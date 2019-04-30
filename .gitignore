@@ -1,0 +1,8 @@
+# Ignore the binary directory first
+bin/
+
+# Also ignore build directories used on windows and unix-platforms
+win/
+build/
+
+

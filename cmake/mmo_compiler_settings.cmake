@@ -1,0 +1,10 @@
+if (MSVC)
+	include("mmo_compilers/msvc")
+elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+	include("mmo_compilers/clang")
+elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+	include("mmo_compilers/gcc")
+else()
+	message(FATAL_ERROR "Unsupported compiler! Currently, this project supports Microsoft Visual Studio 2017 or newer, GCC 8 or newer and Clang.")
+endif()
+
