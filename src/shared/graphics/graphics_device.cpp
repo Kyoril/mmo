@@ -25,6 +25,7 @@ namespace mmo
 
 		// Allocate a new graphics device object
 		s_currentDevice = std::make_unique<GraphicsDeviceD3D11>();
+		s_currentDevice->Create();
 
 		return *s_currentDevice;
 	}
@@ -39,5 +40,24 @@ namespace mmo
 	void GraphicsDevice::Destroy()
 	{
 		s_currentDevice.reset();
+	}
+
+	void GraphicsDevice::SetClearColor(uint32 clearColor)
+	{
+		m_clearColor = clearColor;
+	}
+
+	void GraphicsDevice::Create()
+	{
+	}
+
+	void GraphicsDevice::Resize(uint16 Width, uint16 Height)
+	{
+	}
+
+	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
+	{
+		m_transform[(uint32)type] = matrix;
+		m_transform[(uint32)type].Transpose();
 	}
 }
