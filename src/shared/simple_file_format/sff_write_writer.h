@@ -5,6 +5,8 @@
 #include <string>
 #include <array>
 #include <type_traits>
+#include <algorithm>
+#include <sstream>
 
 namespace sff
 {

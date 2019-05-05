@@ -16,7 +16,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/asio/asio/include")
 # ===============================================================================
 
 # Find OpenSSL
-find_package(OpenSSL QUIET)
+find_package(OpenSSL)
 if (NOT OPENSSL_FOUND)
 	message(FATAL_ERROR "Couldn't find OpenSSL libraries on your system. If you're on windows, please download and install Win64 OpenSSL v1.0.2o from this website: https://slproweb.com/products/Win32OpenSSL.html!")
 endif()

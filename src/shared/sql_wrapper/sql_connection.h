@@ -176,7 +176,7 @@ namespace mmo
 			template <class Int>
 			void GetIntInto(std::size_t column, Int &out_value) const
 			{
-				out_value = getInt<Int>(column);
+				out_value = GetInt<Int>(column);
 			}
 
 		private:
