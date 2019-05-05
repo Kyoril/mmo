@@ -1,5 +1,6 @@
-# Ignore the binary directory first
+# Ignore the binary and library directory first
 bin/
+lib/
 
 # Also ignore build directories used on windows and unix-platforms
 win/
