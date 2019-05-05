@@ -17,23 +17,55 @@
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 
+#include "graphics/graphics_device.h"
+
 #include <mutex>
 
 
 namespace mmo
 {
+	/// Initializes the global game systems.
+	bool InitializeGlobal()
+	{
+		// Initialize the graphics api
+		auto& device = GraphicsDevice::CreateD3D11();
+
+		// TODO: Initialize other systems
+
+		return true;
+	}
+
+	/// Destroys the global game systems.
+	void DestroyGlobal()
+	{
+		// Destroy the graphics device object
+		GraphicsDevice::Destroy();
+
+		// TODO: Destroy systems
+	}
+
 	/// Shared entry point of the application on all platforms.
 	int32 CommonMain()
 	{
-		// The io service used for networking
-		asio::io_service networkIO;
+		// Initialize the game systems, and on success, run the main event loop
+		if (InitializeGlobal())
+		{
+			// TODO: Run event loop
 
-		// Create a new connector and run it
-		auto connector = std::make_shared<LoginConnector>(networkIO);
-		connector->Connect("Kyoril", "12345");
+			// The io service used for networking
+			asio::io_service networkIO;
 
-		// Run the network IO
-		networkIO.run();
+			// Create a new connector and run it
+			auto connector = std::make_shared<LoginConnector>(networkIO);
+			connector->Connect("Kyoril", "12345");
+
+			// Run the network IO
+			networkIO.run();
+
+			// After finishing the main even loop, destroy everything that has
+			// beein initialized so far
+			DestroyGlobal();
+		}
 
 		return 0;
 	}

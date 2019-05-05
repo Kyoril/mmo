@@ -8,4 +8,4 @@ add_subdirectory(network)
 add_subdirectory(sql_wrapper)
 add_subdirectory(mysql_wrapper)
 add_subdirectory(auth_protocol)
-
+add_subdirectory(graphics)

@@ -8,25 +8,6 @@
 
 namespace mmo
 {
-	namespace
-	{
-		/// This helper method combines a given amount of BigNumbers into a sha1 hash.
-		/// This iss done to simplify code and eventually make it more readable.
-		inline SHA1Hash Sha1BigNumbers(std::initializer_list<BigNumber> args)
-		{
-			HashGeneratorSha1 gen;
-
-			for (auto& num : args)
-			{
-				auto arr = num.asByteArray();
-				gen.update(reinterpret_cast<const char*>(arr.data()), arr.size());
-			}
-
-			return gen.finalize();
-		}
-	}
-
-
 	LoginConnector::LoginConnector(asio::io_service & io)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
@@ -98,6 +79,9 @@ namespace mmo
 		case auth::server_packet::LogonProof:
 			OnLogonProof(packet);
 			break;
+		case auth::server_packet::RealmList:
+			// TODO: Handle realm list packet
+			break;
 		default:
 			WLOG("Received unhandled packet " << packet.GetId());
 			break;
@@ -127,11 +111,8 @@ namespace mmo
 		// Calculate A
 		m_A = constants::srp::g.modExp(m_a, constants::srp::N);
 
-		// Helper
-		std::vector<uint8> sArr;
-
 		// Calculate u
-		SHA1Hash uHash = Sha1BigNumbers({ m_A, m_B });
+		SHA1Hash uHash = Sha1_BigNumbers({ m_A, m_B });
 		m_u.setBinary(uHash.data(), uHash.size());
 
 		// Calcualte S
@@ -139,67 +120,59 @@ namespace mmo
 		m_S = (m_B - k * constants::srp::g.modExp(m_x, constants::srp::N)).modExp((m_a + m_u * m_x), constants::srp::N);
 		assert(m_S.asUInt32() > 0);
 
-		// Prepare response
-
-		// calc M1 & M2
-		unsigned int i = 0;
-		char S1[16 + 1], S2[16 + 1]; // 32/2=16 :) +1 for \0
-									 // split it into 2 seperate strings, interleaved
-		for (i = 0; i < 16; i++) {
-			S1[i] = m_S.asByteArray()[i * 2];
-			S2[i] = m_S.asByteArray()[i * 2 + 1];
+		// Calculate proof hashes M1 (client) and M2 (server)
+		
+		// Split it into 2 seperate strings, interleaved
+		// Leave space for terminating 0
+		char S1[16 + 1], S2[16 + 1];
+		auto arrS = m_S.asByteArray();
+		for (uint32 i = 0; i < 16; i++) 
+		{
+			S1[i] = arrS[i * 2];
+			S2[i] = arrS[i * 2 + 1];
 		}
 
-		// hash each one:
+		// Calculate the hash for each string
 		gen.update((const char*)S1, 16);
 		SHA1Hash S1hash = gen.finalize();
 		gen.update((const char*)S2, 16);
 		SHA1Hash S2hash = gen.finalize();
 
-		// Re-combine them
-		char S_hash[40];
-		for (i = 0; i < 20; i++) {
+		// Re-combine them to form the session key
+		uint8 S_hash[40];
+		for (uint32 i = 0; i < 20; i++) 
+		{
 			S_hash[i * 2] = S1hash[i];
 			S_hash[i * 2 + 1] = S2hash[i];
 		}
 
-		m_sessionKey.setBinary((uint8*)S_hash, 40); // used later when authing to world
-		DLOG("Session key: " << m_sessionKey.asHexStr());
-
+		// Store the session key as BigNumber so that we can use it for 
+		// calculations later on.
+		m_sessionKey.setBinary((uint8*)S_hash, 40);
+		
 		// Generate hash of plain username
 		gen.update((const char*)m_username.c_str(), m_username.size());
 		SHA1Hash userhash2 = gen.finalize();
 
 		// Generate N and g hashes
-		SHA1Hash Nhash = Sha1BigNumbers({ constants::srp::N });
-		SHA1Hash ghash = Sha1BigNumbers({ constants::srp::g });
+		SHA1Hash Nhash = Sha1_BigNumbers({ constants::srp::N });
+		SHA1Hash ghash = Sha1_BigNumbers({ constants::srp::g });
 
 		// Combine N and g hash like this: (N ^ g)
-		char Ng_hash[20];
-		for (i = 0; i < 20; i++) Ng_hash[i] = Nhash[i] ^ ghash[i];
+		uint8 Ng_hash[20];
+		for (uint32 i = 0; i < 20; i++) Ng_hash[i] = Nhash[i] ^ ghash[i];
 
 		// Convert hashes into bignumbers so we can calculate easier
-		BigNumber t_acc, t_Ng_hash;
-		t_acc.setBinary((const uint8*)userhash2.data(), userhash2.size());
-		t_Ng_hash.setBinary((const uint8*)Ng_hash, 20);
+		BigNumber t_acc{ userhash2.data(), userhash2.size() };
+		BigNumber t_Ng_hash{ Ng_hash, 20 };
 
 		// Caluclate M1 hash sent to the server
-		sArr = t_Ng_hash.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
-		sArr = t_acc.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
-		sArr = m_s.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
-		sArr = m_A.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
-		sArr = m_B.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
+		Sha1_Add_BigNumbers(gen, { t_Ng_hash, t_acc, m_s, m_A, m_B});
 		gen.update((const char*)S_hash, 40);
 		M1hash = gen.finalize();
 
 		// Calculate M2 hash to store for later comparison on server answer
-		sArr = m_A.asByteArray();
-		gen.update((const char*)sArr.data(), sArr.size());
+		Sha1_Add_BigNumbers(gen, { m_A });
 		gen.update((const char*)M1hash.data(), M1hash.size());
 		gen.update((const char*)S_hash, 40);
 		M2hash = gen.finalize();
