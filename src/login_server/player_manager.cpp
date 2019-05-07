@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #include "player_manager.h"
 #include "player.h"
 #include "binary_io/string_sink.h"

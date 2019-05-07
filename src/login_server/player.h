@@ -1,3 +1,4 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #pragma once
 
@@ -79,6 +80,7 @@ namespace mmo
 		BigNumber m_unk3;
 		BigNumber m_reconnectProof;
 		BigNumber m_reconnectKey;
+		SHA1Hash m_m2;
 
 		/// Number of bytes used to store m_s.
 		static constexpr int ByteCountS = 32;
@@ -94,6 +96,9 @@ namespace mmo
 		void connectionMalformedPacket() override;
 		/// @copydoc wow::auth::IConnectionListener::connectionPacketReceived()
 		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
+
+	private:
+		void SendAuthProof(auth::AuthResult result);
 
 	private:
 

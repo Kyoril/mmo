@@ -1,5 +1,5 @@
 # We want a kind-of modern cmake
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 
 # Generate a solution file
 project(mmo)

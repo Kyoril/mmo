@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #include "configuration.h"
 
 #include "simple_file_format/sff_write.h"

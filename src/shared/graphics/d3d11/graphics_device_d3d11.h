@@ -5,6 +5,8 @@
 #include "graphics/graphics_device.h"
 #include "base/typedefs.h"
 
+#include <map>
+
 // D3D11 header files and namespaces
 #include <d3d11_4.h>
 #include <dxgi1_6.h>
@@ -94,6 +96,8 @@ namespace mmo
 		ComPtr<ID3D11RasterizerState> m_rasterizerState;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
+		/// Input layouts.
+		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		/// The best supported feature level.
 		D3D_FEATURE_LEVEL m_featureLevel;
 		/// The window handle.

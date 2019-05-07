@@ -16,9 +16,32 @@
 
 namespace mmo
 {
-	GameTime getCurrentTime()
+	GameTime GetAsyncTimeMs()
 	{
 #if defined(WIN32) || defined(_WIN32)
+		static double s_qpcScaleToMs = 0.0;
+
+		static bool s_qpcExistsTested = false;
+		static bool s_qpcExists = false;
+
+		LARGE_INTEGER timestamp;
+		if (!s_qpcExistsTested)
+		{
+			if (QueryPerformanceFrequency(&timestamp))
+			{
+				s_qpcScaleToMs = 1000.0 / timestamp.QuadPart;
+				s_qpcExists = true;
+			}
+
+			s_qpcExistsTested = true;
+		}
+
+		if (s_qpcExists)
+		{
+			QueryPerformanceCounter(&timestamp);
+			return timestamp.QuadPart * s_qpcScaleToMs;
+		}
+
 		return ::GetTickCount64();
 #else
         struct timeval tp;

@@ -208,7 +208,57 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::CreateInputLayouts()
 	{
-		// TODO
+		// Include shader code
+		#include "shaders/VS_Pos.h"
+		#include "shaders/VS_PosColor.h"
+		#include "shaders/VS_PosColorNormal.h"
+		#include "shaders/VS_PosColorNormalTex.h"
+		#include "shaders/VS_PosColorTex.h"
+
+		ComPtr<ID3D11InputLayout> InputLayout;
+
+		// EGxVertexFormat::Pos
+		const D3D11_INPUT_ELEMENT_DESC PosElements[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosElements, ARRAYSIZE(PosElements), g_VS_Pos, ARRAYSIZE(g_VS_Pos), &InputLayout)));
+		InputLayouts[VertexFormat::Pos] = InputLayout;
+
+		// EGxVertexFormat::PosColor
+		const D3D11_INPUT_ELEMENT_DESC PosColElements[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColElements, ARRAYSIZE(PosColElements), g_VS_PosColor, ARRAYSIZE(g_VS_PosColor), &InputLayout)));
+		InputLayouts[VertexFormat::PosColor] = InputLayout;
+
+		// EGxVertexFormat::PosColorNormal
+		const D3D11_INPUT_ELEMENT_DESC PosColNormElements[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColNormElements, ARRAYSIZE(PosColNormElements), g_VS_PosColorNormal, ARRAYSIZE(g_VS_PosColorNormal), &InputLayout)));
+		InputLayouts[VertexFormat::PosColorNormal] = InputLayout;
+
+		// EGxVertexFormat::PosColorNormalTex1
+		const D3D11_INPUT_ELEMENT_DESC PosColNormTexElements[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColNormTexElements, ARRAYSIZE(PosColNormTexElements), g_VS_PosColorNormalTex, ARRAYSIZE(g_VS_PosColorNormalTex), &InputLayout)));
+		InputLayouts[VertexFormat::PosColorNormalTex1] = InputLayout;
+
+		// EGxVertexFormat::PosColorTex1
+		const D3D11_INPUT_ELEMENT_DESC PosColTexElements[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColTexElements, ARRAYSIZE(PosColTexElements), g_VS_PosColorTex, ARRAYSIZE(g_VS_PosColorTex), &InputLayout)));
+		InputLayouts[VertexFormat::PosColorTex1] = InputLayout;
 	}
 
 	void GraphicsDeviceD3D11::CreateBlendStates()
@@ -484,10 +534,10 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetVertexFormat(VertexFormat InFormat)
 	{
-		/*auto it = InputLayouts.find(InFormat);
+		auto it = InputLayouts.find(InFormat);
 		ASSERT(it != InputLayouts.end());
 
-		m_immContext->IASetInputLayout(it->second.Get());*/
+		m_immContext->IASetInputLayout(it->second.Get());
 	}
 
 	void GraphicsDeviceD3D11::SetBlendMode(BlendMode InBlendMode)

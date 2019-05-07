@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #include "mysql_database.h"
 #include "mysql_wrapper/mysql_row.h"
 #include "mysql_wrapper/mysql_select.h"
@@ -97,9 +99,17 @@ namespace mmo
 		return {};
 	}
 
-	void MySQLDatabase::setAccountSessionKey(uint64 accountId, const std::string& sessionKey)
+	void MySQLDatabase::playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip)
 	{
-		m_connection.Execute("UPDATE account SET k = '" + m_connection.EscapeString(sessionKey) + "' WHERE id = " + std::to_string(accountId));
+		if (!m_connection.Execute("UPDATE account SET k = '"
+			+ m_connection.EscapeString(sessionKey)
+			+ "', last_login = NOW(), last_ip = '"
+			+ m_connection.EscapeString(ip)
+			+ "' WHERE id = " + std::to_string(accountId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update account database on login");
+		}
 	}
 	
 	void MySQLDatabase::PrintDatabaseError()

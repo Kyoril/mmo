@@ -28,5 +28,5 @@ namespace mmo
 	}
 
 
-	GameTime getCurrentTime();
+	GameTime GetAsyncTimeMs();
 }

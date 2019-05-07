@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include "database.h"
@@ -19,7 +21,7 @@ namespace mmo
 		std::optional<AccountData> getAccountDataByName(const std::string& name) override;
 		std::optional<RealmAuthData> getRealmAuthData(uint32 realmId) override;
 		std::optional<std::pair<uint64, std::string>> getAccountSessionKey(const std::string& accountName) override;
-		void setAccountSessionKey(uint64 accountId, const std::string& sessionKey) override;
+		void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) override;
 
 	private:
 		void PrintDatabaseError();

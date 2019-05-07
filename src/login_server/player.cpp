@@ -1,3 +1,4 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "player.h"
 #include "database.h"
@@ -74,6 +75,25 @@ namespace mmo
 
 		// Execute the packet handler and return the result
 		return handler(packet);
+	}
+
+	void Player::SendAuthProof(auth::AuthResult result)
+	{
+		// Send proof packet to the client
+		m_connection->sendSinglePacket([result, this](auth::OutgoingPacket& packet) {
+			packet.Start(auth::server_packet::LogonProof);
+			packet << io::write<uint8>(result);
+
+			// If the login attempt succeeded, we also send the calculated M2 hash value to the
+			// client, which will compare it against it's own calculated M2 hash just in case.
+			if (result == auth::auth_result::Success)
+			{
+				// Send server-calculated M2 hash value so that the client can verify this as well
+				packet << io::write_range(this->m_m2.begin(), this->m_m2.end());
+			}
+
+			packet.Finish();
+		});
 	}
 
 	void Player::registerPacketHandler(uint8 opCode, PacketHandler && handler)
@@ -290,31 +310,45 @@ namespace mmo
 		auto sArr = M1.asByteArray(20);
 		if (std::equal(sArr.begin(), sArr.end(), rec_M1.begin()))
 		{
-			// Addd log entry about successful login as the hashes do indeed mach (and thus, so
-			// do the passwords)
-			ILOG("User " << m_userName << " successfully authenticated");
-
 			// Finish SRP6 by calculating the M2 hash value that is sent back to the client for
 			// verification as well.
-			hash = Sha1_BigNumbers({ A, M1, K});
+			m_m2 = Sha1_BigNumbers({ A, M1, K});
 
 			// Store the caluclated session key value internally for later use, also store it in the 
 			// database maybe.
 			m_sessionKey = K;
 
+			// Handler method
+			std::weak_ptr<Player> weakThis{ shared_from_this() };
+			auto handler = [weakThis](bool success)
+			{
+				if (auto strongThis = weakThis.lock())
+				{
+					if (success)
+					{
+						// Add log entry about successful login as the hashes do indeed mach (and thus, so
+						// do the passwords)
+						ILOG("User " << strongThis->m_userName << " successfully authenticated");
+
+						// If the login attempt succeeded, then we will accept RealmList request packets from now
+						// on to send the realm list to the client on manual request
+						strongThis->registerPacketHandler(auth::client_packet::RealmList, std::bind(&Player::handleRealmList, strongThis.get(), std::placeholders::_1));
+						strongThis->SendAuthProof(auth::AuthResult::Success);
+					}
+					else
+					{
+						strongThis->SendAuthProof(auth::AuthResult::FailDbBusy);
+					}
+				}
+			};
+
 			// Store session key in account database
 			m_database.asyncRequest<void>(
-				std::bind(&IDatabase::setAccountSessionKey, std::placeholders::_1, 
-					m_accountId, 
-					K.asHexStr()), 
-				dbNullHandler);
+				std::bind(&IDatabase::playerLogin, std::placeholders::_1, m_accountId, K.asHexStr(), m_address),
+				std::move(handler));
 
-			// Create session
-			//m_session = m_createSession(K, m_accountId, m_userName, m_v, m_s);
-			//m_database.setKey(m_accountId, K);
-
-			// Send proof
-			proofResult = auth::auth_result::Success;
+			// Stop here since we wait for the database callback
+			return PacketParseResult::Pass;
 		}
 		else
 		{
@@ -322,28 +356,8 @@ namespace mmo
 			WLOG("Invalid password for account " << m_userName);
 		}
 
-		// If the login attempt succeeded, then we will accept RealmList request packets from now
-		// on to send the realm list to the client on manual request
-		if (proofResult == auth::auth_result::Success)
-		{
-			registerPacketHandler(auth::client_packet::RealmList, std::bind(&Player::handleRealmList, this, std::placeholders::_1));
-		}
-
-		// Send proof packet to the client
-		m_connection->sendSinglePacket([proofResult, &hash](auth::OutgoingPacket& packet) {
-			packet.Start(auth::server_packet::LogonProof);
-			packet << io::write<uint8>(proofResult);
-
-			// If the login attempt succeeded, we also send the calculated M2 hash value to the
-			// client, which will compare it against it's own calculated M2 hash just in case.
-			if (proofResult == auth::auth_result::Success)
-			{
-				// Send server-calculated M2 hash value so that the client can verify this as well
-				packet << io::write_range(hash.begin(), hash.end());
-			}
-
-			packet.Finish();
-		});
+		// Send proof result
+		SendAuthProof(proofResult);
 
 		return PacketParseResult::Pass;
 	}

@@ -42,7 +42,7 @@ namespace mmo
 		/// 
 		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(const std::string& accountName) = 0;
 		/// 
-		virtual void setAccountSessionKey(uint64 accountId, const std::string& sessionKey) = 0;
+		virtual void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
 	};
 
 
@@ -80,9 +80,11 @@ namespace mmo
 				const Request &request,
 				const ResultHandler &handler) const
 			{
+				bool succeeded = false;
 				try
 				{
 					request();
+					succeeded = true;
 				}
 				catch (const std::exception &ex)
 				{
@@ -90,7 +92,7 @@ namespace mmo
 					return;
 				}
 
-				dispatcher(std::bind<void>(handler));
+				dispatcher(std::bind<void>(handler, succeeded));
 			}
 		};
 	}

@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #include "program.h"
 #include "configuration.h"
 #include "version.h"
