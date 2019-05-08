@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include "base/non_copyable.h"
@@ -11,6 +13,7 @@ namespace mmo
 {
 	/// Defines a console command handler function pointer.
 	typedef std::function<void(const std::string& command, const std::string& args)> ConsoleCommandHandler;
+
 
 	/// Enumerates console command categories.
 	enum class ConsoleCommandCategory
@@ -28,6 +31,7 @@ namespace mmo
 		/// Sound-related console commands.
 		Sound
 	};
+
 
 	/// This class manages the console client.
 	class Console : public NonCopyable

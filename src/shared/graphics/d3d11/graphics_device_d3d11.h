@@ -98,6 +98,8 @@ namespace mmo
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
 		/// Input layouts.
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
+		std::map<VertexFormat, ShaderPtr> VertexShaders;
+		std::map<VertexFormat, ShaderPtr> PixelShaders;
 		/// The best supported feature level.
 		D3D_FEATURE_LEVEL m_featureLevel;
 		/// The window handle.

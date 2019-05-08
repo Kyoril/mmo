@@ -1,3 +1,5 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+
 #include "console_commands.h"
 #include "console.h"
 #include "version.h"

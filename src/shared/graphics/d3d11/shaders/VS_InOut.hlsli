@@ -1,7 +1,8 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 struct VertexIn
 {
-	float4 pos : POSITION;
+	float4 pos : SV_POSITION;
 #ifdef WITH_COLOR
 	float4 color : COLOR;
 #endif
