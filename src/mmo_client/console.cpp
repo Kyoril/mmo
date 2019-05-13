@@ -15,7 +15,7 @@ namespace mmo
 	{
 		// Register some default console commands
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
-		RegisterCommand("run", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Runs a console script.");
+		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 
 		// Load the config file
 		console_commands::ConsoleCommand_Run("run", configFile);

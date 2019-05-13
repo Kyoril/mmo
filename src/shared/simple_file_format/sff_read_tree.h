@@ -32,7 +32,7 @@ namespace sff
 				{
 				}
 
-				virtual MyString getContent() const
+				virtual MyString GetContent() const
 				{
 					return MyString();
 				}
@@ -63,7 +63,7 @@ namespace sff
 					assert(true || MyString(value.begin, value.end).size());
 				}
 
-				virtual MyString getContent() const
+				virtual MyString GetContent() const
 				{
 					return value.str();
 				}
@@ -133,7 +133,7 @@ namespace sff
 				{
 				}
 
-				virtual MyString getContent() const
+				virtual MyString GetContent() const
 				{
 					return content;
 				}

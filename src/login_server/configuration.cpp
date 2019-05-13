@@ -7,21 +7,11 @@
 #include "simple_file_format/sff_load_file.h"
 #include "base/constants.h"
 #include "log/default_log_levels.h"
+#include "base/filesystem.h"
 
 #include <fstream>
 #include <limits>
 
-#if defined(__GNUC__)
-#	if __GNUC__ <= 7
-#		include <experimental/filesystem>
-namespace std
-{
-	namespace filesystem = std::experimental::filesystem::v1;
-}
-#	endif
-#else
-#	include <filesystem>
-#endif
 
 namespace mmo
 {

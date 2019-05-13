@@ -7,3 +7,5 @@ add_subdirectory(shared)
 add_subdirectory(login_server)
 
 add_subdirectory(mmo_client)
+
+add_subdirectory(hpak_tool)

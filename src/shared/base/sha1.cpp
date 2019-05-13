@@ -36,7 +36,7 @@ namespace mmo
 	{
 	}
 
-	void HashGeneratorSha1::update(const char * data, size_t len)
+	void HashGeneratorSha1::ensureContextCreated()
 	{
 		if (!m_context)
 		{
@@ -46,6 +46,11 @@ namespace mmo
 				throw std::runtime_error("SHA1_Init failed");
 			}
 		}
+	}
+
+	void HashGeneratorSha1::update(const char * data, size_t len)
+	{
+		ensureContextCreated();
 
 		if (!(SHA1_Update(m_context.get(), data, len)))
 		{
@@ -55,6 +60,8 @@ namespace mmo
 
 	SHA1Hash HashGeneratorSha1::finalize()
 	{
+		ensureContextCreated();
+
 		SHA1Hash digest;
 		if (!SHA1_Final(digest.data(), m_context.get()))
 		{

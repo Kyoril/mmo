@@ -22,6 +22,9 @@ namespace mmo
 	private:
 		struct Context;
 		std::shared_ptr<Context> m_context;
+
+	private:
+		void ensureContextCreated();
 	};
 
 	/// Generates a SHA1 hash based on the contents of an std::istream.

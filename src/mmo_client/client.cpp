@@ -155,6 +155,26 @@ namespace mmo
 }
 
 
+namespace mmo
+{
+	/// This command will try to connect to the login server and make a login attempt using the
+	/// first parameter as username and the second parameter as password.
+	static void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
+	{
+		std::size_t spacePos = arguments.find(' ');
+		if (spacePos == arguments.npos)
+		{
+			ELOG("Invalid argument count!");
+			return;
+		}
+
+		// Try to connect
+		s_loginConnector->Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
+	}
+}
+
+
+
 ////////////////////////////////////////////////////////////////
 // Initialization and destruction
 
@@ -179,6 +199,12 @@ namespace mmo
 		// Initialize a little test scene
 		Init_Triangle();
 
+		// Lets setup a test command
+		Console::RegisterCommand("login", ConsoleCommand_Login, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
+
+		// Run the RunOnce script
+		Console::ExecuteComamnd("run Config\\RunOnce.cfg");
+
 		// TODO: Initialize other systems
 		return true;
 	}
@@ -187,6 +213,9 @@ namespace mmo
 	void DestroyGlobal()
 	{
 		// TODO: Destroy systems
+
+		// Remove login command
+		Console::UnregisterCommand("login");
 
 		// Destroy our little test scene
 		Destroy_Triangle();
