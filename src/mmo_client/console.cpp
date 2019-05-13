@@ -8,7 +8,7 @@
 
 namespace mmo
 {
-	std::map<std::string, Console::ConsoleCommand, Console::ConsoleCommandComp> Console::s_consoleCommands;
+	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
 
 
 	void Console::Initialize(const std::string& configFile)

@@ -11,15 +11,16 @@
 #	include <iostream>
 #endif
 
-#include "login_connector.h"
-
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
-
 #include "graphics/graphics_device.h"
+
 #include "event_loop.h"
 #include "console.h"
+#include "login_connector.h"
+#include "game_state_mgr.h"
+#include "login_state.h"
 
 #include <thread>
 #include <memory>
@@ -196,6 +197,10 @@ namespace mmo
 		// Initialize network threads
 		NetInit();
 
+		// Register game states
+		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>());
+		GameStateMgr::Get().SetGameState(LoginState::Name);
+
 		// Initialize a little test scene
 		Init_Triangle();
 
@@ -206,6 +211,7 @@ namespace mmo
 		Console::ExecuteComamnd("run Config\\RunOnce.cfg");
 
 		// TODO: Initialize other systems
+
 		return true;
 	}
 
@@ -219,6 +225,9 @@ namespace mmo
 
 		// Destroy our little test scene
 		Destroy_Triangle();
+
+		// Remove all registered game states and also leave the current game state.
+		GameStateMgr::Get().RemoveAllGameStates();
 
 		// Destroy the network thread
 		NetDestroy();

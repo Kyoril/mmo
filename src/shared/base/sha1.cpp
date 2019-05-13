@@ -4,6 +4,7 @@
 
 #include <iomanip>
 #include <cassert>
+#include <cctype>
 
 #include <openssl/sha.h>
 
@@ -12,6 +13,22 @@ namespace mmo
 	struct HashGeneratorSha1::Context : SHA_CTX
 	{
 	};
+
+	SHA1Hash sha1(std::istream & source)
+	{
+		HashGeneratorSha1 generator;
+
+		char buffer[4096];
+		size_t read = 0;
+		do
+		{
+			source.read(buffer, 4096);
+			read = source.gcount();
+			if (read > 0) generator.update(buffer, read);
+		} while (source && read > 0);
+
+		return generator.finalize();
+	}
 
 	SHA1Hash sha1(const char* data, size_t len)
 	{
@@ -30,6 +47,51 @@ namespace mmo
 			    << std::setw(2)
 			    << (static_cast<unsigned>(e) & 0xff);
 		}
+	}
+
+	namespace
+	{
+		int hexDigitValue(char c)
+		{
+			if (c >= '0' && c <= '9')
+			{
+				return (c - '0');
+			}
+
+			c = static_cast<char>(std::tolower(c));
+
+			if (c >= 'a' && c <= 'f')
+			{
+				return (c - 'a') + 10;
+			}
+
+			return -1;
+		}
+	}
+
+	SHA1Hash sha1ParseHex(std::istream &source)
+	{
+		SHA1Hash result;
+
+		for(unsigned char & e : result)
+		{
+			char high, low;
+			source >> high >> low;
+
+			const int left = hexDigitValue(high);
+			const int right = hexDigitValue(low);
+
+			if (left < 0 ||
+				right < 0)
+			{
+				source.setstate(std::ios::failbit);
+				break;
+			}
+
+			e = static_cast<unsigned char>((left * 16) + right);
+		}
+
+		return result;
 	}
 
 	HashGeneratorSha1::HashGeneratorSha1() noexcept

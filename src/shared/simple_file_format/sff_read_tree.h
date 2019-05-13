@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <memory>
+#include <vector>
 #include <map>
 #include <cstddef>
 #include <cassert>
@@ -173,7 +174,7 @@ namespace sff
 
 				const Element &getElement(Index index) const
 				{
-					return elements[index];
+					return *elements.at(index);
 				}
 
 				const Table<T> *getTable(Index index) const;

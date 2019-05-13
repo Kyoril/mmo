@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/non_copyable.h"
+#include "base/utilities.h"
 
 #include <string>
 #include <functional>
@@ -36,15 +37,6 @@ namespace mmo
 	/// This class manages the console client.
 	class Console : public NonCopyable
 	{
-		/// A custom compare operator used to make string keys in the s_consoleCommands
-		/// map case insensitive.
-		struct ConsoleCommandComp
-		{
-			bool operator() (const std::string& lhs, const std::string& rhs) const {
-				return _stricmp(lhs.c_str(), rhs.c_str()) < 0;
-			}
-		};
-
 		/// This struct contains a console command.
 		struct ConsoleCommand
 		{
@@ -73,6 +65,6 @@ namespace mmo
 
 	private:
 		/// A map of all registered console commands.
-		static std::map<std::string, ConsoleCommand, ConsoleCommandComp> s_consoleCommands;
+		static std::map<std::string, ConsoleCommand, StrCaseIComp> s_consoleCommands;
 	};
 }
