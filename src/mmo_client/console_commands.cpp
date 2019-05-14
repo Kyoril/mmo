@@ -49,7 +49,7 @@ namespace mmo
 				// Check if line is empty, and if not, execute it
 				if (!line.empty())
 				{
-					Console::ExecuteComamnd(line);
+					Console::ExecuteCommand(line);
 				}
 			}
 		}

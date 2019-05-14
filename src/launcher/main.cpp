@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 namespace
 {
 	const std::string UpdateSourceUrl =
-	    "http://127.0.0.1/update"
+	    "http://62.75.158.8/update"
 	    ;
 	
 	bool isSelfUpdateEnabled = true;

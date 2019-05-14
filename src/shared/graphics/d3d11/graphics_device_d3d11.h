@@ -26,7 +26,7 @@ namespace mmo
 		virtual void Clear(ClearFlags Flags = ClearFlags::None) override;
 		virtual void Present() override;
 		virtual void Resize(uint16 Width, uint16 Height) override;
-		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, const void* InitialData = nullptr) override;
+		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
 		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
 		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
 		virtual void Draw() override;

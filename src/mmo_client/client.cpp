@@ -15,6 +15,7 @@
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "graphics/graphics_device.h"
+#include "base/filesystem.h"
 
 #include "event_loop.h"
 #include "console.h"
@@ -22,6 +23,7 @@
 #include "game_state_mgr.h"
 #include "login_state.h"
 
+#include <fstream>
 #include <thread>
 #include <memory>
 #include <mutex>
@@ -45,9 +47,6 @@ namespace mmo
 	{
 		auto& dev = GraphicsDevice::Get();
 
-		// Clear device
-		dev.Clear(ClearFlags::All);
-
 		// Render the triangle
 		dev.SetBlendMode(BlendMode::Opaque);
 		dev.SetTopologyType(TopologyType::TriangleList);
@@ -66,9 +65,6 @@ namespace mmo
 
 		// Draw the geometry
 		dev.DrawIndexed();
-
-		// Present the buffer on screen
-		dev.Present();
 	}
 
 	/// Initializes the triangle test scene (allocated geometry buffers etc.)
@@ -80,14 +76,14 @@ namespace mmo
 			{ {  0.75f, -0.75f, 0.0f }, 0xFF00FF00 },
 			{ { -0.75f, -0.75f, 0.0f }, 0xFF0000FF },
 		};
-		s_triangleVertBuf = GraphicsDevice::Get().CreateVertexBuffer(3, sizeof(POS_COL_VERTEX), vertices);
+		s_triangleVertBuf = GraphicsDevice::Get().CreateVertexBuffer(3, sizeof(POS_COL_VERTEX), false, vertices);
 
 		// Create index data
 		const uint16 indices[] = { 0, 1, 2 };
 		s_triangleIndBuf = GraphicsDevice::Get().CreateIndexBuffer(3, IndexBufferSize::Index_16, indices);
 
 		// Connect to the paint event
-		s_trianglePaintCon = EventLoop::Paint.connect(Paint_Triangle);
+		s_trianglePaintCon = EventLoop::Paint.connect(Paint_Triangle, true);
 	}
 
 	/// Destroy the simple triangle scene (destroying geometry buffers etc.)
@@ -181,18 +177,31 @@ namespace mmo
 
 namespace mmo
 {
+	static std::ofstream s_logFile;
+	static scoped_connection s_logConn;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
+		// Ensure the logs directory exists
+		std::filesystem::create_directories("./Logs");
+
+		// Setup the log file connection after opening the log file
+		s_logFile.open("./Logs/Client.log", std::ios::out);
+		if (s_logFile)
+		{
+			s_logConn = g_DefaultLog.signal().connect(
+				[](const LogEntry & entry)
+			{
+				printLogEntry(s_logFile, entry, g_DefaultFileLogOptions);
+			});
+		}
+
 		// Initialize the event loop
 		EventLoop::Initialize();
 
 		// Initialize the console client
 		Console::Initialize("Config\\Config.cfg");
-
-		// Initialize the graphics api
-		auto& device = GraphicsDevice::CreateD3D11();
-		device.SetWindowTitle(TEXT("MMORPG"));
 
 		// Initialize network threads
 		NetInit();
@@ -208,7 +217,7 @@ namespace mmo
 		Console::RegisterCommand("login", ConsoleCommand_Login, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 
 		// Run the RunOnce script
-		Console::ExecuteComamnd("run Config\\RunOnce.cfg");
+		Console::ExecuteCommand("run Config\\RunOnce.cfg");
 
 		// TODO: Initialize other systems
 
@@ -240,6 +249,10 @@ namespace mmo
 
 		// Destroy the event loop
 		EventLoop::Destroy();
+
+		// Destroy log
+		s_logConn.disconnect();
+		s_logFile.close();
 	}
 }
 

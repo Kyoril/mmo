@@ -5,9 +5,10 @@
 
 namespace mmo
 {
-	VertexBuffer::VertexBuffer(size_t InVertexCount, size_t InVertexSize)
+	VertexBuffer::VertexBuffer(size_t InVertexCount, size_t InVertexSize, bool dynamic)
 		: VertexCount(InVertexCount)
 		, VertexSize(InVertexSize)
+		, m_dynamic(dynamic)
 	{
 	}
 }

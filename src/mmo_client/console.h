@@ -35,7 +35,8 @@ namespace mmo
 
 
 	/// This class manages the console client.
-	class Console : public NonCopyable
+	class Console 
+		: public NonCopyable
 	{
 		/// This struct contains a console command.
 		struct ConsoleCommand
@@ -61,7 +62,11 @@ namespace mmo
 		/// Removes a registered console command.
 		static void UnregisterCommand(const std::string& command);
 		/// Executes the given command line to execute console commands.
-		static void ExecuteComamnd(std::string commandLine);
+		static void ExecuteCommand(std::string commandLine);
+
+	public:
+		/// Paints the console.
+		static void Paint();
 
 	private:
 		/// A map of all registered console commands.

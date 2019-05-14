@@ -480,9 +480,9 @@ namespace mmo
 		m_resizePending = true;
 	}
 
-	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, const void * InitialData)
+	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
 	{
-		return std::make_unique<VertexBufferD3D11>(*this, VertexCount, VertexSize, InitialData);
+		return std::make_unique<VertexBufferD3D11>(*this, VertexCount, VertexSize, dynamic, InitialData);
 	}
 
 	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void * InitialData)

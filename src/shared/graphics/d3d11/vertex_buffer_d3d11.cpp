@@ -6,17 +6,17 @@
 
 namespace mmo
 {
-	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t InVertexCount, size_t InVertexSize, const void* InitialData)
-		: VertexBuffer(InVertexCount, InVertexSize)
+	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t InVertexCount, size_t InVertexSize, bool dynamic, const void* InitialData)
+		: VertexBuffer(InVertexCount, InVertexSize, dynamic)
 		, Device(InDevice)
 	{
 		// Allocate vertex buffer
 		D3D11_BUFFER_DESC BufferDesc;
 		ZeroMemory(&BufferDesc, sizeof(BufferDesc));
-		BufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+		BufferDesc.Usage = m_dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
 		BufferDesc.ByteWidth = static_cast<UINT>(VertexSize * VertexCount);
 		BufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-		BufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		BufferDesc.CPUAccessFlags = m_dynamic ? D3D11_CPU_ACCESS_WRITE : 0;
 		BufferDesc.MiscFlags = 0;
 
 		// Fill buffer with initial data on creation to speed things up

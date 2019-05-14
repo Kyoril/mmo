@@ -124,6 +124,17 @@ namespace mmo
 				0.0f, 0.0f, -Q * fNearPlane, 0.0f);
 		}
 
+		inline static Matrix4 MakeOrthographic(const float fFOV, const float fAspect, const float fNearPlane, const float fFarPlane)
+		{
+			const float s = 1.0f / tanf(fFOV * 0.5f);
+			const float Q = fFarPlane / (fFarPlane - fNearPlane);
+
+			return Matrix4(s / fAspect, 0.0f, 0.0f, 0.0f,
+				0.0f, s, 0.0f, 0.0f,
+				0.0f, 0.0f, Q, 1.0f,
+				0.0f, 0.0f, -Q * fNearPlane, 0.0f);
+		}
+
 		inline static Matrix4 MakeView(const Vector3& vPos,
 			const Vector3& vLookAt,
 			const Vector3& vUp = Vector3(0.0f, 1.0f, 0.0f))

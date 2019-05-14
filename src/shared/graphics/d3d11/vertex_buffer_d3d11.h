@@ -12,7 +12,7 @@ namespace mmo
 	class VertexBufferD3D11 : public VertexBuffer
 	{
 	public:
-		VertexBufferD3D11(GraphicsDeviceD3D11& InDevice, size_t VertexCount, size_t VertexSize, const void* InitialData = nullptr);
+		VertexBufferD3D11(GraphicsDeviceD3D11& InDevice, size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr);
 
 	public:
 		//~Begin CGxBufferBase

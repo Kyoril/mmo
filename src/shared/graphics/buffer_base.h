@@ -51,6 +51,8 @@ namespace mmo
 			return Memory + Index;
 		}
 
+		T* operator->() const { return Get(); }
+
 	private:
 		BufferBase& Buffer;
 		T* Memory;

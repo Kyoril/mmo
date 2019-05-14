@@ -14,13 +14,14 @@ namespace mmo
 	{
 	public:
 		/// 
-		VertexBuffer(size_t InVertexCount, size_t InVertexSize);
+		VertexBuffer(size_t InVertexCount, size_t InVertexSize, bool dynamic);
 		/// Virtual default destructor because of inheritance.
 		virtual ~VertexBuffer() = default;
 
 	protected:
 		size_t VertexCount;
 		size_t VertexSize;
+		bool m_dynamic;
 	};
 
 	typedef std::unique_ptr<VertexBuffer> VertexBufferPtr;

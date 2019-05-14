@@ -93,7 +93,7 @@ namespace mmo
 		/// Resizes the graphics device.
 		virtual void Resize(uint16 Width, uint16 Height);
 		/// Creates a new vertex buffer.
-		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, const void* InitialData = nullptr) = 0;
+		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) = 0;
 		/// Creates a new index buffer.
 		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) = 0;
 		/// Creates a new shader of a certain type if supported.
