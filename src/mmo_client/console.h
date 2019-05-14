@@ -64,10 +64,6 @@ namespace mmo
 		/// Executes the given command line to execute console commands.
 		static void ExecuteCommand(std::string commandLine);
 
-	public:
-		/// Paints the console.
-		static void Paint();
-
 	private:
 		/// A map of all registered console commands.
 		static std::map<std::string, ConsoleCommand, StrCaseIComp> s_consoleCommands;

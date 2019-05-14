@@ -3,6 +3,7 @@
 #include "console.h"
 #include "console_commands.h"
 #include "event_loop.h"
+#include "screen.h"
 
 #include "base/filesystem.h"
 #include "log/default_log_levels.h"
@@ -13,11 +14,6 @@ namespace mmo
 {
 	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
 
-	static VertexBufferPtr s_consoleVertBuf;
-	static IndexBufferPtr s_consoleIndBuf;
-
-	static scoped_connection s_consolePaintCon;
-	
 	void Console::Initialize(const std::string& configFile)
 	{
 		// Ensure the folder is created
@@ -35,29 +31,19 @@ namespace mmo
 		auto& device = GraphicsDevice::CreateD3D11();
 		device.SetWindowTitle("MMORPG");
 
-		// Setup vertex buffer
-		s_consoleVertBuf = GraphicsDevice::Get().CreateVertexBuffer(4, sizeof(POS_COL_VERTEX), true, nullptr);
-
-		// Setup index buffer
-		const uint16 s_consoleIndices[] = {
-			0, 1, 2,
-			2, 3, 0
-		};
-		s_consoleIndBuf = GraphicsDevice::Get().CreateIndexBuffer(6, IndexBufferSize::Index_16, s_consoleIndices);
-
-		// Register paint command
-		s_consolePaintCon = EventLoop::Paint.connect(&Console::Paint);
+		// Initialize the screen system
+		Screen::Initialize();
 	}
 
 	void Console::Destroy()
 	{
-		// Remove paint command
-		s_consolePaintCon.disconnect();
+		// Destroy the screen system
+		Screen::Destroy();
 
-		// Reset buffers
-		s_consoleIndBuf.reset();
-		s_consoleVertBuf.reset();
+		// Destroy the graphics device
+		GraphicsDevice::Destroy();
 
+		// Remove default console commands
 		UnregisterCommand("run");
 		UnregisterCommand("ver");
 	}
@@ -126,40 +112,5 @@ namespace mmo
 		{
 			it->second.handler(command, arguments);
 		}
-	}
-
-	void Console::Paint()
-	{
-		auto& gx = GraphicsDevice::Get();
-
-		// Activate alpha blending
-		gx.SetBlendMode(BlendMode::Alpha);
-
-		// Setup render states
-		gx.SetTopologyType(TopologyType::TriangleStrip);
-		gx.SetVertexFormat(VertexFormat::PosColor);
-		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
-
-		// Update vertex buffer contents
-		{
-			CScopedGxBufferLock<POS_COL_VERTEX> lock{ *s_consoleVertBuf };
-			lock[0]->pos[0] = -1.0f; lock[0]->pos[1] = 0.0f; lock[0]->pos[2] = 0.0f;
-			lock[0]->color = 0xA0000000;
-			lock[1]->pos[0] = -1.0f; lock[1]->pos[1] = 1.0f; lock[1]->pos[2] = 0.0f;
-			lock[1]->color = 0xA0000000;
-			lock[2]->pos[0] = 1.0f; lock[2]->pos[1] = 1.0f; lock[2]->pos[2] = 0.0f;
-			lock[2]->color = 0xA0000000;
-			lock[3]->pos[0] = 1.0f; lock[3]->pos[1] = 0.0f; lock[3]->pos[2] = 0.0f;
-			lock[3]->color = 0xA0000000;
-		}
-
-		// Draw the geometry
-		s_consoleVertBuf->Set();
-		s_consoleIndBuf->Set();
-
-		// Draw console
-		gx.DrawIndexed();
 	}
 }

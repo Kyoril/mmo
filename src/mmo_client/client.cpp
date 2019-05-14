@@ -22,6 +22,7 @@
 #include "login_connector.h"
 #include "game_state_mgr.h"
 #include "login_state.h"
+#include "screen.h"
 
 #include <fstream>
 #include <thread>
@@ -179,6 +180,10 @@ namespace mmo
 {
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
+
+	void PaintFuncTest()
+	{
+	}
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()

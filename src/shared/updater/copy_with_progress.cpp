@@ -45,7 +45,8 @@ namespace mmo
 
 				if (!(*src))
 				{
-					if (written < originalSize)
+					if (written < originalSize &&
+						written != compressedSize)
 					{
 						throw std::runtime_error(name + ": Received incomplete file");
 					}
