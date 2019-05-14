@@ -3,6 +3,9 @@
 #if defined(__unix__) || defined(__APPLE__)
 #	include <spawn.h>
 #	include <sys/stat.h>
+#	include <cstring>
+#	include <iostream>
+#	include <exception>
 #elif defined _WIN32
 #	include <Windows.h>
 #endif
@@ -95,10 +98,6 @@ namespace mmo
 
 		throw std::runtime_error("Failed to create executable! Result: " +
 			std::to_string(result));
-
-		throw boost::system::system_error(
-		    result,
-		    boost::system::get_posix_category());
 #else
 		(void)file;
 #endif
