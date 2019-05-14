@@ -9,6 +9,8 @@
 #include <exception>
 #include <optional>
 
+#include "base/sha1.h"
+
 namespace mmo
 {
 	/// Contains account data in a structure.
@@ -24,10 +26,13 @@ namespace mmo
 		std::string v;
 	};
 
+	/// Contains data used by a realm for authentification.
 	struct RealmAuthData
 	{
+		/// Name of the realm.
 		std::string name;
-		std::string password;
+		/// A simple password hash that is used for authentification.
+		SHA1Hash password;
 	};
 
 	/// Basic interface for a database system used by the login server.
@@ -36,12 +41,19 @@ namespace mmo
 		virtual ~IDatabase();
 
 		/// Gets the account data by a given name.
+		/// @param name Name of the account.
 		virtual std::optional<AccountData> getAccountDataByName(const std::string& name) = 0;
-		/// Obtains a realms auth data by it's id.
+		/// Obtains realm data by it's id.
+		/// @param realmId ID of the realm.
 		virtual std::optional<RealmAuthData> getRealmAuthData(uint32 realmId) = 0;
-		/// 
+		/// Retrieves the session key and the account id by name.
+		/// @param accountName Name of the account.
 		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(const std::string& accountName) = 0;
-		/// 
+		/// Writes player session and login data to the database. This also writes the current timestamp
+		/// to the last_login field.
+		/// @param accountId ID of the account to modify.
+		/// @param sessionKey The new session key (hex str).
+		/// @param ip The current ip of the player.
 		virtual void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
 	};
 

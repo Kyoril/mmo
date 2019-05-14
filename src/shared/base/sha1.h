@@ -38,6 +38,10 @@ namespace mmo
 	/// @param sink The output stream.
 	/// @param value The binary SHA1 hash.
 	void sha1PrintHex(std::ostream &sink, const SHA1Hash &value);
+	/// Parses a sha1 hex string.
+	/// @param source The string to parse.
+	/// @param error If not set to nullptr, true will be written if an error occurred.
+	SHA1Hash sha1ParseHex(std::string &source, bool* error = nullptr);
 
 	SHA1Hash sha1ParseHex(std::istream &source);
 }

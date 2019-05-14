@@ -69,6 +69,46 @@ namespace mmo
 		}
 	}
 
+	SHA1Hash sha1ParseHex(std::string &source, bool* error)
+	{
+		SHA1Hash result;
+		
+		size_t i = 0;
+		for (unsigned char & e : result)
+		{
+			if (i >= source.size())
+			{
+				if (error) *error = true;
+				break;
+			}
+
+			char high = source[i++];
+
+			if (i >= source.size())
+			{
+				if (error) *error = true;
+				break;
+			}
+
+			char low = source[i++];
+
+			const int left = hexDigitValue(high);
+			const int right = hexDigitValue(low);
+
+			if (left < 0 ||
+				right < 0)
+			{
+				if (error) *error = true;
+				break;
+			}
+
+			e = static_cast<unsigned char>((left * 16) + right);
+		}
+
+		if (error) *error = false;
+		return result;
+	}
+
 	SHA1Hash sha1ParseHex(std::istream &source)
 	{
 		SHA1Hash result;

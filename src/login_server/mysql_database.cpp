@@ -64,9 +64,23 @@ namespace mmo
 			mysql::Row row(select);
 			if (row)
 			{
+				// Create the structure and fill it with data
 				RealmAuthData data;
 				row.GetField(0, data.name);
-				row.GetField(1, data.password);
+
+				// Read password hash as hex string
+				std::string passwordHash;
+				row.GetField(1, passwordHash);
+
+				// Now parse hex string into SHA1 hash
+				bool error = false;
+				data.password = sha1ParseHex(passwordHash, &error);
+				if (error)
+				{
+					ELOG("Realm " << realmId << ": Invalid sha1 password hash string!");
+					return {};
+				}
+
 				return data;
 			}
 		}

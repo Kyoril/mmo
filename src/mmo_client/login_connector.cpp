@@ -125,7 +125,7 @@ namespace mmo
 		// Split it into 2 seperate strings, interleaved
 		// Leave space for terminating 0
 		char S1[16 + 1], S2[16 + 1];
-		auto arrS = m_S.asByteArray();
+		auto arrS = m_S.asByteArray(32);
 		for (uint32 i = 0; i < 16; i++) 
 		{
 			S1[i] = arrS[i * 2];
@@ -270,6 +270,6 @@ namespace mmo
 		m_authHash = sha1(authHash.c_str(), authHash.size());
 
 		// Connect to the server at localhost
-		connect("127.0.0.1", constants::DefaultLoginPlayerPort, *this, m_ioService);
+		connect("mmo-dev.net", constants::DefaultLoginPlayerPort, *this, m_ioService);
 	}
 }
