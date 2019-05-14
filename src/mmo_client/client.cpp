@@ -263,8 +263,10 @@ namespace mmo
 namespace mmo
 {
 	/// Shared entry point of the application on all platforms.
-	int32 CommonMain()
+	int32 CommonMain(int argc, char** argv)
 	{
+		// TODO: Do something with command line arguments
+
 		// Initialize the game systems, and on success, run the main event loop
 		if (InitializeGlobal())
 		{
@@ -283,6 +285,8 @@ namespace mmo
 
 #ifdef _WIN32
 
+#include "base/win_utility.h"
+
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
@@ -292,15 +296,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		std::scoped_lock lock{ logMutex };
 		OutputDebugStringA((entry.message + "\n").c_str());
 	});
-	
+
+	// Split command line arguments
+	int argc = 0;
+	PCHAR* argv = CommandLineToArgvA(GetCommandLine(), &argc);
+
 	// Finally, run the common main function on all platforms
-	return mmo::CommonMain();
+	return mmo::CommonMain(argc, argv);
 }
 
 #else
 
 /// Procedural entry point on non-windows platforms.
-int main(int argc, const char* argv[])
+int main(int argc, char** argv)
 {
 	// Write everything log entry to cout on non-windows platforms by default
 	std::mutex logMutex;
@@ -310,7 +318,7 @@ int main(int argc, const char* argv[])
 	});
 
 	// Finally, run the common main function on all platforms
-	return mmo::CommonMain();
+	return mmo::CommonMain(argc, argv);
 }
 
 #endif
