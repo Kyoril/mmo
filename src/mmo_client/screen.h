@@ -64,6 +64,6 @@ namespace mmo
 		/// Registers a new screen layer.
 		static ScreenLayerIt AddLayer(ScreenLayerPaintFunc paintFunc, float priority, uint32 flags);
 		/// Removes an existing screen layer.
-		static void RemoveLayer(ScreenLayerIt layer);
+		static void RemoveLayer(ScreenLayerIt& layer);
 	};
 }

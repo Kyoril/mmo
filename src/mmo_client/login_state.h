@@ -3,6 +3,7 @@
 #pragma once
 
 #include "game_state.h"
+#include "screen.h"
 
 
 namespace mmo
@@ -22,5 +23,13 @@ namespace mmo
 		virtual void OnLeave() override;
 		virtual const std::string & GetName() const override;
 
+	private:
+
+		/// Called when the screen layer should be painted. Should paint the scene.
+		void OnPaint();
+
+	private:
+
+		ScreenLayerIt m_paintLayer;
 	};
 }

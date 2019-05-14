@@ -31,76 +31,6 @@
 
 
 ////////////////////////////////////////////////////////////////
-// Triangle test scene
-
-namespace mmo
-{
-	/// The vertex buffer which contains the geometry of our triangle.
-	static VertexBufferPtr s_triangleVertBuf;
-	/// The index buffer which contains the indices of the triangle geometry.
-	static IndexBufferPtr s_triangleIndBuf;
-	/// The connection with the Paint event of the event loop.
-	static scoped_connection s_trianglePaintCon;
-
-
-	/// A simple test function which paints a plain triangle.
-	void Paint_Triangle()
-	{
-		auto& dev = GraphicsDevice::Get();
-
-		// Render the triangle
-		dev.SetBlendMode(BlendMode::Opaque);
-		dev.SetTopologyType(TopologyType::TriangleList);
-		dev.SetVertexFormat(VertexFormat::PosColor);
-
-		// Setup transformation
-		dev.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		dev.SetTransformMatrix(TransformType::View,
-			Matrix4::MakeView(Vector3(0.0f, 3.5f, -5.0f), Vector3::Zero, Vector3::UnitY));
-		dev.SetTransformMatrix(TransformType::Projection,
-			Matrix4::MakeProjection(1.50098f, 4.f / 3.f, 0.222222f, 1777.78f));
-
-		// Activate the buffers
-		s_triangleVertBuf->Set();
-		s_triangleIndBuf->Set();
-
-		// Draw the geometry
-		dev.DrawIndexed();
-	}
-
-	/// Initializes the triangle test scene (allocated geometry buffers etc.)
-	void Init_Triangle()
-	{
-		// Create vertex data
-		const POS_COL_VERTEX vertices[] = {
-			{ {  0.0f,   0.75f, 0.0f }, 0xFFFF0000 },
-			{ {  0.75f, -0.75f, 0.0f }, 0xFF00FF00 },
-			{ { -0.75f, -0.75f, 0.0f }, 0xFF0000FF },
-		};
-		s_triangleVertBuf = GraphicsDevice::Get().CreateVertexBuffer(3, sizeof(POS_COL_VERTEX), false, vertices);
-
-		// Create index data
-		const uint16 indices[] = { 0, 1, 2 };
-		s_triangleIndBuf = GraphicsDevice::Get().CreateIndexBuffer(3, IndexBufferSize::Index_16, indices);
-
-		// Connect to the paint event
-		s_trianglePaintCon = EventLoop::Paint.connect(Paint_Triangle, true);
-	}
-
-	/// Destroy the simple triangle scene (destroying geometry buffers etc.)
-	void Destroy_Triangle()
-	{
-		// Disconnect from paint event
-		s_trianglePaintCon.disconnect();
-
-		// Destroy buffers as they are no longer used
-		s_triangleIndBuf.reset();
-		s_triangleVertBuf.reset();
-	}
-}
-
-
-////////////////////////////////////////////////////////////////
 // Network handler
 
 namespace mmo
@@ -215,9 +145,6 @@ namespace mmo
 		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>());
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 
-		// Initialize a little test scene
-		Init_Triangle();
-
 		// Lets setup a test command
 		Console::RegisterCommand("login", ConsoleCommand_Login, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 
@@ -236,9 +163,6 @@ namespace mmo
 
 		// Remove login command
 		Console::UnregisterCommand("login");
-
-		// Destroy our little test scene
-		Destroy_Triangle();
 
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();

@@ -40,7 +40,7 @@ function(enable_unity_build UB_SUFFIX SOURCE_VARIABLE_NAME)
 endfunction()
 
 macro(add_lib name)
-	file(GLOB sources "*.cpp")
+	file(GLOB sources "*.cpp" "*.c")
 	file(GLOB headers "*.h" "*.hpp")
 	#remove_pch_cpp(sources "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp")
 	if(MMO_UNITY_BUILD)

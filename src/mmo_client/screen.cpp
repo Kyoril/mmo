@@ -90,11 +90,12 @@ namespace mmo
 		return s_screenLayers.emplace(it, std::move(layer));
 	}
 
-	void Screen::RemoveLayer(ScreenLayerIt layer)
+	void Screen::RemoveLayer(ScreenLayerIt& layer)
 	{
 		if (layer != s_screenLayers.end())
 		{
 			s_screenLayers.erase(layer);
+			layer = s_screenLayers.end();
 		}
 	}
 
