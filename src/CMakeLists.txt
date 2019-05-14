@@ -14,3 +14,4 @@ add_subdirectory(launcher)
 add_subdirectory(update_compiler)
 
 add_subdirectory(hpak_tool)
+add_subdirectory(texture_tool)

@@ -18,3 +18,6 @@ add_subdirectory(http_client)
 add_subdirectory(virtual_dir)
 add_subdirectory(updater)
 add_subdirectory(update_compilation)
+add_subdirectory(tex)
+add_subdirectory(tex_v1_0)
+
