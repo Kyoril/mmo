@@ -23,7 +23,7 @@ namespace mmo
 				bool hasMips;
 				uint16 width;
 				uint16 height;
-				std::array<uint32, 16> mimapOffsets;
+				std::array<uint32, 16> mipmapOffsets;
 				std::array<uint32, 16> mipmapLengths;
 
 				explicit Header(VersionId version);

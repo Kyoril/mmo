@@ -11,7 +11,11 @@ namespace mmo
 		{
 			Header::Header(VersionId version)
 				: version(version)
+				, compression(NotCompressed)
+				, hasMips(false)
 			{
+				mipmapOffsets.fill(0);
+				mipmapLengths.fill(0);
 			}
 		}
 	}

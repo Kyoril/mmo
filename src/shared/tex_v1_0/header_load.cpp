@@ -19,7 +19,7 @@ namespace mmo
 					>> io::read<uint8>(header.hasMips)
 					>> io::read<uint16>(header.width)
 					>> io::read<uint16>(header.height)
-					>> io::read_range(header.mimapOffsets)
+					>> io::read_range(header.mipmapOffsets)
 					>> io::read_range(header.mipmapLengths);
 			}
 		}
