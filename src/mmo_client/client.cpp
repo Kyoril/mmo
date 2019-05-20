@@ -70,6 +70,7 @@ namespace mmo
 	void NetDestroy()
 	{
 		// Close the login connector
+		s_loginConnector->resetListener();
 		s_loginConnector->close();
 		s_loginConnector.reset();
 
