@@ -71,6 +71,8 @@ namespace mmo
 		void CreateConstantBuffers();
 		/// Creates the supported rasterizer states.
 		void CreateRasterizerStates();
+		/// Creates the supported sampler states.
+		void CreateSamplerStates();
 
 	private:
 		/// The render window callback procedure for internally created windows.
@@ -96,6 +98,8 @@ namespace mmo
 		ComPtr<ID3D11RasterizerState> m_rasterizerState;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
+		/// The default texture sampler.
+		ComPtr<ID3D11SamplerState> m_samplerState;
 		/// Input layouts.
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		std::map<VertexFormat, ShaderPtr> VertexShaders;

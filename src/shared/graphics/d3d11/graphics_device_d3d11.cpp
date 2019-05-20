@@ -171,6 +171,9 @@ namespace mmo
 
 		// Create rasterizer state
 		CreateRasterizerStates();
+
+		// Create sampler state
+		CreateSamplerStates();
 	}
 
 	void GraphicsDeviceD3D11::CreateSizeDependantResources()
@@ -335,6 +338,20 @@ namespace mmo
 		rd.FillMode = D3D11_FILL_SOLID;
 		rd.CullMode = D3D11_CULL_NONE;
 		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_rasterizerState)));
+	}
+
+	void GraphicsDeviceD3D11::CreateSamplerStates()
+	{
+		D3D11_SAMPLER_DESC sd;
+		ZeroMemory(&sd, sizeof(sd));
+
+		sd.Filter = D3D11_FILTER_ANISOTROPIC;
+		sd.MaxAnisotropy = 4;
+		sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+
+		VERIFY(SUCCEEDED(m_device->CreateSamplerState(&sd, &m_samplerState)));
 	}
 
 	LRESULT GraphicsDeviceD3D11::RenderWindowProc(HWND Wnd, UINT Msg, WPARAM WParam, LPARAM LParam)
@@ -569,6 +586,10 @@ namespace mmo
 		if (pixIt != PixelShaders.end())
 		{
 			pixIt->second->Set();
+
+			// Set sampler state
+			ID3D11SamplerState* const samplerStates = { m_samplerState.Get() };
+			m_immContext->PSSetSamplers(0, 1, &samplerStates);
 		}
 	}
 

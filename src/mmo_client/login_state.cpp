@@ -25,11 +25,24 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
+		// Create vertex buffer
+		const POS_COL_TEX_VERTEX vertices[] = {
+			{ { -1.0f, -1.0f, 0.0f }, 0xffffffff, { 0.0f, 0.0f } },
+			{ { -1.0f,  1.0f, 0.0f }, 0xffffffff, { 0.0f, 1.0f } },
+			{ {  1.0f,  1.0f, 0.0f }, 0xffffffff, { 1.0f, 1.0f } },
+			{ {  1.0f, -1.0f, 0.0f }, 0xffffffff, { 1.0f, 0.0f } }
+		};
+		m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(4, sizeof(POS_COL_TEX_VERTEX), false, vertices);
+
+		// Create index buffer
+		const uint16 indices[] = {
+			0, 1, 2,
+			2, 3, 0
+		};
+		m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(4, IndexBufferSize::Index_16, indices);
+
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, 0);
-
-		// Create geometry to render the logo on screen
-
 
 #if 0
 		// Load texture to render
@@ -63,7 +76,12 @@ namespace mmo
 
 	void LoginState::OnLeave()
 	{
+		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
+
+		// Destroy vertex and index buffer
+		m_indexBuffer.reset();
+		m_vertexBuffer.reset();
 	}
 
 	const std::string & LoginState::GetName() const
@@ -73,7 +91,17 @@ namespace mmo
 
 	void LoginState::OnPaint()
 	{
-		// Setup something to paint
+		// Setup render states to draw
+		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorTex1);
+		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList);
 
+		// TODO: Setup texture
+
+		// Setup geometry buffers
+		m_vertexBuffer->Set();
+		m_indexBuffer->Set();
+
+		// Draw indexed
+		GraphicsDevice::Get().DrawIndexed();
 	}
 }

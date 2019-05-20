@@ -4,6 +4,7 @@
 
 #include "game_state.h"
 #include "screen.h"
+#include "graphics/graphics_device.h"
 
 
 namespace mmo
@@ -31,5 +32,8 @@ namespace mmo
 	private:
 
 		ScreenLayerIt m_paintLayer;
+
+		VertexBufferPtr m_vertexBuffer;
+		IndexBufferPtr m_indexBuffer;
 	};
 }
