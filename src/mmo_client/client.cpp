@@ -221,11 +221,13 @@ namespace mmo
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
 	// Setup log to print each log entry to the debug output on windows
+#ifdef _DEBUG
 	std::mutex logMutex;
 	mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry & entry) {
 		std::scoped_lock lock{ logMutex };
 		OutputDebugStringA((entry.message + "\n").c_str());
 	});
+#endif
 
 	// Split command line arguments
 	int argc = 0;

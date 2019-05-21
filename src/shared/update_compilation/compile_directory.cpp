@@ -13,6 +13,8 @@
 
 #include "zstr/zstr.hpp"
 
+#include <iostream>
+
 namespace mmo
 {
 	namespace updating
@@ -173,6 +175,7 @@ namespace mmo
 			    bool isZLibCompressed
 			);
 
+
 			void compileEntry(
 			    virtual_dir::IReader &sourceRoot,
 			    virtual_dir::IWriter &outputRoot,
@@ -183,8 +186,12 @@ namespace mmo
 			    bool isZLibCompressed
 			)
 			{
+				// Obtain the source type so we can apply a different compiler eventually
 				const auto type = inputDescription.getString("type");
 				outputDescription.addKey("type", type);
+
+				// Add sub directory entry
+				const auto sub = inputDescription.getString("sub");
 
 				if (type == "if")
 				{
@@ -200,10 +207,12 @@ namespace mmo
 				}
 				else
 				{
+					// Read the from and to fields
 					const auto from = inputDescription.getString("from");
 					auto to = inputDescription.getString("to");
 					if (to.empty())
 					{
+						// If there is no "to" location, use "from" as "to" location
 						to = from;
 					}
 
@@ -227,39 +236,103 @@ namespace mmo
 								throw std::runtime_error("Found a non-table in an 'entries' array");
 							}
 
-							TableWriter entryDescriptionOutput(
-							    entriesOutput,
-							    sff::write::Comma);
+							// If there is a subdirectory set, add it
+							if (!sub.empty())
+							{
+								TableWriter entryOutput(entriesOutput, sff::write::Comma);
+								entryOutput.addKey("type", "fs");
+								entryOutput.addKey("name", sub);
 
-							compileEntry(
-							    sourceRoot,
-							    outputRoot,
-							    *entryDescription,
-							    subFromLocation,
-							    entryDescriptionOutput,
-							    subDestinationDir,
-							    isZLibCompressed
-							);
+								sff::write::Array<char> subEntriesOutput(
+									entryOutput,
+									"entries",
+									sff::write::MultiLine);
 
-							entryDescriptionOutput.Finish();
+								TableWriter entryDescriptionOutput(
+									subEntriesOutput,
+									sff::write::Comma);
+
+								compileEntry(
+									sourceRoot,
+									outputRoot,
+									*entryDescription,
+									subFromLocation,
+									entryDescriptionOutput,
+									virtual_dir::joinPaths(subDestinationDir, sub),
+									isZLibCompressed
+								);
+
+								subEntriesOutput.Finish();
+								entryOutput.Finish();
+
+								entryDescriptionOutput.Finish();
+							}
+							else
+							{
+								TableWriter entryDescriptionOutput(
+									entriesOutput,
+									sff::write::Comma);
+
+								compileEntry(
+									sourceRoot,
+									outputRoot,
+									*entryDescription,
+									subFromLocation,
+									entryDescriptionOutput,
+									subDestinationDir,
+									isZLibCompressed
+								);
+
+								entryDescriptionOutput.Finish();
+							}
 						}
 
 						entriesOutput.Finish();
 					}
 					else
 					{
-						compileFile(
-						    sourceRoot,
-						    outputRoot,
-						    subFromLocation,
-						    outputDescription,
-						    subDestinationDir,
-						    isZLibCompressed,
-						    to
-						);
+						// If there is a subdirectory set, add it
+						auto dir = subDestinationDir;
+						if (!sub.empty())
+						{
+							sff::write::Array<char> entriesOutput(
+								outputDescription,
+								"entries",
+								sff::write::MultiLine);
+
+							TableWriter entryOutput(entriesOutput, sff::write::Comma);
+							entryOutput.addKey("type", "fs");
+							entryOutput.addKey("name", sub);
+
+							compileFile(
+								sourceRoot,
+								outputRoot,
+								subFromLocation,
+								entryOutput,
+								virtual_dir::joinPaths(subDestinationDir, sub),
+								isZLibCompressed,
+								to
+							);
+
+							entryOutput.Finish();
+							entriesOutput.Finish();
+						}
+						else
+						{
+							compileFile(
+								sourceRoot,
+								outputRoot,
+								subFromLocation,
+								outputDescription,
+								subDestinationDir,
+								isZLibCompressed,
+								to
+							);
+						}
 					}
 				}
 			}
+
 
 			void compileIf(
 			    virtual_dir::IReader &sourceRoot,
@@ -305,12 +378,14 @@ namespace mmo
 			}
 		}
 
+
 		void compileDirectory(
 			virtual_dir::IReader &sourceDir,
 			virtual_dir::IWriter &destinationDir,
 		    bool isZLibCompressed
 		)
 		{
+			// Try to find source.txt in source directoy and open it for reading
 			const std::string fullSourceFileName = "source.txt";
 			const auto sourceFile = sourceDir.readFile(fullSourceFileName, false);
 			if (!sourceFile)
@@ -318,33 +393,40 @@ namespace mmo
 				throw std::runtime_error("Could not open source list file " + fullSourceFileName);
 			}
 
+			// Parse the whole file
 			std::string sourceContent;
 			Table sourceTable;
 			sff::loadTableFromFile(sourceTable, sourceContent, *sourceFile);
 
+			// Check the format version
 			const auto version = sourceTable.getInteger<unsigned>("version", 0);
 			if (version == 0)
 			{
+				// Try to get the root object
 				const auto *const root = sourceTable.getTable("root");
 				if (!root)
 				{
 					throw std::runtime_error("Root directory entry is missing");
 				}
 
+				// Create the list.txt file in the target directory for writing. This file
+				// will contain a summary of all file entries
 				const virtual_dir::Path fullListFileName = "list.txt";
 				const auto listFile = destinationDir.writeFile(fullListFileName, false, true);
-
 				if (!listFile)
 				{
 					throw std::runtime_error(
 					    "Could not open output list file " + fullListFileName);
 				}
 
+				// Write the target root table
 				sff::write::Writer<char> listWriter(*listFile);
 				TableWriter listTable(listWriter, sff::write::MultiLine);
 
+				// Add the current file format verison
 				listTable.addKey("version", 1);
 
+				// Compile the first entry from the source list
 				TableWriter rootEntry(listTable, "root", sff::write::Comma);
 				compileEntry(
 				    sourceDir,
@@ -355,6 +437,8 @@ namespace mmo
 				    "",
 				    isZLibCompressed
 				);
+
+				// And finishe the root entry in list.txt
 				rootEntry.Finish();
 			}
 			else
