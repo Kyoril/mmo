@@ -141,7 +141,7 @@ namespace mmo
 		}
 
 		// Initialize the asset registry
-		AssetRegistry::Initialize(current_path / "Data");
+		AssetRegistry::Initialize(current_path / "Data", { "Interface.hpak", "Fonts.hpak" });
 
 		// Initialize the event loop
 		EventLoop::Initialize();

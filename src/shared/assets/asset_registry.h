@@ -20,7 +20,7 @@ namespace mmo
 
 	public:
 		/// Initializes the asset registry.
-		static void Initialize(const std::filesystem::path& basePath);
+		static void Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives);
 		/// Destroys the asset registry.
 		static void Destroy();
 		/// Opens a file for reading. Returns nullptr if the files doesn't exist.

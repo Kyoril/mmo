@@ -25,7 +25,7 @@ namespace mmo
 	static std::map<std::string, std::shared_ptr<IArchive>, StrCaseIComp> s_files;
 
 
-	void AssetRegistry::Initialize(const std::filesystem::path& basePath)
+	void AssetRegistry::Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives)
 	{
 		ASSERT(s_archives.empty());
 		ASSERT(s_files.empty());
@@ -40,14 +40,8 @@ namespace mmo
 		// for distribution, which is the only purpose of hpak files. Also, even in
 		// release builds, we allow loading files from the file system.
 #ifndef _DEBUG
-		// HPAK archive file names to load
-		const std::array<std::string, 2> archiveNames{
-			"Interface.hpak",
-			"Fonts.hpak"
-		};
-
 		// Iterate through files
-		for (const std::string& file : archiveNames)
+		for (const std::string& file : archives)
 		{
 			// Check if the file exists
 			std::filesystem::path archivePath = s_basePath / file;
