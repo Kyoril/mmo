@@ -78,21 +78,23 @@ namespace mmo
 
 	void LoginState::OnPaint()
 	{
+		auto& gx = GraphicsDevice::Get();
+
 		// Setup orthographic projection
-		GraphicsDevice::Get().SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1024.0f, 1024.0f, 0.0f, 0.0f, 100.0f));
+		gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1024.0f, 1024.0f, 0.0f, 0.0f, 100.0f));
 
 		// Setup render states to draw
-		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorTex1);
-		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList);
+		gx.SetVertexFormat(VertexFormat::PosColorTex1);
+		gx.SetTopologyType(TopologyType::TriangleList);
 
 		// Bind texture
-		GraphicsDevice::Get().BindTexture(m_texture, ShaderType::PixelShader, 0);
+		gx.BindTexture(m_texture, ShaderType::PixelShader, 0);
 
 		// Setup geometry buffers
 		m_vertexBuffer->Set();
 		m_indexBuffer->Set();
 
 		// Draw indexed
-		GraphicsDevice::Get().DrawIndexed();
+		gx.DrawIndexed();
 	}
 }

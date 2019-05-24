@@ -16,7 +16,12 @@ namespace mmo
 
 	void FileSystemArchive::Load()
 	{
-		// Nothing to do here
+		// Try to create the directory in case it is empty
+		if (!std::filesystem::exists(m_name))
+		{
+			std::filesystem::create_directories(m_name);
+		}
+
 	}
 
 	void FileSystemArchive::Unload()
