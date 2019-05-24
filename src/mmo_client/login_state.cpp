@@ -1,7 +1,7 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "login_state.h"
-#include "asset_registry.h"
+#include "assets/asset_registry.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -56,13 +56,19 @@ namespace mmo
 			throw std::runtime_error("Failed to load texture pre header");
 		}
 
-		tex::v1_0::Header header(tex::Version_1_0);
-		if (!tex::v1_0::loadHeader(header, reader))
+		switch (preHeader.version)
 		{
-			throw std::runtime_error("Failed to load texture header");
-		}
+			case tex::Version_1_0:
+			{
+				tex::v1_0::Header header(preHeader.version);
+				if (!tex::v1_0::loadHeader(header, reader))
+				{
+					throw std::runtime_error("Failed to load texture header");
+				}
 
-		DLOG("Loaded logo texture. Size: " << header.width << "x" << header.height << " (Has Mips: " << header.hasMips << ")");
+				DLOG("Loaded logo texture. Size: " << header.width << "x" << header.height << " (Has Mips: " << header.hasMips << ")");
+			} break;
+		}
 	}
 
 	void LoginState::OnLeave()

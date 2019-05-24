@@ -15,6 +15,7 @@
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "graphics/graphics_device.h"
+#include "assets/asset_registry.h"
 #include "base/filesystem.h"
 
 #include "event_loop.h"
@@ -23,7 +24,6 @@
 #include "game_state_mgr.h"
 #include "login_state.h"
 #include "screen.h"
-#include "asset_registry.h"
 
 #include <fstream>
 #include <thread>

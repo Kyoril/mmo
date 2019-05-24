@@ -16,6 +16,7 @@
 #include <sstream>
 #include <exception>
 
+
 namespace mmo
 {
 	HPAKArchive::HPAKArchive(const std::string & filename)

@@ -1,6 +1,5 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
-
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -55,23 +54,6 @@ namespace mmo
 	struct BmpImageParser
 		: IImageParser
 	{
-		int32 reverseInt(int32 getal)
-		{
-			int reversed;  // this is reverse of getal
-
-			/* get number form console here */
-			char *n1, *n2;
-			n1 = (char *)&getal;
-			n2 = (char *)&reversed;
-
-			*(n2 + 0) = *(n1 + 3);  // or n2[0] = n1[3];
-			*(n2 + 1) = *(n1 + 2);  // or n2[1] = n1[2];
-			*(n2 + 2) = *(n1 + 1);  // or n2[2] = n1[1]; 
-			*(n2 + 3) = *(n1 + 0);  // or n2[3] = n1[0];
-
-			return reversed;
-		}
-
 		virtual bool Parse(std::istream& data, uint16& width, uint16& height, ImageFormat& format, std::vector<uint8>& pixels) override
 		{
 			// Setup source and  reader
