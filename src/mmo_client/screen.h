@@ -23,9 +23,11 @@ namespace mmo
 	enum ScreenLayerFlags
 	{
 		/// The screen layer is rendered using screen space only.
-		ScreenSpaceTransform = 1,
+		IdentityProjection = 1,
 		/// The screen layer is disabled (currently not drawn).
 		Disabled = 2,
+		/// The screen layer is rendered using screen space only.
+		IdentityTransform = 4,
 	};
 
 	/// Function callback that is executed once a layer should be drawn.

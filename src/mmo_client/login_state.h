@@ -35,5 +35,6 @@ namespace mmo
 
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
+		TexturePtr m_texture;
 	};
 }

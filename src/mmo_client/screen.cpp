@@ -34,19 +34,17 @@ namespace mmo
 				continue;
 			}
 
-			// Layer is enabled, reset transforms
-			gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-			gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
+			if (layer.flags & ScreenLayerFlags::IdentityTransform)
+			{
+				// Layer is enabled, reset transforms
+				gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
+				gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
+			}
 
 			// If the layer is marked as screen space, setup orthographic matrix
-			if (layer.flags & ScreenLayerFlags::ScreenSpaceTransform)
+			if (layer.flags & ScreenLayerFlags::IdentityProjection)
 			{
 				gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
-			}
-			else
-			{
-				// Setup projection matrix
-				gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeProjection(1.0472f, 16.0f / 9.0f, 0.1f, 300.0f));
 			}
 
 			// Call the paint function of the layer

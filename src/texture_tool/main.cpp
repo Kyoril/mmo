@@ -50,113 +50,91 @@ namespace mmo
 #define HIWORD(l)           ((uint16)((((uint32)(l)) >> 16) & 0xffff))
 #endif
 
-	/// This class parses bmp image data.
-	struct BmpImageParser
+	/// This class parses png image data.
+	struct TgaImageParser
 		: IImageParser
 	{
+#pragma pack(push, 1)
+		struct TargaHeader
+		{
+			uint8 IDLength;
+			uint8 ColorMapType;
+			uint8 DataTypeCode;
+			uint16 wColorMapOrigin;
+			uint16 wColorMapLength;
+			uint8 ColorMapDepth;
+			uint16 wOriginX;
+			uint16 wOriginY;
+			uint16 wWidth;
+			uint16 wHeight;
+			uint8 BitDepth;
+			uint8 ImageDescriptor;
+		};
+#pragma pack(pop)
+
 		virtual bool Parse(std::istream& data, uint16& width, uint16& height, ImageFormat& format, std::vector<uint8>& pixels) override
 		{
 			// Setup source and  reader
 			io::StreamSource source{ data };
 			io::Reader reader{ source };
 
-			// Read bitmap magic
-			uint16 bmpMagic;
-			if (!(reader >> io::read<uint16>(bmpMagic)) || bmpMagic != 0x4D42)
+			// Read targa header
+			TargaHeader header;
+			reader.readPOD(header);
+			if (!reader)
 				return false;
 
-			// Skip size in bytes as it is known to be unreliable anyway
-			reader >> io::skip<uint16>();
-
-			// Reserved, software dependant (so just skip)
-			reader >> io::skip<uint32>();
-
-			// Read the beginning of the actual pixel data offset in bytes from the beginning of the file.
-			// The minimum value is the minimum header size in bytes. It might be also bigger in case of a
-			// bigger info block in the header.
-			const uint32 minSupportedPixelOffset = 54;
-			uint32 pixelOffset = 0;
-			if (!(reader >> io::read<uint32>(pixelOffset)) || pixelOffset < minSupportedPixelOffset)
+			// We only support uncompressed tga
+			if (header.DataTypeCode != 2)
 				return false;
 
-			// Skip size of info header block (we don't care!)
-			reader >> io::skip<uint32>();
-
-			// Read bitmap size in pixels
-			int32 bmWidth = 0, bmHeight = 0;
-			if (!(reader >> io::read<int32>(bmWidth) >> io::read<int32>(bmHeight)))
+			// We don't support color palettes
+			if (header.ColorMapType != 0)
 				return false;
 
-			bmWidth = HIWORD(bmWidth) + ((uint32)LOWORD(bmWidth) << 16);
-			bmHeight = HIWORD(bmHeight) + ((uint32)LOWORD(bmHeight) << 16);
-
-			// Write size in pixels. Height might be negative and indicates the row-order of the pixel data
-			// where positive value means bottom-up order and negative value means top-bottom order.
-			width = static_cast<uint16>(bmWidth);
-			height = static_cast<uint16>(std::abs(bmHeight));
-
-			// Something went wrong, size isn't valid
-			if (width == 0 || height == 0)
+			// We only support 24 or 32 bits
+			if (header.BitDepth != 24 && header.BitDepth != 32)
 				return false;
 
-			// Skip num planes
-			reader >> io::skip<uint32>();
-	
-			// Read bits per pixel count
-			uint16 bpp = 0;
-			if (!(reader >> io::read<uint16>(bpp)))
+			// Skip image id data
+			if (header.IDLength > 0)
+				reader.skip(header.IDLength);
+
+			// Check if still valid
+			if (!reader)
 				return false;
 
-			// We only support 24 and 32 bits per pixel
-			if (bpp != 24 && bpp != 32)
+			// Write image size
+			width = header.wWidth;
+			height = header.wHeight;
+
+			// Write image format
+			format = ImageFormat::RGBA;
+
+			// Image data: BGR(A)
+			pixels.resize(width * height * 4, 0xff);
+			for (uint32 y = 0; y < height; ++y)
 			{
-				std::cerr << "Only 24 and 32 bit bitmaps are supported!\n";
-				return false;
-			}
-
-			// Read compression value
-			uint32 compression = 0;
-			if (!(reader >> io::read<uint32>(compression)))
-				return false;
-
-			// Seek pixel offset in bytes
-			pixelOffset = HIWORD(pixelOffset) + ((uint32)LOWORD(pixelOffset) << 16);;
-			source.seek(pixelOffset);
-
-			// Read pixel data
-			if (compression == 0)	// RGB, uncompressed
-			{
-				// 24 bit rgb
-				pixels.reserve(width * height * 3);
-				format = ImageFormat::RGB;
-
-				for (uint32 i = 0; i < static_cast<uint32>(width) * static_cast<uint32>(height); ++i)
+				for (uint32 x = 0; x < width ; ++x)
 				{
-					// Just read the data, but be careful since it's BGR actually
-					uint8 b = 0, g = 0, r = 0;
-					if (!(reader >> io::read<uint8>(b) >> io::read<uint8>(g) >> io::read<uint8>(r)))
+					uint8 b = 0, g = 0, r = 0, a = 0xff;
+					reader >> io::read<uint8>(b) >> io::read<uint8>(g) >> io::read<uint8>(r);
+					if (header.BitDepth == 32)
+						reader >> io::read<uint8>(a);
+
+					if (!reader)
 						return false;
 
-					// Convert bgr to rgb and add it
-					pixels.push_back(r);
-					pixels.push_back(g);
-					pixels.push_back(b);
+					const size_t index = x + y * width;
+					pixels[index * 4 + 0] = r;
+					pixels[index * 4 + 1] = g;
+					pixels[index * 4 + 2] = b;
+					pixels[index * 4 + 3] = a;
 				}
+				
 			}
 
-			// Successfully read image
 			return true;
-		}
-	};
-
-	/// This class parses png image data.
-	struct PngImageParser
-		: IImageParser
-	{
-		virtual bool Parse(std::istream& data, uint16& width, uint16& height, ImageFormat& format, std::vector<uint8>& pixels) override
-		{
-			std::cerr << "Png images aren't yet supported!\n";
-			return false;
 		}
 	};
 }
@@ -273,7 +251,7 @@ int main(int argc, char** argv)
 
 			// Parse in the source data and determine parameters
 			std::unique_ptr<mmo::IImageParser> imageParser;
-			imageParser = std::make_unique<mmo::BmpImageParser>();
+			imageParser = std::make_unique<mmo::TgaImageParser>();
 
 			uint16 width = 0, height = 0;
 			mmo::ImageFormat format;

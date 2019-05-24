@@ -5,6 +5,7 @@
 #include "index_buffer_d3d11.h"
 #include "vertex_shader_d3d11.h"
 #include "pixel_shader_d3d11.h"
+#include "texture_d3d11.h"
 #include "base/macros.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -278,7 +279,7 @@ namespace mmo
 		const D3D11_INPUT_ELEMENT_DESC PosColTexElements[] = {
 			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
 		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColTexElements, ARRAYSIZE(PosColTexElements), g_VS_PosColorTex, ARRAYSIZE(g_VS_PosColorTex), &InputLayout)));
 		InputLayouts[VertexFormat::PosColorTex1] = InputLayout;
@@ -588,7 +589,7 @@ namespace mmo
 			pixIt->second->Set();
 
 			// Set sampler state
-			ID3D11SamplerState* const samplerStates = { m_samplerState.Get() };
+			ID3D11SamplerState* const samplerStates = m_samplerState.Get();
 			m_immContext->PSSetSamplers(0, 1, &samplerStates);
 		}
 	}
@@ -634,5 +635,16 @@ namespace mmo
 		// Change the transform values
 		GraphicsDevice::SetTransformMatrix(type, matrix);
 		m_matrixDirty = true;
+	}
+
+	TexturePtr GraphicsDeviceD3D11::CreateTexture()
+	{
+		return std::make_shared<TextureD3D11>(*this);
+	}
+
+	void GraphicsDeviceD3D11::BindTexture(TexturePtr texture, ShaderType shader, uint32 slot)
+	{
+		auto texD3D11 = std::static_pointer_cast<TextureD3D11>(texture);
+		texD3D11->Bind(shader, slot);
 	}
 }

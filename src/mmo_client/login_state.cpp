@@ -21,12 +21,18 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
+		// Vertex position
+		const float w = 512.0f;
+		const float h = 256.0f;
+		const float x = 512.0f - w / 2.0f;
+		const float y = 100.0f;
+
 		// Create vertex buffer
 		const POS_COL_TEX_VERTEX vertices[] = {
-			{ { -1.0f, -1.0f, 0.0f }, 0xffffffff, { 0.0f, 0.0f } },
-			{ { -1.0f,  1.0f, 0.0f }, 0xffffffff, { 0.0f, 1.0f } },
-			{ {  1.0f,  1.0f, 0.0f }, 0xffffffff, { 1.0f, 1.0f } },
-			{ {  1.0f, -1.0f, 0.0f }, 0xffffffff, { 1.0f, 0.0f } }
+			{ { x, y + h, 0.0f }, 0xffffffff, { 0.0f, 0.0f } },
+			{ { x, y, 0.0f }, 0xffffffff, { 0.0f, 1.0f } },
+			{ { x + w, y, 0.0f }, 0xffffffff, { 1.0f, 1.0f } },
+			{ { x + w, y + h, 0.0f }, 0xffffffff, { 1.0f, 0.0f } }
 		};
 		m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(4, sizeof(POS_COL_TEX_VERTEX), false, vertices);
 
@@ -35,10 +41,7 @@ namespace mmo
 			0, 1, 2,
 			2, 3, 0
 		};
-		m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(4, IndexBufferSize::Index_16, indices);
-
-		// Register drawing of the login ui
-		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, 0);
+		m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(6, IndexBufferSize::Index_16, indices);
 
 		// Try to load interface.hpak
 		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile("Interface/Logo.htex");
@@ -47,34 +50,21 @@ namespace mmo
 			throw std::runtime_error("Failed to load logo texture");
 		}
 
-		io::StreamSource source{ *file };
-		io::Reader reader{ source };
+		// Load the logo texture
+		m_texture = GraphicsDevice::Get().CreateTexture();
+		m_texture->Load(file);
 
-		tex::PreHeader preHeader;
-		if (!tex::loadPreHeader(preHeader, reader))
-		{
-			throw std::runtime_error("Failed to load texture pre header");
-		}
-
-		switch (preHeader.version)
-		{
-			case tex::Version_1_0:
-			{
-				tex::v1_0::Header header(preHeader.version);
-				if (!tex::v1_0::loadHeader(header, reader))
-				{
-					throw std::runtime_error("Failed to load texture header");
-				}
-
-				DLOG("Loaded logo texture. Size: " << header.width << "x" << header.height << " (Has Mips: " << header.hasMips << ")");
-			} break;
-		}
+		// Register drawing of the login ui
+		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
 	}
 
 	void LoginState::OnLeave()
 	{
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
+
+		// Reset texture
+		m_texture.reset();
 
 		// Destroy vertex and index buffer
 		m_indexBuffer.reset();
@@ -88,11 +78,15 @@ namespace mmo
 
 	void LoginState::OnPaint()
 	{
+		// Setup orthographic projection
+		GraphicsDevice::Get().SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1024.0f, 1024.0f, 0.0f, 0.0f, 100.0f));
+
 		// Setup render states to draw
 		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorTex1);
 		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList);
 
-		// TODO: Setup texture
+		// Bind texture
+		GraphicsDevice::Get().BindTexture(m_texture, ShaderType::PixelShader, 0);
 
 		// Setup geometry buffers
 		m_vertexBuffer->Set();

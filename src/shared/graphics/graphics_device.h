@@ -9,6 +9,7 @@
 #include "vertex_shader.h"
 #include "pixel_shader.h"
 #include "vertex_format.h"
+#include "texture.h"
 
 
 namespace mmo
@@ -116,6 +117,10 @@ namespace mmo
 		virtual void RestoreState() = 0;
 		/// Sets the transform matrix for a certain type of transform.
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix);
+		/// Create a new texture object.
+		virtual TexturePtr CreateTexture() = 0;
+		/// Binds a texture to the given slot for a given shader type.
+		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) = 0;
 
 	protected:
 		Matrix4 m_transform[TransformType::Count];

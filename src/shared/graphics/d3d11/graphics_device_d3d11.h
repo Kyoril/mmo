@@ -38,6 +38,8 @@ namespace mmo
 		virtual void CaptureState() override;
 		virtual void RestoreState() override;
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
+		virtual TexturePtr CreateTexture() override;
+		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
 		// ~ End GraphicsDevice
 
 	public:
