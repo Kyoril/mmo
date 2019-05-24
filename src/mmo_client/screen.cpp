@@ -1,3 +1,4 @@
+// Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "screen.h"
 #include "event_loop.h"

@@ -4,6 +4,7 @@
 
 #include "typedefs.h"
 #include "big_number.h"
+#include "config.h"
 
 namespace mmo
 {
@@ -33,8 +34,8 @@ namespace mmo
 		// These are shared constants used by srp-6 calculations
 		namespace srp
 		{
-			static const BigNumber N("894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7");
-			static const BigNumber g(7);
+			static const BigNumber N(Srp6N);
+			static const BigNumber g(Srp6g);
 		}
 	}
 }

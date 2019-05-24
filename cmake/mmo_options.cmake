@@ -34,6 +34,10 @@ option(MMO_BUILD_TOOLS "If checked, will try to build tools." OFF)
 # If enabled, unit tests will be built.
 option(MMO_BUILD_TESTS "If checked, will try to test programs." ON)
 
+# If enabled, unit tests will be built.
+set(MMO_SRP6_N "894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7" CACHE STRING "Hex representation of a prime number for srp6a calculations.")
+set(MMO_SRP6_g "07" CACHE STRING "Hex representation of a prime number for srp6a calculations.")
+
 # TODO: Add more options here as you need
 
 
@@ -50,3 +54,5 @@ if (MMO_WITH_RELEASE_ASSERTS)
 endif()
 
 # TODO: Add more option-specific settings here as you need
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h @ONLY)
