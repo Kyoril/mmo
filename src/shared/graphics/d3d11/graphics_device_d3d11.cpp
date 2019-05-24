@@ -337,7 +337,7 @@ namespace mmo
 		D3D11_RASTERIZER_DESC rd;
 		ZeroMemory(&rd, sizeof(rd));
 		rd.FillMode = D3D11_FILL_SOLID;
-		rd.CullMode = D3D11_CULL_NONE;
+		rd.CullMode = D3D11_CULL_BACK;
 		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_rasterizerState)));
 	}
 
@@ -347,7 +347,7 @@ namespace mmo
 		ZeroMemory(&sd, sizeof(sd));
 
 		sd.Filter = D3D11_FILTER_ANISOTROPIC;
-		sd.MaxAnisotropy = 4;
+		sd.MaxAnisotropy = D3D11_MAX_MAXANISOTROPY;
 		sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
 		sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 		sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
