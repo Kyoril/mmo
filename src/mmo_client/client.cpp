@@ -23,6 +23,7 @@
 #include "game_state_mgr.h"
 #include "login_state.h"
 #include "screen.h"
+#include "asset_registry.h"
 
 #include <fstream>
 #include <thread>
@@ -112,18 +113,24 @@ namespace mmo
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
 
-	void PaintFuncTest()
-	{
-	}
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
+		// Receive the current working directory
+		std::error_code error;
+		auto current_path = std::filesystem::current_path(error);
+		if (error)
+		{
+			ELOG("Could not obtain working directory: " << error);
+			return false;
+		}
+
 		// Ensure the logs directory exists
-		std::filesystem::create_directories("./Logs");
+		std::filesystem::create_directories(current_path / "Logs");
 
 		// Setup the log file connection after opening the log file
-		s_logFile.open("./Logs/Client.log", std::ios::out);
+		s_logFile.open((current_path / "Logs" / "Client.log").string().c_str(), std::ios::out);
 		if (s_logFile)
 		{
 			s_logConn = g_DefaultLog.signal().connect(
@@ -133,11 +140,14 @@ namespace mmo
 			});
 		}
 
+		// Initialize the asset registry
+		AssetRegistry::Initialize(current_path / "Data");
+
 		// Initialize the event loop
 		EventLoop::Initialize();
 
-		// Initialize the console client
-		Console::Initialize("Config\\Config.cfg");
+		// Initialize the console client which also loads the config file
+		Console::Initialize(current_path / "Config" / "Config.cfg");
 
 		// Initialize network threads
 		NetInit();
@@ -150,7 +160,7 @@ namespace mmo
 		Console::RegisterCommand("login", ConsoleCommand_Login, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 
 		// Run the RunOnce script
-		Console::ExecuteCommand("run Config\\RunOnce.cfg");
+		Console::ExecuteCommand("run Config/RunOnce.cfg");
 
 		// TODO: Initialize other systems
 
@@ -173,12 +183,9 @@ namespace mmo
 
 		// Destroy the graphics device object
 		GraphicsDevice::Destroy();
-
-		// Destroy the console client
 		Console::Destroy();
-
-		// Destroy the event loop
 		EventLoop::Destroy();
+		AssetRegistry::Destroy();
 
 		// Destroy log
 		s_logConn.disconnect();

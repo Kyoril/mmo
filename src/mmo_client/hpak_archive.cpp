@@ -95,4 +95,12 @@ namespace mmo
 
 		return strm;
 	}
+
+	void HPAKArchive::EnumerateFiles(std::vector<std::string>& files)
+	{
+		for (const auto& file : m_header.files)
+		{
+			files.push_back(file.name);
+		}
+	}
 }

@@ -2,6 +2,8 @@
 
 #include "filesystem_archive.h"
 
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -35,5 +37,32 @@ namespace mmo
 	std::unique_ptr<std::istream> FileSystemArchive::Open(const std::string & filename)
 	{
 		return m_reader.readFile(filename, false);
+	}
+
+	void FileSystemArchive::EnumerateFiles(std::vector<std::string>& files)
+	{
+		EnumerateFilesImpl(m_name, "", files);
+	}
+
+	void FileSystemArchive::EnumerateFilesImpl(const virtual_dir::Path & root, const virtual_dir::Path& relPath, std::vector<std::string>& files)
+	{
+		// Iterate through all files
+		for (const auto& entry : m_reader.queryEntries(root))
+		{
+			std::filesystem::path path = root;
+			path /= relPath;
+
+			if (std::filesystem::is_directory(path / entry))
+			{
+				EnumerateFilesImpl(
+					(path / entry).generic_string(),
+					(std::filesystem::path(relPath) / entry).generic_string(),
+					files);
+			}
+			else
+			{
+				files.push_back(relPath + "/" + entry);
+			}
+		}
 	}
 }

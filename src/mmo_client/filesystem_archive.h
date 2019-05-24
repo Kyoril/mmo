@@ -27,6 +27,11 @@ namespace mmo
 		virtual const std::string& GetName() const override;
 		virtual ArchiveMode GetMode() const override;
 		virtual std::unique_ptr<std::istream> Open(const std::string& filename) override;
+		virtual void EnumerateFiles(std::vector<std::string>& files) override;
+
+	private:
+
+		void EnumerateFilesImpl(const virtual_dir::Path& root, const virtual_dir::Path& relPath, std::vector<std::string>& files);
 	};
 
 }

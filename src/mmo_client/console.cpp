@@ -5,7 +5,6 @@
 #include "event_loop.h"
 #include "screen.h"
 
-#include "base/filesystem.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
 
@@ -14,18 +13,17 @@ namespace mmo
 {
 	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
 
-	void Console::Initialize(const std::string& configFile)
+	void Console::Initialize(const std::filesystem::path& configFile)
 	{
 		// Ensure the folder is created
-		std::filesystem::path folder = configFile;
-		std::filesystem::create_directories(folder.parent_path());
+		std::filesystem::create_directories(configFile.parent_path());
 
 		// Register some default console commands
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 
 		// Load the config file
-		console_commands::ConsoleCommand_Run("run", configFile);
+		console_commands::ConsoleCommand_Run("run", configFile.string());
 
 		// Initialize the graphics api
 		auto& device = GraphicsDevice::CreateD3D11();

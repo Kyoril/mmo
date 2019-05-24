@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <istream>
+#include <vector>
 
 namespace mmo
 {
@@ -29,6 +30,8 @@ namespace mmo
 		virtual ArchiveMode GetMode() const = 0;
 		/// Tries to open a file for reading.
 		virtual std::unique_ptr<std::istream> Open(const std::string& filename) = 0;
+		/// Enumerates all files the archive contains.
+		virtual void EnumerateFiles(std::vector<std::string>& files) = 0;
 	};
 
 }

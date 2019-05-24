@@ -224,7 +224,7 @@ namespace mmo
 		else
 		{
 			// Output error code
-			ELOG("AUTH ERROR: " << static_cast<uint16>(result));
+			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
 		}
 	}
 
@@ -244,14 +244,13 @@ namespace mmo
 			// Check that both match
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
-				// Success!
-				ILOG("Success!");
+				ILOG("AUTH: SUCCESS");
 			}
 		}
 		else
 		{
 			// Output error code
-			ELOG("AUTH ERROR: " << static_cast<uint16>(result));
+			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
 		}
 	}
 

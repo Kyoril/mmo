@@ -4,6 +4,7 @@
 
 #include "base/non_copyable.h"
 #include "base/utilities.h"
+#include "base/filesystem.h"
 
 #include <string>
 #include <functional>
@@ -48,7 +49,7 @@ namespace mmo
 
 	public:
 		/// Initializes the console system.
-		static void Initialize(const std::string& configFile);
+		static void Initialize(const std::filesystem::path& configFile);
 		/// Destroys the console system.
 		static void Destroy();
 
