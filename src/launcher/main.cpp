@@ -37,6 +37,7 @@ int main(int argc, char *argv[])
 #include <any>
 #include <array>
 #include <set>
+#include "asio.hpp"
 
 #include "cxxopts/cxxopts.hpp"
 #include "base/filesystem.h"

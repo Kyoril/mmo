@@ -2,6 +2,7 @@
 
 #include "mysql_exception.h"
 
+
 namespace mmo
 {
 	namespace mysql

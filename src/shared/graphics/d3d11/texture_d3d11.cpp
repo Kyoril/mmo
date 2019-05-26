@@ -5,6 +5,7 @@
 #include "base/macros.h"
 
 #include <vector>
+#include <stdexcept>
 
 
 namespace mmo

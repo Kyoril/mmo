@@ -13,6 +13,8 @@
 #include "binary_io/stream_source.h"
 #include "binary_io/reader.h"
 
+#include "asio.hpp"
+
 
 namespace mmo
 {

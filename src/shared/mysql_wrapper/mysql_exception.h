@@ -3,8 +3,10 @@
 #pragma once
 
 #include "base/typedefs.h"
+
 #include <stdexcept>
 #include <typeinfo>
+
 
 namespace mmo
 {

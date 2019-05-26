@@ -2,14 +2,15 @@
 
 #include "send_request.h"
 #include "base/macros.h"
+#include "base/utilities.h"
 
 #include <iomanip>
 #include <sstream>
 #include <cctype>
-
-#include "base/utilities.h"
+#include <stdexcept>
 
 #include "asio.hpp"
+
 
 namespace mmo
 {

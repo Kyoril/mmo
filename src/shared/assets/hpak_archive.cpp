@@ -14,7 +14,7 @@
 
 #include <fstream>
 #include <sstream>
-#include <exception>
+#include <stdexcept>
 
 
 namespace mmo

@@ -2,6 +2,8 @@
 
 #include "texture.h"
 
+#include <stdexcept>
+
 
 namespace mmo
 {

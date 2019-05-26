@@ -13,6 +13,8 @@
 #include "simple_file_format/sff_write_table.h"
 #include "simple_file_format/sff_write_array.h"
 
+#include <stdexcept>
+
 
 namespace mmo
 {
