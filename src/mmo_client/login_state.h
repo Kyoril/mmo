@@ -5,6 +5,7 @@
 #include "game_state.h"
 #include "screen.h"
 #include "graphics/graphics_device.h"
+#include "frame_ui/frame.h"
 
 
 namespace mmo
@@ -36,5 +37,6 @@ namespace mmo
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
 		TexturePtr m_texture;
+		FramePtr m_logoFrame;
 	};
 }

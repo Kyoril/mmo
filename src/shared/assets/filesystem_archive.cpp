@@ -55,7 +55,7 @@ namespace mmo
 		for (const auto& entry : m_reader.queryEntries(root))
 		{
 			std::filesystem::path path = root;
-			path /= relPath;
+			//path /= relPath;
 
 			if (std::filesystem::is_directory(path / entry))
 			{

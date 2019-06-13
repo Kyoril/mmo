@@ -18,6 +18,12 @@ namespace mmo
 		/// Virtual default destructor because of inheritance.
 		virtual ~VertexBuffer() = default;
 
+	public:
+
+		inline size_t GetVertexCount() const { return VertexCount; }
+		inline size_t GetVertexSize() const { return VertexSize; }
+		inline bool IsDynamic() const { return m_dynamic; }
+
 	protected:
 		size_t VertexCount;
 		size_t VertexSize;
