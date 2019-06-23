@@ -100,7 +100,7 @@ namespace mmo
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) = 0;
 		/// 
-		virtual void Draw() = 0;
+		virtual void Draw(uint32 vertexCount, uint32 start = 0) = 0;
 		/// 
 		virtual void DrawIndexed() = 0;
 		/// 

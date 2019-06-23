@@ -523,9 +523,14 @@ namespace mmo
 		return nullptr;
 	}
 
-	void GraphicsDeviceD3D11::Draw()
+	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
 	{
+		// Update the constant buffer
+		m_matrixDirty = false;
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 
+		// Execute draw command
+		m_immContext->Draw(vertexCount, start);
 	}
 
 	void GraphicsDeviceD3D11::DrawIndexed()

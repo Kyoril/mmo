@@ -29,7 +29,7 @@ namespace mmo
 		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
 		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
 		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
-		virtual void Draw() override;
+		virtual void Draw(uint32 vertexCount, uint32 start = 0) override;
 		virtual void DrawIndexed() override;
 		virtual void SetTopologyType(TopologyType InType) override;
 		virtual void SetVertexFormat(VertexFormat InFormat) override;

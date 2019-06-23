@@ -6,6 +6,7 @@
 #include "base/signal.h"
 
 #include "geometry_buffer.h"
+#include "frame_layer.h"
 #include "rect.h"
 
 #include <memory>
@@ -55,6 +56,29 @@ namespace mmo
 		Visible,
 	};
 
+	/// Enumerates relative anchor points for frames and frame elements.
+	enum class AnchorPoint
+	{
+		// Corners
+
+		/// Upper left corner
+		TopLeft,
+		/// Upper right corner
+		TopRight,
+		/// Lower right corner
+		BottomRight,
+		/// Lower left 
+		BottomLeft,
+
+		// Edges
+		Top,
+		Right,
+		Bottom,
+		Left,
+
+		// Center
+		Center
+	};
 
 	/// This is the base class to represent a simple frame.
 	class Frame
@@ -76,9 +100,24 @@ namespace mmo
 
 		virtual void Update(float elapsed);
 
+		/// Gets the pixel size of this frame.
 		virtual inline Size GetPixelSize() const { return m_pixelSize; }
+		/// Sets the pixel size of this frame.
+		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
+
+		virtual void SetAnchor(AnchorPoint point, Point offset = Point());
+
+	public:
+		FrameLayer& AddLayer();
+		void RemoveLayer(FrameLayer& layer);
 
 	protected:
+
+		virtual Rect GetRelativeFrameRect();
+		/// Used to get the frame rectangle.
+		virtual Rect GetAbsoluteFrameRect();
+		/// Gets the frame rectangle in screen space coordinates.
+		virtual Rect GetScreenFrameRect();
 
 		virtual void UpdateSelf(float elapsed);
 
@@ -100,6 +139,14 @@ namespace mmo
 		std::unique_ptr<GeometryBuffer> m_geometryBuffer;
 		/// The current size of this frame in pixels.
 		Size m_pixelSize;
+		/// The anchor point used for positioning.
+		AnchorPoint m_anchorPoint;
+
+		Point m_anchorOffset;
+
+		Frame* m_parent;
+
+		std::vector<std::unique_ptr<FrameLayer>> m_layers;
 	};
 
 	typedef std::shared_ptr<Frame> FramePtr;

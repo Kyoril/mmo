@@ -5,6 +5,7 @@ endif()
 
 # Add shared graphics library
 add_lib(graphics)
+target_link_libraries(graphics assets)
 
 # On windows platforms, we want to compile with d3d11 support
 if(WIN32)

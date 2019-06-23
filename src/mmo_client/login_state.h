@@ -33,9 +33,6 @@ namespace mmo
 	private:
 
 		ScreenLayerIt m_paintLayer;
-
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
 		TexturePtr m_texture;
 		FramePtr m_logoFrame;
 	};

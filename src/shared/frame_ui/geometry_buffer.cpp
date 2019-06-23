@@ -2,6 +2,8 @@
 
 #include "geometry_buffer.h"
 
+#include "base/macros.h"
+
 
 namespace mmo
 {
@@ -26,15 +28,10 @@ namespace mmo
 		}
 
 		// Prepare render states
-		gx.SetBlendMode(BlendMode::Alpha);
-		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetVertexFormat(VertexFormat::PosColorTex1);
-		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
 
 		// draw the batches
-		size_t pos = 0;
+		uint32 pos = 0;
 		for (const auto& batch : m_batches)
 		{
 			// Bind texture
@@ -44,7 +41,7 @@ namespace mmo
 			m_hwBuffer->Set();
 
 			// Draw vertex buffer data
-			gx.Draw();
+			gx.Draw(batch.second, pos);
 
 			// Increase offset
 			pos += batch.second;
@@ -63,6 +60,8 @@ namespace mmo
 
 	void GeometryBuffer::AppendGeometry(const Vertex * const buffer, uint32 count)
 	{
+		ASSERT(m_activeTexture);
+
 		// See if we need to start a new render batch
 		if (m_batches.empty() || m_batches.back().first != m_activeTexture)
 			m_batches.push_back(BatchInfo(m_activeTexture, 0));

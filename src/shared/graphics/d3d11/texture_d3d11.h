@@ -18,6 +18,8 @@ namespace mmo
 
 	public:
 		virtual void Load(std::unique_ptr<std::istream>& stream) override;
+		/// Gets the memory usage of this texture in bytes on the gpu.
+		virtual uint32 GetMemorySize() const;
 
 	public:
 

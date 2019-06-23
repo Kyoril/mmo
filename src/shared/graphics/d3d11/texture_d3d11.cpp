@@ -67,6 +67,12 @@ namespace mmo
 		VERIFY(SUCCEEDED(dev.CreateShaderResourceView(m_texture.Get(), &srvd, &m_shaderView)));
 	}
 
+	uint32 TextureD3D11::GetMemorySize() const
+	{
+		// For now, all textures are uncompressed RGBAs
+		return m_header.width * m_header.height * sizeof(uint32);
+	}
+
 	void TextureD3D11::Bind(ShaderType shader, uint32 slot)
 	{
 		ID3D11DeviceContext& context = m_device;

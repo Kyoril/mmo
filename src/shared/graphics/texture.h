@@ -35,6 +35,8 @@ namespace mmo
 		virtual uint16 GetWidth() const { return m_header.width; }
 		/// Gets the height of this texture in pixels.
 		virtual uint16 GetHeight() const { return m_header.height; }
+		/// Gets the memory usage of this texture in bytes on the gpu.
+		virtual uint32 GetMemorySize() const { return 0; }
 
 	protected:
 		/// Texture file header.
