@@ -10,6 +10,8 @@ add_subdirectory(world_server)
 
 add_subdirectory(mmo_client)
 
+add_subdirectory(mmo_edit)
+
 add_subdirectory(launcher)
 add_subdirectory(update_compiler)
 

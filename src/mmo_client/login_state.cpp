@@ -150,8 +150,6 @@ namespace mmo
 		auto texture = std::make_unique<FrameTexture>("Interface/Logo.htex");
 		backgroundLayer.AddObject(std::move(texture));
 
-
-
 		// Setup the paint layer
 
 
