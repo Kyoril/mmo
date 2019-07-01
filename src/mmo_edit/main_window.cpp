@@ -53,6 +53,10 @@ namespace mmo
 		UpdateWindow(m_windowHandle);
 	}
 
+	void MainWindow::CreateStatusBar()
+	{
+	}
+
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		// If this is the creation message, we will set the class long to the instance pointer
@@ -87,6 +91,13 @@ namespace mmo
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			return 0;
+		case WM_COMMAND:
+			switch (LOWORD(wparam))
+			{
+			case ID_PROJECT_EXIT:
+				DestroyWindow(wnd);
+				return 0;
+			}
 		}
 
 		return DefWindowProc(wnd, msg, wparam, lparam);

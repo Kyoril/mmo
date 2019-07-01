@@ -20,6 +20,8 @@ namespace mmo
 		void EnsureWindowClassCreated();
 		/// Creates the internal window handle.
 		void CreateWindowHandle();
+		/// Create the status bar.
+		void CreateStatusBar();
 
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
@@ -30,5 +32,7 @@ namespace mmo
 
 	private:
 		HWND m_windowHandle;
+
+		HWND m_statusBarHandle;
 	};
 }
