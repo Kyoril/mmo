@@ -14,12 +14,16 @@ namespace mmo
 	{
 	public:
 		/// Initializes a new instance of the TextureD3D11 class.
-		TextureD3D11(GraphicsDeviceD3D11& device);
+		TextureD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height);
 
 	public:
 		virtual void Load(std::unique_ptr<std::istream>& stream) override;
+		virtual void LoadRaw(void* data, size_t dataSize) override;
 		/// Gets the memory usage of this texture in bytes on the gpu.
 		virtual uint32 GetMemorySize() const;
+
+	private:
+		void CreateShaderResourceView();
 
 	public:
 

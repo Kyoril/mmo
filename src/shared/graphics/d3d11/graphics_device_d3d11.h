@@ -38,7 +38,7 @@ namespace mmo
 		virtual void CaptureState() override;
 		virtual void RestoreState() override;
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
-		virtual TexturePtr CreateTexture() override;
+		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) override;
 		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
 		// ~ End GraphicsDevice
 
@@ -75,6 +75,8 @@ namespace mmo
 		void CreateRasterizerStates();
 		/// Creates the supported sampler states.
 		void CreateSamplerStates();
+		/// Creates the supported depth states.
+		void CreateDepthStates();
 
 	private:
 		/// The render window callback procedure for internally created windows.
@@ -102,6 +104,8 @@ namespace mmo
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
 		/// The default texture sampler.
 		ComPtr<ID3D11SamplerState> m_samplerState;
+		/// The depth stencil state
+		ComPtr<ID3D11DepthStencilState> m_depthStencilState;
 		/// Input layouts.
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		std::map<VertexFormat, ShaderPtr> VertexShaders;

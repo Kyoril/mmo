@@ -10,9 +10,11 @@
 
 namespace mmo
 {
-	TextureD3D11::TextureD3D11(GraphicsDeviceD3D11 & device)
+	TextureD3D11::TextureD3D11(GraphicsDeviceD3D11 & device, uint16 width, uint16 height)
 		: m_device(device)
 	{
+		m_header.width = width;
+		m_header.height = height;
 	}
 
 	void TextureD3D11::Load(std::unique_ptr<std::istream>& stream)
@@ -56,6 +58,49 @@ namespace mmo
 		// Create texture object
 		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, &data, &m_texture)));
 
+		CreateShaderResourceView();
+	}
+
+	void TextureD3D11::LoadRaw(void * data, size_t dataSize)
+	{
+		// Obtain ID3D11Device object by casting
+		ID3D11Device& dev = m_device;
+
+		// Create texture description
+		D3D11_TEXTURE2D_DESC td;
+		ZeroMemory(&td, sizeof(td));
+		td.ArraySize = 1;
+		td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		td.Height = m_header.height;
+		td.Width = m_header.width;
+		td.MipLevels = 1;
+		td.SampleDesc.Count = 1;
+		td.Usage = D3D11_USAGE_IMMUTABLE;
+
+		// Prepare usage data
+		D3D11_SUBRESOURCE_DATA initialData;
+		ZeroMemory(&initialData, sizeof(initialData));
+		initialData.pSysMem = data;
+		initialData.SysMemPitch = sizeof(uint32) * m_header.width;
+
+		// Create texture object
+		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, &initialData, &m_texture)));
+
+		CreateShaderResourceView();
+	}
+
+	uint32 TextureD3D11::GetMemorySize() const
+	{
+		// For now, all textures are uncompressed RGBAs
+		return m_header.width * m_header.height * sizeof(uint32);
+	}
+
+	void TextureD3D11::CreateShaderResourceView()
+	{
+		// Obtain ID3D11Device object by casting
+		ID3D11Device& dev = m_device;
+
 		// Create shader resource view description
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvd;
 		ZeroMemory(&srvd, sizeof(srvd));
@@ -65,12 +110,6 @@ namespace mmo
 
 		// Create shader resource view
 		VERIFY(SUCCEEDED(dev.CreateShaderResourceView(m_texture.Get(), &srvd, &m_shaderView)));
-	}
-
-	uint32 TextureD3D11::GetMemorySize() const
-	{
-		// For now, all textures are uncompressed RGBAs
-		return m_header.width * m_header.height * sizeof(uint32);
 	}
 
 	void TextureD3D11::Bind(ShaderType shader, uint32 slot)

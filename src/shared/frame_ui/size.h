@@ -13,12 +13,12 @@ namespace mmo
 
 	public:
 		Size(float width = 0.0f, float height = 0.0f) 
-			: m_width(width)
-			, m_height(height)
+			: width(width)
+			, height(height)
 		{}
 
 	public:
-		float m_width;
-		float m_height;
+		float width;
+		float height;
 	};
 }

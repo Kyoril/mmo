@@ -13,12 +13,12 @@ namespace mmo
 
 	public:
 		Point(float x = 0.0f, float y = 0.0f)
-			: m_x(x)
-			, m_y(y)
+			: x(x)
+			, y(y)
 		{
 		}
 
 	public:
-		float m_x, m_y;
+		float x, y;
 	};
 }

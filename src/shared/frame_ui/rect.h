@@ -25,7 +25,7 @@ namespace mmo
 		inline Size GetSize() const { return Size(GetWidth(), GetHeight()); }
 		inline void SetWidth(float width) { m_right = m_left + width; }
 		inline void SetHeight(float height) { m_bottom = m_top + height; }
-		inline void SetSize(const Size& size) { SetWidth(size.m_width); SetHeight(size.m_height); }
+		inline void SetSize(const Size& size) { SetWidth(size.width); SetHeight(size.height); }
 
 	public:
 		void SetPosition(const Point& pos);

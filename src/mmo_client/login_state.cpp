@@ -8,6 +8,7 @@
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_texture.h"
 #include "graphics/texture_mgr.h"
+#include "frame_ui/font.h"
 
 #include "asio.hpp"
 
@@ -18,6 +19,8 @@ namespace mmo
 {
 	const std::string LoginState::Name = "login";
 
+
+	static std::shared_ptr<Font> s_loginFont;
 
 	// Forward declaration for detail methods
 	void LoadUIFile(const std::string& filename);
@@ -150,6 +153,10 @@ namespace mmo
 		auto texture = std::make_unique<FrameTexture>("Interface/Logo.htex");
 		backgroundLayer.AddObject(std::move(texture));
 
+		// Setup the font
+		s_loginFont = std::make_shared<Font>();
+		VERIFY(s_loginFont->Initialize("Fonts/FRIZQT__.TTF", 12.0f));
+
 		// Setup the paint layer
 
 
@@ -161,6 +168,8 @@ namespace mmo
 	{
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
+
+		s_loginFont.reset();
 
 		// Reset the logo frame ui
 		m_logoFrame.reset();
@@ -178,5 +187,13 @@ namespace mmo
 	{
 		// Render the logo frame ui
 		m_logoFrame->Render();
+
+#ifdef DrawText
+#undef DrawText
+#endif
+		static GeometryBuffer buffer;
+		buffer.Reset();
+		s_loginFont->DrawText("Font rendering works!", Point(0.0f, 0.0f), buffer);
+		buffer.Draw();
 	}
 }

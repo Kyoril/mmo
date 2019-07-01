@@ -118,7 +118,7 @@ namespace mmo
 		/// Sets the transform matrix for a certain type of transform.
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix);
 		/// Create a new texture object.
-		virtual TexturePtr CreateTexture() = 0;
+		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) = 0;
 		/// Binds a texture to the given slot for a given shader type.
 		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) = 0;
 

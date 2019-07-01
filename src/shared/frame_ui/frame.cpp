@@ -105,25 +105,25 @@ namespace mmo
 		case AnchorPoint::TopRight:
 		case AnchorPoint::Right:
 			r.Offset(Point(
-				parentRect.GetWidth() - r.GetWidth() - offset.m_x,
-				offset.m_y));
+				parentRect.GetWidth() - r.GetWidth() - offset.x,
+				offset.y));
 			break;
 		case AnchorPoint::BottomRight:
 			r.Offset(Point(
-				parentRect.GetWidth() - r.GetWidth() - offset.m_x,
-				parentRect.GetHeight() - r.GetHeight() - offset.m_y));
+				parentRect.GetWidth() - r.GetWidth() - offset.x,
+				parentRect.GetHeight() - r.GetHeight() - offset.y));
 			break;
 		case AnchorPoint::BottomLeft:
 		case AnchorPoint::Bottom:
 			r.Offset(Point(
-				offset.m_x,
-				parentRect.m_bottom - r.GetHeight() - offset.m_y));
+				offset.x,
+				parentRect.m_bottom - r.GetHeight() - offset.y));
 			break;
 
 		case AnchorPoint::Center:
 			r.Offset(Point(
-				parentRect.GetWidth() * 0.5f - r.GetWidth() * 0.5f + offset.m_x,
-				parentRect.GetHeight() * 0.5f - r.GetHeight() * 0.5f + offset.m_y
+				parentRect.GetWidth() * 0.5f - r.GetWidth() * 0.5f + offset.x,
+				parentRect.GetHeight() * 0.5f - r.GetHeight() * 0.5f + offset.y
 			));
 			break;
 		}

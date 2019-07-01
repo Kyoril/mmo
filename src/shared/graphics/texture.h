@@ -29,6 +29,7 @@ namespace mmo
 	public:
 		/// Load the texture contents from stream.
 		virtual void Load(std::unique_ptr<std::istream>& stream);
+		virtual void LoadRaw(void* data, size_t dataSize) = 0;
 		/// Unloads the header file.
 		virtual void Unload();
 		/// Gets the width of this texture in pixels.

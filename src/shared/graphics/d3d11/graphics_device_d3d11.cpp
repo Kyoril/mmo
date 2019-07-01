@@ -175,6 +175,9 @@ namespace mmo
 
 		// Create sampler state
 		CreateSamplerStates();
+
+		// Setup depth states
+		CreateDepthStates();
 	}
 
 	void GraphicsDeviceD3D11::CreateSizeDependantResources()
@@ -337,7 +340,7 @@ namespace mmo
 		D3D11_RASTERIZER_DESC rd;
 		ZeroMemory(&rd, sizeof(rd));
 		rd.FillMode = D3D11_FILL_SOLID;
-		rd.CullMode = D3D11_CULL_BACK;
+		rd.CullMode = D3D11_CULL_NONE;
 		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_rasterizerState)));
 	}
 
@@ -353,6 +356,31 @@ namespace mmo
 		sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 
 		VERIFY(SUCCEEDED(m_device->CreateSamplerState(&sd, &m_samplerState)));
+	}
+
+	void GraphicsDeviceD3D11::CreateDepthStates()
+	{
+		D3D11_DEPTH_STENCIL_DESC depthStencilDesc;
+		depthStencilDesc.DepthEnable = TRUE;
+		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+		depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+		depthStencilDesc.StencilEnable = FALSE;
+		depthStencilDesc.StencilReadMask = 0xFF;
+		depthStencilDesc.StencilWriteMask = 0xFF;
+
+		// Stencil operations if pixel is front-facing
+		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+		// Stencil operations if pixel is back-facing
+		depthStencilDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+		depthStencilDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+		depthStencilDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+		depthStencilDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+		VERIFY( SUCCEEDED(m_device->CreateDepthStencilState(&depthStencilDesc, m_depthStencilState.GetAddressOf())));
 	}
 
 	LRESULT GraphicsDeviceD3D11::RenderWindowProc(HWND Wnd, UINT Msg, WPARAM WParam, LPARAM LParam)
@@ -420,6 +448,8 @@ namespace mmo
 
 		// Set rasterizer state
 		m_immContext->RSSetState(m_rasterizerState.Get());
+
+		m_immContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
 
 		// Update the constant buffer
 		if (m_matrixDirty)
@@ -642,9 +672,9 @@ namespace mmo
 		m_matrixDirty = true;
 	}
 
-	TexturePtr GraphicsDeviceD3D11::CreateTexture()
+	TexturePtr GraphicsDeviceD3D11::CreateTexture(uint16 width, uint16 height)
 	{
-		return std::make_shared<TextureD3D11>(*this);
+		return std::make_shared<TextureD3D11>(*this, width, height);
 	}
 
 	void GraphicsDeviceD3D11::BindTexture(TexturePtr texture, ShaderType shader, uint32 slot)

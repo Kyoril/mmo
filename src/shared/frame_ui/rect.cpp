@@ -16,10 +16,10 @@ namespace mmo
 	}
 
 	Rect::Rect(Point pos, Size size)
-		: m_left(pos.m_x)
-		, m_top(pos.m_y)
-		, m_right(pos.m_x + size.m_width)
-		, m_bottom(pos.m_y + size.m_height)
+		: m_left(pos.x)
+		, m_top(pos.y)
+		, m_right(pos.x + size.width)
+		, m_bottom(pos.y + size.height)
 	{
 	}
 
@@ -27,8 +27,8 @@ namespace mmo
 	{
 		Size size(GetSize());
 
-		m_left += pos.m_x;
-		m_top += pos.m_y;
+		m_left += pos.x;
+		m_top += pos.y;
 
 		SetSize(size);
 	}
@@ -57,20 +57,20 @@ namespace mmo
 
 	Rect & Rect::Offset(const Point & offset)
 	{
-		m_left += offset.m_x;
-		m_right += offset.m_x;
-		m_top += offset.m_y;
-		m_bottom += offset.m_y;
+		m_left += offset.x;
+		m_right += offset.x;
+		m_top += offset.y;
+		m_bottom += offset.y;
 
 		return *this;
 	}
 
 	bool Rect::IsPointInRect(const Point & pt) const
 	{
-		if ((m_left > pt.m_x) ||
-			(m_right <= pt.m_x) ||
-			(m_top > pt.m_y) ||
-			(m_bottom <= pt.m_y))
+		if ((m_left > pt.x) ||
+			(m_right <= pt.x) ||
+			(m_top > pt.y) ||
+			(m_bottom <= pt.y))
 		{
 			return false;
 		}
@@ -80,14 +80,14 @@ namespace mmo
 
 	Rect & Rect::ConstrainSizeMax(const Size & size)
 	{
-		if (GetWidth() > size.m_width)
+		if (GetWidth() > size.width)
 		{
-			SetWidth(size.m_width);
+			SetWidth(size.width);
 		}
 
-		if (GetHeight() > size.m_height)
+		if (GetHeight() > size.height)
 		{
-			SetHeight(size.m_height);
+			SetHeight(size.height);
 		}
 
 		return *this;
@@ -95,14 +95,14 @@ namespace mmo
 
 	Rect & Rect::ConstainSizeMin(const Size & size)
 	{
-		if (GetWidth() < size.m_width)
+		if (GetWidth() < size.width)
 		{
-			SetWidth(size.m_width);
+			SetWidth(size.width);
 		}
 
-		if (GetHeight() < size.m_height)
+		if (GetHeight() < size.height)
 		{
-			SetHeight(size.m_height);
+			SetHeight(size.height);
 		}
 
 		return *this;
@@ -112,22 +112,22 @@ namespace mmo
 	{
 		Size currentSize = GetSize();
 
-		if (currentSize.m_width > maxSize.m_width)
+		if (currentSize.width > maxSize.width)
 		{
-			SetWidth(maxSize.m_width);
+			SetWidth(maxSize.width);
 		}
-		else if (currentSize.m_width < minSize.m_width)
+		else if (currentSize.width < minSize.width)
 		{
-			SetWidth(minSize.m_width);
+			SetWidth(minSize.width);
 		}
 
-		if (currentSize.m_height > maxSize.m_height)
+		if (currentSize.height > maxSize.height)
 		{
-			SetHeight(maxSize.m_height);
+			SetHeight(maxSize.height);
 		}
-		else if (currentSize.m_height < minSize.m_height)
+		else if (currentSize.height < minSize.height)
 		{
-			SetHeight(minSize.m_height);
+			SetHeight(minSize.height);
 		}
 
 		return *this;
