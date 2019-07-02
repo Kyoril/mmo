@@ -133,4 +133,6 @@ namespace mmo
 
 		std::list<FontImageset> m_imageSets;
 	};
+
+	typedef std::shared_ptr<Font> FontPtr;
 }

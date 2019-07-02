@@ -7,8 +7,8 @@
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_texture.h"
+#include "frame_ui/frame_font_string.h"
 #include "graphics/texture_mgr.h"
-#include "frame_ui/font.h"
 
 #include "asio.hpp"
 
@@ -139,7 +139,6 @@ namespace mmo
 		LoadUIFile("Interface/GlueUI/GlueUI.toc");
 
 
-
 		// Manually create a frame to render the logo
 
 
@@ -154,11 +153,11 @@ namespace mmo
 		backgroundLayer.AddObject(std::move(texture));
 
 		// Setup the font
-		s_loginFont = std::make_shared<Font>();
-		VERIFY(s_loginFont->Initialize("Fonts/FRIZQT__.TTF", 12.0f));
+		auto fontString = std::make_unique<FrameFontString>("Fonts/FRIZQT__.TTF", 12.0f);
+		fontString->SetText("Font rendering is working!");
+		backgroundLayer.AddObject(std::move(fontString));
 
 		// Setup the paint layer
-
 
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -187,13 +186,5 @@ namespace mmo
 	{
 		// Render the logo frame ui
 		m_logoFrame->Render();
-
-#ifdef DrawText
-#undef DrawText
-#endif
-		static GeometryBuffer buffer;
-		buffer.Reset();
-		s_loginFont->DrawText("Font rendering works!", Point(0.0f, 0.0f), buffer);
-		buffer.Draw();
 	}
 }

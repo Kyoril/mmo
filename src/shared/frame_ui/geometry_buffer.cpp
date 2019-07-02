@@ -35,7 +35,7 @@ namespace mmo
 		for (const auto& batch : m_batches)
 		{
 			// Bind texture
-			gx.BindTexture(m_activeTexture, ShaderType::PixelShader, 0);
+			gx.BindTexture(batch.first, ShaderType::PixelShader, 0);
 
 			// Setup geometry
 			m_hwBuffer->Set();
