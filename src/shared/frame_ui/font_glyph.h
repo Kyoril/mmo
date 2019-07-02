@@ -9,6 +9,8 @@
 
 namespace mmo
 {
+	/// A font glyph contains data of a codepoint of a font. It also contains a link
+	/// to an image, whose owning imageset is owned by the font.
 	class FontGlyph
 	{
 	public:

@@ -19,9 +19,6 @@ namespace mmo
 {
 	const std::string LoginState::Name = "login";
 
-
-	static std::shared_ptr<Font> s_loginFont;
-
 	// Forward declaration for detail methods
 	void LoadUIFile(const std::string& filename);
 	
@@ -167,8 +164,6 @@ namespace mmo
 	{
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
-
-		s_loginFont.reset();
 
 		// Reset the logo frame ui
 		m_logoFrame.reset();

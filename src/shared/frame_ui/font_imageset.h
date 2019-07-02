@@ -16,13 +16,18 @@ namespace mmo
 {
 	class GeometryBuffer;
 
+	/// An imageset is a combination of a texture (most likely runtime-generated) and
+	/// named areas (images).
 	class FontImageset
 	{
 	public:
-
+		/// Sets the texture of this imageset.
 		void SetTexture(TexturePtr texture);
+		/// Defines a new named area on this set.
 		FontImage& DefineImage(const Point& position, const Size& size, const Point& renderOffset);
+		/// Defines a new named area on this set.
 		FontImage& DefineImage(const Rect& imageRect, const Point& renderOffset);
+		/// Draws an image from the imageset.
 		void Draw(const Rect& srcRect, const Rect& dstRect, GeometryBuffer& buffer) const;
 
 	private:

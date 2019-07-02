@@ -11,6 +11,8 @@ namespace mmo
 	class FontImageset;
 	class GeometryBuffer;
 
+	/// Represents a named area on an imageset. This class is used to calculate texture coordinates
+	/// for rendering text, but it also has a Draw method to create geometry.
 	class FontImage
 	{
 	public:
