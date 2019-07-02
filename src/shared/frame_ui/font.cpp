@@ -490,10 +490,6 @@ namespace mmo
 		}
 	}
 
-	void Font::DrawSpansToBuffer(uint32 * buffer, uint32 textureSize, const Spans & spans) const
-	{
-	}
-
 	void Font::RasterCallback(const int y, const int count, const FT_Span * const spans, void * const user)
 	{
 		Spans *sptr = (Spans *)user;
