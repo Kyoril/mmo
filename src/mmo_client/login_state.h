@@ -34,6 +34,6 @@ namespace mmo
 
 		ScreenLayerIt m_paintLayer;
 		TexturePtr m_texture;
-		FramePtr m_logoFrame;
+		FramePtr m_topFrame;
 	};
 }

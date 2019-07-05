@@ -8,6 +8,7 @@ namespace mmo
 	namespace tex
 	{
 		PreHeader::PreHeader()
+			: version(VersionId::Version_1_0)
 		{
 		}
 

@@ -11,6 +11,7 @@
 #include "graphics/texture_mgr.h"
 
 #include "asio.hpp"
+#include "expat/lib/expat.h"
 
 #include <set>
 
@@ -41,6 +42,52 @@ namespace mmo
 			// TODO: Load (and execute) lua script
 		}
 
+		static void StartElement(void *userData, const XML_Char *name, const XML_Char **atts)
+		{
+			int32* depth = reinterpret_cast<int32*>(userData);
+
+			std::ostringstream strm;
+			for (int32 i = 0; i < *depth; ++i)
+				strm << "\t";
+
+			strm << "Start: " << name;
+
+			if (atts && *atts)
+			{
+				strm << "; Attributes: ";
+				while (*atts)
+				{
+					strm << *atts << " = ";
+					atts++;
+					
+					if (!*atts)
+						break;
+
+					strm << *atts << ";";
+					atts++;
+				}
+			}
+
+			DLOG("\t" << strm.str());
+			(*depth)++;
+		}
+
+		static void EndElement(void *userData, const XML_Char *name)
+		{
+			int32* depth = reinterpret_cast<int32*>(userData);
+			(*depth)--;
+		}
+
+		static void CharacterHandler(void *userData, const XML_Char *s, int len)
+		{
+			if (len > 0)
+			{
+				std::string strContent{ s, (const size_t)len };
+
+				// TODO
+			}
+		}
+
 		/// Subroutine for loading a *.xml file for the frame ui. An xml file describes frames to
 		/// be created, but can also reference script files directly.
 		/// @param file A file pointer for reading the file contents.
@@ -49,7 +96,37 @@ namespace mmo
 		{
 			ASSERT(file);
 
-			// TODO: Load and parse xml file
+			// Load file content
+			file->seekg(0, std::ios::end);
+			const auto fileSize = file->tellg();
+			file->seekg(0, std::ios::beg);
+
+			// Allocate buffer
+			std::vector<char> buffer;
+			buffer.resize(fileSize);
+
+			// Read file content
+			file->read(&buffer[0], buffer.size());
+
+			// Create the xml parser
+			XML_Parser parser = XML_ParserCreate(nullptr);
+
+			// A depth counter to account the xml layer depth
+			int32 depth = 0;
+			XML_SetUserData(parser, &depth);
+
+			// Set the element handler
+			XML_SetElementHandler(parser, StartElement, EndElement);
+			XML_SetCharacterDataHandler(parser, CharacterHandler);
+
+			// Parse the file contents
+			if (XML_Parse(parser, &buffer[0], buffer.size(), XML_TRUE) == XML_STATUS_ERROR)
+			{
+				ELOG("Xml Error: " << XML_ErrorString(XML_GetErrorCode(parser)));
+				return;
+			}
+
+			// TODO...
 		}
 
 		/// Subroutine for loading a *.toc file for the frame ui. A toc file is a text file which
@@ -129,32 +206,14 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
+		// Make the logo frame element
+		m_topFrame = std::make_shared<Frame>("TopFrame");
+
 		// Clear all loaded toc files
 		detail::s_tocFiles.clear();
 
 		// Load the root toc file
 		LoadUIFile("Interface/GlueUI/GlueUI.toc");
-
-
-		// Manually create a frame to render the logo
-
-
-		// Make the logo frame element
-		m_logoFrame = std::make_shared<Frame>("LoginLogo");
-		
-		// Setup the logo frame
-		FrameLayer& backgroundLayer = m_logoFrame->AddLayer();
-
-		// Add a texture object
-		auto texture = std::make_unique<FrameTexture>("Interface/Logo.htex");
-		backgroundLayer.AddObject(std::move(texture));
-
-		// Setup the font
-		auto fontString = std::make_unique<FrameFontString>("Fonts/FRIZQT__.TTF", 12.0f);
-		fontString->SetText("Font rendering is working!");
-		backgroundLayer.AddObject(std::move(fontString));
-
-		// Setup the paint layer
 
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -166,7 +225,7 @@ namespace mmo
 		Screen::RemoveLayer(m_paintLayer);
 
 		// Reset the logo frame ui
-		m_logoFrame.reset();
+		m_topFrame.reset();
 
 		// Reset texture
 		m_texture.reset();
@@ -180,6 +239,6 @@ namespace mmo
 	void LoginState::OnPaint()
 	{
 		// Render the logo frame ui
-		m_logoFrame->Render();
+		m_topFrame->Render();
 	}
 }

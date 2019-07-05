@@ -32,6 +32,8 @@ include_directories(deps)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/deps/zlib)
 include_directories(src)
 
+add_definitions("-DXML_STATIC")
+
 # Add source directory
 add_subdirectory(deps)
 add_subdirectory(src)

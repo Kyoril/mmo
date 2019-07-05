@@ -39,7 +39,11 @@ namespace mmo
 		// Draw self
 		DrawSelf();
 
-		// TODO: Draw children
+		// Draw children
+		for (Frame* child : m_children)
+		{
+			child->Render();
+		}
 	}
 
 	void Frame::Update(float elapsed)

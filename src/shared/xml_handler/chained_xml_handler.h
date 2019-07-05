@@ -26,13 +26,11 @@ namespace mmo
 		/// Returns whether this chained handler has completed.
 		bool Completed() const;
 
-
 	protected:
 		/// Function that handles elements locally (used at end of handler chain)
 		virtual void ElementStartLocal(const std::string& element, const XmlAttributes& attributes) = 0;
 		/// Function that handles elements locally (used at end of handler chain)
 		virtual void ElementEndLocal(const std::string& element) = 0;
-
 		/// clean up any chained handler.
 		void CleanupChainedHandler();
 

@@ -19,10 +19,8 @@ namespace mmo
 	public:
 		/// Method called to notify the handler at the start of each xml element encountered.
 		virtual void ElementStart(const std::string& element, const XmlAttributes& attributes) {}
-
 		/// Method called to notify the handler at the end of each xml element encountered.
 		virtual void ElementEnd(const std::string& element) {}
-
 		/// Method called to notify text node, several successive text nodes are aggregated.
 		virtual void Text(const std::string& text) {}
 	};

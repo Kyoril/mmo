@@ -1267,17 +1267,17 @@ namespace mmo
         connection() = default;
         ~connection() = default;
 
-        connection(connection&& rhs)
+        connection(connection&& rhs) noexcept
             : base{ std::move(rhs.base) }
         {
         }
 
-        connection(connection const& rhs)
+        connection(connection const& rhs) noexcept
             : base{ rhs.base }
         {
         }
 
-        explicit connection(detail::connection_base* base)
+        explicit connection(detail::connection_base* base) noexcept
             : base{ base }
         {
         }

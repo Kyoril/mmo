@@ -8,6 +8,7 @@ namespace mmo
 	namespace hpak
 	{
 		PreHeader::PreHeader()
+			: version(VersionId::Version_1_0)
 		{
 		}
 

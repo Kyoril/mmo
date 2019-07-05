@@ -7,6 +7,7 @@
 namespace mmo
 {
 	FrameFontString::FrameFontString(const std::string & fontFile, float fontSize, float outline)
+		: m_width(0.0f)
 	{
 		m_font = std::make_shared<Font>();
 		VERIFY(m_font->Initialize(fontFile, fontSize, outline));

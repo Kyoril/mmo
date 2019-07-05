@@ -111,7 +111,7 @@ namespace mmo
 		std::map<VertexFormat, ShaderPtr> VertexShaders;
 		std::map<VertexFormat, ShaderPtr> PixelShaders;
 		/// The best supported feature level.
-		D3D_FEATURE_LEVEL m_featureLevel;
+		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_9_1;
 		/// The window handle.
 		HWND m_windowHandle = nullptr;
 		/// Whether it's our own window (which we need to destroy ourself).
