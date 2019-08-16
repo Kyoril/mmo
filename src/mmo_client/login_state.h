@@ -4,8 +4,8 @@
 
 #include "game_state.h"
 #include "screen.h"
+#include "frame_ui/frame_mgr.h"
 #include "graphics/graphics_device.h"
-#include "frame_ui/frame.h"
 
 
 namespace mmo
@@ -34,6 +34,5 @@ namespace mmo
 
 		ScreenLayerIt m_paintLayer;
 		TexturePtr m_texture;
-		FramePtr m_topFrame;
 	};
 }

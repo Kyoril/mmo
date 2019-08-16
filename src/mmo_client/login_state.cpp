@@ -21,6 +21,8 @@ namespace mmo
 {
 	const std::string LoginState::Name = "login";
 
+	static FrameManager &s_frameMgr = FrameManager::Get();
+
 	// Forward declaration for detail methods
 	void LoadUIFile(const std::string& filename);
 	
@@ -211,7 +213,8 @@ namespace mmo
 		FrameManager::
 
 		// Make the logo frame element
-		m_topFrame = std::make_shared<Frame>("TopFrame");
+		auto topFrame = s_frameMgr.CreateOrRetrieve("TopFrame");
+		s_frameMgr.SetTopFrame(topFrame);
 
 		// Clear all loaded toc files
 		detail::s_tocFiles.clear();
@@ -229,7 +232,7 @@ namespace mmo
 		Screen::RemoveLayer(m_paintLayer);
 
 		// Reset the logo frame ui
-		m_topFrame.reset();
+		s_frameMgr.ResetTopFrame();
 
 		// Reset texture
 		m_texture.reset();
@@ -243,6 +246,6 @@ namespace mmo
 	void LoginState::OnPaint()
 	{
 		// Render the logo frame ui
-		m_topFrame->Render();
+		FrameManager::Get().Draw();
 	}
 }
