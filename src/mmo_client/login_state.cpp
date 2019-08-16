@@ -8,6 +8,7 @@
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_texture.h"
 #include "frame_ui/frame_font_string.h"
+#include "frame_ui/frame_mgr.h"
 #include "graphics/texture_mgr.h"
 
 #include "asio.hpp"
@@ -204,8 +205,11 @@ namespace mmo
 		}
 	}
 
+
 	void LoginState::OnEnter()
 	{
+		FrameManager::
+
 		// Make the logo frame element
 		m_topFrame = std::make_shared<Frame>("TopFrame");
 
