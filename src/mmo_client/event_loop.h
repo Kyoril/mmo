@@ -20,6 +20,12 @@ namespace mmo
 		static signal<bool(int key)> KeyDown;
 		/// This event is fired regularly to render the game.
 		static signal<bool(int key)> KeyUp;
+		/// This event is fired regularly to render the game.
+		static signal<bool(int button, int x, int y)> MouseDown;
+		/// This event is fired regularly to render the game.
+		static signal<bool(int button, int x, int y)> MouseUp;
+		/// This event is fired regularly to render the game.
+		static signal<bool(int x, int y)> MouseMove;
 
 	public:
 		/// Initializes the event loop.

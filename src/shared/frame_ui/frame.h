@@ -84,6 +84,9 @@ namespace mmo
 	class Frame
 	{
 	public:
+		typedef std::shared_ptr<Frame> Pointer;
+
+	public:
 
 		signal<void()> RenderingStarted;
 		signal<void()> RenderingEnded;
@@ -106,6 +109,8 @@ namespace mmo
 		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
 
 		virtual void SetAnchor(AnchorPoint point, Point offset = Point());
+
+		virtual void AddChild(Pointer frame);
 
 	public:
 		FrameLayer& AddLayer();
@@ -131,7 +136,7 @@ namespace mmo
 
 	protected:
 
-		typedef std::vector<Frame*> ChildList;
+		typedef std::vector<Pointer> ChildList;
 
 		std::string m_name;
 		bool m_needsRedraw;
@@ -149,5 +154,6 @@ namespace mmo
 		std::vector<std::unique_ptr<FrameLayer>> m_layers;
 	};
 
-	typedef std::shared_ptr<Frame> FramePtr;
+	typedef Frame::Pointer FramePtr;
+
 }

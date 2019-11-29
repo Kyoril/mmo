@@ -88,7 +88,7 @@ namespace mmo
 namespace mmo
 {
 	/// This command will try to connect to the login server and make a login attempt using the
-	/// first parameter as username and the second parameter as password.
+	/// first parameter as username and the other parameters as password.
 	static void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
 	{
 		std::size_t spacePos = arguments.find(' ');

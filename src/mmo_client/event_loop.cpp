@@ -7,6 +7,7 @@
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
 #	include <Windows.h>
+#	include <windowsx.h>
 #endif
 
 #include <thread>
@@ -20,7 +21,9 @@ namespace mmo
 	signal<void()> EventLoop::Paint;
 	signal<bool(int)> EventLoop::KeyDown;
 	signal<bool(int)> EventLoop::KeyUp;
-
+	signal<bool(int, int, int)> EventLoop::MouseDown;
+	signal<bool(int, int, int)> EventLoop::MouseUp;
+	signal<bool(int, int)> EventLoop::MouseMove;
 
 	void EventLoop::Initialize()
 	{
@@ -37,6 +40,40 @@ namespace mmo
 		MSG msg = { 0 };
 		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
+			// Process input messages
+			switch (msg.message)
+			{
+			case WM_KEYDOWN:
+				KeyDown(msg.wParam);
+				break;
+			case WM_KEYUP:
+				KeyUp(msg.wParam);
+				break;
+			case WM_LBUTTONDOWN:
+				MouseDown(0, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_LBUTTONUP:
+				MouseUp(0, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_RBUTTONDOWN:
+				MouseDown(1, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_RBUTTONUP:
+				MouseUp(1, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_MBUTTONDOWN:
+				MouseDown(2, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_MBUTTONUP:
+				MouseUp(2, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_MOUSEMOVE:
+				MouseMove(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				break;
+			case WM_MOUSEWHEEL:
+				break;
+			}
+
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}

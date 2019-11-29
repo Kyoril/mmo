@@ -2,6 +2,8 @@
 
 #include "frame.h"
 
+#include "base/utilities.h"
+
 #include <algorithm>
 
 
@@ -40,7 +42,7 @@ namespace mmo
 		DrawSelf();
 
 		// Draw children
-		for (Frame* child : m_children)
+		for (const auto& child : m_children)
 		{
 			child->Render();
 		}
@@ -56,6 +58,11 @@ namespace mmo
 		m_anchorPoint = point;
 		m_anchorOffset = offset;
 		m_needsRedraw = true;
+	}
+
+	void Frame::AddChild(Frame::Pointer frame)
+	{
+		m_children.push_back(frame);
 	}
 
 	FrameLayer & Frame::AddLayer()
@@ -208,4 +215,5 @@ namespace mmo
 			layer->Render(*m_geometryBuffer);
 		}
 	}
+
 }

@@ -11,6 +11,13 @@
 #	define VERIFY(x) (void)(x)
 #endif
 
+#ifdef _DEBUG
+#	define FATAL(x, msg) ASSERT(x && msg)
+#else
+// TODO: Change this later on to terminate the application with a fatal error message etc.
+#	define FATAL(x, msg) ASSERT(x)
+#endif
+
 
 #ifdef _WIN32
 #	define PLATFORM_WINDOWS 1
