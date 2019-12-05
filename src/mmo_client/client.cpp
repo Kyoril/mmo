@@ -71,9 +71,12 @@ namespace mmo
 	void NetDestroy()
 	{
 		// Close the login connector
-		s_loginConnector->resetListener();
-		s_loginConnector->close();
-		s_loginConnector.reset();
+		if (s_loginConnector)
+		{
+			s_loginConnector->resetListener();
+			s_loginConnector->close();
+			s_loginConnector.reset();
+		}
 
 		// Destroy the work object that keeps the worker busy so that
 		// it can actually exit

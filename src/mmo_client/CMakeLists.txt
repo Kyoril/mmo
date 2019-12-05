@@ -16,7 +16,8 @@ target_link_libraries(mmo_client
 	tex_v1_0 
 	assets
 	frame_ui
-	expat)
+	expat
+	game)
 
 target_link_libraries(mmo_client ${OPENSSL_LIBRARIES})
 set_property(TARGET mmo_client PROPERTY FOLDER "client")
