@@ -76,7 +76,7 @@ namespace mmo
 
 		// Find the right place to add the screen layer
 		auto it = s_screenLayers.begin();
-		while (it != s_screenLayers.end() && it->priority >= priority)
+		while (it != s_screenLayers.end() && it->priority <= priority)
 		{
 			++it;
 		}

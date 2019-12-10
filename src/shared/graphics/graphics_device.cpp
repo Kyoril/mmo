@@ -15,6 +15,12 @@ namespace mmo
 
 
 	GraphicsDevice::GraphicsDevice()
+		: m_viewX(0)
+		, m_viewY(0)
+		, m_viewW(1024)
+		, m_viewH(720)
+		, m_viewMinZ(0.001f)
+		, m_viewMaxZ(100.0f)
 	{
 	}
 
@@ -59,5 +65,25 @@ namespace mmo
 	{
 		m_transform[(uint32)type] = matrix;
 		m_transform[(uint32)type].Transpose();
+	}
+
+	void GraphicsDevice::GetViewport(int32 * x, int32 * y, int32 * w, int32 * h, float * minZ, float * maxZ)
+	{
+		if (x) *x = m_viewX;
+		if (y) *y = m_viewY;
+		if (w) *w = m_viewW;
+		if (h) *h = m_viewH;
+		if (minZ) *minZ = m_viewMinZ;
+		if (maxZ) *maxZ = m_viewMaxZ;
+	}
+
+	void GraphicsDevice::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
+	{
+		m_viewX = x;
+		m_viewY = y;
+		m_viewW = w;
+		m_viewH = h;
+		m_viewMinZ = minZ;
+		m_viewMaxZ = maxZ;
 	}
 }

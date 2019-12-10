@@ -40,6 +40,9 @@ namespace mmo
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
 		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) override;
 		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
+		virtual void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) override;
+		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) override;
+		virtual void ResetClipRect() override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -98,7 +101,9 @@ namespace mmo
 		/// Blend state with alpha blending enabled.
 		ComPtr<ID3D11BlendState> m_alphaBlendState;
 		/// Default rasterizer state.
-		ComPtr<ID3D11RasterizerState> m_rasterizerState;
+		ComPtr<ID3D11RasterizerState> m_defaultRasterizerState;
+		/// Rasterizer state with support for scissor rects.
+		ComPtr<ID3D11RasterizerState> m_scissorRasterizerState;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
 		/// The default texture sampler.

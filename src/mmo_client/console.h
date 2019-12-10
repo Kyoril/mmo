@@ -66,6 +66,11 @@ namespace mmo
 		static void ExecuteCommand(std::string commandLine);
 
 	private:
+		static bool KeyDown(int key);
+		static bool KeyUp(int key);
+		static void Paint();
+
+	private:
 		/// A map of all registered console commands.
 		static std::map<std::string, ConsoleCommand, StrCaseIComp> s_consoleCommands;
 	};

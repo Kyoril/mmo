@@ -31,11 +31,14 @@ namespace mmo
 		{
 			auto& gx = GraphicsDevice::Get();
 
+			int32 vpW, vpH;
+			gx.GetViewport(nullptr, nullptr, &vpW, &vpH);
+
 			gx.SetTopologyType(TopologyType::TriangleList);
 			gx.SetBlendMode(BlendMode::Alpha);
 			gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
 			gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-			gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1024.0f, 768.0f, 0.0f, 0.0f, 100.0f));
+			gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 0.0f, 100.0f));
 		}
 
 		// Draw self
@@ -144,8 +147,11 @@ namespace mmo
 	{
 		Rect r = GetRelativeFrameRect();
 
+		int32 vpW, vpH;
+		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vpW, &vpH);
+
 		// Offset by parent position
-		Rect parentRect = Rect(0.0f, 0.0f, 1280.0f, 720.0f);	// TODO: Get screen size
+		Rect parentRect = Rect(0.0f, 0.0f, static_cast<float>(vpW), static_cast<float>(vpH));	// TODO: Get screen size
 		if (m_parent != nullptr)
 		{
 			parentRect = m_parent->GetAbsoluteFrameRect();

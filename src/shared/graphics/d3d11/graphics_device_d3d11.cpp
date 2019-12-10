@@ -337,11 +337,17 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::CreateRasterizerStates()
 	{
+		// Create the default rasterizer state
 		D3D11_RASTERIZER_DESC rd;
 		ZeroMemory(&rd, sizeof(rd));
 		rd.FillMode = D3D11_FILL_SOLID;
 		rd.CullMode = D3D11_CULL_NONE;
-		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_rasterizerState)));
+		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_defaultRasterizerState)));
+
+		// Create the rasterizer state with support for scissor rects
+		rd.ScissorEnable = TRUE;
+		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_scissorRasterizerState)));
+		
 	}
 
 	void GraphicsDeviceD3D11::CreateSamplerStates()
@@ -395,7 +401,7 @@ namespace mmo
 			return 0;
 		case WM_SIZE:
 			GraphicsDevice::Get().Resize(LOWORD(LParam), HIWORD(LParam));
-			break;
+			return 1;
 		}
 
 		return DefWindowProc(Wnd, Msg, WParam, LParam);
@@ -447,7 +453,7 @@ namespace mmo
 		m_immContext->ClearState();
 
 		// Set rasterizer state
-		m_immContext->RSSetState(m_rasterizerState.Get());
+		m_immContext->RSSetState(m_defaultRasterizerState.Get());
 
 		m_immContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
 
@@ -487,8 +493,10 @@ namespace mmo
 		// Bind viewport
 		D3D11_VIEWPORT Viewport;
 		ZeroMemory(&Viewport, sizeof(Viewport));
-		Viewport.Width = m_width;
-		Viewport.Height = m_height;
+		Viewport.TopLeftX = m_viewX;
+		Viewport.TopLeftY = m_viewY;
+		Viewport.Width = m_viewW;
+		Viewport.Height = m_viewH;
 		Viewport.MaxDepth = 1.0f;
 		m_immContext->RSSetViewports(1, &Viewport);
 
@@ -521,8 +529,10 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Resize(uint16 Width, uint16 Height)
 	{
-		if (!m_swapChain || Width == m_width || Height == m_height)
+		if (!m_swapChain || (Width == m_width && Height == m_height))
 			return;
+
+		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
 
 		GraphicsDevice::Resize(Width, Height);
 		m_resizePending = true;
@@ -681,5 +691,39 @@ namespace mmo
 	{
 		auto texD3D11 = std::static_pointer_cast<TextureD3D11>(texture);
 		texD3D11->Bind(shader, slot);
+	}
+
+	void GraphicsDeviceD3D11::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
+	{
+		// Call super class method
+		GraphicsDevice::SetViewport(x, y, w, h, minZ, maxZ);
+
+		// Setup a viewport struct and apply
+		D3D11_VIEWPORT vp;
+		vp.TopLeftX = x;
+		vp.TopLeftY = y;
+		vp.Width = w;
+		vp.Height = h;
+		vp.MinDepth = minZ;
+		vp.MaxDepth = maxZ;
+
+		// Apply to current context
+		m_immContext->RSSetViewports(1, &vp);
+	}
+
+	void GraphicsDeviceD3D11::SetClipRect(int32 x, int32 y, int32 w, int32 h)
+	{
+		D3D11_RECT clipRect;
+		clipRect.left = x;
+		clipRect.top = y;
+		clipRect.right = x + w;
+		clipRect.bottom = y + h;
+		m_immContext->RSSetScissorRects(1, &clipRect);
+		m_immContext->RSSetState(m_scissorRasterizerState.Get());
+	}
+
+	void GraphicsDeviceD3D11::ResetClipRect()
+	{
+		m_immContext->RSSetState(m_defaultRasterizerState.Get());
 	}
 }

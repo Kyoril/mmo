@@ -121,9 +121,23 @@ namespace mmo
 		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) = 0;
 		/// Binds a texture to the given slot for a given shader type.
 		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) = 0;
+		/// Gets the current viewport dimensions.
+		virtual void GetViewport(int32* x = nullptr, int32* y = nullptr, int32* w = nullptr, int32* h = nullptr, float* minZ = nullptr, float* maxZ = nullptr);
+		/// Sets the current viewport dimensions.
+		virtual void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ);
+		/// Sets the clipping rect.
+		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) = 0;
+		/// Resets the clipping rect if there is any.
+		virtual void ResetClipRect() = 0;
 
 	protected:
 		Matrix4 m_transform[TransformType::Count];
 		uint32 m_clearColor = 0xFF000000;
+		int32 m_viewX;
+		int32 m_viewY;
+		int32 m_viewW;
+		int32 m_viewH;
+		float m_viewMinZ;
+		float m_viewMaxZ;
 	};
 }
