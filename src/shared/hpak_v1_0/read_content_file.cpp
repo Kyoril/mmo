@@ -44,7 +44,7 @@ namespace mmo
 
 				ASSERT(read == contentLength);
 				m_contentStream.seekg(0, std::ios::beg);
-
+				
 				// Create stream
 				switch (file.compression)
 				{
@@ -53,7 +53,7 @@ namespace mmo
 					break;
 
 				default:
-					m_stream = std::make_unique<std::istream>(m_contentStream.rdbuf(), true);
+					m_stream = std::make_unique<std::istream>(m_contentStream.rdbuf()/*, true*/);
 					break;
 				}
 			}
