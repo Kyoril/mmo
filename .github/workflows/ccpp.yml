@@ -10,6 +10,6 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: configure
-      run: mkdir build && cd build && cmake ../ 
+      run: sudo apt-get install libmysqlclient-dev && mkdir build && cd build && cmake ../ 
     - name: make
       run: make
