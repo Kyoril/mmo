@@ -12,4 +12,4 @@ jobs:
     - name: configure
       run: sudo apt-get install libmysqlclient-dev && mkdir build && cd build && cmake ../ 
     - name: make
-      run: cd .. && make
+      run: cd build && make
