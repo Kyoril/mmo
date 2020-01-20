@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <limits>
+#include <cfloat>
 
 
 namespace mmo
