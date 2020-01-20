@@ -8,11 +8,17 @@ add_subdirectory(login_server)
 add_subdirectory(realm_server)
 add_subdirectory(world_server)
 
-add_subdirectory(mmo_client)
 
-add_subdirectory(mmo_edit)
+if (MMO_BUILD_CLIENT)
+	add_subdirectory(mmo_client)
+endif()
+if (MMO_BUILD_EDITOR)
+	add_subdirectory(mmo_edit)
+endif()
 
-add_subdirectory(launcher)
+if (WIN32 OR APPLE)
+	add_subdirectory(launcher)
+endif()
 add_subdirectory(update_compiler)
 
 add_subdirectory(hpak_tool)

@@ -6,6 +6,7 @@
 #include "sff_chartraits.h"
 
 #include <vector>
+#include <algorithm>
 #include <cstddef>
 
 namespace sff

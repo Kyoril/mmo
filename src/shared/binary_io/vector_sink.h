@@ -5,6 +5,7 @@
 #include "sink.h"
 
 #include <vector>
+#include <cstring>
 #include <cassert>
 
 namespace io

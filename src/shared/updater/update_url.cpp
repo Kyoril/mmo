@@ -1,4 +1,7 @@
 #include "update_url.h"
+
+#include <algorithm>
+#include <stdexcept>
 #include <cstdlib>
 
 

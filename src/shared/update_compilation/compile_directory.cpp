@@ -131,7 +131,7 @@ namespace mmo
 					std::unique_ptr<std::ostream> outStream;
 					if (!isZLibCompressed)
 					{
-						outStream = std::make_unique<std::ostream>(outputFile->rdbuf(), true);
+						outStream = std::make_unique<std::ostream>(outputFile->rdbuf());
 					}
 					else
 					{

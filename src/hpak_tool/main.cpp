@@ -7,6 +7,7 @@
 #include "describe.h"
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 
 #include "cxxopts/cxxopts.hpp"

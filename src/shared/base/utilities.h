@@ -3,10 +3,18 @@
 
 #include <string>
 #include <cstdio>
+#include <cstring>
 #include <algorithm>
+#ifndef _MSC_VER
+#	include <strings.h>
+#endif
+
+#ifndef _MSC_VER
+#	define _stricmp(l,r) strcasecmp(l, r)
+#endif
 
 namespace mmo
-{
+{	
 	/// A custom compare operator used to make string keys in a hash container case insensitive.
 	struct StrCaseIComp
 	{

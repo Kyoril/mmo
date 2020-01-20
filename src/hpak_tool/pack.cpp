@@ -196,7 +196,7 @@ namespace mmo
 			std::unique_ptr<std::ostream> outStream;
 			if (!isCompressionEnabled)
 			{
-				outStream = std::make_unique<std::ostream>(archive.rdbuf(), true);
+				outStream = std::make_unique<std::ostream>(archive.rdbuf());
 			}
 			else
 			{

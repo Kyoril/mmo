@@ -1,5 +1,7 @@
 #include "path.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	namespace virtual_dir

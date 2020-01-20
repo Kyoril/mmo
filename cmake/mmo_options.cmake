@@ -21,6 +21,12 @@ mark_as_advanced(MMO_UNITY_FILES_PER_UNIT)
 # on a public server to avoid GM power abuse, but which you might need on development servers to test certain things quickly).
 option(MMO_WITH_DEV_COMMANDS "If checked, developer commands will be available." OFF)
 
+if (WIN32)
+	option(MMO_BUILD_CLIENT "If checked, will try to build the client." ON)
+else()
+	option(MMO_BUILD_CLIENT "If checked, will try to build the client." OFF)
+endif()
+
 # If enabled, the editor will be built. The editor can be used to modify static game data like creature spawns etc.
 # However, it's a heavy tool with heavy dependencies and thus you might not want to build this yourself, so this option is 
 # turned OFF by default.

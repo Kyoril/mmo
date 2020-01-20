@@ -5,6 +5,9 @@
 #include "base/non_copyable.h"
 #include "base/filesystem.h"
 
+#include <memory>
+#include <istream>
+
 
 namespace mmo
 {

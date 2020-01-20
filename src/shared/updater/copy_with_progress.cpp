@@ -22,7 +22,7 @@ namespace mmo
 			std::unique_ptr<std::istream> src =
 				doZLibUncompress ?
 					std::make_unique<zstr::istream>(source) :
-					std::make_unique<std::istream>(source.rdbuf(), true);
+					std::make_unique<std::istream>(source.rdbuf());
 
 			std::uintmax_t written = 0;
 			parameters.progressHandler.updateFile(name, originalSize, written);

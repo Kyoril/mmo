@@ -10,6 +10,7 @@
 #include "base/utilities.h"
 #include "base/macros.h"
 
+#include <fstream>
 #include <array>
 #include <list>
 #include <map>
