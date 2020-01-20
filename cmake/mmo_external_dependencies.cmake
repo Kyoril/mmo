@@ -22,9 +22,9 @@ if (NOT OPENSSL_FOUND)
 endif()
 
 # Check openssl version infos (right now, we want to make sure we don't use 1.1.X, but 1.0.2)
-if (NOT OPENSSL_VERSION MATCHES "1.0.2[a-z]")
-	message(FATAL_ERROR "OpenSSL 1.0.2 is required, but ${OPENSSL_VERSION} was detected! This would lead to compile errors.")
-endif()
+#if (NOT OPENSSL_VERSION MATCHES "1.0.2[a-z]")
+#	message(FATAL_ERROR "OpenSSL 1.0.2 is required, but ${OPENSSL_VERSION} was detected! This would lead to compile errors.")
+#endif()
 
 # Mark OpenSSL options as advanced
 mark_as_advanced(LIB_EAY_DEBUG LIB_EAY_RELEASE SSL_EAY_DEBUG SSL_EAY_RELEASE OPENSSL_INCLUDE_DIR)
