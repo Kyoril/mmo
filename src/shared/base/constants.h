@@ -13,7 +13,7 @@ namespace mmo
 		/// This port is used by the game client to connect with the login server.
 		static const uint16 DefaultLoginPlayerPort = 3724;
 		/// This is the default port used by a world server.
-		static const uint16 DefaultWorldPlayerPort = 8129;
+		static const uint16 DefaultRealmPlayerPort = 8129;
 		/// This is the default port on which the login server listens for realms.
 		static const uint16 DefaultLoginRealmPort = 6279;
 		/// This is the default port on which the realm server listens for worlds.

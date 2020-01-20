@@ -11,7 +11,7 @@ namespace mmo
 {
 	namespace mesh
 	{
-		void savePreHeader(const PreHeader &preHeader, io::Writer &writer)
+		void SavePreHeader(const PreHeader &preHeader, io::Writer &writer)
 		{
 			static_assert((std::is_same<decltype(FileBeginMagic), const std::array<char, 4> >::value));
 

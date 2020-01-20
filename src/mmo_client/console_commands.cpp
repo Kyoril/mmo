@@ -53,5 +53,9 @@ namespace mmo
 				}
 			}
 		}
+
+#ifdef MMO_WITH_DEV_COMMANDS
+		// TODO: Add console commands in here which are only available to developers
+#endif
 	}
 }

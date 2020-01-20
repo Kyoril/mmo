@@ -519,14 +519,11 @@ namespace mmo
 		{
 			// Set progress
 			std::stringstream statusStream;
-			statusStream << "An error occurred...";
+			statusStream << e.what();
 			SetDlgItemTextA(dialogHandle, IDC_STATUS_LABEL, statusStream.str().c_str());
 
 			// Log error
 			ELOG(e.what());
-
-			// Display error dialog
-			MessageBoxA(NULL, e.what(), "Error", MB_ICONERROR | MB_OK);
 			return false;
 		}
 

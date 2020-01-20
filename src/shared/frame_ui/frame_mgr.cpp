@@ -41,11 +41,8 @@ namespace mmo
 
 		/// Keeps track if there is a UI element that has been started.
 		static bool s_uiStarted = false;
-
 		static bool s_layersStarted = false;
-
 		static std::shared_ptr<Frame> s_currentParseFrame;
-
 		static FrameLayer* s_currentLayer = nullptr;
 
 		/// Executed when an element is started.
@@ -108,8 +105,11 @@ namespace mmo
 					parentFrame = s_frameMgr.GetTopFrame();
 				}
 
+				// Parent frame has to exist
+				ASSERT(parentFrame);
+
 				// Create the new frame element
-				s_currentParseFrame = s_frameMgr.Create(frameName);
+				s_currentParseFrame = s_frameMgr.Create("Frame", frameName);
 				if (!s_currentParseFrame)
 				{
 					ELOG("Failed to create new frame - name was probably already taken!");
@@ -315,11 +315,11 @@ namespace mmo
 		if (!detail::LoadCycleCheck(filename))
 			return;
 
-		// Extract the file extension
+		// Extract the file extension in lower case letters
 		std::string extension = GetFileExtension(filename);
 		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-		// Try to open the file
+		// Try to open the file using the asset registry system
 		auto file = AssetRegistry::OpenFile(filename);
 		ASSERT(file);
 
@@ -345,6 +345,18 @@ namespace mmo
 		return s_frameMgr;
 	}
 
+	void FrameManager::Initialize()
+	{
+		// Register frame factories
+		FrameManager::Get().RegisterFrameFactory("frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>(name); });
+	}
+
+	void FrameManager::Destroy()
+	{
+		// Unregister all frame factories
+		FrameManager::Get().ClearFrameFactories();
+	}
+
 	void FrameManager::LoadUIFile(const std::string& filename)
 	{
 		// Clear all loaded toc files
@@ -354,7 +366,7 @@ namespace mmo
 		mmo::LoadUIFile(filename);
 	}
 
-	FramePtr FrameManager::Create(const std::string & name)
+	FramePtr FrameManager::Create(const std::string& type, const std::string & name)
 	{
 		auto it = m_framesByName.find(name);
 		if (it != m_framesByName.end())
@@ -362,13 +374,22 @@ namespace mmo
 			return nullptr;
 		}
 
-		auto newFrame = std::make_shared<Frame>(name);
+		// Retrieve the frame factory by type
+		auto factoryIt = m_frameFactories.find(type);
+		if (factoryIt == m_frameFactories.end())
+		{
+			ELOG("Can not create a frame of type " << type);
+			return nullptr;
+		}
+
+		// Create the new frame using the frame factory
+		auto newFrame = factoryIt->second(name);
 		m_framesByName[name] = newFrame;
 
 		return newFrame;
 	}
 
-	FramePtr FrameManager::CreateOrRetrieve(const std::string& name)
+	FramePtr FrameManager::CreateOrRetrieve(const std::string& type, const std::string& name)
 	{
 		auto it = m_framesByName.find(name);
 		if (it != m_framesByName.end())
@@ -376,8 +397,15 @@ namespace mmo
 			return it->second;
 		}
 
-		auto newFrame = std::make_shared<Frame>(name);
+		// Retrieve the frame factory by type
+		auto factoryIt = m_frameFactories.find(type);
+		if (factoryIt == m_frameFactories.end())
+		{
+			ELOG("Can not create a frame of type " << type);
+			return nullptr;
+		}
 
+		auto newFrame = factoryIt->second(name);
 		m_framesByName[name] = newFrame;
 
 		return newFrame;
@@ -412,7 +440,7 @@ namespace mmo
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)
 	{
 		auto it = m_frameFactories.find(elementName);
-		FATAL(it != m_frameFactories.end(), "Frame factory already registered!");
+		FATAL(it == m_frameFactories.end(), "Frame factory already registered!");
 
 		// Register factory
 		m_frameFactories[elementName] = factory;

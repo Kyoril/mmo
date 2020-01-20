@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/non_copyable.h"
+#include "base/typedefs.h"
 #include "base/utilities.h"
 #include "base/filesystem.h"
 
@@ -66,8 +67,8 @@ namespace mmo
 		static void ExecuteCommand(std::string commandLine);
 
 	private:
-		static bool KeyDown(int key);
-		static bool KeyUp(int key);
+		static bool KeyDown(int32 key);
+		static bool KeyUp(int32 key);
 		static void Paint();
 
 	private:

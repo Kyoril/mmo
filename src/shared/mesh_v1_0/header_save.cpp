@@ -23,7 +23,7 @@ namespace mmo
 #endif
 			{
 				io::Writer writer(destination);
-				savePreHeader(PreHeader(Version_1_0), writer);
+				SavePreHeader(PreHeader(Version_1_0), writer);
 
 				// TODO
 			}
@@ -35,7 +35,7 @@ namespace mmo
 #endif
 			}
 
-			void HeaderSaver::finish()
+			void HeaderSaver::Finish()
 			{
 				io::Writer writer(m_destination);
 

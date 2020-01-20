@@ -22,7 +22,7 @@ namespace mmo
 				explicit HeaderSaver(io::ISink &destination, const Header& header);
 				~HeaderSaver();
 
-				void finish();
+				void Finish();
 
 			private:
 

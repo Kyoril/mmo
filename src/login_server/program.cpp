@@ -6,6 +6,8 @@
 #include "mysql_database.h"
 #include "player_manager.h"
 #include "player.h"
+#include "realm_manager.h"
+#include "realm.h"
 
 #include "asio.hpp"
 
@@ -132,13 +134,13 @@ namespace mmo
 		// Create the realm service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		/*RealmManager realmManager{ config.maxRealms };
+		RealmManager realmManager{ config.maxRealms };
 
 		// Create the realm server
-		std::unique_ptr<binary::Server> realmServer;
+		std::unique_ptr<auth::Server> realmServer;
 		try
 		{
-			realmServer.reset(new binary::Server(std::ref(ioService), constants::DefaultLoginRealmPort, std::bind(&binary::Connection::create, std::ref(ioService), nullptr)));
+			realmServer.reset(new auth::Server(std::ref(ioService), constants::DefaultLoginRealmPort, std::bind(&auth::Connection::create, std::ref(ioService), nullptr)));
 		}
 		catch (const BindFailedException &)
 		{
@@ -163,14 +165,14 @@ namespace mmo
 
 			auto realm = std::make_shared<Realm>(realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming realm connection from " << address);
-			realmManager.addRealm(std::move(realm));
+			realmManager.AddRealm(std::move(realm));
 
 			connection->startReceiving();
 		};
 
 		// Start accepting incoming realm connections
 		const scoped_connection realmConnected{ realmServer->connected().connect(createRealm) };
-		realmServer->startAccept();*/
+		realmServer->startAccept();
 
 
 

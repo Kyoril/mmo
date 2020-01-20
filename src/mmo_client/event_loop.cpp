@@ -19,11 +19,11 @@ namespace mmo
 	// Event loop events
 	signal<void(float deltaSeconds, GameTime timestamp)> EventLoop::Idle;
 	signal<void()> EventLoop::Paint;
-	signal<bool(int)> EventLoop::KeyDown;
-	signal<bool(int)> EventLoop::KeyUp;
-	signal<bool(int, int, int)> EventLoop::MouseDown;
-	signal<bool(int, int, int)> EventLoop::MouseUp;
-	signal<bool(int, int)> EventLoop::MouseMove;
+	signal<bool(int32)> EventLoop::KeyDown;
+	signal<bool(int32)> EventLoop::KeyUp;
+	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseDown;
+	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseUp;
+	signal<bool(int32, int32)> EventLoop::MouseMove;
 
 	void EventLoop::Initialize()
 	{
@@ -50,22 +50,22 @@ namespace mmo
 				KeyUp(msg.wParam);
 				break;
 			case WM_LBUTTONDOWN:
-				MouseDown(0, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseDown(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_LBUTTONUP:
-				MouseUp(0, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseUp(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_RBUTTONDOWN:
-				MouseDown(1, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseDown(MouseButton_Right, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_RBUTTONUP:
-				MouseUp(1, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseUp(MouseButton_Right, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MBUTTONDOWN:
-				MouseDown(2, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseDown(MouseButton_Middle, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MBUTTONUP:
-				MouseUp(2, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+				MouseUp(MouseButton_Middle, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MOUSEMOVE:
 				MouseMove(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));

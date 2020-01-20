@@ -7,6 +7,7 @@
 
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
+#include "frame_ui/frame_mgr.h"
 #include "frame_ui/font.h"
 #include "frame_ui/geometry_buffer.h"
 
@@ -66,9 +67,9 @@ namespace mmo
 		// Create the vertex buffer for the console background
 		const POS_COL_VERTEX vertices[] = {
 			{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-			{ { s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
-			{ { s_lastViewportWidth, s_consoleWindowHeight, 0.0f }, 0xc0000000 },
-			{ { 0.0f, s_consoleWindowHeight, 0.0f }, 0xc0000000 }
+			{ { (float)s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
+			{ { (float)s_lastViewportWidth, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 },
+			{ { 0.0f, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 }
 		};
 
 		// Setup vertices
@@ -89,6 +90,9 @@ namespace mmo
 
 		// Initialize the screen system
 		Screen::Initialize();
+
+		// Initialize the frame manager
+		FrameManager::Initialize();
 
 		// Assign console log signal
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
@@ -117,6 +121,9 @@ namespace mmo
 
 		// Remove the console layer
 		Screen::RemoveLayer(s_consoleLayer);
+
+		// Destroy the frame manager
+		FrameManager::Destroy();
 
 		// Destroy the screen system
 		Screen::Destroy();
@@ -209,7 +216,7 @@ namespace mmo
 		}
 	}
 
-	bool Console::KeyDown(int key)
+	bool Console::KeyDown(int32 key)
 	{
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)
@@ -227,7 +234,7 @@ namespace mmo
 		return true;
 	}
 
-	bool Console::KeyUp(int key)
+	bool Console::KeyUp(int32 key)
 	{
 		return true;
 	}
@@ -280,9 +287,9 @@ namespace mmo
 			// Create the vertex buffer for the console background
 			const POS_COL_VERTEX vertices[] = {
 				{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-				{ { s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
-				{ { s_lastViewportWidth, s_consoleWindowHeight, 0.0f }, 0xc0000000 },
-				{ { 0.0f, s_consoleWindowHeight, 0.0f }, 0xc0000000 }
+				{ { (float)s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
+				{ { (float)s_lastViewportWidth, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 },
+				{ { 0.0f, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 }
 			};
 
 			// Update vertex buffer data
@@ -291,8 +298,6 @@ namespace mmo
 			*lock[1] = vertices[1];
 			*lock[2] = vertices[2];
 			*lock[3] = vertices[3];
-
-			DLOG("Updated console vertex buffer");
 		}
 
 		// Set up a clipping rect

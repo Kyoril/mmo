@@ -15,33 +15,35 @@ namespace mmo
 	class FrameManager final : public NonCopyable
 	{
 	public:
-		typedef std::function<FramePtr(FramePtr parent)> FrameFactory;
+		typedef std::function<FramePtr(const std::string& name)> FrameFactory;
 
 	private:
 		/// Contains a hash map of all registered frame factories.
 		std::map<std::string, FrameFactory, StrCaseIComp> m_frameFactories;
 
 	private:
-		FrameManager()
-		{}
+		FrameManager() = default;
 
 	public:
 		/// Singleton getter method.
 		static FrameManager& Get();
 
 	public:
+		/// Initializes the frame manager by registering default frame factories.
+		static void Initialize();
+		static void Destroy();
+
+	public:
 		/// Loads files based on a given input stream with file contents.
 		void LoadUIFile(const std::string& filename);
 
 	public:
-		FramePtr Create(const std::string& name);
-		FramePtr CreateOrRetrieve(const std::string& name);
+		/// Creates a new frame using the given type.
+		FramePtr Create(const std::string& type, const std::string& name);
+		FramePtr CreateOrRetrieve(const std::string& type, const std::string& name);
 		FramePtr Find(const std::string& name);
-
 		void SetTopFrame(const FramePtr& topFrame);
-
 		void ResetTopFrame();
-
 		void Draw() const;
 
 	public:

@@ -26,7 +26,7 @@ namespace mmo
 	void LoginState::OnEnter()
 	{
 		// Make the logo frame element
-		auto topFrame = s_frameMgr.CreateOrRetrieve("TopFrame");
+		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopFrame");
 		s_frameMgr.SetTopFrame(topFrame);
 
 		// Load ui file

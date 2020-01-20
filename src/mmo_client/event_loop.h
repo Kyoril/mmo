@@ -5,9 +5,30 @@
 #include "base/non_copyable.h"
 #include "base/signal.h"
 #include "base/clock.h"
+#include "base/typedefs.h"
 
 namespace mmo
 {
+	/// Enumerates possible mouse buttons.
+	enum EMouseButton
+	{
+		// Default buttons
+
+		/// Left mouse button.
+		MouseButton_Left = 0,
+		/// Right mouse button.
+		MouseButton_Right = 1,
+		/// Mouse wheel has been pressed (not scrolled!)
+		MouseButton_Middle = 2,
+
+		// Some mices have additional two buttons
+
+		/// Fourth button (if available)
+		MouseButton_Four = 3,
+		/// Fifth button (if available)
+		MouseButton_Five = 4,
+	};
+
 	/// This class represents an event loop.
 	class EventLoop : public NonCopyable
 	{
@@ -17,15 +38,15 @@ namespace mmo
 		/// This event is fired regularly to render the game.
 		static signal<void()> Paint;
 		/// This event is fired regularly to render the game.
-		static signal<bool(int key)> KeyDown;
+		static signal<bool(int32 key)> KeyDown;
 		/// This event is fired regularly to render the game.
-		static signal<bool(int key)> KeyUp;
+		static signal<bool(int32 key)> KeyUp;
 		/// This event is fired regularly to render the game.
-		static signal<bool(int button, int x, int y)> MouseDown;
+		static signal<bool(EMouseButton button, int32 x, int32 y)> MouseDown;
 		/// This event is fired regularly to render the game.
-		static signal<bool(int button, int x, int y)> MouseUp;
+		static signal<bool(EMouseButton button, int32 x, int32 y)> MouseUp;
 		/// This event is fired regularly to render the game.
-		static signal<bool(int x, int y)> MouseMove;
+		static signal<bool(int32 x, int32 y)> MouseMove;
 
 	public:
 		/// Initializes the event loop.

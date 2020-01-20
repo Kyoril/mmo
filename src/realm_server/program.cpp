@@ -1,6 +1,8 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "program.h"
+#include "login_connector.h"
+#include "configuration.h"
 #include "version.h"
 
 #include "asio.hpp"
@@ -11,6 +13,10 @@
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_server.h"
 #include "base/constants.h"
+#include "base/filesystem.h"
+#include "base/timer_queue.h"
+
+#include "deps/cxxopts/cxxopts.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -20,8 +26,6 @@
 #include <vector>
 #include <mutex>
 #include <thread>
-
-#include "base/filesystem.h"
 
 namespace mmo
 {
@@ -48,10 +52,13 @@ namespace mmo
 		}
 	}
 
-	int32 Program::run()
+	int32 Program::run(const std::string& configFileName)
 	{
 		// This is the main ioService object
 		asio::io_service ioService;
+
+		// This is the main timer queue
+		TimerQueue timerQueue{ ioService };
 
 		// The database service object and keep-alive object
 		asio::io_service dbService;
@@ -65,15 +72,34 @@ namespace mmo
 		// Load config file
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
-
+		Configuration config;
+		if (!config.load(configFileName))
+		{
+			return 1;
+		}
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		if (config.isLogActive)
+		{
+			auto logOptions = g_DefaultFileLogOptions;
+			logOptions.alwaysFlush = !config.isLogFileBuffering;
+
+			// Setup the log file connection after opening the log file
+			scoped_connection genericLogConnection;
+			m_logFile.open(generateLogFileName(config.logFileName).c_str(), std::ios::app);
+			if (m_logFile)
+			{
+				genericLogConnection = g_DefaultLog.signal().connect(
+					[this, &logOptions](const LogEntry & entry)
+				{
+					printLogEntry(m_logFile, entry, logOptions);
+				});
+			}
+		}
 
 		// Display version infos
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revisision << " (Commit: " << GitCommit << ")");
@@ -111,6 +137,20 @@ namespace mmo
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Login at login server
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+		// Setup the login connector and connect to the login server
+		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue);
+		if (!loginConnector->Login(config.loginServerAddress, config.loginServerPort, config.realmName, config.realmPasswordHash))
+		{
+			return 1;
+		}
+
+
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -129,6 +169,9 @@ namespace mmo
 
 		// Run the database service thread
 		std::thread dbThread{ [&dbService]() { dbService.run(); } };
+
+		// Keep realm busy
+		asio::io_context::work work{ ioService };
 
 		// Also run the io service on the main thread as well
 		ioService.run();

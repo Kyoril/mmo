@@ -11,7 +11,7 @@ namespace mmo
 {
 	namespace mesh
 	{
-		bool loadPreHeader(PreHeader &preHeader, io::Reader &reader)
+		bool LoadPreHeader(PreHeader &preHeader, io::Reader &reader)
 		{
 			{
 				std::array<char, 4> magic;

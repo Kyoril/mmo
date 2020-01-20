@@ -56,9 +56,9 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(uint32 realmId)
+	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(const std::string& name)
 	{
-		mysql::Select select(m_connection, "SELECT internalName,password FROM realm WHERE id = " + std::to_string(realmId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id,name,s,v FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -66,21 +66,10 @@ namespace mmo
 			{
 				// Create the structure and fill it with data
 				RealmAuthData data;
-				row.GetField(0, data.name);
-
-				// Read password hash as hex string
-				std::string passwordHash;
-				row.GetField(1, passwordHash);
-
-				// Now parse hex string into SHA1 hash
-				bool error = false;
-				data.password = sha1ParseHex(passwordHash, &error);
-				if (error)
-				{
-					ELOG("Realm " << realmId << ": Invalid sha1 password hash string!");
-					return {};
-				}
-
+				row.GetField(0, data.id);
+				row.GetField(1, data.name);
+				row.GetField(2, data.s);
+				row.GetField(3, data.v);
 				return data;
 			}
 		}
@@ -123,6 +112,21 @@ namespace mmo
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update account database on login");
+		}
+	}
+
+	void MySQLDatabase::realmLogin(uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
+	{
+		if (!m_connection.Execute("UPDATE realm SET k = '"
+			+ m_connection.EscapeString(sessionKey)
+			+ "', last_login = NOW(), last_ip = '"
+			+ m_connection.EscapeString(ip)
+			+ "', last_build = '"
+			+ m_connection.EscapeString(build)
+			+ "' WHERE id = " + std::to_string(realmId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update realm database on login");
 		}
 	}
 	

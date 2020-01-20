@@ -29,10 +29,14 @@ namespace mmo
 	/// Contains data used by a realm for authentification.
 	struct RealmAuthData
 	{
+		/// The unique realm id.
+		uint32 id;
 		/// Name of the realm.
 		std::string name;
-		/// A simple password hash that is used for authentification.
-		SHA1Hash password;
+		/// Password salt.
+		std::string s;
+		/// Password verifier.
+		std::string v;
 	};
 
 	/// Basic interface for a database system used by the login server.
@@ -44,8 +48,8 @@ namespace mmo
 		/// @param name Name of the account.
 		virtual std::optional<AccountData> getAccountDataByName(const std::string& name) = 0;
 		/// Obtains realm data by it's id.
-		/// @param realmId ID of the realm.
-		virtual std::optional<RealmAuthData> getRealmAuthData(uint32 realmId) = 0;
+		/// @param name Name of the realm.
+		virtual std::optional<RealmAuthData> getRealmAuthData(const std::string& name) = 0;
 		/// Retrieves the session key and the account id by name.
 		/// @param accountName Name of the account.
 		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(const std::string& accountName) = 0;
@@ -55,6 +59,8 @@ namespace mmo
 		/// @param sessionKey The new session key (hex str).
 		/// @param ip The current ip of the player.
 		virtual void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
+		/// 
+		virtual void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
 	};
 
 

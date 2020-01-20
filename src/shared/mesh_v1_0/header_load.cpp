@@ -12,7 +12,7 @@ namespace mmo
 	{
 		namespace v1_0
 		{
-			bool loadHeader(Header &header, io::Reader &reader)
+			bool LoadHeader(Header &header, io::Reader &reader)
 			{
 				return reader;
 			}

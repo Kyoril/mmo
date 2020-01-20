@@ -4,13 +4,17 @@
 #include "version.h"
 
 #include "base/constants.h"
+#include "base/timer_queue.h"
+#include "base/clock.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
 {
-	LoginConnector::LoginConnector(asio::io_service & io)
+	LoginConnector::LoginConnector(asio::io_service & io, TimerQueue& queue)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
+		, m_timerQueue(queue)
+		, m_willTerminate(false)
 	{
 	}
 
@@ -24,11 +28,6 @@ namespace mmo
 				// Initialize packet using the op code
 				packet.Start(auth::client_packet::LogonChallenge);
 
-				// Placeholder for packet size value
-				const size_t contentSizePos = packet.sink().position();
-				packet
-					<< io::write<uint16>(0);
-
 				// Write the actual packet content
 				const size_t contentStart = packet.sink().position();
 				packet
@@ -36,16 +35,7 @@ namespace mmo
 					<< io::write<uint8>(mmo::Minor)
 					<< io::write<uint8>(mmo::Build)
 					<< io::write<uint16>(mmo::Revisision)
-					<< io::write<uint32>(0x00783836)	// Platform: x86
-					<< io::write<uint32>(0x0057696e)	// System: Win
-					<< io::write<uint32>(0x64654445)	// Locale: deDE
-					<< io::write<uint32>(0)	// Timezone?
-					<< io::write<uint32>(0)	// Ip
-					<< io::write_dynamic_range<uint8>(m_username);
-
-				// Calculate the actual packet size and write it at the beginning
-				const size_t contentEnd = packet.sink().position();
-				packet.writePOD(contentSizePos, static_cast<uint16>(contentEnd - contentStart));
+					<< io::write_dynamic_range<uint8>(m_realmName);
 
 				// Finish packet and send it
 				packet.Finish();
@@ -54,19 +44,30 @@ namespace mmo
 		else
 		{
 			// Connection error!
-			ELOG("Could not connect");
+			ELOG("Could not connect to the login server at " << m_loginAddress << ":" << m_loginPort << 
+				"! Will try to reconnect in a few seconds...");
+			QueueReconnect();
 		}
+
 		return true;
 	}
 
 	void LoginConnector::connectionLost()
 	{
-		ELOG("Disconnected");
+		// Notify the user
+		ELOG("Connection to the login server has been lost!");
+
+		// Reset authentication status
+		Reset();
+
+		// Queue reconnect timer
+		QueueReconnect();
 	}
 
 	void LoginConnector::connectionMalformedPacket()
 	{
-		ELOG("Received a malformed packet");
+		ELOG("Received a malformed packet from login server!");
+		QueueTermination();
 	}
 
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
@@ -79,11 +80,8 @@ namespace mmo
 		case auth::server_packet::LogonProof:
 			OnLogonProof(packet);
 			break;
-		case auth::server_packet::RealmList:
-			// TODO: Handle realm list packet
-			break;
 		default:
-			WLOG("Received unhandled packet " << packet.GetId());
+			WLOG("Received unhandled packet from login server: Op Code 0x" << std::hex << packet.GetId());
 			break;
 		}
 
@@ -151,7 +149,7 @@ namespace mmo
 		m_sessionKey.setBinary((uint8*)S_hash, 40);
 		
 		// Generate hash of plain username
-		gen.update((const char*)m_username.c_str(), m_username.size());
+		gen.update((const char*)m_realmName.c_str(), m_realmName.size());
 		SHA1Hash userhash2 = gen.finalize();
 
 		// Generate N and g hashes
@@ -223,8 +221,7 @@ namespace mmo
 		}
 		else
 		{
-			// Output error code
-			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+			OnLoginError(static_cast<auth::AuthResult>(result));
 		}
 	}
 
@@ -244,35 +241,113 @@ namespace mmo
 			// Check that both match
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
-				ILOG("AUTH: SUCCESS");
+				ILOG("Successfully authenticated at the login server! Players should now be ready to play on this realm!");
 			}
 			else
 			{
-				ELOG("AUTH: ERROR (Hash mismatch)");
+				// Output error code in chat before terminating the application
+				ELOG("[Login Server] Could not authenticate realm at login server, hash mismatch detected!");
+				QueueTermination();
+				return;
 			}
 		}
 		else
 		{
-			// Output error code
-			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+			OnLoginError(static_cast<auth::AuthResult>(result));
 		}
 	}
 
-	void LoginConnector::Connect(const std::string & username, const std::string & password)
+	void LoginConnector::OnLoginError(auth::AuthResult result)
 	{
-		// Apply username and convert it to uppercase letters
-		m_username = std::move(username);
-		std::transform(m_username.begin(), m_username.end(), m_username.begin(), ::toupper);
+		// Output error code in chat before terminating the application
+		ELOG("[Login Server] Could not authenticate realm at login server. Error code 0x" << std::hex << static_cast<uint16>(result));
+		QueueTermination();
+	}
 
-		// Apply password in uppercase letters
-		std::string upperPassword;
-		std::transform(password.begin(), password.end(), std::back_inserter(upperPassword), ::toupper);
+	void LoginConnector::Reset()
+	{
+		// Reset srp6a values
+		m_B = 0;
+		m_s = 0;
+		m_unk = 0;
+		m_a = 0;
+		m_x = 0;
+		m_v = 0;
+		m_u = 0;
+		m_A = 0;
+		m_S = 0;
+
+		// Reset session key
+		m_sessionKey = 0;
+
+		// Reset calculated hash values
+		M1hash.fill(0);
+		M2hash.fill(0);
+	}
+
+	void LoginConnector::QueueReconnect()
+	{
+		if (!m_willTerminate)
+		{
+			// Reconnect in 5 seconds from now on
+			m_timerQueue.AddEvent(std::bind(&LoginConnector::OnReconnectTimer, this), m_timerQueue.GetNow() + constants::OneSecond * 5);
+		}
+	}
+
+	void LoginConnector::OnReconnectTimer()
+	{
+		if (!m_willTerminate)
+		{
+			// Try to connect, everything in terms of authentication is handled in the connectionEstablished event
+			connect(m_loginAddress, m_loginPort, *this, m_ioService);
+		}
+	}
+
+	void LoginConnector::QueueTermination()
+	{
+		// Prevent double timer
+		if (m_willTerminate)
+		{
+			return;
+		}
+
+		// Termination callback
+		const auto termination = [this]() {
+			// TODO: might need to change this to a global event to trigger instead in case we have more than one major io service object
+			m_ioService.stop();
+		};
+
+		// Notify the user
+		WLOG("Server will terminate in 5 seconds...");
+		m_timerQueue.AddEvent(std::move(termination), m_timerQueue.GetNow() + constants::OneSecond * 5);
+	}
+
+	bool LoginConnector::Login(const std::string& serverAddress, uint16 port, const std::string & realmName, std::string password)
+	{
+		// Reset authentication status
+		Reset();
+
+		// Copy data for later use in reconnect timer
+		m_loginAddress = serverAddress;
+		m_loginPort = port;
+
+		// Apply username and convert it to uppercase letters
+		m_realmName = std::move(realmName);
+		std::transform(m_realmName.begin(), m_realmName.end(), m_realmName.begin(), ::toupper);
 
 		// Calculate auth hash
-		const std::string authHash = m_username + ":" + upperPassword;
-		m_authHash = sha1(authHash.c_str(), authHash.size());
+		bool hexParseError = false;
+		m_authHash = sha1ParseHex(password, &hexParseError);
+
+		// Check for errors
+		if (hexParseError)
+		{
+			ELOG("Invalid realm password hash string provided! SHA1 hashes are represented by a 20-character hex string!");
+			return false;
+		}
 
 		// Connect to the server at localhost
-		connect("mmo-dev.net", constants::DefaultLoginPlayerPort, *this, m_ioService);
+		connect(serverAddress, port, *this, m_ioService);
+		return true;
 	}
 }

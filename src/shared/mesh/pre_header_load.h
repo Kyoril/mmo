@@ -15,6 +15,6 @@ namespace mmo
 		struct PreHeader;
 
 
-		bool loadPreHeader(PreHeader &preHeader, io::Reader &reader);
+		bool LoadPreHeader(PreHeader &preHeader, io::Reader &reader);
 	}
 }

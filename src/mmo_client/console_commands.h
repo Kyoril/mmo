@@ -11,5 +11,9 @@ namespace mmo
 	{
 		void ConsoleCommand_Ver(const std::string& cmd, const std::string& args);
 		void ConsoleCommand_Run(const std::string& cmd, const std::string& args);
+
+#ifdef MMO_WITH_DEV_COMMANDS
+		// TODO: Add console commands in here which are only available to developers
+#endif
 	}
 }

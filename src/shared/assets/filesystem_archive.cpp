@@ -21,7 +21,6 @@ namespace mmo
 		{
 			std::filesystem::create_directories(m_name);
 		}
-
 	}
 
 	void FileSystemArchive::Unload()

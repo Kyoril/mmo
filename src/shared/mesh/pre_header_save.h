@@ -16,6 +16,6 @@ namespace mmo
 		struct PreHeader;
 
 
-		void savePreHeader(const PreHeader &preHeader, io::Writer &writer);
+		void SavePreHeader(const PreHeader &preHeader, io::Writer &writer);
 	}
 }

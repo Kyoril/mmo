@@ -17,7 +17,7 @@ namespace mmo
 			struct Header;
 
 
-			bool loadHeader(Header &header, io::Reader &reader);
+			bool LoadHeader(Header &header, io::Reader &reader);
 		}
 	}
 }

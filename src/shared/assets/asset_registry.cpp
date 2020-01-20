@@ -104,7 +104,6 @@ namespace mmo
 		}
 
 		// Open file from archive
-		DLOG("Loading file " << filename << " for reading from archive " << it->second->GetName());
 		return it->second->Open(filename);
 	}
 }
