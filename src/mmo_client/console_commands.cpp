@@ -16,7 +16,6 @@ namespace mmo
 	{
 		void ConsoleCommand_Ver(const std::string & cmd, const std::string & args)
 		{
-			// TODO: Write it to the console
 			DLOG("MMO Client Version " << Major << "." << Minor << "." << Build << " (Build: " << Revisision << ")");
 		}
 

@@ -16,7 +16,7 @@ if (MMO_BUILD_EDITOR)
 	add_subdirectory(mmo_edit)
 endif()
 
-if (WIN32 OR APPLE)
+if ((WIN32 OR APPLE) AND MMO_BUILD_LAUNCHER)
 	add_subdirectory(launcher)
 endif()
 add_subdirectory(update_compiler)
