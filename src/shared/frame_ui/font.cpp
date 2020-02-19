@@ -520,16 +520,30 @@ namespace mmo
 		// Iterate through all characters of the string
 		for (size_t c = 0; c < text.length(); ++c)
 		{
+			size_t iterations = 1;
+
+			// Grab the glyph from string
+			char g = text[c];
+			if (g == '\t')
+			{
+				g = ' ';
+
+				iterations = 4;
+			}
+
 			// Get the glyph data
-			const FontGlyph* glyph = GetGlyphData(text[c]);
+			const FontGlyph* glyph = GetGlyphData(g);
 			if (glyph)
 			{
 				// Adjust the width
 				width = glyph->GetRenderedAdvance(scale);
-				if (advWidth + width > curWidth)
-					curWidth = advWidth + width;
+				for (size_t i = 0; i < iterations; ++i)
+				{
+					if (advWidth + width > curWidth)
+						curWidth = advWidth + width;
 
-				advWidth += glyph->GetAdvance(scale);
+					advWidth += glyph->GetAdvance(scale);
+				}
 			}
 		}
 
@@ -565,14 +579,27 @@ namespace mmo
 
 		for (size_t c = 0; c < text.length(); ++c)
 		{
+			size_t iterations = 1;
+
+			char g = text[c];
+			if (g == '\t')
+			{
+				g = ' ';
+				iterations = 4;
+			}
+
 			const FontGlyph* glyph = nullptr;
-			if ((glyph = GetGlyphData(text[c])))
+			if ((glyph = GetGlyphData(g)))
 			{
 				const FontImage* const image = glyph->GetImage();
 				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale);
 
 				image->Draw(glyphPos, glyph->GetImage()->GetSize(), buffer);
-				glyphPos.x += glyph->GetAdvance(scale);
+
+				for (size_t i = 0; i < iterations; ++i)
+				{
+					glyphPos.x += glyph->GetAdvance(scale);
+				}
 			}
 		}
 	}

@@ -13,9 +13,13 @@
 #include "frame_ui/geometry_buffer.h"
 
 #include <mutex>
+#include <algorithm>
+
 
 namespace mmo
 {
+	// Static private variables
+
 	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
 
 	/// A event that listens for KeyDown events from the event loop to handle console input.
@@ -42,6 +46,73 @@ namespace mmo
 	static std::mutex s_consoleLogMutex;
 	static scoped_connection s_consoleLogConn;
 
+
+
+	// Graphics CVar stuff
+	namespace
+	{
+		static ConsoleVar* s_gxResolutionCVar = nullptr;
+		static ConsoleVar* s_gxWindowedCVar = nullptr;
+		static ConsoleVar* s_gxVSyncCVar = nullptr;
+
+
+		/// Helper struct for automatic gx cvar table.
+		typedef struct
+		{
+			std::string name;
+			std::string description;
+			std::string defaultValue;
+			ConsoleVar** outputVar = nullptr;
+			std::function<ConsoleVar::ChangedSignal::signature_type> changedHandler = nullptr;
+		} GxCVarHelper;
+
+		/// A list of automatically registered and unregistered console variables that are also
+		/// serialized when the games config file is serialized.
+		static const std::vector<GxCVarHelper> s_gxCVars = 
+		{
+			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
+			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar,		nullptr },
+			{"gxVSync",			"Whether the application will run with vsync enabled.",	"0",		&s_gxVSyncCVar,			nullptr },
+
+			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
+			// as well as being serialized when saving the graphics settings of the game.
+		};
+
+
+		/// Triggered when a gxcvar is changed to invalidate the current graphics settings.
+		static void GxCVarChanged(ConsoleVar& var, const std::string& oldValue)
+		{
+
+		}
+
+
+		/// Registers the automatically managed gx cvars from the table above.
+		static void RegisterGraphicsCVars()
+		{
+			// Register console variables from the table
+			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
+				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
+
+				// Eventually assign the output variable if asked to do so.
+				if (x.outputVar != nullptr)
+				{
+					*x.outputVar = output;
+				}
+			});
+		}
+
+		/// Unregisters the automatically managed gx cvars from the table above.
+		static void UnregisterGraphicsCVars()
+		{
+			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
+				ConsoleVarMgr::UnregisterConsoleVar(x.name);
+			});
+		}
+	}
+
+
+	// Console implementation
+
 	void Console::Initialize(const std::filesystem::path& configFile)
 	{
 		// Ensure the folder is created
@@ -53,6 +124,9 @@ namespace mmo
 
 		// Initialize the cvar manager
 		ConsoleVarMgr::Initialize();
+
+		// Register graphics variables
+		RegisterGraphicsCVars();
 
 		// Load the config file
 		console_commands::ConsoleCommand_Run("run", configFile.string());
@@ -145,6 +219,10 @@ namespace mmo
 		s_consoleIndBuf.reset();
 		s_consoleVertBuf.reset();
 		s_consoleLog.clear();
+
+		// Unregister graphics console variables and do so before we destroy the graphics device, so that
+		// no variables could ever affect the graphics device after it has been destroyed
+		UnregisterGraphicsCVars();
 
 		// Destroy the graphics device
 		GraphicsDevice::Destroy();

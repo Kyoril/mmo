@@ -25,6 +25,7 @@ namespace mmo
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseUp;
 	signal<bool(int32, int32)> EventLoop::MouseMove;
 
+
 	void EventLoop::Initialize()
 	{
 	}
@@ -115,9 +116,6 @@ namespace mmo
 
 			// Flip buffers
 			gx.Present();
-
-			// Pretend we have some work to do
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 	}
 }
