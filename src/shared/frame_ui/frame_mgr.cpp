@@ -338,7 +338,6 @@ namespace mmo
 		}
 	}
 
-
 	FrameManager& FrameManager::Get()
 	{
 		static FrameManager s_frameMgr;
@@ -434,7 +433,11 @@ namespace mmo
 
 	void FrameManager::Draw() const
 	{
-		m_topFrame->Render();
+		// Render top frame if there is any
+		if (m_topFrame != nullptr)
+		{
+			m_topFrame->Render();
+		}
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

@@ -129,3 +129,6 @@ configure_file(expat.pc.in ${CMAKE_CURRENT_BINARY_DIR}/expat.pc @ONLY)
 
 # Addition by mmo-project: Add to deps solution folder
 set_property(TARGET expat PROPERTY FOLDER "deps")
+
+# Mark properties as advanced
+mark_as_advanced(BUILD_shared INSTALL WARNINGS_AS_ERRORS XML_NS XML_DTD XML_CONTEXT_BYTES XML_UNICODE XML_UNICODE_WCHAR_T XML_DEV_URANDOM)

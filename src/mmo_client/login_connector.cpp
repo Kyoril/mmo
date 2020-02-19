@@ -1,6 +1,7 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "login_connector.h"
+#include "console_var.h"
 #include "version.h"
 
 #include "base/constants.h"
@@ -8,10 +9,22 @@
 
 namespace mmo
 {
+	static ConsoleVar* s_realmlistCVar = nullptr;
+
+
 	LoginConnector::LoginConnector(asio::io_service & io)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 	{
+		s_realmlistCVar = ConsoleVarMgr::RegisterConsoleVar("realmlist", "", "mmo-dev.net");
+		ASSERT(s_realmlistCVar);
+	}
+
+	LoginConnector::~LoginConnector()
+	{
+		// Unregister cvar
+		ConsoleVarMgr::UnregisterConsoleVar("realmlist");
+		s_realmlistCVar = nullptr;
 	}
 
 	bool LoginConnector::connectionEstablished(bool success)
@@ -273,6 +286,6 @@ namespace mmo
 		m_authHash = sha1(authHash.c_str(), authHash.size());
 
 		// Connect to the server at localhost
-		connect("mmo-dev.net", constants::DefaultLoginPlayerPort, *this, m_ioService);
+		connect(s_realmlistCVar->GetStringValue(), constants::DefaultLoginPlayerPort, *this, m_ioService);
 	}
 }

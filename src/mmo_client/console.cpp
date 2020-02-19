@@ -2,6 +2,7 @@
 
 #include "console.h"
 #include "console_commands.h"
+#include "console_var.h"
 #include "event_loop.h"
 #include "screen.h"
 
@@ -49,6 +50,9 @@ namespace mmo
 		// Register some default console commands
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
+
+		// Initialize the cvar manager
+		ConsoleVarMgr::Initialize();
 
 		// Load the config file
 		console_commands::ConsoleCommand_Run("run", configFile.string());
@@ -144,6 +148,9 @@ namespace mmo
 
 		// Destroy the graphics device
 		GraphicsDevice::Destroy();
+
+		// Destroy the cvar manager
+		ConsoleVarMgr::Destroy();
 
 		// Remove default console commands
 		UnregisterCommand("run");

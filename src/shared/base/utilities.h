@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <vector>
 #ifndef _MSC_VER
 #	include <strings.h>
 #endif
@@ -62,5 +63,38 @@ namespace mmo
 		}
 
 		return std::string();
+	}
+
+	template< typename T, size_t N >
+	size_t countof(const T(&)[N]) { return N; }
+
+	static void TokenizeString(std::string str, std::vector<std::string>& out_tokens)
+	{
+		std::string token;
+
+		for (size_t i = 0; i < str.length(); i++) 
+		{
+			char c = str[i];
+
+			if (c == ' ' || c == '\t') 
+			{
+				out_tokens.emplace_back(std::move(token));
+			}
+			else if (c == '\"') 
+			{
+				i++;
+
+				while (str[i] != '\"') { token.push_back(str[i]); i++; }
+			}
+			else 
+			{
+				token.push_back(str[i]);
+			}
+		}
+
+		if (!token.empty())
+		{
+			out_tokens.emplace_back(std::move(token));
+		}
 	}
 }

@@ -13,7 +13,7 @@ namespace mmo
 {
 	/// A simple test connector which will try to log in to the login server
 	/// hosted at localhost.
-	class LoginConnector
+	class LoginConnector final
 		: public auth::Connector
 		, public auth::IConnectorListener
 	{
@@ -50,6 +50,7 @@ namespace mmo
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
 		explicit LoginConnector(asio::io_service &io);
+		~LoginConnector();
 
 	public:
 		// ~ Begin IConnectorListener

@@ -66,3 +66,9 @@ endif()
 # TODO: Add more option-specific settings here as you need
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h @ONLY)
+
+# Advanced default cmake options
+mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
+
+# Advanced mmo options
+mark_as_advanced(MMO_SRP6_g MMO_SRP6_N)

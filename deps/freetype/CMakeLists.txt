@@ -404,3 +404,7 @@ endif ()
 
 # Addition by mmo-project: Add to deps solution folder
 set_property(TARGET freetype PROPERTY FOLDER "deps")
+
+
+# Mark freetype options as advanced
+mark_as_advanced(FT_WITH_BZIP2 FT_WITH_HARFBUZZ FT_WITH_PNG FT_WITH_ZLIB)
