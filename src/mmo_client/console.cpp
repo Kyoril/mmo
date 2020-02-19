@@ -159,7 +159,7 @@ namespace mmo
 
 		// Load the console font
 		s_consoleFont = std::make_shared<Font>();
-		VERIFY(s_consoleFont->Initialize("Fonts/ARIALN.TTF", 12.0f, 0.0f));
+		VERIFY(s_consoleFont->Initialize("Fonts/consola.ttf", 12.0f, 0.0f));
 
 		// Create a geometry buffer for the console output text
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();

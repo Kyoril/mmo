@@ -76,12 +76,20 @@ namespace mmo
 			{
 				// Parse supported elements
 				std::string frameName;
+				bool isTemplateFrame = false;
 
 				// Look for the frame name
 				auto nameIt = attributeMap.find("name");
 				if (nameIt != attributeMap.end())
 				{
 					frameName = nameIt->second;
+				}
+
+				// Check if it is a template frame
+				auto templateIt = attributeMap.find("template");
+				if (templateIt != attributeMap.end())
+				{
+					isTemplateFrame = _stricmp(templateIt->second.c_str(), "true") < 0;
 				}
 
 				// The parent frame that this frame will belong to

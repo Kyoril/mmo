@@ -438,7 +438,7 @@ namespace mmo
 
 								Rect area(
 									static_cast<float>(x),
-									static_cast<float>(y),
+									static_cast<float>(y + INTER_GLYPH_PAD_SPACE),
 									static_cast<float>(x + glyphW),
 									static_cast<float>(y + glyphH + INTER_GLYPH_PAD_SPACE));
 								Point offset(
@@ -592,7 +592,7 @@ namespace mmo
 			if ((glyph = GetGlyphData(g)))
 			{
 				const FontImage* const image = glyph->GetImage();
-				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale);
+				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 
 				image->Draw(glyphPos, glyph->GetImage()->GetSize(), buffer);
 
