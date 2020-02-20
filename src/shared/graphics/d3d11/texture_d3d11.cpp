@@ -42,7 +42,24 @@ namespace mmo
 		ZeroMemory(&td, sizeof(td));
 		td.ArraySize = 1;
 		td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+		switch (m_header.format)
+		{
+		case tex::v1_0::RGB:
+		case tex::v1_0::RGBA:
+			td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case tex::v1_0::DXT1:
+			td.Format = DXGI_FORMAT_BC1_UNORM;
+			break;
+		case tex::v1_0::DXT5:
+			td.Format = DXGI_FORMAT_BC3_UNORM;
+			break;
+		default:
+			throw std::runtime_error("Unsupported texture format for d3d11 texture!");
+			break;
+		}
+
 		td.Height = m_header.height;
 		td.Width = m_header.width;
 		td.MipLevels = 1;
@@ -93,7 +110,15 @@ namespace mmo
 	uint32 TextureD3D11::GetMemorySize() const
 	{
 		// For now, all textures are uncompressed RGBAs
-		return m_header.width * m_header.height * sizeof(uint32);
+		switch (m_header.format)
+		{
+		case tex::v1_0::DXT1:
+			return (m_header.width * m_header.height * sizeof(uint32)) / 8;
+		case tex::v1_0::DXT5:
+			return (m_header.width * m_header.height * sizeof(uint32)) / 4;
+		default:
+			return m_header.width * m_header.height * sizeof(uint32);
+		}
 	}
 
 	void TextureD3D11::CreateShaderResourceView()
@@ -104,7 +129,24 @@ namespace mmo
 		// Create shader resource view description
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvd;
 		ZeroMemory(&srvd, sizeof(srvd));
-		srvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+		switch (m_header.format)
+		{
+		case tex::v1_0::RGB:
+		case tex::v1_0::RGBA:
+			srvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case tex::v1_0::DXT1:
+			srvd.Format = DXGI_FORMAT_BC1_UNORM;
+			break;
+		case tex::v1_0::DXT5:
+			srvd.Format = DXGI_FORMAT_BC3_UNORM;
+			break;
+		default:
+			throw std::runtime_error("Unsupported texture format for d3d11 texture!");
+			break;
+		}
+
 		srvd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 		srvd.Texture2D.MipLevels = 1;
 

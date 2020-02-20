@@ -26,7 +26,7 @@ namespace mmo
 				savePreHeader(PreHeader(Version_1_0), writer);
 
 				writer
-					<< io::write<uint8>(header.compression)
+					<< io::write<uint8>(header.format)
 					<< io::write<uint8>(header.hasMips)
 					<< io::write<uint16>(header.width)
 					<< io::write<uint16>(header.height);

@@ -15,7 +15,7 @@ namespace mmo
 			bool loadHeader(Header &header, io::Reader &reader)
 			{
 				return reader
-					>> io::read<uint8>(header.compression)
+					>> io::read<uint8>(header.format)
 					>> io::read<uint8>(header.hasMips)
 					>> io::read<uint16>(header.width)
 					>> io::read<uint16>(header.height)

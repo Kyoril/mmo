@@ -19,7 +19,7 @@ namespace mmo
 			struct Header
 			{
 				VersionId version;
-				CompressionType compression;
+				PixelFormat format;
 				bool hasMips;
 				uint16 width;
 				uint16 height;

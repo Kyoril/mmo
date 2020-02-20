@@ -18,6 +18,8 @@
 #	define FATAL(x, msg) ASSERT(x)
 #endif
 
+#define UNREACHABLE() ASSERT(! "This code path should not be reached!")
+
 
 #ifdef _WIN32
 #	define PLATFORM_WINDOWS 1
