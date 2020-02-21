@@ -7,6 +7,8 @@
 #include "base/constants.h"
 #include "log/default_log_levels.h"
 
+#include <iomanip>
+
 namespace mmo
 {
 	static ConsoleVar* s_realmlistCVar = nullptr;
@@ -27,10 +29,40 @@ namespace mmo
 		s_realmlistCVar = nullptr;
 	}
 
+	void LoginConnector::RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler)
+	{
+		std::scoped_lock lock{ m_packetHandlerMutex };
+
+		// Assign packet handler for the given op code
+		m_packetHandlers[static_cast<uint8>(opCode)] = std::move(handler);
+	}
+
+	void LoginConnector::ClearPacketHandler(auth::server_packet::Type opCode)
+	{
+		std::scoped_lock lock{ m_packetHandlerMutex };
+
+		auto it = m_packetHandlers.find(static_cast<uint8>(opCode));
+		if (it != m_packetHandlers.end())
+		{
+			m_packetHandlers.erase(it);
+		}
+	}
+
+	void LoginConnector::ClearPacketHandlers()
+	{
+		std::scoped_lock lock{ m_packetHandlerMutex };
+		m_packetHandlers.clear();
+	}
+
 	bool LoginConnector::connectionEstablished(bool success)
 	{
 		if (success)
 		{
+			using std::placeholders::_1;
+
+			// Register for default packet handlers
+			RegisterPacketHandler(auth::server_packet::LogonChallenge, std::bind(&LoginConnector::OnLogonChallenge, this, _1));
+
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
@@ -75,6 +107,9 @@ namespace mmo
 	void LoginConnector::connectionLost()
 	{
 		ELOG("Disconnected");
+
+		// Clear packet handlers
+		ClearPacketHandlers();
 	}
 
 	void LoginConnector::connectionMalformedPacket()
@@ -84,23 +119,25 @@ namespace mmo
 
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
-		switch (packet.GetId())
+		// Try to retrieve the packet handler in a thread-safe way
+		PacketHandler handler = nullptr;
 		{
-		case auth::server_packet::LogonChallenge:
-			OnLogonChallenge(packet);
-			break;
-		case auth::server_packet::LogonProof:
-			OnLogonProof(packet);
-			break;
-		case auth::server_packet::RealmList:
-			// TODO: Handle realm list packet
-			break;
-		default:
-			WLOG("Received unhandled packet " << packet.GetId());
-			break;
+			std::scoped_lock lock{ m_packetHandlerMutex };
+
+			// Try to find a registered packet handler
+			auto it = m_packetHandlers.find(packet.GetId());
+			if (it == m_packetHandlers.end())
+			{
+				// Received unhandled server packet
+				WLOG("Received unhandled server op code: 0x" << std::hex << std::setw(2) << static_cast<uint16>(packet.GetId()));
+				return PacketParseResult::Disconnect;
+			}
+
+			handler = it->second;
 		}
 
-		return PacketParseResult::Pass;
+		// Call the packet handler
+		return handler(packet);
 	}
 
 	void LoginConnector::DoSRP6ACalculation()
@@ -191,8 +228,13 @@ namespace mmo
 		M2hash = gen.finalize();
 	}
 
-	void LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
+	PacketParseResult LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
 	{
+		using std::placeholders::_1;
+
+		// No longer listen for the logon challenge packet
+		ClearPacketHandler(auth::server_packet::LogonChallenge);
+
 		// Read the response code
 		uint8 result = 0;
 		packet >> io::read<uint8>(result);
@@ -224,6 +266,9 @@ namespace mmo
 			// Do srp6a calculations
 			DoSRP6ACalculation();
 
+			// Now wait for LogonProof packet
+			RegisterPacketHandler(auth::server_packet::LogonProof, std::bind(&LoginConnector::OnLogonProof, this, _1));
+
 			// Send response packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
@@ -238,11 +283,18 @@ namespace mmo
 		{
 			// Output error code
 			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+			return PacketParseResult::Disconnect;
 		}
+
+		// Successfully parsed the packet, proceed
+		return PacketParseResult::Pass;
 	}
 
-	void LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
+	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
+		// No longer listen for the logon challenge packet
+		ClearPacketHandler(auth::server_packet::LogonProof);
+
 		// Read the response code
 		uint8 result = 0;
 		packet >> io::read<uint8>(result);
@@ -258,17 +310,34 @@ namespace mmo
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
 				ILOG("AUTH: SUCCESS");
+
+				// Notify about authentication success
+				AuthenticationResult(auth::AuthResult::Success);
 			}
 			else
 			{
 				ELOG("AUTH: ERROR (Hash mismatch)");
+				AuthenticationResult(auth::AuthResult::FailInternalError);
+				return PacketParseResult::Disconnect;
 			}
 		}
 		else
 		{
 			// Output error code
 			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+
+			// Raise auth error event if the result code is valid
+			if (result <= auth::AuthResult::Count_)
+			{
+				AuthenticationResult(static_cast<auth::AuthResult>(result));
+			}
+
+			// Disconnect after we handled this packet
+			return PacketParseResult::Disconnect;
 		}
+
+		// Sucessfully parsed the packet
+		return PacketParseResult::Pass;
 	}
 
 	void LoginConnector::Connect(const std::string & username, const std::string & password)

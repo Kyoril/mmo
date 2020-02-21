@@ -6,8 +6,14 @@
 #include "auth_protocol/auth_connector.h"
 #include "base/big_number.h"
 #include "base/sha1.h"
+#include "base/signal.h"
 
 #include "asio/io_service.hpp"
+
+#include <map>
+#include <functional>
+#include <mutex>
+
 
 namespace mmo
 {
@@ -17,6 +23,15 @@ namespace mmo
 		: public auth::Connector
 		, public auth::IConnectorListener
 	{
+	public:
+		typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
+
+	public:
+		/// Signal that is fired when the client successfully authenticated at the realm list.
+		signal<void(auth::AuthResult)> AuthenticationResult;
+		/// Signal that is fired when the client received a realm list packet.
+		signal<void()> RealmListUpdated;
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;
@@ -46,11 +61,23 @@ namespace mmo
 		/// A hash that is built by the salted password provided to the Connect method.
 		SHA1Hash m_authHash;
 
+		/// Active packet handler instances.
+		std::map<uint8, PacketHandler> m_packetHandlers;
+		std::mutex m_packetHandlerMutex;
+
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
 		explicit LoginConnector(asio::io_service &io);
 		~LoginConnector();
+
+	public:
+		/// Registers a packet handler for a given op code.
+		void RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler);
+		/// Removes a registered packet handler for a given op code.
+		void ClearPacketHandler(auth::server_packet::Type opCode);
+		/// Removes all registered packet handlers.
+		void ClearPacketHandlers();
 
 	public:
 		// ~ Begin IConnectorListener
@@ -64,9 +91,9 @@ namespace mmo
 		// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
 		// Handles the LogonChallenge packet from the server.
-		void OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
+		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
 		// Handles the LogonProof packet from the server.
-		void OnLogonProof(auth::IncomingPacket &packet);
+		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

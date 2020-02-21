@@ -39,7 +39,7 @@ namespace mmo
 		/// Enumerates possible OP codes which the server can send to the client.
 		namespace server_packet
 		{
-			enum
+			enum Type
 			{
 				LogonChallenge		= 0x00,
 				LogonProof			= 0x01,
@@ -83,7 +83,11 @@ namespace mmo
 				/// You have applied a lock to your account. You can change your locked status by calling your account lock phone number.
 				FailLockedEnforced,
 				/// Your trial subscription has expired. Please visit <site> to upgrade your account.
-				FailTrialEnded
+				FailTrialEnded,
+				/// Internal error.
+				FailInternalError,
+
+				Count_
 			};
 		}
 
