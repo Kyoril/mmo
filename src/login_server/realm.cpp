@@ -23,7 +23,10 @@ namespace mmo
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
+		, m_authenticated(false)
 	{
+		// Reminder: constructor might be called by multiple threads
+
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
@@ -33,6 +36,8 @@ namespace mmo
 
 	void Realm::Destroy()
 	{
+		m_authenticated = false;
+
 		m_connection->resetListener();
 		m_connection.reset();
 
@@ -316,6 +321,7 @@ namespace mmo
 						// Add log entry about successful login as the hashes do indeed mach (and thus, so
 						// do the passwords)
 						ILOG("Realm server " << strongThis->m_realmName << " successfully authenticated");
+						strongThis->m_authenticated = true;
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request

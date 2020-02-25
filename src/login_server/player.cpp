@@ -2,6 +2,9 @@
 
 #include "player.h"
 #include "database.h"
+#include "realm_manager.h"
+#include "player_manager.h"
+#include "realm.h"
 
 #include "base/constants.h"
 #include "base/sha1.h"
@@ -15,11 +18,13 @@
 namespace mmo
 {
 	Player::Player(
-		PlayerManager& playerManager, 
+		PlayerManager& playerManager,
+		RealmManager& realmManager,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address)
 		: m_manager(playerManager)
+		, m_realmManager(realmManager)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
@@ -92,6 +97,47 @@ namespace mmo
 				packet << io::write_range(this->m_m2.begin(), this->m_m2.end());
 			}
 
+			packet.Finish();
+		});
+	}
+
+	void Player::SendRealmList()
+	{
+		m_connection->sendSinglePacket([this](auth::OutgoingPacket& packet) {
+			packet.Start(mmo::auth::server_packet::RealmList);
+
+			// Remember realm count position and write placeholder value
+			const size_t realmCountPos = packet.sink().position();
+			packet << io::write<uint16>(0);
+
+			// The realm counter
+			uint16 realmCount = 0;
+
+			// Iterate through every realm and write it's data to the outgoing packet
+			m_realmManager.ForEachRealm([&realmCount, &packet](const Realm& realm) {
+				// Skip this realm if it is not authenticated
+				if (!realm.IsAuthentificated())
+				{
+					return;
+				}
+
+				// TODO: Probably check if the realm is otherwise not eligible? Account level / security groups / supported client versions?
+
+				// Write realm data
+				packet 
+					<< io::write<uint32>(realm.GetRealmId())
+					<< io::write_dynamic_range<uint8>(realm.GetRealmName())
+					<< io::write_dynamic_range<uint8>(realm.GetAddress())
+					;
+
+				// Increase counter
+				realmCount++;
+			});
+
+			// Now overwrite realm count with the actual realm count
+			packet.sink().overwrite(realmCountPos, reinterpret_cast<const char*>(&realmCount), sizeof(realmCount));
+
+			// Finish the packet
 			packet.Finish();
 		});
 	}
@@ -334,6 +380,9 @@ namespace mmo
 						// on to send the realm list to the client on manual request
 						strongThis->registerPacketHandler(auth::client_packet::RealmList, std::bind(&Player::handleRealmList, strongThis.get(), std::placeholders::_1));
 						strongThis->SendAuthProof(auth::AuthResult::Success);
+
+						// Send the realm list as well
+						strongThis->SendRealmList();
 					}
 					else
 					{

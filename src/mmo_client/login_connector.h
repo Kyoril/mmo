@@ -17,6 +17,17 @@
 
 namespace mmo
 {
+	/// Contains realm informations.
+	struct RealmData final
+	{
+		/// Unique id of a realm.
+		uint32 id;
+		/// Realm display name.
+		std::string name;
+		/// Realm address (ip).
+		std::string address;
+	};
+
 	/// A simple test connector which will try to log in to the login server
 	/// hosted at localhost.
 	class LoginConnector final
@@ -65,6 +76,9 @@ namespace mmo
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
+		/// Realm list infos.
+		std::vector<RealmData> m_realms;
+
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -78,6 +92,12 @@ namespace mmo
 		void ClearPacketHandler(auth::server_packet::Type opCode);
 		/// Removes all registered packet handlers.
 		void ClearPacketHandlers();
+
+	public:
+		/// Get realm data.
+		inline const std::vector<RealmData>& GetRealms() const { return m_realms; }
+		/// Get the session key.
+		inline const BigNumber& GetSessionKey() const { return m_sessionKey; }
 
 	public:
 		// ~ Begin IConnectorListener
@@ -94,6 +114,8 @@ namespace mmo
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
 		// Handles the LogonProof packet from the server.
 		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
+		/// Handles the RealmList packet from the login server.
+		PacketParseResult OnRealmList(auth::IncomingPacket &packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

@@ -10,52 +10,40 @@
 
 namespace mmo
 {
-	class Realm;
+	class Player;
 
 	/// Manages all connected players.
-	class RealmManager final : public NonCopyable
+	class PlayerManager final : public NonCopyable
 	{
 	public:
 
-		typedef std::list<std::shared_ptr<Realm>> Realms;
+		typedef std::list<std::shared_ptr<Player>> Players;
 
 	public:
 
 		/// Initializes a new instance of the player manager class.
 		/// @param playerCapacity The maximum number of connections that can be connected at the same time.
-		explicit RealmManager(
+		explicit PlayerManager(
 		    size_t playerCapacity
 		);
-		~RealmManager();
+		~PlayerManager();
 
 		/// Notifies the manager that a player has been disconnected which will
 		/// delete the player instance.
-		void RealmDisconnected(Realm &realm);
+		void PlayerDisconnected(Player &player);
 		/// Determines whether the player capacity limit has been reached.
-		bool HasCapacityBeenReached();
+		bool HasPlayerCapacityBeenReached();
 		/// Adds a new player instance to the manager.
-		void AddRealm(std::shared_ptr<Realm> added);
-		/// Gets a realm by it's name.
-		Realm *GetRealmByName(const String &realmName);
+		void AddPlayer(std::shared_ptr<Player> added);
+		/// Gets a player by his account name.
+		Player *GetPlayerByAccountName(const String &accountName);
 		/// 
-		Realm *GetRealmByID(uint32 id);
-
-		/// Executes a function callback for each realm.
-		template<class Functor>
-		void ForEachRealm(Functor f)
-		{
-			std::scoped_lock lock{ m_realmsMutex };
-
-			for (const auto& realm : m_realms)
-			{
-				f(*realm);
-			}
-		}
+		Player *GetPlayerByAccountID(uint32 accountId);
 
 	private:
 
-		Realms m_realms;
-		size_t m_capacity;
-		std::mutex m_realmsMutex;
+		Players m_players;
+		size_t m_playerCapacity;
+		std::mutex m_playerMutex;
 	};
 }

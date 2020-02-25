@@ -9,6 +9,7 @@
 
 #include <iomanip>
 
+
 namespace mmo
 {
 	static ConsoleVar* s_realmlistCVar = nullptr;
@@ -292,6 +293,8 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
+		using std::placeholders::_1;
+
 		// No longer listen for the logon challenge packet
 		ClearPacketHandler(auth::server_packet::LogonProof);
 
@@ -313,6 +316,9 @@ namespace mmo
 
 				// Notify about authentication success
 				AuthenticationResult(auth::AuthResult::Success);
+
+				// Allow the client to handle the realm list packet
+				RegisterPacketHandler(mmo::auth::server_packet::RealmList, std::bind(&LoginConnector::OnRealmList, this, _1));
 			}
 			else
 			{
@@ -337,6 +343,40 @@ namespace mmo
 		}
 
 		// Sucessfully parsed the packet
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult LoginConnector::OnRealmList(auth::IncomingPacket & packet)
+	{
+		// Clear the realms
+		m_realms.clear();
+
+		// Read the realm count
+		uint16 realmCount = 0;
+		packet >> io::read<uint16>(realmCount);
+		m_realms.reserve(realmCount);
+
+		// Notify user about this packet
+		ILOG("Available realms: " << realmCount);
+
+		// Read every single realm entry
+		for (uint16 i = 0; (i < realmCount) && packet; ++i)
+		{
+			// Read realm data
+			RealmData realm;
+			packet
+				>> io::read<uint32>(realm.id)
+				>> io::read_container<uint8>(realm.name)
+				>> io::read_container<uint8>(realm.address);
+
+			// Add to the list of available realms
+			m_realms.emplace_back(std::move(realm));
+		}
+
+		// Trigger signal
+		RealmListUpdated();
+
+		// Continue
 		return PacketParseResult::Pass;
 	}
 

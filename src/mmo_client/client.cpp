@@ -21,6 +21,7 @@
 #include "event_loop.h"
 #include "console.h"
 #include "login_connector.h"
+#include "realm_connector.h"
 #include "game_state_mgr.h"
 #include "login_state.h"
 #include "screen.h"
@@ -41,6 +42,7 @@ namespace mmo
 	static std::unique_ptr<asio::io_service::work> s_networkWork;
 	static std::thread s_networkThread;
 	static std::shared_ptr<LoginConnector> s_loginConnector;
+	static std::shared_ptr<RealmConnector> s_realmConnector;
 
 
 	// Runs the network thread to handle incoming packets.
@@ -60,6 +62,7 @@ namespace mmo
 
 		// Create the login connector instance
 		s_loginConnector = std::make_shared<LoginConnector>(s_networkIO);
+		s_realmConnector = std::make_shared<RealmConnector>(s_networkIO);
 
 		// Start a network thread
 		s_networkThread = std::thread(NetWorkProc);
@@ -70,6 +73,14 @@ namespace mmo
 	/// be called from the main thread.
 	void NetDestroy()
 	{
+		// Close the realm connector
+		if (s_realmConnector)
+		{
+			s_realmConnector->resetListener();
+			s_realmConnector->close();
+			s_realmConnector.reset();
+		}
+
 		// Close the login connector
 		if (s_loginConnector)
 		{
@@ -155,8 +166,11 @@ namespace mmo
 		// Initialize network threads
 		NetInit();
 
+		// Verify the connector instances have been initialized
+		ASSERT(s_loginConnector && s_realmConnector);
+
 		// Register game states
-		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>());
+		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 
 		// Lets setup a test command

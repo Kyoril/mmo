@@ -195,7 +195,7 @@ namespace mmo
 		}
 		
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &asyncDatabase](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &realmManager, &asyncDatabase](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -209,7 +209,7 @@ namespace mmo
 				return;
 			}
 
-			auto player = std::make_shared<Player>(std::ref(playerManager), std::ref(asyncDatabase), connection, address.to_string());
+			auto player = std::make_shared<Player>(playerManager, realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
 			playerManager.addPlayer(std::move(player));
 

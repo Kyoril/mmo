@@ -190,9 +190,13 @@ namespace mmo
 
 			m_isClosedOnParsing = true;
 			m_isClosedOnSend = true;
-			if (m_socket->is_open())
+
+			if (m_socket)
 			{
-				m_socket->close();
+				if (m_socket->is_open())
+				{
+					m_socket->close();
+				}
 			}
 		}
 
@@ -206,7 +210,8 @@ namespace mmo
 			m_sendBuffer.append(data.data(), data.size());
 		}
 
-		MySocket &getSocket() {
+		MySocket &getSocket() 
+		{
 			return *m_socket;
 		}
 

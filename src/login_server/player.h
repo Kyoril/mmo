@@ -3,20 +3,24 @@
 #pragma once
 
 #include "player_manager.h"
+
 #include "base/non_copyable.h"
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_connection.h"
 #include "base/signal.h"
 #include "base/big_number.h"
+
 #include <memory>
 #include <functional>
 #include <map>
 #include <cassert>
 
+
 namespace mmo
 {
 	class AsyncDatabase;
 	class RealmManager;
+
 
 	/// This class represents a player connction on the login server.
 	class Player final
@@ -31,6 +35,7 @@ namespace mmo
 	public:
 		explicit Player(
 			PlayerManager &manager,
+			RealmManager &realmManager,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
 			const std::string &address);
@@ -57,6 +62,7 @@ namespace mmo
 
 	private:
 		PlayerManager &m_manager;
+		RealmManager &m_realmManager;
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
@@ -73,7 +79,6 @@ namespace mmo
 		std::mutex m_packetHandlerMutex;
 
 	private:
-
 		BigNumber m_sessionKey;
 		BigNumber m_s, m_v;
 		BigNumber m_b, m_B;
@@ -99,6 +104,7 @@ namespace mmo
 
 	private:
 		void SendAuthProof(auth::AuthResult result);
+		void SendRealmList();
 
 	private:
 

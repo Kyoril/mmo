@@ -2,6 +2,9 @@
 
 #include "program.h"
 #include "login_connector.h"
+#include "player_manager.h"
+#include "player.h"
+#include "mysql_database.h"
 #include "configuration.h"
 #include "version.h"
 
@@ -26,6 +29,7 @@
 #include <vector>
 #include <mutex>
 #include <thread>
+
 
 namespace mmo
 {
@@ -111,7 +115,23 @@ namespace mmo
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		auto database = std::make_unique<MySQLDatabase>(mmo::mysql::DatabaseInfo{
+			config.mysqlHost,
+			config.mysqlPort,
+			config.mysqlUser,
+			config.mysqlPassword,
+			config.mysqlDatabase
+			});
+		if (!database->load())
+		{
+			ELOG("Could not load the database");
+			return 1;
+		}
+
+		const auto async = [&dbService](Action action) { dbService.post(std::move(action)); };
+		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
+		AsyncDatabase asyncDatabase{ *database, async, sync };
+
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,7 +145,46 @@ namespace mmo
 		// Create the player service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		PlayerManager playerManager{ config.maxPlayers };
+
+		// Create the player server
+		std::unique_ptr<auth::Server> playerServer;
+		try
+		{
+			playerServer.reset(new mmo::auth::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::auth::Connection::create, std::ref(ioService), nullptr)));
+		}
+		catch (const mmo::BindFailedException &)
+		{
+			ELOG("Could not bind on tcp port " << constants::DefaultRealmPlayerPort << "! Maybe there is another server instance running on this port?");
+			return 1;
+		}
+
+		// Careful: Called by multiple threads!
+		const auto createPlayer = [&playerManager, &asyncDatabase](std::shared_ptr<Player::Client> connection)
+		{
+			asio::ip::address address;
+
+			try
+			{
+				address = connection->getRemoteAddress();
+			}
+			catch (const asio::system_error &error)
+			{
+				ELOG(error.what());
+				return;
+			}
+
+			auto player = std::make_shared<Player>(playerManager, asyncDatabase, connection, address.to_string());
+			ILOG("Incoming player connection from " << address);
+			playerManager.AddPlayer(std::move(player));
+
+			// Now we can start receiving data
+			connection->startReceiving();
+		};
+
+		// Start accepting incoming player connections
+		const scoped_connection playerConnected{ playerServer->connected().connect(createPlayer) };
+		playerServer->startAccept();
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
