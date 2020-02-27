@@ -14,7 +14,7 @@ namespace mmo
 	const unsigned int Major = 0;
 	const unsigned int Minor = 1;
 	const unsigned int Build = 0;
-	const unsigned int Revisision = @MMO_GIT_REVISION@;
+	const unsigned int Revision = @MMO_GIT_REVISION@;
 }
 
 #define MMO_VERSION_RES 0,1,0,@MMO_GIT_REVISION@

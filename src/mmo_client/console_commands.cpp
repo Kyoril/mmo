@@ -16,7 +16,7 @@ namespace mmo
 	{
 		void ConsoleCommand_Ver(const std::string & cmd, const std::string & args)
 		{
-			DLOG("MMO Client Version " << Major << "." << Minor << "." << Build << " (Build: " << Revisision << ")");
+			DLOG("MMO Client Version " << Major << "." << Minor << "." << Build << " (Build: " << Revision << ")");
 		}
 
 		void ConsoleCommand_Run(const std::string & cmd, const std::string & args)

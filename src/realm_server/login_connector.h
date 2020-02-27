@@ -70,10 +70,6 @@ namespace mmo
 	private:
 		// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
-		// Handles the LogonChallenge packet from the server.
-		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
-		// Handles the LogonProof packet from the server.
-		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
 		/// Called if a login error happened.
 		void OnLoginError(auth::AuthResult result);
 		/// Resets the authentication status to the initial state.
@@ -84,6 +80,14 @@ namespace mmo
 		void OnReconnectTimer();
 		/// Queues app termination in case of errors.
 		void QueueTermination();
+
+	private:
+		// Handles the LogonChallenge packet from the server.
+		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
+		// Handles the LogonProof packet from the server.
+		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
+		// Handles the ClientAuthSessionResponse packet from the login server.
+		PacketParseResult OnClientAuthSessionResponse(auth::IncomingPacket &packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

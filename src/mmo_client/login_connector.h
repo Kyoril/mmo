@@ -65,7 +65,7 @@ namespace mmo
 		SHA1Hash M2hash;
 
 		/// Username provided to the Connect method.
-		std::string m_username;
+		std::string m_accountName;
 		/// A hash that is built by the salted password provided to the Connect method.
 		SHA1Hash m_authHash;
 
@@ -79,10 +79,12 @@ namespace mmo
 		~LoginConnector();
 
 	public:
-		/// Get realm data.
+		/// Gets realm data.
 		inline const std::vector<RealmData>& GetRealms() const { return m_realms; }
-		/// Get the session key.
+		/// Gets the session key.
 		inline const BigNumber& GetSessionKey() const { return m_sessionKey; }
+		/// Gets the account name.
+		inline const std::string& GetAccountName() const { return m_accountName; }
 
 	public:
 		// ~ Begin IConnectorListener

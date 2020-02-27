@@ -107,6 +107,7 @@ namespace mmo
 		m_realmConnector.Connect(
 			realm.address, 
 			constants::DefaultRealmPlayerPort, 
+			m_loginConnector.GetAccountName(),
 			realm.name, 
 			m_loginConnector.GetSessionKey());
 	}

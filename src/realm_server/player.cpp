@@ -3,6 +3,7 @@
 #include "player.h"
 #include "player_manager.h"
 #include "database.h"
+#include "version.h"
 
 #include "base/random.h"
 #include "base/constants.h"
@@ -81,9 +82,31 @@ namespace mmo
 		return handler(packet);
 	}
 
-	PacketParseResult Player::OnLogonChallenge(auth::IncomingPacket & packet)
+	PacketParseResult Player::OnAuthSession(auth::IncomingPacket & packet)
 	{
-		ILOG("Received OnLogonChallenge packet");
+		// Read packet data
+		if (!(packet
+			>> io::read<uint32>(m_build)
+			>> io::read_container<uint8>(m_accountName)
+			>> io::read<uint32>(m_clientSeed)
+			>> io::read_range(m_clientHash)))
+		{
+			ELOG("Could not read LogonChallenge packet from a game client");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Verify the client build immediatly for validity
+		if (m_build != mmo::Revision)
+		{
+			ELOG("Unsupported client build " << m_build);
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: Store pending login request data so we can properly handle answers from a login server
+
+
+		// TODO: Send logon request to the login server
+
 
 		return PacketParseResult::Pass;
 	}
@@ -91,11 +114,11 @@ namespace mmo
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
-		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Player::OnLogonChallenge);
+		RegisterPacketHandler(auth::client_realm_packet::AuthSession, *this, &Player::OnAuthSession);
 
 		// Send the LogonChallenge packet to the client including our generated seed
 		m_connection->sendSinglePacket([this](mmo::auth::OutgoingPacket& packet) {
-			packet.Start(mmo::auth::server_packet::LogonChallenge);
+			packet.Start(mmo::auth::realm_client_packet::AuthChallenge);
 			packet << io::write<uint32>(m_seed);
 			packet.Finish();
 		});

@@ -112,11 +112,5 @@ namespace mmo
 		/// Handles an incoming packet with packet id LogonProof.
 		/// @param packet The packet data.
 		PacketParseResult HandleLogonProof(auth::IncomingPacket &packet);
-		/// Handles an incoming packet with packet id LogonChallenge.
-		/// @param packet The packet data.
-		PacketParseResult HandleReconnectChallenge(auth::IncomingPacket &packet);
-		/// Handles an incoming packet with packet id LogonProof.
-		/// @param packet The packet data.
-		PacketParseResult HandleReconnectProof(auth::IncomingPacket &packet);
 	};
 }

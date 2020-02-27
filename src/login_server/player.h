@@ -48,7 +48,7 @@ namespace mmo
 		/// @returns true if the player is authentificated.
 		inline bool isAuthentificated() const { return false;/* (getSession() != nullptr);*/ }
 		/// Gets the account name the player is logged in with.
-		inline const std::string &getAccountName() const { return m_userName; }
+		inline const std::string &getAccountName() const { return m_accountName; }
 		/// 
 		inline uint32 getAccountId() const { return m_accountId; }
 		/// Returns the client locale.
@@ -66,7 +66,7 @@ namespace mmo
 			});
 		}
 		/// Clears a packet handler so that the opcode is no longer handled.
-		void clearPacketHandler(uint8 opCode);
+		void ClearPacketHandler(uint8 opCode);
 
 	private:
 		PlayerManager &m_manager;
@@ -74,7 +74,7 @@ namespace mmo
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
-		std::string m_userName;						// Account name in uppercase letters
+		std::string m_accountName;						// Account name in uppercase letters
 		auth::AuthPlatform m_platform;			// Client platform (32 Bit / 64 Bit)
 		auth::AuthSystem m_system;				// User system (Windows, Mac)
 		auth::AuthLocale m_locale;				// Client language
@@ -130,6 +130,6 @@ namespace mmo
 		PacketParseResult handleReconnectProof(auth::IncomingPacket &packet);
 		/// Handles an incoming packet with packet id RealmList.
 		/// @param packet The packet data.
-		PacketParseResult handleRealmList(auth::IncomingPacket &packet);
+		PacketParseResult OnRealmList(auth::IncomingPacket &packet);
 	};
 }

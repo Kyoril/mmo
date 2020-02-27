@@ -1,8 +1,11 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "realm_connector.h"
+#include "version.h"
 
 #include "base/constants.h"
+#include "base/random.h"
+#include "base/sha1.h"
 #include "log/default_log_levels.h"
 
 #include <iomanip>
@@ -12,6 +15,8 @@ namespace mmo
 	RealmConnector::RealmConnector(asio::io_service & io)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
+		, m_serverSeed(0)
+		, m_clientSeed(0)
 	{
 	}
 
@@ -19,35 +24,56 @@ namespace mmo
 	{
 	}
 
-	void RealmConnector::RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler)
+	PacketParseResult RealmConnector::OnAuthChallenge(mmo::auth::IncomingPacket & packet)
 	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
+		// No longer handle LogonChallenge packets during this session
+		ClearPacketHandler(auth::realm_client_packet::AuthChallenge);
 
-		// Assign packet handler for the given op code
-		m_packetHandlers[static_cast<uint8>(opCode)] = std::move(handler);
-	}
-
-	void RealmConnector::ClearPacketHandler(auth::server_packet::Type opCode)
-	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
-
-		auto it = m_packetHandlers.find(static_cast<uint8>(opCode));
-		if (it != m_packetHandlers.end())
+		// Try to read the packet data
+		if (!(packet >> io::read<uint32>(m_serverSeed)))
 		{
-			m_packetHandlers.erase(it);
+			return PacketParseResult::Disconnect;
 		}
-	}
 
-	void RealmConnector::ClearPacketHandlers()
-	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
-		m_packetHandlers.clear();
+		// Calculate a hash for verification
+		HashGeneratorSha1 hashGen;
+		hashGen.update(m_account.data(), m_account.length());
+		hashGen.update(reinterpret_cast<const char*>(&m_clientSeed), sizeof(m_clientSeed));
+		hashGen.update(reinterpret_cast<const char*>(&m_serverSeed), sizeof(m_serverSeed));
+		Sha1_Add_BigNumbers(hashGen, {m_sessionKey});
+		SHA1Hash hash = hashGen.finalize();
+
+		// We have been challenged, respond with an answer
+		sendSinglePacket([this, &hash](auth::OutgoingPacket& packet) {
+			packet.Start(auth::client_realm_packet::AuthSession);
+			packet
+				<< io::write<uint32>(mmo::Revision)
+				<< io::write_dynamic_range<uint8>(this->m_account)
+				<< io::write<uint32>(m_clientSeed)
+				<< io::write_range(hash);
+			packet.Finish();
+		});
+
+		// Debug log
+		DLOG("[Realm] Handshaking...");
+
+		// Proceed handling network packets
+		return PacketParseResult::Pass;
 	}
 
 	bool RealmConnector::connectionEstablished(bool success)
 	{
 		if (success)
 		{
+			// Reset server seed
+			m_serverSeed = 0;
+
+			// Generate a new client seed
+			std::uniform_int_distribution<uint32> dist;
+			m_clientSeed = dist(RandomGenerator);
+
+			// Accept LogonChallenge packets from here on
+			RegisterPacketHandler(auth::realm_client_packet::AuthChallenge, *this, &RealmConnector::OnAuthChallenge);
 		}
 		else
 		{
@@ -59,7 +85,8 @@ namespace mmo
 
 	void RealmConnector::connectionLost()
 	{
-		ELOG("Disconnected");
+		// Log this event
+		ELOG("Lost connection to the realm server...");
 
 		// Clear packet handlers
 		ClearPacketHandlers();
@@ -72,32 +99,15 @@ namespace mmo
 
 	PacketParseResult RealmConnector::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
-		// Try to retrieve the packet handler in a thread-safe way
-		PacketHandler handler = nullptr;
-		{
-			std::scoped_lock lock{ m_packetHandlerMutex };
-
-			// Try to find a registered packet handler
-			auto it = m_packetHandlers.find(packet.GetId());
-			if (it == m_packetHandlers.end())
-			{
-				// Received unhandled server packet
-				WLOG("Received unhandled server op code: 0x" << std::hex << std::setw(2) << static_cast<uint16>(packet.GetId()));
-				return PacketParseResult::Disconnect;
-			}
-
-			handler = it->second;
-		}
-
-		// Call the packet handler
-		return handler(packet);
+		return HandleIncomingPacket(packet);
 	}
 
-	void RealmConnector::Connect(const std::string& realmAddress, uint16 realmPort, const std::string& realmName, BigNumber sessionKey)
+	void RealmConnector::Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey)
 	{
 		m_realmAddress = realmAddress;
 		m_realmPort = realmPort;
 		m_realmName = realmName;
+		m_account = accountName;
 		m_sessionKey = sessionKey;
 
 		// Connect to the server

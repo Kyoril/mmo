@@ -76,7 +76,7 @@ namespace mmo
 		// TODO
 
 		// Display version infos
-		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revisision << " (Commit: " << GitCommit << ")");
+		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");
 		ILOG("Last Change: " << GitLastChange);
 
 

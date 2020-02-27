@@ -22,14 +22,14 @@ namespace mmo
 	{
 		if (success)
 		{
-			// Register default packet handler
-			RegisterPacketHandler(mmo::auth::server_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
+			// Register default packet handlers
+			RegisterPacketHandler(mmo::auth::login_realm_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
 
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
 				// Initialize packet using the op code
-				packet.Start(auth::client_packet::LogonChallenge);
+				packet.Start(auth::realm_login_packet::LogonChallenge);
 
 				// Write the actual packet content
 				const size_t contentStart = packet.sink().position();
@@ -37,7 +37,7 @@ namespace mmo
 					<< io::write<uint8>(mmo::Major)	// Version
 					<< io::write<uint8>(mmo::Minor)
 					<< io::write<uint8>(mmo::Build)
-					<< io::write<uint16>(mmo::Revisision)
+					<< io::write<uint16>(mmo::Revision)
 					<< io::write_dynamic_range<uint8>(m_realmName);
 
 				// Finish packet and send it
@@ -168,6 +168,9 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
 	{
+		// No longer accept LogonChallenge packets from the login server during this session
+		ClearPacketHandler(auth::login_realm_packet::LogonChallenge);
+
 		// Read the response code
 		uint8 result = 0;
 		packet >> io::read<uint8>(result);
@@ -199,13 +202,14 @@ namespace mmo
 			// Do srp6a calculations
 			DoSRP6ACalculation();
 
-			RegisterPacketHandler(auth::server_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
+			// Accept LogonProof packets from the login server from here on
+			RegisterPacketHandler(auth::login_realm_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
 
 			// Send response packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
 				// Proof packet contains only A and M1 hash value
-				packet.Start(auth::client_packet::LogonProof);
+				packet.Start(auth::realm_login_packet::LogonProof);
 				packet << io::write_range(m_A.asByteArray());
 				packet << io::write_range(M1hash);
 				packet.Finish();
@@ -222,6 +226,9 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
+		// No longer accept LogonProof packets from the login server during this session
+		ClearPacketHandler(auth::login_realm_packet::LogonProof);
+
 		// Read the response code
 		uint8 result = 0;
 		packet >> io::read<uint8>(result);
@@ -237,6 +244,9 @@ namespace mmo
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
 				ILOG("Successfully authenticated at the login server! Players should now be ready to play on this realm!");
+
+				// Register required packet handlers
+				RegisterPacketHandler(auth::login_realm_packet::ClientAuthSessionResponse, *this, &LoginConnector::OnClientAuthSessionResponse);
 			}
 			else
 			{
@@ -252,6 +262,14 @@ namespace mmo
 			OnLoginError(static_cast<auth::AuthResult>(result));
 			return PacketParseResult::Disconnect;
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult LoginConnector::OnClientAuthSessionResponse(auth::IncomingPacket & packet)
+	{
+		// TODO: Handle packet
+		WLOG("TODO: Handle ClientAuthSessionResponse from login server");
 
 		return PacketParseResult::Pass;
 	}

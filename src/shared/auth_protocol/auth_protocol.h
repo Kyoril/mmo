@@ -17,8 +17,11 @@ namespace mmo
 		};
 
 
-		/// Enumerates all OP codes sent by the client.
-		namespace client_packet
+		////////////////////////////////////////////////////////////////////////////////
+		// BEGIN: Client <-> Login section
+
+		/// Enumerates all OP codes sent by the client to a login server.
+		namespace client_login_packet
 		{
 			enum Type
 			{
@@ -30,26 +33,128 @@ namespace mmo
 				ReconnectChallenge	= 0x02,
 				/// <Not sent at the moment>
 				ReconnectProof		= 0x03,
-				/// Sent by the client after receive of successful LogonProof from the server, or if
-				/// the player steps back to the realm list.
-				RealmList			= 0x10,
+				/// Sent by the client after receive of successful LogonProof from the server to retrieve
+				/// the current realm list.
+				RealmList			= 0x04,
 			};
 		}
 
-		/// Enumerates possible OP codes which the server can send to the client.
-		namespace server_packet
+		/// Enumerates possible OP codes which the login server can send to the client.
+		namespace login_client_packet
 		{
 			enum Type
 			{
+				/// Sent as answer on a clients LogonChallenge packet.
 				LogonChallenge		= 0x00,
+				/// Sent as answer on a clients LogonProof packet.
 				LogonProof			= 0x01,
+				/// TODO: Packet not yet implemented
 				ReconnectChallenge	= 0x02,
+				/// TODO: Packet not yet implemented
 				ReconnectProof		= 0x03,
-				RealmList			= 0x10,
-				XferInitiated		= 0x30,
-				XferData			= 0x31,
+				/// Packet contains realm list data.
+				RealmList			= 0x04,
 			};
 		}
+
+
+		// TODO: realm_client_packet and client_realm_packet will be handled by a different protocol soon
+
+		////////////////////////////////////////////////////////////////////////////////
+		// BEGIN: Client <-> Realm section
+
+		/// Enumerates possible op codes sent by the client to a realm server.
+		namespace client_realm_packet
+		{
+			enum Type
+			{
+				/// Sent by the client to respond to a AuthChallenge from a realm server.
+				AuthSession = 0x00,
+			};
+		}
+
+		/// Enumerates possible op codes sent by the client to a realm server.
+		namespace realm_client_packet
+		{
+			enum Type
+			{
+				/// Sent by the client immediatly after connecting to challenge it for authentication.
+				AuthChallenge = 0x00,
+			};
+		}
+
+
+
+		////////////////////////////////////////////////////////////////////////////////
+		// BEGIN: Login <-> Realm section
+
+		/// Enumerates possible op codes which a login server can send to a realm server.
+		namespace login_realm_packet
+		{
+			enum Type
+			{
+				/// Sent as response to a realms LogonChallenge packet for authentication.
+				LogonChallenge = 0x00,
+				/// Sent as response to a realms LogonProof packet for authentication.
+				LogonProof = 0x01,
+
+				/// Sent as response to a realms ClientAuthSession packet and contains authentication results (succeeded or failed,
+				/// as well as additional client session details that might be required).
+				ClientAuthSessionResponse = 0x02,
+			};
+		}
+
+		/// Enumerates possible op codes which a realm server can send to a login server.
+		namespace realm_login_packet
+		{
+			enum Type
+			{
+				/// Sent right after successful connect to initiate authentication (handshake).
+				LogonChallenge = 0x00,
+				/// Sent after the login servers LogonChallenge response to finish authentication.
+				LogonProof = 0x01,
+
+				/// Sent to the login server to verify a clients AuthSession request.
+				ClientAuthSession = 0x02,
+			};
+		}
+
+
+
+		////////////////////////////////////////////////////////////////////////////////
+		// BEGIN: Realm <-> World section
+
+		/// Enumerates possible op codes which a realm server can send to a world server.
+		namespace realm_world_packet
+		{
+			enum Type
+			{
+				/// Sent as response to a worlds LogonChallenge packet for authentication.
+				LogonChallenge = 0x00,
+				/// Sent as response to a worlds LogonProof packet for authentication.
+				LogonProof = 0x01,
+			};
+		}
+
+		/// Enumerates possible op codes which a world server can send to a realm server.
+		namespace world_realm_packet
+		{
+			enum Type
+			{
+				/// Sent right after successful connect to initiate authentication (handshake).
+				LogonChallenge = 0x00,
+				/// Sent after the login servers LogonChallenge response to finish authentication.
+				LogonProof = 0x01,
+
+				/// Sent to the login server to verify a clients AuthSession request.
+				ClientAuthSession = 0x02,
+			};
+		}
+
+
+
+		////////////////////////////////////////////////////////////////////////////////
+		// Typedefs
 
 		/// Enumerates possible authentification result codes.
 		namespace auth_result

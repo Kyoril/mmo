@@ -46,7 +46,7 @@ namespace mmo
 		/// @returns true if the player is authentificated.
 		inline bool IsAuthentificated() const { return false;/* (getSession() != nullptr);*/ }
 		/// Gets the account name the player is logged in with.
-		inline const std::string &GetAccountName() const { return m_userName; }
+		inline const std::string &GetAccountName() const { return m_accountName; }
 		/// 
 		inline uint32 GetAccountId() const { return m_accountId; }
 		/// Returns the client locale.
@@ -77,18 +77,17 @@ namespace mmo
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
-		std::string m_userName;						// Account name in uppercase letters
+		std::string m_accountName;						// Account name in uppercase letters
 		auth::AuthPlatform m_platform;			// Client platform (32 Bit / 64 Bit)
 		auth::AuthSystem m_system;				// User system (Windows, Mac)
 		auth::AuthLocale m_locale;				// Client language
-		uint8 m_version1;						// Major version: X.0.0.00000
-		uint8 m_version2;						// Minor version: 0.X.0.00000
-		uint8 m_version3;						// Patch version: 0.0.X.00000
-		uint16 m_build;							// Build version: 0.0.0.XXXXX
+		uint32 m_build;							// Build version: 0.0.0.XXXXX
 		uint32 m_accountId;						// Account ID
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 		uint32 m_seed;				// Random generated seed used for packet header encryption
+		uint32 m_clientSeed;
+		SHA1Hash m_clientHash;
 
 	private:
 		BigNumber m_sessionKey;
@@ -117,6 +116,6 @@ namespace mmo
 		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
 
 	private:
-		PacketParseResult OnLogonChallenge(auth::IncomingPacket& packet);
+		PacketParseResult OnAuthSession(auth::IncomingPacket& packet);
 	};
 }

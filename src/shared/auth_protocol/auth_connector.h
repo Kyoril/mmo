@@ -34,21 +34,21 @@ namespace mmo
 
 		public:
 			/// Registers a packet handler for a given op code.
-			void RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler&& handler)
+			void RegisterPacketHandler(uint8 opCode, PacketHandler&& handler)
 			{
 				std::scoped_lock lock{ m_packetHandlerMutex };
 				m_packetHandlers[opCode] = handler;
 			}
 			/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
 			template <class Instance, class Class, class... Args1>
-			void RegisterPacketHandler(auth::server_packet::Type opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
+			void RegisterPacketHandler(uint8 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
 			{
 				RegisterPacketHandler(opCode, [&object, method](Args1... args) {
 					return (object.*method)(Args1(args)...);
 				});
 			}
 			/// Removes a registered packet handler for a given op code.
-			void ClearPacketHandler(auth::server_packet::Type opCode)
+			void ClearPacketHandler(uint8 opCode)
 			{
 				std::scoped_lock lock{ m_packetHandlerMutex };
 				

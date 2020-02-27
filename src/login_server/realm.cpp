@@ -30,8 +30,7 @@ namespace mmo
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
-		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Realm::HandleLogonChallenge);
-		RegisterPacketHandler(auth::client_packet::ReconnectChallenge, *this, &Realm::HandleLogonChallenge);
+		RegisterPacketHandler(auth::realm_login_packet::LogonChallenge, *this, &Realm::HandleLogonChallenge);
 	}
 
 	void Realm::Destroy()
@@ -86,7 +85,7 @@ namespace mmo
 	{
 		// Send proof packet to the client
 		m_connection->sendSinglePacket([result, this](auth::OutgoingPacket& packet) {
-			packet.Start(auth::server_packet::LogonProof);
+			packet.Start(auth::login_realm_packet::LogonProof);
 			packet << io::write<uint8>(result);
 
 			// If the login attempt succeeded, we also send the calculated M2 hash value to the
@@ -130,8 +129,7 @@ namespace mmo
 	PacketParseResult Realm::HandleLogonChallenge(auth::IncomingPacket & packet)
 	{
 		// No longer handle these packets!
-		ClearPacketHandler(auth::client_packet::LogonChallenge);
-		ClearPacketHandler(auth::client_packet::ReconnectChallenge);
+		ClearPacketHandler(auth::realm_login_packet::LogonChallenge);
 
 		// Read the packet data
 		if (!(packet
@@ -175,7 +173,7 @@ namespace mmo
 					strongThis->m_unk3.setRand(16 * 8);
 
 					// Allow handling the logon proof packet now
-					strongThis->RegisterPacketHandler(auth::client_packet::LogonProof, *strongThis.get(), &Realm::HandleLogonProof);
+					strongThis->RegisterPacketHandler(auth::realm_login_packet::LogonProof, *strongThis.get(), &Realm::HandleLogonProof);
 				}
 				else
 				{
@@ -185,7 +183,7 @@ namespace mmo
 
 				// Send packet with result
 				strongThis->m_connection->sendSinglePacket([authResult, &strongThis](auth::OutgoingPacket& packet) {
-					packet.Start(auth::server_packet::LogonChallenge);
+					packet.Start(auth::login_realm_packet::LogonChallenge);
 					packet << io::write<uint8>(authResult);
 
 					// On success, there are more data values to write
@@ -218,8 +216,8 @@ namespace mmo
 
 	PacketParseResult Realm::HandleLogonProof(auth::IncomingPacket & packet)
 	{
-		// No longer handle proof packet
-		ClearPacketHandler(auth::client_packet::LogonProof);
+		// No longer handle proof packets from the realm server
+		ClearPacketHandler(auth::realm_login_packet::LogonProof);
 
 		// Read packet data
 		std::array<uint8, 32> rec_A;
@@ -363,25 +361,6 @@ namespace mmo
 
 		// Send proof result
 		SendAuthProof(proofResult);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Realm::HandleReconnectChallenge(auth::IncomingPacket & packet)
-	{
-		// No longer handle proof packet
-		ClearPacketHandler(auth::client_packet::LogonChallenge);
-		ClearPacketHandler(auth::client_packet::ReconnectChallenge);
-
-		// Handle reconnect proof packet now
-		RegisterPacketHandler(auth::client_packet::ReconnectProof, *this, &Realm::HandleLogonProof);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Realm::HandleReconnectProof(auth::IncomingPacket & packet)
-	{
-		// TODO: Implement this packet handler
 
 		return PacketParseResult::Pass;
 	}

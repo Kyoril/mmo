@@ -35,13 +35,13 @@ namespace mmo
 		if (success)
 		{
 			// Register for default packet handlers
-			RegisterPacketHandler(auth::server_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
+			RegisterPacketHandler(auth::login_client_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
 
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
 				// Initialize packet using the op code
-				packet.Start(auth::client_packet::LogonChallenge);
+				packet.Start(auth::client_login_packet::LogonChallenge);
 
 				// Placeholder for packet size value
 				const size_t contentSizePos = packet.sink().position();
@@ -54,13 +54,13 @@ namespace mmo
 					<< io::write<uint8>(mmo::Major)	// Version
 					<< io::write<uint8>(mmo::Minor)
 					<< io::write<uint8>(mmo::Build)
-					<< io::write<uint16>(mmo::Revisision)
+					<< io::write<uint16>(mmo::Revision)
 					<< io::write<uint32>(0x00783836)	// Platform: x86
 					<< io::write<uint32>(0x0057696e)	// System: Win
 					<< io::write<uint32>(0x64654445)	// Locale: deDE
 					<< io::write<uint32>(0)	// Timezone?
 					<< io::write<uint32>(0)	// Ip
-					<< io::write_dynamic_range<uint8>(m_username);
+					<< io::write_dynamic_range<uint8>(m_accountName);
 
 				// Calculate the actual packet size and write it at the beginning
 				const size_t contentEnd = packet.sink().position();
@@ -157,7 +157,7 @@ namespace mmo
 		m_sessionKey.setBinary((uint8*)S_hash, 40);
 		
 		// Generate hash of plain username
-		gen.update((const char*)m_username.c_str(), m_username.size());
+		gen.update((const char*)m_accountName.c_str(), m_accountName.size());
 		SHA1Hash userhash2 = gen.finalize();
 
 		// Generate N and g hashes
@@ -187,7 +187,7 @@ namespace mmo
 	PacketParseResult LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
 	{
 		// No longer listen for the logon challenge packet
-		ClearPacketHandler(auth::server_packet::LogonChallenge);
+		ClearPacketHandler(auth::login_client_packet::LogonChallenge);
 
 		// Read the response code
 		uint8 result = 0;
@@ -221,13 +221,13 @@ namespace mmo
 			DoSRP6ACalculation();
 
 			// Now wait for LogonProof packet
-			RegisterPacketHandler(auth::server_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
+			RegisterPacketHandler(auth::login_client_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
 
 			// Send response packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
 				// Proof packet contains only A and M1 hash value
-				packet.Start(auth::client_packet::LogonProof);
+				packet.Start(auth::client_login_packet::LogonProof);
 				packet << io::write_range(m_A.asByteArray());
 				packet << io::write_range(M1hash);
 				packet.Finish();
@@ -247,7 +247,7 @@ namespace mmo
 	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
 		// No longer listen for the logon challenge packet
-		ClearPacketHandler(auth::server_packet::LogonProof);
+		ClearPacketHandler(auth::login_client_packet::LogonProof);
 
 		// Read the response code
 		uint8 result = 0;
@@ -269,7 +269,7 @@ namespace mmo
 				AuthenticationResult(auth::AuthResult::Success);
 
 				// Allow the client to handle the realm list packet
-				RegisterPacketHandler(mmo::auth::server_packet::RealmList, *this, &LoginConnector::OnRealmList);
+				RegisterPacketHandler(mmo::auth::login_client_packet::RealmList, *this, &LoginConnector::OnRealmList);
 			}
 			else
 			{
@@ -334,15 +334,15 @@ namespace mmo
 	void LoginConnector::Connect(const std::string & username, const std::string & password)
 	{
 		// Apply username and convert it to uppercase letters
-		m_username = std::move(username);
-		std::transform(m_username.begin(), m_username.end(), m_username.begin(), ::toupper);
+		m_accountName = std::move(username);
+		std::transform(m_accountName.begin(), m_accountName.end(), m_accountName.begin(), ::toupper);
 
 		// Apply password in uppercase letters
 		std::string upperPassword;
 		std::transform(password.begin(), password.end(), std::back_inserter(upperPassword), ::toupper);
 
 		// Calculate auth hash
-		const std::string authHash = m_username + ":" + upperPassword;
+		const std::string authHash = m_accountName + ":" + upperPassword;
 		m_authHash = sha1(authHash.c_str(), authHash.size());
 
 		// Connect to the server at localhost

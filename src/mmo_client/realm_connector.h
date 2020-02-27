@@ -10,10 +10,6 @@
 
 #include "asio/io_service.hpp"
 
-#include <map>
-#include <functional>
-#include <mutex>
-
 
 namespace mmo
 {
@@ -22,9 +18,6 @@ namespace mmo
 		: public auth::Connector
 		, public auth::IConnectorListener
 	{
-	public:
-		typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
-
 	public:
 		/// Signal that is fired when the client successfully authenticated at the realm list.
 		signal<void(auth::AuthResult)> AuthenticationResult;
@@ -38,11 +31,10 @@ namespace mmo
 		std::string m_realmAddress;
 		uint16 m_realmPort;
 		std::string m_realmName;
+		std::string m_account;
 		BigNumber m_sessionKey;
-
-		/// Active packet handler instances.
-		std::map<uint8, PacketHandler> m_packetHandlers;
-		std::mutex m_packetHandlerMutex;
+		uint32 m_serverSeed;
+		uint32 m_clientSeed;
 
 	public:
 		/// Initializes a new instance of the RealmConnector class.
@@ -50,13 +42,9 @@ namespace mmo
 		explicit RealmConnector(asio::io_service &io);
 		~RealmConnector();
 
-	public:
-		/// Registers a packet handler for a given op code.
-		void RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler);
-		/// Removes a registered packet handler for a given op code.
-		void ClearPacketHandler(auth::server_packet::Type opCode);
-		/// Removes all registered packet handlers.
-		void ClearPacketHandlers();
+	private:
+		/// Handles the LogonChallenge packet.
+		PacketParseResult OnAuthChallenge(mmo::auth::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -70,8 +58,9 @@ namespace mmo
 		/// Tries to connect to the given realm server.
 		/// @param realmAddress The ip address of the realm.
 		/// @param realmPort The port of the realm.
+		/// @param accountName Name of the player account.
 		/// @param realmName The realm's display name.
-		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& realmName, BigNumber sessionKey);
+		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
 	};
 }
 

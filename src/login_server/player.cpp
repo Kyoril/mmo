@@ -32,8 +32,8 @@ namespace mmo
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
-		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Player::handleLogonChallenge);
-		RegisterPacketHandler(auth::client_packet::ReconnectChallenge, *this, &Player::handleLogonChallenge);
+		RegisterPacketHandler(auth::client_login_packet::LogonChallenge, *this, &Player::handleLogonChallenge);
+		RegisterPacketHandler(auth::client_login_packet::ReconnectChallenge, *this, &Player::handleLogonChallenge);
 	}
 
 	void Player::destroy()
@@ -86,7 +86,7 @@ namespace mmo
 	{
 		// Send proof packet to the client
 		m_connection->sendSinglePacket([result, this](auth::OutgoingPacket& packet) {
-			packet.Start(auth::server_packet::LogonProof);
+			packet.Start(auth::login_client_packet::LogonProof);
 			packet << io::write<uint8>(result);
 
 			// If the login attempt succeeded, we also send the calculated M2 hash value to the
@@ -104,7 +104,7 @@ namespace mmo
 	void Player::SendRealmList()
 	{
 		m_connection->sendSinglePacket([this](auth::OutgoingPacket& packet) {
-			packet.Start(mmo::auth::server_packet::RealmList);
+			packet.Start(mmo::auth::login_client_packet::RealmList);
 
 			// Remember realm count position and write placeholder value
 			const size_t realmCountPos = packet.sink().position();
@@ -157,7 +157,7 @@ namespace mmo
 		}
 	}
 
-	void Player::clearPacketHandler(uint8 opCode)
+	void Player::ClearPacketHandler(uint8 opCode)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
@@ -171,8 +171,8 @@ namespace mmo
 	PacketParseResult Player::handleLogonChallenge(auth::IncomingPacket & packet)
 	{
 		// No longer handle these packets!
-		clearPacketHandler(auth::client_packet::LogonChallenge);
-		clearPacketHandler(auth::client_packet::ReconnectChallenge);
+		ClearPacketHandler(auth::client_login_packet::LogonChallenge);
+		ClearPacketHandler(auth::client_login_packet::ReconnectChallenge);
 
 		// Read the packet data
 		uint16 contentSize = 0;
@@ -188,7 +188,7 @@ namespace mmo
 			>> m_locale
 			>> io::read<uint32>(timezone)
 			>> io::read<uint32>(ip)
-			>> io::read_container<uint8>(m_userName)))
+			>> io::read_container<uint8>(m_accountName)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -200,7 +200,7 @@ namespace mmo
 		}
 
 		// Write the login attempt to the logs
-		ILOG("Received logon challenge for account " << m_userName << "...");
+		ILOG("Received logon challenge for account " << m_accountName << "...");
 		
 		// RequestHandler
 		std::weak_ptr<Player> weakThis{ shared_from_this() };
@@ -229,7 +229,7 @@ namespace mmo
 					strongThis->m_unk3.setRand(16 * 8);
 
 					// Allow handling the logon proof packet now
-					strongThis->RegisterPacketHandler(auth::client_packet::LogonProof, *strongThis.get(), &Player::handleLogonProof);
+					strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::handleLogonProof);
 				}
 				else
 				{
@@ -239,7 +239,7 @@ namespace mmo
 
 				// Send packet with result
 				strongThis->m_connection->sendSinglePacket([authResult, &strongThis](auth::OutgoingPacket& packet) {
-					packet.Start(auth::server_packet::LogonChallenge);
+					packet.Start(auth::login_client_packet::LogonChallenge);
 					packet << io::write<uint8>(authResult);
 
 					// On success, there are more data values to write
@@ -266,14 +266,14 @@ namespace mmo
 		};
 
 		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::getAccountDataByName, std::cref(m_userName));
+		m_database.asyncRequest(std::move(handler), &IDatabase::getAccountDataByName, std::cref(m_accountName));
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult Player::handleLogonProof(auth::IncomingPacket & packet)
 	{
 		// No longer handle proof packet
-		clearPacketHandler(auth::client_packet::LogonProof);
+		ClearPacketHandler(auth::client_login_packet::LogonProof);
 
 		// Read packet data
 		std::array<uint8, 32> rec_A;
@@ -342,7 +342,7 @@ namespace mmo
 
 		HashGeneratorSha1 sha;
 		Sha1_Add_BigNumbers(sha, { t3 });
-		const auto t4 = sha1(reinterpret_cast<const char*>(m_userName.data()), m_userName.size());
+		const auto t4 = sha1(reinterpret_cast<const char*>(m_accountName.data()), m_accountName.size());
 		sha.update(reinterpret_cast<const char*>(t4.data()), t4.size());
 		Sha1_Add_BigNumbers(sha, { m_s, A, m_B, K });
 		hash = sha.finalize();
@@ -374,11 +374,11 @@ namespace mmo
 					{
 						// Add log entry about successful login as the hashes do indeed mach (and thus, so
 						// do the passwords)
-						ILOG("User " << strongThis->m_userName << " successfully authenticated");
+						ILOG("User " << strongThis->m_accountName << " successfully authenticated");
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
-						strongThis->RegisterPacketHandler(auth::client_packet::RealmList, *strongThis.get(), &Player::handleRealmList);
+						strongThis->RegisterPacketHandler(auth::client_login_packet::RealmList, *strongThis.get(), &Player::OnRealmList);
 						strongThis->SendAuthProof(auth::AuthResult::Success);
 
 						// Send the realm list as well
@@ -402,7 +402,7 @@ namespace mmo
 		else
 		{
 			// Log error
-			WLOG("Invalid password for account " << m_userName);
+			WLOG("Invalid password for account " << m_accountName);
 		}
 
 		// Send proof result
@@ -414,78 +414,33 @@ namespace mmo
 	PacketParseResult Player::handleReconnectChallenge(auth::IncomingPacket & packet)
 	{
 		// No longer handle proof packet
-		clearPacketHandler(auth::client_packet::LogonChallenge);
-		clearPacketHandler(auth::client_packet::ReconnectChallenge);
+		ClearPacketHandler(auth::client_login_packet::LogonChallenge);
+		ClearPacketHandler(auth::client_login_packet::ReconnectChallenge);
+
+		// TODO: Handle this packet properly
 
 		// Handle reconnect proof packet now
-		RegisterPacketHandler(auth::client_packet::ReconnectProof, *this, &Player::handleLogonProof);
+		RegisterPacketHandler(auth::client_login_packet::ReconnectProof, *this, &Player::handleLogonProof);
 
-		return PacketParseResult::Pass;
+		return PacketParseResult::Disconnect;
 	}
 
 	PacketParseResult Player::handleReconnectProof(auth::IncomingPacket & packet)
 	{
-		// Handle realm list packet now
-		RegisterPacketHandler(auth::client_packet::RealmList, *this, &Player::handleRealmList);
+		// TODO: Handle this packet properly
 
-		return PacketParseResult::Pass;
+		// Handle realm list packet now
+		RegisterPacketHandler(auth::client_login_packet::RealmList, *this, &Player::OnRealmList);
+
+		return PacketParseResult::Disconnect;
 	}
 
-	PacketParseResult Player::handleRealmList(auth::IncomingPacket & packet)
+	PacketParseResult Player::OnRealmList(auth::IncomingPacket & packet)
 	{
-		// TODO: Use a cache to not load realms from the database too frequently
+		// TODO: apply a rate limiter so the client cannot spam this packet (DDOS attack)
 
-		// Query all realms from the database
-#if 0
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto handler = [weakThis](std::vector<binary::realm_login::RealmData> realms) {
-			if (auto strongThis = weakThis.lock())
-			{
-				// Send the realm list packet
-				strongThis->m_connection->sendSinglePacket([strongThis, &realms](auth::OutgoingPacket &packet) {
-					packet.Start(auth::server_packet::RealmList);
-					const auto sizePos = packet.sink().position();
-					packet << io::write<uint16>(0);	// size placeholder
-
-					const auto contentPos = packet.sink().position();
-					packet
-						<< io::write<uint32>(0)
-						<< io::write<uint8>(realms.size());
-
-					for (const auto& realm : realms)
-					{
-						// Check if there is such a realm by id
-						const bool realmIsOnline = (strongThis->m_realmManager.getRealmById(realm.id) != nullptr);
-
-						// Build realm flags
-						uint16 realmFlags = 0;
-						if (!realmIsOnline) realmFlags |= 2;
-
-						const std::string realmAddr = realm.address + ":" + std::to_string(realm.port);
-						packet
-							<< io::write<uint32>(0)				// type
-							<< io::write<uint8>(realmFlags)		// flags
-							<< io::write_range(realm.name) << io::write<uint8>(0)
-							<< io::write_range(realmAddr) << io::write<uint8>(0)
-							<< io::write<float>(0.0f)			// population
-							<< io::write<uint8>(0)				// amount of chars
-							<< io::write<uint8>(1)				// time zone (language)
-							<< io::write<uint8>(0);
-					}
-
-					packet << io::write<uint16>(2);
-
-					// Overwrite packet size field
-					const uint16 packetSize = static_cast<uint16>(packet.sink().position() - contentPos);
-					packet.sink().overwrite(sizePos, reinterpret_cast<const char*>(&packetSize), sizeof(uint16));
-
-					packet.Finish();
-				});
-			}
-		};
-		
-		m_database.asyncRequest<std::vector<binary::realm_login::RealmData>>(&IDatabase::getRealms, std::move(handler));
-#endif
+		// Send the realm list with all currently connected realms in there
+		SendRealmList();
 
 		return PacketParseResult::Pass;
 	}
