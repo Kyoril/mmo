@@ -4,6 +4,7 @@
 #include "player_manager.h"
 #include "database.h"
 
+#include "base/random.h"
 #include "base/constants.h"
 #include "base/sha1.h"
 #include "base/clock.h"
@@ -26,6 +27,11 @@ namespace mmo
 		, m_connection(std::move(connection))
 		, m_address(address)
 	{
+		// Generate random encryption seed
+		std::uniform_int_distribution<uint32> dist;
+		m_seed = dist(RandomGenerator);
+
+		// Setup ourself as listener
 		m_connection->setListener(*this);
 	}
 
@@ -73,6 +79,26 @@ namespace mmo
 
 		// Execute the packet handler and return the result
 		return handler(packet);
+	}
+
+	PacketParseResult Player::OnLogonChallenge(auth::IncomingPacket & packet)
+	{
+		ILOG("Received OnLogonChallenge packet");
+
+		return PacketParseResult::Pass;
+	}
+
+	void Player::SendAuthChallenge()
+	{
+		// We will start accepting LogonChallenge packets from the client
+		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Player::OnLogonChallenge);
+
+		// Send the LogonChallenge packet to the client including our generated seed
+		m_connection->sendSinglePacket([this](mmo::auth::OutgoingPacket& packet) {
+			packet.Start(mmo::auth::server_packet::LogonChallenge);
+			packet << io::write<uint32>(m_seed);
+			packet.Finish();
+		});
 	}
 
 	void Player::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)

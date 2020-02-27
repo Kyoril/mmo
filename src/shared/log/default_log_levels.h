@@ -8,26 +8,26 @@
 namespace mmo
 {
 	//For events that are useful for developers
-	extern const LogLevel g_DebugLevel;
+	extern const LogLevel DebugLevel;
 
 	//For common events
 	// - Connected
 	// - User signed in
-	extern const LogLevel g_InfoLevel;
+	extern const LogLevel InfoLevel;
 
 	//For unexpected events
 	// - optional but useful setting not found
 	// - unexpected user input
-	extern const LogLevel g_WarningLevel;
+	extern const LogLevel WarningLevel;
 
 	//For runtime errors
 	// - File not found
 	// - Connection lost
-	extern const LogLevel g_ErrorLevel;
+	extern const LogLevel ErrorLevel;
 
 
-#define DLOG(message) MMO_LOG(::mmo::g_DebugLevel, message)
-#define ILOG(message) MMO_LOG(::mmo::g_InfoLevel, message)
-#define WLOG(message) MMO_LOG(::mmo::g_WarningLevel, message)
-#define ELOG(message) MMO_LOG(::mmo::g_ErrorLevel, message)
+#define DLOG(message) MMO_LOG(::mmo::DebugLevel, message)
+#define ILOG(message) MMO_LOG(::mmo::InfoLevel, message)
+#define WLOG(message) MMO_LOG(::mmo::WarningLevel, message)
+#define ELOG(message) MMO_LOG(::mmo::ErrorLevel, message)
 }

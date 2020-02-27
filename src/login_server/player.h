@@ -56,7 +56,15 @@ namespace mmo
 
 	public:
 		/// Registers a packet handler.
-		void registerPacketHandler(uint8 opCode, PacketHandler &&handler);
+		void RegisterPacketHandler(uint8 opCode, PacketHandler &&handler);
+		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
+		template <class Instance, class Class, class... Args1>
+		void RegisterPacketHandler(uint8 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
+		{
+			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
+				return (object.*method)(Args1(args)...);
+			});
+		}
 		/// Clears a packet handler so that the opcode is no longer handled.
 		void clearPacketHandler(uint8 opCode);
 

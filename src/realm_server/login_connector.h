@@ -71,9 +71,9 @@ namespace mmo
 		// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
 		// Handles the LogonChallenge packet from the server.
-		void OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
+		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
 		// Handles the LogonProof packet from the server.
-		void OnLogonProof(auth::IncomingPacket &packet);
+		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
 		/// Called if a login error happened.
 		void OnLoginError(auth::AuthResult result);
 		/// Resets the authentication status to the initial state.

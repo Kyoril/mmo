@@ -24,16 +24,16 @@ namespace mmo
 	class Connector : public Connection<P, MySocket>
 	{
 	public:
-
 		typedef Connection<P> Super;
 		typedef P Protocol;
 		typedef IConnectorListener<P> Listener;
 		typedef MySocket Socket;
 
 	public:
-
 		explicit Connector(std::unique_ptr<Socket> socket, Listener *listener);
-		~Connector();
+		virtual ~Connector();
+
+	public:
 		virtual void setListener(Listener &listener);
 		Listener *getListener() const;
 		void connect(const std::string &host, uint16 port, Listener &listener,

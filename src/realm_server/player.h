@@ -53,8 +53,22 @@ namespace mmo
 		inline const auth::AuthLocale &GetLocale() const { return m_locale; }
 
 	public:
+		/// Send an auth challenge packet to the client in order to ask it for authentication data.
+		void SendAuthChallenge();
+
+	public:
+
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint8 opCode, PacketHandler &&handler);
+		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
+		template <class Instance, class Class, class... Args1>
+		void RegisterPacketHandler(uint8 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
+		{
+			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
+				return (object.*method)(Args1(args)...);
+			});
+		}
+
 		/// Clears a packet handler so that the opcode is no longer handled.
 		void ClearPacketHandler(uint8 opCode);
 
@@ -74,6 +88,7 @@ namespace mmo
 		uint32 m_accountId;						// Account ID
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
+		uint32 m_seed;				// Random generated seed used for packet header encryption
 
 	private:
 		BigNumber m_sessionKey;
@@ -100,5 +115,8 @@ namespace mmo
 		void connectionMalformedPacket() override;
 		/// @copydoc wow::auth::IConnectionListener::connectionPacketReceived()
 		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
+
+	private:
+		PacketParseResult OnLogonChallenge(auth::IncomingPacket& packet);
 	};
 }

@@ -30,39 +30,12 @@ namespace mmo
 		s_realmlistCVar = nullptr;
 	}
 
-	void LoginConnector::RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler)
-	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
-
-		// Assign packet handler for the given op code
-		m_packetHandlers[static_cast<uint8>(opCode)] = std::move(handler);
-	}
-
-	void LoginConnector::ClearPacketHandler(auth::server_packet::Type opCode)
-	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
-
-		auto it = m_packetHandlers.find(static_cast<uint8>(opCode));
-		if (it != m_packetHandlers.end())
-		{
-			m_packetHandlers.erase(it);
-		}
-	}
-
-	void LoginConnector::ClearPacketHandlers()
-	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
-		m_packetHandlers.clear();
-	}
-
 	bool LoginConnector::connectionEstablished(bool success)
 	{
 		if (success)
 		{
-			using std::placeholders::_1;
-
 			// Register for default packet handlers
-			RegisterPacketHandler(auth::server_packet::LogonChallenge, std::bind(&LoginConnector::OnLogonChallenge, this, _1));
+			RegisterPacketHandler(auth::server_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
 
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
@@ -120,25 +93,7 @@ namespace mmo
 
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
-		// Try to retrieve the packet handler in a thread-safe way
-		PacketHandler handler = nullptr;
-		{
-			std::scoped_lock lock{ m_packetHandlerMutex };
-
-			// Try to find a registered packet handler
-			auto it = m_packetHandlers.find(packet.GetId());
-			if (it == m_packetHandlers.end())
-			{
-				// Received unhandled server packet
-				WLOG("Received unhandled server op code: 0x" << std::hex << std::setw(2) << static_cast<uint16>(packet.GetId()));
-				return PacketParseResult::Disconnect;
-			}
-
-			handler = it->second;
-		}
-
-		// Call the packet handler
-		return handler(packet);
+		return HandleIncomingPacket(packet);
 	}
 
 	void LoginConnector::DoSRP6ACalculation()
@@ -231,8 +186,6 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
 	{
-		using std::placeholders::_1;
-
 		// No longer listen for the logon challenge packet
 		ClearPacketHandler(auth::server_packet::LogonChallenge);
 
@@ -268,7 +221,7 @@ namespace mmo
 			DoSRP6ACalculation();
 
 			// Now wait for LogonProof packet
-			RegisterPacketHandler(auth::server_packet::LogonProof, std::bind(&LoginConnector::OnLogonProof, this, _1));
+			RegisterPacketHandler(auth::server_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
 
 			// Send response packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
@@ -293,8 +246,6 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
-		using std::placeholders::_1;
-
 		// No longer listen for the logon challenge packet
 		ClearPacketHandler(auth::server_packet::LogonProof);
 
@@ -318,7 +269,7 @@ namespace mmo
 				AuthenticationResult(auth::AuthResult::Success);
 
 				// Allow the client to handle the realm list packet
-				RegisterPacketHandler(mmo::auth::server_packet::RealmList, std::bind(&LoginConnector::OnRealmList, this, _1));
+				RegisterPacketHandler(mmo::auth::server_packet::RealmList, *this, &LoginConnector::OnRealmList);
 			}
 			else
 			{

@@ -22,6 +22,9 @@ namespace mmo
 	{
 		if (success)
 		{
+			// Register default packet handler
+			RegisterPacketHandler(mmo::auth::server_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
+
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
@@ -72,20 +75,7 @@ namespace mmo
 
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
-		switch (packet.GetId())
-		{
-		case auth::server_packet::LogonChallenge:
-			OnLogonChallenge(packet);
-			break;
-		case auth::server_packet::LogonProof:
-			OnLogonProof(packet);
-			break;
-		default:
-			WLOG("Received unhandled packet from login server: Op Code 0x" << std::hex << packet.GetId());
-			break;
-		}
-
-		return PacketParseResult::Pass;
+		return HandleIncomingPacket(packet);
 	}
 
 	void LoginConnector::DoSRP6ACalculation()
@@ -176,7 +166,7 @@ namespace mmo
 		M2hash = gen.finalize();
 	}
 
-	void LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
+	PacketParseResult LoginConnector::OnLogonChallenge(auth::Protocol::IncomingPacket & packet)
 	{
 		// Read the response code
 		uint8 result = 0;
@@ -209,6 +199,8 @@ namespace mmo
 			// Do srp6a calculations
 			DoSRP6ACalculation();
 
+			RegisterPacketHandler(auth::server_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
+
 			// Send response packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
@@ -222,10 +214,13 @@ namespace mmo
 		else
 		{
 			OnLoginError(static_cast<auth::AuthResult>(result));
+			return PacketParseResult::Disconnect;
 		}
+
+		return PacketParseResult::Pass;
 	}
 
-	void LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
+	PacketParseResult LoginConnector::OnLogonProof(auth::IncomingPacket & packet)
 	{
 		// Read the response code
 		uint8 result = 0;
@@ -248,13 +243,17 @@ namespace mmo
 				// Output error code in chat before terminating the application
 				ELOG("[Login Server] Could not authenticate realm at login server, hash mismatch detected!");
 				QueueTermination();
-				return;
+
+				return PacketParseResult::Disconnect;
 			}
 		}
 		else
 		{
 			OnLoginError(static_cast<auth::AuthResult>(result));
+			return PacketParseResult::Disconnect;
 		}
+
+		return PacketParseResult::Pass;
 	}
 
 	void LoginConnector::OnLoginError(auth::AuthResult result)

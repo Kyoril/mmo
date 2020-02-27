@@ -62,6 +62,11 @@ int main(int argc, const char* argv[])
 		ILOG("Starting the login server application...");
 	}
 
+	// Notify in case of debug builds
+#ifdef _DEBUG
+	DLOG("Debug build enabled");
+#endif
+
 	// Run the application as long as the result code is 0 and the program is flagged to be restarted
 	int32 result = 0;
 	do

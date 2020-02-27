@@ -20,7 +20,7 @@ namespace mmo
 		/// Enumerates all OP codes sent by the client.
 		namespace client_packet
 		{
-			enum
+			enum Type
 			{
 				/// Sent by the client right after the connection was established.
 				LogonChallenge		= 0x00,

@@ -46,7 +46,10 @@ namespace mmo
 		std::scoped_lock playerLock{ m_playerMutex };
 
 		assert(added);
-		m_players.push_back(std::move(added));
+		m_players.push_back(added);
+
+		// Challenge the newly connected client for authentication
+		added->SendAuthChallenge();
 	}
 
 	Player * PlayerManager::GetPlayerByAccountName(const String &accountName)

@@ -32,8 +32,8 @@ namespace mmo
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
-		registerPacketHandler(auth::client_packet::LogonChallenge, std::bind(&Player::handleLogonChallenge, this, std::placeholders::_1));
-		registerPacketHandler(auth::client_packet::ReconnectChallenge, std::bind(&Player::handleLogonChallenge, this, std::placeholders::_1));
+		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Player::handleLogonChallenge);
+		RegisterPacketHandler(auth::client_packet::ReconnectChallenge, *this, &Player::handleLogonChallenge);
 	}
 
 	void Player::destroy()
@@ -142,7 +142,7 @@ namespace mmo
 		});
 	}
 
-	void Player::registerPacketHandler(uint8 opCode, PacketHandler && handler)
+	void Player::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
@@ -229,7 +229,7 @@ namespace mmo
 					strongThis->m_unk3.setRand(16 * 8);
 
 					// Allow handling the logon proof packet now
-					strongThis->registerPacketHandler(auth::client_packet::LogonProof, std::bind(&Player::handleLogonProof, strongThis.get(), std::placeholders::_1));
+					strongThis->RegisterPacketHandler(auth::client_packet::LogonProof, *strongThis.get(), &Player::handleLogonProof);
 				}
 				else
 				{
@@ -378,7 +378,7 @@ namespace mmo
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
-						strongThis->registerPacketHandler(auth::client_packet::RealmList, std::bind(&Player::handleRealmList, strongThis.get(), std::placeholders::_1));
+						strongThis->RegisterPacketHandler(auth::client_packet::RealmList, *strongThis.get(), &Player::handleRealmList);
 						strongThis->SendAuthProof(auth::AuthResult::Success);
 
 						// Send the realm list as well
@@ -418,7 +418,7 @@ namespace mmo
 		clearPacketHandler(auth::client_packet::ReconnectChallenge);
 
 		// Handle reconnect proof packet now
-		registerPacketHandler(auth::client_packet::ReconnectProof, std::bind(&Player::handleLogonProof, this, std::placeholders::_1));
+		RegisterPacketHandler(auth::client_packet::ReconnectProof, *this, &Player::handleLogonProof);
 
 		return PacketParseResult::Pass;
 	}
@@ -426,7 +426,7 @@ namespace mmo
 	PacketParseResult Player::handleReconnectProof(auth::IncomingPacket & packet)
 	{
 		// Handle realm list packet now
-		registerPacketHandler(auth::client_packet::RealmList, std::bind(&Player::handleRealmList, this, std::placeholders::_1));
+		RegisterPacketHandler(auth::client_packet::RealmList, *this, &Player::handleRealmList);
 
 		return PacketParseResult::Pass;
 	}

@@ -35,9 +35,6 @@ namespace mmo
 		, public auth::IConnectorListener
 	{
 	public:
-		typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
-
-	public:
 		/// Signal that is fired when the client successfully authenticated at the realm list.
 		signal<void(auth::AuthResult)> AuthenticationResult;
 		/// Signal that is fired when the client received a realm list packet.
@@ -72,10 +69,6 @@ namespace mmo
 		/// A hash that is built by the salted password provided to the Connect method.
 		SHA1Hash m_authHash;
 
-		/// Active packet handler instances.
-		std::map<uint8, PacketHandler> m_packetHandlers;
-		std::mutex m_packetHandlerMutex;
-
 		/// Realm list infos.
 		std::vector<RealmData> m_realms;
 
@@ -84,14 +77,6 @@ namespace mmo
 		/// @param io The io service to be used in order to create the internal socket.
 		explicit LoginConnector(asio::io_service &io);
 		~LoginConnector();
-
-	public:
-		/// Registers a packet handler for a given op code.
-		void RegisterPacketHandler(auth::server_packet::Type opCode, PacketHandler handler);
-		/// Removes a registered packet handler for a given op code.
-		void ClearPacketHandler(auth::server_packet::Type opCode);
-		/// Removes all registered packet handlers.
-		void ClearPacketHandlers();
 
 	public:
 		/// Get realm data.

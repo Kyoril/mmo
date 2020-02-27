@@ -30,8 +30,8 @@ namespace mmo
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
-		RegisterPacketHandler(auth::client_packet::LogonChallenge, std::bind(&Realm::HandleLogonChallenge, this, std::placeholders::_1));
-		RegisterPacketHandler(auth::client_packet::ReconnectChallenge, std::bind(&Realm::HandleLogonChallenge, this, std::placeholders::_1));
+		RegisterPacketHandler(auth::client_packet::LogonChallenge, *this, &Realm::HandleLogonChallenge);
+		RegisterPacketHandler(auth::client_packet::ReconnectChallenge, *this, &Realm::HandleLogonChallenge);
 	}
 
 	void Realm::Destroy()
@@ -175,7 +175,7 @@ namespace mmo
 					strongThis->m_unk3.setRand(16 * 8);
 
 					// Allow handling the logon proof packet now
-					strongThis->RegisterPacketHandler(auth::client_packet::LogonProof, std::bind(&Realm::HandleLogonProof, strongThis.get(), std::placeholders::_1));
+					strongThis->RegisterPacketHandler(auth::client_packet::LogonProof, *strongThis.get(), &Realm::HandleLogonProof);
 				}
 				else
 				{
@@ -374,15 +374,14 @@ namespace mmo
 		ClearPacketHandler(auth::client_packet::ReconnectChallenge);
 
 		// Handle reconnect proof packet now
-		RegisterPacketHandler(auth::client_packet::ReconnectProof, std::bind(&Realm::HandleLogonProof, this, std::placeholders::_1));
+		RegisterPacketHandler(auth::client_packet::ReconnectProof, *this, &Realm::HandleLogonProof);
 
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult Realm::HandleReconnectProof(auth::IncomingPacket & packet)
 	{
-		// Handle realm list packet now
-		//RegisterPacketHandler(auth::client_packet::RealmList, std::bind(&Realm::HandleRealmList, this, std::placeholders::_1));
+		// TODO: Implement this packet handler
 
 		return PacketParseResult::Pass;
 	}

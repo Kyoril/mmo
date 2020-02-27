@@ -48,11 +48,10 @@ namespace mmo
 	{
 		if (success)
 		{
-			// TODO:
 		}
 		else
 		{
-			ELOG("Could not connect");
+			ELOG("Could not connect to the realm server");
 		}
 
 		return true;
