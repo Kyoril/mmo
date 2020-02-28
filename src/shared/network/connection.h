@@ -215,6 +215,11 @@ namespace mmo
 			return *m_socket;
 		}
 
+		inline bool IsConnected() const 
+		{
+			return m_socket && m_socket->is_open();
+		}
+
 		static std::shared_ptr<Connection> create(asio::io_service &service, Listener *listener)
 		{
 			return std::make_shared<Connection<P, MySocket> >(std::unique_ptr<MySocket>(new MySocket(service)), listener);

@@ -72,25 +72,4 @@ namespace mmo
 
 		return nullptr;
 	}
-
-	Player * PlayerManager::GetPlayerByAccountID(uint32 accountId)
-	{
-		std::scoped_lock playerLock{ m_playerMutex };
-
-		const auto p = std::find_if(
-			m_players.begin(),
-			m_players.end(),
-			[accountId](const std::shared_ptr<Player> &p)
-		{
-			return (p->IsAuthentificated() &&
-				accountId == p->GetAccountId());
-		});
-
-		if (p != m_players.end())
-		{
-			return (*p).get();
-		}
-
-		return nullptr;
-	}
 }

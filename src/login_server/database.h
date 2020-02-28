@@ -46,13 +46,13 @@ namespace mmo
 
 		/// Gets the account data by a given name.
 		/// @param name Name of the account.
-		virtual std::optional<AccountData> getAccountDataByName(const std::string& name) = 0;
+		virtual std::optional<AccountData> getAccountDataByName(std::string name) = 0;
 		/// Obtains realm data by it's id.
 		/// @param name Name of the realm.
-		virtual std::optional<RealmAuthData> getRealmAuthData(const std::string& name) = 0;
+		virtual std::optional<RealmAuthData> getRealmAuthData(std::string name) = 0;
 		/// Retrieves the session key and the account id by name.
 		/// @param accountName Name of the account.
-		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(const std::string& accountName) = 0;
+		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(std::string accountName) = 0;
 		/// Writes player session and login data to the database. This also writes the current timestamp
 		/// to the last_login field.
 		/// @param accountId ID of the account to modify.

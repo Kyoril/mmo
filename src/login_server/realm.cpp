@@ -100,6 +100,37 @@ namespace mmo
 		});
 	}
 
+	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, BigNumber sessionKey)
+	{
+		if (result == auth::auth_result::Success)
+		{
+			// Hash matched, client has a valid session key and thus is able to sign in on the realm
+			ILOG("Client successfully signed in on realm " << m_realmName << "...");
+		}
+		else
+		{
+			// Warn about this, as this might mean that someone is trying to log in on a realm without 
+			// having a valid session key.
+			WLOG("Auth session hash mismatch, client could not sign in on realm " << m_realmName << "!");
+		}
+
+		// Send response packet to the realm server
+		m_connection->sendSinglePacket([requestId, result, &sessionKey](auth::OutgoingPacket& packet) {
+			packet.Start(auth::login_realm_packet::ClientAuthSessionResponse);
+			packet
+				<< io::write<uint64>(requestId)
+				<< io::write<uint8>(result);
+
+			if (result == auth::auth_result::Success)
+			{
+				packet
+					<< io::write_dynamic_range<uint16>(sessionKey.asByteArray());
+			}
+
+			packet.Finish();
+		});
+	}
+
 	void Realm::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
@@ -321,6 +352,9 @@ namespace mmo
 						ILOG("Realm server " << strongThis->m_realmName << " successfully authenticated");
 						strongThis->m_authenticated = true;
 
+						// From here on, accept ClientAuthSession packets
+						strongThis->RegisterPacketHandler(auth::realm_login_packet::ClientAuthSession, *strongThis.get(), &Realm::OnClientAuthSession);
+
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
 						//strongThis->RegisterPacketHandler(auth::client_packet::RealmList, std::bind(&Realm::HandleRealmList, strongThis.get(), std::placeholders::_1));
@@ -361,6 +395,74 @@ namespace mmo
 
 		// Send proof result
 		SendAuthProof(proofResult);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Realm::OnClientAuthSession(auth::IncomingPacket & packet)
+	{
+		// Read the packet data
+		uint64 requestId;
+		std::string accountName;
+		uint32 clientSeed;
+		uint32 serverSeed;
+		SHA1Hash clientHash;
+
+		if (!(packet
+			>> io::read<uint64>(requestId)
+			>> io::read_container<uint8>(accountName)
+			>> io::read<uint32>(clientSeed)
+			>> io::read<uint32>(serverSeed)
+			>> io::read_range(clientHash)))
+		{
+			// Failed to read packet correctly, disconnect
+			return PacketParseResult::Disconnect;
+		}
+
+		// Database handler method will validate the client hash
+		std::weak_ptr<Realm> weakThis{ shared_from_this() };
+		auto handler = [weakThis, requestId, accountName, clientSeed, serverSeed, clientHash](std::optional<std::pair<uint64, std::string>> result)
+		{
+			if (auto strongThis = weakThis.lock())
+			{
+				// This will store the session key
+				BigNumber sessionKey;
+
+				// The result that will be sent
+				auth::AuthResult authResult = auth::auth_result::Success;
+				if (result.has_value())
+				{
+					// Reconstruct the client hash to verify that the data sent is valid
+					HashGeneratorSha1 gen;
+					gen.update(accountName.data(), accountName.length());
+					gen.update(serverSeed);
+					gen.update(clientSeed);
+					Sha1_Add_BigNumbers(gen, { BigNumber(result->second) });
+					SHA1Hash checkHash = gen.finalize();
+
+					// Verify that both hashes match
+					if (checkHash != clientHash)
+					{
+						authResult = auth::auth_result::FailNoAccess;
+					}
+					else
+					{
+						// Store the session key on match
+						sessionKey.setHexStr(result->second);
+					}
+				}
+				else
+				{
+					authResult = auth::auth_result::FailWrongCredentials;
+				}
+
+				// Send the response
+				strongThis->SendAuthSessionResult(requestId, authResult, sessionKey);
+			}
+		};
+
+		// Now do a database request by account name to retrieve the session key
+		m_database.asyncRequest(std::move(handler), &IDatabase::getAccountSessionKey, std::move(accountName));
 
 		return PacketParseResult::Pass;
 	}

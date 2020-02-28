@@ -13,7 +13,7 @@
 namespace mmo
 {
 	RealmConnector::RealmConnector(asio::io_service & io)
-		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
+		: game::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_serverSeed(0)
 		, m_clientSeed(0)
@@ -24,10 +24,10 @@ namespace mmo
 	{
 	}
 
-	PacketParseResult RealmConnector::OnAuthChallenge(mmo::auth::IncomingPacket & packet)
+	PacketParseResult RealmConnector::OnAuthChallenge(game::IncomingPacket & packet)
 	{
 		// No longer handle LogonChallenge packets during this session
-		ClearPacketHandler(auth::realm_client_packet::AuthChallenge);
+		ClearPacketHandler(game::realm_client_packet::AuthChallenge);
 
 		// Try to read the packet data
 		if (!(packet >> io::read<uint32>(m_serverSeed)))
@@ -44,8 +44,8 @@ namespace mmo
 		SHA1Hash hash = hashGen.finalize();
 
 		// We have been challenged, respond with an answer
-		sendSinglePacket([this, &hash](auth::OutgoingPacket& packet) {
-			packet.Start(auth::client_realm_packet::AuthSession);
+		sendSinglePacket([this, &hash](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AuthSession);
 			packet
 				<< io::write<uint32>(mmo::Revision)
 				<< io::write_dynamic_range<uint8>(this->m_account)
@@ -73,7 +73,7 @@ namespace mmo
 			m_clientSeed = dist(RandomGenerator);
 
 			// Accept LogonChallenge packets from here on
-			RegisterPacketHandler(auth::realm_client_packet::AuthChallenge, *this, &RealmConnector::OnAuthChallenge);
+			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &RealmConnector::OnAuthChallenge);
 		}
 		else
 		{
@@ -97,7 +97,7 @@ namespace mmo
 		ELOG("Received a malformed packet");
 	}
 
-	PacketParseResult RealmConnector::connectionPacketReceived(auth::IncomingPacket & packet)
+	PacketParseResult RealmConnector::connectionPacketReceived(game::IncomingPacket & packet)
 	{
 		return HandleIncomingPacket(packet);
 	}

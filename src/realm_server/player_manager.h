@@ -37,8 +37,6 @@ namespace mmo
 		void AddPlayer(std::shared_ptr<Player> added);
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);
-		/// 
-		Player *GetPlayerByAccountID(uint32 accountId);
 
 	private:
 

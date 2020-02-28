@@ -60,6 +60,22 @@ namespace mmo
 		// Notify the user
 		ELOG("Connection to the login server has been lost!");
 
+		// Cancel all pending client auth session requests
+		{
+			std::scoped_lock lock{ m_authSessionReqMutex };
+
+			const BigNumber emptyKey = { 0 };
+
+			// Execute all callbacks with "false" result
+			for (const auto& pair : m_pendingClientAuthSessionReqs)
+			{
+				pair.second.callback(false, emptyKey);
+			}
+
+			// Finally clear pending requests
+			m_pendingClientAuthSessionReqs.clear();
+		}
+
 		// Reset authentication status
 		Reset();
 
@@ -76,6 +92,64 @@ namespace mmo
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
 		return HandleIncomingPacket(packet);
+	}
+
+	bool LoginConnector::QueueClientAuthSession(const std::string& accountName, uint32 clientSeed, uint32 serverSeed, const SHA1Hash& clientHash, ClientAuthSessionCallback callback)
+	{
+		// TODO: If we are currently not connected or not yet authenticated, it might be a good idea
+		// to put the request into a queue that is executed on successful reconnect authentication?
+		// For now, the plan is to let all pending auth sessions fail on disconnect and return false
+		// for new queue requests.
+
+		// Check for active connection
+		if (!IsConnected())
+		{
+			// Not yet supported, so just fail in this case
+			return false;
+		}
+
+		// Check for valid session key
+		if (m_sessionKey.isZero())
+		{
+			// Not yet supported, so just fail in this case
+			return false;
+		}
+
+		// Create a pending request entry
+		{
+			std::scoped_lock lock{ m_authSessionReqMutex };
+
+			// Generate request id
+			const uint64 requestId = m_clientAuthSessionReqIdGen.GenerateId();
+
+			// Setup request entry
+			ClientAuthSessionRequest req
+			{
+				accountName,
+				clientSeed,
+				serverSeed,
+				clientHash,
+				std::move(callback)
+			};
+
+			// Assign pending request with new id
+			m_pendingClientAuthSessionReqs[requestId] = std::move(req);
+
+			// Send packet to the login server
+			sendSinglePacket([&accountName, clientSeed, serverSeed, &clientHash, requestId](auth::OutgoingPacket& packet) {
+				packet.Start(auth::realm_login_packet::ClientAuthSession);
+				packet
+					<< io::write<uint64>(requestId)
+					<< io::write_dynamic_range<uint8>(accountName)
+					<< io::write<uint32>(serverSeed)
+					<< io::write<uint32>(clientSeed)
+					<< io::write_range(clientHash);
+				packet.Finish();
+			});
+		}
+
+		// Successfully queued client auth session request
+		return true;
 	}
 
 	void LoginConnector::DoSRP6ACalculation()
@@ -268,8 +342,67 @@ namespace mmo
 
 	PacketParseResult LoginConnector::OnClientAuthSessionResponse(auth::IncomingPacket & packet)
 	{
-		// TODO: Handle packet
-		WLOG("TODO: Handle ClientAuthSessionResponse from login server");
+		// Read response
+		uint64 requestId = 0;
+		uint8 result = 0;
+		if (!(packet
+			>> io::read<uint64>(requestId)
+			>> io::read<uint8>(result)))
+		{
+			ELOG("Failed to read ClientAuthSessionResponse packet from login server!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check for valid result code
+		if (result >= auth::auth_result::Count_)
+		{
+			WLOG("Received unknown or invalid client auth session result code from login server!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The callback for the request if there is any
+		ClientAuthSessionCallback callback = nullptr;
+
+		// Will store the session key on success packet
+		BigNumber sessionKey;
+
+		// This scope exists to minimize the time of the lock
+		{
+			// Find the respective pending request
+			std::scoped_lock lock{ m_authSessionReqMutex };
+
+			// Find pending auth request
+			auto it = m_pendingClientAuthSessionReqs.find(requestId);
+			if (it == m_pendingClientAuthSessionReqs.end())
+			{
+				ELOG("Received unknown request id from login server!");
+				return PacketParseResult::Pass;
+			}
+
+			// Try to read the session key
+			if (result == auth::auth_result::Success)
+			{
+				std::vector<uint8> sessionKeyData;
+				if (!(packet >> io::read_container<uint16>(sessionKeyData)))
+				{
+					ELOG("Failed to read ClientAuthSessionResponse packet from login server!");
+					return PacketParseResult::Disconnect;
+				}
+
+				// Generate SessionKey BigNumber from binary data
+				sessionKey.setBinary(sessionKeyData);
+			}
+
+			// Execute the callback
+			callback = std::move(it->second.callback);
+			m_pendingClientAuthSessionReqs.erase(it);
+		}
+		
+		// Execute the callback
+		if (callback)
+		{
+			callback(result == auth::auth_result::Success, sessionKey);
+		}
 
 		return PacketParseResult::Pass;
 	}

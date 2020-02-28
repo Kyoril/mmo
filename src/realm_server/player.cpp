@@ -2,6 +2,7 @@
 
 #include "player.h"
 #include "player_manager.h"
+#include "login_connector.h"
 #include "database.h"
 #include "version.h"
 
@@ -20,10 +21,12 @@ namespace mmo
 {
 	Player::Player(
 		PlayerManager& playerManager,
+		LoginConnector &loginConnector,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address)
 		: m_manager(playerManager)
+		, m_loginConnector(loginConnector)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
@@ -56,7 +59,7 @@ namespace mmo
 		Destroy();
 	}
 
-	PacketParseResult Player::connectionPacketReceived(auth::IncomingPacket & packet)
+	PacketParseResult Player::connectionPacketReceived(game::IncomingPacket & packet)
 	{
 		const auto packetId = packet.GetId();
 		bool isValid = true;
@@ -71,7 +74,7 @@ namespace mmo
 			auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
-				WLOG("Packet 0x" << std::hex << (uint16)packetId << " is either unhandled or simply currently not handled");
+				WLOG("Packet 0x" << std::hex << packetId << " is either unhandled or simply currently not handled");
 				return PacketParseResult::Disconnect;
 			}
 
@@ -82,7 +85,7 @@ namespace mmo
 		return handler(packet);
 	}
 
-	PacketParseResult Player::OnAuthSession(auth::IncomingPacket & packet)
+	PacketParseResult Player::OnAuthSession(game::IncomingPacket & packet)
 	{
 		// Read packet data
 		if (!(packet
@@ -102,29 +105,60 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// TODO: Store pending login request data so we can properly handle answers from a login server
+		// Setup a weak callback handler
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		auto callbackHandler = [weakThis](bool succeeded, const BigNumber& sessionKey) {
+			// Obtain strong reference to see if the client connection is still valid
+			auto strongThis = weakThis.lock();
+			if (strongThis)
+			{
+				// Handle success cases
+				if (succeeded)
+				{
+					// Store session key
+					strongThis->m_sessionKey  = sessionKey;
 
+					// TODO: Initialize connection encryption
 
-		// TODO: Send logon request to the login server
+					// TODO: Send response to the game client
+					DLOG("CLIENT_AUTH_SESSION: Success!");
+				}
+				else
+				{
+					// TODO: Send response to the game client
+					DLOG("CLIENT_AUTH_SESSION: Error");
+				}
+			}
+		};
 
+		// Since we can't verify the client hash, as we don't have the client's session key just yet,
+		// we need to ask the login server for verification.
+		if (!m_loginConnector.QueueClientAuthSession(m_accountName, m_clientSeed, m_seed, m_clientHash, callbackHandler))
+		{
+			// Could not queue session, there is probably something wrong with the login server 
+			// connection, so we close the client connection at this point
+			return PacketParseResult::Disconnect;
+		}
 
+		// Everything has been done on our end, the client will be notified once the login server
+		// has processed the request we just made
 		return PacketParseResult::Pass;
 	}
 
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
-		RegisterPacketHandler(auth::client_realm_packet::AuthSession, *this, &Player::OnAuthSession);
+		RegisterPacketHandler(game::client_realm_packet::AuthSession, *this, &Player::OnAuthSession);
 
 		// Send the LogonChallenge packet to the client including our generated seed
-		m_connection->sendSinglePacket([this](mmo::auth::OutgoingPacket& packet) {
-			packet.Start(mmo::auth::realm_client_packet::AuthChallenge);
+		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::AuthChallenge);
 			packet << io::write<uint32>(m_seed);
 			packet.Finish();
 		});
 	}
 
-	void Player::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)
+	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
@@ -139,7 +173,7 @@ namespace mmo
 		}
 	}
 
-	void Player::ClearPacketHandler(uint8 opCode)
+	void Player::ClearPacketHandler(uint16 opCode)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 

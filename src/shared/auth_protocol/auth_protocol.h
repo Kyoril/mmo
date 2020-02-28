@@ -58,33 +58,6 @@ namespace mmo
 		}
 
 
-		// TODO: realm_client_packet and client_realm_packet will be handled by a different protocol soon
-
-		////////////////////////////////////////////////////////////////////////////////
-		// BEGIN: Client <-> Realm section
-
-		/// Enumerates possible op codes sent by the client to a realm server.
-		namespace client_realm_packet
-		{
-			enum Type
-			{
-				/// Sent by the client to respond to a AuthChallenge from a realm server.
-				AuthSession = 0x00,
-			};
-		}
-
-		/// Enumerates possible op codes sent by the client to a realm server.
-		namespace realm_client_packet
-		{
-			enum Type
-			{
-				/// Sent by the client immediatly after connecting to challenge it for authentication.
-				AuthChallenge = 0x00,
-			};
-		}
-
-
-
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Login <-> Realm section
 

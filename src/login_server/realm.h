@@ -102,7 +102,10 @@ namespace mmo
 		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
 
 	private:
+		/// Send auth proof result to the realm server.
 		void SendAuthProof(auth::AuthResult result);
+		/// Send the auth session result back to the realm server.
+		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, BigNumber sessionKey);
 
 	private:
 
@@ -112,5 +115,7 @@ namespace mmo
 		/// Handles an incoming packet with packet id LogonProof.
 		/// @param packet The packet data.
 		PacketParseResult HandleLogonProof(auth::IncomingPacket &packet);
+		/// Handles incoming ClientAuthSession packets from a realm server.
+		PacketParseResult OnClientAuthSession(auth::IncomingPacket &packet);
 	};
 }

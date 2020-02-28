@@ -30,7 +30,7 @@ namespace mmo
 		return true;
 	}
 
-	std::optional<AccountData> MySQLDatabase::getAccountDataByName(const std::string & name)
+	std::optional<AccountData> MySQLDatabase::getAccountDataByName(std::string name)
 	{
 		mysql::Select select(m_connection, "SELECT id,username,s,v FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
@@ -56,7 +56,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(const std::string& name)
+	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(std::string name)
 	{
 		mysql::Select select(m_connection, "SELECT id,name,s,v FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
@@ -82,7 +82,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<std::pair<uint64, std::string>> MySQLDatabase::getAccountSessionKey(const std::string& accountName)
+	std::optional<std::pair<uint64, std::string>> MySQLDatabase::getAccountSessionKey(std::string accountName)
 	{
 		mysql::Select select(m_connection, "SELECT id,k FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
 		if (select.Success())

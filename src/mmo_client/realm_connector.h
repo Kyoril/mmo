@@ -3,7 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
-#include "auth_protocol/auth_connector.h"
+#include "game_protocol/game_connector.h"
 #include "base/big_number.h"
 #include "base/sha1.h"
 #include "base/signal.h"
@@ -15,12 +15,10 @@ namespace mmo
 {
 	/// This class manages the connection to the current realm server if there is any.
 	class RealmConnector final
-		: public auth::Connector
-		, public auth::IConnectorListener
+		: public game::Connector
+		, public game::IConnectorListener
 	{
 	public:
-		/// Signal that is fired when the client successfully authenticated at the realm list.
-		signal<void(auth::AuthResult)> AuthenticationResult;
 		/// Signal that is fired when the client received a new character list packet.
 		signal<void()> CharListUpdated;
 
@@ -44,14 +42,14 @@ namespace mmo
 
 	private:
 		/// Handles the LogonChallenge packet.
-		PacketParseResult OnAuthChallenge(mmo::auth::IncomingPacket& packet);
+		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener
 		virtual bool connectionEstablished(bool success) override;
 		virtual void connectionLost() override;
 		virtual void connectionMalformedPacket() override;
-		virtual PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
+		virtual PacketParseResult connectionPacketReceived(game::IncomingPacket &packet) override;
 		// ~ End IConnectorListener
 
 	public:

@@ -3,15 +3,21 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "base/non_copyable.h"
 #include "auth_protocol/auth_connector.h"
 #include "base/big_number.h"
 #include "base/sha1.h"
+#include "base/id_generator.h"
 
 #include "asio/io_service.hpp"
+
+#include <functional>
+
 
 namespace mmo
 {
 	class TimerQueue;
+	
 
 	/// A simple test connector which will try to log in to the login server
 	/// hosted at localhost.
@@ -19,6 +25,26 @@ namespace mmo
 		: public auth::Connector
 		, public auth::IConnectorListener
 	{
+	public:
+		/// Callback for ClientAuthSession results.
+		typedef std::function<void(bool success, const BigNumber& sessionKey)> ClientAuthSessionCallback;
+
+	private:
+		/// Contains data passed by a ClientAuthSession packet.
+		struct ClientAuthSessionRequest final
+		{
+			/// Requested account name.
+			std::string accountName;
+			/// Requested client seed.
+			uint32 clientSeed;
+			/// Requested server seed.
+			uint32 serverSeed;
+			/// Requested client hash for verification.
+			SHA1Hash clientHash;
+			/// Callback on success.
+			ClientAuthSessionCallback callback;
+		};
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;
@@ -49,10 +75,21 @@ namespace mmo
 		/// A hash that is built by the salted password provided to the Connect method.
 		SHA1Hash m_authHash;
 
+		/// Ip address of the login server. Stored for automatic reconnection attempts.
 		std::string m_loginAddress;
+		/// Port of the login server. Stored for automatic reconnection attempts.
 		uint16 m_loginPort;
-
+		/// Whether the login connector will request application termination due to wrong login requests at the
+		/// login server (termination is logical since we have to guess for wrong credentials, which can only be
+		/// fixed after a server restart anyway).
 		bool m_willTerminate;
+
+		/// Generator for client auth session request ids.
+		IdGenerator<uint64> m_clientAuthSessionReqIdGen;
+		/// Pending client auth session requests by id.
+		std::map<uint64, ClientAuthSessionRequest> m_pendingClientAuthSessionReqs;
+		/// Mutex for accessing m_pendingClientAuthSessionReqs
+		std::mutex m_authSessionReqMutex;
 
 	public:
 		/// Initializes a new instance of the TestConnector class.
@@ -66,6 +103,11 @@ namespace mmo
 		virtual void connectionMalformedPacket() override;
 		virtual PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
 		// ~ End IConnectorListener
+
+	public:
+		/// Queues a client auth session request for the login connector and waits for response from a login server.
+		/// @returns false if the request couldn't be queued.
+		bool QueueClientAuthSession(const std::string& accountName, uint32 clientSeed, uint32 serverSeed, const SHA1Hash& clientHash, ClientAuthSessionCallback callback);
 
 	private:
 		// Perform client-side srp6-a calculations after we received server values

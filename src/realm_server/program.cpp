@@ -15,6 +15,8 @@
 #include "log/default_log_levels.h"
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_server.h"
+#include "game_protocol/game_protocol.h"
+#include "game_protocol/game_server.h"
 #include "base/constants.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
@@ -144,16 +146,31 @@ namespace mmo
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Login at login server
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+		// Setup the login connector and connect to the login server
+		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue);
+		if (!loginConnector->Login(config.loginServerAddress, config.loginServerPort, config.realmName, config.realmPasswordHash))
+		{
+			return 1;
+		}
+
+
+
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the player service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		PlayerManager playerManager{ config.maxPlayers };
 
 		// Create the player server
-		std::unique_ptr<auth::Server> playerServer;
+		std::unique_ptr<game::Server> playerServer;
 		try
 		{
-			playerServer.reset(new mmo::auth::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::auth::Connection::create, std::ref(ioService), nullptr)));
+			playerServer.reset(new mmo::game::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::game::Connection::create, std::ref(ioService), nullptr)));
 		}
 		catch (const mmo::BindFailedException &)
 		{
@@ -162,7 +179,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &asyncDatabase](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &asyncDatabase, &loginConnector](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -176,7 +193,7 @@ namespace mmo
 				return;
 			}
 
-			auto player = std::make_shared<Player>(playerManager, asyncDatabase, connection, address.to_string());
+			auto player = std::make_shared<Player>(playerManager, *loginConnector, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 
@@ -195,20 +212,6 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		// TODO
-
-
-
-		/////////////////////////////////////////////////////////////////////////////////////////////////
-		// Login at login server
-		/////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-		// Setup the login connector and connect to the login server
-		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue);
-		if (!loginConnector->Login(config.loginServerAddress, config.loginServerPort, config.realmName, config.realmPasswordHash))
-		{
-			return 1;
-		}
 
 
 

@@ -9,6 +9,7 @@ target_link_libraries(mmo_client
 	binary_io_hdrs 
 	network_hdrs 
 	auth_protocol 
+	game_protocol
 	graphics 
 	math 
 	virtual_dir 

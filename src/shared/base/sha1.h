@@ -18,6 +18,12 @@ namespace mmo
 
 		void update(const char* data, size_t len);
 
+		template<typename T>
+		void update(const T& data)
+		{
+			update(reinterpret_cast<const char*>(&data), sizeof(data));
+		}
+
 		SHA1Hash finalize();
 
 	private:
