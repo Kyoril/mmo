@@ -80,7 +80,7 @@ namespace mmo
 
 	void LoginConnector::connectionLost()
 	{
-		ELOG("Disconnected");
+		ELOG("Lost connection to the login server");
 
 		// Clear packet handlers
 		ClearPacketHandlers();

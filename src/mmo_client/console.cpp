@@ -11,6 +11,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "frame_ui/font.h"
 #include "frame_ui/geometry_buffer.h"
+#include "base/assign_on_exit.h"
 
 #include <mutex>
 #include <algorithm>
@@ -32,6 +33,8 @@ namespace mmo
 	static int32 s_consoleWindowHeight = 210;
 	static int32 s_lastViewportWidth = 0;
 	static int32 s_lastViewportHeight = 0;
+	/// Scroll offset of the console text in lines.
+	static int32 s_consoleScrollOffset = 0;
 
 	// Used for rendering the console window background
 	static ScreenLayerIt s_consoleLayer;
@@ -109,6 +112,42 @@ namespace mmo
 			});
 		}
 	}
+
+
+	// Console helpers
+	namespace
+	{
+		/// Changes the console scrolling value by an amount and ensures that the scroll index
+		/// stays in the expected range so that no overflow / underflow occurrs.
+		inline void EnsureConsoleScrolling(int32 Amount)
+		{
+			// Ensure that s_consoleTextDirty is set to true at the end of the function,
+			// no matter how we exit it.
+			AssignOnExit<bool> invalidateGraphics{ s_consoleTextDirty, true };
+
+			// Increase the scrolling amount
+			s_consoleScrollOffset += Amount;
+
+			// Always enforce positive scroll offset value
+			s_consoleScrollOffset = std::max(0, s_consoleScrollOffset);
+
+			// Max visible console lines 
+			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
+
+			// Ensure there are enough entries so that scrolling is needed
+			if (s_consoleLog.size() < maxVisibleEntries)
+			{
+				// Without scrolling, there is no need to change the scroll offset
+				s_consoleScrollOffset = 0;
+				return;
+			}
+
+			// Enforce max scroll value
+			s_consoleScrollOffset = std::min(s_consoleScrollOffset, 
+				static_cast<int32>(s_consoleLog.size()) - maxVisibleEntries);
+		}
+	}
+
 
 
 	// Console implementation
@@ -316,6 +355,21 @@ namespace mmo
 			return false;
 		}
 
+		// Enable console scrolling by pressing the PAGE_UP / PAGE_DOWN keys
+		if (key == 0x21 || key == 0x22)
+		{
+			if (key == 0x21)	// PG_UP
+			{
+				EnsureConsoleScrolling(1);
+			}
+			else				// PG_DOWN
+			{
+
+				EnsureConsoleScrolling(-1);
+			}
+
+		}
+
 		return true;
 	}
 
@@ -339,18 +393,28 @@ namespace mmo
 			s_consoleTextGeom->Reset();
 			
 			// Calculate start point
-			mmo::Point startPoint{ 0.0f, 0.0f };
+			mmo::Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) };
 
-			for (auto it = s_consoleLog.rbegin(); it != s_consoleLog.rend(); it++)
+			uint32 index = 0;
+
+			// Determine max visible entries in console window
+			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
+			for (auto it = s_consoleLog.begin(); it != s_consoleLog.end(); it++)
 			{
+				// Skip as many items as required to reach the console scroll offset
+				if (index++ < s_consoleScrollOffset)
+				{
+					continue;
+				}
+
+				// Reduce line by one
+				startPoint.y -= s_consoleFont->GetHeight();
+
 				// Draw line of text
 				s_consoleFont->DrawText(*it, startPoint, *s_consoleTextGeom);
 
-				// Reduce line by one
-				startPoint.y += s_consoleFont->GetHeight();
-
 				// Stop it here
-				if (startPoint.y > s_consoleWindowHeight)
+				if (startPoint.y < 0.0f)
 				{
 					break;
 				}
