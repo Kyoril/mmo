@@ -127,7 +127,8 @@ namespace mmo
 				packet 
 					<< io::write<uint32>(realm.GetRealmId())
 					<< io::write_dynamic_range<uint8>(realm.GetRealmName())
-					<< io::write_dynamic_range<uint8>(realm.GetAddress())
+					<< io::write_dynamic_range<uint8>(realm.GetRealmListAddress())
+					<< io::write<uint16>(realm.GetRealmListPort())
 					;
 
 				// Increase counter
@@ -176,7 +177,6 @@ namespace mmo
 
 		// Read the packet data
 		uint16 contentSize = 0;
-		uint32 timezone = 0, ip = 0;
 		if (!(packet
 			>> io::read<uint16>(contentSize)
 			>> io::read<uint8>(m_version1)
@@ -186,8 +186,6 @@ namespace mmo
 			>> m_platform
 			>> m_system
 			>> m_locale
-			>> io::read<uint32>(timezone)
-			>> io::read<uint32>(ip)
 			>> io::read_container<uint8>(m_accountName)))
 		{
 			return PacketParseResult::Disconnect;

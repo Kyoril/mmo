@@ -106,7 +106,7 @@ namespace mmo
 		// Connect to the first realm available
 		m_realmConnector.Connect(
 			realm.address, 
-			constants::DefaultRealmPlayerPort, 
+			realm.port, 
 			m_loginConnector.GetAccountName(),
 			realm.name, 
 			m_loginConnector.GetSessionKey());

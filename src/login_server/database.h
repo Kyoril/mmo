@@ -37,6 +37,10 @@ namespace mmo
 		std::string s;
 		/// Password verifier.
 		std::string v;
+		/// The ip address of the realm server.
+		std::string ipAddress;
+		/// The port of the realm server.
+		uint16 port;
 	};
 
 	/// Basic interface for a database system used by the login server.

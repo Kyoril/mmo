@@ -27,6 +27,10 @@ namespace mmo
 			{
 				/// Sent by the client to respond to a AuthChallenge from a realm server.
 				AuthSession = 0x00,
+
+
+				/// Counter constant
+				Count_,
 			};
 		}
 
@@ -37,6 +41,12 @@ namespace mmo
 			{
 				/// Sent by the client immediatly after connecting to challenge it for authentication.
 				AuthChallenge = 0x00,
+				/// Send by the realm as response.
+				AuthSessionResponse,
+
+
+				/// Counter constant
+				Count_,
 			};
 		}
 	}

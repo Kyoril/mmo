@@ -192,6 +192,8 @@ namespace mmo
 					// Store realm infos
 					strongThis->m_realmId = result->id;
 					strongThis->m_realmName = result->name;
+					strongThis->m_realmListAddress = result->ipAddress;
+					strongThis->m_realmListPort = result->port;
 
 					// We are NOT banned so continue
 					authResult = auth::auth_result::Success;

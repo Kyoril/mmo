@@ -58,8 +58,6 @@ namespace mmo
 					<< io::write<uint32>(0x00783836)	// Platform: x86
 					<< io::write<uint32>(0x0057696e)	// System: Win
 					<< io::write<uint32>(0x64654445)	// Locale: deDE
-					<< io::write<uint32>(0)	// Timezone?
-					<< io::write<uint32>(0)	// Ip
 					<< io::write_dynamic_range<uint8>(m_accountName);
 
 				// Calculate the actual packet size and write it at the beginning
@@ -318,7 +316,8 @@ namespace mmo
 			packet
 				>> io::read<uint32>(realm.id)
 				>> io::read_container<uint8>(realm.name)
-				>> io::read_container<uint8>(realm.address);
+				>> io::read_container<uint8>(realm.address)
+				>> io::read<uint16>(realm.port);
 
 			// Add to the list of available realms
 			m_realms.emplace_back(std::move(realm));

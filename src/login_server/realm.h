@@ -47,6 +47,10 @@ namespace mmo
 		inline uint32 GetRealmId() const { return m_realmId; }
 		/// Realm address string.
 		inline const std::string& GetAddress() const { return m_address; }
+		/// Gets the realm list address string.
+		inline const std::string& GetRealmListAddress() const { return m_realmListAddress; }
+		/// Gets the realm list port.
+		inline uint16 GetRealmListPort() const { return m_realmListPort; }
 
 	public:
 		/// Registers a packet handler.
@@ -66,8 +70,10 @@ namespace mmo
 		RealmManager &m_manager;
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
-		std::string m_address;					// IP address in string format
+		std::string m_address;					// IP address of the realm server in string format
 		std::string m_realmName;				// Realm name
+		std::string m_realmListAddress;			// Address of the realm server which will appear in the realm list
+		uint16 m_realmListPort;					// Port of the realm server which will appear in the realm list.
 		uint8 m_version1;						// Major version: X.0.0.00000
 		uint8 m_version2;						// Minor version: 0.X.0.00000
 		uint8 m_version3;						// Patch version: 0.0.X.00000

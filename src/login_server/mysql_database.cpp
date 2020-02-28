@@ -58,7 +58,7 @@ namespace mmo
 
 	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(std::string name)
 	{
-		mysql::Select select(m_connection, "SELECT id,name,s,v FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id,name,s,v,address,port FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -70,6 +70,8 @@ namespace mmo
 				row.GetField(1, data.name);
 				row.GetField(2, data.s);
 				row.GetField(3, data.v);
+				row.GetField(4, data.ipAddress);
+				row.GetField(5, data.port);
 				return data;
 			}
 		}

@@ -26,6 +26,8 @@ namespace mmo
 		std::string name;
 		/// Realm address (ip).
 		std::string address;
+		/// Realm port.
+		uint16 port;
 	};
 
 	/// A simple test connector which will try to log in to the login server
