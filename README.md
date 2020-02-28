@@ -1,3 +1,5 @@
+![Linux Servers](https://github.com/Kyoril/mmo/workflows/Linux%20Servers/badge.svg)
+
 # What is this project about?
 This project will grow to a fully fledged MMORPG prototype. This means, that it will contain all tools required to build an MMORPG from scratch.
 
