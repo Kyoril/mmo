@@ -138,7 +138,7 @@ namespace mmo
 
 			void SendBuffer(const Buffer &data)
 			{
-				m_sendBuffer(data.data(), data.size());
+				m_sendBuffer.append(data.data(), data.size());
 			}
 
 		public:
