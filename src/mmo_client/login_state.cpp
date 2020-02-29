@@ -34,8 +34,6 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
-		using std::placeholders::_1;
-
 		// Make the logo frame element
 		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopFrame");
 		s_frameMgr.SetTopFrame(topFrame);
@@ -47,8 +45,11 @@ namespace mmo
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
 
 		// Register for signals of the login connector instance
-		m_loginConnections += m_loginConnector.AuthenticationResult.connect(std::bind(&LoginState::OnAuthenticationResult, this, _1));
-		m_loginConnections += m_loginConnector.RealmListUpdated.connect(std::bind(&LoginState::OnRealmListUpdated, this));
+		m_loginConnections += m_loginConnector.AuthenticationResult.connect(*this, &LoginState::OnAuthenticationResult);
+		m_loginConnections += m_loginConnector.RealmListUpdated.connect(*this, &LoginState::OnRealmListUpdated);
+
+		// Register realm signal
+		m_loginConnections += m_realmConnector.Authenticated.connect(*this, &LoginState::OnRealmAuthenticated);
 	}
 
 	void LoginState::OnLeave()
@@ -110,5 +111,12 @@ namespace mmo
 			m_loginConnector.GetAccountName(),
 			realm.name, 
 			m_loginConnector.GetSessionKey());
+	}
+
+	void LoginState::OnRealmAuthenticated()
+	{
+		DLOG("[Realm] Success!");
+
+
 	}
 }

@@ -29,7 +29,7 @@ namespace mmo
 		, public std::enable_shared_from_this<Player>
 	{
 	public:
-		typedef AbstractConnection<game::Protocol> Client;
+		typedef game::EncryptedConnection<game::Protocol> Client;
 		typedef std::function<PacketParseResult(game::IncomingPacket &)> PacketHandler;
 
 	public:
@@ -53,6 +53,9 @@ namespace mmo
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
+		/// Initializes the session by providing a session key. The connection to the client will 
+		/// be encrypted from here on.
+		void InitializeSession(const BigNumber& sessionKey);
 
 	public:
 		/// Registers a packet handler.

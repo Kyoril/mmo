@@ -19,6 +19,8 @@ namespace mmo
 		, public game::IConnectorListener
 	{
 	public:
+		/// Signal that is fired when the authentication has been successful.
+		signal<void()> Authenticated;
 		/// Signal that is fired when the client received a new character list packet.
 		signal<void()> CharListUpdated;
 
@@ -43,6 +45,8 @@ namespace mmo
 	private:
 		/// Handles the LogonChallenge packet.
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
+		/// Handles the AuthSessionResponse packet.
+		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener

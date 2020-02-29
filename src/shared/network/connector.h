@@ -21,7 +21,8 @@ namespace mmo
 
 
 	template <class P, class MySocket = asio::ip::tcp::socket>
-	class Connector : public Connection<P, MySocket>
+	class Connector 
+		: public Connection<P, MySocket>
 	{
 	public:
 		typedef Connection<P> Super;

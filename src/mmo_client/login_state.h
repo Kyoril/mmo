@@ -42,6 +42,8 @@ namespace mmo
 		/// 
 		void OnRealmListUpdated();
 
+		void OnRealmAuthenticated();
+
 	private:
 
 		LoginConnector& m_loginConnector;

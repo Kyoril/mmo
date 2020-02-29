@@ -43,6 +43,9 @@ namespace mmo
 		Sha1_Add_BigNumbers(hashGen, {m_sessionKey});
 		SHA1Hash hash = hashGen.finalize();
 
+		// Listen for response packet
+		RegisterPacketHandler(game::realm_client_packet::AuthSessionResponse, *this, &RealmConnector::OnAuthSessionResponse);
+
 		// We have been challenged, respond with an answer
 		sendSinglePacket([this, &hash](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::AuthSession);
@@ -54,10 +57,34 @@ namespace mmo
 			packet.Finish();
 		});
 
+		// Initialize connection encryption afterwards
+		HMACHash cryptKey;
+		GetCrypt().GenerateKey(cryptKey, m_sessionKey);
+		GetCrypt().SetKey(cryptKey.data(), cryptKey.size());
+		GetCrypt().Init();
+
 		// Debug log
 		DLOG("[Realm] Handshaking...");
 
 		// Proceed handling network packets
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnAuthSessionResponse(game::IncomingPacket & packet)
+	{
+		uint8 result = 0;
+
+		// Try to read packet data
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: Validate result code
+
+		// Authentication has been successful!
+		Authenticated();
+
 		return PacketParseResult::Pass;
 	}
 

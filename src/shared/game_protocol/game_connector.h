@@ -3,6 +3,9 @@
 #pragma once
 
 #include "game_protocol.h"
+#include "game_connection.h"
+#include "game_crypt.h"
+
 #include "network/connector.h"
 
 #include "log/default_log_levels.h"
@@ -17,20 +20,33 @@ namespace mmo
 {
 	namespace game
 	{
-		/// Basic connector implementation using the Auth protocol. Extends the Connector class
-		/// by thread safe PacketHandler management methods.
-		class GameConnector 
-			: public mmo::Connector<Protocol>
+		template <class P, class MySocket = asio::ip::tcp::socket>
+		class EncryptedConnector
+			: public game::EncryptedConnection<P, MySocket>
 		{
 		public:
 			typedef std::function<PacketParseResult(game::IncomingPacket &)> PacketHandler;
 
 		public:
-			explicit GameConnector(std::unique_ptr<Socket> socket, Listener *listener)
-				: mmo::Connector<Protocol>(std::move(socket), listener)
+			typedef EncryptedConnection<P, MySocket> Super;
+			typedef EncryptedConnector<P, MySocket> ThisClass;
+			typedef P Protocol;
+			typedef mmo::IConnectorListener<P> Listener;
+			typedef MySocket Socket;
+
+		public:
+			explicit EncryptedConnector(std::unique_ptr<Socket> socket, Listener *listener)
+				: Super(std::move(socket), listener)
+				, m_port(0)
 			{
 			}
-			virtual ~GameConnector() = default;
+			virtual ~EncryptedConnector() = default;
+
+		public:
+			Listener *getListener() const
+			{
+				return dynamic_cast<Listener *>(Super::getListener());
+			}
 
 		public:
 			/// Registers a packet handler for a given op code.
@@ -51,7 +67,7 @@ namespace mmo
 			void ClearPacketHandler(uint16 opCode)
 			{
 				std::scoped_lock lock{ m_packetHandlerMutex };
-				
+
 				auto it = m_packetHandlers.find(opCode);
 				if (it != m_packetHandlers.end())
 				{
@@ -92,9 +108,101 @@ namespace mmo
 		protected:
 			std::mutex m_packetHandlerMutex;
 			std::map<uint16, PacketHandler> m_packetHandlers;
+
+		public:
+			void connect(const std::string &host, uint16 port, Listener &listener,
+				asio::io_service &ioService)
+			{
+				setListener(listener);
+				ASSERT(GetListener());
+
+				m_port = port;
+
+				m_resolver.reset(new asio::ip::tcp::resolver(ioService));
+
+				asio::ip::tcp::resolver::query query(
+					asio::ip::tcp::v4(),
+					host,
+					"");
+
+				const auto this_ = std::static_pointer_cast<ThisClass>(this->shared_from_this());
+				ASSERT(this_);
+
+				m_resolver->async_resolve(query,
+					bind_weak_ptr_2(this_,
+						std::bind(&ThisClass::handleResolve,
+							std::placeholders::_1,
+							std::placeholders::_2,
+							std::placeholders::_3)));
+			}
+
+			static std::shared_ptr<EncryptedConnector> Create(asio::io_service &service, Listener *listener = nullptr)
+			{
+				return std::make_shared<Super>(std::unique_ptr<MySocket>(new MySocket(service)), listener);
+			}
+
+		private:
+			std::unique_ptr<asio::ip::tcp::resolver> m_resolver;
+			uint16 m_port;
+
+		private:
+			void handleResolve(const asio::system_error &error, asio::ip::tcp::resolver::iterator iterator)
+			{
+				if (error.code())
+				{
+					assert(getListener());
+					getListener()->connectionEstablished(false);
+					this->resetListener();
+					return;
+				}
+
+				m_resolver.reset();
+				beginConnect(iterator);
+			}
+			void beginConnect(asio::ip::tcp::resolver::iterator iterator)
+			{
+				const typename Super::Socket::endpoint_type endpoint(
+					iterator->endpoint().address(),
+					static_cast<std::uint16_t>(m_port)
+				);
+
+				const auto this_ = std::static_pointer_cast<ThisClass>(this->shared_from_this());
+				assert(this_);
+
+				this->getSocket().lowest_layer().async_connect(endpoint,
+					bind_weak_ptr_1(this_,
+						std::bind(
+							&ThisClass::handleConnect,
+							std::placeholders::_1,
+							std::placeholders::_2,
+							++iterator)));
+			}
+			void handleConnect(const asio::system_error &error, asio::ip::tcp::resolver::iterator iterator)
+			{
+				if (!error.code())
+				{
+					if (getListener()->connectionEstablished(true))
+					{
+						this->startReceiving();
+					}
+					return;
+				}
+				else if (error.code() == asio::error::operation_aborted)
+				{
+					return;
+				}
+				else if (iterator == asio::ip::tcp::resolver::iterator())
+				{
+					getListener()->connectionEstablished(false);
+					this->resetListener();
+					return;
+				}
+
+				beginConnect(iterator);
+			}
 		};
 
-		typedef GameConnector Connector;
+		typedef EncryptedConnector<Protocol> Connector;
 		typedef mmo::IConnectorListener<Protocol> IConnectorListener;
 	}
 }

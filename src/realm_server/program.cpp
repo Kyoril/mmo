@@ -170,7 +170,7 @@ namespace mmo
 		std::unique_ptr<game::Server> playerServer;
 		try
 		{
-			playerServer.reset(new mmo::game::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::game::Connection::create, std::ref(ioService), nullptr)));
+			playerServer.reset(new mmo::game::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::game::Connection::Create, std::ref(ioService), nullptr)));
 		}
 		catch (const mmo::BindFailedException &)
 		{

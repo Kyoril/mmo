@@ -116,12 +116,7 @@ namespace mmo
 				if (succeeded)
 				{
 					// Store session key
-					strongThis->m_sessionKey  = sessionKey;
-
-					// TODO: Initialize connection encryption
-
-					// TODO: Send response to the game client
-					DLOG("CLIENT_AUTH_SESSION: Success!");
+					strongThis->InitializeSession(sessionKey);
 				}
 				else
 				{
@@ -154,6 +149,27 @@ namespace mmo
 		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::AuthChallenge);
 			packet << io::write<uint32>(m_seed);
+			packet.Finish();
+		});
+	}
+
+	void Player::InitializeSession(const BigNumber & sessionKey)
+	{
+		m_sessionKey = sessionKey;
+
+		// Notify about success
+		DLOG("CLIENT_AUTH_SESSION: Success!");
+
+		// Initialize encryption
+		HMACHash hash;
+		m_connection->GetCrypt().GenerateKey(hash, m_sessionKey);
+		m_connection->GetCrypt().SetKey(hash.data(), hash.size());
+		m_connection->GetCrypt().Init();
+
+		// Send the response to the client
+		m_connection->sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::AuthSessionResponse);
+			packet << io::write<uint8>(0);	// TODO: Write real packet content
 			packet.Finish();
 		});
 	}

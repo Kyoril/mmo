@@ -14,18 +14,19 @@ namespace mmo
 		{
 		}
 
-		uint16 IncomingPacket::GetId() const
-		{
-			return m_id;
-		}
-
 		ReceiveState IncomingPacket::Start(IncomingPacket &packet, io::MemorySource &source)
 		{
 			io::Reader streamReader(source);
 
-			if (streamReader >> io::read<uint16>(packet.m_id))
+			if (streamReader 
+				>> io::read<uint16>(packet.m_id)
+				>> io::read<uint32>(packet.m_size))
 			{
 				std::size_t size = source.getRest();
+				if (size < packet.m_size)
+				{
+					return receive_state::Incomplete;
+				}
 
 				const char *const body = source.getPosition();
 				source.skip(size);

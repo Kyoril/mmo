@@ -51,7 +51,7 @@ namespace mmo
 
 	namespace
 	{
-		int hexDigitValue(char c)
+		static int hexDigitValue(char c)
 		{
 			if (c >= '0' && c <= '9')
 			{
