@@ -2,6 +2,7 @@
 #include "frame_font_string.h"
 #include "frame_texture.h"
 #include "frame_layer.h"
+#include "style_xml_loader.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -43,33 +44,71 @@ namespace mmo
 		}
 
 
+		/// The current xml loader.
+		static XmlHandler* s_currentXmlLoader = nullptr;
+		/// The current xml indent.
+		static int32 s_currentXmlIndent;
 		/// A xml handler for loading frame layouts using xml.
 		static LayoutXmlHandler s_layoutXmlHandler;
+		/// An xml loader for style xml files.
+		static StyleXmlLoader s_styleXmlLoader;
 
 
 
 		/// Executed when an element is started.
 		static void StartElement(void *userData, const XML_Char *name, const XML_Char **atts)
 		{
-			// Parse attribute map
-			XmlAttributes attributeMap;
-			while (atts && *atts)
+			// If we don't have a current xml loader
+			if (s_currentXmlIndent == 0)
 			{
-				const std::string key{ *(atts++) };
-				if (!*atts) break;
+				// No current loader, check for tag names
+				if (std::string(name) == "UiLayout")
+				{
+					// Use the layout xml loader from here on
+					s_currentXmlLoader = &s_layoutXmlHandler;
+				}
+				else if(std::string(name) == "UiStyle")
+				{
+					s_currentXmlLoader = &s_styleXmlLoader;
+				}
+			}
+			else if(s_currentXmlLoader != nullptr)
+			{
+				// Parse attribute map
+				XmlAttributes attributeMap;
+				while (atts && *atts)
+				{
+					const std::string key{ *(atts++) };
+					if (!*atts) break;
 
-				const std::string value{ *(atts++) };
-				attributeMap.Add(key, value);
+					const std::string value{ *(atts++) };
+					attributeMap.Add(key, value);
+				}
+
+				// Call StartElement on the current xml loader
+				s_currentXmlLoader->ElementStart(name, attributeMap);
 			}
 
-			// Start element
-			s_layoutXmlHandler.ElementStart(name, attributeMap);
+			// Increase the indent counter
+			s_currentXmlIndent++;
 		}
 
 		/// Executed when an event ended.
 		static void EndElement(void *userData, const XML_Char *name)
 		{
-			s_layoutXmlHandler.ElementEnd(name);
+			// Reduce the xml indent counter
+			s_currentXmlIndent--;
+
+			// Reset current loader if we reached the root element
+			if (s_currentXmlIndent == 0)
+			{
+				s_currentXmlLoader = nullptr;
+			}
+			else if(s_currentXmlLoader != nullptr)
+			{
+				// Route to current loader
+				s_currentXmlLoader->ElementEnd(name);
+			}
 		}
 
 		/// Executed whenever there is text. Concurrent text data should be concatenated
