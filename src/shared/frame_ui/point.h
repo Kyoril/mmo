@@ -2,6 +2,12 @@
 
 #pragma once
 
+#include "base/macros.h"
+
+#include <cfloat>
+#include <cmath>
+#include <cstdlib>
+
 
 namespace mmo
 {
@@ -12,10 +18,53 @@ namespace mmo
 		static Point Zero;
 
 	public:
-		Point(float x = 0.0f, float y = 0.0f)
+		Point(float x = 0.0f, float y = 0.0f) noexcept
 			: x(x)
 			, y(y)
 		{
+		}
+
+		Point(const Point& other) noexcept
+			: x(other.x)
+			, y(other.y)
+		{
+		}
+
+	public:
+		inline Point& operator+=(const Point& rhs) noexcept
+		{
+			x += rhs.x;
+			y += rhs.y;
+			return *this;
+		}
+		inline Point& operator-=(const Point& rhs) noexcept
+		{
+			x -= rhs.x;
+			y -= rhs.y;
+			return *this;
+		}
+		inline Point& operator*=(float scalar) noexcept
+		{
+			x *= scalar;
+			y *= scalar;
+			return *this;
+		}
+		inline Point& operator/=(float scalar)
+		{
+			ASSERT(scalar != 0.0f);
+			x /= scalar;
+			y /= scalar;
+			return *this;
+		}
+		inline bool operator==(const Point& rhs) const
+		{
+			return 
+				std::fabs(x - rhs.x) < FLT_EPSILON &&
+				std::fabs(y - rhs.y) < FLT_EPSILON;
+		}
+		inline bool operator!=(const Point& rhs) const
+		{
+			return !(*this == rhs);
 		}
 
 	public:

@@ -1,10 +1,11 @@
 #pragma once
 
-#include "frame_ui/frame.h"
-//
+#include "frame.h"
+#include "layout_xmlhandler.h"
+
 #include "base/non_copyable.h"
 #include "base/utilities.h"
-//
+
 #include <string>
 #include <functional>
 #include <map>
@@ -12,7 +13,9 @@
 
 namespace mmo
 {
-	class FrameManager final : public NonCopyable
+	/// Handler for layout xml.
+	class FrameManager final 
+		: public NonCopyable
 	{
 	public:
 		typedef std::function<FramePtr(const std::string& name)> FrameFactory;

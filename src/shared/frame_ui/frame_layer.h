@@ -1,9 +1,9 @@
 
 #pragma once
 
-#include "base/non_copyable.h"
-
 #include "frame_object.h"
+
+#include "base/non_copyable.h"
 
 #include <memory>
 #include <vector>
@@ -12,6 +12,7 @@
 namespace mmo
 {
 	class GeometryBuffer;
+
 
 	/// This class represents a layer of a frame. Layers contain assigned objects
 	/// that can be rendered in order.

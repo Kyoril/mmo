@@ -6,6 +6,7 @@
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "assets/asset_registry.h"
+#include "xml_handler/xml_attributes.h"
 
 #include <set>
 #include <string>
@@ -20,6 +21,7 @@ namespace mmo
 	// Forward declaration for detail methods
 	void LoadUIFile(const std::string& filename);
 
+
 	namespace detail
 	{
 		// TODO: Implement the s_tocFiles check in the AssetRegistry system somehow?
@@ -28,6 +30,7 @@ namespace mmo
 
 		/// A list of files that have been loaded.
 		static std::set<std::string> s_tocFiles;
+
 
 		/// Subroutine for loading a *.lua file for the frame ui.
 		/// @param file A file pointer for reading the file contents.
@@ -39,185 +42,34 @@ namespace mmo
 			// TODO: Load (and execute) lua script
 		}
 
-		/// Keeps track if there is a UI element that has been started.
-		static bool s_uiStarted = false;
-		static bool s_layersStarted = false;
-		static std::shared_ptr<Frame> s_currentParseFrame;
-		static FrameLayer* s_currentLayer = nullptr;
+
+		/// A xml handler for loading frame layouts using xml.
+		static LayoutXmlHandler s_layoutXmlHandler;
+
+
 
 		/// Executed when an element is started.
 		static void StartElement(void *userData, const XML_Char *name, const XML_Char **atts)
 		{
-			// Check for a starting Ui element
-			if (!s_uiStarted)
-			{
-				s_uiStarted = (strcmp(name, "Ui") == 0);
-				if (!s_uiStarted)
-				{
-					ELOG("The first tag always has to be a Ui tag, but " << name << " was found!");
-				}
-
-				return;
-			}
-
 			// Parse attribute map
-			std::map<std::string, std::string> attributeMap;
+			XmlAttributes attributeMap;
 			while (atts && *atts)
 			{
-				std::string key{ *(atts++) };
+				const std::string key{ *(atts++) };
 				if (!*atts) break;
 
-				std::string value{ *(atts++) };
-				attributeMap[key] = value;
+				const std::string value{ *(atts++) };
+				attributeMap.Add(key, value);
 			}
 
-			// Check for Frame
-			if (strcmp(name, "Frame") == 0)
-			{
-				// Parse supported elements
-				std::string frameName;
-				bool isTemplateFrame = false;
-
-				// Look for the frame name
-				auto nameIt = attributeMap.find("name");
-				if (nameIt != attributeMap.end())
-				{
-					frameName = nameIt->second;
-				}
-
-				// Check if it is a template frame
-				auto templateIt = attributeMap.find("template");
-				if (templateIt != attributeMap.end())
-				{
-					isTemplateFrame = _stricmp(templateIt->second.c_str(), "true") < 0;
-				}
-
-				// The parent frame that this frame will belong to
-				FramePtr parentFrame;
-
-				// Look for the parent frame
-				auto parentIt = attributeMap.find("parent");
-				if (parentIt != attributeMap.end())
-				{
-					// Try to find the parent frame by name
-					parentFrame = s_frameMgr.Find(parentIt->second);
-					if (parentFrame == nullptr)
-					{
-						WLOG("Parent frame " << parentIt->second << " could not be found! Using default top frame as the parent frame.");
-					}
-				}
-
-				// If there is no parent frame, use the top frame as parent
-				if (parentFrame == nullptr)
-				{
-					parentFrame = s_frameMgr.GetTopFrame();
-				}
-
-				// Parent frame has to exist
-				ASSERT(parentFrame);
-
-				// Create the new frame element
-				s_currentParseFrame = s_frameMgr.Create("Frame", frameName);
-				if (!s_currentParseFrame)
-				{
-					ELOG("Failed to create new frame - name was probably already taken!");
-				}
-
-				if (parentFrame != nullptr)
-				{
-					parentFrame->AddChild(s_currentParseFrame);
-				}
-			}
-			else if (strcmp(name, "Layers") == 0)
-			{
-				s_layersStarted = true;
-			}
-			else if (strcmp(name, "Layer") == 0)
-			{
-				if (!s_layersStarted)
-					return;
-
-				if (s_currentParseFrame == nullptr || s_currentLayer != nullptr)
-					return;
-
-				s_currentLayer = &s_currentParseFrame->AddLayer();
-			}
-			else if (strcmp(name, "FontString") == 0)
-			{
-				if (s_currentLayer == nullptr)
-					return;
-
-				std::string fontName;
-				size_t fontSize = 8, outline = 0;
-				std::string text;
-
-				auto fontIt = attributeMap.find("font");
-				if (fontIt != attributeMap.end())
-				{
-					fontName = fontIt->second;
-				}
-
-				auto textIt = attributeMap.find("text");
-				if (textIt != attributeMap.end())
-				{
-					text = textIt->second;
-				}
-
-				auto sizeIt = attributeMap.find("size");
-				if (sizeIt != attributeMap.end())
-				{
-					fontSize = std::atoi(sizeIt->second.c_str());
-				}
-
-				auto outlineIt = attributeMap.find("outline");
-				if (outlineIt != attributeMap.end())
-				{
-					outline = std::atoi(outlineIt->second.c_str());
-				}
-
-				auto fontString = std::make_unique<FrameFontString>(fontName, fontSize, outline);
-				fontString->SetText(text);
-
-				s_currentLayer->AddObject(std::move(fontString));
-			}
-			else if (strcmp(name, "Texture") == 0)
-			{
-				if (s_currentLayer == nullptr)
-					return;
-
-				std::string textureFile;
-
-				auto fileIt = attributeMap.find("file");
-				if (fileIt != attributeMap.end())
-				{
-					textureFile = fileIt->second;
-				}
-
-				auto texture = std::make_unique<FrameTexture>(textureFile);
-				s_currentLayer->AddObject(std::move(texture));
-			}
+			// Start element
+			s_layoutXmlHandler.ElementStart(name, attributeMap);
 		}
 
 		/// Executed when an event ended.
 		static void EndElement(void *userData, const XML_Char *name)
 		{
-			// Check for ending Ui element
-			if (strcmp(name, "Ui") == 0)
-			{
-				s_uiStarted = false;
-			}
-			else if (strcmp(name, "Frame") == 0)
-			{
-				s_currentParseFrame.reset();
-			}
-			else if (strcmp(name, "Layers") == 0)
-			{
-				s_layersStarted = false;
-			}
-			else if (strcmp(name, "Layer") == 0)
-			{
-				s_currentLayer = nullptr;
-			}
+			s_layoutXmlHandler.ElementEnd(name);
 		}
 
 		/// Executed whenever there is text. Concurrent text data should be concatenated
@@ -226,11 +78,12 @@ namespace mmo
 		{
 			if (len > 0)
 			{
-				std::string strContent{ s, (const size_t)len };
-
-				// TODO
+				const std::string strContent{ s, (const size_t)len };
+				s_layoutXmlHandler.Text(strContent);
 			}
 		}
+
+
 
 		/// Subroutine for loading a *.xml file for the frame ui. An xml file describes frames to
 		/// be created, but can also reference script files directly.
@@ -315,6 +168,7 @@ namespace mmo
 		}
 	}
 
+
 	/// Loads a UI file, which can be one of: *.toc, *.xml or *.lua. The respective file is
 	/// then handled properly. The file is loaded using the AssetRegistry system.
 	/// @param filename Name of the file to load.
@@ -345,6 +199,7 @@ namespace mmo
 			detail::LoadFrameXML(std::move(file), filename);
 		}
 	}
+
 
 	FrameManager& FrameManager::Get()
 	{
