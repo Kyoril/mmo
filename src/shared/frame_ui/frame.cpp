@@ -137,35 +137,6 @@ namespace mmo
 		m_children.push_back(frame);
 	}
 
-	FrameLayer & Frame::AddLayer()
-	{
-		auto layer = std::make_unique<FrameLayer>();
-
-		// TODO: Configure layer somehow?
-
-		return *m_layers.emplace_back(std::move(layer));
-	}
-
-	void Frame::RemoveLayer(FrameLayer & layer)
-	{
-		// Warning: This method isn't very performant. Although removing from a vector can be
-		// improved by swapping with back and popping the last element from the vector, this
-		// would mean that the order in which layers are drawn would be affected - which we
-		// don't want to. So call this method not too often (if you every need to call it at
-		// all that is).
-
-		// Find that layer
-		auto layerIt = std::find_if(m_layers.begin(), m_layers.end(), [&layer](std::unique_ptr<FrameLayer>& b) -> bool {
-			return &layer == b.get();
-		});
-
-		// Remove that layer from the list of layers
-		if (layerIt != m_layers.end())
-		{
-			m_layers.erase(layerIt);
-		}
-	}
-
 	Rect Frame::GetRelativeFrameRect()
 	{
 		Rect r;
@@ -285,10 +256,6 @@ namespace mmo
 
 	void Frame::PopulateGeometryBuffer()
 	{
-		for (const auto& layer : m_layers)
-		{
-			layer->Render(*m_geometryBuffer);
-		}
+		// TODO: Call the window renderer's draw method
 	}
-
 }

@@ -4,9 +4,16 @@
 
 #include "base/macros.h"
 
+#include <utility>
+
 
 namespace mmo
 {
+	inline FrameLayer::FrameLayer(std::string name)
+		: m_name(std::move(name))
+	{
+	}
+
 	void FrameLayer::AddObject(std::unique_ptr<FrameObject> object)
 	{
 		ASSERT(object);
