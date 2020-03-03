@@ -15,11 +15,17 @@ namespace mmo
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
-		explicit FrameTexture(const std::string& filename);
+		explicit FrameTexture(Frame& frame, const std::string& filename);
+		virtual ~FrameTexture() = default;
 
 	public:
 		// FrameObject overrides
 		void Render(GeometryBuffer& buffer) const override;
+
+	public:
+		// ~Begin FrameObject
+		virtual Size GetSize() const override;
+		// ~End FrameObject
 
 	private:
 		/// The graphics texture object.

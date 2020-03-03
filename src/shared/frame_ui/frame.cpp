@@ -1,6 +1,7 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "frame.h"
+#include "frame_mgr.h"
 
 #include "base/utilities.h"
 
@@ -22,8 +23,44 @@ namespace mmo
 	{
 	}
 
+	void Frame::SetText(const std::string & text)
+	{
+		// Apply new text and invalidate rendering
+		m_text = text;
+		m_needsRedraw = true;
+
+		// Notify observers
+		TextChanged();
+	}
+
+	bool Frame::IsVisible(bool localOnly) const
+	{
+		// If this is the root frame or we only care for local visibility setting...
+		if (localOnly || m_parent == nullptr || IsRootFrame())
+		{
+			// ... return local setting
+			return m_visible;
+		}
+
+		// Return parent frame visibility AND local setting
+		return m_parent->IsVisible(false) && m_visible;
+	}
+
+	bool Frame::IsRootFrame() const
+	{
+		FramePtr rootFrame = FrameManager::Get().GetTopFrame();
+		if (rootFrame == nullptr)
+			return false;
+
+		return (rootFrame.get() == this);
+	}
+
 	void Frame::Render()
 	{
+		// If this frame is hidden, we don't have anything to do
+		if (!IsVisible())
+			return;
+
 		// If this is a top level frame, prepare render common render states so that
 		// we don't have to care about them in every single child frame or child frame
 		// element.
@@ -56,11 +93,15 @@ namespace mmo
 
 	}
 
-	void Frame::SetAnchor(AnchorPoint point, Point offset)
+	void Frame::SetOrigin(AnchorPoint point, Point offset)
 	{
-		m_anchorPoint = point;
+		m_originPoint = point;
 		m_anchorOffset = offset;
 		m_needsRedraw = true;
+	}
+
+	void Frame::SetAnchorPoints(uint8 points)
+	{
 	}
 
 	void Frame::AddChild(Frame::Pointer frame)
@@ -161,7 +202,7 @@ namespace mmo
 		r.Offset(parentRect.GetPosition());
 
 		// Adjust rectangle based on anchor position
-		AdjustRectToAnchor(r, parentRect, m_anchorPoint, m_anchorOffset);
+		AdjustRectToAnchor(r, parentRect, m_originPoint, m_anchorOffset);
 
 		return r;
 	}

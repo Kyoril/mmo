@@ -395,7 +395,7 @@ namespace mmo
 			// Calculate start point
 			mmo::Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) };
 
-			uint32 index = 0;
+			int32 index = 0;
 
 			// Determine max visible entries in console window
 			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();

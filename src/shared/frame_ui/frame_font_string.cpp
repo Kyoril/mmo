@@ -6,8 +6,9 @@
 
 namespace mmo
 {
-	FrameFontString::FrameFontString(const std::string & fontFile, float fontSize, float outline)
-		: m_width(0.0f)
+	FrameFontString::FrameFontString(Frame& frame, const std::string & fontFile, float fontSize, float outline)
+		: FrameObject(frame)
+		, m_width(0.0f)
 	{
 		m_font = std::make_shared<Font>();
 		VERIFY(m_font->Initialize(fontFile, fontSize, outline));
@@ -30,5 +31,10 @@ namespace mmo
 
 		// Calculate the text width and cache it for later use
 		m_width = m_font->GetTextWidth(m_text);
+	}
+
+	Size FrameFontString::GetSize() const
+	{
+		return Size(m_width, m_font->GetHeight());
 	}
 }

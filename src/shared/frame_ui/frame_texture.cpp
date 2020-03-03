@@ -7,8 +7,9 @@
 
 namespace mmo
 {
-	FrameTexture::FrameTexture(const std::string& filename)
-		: m_width(0)
+	FrameTexture::FrameTexture(Frame& frame, const std::string& filename)
+		: FrameObject(frame)
+		, m_width(0)
 		, m_height(0)
 	{
 		m_texture = TextureManager::Get().CreateOrRetrieve(filename);
@@ -39,5 +40,16 @@ namespace mmo
 
 		// Append vertices
 		buffer.AppendGeometry(vertices, 6);
+	}
+
+	Size FrameTexture::GetSize() const
+	{
+		uint16 realWidth = m_width;
+		if (realWidth == 0) realWidth = m_texture->GetWidth();
+
+		uint16 realHeight = m_height;
+		if (realHeight == 0) realHeight = m_texture->GetHeight();
+
+		return Size(realWidth, realHeight);
 	}
 }

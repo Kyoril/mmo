@@ -8,6 +8,7 @@
 #include "geometry_buffer.h"
 #include "frame_layer.h"
 #include "rect.h"
+#include "anchor_point.h"
 
 #include <memory>
 #include <string>
@@ -56,29 +57,6 @@ namespace mmo
 		Visible,
 	};
 
-	/// Enumerates relative anchor points for frames and frame elements.
-	enum class AnchorPoint
-	{
-		// Corners
-
-		/// Upper left corner
-		TopLeft,
-		/// Upper right corner
-		TopRight,
-		/// Lower right corner
-		BottomRight,
-		/// Lower left 
-		BottomLeft,
-
-		// Edges
-		Top,
-		Right,
-		Bottom,
-		Left,
-
-		// Center
-		Center
-	};
 
 	/// This is the base class to represent a simple frame.
 	class Frame
@@ -87,13 +65,27 @@ namespace mmo
 		typedef std::shared_ptr<Frame> Pointer;
 
 	public:
-
 		signal<void()> RenderingStarted;
 		signal<void()> RenderingEnded;
+		/// Fired when the text of this frame was changed.
+		signal<void()> TextChanged;
 
 	public:
 		Frame(const std::string& name);
 		virtual ~Frame();
+
+	public:
+		/// Gets the text of this frame.
+		inline const std::string& GetText() const { return m_text; }
+		/// Sets the text of this frame.
+		void SetText(const std::string& text);
+		/// Determines whether the frame is currently visible.
+		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
+		/// @returns true, if this frame is currently visible.
+		bool IsVisible(bool localOnly = true) const;
+
+		/// Determines if this window is the root frame.
+		bool IsRootFrame() const;
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -108,7 +100,9 @@ namespace mmo
 		/// Sets the pixel size of this frame.
 		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
 
-		virtual void SetAnchor(AnchorPoint point, Point offset = Point());
+		virtual void SetOrigin(AnchorPoint point, Point offset = Point());
+		/// Sets anchor points of this frame in the parent frame, which tells where to position the frame.
+		virtual void SetAnchorPoints(uint8 points);
 
 		virtual void AddChild(Pointer frame);
 
@@ -140,12 +134,14 @@ namespace mmo
 
 		std::string m_name;
 		bool m_needsRedraw;
+		std::string m_text;
+		bool m_visible;
 		ChildList m_children;
 		std::unique_ptr<GeometryBuffer> m_geometryBuffer;
 		/// The current size of this frame in pixels.
 		Size m_pixelSize;
 		/// The anchor point used for positioning.
-		AnchorPoint m_anchorPoint;
+		AnchorPoint m_originPoint;
 
 		Point m_anchorOffset;
 

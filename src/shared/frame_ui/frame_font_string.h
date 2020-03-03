@@ -15,7 +15,7 @@ namespace mmo
 	{
 	public:
 		/// Creates a frame font string object which can be used to draw a text.
-		explicit FrameFontString(const std::string& fontFile, float fontSize, float outline = 0.0f);
+		explicit FrameFontString(Frame& frame, const std::string& fontFile, float fontSize, float outline = 0.0f);
 
 	public:
 		// FrameObject overrides
@@ -28,6 +28,9 @@ namespace mmo
 	public:
 		/// Gets the current text value.
 		inline const std::string& GetText() const { return m_text; }
+
+	public:
+		virtual Size GetSize() const override;
 
 	private:
 		/// The graphics texture object.
