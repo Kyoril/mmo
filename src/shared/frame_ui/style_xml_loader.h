@@ -36,7 +36,8 @@ namespace mmo
 
 	private:
 		StylePtr m_style;
-		std::shared_ptr<StateImagerySection> m_section;
+		std::shared_ptr<ImagerySection> m_section;
 		std::shared_ptr<StateImagery> m_stateImagery;
+		std::shared_ptr<FrameLayer> m_layer;
 	};
 }

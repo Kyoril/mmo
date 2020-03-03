@@ -1,21 +1,22 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
-#include "frame_texture.h"
+#include "image_component.h"
 #include "geometry_buffer.h"
+
 #include "graphics/texture_mgr.h"
 
 
 namespace mmo
 {
-	FrameTexture::FrameTexture(Frame& frame, const std::string& filename)
-		: FrameObject(frame)
+	ImageComponent::ImageComponent(Frame& frame, const std::string& filename)
+		: FrameComponent(frame)
 		, m_width(0)
 		, m_height(0)
 	{
 		m_texture = TextureManager::Get().CreateOrRetrieve(filename);
 	}
 
-	void FrameTexture::Render(GeometryBuffer& buffer) const
+	void ImageComponent::Render(GeometryBuffer& buffer) const
 	{
 		// Bind the texture object
 		buffer.SetActiveTexture(m_texture);
@@ -42,7 +43,7 @@ namespace mmo
 		buffer.AppendGeometry(vertices, 6);
 	}
 
-	Size FrameTexture::GetSize() const
+	Size ImageComponent::GetSize() const
 	{
 		uint16 realWidth = m_width;
 		if (realWidth == 0) realWidth = m_texture->GetWidth();

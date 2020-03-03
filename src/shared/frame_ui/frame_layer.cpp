@@ -1,36 +1,48 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "frame_layer.h"
 #include "geometry_buffer.h"
 
 #include "base/macros.h"
 
-#include <utility>
-
 
 namespace mmo
 {
-	inline FrameLayer::FrameLayer(std::string name)
-		: m_name(std::move(name))
+	FrameLayer::FrameLayer()
 	{
 	}
 
-	void FrameLayer::AddObject(std::unique_ptr<FrameObject> object)
+	void FrameLayer::AddSection(const ImagerySection & section)
 	{
-		ASSERT(object);
-
-		m_objects.emplace_back(std::move(object));
+		m_sections.push_back(&section);
 	}
 
-	void FrameLayer::RemoveAllObjects()
+	void FrameLayer::RemoveSection(uint32 index)
 	{
-		m_objects.clear();
+		ASSERT(index < m_sections.size());
+		m_sections.erase(m_sections.begin() + index);
+	}
+
+	void FrameLayer::RemoveSection(const std::string & name)
+	{
+		const auto it = std::remove_if(m_sections.begin(), m_sections.end(), [&name](const ImagerySection*& section) {
+			return name == section->GetName();
+		});
+
+		// Erase all sections that have been found
+		m_sections.erase(it, m_sections.end());
+	}
+
+	void FrameLayer::RemoveAllSections()
+	{
+		m_sections.clear();
 	}
 
 	void FrameLayer::Render(GeometryBuffer& buffer) const
 	{
-		for (const auto& object : m_objects)
+		for (const auto& section : m_sections)
 		{
-			object->Render(buffer);
+			section->Render(buffer);
 		}
 	}
 }

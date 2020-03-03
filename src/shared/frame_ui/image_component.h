@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "frame_object.h"
+#include "frame_component.h"
 
 #include "graphics/texture.h"
 
@@ -10,22 +10,23 @@
 namespace mmo
 {
 	/// This class is a texture frame object which can be used to render plain images.
-	class FrameTexture : public FrameObject
+	class ImageComponent 
+		: public FrameComponent
 	{
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
-		explicit FrameTexture(Frame& frame, const std::string& filename);
-		virtual ~FrameTexture() = default;
+		explicit ImageComponent(Frame& frame, const std::string& filename);
+		virtual ~ImageComponent() = default;
 
 	public:
-		// FrameObject overrides
+		// FrameComponent overrides
 		void Render(GeometryBuffer& buffer) const override;
 
 	public:
-		// ~Begin FrameObject
+		// ~Begin FrameComponent
 		virtual Size GetSize() const override;
-		// ~End FrameObject
+		// ~End FrameComponent
 
 	private:
 		/// The graphics texture object.

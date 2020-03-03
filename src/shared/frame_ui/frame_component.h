@@ -15,13 +15,15 @@ namespace mmo
 	class GeometryBuffer;
 	class Frame;
 
+
 	/// This is the base class for a frame object which is renderable
 	/// and has some placement logic.
-	class FrameObject : public NonCopyable
+	class FrameComponent 
+		: public NonCopyable
 	{
 	public:
-		FrameObject(Frame& frame);
-		virtual ~FrameObject() = default;
+		FrameComponent(Frame& frame);
+		virtual ~FrameComponent() = default;
 
 	public:
 		/// Gets the size of this frame object in pixels.
@@ -34,7 +36,6 @@ namespace mmo
 		virtual void Render(GeometryBuffer& buffer) const = 0;
 
 	protected:
-
 		bool GetAnchorPointOffset(AnchorPoint point, Point& offset);
 
 	protected:

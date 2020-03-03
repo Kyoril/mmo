@@ -16,7 +16,7 @@ namespace mmo
 
 	}
 
-	void Style::AddImagerySection(std::shared_ptr<StateImagerySection>& section)
+	void Style::AddImagerySection(std::shared_ptr<ImagerySection>& section)
 	{
 		ASSERT(section);
 		ASSERT(m_sectionsByName.find(section->GetName()) == m_sectionsByName.end());
@@ -32,7 +32,7 @@ namespace mmo
 		m_sectionsByName.erase(it);
 	}
 
-	StateImagerySection * Style::GetImagerySectionByName(const std::string & name) const
+	ImagerySection * Style::GetImagerySectionByName(const std::string & name) const
 	{
 		const auto it = m_sectionsByName.find(name);
 		return (it == m_sectionsByName.end()) ? nullptr : it->second.get();
@@ -43,7 +43,7 @@ namespace mmo
 		ASSERT(stateImagery);
 		ASSERT(m_stateImageriesByName.find(stateImagery->GetName()) == m_stateImageriesByName.end());
 
-		m_stateImageriesByName[stateImagery->GetName()] = std::move(stateImagery);
+		m_stateImageriesByName[stateImagery->GetName()] = stateImagery;
 	}
 
 	void Style::RemoveStateImagery(const std::string & name)
