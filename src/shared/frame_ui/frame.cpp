@@ -43,7 +43,35 @@ namespace mmo
 		}
 
 		// Return parent frame visibility AND local setting
-		return m_parent->IsVisible(false) && m_visible;
+		return m_parent->IsVisible(localOnly) && m_visible;
+	}
+
+	void Frame::SetVisible(bool visible)
+	{
+		if (m_visible != visible)
+		{
+			m_visible = visible;
+			VisibilityChanged();
+		}
+	}
+
+	bool Frame::IsEnabled(bool localOnly) const
+	{
+		if (localOnly || m_parent == nullptr || IsRootFrame())
+		{
+			return m_enabled;
+		}
+
+		return m_parent->IsEnabled(localOnly) && m_enabled;
+	}
+
+	void Frame::SetEnabled(bool enable)
+	{
+		if (m_enabled != enable)
+		{
+			m_enabled = enable;
+			EnabledStateChanged();
+		}
 	}
 
 	bool Frame::IsRootFrame() const

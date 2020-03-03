@@ -69,6 +69,10 @@ namespace mmo
 		signal<void()> RenderingEnded;
 		/// Fired when the text of this frame was changed.
 		signal<void()> TextChanged;
+		/// Fired when the enabled state of this frame was changed.
+		signal<void()> EnabledStateChanged;
+		/// Fired when the frame's visibility changed.
+		signal<void()> VisibilityChanged;
 
 	public:
 		Frame(const std::string& name);
@@ -83,7 +87,24 @@ namespace mmo
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.
 		bool IsVisible(bool localOnly = true) const;
-
+		/// Sets the visibility of this frame.
+		/// @param visible Whether the frame will be visible or not.
+		void SetVisible(bool visible);
+		/// Syntactic sugar for SetVisible(true).
+		inline void Show() { SetVisible(true); }
+		/// Syntactic sugar for SetVisible(false).
+		inline void Hide() { SetVisible(false); }
+		/// Determines whether the frame is currently enabled.
+		/// @param localOnly If set to true, the parent frame's enabled setting is ignored.
+		/// @returns true, if this frame is currently enabled.
+		bool IsEnabled(bool localOnly = true) const;
+		/// Enables or disables this frame.
+		/// @param enable Whether the frame should be enabled or disabled.
+		void SetEnabled(bool enable);
+		/// Syntactic sugar for SetEnabled(true).
+		inline void Enable() { SetEnabled(true); }
+		/// Syntactic sugar for SetEnabled(false).
+		inline void Disable() { SetEnabled(false); }
 		/// Determines if this window is the root frame.
 		bool IsRootFrame() const;
 
@@ -136,6 +157,7 @@ namespace mmo
 		bool m_needsRedraw;
 		std::string m_text;
 		bool m_visible;
+		bool m_enabled;
 		ChildList m_children;
 		std::unique_ptr<GeometryBuffer> m_geometryBuffer;
 		/// The current size of this frame in pixels.
