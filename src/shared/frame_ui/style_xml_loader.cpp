@@ -132,7 +132,7 @@ namespace mmo
 		}
 
 		// Add new imagery section
-		m_section = std::make_shared<StateImagerySection>(name);
+		m_section = std::make_shared<ImagerySection>(name);
 		m_style->AddImagerySection(m_section);
 	}
 
@@ -176,12 +176,21 @@ namespace mmo
 
 	void StyleXmlLoader::ElementLayerStart(const XmlAttributes & attributes)
 	{
-		// TODO: Handle Layer element start
+		// Ensure that the element may appear at this location
+		if (m_layer != nullptr || m_stateImagery == nullptr)
+		{
+			throw std::runtime_error("Unexpected Layer element!");
+		}
+
+		// Add a new layer to the state imagery
+		m_layer = std::make_shared<FrameLayer>();
+		m_stateImagery->AddLayer(m_layer);
 	}
 
 	void StyleXmlLoader::ElementLayerEnd()
 	{
-		// TODO: Handle Layer element end
+		// Reset the current layer element
+		m_layer.reset();
 	}
 
 	void StyleXmlLoader::ElementSectionStart(const XmlAttributes & attributes)

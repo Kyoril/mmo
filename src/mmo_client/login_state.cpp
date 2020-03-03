@@ -8,10 +8,7 @@
 #include "base/macros.h"
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
-#include "frame_ui/frame_texture.h"
-#include "frame_ui/frame_font_string.h"
 #include "frame_ui/frame_mgr.h"
-#include "graphics/texture_mgr.h"
 #include "base/constants.h"
 
 #include "asio.hpp"

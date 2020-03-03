@@ -1,24 +1,23 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
-#include "frame_object.h"
+#include "frame_component.h"
 #include "font.h"
-
-#include "graphics/texture.h"
 
 
 namespace mmo
 {
 	/// This class is a texture frame object which can be used to render plain images.
-	class FrameFontString : public FrameObject
+	class TextComponent 
+		: public FrameComponent
 	{
 	public:
 		/// Creates a frame font string object which can be used to draw a text.
-		explicit FrameFontString(Frame& frame, const std::string& fontFile, float fontSize, float outline = 0.0f);
+		explicit TextComponent(Frame& frame, const std::string& fontFile, float fontSize, float outline = 0.0f);
 
 	public:
-		// FrameObject overrides
+		// FrameComponent overrides
 		void Render(GeometryBuffer& buffer) const override;
 
 	public:

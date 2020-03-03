@@ -1,7 +1,8 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
-#include "frame_object.h"
+#include "imagery_section.h"
 
 #include "base/non_copyable.h"
 
@@ -21,25 +22,23 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
-		FrameLayer(std::string name);
+		FrameLayer();
 		
 	public:
-		/// Gets the name of this layer.
-		inline const std::string& GetName() const { return m_name; }
-
-	public:
 		/// Adds a new object to the object list of this layer.
-		void AddObject(std::unique_ptr<FrameObject> object);
+		void AddSection(const ImagerySection& section);
+		/// Removes a section by index.
+		void RemoveSection(uint32 index);
+		/// Removes a section by name.
+		void RemoveSection(const std::string& name);
 		/// Removes all objects from this layer.
-		void RemoveAllObjects();
+		void RemoveAllSections();
 		/// Renders the frame layer, which simply means rendering all attached objects
 		/// in order.
 		void Render(GeometryBuffer& buffer) const;
 
 	protected:
-		/// Name of the layer (if any).
-		std::string m_name;
-		/// 
-		std::vector<std::unique_ptr<FrameObject>> m_objects;
+		/// A vector of all active sessions.
+		std::vector<const ImagerySection*> m_sections;
 	};
 }

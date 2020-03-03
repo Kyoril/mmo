@@ -15,33 +15,27 @@ namespace mmo
 	{
 	}
 
-	void StateImagery::AddSection(std::unique_ptr<StateImagerySection> section)
+	void StateImagery::AddLayer(std::shared_ptr<FrameLayer>& layer)
 	{
-		m_sections.emplace_back(std::move(section));
+		m_layers.emplace_back(layer);
 	}
 
-	void StateImagery::RemoveSection(const std::string & name)
+	void StateImagery::RemoveLayer(uint32 index)
 	{
-		// Remove section by name
-		auto lastIt = std::remove_if(m_sections.begin(), m_sections.end(), [&name](const std::unique_ptr<StateImagerySection>& section) {
-			return section->GetName() == name;
-		});
-
-		ASSERT(lastIt != m_sections.end());
-		m_sections.erase(lastIt, m_sections.end());
+		ASSERT(index < m_layers.size());
+		m_layers.erase(m_layers.begin() + index);
 	}
 
-	void StateImagery::RemoveSection(uint32 index)
+	void StateImagery::RemoveAllLayers()
 	{
-		ASSERT(index < m_sections.size());
-		m_sections.erase(m_sections.begin() + index);
+		m_layers.clear();
 	}
 
 	void StateImagery::Render(GeometryBuffer & buffer) const
 	{
-		for (const auto& section : m_sections)
+		for (const auto& layer : m_layers)
 		{
-			section->Render(buffer);
+			layer->Render(buffer);
 		}
 	}
 }

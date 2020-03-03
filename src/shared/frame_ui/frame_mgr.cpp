@@ -1,6 +1,6 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
+
 #include "frame_mgr.h"
-#include "frame_font_string.h"
-#include "frame_texture.h"
 #include "frame_layer.h"
 #include "style_xml_loader.h"
 

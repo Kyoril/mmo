@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "state_imagery_section.h"
+#include "frame_layer.h"
 
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
@@ -28,13 +28,13 @@ namespace mmo
 		StateImagery(std::string name);
 
 	public:
-		/// Adds a new section to the state imagery.
-		/// @param section The section to add.
-		void AddSection(std::unique_ptr<StateImagerySection> section);
-		/// Removes a section by name.
-		void RemoveSection(const std::string& name);
-		/// Removes a section by index.
-		void RemoveSection(uint32 index);
+		/// Adds a new layer to the state imagery.
+		/// @param layer The layer to add.
+		void AddLayer(std::shared_ptr<FrameLayer>& layer);
+		/// Removes a layer by index.
+		void RemoveLayer(uint32 index);
+		/// Removes all layers.
+		void RemoveAllLayers();
 
 		/// Renders this state imagery.
 		void Render(GeometryBuffer& buffer) const;
@@ -46,7 +46,7 @@ namespace mmo
 	private:
 		/// The name of this imagery.
 		std::string m_name;
-		/// The sections that make up the whole frame in the current state.
-		std::vector<std::unique_ptr<StateImagerySection>> m_sections;
+		/// The layers that make up this state imagery.
+		std::vector<std::shared_ptr<FrameLayer>> m_layers;
 	};
 }

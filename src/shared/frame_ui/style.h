@@ -3,7 +3,7 @@
 #pragma once
 
 #include "state_imagery.h"
-#include "state_imagery_section.h"
+#include "imagery_section.h"
 
 #include <string>
 #include <map>
@@ -25,13 +25,13 @@ namespace mmo
 
 	public:
 		/// Adds a new state imagery.
-		void AddImagerySection(std::shared_ptr<StateImagerySection>& section);
+		void AddImagerySection(std::shared_ptr<ImagerySection>& section);
 		/// Removes a state imagery by name.
 		void RemoveImagerySection(const std::string& name);
 		/// Gets an imagery section by name.
 		/// @param name Name of the imagery section.
 		/// @return nullptr if no such imagery section exists.
-		StateImagerySection* GetImagerySectionByName(const std::string& name) const;
+		ImagerySection* GetImagerySectionByName(const std::string& name) const;
 
 		/// Adds a new state imagery.
 		void AddStateImagery(std::shared_ptr<StateImagery>& stateImagery);
@@ -53,7 +53,7 @@ namespace mmo
 		/// Contains all state imageries of this style by name.
 		std::map<std::string, std::shared_ptr<StateImagery>> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
-		std::map<std::string, std::shared_ptr<StateImagerySection>> m_sectionsByName;
+		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
 	};
 
 	typedef std::shared_ptr<Style> StylePtr;
