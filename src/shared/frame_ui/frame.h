@@ -28,7 +28,6 @@ namespace mmo
 		Bottom
 	};
 
-
 	/// Enumerated type used when specifying horizontal alignments.
 	enum class HorizontalAlignment
 	{
@@ -39,7 +38,6 @@ namespace mmo
 		/// Frame's position specifies an offset of it's right edge from the right edge of it's parent.
 		Right
 	};
-
 
 	/// Enumerated type used for specifying Frame::update mode to be used. Note that
 	/// the setting specified will also have an effect on child window content; for
