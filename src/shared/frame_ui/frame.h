@@ -6,7 +6,6 @@
 #include "base/signal.h"
 
 #include "geometry_buffer.h"
-#include "frame_layer.h"
 #include "rect.h"
 #include "anchor_point.h"
 
@@ -65,7 +64,9 @@ namespace mmo
 		typedef std::shared_ptr<Frame> Pointer;
 
 	public:
+		/// Fired when rendering of the frame began.
 		signal<void()> RenderingStarted;
+		/// Fired when rendering of the frame ended.
 		signal<void()> RenderingEnded;
 		/// Fired when the text of this frame was changed.
 		signal<void()> TextChanged;
@@ -126,11 +127,7 @@ namespace mmo
 		virtual void SetAnchorPoints(uint8 points);
 
 		virtual void AddChild(Pointer frame);
-
-	public:
-		FrameLayer& AddLayer();
-		void RemoveLayer(FrameLayer& layer);
-
+		
 	protected:
 
 		virtual Rect GetRelativeFrameRect();
@@ -168,8 +165,6 @@ namespace mmo
 		Point m_anchorOffset;
 
 		Frame* m_parent;
-
-		std::vector<std::unique_ptr<FrameLayer>> m_layers;
 	};
 
 	typedef Frame::Pointer FramePtr;

@@ -5,6 +5,7 @@
 
 #include "base/non_copyable.h"
 
+#include <string>
 #include <memory>
 #include <vector>
 
@@ -16,11 +17,16 @@ namespace mmo
 
 	/// This class represents a layer of a frame. Layers contain assigned objects
 	/// that can be rendered in order.
-	class FrameLayer : public NonCopyable
+	class FrameLayer final
+		: public NonCopyable
 	{
 	public:
-		FrameLayer() {}
+		FrameLayer(std::string name);
 		
+	public:
+		/// Gets the name of this layer.
+		inline const std::string& GetName() const { return m_name; }
+
 	public:
 		/// Adds a new object to the object list of this layer.
 		void AddObject(std::unique_ptr<FrameObject> object);
@@ -31,6 +37,8 @@ namespace mmo
 		void Render(GeometryBuffer& buffer) const;
 
 	protected:
+		/// Name of the layer (if any).
+		std::string m_name;
 		/// 
 		std::vector<std::unique_ptr<FrameObject>> m_objects;
 	};
