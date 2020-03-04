@@ -10,11 +10,16 @@ namespace mmo
 	void DefaultRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		const std::string activeState = m_frame->IsEnabled() ? "Enabled" : "Disabled";
-		
+
 		const auto style = m_frame->GetStyle();
 		if (style)
 		{
 			const auto* imagery = style->GetStateImageryByName(activeState);
+			if (!imagery)
+			{
+				imagery = style->GetStateImageryByName("Enabled");
+			}
+
 			if (imagery)
 			{
 				imagery->Render(*m_frame);

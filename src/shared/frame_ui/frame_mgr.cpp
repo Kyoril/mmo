@@ -349,7 +349,31 @@ namespace mmo
 		// TODO: Determine the currently hovered frame and set it as the 
 		// hovered frame.
 
+		// Only works if we have a top frame
+		if (m_topFrame != nullptr)
+		{
+			// Find the frame at the lowest level for the given point
+			FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
+			if (hoverFrame != m_hoverFrame)
+			{
+				auto prevFrame = m_hoverFrame;
+				m_hoverFrame = std::move(hoverFrame);
 
+				//DLOG("Hovered frame changed: " << (m_hoverFrame ? m_hoverFrame->GetName() : "(nullptr)"));
+
+				// Invalidate the old hover frame if there was any
+				if (prevFrame)
+				{
+					prevFrame->Invalidate();
+				}
+
+				// Invalidate the new hover frame if there is any
+				if (m_hoverFrame)
+				{
+					m_hoverFrame->Invalidate();
+				}
+			}
+		}
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

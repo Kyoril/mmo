@@ -193,6 +193,28 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
+	void Frame::Invalidate()
+	{
+		m_needsRedraw = true;
+	}
+
+	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
+	{
+		// Iterate through all children
+		for (auto& child : m_children)
+		{
+			// Check the rectangle
+			const Rect childRect = child->GetAbsoluteFrameRect();
+			if (childRect.IsPointInRect(position) &&
+				(allowDisabled || child->IsEnabled()))
+			{
+				return child->GetChildFrameAt(position, allowDisabled);
+			}
+		}
+
+		return shared_from_this();
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do
