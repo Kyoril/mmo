@@ -123,6 +123,8 @@ namespace mmo
 		void ClearAnchor(AnchorPoint point);
 		/// Gets the parent frame.
 		inline Frame* GetParent() const { return m_parent; }
+		/// Determines whether the frame is currently hovered.
+		bool IsHovered() const;
 
 	public:
 		/// Gets a string object holding the name of this frame.

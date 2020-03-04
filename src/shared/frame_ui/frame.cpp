@@ -188,6 +188,11 @@ namespace mmo
 		}
 	}
 
+	bool Frame::IsHovered() const
+	{
+		return this == FrameManager::Get().GetHoveredFrame().get();
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do

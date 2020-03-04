@@ -127,6 +127,7 @@ namespace mmo
 {
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
+	static scoped_connection_container s_frameUiConnections;
 
 
 	/// Initializes the global game systems.
@@ -170,6 +171,12 @@ namespace mmo
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
 
+		// Watch for mouse events
+		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseMoved(Point(x, y)); 
+			return false; 
+		});
+
 		// Register game states
 		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));
 		GameStateMgr::Get().SetGameState(LoginState::Name);
@@ -195,6 +202,9 @@ namespace mmo
 
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
+
+		// Disconnect FrameUI connections
+		s_frameUiConnections.disconnect();
 
 		// Destroy the network thread
 		NetDestroy();
