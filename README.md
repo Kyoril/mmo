@@ -6,6 +6,9 @@ This project will grow to a fully fledged MMORPG prototype. This means, that it 
 # You mentioned prototype - what does that mean?
 Since this is designed to be a protoype, it won't be a massive MMORPG with dozens of races, classes and maps. It will probably contain one race, one or two classes, one or two small maps. The scope may grow over time, if the effort required to so is reasonable.
 
+# Contact
+If you want to contact the author of this project, feel free to join the discord server at: https://discord.gg/Hzf5AJ
+
 # Supported platforms
 There are three supported platforms:
 
