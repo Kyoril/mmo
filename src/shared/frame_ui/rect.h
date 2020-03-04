@@ -19,12 +19,12 @@ namespace mmo
 		Rect(Point pos, Size size);
 
 	public:
-		inline Point GetPosition() const { return Point(m_left, m_top); }
-		inline float GetWidth() const { return m_right - m_left; }
-		inline float GetHeight() const { return m_bottom - m_top; }
+		inline Point GetPosition() const { return Point(left, top); }
+		inline float GetWidth() const { return right - left; }
+		inline float GetHeight() const { return bottom - top; }
 		inline Size GetSize() const { return Size(GetWidth(), GetHeight()); }
-		inline void SetWidth(float width) { m_right = m_left + width; }
-		inline void SetHeight(float height) { m_bottom = m_top + height; }
+		inline void SetWidth(float width) { right = left + width; }
+		inline void SetHeight(float height) { bottom = top + height; }
 		inline void SetSize(const Size& size) { SetWidth(size.width); SetHeight(size.height); }
 
 	public:
@@ -39,21 +39,21 @@ namespace mmo
 	public:
 		inline bool operator==(const Rect& rhs) const
 		{
-			return ((m_left == rhs.m_left) && (m_right == rhs.m_right) && (m_top == rhs.m_top) && (m_bottom == rhs.m_bottom));
+			return ((left == rhs.left) && (right == rhs.right) && (top == rhs.top) && (bottom == rhs.bottom));
 		}
 		inline bool operator!=(const Rect& rhs) const { return !operator==(rhs); }
 		
 		Rect& operator=(const Rect& rhs);
 
-		inline Rect operator*(float scalar) const { return Rect(m_left * scalar, m_top * scalar, m_right * scalar, m_bottom * scalar); }
-		inline const Rect& operator*=(float scalar) { m_left *= scalar; m_top *= scalar; m_right *= scalar; m_bottom *= scalar; return *this; }
+		inline Rect operator*(float scalar) const { return Rect(left * scalar, top * scalar, right * scalar, bottom * scalar); }
+		inline const Rect& operator*=(float scalar) { left *= scalar; top *= scalar; right *= scalar; bottom *= scalar; return *this; }
 
-		inline Rect operator+(const Rect&r) const { return Rect(m_left + r.m_left, m_top + r.m_top, m_right + r.m_right, m_bottom + r.m_bottom); }
+		inline Rect operator+(const Rect&r) const { return Rect(left + r.left, top + r.top, right + r.right, bottom + r.bottom); }
 
 	public:
-		float m_left;
-		float m_top;
-		float m_right;
-		float m_bottom;
+		float left;
+		float top;
+		float right;
+		float bottom;
 	};
 }

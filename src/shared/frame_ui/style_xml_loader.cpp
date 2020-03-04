@@ -4,6 +4,7 @@
 #include "style_mgr.h"
 #include "frame_text_component.h"
 #include "image_component.h"
+#include "border_component.h"
 #include "state_imagery.h"
 #include "imagery_section.h"
 
@@ -325,10 +326,20 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr)
 		{
-			throw std::runtime_error("Unexpected TextComponent element!");
+			throw std::runtime_error("Unexpected BorderComponent element!");
 		}
 
-		// TODO: Handle method
+		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
+
+		// Check for texture name existance
+		if (texture.empty())
+		{
+			throw std::runtime_error("BorderComponent needs a texture filename!");
+		}
+
+		// Setup component and add it to the current section
+		m_component = std::make_shared<BorderComponent>(texture, 22.0f);
+		m_section->AddComponent(m_component);
 	}
 
 	void StyleXmlLoader::ElementBorderComponentEnd()
