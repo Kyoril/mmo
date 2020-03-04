@@ -49,7 +49,15 @@ namespace mmo
 				position.x += frameRect.GetWidth() - width;
 			}
 
-			// TODO: apply vertical alignment formatting
+			// Apply vertical alignment formatting
+			if (m_vertAlignment == VerticalAlignment::Center)
+			{
+				position.y += frameRect.GetHeight() * 0.5f - m_font->GetHeight() * 0.5f;
+			}
+			else if (m_vertAlignment == VerticalAlignment::Bottom)
+			{
+				position.y += frameRect.GetHeight() - m_font->GetHeight();
+			}
 
 			// Determine the position to render the font at
 			m_font->DrawText(frame.GetText(), position, frame.GetGeometryBuffer());
