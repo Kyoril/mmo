@@ -3,6 +3,7 @@
 #include "frame_mgr.h"
 #include "frame_layer.h"
 #include "style_xml_loader.h"
+#include "layout_xml_loader.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -49,7 +50,7 @@ namespace mmo
 		/// The current xml indent.
 		static int32 s_currentXmlIndent;
 		/// A xml handler for loading frame layouts using xml.
-		static LayoutXmlHandler s_layoutXmlHandler;
+		static LayoutXmlLoader s_layoutXmlLoader;
 		/// An xml loader for style xml files.
 		static StyleXmlLoader s_styleXmlLoader;
 
@@ -65,7 +66,7 @@ namespace mmo
 				if (std::string(name) == "UiLayout")
 				{
 					// Use the layout xml loader from here on
-					s_currentXmlLoader = &s_layoutXmlHandler;
+					s_currentXmlLoader = &s_layoutXmlLoader;
 				}
 				else if(std::string(name) == "UiStyle")
 				{
@@ -118,7 +119,7 @@ namespace mmo
 			if (len > 0)
 			{
 				const std::string strContent{ s, (const size_t)len };
-				s_layoutXmlHandler.Text(strContent);
+				s_layoutXmlLoader.Text(strContent);
 			}
 		}
 
@@ -175,10 +176,6 @@ namespace mmo
 			std::string line;
 			while (std::getline(*file, line))
 			{
-				// Check for empty lines or comments
-				if (line.empty())
-					continue;
-
 				// Remove all occurences of \r character as getline only accounts for \n and on
 				// windows, lines might end with \r\n
 				size_t index = 0;
@@ -186,6 +183,11 @@ namespace mmo
 				{
 					line.erase(index, 1);
 				}
+
+				// Check for empty lines or comments
+				if (line.empty() || line[0] == '#')
+					continue;
+
 
 				// Load the ui file
 				LoadUIFile(line);

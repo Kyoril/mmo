@@ -1,6 +1,6 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
-#include "layout_xmlhandler.h"
+#include "layout_xml_loader.h"
 #include "frame_mgr.h"
 #include "frame.h"
 
@@ -11,25 +11,31 @@ namespace mmo
 {
 	static const std::string UILayoutElement("UILayout");
 	static const std::string FrameElement("Frame");
-	static const std::string FrameTypeAttribute("type");
 	static const std::string FrameNameAttribute("name");
+	static const std::string FrameStyleAttribute("style");
+	static const std::string FrameRendererAttribute("renderer");
 	static const std::string FrameTextAttribute("text");
 	static const std::string FrameParentAttribute("parent");
+	static const std::string AreaElement("Area");
+	static const std::string ScriptElement("Script");
+	static const std::string ScriptFileAttribute("file");
 	static const std::string EventNameAttribute("name");
 	static const std::string EventFunctionAttribute("function");
-	static const std::string LayersElement("Layers");
-	static const std::string LayerElement("Layer");
 
 
-	void LayoutXmlHandler::ElementStart(const std::string & element, const XmlAttributes & attributes)
+	void LayoutXmlLoader::ElementStart(const std::string & element, const XmlAttributes & attributes)
 	{
-		if (element == UILayoutElement)
-		{
-			ElementUILayoutStart(attributes);
-		}
-		else if (element == FrameElement)
+		if (element == FrameElement)
 		{
 			ElementFrameStart(attributes);
+		}
+		else if (element == AreaElement)
+		{
+			ElementAreaStart(attributes);
+		}
+		else if (element == ScriptElement)
+		{
+			ElementScriptStart(attributes);
 		}
 		else
 		{
@@ -37,39 +43,34 @@ namespace mmo
 		}
 	}
 
-	void LayoutXmlHandler::ElementEnd(const std::string & element) 
+	void LayoutXmlLoader::ElementEnd(const std::string & element) 
 	{
-		if (element == UILayoutElement)
-		{
-			ElementUILayoutEnd();
-		}
-		else if (element == FrameElement)
+		if (element == FrameElement)
 		{
 			ElementFrameEnd();
 		}
-	}
-
-	void LayoutXmlHandler::Text(const std::string & text) 
-	{
-	}
-
-	void LayoutXmlHandler::ElementUILayoutStart(const XmlAttributes & attributes)
-	{
-		// Ui is the first tag and may only appear once.
-		if (m_uiStarted)
+		else if (element == AreaElement)
 		{
-			throw std::runtime_error("Nested Ui tag is not supported!");
+			ElementAreaEnd();
 		}
-
-		m_uiStarted = true;
+		else if (element == ScriptElement)
+		{
+			ElementScriptEnd();
+		}
 	}
 
-	void LayoutXmlHandler::ElementFrameStart(const XmlAttributes & attributes)
+	void LayoutXmlLoader::Text(const std::string & text) 
+	{
+	}
+
+	void LayoutXmlLoader::ElementFrameStart(const XmlAttributes & attributes)
 	{
 		// Get the name of the frame to create
 		std::string name(attributes.GetValueAsString(FrameNameAttribute));
 		std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		std::string text(attributes.GetValueAsString(FrameTextAttribute));
+		std::string style(attributes.GetValueAsString(FrameStyleAttribute));
+		std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 
 		// Attempt to create the frame
 		FramePtr frame = FrameManager::Get().Create("Frame", name);
@@ -77,6 +78,10 @@ namespace mmo
 		{
 			throw std::runtime_error("Could not create frame named!");
 		}
+
+		// Setup style and renderer
+		if (!style.empty()) frame->SetStyle(style);
+		if (!renderer.empty()) frame->SetRenderer(renderer);
 
 		// Set frame text if there is any
 		if (!text.empty())
@@ -101,23 +106,27 @@ namespace mmo
 		m_frames.push(frame);
 	}
 
-	void LayoutXmlHandler::ElementAutoFrameStart(const XmlAttributes & attributes)
-	{
-
-	}
-
-	void LayoutXmlHandler::ElementUILayoutEnd()
-	{
-		// We don't need to check this here, as the xml parser will already ensure that
-		// check for valid end elements is performed.
-		m_uiStarted = false;
-	}
-
-	void LayoutXmlHandler::ElementFrameEnd()
+	void LayoutXmlLoader::ElementFrameEnd()
 	{
 		// Remove the last processes frame from the stack and ensure that
 		// there is one
 		ASSERT(!m_frames.empty());
 		m_frames.pop();
+	}
+
+	void LayoutXmlLoader::ElementAreaStart(const XmlAttributes & attributes)
+	{
+	}
+
+	void LayoutXmlLoader::ElementAreaEnd()
+	{
+	}
+
+	void LayoutXmlLoader::ElementScriptStart(const XmlAttributes & attributes)
+	{
+	}
+
+	void LayoutXmlLoader::ElementScriptEnd()
+	{
 	}
 }
