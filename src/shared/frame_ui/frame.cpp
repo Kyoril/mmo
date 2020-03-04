@@ -4,8 +4,10 @@
 #include "frame_mgr.h"
 #include "style_mgr.h"
 #include "default_renderer.h"
+#include "button_renderer.h"
 
 #include "base/utilities.h"
+#include "base/macros.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -96,9 +98,20 @@ namespace mmo
 		}
 
 		// TODO: This is only a temporary test until there is a renderer factory
-		m_renderer = std::make_unique<DefaultRenderer>("DefaultRenderer");
-		m_renderer->m_frame = this;
-		m_needsRedraw = true;
+		if (rendererName == "ButtonRenderer")
+		{
+			m_renderer = std::make_unique<ButtonRenderer>("ButtonRenderer");
+		}
+		else
+		{
+			m_renderer = std::make_unique<DefaultRenderer>("DefaultRenderer");
+		}
+
+		if (m_renderer)
+		{
+			m_renderer->m_frame = this;
+			m_needsRedraw = true;
+		}
 
 		// TODO: Create new renderer instance by name
 
@@ -281,15 +294,8 @@ namespace mmo
 
 	Rect Frame::GetRelativeFrameRect()
 	{
+		// Use the internal size property as the default value
 		Size mySize = GetPixelSize();
-		if (AnchorsSatisfyWidth())
-		{
-			// TODO: Determine width by using anchors
-		}
-		if (AnchorsSatisfyHeight())
-		{
-			// TODO: Determine height by using anchors
-		}
 
 		// Return the rectangle with the calculated size
 		return Rect(Point(), mySize);
@@ -338,22 +344,7 @@ namespace mmo
 		Rect r = GetRelativeFrameRect();
 
 		// This rect will contain the absolute parent rectangle
-		Rect parentRect;
-
-		if (m_parent == nullptr)
-		{
-			// Obtain the current viewport size in pixels in case this 
-			int32 vpW, vpH;
-			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vpW, &vpH);
-
-			// No parent frame available, then the screen rect is the parent rect
-			parentRect.SetSize(Size(vpW, vpH));
-		}
-		else
-		{
-			// Use the absolute frame rect of the parent
-			parentRect = m_parent->GetAbsoluteFrameRect();
-		}
+		const Rect parentRect = GetParentRect();
 
 		// Add parent rect offset to the relative rect
 		r.Offset(parentRect.GetPosition());
@@ -362,12 +353,31 @@ namespace mmo
 		Point localPosition = m_position;
 		if (AnchorsSatisfyXPosition())
 		{
-			// TODO: Apply anchor position
-
+			// TODO
 		}
 		if (AnchorsSatisfyYPosition())
 		{
-			// TODO: Apply anchor position
+			// TODO
+		}
+		if (AnchorsSatisfyWidth())
+		{
+			const auto leftAnchorIt = m_anchors.find(anchor_point::Left);
+			ASSERT(leftAnchorIt != m_anchors.end());
+			const auto rightAnchorIt = m_anchors.find(anchor_point::Right);
+			ASSERT(rightAnchorIt != m_anchors.end());
+
+			// TODO: Apply anchor offset values
+			r.SetWidth(parentRect.GetWidth());
+		}
+		if (AnchorsSatisfyHeight())
+		{
+			const auto topAnchorIt = m_anchors.find(anchor_point::Top);
+			ASSERT(topAnchorIt != m_anchors.end());
+			const auto bottomAnchorIt = m_anchors.find(anchor_point::Bottom);
+			ASSERT(bottomAnchorIt != m_anchors.end());
+
+			// TODO: Apply anchor offset values
+			r.SetHeight(parentRect.GetHeight());
 		}
 
 		// Move rectangle
@@ -416,6 +426,28 @@ namespace mmo
 	{
 		// Draw the geometry buffer
 		m_geometryBuffer.Draw();
+	}
+
+	Rect Frame::GetParentRect()
+	{
+		Rect parentRect;
+
+		if (m_parent == nullptr)
+		{
+			// Obtain the current viewport size in pixels in case this 
+			int32 vpW, vpH;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vpW, &vpH);
+
+			// No parent frame available, then the screen rect is the parent rect
+			parentRect.SetSize(Size(vpW, vpH));
+		}
+		else
+		{
+			// Use the absolute frame rect of the parent
+			parentRect = m_parent->GetAbsoluteFrameRect();
+		}
+
+		return parentRect;
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()

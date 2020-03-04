@@ -161,6 +161,8 @@ namespace mmo
 		void QueueGeometry();
 		/// Allows for custom geometry buffer population for custom frame classes.
 		virtual void PopulateGeometryBuffer() {}
+		/// Gets the parent rectangle.
+		Rect GetParentRect();
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
