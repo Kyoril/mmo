@@ -204,7 +204,7 @@ namespace mmo
 		case AnchorPoint::Bottom:
 			r.Offset(Point(
 				offset.x,
-				parentRect.m_bottom - r.GetHeight() - offset.y));
+				parentRect.bottom - r.GetHeight() - offset.y));
 			break;
 
 		case AnchorPoint::Center:

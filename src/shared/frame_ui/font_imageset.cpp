@@ -33,21 +33,21 @@ namespace mmo
 			const float w = (float)m_texture->GetWidth();
 			const float h = (float)m_texture->GetHeight();
 
-			const float srcU = srcRect.m_left / w;
-			const float srcV = srcRect.m_top / h;
-			const float dstU = srcRect.m_right / w;
-			const float dstV = srcRect.m_bottom / h;
+			const float srcU = srcRect.left / w;
+			const float srcV = srcRect.top / h;
+			const float dstU = srcRect.right / w;
+			const float dstV = srcRect.bottom / h;
 
 			// Setup geometry
 			GeometryBuffer::Vertex vertices[6]{
 				// First triangle
-				{ { dstRect.m_left, dstRect.m_bottom, 0.0f }, 0xffffffff, { srcU, dstV } },
-				{ { dstRect.m_left, dstRect.m_top, 0.0f }, 0xffffffff, { srcU, srcV } },
-				{ { dstRect.m_right, dstRect.m_top, 0.0f }, 0xffffffff, { dstU, srcV } },
+				{ { dstRect.left, dstRect.bottom, 0.0f }, 0xffffffff, { srcU, dstV } },
+				{ { dstRect.left, dstRect.top, 0.0f }, 0xffffffff, { srcU, srcV } },
+				{ { dstRect.right, dstRect.top, 0.0f }, 0xffffffff, { dstU, srcV } },
 				// Second triangle
-				{ { dstRect.m_right, dstRect.m_top, 0.0f }, 0xffffffff, { dstU, srcV } },
-				{ { dstRect.m_right, dstRect.m_bottom, 0.0f }, 0xffffffff, { dstU, dstV } },
-				{ { dstRect.m_left, dstRect.m_bottom, 0.0f }, 0xffffffff, { srcU, dstV } }
+				{ { dstRect.right, dstRect.top, 0.0f }, 0xffffffff, { dstU, srcV } },
+				{ { dstRect.right, dstRect.bottom, 0.0f }, 0xffffffff, { dstU, dstV } },
+				{ { dstRect.left, dstRect.bottom, 0.0f }, 0xffffffff, { srcU, dstV } }
 			};
 
 			// Append vertices
