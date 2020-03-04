@@ -2,12 +2,14 @@
 
 #pragma once
 
-#include "base/typedefs.h"
-#include "base/signal.h"
-
 #include "geometry_buffer.h"
 #include "rect.h"
 #include "anchor_point.h"
+#include "style.h"
+#include "frame_renderer.h"
+
+#include "base/typedefs.h"
+#include "base/signal.h"
 
 #include <memory>
 #include <string>
@@ -106,6 +108,15 @@ namespace mmo
 		inline void Disable() { SetEnabled(false); }
 		/// Determines if this window is the root frame.
 		bool IsRootFrame() const;
+		/// Sets the renderer by name.
+		void SetRenderer(const std::string& rendererName);
+		/// Sets the window style by name.
+		void SetStyle(const std::string& style);
+		/// Gets the style instance if there is any.
+		inline const StylePtr GetStyle() const { return m_style; }
+		/// Gets the renderer instance if there is any.
+		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
+
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -141,8 +152,8 @@ namespace mmo
 		void BufferGeometry();
 
 		void QueueGeometry();
-
-		virtual void PopulateGeometryBuffer();
+		/// Allows for custom geometry buffer population for custom frame classes.
+		virtual void PopulateGeometryBuffer() {}
 
 	protected:
 
@@ -163,6 +174,10 @@ namespace mmo
 		Point m_anchorOffset;
 
 		Frame* m_parent;
+		/// Window style instance.
+		StylePtr m_style;
+		/// Window renderer instance.
+		std::unique_ptr<FrameRenderer> m_renderer;
 	};
 
 	typedef Frame::Pointer FramePtr;

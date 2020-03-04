@@ -2,6 +2,7 @@
 
 #include "frame_text_component.h"
 #include "geometry_buffer.h"
+#include "frame.h"
 
 
 
@@ -13,25 +14,28 @@ namespace mmo
 	{
 		m_font = std::make_shared<Font>();
 		VERIFY(m_font->Initialize(fontFile, fontSize, outline));
+
+		m_frameConnection = m_frame.TextChanged.connect(*this, &TextComponent::OnTextChanged);
+		OnTextChanged();
 	}
 
 	void TextComponent::Render(GeometryBuffer & buffer) const
 	{
-		m_font->DrawText(m_text, Point::Zero, buffer);
+		m_font->DrawText(m_frame.GetText(), Point::Zero, buffer);
 	}
 
-	void TextComponent::SetText(const std::string & text)
+	void TextComponent::OnTextChanged()
 	{
-		m_text = text;
+		ASSERT(m_font);
 
-		if (text.size() == 0)
+		if (m_frame.GetText().size() == 0)
 		{
 			m_width = 0.0f;
 			return;
 		}
 
 		// Calculate the text width and cache it for later use
-		m_width = m_font->GetTextWidth(m_text);
+		m_width = m_font->GetTextWidth(m_frame.GetText());
 	}
 
 	Size TextComponent::GetSize() const

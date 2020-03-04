@@ -12,7 +12,7 @@
 namespace mmo
 {
 	/// Provides a frame layout xml handler using the basic xml interface.
-	class LayoutXmlHandler final 
+	class LayoutXmlLoader final 
 		: public XmlHandler
 	{
 	public:
@@ -24,17 +24,16 @@ namespace mmo
 
 
 	private:
-		void ElementUILayoutStart(const XmlAttributes& attributes);
 		void ElementFrameStart(const XmlAttributes& attributes);
-		void ElementAutoFrameStart(const XmlAttributes& attributes);
-		void ElementUILayoutEnd();
 		void ElementFrameEnd();
+		void ElementAreaStart(const XmlAttributes& attributes);
+		void ElementAreaEnd();
+		void ElementScriptStart(const XmlAttributes& attributes);
+		void ElementScriptEnd();
 
-		void operator=(const LayoutXmlHandler&) {}
+		void operator=(const LayoutXmlLoader&) {}
 
 	private:
-		/// Whether the UI tag has been started.
-		bool m_uiStarted;
 		/// Stack of added frames.
 		std::stack<FramePtr> m_frames;
 	};

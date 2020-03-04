@@ -5,11 +5,13 @@
 #include "frame_component.h"
 #include "font.h"
 
+#include "base/signal.h"
+
 
 namespace mmo
 {
 	/// This class is a texture frame object which can be used to render plain images.
-	class TextComponent 
+	class TextComponent final
 		: public FrameComponent
 	{
 	public:
@@ -19,24 +21,18 @@ namespace mmo
 	public:
 		// FrameComponent overrides
 		void Render(GeometryBuffer& buffer) const override;
+		Size GetSize() const override;
 
-	public:
-		/// Sets the new string to render.
-		void SetText(const std::string& text);
-
-	public:
-		/// Gets the current text value.
-		inline const std::string& GetText() const { return m_text; }
-
-	public:
-		virtual Size GetSize() const override;
+	private:
+		/// Executed when the frame's text changed.
+		void OnTextChanged();
 
 	private:
 		/// The graphics texture object.
 		FontPtr m_font;
-		/// The string value to render.
-		std::string m_text;
 		/// The cached pixel width of the string.
 		float m_width;
+		/// Scoped frame signal connection
+		scoped_connection m_frameConnection;
 	};
 }

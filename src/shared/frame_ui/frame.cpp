@@ -2,8 +2,10 @@
 
 #include "frame.h"
 #include "frame_mgr.h"
+#include "style_mgr.h"
 
 #include "base/utilities.h"
+#include "log/default_log_levels.h"
 
 #include <algorithm>
 
@@ -81,6 +83,32 @@ namespace mmo
 			return false;
 
 		return (rootFrame.get() == this);
+	}
+
+	void Frame::SetRenderer(const std::string & rendererName)
+	{
+		if (m_renderer != nullptr)
+		{
+			m_renderer->m_frame = nullptr;
+			m_renderer.reset();
+		}
+
+		// TODO: Create new renderer instance by name
+
+		// TODO: Register this frame for the new renderer
+	}
+
+	void Frame::SetStyle(const std::string & style)
+	{
+		m_style = StyleManager::Get().Find(style);
+		if (!m_style)
+		{
+			WLOG("Unable to find frame style '" << style << "' for frame '" << m_name << "'");
+		}
+
+		m_needsRedraw = true;
+
+		// TODO: Notify renderer about this?
 	}
 
 	void Frame::Render()
@@ -237,8 +265,16 @@ namespace mmo
 			// Signal rendering started
 			RenderingStarted();
 
-			// Get derived class or WindowRenderer to re-populate geometry buffer.
-			PopulateGeometryBuffer();
+			// If there is a renderer created, use it to render this frame, otherwise call the frame's internal
+			// PopulateGeometryBuffer virtual method.
+			if (m_renderer != nullptr)
+			{
+				m_renderer->Render();
+			}
+			else
+			{
+				PopulateGeometryBuffer();
+			}
 
 			// Signal rendering ended
 			RenderingEnded();
@@ -252,10 +288,5 @@ namespace mmo
 	{
 		// Draw the geometry buffer
 		m_geometryBuffer->Draw();
-	}
-
-	void Frame::PopulateGeometryBuffer()
-	{
-		// TODO: Call the window renderer's draw method
 	}
 }
