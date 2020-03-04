@@ -344,6 +344,14 @@ namespace mmo
 		}
 	}
 
+	void FrameManager::NotifyMouseMoved(const Point & position)
+	{
+		// TODO: Determine the currently hovered frame and set it as the 
+		// hovered frame.
+
+
+	}
+
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)
 	{
 		auto it = m_frameFactories.find(elementName);

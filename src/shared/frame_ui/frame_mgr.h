@@ -49,6 +49,10 @@ namespace mmo
 		void SetTopFrame(const FramePtr& topFrame);
 		void ResetTopFrame();
 		void Draw() const;
+		/// Gets the currently hovered frame.
+		inline FramePtr GetHoveredFrame() const { return m_hoverFrame; }
+		/// Notifies the FrameManager that the mouse cursor has been moved.
+		void NotifyMouseMoved(const Point& position);
 
 	public:
 		/// Registers a new factory for a certain frame type.
@@ -64,5 +68,6 @@ namespace mmo
 	private:
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;
 		FramePtr m_topFrame;
+		FramePtr m_hoverFrame;
 	};
 }
