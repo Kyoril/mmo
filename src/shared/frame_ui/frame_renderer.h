@@ -48,9 +48,16 @@ namespace mmo
 		virtual void Render(
 			optional<Color> colorOverride = optional<Color>(), 
 			optional<Rect> clipper = optional<Rect>()) = 0;
+		/// Called once per frame to update anything that needs to be updated every frame,
+		/// like animations.
+		/// @param elapsedSeconds Time since the last call to update in seconds.
+		virtual void Update(float elapsedSeconds) {}
 
 	protected:
+		/// Name of this renderer.
 		std::string m_name;
+		/// The frame that is assigned to this renderer instance. The Frame class
+		/// sets this directly in the SetRenderer method.
 		Frame* m_frame;
 	};
 }

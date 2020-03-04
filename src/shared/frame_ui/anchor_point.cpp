@@ -20,8 +20,10 @@ namespace mmo
 			return "BOTTOM";
 		case anchor_point::Left:
 			return "LEFT";
-		case anchor_point::Center:
-			return "CENTER";
+		case anchor_point::HorizontalCenter:
+			return "H_CENTER";
+		case anchor_point::VerticalCenter:
+			return "V_CENTER";
 		default:
 			return "NONE";
 		}
@@ -45,9 +47,13 @@ namespace mmo
 		{
 			return anchor_point::Left;
 		}
-		else if (_stricmp(name.c_str(), "CENTER") == 0)
+		else if (_stricmp(name.c_str(), "H_CENTER") == 0)
 		{
-			return anchor_point::Center;
+			return anchor_point::HorizontalCenter;
+		}
+		else if (_stricmp(name.c_str(), "V_CENTER") == 0)
+		{
+			return anchor_point::VerticalCenter;
 		}
 
 		return AnchorPoint::None;

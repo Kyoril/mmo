@@ -19,28 +19,6 @@
 
 namespace mmo
 {
-	/// Enumerated type used when specifying vertical alignments.
-	enum class VerticalAlignment
-	{
-		/// Frame's position specifies an offset of it's top edge from the top edge of it's parent.
-		Top,
-		/// Frame's position specifies an offset of it's vertical center from the vertical center of it's parent.
-		Center,
-		/// Frame's position specifies an offset of it's bottom edge from the bottom edge of it's parent.
-		Bottom
-	};
-
-	/// Enumerated type used when specifying horizontal alignments.
-	enum class HorizontalAlignment
-	{
-		/// Frame's position specifies an offset of it's left edge from the left edge of it's parent.
-		Left,
-		/// Frame's position specifies an offset of it's horizontal center from the horizontal center of it's parent.
-		Center,
-		/// Frame's position specifies an offset of it's right edge from the right edge of it's parent.
-		Right
-	};
-
 	/// Enumerated type used for specifying Frame::update mode to be used. Note that
 	/// the setting specified will also have an effect on child window content; for
 	/// Never and Visible, if the parent's update function is not called, then no
@@ -127,10 +105,24 @@ namespace mmo
 		/// Sets the position of this frame. Note that anchors have higher priority, so this function
 		/// might have no effect at all.
 		void SetPosition(const Point& position);
+		/// Determines if the set anchors can be used to determine the frame's x position.
+		bool AnchorsSatisfyXPosition() const;
+		/// Determines if the anchors can be used to determine the frame's y position.
+		bool AnchorsSatisfyYPosition() const;
 		/// Determines if the set anchors can be used to determine the frame position.
-		bool AnchorsSatisfyPosition() const;
+		inline bool AnchorsSatisfyPosition() const { return AnchorsSatisfyXPosition() && AnchorsSatisfyYPosition(); }
+		/// Determines if the width of this frame can be derived from anchors.
+		bool AnchorsSatisfyWidth() const;
+		/// Determines if the height of this frame can be derived from anchors.
+		bool AnchorsSatisfyHeight() const;
 		/// Determines if the set anchors can be used to determine the frame size.
-		bool AnchorsSatisfySize() const;
+		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
+		/// Sets an anchor for this frame.
+		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Pointer relativeTo);
+		/// Clears an anchor point.
+		void ClearAnchor(AnchorPoint point);
+		/// Gets the parent frame.
+		inline Frame* GetParent() const { return m_parent; }
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -144,24 +136,17 @@ namespace mmo
 		virtual inline Size GetPixelSize() const { return m_pixelSize; }
 		/// Sets the pixel size of this frame.
 		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
-
-		virtual void SetOrigin(AnchorPoint point, Point offset = Point());
-		/// Sets anchor points of this frame in the parent frame, which tells where to position the frame.
-		virtual void SetAnchorPoints(uint8 points);
-
+		/// Adds a frame to the list of child frames.
 		virtual void AddChild(Pointer frame);
 		/// Gets the geometry buffer that is used to render this frame.
 		GeometryBuffer& GetGeometryBuffer();
 
-	protected:
+	public:
 		virtual Rect GetRelativeFrameRect();
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();
-		/// Gets the frame rectangle in screen space coordinates.
-		virtual Rect GetScreenFrameRect();
 
-		virtual void UpdateSelf(float elapsed);
-
+	protected:
 		virtual void DrawSelf();
 
 		void BufferGeometry();
@@ -171,32 +156,38 @@ namespace mmo
 		virtual void PopulateGeometryBuffer() {}
 
 	protected:
-
 		typedef std::vector<Pointer> ChildList;
 
+		/// The name of this frame. Must be unique.
 		std::string m_name;
+		/// Whether the frame needs to be fully redrawn (geometry recreated).
 		bool m_needsRedraw;
+		/// The text of this frame that is rendered by TextComponents in the frame's style.
 		std::string m_text;
+		/// Whether the frame is visibile and thus can be rendered (can be used to hide the frame).
 		bool m_visible;
+		/// Whether the frame is enabled and thus responds to click events and can receive the input focus.
 		bool m_enabled;
+		/// Whether the frame is clipped by it's parent frame.
 		bool m_clippedByParent;
+		/// The frame's position if no or not enough anchor points are set.
 		Point m_position;
+		/// A container of attached child frames.
 		ChildList m_children;
+		/// The geometry buffer of this frame.
 		GeometryBuffer m_geometryBuffer;
 		/// The current size of this frame in pixels.
-		Size m_pixelSize;
-		/// The anchor point used for positioning.
-		AnchorPoint m_originPoint;
-
-		Point m_anchorOffset;
-
+		Size m_pixelSize = { 200.0f, 96.0f };
+		/// The parent frame (or nullptr if there is no parent frame).
 		Frame* m_parent;
 		/// Window style instance.
 		StylePtr m_style;
 		/// Window renderer instance.
 		std::unique_ptr<FrameRenderer> m_renderer;
+		/// A map of anchor points.
+		std::map<AnchorPoint, std::unique_ptr<Anchor>> m_anchors;
 	};
 
+	/// A shared pointer of a frame.
 	typedef Frame::Pointer FramePtr;
-
 }
