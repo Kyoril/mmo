@@ -101,6 +101,15 @@ namespace mmo
 			// Add this frame to the parent frame
 			parentFrame->AddChild(frame);
 		}
+		else
+		{
+			// No parent property set - check if we already have a frame on the stack, and if so, add
+			// the current frame as a child frame to the frame on top of the stack
+			if (!m_frames.empty())
+			{
+				m_frames.top()->AddChild(frame);
+			}
+		}
 
 		// Push it to the stack of frames
 		m_frames.push(frame);
