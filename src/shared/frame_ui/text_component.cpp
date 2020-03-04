@@ -58,11 +58,11 @@ namespace mmo
 
 	VerticalAlignment VerticalAlignmentByName(const std::string & name)
 	{
-		if (stricmp(name.c_str(), "CENTER") == 0)
+		if (_stricmp(name.c_str(), "CENTER") == 0)
 		{
 			return VerticalAlignment::Center;
 		}
-		else if (stricmp(name.c_str(), "BOTTOM") == 0)
+		else if (_stricmp(name.c_str(), "BOTTOM") == 0)
 		{
 			return VerticalAlignment::Bottom;
 		}
@@ -89,11 +89,11 @@ namespace mmo
 
 	HorizontalAlignment HorizontalAlignmentByName(const std::string & name)
 	{
-		if (stricmp(name.c_str(), "CENTER") == 0)
+		if (_stricmp(name.c_str(), "CENTER") == 0)
 		{
 			return HorizontalAlignment::Center;
 		}
-		else if (stricmp(name.c_str(), "RIGHT") == 0)
+		else if (_stricmp(name.c_str(), "RIGHT") == 0)
 		{
 			return HorizontalAlignment::Right;
 		}
