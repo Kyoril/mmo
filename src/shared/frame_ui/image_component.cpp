@@ -2,7 +2,9 @@
 
 #include "image_component.h"
 #include "geometry_buffer.h"
+#include "geometry_helper.h"
 
+#include "base/utilities.h"
 #include "graphics/texture_mgr.h"
 
 
@@ -12,6 +14,7 @@ namespace mmo
 		: FrameComponent()
 		, m_width(0)
 		, m_height(0)
+		, m_tiling(ImageTilingMode::None)
 	{
 		m_texture = TextureManager::Get().CreateOrRetrieve(filename);
 	}
@@ -21,26 +24,35 @@ namespace mmo
 		// Bind the texture object
 		frame.GetGeometryBuffer().SetActiveTexture(m_texture);
 		
-		// Determine width and height
-		float w = m_width; 
-		if (m_width == 0) w = m_texture->GetWidth();
-		float h = m_height; 
-		if (m_height == 0) h = m_texture->GetHeight();
+		const Rect frameRect = frame.GetAbsoluteFrameRect();
 
-		// Setup geometry
-		GeometryBuffer::Vertex vertices[6]{
-			// First triangle
-			{ { 0.0f,    h, 0.0f }, 0xffffffff, { 0.0f, 0.0f } },
-			{ { 0.0f, 0.0f, 0.0f }, 0xffffffff, { 0.0f, 1.0f } },
-			{ {    w, 0.0f, 0.0f }, 0xffffffff, { 1.0f, 1.0f } },
-			// Second triangle
-			{ {    w, 0.0f, 0.0f }, 0xffffffff, { 1.0f, 1.0f } },
-			{ {    w,    h, 0.0f }, 0xffffffff, { 1.0f, 0.0f } },
-			{ { 0.0f,    h, 0.0f }, 0xffffffff, { 0.0f, 0.0f } }
-		};
+		// Default source rect encapsules the whole image area
+		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(m_texture->GetWidth()), static_cast<float>(m_texture->GetHeight())};
 
-		// Append vertices
-		frame.GetGeometryBuffer().AppendGeometry(vertices, 6);
+		// Apply tiling
+		if (m_tiling == ImageTilingMode::Horizontally ||
+			m_tiling == ImageTilingMode::Both)
+		{
+			const float factorX = frameRect.GetWidth() / static_cast<float>(m_texture->GetWidth());
+			srcRect.SetWidth(factorX * srcRect.GetWidth());
+		}
+		if (m_tiling == ImageTilingMode::Vertically ||
+			m_tiling == ImageTilingMode::Both)
+		{
+			const float factorY = frameRect.GetHeight() / static_cast<float>(m_texture->GetHeight());
+			srcRect.SetWidth(factorY * srcRect.GetHeight());
+		}
+
+		// Create the rectangle
+		GeometryHelper::CreateRect(frame.GetGeometryBuffer(),
+			frameRect,
+			srcRect,
+			m_texture->GetWidth(), m_texture->GetHeight());
+	}
+
+	void ImageComponent::SetTilingMode(ImageTilingMode mode)
+	{
+		m_tiling = mode;
 	}
 
 	Size ImageComponent::GetSize() const
@@ -52,5 +64,41 @@ namespace mmo
 		if (realHeight == 0) realHeight = m_texture->GetHeight();
 
 		return Size(realWidth, realHeight);
+	}
+
+	ImageTilingMode ImageTilingModeByName(const std::string & name)
+	{
+		if (_stricmp(name.c_str(), "HORZ") == 0)
+		{
+			return ImageTilingMode::Horizontally;
+		}
+		else if (_stricmp(name.c_str(), "VERT") == 0)
+		{
+			return ImageTilingMode::Vertically;
+		}
+		else if (_stricmp(name.c_str(), "BOTH") == 0)
+		{
+			return ImageTilingMode::Both;
+		}
+
+		// Default value
+		return ImageTilingMode::None;
+	}
+
+	std::string ImageTilingModeName(ImageTilingMode alignment)
+	{
+		switch (alignment)
+		{
+		case ImageTilingMode::None:
+			return "NONE";
+		case ImageTilingMode::Horizontally:
+			return "HORZ";
+		case ImageTilingMode::Vertically:
+			return "VERT";
+		case ImageTilingMode::Both:
+			return "BOTH";
+		default:
+			return "NONE";
+		}
 	}
 }

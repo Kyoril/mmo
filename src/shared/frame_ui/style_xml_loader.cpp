@@ -32,7 +32,9 @@ namespace mmo
 	static const std::string TextComponentOutlineAttribute("outline");
 	static const std::string ImageComponentElement("ImageComponent");
 	static const std::string ImageComponentTextureAttribute("texture");
+	static const std::string ImageComponentTilingAttribute("tiling");
 	static const std::string BorderComponentElement("BorderComponent");
+	static const std::string BorderComponentBorderSizeAttribute("borderSize");
 	static const std::string AreaElement("Area");
 
 
@@ -282,6 +284,7 @@ namespace mmo
 		const std::string font(attributes.GetValueAsString(TextComponentFontAttribute));
 		const int size = attributes.GetValueAsInt(TextComponentSizeAttribute);
 		const float outline = attributes.GetValueAsFloat(TextComponentOutlineAttribute);
+		const std::string color(attributes.GetValueAsString(TextComponentColorAttribute));
 		const std::string horzAlignAttr(attributes.GetValueAsString(TextComponentHorzAlignAttribute));
 		const std::string vertAlignAttr(attributes.GetValueAsString(TextComponentVertAlignAttribute));
 
@@ -295,6 +298,19 @@ namespace mmo
 		auto component = std::make_shared<TextComponent>(font, size, outline);
 		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
 		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
+
+		if (attributes.Exists(TextComponentColorAttribute))
+		{
+			argb_t argb;
+
+			std::stringstream colorStream;
+			colorStream.str(color);
+			colorStream.clear();
+
+			colorStream >> std::hex >> argb;
+			component->SetColor(argb);
+		}
+
 		m_component = component;
 		m_section->AddComponent(m_component);
 	}
@@ -312,6 +328,7 @@ namespace mmo
 		}
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
+		const std::string tilingAttr(attributes.GetValueAsString(ImageComponentTilingAttribute));
 
 		// Check for texture name existance
 		if (texture.empty())
@@ -320,7 +337,15 @@ namespace mmo
 		}
 
 		// Setup component and add it to the current section
-		m_component = std::make_shared<ImageComponent>(texture);
+		auto component = std::make_shared<ImageComponent>(texture);
+
+		// Apply tiling mode if set
+		if (attributes.Exists(ImageComponentTilingAttribute))
+		{
+			component->SetTilingMode(ImageTilingModeByName(tilingAttr));
+		}
+
+		m_component = component;
 		m_section->AddComponent(m_component);
 	}
 
@@ -337,6 +362,7 @@ namespace mmo
 		}
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
+		const int borderSize = attributes.GetValueAsInt(BorderComponentBorderSizeAttribute);
 
 		// Check for texture name existance
 		if (texture.empty())
@@ -344,8 +370,15 @@ namespace mmo
 			throw std::runtime_error("BorderComponent needs a texture filename!");
 		}
 
+		// Check for border size
+		if (!attributes.Exists(BorderComponentBorderSizeAttribute) ||
+			borderSize <= 0)
+		{
+			throw std::runtime_error("BorderComponent needs a valid border size value!");
+		}
+
 		// Setup component and add it to the current section
-		m_component = std::make_shared<BorderComponent>(texture, 22.0f);
+		m_component = std::make_shared<BorderComponent>(texture, borderSize);
 		m_section->AddComponent(m_component);
 	}
 

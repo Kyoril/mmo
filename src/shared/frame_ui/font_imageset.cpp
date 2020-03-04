@@ -22,7 +22,7 @@ namespace mmo
 		return m_images.back();
 	}
 
-	void FontImageset::Draw(const Rect & srcRect, const Rect & dstRect, GeometryBuffer & buffer) const
+	void FontImageset::Draw(const Rect & srcRect, const Rect & dstRect, GeometryBuffer & buffer, argb_t color) const
 	{
 		if (m_texture)
 		{
@@ -41,13 +41,13 @@ namespace mmo
 			// Setup geometry
 			GeometryBuffer::Vertex vertices[6]{
 				// First triangle
-				{ { dstRect.left, dstRect.bottom, 0.0f }, 0xffffffff, { srcU, dstV } },
-				{ { dstRect.left, dstRect.top, 0.0f }, 0xffffffff, { srcU, srcV } },
-				{ { dstRect.right, dstRect.top, 0.0f }, 0xffffffff, { dstU, srcV } },
+				{ { dstRect.left, dstRect.bottom, 0.0f }, color, { srcU, dstV } },
+				{ { dstRect.left, dstRect.top, 0.0f }, color, { srcU, srcV } },
+				{ { dstRect.right, dstRect.top, 0.0f }, color, { dstU, srcV } },
 				// Second triangle
-				{ { dstRect.right, dstRect.top, 0.0f }, 0xffffffff, { dstU, srcV } },
-				{ { dstRect.right, dstRect.bottom, 0.0f }, 0xffffffff, { dstU, dstV } },
-				{ { dstRect.left, dstRect.bottom, 0.0f }, 0xffffffff, { srcU, dstV } }
+				{ { dstRect.right, dstRect.top, 0.0f }, color, { dstU, srcV } },
+				{ { dstRect.right, dstRect.bottom, 0.0f }, color, { dstU, dstV } },
+				{ { dstRect.left, dstRect.bottom, 0.0f }, color, { srcU, dstV } }
 			};
 
 			// Append vertices

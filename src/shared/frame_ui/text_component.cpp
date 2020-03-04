@@ -26,6 +26,11 @@ namespace mmo
 		m_vertAlignment = alignment;
 	}
 
+	void TextComponent::SetColor(const Color & color)
+	{
+		m_color = color;
+	}
+
 	void TextComponent::Render(Frame& frame) const
 	{
 		if (m_font)
@@ -60,7 +65,7 @@ namespace mmo
 			}
 
 			// Determine the position to render the font at
-			m_font->DrawText(frame.GetText(), position, frame.GetGeometryBuffer());
+			m_font->DrawText(frame.GetText(), position, frame.GetGeometryBuffer(), 1.0f, m_color);
 		}
 	}
 

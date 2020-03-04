@@ -572,7 +572,7 @@ namespace mmo
 		return (it != m_glyphMap.end()) ? &it->second : nullptr;
 	}
 
-	void Font::DrawText(const std::string & text, const Point & position, GeometryBuffer& buffer, float scale)
+	void Font::DrawText(const std::string & text, const Point & position, GeometryBuffer& buffer, float scale, argb_t color)
 	{
 		const float baseY = position.y + GetBaseline(scale);
 		Point glyphPos(position);
@@ -594,7 +594,7 @@ namespace mmo
 				const FontImage* const image = glyph->GetImage();
 				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 
-				image->Draw(glyphPos, glyph->GetImage()->GetSize(), buffer);
+				image->Draw(glyphPos, glyph->GetImage()->GetSize(), buffer, color);
 
 				for (size_t i = 0; i < iterations; ++i)
 				{

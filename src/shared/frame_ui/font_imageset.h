@@ -5,6 +5,7 @@
 #include "rect.h"
 #include "size.h"
 #include "font_image.h"
+#include "color.h"
 
 #include "base/typedefs.h"
 #include "graphics/texture.h"
@@ -28,7 +29,7 @@ namespace mmo
 		/// Defines a new named area on this set.
 		FontImage& DefineImage(const Rect& imageRect, const Point& renderOffset);
 		/// Draws an image from the imageset.
-		void Draw(const Rect& srcRect, const Rect& dstRect, GeometryBuffer& buffer) const;
+		void Draw(const Rect& srcRect, const Rect& dstRect, GeometryBuffer& buffer, argb_t color = 0xffffffff) const;
 
 	private:
 

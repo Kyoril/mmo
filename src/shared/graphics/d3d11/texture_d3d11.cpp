@@ -70,7 +70,17 @@ namespace mmo
 		D3D11_SUBRESOURCE_DATA data;
 		ZeroMemory(&data, sizeof(data));
 		data.pSysMem = &mipData[0];
+
 		data.SysMemPitch = sizeof(uint32) * m_header.width;
+		switch (m_header.format)
+		{
+		case tex::v1_0::DXT1:
+			data.SysMemPitch /= 8;
+			break;
+		case tex::v1_0::DXT5:
+			data.SysMemPitch /= 4;
+			break;
+		}
 
 		// Create texture object
 		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, &data, &m_texture)));

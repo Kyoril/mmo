@@ -4,28 +4,47 @@
 
 #include "frame_component.h"
 
+#include "base/typedefs.h"
 #include "graphics/texture.h"
 
 
 namespace mmo
 {
+	enum class ImageTilingMode : uint8
+	{
+		None,
+
+		Horizontally,
+		Vertically,
+
+		Both
+	};
+
+	/// Parses a string and converts it to a ImageTilingMode enum value.
+	ImageTilingMode ImageTilingModeByName(const std::string& name);
+	/// Generates the name of a ImageTilingMode enum value.
+	std::string ImageTilingModeName(ImageTilingMode alignment);
+
+
 	/// This class is a texture frame object which can be used to render plain images.
-	class ImageComponent 
+	class ImageComponent final
 		: public FrameComponent
 	{
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
 		explicit ImageComponent(const std::string& filename);
-		virtual ~ImageComponent() = default;
 
 	public:
 		// FrameComponent overrides
 		void Render(Frame& frame) const override;
 
 	public:
+		void SetTilingMode(ImageTilingMode mode);
+
+	public:
 		// ~Begin FrameComponent
-		virtual Size GetSize() const override;
+		Size GetSize() const override;
 		// ~End FrameComponent
 
 	private:
@@ -35,5 +54,7 @@ namespace mmo
 		uint16 m_width;
 		/// The height at which the frame texture object is drawn. If set to 0, the texture height is used.
 		uint16 m_height;
+		/// The tiling mode of the image.
+		ImageTilingMode m_tiling;
 	};
 }

@@ -29,11 +29,11 @@ namespace mmo
 		return m_area;
 	}
 
-	void FontImage::Draw(const Point & position, const Size & size, GeometryBuffer & buffer) const
+	void FontImage::Draw(const Point & position, const Size & size, GeometryBuffer & buffer, argb_t color) const
 	{
 		if (!m_owner)
 			return;
 
-		m_owner->Draw(m_area, Rect(Point(position.x + m_scaledOffset.x, position.y + m_scaledOffset.y), size), buffer);
+		m_owner->Draw(m_area, Rect(Point(position.x + m_scaledOffset.x, position.y + m_scaledOffset.y), size), buffer, color);
 	}
 }
