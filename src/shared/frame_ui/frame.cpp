@@ -98,8 +98,8 @@ namespace mmo
 		// TODO: This is only a temporary test until there is a renderer factory
 		m_renderer = std::make_unique<DefaultRenderer>("DefaultRenderer");
 		m_renderer->m_frame = this;
-
 		m_needsRedraw = true;
+
 		// TODO: Create new renderer instance by name
 
 		// TODO: Register this frame for the new renderer
@@ -128,17 +128,64 @@ namespace mmo
 		}
 	}
 
-	bool Frame::AnchorsSatisfyPosition() const
+	void Frame::SetPosition(const Point & position)
 	{
-		// TODO: Implement this method
+		m_position = position;
 
-		return false;
+		// If this change somehow affects this frame, invalidate it
+		if (!AnchorsSatisfyPosition())
+		{
+			m_needsRedraw = true;
+		}
 	}
 
-	bool Frame::AnchorsSatisfySize() const
+	bool Frame::AnchorsSatisfyXPosition() const
 	{
-		// TODO: Implement this method
-		return false;
+		return
+			m_anchors.find(anchor_point::Left) != m_anchors.end() ||
+			m_anchors.find(anchor_point::Right) != m_anchors.end() ||
+			m_anchors.find(anchor_point::HorizontalCenter) != m_anchors.end();
+	}
+
+	bool Frame::AnchorsSatisfyYPosition() const
+	{
+		return
+			m_anchors.find(anchor_point::Top) != m_anchors.end() ||
+			m_anchors.find(anchor_point::Bottom) != m_anchors.end() ||
+			m_anchors.find(anchor_point::VerticalCenter) != m_anchors.end();
+	}
+
+	bool Frame::AnchorsSatisfyWidth() const
+	{
+		// For this to work, there need to be an anchor set for left and right
+		return 
+			m_anchors.find(anchor_point::Left) != m_anchors.end() &&
+			m_anchors.find(anchor_point::Right) != m_anchors.end();
+	}
+
+	bool Frame::AnchorsSatisfyHeight() const
+	{
+		// For this to work, there need to be an anchor set for left and right
+		return
+			m_anchors.find(anchor_point::Top) != m_anchors.end() &&
+			m_anchors.find(anchor_point::Bottom) != m_anchors.end();
+	}
+
+	void Frame::SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Frame::Pointer relativeTo)
+	{
+		// Create a new anchor
+		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo);
+		m_needsRedraw = true;
+	}
+
+	void Frame::ClearAnchor(AnchorPoint point)
+	{
+		const auto it = m_anchors.find(point);
+		if (it != m_anchors.end())
+		{
+			m_anchors.erase(it);
+			m_needsRedraw = true;
+		}
 	}
 
 	void Frame::Render()
@@ -147,13 +194,13 @@ namespace mmo
 		if (!IsVisible())
 			return;
 
+		auto& gx = GraphicsDevice::Get();
+
 		// If this is a top level frame, prepare render common render states so that
 		// we don't have to care about them in every single child frame or child frame
 		// element.
 		if (m_parent == nullptr)
 		{
-			auto& gx = GraphicsDevice::Get();
-
 			int32 vpW, vpH;
 			gx.GetViewport(nullptr, nullptr, &vpW, &vpH);
 
@@ -167,27 +214,37 @@ namespace mmo
 		// Draw self
 		DrawSelf();
 
+		// Whether a clip rect has been set by this function call to avoid calling ResetClipRect on
+		// the graphics library more often than needed
+		bool hasClipRectSet = false;
+
 		// Draw children
 		for (const auto& child : m_children)
 		{
+			if (child->IsClippedByParent())
+			{
+				// TODO: set clip rect
+				hasClipRectSet = true;
+			}
+			else if (hasClipRectSet)
+			{
+				// Reset clip rect
+				gx.ResetClipRect();
+				hasClipRectSet = false;
+			}
+
+			// Render child frame
 			child->Render();
 		}
 	}
 
 	void Frame::Update(float elapsed)
 	{
-
-	}
-
-	void Frame::SetOrigin(AnchorPoint point, Point offset)
-	{
-		m_originPoint = point;
-		m_anchorOffset = offset;
-		m_needsRedraw = true;
-	}
-
-	void Frame::SetAnchorPoints(uint8 points)
-	{
+		// Try to call the renderer's update method if we have a valid renderer
+		if (m_renderer != nullptr)
+		{
+			m_renderer->Update(elapsed);
+		}
 	}
 
 	void Frame::AddChild(Frame::Pointer frame)
@@ -197,12 +254,18 @@ namespace mmo
 
 	Rect Frame::GetRelativeFrameRect()
 	{
-		Rect r;
+		Size mySize = GetPixelSize();
+		if (AnchorsSatisfyWidth())
+		{
+			// TODO: Determine width by using anchors
+		}
+		if (AnchorsSatisfyHeight())
+		{
+			// TODO: Determine height by using anchors
+		}
 
-		// Set the size of this rectangle
-		r.SetSize(GetPixelSize());
-
-		return r;
+		// Return the rectangle with the calculated size
+		return Rect(Point(), mySize);
 	}
 
 	static void AdjustRectToAnchor(Rect& r, const Rect& parentRect, AnchorPoint p, const Point& offset)
@@ -210,23 +273,32 @@ namespace mmo
 		switch (p)
 		{
 		case AnchorPoint::Top:
+			r.Offset(Point(0.0f, offset.y));
+			break;
 		case AnchorPoint::Left:
-			r.Offset(offset);
+			r.Offset(Point(offset.x, 0.0f));
 			break;
 		case AnchorPoint::Right:
 			r.Offset(Point(
 				parentRect.GetWidth() - r.GetWidth() - offset.x,
-				offset.y));
+				0.0f));
 			break;
 		case AnchorPoint::Bottom:
 			r.Offset(Point(
-				offset.x,
+				0.0f,
 				parentRect.bottom - r.GetHeight() - offset.y));
 			break;
 
-		case AnchorPoint::Center:
+		case AnchorPoint::HorizontalCenter:
 			r.Offset(Point(
 				parentRect.GetWidth() * 0.5f - r.GetWidth() * 0.5f + offset.x,
+				0.0f
+			));
+			break;
+
+		case AnchorPoint::VerticalCenter:
+			r.Offset(Point(
+				0.0f,
 				parentRect.GetHeight() * 0.5f - r.GetHeight() * 0.5f + offset.y
 			));
 			break;
@@ -235,42 +307,49 @@ namespace mmo
 
 	Rect Frame::GetAbsoluteFrameRect()
 	{
+		// First, obtain the relative frame rect
 		Rect r = GetRelativeFrameRect();
 
-		int32 vpW, vpH;
-		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vpW, &vpH);
+		// This rect will contain the absolute parent rectangle
+		Rect parentRect;
 
-		// Offset by parent position
-		Rect parentRect = Rect(0.0f, 0.0f, static_cast<float>(vpW), static_cast<float>(vpH));	// TODO: Get screen size
-		if (m_parent != nullptr)
+		if (m_parent == nullptr)
 		{
+			// Obtain the current viewport size in pixels in case this 
+			int32 vpW, vpH;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vpW, &vpH);
+
+			// No parent frame available, then the screen rect is the parent rect
+			parentRect.SetSize(Size(vpW, vpH));
+		}
+		else
+		{
+			// Use the absolute frame rect of the parent
 			parentRect = m_parent->GetAbsoluteFrameRect();
 		}
 
-		// Add parent rect offset
+		// Add parent rect offset to the relative rect
 		r.Offset(parentRect.GetPosition());
 
-		// Adjust rectangle based on anchor position
-		AdjustRectToAnchor(r, parentRect, m_originPoint, m_anchorOffset);
+		// Apply custom position
+		Point localPosition = m_position;
+		if (AnchorsSatisfyXPosition())
+		{
+			// TODO: Apply anchor position
 
+		}
+		if (AnchorsSatisfyYPosition())
+		{
+			// TODO: Apply anchor position
+		}
+
+		// Move rectangle
+		r.Offset(localPosition);
+
+		// Return the current rect
 		return r;
 	}
-
-	Rect Frame::GetScreenFrameRect()
-	{
-		Rect frameRect = GetAbsoluteFrameRect();
-
-		// TODO: Derive screen size
-
-
-		return frameRect;
-	}
-
-	void Frame::UpdateSelf(float elapsed)
-	{
-
-	}
-
+	
 	void Frame::DrawSelf()
 	{
 		BufferGeometry();

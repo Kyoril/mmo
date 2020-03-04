@@ -2,7 +2,7 @@
 
 #include "style_xml_loader.h"
 #include "style_mgr.h"
-#include "frame_text_component.h"
+#include "text_component.h"
 #include "image_component.h"
 #include "border_component.h"
 #include "state_imagery.h"
@@ -27,6 +27,8 @@ namespace mmo
 	static const std::string TextComponentColorAttribute("color");
 	static const std::string TextComponentFontAttribute("font");
 	static const std::string TextComponentSizeAttribute("size");
+	static const std::string TextComponentHorzAlignAttribute("horzAlign");
+	static const std::string TextComponentVertAlignAttribute("vertAlign");
 	static const std::string TextComponentOutlineAttribute("outline");
 	static const std::string ImageComponentElement("ImageComponent");
 	static const std::string ImageComponentTextureAttribute("texture");
@@ -280,6 +282,8 @@ namespace mmo
 		const std::string font(attributes.GetValueAsString(TextComponentFontAttribute));
 		const int size = attributes.GetValueAsInt(TextComponentSizeAttribute);
 		const float outline = attributes.GetValueAsFloat(TextComponentOutlineAttribute);
+		const std::string horzAlignAttr(attributes.GetValueAsString(TextComponentHorzAlignAttribute));
+		const std::string vertAlignAttr(attributes.GetValueAsString(TextComponentVertAlignAttribute));
 
 		// Check for font name existance
 		if (font.empty())
@@ -288,7 +292,10 @@ namespace mmo
 		}
 
 		// Setup component and add it to the current section
-		m_component = std::make_shared<TextComponent>(font, size, outline);
+		auto component = std::make_shared<TextComponent>(font, size, outline);
+		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
+		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
+		m_component = component;
 		m_section->AddComponent(m_component);
 	}
 

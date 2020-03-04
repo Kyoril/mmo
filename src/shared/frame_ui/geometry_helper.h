@@ -29,5 +29,6 @@ namespace mmo
 		/// @param texW Width of the texture (used to calculate uv coordinates).
 		/// @param texH Height of the texture (used to calculate uv coordinates).
 		static void CreateRect(GeometryBuffer& buffer, Point position, Rect src, uint16 texW, uint16 texH);
+		static void CreateRect(GeometryBuffer& buffer, Rect dst, Rect src, uint16 texW, uint16 texH);
 	};
 }
