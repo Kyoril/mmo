@@ -5,6 +5,7 @@
 #include "font_glyph.h"
 #include "font_imageset.h"
 #include "point.h"
+#include "color.h"
 
 #include "base/typedefs.h"
 
@@ -124,7 +125,8 @@ namespace mmo
 		/// @param position The position (in pixels) where to draw the text on screen.
 		/// @param buffer The geometry buffer which will receive the generated geometry.
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.
-		void DrawText(const std::string& text, const Point& position, GeometryBuffer& buffer, float scale = 1.0f);
+		/// @param color The argbv color value.
+		void DrawText(const std::string& text, const Point& position, GeometryBuffer& buffer, float scale = 1.0f, argb_t color = 0xFFFFFFFF);
 		
 	public:
 		/// Gets the default spacing between two lines of text in pixels.

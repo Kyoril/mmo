@@ -4,6 +4,7 @@
 
 #include "rect.h"
 #include "size.h"
+#include "color.h"
 
 
 namespace mmo
@@ -44,7 +45,7 @@ namespace mmo
 		/// Queues the image to be drawn.
 		/// @param position The position of the image.
 		/// @param size The size with which the image will be drawn.
-		void Draw(const Point& position, const Size& size, GeometryBuffer& buffer) const;
+		void Draw(const Point& position, const Size& size, GeometryBuffer& buffer, argb_t color = 0xffffffff) const;
 
 	private:
 		const FontImageset* m_owner;

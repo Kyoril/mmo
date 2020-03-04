@@ -55,6 +55,8 @@ namespace mmo
 		void SetHorizontalAlignment(HorizontalAlignment alignment);
 		inline VerticalAlignment GetVerticalAlignment() const { return m_vertAlignment; }
 		void SetVerticalAlignment(VerticalAlignment alignment);
+		inline const Color& GetColor() const { return m_color; }
+		void SetColor(const Color& color);
 
 	public:
 		// FrameComponent overrides
@@ -63,6 +65,8 @@ namespace mmo
 	private:
 		/// The graphics texture object.
 		FontPtr m_font;
+		/// The color to use when rendering text.
+		Color m_color = Color(0xffffffff);
 		/// 
 		HorizontalAlignment m_horzAlignment = HorizontalAlignment::Left;
 		/// 
