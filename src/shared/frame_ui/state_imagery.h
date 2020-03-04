@@ -37,7 +37,7 @@ namespace mmo
 		void RemoveAllLayers();
 
 		/// Renders this state imagery.
-		void Render(GeometryBuffer& buffer) const;
+		void Render(Frame& frame) const;
 
 	public:
 		/// Gets the name of this imagery.

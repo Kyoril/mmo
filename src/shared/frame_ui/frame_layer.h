@@ -35,7 +35,7 @@ namespace mmo
 		void RemoveAllSections();
 		/// Renders the frame layer, which simply means rendering all attached objects
 		/// in order.
-		void Render(GeometryBuffer& buffer) const;
+		void Render(Frame& frame) const;
 
 	protected:
 		/// A vector of all active sessions.

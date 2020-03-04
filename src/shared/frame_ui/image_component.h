@@ -16,12 +16,12 @@ namespace mmo
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
-		explicit ImageComponent(Frame& frame, const std::string& filename);
+		explicit ImageComponent(const std::string& filename);
 		virtual ~ImageComponent() = default;
 
 	public:
 		// FrameComponent overrides
-		void Render(GeometryBuffer& buffer) const override;
+		void Render(Frame& frame) const override;
 
 	public:
 		// ~Begin FrameComponent

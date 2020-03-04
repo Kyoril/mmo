@@ -136,7 +136,9 @@ namespace mmo
 		virtual void SetAnchorPoints(uint8 points);
 
 		virtual void AddChild(Pointer frame);
-		
+		/// Gets the geometry buffer that is used to render this frame.
+		GeometryBuffer& GetGeometryBuffer();
+
 	protected:
 
 		virtual Rect GetRelativeFrameRect();
@@ -165,7 +167,7 @@ namespace mmo
 		bool m_visible;
 		bool m_enabled;
 		ChildList m_children;
-		std::unique_ptr<GeometryBuffer> m_geometryBuffer;
+		GeometryBuffer m_geometryBuffer;
 		/// The current size of this frame in pixels.
 		Size m_pixelSize;
 		/// The anchor point used for positioning.

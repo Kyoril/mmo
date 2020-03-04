@@ -14,9 +14,9 @@ namespace mmo
 	{
 	}
 
-	void ImagerySection::AddComponent(std::unique_ptr<FrameComponent> component)
+	void ImagerySection::AddComponent(std::shared_ptr<FrameComponent>& component)
 	{
-		m_components.emplace_back(std::move(component));
+		m_components.emplace_back(component);
 	}
 
 	void ImagerySection::RemoveComponent(uint32 index)
@@ -32,11 +32,11 @@ namespace mmo
 		m_components.clear();
 	}
 
-	void ImagerySection::Render(GeometryBuffer & buffer) const
+	void ImagerySection::Render(Frame & frame) const
 	{
 		for (const auto& component : m_components)
 		{
-			component->Render(buffer);
+			component->Render(frame);
 		}
 	}
 }

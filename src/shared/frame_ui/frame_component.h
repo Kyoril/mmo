@@ -4,6 +4,7 @@
 
 #include "rect.h"
 #include "anchor_point.h"
+#include "frame.h"
 
 #include "base/non_copyable.h"
 
@@ -12,7 +13,6 @@
 
 namespace mmo
 {
-	class GeometryBuffer;
 	class Frame;
 
 
@@ -22,7 +22,7 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
-		FrameComponent(Frame& frame);
+		FrameComponent();
 		virtual ~FrameComponent() = default;
 
 	public:
@@ -33,13 +33,12 @@ namespace mmo
 
 	public:
 		/// Renders the frame object.
-		virtual void Render(GeometryBuffer& buffer) const = 0;
+		virtual void Render(Frame& frame) const = 0;
 
 	protected:
 		bool GetAnchorPointOffset(AnchorPoint point, Point& offset);
 
 	protected:
-		Frame& m_frame;
 		/// Map of anchor points.
 		std::map<AnchorPoint, Point> m_anchorPointOffsets;
 	};

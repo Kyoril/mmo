@@ -1,6 +1,8 @@
 // Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "style.h"
+#include "imagery_section.h"
+#include "state_imagery.h"
 
 #include "base/macros.h"
 
@@ -21,7 +23,7 @@ namespace mmo
 		ASSERT(section);
 		ASSERT(m_sectionsByName.find(section->GetName()) == m_sectionsByName.end());
 
-		m_sectionsByName[section->GetName()] = std::move(section);
+		m_sectionsByName[section->GetName()] = section;
 	}
 
 	void Style::RemoveImagerySection(const std::string & name)

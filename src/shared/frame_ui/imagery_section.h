@@ -10,12 +10,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
 
 
 namespace mmo
 {
-	class GeometryBuffer;
-
 	/// This class represents the visuals of a frame type for a single named state.
 	/// It consists of layers, which again consist of frame components that actually
 	/// render the frame geometry.
@@ -28,13 +27,13 @@ namespace mmo
 
 	public:
 		/// Adds a new layer to this section.
-		void AddComponent(std::unique_ptr<FrameComponent> component);
+		void AddComponent(std::shared_ptr<FrameComponent>& component);
 		/// Removes a layer by index.
 		void RemoveComponent(uint32 index);
 		/// Removes a layer by index.
 		void RemoveAllComponent();
 		/// Renders this state imagery.
-		void Render(GeometryBuffer& buffer) const;
+		void Render(Frame& frame) const;
 
 	public:
 		/// Gets the name of this imagery.
@@ -44,6 +43,6 @@ namespace mmo
 		/// The name of this imagery.
 		std::string m_name;
 		/// The components that this section contains.
-		std::vector<std::unique_ptr<FrameComponent>> m_components;
+		std::vector<std::shared_ptr<FrameComponent>> m_components;
 	};
 }
