@@ -16,6 +16,8 @@ namespace mmo
 	static const std::string FrameRendererAttribute("renderer");
 	static const std::string FrameTextAttribute("text");
 	static const std::string FrameParentAttribute("parent");
+	static const std::string FrameHiddenAttribute("hidden");
+	static const std::string FrameEnabledAttribute("enabled");
 	static const std::string AreaElement("Area");
 	static const std::string ScriptElement("Script");
 	static const std::string ScriptFileAttribute("file");
@@ -66,11 +68,13 @@ namespace mmo
 	void LayoutXmlLoader::ElementFrameStart(const XmlAttributes & attributes)
 	{
 		// Get the name of the frame to create
-		std::string name(attributes.GetValueAsString(FrameNameAttribute));
-		std::string parent(attributes.GetValueAsString(FrameParentAttribute));
-		std::string text(attributes.GetValueAsString(FrameTextAttribute));
-		std::string style(attributes.GetValueAsString(FrameStyleAttribute));
-		std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
+		const std::string name(attributes.GetValueAsString(FrameNameAttribute));
+		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
+		const std::string text(attributes.GetValueAsString(FrameTextAttribute));
+		const std::string style(attributes.GetValueAsString(FrameStyleAttribute));
+		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
+		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
+		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
 
 		// Attempt to create the frame
 		FramePtr frame = FrameManager::Get().Create("Frame", name);
@@ -78,6 +82,10 @@ namespace mmo
 		{
 			throw std::runtime_error("Could not create frame named!");
 		}
+
+		// Setup frame properties
+		frame->SetVisible(!hidden);
+		frame->SetEnabled(enabled);
 
 		// Setup style and renderer
 		if (!style.empty()) frame->SetStyle(style);

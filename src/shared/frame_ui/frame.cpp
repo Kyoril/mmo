@@ -17,6 +17,9 @@ namespace mmo
 		: m_name(name)
 		, m_needsRedraw(true)
 		, m_parent(nullptr)
+		, m_visible(true)
+		, m_enabled(true)
+		, m_clippedByParent(false)
 	{
 	}
 
@@ -116,6 +119,28 @@ namespace mmo
 		// TODO: Notify renderer about this?
 	}
 
+	void Frame::SetClippedByParent(bool clipped)
+	{
+		if (m_clippedByParent != clipped)
+		{
+			m_clippedByParent = clipped;
+			m_needsRedraw = true;
+		}
+	}
+
+	bool Frame::AnchorsSatisfyPosition() const
+	{
+		// TODO: Implement this method
+
+		return false;
+	}
+
+	bool Frame::AnchorsSatisfySize() const
+	{
+		// TODO: Implement this method
+		return false;
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do
@@ -184,23 +209,15 @@ namespace mmo
 	{
 		switch (p)
 		{
-		case AnchorPoint::TopLeft:
 		case AnchorPoint::Top:
 		case AnchorPoint::Left:
 			r.Offset(offset);
 			break;
-		case AnchorPoint::TopRight:
 		case AnchorPoint::Right:
 			r.Offset(Point(
 				parentRect.GetWidth() - r.GetWidth() - offset.x,
 				offset.y));
 			break;
-		case AnchorPoint::BottomRight:
-			r.Offset(Point(
-				parentRect.GetWidth() - r.GetWidth() - offset.x,
-				parentRect.GetHeight() - r.GetHeight() - offset.y));
-			break;
-		case AnchorPoint::BottomLeft:
 		case AnchorPoint::Bottom:
 			r.Offset(Point(
 				offset.x,
