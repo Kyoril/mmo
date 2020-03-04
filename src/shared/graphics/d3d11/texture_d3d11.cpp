@@ -70,15 +70,18 @@ namespace mmo
 		D3D11_SUBRESOURCE_DATA data;
 		ZeroMemory(&data, sizeof(data));
 		data.pSysMem = &mipData[0];
-
-		data.SysMemPitch = sizeof(uint32) * m_header.width;
 		switch (m_header.format)
 		{
 		case tex::v1_0::DXT1:
-			data.SysMemPitch /= 8;
+			data.SysMemPitch = 16 * (m_header.width / 8);
+			data.SysMemSlicePitch = data.SysMemPitch * (m_header.height / 8);
 			break;
 		case tex::v1_0::DXT5:
-			data.SysMemPitch /= 4;
+			data.SysMemPitch = 16 * (m_header.width / 4);
+			data.SysMemSlicePitch = data.SysMemPitch * (m_header.height / 4);
+			break;
+		default:
+			data.SysMemPitch = sizeof(uint32) * m_header.width;
 			break;
 		}
 
