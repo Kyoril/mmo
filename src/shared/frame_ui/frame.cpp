@@ -3,6 +3,7 @@
 #include "frame.h"
 #include "frame_mgr.h"
 #include "style_mgr.h"
+#include "default_renderer.h"
 
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
@@ -17,8 +18,6 @@ namespace mmo
 		, m_needsRedraw(true)
 		, m_parent(nullptr)
 	{
-		// Create a new geometry buffer for this frame
-		m_geometryBuffer = std::make_unique<GeometryBuffer>();
 	}
 
 	Frame::~Frame()
@@ -93,6 +92,11 @@ namespace mmo
 			m_renderer.reset();
 		}
 
+		// TODO: This is only a temporary test until there is a renderer factory
+		m_renderer = std::make_unique<DefaultRenderer>("DefaultRenderer");
+		m_renderer->m_frame = this;
+
+		m_needsRedraw = true;
 		// TODO: Create new renderer instance by name
 
 		// TODO: Register this frame for the new renderer
@@ -100,6 +104,7 @@ namespace mmo
 
 	void Frame::SetStyle(const std::string & style)
 	{
+		// Create a style of the given template
 		m_style = StyleManager::Get().Find(style);
 		if (!m_style)
 		{
@@ -260,7 +265,7 @@ namespace mmo
 		if (m_needsRedraw)
 		{
 			// dispose of already cached geometry.
-			m_geometryBuffer->Reset();
+			m_geometryBuffer.Reset();
 
 			// Signal rendering started
 			RenderingStarted();
@@ -287,6 +292,11 @@ namespace mmo
 	void Frame::QueueGeometry()
 	{
 		// Draw the geometry buffer
-		m_geometryBuffer->Draw();
+		m_geometryBuffer.Draw();
+	}
+
+	GeometryBuffer & Frame::GetGeometryBuffer()
+	{ 
+		return m_geometryBuffer;
 	}
 }

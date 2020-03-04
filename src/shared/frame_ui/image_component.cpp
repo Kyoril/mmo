@@ -8,18 +8,18 @@
 
 namespace mmo
 {
-	ImageComponent::ImageComponent(Frame& frame, const std::string& filename)
-		: FrameComponent(frame)
+	ImageComponent::ImageComponent(const std::string& filename)
+		: FrameComponent()
 		, m_width(0)
 		, m_height(0)
 	{
 		m_texture = TextureManager::Get().CreateOrRetrieve(filename);
 	}
 
-	void ImageComponent::Render(GeometryBuffer& buffer) const
+	void ImageComponent::Render(Frame& frame) const
 	{
 		// Bind the texture object
-		buffer.SetActiveTexture(m_texture);
+		frame.GetGeometryBuffer().SetActiveTexture(m_texture);
 		
 		// Determine width and height
 		float w = m_width; 
@@ -40,7 +40,7 @@ namespace mmo
 		};
 
 		// Append vertices
-		buffer.AppendGeometry(vertices, 6);
+		frame.GetGeometryBuffer().AppendGeometry(vertices, 6);
 	}
 
 	Size ImageComponent::GetSize() const

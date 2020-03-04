@@ -2,9 +2,6 @@
 
 #pragma once
 
-#include "state_imagery.h"
-#include "imagery_section.h"
-
 #include <string>
 #include <map>
 #include <memory>
@@ -13,6 +10,7 @@
 namespace mmo
 {
 	class StateImagery;
+	class ImagerySection;
 
 
 	/// This class contains informations about how to render a frame.

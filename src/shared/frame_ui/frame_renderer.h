@@ -38,7 +38,7 @@ namespace mmo
 		/// Gets the name of this renderer.
 		inline const std::string& GetName() const { return m_name; }
 		/// Gets the frame that is attached to this renderer instance.
-		inline std::shared_ptr<Frame> GetFrame() const { return m_frame; }
+		inline Frame* GetFrame() const { return m_frame; }
 
 	public:
 		/// Renders a given frame using this renderer instance.
@@ -51,6 +51,6 @@ namespace mmo
 
 	protected:
 		std::string m_name;
-		std::shared_ptr<Frame> m_frame;
+		Frame* m_frame;
 	};
 }

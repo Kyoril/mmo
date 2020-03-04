@@ -2,6 +2,8 @@
 
 #include "style_mgr.h"
 
+#include "base/macros.h"
+
 
 namespace mmo
 {

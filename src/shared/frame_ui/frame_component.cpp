@@ -1,20 +1,18 @@
 // Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "frame_component.h"
-#include "frame.h"
 
 
 namespace mmo
 {
-	FrameComponent::FrameComponent(Frame & frame)
-		: m_frame(frame)
+	FrameComponent::FrameComponent()
 	{
 	}
-
+	
 	Rect FrameComponent::GetArea() const
 	{
 		// Obtain the parent frame area
-		Rect parentFrameArea = Rect(Point(), m_frame.GetPixelSize());
+		//Rect parentFrameArea = Rect(Point(), m_frame.GetPixelSize());
 
 		// Check anchor points
 

@@ -31,11 +31,11 @@ namespace mmo
 		m_layers.clear();
 	}
 
-	void StateImagery::Render(GeometryBuffer & buffer) const
+	void StateImagery::Render(Frame & frame) const
 	{
 		for (const auto& layer : m_layers)
 		{
-			layer->Render(buffer);
+			layer->Render(frame);
 		}
 	}
 }
