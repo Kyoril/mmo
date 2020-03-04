@@ -23,12 +23,6 @@ namespace mmo
 
 			// Center
 			Center,
-
-			// Corners
-			TopLeft,
-			TopRight,
-			BottomRight,
-			BottomLeft,
 		};
 	}
 

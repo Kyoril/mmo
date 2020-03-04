@@ -116,16 +116,30 @@ namespace mmo
 		inline const StylePtr GetStyle() const { return m_style; }
 		/// Gets the renderer instance if there is any.
 		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
-
+		/// Determines whether this frame is clipped by the parent frame.
+		inline bool IsClippedByParent() const { return m_clippedByParent; }
+		/// Sets whether this frame is clipped by it's parent frame.
+		void SetClippedByParent(bool clipped);
+		/// Returns the position of this frame set by the position property. Keep in mind, that
+		/// this might not represent the actual frame position on screen, as Anchors have higher
+		/// priority than this setting, which is only a fallback if no anchors are set.
+		inline const Point& GetPosition() const { return m_position; }
+		/// Sets the position of this frame. Note that anchors have higher priority, so this function
+		/// might have no effect at all.
+		void SetPosition(const Point& position);
+		/// Determines if the set anchors can be used to determine the frame position.
+		bool AnchorsSatisfyPosition() const;
+		/// Determines if the set anchors can be used to determine the frame size.
+		bool AnchorsSatisfySize() const;
 
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }
-
+		/// Renders the frame and it's child frames if it needs to be rendered.
 		void Render();
-
+		/// Updates animation logic of the frame and it's component (like the frame renderer if there is any). 
+		/// Should be called once per frame.
 		virtual void Update(float elapsed);
-
 		/// Gets the pixel size of this frame.
 		virtual inline Size GetPixelSize() const { return m_pixelSize; }
 		/// Sets the pixel size of this frame.
@@ -140,7 +154,6 @@ namespace mmo
 		GeometryBuffer& GetGeometryBuffer();
 
 	protected:
-
 		virtual Rect GetRelativeFrameRect();
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();
@@ -166,6 +179,8 @@ namespace mmo
 		std::string m_text;
 		bool m_visible;
 		bool m_enabled;
+		bool m_clippedByParent;
+		Point m_position;
 		ChildList m_children;
 		GeometryBuffer m_geometryBuffer;
 		/// The current size of this frame in pixels.

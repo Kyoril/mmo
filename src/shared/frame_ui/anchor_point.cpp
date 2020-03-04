@@ -22,14 +22,6 @@ namespace mmo
 			return "LEFT";
 		case anchor_point::Center:
 			return "CENTER";
-		case anchor_point::TopLeft:
-			return "TOPLEFT";
-		case anchor_point::TopRight:
-			return "TOPRIGHT";
-		case anchor_point::BottomRight:
-			return "BOTTOMRIGHT";
-		case anchor_point::BottomLeft:
-			return "BOTTOMLEFT";
 		default:
 			return "NONE";
 		}
@@ -56,22 +48,6 @@ namespace mmo
 		else if (_stricmp(name.c_str(), "CENTER") == 0)
 		{
 			return anchor_point::Center;
-		}
-		else if (_stricmp(name.c_str(), "TOPLEFT") == 0)
-		{
-			return anchor_point::TopLeft;
-		}
-		else if (_stricmp(name.c_str(), "TOPRIGHT") == 0)
-		{
-			return anchor_point::TopRight;
-		}
-		else if (_stricmp(name.c_str(), "BOTTOMRIGHT") == 0)
-		{
-			return anchor_point::BottomRight;
-		}
-		else if (_stricmp(name.c_str(), "BOTTOMLEFT") == 0)
-		{
-			return anchor_point::BottomLeft;
 		}
 
 		return AnchorPoint::None;
