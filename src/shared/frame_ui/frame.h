@@ -37,6 +37,7 @@ namespace mmo
 
 	/// This is the base class to represent a simple frame.
 	class Frame
+		: public std::enable_shared_from_this<Frame>
 	{
 	public:
 		typedef std::shared_ptr<Frame> Pointer;
@@ -125,6 +126,10 @@ namespace mmo
 		inline Frame* GetParent() const { return m_parent; }
 		/// Determines whether the frame is currently hovered.
 		bool IsHovered() const;
+		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
+		void Invalidate();
+		/// Tries to retrieve a child frame at the given position.
+		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
 
 	public:
 		/// Gets a string object holding the name of this frame.
