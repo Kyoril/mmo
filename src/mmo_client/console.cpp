@@ -9,7 +9,7 @@
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
 #include "frame_ui/frame_mgr.h"
-#include "frame_ui/font.h"
+#include "frame_ui/font_mgr.h"
 #include "frame_ui/geometry_buffer.h"
 #include "base/assign_on_exit.h"
 
@@ -197,8 +197,7 @@ namespace mmo
 		s_consoleIndBuf = device.CreateIndexBuffer(6, IndexBufferSize::Index_16, indices);
 
 		// Load the console font
-		s_consoleFont = std::make_shared<Font>();
-		VERIFY(s_consoleFont->Initialize("Fonts/consola.ttf", 12.0f, 0.0f));
+		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 12.0f, 0.0f);
 
 		// Create a geometry buffer for the console output text
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();
