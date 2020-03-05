@@ -203,6 +203,10 @@ namespace mmo
 		std::unique_ptr<FrameRenderer> m_renderer;
 		/// A map of anchor points.
 		std::map<AnchorPoint, std::unique_ptr<Anchor>> m_anchors;
+		/// Whether the layout needs to be recalculated.
+		bool m_needsLayout;
+		/// The cached absolute frame rect.
+		Rect m_absRectCache;
 	};
 
 	/// A shared pointer of a frame.
