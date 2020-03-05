@@ -23,6 +23,7 @@ namespace mmo
 		, m_visible(true)
 		, m_enabled(true)
 		, m_clippedByParent(false)
+		, m_needsLayout(true)
 	{
 	}
 
@@ -66,6 +67,7 @@ namespace mmo
 		// Apply new text and invalidate rendering
 		m_text = text;
 		m_needsRedraw = true;
+		m_needsLayout = true;
 
 		// Notify observers
 		TextChanged();
@@ -181,6 +183,7 @@ namespace mmo
 		if (!AnchorsSatisfyPosition())
 		{
 			m_needsRedraw = true;
+			m_needsLayout = true;
 		}
 	}
 
@@ -221,6 +224,7 @@ namespace mmo
 		// Create a new anchor
 		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo);
 		m_needsRedraw = true;
+		m_needsLayout = true;
 	}
 
 	void Frame::ClearAnchor(AnchorPoint point)
@@ -230,6 +234,7 @@ namespace mmo
 		{
 			m_anchors.erase(it);
 			m_needsRedraw = true;
+			m_needsLayout = true;
 		}
 	}
 
@@ -372,51 +377,63 @@ namespace mmo
 
 	Rect Frame::GetAbsoluteFrameRect()
 	{
+		// Try to use cached abs rect
+		if (!m_needsLayout)
+			return m_absRectCache;
+
 		// First, obtain the relative frame rect
-		Rect r = GetRelativeFrameRect();
+		m_absRectCache = GetRelativeFrameRect();
 
 		// This rect will contain the absolute parent rectangle
 		const Rect parentRect = GetParentRect();
 
 		// Add parent rect offset to the relative rect
-		r.Offset(parentRect.GetPosition());
+		m_absRectCache.Offset(parentRect.GetPosition());
 
 		// Apply custom position
 		Point localPosition = m_position;
-		if (AnchorsSatisfyXPosition())
-		{
-			// TODO
-		}
-		if (AnchorsSatisfyYPosition())
-		{
-			// TODO
-		}
 		if (AnchorsSatisfyWidth())
 		{
-			const auto leftAnchorIt = m_anchors.find(anchor_point::Left);
-			ASSERT(leftAnchorIt != m_anchors.end());
-			const auto rightAnchorIt = m_anchors.find(anchor_point::Right);
-			ASSERT(rightAnchorIt != m_anchors.end());
-
 			// TODO: Apply anchor offset values
-			r.SetWidth(parentRect.GetWidth());
+			m_absRectCache.SetWidth(parentRect.GetWidth());
 		}
 		if (AnchorsSatisfyHeight())
 		{
-			const auto topAnchorIt = m_anchors.find(anchor_point::Top);
-			ASSERT(topAnchorIt != m_anchors.end());
-			const auto bottomAnchorIt = m_anchors.find(anchor_point::Bottom);
-			ASSERT(bottomAnchorIt != m_anchors.end());
-
 			// TODO: Apply anchor offset values
-			r.SetHeight(parentRect.GetHeight());
+			m_absRectCache.SetHeight(parentRect.GetHeight());
+		}
+
+		if (AnchorsSatisfyXPosition())
+		{
+			const auto centerIt = m_anchors.find(anchor_point::HorizontalCenter);
+			if (centerIt != m_anchors.end())
+			{
+				localPosition.x = parentRect.GetWidth() * 0.5f - m_absRectCache.GetWidth() * 0.5f;
+			}
+			else
+			{
+				const auto rightIt = m_anchors.find(anchor_point::Right);
+				if (rightIt != m_anchors.end())
+				{
+					localPosition.x = parentRect.GetWidth() - m_absRectCache.GetWidth();
+				}
+			}
+		}
+		if (AnchorsSatisfyYPosition())
+		{
+			const auto bottomIt = m_anchors.find(anchor_point::Bottom);
+			if (bottomIt != m_anchors.end())
+			{
+				localPosition.y = parentRect.GetHeight() - m_absRectCache.GetHeight();
+			}
 		}
 
 		// Move rectangle
-		r.Offset(localPosition);
+		m_absRectCache.Offset(localPosition);
+		m_needsLayout = false;
 
 		// Return the current rect
-		return r;
+		return m_absRectCache;
 	}
 	
 	void Frame::DrawSelf()
