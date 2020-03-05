@@ -19,6 +19,7 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
+		/// Type for a frame type factor.
 		typedef std::function<FramePtr(const std::string& name)> FrameFactory;
 
 	private:
@@ -26,6 +27,7 @@ namespace mmo
 		std::map<std::string, FrameFactory, StrCaseIComp> m_frameFactories;
 
 	private:
+		/// Private destructor to avoid instancing.
 		FrameManager() = default;
 
 	public:
@@ -35,6 +37,7 @@ namespace mmo
 	public:
 		/// Initializes the frame manager by registering default frame factories.
 		static void Initialize();
+		/// Deinitilaizes the frame manager, reverting everything done in Initialize().
 		static void Destroy();
 
 	public:
@@ -63,11 +66,15 @@ namespace mmo
 		void ClearFrameFactories();
 
 	public:
+		/// Gets the root frame or nullptr if there is none.
 		inline FramePtr GetTopFrame() const { return m_topFrame; }
 
 	private:
+		/// A map of all frames, keyed by their case insensitive name.
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;
+		/// The current root frame that is the one frame that is rendered.
 		FramePtr m_topFrame;
+		/// The currently hovered frame.
 		FramePtr m_hoverFrame;
 	};
 }
