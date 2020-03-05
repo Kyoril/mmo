@@ -46,7 +46,7 @@ namespace mmo
 
 	public:
 		/// Creates a new frame using the given type.
-		FramePtr Create(const std::string& type, const std::string& name);
+		FramePtr Create(const std::string& type, const std::string& name, bool isCopy = false);
 		FramePtr CreateOrRetrieve(const std::string& type, const std::string& name);
 		FramePtr Find(const std::string& name);
 		void SetTopFrame(const FramePtr& topFrame);
