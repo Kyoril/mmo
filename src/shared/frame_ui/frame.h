@@ -55,7 +55,7 @@ namespace mmo
 		signal<void()> VisibilityChanged;
 
 	public:
-		Frame(const std::string& name);
+		Frame(const std::string& type, const std::string& name);
 		virtual ~Frame();
 
 	public:
@@ -63,6 +63,8 @@ namespace mmo
 		virtual void Copy(Frame& other);
 
 	public:
+		/// Gets the type name of this frame.
+		inline const std::string& GetType() const { return m_type; }
 		/// Gets the text of this frame.
 		inline const std::string& GetText() const { return m_text; }
 		/// Sets the text of this frame.
@@ -171,6 +173,8 @@ namespace mmo
 	protected:
 		typedef std::vector<Pointer> ChildList;
 
+		/// The type name of this frame.
+		std::string m_type;
 		/// The name of this frame. Must be unique.
 		std::string m_name;
 		/// Whether the frame needs to be fully redrawn (geometry recreated).

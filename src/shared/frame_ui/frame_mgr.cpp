@@ -251,7 +251,7 @@ namespace mmo
 	void FrameManager::Initialize()
 	{
 		// Register frame factories
-		FrameManager::Get().RegisterFrameFactory("frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>(name); });
+		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 	}
 
 	void FrameManager::Destroy()
@@ -269,12 +269,15 @@ namespace mmo
 		mmo::LoadUIFile(filename);
 	}
 
-	FramePtr FrameManager::Create(const std::string& type, const std::string & name)
+	FramePtr FrameManager::Create(const std::string& type, const std::string & name, bool isCopy)
 	{
-		auto it = m_framesByName.find(name);
-		if (it != m_framesByName.end())
+		if (!isCopy)
 		{
-			return nullptr;
+			auto it = m_framesByName.find(name);
+			if (it != m_framesByName.end())
+			{
+				return nullptr;
+			}
 		}
 
 		// Retrieve the frame factory by type
@@ -287,7 +290,11 @@ namespace mmo
 
 		// Create the new frame using the frame factory
 		auto newFrame = factoryIt->second(name);
-		m_framesByName[name] = newFrame;
+
+		if (!isCopy)
+		{
+			m_framesByName[name] = newFrame;
+		}
 
 		return newFrame;
 	}

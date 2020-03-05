@@ -15,8 +15,9 @@
 
 namespace mmo
 {
-	Frame::Frame(const std::string & name)
-		: m_name(name)
+	Frame::Frame(const std::string& type, const std::string & name)
+		: m_type(type)
+		, m_name(name)
 		, m_needsRedraw(true)
 		, m_parent(nullptr)
 		, m_visible(true)
@@ -44,6 +45,20 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
+
+		// Copy all children and their children
+		for (const auto& child : m_children)
+		{
+			// Create a copy of the child frame
+			FramePtr copiedChild = FrameManager::Get().Create(m_type, "", true);
+			ASSERT(copiedChild);
+
+			// Copy properties over to child frame
+			child->Copy(*copiedChild);
+
+			// Add child copy to the copied frame
+			other.m_children.emplace_back(std::move(copiedChild));
+		}
 	}
 
 	void Frame::SetText(const std::string & text)
