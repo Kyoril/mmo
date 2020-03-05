@@ -167,6 +167,9 @@ namespace mmo
 			{
 				ASSERT(!m_sending.empty());
 
+				if (!m_socket)
+					return;
+
 				asio::async_write(
 					*m_socket,
 					asio::buffer(m_sending),
@@ -188,6 +191,9 @@ namespace mmo
 			void BeginReceive()
 			{
 				if (m_isReceiving)
+					return;
+
+				if (!m_socket)
 					return;
 
 				m_isReceiving = true;
