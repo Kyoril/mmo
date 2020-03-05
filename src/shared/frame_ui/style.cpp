@@ -31,6 +31,9 @@ namespace mmo
 		const auto it = m_sectionsByName.find(name);
 		ASSERT(it != m_sectionsByName.end());
 
+		// TODO: Removing an imagery section will result in undefined behavior if the section
+		// is still referenced by a layer in a state imagery.
+
 		m_sectionsByName.erase(it);
 	}
 

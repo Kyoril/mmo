@@ -29,6 +29,23 @@ namespace mmo
 	{
 	}
 
+	void Frame::Copy(Frame & other)
+	{
+		// Copy style
+		other.m_style = m_style;
+
+		// Apply renderer property
+		other.SetRenderer(m_renderer->GetName());
+
+		// Apply other properties
+		other.m_enabled = m_enabled;
+		other.m_visible = m_visible;
+		other.m_clippedByParent = m_clippedByParent;
+		other.m_pixelSize = m_pixelSize;
+		other.m_position = m_position;
+		other.m_text = m_text;
+	}
+
 	void Frame::SetText(const std::string & text)
 	{
 		// Apply new text and invalidate rendering

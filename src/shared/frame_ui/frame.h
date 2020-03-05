@@ -59,6 +59,10 @@ namespace mmo
 		virtual ~Frame();
 
 	public:
+		/// Called to copy this frame's properties over to another frame.
+		virtual void Copy(Frame& other);
+
+	public:
 		/// Gets the text of this frame.
 		inline const std::string& GetText() const { return m_text; }
 		/// Sets the text of this frame.

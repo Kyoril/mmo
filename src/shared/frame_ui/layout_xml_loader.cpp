@@ -18,6 +18,7 @@ namespace mmo
 	static const std::string FrameParentAttribute("parent");
 	static const std::string FrameHiddenAttribute("hidden");
 	static const std::string FrameEnabledAttribute("enabled");
+	static const std::string FrameInheritsAttribute("inherits");
 	static const std::string AreaElement("Area");
 	static const std::string SizeElement("Size");
 	static const std::string PositionElement("Position");
@@ -127,6 +128,23 @@ namespace mmo
 		if (!frame)
 		{
 			throw std::runtime_error("Could not create frame named!");
+		}
+
+		// First, duplicate template frame if there is any. We do this to allow
+		// overriding other frame properties by this frame definition.
+		if (attributes.Exists(FrameInheritsAttribute))
+		{
+			const std::string inherits(attributes.GetValueAsString(FrameInheritsAttribute));
+
+			// Find template frame
+			FramePtr templateFrame = FrameManager::Get().Find(inherits);
+			if (templateFrame == nullptr)
+			{
+				throw std::runtime_error("Unable to find template frame '" + inherits + "'");
+			}
+
+			// Copy properties
+			templateFrame->Copy(*frame);
 		}
 
 		// Setup frame properties
