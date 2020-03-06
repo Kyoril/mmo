@@ -56,6 +56,10 @@ namespace mmo
 		inline FramePtr GetHoveredFrame() const { return m_hoverFrame; }
 		/// Notifies the FrameManager that the mouse cursor has been moved.
 		void NotifyMouseMoved(const Point& position);
+		/// Notifies the FrameManager that a mouse button was pressed.
+		void NotifyMouseDown(MouseButton button, const Point& position);
+		/// Notifies the FrameManager that a mouse button was released.
+		void NotifyMouseUp(MouseButton button, const Point& position);
 
 	public:
 		/// Registers a new factory for a certain frame type.
@@ -70,11 +74,15 @@ namespace mmo
 		inline FramePtr GetTopFrame() const { return m_topFrame; }
 
 	private:
+		/// A map of mouse-down frames.
+		std::map<MouseButton, FramePtr> m_mouseDownFrames;
 		/// A map of all frames, keyed by their case insensitive name.
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;
 		/// The current root frame that is the one frame that is rendered.
 		FramePtr m_topFrame;
 		/// The currently hovered frame.
 		FramePtr m_hoverFrame;
+		/// Pressed mouse buttons.
+		int32 m_pressedButtons;
 	};
 }

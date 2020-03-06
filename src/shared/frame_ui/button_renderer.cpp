@@ -7,12 +7,20 @@
 
 namespace mmo
 {
+	ButtonRenderer::ButtonRenderer(const std::string & name)
+		: FrameRenderer(name)
+		, m_pushed(false)
+	{
+	}
 	void ButtonRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		std::string activeState = m_frame->IsEnabled() ? "Normal" : "Disabled";
-		if (m_frame->IsHovered())
+		if (m_pushed)
 		{
-			// TODO: Handle Pushed state
+			activeState = "Pushed";
+		}
+		else if (m_frame->IsHovered())
+		{
 			activeState = "Hovered";
 		}
 
@@ -30,5 +38,35 @@ namespace mmo
 				imagery->Render(*m_frame);
 			}
 		}
+	}
+
+	void ButtonRenderer::NotifyFrameAttached()
+	{
+		m_frameConnections.disconnect();
+		m_pushed = false;
+
+		ASSERT(m_frame);
+
+		m_frameConnections += m_frame->MouseDown.connect([this](const MouseEventArgs& args) {
+			if (args.IsButtonPressed(MouseButton::Left))
+			{
+				this->m_pushed = true;
+				this->m_frame->Invalidate();
+			}
+		});
+
+		m_frameConnections += m_frame->MouseUp.connect([this](const MouseEventArgs& args) {
+			if (!args.IsButtonPressed(MouseButton::Left))
+			{
+				this->m_pushed = false;
+				this->m_frame->Invalidate();
+			}
+		});
+	}
+
+	void ButtonRenderer::NotifyFrameDetached()
+	{
+		m_frameConnections.disconnect();
+		m_pushed = false;
 	}
 }

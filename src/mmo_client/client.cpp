@@ -176,6 +176,14 @@ namespace mmo
 			FrameManager::Get().NotifyMouseMoved(Point(x, y)); 
 			return false; 
 		});
+		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
+			return false;
+		});
+		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
+			return false;
+		});
 
 		// Register game states
 		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));

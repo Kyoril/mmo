@@ -127,6 +127,8 @@ namespace mmo
 	{
 		if (m_renderer != nullptr)
 		{
+			m_renderer->NotifyFrameDetached();
+
 			m_renderer->m_frame = nullptr;
 			m_renderer.reset();
 		}
@@ -144,6 +146,8 @@ namespace mmo
 		if (m_renderer)
 		{
 			m_renderer->m_frame = this;
+			m_renderer->NotifyFrameAttached();
+
 			m_needsRedraw = true;
 		}
 

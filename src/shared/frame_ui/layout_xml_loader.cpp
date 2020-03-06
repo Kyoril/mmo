@@ -12,6 +12,7 @@ namespace mmo
 	static const std::string UILayoutElement("UILayout");
 	static const std::string FrameElement("Frame");
 	static const std::string FrameNameAttribute("name");
+	static const std::string FrameTypeAttribute("type");
 	static const std::string FrameStyleAttribute("style");
 	static const std::string FrameRendererAttribute("renderer");
 	static const std::string FrameTextAttribute("text");
@@ -116,6 +117,7 @@ namespace mmo
 
 		// Get the name of the frame to create
 		const std::string name(attributes.GetValueAsString(FrameNameAttribute));
+		const std::string type(attributes.GetValueAsString(FrameTypeAttribute, FrameElement));
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		const std::string text(attributes.GetValueAsString(FrameTextAttribute));
 		const std::string style(attributes.GetValueAsString(FrameStyleAttribute));
@@ -124,7 +126,7 @@ namespace mmo
 		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
 
 		// Attempt to create the frame
-		FramePtr frame = FrameManager::Get().Create("Frame", name);
+		FramePtr frame = FrameManager::Get().Create(type, name);
 		if (!frame)
 		{
 			throw std::runtime_error("Could not create frame named!");
