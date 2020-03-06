@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
@@ -7,6 +7,7 @@
 #include "anchor_point.h"
 #include "style.h"
 #include "frame_renderer.h"
+#include "mouse_event_args.h"
 
 #include "base/typedefs.h"
 #include "base/signal.h"
@@ -53,6 +54,10 @@ namespace mmo
 		signal<void()> EnabledStateChanged;
 		/// Fired when the frame's visibility changed.
 		signal<void()> VisibilityChanged;
+		/// Fired when the mouse button was pressed on this frame.
+		signal<void(const MouseEventArgs& args)> MouseDown;
+		/// Fired when the mouse button was released after being pressed on this frame.
+		signal<void(const MouseEventArgs& args)> MouseUp;
 
 	public:
 		Frame(const std::string& type, const std::string& name);

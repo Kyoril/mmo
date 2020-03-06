@@ -4,6 +4,7 @@
 #include "frame_layer.h"
 #include "style_xml_loader.h"
 #include "layout_xml_loader.h"
+#include "button.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -252,6 +253,7 @@ namespace mmo
 	{
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
+		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
 	}
 
 	void FrameManager::Destroy()
@@ -380,6 +382,39 @@ namespace mmo
 					m_hoverFrame->Invalidate();
 				}
 			}
+		}
+	}
+
+	void FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
+	{
+		// Only works if we have a top frame
+		if (m_topFrame != nullptr)
+		{
+			// Find the child frame at the given position (this may also return the top frame itself).
+			auto targetFrame = m_topFrame->GetChildFrameAt(position, true);
+			if (targetFrame != nullptr)
+			{
+				if (targetFrame->IsEnabled(false))
+				{
+					m_mouseDownFrames[button] = targetFrame;
+					m_pressedButtons |= static_cast<int32>(button);
+					targetFrame->MouseDown(MouseEventArgs(static_cast<MouseButton>(m_pressedButtons), position.x, position.y));
+				}
+			}
+		}
+	}
+
+	void FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
+	{
+		// For mouse button up, we want to notify the same frame that received the coresponding
+		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
+		// that the old frame can correctly update it's state.
+		const auto it = m_mouseDownFrames.find(button);
+		if (it != m_mouseDownFrames.end())
+		{
+			m_pressedButtons &= ~static_cast<int32>(button);
+			it->second->MouseUp(MouseEventArgs(static_cast<MouseButton>(m_pressedButtons), position.x, position.y));
+			m_mouseDownFrames.erase(it);
 		}
 	}
 

@@ -52,6 +52,10 @@ namespace mmo
 		/// like animations.
 		/// @param elapsedSeconds Time since the last call to update in seconds.
 		virtual void Update(float elapsedSeconds) {}
+		/// Called to notify the renderer that a frame has been attached.
+		virtual void NotifyFrameAttached() {}
+		/// Called to notify the renderer that a frame has been detached.
+		virtual void NotifyFrameDetached() {}
 
 	protected:
 		/// Name of this renderer.
