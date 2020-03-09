@@ -391,7 +391,7 @@ namespace mmo
 				{
 					m_mouseDownFrames[button] = targetFrame;
 					m_pressedButtons |= static_cast<int32>(button);
-					targetFrame->MouseDown(MouseEventArgs(static_cast<MouseButton>(m_pressedButtons), position.x, position.y));
+					targetFrame->OnMouseDown(button, m_pressedButtons, position);
 				}
 			}
 		}
@@ -406,7 +406,7 @@ namespace mmo
 		if (it != m_mouseDownFrames.end())
 		{
 			m_pressedButtons &= ~static_cast<int32>(button);
-			it->second->MouseUp(MouseEventArgs(static_cast<MouseButton>(m_pressedButtons), position.x, position.y));
+			it->second->OnMouseUp(button, m_pressedButtons, position);
 			m_mouseDownFrames.erase(it);
 		}
 	}

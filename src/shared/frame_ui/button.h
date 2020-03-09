@@ -18,5 +18,8 @@ namespace mmo
 	public:
 		explicit Button(const std::string& type, const std::string& name);
 		virtual ~Button() = default;
+
+	public:
+		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 	};
 }

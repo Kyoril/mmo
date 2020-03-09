@@ -43,8 +43,11 @@ namespace mmo
 		/// This struct contains a console command.
 		struct ConsoleCommand
 		{
+			/// A help text that is displayed to the user in the console when using the help command.
 			std::string help;
+			/// The command handler callback function that is executed when executing the command.
 			ConsoleCommandHandler handler;
+			/// The category of this console command to allow better organization.
 			ConsoleCommandCategory category = ConsoleCommandCategory::Default;
 		};
 
@@ -67,8 +70,11 @@ namespace mmo
 		static void ExecuteCommand(std::string commandLine);
 
 	private:
+		/// Executed when a key has been pressed. Repeated.
 		static bool KeyDown(int32 key);
+		/// Executed when a key has been released.
 		static bool KeyUp(int32 key);
+		/// Executed when the console should be painted (paint signal in event loop is fired).
 		static void Paint();
 
 	private:

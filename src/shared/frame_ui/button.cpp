@@ -9,4 +9,20 @@ namespace mmo
 		: Frame(type, name)
 	{
 	}
+
+	void Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
+	{
+		if (button == MouseButton::Left)
+		{
+			const Rect frame = GetAbsoluteFrameRect();
+			if (frame.IsPointInRect(position))
+			{
+				// Notify that the button has been clicked
+				Clicked();
+			}
+		}
+
+		// Call super class method
+		Frame::OnMouseUp(button, buttons, position);
+	}
 }

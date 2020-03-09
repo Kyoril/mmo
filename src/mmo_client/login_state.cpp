@@ -3,12 +3,14 @@
 #include "login_state.h"
 #include "login_connector.h"
 #include "realm_connector.h"
+#include "console.h"
 
 #include "assets/asset_registry.h"
 #include "base/macros.h"
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_mgr.h"
+#include "frame_ui/button.h"
 #include "base/constants.h"
 
 #include "asio.hpp"
@@ -47,6 +49,16 @@ namespace mmo
 
 		// Register realm signal
 		m_loginConnections += m_realmConnector.Authenticated.connect(*this, &LoginState::OnRealmAuthenticated);
+
+		// Quit button test
+		auto quitButton = std::static_pointer_cast<Button>(s_frameMgr.Find("QuitButton"));
+		if (quitButton)
+		{
+			m_loginConnections += quitButton->Clicked.connect([]()
+			{
+				Console::ExecuteCommand("quit");
+			});
+		}
 	}
 
 	void LoginState::OnLeave()
