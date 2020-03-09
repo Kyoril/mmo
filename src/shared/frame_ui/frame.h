@@ -5,7 +5,6 @@
 #include "geometry_buffer.h"
 #include "rect.h"
 #include "anchor_point.h"
-#include "style.h"
 #include "frame_renderer.h"
 #include "mouse_event_args.h"
 
@@ -20,6 +19,9 @@
 
 namespace mmo
 {
+	class StateImagery;
+	class ImagerySection;
+
 	/// Enumerated type used for specifying Frame::update mode to be used. Note that
 	/// the setting specified will also have an effect on child window content; for
 	/// Never and Visible, if the parent's update function is not called, then no
@@ -68,6 +70,25 @@ namespace mmo
 		virtual void Copy(Frame& other);
 
 	public:
+		/// Adds a new state imagery.
+		void AddImagerySection(std::shared_ptr<ImagerySection>& section);
+		/// Removes a state imagery by name.
+		void RemoveImagerySection(const std::string& name);
+		/// Gets an imagery section by name.
+		/// @param name Name of the imagery section.
+		/// @return nullptr if no such imagery section exists.
+		ImagerySection* GetImagerySectionByName(const std::string& name) const;
+		/// Adds a new state imagery.
+		void AddStateImagery(std::shared_ptr<StateImagery>& stateImagery);
+		/// Removes a state imagery by name.
+		void RemoveStateImagery(const std::string& name);
+		/// Gets a state imagery by name. Don't keep a pointer on the result, as it is destroyed when
+		/// the style instance is destroyed!
+		/// @param name Name of the state imagery.
+		/// @return nullptr if no such state imagery exists.
+		StateImagery* GetStateImageryByName(const std::string& name) const;
+
+	public:
 		/// Gets the type name of this frame.
 		inline const std::string& GetType() const { return m_type; }
 		/// Gets the text of this frame.
@@ -100,10 +121,6 @@ namespace mmo
 		bool IsRootFrame() const;
 		/// Sets the renderer by name.
 		void SetRenderer(const std::string& rendererName);
-		/// Sets the window style by name.
-		void SetStyle(const std::string& style);
-		/// Gets the style instance if there is any.
-		inline const StylePtr GetStyle() const { return m_style; }
 		/// Gets the renderer instance if there is any.
 		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
 		/// Determines whether this frame is clipped by the parent frame.
@@ -202,8 +219,6 @@ namespace mmo
 		Size m_pixelSize = { 200.0f, 96.0f };
 		/// The parent frame (or nullptr if there is no parent frame).
 		Frame* m_parent;
-		/// Window style instance.
-		StylePtr m_style;
 		/// Window renderer instance.
 		std::unique_ptr<FrameRenderer> m_renderer;
 		/// A map of anchor points.
@@ -212,6 +227,10 @@ namespace mmo
 		bool m_needsLayout;
 		/// The cached absolute frame rect.
 		Rect m_absRectCache;
+		/// Contains all state imageries of this style by name.
+		std::map<std::string, std::shared_ptr<StateImagery>> m_stateImageriesByName;
+		/// Contains all state imagery sections of this style by name.
+		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
 	};
 
 	/// A shared pointer of a frame.

@@ -24,19 +24,15 @@ namespace mmo
 			activeState = "Hovered";
 		}
 
-		const auto style = m_frame->GetStyle();
-		if (style)
+		const auto* imagery = m_frame->GetStateImageryByName(activeState);
+		if (!imagery)
 		{
-			const auto* imagery = style->GetStateImageryByName(activeState);
-			if (!imagery)
-			{
-				imagery = style->GetStateImageryByName("Normal");
-			}
+			imagery = m_frame->GetStateImageryByName("Normal");
+		}
 
-			if (imagery)
-			{
-				imagery->Render(*m_frame);
-			}
+		if (imagery)
+		{
+			imagery->Render(*m_frame);
 		}
 	}
 
