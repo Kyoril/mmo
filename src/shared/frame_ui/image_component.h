@@ -40,6 +40,7 @@ namespace mmo
 		void Render(Frame& frame) const override;
 
 	public:
+		/// Sets the tiling mode for this component.
 		void SetTilingMode(ImageTilingMode mode);
 
 	public:

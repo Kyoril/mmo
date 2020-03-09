@@ -2,7 +2,6 @@
 
 #include "frame_mgr.h"
 #include "frame_layer.h"
-#include "style_xml_loader.h"
 #include "layout_xml_loader.h"
 #include "button.h"
 
@@ -52,8 +51,6 @@ namespace mmo
 		static int32 s_currentXmlIndent;
 		/// A xml handler for loading frame layouts using xml.
 		static LayoutXmlLoader s_layoutXmlLoader;
-		/// An xml loader for style xml files.
-		static StyleXmlLoader s_styleXmlLoader;
 
 
 
@@ -68,10 +65,6 @@ namespace mmo
 				{
 					// Use the layout xml loader from here on
 					s_currentXmlLoader = &s_layoutXmlLoader;
-				}
-				else if(std::string(name) == "UiStyle")
-				{
-					s_currentXmlLoader = &s_styleXmlLoader;
 				}
 			}
 			else if(s_currentXmlLoader != nullptr)
@@ -160,7 +153,7 @@ namespace mmo
 			// Parse the file contents
 			if (XML_Parse(parser, &buffer[0], buffer.size(), XML_TRUE) == XML_STATUS_ERROR)
 			{
-				ELOG("Xml Error: " << XML_ErrorString(XML_GetErrorCode(parser)));
+				ELOG("Xml Error: " << XML_ErrorString(XML_GetErrorCode(parser)) << " - File '" << filename << "', Line " << XML_GetErrorLineNumber(parser));
 				return;
 			}
 		}

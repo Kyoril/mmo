@@ -3,6 +3,11 @@
 #include "layout_xml_loader.h"
 #include "frame_mgr.h"
 #include "frame.h"
+#include "state_imagery.h"
+#include "imagery_section.h"
+#include "image_component.h"
+#include "border_component.h"
+#include "text_component.h"
 
 #include "xml_handler/xml_attributes.h"
 #include "log/default_log_levels.h"
@@ -13,7 +18,6 @@ namespace mmo
 	static const std::string FrameElement("Frame");
 	static const std::string FrameNameAttribute("name");
 	static const std::string FrameTypeAttribute("type");
-	static const std::string FrameStyleAttribute("style");
 	static const std::string FrameRendererAttribute("renderer");
 	static const std::string FrameTextAttribute("text");
 	static const std::string FrameParentAttribute("parent");
@@ -34,6 +38,33 @@ namespace mmo
 	static const std::string ScriptFileAttribute("file");
 	static const std::string EventNameAttribute("name");
 	static const std::string EventFunctionAttribute("function");
+
+	static const std::string PropertyElement("Property");
+	static const std::string PropertyNameAttribute("name");
+	static const std::string PropertyDefaultValueAttribute("defaultValue");
+
+
+	static const std::string VisualElement("Visual");
+	static const std::string ImagerySectionElement("ImagerySection");
+	static const std::string ImagerySectionNameAttribute("name");
+	static const std::string StateImageryElement("StateImagery");
+	static const std::string StateImageryNameAttribute("name");
+	static const std::string LayerElement("Layer");
+	static const std::string SectionElement("Section");
+	static const std::string SectionSectionAttribute("section");
+	static const std::string SectionColorAttribute("color");
+	static const std::string TextComponentElement("TextComponent");
+	static const std::string TextComponentColorAttribute("color");
+	static const std::string TextComponentFontAttribute("font");
+	static const std::string TextComponentSizeAttribute("size");
+	static const std::string TextComponentHorzAlignAttribute("horzAlign");
+	static const std::string TextComponentVertAlignAttribute("vertAlign");
+	static const std::string TextComponentOutlineAttribute("outline");
+	static const std::string ImageComponentElement("ImageComponent");
+	static const std::string ImageComponentTextureAttribute("texture");
+	static const std::string ImageComponentTilingAttribute("tiling");
+	static const std::string BorderComponentElement("BorderComponent");
+	static const std::string BorderComponentBorderSizeAttribute("borderSize");
 
 
 	void LayoutXmlLoader::ElementStart(const std::string & element, const XmlAttributes & attributes)
@@ -65,6 +96,42 @@ namespace mmo
 		else if (element == ScriptElement)
 		{
 			ElementScriptStart(attributes);
+		}
+		if (element == VisualElement)
+		{
+			ElementVisualStart(attributes);
+		}
+		else if (element == ImagerySectionElement)
+		{
+			ElementImagerySectionStart(attributes);
+		}
+		else if (element == StateImageryElement)
+		{
+			ElementImageryStart(attributes);
+		}
+		else if (element == LayerElement)
+		{
+			ElementLayerStart(attributes);
+		}
+		else if (element == SectionElement)
+		{
+			ElementSectionStart(attributes);
+		}
+		else if (element == TextComponentElement)
+		{
+			ElementTextComponentStart(attributes);
+		}
+		else if (element == ImageComponentElement)
+		{
+			ElementImageComponentStart(attributes);
+		}
+		else if (element == BorderComponentElement)
+		{
+			ElementBorderComponentStart(attributes);
+		}
+		else if (element == PropertyElement)
+		{
+			ElementPropertyStart(attributes);
 		}
 		else
 		{
@@ -102,6 +169,46 @@ namespace mmo
 		{
 			ElementScriptEnd();
 		}
+		if (element == VisualElement)
+		{
+			ElementVisualEnd();
+		}
+		else if (element == ImagerySectionElement)
+		{
+			ElementImagerySectionEnd();
+		}
+		else if (element == StateImageryElement)
+		{
+			ElementImageryEnd();
+		}
+		else if (element == LayerElement)
+		{
+			ElementLayerEnd();
+		}
+		else if (element == SectionElement)
+		{
+			ElementSectionEnd();
+		}
+		else if (element == TextComponentElement)
+		{
+			ElementTextComponentEnd();
+		}
+		else if (element == ImageComponentElement)
+		{
+			ElementImageComponentEnd();
+		}
+		else if (element == BorderComponentElement)
+		{
+			ElementBorderComponentEnd();
+		}
+		else if (element == AreaElement)
+		{
+			ElementAreaEnd();
+		}
+		else if (element == PropertyElement)
+		{
+			ElementPropertyEnd();
+		}
 	}
 
 	void LayoutXmlLoader::Text(const std::string & text) 
@@ -120,7 +227,6 @@ namespace mmo
 		const std::string type(attributes.GetValueAsString(FrameTypeAttribute, FrameElement));
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		const std::string text(attributes.GetValueAsString(FrameTextAttribute));
-		const std::string style(attributes.GetValueAsString(FrameStyleAttribute));
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
 		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
@@ -154,7 +260,6 @@ namespace mmo
 		frame->SetEnabled(enabled);
 
 		// Setup style and renderer
-		if (!style.empty()) frame->SetStyle(style);
 		if (!renderer.empty()) frame->SetRenderer(renderer);
 
 		// Set frame text if there is any
@@ -324,5 +429,258 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementScriptEnd()
 	{
+	}
+
+	void LayoutXmlLoader::ElementVisualStart(const XmlAttributes & attributes)
+	{
+		// Style has to be a top-level element
+		if (m_frames.empty() || m_hasAreaTag || m_hasSizeTag || m_hasVisualTag)
+		{
+			throw std::runtime_error("Unexpected Visual element!");
+		}
+
+		m_hasVisualTag = true;
+	}
+
+	void LayoutXmlLoader::ElementVisualEnd()
+	{
+		m_hasVisualTag = false;
+	}
+
+	void LayoutXmlLoader::ElementImagerySectionStart(const XmlAttributes & attributes)
+	{
+		// Ensure that the element may appear at this location
+		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr)
+		{
+			throw std::runtime_error("Unexpected ImagerySection element!");
+		}
+
+		// Parse attributes
+		const std::string name(attributes.GetValueAsString(ImagerySectionNameAttribute));
+		if (name.empty())
+		{
+			throw std::runtime_error("ImagerySection element has to have a valid name!");
+		}
+
+		// Ensure that such a section doesn't already exist
+		if (m_frames.top()->GetImagerySectionByName(name) != nullptr)
+		{
+			throw std::runtime_error("ImagerySection with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+		}
+
+		// Add new imagery section
+		m_section = std::make_shared<ImagerySection>(name);
+		m_frames.top()->AddImagerySection(m_section);
+	}
+
+	void LayoutXmlLoader::ElementImagerySectionEnd()
+	{
+		// Reset ImagerySection element
+		m_section.reset();
+	}
+
+	void LayoutXmlLoader::ElementImageryStart(const XmlAttributes & attributes)
+	{
+		// Ensure that the element may appear at this location
+		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr)
+		{
+			throw std::runtime_error("Unexpected StateImagery element!");
+		}
+
+		// Parse attributes
+		const std::string name(attributes.GetValueAsString(StateImageryNameAttribute));
+		if (name.empty())
+		{
+			throw std::runtime_error("StateImagery element has to have a valid name!");
+		}
+
+		// Ensure that such a state imagery doesn't already exist
+		if (m_frames.top()->GetStateImageryByName(name) != nullptr)
+		{
+			throw std::runtime_error("StateImagery with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+		}
+
+		// Add new imagery section
+		m_stateImagery = std::make_shared<StateImagery>(name);
+		m_frames.top()->AddStateImagery(m_stateImagery);
+	}
+
+	void LayoutXmlLoader::ElementImageryEnd()
+	{
+		// Reset current state imagery object
+		m_stateImagery.reset();
+	}
+
+	void LayoutXmlLoader::ElementLayerStart(const XmlAttributes & attributes)
+	{
+		// Ensure that the element may appear at this location
+		if (m_layer != nullptr || m_stateImagery == nullptr)
+		{
+			throw std::runtime_error("Unexpected Layer element!");
+		}
+
+		// Add a new layer to the state imagery
+		m_layer = std::make_shared<FrameLayer>();
+		m_stateImagery->AddLayer(m_layer);
+	}
+
+	void LayoutXmlLoader::ElementLayerEnd()
+	{
+		// Reset the current layer element
+		m_layer.reset();
+	}
+
+	void LayoutXmlLoader::ElementSectionStart(const XmlAttributes & attributes)
+	{
+		// Ensure that the element may appear at this location
+		if (m_layer == nullptr)
+		{
+			throw std::runtime_error("Unexpected Section element!");
+		}
+
+		// Get the section name attribute
+		const std::string section(attributes.GetValueAsString(SectionSectionAttribute));
+		if (section.empty())
+		{
+			throw std::runtime_error("Section element needs to have a section name specified!");
+		}
+
+		// Find section by name
+		const ImagerySection* sectionEntry = m_frames.top()->GetImagerySectionByName(section);
+		if (sectionEntry == nullptr)
+		{
+			throw std::runtime_error("Unable to find section named '" + section + "' in frame '" + m_frames.top()->GetName() + "'!");
+		}
+
+		// Add section entry to layer
+		m_layer->AddSection(*sectionEntry);
+	}
+
+	void LayoutXmlLoader::ElementSectionEnd()
+	{
+		// Nothing to do here yet
+	}
+
+	void LayoutXmlLoader::ElementTextComponentStart(const XmlAttributes & attributes)
+	{
+		if (m_component != nullptr || m_section == nullptr)
+		{
+			throw std::runtime_error("Unexpected TextComponent element!");
+		}
+
+		const std::string font(attributes.GetValueAsString(TextComponentFontAttribute));
+		const int size = attributes.GetValueAsInt(TextComponentSizeAttribute);
+		const float outline = attributes.GetValueAsFloat(TextComponentOutlineAttribute);
+		const std::string color(attributes.GetValueAsString(TextComponentColorAttribute));
+		const std::string horzAlignAttr(attributes.GetValueAsString(TextComponentHorzAlignAttribute));
+		const std::string vertAlignAttr(attributes.GetValueAsString(TextComponentVertAlignAttribute));
+
+		// Check for font name existance
+		if (font.empty())
+		{
+			throw std::runtime_error("TextComponent needs a font name!");
+		}
+
+		// Setup component and add it to the current section
+		auto component = std::make_shared<TextComponent>(font, size, outline);
+		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
+		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
+
+		if (attributes.Exists(TextComponentColorAttribute))
+		{
+			argb_t argb;
+
+			std::stringstream colorStream;
+			colorStream.str(color);
+			colorStream.clear();
+
+			colorStream >> std::hex >> argb;
+			component->SetColor(argb);
+		}
+
+		m_component = component;
+		m_section->AddComponent(m_component);
+	}
+
+	void LayoutXmlLoader::ElementTextComponentEnd()
+	{
+		m_component.reset();
+	}
+
+	void LayoutXmlLoader::ElementImageComponentStart(const XmlAttributes & attributes)
+	{
+		if (m_component != nullptr || m_section == nullptr)
+		{
+			throw std::runtime_error("Unexpected ImageComponent element!");
+		}
+
+		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
+		const std::string tilingAttr(attributes.GetValueAsString(ImageComponentTilingAttribute));
+
+		// Check for texture name existance
+		if (texture.empty())
+		{
+			throw std::runtime_error("ImageComponent needs a texture filename!");
+		}
+
+		// Setup component and add it to the current section
+		auto component = std::make_shared<ImageComponent>(texture);
+
+		// Apply tiling mode if set
+		if (attributes.Exists(ImageComponentTilingAttribute))
+		{
+			component->SetTilingMode(ImageTilingModeByName(tilingAttr));
+		}
+
+		m_component = component;
+		m_section->AddComponent(m_component);
+	}
+
+	void LayoutXmlLoader::ElementImageComponentEnd()
+	{
+		m_component.reset();
+	}
+
+	void LayoutXmlLoader::ElementBorderComponentStart(const XmlAttributes & attributes)
+	{
+		if (m_component != nullptr || m_section == nullptr)
+		{
+			throw std::runtime_error("Unexpected BorderComponent element!");
+		}
+
+		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
+		const int borderSize = attributes.GetValueAsInt(BorderComponentBorderSizeAttribute);
+
+		// Check for texture name existance
+		if (texture.empty())
+		{
+			throw std::runtime_error("BorderComponent needs a texture filename!");
+		}
+
+		// Check for border size
+		if (!attributes.Exists(BorderComponentBorderSizeAttribute) ||
+			borderSize <= 0)
+		{
+			throw std::runtime_error("BorderComponent needs a valid border size value!");
+		}
+
+		// Setup component and add it to the current section
+		m_component = std::make_shared<BorderComponent>(texture, borderSize);
+		m_section->AddComponent(m_component);
+	}
+
+	void LayoutXmlLoader::ElementBorderComponentEnd()
+	{
+		m_component.reset();
+	}
+
+	void LayoutXmlLoader::ElementPropertyStart(const XmlAttributes & attributes)
+	{
+
+	}
+
+	void LayoutXmlLoader::ElementPropertyEnd()
+	{
+		// Nothing to do here yet
 	}
 }

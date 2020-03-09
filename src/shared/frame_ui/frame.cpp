@@ -2,9 +2,10 @@
 
 #include "frame.h"
 #include "frame_mgr.h"
-#include "style_mgr.h"
 #include "default_renderer.h"
 #include "button_renderer.h"
+#include "imagery_section.h"
+#include "state_imagery.h"
 
 #include "base/utilities.h"
 #include "base/macros.h"
@@ -33,9 +34,6 @@ namespace mmo
 
 	void Frame::Copy(Frame & other)
 	{
-		// Copy style
-		other.m_style = m_style;
-
 		// Apply renderer property
 		other.SetRenderer(m_renderer->GetName());
 
@@ -46,6 +44,17 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
+
+		// Add section reference
+		for (const auto& pair : m_sectionsByName)
+		{
+			other.m_sectionsByName[pair.first] = pair.second;
+		}
+		// Add state imagery reference
+		for (const auto& pair : m_stateImageriesByName)
+		{
+			other.m_stateImageriesByName[pair.first] = pair.second;
+		}
 
 		// Copy all children and their children
 		for (const auto& child : m_children)
@@ -60,6 +69,53 @@ namespace mmo
 			// Add child copy to the copied frame
 			other.m_children.emplace_back(std::move(copiedChild));
 		}
+	}
+
+	void Frame::AddImagerySection(std::shared_ptr<ImagerySection>& section)
+	{
+		ASSERT(section);
+		ASSERT(m_sectionsByName.find(section->GetName()) == m_sectionsByName.end());
+
+		m_sectionsByName[section->GetName()] = section;
+	}
+
+	void Frame::RemoveImagerySection(const std::string & name)
+	{
+		const auto it = m_sectionsByName.find(name);
+		ASSERT(it != m_sectionsByName.end());
+
+		// TODO: Removing an imagery section will result in undefined behavior if the section
+		// is still referenced by a layer in a state imagery.
+
+		m_sectionsByName.erase(it);
+	}
+
+	ImagerySection * Frame::GetImagerySectionByName(const std::string & name) const
+	{
+		const auto it = m_sectionsByName.find(name);
+		return (it == m_sectionsByName.end()) ? nullptr : it->second.get();
+	}
+
+	void Frame::AddStateImagery(std::shared_ptr<StateImagery>& stateImagery)
+	{
+		ASSERT(stateImagery);
+		ASSERT(m_stateImageriesByName.find(stateImagery->GetName()) == m_stateImageriesByName.end());
+
+		m_stateImageriesByName[stateImagery->GetName()] = stateImagery;
+	}
+
+	void Frame::RemoveStateImagery(const std::string & name)
+	{
+		const auto it = m_stateImageriesByName.find(name);
+		ASSERT(it != m_stateImageriesByName.end());
+
+		m_stateImageriesByName.erase(it);
+	}
+
+	StateImagery * Frame::GetStateImageryByName(const std::string & name) const
+	{
+		const auto it = m_stateImageriesByName.find(name);
+		return (it == m_stateImageriesByName.end()) ? nullptr : it->second.get();
 	}
 
 	void Frame::SetText(const std::string & text)
@@ -155,21 +211,7 @@ namespace mmo
 
 		// TODO: Register this frame for the new renderer
 	}
-
-	void Frame::SetStyle(const std::string & style)
-	{
-		// Create a style of the given template
-		m_style = StyleManager::Get().Find(style);
-		if (!m_style)
-		{
-			WLOG("Unable to find frame style '" << style << "' for frame '" << m_name << "'");
-		}
-
-		m_needsRedraw = true;
-
-		// TODO: Notify renderer about this?
-	}
-
+	
 	void Frame::SetClippedByParent(bool clipped)
 	{
 		if (m_clippedByParent != clipped)
