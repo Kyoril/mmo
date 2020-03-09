@@ -2,6 +2,7 @@
 # Add executable
 add_gui_exe(mmo_client)
 
+# Link internal libraries
 target_link_libraries(mmo_client 
 	base 
 	log 
@@ -20,5 +21,9 @@ target_link_libraries(mmo_client
 	expat
 	game)
 
+# Link external dependency libraries
+target_link_libraries(mmo_client lua)
 target_link_libraries(mmo_client ${OPENSSL_LIBRARIES})
+
+# Add project to a solution folder for better organization
 set_property(TARGET mmo_client PROPERTY FOLDER "client")
