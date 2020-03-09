@@ -14,6 +14,7 @@
 #include <string>
 
 #include "expat/lib/expat.h"
+#include "lua/lua.hpp"
 
 
 namespace mmo
@@ -242,8 +243,14 @@ namespace mmo
 		return s_frameMgr;
 	}
 
-	void FrameManager::Initialize()
+	void FrameManager::Initialize(lua_State* luaState)
 	{
+		// Verify and register lua state
+		ASSERT(luaState);
+		FrameManager::Get().m_luaState = luaState;
+
+		// TODO: add methods to the given lua state
+
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
@@ -253,6 +260,11 @@ namespace mmo
 	{
 		// Unregister all frame factories
 		FrameManager::Get().ClearFrameFactories();
+
+		// TODO: Remove previously registered methods from lua state?
+
+		// No longer use the lua state
+		FrameManager::Get().m_luaState = nullptr;
 	}
 
 	void FrameManager::LoadUIFile(const std::string& filename)

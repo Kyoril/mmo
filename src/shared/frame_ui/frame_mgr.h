@@ -12,6 +12,9 @@
 #include <map>
 
 
+struct lua_State;
+
+
 namespace mmo
 {
 	/// Handler for layout xml.
@@ -36,7 +39,7 @@ namespace mmo
 
 	public:
 		/// Initializes the frame manager by registering default frame factories.
-		static void Initialize();
+		static void Initialize(lua_State* state);
 		/// Deinitilaizes the frame manager, reverting everything done in Initialize().
 		static void Destroy();
 
@@ -84,5 +87,7 @@ namespace mmo
 		FramePtr m_hoverFrame;
 		/// Pressed mouse buttons.
 		int32 m_pressedButtons;
+		/// The lua state instance.
+		lua_State* m_luaState;
 	};
 }
