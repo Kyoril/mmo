@@ -45,6 +45,12 @@ namespace mmo
 		other.m_position = m_position;
 		other.m_text = m_text;
 
+		// Copy registered event handlers
+		for (const auto& pair : m_eventsByName)
+		{
+			other.m_eventsByName[pair.first] = pair.second;
+		}
+
 		// Add section reference
 		for (const auto& pair : m_sectionsByName)
 		{
@@ -69,6 +75,51 @@ namespace mmo
 			// Add child copy to the copied frame
 			other.m_children.emplace_back(std::move(copiedChild));
 		}
+	}
+
+	FrameEvent & Frame::RegisterEvent(std::string name)
+	{
+		auto* evt = FindEvent(name);
+		if (evt)
+		{
+			return *evt;
+		}
+
+		const auto result = m_eventsByName.insert(std::make_pair(name, FrameEvent()));
+		return result.first->second;
+	}
+
+	FrameEvent * Frame::FindEvent(const std::string & name)
+	{
+		const auto it = m_eventsByName.find(name);
+		if (it != m_eventsByName.end())
+		{
+			return &it->second;
+		}
+
+		return nullptr;
+	}
+
+	void Frame::UnregisterEvent(const std::string & name)
+	{
+		const auto it = m_eventsByName.find(name);
+		if (it != m_eventsByName.end())
+		{
+			m_eventsByName.erase(it);
+		}
+	}
+
+	bool Frame::TriggerEvent(const std::string & name)
+	{
+		// Find the named event and try to execute it's assigned lua script code.
+		const FrameEvent* evt = FindEvent(name);
+		if (evt)
+		{
+			(*evt)();
+			return true;
+		}
+
+		return false;
 	}
 
 	void Frame::AddImagerySection(std::shared_ptr<ImagerySection>& section)

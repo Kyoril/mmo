@@ -49,16 +49,6 @@ namespace mmo
 
 		// Register realm signal
 		m_loginConnections += m_realmConnector.Authenticated.connect(*this, &LoginState::OnRealmAuthenticated);
-
-		// Quit button test
-		auto quitButton = std::static_pointer_cast<Button>(s_frameMgr.Find("QuitButton"));
-		if (quitButton)
-		{
-			m_loginConnections += quitButton->Clicked.connect([]()
-			{
-				Console::ExecuteCommand("quit");
-			});
-		}
 	}
 
 	void LoginState::OnLeave()

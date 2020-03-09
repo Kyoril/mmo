@@ -67,6 +67,8 @@ namespace mmo
 				// Finish packet and send it
 				packet.Finish();
 			});
+
+			DLOG("[Login] Handshaking...");
 		}
 		else
 		{
@@ -343,6 +345,8 @@ namespace mmo
 		// Calculate auth hash
 		const std::string authHash = m_accountName + ":" + upperPassword;
 		m_authHash = sha1(authHash.c_str(), authHash.size());
+
+		DLOG("[Login] Connecting...");
 
 		// Connect to the server at localhost
 		connect(s_realmlistCVar->GetStringValue(), constants::DefaultLoginPlayerPort, *this, m_ioService);

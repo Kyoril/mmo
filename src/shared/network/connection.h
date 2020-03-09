@@ -195,7 +195,12 @@ namespace mmo
 			{
 				if (m_socket->is_open())
 				{
-					m_socket->close();
+					asio::error_code error;
+					m_socket->shutdown(asio::ip::tcp::socket::shutdown_both, error);
+					if (!error.value())
+					{
+						m_socket->close(error);
+					}
 				}
 			}
 		}
@@ -272,6 +277,7 @@ namespace mmo
 			if (m_isClosedOnSend && m_sending.empty())
 			{
 				disconnected();
+				m_sendBuffer.clear();
 				return;
 			}
 		}
@@ -356,19 +362,25 @@ namespace mmo
 						parsedUntil += static_cast<std::size_t>(source.getPosition() - source.getBegin());
 						break;
 					case receive_state::Malformed:
-						m_socket.reset();
 						if (m_listener)
 						{
 							m_listener->connectionMalformedPacket();
 							m_listener = nullptr;
 						}
+
+						m_socket->close();
+						m_received.clear();
+
 						return;
 				}
 
 				if (m_isClosedOnParsing)
 				{
 					m_isClosedOnParsing = false;
-					m_socket.reset();
+					disconnected();
+
+					m_received.clear();
+
 					return;
 				}
 			} while (nextPacket);
@@ -392,6 +404,17 @@ namespace mmo
 				m_listener->connectionLost();
 				m_listener = nullptr;
 			}
+
+			if (m_socket->is_open())
+			{
+				asio::error_code error;
+				m_socket->shutdown(asio::ip::tcp::socket::shutdown_both, error);
+				if (!error.value())
+				{
+					m_socket->close(error);
+				}
+			}
+			m_received.clear();
 		}
 	};
 }

@@ -36,13 +36,11 @@ namespace mmo
 	static const std::string AnchorRelativeToAttribute("relativeTo");
 	static const std::string ScriptElement("Script");
 	static const std::string ScriptFileAttribute("file");
-	static const std::string EventNameAttribute("name");
-	static const std::string EventFunctionAttribute("function");
+	static const std::string EventsElement("Events");
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
 	static const std::string PropertyDefaultValueAttribute("defaultValue");
-
 
 	static const std::string VisualElement("Visual");
 	static const std::string ImagerySectionElement("ImagerySection");
@@ -69,150 +67,194 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementStart(const std::string & element, const XmlAttributes & attributes)
 	{
-		if (element == FrameElement)
+		// Clear text buffer before handling a new tag
+		m_text.clear();
+
+		if (m_hasEventsTag)
 		{
-			ElementFrameStart(attributes);
-		}
-		else if (element == AreaElement)
-		{
-			ElementAreaStart(attributes);
-		}
-		else if (element == SizeElement)
-		{
-			ElementSizeStart(attributes);
-		}
-		else if (element == PositionElement)
-		{
-			ElementPositionStart(attributes);
-		}
-		else if (element == AbsDimensionElement)
-		{
-			ElementAbsDimensionStart(attributes);
-		}
-		else if (element == AnchorElement)
-		{
-			ElementAnchorStart(attributes);
-		}
-		else if (element == ScriptElement)
-		{
-			ElementScriptStart(attributes);
-		}
-		if (element == VisualElement)
-		{
-			ElementVisualStart(attributes);
-		}
-		else if (element == ImagerySectionElement)
-		{
-			ElementImagerySectionStart(attributes);
-		}
-		else if (element == StateImageryElement)
-		{
-			ElementImageryStart(attributes);
-		}
-		else if (element == LayerElement)
-		{
-			ElementLayerStart(attributes);
-		}
-		else if (element == SectionElement)
-		{
-			ElementSectionStart(attributes);
-		}
-		else if (element == TextComponentElement)
-		{
-			ElementTextComponentStart(attributes);
-		}
-		else if (element == ImageComponentElement)
-		{
-			ElementImageComponentStart(attributes);
-		}
-		else if (element == BorderComponentElement)
-		{
-			ElementBorderComponentStart(attributes);
-		}
-		else if (element == PropertyElement)
-		{
-			ElementPropertyStart(attributes);
+			// We are in an Events tag - try to find the frame event by name.
+			m_frameEvent = m_frames.top()->FindEvent(element);
+			if (m_frameEvent != nullptr)
+			{
+				return;
+			}
+
+			WLOG("Event '" << element << "' is not supported!");
 		}
 		else
 		{
-			WLOG("Unknown element found while parsing the ui-layout file: '" << element << "'");
+			// Now handle tags by name
+			if (element == FrameElement)
+			{
+				ElementFrameStart(attributes);
+			}
+			else if (element == AreaElement)
+			{
+				ElementAreaStart(attributes);
+			}
+			else if (element == SizeElement)
+			{
+				ElementSizeStart(attributes);
+			}
+			else if (element == PositionElement)
+			{
+				ElementPositionStart(attributes);
+			}
+			else if (element == AbsDimensionElement)
+			{
+				ElementAbsDimensionStart(attributes);
+			}
+			else if (element == AnchorElement)
+			{
+				ElementAnchorStart(attributes);
+			}
+			else if (element == ScriptElement)
+			{
+				ElementScriptStart(attributes);
+			}
+			else if (element == VisualElement)
+			{
+				ElementVisualStart(attributes);
+			}
+			else if (element == ImagerySectionElement)
+			{
+				ElementImagerySectionStart(attributes);
+			}
+			else if (element == StateImageryElement)
+			{
+				ElementImageryStart(attributes);
+			}
+			else if (element == LayerElement)
+			{
+				ElementLayerStart(attributes);
+			}
+			else if (element == SectionElement)
+			{
+				ElementSectionStart(attributes);
+			}
+			else if (element == TextComponentElement)
+			{
+				ElementTextComponentStart(attributes);
+			}
+			else if (element == ImageComponentElement)
+			{
+				ElementImageComponentStart(attributes);
+			}
+			else if (element == BorderComponentElement)
+			{
+				ElementBorderComponentStart(attributes);
+			}
+			else if (element == PropertyElement)
+			{
+				ElementPropertyStart(attributes);
+			}
+			else if (element == EventsElement)
+			{
+				ElementEventsStart(attributes);
+			}
+			else
+			{
+				// We didn't find a valid frame event now a supported tag - output a warning for
+				// the developers.
+				WLOG("Unknown element found while parsing the ui-layout file: '" << element << "'");
+			}
 		}
+		
 	}
 
 	void LayoutXmlLoader::ElementEnd(const std::string & element) 
 	{
-		if (element == FrameElement)
+		// If we have a valid frame event, assign the xml text as event code
+		if (m_frameEvent != nullptr)
 		{
-			ElementFrameEnd();
+			m_frameEvent->Set(m_text);
+			m_frameEvent = nullptr;
 		}
-		else if (element == AreaElement)
+		else
 		{
-			ElementAreaEnd();
-		}
-		else if (element == SizeElement)
-		{
-			ElementSizeEnd();
-		}
-		else if (element == PositionElement)
-		{
-			ElementPositionEnd();
-		}
-		else if (element == AbsDimensionElement)
-		{
-			ElementAbsDimensionEnd();
-		}
-		else if (element == AnchorElement)
-		{
-			ElementAnchorEnd();
-		}
-		else if (element == ScriptElement)
-		{
-			ElementScriptEnd();
-		}
-		if (element == VisualElement)
-		{
-			ElementVisualEnd();
-		}
-		else if (element == ImagerySectionElement)
-		{
-			ElementImagerySectionEnd();
-		}
-		else if (element == StateImageryElement)
-		{
-			ElementImageryEnd();
-		}
-		else if (element == LayerElement)
-		{
-			ElementLayerEnd();
-		}
-		else if (element == SectionElement)
-		{
-			ElementSectionEnd();
-		}
-		else if (element == TextComponentElement)
-		{
-			ElementTextComponentEnd();
-		}
-		else if (element == ImageComponentElement)
-		{
-			ElementImageComponentEnd();
-		}
-		else if (element == BorderComponentElement)
-		{
-			ElementBorderComponentEnd();
-		}
-		else if (element == AreaElement)
-		{
-			ElementAreaEnd();
-		}
-		else if (element == PropertyElement)
-		{
-			ElementPropertyEnd();
+			if (element == FrameElement)
+			{
+				ElementFrameEnd();
+			}
+			else if (element == AreaElement)
+			{
+				ElementAreaEnd();
+			}
+			else if (element == SizeElement)
+			{
+				ElementSizeEnd();
+			}
+			else if (element == PositionElement)
+			{
+				ElementPositionEnd();
+			}
+			else if (element == AbsDimensionElement)
+			{
+				ElementAbsDimensionEnd();
+			}
+			else if (element == AnchorElement)
+			{
+				ElementAnchorEnd();
+			}
+			else if (element == ScriptElement)
+			{
+				ElementScriptEnd();
+			}
+			else if (element == VisualElement)
+			{
+				ElementVisualEnd();
+			}
+			else if (element == ImagerySectionElement)
+			{
+				ElementImagerySectionEnd();
+			}
+			else if (element == StateImageryElement)
+			{
+				ElementImageryEnd();
+			}
+			else if (element == LayerElement)
+			{
+				ElementLayerEnd();
+			}
+			else if (element == SectionElement)
+			{
+				ElementSectionEnd();
+			}
+			else if (element == TextComponentElement)
+			{
+				ElementTextComponentEnd();
+			}
+			else if (element == ImageComponentElement)
+			{
+				ElementImageComponentEnd();
+			}
+			else if (element == BorderComponentElement)
+			{
+				ElementBorderComponentEnd();
+			}
+			else if (element == AreaElement)
+			{
+				ElementAreaEnd();
+			}
+			else if (element == PropertyElement)
+			{
+				ElementPropertyEnd();
+			}
+			else if (element == EventsElement)
+			{
+				ElementEventsEnd();
+			}
 		}
 	}
 
 	void LayoutXmlLoader::Text(const std::string & text) 
 	{
+		// Append text to the buffer. Since xml text may be processed in multiple blocks,
+		// this callback may actually be called multiple times for a single text block.
+
+		// m_text will automatically be cleared before a new tag is processed to ensure
+		// that multiple text blocks are not concatenated together by accident.
+		m_text.append(text);
 	}
 
 	void LayoutXmlLoader::ElementFrameStart(const XmlAttributes & attributes)
@@ -693,5 +735,20 @@ namespace mmo
 	void LayoutXmlLoader::ElementPropertyEnd()
 	{
 		// Nothing to do here yet
+	}
+
+	void LayoutXmlLoader::ElementEventsStart(const XmlAttributes & attributes)
+	{
+		if (m_hasEventsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
+		{
+			throw std::runtime_error("Unexpected " + EventsElement + " element!");
+		}
+
+		m_hasEventsTag = true;
+	}
+
+	void LayoutXmlLoader::ElementEventsEnd()
+	{
+		m_hasEventsTag = false;
 	}
 }

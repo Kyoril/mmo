@@ -63,6 +63,8 @@ namespace mmo
 		void NotifyMouseDown(MouseButton button, const Point& position);
 		/// Notifies the FrameManager that a mouse button was released.
 		void NotifyMouseUp(MouseButton button, const Point& position);
+		/// Executes lua code.
+		void ExecuteLua(const std::string& code);
 
 	public:
 		/// Registers a new factory for a certain frame type.
