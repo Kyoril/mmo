@@ -58,7 +58,7 @@ namespace mmo
 	void GameScript::RegisterGlobalFunctions()
 	{
 		// Check for double initialization
-		ASSERT(m_globalFunctionsRegistered);
+		ASSERT(!m_globalFunctionsRegistered);
 
 		// Register all script functions
 		for (int i = 0; i < sizeof(s_scriptFunctions) / sizeof(ScriptFunctionHelper); ++i)
