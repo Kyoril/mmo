@@ -61,5 +61,7 @@ namespace mmo
 	public:
 		/// Runs the event loop.
 		static void Run();
+		/// Terminates the event loop.
+		static void Terminate(int32 exitCode);
 	};
 }

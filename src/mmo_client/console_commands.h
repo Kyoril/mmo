@@ -14,6 +14,9 @@ namespace mmo
 		/// Handles the run command to execute a console script file (used for config files for example).
 		void ConsoleCommand_Run(const std::string& cmd, const std::string& args);
 
+		/// Handles the quit command to terminate the event loop.
+		void ConsoleCommand_Quit(const std::string& cmd, const std::string& args);
+
 		/// Handles the set command to set a console variable,
 		void ConsoleCommand_Set(const std::string& cmd, const std::string& args);
 		/// Handles the unset command to unset / remove a console variable.

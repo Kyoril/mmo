@@ -167,6 +167,7 @@ namespace mmo
 		// Register some default console commands
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
+		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediatly.");
 
 		// Initialize the cvar manager
 		ConsoleVarMgr::Initialize();
