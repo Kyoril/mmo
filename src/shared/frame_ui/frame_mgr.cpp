@@ -423,6 +423,12 @@ namespace mmo
 		}
 	}
 
+	void FrameManager::ExecuteLua(const std::string & code)
+	{
+		ASSERT(m_luaState);
+		luaL_dostring(m_luaState, code.c_str());
+	}
+
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)
 	{
 		auto it = m_frameFactories.find(elementName);

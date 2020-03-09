@@ -79,7 +79,6 @@ namespace mmo
 		{
 			s_realmConnector->resetListener();
 			s_realmConnector->close();
-			s_realmConnector.reset();
 		}
 
 		// Close the login connector
@@ -87,7 +86,6 @@ namespace mmo
 		{
 			s_loginConnector->resetListener();
 			s_loginConnector->close();
-			s_loginConnector.reset();
 		}
 
 		// Destroy the work object that keeps the worker busy so that
@@ -96,6 +94,9 @@ namespace mmo
 
 		// Wait for the network thread to stop running
 		s_networkThread.join();
+
+		s_realmConnector.reset();
+		s_loginConnector.reset();
 	}
 }
 

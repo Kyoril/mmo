@@ -26,7 +26,6 @@ namespace mmo
 		virtual void Text(const std::string& text) override;
 		// ~ End XmlHandler
 
-
 	private:
 		void ElementFrameStart(const XmlAttributes& attributes);
 		void ElementFrameEnd();
@@ -42,7 +41,6 @@ namespace mmo
 		void ElementAnchorEnd();
 		void ElementScriptStart(const XmlAttributes& attributes);
 		void ElementScriptEnd();
-
 		void ElementVisualStart(const XmlAttributes& attributes);
 		void ElementVisualEnd();
 		void ElementImagerySectionStart(const XmlAttributes& attributes);
@@ -61,8 +59,8 @@ namespace mmo
 		void ElementBorderComponentEnd();
 		void ElementPropertyStart(const XmlAttributes& attributes);
 		void ElementPropertyEnd();
-
-		void operator=(const LayoutXmlLoader&) {}
+		void ElementEventsStart(const XmlAttributes& attributes);
+		void ElementEventsEnd();
 
 	private:
 		/// Stack of added frames.
@@ -80,5 +78,11 @@ namespace mmo
 		std::shared_ptr<StateImagery> m_stateImagery;
 		std::shared_ptr<FrameLayer> m_layer;
 		std::shared_ptr<FrameComponent> m_component;
+
+		std::string m_text;
+
+		bool m_hasEventsTag = false;
+
+		FrameEvent* m_frameEvent = nullptr;
 	};
 }

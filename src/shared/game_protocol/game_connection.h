@@ -122,6 +122,8 @@ namespace mmo
 					if (m_socket->is_open())
 					{
 						m_socket->close();
+
+						m_received.clear();
 					}
 				}
 			}
@@ -295,7 +297,7 @@ namespace mmo
 					if (m_isClosedOnParsing)
 					{
 						m_isClosedOnParsing = false;
-						m_socket.reset();
+						Disconnected();
 						return;
 					}
 				} while (nextPacket);
@@ -322,6 +324,18 @@ namespace mmo
 					m_listener->connectionLost();
 					m_listener = nullptr;
 				}
+
+				if (m_socket->is_open())
+				{
+					asio::error_code error;
+					m_socket->shutdown(asio::ip::tcp::socket::shutdown_both, error);
+					if (!error.value())
+					{
+						m_socket->close(error);
+					}
+				}
+
+				m_received.clear();
 			}
 		};
 

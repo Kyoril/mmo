@@ -5,9 +5,13 @@
 
 namespace mmo
 {
+	static const std::string ButtonClickedEvent("OnClicked");
+
 	Button::Button(const std::string & type, const std::string & name)
 		: Frame(type, name)
 	{
+		// Register events
+		RegisterEvent(ButtonClickedEvent);
 	}
 
 	void Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
@@ -17,7 +21,14 @@ namespace mmo
 			const Rect frame = GetAbsoluteFrameRect();
 			if (frame.IsPointInRect(position))
 			{
-				// Notify that the button has been clicked
+				// Try to execute lua script event first
+				const FrameEvent* clickedEvent = FindEvent(ButtonClickedEvent);
+				if (clickedEvent)
+				{
+					(*clickedEvent)();
+				}
+
+				// Afterwards, signal the event
 				Clicked();
 			}
 		}

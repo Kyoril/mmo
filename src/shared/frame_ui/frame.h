@@ -7,6 +7,7 @@
 #include "anchor_point.h"
 #include "frame_renderer.h"
 #include "mouse_event_args.h"
+#include "frame_event.h"
 
 #include "base/typedefs.h"
 #include "base/signal.h"
@@ -68,6 +69,22 @@ namespace mmo
 	public:
 		/// Called to copy this frame's properties over to another frame.
 		virtual void Copy(Frame& other);
+
+	public:
+		/// Registers a new frame event by name. If the event already exists, it's instance
+		/// is returned instead.
+		/// @param name Name of the event.
+		/// @returns Reference to the FrameEvent object.
+		FrameEvent& RegisterEvent(std::string name);
+		/// Tries to find an event by name.
+		/// @param name The name of the event that is searched.
+		/// @return nullptr if the event doesn't exist, otherwise a pointer on the FrameEvent object.
+		FrameEvent* FindEvent(const std::string& name);
+		/// Unregisters an event from this frame by name.
+		void UnregisterEvent(const std::string& name);
+		/// Triggers a frame event by name.
+		/// @returns false if the event doesn't exist.
+		bool TriggerEvent(const std::string& name);
 
 	public:
 		/// Adds a new state imagery.
@@ -235,6 +252,8 @@ namespace mmo
 		std::map<std::string, std::shared_ptr<StateImagery>> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
 		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
+		/// Contains all registered events by name.
+		std::map<std::string, FrameEvent> m_eventsByName;
 	};
 
 	/// A shared pointer of a frame.
