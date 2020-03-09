@@ -118,4 +118,13 @@ namespace mmo
 			gx.Present();
 		}
 	}
+
+	void EventLoop::Terminate(int32 exitCode)
+	{
+#ifdef _WIN32
+		PostQuitMessage(exitCode);
+#else
+		ASSERT(!"TODO: Implement event loop termination on operating system!");
+#endif
+	}
 }

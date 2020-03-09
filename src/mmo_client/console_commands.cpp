@@ -3,6 +3,7 @@
 #include "console_commands.h"
 #include "console.h"
 #include "version.h"
+#include "event_loop.h"
 
 #include "log/default_log_levels.h"
 
@@ -51,6 +52,11 @@ namespace mmo
 					Console::ExecuteCommand(line);
 				}
 			}
+		}
+
+		void ConsoleCommand_Quit(const std::string& cmd, const std::string& args)
+		{
+			EventLoop::Terminate(0);
 		}
 
 #ifdef MMO_WITH_DEV_COMMANDS
