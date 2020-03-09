@@ -549,4 +549,16 @@ namespace mmo
 	{ 
 		return m_geometryBuffer;
 	}
+
+	void Frame::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
+	{
+		// Simply raise the signal
+		MouseDown(MouseEventArgs(buttons, position.x, position.y));
+	}
+
+	void Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
+	{
+		// Simply raise the signal
+		MouseUp(MouseEventArgs(buttons, position.x, position.y));
+	}
 }

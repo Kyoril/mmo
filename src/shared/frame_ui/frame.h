@@ -175,6 +175,10 @@ namespace mmo
 		virtual void AddChild(Pointer frame);
 		/// Gets the geometry buffer that is used to render this frame.
 		GeometryBuffer& GetGeometryBuffer();
+		/// 
+		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position);
+		/// 
+		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
 
 	public:
 		virtual Rect GetRelativeFrameRect();

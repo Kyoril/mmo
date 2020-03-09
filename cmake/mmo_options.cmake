@@ -63,6 +63,37 @@ if (MMO_WITH_RELEASE_ASSERTS)
 	add_definitions("-DMMO_ALWAYS_ASSERT")
 endif()
 
+if (MMO_BUILD_TESTS)
+	enable_testing()
+	add_definitions("-DMMO_BUILD_TESTS=1")
+else()
+	add_definitions("-DMMO_BUILD_TESTS=0")
+endif()
+
+if (MMO_BUILD_EDITOR)
+	add_definitions("-DMMO_BUILD_EDITOR=1")
+else()
+	add_definitions("-DMMO_BUILD_EDITOR=0")
+endif()
+
+if (MMO_BUILD_LAUNCHER)
+	add_definitions("-DMMO_BUILD_LAUNCHER=1")
+else()
+	add_definitions("-DMMO_BUILD_LAUNCHER=0")
+endif()
+
+if (MMO_BUILD_TOOLS)
+	add_definitions("-DMMO_BUILD_TOOLS=1")
+else()
+	add_definitions("-DMMO_BUILD_TOOLS=0")
+endif()
+
+if (MMO_BUILD_CLIENT)
+	add_definitions("-DMMO_BUILD_CLIENT=1")
+else()
+	add_definitions("-DMMO_BUILD_CLIENT=0")
+endif()
+
 # TODO: Add more option-specific settings here as you need
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h @ONLY)

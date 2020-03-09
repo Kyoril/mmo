@@ -21,32 +21,39 @@ namespace mmo
 {
 	// Static private variables
 
+	/// Map of case insensitive registered console commands.
 	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
-
-	/// A event that listens for KeyDown events from the event loop to handle console input.
+	/// Am event that listens for KeyDown events from the event loop to handle console input.
 	static scoped_connection s_consoleKeyDownEvent;
-
-	// Used to determine whether the console window needs to be rendered right now
-	/// Whether the console window should be rendered right now.
+	/// Whether the console window is currently visible on screen or not.
 	static bool s_consoleVisible = false;
 	/// The current height of the console window in pixels, counted from the top edge.
 	static int32 s_consoleWindowHeight = 210;
+	/// The last viewport width in pixels. Used to detect size changes.
 	static int32 s_lastViewportWidth = 0;
+	/// The last viewport height in pixels. Used to detect size changes.
 	static int32 s_lastViewportHeight = 0;
 	/// Scroll offset of the console text in lines.
 	static int32 s_consoleScrollOffset = 0;
-
-	// Used for rendering the console window background
+	/// Reference to the layer that has been registered for rendering the client console.
 	static ScreenLayerIt s_consoleLayer;
+	/// A vertex buffer that is used to render the console geometry (except the text).
 	static VertexBufferPtr s_consoleVertBuf;
+	/// Index buffer that is used to render the console vertex buffer geometry more efficiently.
 	static IndexBufferPtr s_consoleIndBuf;
-
+	/// The font that is used to render the console text.
 	static FontPtr s_consoleFont;
+	/// A geometry buffer which is populated by the console font's draw commands and then used to
+	/// actually draw the console text on screen.
 	static std::unique_ptr<GeometryBuffer> s_consoleTextGeom;
+	/// A flag that indicates that the console text needs to be redrawn. Set on scrolling and text
+	/// change events currently.
 	static bool s_consoleTextDirty = true;
+	/// A list of all console text lines. The list contents are clamped.
 	static std::list<std::string> s_consoleLog;
-
+	/// A mutex to support adding console text lines in a multi threaded environment.
 	static std::mutex s_consoleLogMutex;
+	/// A connection that binds a function which displays the content of the LOG macros in the console.
 	static scoped_connection s_consoleLogConn;
 
 
@@ -85,7 +92,7 @@ namespace mmo
 		/// Triggered when a gxcvar is changed to invalidate the current graphics settings.
 		static void GxCVarChanged(ConsoleVar& var, const std::string& oldValue)
 		{
-
+			// TODO: Set pending graphics changes so that they can be submitted all at once.
 		}
 
 

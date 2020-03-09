@@ -224,19 +224,17 @@ namespace mmo
 
 		// Get the name of the frame to create
 		const std::string name(attributes.GetValueAsString(FrameNameAttribute));
-		const std::string type(attributes.GetValueAsString(FrameTypeAttribute, FrameElement));
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		const std::string text(attributes.GetValueAsString(FrameTextAttribute));
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
 		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
 
-		// Attempt to create the frame
-		FramePtr frame = FrameManager::Get().Create(type, name);
-		if (!frame)
-		{
-			throw std::runtime_error("Could not create frame named!");
-		}
+		// Frame type might be overridden
+		std::string type(attributes.GetValueAsString(FrameTypeAttribute, "Frame"));
+
+		// Contains the inherited frame (if any provided)
+		FramePtr templateFrame;
 
 		// First, duplicate template frame if there is any. We do this to allow
 		// overriding other frame properties by this frame definition.
@@ -245,13 +243,26 @@ namespace mmo
 			const std::string inherits(attributes.GetValueAsString(FrameInheritsAttribute));
 
 			// Find template frame
-			FramePtr templateFrame = FrameManager::Get().Find(inherits);
+			templateFrame = FrameManager::Get().Find(inherits);
 			if (templateFrame == nullptr)
 			{
 				throw std::runtime_error("Unable to find template frame '" + inherits + "'");
 			}
 
-			// Copy properties
+			// Override frame type to be used
+			type = templateFrame->GetType();
+		}
+
+		// Attempt to create the frame
+		FramePtr frame = FrameManager::Get().Create(type, name);
+		if (!frame)
+		{
+			throw std::runtime_error("Could not create frame named!");
+		}
+
+		// Copy properties over
+		if (templateFrame)
+		{
 			templateFrame->Copy(*frame);
 		}
 
