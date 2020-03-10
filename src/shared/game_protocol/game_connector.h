@@ -193,8 +193,11 @@ namespace mmo
 				}
 				else if (iterator == asio::ip::tcp::resolver::iterator())
 				{
-					getListener()->connectionEstablished(false);
-					this->resetListener();
+					if (getListener())
+					{
+						getListener()->connectionEstablished(false);
+						this->resetListener();
+					}
 					return;
 				}
 
