@@ -186,6 +186,19 @@ namespace mmo
 			return false;
 		});
 
+		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key) {
+			FrameManager::Get().NotifyKeyDown(key);
+			return false;
+		});
+		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint) {
+			FrameManager::Get().NotifyKeyChar(codepoint);
+			return false;
+		});
+		s_frameUiConnections += EventLoop::KeyUp.connect([](int32 key) {
+			FrameManager::Get().NotifyKeyUp(key);
+			return false;
+		});
+
 		// Register game states
 		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));
 		GameStateMgr::Get().SetGameState(LoginState::Name);

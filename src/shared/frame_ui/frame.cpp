@@ -257,6 +257,13 @@ namespace mmo
 		if (m_enabled != enable)
 		{
 			m_enabled = enable;
+
+			// Release input on disable
+			if (!m_enabled)
+			{
+				ReleaseInput();
+			}
+
 			EnabledStateChanged();
 		}
 	}
@@ -400,6 +407,20 @@ namespace mmo
 		}
 
 		return shared_from_this();
+	}
+
+	void Frame::CaptureInput()
+	{
+		FrameManager::Get().SetCaptureWindow(shared_from_this());
+	}
+
+	void Frame::ReleaseInput()
+	{
+		// Reset capture frame if it is this frame
+		if (FrameManager::Get().GetCaptureFrame().get() == this)
+		{
+			FrameManager::Get().SetCaptureWindow(nullptr);
+		}
 	}
 
 	void Frame::Render()

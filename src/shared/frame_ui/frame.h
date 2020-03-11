@@ -9,6 +9,7 @@
 #include "mouse_event_args.h"
 #include "frame_event.h"
 #include "property.h"
+#include "key.h"
 
 #include "base/typedefs.h"
 #include "base/utilities.h"
@@ -187,6 +188,14 @@ namespace mmo
 		void Invalidate();
 		/// Tries to retrieve a child frame at the given position.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
+		/// Makes this frame capture input events.
+		void CaptureInput();
+		/// Stops this frame from receiving input events.
+		void ReleaseInput();
+		/// Called when the input was captured.
+		virtual void OnInputCaptured() {}
+		/// Called when the input was released.
+		virtual void OnInputReleased() {}
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -207,7 +216,11 @@ namespace mmo
 		/// 
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position);
 		/// 
-		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
+		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position); 
+		//// 
+		virtual void OnKeyDown(Key key) {};
+		/// 
+		virtual void OnKeyChar(uint16 codepoint) {};
 
 	public:
 		virtual Rect GetRelativeFrameRect();
@@ -272,6 +285,7 @@ namespace mmo
 		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
 		/// Contains all registered events by name.
 		std::map<std::string, FrameEvent, StrCaseIComp> m_eventsByName;
+		/// 
 		std::map<std::string, Property, StrCaseIComp> m_propertiesByName;
 
 	protected:

@@ -425,10 +425,64 @@ namespace mmo
 		}
 	}
 
+	void FrameManager::NotifyKeyDown(Key key)
+	{
+		// We need an active input capture to handle key down events
+		if (!m_inputCapture)
+		{
+			return;
+		}
+
+		// Forward the event
+		m_inputCapture->OnKeyDown(key);
+	}
+
+	void FrameManager::NotifyKeyChar(uint16 codepoint)
+	{
+		// We need an active input capture to handle key up events
+		if (!m_inputCapture)
+		{
+			return;
+		}
+
+		// Forward the event
+		m_inputCapture->OnKeyChar(codepoint);
+	}
+
+	void FrameManager::NotifyKeyUp(Key key)
+	{
+		// We need an active input capture to handle key up events
+		if (!m_inputCapture)
+		{
+			return;
+		}
+
+		// TODO: Forward the event
+	}
+
 	void FrameManager::ExecuteLua(const std::string & code)
 	{
 		ASSERT(m_luaState);
 		luaL_dostring(m_luaState, code.c_str());
+	}
+
+	void FrameManager::SetCaptureWindow(FramePtr capture)
+	{
+		// Notify the previous input capture frame that it no longer captures the input
+		if (m_inputCapture)
+		{
+			m_inputCapture->OnInputReleased();
+			m_inputCapture = nullptr;
+		}
+
+		// Set the new input capture frame
+		m_inputCapture = std::move(capture);
+
+		// Notify the new one if there is any
+		if (m_inputCapture)
+		{
+			m_inputCapture->OnInputCaptured();
+		}
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)
