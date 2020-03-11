@@ -366,7 +366,7 @@ namespace mmo
 	void Frame::SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Frame::Pointer relativeTo)
 	{
 		// Create a new anchor
-		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo);
+		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, Point(), relativeTo);
 		m_needsRedraw = true;
 		m_needsLayout = true;
 	}
@@ -547,9 +547,32 @@ namespace mmo
 
 		// Add parent rect offset to the relative rect
 		m_absRectCache.Offset(parentRect.GetPosition());
+		m_absRectCache.Offset(m_position);
 
+		// Apply anchor points
+		for (const auto& anchor : m_anchors)
+		{
+			bool hasOpposite = false;
+
+			const AnchorPoint oppositePoint = OppositeAnchorPoint(anchor.first);
+			if (oppositePoint != anchor_point::None)
+			{
+				hasOpposite = m_anchors.find(oppositePoint) != m_anchors.end();
+			}
+
+			// Try to use other frame's rectangle if referenced
+			Rect anchorParentRect = parentRect;
+			if (anchor.second->GetRelativeTo() != nullptr)
+			{
+				anchorParentRect = anchor.second->GetRelativeTo()->GetAbsoluteFrameRect();
+			}
+
+			anchor.second->ApplyToAbsRect(
+				m_absRectCache, anchorParentRect, hasOpposite);
+		}
+
+#if 0
 		// Apply custom position
-		Point localPosition = m_position;
 		if (AnchorsSatisfyWidth())
 		{
 			// TODO: Apply anchor offset values
@@ -585,9 +608,9 @@ namespace mmo
 				localPosition.y = parentRect.GetHeight() - m_absRectCache.GetHeight();
 			}
 		}
+#endif
 
 		// Move rectangle
-		m_absRectCache.Offset(localPosition);
 		m_needsLayout = false;
 
 		// Return the current rect

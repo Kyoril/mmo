@@ -127,6 +127,8 @@ namespace mmo
 
 		uint16 m_height = 768;
 
+		uint16 m_pendingWidth = 0, m_pendingHeight = 0;
+
 		bool m_resizePending = false;
 
 		bool m_matrixDirty = false;
