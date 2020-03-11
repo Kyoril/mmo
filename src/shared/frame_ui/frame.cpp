@@ -363,10 +363,10 @@ namespace mmo
 			m_anchors.find(anchor_point::Bottom) != m_anchors.end();
 	}
 
-	void Frame::SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Frame::Pointer relativeTo)
+	void Frame::SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Frame::Pointer relativeTo, float offset)
 	{
 		// Create a new anchor
-		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, Point(), relativeTo);
+		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo, offset);
 		m_needsRedraw = true;
 		m_needsLayout = true;
 	}
@@ -570,45 +570,6 @@ namespace mmo
 			anchor.second->ApplyToAbsRect(
 				m_absRectCache, anchorParentRect, hasOpposite);
 		}
-
-#if 0
-		// Apply custom position
-		if (AnchorsSatisfyWidth())
-		{
-			// TODO: Apply anchor offset values
-			m_absRectCache.SetWidth(parentRect.GetWidth());
-		}
-		if (AnchorsSatisfyHeight())
-		{
-			// TODO: Apply anchor offset values
-			m_absRectCache.SetHeight(parentRect.GetHeight());
-		}
-
-		if (AnchorsSatisfyXPosition())
-		{
-			const auto centerIt = m_anchors.find(anchor_point::HorizontalCenter);
-			if (centerIt != m_anchors.end())
-			{
-				localPosition.x = parentRect.GetWidth() * 0.5f - m_absRectCache.GetWidth() * 0.5f;
-			}
-			else
-			{
-				const auto rightIt = m_anchors.find(anchor_point::Right);
-				if (rightIt != m_anchors.end())
-				{
-					localPosition.x = parentRect.GetWidth() - m_absRectCache.GetWidth();
-				}
-			}
-		}
-		if (AnchorsSatisfyYPosition())
-		{
-			const auto bottomIt = m_anchors.find(anchor_point::Bottom);
-			if (bottomIt != m_anchors.end())
-			{
-				localPosition.y = parentRect.GetHeight() - m_absRectCache.GetHeight();
-			}
-		}
-#endif
 
 		// Move rectangle
 		m_needsLayout = false;
