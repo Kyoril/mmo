@@ -8,8 +8,10 @@
 #include "frame_renderer.h"
 #include "mouse_event_args.h"
 #include "frame_event.h"
+#include "property.h"
 
 #include "base/typedefs.h"
+#include "base/utilities.h"
 #include "base/signal.h"
 
 #include <memory>
@@ -64,11 +66,19 @@ namespace mmo
 
 	public:
 		Frame(const std::string& type, const std::string& name);
-		virtual ~Frame();
+		virtual ~Frame() = default;
 
 	public:
 		/// Called to copy this frame's properties over to another frame.
 		virtual void Copy(Frame& other);
+
+	public:
+		/// Adds a property definition to this frame.
+		Property& AddProperty(const std::string& name, std::string defaultValue = "");
+		/// Tries to get a property by name.
+		Property* GetProperty(const std::string& name);
+		/// Removes a property from the frame.
+		bool RemoveProperty(const std::string& name);
 
 	public:
 		/// Registers a new frame event by name. If the event already exists, it's instance
@@ -110,8 +120,10 @@ namespace mmo
 		inline const std::string& GetType() const { return m_type; }
 		/// Gets the text of this frame.
 		inline const std::string& GetText() const { return m_text; }
+		/// Gets the text that is actually rendered.
+		virtual const std::string& GetVisualText() const { return m_text; }
 		/// Sets the text of this frame.
-		void SetText(const std::string& text);
+		void SetText(std::string text);
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.
@@ -212,6 +224,12 @@ namespace mmo
 		virtual void PopulateGeometryBuffer() {}
 		/// Gets the parent rectangle.
 		Rect GetParentRect();
+		/// Executed when the text was changed.
+		virtual void OnTextChanged();
+
+	private:
+		/// Executed when the text property was changed.
+		void OnTextPropertyChanged(const Property& property);
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
@@ -253,7 +271,11 @@ namespace mmo
 		/// Contains all state imagery sections of this style by name.
 		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
 		/// Contains all registered events by name.
-		std::map<std::string, FrameEvent> m_eventsByName;
+		std::map<std::string, FrameEvent, StrCaseIComp> m_eventsByName;
+		std::map<std::string, Property, StrCaseIComp> m_propertiesByName;
+
+	protected:
+		scoped_connection_container m_propConnections;
 	};
 
 	/// A shared pointer of a frame.

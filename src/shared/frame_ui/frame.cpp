@@ -26,10 +26,9 @@ namespace mmo
 		, m_clippedByParent(false)
 		, m_needsLayout(true)
 	{
-	}
-
-	Frame::~Frame()
-	{
+		// Register text property for frame
+		auto& textProp = AddProperty("Text");
+		m_propConnections += textProp.Changed.connect(this, &Frame::OnTextPropertyChanged);
 	}
 
 	void Frame::Copy(Frame & other)
@@ -75,6 +74,45 @@ namespace mmo
 			// Add child copy to the copied frame
 			other.m_children.emplace_back(std::move(copiedChild));
 		}
+	}
+
+	Property & Frame::AddProperty(const std::string& name, std::string defaultValue)
+	{
+		// First, see if the property already exists and if so, return a reference on it
+		Property* prop = GetProperty(name);
+		if (prop)
+		{
+			// Apply the value for existing property
+			prop->Set(defaultValue);
+			return *prop;
+		}
+
+		// Doesn't exist yet, create it and return the reference
+		const auto insertElem = m_propertiesByName.insert(std::make_pair(name, Property(std::move(defaultValue))));
+		return insertElem.first->second;
+	}
+
+	Property * Frame::GetProperty(const std::string & name)
+	{
+		const auto propertyIt = m_propertiesByName.find(name);
+		if (propertyIt != m_propertiesByName.end())
+		{
+			return &propertyIt->second;
+		}
+
+		return nullptr;
+	}
+
+	bool Frame::RemoveProperty(const std::string & name)
+	{
+		const auto it = m_propertiesByName.find(name);
+		if (it != m_propertiesByName.end())
+		{
+			m_propertiesByName.erase(it);
+			return true;
+		}
+
+		return false;
 	}
 
 	FrameEvent & Frame::RegisterEvent(std::string name)
@@ -169,15 +207,17 @@ namespace mmo
 		return (it == m_stateImageriesByName.end()) ? nullptr : it->second.get();
 	}
 
-	void Frame::SetText(const std::string & text)
+	void Frame::SetText(std::string text)
 	{
 		// Apply new text and invalidate rendering
-		m_text = text;
-		m_needsRedraw = true;
-		m_needsLayout = true;
+		m_text = std::move(text);
 
 		// Notify observers
-		TextChanged();
+		OnTextChanged();
+
+		// Invalidate
+		m_needsRedraw = true;
+		m_needsLayout = true;
 	}
 
 	bool Frame::IsVisible(bool localOnly) const
@@ -594,6 +634,17 @@ namespace mmo
 		}
 
 		return parentRect;
+	}
+
+	void Frame::OnTextChanged()
+	{
+		// Invoke the signal
+		TextChanged();
+	}
+
+	void Frame::OnTextPropertyChanged(const Property & property)
+	{
+		SetText(property.GetValue());
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()
