@@ -518,26 +518,30 @@ namespace mmo
 			m_depthStencilView.Reset();
 			m_renderTargetView.Reset();
 
+			m_width = m_pendingWidth;
+			m_height = m_pendingHeight;
+
 			// Resize buffers
 			VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(2, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_tearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
 
 			// Create size dependent resources
 			CreateSizeDependantResources();
+
 			m_resizePending = false;
 		}
 	}
 
 	void GraphicsDeviceD3D11::Resize(uint16 Width, uint16 Height)
 	{
+		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
+
 		if (!m_swapChain || (Width == m_width && Height == m_height))
 			return;
 
-		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
-
 		GraphicsDevice::Resize(Width, Height);
 
-		m_width = Width;
-		m_height = Height;
+		m_pendingWidth = Width;
+		m_pendingHeight = Height;
 
 		m_resizePending = true;
 	}
