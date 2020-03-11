@@ -2,12 +2,13 @@
 
 #include "property.h"
 
+#include "base/utilities.h"
+
 
 namespace mmo
 {
-	Property::Property(std::string name, std::string defaultValue)
-		: m_name(std::move(name))
-		, m_defaultValue(std::move(defaultValue))
+	Property::Property(std::string defaultValue)
+		: m_defaultValue(std::move(defaultValue))
 	{
 		m_value = m_defaultValue;
 	}
@@ -17,8 +18,23 @@ namespace mmo
 		if (m_value != value)
 		{
 			m_value = std::move(value);
-			Changed();
+			Changed(*this);
 		}
+	}
+
+	void Property::Set(bool value)
+	{
+		Set(std::string(value ? "true" : "false"));
+	}
+
+	bool Property::GetBoolValue() const
+	{
+		if (_strcmpi(m_value.c_str(), "true") == 0)
+		{
+			return true;
+		}
+
+		return false;
 	}
 }
 

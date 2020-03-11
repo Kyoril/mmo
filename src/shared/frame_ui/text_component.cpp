@@ -35,11 +35,14 @@ namespace mmo
 	{
 		if (m_font)
 		{
+			// Gets the text that should be displayed for this frame.
+			const std::string& text = frame.GetVisualText();
+
 			// Calculate the frame rectangle
 			const Rect frameRect = frame.GetAbsoluteFrameRect();
 
 			// Calculate the text width and cache it for later use
-			const float width = m_font->GetTextWidth(frame.GetText());
+			const float width = m_font->GetTextWidth(text);
 
 			// Calculate final text position in component
 			Point position = frameRect.GetPosition();
@@ -65,7 +68,7 @@ namespace mmo
 			}
 
 			// Determine the position to render the font at
-			m_font->DrawText(frame.GetText(), position, frame.GetGeometryBuffer(), 1.0f, m_color);
+			m_font->DrawText(text, position, frame.GetGeometryBuffer(), 1.0f, m_color);
 		}
 	}
 

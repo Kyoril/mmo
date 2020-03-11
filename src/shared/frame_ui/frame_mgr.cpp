@@ -4,6 +4,7 @@
 #include "frame_layer.h"
 #include "layout_xml_loader.h"
 #include "button.h"
+#include "textfield.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -254,6 +255,7 @@ namespace mmo
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		FrameManager::Get().RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 	}
 
 	void FrameManager::Destroy()

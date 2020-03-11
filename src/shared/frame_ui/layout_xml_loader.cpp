@@ -19,7 +19,6 @@ namespace mmo
 	static const std::string FrameNameAttribute("name");
 	static const std::string FrameTypeAttribute("type");
 	static const std::string FrameRendererAttribute("renderer");
-	static const std::string FrameTextAttribute("text");
 	static const std::string FrameParentAttribute("parent");
 	static const std::string FrameHiddenAttribute("hidden");
 	static const std::string FrameEnabledAttribute("enabled");
@@ -40,7 +39,7 @@ namespace mmo
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
-	static const std::string PropertyDefaultValueAttribute("defaultValue");
+	static const std::string PropertyValueAttribute("value");
 
 	static const std::string VisualElement("Visual");
 	static const std::string ImagerySectionElement("ImagerySection");
@@ -267,7 +266,6 @@ namespace mmo
 		// Get the name of the frame to create
 		const std::string name(attributes.GetValueAsString(FrameNameAttribute));
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
-		const std::string text(attributes.GetValueAsString(FrameTextAttribute));
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
 		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
@@ -314,12 +312,6 @@ namespace mmo
 
 		// Setup style and renderer
 		if (!renderer.empty()) frame->SetRenderer(renderer);
-
-		// Set frame text if there is any
-		if (!text.empty())
-		{
-			frame->SetText(text);
-		}
 
 		// Check if a parent attribute has been set
 		if (!parent.empty())
@@ -729,7 +721,23 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementPropertyStart(const XmlAttributes & attributes)
 	{
+		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
+		{
+			throw std::runtime_error("Unexpected " + PropertyElement + " element!");
+		}
 
+		// Grab attributes
+		const std::string name(attributes.GetValueAsString(PropertyNameAttribute));
+		const std::string value(attributes.GetValueAsString(PropertyValueAttribute));
+
+		// Verify attributes
+		if (name.empty())
+		{
+			throw std::runtime_error("Property needs to have a name!");
+		}
+
+		// Add the property to the frame or (if it already exists) just set it's value
+		m_frames.top()->AddProperty(name, value);
 	}
 
 	void LayoutXmlLoader::ElementPropertyEnd()
