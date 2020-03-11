@@ -64,6 +64,43 @@ namespace mmo
 		return Frame::GetVisualText();
 	}
 
+	void TextField::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
+	{
+		// If the left mouse button is pressed...
+		if (button == MouseButton::Left)
+		{
+			// ... start capturing input
+			CaptureInput();
+		}
+
+		// Raise the signal from the super class
+		Frame::OnMouseDown(button, buttons, position);
+	}
+
+#include <Windows.h>
+	void TextField::OnKeyDown(Key key)
+	{
+		if (key == 0x08)		// VK_BACKSPACE
+		{
+			m_text.pop_back();
+
+			OnTextChanged();
+
+			m_needsLayout = true;
+			m_needsRedraw = true;
+		}
+	}
+
+	void TextField::OnKeyChar(uint16 codepoint)
+	{
+		m_text.push_back(static_cast<char>(codepoint & 0xFF));
+
+		OnTextChanged();
+
+		m_needsLayout = true;
+		m_needsRedraw = true;
+	}
+
 	void TextField::OnTextChanged()
 	{
 		// Invalidate masked text

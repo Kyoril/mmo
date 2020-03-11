@@ -37,10 +37,12 @@ namespace mmo
 		static signal<void(float deltaSeconds, GameTime timestamp)> Idle;
 		/// This event is fired regularly to render the game.
 		static signal<void()> Paint;
-		/// This event is fired regularly to render the game.
+		/// This event is fired when the OS reports that a key has been pressed.
 		static signal<bool(int32 key)> KeyDown;
-		/// This event is fired regularly to render the game.
+		/// This event is fired when the OS reports that a key has been released.
 		static signal<bool(int32 key)> KeyUp;
+		/// This event is fired when the OS reports a key char input event.
+		static signal<bool(uint16 codepoint)> KeyChar;
 		/// This event is fired regularly to render the game.
 		static signal<bool(EMouseButton button, int32 x, int32 y)> MouseDown;
 		/// This event is fired regularly to render the game.

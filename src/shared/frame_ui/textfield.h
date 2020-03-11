@@ -27,6 +27,11 @@ namespace mmo
 		/// 
 		virtual const std::string& GetVisualText() const override;
 
+	public:
+		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+		virtual void OnKeyDown(Key key) override;
+		virtual void OnKeyChar(uint16 codepoint) override;
+
 	protected:
 		/// Executed when the text was changed.
 		virtual void OnTextChanged() override;

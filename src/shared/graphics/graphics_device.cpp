@@ -18,7 +18,7 @@ namespace mmo
 		: m_viewX(0)
 		, m_viewY(0)
 		, m_viewW(1024)
-		, m_viewH(720)
+		, m_viewH(768)
 		, m_viewMinZ(0.001f)
 		, m_viewMaxZ(100.0f)
 	{
@@ -59,6 +59,7 @@ namespace mmo
 
 	void GraphicsDevice::Resize(uint16 Width, uint16 Height)
 	{
+		
 	}
 
 	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)

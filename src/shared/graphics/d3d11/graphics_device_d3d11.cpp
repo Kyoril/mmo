@@ -535,6 +535,10 @@ namespace mmo
 		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
 
 		GraphicsDevice::Resize(Width, Height);
+
+		m_width = Width;
+		m_height = Height;
+
 		m_resizePending = true;
 	}
 

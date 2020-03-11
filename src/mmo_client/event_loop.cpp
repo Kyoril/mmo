@@ -20,6 +20,7 @@ namespace mmo
 	signal<void(float deltaSeconds, GameTime timestamp)> EventLoop::Idle;
 	signal<void()> EventLoop::Paint;
 	signal<bool(int32)> EventLoop::KeyDown;
+	signal<bool(uint16)> EventLoop::KeyChar;
 	signal<bool(int32)> EventLoop::KeyUp;
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseDown;
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseUp;
@@ -46,6 +47,9 @@ namespace mmo
 			{
 			case WM_KEYDOWN:
 				KeyDown(msg.wParam);
+				break;
+			case WM_CHAR:
+				KeyChar(static_cast<uint16>(msg.wParam));
 				break;
 			case WM_KEYUP:
 				KeyUp(msg.wParam);
