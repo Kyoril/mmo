@@ -43,7 +43,9 @@ namespace mmo
 		{
 			ASSERT(file);
 
-			// TODO: Load (and execute) lua script
+			// Load the file contents and execute the file
+			std::string contents{ std::istreambuf_iterator<char>(*file), std::istreambuf_iterator<char>() };
+			FrameManager::Get().ExecuteLua(contents);
 		}
 
 
@@ -99,6 +101,14 @@ namespace mmo
 			// Reset current loader if we reached the root element
 			if (s_currentXmlIndent == 0)
 			{
+				// Hacky?
+				if (s_currentXmlLoader == &s_layoutXmlLoader)
+				{
+					// We load script files after we are done with the layout xml file, so that the xml loader is only
+					// processing one entire layout xml file at once.
+					s_layoutXmlLoader.LoadScriptFiles();
+				}
+
 				s_currentXmlLoader = nullptr;
 			}
 			else if(s_currentXmlLoader != nullptr)
@@ -128,6 +138,9 @@ namespace mmo
 		static void LoadFrameXML(std::unique_ptr<std::istream> file, const std::string& filename)
 		{
 			ASSERT(file);
+
+			// Set the name of the layout file that is currently processed
+			s_layoutXmlLoader.SetFilename(filename);
 
 			// Load file content
 			file->seekg(0, std::ios::end);
@@ -168,6 +181,9 @@ namespace mmo
 		{
 			ASSERT(file);
 
+			// Extract the directory of the toc file
+			std::filesystem::path p = std::filesystem::path(filename).parent_path();
+
 			// Read each line of the file
 			std::string line;
 			while (std::getline(*file, line))
@@ -184,9 +200,8 @@ namespace mmo
 				if (line.empty() || line[0] == '#')
 					continue;
 
-
 				// Load the ui file
-				LoadUIFile(line);
+				LoadUIFile((p / line).generic_string());
 			}
 		}
 

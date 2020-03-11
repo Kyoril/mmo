@@ -20,6 +20,13 @@ namespace mmo
 		: public XmlHandler
 	{
 	public:
+		/// Sets the name of the file that is currently being processed.
+		void SetFilename(std::string filename);
+		/// Loads all script files that have been found while parsing the layout xml file. Afterwards,
+		/// it clears the list.
+		void LoadScriptFiles();
+
+	public:
 		// ~ Begin XmlHandler
 		virtual void ElementStart(const std::string& element, const XmlAttributes& attributes) override;
 		virtual void ElementEnd(const std::string& element) override;
@@ -84,5 +91,9 @@ namespace mmo
 		bool m_hasEventsTag = false;
 
 		FrameEvent* m_frameEvent = nullptr;
+
+		std::string m_filename;
+		/// Stores the file names of script file to load after the layout file has been processed.
+		std::vector<std::string> m_scriptsToLoad;
 	};
 }

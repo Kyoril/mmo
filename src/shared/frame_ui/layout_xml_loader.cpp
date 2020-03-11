@@ -11,6 +11,9 @@
 
 #include "xml_handler/xml_attributes.h"
 #include "log/default_log_levels.h"
+#include "base/filesystem.h"
+#include "base/utilities.h"
+
 
 namespace mmo
 {
@@ -64,6 +67,21 @@ namespace mmo
 	static const std::string BorderComponentElement("BorderComponent");
 	static const std::string BorderComponentBorderSizeAttribute("borderSize");
 
+
+	void LayoutXmlLoader::SetFilename(std::string filename)
+	{
+		m_filename = std::move(filename);
+	}
+
+	void LayoutXmlLoader::LoadScriptFiles()
+	{
+		for (const auto& file : m_scriptsToLoad)
+		{
+			FrameManager::Get().LoadUIFile(file);
+		}
+
+		m_scriptsToLoad.clear();
+	}
 
 	void LayoutXmlLoader::ElementStart(const std::string & element, const XmlAttributes & attributes)
 	{
@@ -472,6 +490,27 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementScriptStart(const XmlAttributes & attributes)
 	{
+		const std::string file(attributes.GetValueAsString(ScriptFileAttribute));
+		if (file.empty())
+		{
+			throw std::runtime_error("Script element requires a valid file attribute!");
+		}
+
+		// Retrieve the full file name and add it to the list of scripts to load later.
+		const std::filesystem::path p = std::filesystem::path(m_filename).parent_path();
+		const std::filesystem::path f{ file };
+
+		// Ensure that the file has the .lua extension. This way, we ensure that the only lua
+		// scripts are loaded, since the FrameManager::LoadUIFile method is later used to load
+		// these files and this would theoretically allow to load layouts (which is bad with
+		// the current design where only one instance of the xml loader is present).
+		if (!f.has_extension() || _stricmp(f.extension().generic_string().c_str(), ".lua") != 0)
+		{
+			throw std::runtime_error("Script file names have to have the *.lua extension!");
+		}
+
+		// Add the file to the list of files to load later.
+		m_scriptsToLoad.push_back((p / file).generic_string());
 	}
 
 	void LayoutXmlLoader::ElementScriptEnd()
