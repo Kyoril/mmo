@@ -61,7 +61,8 @@ namespace mmo
 
 	void Anchor::ApplyToAbsRect(Rect & rect, const Rect & parentRect, bool hasOppositeAnchor)
 	{
-		const float offset = GetValueByPoint(parentRect, m_relativePoint);
+		const float offset = GetValueByPoint(parentRect, m_relativePoint) + m_offset;
+
 		switch (m_point)
 		{
 		case anchor_point::Left:

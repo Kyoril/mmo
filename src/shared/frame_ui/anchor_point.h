@@ -63,7 +63,7 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
-		Anchor(AnchorPoint point, AnchorPoint relativePoint, const Point& offset, std::weak_ptr<Frame> relativeTo)
+		Anchor(AnchorPoint point, AnchorPoint relativePoint, std::weak_ptr<Frame> relativeTo, float offset)
 			: m_point(point)
 			, m_relativePoint(relativePoint)
 			, m_offset(offset)
@@ -83,13 +83,12 @@ namespace mmo
 		inline AnchorPoint GetPoint() const { return m_point; }
 		inline AnchorPoint GetRelativePoint() const { return m_relativePoint; }
 		inline Frame* GetRelativeTo() const { return m_relativeTo.lock().get(); }
-		inline const Point& GetOffset() const { return m_offset; }
+		inline float GetOffset() const { return m_offset; }
 
 	private:
-
 		AnchorPoint m_point;
 		AnchorPoint m_relativePoint;
-		Point m_offset;
+		float m_offset;
 		std::weak_ptr<Frame> m_relativeTo;
 	};
 }

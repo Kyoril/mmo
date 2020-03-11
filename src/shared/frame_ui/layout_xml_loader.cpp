@@ -33,6 +33,7 @@ namespace mmo
 	static const std::string AnchorPointAttribute("point");
 	static const std::string AnchorRelativePointAttribute("relativePoint");
 	static const std::string AnchorRelativeToAttribute("relativeTo");
+	static const std::string AnchorOffsetAttribute("offset");
 	static const std::string ScriptElement("Script");
 	static const std::string ScriptFileAttribute("file");
 	static const std::string EventsElement("Events");
@@ -437,6 +438,7 @@ namespace mmo
 		const std::string pointAttr(attributes.GetValueAsString(AnchorPointAttribute));
 		const std::string relativePointAttr(attributes.GetValueAsString(AnchorRelativePointAttribute));
 		const std::string relativeToAttr(attributes.GetValueAsString(AnchorRelativeToAttribute));
+		const float offset = attributes.GetValueAsFloat(AnchorOffsetAttribute);
 
 		// Evaluate point attribute
 		AnchorPoint point = AnchorPointByName(pointAttr);
@@ -461,7 +463,7 @@ namespace mmo
 		}
 
 		// Set anchor for current frame
-		topFrame->SetAnchor(point, relativePoint, relativeTo);
+		topFrame->SetAnchor(point, relativePoint, relativeTo, offset);
 	}
 
 	void LayoutXmlLoader::ElementAnchorEnd()

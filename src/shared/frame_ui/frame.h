@@ -177,7 +177,7 @@ namespace mmo
 		/// Determines if the set anchors can be used to determine the frame size.
 		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
 		/// Sets an anchor for this frame.
-		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Pointer relativeTo);
+		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Pointer relativeTo, float offset = 0.0f);
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);
 		/// Gets the parent frame.
