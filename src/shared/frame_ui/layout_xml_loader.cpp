@@ -26,7 +26,14 @@ namespace mmo
 	static const std::string FrameHiddenAttribute("hidden");
 	static const std::string FrameEnabledAttribute("enabled");
 	static const std::string FrameInheritsAttribute("inherits");
+	static const std::string FrameSetAllPointsAttribute("setAllPoints");
 	static const std::string AreaElement("Area");
+	static const std::string InsetElement("Inset");
+	static const std::string InsetLeftAttribute("left");
+	static const std::string InsetRightAttribute("right");
+	static const std::string InsetBottomAttribute("bottom");
+	static const std::string InsetTopAttribute("top");
+	static const std::string InsetAllAttribute("all");
 	static const std::string SizeElement("Size");
 	static const std::string PositionElement("Position");
 	static const std::string AbsDimensionElement("AbsDimension");
@@ -170,6 +177,10 @@ namespace mmo
 			{
 				ElementEventsStart(attributes);
 			}
+			else if (element == InsetElement)
+			{
+				ElementInsetStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -262,6 +273,10 @@ namespace mmo
 			{
 				ElementEventsEnd();
 			}
+			else if (element == EventsElement)
+			{
+				ElementInsetEnd();
+			}
 		}
 	}
 
@@ -288,6 +303,7 @@ namespace mmo
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
 		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
+		const bool setAllPoints = attributes.GetValueAsBool(FrameSetAllPointsAttribute, false);
 
 		// Frame type might be overridden
 		std::string type(attributes.GetValueAsString(FrameTypeAttribute, "Frame"));
@@ -332,17 +348,17 @@ namespace mmo
 		// Setup style and renderer
 		if (!renderer.empty()) frame->SetRenderer(renderer);
 
+		// Used to find the parent frame
+		FramePtr parentFrame = nullptr;
+
 		// Check if a parent attribute has been set
 		if (!parent.empty())
 		{
-			FramePtr parentFrame = FrameManager::Get().Find(parent);
+			parentFrame = FrameManager::Get().Find(parent);
 			if (parentFrame == nullptr)
 			{
 				throw std::runtime_error("Parent frame named " + parent + " doesn't exist!");
 			}
-
-			// Add this frame to the parent frame
-			parentFrame->AddChild(frame);
 		}
 		else
 		{
@@ -350,8 +366,23 @@ namespace mmo
 			// the current frame as a child frame to the frame on top of the stack
 			if (!m_frames.empty())
 			{
-				m_frames.top()->AddChild(frame);
+				parentFrame = m_frames.top();
 			}
+		}
+
+		// Set all anchor points to match the parent frame's anchor points
+		if (setAllPoints)
+		{
+			frame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
+			frame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
+			frame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
+			frame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
+		}
+
+		// Add this frame to the parent frame if we found one
+		if (parentFrame)
+		{
+			parentFrame->AddChild(frame);
 		}
 
 		// Push it to the stack of frames
@@ -796,5 +827,32 @@ namespace mmo
 	void LayoutXmlLoader::ElementEventsEnd()
 	{
 		m_hasEventsTag = false;
+	}
+
+	void LayoutXmlLoader::ElementInsetStart(const XmlAttributes & attributes)
+	{
+		if (!m_hasAreaTag || !m_component)
+		{
+			throw std::runtime_error("Unexpected " + InsetElement + " element!");
+		}
+
+		if (attributes.Exists(InsetAllAttribute))
+		{
+			const float allInset = attributes.GetValueAsFloat(InsetAllAttribute);
+			m_insetRect.left = m_insetRect.top = m_insetRect.bottom = m_insetRect.right = allInset;
+		}
+		else
+		{
+			m_insetRect.left = attributes.GetValueAsFloat(InsetLeftAttribute);
+			m_insetRect.top = attributes.GetValueAsFloat(InsetTopAttribute);
+			m_insetRect.right = attributes.GetValueAsFloat(InsetRightAttribute);
+			m_insetRect.bottom = attributes.GetValueAsFloat(InsetBottomAttribute);
+		}
+
+		m_component->SetInset(m_insetRect);
+	}
+
+	void LayoutXmlLoader::ElementInsetEnd()
+	{
 	}
 }

@@ -13,6 +13,11 @@ namespace mmo
 	{
 	}
 	
+	void FrameComponent::CopyBaseAttributes(FrameComponent & other) const
+	{
+		other.SetInset(m_areaInset);
+	}
+
 	Rect FrameComponent::GetArea() const
 	{
 		ASSERT(m_frame);
