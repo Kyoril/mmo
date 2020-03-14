@@ -42,3 +42,9 @@ link_directories(${OPENSSL_LIBRARY_DIR})
 # Find MySQL
 find_package(MYSQL REQUIRED)
 include_directories(${MYSQL_INCLUDE_DIR})
+
+
+# Luabind
+
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/lua")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/luabind_noboost")

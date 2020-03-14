@@ -17,6 +17,8 @@
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
 
+#include "luabind_noboost/luabind/luabind.hpp"
+
 
 namespace mmo
 {
@@ -265,8 +267,19 @@ namespace mmo
 		ASSERT(luaState);
 		FrameManager::Get().m_luaState = luaState;
 
+		// Initialize luabind
+		luabind::open(luaState);
+
 		// TODO: add methods to the given lua state
-		
+		luabind::module(luaState)
+		[
+			luabind::class_<Frame>("Frame")
+				.def("SetText", &Frame::Lua_SetText)
+				.def("Show", &Frame::Lua_Show)
+				.def("Hide", &Frame::Lua_Hide)
+				.def("Enable", &Frame::Lua_Enable)
+				.def("Disable", &Frame::Lua_Disable)
+		];
 
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
@@ -320,8 +333,9 @@ namespace mmo
 		{
 			m_framesByName[name] = newFrame;
 
-			// Expose frame instance to lua
-
+			// Expose global variable
+			auto globals = luabind::globals(m_luaState);
+			globals[name.c_str()] = newFrame.get();
 		}
 
 		return newFrame;

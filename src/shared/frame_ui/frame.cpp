@@ -132,6 +132,40 @@ namespace mmo
 		return false;
 	}
 
+	int Frame::Lua_SetText(lua_State * state)
+	{
+		// Try to grab the text
+		const char* text = luaL_checkstring(state, 1);
+		SetText(text);
+
+		// No return values
+		return 0;
+	}
+
+	int Frame::Lua_Show(lua_State * state)
+	{
+		SetVisible(true);
+		return 0;
+	}
+
+	int Frame::Lua_Hide(lua_State * state)
+	{
+		SetVisible(false);
+		return 0;
+	}
+
+	int Frame::Lua_Enable(lua_State * state)
+	{
+		SetEnabled(true);
+		return 0;
+	}
+
+	int Frame::Lua_Disable(lua_State * state)
+	{
+		SetEnabled(false);
+		return 0;
+	}
+
 	FrameEvent & Frame::RegisterEvent(std::string name)
 	{
 		auto* evt = FindEvent(name);
@@ -415,6 +449,7 @@ namespace mmo
 			// Check the rectangle
 			const Rect childRect = child->GetAbsoluteFrameRect();
 			if (childRect.IsPointInRect(position) &&
+				child->IsVisible() &&
 				(allowDisabled || child->IsEnabled()))
 			{
 				return child->GetChildFrameAt(position, allowDisabled);

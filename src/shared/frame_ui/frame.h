@@ -23,6 +23,8 @@
 #include <vector>
 #include <map>
 
+#include "lua.hpp"
+
 
 namespace mmo
 {
@@ -80,6 +82,15 @@ namespace mmo
 		Property* GetProperty(const std::string& name);
 		/// Removes a property from the frame.
 		bool RemoveProperty(const std::string& name);
+
+	public:
+		// Lua wrappers
+		int Lua_SetText(lua_State* state);
+		int Lua_Show(lua_State* state);
+		int Lua_Hide(lua_State* state);
+		int Lua_Enable(lua_State* state);
+		int Lua_Disable(lua_State* state);
+
 
 	public:
 		/// Registers a new frame event by name. If the event already exists, it's instance
