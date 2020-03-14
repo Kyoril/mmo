@@ -33,11 +33,14 @@ namespace mmo
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
-		explicit ImageComponent(const std::string& filename);
+		explicit ImageComponent(Frame& frame, std::string filename);
+
+	public:
+		virtual std::unique_ptr<FrameComponent> Copy() const override;
 
 	public:
 		// FrameComponent overrides
-		void Render(Frame& frame) const override;
+		void Render() const override;
 
 	public:
 		/// Sets the tiling mode for this component.
@@ -49,6 +52,7 @@ namespace mmo
 		// ~End FrameComponent
 
 	private:
+		std::string m_filename;
 		/// The graphics texture object.
 		TexturePtr m_texture;
 		/// The width at which the frame texture object is drawn. If set to 0, the texture width is used.

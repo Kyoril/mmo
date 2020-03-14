@@ -19,7 +19,7 @@ namespace mmo
 
 		if (imagery)
 		{
-			imagery->Render(*m_frame);
+			imagery->Render();
 		}
 	}
 }

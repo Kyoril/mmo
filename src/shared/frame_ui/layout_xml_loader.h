@@ -81,10 +81,10 @@ namespace mmo
 
 		bool m_hasVisualTag = false;
 
-		std::shared_ptr<ImagerySection> m_section;
-		std::shared_ptr<StateImagery> m_stateImagery;
-		std::shared_ptr<FrameLayer> m_layer;
-		std::shared_ptr<FrameComponent> m_component;
+		std::unique_ptr<ImagerySection> m_section;
+		std::unique_ptr<StateImagery> m_stateImagery;
+		std::unique_ptr<FrameLayer> m_layer;
+		std::unique_ptr<FrameComponent> m_component;
 
 		std::string m_text;
 

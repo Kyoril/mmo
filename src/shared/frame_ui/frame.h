@@ -11,6 +11,9 @@
 #include "property.h"
 #include "key.h"
 
+#include "imagery_section.h"
+#include "state_imagery.h"
+
 #include "base/typedefs.h"
 #include "base/utilities.h"
 #include "base/signal.h"
@@ -23,9 +26,6 @@
 
 namespace mmo
 {
-	class StateImagery;
-	class ImagerySection;
-
 	/// Enumerated type used for specifying Frame::update mode to be used. Note that
 	/// the setting specified will also have an effect on child window content; for
 	/// Never and Visible, if the parent's update function is not called, then no
@@ -99,7 +99,7 @@ namespace mmo
 
 	public:
 		/// Adds a new state imagery.
-		void AddImagerySection(std::shared_ptr<ImagerySection>& section);
+		void AddImagerySection(ImagerySection& section);
 		/// Removes a state imagery by name.
 		void RemoveImagerySection(const std::string& name);
 		/// Gets an imagery section by name.
@@ -107,7 +107,7 @@ namespace mmo
 		/// @return nullptr if no such imagery section exists.
 		ImagerySection* GetImagerySectionByName(const std::string& name) const;
 		/// Adds a new state imagery.
-		void AddStateImagery(std::shared_ptr<StateImagery>& stateImagery);
+		void AddStateImagery(StateImagery& stateImagery);
 		/// Removes a state imagery by name.
 		void RemoveStateImagery(const std::string& name);
 		/// Gets a state imagery by name. Don't keep a pointer on the result, as it is destroyed when
@@ -280,9 +280,9 @@ namespace mmo
 		/// The cached absolute frame rect.
 		Rect m_absRectCache;
 		/// Contains all state imageries of this style by name.
-		std::map<std::string, std::shared_ptr<StateImagery>> m_stateImageriesByName;
+		std::map<std::string, StateImagery> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
-		std::map<std::string, std::shared_ptr<ImagerySection>> m_sectionsByName;
+		std::map<std::string, ImagerySection> m_sectionsByName;
 		/// Contains all registered events by name.
 		std::map<std::string, FrameEvent, StrCaseIComp> m_eventsByName;
 		/// 

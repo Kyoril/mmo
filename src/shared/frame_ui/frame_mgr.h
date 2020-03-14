@@ -74,6 +74,8 @@ namespace mmo
 		void NotifyKeyUp(Key key);
 		/// Executes lua code.
 		void ExecuteLua(const std::string& code);
+		/// Triggers a lua event.
+		void TriggerLuaEvent(const std::string& eventName);
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
 

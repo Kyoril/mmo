@@ -266,6 +266,7 @@ namespace mmo
 		FrameManager::Get().m_luaState = luaState;
 
 		// TODO: add methods to the given lua state
+		
 
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
@@ -479,6 +480,11 @@ namespace mmo
 	{
 		ASSERT(m_luaState);
 		luaL_dostring(m_luaState, code.c_str());
+	}
+
+	void FrameManager::TriggerLuaEvent(const std::string & eventName)
+	{
+
 	}
 
 	void FrameManager::SetCaptureWindow(FramePtr capture)

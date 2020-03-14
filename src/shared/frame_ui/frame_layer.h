@@ -4,8 +4,6 @@
 
 #include "imagery_section.h"
 
-#include "base/non_copyable.h"
-
 #include <string>
 #include <memory>
 #include <vector>
@@ -19,8 +17,9 @@ namespace mmo
 	/// This class represents a layer of a frame. Layers contain assigned objects
 	/// that can be rendered in order.
 	class FrameLayer final
-		: public NonCopyable
 	{
+		friend class Frame;
+
 	public:
 		FrameLayer();
 		
@@ -35,7 +34,7 @@ namespace mmo
 		void RemoveAllSections();
 		/// Renders the frame layer, which simply means rendering all attached objects
 		/// in order.
-		void Render(Frame& frame) const;
+		void Render() const;
 
 	protected:
 		/// A vector of all active sessions.

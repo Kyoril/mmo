@@ -164,7 +164,7 @@ namespace mmo
 	{
 		if (!error.code())
 		{
-			if (getListener()->connectionEstablished(true))
+			if (getListener() && getListener()->connectionEstablished(true))
 			{
 				this->startReceiving();
 			}

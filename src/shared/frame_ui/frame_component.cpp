@@ -1,32 +1,31 @@
 // Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "frame_component.h"
+#include "frame.h"
+
+#include "base/macros.h"
 
 
 namespace mmo
 {
-	FrameComponent::FrameComponent()
+	FrameComponent::FrameComponent(Frame& frame)
+		: m_frame(&frame)
 	{
 	}
 	
 	Rect FrameComponent::GetArea() const
 	{
-		// Obtain the parent frame area
-		//Rect parentFrameArea = Rect(Point(), m_frame.GetPixelSize());
+		ASSERT(m_frame);
 
 		// Check anchor points
+		Rect r = m_frame->GetAbsoluteFrameRect();
 
+		// Apply inset
+		r.left += m_areaInset.left;
+		r.top += m_areaInset.top;
+		r.bottom -= m_areaInset.bottom;
+		r.right -= m_areaInset.right;
 
-		return Rect();
-	}
-
-	bool FrameComponent::GetAnchorPointOffset(AnchorPoint point, Point & offset)
-	{
-		auto it = m_anchorPointOffsets.find(point);
-		if (it == m_anchorPointOffsets.end())
-			return false;
-
-		offset = it->second;
-		return true;
+		return r;
 	}
 }

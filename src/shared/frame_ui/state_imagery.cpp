@@ -15,9 +15,9 @@ namespace mmo
 	{
 	}
 
-	void StateImagery::AddLayer(std::shared_ptr<FrameLayer>& layer)
+	void StateImagery::AddLayer(FrameLayer& layer)
 	{
-		m_layers.emplace_back(layer);
+		m_layers.push_back(layer);
 	}
 
 	void StateImagery::RemoveLayer(uint32 index)
@@ -31,11 +31,11 @@ namespace mmo
 		m_layers.clear();
 	}
 
-	void StateImagery::Render(Frame & frame) const
+	void StateImagery::Render() const
 	{
 		for (const auto& layer : m_layers)
 		{
-			layer->Render(frame);
+			layer.Render();
 		}
 	}
 }

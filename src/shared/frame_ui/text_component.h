@@ -48,7 +48,10 @@ namespace mmo
 	{
 	public:
 		/// Creates a frame font string object which can be used to draw a text.
-		explicit TextComponent(const std::string& fontFile, float fontSize, float outline = 0.0f);
+		explicit TextComponent(Frame& frame, std::string fontFile, float fontSize, float outline = 0.0f);
+
+	public:
+		virtual std::unique_ptr<FrameComponent> Copy() const override;
 
 	public:
 		inline HorizontalAlignment GetHorizontalAlignment() const { return m_horzAlignment; }
@@ -60,9 +63,12 @@ namespace mmo
 
 	public:
 		// FrameComponent overrides
-		void Render(Frame& frame) const override;
+		void Render() const override;
 
 	private:
+		std::string m_filename;
+		float m_fontSize;
+		float m_outline;
 		/// The graphics texture object.
 		FontPtr m_font;
 		/// The color to use when rendering text.

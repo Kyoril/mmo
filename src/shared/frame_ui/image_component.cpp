@@ -3,28 +3,40 @@
 #include "image_component.h"
 #include "geometry_buffer.h"
 #include "geometry_helper.h"
+#include "frame.h"
 
 #include "base/utilities.h"
+#include "base/macros.h"
 #include "graphics/texture_mgr.h"
+
+#include <utility>
 
 
 namespace mmo
 {
-	ImageComponent::ImageComponent(const std::string& filename)
-		: FrameComponent()
+	ImageComponent::ImageComponent(Frame& frame, std::string filename)
+		: FrameComponent(frame)
+		, m_filename(std::move(filename))
 		, m_width(0)
 		, m_height(0)
 		, m_tiling(ImageTilingMode::None)
 	{
-		m_texture = TextureManager::Get().CreateOrRetrieve(filename);
+		m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
 	}
 
-	void ImageComponent::Render(Frame& frame) const
+	std::unique_ptr<FrameComponent> ImageComponent::Copy() const
+	{
+		ASSERT(m_frame);
+		return std::make_unique<ImageComponent>(*m_frame, m_filename);
+	}
+	
+	void ImageComponent::Render() const
 	{
 		// Bind the texture object
-		frame.GetGeometryBuffer().SetActiveTexture(m_texture);
+		ASSERT(m_frame);
+		m_frame->GetGeometryBuffer().SetActiveTexture(m_texture);
 		
-		const Rect frameRect = frame.GetAbsoluteFrameRect();
+		const Rect frameRect = GetArea();
 
 		// Default source rect encapsules the whole image area
 		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(m_texture->GetWidth()), static_cast<float>(m_texture->GetHeight())};
@@ -44,7 +56,7 @@ namespace mmo
 		}
 
 		// Create the rectangle
-		GeometryHelper::CreateRect(frame.GetGeometryBuffer(),
+		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			frameRect,
 			srcRect,
 			m_texture->GetWidth(), m_texture->GetHeight());
