@@ -124,7 +124,7 @@
 
     if ( base_glyph_offset >= table_size )
       goto InvalidTable;
-    if ( colr->num_base_glyphs * BASE_GLYPH_SIZE >
+    if ( (FT_ULong)(colr->num_base_glyphs * BASE_GLYPH_SIZE) >
            table_size - base_glyph_offset )
       goto InvalidTable;
 
@@ -133,7 +133,7 @@
 
     if ( layer_offset >= table_size )
       goto InvalidTable;
-    if ( colr->num_layers * LAYER_SIZE > table_size - layer_offset )
+    if ( (FT_ULong)(colr->num_layers * LAYER_SIZE) > table_size - layer_offset )
       goto InvalidTable;
 
     colr->base_glyphs = (FT_Byte*)( table + base_glyph_offset );

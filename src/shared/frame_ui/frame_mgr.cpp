@@ -319,6 +319,9 @@ namespace mmo
 		if (!isCopy)
 		{
 			m_framesByName[name] = newFrame;
+
+			// Expose frame instance to lua
+
 		}
 
 		return newFrame;

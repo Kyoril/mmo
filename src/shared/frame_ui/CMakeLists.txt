@@ -9,7 +9,8 @@ target_link_libraries(frame_ui
 # Link external dependencies
 target_link_libraries(frame_ui
 	freetype
-	lua)
+	lua
+	luabind)
 
 # Add library to a solution folder for better organization
 set_property(TARGET frame_ui PROPERTY FOLDER "shared")

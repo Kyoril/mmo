@@ -118,7 +118,7 @@
 
     if ( colors_offset >= table_size )
       goto InvalidTable;
-    if ( cpal->num_colors * COLOR_SIZE > table_size - colors_offset )
+    if ((FT_ULong)(cpal->num_colors * COLOR_SIZE) > table_size - colors_offset )
       goto InvalidTable;
 
     if ( face->palette_data.num_palette_entries > cpal->num_colors )
@@ -150,7 +150,7 @@
       {
         if ( type_offset >= table_size )
           goto InvalidTable;
-        if ( face->palette_data.num_palettes * 2 >
+        if ((FT_ULong)(face->palette_data.num_palettes * 2) >
                table_size - type_offset )
           goto InvalidTable;
 
@@ -171,7 +171,7 @@
       {
         if ( label_offset >= table_size )
           goto InvalidTable;
-        if ( face->palette_data.num_palettes * 2 >
+        if ((FT_ULong)(face->palette_data.num_palettes * 2) >
                table_size - label_offset )
           goto InvalidTable;
 
@@ -192,7 +192,7 @@
       {
         if ( entry_label_offset >= table_size )
           goto InvalidTable;
-        if ( face->palette_data.num_palette_entries * 2 >
+        if ((FT_ULong)(face->palette_data.num_palette_entries * 2) >
                table_size - entry_label_offset )
           goto InvalidTable;
 
