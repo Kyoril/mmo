@@ -313,6 +313,7 @@ namespace mmo
 		if (m_enabled != enable)
 		{
 			m_enabled = enable;
+			m_needsRedraw = true;
 
 			// Release input on disable
 			if (!m_enabled)
@@ -451,8 +452,10 @@ namespace mmo
 	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
 	{
 		// Iterate through all children
-		for (auto& child : m_children)
+		for (auto childIt = m_children.rbegin(); childIt != m_children.rend(); ++childIt)
 		{
+			const auto& child = *childIt;
+
 			// Check the rectangle
 			const Rect childRect = child->GetAbsoluteFrameRect();
 			if (childRect.IsPointInRect(position) &&
