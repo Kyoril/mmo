@@ -13,7 +13,6 @@ namespace luabind {
 
 		template< typename CRTP, typename Category, typename ValueType, typename ReferenceType = ValueType&, typename DifferenceType = ptrdiff_t >
 		class crtp_iterator 
-			//: public std::iterator<Category, ValueType, DifferenceType, ValueType*, ReferenceType >
 		{
 		public:
 			using iterator_category = Category;
@@ -23,7 +22,6 @@ namespace luabind {
 			using reference = ReferenceType;
 
 		public:
-			//using base_type = std::iterator<Category, ValueType, DifferenceType, ValueType*, ReferenceType >;
 
 
 			CRTP& operator++()
@@ -49,12 +47,12 @@ namespace luabind {
 				return !upcast().equal(rhs);
 			}
 
-			typename reference operator*()
+			reference operator*()
 			{
 				return upcast().dereference();
 			}
 
-			typename reference operator->()
+			reference operator->()
 			{
 				return upcast().dereference();
 			}
