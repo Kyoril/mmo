@@ -68,6 +68,8 @@ namespace mmo
 		void ElementPropertyEnd();
 		void ElementEventsStart(const XmlAttributes& attributes);
 		void ElementEventsEnd();
+		void ElementInsetStart(const XmlAttributes& attributes);
+		void ElementInsetEnd();
 
 	private:
 		/// Stack of added frames.
@@ -95,5 +97,7 @@ namespace mmo
 		std::string m_filename;
 		/// Stores the file names of script file to load after the layout file has been processed.
 		std::vector<std::string> m_scriptsToLoad;
+
+		Rect m_insetRect;
 	};
 }

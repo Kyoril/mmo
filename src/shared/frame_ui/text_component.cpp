@@ -26,6 +26,7 @@ namespace mmo
 		ASSERT(m_frame);
 
 		auto copy = std::make_unique<TextComponent>(*m_frame, m_filename, m_fontSize, m_outline);
+		CopyBaseAttributes(*copy);
 		copy->SetHorizontalAlignment(m_horzAlignment);
 		copy->SetVerticalAlignment(m_vertAlignment);
 		copy->SetColor(m_color);

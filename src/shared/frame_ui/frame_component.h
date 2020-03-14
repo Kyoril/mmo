@@ -28,6 +28,9 @@ namespace mmo
 	public:
 		virtual std::unique_ptr<FrameComponent> Copy() const = 0;
 
+	protected:
+		void CopyBaseAttributes(FrameComponent& other) const;
+
 	public:
 		/// Gets the size of this frame object in pixels.
 		virtual Size GetSize() const { return Size(); }

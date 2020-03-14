@@ -499,7 +499,17 @@ namespace mmo
 
 	void Frame::AddChild(Frame::Pointer frame)
 	{
+		// We can't add ourself as child frame
+		if (frame.get() == this)
+		{
+			throw std::runtime_error("Frame can't be it's own child frame!");
+		}
+
+		// Add to the list of children
 		m_children.push_back(frame);
+
+		// Register ourself as parent frame
+		frame->m_parent = this;
 	}
 
 	Rect Frame::GetRelativeFrameRect()
@@ -638,7 +648,7 @@ namespace mmo
 	{
 		Rect parentRect;
 
-		if (m_parent == nullptr)
+		if (m_parent == nullptr && m_parent != this)
 		{
 			// Obtain the current viewport size in pixels in case this 
 			int32 vpW, vpH;

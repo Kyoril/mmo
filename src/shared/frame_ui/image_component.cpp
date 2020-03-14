@@ -27,7 +27,10 @@ namespace mmo
 	std::unique_ptr<FrameComponent> ImageComponent::Copy() const
 	{
 		ASSERT(m_frame);
-		return std::make_unique<ImageComponent>(*m_frame, m_filename);
+
+		auto copy = std::make_unique<ImageComponent>(*m_frame, m_filename);
+		CopyBaseAttributes(*copy);
+		return copy;
 	}
 	
 	void ImageComponent::Render() const

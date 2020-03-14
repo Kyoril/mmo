@@ -28,7 +28,10 @@ namespace mmo
 	std::unique_ptr<FrameComponent> BorderComponent::Copy() const
 	{
 		ASSERT(m_frame);
-		return std::make_unique<BorderComponent>(*m_frame, m_filename, m_borderInset);
+
+		auto copy = std::make_unique<BorderComponent>(*m_frame, m_filename, m_borderInset);
+		CopyBaseAttributes(*copy);
+		return copy;
 	}
 
 	void BorderComponent::Render() const

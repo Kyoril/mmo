@@ -35,6 +35,10 @@ namespace mmo
 	{
 		// Make the logo frame element
 		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopFrame");
+		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
+		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
+		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
+		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 		s_frameMgr.SetTopFrame(topFrame);
 
 		// Load ui file
