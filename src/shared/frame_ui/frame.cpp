@@ -142,6 +142,13 @@ namespace mmo
 		return 0;
 	}
 
+	int Frame::Lua_GetText(lua_State * state)
+	{
+		// Return the text as string value
+		lua_pushstring(state, GetText().c_str());
+		return 1;
+	}
+
 	int Frame::Lua_Show(lua_State * state)
 	{
 		SetVisible(true);

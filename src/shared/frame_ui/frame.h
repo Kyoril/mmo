@@ -86,6 +86,7 @@ namespace mmo
 	public:
 		// Lua wrappers
 		int Lua_SetText(lua_State* state);
+		int Lua_GetText(lua_State* state);
 		int Lua_Show(lua_State* state);
 		int Lua_Hide(lua_State* state);
 		int Lua_Enable(lua_State* state);

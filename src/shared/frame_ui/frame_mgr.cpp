@@ -270,11 +270,12 @@ namespace mmo
 		// Initialize luabind
 		luabind::open(luaState);
 
-		// TODO: add methods to the given lua state
+		// Expose classes and methods to the lua state
 		luabind::module(luaState)
 		[
 			luabind::class_<Frame>("Frame")
 				.def("SetText", &Frame::Lua_SetText)
+				.def("GetText", &Frame::Lua_GetText)
 				.def("Show", &Frame::Lua_Show)
 				.def("Hide", &Frame::Lua_Hide)
 				.def("Enable", &Frame::Lua_Enable)
