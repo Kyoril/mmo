@@ -555,13 +555,13 @@ namespace mmo
 		}
 
 		// Add new imagery section
-		m_section = std::make_shared<ImagerySection>(name);
-		m_frames.top()->AddImagerySection(m_section);
+		m_section = std::make_unique<ImagerySection>(name);
 	}
 
 	void LayoutXmlLoader::ElementImagerySectionEnd()
 	{
 		// Reset ImagerySection element
+		m_frames.top()->AddImagerySection(*m_section);
 		m_section.reset();
 	}
 
@@ -587,13 +587,13 @@ namespace mmo
 		}
 
 		// Add new imagery section
-		m_stateImagery = std::make_shared<StateImagery>(name);
-		m_frames.top()->AddStateImagery(m_stateImagery);
+		m_stateImagery = std::make_unique<StateImagery>(name);
 	}
 
 	void LayoutXmlLoader::ElementImageryEnd()
 	{
 		// Reset current state imagery object
+		m_frames.top()->AddStateImagery(*m_stateImagery);
 		m_stateImagery.reset();
 	}
 
@@ -606,13 +606,13 @@ namespace mmo
 		}
 
 		// Add a new layer to the state imagery
-		m_layer = std::make_shared<FrameLayer>();
-		m_stateImagery->AddLayer(m_layer);
+		m_layer = std::make_unique<FrameLayer>();
 	}
 
 	void LayoutXmlLoader::ElementLayerEnd()
 	{
 		// Reset the current layer element
+		m_stateImagery->AddLayer(*m_layer);
 		m_layer.reset();
 	}
 
@@ -668,7 +668,7 @@ namespace mmo
 		}
 
 		// Setup component and add it to the current section
-		auto component = std::make_shared<TextComponent>(font, size, outline);
+		auto component = std::make_unique<TextComponent>(*m_frames.top(), font, size, outline);
 		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
 		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
 
@@ -684,13 +684,12 @@ namespace mmo
 			component->SetColor(argb);
 		}
 
-		m_component = component;
-		m_section->AddComponent(m_component);
+		m_component = std::move(component);
 	}
 
 	void LayoutXmlLoader::ElementTextComponentEnd()
 	{
-		m_component.reset();
+		m_section->AddComponent(std::move(m_component));
 	}
 
 	void LayoutXmlLoader::ElementImageComponentStart(const XmlAttributes & attributes)
@@ -710,7 +709,7 @@ namespace mmo
 		}
 
 		// Setup component and add it to the current section
-		auto component = std::make_shared<ImageComponent>(texture);
+		auto component = std::make_unique<ImageComponent>(*m_frames.top(), texture);
 
 		// Apply tiling mode if set
 		if (attributes.Exists(ImageComponentTilingAttribute))
@@ -718,13 +717,12 @@ namespace mmo
 			component->SetTilingMode(ImageTilingModeByName(tilingAttr));
 		}
 
-		m_component = component;
-		m_section->AddComponent(m_component);
+		m_component = std::move(component);
 	}
 
 	void LayoutXmlLoader::ElementImageComponentEnd()
 	{
-		m_component.reset();
+		m_section->AddComponent(std::move(m_component));
 	}
 
 	void LayoutXmlLoader::ElementBorderComponentStart(const XmlAttributes & attributes)
@@ -751,13 +749,12 @@ namespace mmo
 		}
 
 		// Setup component and add it to the current section
-		m_component = std::make_shared<BorderComponent>(texture, borderSize);
-		m_section->AddComponent(m_component);
+		m_component = std::make_unique<BorderComponent>(*m_frames.top(), texture, borderSize);
 	}
 
 	void LayoutXmlLoader::ElementBorderComponentEnd()
 	{
-		m_component.reset();
+		m_section->AddComponent(std::move(m_component));
 	}
 
 	void LayoutXmlLoader::ElementPropertyStart(const XmlAttributes & attributes)

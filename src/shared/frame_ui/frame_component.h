@@ -4,7 +4,6 @@
 
 #include "rect.h"
 #include "anchor_point.h"
-#include "frame.h"
 
 #include "base/non_copyable.h"
 
@@ -20,10 +19,14 @@ namespace mmo
 	/// and has some placement logic.
 	class FrameComponent 
 		: public NonCopyable
+		, public std::enable_shared_from_this<FrameComponent>
 	{
 	public:
-		FrameComponent();
+		FrameComponent(Frame& frame);
 		virtual ~FrameComponent() = default;
+
+	public:
+		virtual std::unique_ptr<FrameComponent> Copy() const = 0;
 
 	public:
 		/// Gets the size of this frame object in pixels.
@@ -31,15 +34,20 @@ namespace mmo
 		/// Gets the area rectangle of this object.
 		virtual Rect GetArea() const;
 
+		inline const Rect& GetInset() const { return m_areaInset; }
+		/// Sets the area inset.
+		inline void SetInset(const Rect& rect) { m_areaInset = rect; }
+		/// Sets the frame that this component belongs to.
+		inline void SetFrame(Frame& frame) { m_frame = &frame; }
+
 	public:
 		/// Renders the frame object.
-		virtual void Render(Frame& frame) const = 0;
+		virtual void Render() const = 0;
 
 	protected:
-		bool GetAnchorPointOffset(AnchorPoint point, Point& offset);
-
-	protected:
-		/// Map of anchor points.
-		std::map<AnchorPoint, Point> m_anchorPointOffsets;
+		/// The frame that owns this component.
+		Frame* m_frame;
+		/// The area inset.
+		Rect m_areaInset;
 	};
 }

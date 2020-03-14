@@ -15,19 +15,25 @@ namespace mmo
 		: public FrameComponent
 	{
 	public:
-		explicit BorderComponent(const std::string& filename, float borderInset);
+		explicit BorderComponent(Frame& frame, std::string filename, float borderInset);
 		virtual ~BorderComponent() = default;
 
 	public:
+		virtual std::unique_ptr<FrameComponent> Copy() const override;
+
+	public:
 		// ~Begin FrameComponent
-		void Render(Frame& frame) const override;
+		void Render() const override;
 		virtual Size GetSize() const override;
 		// ~End FrameComponent
 
 	private:
+		std::string m_filename;
 		/// The graphics texture object.
 		TexturePtr m_texture;
 		/// 
 		Rect m_contentRect;
+		/// Border inset.
+		float m_borderInset;
 	};
 }

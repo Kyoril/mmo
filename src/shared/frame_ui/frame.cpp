@@ -4,8 +4,6 @@
 #include "frame_mgr.h"
 #include "default_renderer.h"
 #include "button_renderer.h"
-#include "imagery_section.h"
-#include "state_imagery.h"
 
 #include "base/utilities.h"
 #include "base/macros.h"
@@ -53,12 +51,31 @@ namespace mmo
 		// Add section reference
 		for (const auto& pair : m_sectionsByName)
 		{
-			other.m_sectionsByName[pair.first] = pair.second;
+			auto& added = (other.m_sectionsByName[pair.first] = pair.second);
+			added.SetComponentFrame(other);
 		}
 		// Add state imagery reference
 		for (const auto& pair : m_stateImageriesByName)
 		{
-			other.m_stateImageriesByName[pair.first] = pair.second;
+			auto& added = (other.m_stateImageriesByName[pair.first] = pair.second);
+			
+			added.m_layers.clear();
+
+			for (const auto& layer : pair.second.m_layers)
+			{
+				FrameLayer newLayer;
+				
+				for (const auto& section : layer.m_sections)
+				{
+					auto* otherSection = other.GetImagerySectionByName(section->GetName());
+					if (otherSection)
+					{
+						newLayer.AddSection(*otherSection);
+					}
+				}
+
+				added.AddLayer(newLayer);
+			}
 		}
 
 		// Copy all children and their children
@@ -160,12 +177,11 @@ namespace mmo
 		return false;
 	}
 
-	void Frame::AddImagerySection(std::shared_ptr<ImagerySection>& section)
+	void Frame::AddImagerySection(ImagerySection& section)
 	{
-		ASSERT(section);
-		ASSERT(m_sectionsByName.find(section->GetName()) == m_sectionsByName.end());
+		ASSERT(m_sectionsByName.find(section.GetName()) == m_sectionsByName.end());
 
-		m_sectionsByName[section->GetName()] = section;
+		m_sectionsByName[section.GetName()] = section;
 	}
 
 	void Frame::RemoveImagerySection(const std::string & name)
@@ -182,15 +198,14 @@ namespace mmo
 	ImagerySection * Frame::GetImagerySectionByName(const std::string & name) const
 	{
 		const auto it = m_sectionsByName.find(name);
-		return (it == m_sectionsByName.end()) ? nullptr : it->second.get();
+		return (it == m_sectionsByName.end()) ? nullptr : (ImagerySection*)&it->second;
 	}
 
-	void Frame::AddStateImagery(std::shared_ptr<StateImagery>& stateImagery)
+	void Frame::AddStateImagery(StateImagery& stateImagery)
 	{
-		ASSERT(stateImagery);
-		ASSERT(m_stateImageriesByName.find(stateImagery->GetName()) == m_stateImageriesByName.end());
+		ASSERT(m_stateImageriesByName.find(stateImagery.GetName()) == m_stateImageriesByName.end());
 
-		m_stateImageriesByName[stateImagery->GetName()] = stateImagery;
+		m_stateImageriesByName[stateImagery.GetName()] = stateImagery;
 	}
 
 	void Frame::RemoveStateImagery(const std::string & name)
@@ -204,7 +219,7 @@ namespace mmo
 	StateImagery * Frame::GetStateImageryByName(const std::string & name) const
 	{
 		const auto it = m_stateImageriesByName.find(name);
-		return (it == m_stateImageriesByName.end()) ? nullptr : it->second.get();
+		return (it == m_stateImageriesByName.end()) ? nullptr : (StateImagery*)&it->second;
 	}
 
 	void Frame::SetText(std::string text)

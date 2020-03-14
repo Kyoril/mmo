@@ -7,13 +7,29 @@
 
 #include "base/utilities.h"
 
+#include <utility>
+
 
 namespace mmo
 {
-	TextComponent::TextComponent(const std::string & fontFile, float fontSize, float outline)
-		: FrameComponent()
+	TextComponent::TextComponent(Frame& frame, std::string fontFile, float fontSize, float outline)
+		: FrameComponent(frame)
+		, m_filename(std::move(fontFile))
+		, m_fontSize(fontSize)
+		, m_outline(outline)
 	{
-		m_font = FontManager::Get().CreateOrRetrieve(fontFile, fontSize, outline);
+		m_font = FontManager::Get().CreateOrRetrieve(m_filename, m_fontSize, m_outline);
+	}
+
+	std::unique_ptr<FrameComponent> TextComponent::Copy() const
+	{
+		ASSERT(m_frame);
+
+		auto copy = std::make_unique<TextComponent>(*m_frame, m_filename, m_fontSize, m_outline);
+		copy->SetHorizontalAlignment(m_horzAlignment);
+		copy->SetVerticalAlignment(m_vertAlignment);
+		copy->SetColor(m_color);
+		return copy;
 	}
 
 	void TextComponent::SetHorizontalAlignment(HorizontalAlignment alignment)
@@ -31,15 +47,17 @@ namespace mmo
 		m_color = color;
 	}
 
-	void TextComponent::Render(Frame& frame) const
+	void TextComponent::Render() const
 	{
 		if (m_font)
 		{
+			ASSERT(m_frame);
+
 			// Gets the text that should be displayed for this frame.
-			const std::string& text = frame.GetVisualText();
+			const std::string& text = m_frame->GetVisualText();
 
 			// Calculate the frame rectangle
-			const Rect frameRect = frame.GetAbsoluteFrameRect();
+			const Rect frameRect = GetArea();
 
 			// Calculate the text width and cache it for later use
 			const float width = m_font->GetTextWidth(text);
@@ -68,7 +86,7 @@ namespace mmo
 			}
 
 			// Determine the position to render the font at
-			m_font->DrawText(text, position, frame.GetGeometryBuffer(), 1.0f, m_color);
+			m_font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f, m_color);
 		}
 	}
 

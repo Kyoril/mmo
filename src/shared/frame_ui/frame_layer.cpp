@@ -38,11 +38,11 @@ namespace mmo
 		m_sections.clear();
 	}
 
-	void FrameLayer::Render(Frame& frame) const
+	void FrameLayer::Render() const
 	{
 		for (const auto& section : m_sections)
 		{
-			section->Render(frame);
+			section->Render();
 		}
 	}
 }
