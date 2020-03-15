@@ -258,8 +258,7 @@ namespace mmo
 	static void FrameDebugLog(const char* msg)
 	{
 		ASSERT(msg);
-
-		DLOG("Lua Debug: " << msg);
+		DLOG(msg);
 	}
 
 	FrameManager& FrameManager::Get()
@@ -273,9 +272,6 @@ namespace mmo
 		// Verify and register lua state
 		ASSERT(luaState);
 		FrameManager::Get().m_luaState = luaState;
-
-		// Initialize luabind
-		luabind::open(luaState);
 
 		// Expose classes and methods to the lua state
 		luabind::module(luaState)
