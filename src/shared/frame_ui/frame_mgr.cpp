@@ -255,6 +255,13 @@ namespace mmo
 	}
 
 
+	static void FrameDebugLog(const char* msg)
+	{
+		ASSERT(msg);
+
+		DLOG("Lua Debug: " << msg);
+	}
+
 	FrameManager& FrameManager::Get()
 	{
 		static FrameManager s_frameMgr;
@@ -280,8 +287,12 @@ namespace mmo
 				.def("Hide", &Frame::Lua_Hide)
 				.def("Enable", &Frame::Lua_Enable)
 				.def("Disable", &Frame::Lua_Disable)
-		];
+				.def("RegisterEvent", &Frame::Lua_RegisterEvent)
+				.def("GetName", &Frame::Lua_GetName),
 
+			luabind::def("DebugLog", &FrameDebugLog)
+		];
+	
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
@@ -497,12 +508,44 @@ namespace mmo
 	void FrameManager::ExecuteLua(const std::string & code)
 	{
 		ASSERT(m_luaState);
-		luaL_dostring(m_luaState, code.c_str());
+
+		if (luaL_dostring(m_luaState, code.c_str()))
+		{
+			std::string errMsg = lua_tostring(m_luaState, -1);
+			ELOG("Lua Error: " << errMsg);
+		}
 	}
 
 	void FrameManager::TriggerLuaEvent(const std::string & eventName)
 	{
+		auto eventIt = m_eventFrames.find(eventName);
+		if (eventIt == m_eventFrames.end())
+			return;
 
+		// Push event variable
+		lua_pushstring(m_luaState, eventName.c_str());
+		lua_setglobal(m_luaState, "event");
+
+		// Iterate through every frame
+		for (const auto& weakFrame : eventIt->second)
+		{
+			if (auto strongFrame = weakFrame.lock())
+			{
+				// Push this variable
+				luabind::object o = luabind::object(m_luaState, strongFrame.get());
+				o.push(m_luaState);
+				lua_setglobal(m_luaState, "this");
+
+				// Raise event script
+				strongFrame->TriggerEvent("OnEvent");
+
+				// Pop this variable
+				lua_pop(m_luaState, 1);
+			}
+		}
+
+		// Pop event variable
+		lua_pop(m_luaState, 1);
 	}
 
 	void FrameManager::SetCaptureWindow(FramePtr capture)
@@ -522,6 +565,11 @@ namespace mmo
 		{
 			m_inputCapture->OnInputCaptured();
 		}
+	}
+
+	void FrameManager::FrameRegisterEvent(FramePtr frame, const std::string & eventName)
+	{
+		m_eventFrames[eventName].emplace_back(std::move(frame));
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

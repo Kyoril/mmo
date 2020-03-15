@@ -20,6 +20,12 @@
 
 namespace mmo
 {
+	struct ConsoleLogEntry final
+	{
+		argb_t color;
+		std::string message;
+	};
+
 	// Static private variables
 
 	/// Map of case insensitive registered console commands.
@@ -51,7 +57,7 @@ namespace mmo
 	/// change events currently.
 	static bool s_consoleTextDirty = true;
 	/// A list of all console text lines. The list contents are clamped.
-	static std::list<std::string> s_consoleLog;
+	static std::list<ConsoleLogEntry> s_consoleLog;
 	/// A mutex to support adding console text lines in a multi threaded environment.
 	static std::mutex s_consoleLogMutex;
 	/// A connection that binds a function which displays the content of the LOG macros in the console.
@@ -227,7 +233,24 @@ namespace mmo
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ s_consoleLogMutex };
 
-			s_consoleLog.push_front(entry.message);
+			// Determine color value
+			argb_t color = Color(1.0f, 1.0f, 1.0f);
+			switch (entry.level->color)
+			{
+			case log_color::Yellow:		color = Color(1.0f, 1.0f, 0.0f);	break;
+			case log_color::Green:		color = Color(0.0f, 1.0f, 0.0f);	break;
+			case log_color::Red:		color = Color(1.0f, 0.0f, 0.0f);	break;
+			case log_color::Purple:		color = Color(0.65f, 0.0f, 0.65f);	break;
+			case log_color::Black:		color = Color(0.0f, 0.0f, 0.0f);	break;
+			case log_color::Blue:		color = Color(0.4f, 0.5f, 1.0f);	break;
+			case log_color::Grey:		color = Color(0.75, 0.75f, 0.75f);	break;
+			default: break;
+			}
+
+			// Push log entry
+			s_consoleLog.push_front({ color, entry.message });
+
+			// Ensure log size doesn't explode
 			if (s_consoleLog.size() > 50)
 			{
 				s_consoleLog.pop_back();
@@ -426,7 +449,7 @@ namespace mmo
 				startPoint.y -= s_consoleFont->GetHeight();
 
 				// Draw line of text
-				s_consoleFont->DrawText(*it, startPoint, *s_consoleTextGeom);
+				s_consoleFont->DrawText(it->message, startPoint, *s_consoleTextGeom, 1.0f, it->color);
 
 				// Stop it here
 				if (startPoint.y < 0.0f)

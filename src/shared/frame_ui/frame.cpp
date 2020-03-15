@@ -27,6 +27,9 @@ namespace mmo
 		// Register text property for frame
 		auto& textProp = AddProperty("Text");
 		m_propConnections += textProp.Changed.connect(this, &Frame::OnTextPropertyChanged);
+
+		// Add events
+		RegisterEvent("OnEvent");
 	}
 
 	void Frame::Copy(Frame & other)
@@ -132,45 +135,47 @@ namespace mmo
 		return false;
 	}
 
-	int Frame::Lua_SetText(lua_State * state)
+	void Frame::Lua_SetText(const char* text)
 	{
-		// Try to grab the text
-		const char* text = luaL_checkstring(state, 1);
+		ASSERT(text);
 		SetText(text);
-
-		// No return values
-		return 0;
 	}
 
-	int Frame::Lua_GetText(lua_State * state)
+	const char* Frame::Lua_GetText()
 	{
-		// Return the text as string value
-		lua_pushstring(state, GetText().c_str());
-		return 1;
+		return GetText().c_str();
 	}
 
-	int Frame::Lua_Show(lua_State * state)
+	const char * Frame::Lua_GetName()
+	{
+		return m_name.c_str();
+	}
+
+	void Frame::Lua_Show()
 	{
 		SetVisible(true);
-		return 0;
 	}
 
-	int Frame::Lua_Hide(lua_State * state)
+	void Frame::Lua_Hide()
 	{
 		SetVisible(false);
-		return 0;
 	}
 
-	int Frame::Lua_Enable(lua_State * state)
+	void Frame::Lua_Enable()
 	{
 		SetEnabled(true);
-		return 0;
 	}
 
-	int Frame::Lua_Disable(lua_State * state)
+	void Frame::Lua_Disable()
 	{
 		SetEnabled(false);
-		return 0;
+	}
+
+	void Frame::Lua_RegisterEvent(const char* eventName)
+	{
+		ASSERT(eventName);
+
+		FrameManager::Get().FrameRegisterEvent(shared_from_this(), eventName);
 	}
 
 	FrameEvent & Frame::RegisterEvent(std::string name)

@@ -11,6 +11,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <memory>
 
 
 struct lua_State;
@@ -29,6 +30,8 @@ namespace mmo
 	private:
 		/// Contains a hash map of all registered frame factories.
 		std::map<std::string, FrameFactory, StrCaseIComp> m_frameFactories;
+
+		std::map<std::string, std::vector<std::weak_ptr<Frame>>> m_eventFrames;
 
 	private:
 		/// Private destructor to avoid instancing.
@@ -78,6 +81,8 @@ namespace mmo
 		void TriggerLuaEvent(const std::string& eventName);
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
+
+		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
 
 	public:
 		/// Registers a new factory for a certain frame type.

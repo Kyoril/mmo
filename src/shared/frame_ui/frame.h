@@ -85,13 +85,14 @@ namespace mmo
 
 	public:
 		// Lua wrappers
-		int Lua_SetText(lua_State* state);
-		int Lua_GetText(lua_State* state);
-		int Lua_Show(lua_State* state);
-		int Lua_Hide(lua_State* state);
-		int Lua_Enable(lua_State* state);
-		int Lua_Disable(lua_State* state);
-
+		void Lua_SetText(const char* text);
+		const char* Lua_GetText();
+		const char* Lua_GetName();
+		void Lua_Show();
+		void Lua_Hide();
+		void Lua_Enable();
+		void Lua_Disable();
+		void Lua_RegisterEvent(const char* eventName);
 
 	public:
 		/// Registers a new frame event by name. If the event already exists, it's instance

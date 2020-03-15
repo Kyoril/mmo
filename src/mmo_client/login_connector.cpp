@@ -68,12 +68,12 @@ namespace mmo
 				packet.Finish();
 			});
 
-			DLOG("[Login] Handshaking...");
+			ILOG("[Login] Handshaking...");
 		}
 		else
 		{
 			// Connection error!
-			ELOG("Could not connect");
+			ELOG("Could not connect to the login server.");
 		}
 		return true;
 	}
@@ -346,7 +346,7 @@ namespace mmo
 		const std::string authHash = m_accountName + ":" + upperPassword;
 		m_authHash = sha1(authHash.c_str(), authHash.size());
 
-		DLOG("[Login] Connecting...");
+		ILOG("[Login] Connecting...");
 
 		// Connect to the server at localhost
 		connect(s_realmlistCVar->GetStringValue(), constants::DefaultLoginPlayerPort, *this, m_ioService);

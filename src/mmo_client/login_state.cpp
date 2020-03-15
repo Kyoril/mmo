@@ -86,6 +86,11 @@ namespace mmo
 		if (result != auth::auth_result::Success)
 		{
 			// TODO: In case there was an error, update the UI to display an error message
+			FrameManager::Get().TriggerLuaEvent("AUTH_FAILED");
+		}
+		else
+		{
+			FrameManager::Get().TriggerLuaEvent("AUTH_SUCCESS");
 		}
 	}
 
