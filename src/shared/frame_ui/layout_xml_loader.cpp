@@ -73,6 +73,10 @@ namespace mmo
 	static const std::string ImageComponentTilingAttribute("tiling");
 	static const std::string BorderComponentElement("BorderComponent");
 	static const std::string BorderComponentBorderSizeAttribute("borderSize");
+	static const std::string BorderComponentTopSizeAttribute("topSize");
+	static const std::string BorderComponentLeftSizeAttribute("leftSize");
+	static const std::string BorderComponentRightSizeAttribute("rightSize");
+	static const std::string BorderComponentBottomSizeAttribute("bottomSize");
 
 
 	void LayoutXmlLoader::SetFilename(std::string filename)
@@ -764,7 +768,7 @@ namespace mmo
 		}
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
-		const int borderSize = attributes.GetValueAsInt(BorderComponentBorderSizeAttribute);
+		const float borderSize = attributes.GetValueAsFloat(BorderComponentBorderSizeAttribute);
 
 		// Check for texture name existance
 		if (texture.empty())
@@ -772,15 +776,20 @@ namespace mmo
 			throw std::runtime_error("BorderComponent needs a texture filename!");
 		}
 
+		// Setup component and add it to the current section
+		auto borderComponent = std::make_unique<BorderComponent>(*m_frames.top(), texture, borderSize);
+
 		// Check for border size
-		if (!attributes.Exists(BorderComponentBorderSizeAttribute) ||
-			borderSize <= 0)
+		if (!attributes.Exists(BorderComponentBorderSizeAttribute))
 		{
-			throw std::runtime_error("BorderComponent needs a valid border size value!");
+			const float top = attributes.GetValueAsInt(BorderComponentTopSizeAttribute);
+			const float left = attributes.GetValueAsInt(BorderComponentLeftSizeAttribute);
+			const float right = attributes.GetValueAsInt(BorderComponentRightSizeAttribute);
+			const float bottom = attributes.GetValueAsInt(BorderComponentBottomSizeAttribute);
+			borderComponent->SetBorderSize(Rect(left, top, right, bottom));
 		}
 
-		// Setup component and add it to the current section
-		m_component = std::make_unique<BorderComponent>(*m_frames.top(), texture, borderSize);
+		m_component = std::move(borderComponent);
 	}
 
 	void LayoutXmlLoader::ElementBorderComponentEnd()

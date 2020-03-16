@@ -17,8 +17,8 @@ namespace mmo
 	GraphicsDevice::GraphicsDevice()
 		: m_viewX(0)
 		, m_viewY(0)
-		, m_viewW(1024)
-		, m_viewH(768)
+		, m_viewW(1600)
+		, m_viewH(900)
 		, m_viewMinZ(0.001f)
 		, m_viewMaxZ(100.0f)
 	{

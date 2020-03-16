@@ -14,14 +14,21 @@ namespace mmo
 	}
 	void ButtonRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
-		std::string activeState = m_frame->IsEnabled() ? "Normal" : "Disabled";
-		if (m_pushed)
+		std::string activeState = "Disabled";
+		if (m_frame->IsEnabled())
 		{
-			activeState = "Pushed";
-		}
-		else if (m_frame->IsHovered())
-		{
-			activeState = "Hovered";
+			if (m_pushed)
+			{
+				activeState = "Pushed";
+			}
+			else if (m_frame->IsHovered())
+			{
+				activeState = "Hovered";
+			}
+			else
+			{
+				activeState = "Normal";
+			}
 		}
 
 		const auto* imagery = m_frame->GetStateImageryByName(activeState);

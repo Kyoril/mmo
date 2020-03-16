@@ -64,7 +64,7 @@ namespace mmo
 		GetCrypt().Init();
 
 		// Debug log
-		DLOG("[Realm] Handshaking...");
+		ILOG("[Realm] Handshaking...");
 
 		// Proceed handling network packets
 		return PacketParseResult::Pass;

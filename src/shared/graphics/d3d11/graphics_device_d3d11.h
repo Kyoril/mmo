@@ -123,9 +123,9 @@ namespace mmo
 		/// Whether the device supports GSync displays.
 		bool m_tearingSupport = false;
 
-		uint16 m_width = 1024;
+		uint16 m_width = 1600;
 
-		uint16 m_height = 768;
+		uint16 m_height = 900;
 
 		uint16 m_pendingWidth = 0, m_pendingHeight = 0;
 

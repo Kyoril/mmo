@@ -22,7 +22,7 @@ namespace mmo
 		m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
 		ASSERT(m_texture);
 
-		m_contentRect = Rect(borderInset, borderInset, m_texture->GetWidth() - borderInset, m_texture->GetHeight() - borderInset);
+		m_borderSizeRect = Rect(borderInset, borderInset, borderInset, borderInset);
 	}
 
 	std::unique_ptr<FrameComponent> BorderComponent::Copy() const
@@ -31,6 +31,8 @@ namespace mmo
 
 		auto copy = std::make_unique<BorderComponent>(*m_frame, m_filename, m_borderInset);
 		CopyBaseAttributes(*copy);
+		copy->m_borderInset = m_borderInset;
+		copy->m_borderSizeRect = m_borderSizeRect;
 		return copy;
 	}
 
@@ -48,58 +50,65 @@ namespace mmo
 		const Size size = frameRect.GetSize();
 
 		// Border size
-		const float borderSize = m_contentRect.left;
+		const float borderSize = m_borderInset;
+
+		// A rectangle that represents the content area in the frame rect
+		const Rect contentRect = Rect(
+			m_borderSizeRect.left, 
+			m_borderSizeRect.top,
+			m_texture->GetWidth() - m_borderSizeRect.right, 
+			m_texture->GetHeight() - m_borderSizeRect.bottom);
 
 		// Setup geometry
 
 		// Top left corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			position, 
-			Rect(0.0f, m_contentRect.bottom, m_contentRect.left, m_texture->GetHeight()),
+			Rect(0.0f, contentRect.bottom, contentRect.left, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom left corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			position + Point(0.0f, size.height - borderSize),
-			Rect(0.0f, 0.0f, m_contentRect.left, m_contentRect.top),
+			Rect(0.0f, 0.0f, contentRect.left, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			position + Point(size.width - borderSize, size.height - borderSize),
-			Rect(m_contentRect.right, 0.0f, m_texture->GetWidth(), m_contentRect.top),
+			Rect(contentRect.right, 0.0f, m_texture->GetWidth(), contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Top right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			position + Point(size.width - borderSize, 0.0f),
-			Rect(m_contentRect.right, m_contentRect.bottom, m_texture->GetWidth(), m_texture->GetHeight()),
+			Rect(contentRect.right, contentRect.bottom, m_texture->GetWidth(), m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 
 		// Edges
 
 		// Top edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
-			Rect(position + Point(m_contentRect.left, 0.0f), Size(size.width - borderSize * 2, borderSize)),
-			Rect(m_contentRect.left, m_contentRect.bottom, m_contentRect.right, m_texture->GetHeight()),
+			Rect(position + Point(contentRect.left, 0.0f), Size(size.width - borderSize * 2, borderSize)),
+			Rect(contentRect.left, contentRect.bottom, contentRect.right, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Left edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
-			Rect(position + Point(0.0f, m_contentRect.top), Size(borderSize, size.height - borderSize * 2)),
-			Rect(0.0f, m_contentRect.top, m_contentRect.left, m_contentRect.bottom),
+			Rect(position + Point(0.0f, contentRect.top), Size(borderSize, size.height - borderSize * 2)),
+			Rect(0.0f, contentRect.top, contentRect.left, contentRect.bottom),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Right edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
-			Rect(position + Point(size.width - borderSize, m_contentRect.top), Size(borderSize, size.height - borderSize * 2)),
-			Rect(m_contentRect.right, m_contentRect.top, m_texture->GetWidth(), m_contentRect.bottom),
+			Rect(position + Point(size.width - borderSize, contentRect.top), Size(borderSize, size.height - borderSize * 2)),
+			Rect(contentRect.right, contentRect.top, m_texture->GetWidth(), contentRect.bottom),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			Rect(position + Point(borderSize, size.height - borderSize), Size(size.width - borderSize * 2, borderSize)),
-			Rect(m_contentRect.left, 0.0f, m_contentRect.right, m_contentRect.top),
+			Rect(contentRect.left, 0.0f, contentRect.right, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 
 		// Center
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
-			Rect(position + m_contentRect.GetPosition(), Size(size.width - borderSize * 2, size.height - borderSize * 2)),
-			m_contentRect,
+			Rect(position + contentRect.GetPosition(), Size(size.width - borderSize * 2, size.height - borderSize * 2)),
+			contentRect,
 			m_texture->GetWidth(), m_texture->GetHeight());
 	}
 

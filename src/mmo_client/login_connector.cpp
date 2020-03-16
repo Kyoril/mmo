@@ -236,7 +236,9 @@ namespace mmo
 		else
 		{
 			// Output error code
-			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+			ELOG("[Login] Auth Error: " << static_cast<uint16>(result));
+			AuthenticationResult(static_cast<auth::AuthResult>(result));
+
 			return PacketParseResult::Disconnect;
 		}
 
@@ -263,7 +265,7 @@ namespace mmo
 			// Check that both match
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
-				ILOG("AUTH: SUCCESS");
+				ILOG("[Login] Auth Success!");
 
 				// Notify about authentication success
 				AuthenticationResult(auth::AuthResult::Success);
@@ -273,7 +275,8 @@ namespace mmo
 			}
 			else
 			{
-				ELOG("AUTH: ERROR (Hash mismatch)");
+				ELOG("[Login] Auth Error!");
+
 				AuthenticationResult(auth::AuthResult::FailInternalError);
 				return PacketParseResult::Disconnect;
 			}
@@ -281,7 +284,7 @@ namespace mmo
 		else
 		{
 			// Output error code
-			ELOG("AUTH: ERROR_CODE: " << static_cast<uint16>(result));
+			ELOG("[Login] Auth Error: " << static_cast<uint16>(result));
 
 			// Raise auth error event if the result code is valid
 			if (result <= auth::AuthResult::Count_)

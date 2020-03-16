@@ -19,6 +19,9 @@ namespace mmo
 		virtual ~BorderComponent() = default;
 
 	public:
+		inline void SetBorderSize(const Rect borderSizeRect) { m_borderSizeRect = borderSizeRect; }
+
+	public:
 		virtual std::unique_ptr<FrameComponent> Copy() const override;
 
 	public:
@@ -32,7 +35,7 @@ namespace mmo
 		/// The graphics texture object.
 		TexturePtr m_texture;
 		/// 
-		Rect m_contentRect;
+		Rect m_borderSizeRect;
 		/// Border inset.
 		float m_borderInset;
 	};

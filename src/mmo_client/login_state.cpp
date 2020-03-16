@@ -123,7 +123,7 @@ namespace mmo
 
 	void LoginState::OnRealmAuthenticated()
 	{
-		DLOG("[Realm] Success!");
+		ILOG("[Realm] Success!");
 
 
 	}
