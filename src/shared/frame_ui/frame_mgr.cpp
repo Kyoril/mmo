@@ -5,6 +5,9 @@
 #include "layout_xml_loader.h"
 #include "button.h"
 #include "textfield.h"
+#include "default_renderer.h"
+#include "button_renderer.h"
+#include "textfield_renderer.h"
 
 #include "base/macros.h"
 #include "log/default_log_levels.h"
@@ -254,10 +257,35 @@ namespace mmo
 		}
 	}
 
-
-	static void FrameDebugLog(const char* msg)
+	namespace
 	{
-		ASSERT(msg);
+		/// Registers factory methods for all the supported default frame renderers.
+		static void RegisterDefaultRenderers()
+		{
+			auto& frameMgr = FrameManager::Get();
+
+			// DefaultRenderer
+			frameMgr.RegisterFrameRenderer("DefaultRenderer", [](const std::string& name)
+			{
+				return std::make_unique<DefaultRenderer>(name);
+			});
+
+			// ButtonRenderer
+			frameMgr.RegisterFrameRenderer("ButtonRenderer", [](const std::string& name)
+			{
+				return std::make_unique<ButtonRenderer>(name);
+			});
+
+			// TextFieldRenderer
+			frameMgr.RegisterFrameRenderer("TextFieldRenderer", [](const std::string& name)
+			{
+				return std::make_unique<TextFieldRenderer>(name);
+			});
+		}
+	}
+
+	static void FrameDebugLog(const std::string& msg)
+	{
 		DLOG(msg);
 	}
 
@@ -289,6 +317,9 @@ namespace mmo
 			luabind::def("DebugLog", &FrameDebugLog)
 		];
 	
+		// Register default frame renderer factory methods
+		RegisterDefaultRenderers();
+
 		// Register frame factories
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
@@ -297,13 +328,14 @@ namespace mmo
 
 	void FrameManager::Destroy()
 	{
-		// Unregister all frame factories
-		FrameManager::Get().ClearFrameFactories();
+		auto& frameMgr = FrameManager::Get();
 
-		// TODO: Remove previously registered methods from lua state?
+		// Unregister all frame and renderer factories
+		frameMgr.ClearFrameFactories();
+		frameMgr.m_rendererFactories.clear();
 
 		// No longer use the lua state
-		FrameManager::Get().m_luaState = nullptr;
+		frameMgr.m_luaState = nullptr;
 	}
 
 	void FrameManager::LoadUIFile(const std::string& filename)
@@ -313,6 +345,35 @@ namespace mmo
 
 		// Load UI file
 		mmo::LoadUIFile(filename);
+	}
+
+	void FrameManager::RegisterFrameRenderer(const std::string& name, RendererFactory factory)
+	{
+		ASSERT(m_rendererFactories.find(name) == m_rendererFactories.end());
+		m_rendererFactories[name] = std::move(factory);
+	}
+
+	void FrameManager::RemoveFrameRenderer(const std::string & name)
+	{
+		const auto it = m_rendererFactories.find(name);
+		if (it != m_rendererFactories.end())
+		{
+			m_rendererFactories.erase(it);
+		}
+	}
+
+	std::unique_ptr<FrameRenderer> FrameManager::CreateRenderer(const std::string & name)
+	{
+		// Try to find the renderer factory by name
+		const auto it = m_rendererFactories.find(name);
+		if (it == m_rendererFactories.end())
+		{
+			WLOG("Unable to find frame renderer named '" << name << "'!");
+			return nullptr;
+		}
+
+		// Execute the factory method and return the result
+		return it->second(name);
 	}
 
 	FramePtr FrameManager::Create(const std::string& type, const std::string & name, bool isCopy)

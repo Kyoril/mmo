@@ -4,6 +4,7 @@
 #include "frame_mgr.h"
 #include "default_renderer.h"
 #include "button_renderer.h"
+#include "textfield_renderer.h"
 
 #include "base/utilities.h"
 #include "base/macros.h"
@@ -349,16 +350,10 @@ namespace mmo
 			m_renderer.reset();
 		}
 
-		// TODO: This is only a temporary test until there is a renderer factory
-		if (rendererName == "ButtonRenderer")
-		{
-			m_renderer = std::make_unique<ButtonRenderer>("ButtonRenderer");
-		}
-		else
-		{
-			m_renderer = std::make_unique<DefaultRenderer>("DefaultRenderer");
-		}
+		// Create the frame renderer instance
+		m_renderer = FrameManager::Get().CreateRenderer(rendererName);
 
+		// Attach this frame to the renderer instance
 		if (m_renderer)
 		{
 			m_renderer->m_frame = this;
@@ -486,6 +481,11 @@ namespace mmo
 		{
 			FrameManager::Get().SetCaptureWindow(nullptr);
 		}
+	}
+
+	bool Frame::HasInputCaptured() const
+	{
+		return FrameManager::Get().GetCaptureFrame().get() == this;
 	}
 
 	void Frame::Render()

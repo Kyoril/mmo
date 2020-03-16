@@ -77,7 +77,6 @@ namespace mmo
 		Frame::OnMouseDown(button, buttons, position);
 	}
 
-#include <Windows.h>
 	void TextField::OnKeyDown(Key key)
 	{
 		if (key == 0x08)		// VK_BACKSPACE

@@ -205,6 +205,8 @@ namespace mmo
 		void CaptureInput();
 		/// Stops this frame from receiving input events.
 		void ReleaseInput();
+		/// Determines whether this frame currently received input events.
+		bool HasInputCaptured() const;
 		/// Called when the input was captured.
 		virtual void OnInputCaptured() {}
 		/// Called when the input was released.

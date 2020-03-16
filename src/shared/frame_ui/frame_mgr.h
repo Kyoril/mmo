@@ -24,12 +24,16 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
-		/// Type for a frame type factor.
+		/// Type for a frame type factory.
 		typedef std::function<FramePtr(const std::string& name)> FrameFactory;
+		/// Type for a frame renderer factory.
+		typedef std::function<std::unique_ptr<FrameRenderer>(const std::string& name)> RendererFactory;
 
 	private:
 		/// Contains a hash map of all registered frame factories.
 		std::map<std::string, FrameFactory, StrCaseIComp> m_frameFactories;
+		/// Contains a hash map of all registered frame renderer facotries.
+		std::map<std::string, RendererFactory, StrCaseIComp> m_rendererFactories;
 
 		std::map<std::string, std::vector<std::weak_ptr<Frame>>> m_eventFrames;
 
@@ -50,6 +54,12 @@ namespace mmo
 	public:
 		/// Loads files based on a given input stream with file contents.
 		void LoadUIFile(const std::string& filename);
+		/// Registers a new frame renderer factory by name.
+		void RegisterFrameRenderer(const std::string& name, RendererFactory factory);
+		/// Removes a registered frame renderer factory.
+		void RemoveFrameRenderer(const std::string& name);
+		/// Creates a frame renderer instance by name.
+		std::unique_ptr<FrameRenderer> CreateRenderer(const std::string& name);
 
 	public:
 		/// Creates a new frame using the given type.
