@@ -39,7 +39,7 @@ namespace mmo
 		m_propConnections += focusableProp.Changed.connect(this, &Frame::OnEnabledPropertyChanged);
 
 		// Visible property
-		auto& visibleProp = AddProperty("Visbile");
+		auto& visibleProp = AddProperty("Visible");
 		m_propConnections += visibleProp.Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 
 		// Add events
@@ -190,6 +190,11 @@ namespace mmo
 		ASSERT(eventName);
 
 		FrameManager::Get().FrameRegisterEvent(shared_from_this(), eventName);
+	}
+
+	bool Frame::Lua_IsVisible() const
+	{
+		return IsVisible(false);
 	}
 
 	FrameEvent & Frame::RegisterEvent(std::string name)

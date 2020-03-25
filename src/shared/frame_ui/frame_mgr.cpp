@@ -312,8 +312,9 @@ namespace mmo
 				.def("Enable", &Frame::Lua_Enable)
 				.def("Disable", &Frame::Lua_Disable)
 				.def("RegisterEvent", &Frame::Lua_RegisterEvent)
-				.def("GetName", &Frame::Lua_GetName),
-
+				.def("GetName", &Frame::Lua_GetName)
+				.def("IsVisible", &Frame::Lua_IsVisible),
+				
 			luabind::def("DebugLog", &FrameDebugLog)
 		];
 	

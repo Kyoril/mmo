@@ -93,6 +93,7 @@ namespace mmo
 		void Lua_Enable();
 		void Lua_Disable();
 		void Lua_RegisterEvent(const char* eventName);
+		bool Lua_IsVisible() const;
 
 	public:
 		/// Registers a new frame event by name. If the event already exists, it's instance
