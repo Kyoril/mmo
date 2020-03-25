@@ -484,8 +484,8 @@ namespace mmo
 
 	void Frame::CaptureInput()
 	{
-		// Only allow input capture if the frame is in the enabled state.
-		if (m_enabled)
+		// Only allow input capture if the frame is in the enabled state and focusable is enabled
+		if (m_enabled && m_focusable)
 		{
 			FrameManager::Get().SetCaptureWindow(shared_from_this());
 		}
