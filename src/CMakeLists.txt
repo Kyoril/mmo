@@ -23,3 +23,7 @@ add_subdirectory(update_compiler)
 
 add_subdirectory(hpak_tool)
 add_subdirectory(texture_tool)
+
+if (MMO_BUILD_TESTS)
+	add_subdirectory(unit_tests)
+endif()

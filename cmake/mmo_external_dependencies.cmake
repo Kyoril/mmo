@@ -44,7 +44,19 @@ find_package(MYSQL REQUIRED)
 include_directories(${MYSQL_INCLUDE_DIR})
 
 
+# ===============================================================================
 # Luabind
+# ===============================================================================
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/lua")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/luabind_noboost")
+
+
+
+# ===============================================================================
+# Catch
+# ===============================================================================
+
+if (MMO_BUILD_TESTS)
+	include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/catch/")
+endif()
