@@ -27,8 +27,9 @@ namespace mmo
 			SyncHardwareBuffer();
 		}
 
-		// Prepare render states
-		gx.SetVertexFormat(VertexFormat::PosColorTex1);
+		// Current vertex format
+		auto format = VertexFormat::PosColorTex1;
+		gx.SetVertexFormat(format);
 
 		// draw the batches
 		uint32 pos = 0;

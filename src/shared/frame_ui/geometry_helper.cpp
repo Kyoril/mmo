@@ -34,4 +34,22 @@ namespace mmo
 		// Append geometry to the buffer
 		buffer.AppendGeometry(vertices, 6);
 	}
+
+	void GeometryHelper::CreateRect(GeometryBuffer & buffer, Rect dst, argb_t color)
+	{
+		// Generate vertex data
+		const GeometryBuffer::Vertex vertices[6]{
+			// First triangle
+			{ { dst.left,	dst.bottom,		0.0f }, color, { 0.0f, 0.0f } },
+			{ { dst.left,	dst.top,		0.0f }, color, { 0.0f, 1.0f } },
+			{ { dst.right,	dst.top,		0.0f }, color, { 1.0f, 1.0f } },
+			// Second triangle
+			{ { dst.right,	dst.top,		0.0f }, color, { 1.0f, 1.0f } },
+			{ { dst.right,	dst.bottom,		0.0f }, color, { 1.0f, 0.0f } },
+			{ { dst.left,	dst.bottom,		0.0f }, color, { 0.0f, 0.0f } }
+		};
+
+		// Append geometry to the buffer
+		buffer.AppendGeometry(vertices, 6);
+	}
 }

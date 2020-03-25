@@ -16,6 +16,7 @@ namespace mmo
 		virtual ~TextField() = default;
 
 	public:
+		virtual void Copy(Frame& other) override;
 		/// Determines whether the text that is rendered is masked.
 		inline bool IsTextMasked() const { return m_masked; }
 		/// Gets the code point to use when rendering the text masked.
@@ -26,6 +27,8 @@ namespace mmo
 		void SetMaskCodePoint(std::string::value_type value);
 		/// 
 		virtual const std::string& GetVisualText() const override;
+		/// Tries to find the cursor position based on the given local coordinate.
+		int32 GetCursorAt(const Point& position);
 
 	public:
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
@@ -39,6 +42,10 @@ namespace mmo
 	private:
 		/// 
 		void OnMaskedPropChanged(const Property& property);
+		/// 
+		void OnTextSectionPropChanged(const Property& property);
+		/// Gets the text section (if there is any).
+		ImagerySection* GetTextSection() const;
 
 	private:
 		/// Whether the text of this textfield should be masked.
@@ -49,5 +56,9 @@ namespace mmo
 		mutable bool m_maskTextDirty;
 		/// The cached mask text.
 		mutable std::string m_maskText;
+		/// Text section by name.
+		std::string m_textSectionName;
+		/// Cursor index.
+		int32 m_cursor;
 	};
 }

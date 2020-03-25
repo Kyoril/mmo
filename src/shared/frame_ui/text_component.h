@@ -61,6 +61,8 @@ namespace mmo
 		inline const Color& GetColor() const { return m_color; }
 		void SetColor(const Color& color);
 
+		inline FontPtr GetFont() const { return m_font; }
+
 	public:
 		// FrameComponent overrides
 		void Render() const override;

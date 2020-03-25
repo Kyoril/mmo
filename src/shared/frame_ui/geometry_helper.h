@@ -3,6 +3,7 @@
 #pragma once
 
 #include "rect.h"
+#include "color.h"
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
@@ -30,5 +31,6 @@ namespace mmo
 		/// @param texH Height of the texture (used to calculate uv coordinates).
 		static void CreateRect(GeometryBuffer& buffer, Point position, Rect src, uint16 texW, uint16 texH);
 		static void CreateRect(GeometryBuffer& buffer, Rect dst, Rect src, uint16 texW, uint16 texH);
+		static void CreateRect(GeometryBuffer& buffer, Rect dst, argb_t color);
 	};
 }

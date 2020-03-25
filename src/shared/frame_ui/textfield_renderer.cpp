@@ -3,6 +3,7 @@
 #include "textfield_renderer.h"
 #include "state_imagery.h"
 #include "frame.h"
+#include "geometry_helper.h"
 
 
 namespace mmo
@@ -41,7 +42,7 @@ namespace mmo
 		// If the frame has captured user input...
 		if (m_frame->HasInputCaptured())
 		{
-			// TODO: Render the caret at the given cursor position
+			// TODO: Render the cursor
 		}
 	}
 }
