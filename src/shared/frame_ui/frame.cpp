@@ -24,10 +24,23 @@ namespace mmo
 		, m_enabled(true)
 		, m_clippedByParent(false)
 		, m_needsLayout(true)
+		, m_focusable(false)
 	{
 		// Register text property for frame
 		auto& textProp = AddProperty("Text");
 		m_propConnections += textProp.Changed.connect(this, &Frame::OnTextPropertyChanged);
+
+		// Focusable property
+		auto& focusableProp = AddProperty("Focusable");
+		m_propConnections += focusableProp.Changed.connect(this, &Frame::OnFocusablePropertyChanged);
+
+		// Enabled property
+		auto& enabledProp = AddProperty("Enabled");
+		m_propConnections += focusableProp.Changed.connect(this, &Frame::OnEnabledPropertyChanged);
+
+		// Visible property
+		auto& visibleProp = AddProperty("Visbile");
+		m_propConnections += visibleProp.Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 
 		// Add events
 		RegisterEvent("OnEvent");
@@ -471,7 +484,11 @@ namespace mmo
 
 	void Frame::CaptureInput()
 	{
-		FrameManager::Get().SetCaptureWindow(shared_from_this());
+		// Only allow input capture if the frame is in the enabled state.
+		if (m_enabled)
+		{
+			FrameManager::Get().SetCaptureWindow(shared_from_this());
+		}
 	}
 
 	void Frame::ReleaseInput()
@@ -727,6 +744,27 @@ namespace mmo
 		SetText(property.GetValue());
 	}
 
+	void Frame::OnFocusablePropertyChanged(const Property & property)
+	{
+		m_focusable = property.GetBoolValue();
+
+		// If this frame is no longer focusable and has input captured, release it
+		if (!m_focusable && HasInputCaptured())
+		{
+			ReleaseInput();
+		}
+	}
+
+	void Frame::OnEnabledPropertyChanged(const Property & property)
+	{
+		SetEnabled(property.GetBoolValue());
+	}
+
+	void Frame::OnVisiblePropertyChanged(const Property & property)
+	{
+		SetVisible(property.GetBoolValue());
+	}
+
 	GeometryBuffer & Frame::GetGeometryBuffer()
 	{ 
 		return m_geometryBuffer;
@@ -734,6 +772,12 @@ namespace mmo
 
 	void Frame::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
 	{
+		// Capture the input if this frame is focusable
+		if (m_focusable)
+		{
+			CaptureInput();
+		}
+
 		// Simply raise the signal
 		MouseDown(MouseEventArgs(buttons, position.x, position.y));
 	}

@@ -2,6 +2,8 @@
 
 #include "textfield.h"
 
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -14,6 +16,9 @@ namespace mmo
 		// Add the masked property
 		Property& prop = AddProperty("Masked", "false");
 		m_propConnections += prop.Changed.connect(this, &TextField::OnMaskedPropChanged);
+
+		// Text fields are focusable by default
+		m_focusable = true;
 	}
 
 	void TextField::SetTextMasked(bool value)
@@ -69,8 +74,11 @@ namespace mmo
 		// If the left mouse button is pressed...
 		if (button == MouseButton::Left)
 		{
-			// ... start capturing input
-			CaptureInput();
+			// Convert position to local position
+			const Point localPosition = position - GetAbsoluteFrameRect().GetPosition();
+			
+			// TODO: Calculate the cursor position in the textfield
+			DLOG("Position: " << localPosition.x << ", " << localPosition.y);
 		}
 
 		// Raise the signal from the super class
@@ -81,6 +89,9 @@ namespace mmo
 	{
 		if (key == 0x08)		// VK_BACKSPACE
 		{
+			if (m_text.empty())
+				return;
+
 			m_text.pop_back();
 
 			OnTextChanged();
@@ -92,6 +103,9 @@ namespace mmo
 
 	void TextField::OnKeyChar(uint16 codepoint)
 	{
+		if (codepoint == 0x8)
+			return;
+
 		m_text.push_back(static_cast<char>(codepoint & 0xFF));
 
 		OnTextChanged();

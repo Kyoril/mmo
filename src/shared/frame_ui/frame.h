@@ -211,6 +211,8 @@ namespace mmo
 		virtual void OnInputCaptured() {}
 		/// Called when the input was released.
 		virtual void OnInputReleased() {}
+		/// Whether this frame can receive the input focus.
+		inline bool IsFocusable() const noexcept { return m_focusable; }
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -258,6 +260,12 @@ namespace mmo
 	private:
 		/// Executed when the text property was changed.
 		void OnTextPropertyChanged(const Property& property);
+		/// Executed when the focusable property was changed.
+		void OnFocusablePropertyChanged(const Property& property);
+		/// Executed when the enabled property was changed.
+		void OnEnabledPropertyChanged(const Property& property);
+		/// Executed when the visible property was changed.
+		void OnVisiblePropertyChanged(const Property& property);
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
@@ -302,6 +310,8 @@ namespace mmo
 		std::map<std::string, FrameEvent, StrCaseIComp> m_eventsByName;
 		/// 
 		std::map<std::string, Property, StrCaseIComp> m_propertiesByName;
+		/// Whether this frame can receive the input focus on click.
+		bool m_focusable;
 
 	protected:
 		scoped_connection_container m_propConnections;

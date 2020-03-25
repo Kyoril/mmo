@@ -23,8 +23,6 @@ namespace mmo
 	static const std::string FrameTypeAttribute("type");
 	static const std::string FrameRendererAttribute("renderer");
 	static const std::string FrameParentAttribute("parent");
-	static const std::string FrameHiddenAttribute("hidden");
-	static const std::string FrameEnabledAttribute("enabled");
 	static const std::string FrameInheritsAttribute("inherits");
 	static const std::string FrameSetAllPointsAttribute("setAllPoints");
 	static const std::string AreaElement("Area");
@@ -305,8 +303,6 @@ namespace mmo
 		const std::string name(attributes.GetValueAsString(FrameNameAttribute));
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
-		const bool hidden = attributes.GetValueAsBool(FrameHiddenAttribute, false);
-		const bool enabled = attributes.GetValueAsBool(FrameEnabledAttribute, true);
 		const bool setAllPoints = attributes.GetValueAsBool(FrameSetAllPointsAttribute, false);
 
 		// Frame type might be overridden
@@ -344,10 +340,6 @@ namespace mmo
 		{
 			templateFrame->Copy(*frame);
 		}
-
-		// Setup frame properties
-		frame->SetVisible(!hidden);
-		frame->SetEnabled(enabled);
 
 		// Setup style and renderer
 		if (!renderer.empty()) frame->SetRenderer(renderer);

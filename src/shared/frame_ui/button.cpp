@@ -12,6 +12,9 @@ namespace mmo
 	{
 		// Register events
 		RegisterEvent(ButtonClickedEvent);
+
+		// Buttons are focusable by default
+		m_focusable = true;
 	}
 
 	void Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
