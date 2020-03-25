@@ -13,3 +13,5 @@ jobs:
       run: sudo apt-get install libmysqlclient-dev && git submodule update --init && mkdir build && cd build && cmake ../ 
     - name: make
       run: cd build && make
+    - name: unit tests
+      run: cd ../bin && ./unit_tests
