@@ -87,6 +87,12 @@ namespace mmo
 	    Listener &listener,
 	    asio::io_service &ioService)
 	{
+		if (getSocket().is_open())
+		{
+			getSocket().shutdown(asio::socket_base::shutdown_both);
+			getSocket().close();
+		}
+
 		setListener(listener);
 		assert(getListener());
 
