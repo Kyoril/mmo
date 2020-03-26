@@ -2,6 +2,7 @@
 
 #include "frame.h"
 #include "frame_mgr.h"
+#include "font_mgr.h"
 #include "default_renderer.h"
 #include "button_renderer.h"
 #include "textfield_renderer.h"
@@ -27,20 +28,11 @@ namespace mmo
 		, m_focusable(false)
 	{
 		// Register text property for frame
-		auto& textProp = AddProperty("Text");
-		m_propConnections += textProp.Changed.connect(this, &Frame::OnTextPropertyChanged);
-
-		// Focusable property
-		auto& focusableProp = AddProperty("Focusable");
-		m_propConnections += focusableProp.Changed.connect(this, &Frame::OnFocusablePropertyChanged);
-
-		// Enabled property
-		auto& enabledProp = AddProperty("Enabled");
-		m_propConnections += focusableProp.Changed.connect(this, &Frame::OnEnabledPropertyChanged);
-
-		// Visible property
-		auto& visibleProp = AddProperty("Visible");
-		m_propConnections += visibleProp.Changed.connect(this, &Frame::OnVisiblePropertyChanged);
+		m_propConnections += AddProperty("Text").Changed.connect(this, &Frame::OnTextPropertyChanged);
+		m_propConnections += AddProperty("Focusable").Changed.connect(this, &Frame::OnFocusablePropertyChanged);
+		m_propConnections += AddProperty("Enabled").Changed.connect(this, &Frame::OnEnabledPropertyChanged);
+		m_propConnections += AddProperty("Visible").Changed.connect(this, &Frame::OnVisiblePropertyChanged);
+		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
 
 		// Add events
 		RegisterEvent("OnEvent");
@@ -93,6 +85,18 @@ namespace mmo
 
 				added.AddLayer(newLayer);
 			}
+		}
+
+		// Set all properties
+		for (const auto& pair : m_propertiesByName)
+		{
+			// Find property on other frame (since both frames should have the same
+			// type, the properties should exist in both frames).
+			auto* otherProp = other.GetProperty(pair.first);
+			ASSERT(otherProp);
+
+			// Apply property value
+			otherProp->Set(pair.second.GetValue());
 		}
 
 		// Copy all children and their children
@@ -465,6 +469,7 @@ namespace mmo
 	void Frame::Invalidate()
 	{
 		m_needsRedraw = true;
+		m_needsLayout = true;
 	}
 
 	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
@@ -508,6 +513,19 @@ namespace mmo
 	bool Frame::HasInputCaptured() const
 	{
 		return FrameManager::Get().GetCaptureFrame().get() == this;
+	}
+
+	void Frame::InvalidateChildren(bool recursive)
+	{
+		for (auto& child : m_children)
+		{
+			child->Invalidate();
+
+			if (recursive)
+			{
+				child->InvalidateChildren(recursive);
+			}
+		}
 	}
 
 	void Frame::Render()
@@ -674,6 +692,22 @@ namespace mmo
 		// Return the current rect
 		return m_absRectCache;
 	}
+
+	FontPtr Frame::GetFont() const
+	{
+		if (m_font)
+		{
+			return m_font;
+		}
+
+		if (m_parent)
+		{
+			return m_parent->GetFont();
+		}
+
+		// No font!
+		return nullptr;
+	}
 	
 	void Frame::DrawSelf()
 	{
@@ -768,6 +802,29 @@ namespace mmo
 	void Frame::OnVisiblePropertyChanged(const Property & property)
 	{
 		SetVisible(property.GetBoolValue());
+	}
+
+	void Frame::OnFontPropertyChanged(const Property & property)
+	{
+		// Reset current font
+		m_font.reset();
+
+		// Try to find named font
+		auto* fontMap = FrameManager::Get().GetFontMap(property.GetValue());
+		if (!fontMap)
+		{
+			return;
+		}
+
+		// Try to load font
+		m_font = FontManager::Get().CreateOrRetrieve(fontMap->FontFile, fontMap->Size, fontMap->Outline);
+
+		// Invalidate
+		m_needsRedraw = true;
+		m_needsLayout = true;
+
+		// Invalidate all children as they might depend on our font
+		InvalidateChildren(true);
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()

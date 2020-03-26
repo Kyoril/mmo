@@ -25,6 +25,11 @@ namespace mmo
 	static const std::string FrameParentAttribute("parent");
 	static const std::string FrameInheritsAttribute("inherits");
 	static const std::string FrameSetAllPointsAttribute("setAllPoints");
+	static const std::string FontElement("Font");
+	static const std::string FontNameAttribute("name");
+	static const std::string FontFileAttribute("file");
+	static const std::string FontSizeAttribute("size");
+	static const std::string FontOutlineAttribute("outline");
 	static const std::string AreaElement("Area");
 	static const std::string InsetElement("Inset");
 	static const std::string InsetLeftAttribute("left");
@@ -61,11 +66,8 @@ namespace mmo
 	static const std::string SectionColorAttribute("color");
 	static const std::string TextComponentElement("TextComponent");
 	static const std::string TextComponentColorAttribute("color");
-	static const std::string TextComponentFontAttribute("font");
-	static const std::string TextComponentSizeAttribute("size");
 	static const std::string TextComponentHorzAlignAttribute("horzAlign");
 	static const std::string TextComponentVertAlignAttribute("vertAlign");
-	static const std::string TextComponentOutlineAttribute("outline");
 	static const std::string ImageComponentElement("ImageComponent");
 	static const std::string ImageComponentTextureAttribute("texture");
 	static const std::string ImageComponentTilingAttribute("tiling");
@@ -183,6 +185,10 @@ namespace mmo
 			{
 				ElementInsetStart(attributes);
 			}
+			else if (element == FontElement)
+			{
+				ElementFontStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -278,6 +284,10 @@ namespace mmo
 			else if (element == EventsElement)
 			{
 				ElementInsetEnd();
+			}
+			else if (element == FontElement)
+			{
+				ElementFontEnd();
 			}
 		}
 	}
@@ -681,21 +691,12 @@ namespace mmo
 			throw std::runtime_error("Unexpected TextComponent element!");
 		}
 
-		const std::string font(attributes.GetValueAsString(TextComponentFontAttribute));
-		const int size = attributes.GetValueAsInt(TextComponentSizeAttribute);
-		const float outline = attributes.GetValueAsFloat(TextComponentOutlineAttribute);
 		const std::string color(attributes.GetValueAsString(TextComponentColorAttribute));
 		const std::string horzAlignAttr(attributes.GetValueAsString(TextComponentHorzAlignAttribute));
 		const std::string vertAlignAttr(attributes.GetValueAsString(TextComponentVertAlignAttribute));
 
-		// Check for font name existance
-		if (font.empty())
-		{
-			throw std::runtime_error("TextComponent needs a font name!");
-		}
-
 		// Setup component and add it to the current section
-		auto component = std::make_unique<TextComponent>(*m_frames.top(), font, size, outline);
+		auto component = std::make_unique<TextComponent>(*m_frames.top());
 		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
 		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
 
@@ -854,6 +855,37 @@ namespace mmo
 	}
 
 	void LayoutXmlLoader::ElementInsetEnd()
+	{
+	}
+
+	void LayoutXmlLoader::ElementFontStart(const XmlAttributes & attributes)
+	{
+		// Font may not be defined inside frames
+		if (!m_frames.empty())
+		{
+			throw std::runtime_error("Unexpected " + FontElement + " element!");
+		}
+
+		const std::string name(attributes.GetValueAsString(FontNameAttribute));
+		const std::string file(attributes.GetValueAsString(FontFileAttribute));
+		const float size = attributes.GetValueAsFloat(FontSizeAttribute);
+		const float outline = attributes.GetValueAsFloat(FontOutlineAttribute);
+
+		// Check parameters
+		if (size <= 0.0f || file.empty() || name.empty())
+		{
+			throw std::runtime_error("Font needs to have a valid name, file and size defined!");
+		}
+
+		// Setup a font map
+		FrameManager::FontMap map;
+		map.FontFile = file;
+		map.Size = size;
+		map.Outline = outline;
+		FrameManager::Get().AddFontMap(name, map);
+	}
+
+	void LayoutXmlLoader::ElementFontEnd()
 	{
 	}
 }

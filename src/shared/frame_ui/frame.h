@@ -10,6 +10,7 @@
 #include "frame_event.h"
 #include "property.h"
 #include "key.h"
+#include "font.h"
 
 #include "imagery_section.h"
 #include "state_imagery.h"
@@ -214,6 +215,8 @@ namespace mmo
 		virtual void OnInputReleased() {}
 		/// Whether this frame can receive the input focus.
 		inline bool IsFocusable() const noexcept { return m_focusable; }
+		/// Invalidates all children.
+		void InvalidateChildren(bool recursive = true);
 
 	public:
 		/// Gets a string object holding the name of this frame.
@@ -244,6 +247,8 @@ namespace mmo
 		virtual Rect GetRelativeFrameRect();
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();
+		/// Gets the font of this frame, or it's parent frames.
+		FontPtr GetFont() const;
 
 	protected:
 		virtual void DrawSelf();
@@ -267,6 +272,8 @@ namespace mmo
 		void OnEnabledPropertyChanged(const Property& property);
 		/// Executed when the visible property was changed.
 		void OnVisiblePropertyChanged(const Property& property);
+		/// 
+		void OnFontPropertyChanged(const Property& property);
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
@@ -313,6 +320,8 @@ namespace mmo
 		std::map<std::string, Property, StrCaseIComp> m_propertiesByName;
 		/// Whether this frame can receive the input focus on click.
 		bool m_focusable;
+		/// Sets the font of this frame.
+		FontPtr m_font;
 
 	protected:
 		scoped_connection_container m_propConnections;

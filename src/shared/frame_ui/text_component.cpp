@@ -12,20 +12,16 @@
 
 namespace mmo
 {
-	TextComponent::TextComponent(Frame& frame, std::string fontFile, float fontSize, float outline)
+	TextComponent::TextComponent(Frame& frame)
 		: FrameComponent(frame)
-		, m_filename(std::move(fontFile))
-		, m_fontSize(fontSize)
-		, m_outline(outline)
 	{
-		m_font = FontManager::Get().CreateOrRetrieve(m_filename, m_fontSize, m_outline);
 	}
 
 	std::unique_ptr<FrameComponent> TextComponent::Copy() const
 	{
 		ASSERT(m_frame);
 
-		auto copy = std::make_unique<TextComponent>(*m_frame, m_filename, m_fontSize, m_outline);
+		auto copy = std::make_unique<TextComponent>(*m_frame);
 		CopyBaseAttributes(*copy);
 		copy->SetHorizontalAlignment(m_horzAlignment);
 		copy->SetVerticalAlignment(m_vertAlignment);
@@ -50,7 +46,8 @@ namespace mmo
 
 	void TextComponent::Render() const
 	{
-		if (m_font)
+		FontPtr font = m_frame->GetFont();
+		if (font)
 		{
 			ASSERT(m_frame);
 
@@ -61,7 +58,7 @@ namespace mmo
 			const Rect frameRect = GetArea();
 
 			// Calculate the text width and cache it for later use
-			const float width = m_font->GetTextWidth(text);
+			const float width = font->GetTextWidth(text);
 
 			// Calculate final text position in component
 			Point position = frameRect.GetPosition();
@@ -79,15 +76,15 @@ namespace mmo
 			// Apply vertical alignment formatting
 			if (m_vertAlignment == VerticalAlignment::Center)
 			{
-				position.y += frameRect.GetHeight() * 0.5f - m_font->GetHeight() * 0.5f;
+				position.y += frameRect.GetHeight() * 0.5f - font->GetHeight() * 0.5f;
 			}
 			else if (m_vertAlignment == VerticalAlignment::Bottom)
 			{
-				position.y += frameRect.GetHeight() - m_font->GetHeight();
+				position.y += frameRect.GetHeight() - font->GetHeight();
 			}
 
 			// Determine the position to render the font at
-			m_font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f, m_color);
+			font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f, m_color);
 		}
 	}
 

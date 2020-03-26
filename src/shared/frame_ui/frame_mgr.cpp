@@ -653,5 +653,30 @@ namespace mmo
 		m_frameFactories.clear();
 	}
 
+	void FrameManager::AddFontMap(std::string name, FrameManager::FontMap map)
+	{
+		m_fontMaps.emplace(std::make_pair(std::move(name), std::move(map)));
+	}
+
+	void FrameManager::RemoveFontMap(const std::string & name)
+	{
+		const auto it = m_fontMaps.find(name);
+		if (it != m_fontMaps.end())
+		{
+			m_fontMaps.erase(it);
+		}
+	}
+
+	FrameManager::FontMap * FrameManager::GetFontMap(const std::string & name)
+	{
+		const auto it = m_fontMaps.find(name);
+		if (it != m_fontMaps.end())
+		{
+			return &it->second;
+		}
+
+		return nullptr;
+	}
+
 
 }

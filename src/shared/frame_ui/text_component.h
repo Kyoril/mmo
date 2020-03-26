@@ -48,7 +48,7 @@ namespace mmo
 	{
 	public:
 		/// Creates a frame font string object which can be used to draw a text.
-		explicit TextComponent(Frame& frame, std::string fontFile, float fontSize, float outline = 0.0f);
+		explicit TextComponent(Frame& frame);
 
 	public:
 		virtual std::unique_ptr<FrameComponent> Copy() const override;
@@ -61,18 +61,11 @@ namespace mmo
 		inline const Color& GetColor() const { return m_color; }
 		void SetColor(const Color& color);
 
-		inline FontPtr GetFont() const { return m_font; }
-
 	public:
 		// FrameComponent overrides
 		void Render() const override;
 
 	private:
-		std::string m_filename;
-		float m_fontSize;
-		float m_outline;
-		/// The graphics texture object.
-		FontPtr m_font;
 		/// The color to use when rendering text.
 		Color m_color = Color(0xffffffff);
 		/// 

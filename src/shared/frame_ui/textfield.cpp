@@ -84,32 +84,28 @@ namespace mmo
 
 	int32 TextField::GetCursorAt(const Point & position)
 	{
-		// Try to obtain the text section
-		auto* textSection = GetTextSection();
-		if (!textSection)
+		// Get the font to use
+		FontPtr font = GetFont();
+		if (!font)
 		{
 			return -1;
 		}
 
-		// Find the text component
-		TextComponent* textComponent = textSection->GetFirstTextComponent();
-		if (!textComponent)
-		{
-			return -1;
-		}
+		// TODO: Obtain named area from style
+		const Rect textArea = Rect(0.0f);
 
 		// Check for out of bounds
-		if (position.x <= textComponent->GetInset().left)
+		if (position.x <= textArea.left)
 		{
 			return 0;
 		}
-		if (position.x >= GetAbsoluteFrameRect().GetWidth() - textComponent->GetInset().right)
+		if (position.x >= GetAbsoluteFrameRect().GetWidth() - textArea.right)
 		{
 			return m_text.length();
 		}
 
 		// Now iterate the string value
-		float x = textComponent->GetInset().left;
+		float x = textArea.left;
 
 		// Index
 		int32 index = 0;
@@ -117,7 +113,7 @@ namespace mmo
 		// Iterate
 		for (const auto& codepoint : m_text)
 		{
-			const FontGlyph* glyph = textComponent->GetFont()->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
+			const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
 			if (glyph != nullptr)
 			{				
 				// Advance offset

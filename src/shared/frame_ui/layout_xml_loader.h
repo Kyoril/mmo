@@ -70,6 +70,8 @@ namespace mmo
 		void ElementEventsEnd();
 		void ElementInsetStart(const XmlAttributes& attributes);
 		void ElementInsetEnd();
+		void ElementFontStart(const XmlAttributes& attributes);
+		void ElementFontEnd();
 
 	private:
 		/// Stack of added frames.

@@ -62,6 +62,14 @@ namespace mmo
 		std::unique_ptr<FrameRenderer> CreateRenderer(const std::string& name);
 
 	public:
+		/// Contains info about a font map.
+		struct FontMap final
+		{
+			std::string FontFile;
+			float Size;
+			float Outline;
+		};
+	public:
 		/// Creates a new frame using the given type.
 		FramePtr Create(const std::string& type, const std::string& name, bool isCopy = false);
 		FramePtr CreateOrRetrieve(const std::string& type, const std::string& name);
@@ -101,6 +109,12 @@ namespace mmo
 		void UnregisterFrameFactory(const std::string& elementName);
 		/// Removes all registered frame factories.
 		void ClearFrameFactories();
+		/// Adds a new font map.
+		void AddFontMap(std::string name, FontMap map);
+		/// Removes a font map by it's name.
+		void RemoveFontMap(const std::string& name);
+		/// Gets a font map by it's name.
+		FontMap* GetFontMap(const std::string& name);
 
 	public:
 		/// Gets the root frame or nullptr if there is none.
@@ -121,5 +135,8 @@ namespace mmo
 		lua_State* m_luaState;
 		/// The frame that is currently capturing input events.
 		FramePtr m_inputCapture;
+		/// A map of font infos, keyed by a unique name. This is useful to make
+		/// setting fonts in xml easier.
+		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
 	};
 }
