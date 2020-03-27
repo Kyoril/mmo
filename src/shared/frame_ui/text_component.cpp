@@ -44,19 +44,18 @@ namespace mmo
 		m_color = color;
 	}
 
-	void TextComponent::Render() const
+	void TextComponent::Render(const Rect& area, const Color& color) const
 	{
 		FontPtr font = m_frame->GetFont();
 		if (font)
 		{
 			ASSERT(m_frame);
 
+			const Rect frameRect = GetArea(area);
+
 			// Gets the text that should be displayed for this frame.
 			const std::string& text = m_frame->GetVisualText();
-
-			// Calculate the frame rectangle
-			const Rect frameRect = GetArea();
-
+	
 			// Calculate the text width and cache it for later use
 			const float width = font->GetTextWidth(text);
 
@@ -83,8 +82,12 @@ namespace mmo
 				position.y += frameRect.GetHeight() - font->GetHeight();
 			}
 
+			// Apply color multiplication
+			Color c = color;
+			c *= m_color;
+
 			// Determine the position to render the font at
-			font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f, m_color);
+			font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f, c);
 		}
 	}
 

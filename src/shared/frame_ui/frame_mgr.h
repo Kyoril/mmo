@@ -77,6 +77,7 @@ namespace mmo
 		void SetTopFrame(const FramePtr& topFrame);
 		void ResetTopFrame();
 		void Draw() const;
+		void Update(float elapsedSeconds);
 		/// Gets the currently hovered frame.
 		inline FramePtr GetHoveredFrame() const { return m_hoverFrame; }
 		/// Gets the frame that is currently capturing input events.

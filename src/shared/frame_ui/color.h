@@ -22,6 +22,10 @@ namespace mmo
 	class Color final
 	{
 	public:
+		static const Color White;
+		static const Color Black;
+
+	public:
 		Color() noexcept;
 		Color(const Color& other) noexcept;
 		Color(float r, float g, float b, float a = 1.0f) noexcept;

@@ -200,7 +200,7 @@ namespace mmo
 		/// Determines whether the frame is currently hovered.
 		bool IsHovered() const;
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
-		void Invalidate();
+		void Invalidate() noexcept;
 		/// Tries to retrieve a child frame at the given position.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
 		/// Makes this frame capture input events.

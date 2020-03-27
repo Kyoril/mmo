@@ -463,6 +463,14 @@ namespace mmo
 		}
 	}
 
+	void FrameManager::Update(float elapsedSeconds)
+	{
+		if (m_topFrame)
+		{
+			m_topFrame->Update(elapsedSeconds);
+		}
+	}
+
 	void FrameManager::NotifyMouseMoved(const Point & position)
 	{
 		// TODO: Determine the currently hovered frame and set it as the 

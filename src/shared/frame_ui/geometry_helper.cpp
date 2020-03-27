@@ -6,12 +6,12 @@
 
 namespace mmo
 {
-	void GeometryHelper::CreateRect(GeometryBuffer & buffer, Point position, Rect src, uint16 texW, uint16 texH)
+	void GeometryHelper::CreateRect(GeometryBuffer & buffer, argb_t color, Point position, Rect src, uint16 texW, uint16 texH)
 	{
-		CreateRect(buffer, Rect(position, src.GetSize()), src, texW, texH);
+		CreateRect(buffer, color, Rect(position, src.GetSize()), src, texW, texH);
 	}
 
-	void GeometryHelper::CreateRect(GeometryBuffer & buffer, Rect dst, Rect src, uint16 texW, uint16 texH)
+	void GeometryHelper::CreateRect(GeometryBuffer & buffer, argb_t color, Rect dst, Rect src, uint16 texW, uint16 texH)
 	{
 		// Calculate uv rectangle
 		const Rect uvRect{
@@ -22,20 +22,20 @@ namespace mmo
 		// Generate vertex data
 		const GeometryBuffer::Vertex vertices[6]{
 			// First triangle
-			{ { dst.left,	dst.bottom,		0.0f }, 0xffffffff, { uvRect.left,	uvRect.top		} },
-			{ { dst.left,	dst.top,		0.0f }, 0xffffffff, { uvRect.left,	uvRect.bottom	} },
-			{ { dst.right,	dst.top,		0.0f }, 0xffffffff, { uvRect.right,	uvRect.bottom	} },
+			{ { dst.left,	dst.bottom,		0.0f }, color, { uvRect.left,	uvRect.top		} },
+			{ { dst.left,	dst.top,		0.0f }, color, { uvRect.left,	uvRect.bottom	} },
+			{ { dst.right,	dst.top,		0.0f }, color, { uvRect.right,	uvRect.bottom	} },
 			// Second triangle
-			{ { dst.right,	dst.top,		0.0f }, 0xffffffff, { uvRect.right,	uvRect.bottom	} },
-			{ { dst.right,	dst.bottom,		0.0f }, 0xffffffff, { uvRect.right,	uvRect.top		} },
-			{ { dst.left,	dst.bottom,		0.0f }, 0xffffffff, { uvRect.left,	uvRect.top		} }
+			{ { dst.right,	dst.top,		0.0f }, color, { uvRect.right,	uvRect.bottom	} },
+			{ { dst.right,	dst.bottom,		0.0f }, color, { uvRect.right,	uvRect.top		} },
+			{ { dst.left,	dst.bottom,		0.0f }, color, { uvRect.left,	uvRect.top		} }
 		};
 
 		// Append geometry to the buffer
 		buffer.AppendGeometry(vertices, 6);
 	}
 
-	void GeometryHelper::CreateRect(GeometryBuffer & buffer, Rect dst, argb_t color)
+	void GeometryHelper::CreateRect(GeometryBuffer & buffer, argb_t color, Rect dst)
 	{
 		// Generate vertex data
 		const GeometryBuffer::Vertex vertices[6]{

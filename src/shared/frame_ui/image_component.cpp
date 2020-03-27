@@ -33,13 +33,13 @@ namespace mmo
 		return copy;
 	}
 	
-	void ImageComponent::Render() const
+	void ImageComponent::Render(const Rect& area, const Color& color) const
 	{
 		// Bind the texture object
 		ASSERT(m_frame);
 		m_frame->GetGeometryBuffer().SetActiveTexture(m_texture);
 		
-		const Rect frameRect = GetArea();
+		const Rect frameRect = GetArea(area);
 
 		// Default source rect encapsules the whole image area
 		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(m_texture->GetWidth()), static_cast<float>(m_texture->GetHeight())};
@@ -60,6 +60,7 @@ namespace mmo
 
 		// Create the rectangle
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
+			color,
 			frameRect,
 			srcRect,
 			m_texture->GetWidth(), m_texture->GetHeight());

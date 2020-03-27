@@ -90,10 +90,15 @@ namespace mmo
 		// Set all properties
 		for (const auto& pair : m_propertiesByName)
 		{
-			// Find property on other frame (since both frames should have the same
-			// type, the properties should exist in both frames).
+			// It is valid to define new property in xml only to refer to them, so
+			// not all properties have to exist on the other frame already.
 			auto* otherProp = other.GetProperty(pair.first);
-			ASSERT(otherProp);
+			if (!otherProp)
+			{
+				// Other property doesn't yet exist, add a new one.
+				otherProp = &other.AddProperty(pair.first);
+				otherProp->Set(pair.second.GetValue());
+			}
 
 			// Apply property value
 			otherProp->Set(pair.second.GetValue());
@@ -466,7 +471,7 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
-	void Frame::Invalidate()
+	void Frame::Invalidate() noexcept
 	{
 		m_needsRedraw = true;
 		m_needsLayout = true;
@@ -584,6 +589,12 @@ namespace mmo
 		if (m_renderer != nullptr)
 		{
 			m_renderer->Update(elapsed);
+		}
+
+		// Update child frames
+		for (auto& child : m_children)
+		{
+			child->Update(elapsed);
 		}
 	}
 

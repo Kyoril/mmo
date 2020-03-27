@@ -15,7 +15,6 @@
 namespace mmo
 {
 	class Frame;
-	class TextComponent;
 
 
 	/// This class represents the visuals of a frame type for a single named state.
@@ -43,23 +42,16 @@ namespace mmo
 		/// Removes a layer by index.
 		void RemoveAllComponent();
 		/// Renders this state imagery.
-		void Render() const;
-		/// Gets the first text component of this section.
-		inline TextComponent* GetFirstTextComponent() const { return m_firstTextComponent; }
+		void Render(const Rect& area, const Color& color) const;
 
 	public:
 		/// Gets the name of this imagery.
 		inline const std::string& GetName() const { return m_name; }
 
 	private:
-		void CheckForTextComponent(FrameComponent& component);
-
-	private:
 		/// The name of this imagery.
 		std::string m_name;
 		/// The components that this section contains.
 		std::vector<std::unique_ptr<FrameComponent>> m_components;
-		/// 
-		TextComponent* m_firstTextComponent;
 	};
 }

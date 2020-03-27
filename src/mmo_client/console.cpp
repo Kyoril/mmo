@@ -62,6 +62,7 @@ namespace mmo
 	static std::mutex s_consoleLogMutex;
 	/// A connection that binds a function which displays the content of the LOG macros in the console.
 	static scoped_connection s_consoleLogConn;
+	static scoped_connection s_frameMgrUpdateCon;
 	/// Game script instance.
 	static std::unique_ptr<GameScript> s_gameScript;
 
@@ -229,6 +230,9 @@ namespace mmo
 		// Initialize the frame manager
 		FrameManager::Initialize(&s_gameScript->GetLuaState());
 
+		// Connect idle event
+		s_frameMgrUpdateCon = EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp) { FrameManager::Get().Update(deltaSeconds); });
+
 		// Assign console log signal
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ s_consoleLogMutex };
@@ -276,6 +280,9 @@ namespace mmo
 
 		// Reset game script instance
 		s_gameScript.release();
+
+		// Disconnect idle event for frame manager
+		s_frameMgrUpdateCon.disconnect();
 
 		// Destroy the frame manager
 		FrameManager::Destroy();

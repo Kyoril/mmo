@@ -63,7 +63,7 @@ namespace mmo
 
 	public:
 		// FrameComponent overrides
-		void Render() const override;
+		void Render(const Rect& area, const Color& color = Color::White) const override;
 
 	private:
 		/// The color to use when rendering text.

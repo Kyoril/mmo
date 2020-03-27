@@ -9,6 +9,9 @@
 
 namespace mmo
 {
+	const Color Color::White{ 1.0f, 1.0f, 1.0f, 1.0f };
+	const Color Color::Black{ 0.0f, 0.0f, 0.0f, 1.0f };
+
 	argb_t Color::CalculateARGB() const noexcept
 	{
 		return (

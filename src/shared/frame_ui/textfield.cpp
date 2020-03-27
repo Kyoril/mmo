@@ -14,13 +14,12 @@ namespace mmo
 		, m_maskCodePoint('*')
 		, m_maskTextDirty(true)
 		, m_cursor(-1)
+		, m_horzAlign(HorizontalAlignment::Left)
+		, m_vertAlign(VerticalAlignment::Center)
+		, m_textAreaOffset(Point(10.0f, 10.0f), Size())
 	{
 		// Add the masked property
-		Property& prop = AddProperty("Masked", "false");
-		m_propConnections += prop.Changed.connect(this, &TextField::OnMaskedPropChanged);
-
-		Property& textSectionProp = AddProperty("TextSection");
-		m_propConnections += textSectionProp.Changed.connect(this, &TextField::OnTextSectionPropChanged);
+		m_propConnections += AddProperty("Masked", "false").Changed.connect(this, &TextField::OnMaskedPropChanged);
 
 		// Text fields are focusable by default
 		m_focusable = true;
@@ -29,9 +28,6 @@ namespace mmo
 	void TextField::Copy(Frame & other)
 	{
 		Frame::Copy(other);
-
-		TextField& field = static_cast<TextField&>(other);
-		field.m_textSectionName = m_textSectionName;
 	}
 
 	void TextField::SetTextMasked(bool value)
@@ -91,21 +87,18 @@ namespace mmo
 			return -1;
 		}
 
-		// TODO: Obtain named area from style
-		const Rect textArea = Rect(0.0f);
-
 		// Check for out of bounds
-		if (position.x <= textArea.left)
+		if (position.x <= m_textAreaOffset.left)
 		{
 			return 0;
 		}
-		if (position.x >= GetAbsoluteFrameRect().GetWidth() - textArea.right)
+		if (position.x >= GetAbsoluteFrameRect().GetWidth() - m_textAreaOffset.right)
 		{
 			return m_text.length();
 		}
 
 		// Now iterate the string value
-		float x = textArea.left;
+		float x = m_textAreaOffset.left;
 
 		// Index
 		int32 index = 0;
@@ -134,6 +127,73 @@ namespace mmo
 		return index;
 	}
 
+	void TextField::SetHorzAlignment(HorizontalAlignment value) noexcept
+	{
+		m_horzAlign = value;
+		Invalidate();
+	}
+
+	void TextField::SetVertAlignment(VerticalAlignment value) noexcept
+	{
+		m_vertAlign = value;
+		Invalidate();
+	}
+
+	void TextField::SetEnabledTextColor(const Color & value) noexcept
+	{
+		m_enabledColor = value;
+		Invalidate();
+	}
+
+	void TextField::SetDisabledTextColor(const Color & value) noexcept
+	{
+		m_disabledColor = value;
+		Invalidate();
+	}
+
+	float TextField::GetCursorOffset() const
+	{
+		if (m_cursor <= 0)
+		{
+			return m_textAreaOffset.left;
+		}
+
+		// Check for font
+		auto font = GetFont();
+		if (!font)
+		{
+			return m_textAreaOffset.left;
+		}
+
+		float x = m_textAreaOffset.left;
+
+		int index = 0;
+
+		// Iterate
+		for (const auto& codepoint : m_text)
+		{
+			if (index == m_cursor)
+			{
+				return x;
+			}
+
+			const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
+			if (glyph != nullptr)
+			{
+				// Advance offset
+				const float advance = glyph->GetAdvance(1.0f);
+
+				// Advance
+				x += advance;
+			}
+
+			// Increase index
+			index++;
+		}
+
+		return x;
+	}
+
 	void TextField::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
 	{
 		// If the left mouse button is pressed...
@@ -144,7 +204,6 @@ namespace mmo
 			
 			// Try to find cursor position
 			m_cursor = GetCursorAt(localPosition);
-			DLOG("Index: " << m_cursor);
 
 			// Redraw to display the cursor
 			m_needsRedraw = true;
@@ -206,6 +265,16 @@ namespace mmo
 		m_needsRedraw = true;
 	}
 
+	void TextField::OnInputCaptured()
+	{
+		m_needsRedraw = true;
+	}
+
+	void TextField::OnInputReleased()
+	{
+		m_needsRedraw = true;
+	}
+
 	void TextField::OnTextChanged()
 	{
 		// Invalidate masked text
@@ -218,16 +287,5 @@ namespace mmo
 	void TextField::OnMaskedPropChanged(const Property& property)
 	{
 		SetTextMasked(property.GetBoolValue());
-	}
-
-	void TextField::OnTextSectionPropChanged(const Property & property)
-	{
-		// Apply text section name
-		m_textSectionName = property.GetValue();
-	}
-
-	ImagerySection * TextField::GetTextSection() const
-	{
-		return GetImagerySectionByName(m_textSectionName);
 	}
 }

@@ -19,7 +19,7 @@ namespace mmo
 
 		if (imagery)
 		{
-			imagery->Render();
+			imagery->Render(m_frame->GetAbsoluteFrameRect(), Color::White);
 		}
 	}
 }

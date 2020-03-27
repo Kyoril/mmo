@@ -40,7 +40,7 @@ namespace mmo
 
 	public:
 		// FrameComponent overrides
-		void Render() const override;
+		void Render(const Rect& area, const Color& color = Color::White) const override;
 
 	public:
 		/// Sets the tiling mode for this component.

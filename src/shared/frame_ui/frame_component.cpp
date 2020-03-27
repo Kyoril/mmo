@@ -18,12 +18,12 @@ namespace mmo
 		other.SetInset(m_areaInset);
 	}
 
-	Rect FrameComponent::GetArea() const
+	Rect FrameComponent::GetArea(const Rect& area) const
 	{
 		ASSERT(m_frame);
 
 		// Check anchor points
-		Rect r = m_frame->GetAbsoluteFrameRect();
+		Rect r = area;
 
 		// Apply inset
 		r.left += m_areaInset.left;

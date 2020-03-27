@@ -3,7 +3,7 @@
 #pragma once
 
 #include "rect.h"
-#include "anchor_point.h"
+#include "color.h"
 
 #include "base/non_copyable.h"
 
@@ -35,7 +35,7 @@ namespace mmo
 		/// Gets the size of this frame object in pixels.
 		virtual Size GetSize() const { return Size(); }
 		/// Gets the area rectangle of this object.
-		virtual Rect GetArea() const;
+		virtual Rect GetArea(const Rect& area) const;
 
 		inline const Rect& GetInset() const { return m_areaInset; }
 		/// Sets the area inset.
@@ -45,7 +45,7 @@ namespace mmo
 
 	public:
 		/// Renders the frame object.
-		virtual void Render() const = 0;
+		virtual void Render(const Rect& area, const Color& color = Color::White) const = 0;
 
 	protected:
 		/// The frame that owns this component.

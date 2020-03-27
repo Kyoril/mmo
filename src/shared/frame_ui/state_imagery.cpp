@@ -31,11 +31,11 @@ namespace mmo
 		m_layers.clear();
 	}
 
-	void StateImagery::Render() const
+	void StateImagery::Render(const Rect& area, const Color& color) const
 	{
 		for (const auto& layer : m_layers)
 		{
-			layer.Render();
+			layer.Render(area, color);
 		}
 	}
 }
