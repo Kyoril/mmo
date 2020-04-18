@@ -9,6 +9,7 @@ namespace mmo
 	{
 		IncomingPacket::IncomingPacket()
 			: m_id(std::numeric_limits<uint8>::max())
+			, m_size(0)
 		{
 		}
 
@@ -17,10 +18,10 @@ namespace mmo
 			io::Reader streamReader(source);
 
 			if (streamReader
-				>> io::read<uint16>(packet.m_id)
+				>> io::read<uint8>(packet.m_id)
 				>> io::read<uint32>(packet.m_size))
 			{
-				std::size_t size = source.getRest();
+				const std::size_t size = source.getRest();
 				if (size < packet.m_size)
 				{
 					return receive_state::Incomplete;
