@@ -46,10 +46,26 @@ namespace mmo
 
 		static Matrix4 MakeTranslation(const Vector3& v)
 		{
-			return Matrix4(1.0f, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
-				v.x, v.y, v.z, 1.0f);
+			return Matrix4( 1.0f, 0.0f, 0.0f, v.x,
+							0.0f, 1.0f, 0.0f, v.y,
+							0.0f, 0.0f, 1.0f, v.z,
+							0.0f, 0.0f, 0.0f, 1.0f);
+		}
+
+		static Matrix4 MakeScale(float scalar)
+		{
+			return Matrix4(scalar, 0.0f, 0.0f, 0.0f,
+							0.0f, scalar, 0.0f, 0.0f,
+							0.0f, 0.0f, scalar, 0.0f,
+							0.0f, 0.0f, 0.0f, 1.0f);
+		}
+
+		static Matrix4 MakeScale(const Vector3& v)
+		{
+			return Matrix4( v.x, 0.0f, 0.0f, 0.0f,
+							0.0f, v.y, 0.0f, 0.0f,
+							0.0f, 0.0f, v.z, 0.0f,
+							0.0f, 0.0f, 0.0f, 1.0f);
 		}
 
 		static Matrix4 MakeRotationX(float f)
@@ -112,6 +128,18 @@ namespace mmo
 				b.m14 * a.m41 + b.m24 * a.m42 + b.m34 * a.m43 + b.m44 * a.m44);
 		}
 
+		inline Vector3 operator * (const Vector3 &v) const
+		{
+			Vector3 r;
+
+			float fInvW = 1.0f / (m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3]);
+
+			r.x = (m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3]) * fInvW;
+			r.y = (m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3]) * fInvW;
+			r.z = (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]) * fInvW;
+
+			return r;
+		}
 
 		inline static Matrix4 MakeProjection(const float fFOV, const float fAspect, const float fNearPlane, const float fFarPlane)
 		{

@@ -3,10 +3,14 @@
 #pragma once
 
 #include "base/macros.h"
+#include "binary_io/reader.h"
+#include "binary_io/writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <cfloat>
+#include <ostream>
 
 
 namespace mmo
@@ -26,7 +30,7 @@ namespace mmo
 
 	public:
 
-		explicit inline  Vector3(float inX = 0.0f, float inY = 0.0f, float inZ = 0.0f)
+		inline explicit Vector3(float inX = 0.0f, float inY = 0.0f, float inZ = 0.0f)
 			: x(inX)
 			, y(inY)
 			, z(inZ)
@@ -65,11 +69,27 @@ namespace mmo
 
 			return *this;
 		}
+		inline Vector3& operator*=(const Vector3& v)
+		{
+			x *= v.x;
+			y *= v.y;
+			z *= v.z;
+
+			return *this;
+		}
 		inline Vector3& operator/=(float scalar)
 		{
 			x /= scalar;
 			y /= scalar;
 			z /= scalar;
+
+			return *this;
+		}
+		inline Vector3& operator/=(const Vector3& v)
+		{
+			x /= v.x;
+			y /= v.y;
+			z /= v.z;
 
 			return *this;
 		}
@@ -92,7 +112,19 @@ namespace mmo
 			v *= b;
 			return v;
 		}
+		inline Vector3 operator*(const Vector3& b) const
+		{
+			Vector3 v = *this;
+			v *= b;
+			return v;
+		}
 		inline Vector3 operator/(float b) const
+		{
+			Vector3 v = *this;
+			v /= b;
+			return v;
+		}
+		inline Vector3 operator/(const Vector3& b) const
 		{
 			Vector3 v = *this;
 			v /= b;
@@ -184,4 +216,51 @@ namespace mmo
 		}
 	};
 
+	inline std::ostream& operator<<(std::ostream& o, const Vector3& b)
+	{
+		return o
+			<< "(" << b.x << ", " << b.y << ", " << b.z << ")";
+	}
+
+	inline io::Writer& operator<<(io::Writer& w, const Vector3& b)
+	{
+		return w
+			<< io::write<float>(b.x)
+			<< io::write<float>(b.y)
+			<< io::write<float>(b.z);
+	}
+
+	inline io::Reader& operator>>(io::Reader& r, Vector3& b)
+	{
+		return r
+			>> io::read<float>(b.x)
+			>> io::read<float>(b.y)
+			>> io::read<float>(b.z);
+	}
+
+#ifdef MIN
+#	error "MIN is defined when math/vector3.h is included! This is most likely because NOMINMAX wasn't defined before including Windows.h!"
+#endif
+
+	inline Vector3 TakeMinimum(const Vector3& a, const Vector3& b) 
+	{
+		return Vector3(
+			std::min(a.x, b.x),
+			std::min(a.y, b.y),
+			std::min(a.z, b.z)
+		);
+	}
+
+#ifdef MAX
+#	error "MAX is defined when math/vector3.h is included! This is most likely because NOMINMAX wasn't defined before including Windows.h!"
+#endif
+
+	inline Vector3 TakeMaximum(const Vector3& a, const Vector3& b) 
+	{
+		return Vector3(
+			std::max(a.x, b.x),
+			std::max(a.y, b.y),
+			std::max(a.z, b.z)
+		);
+	}
 }

@@ -13,7 +13,8 @@ target_link_libraries(unit_tests
 	auth_protocol 
 	game_protocol
 	hpak
-	hpak_v1_0)
+	hpak_v1_0
+	math)
 	
 target_link_libraries(unit_tests ${OPENSSL_LIBRARIES})
 set_property(TARGET unit_tests PROPERTY FOLDER "tests")

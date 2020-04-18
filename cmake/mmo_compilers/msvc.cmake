@@ -24,3 +24,6 @@ add_definitions("-D_WIN32_WINNT=0x0A00 -DWIN32_LEAN_AND_MEAN")
 
 # Disable certain warnings, enable multi-cpu builds and allow big precompiled headers
 add_definitions("/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /wd4267 /wd4244 /wd4800 /MP /D_WINSOCK_DEPRECATED_NO_WARNINGS /bigobj /Gy")
+
+# Disable MIN and MAX macros for windows
+add_definitions("-DNOMINMAX")
