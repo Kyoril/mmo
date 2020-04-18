@@ -83,18 +83,18 @@ namespace mmo
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
+		scoped_connection genericLogConnection;
 		if (config.isLogActive)
 		{
 			auto logOptions = g_DefaultFileLogOptions;
 			logOptions.alwaysFlush = !config.isLogFileBuffering;
 
 			// Setup the log file connection after opening the log file
-			scoped_connection genericLogConnection;
 			m_logFile.open(generateLogFileName(config.logFileName).c_str(), std::ios::app);
 			if (m_logFile)
 			{
 				genericLogConnection = g_DefaultLog.signal().connect(
-					[this, &logOptions](const LogEntry & entry)
+					[this, logOptions](const LogEntry & entry)
 				{
 					printLogEntry(m_logFile, entry, logOptions);
 				});
