@@ -176,9 +176,7 @@ namespace mmo
 		ClearPacketHandler(auth::client_login_packet::ReconnectChallenge);
 
 		// Read the packet data
-		uint16 contentSize = 0;
 		if (!(packet
-			>> io::read<uint16>(contentSize)
 			>> io::read<uint8>(m_version1)
 			>> io::read<uint8>(m_version2)
 			>> io::read<uint8>(m_version3)
@@ -187,12 +185,6 @@ namespace mmo
 			>> m_system
 			>> m_locale
 			>> io::read_container<uint8>(m_accountName)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// Verify packet size
-		if (contentSize != packet.getSource()->size() - 2)
 		{
 			return PacketParseResult::Disconnect;
 		}

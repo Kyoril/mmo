@@ -10,7 +10,6 @@
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_mgr.h"
-#include "frame_ui/button.h"
 #include "base/constants.h"
 
 #include "asio.hpp"
@@ -33,7 +32,7 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
-		// Make the logo frame element
+		// Make the top frame element
 		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);

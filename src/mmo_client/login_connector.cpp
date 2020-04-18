@@ -43,11 +43,6 @@ namespace mmo
 				// Initialize packet using the op code
 				packet.Start(auth::client_login_packet::LogonChallenge);
 
-				// Placeholder for packet size value
-				const size_t contentSizePos = packet.sink().position();
-				packet
-					<< io::write<uint16>(0);
-
 				// Write the actual packet content
 				const size_t contentStart = packet.sink().position();
 				packet
@@ -59,10 +54,6 @@ namespace mmo
 					<< io::write<uint32>(0x0057696e)	// System: Win
 					<< io::write<uint32>(0x64654445)	// Locale: deDE
 					<< io::write_dynamic_range<uint8>(m_accountName);
-
-				// Calculate the actual packet size and write it at the beginning
-				const size_t contentEnd = packet.sink().position();
-				packet.writePOD(contentSizePos, static_cast<uint16>(contentEnd - contentStart));
 
 				// Finish packet and send it
 				packet.Finish();

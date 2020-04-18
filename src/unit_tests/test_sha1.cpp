@@ -33,7 +33,7 @@ namespace
 	}
 }
 
-// This test ensures that packet header encryption is working as expected.
+// This test ensures that sha1 hash generation is working as expected.
 TEST_CASE("Sha1", "[sha1]")
 {
 	static const SHA1Hash EmptyDigest = { {

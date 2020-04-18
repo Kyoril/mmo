@@ -18,6 +18,10 @@ namespace mmo
 
 			void Start(uint8 id);
 			void Finish();
+
+		private:
+			size_t m_sizePos;
+			size_t m_bodyPos;
 		};
 	}
 }

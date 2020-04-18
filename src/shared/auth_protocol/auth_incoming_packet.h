@@ -17,13 +17,18 @@ namespace mmo
 		public:
 
 			IncomingPacket();
-			uint8 GetId() const;
+			
+		public:
+			inline uint8 GetId() const { return m_id; }
+			inline uint32 GetSize() const { return m_size; }
+
 
 			static ReceiveState Start(IncomingPacket &packet, io::MemorySource &source);
 
 		private:
 
 			uint8 m_id;
+			uint32 m_size;
 			io::MemorySource m_body;
 		};
 	}

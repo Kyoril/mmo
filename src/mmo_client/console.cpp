@@ -91,7 +91,7 @@ namespace mmo
 		{
 			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
 			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar,		nullptr },
-			{"gxVSync",			"Whether the application will run with vsync enabled.",	"0",		&s_gxVSyncCVar,			nullptr },
+			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar,			nullptr },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.

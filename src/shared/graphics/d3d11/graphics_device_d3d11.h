@@ -136,5 +136,7 @@ namespace mmo
 		uint32 m_indexCount = 0;
 
 		FLOAT m_clearColorFloat[4];
+
+		bool m_vsync = true;
 	};
 }

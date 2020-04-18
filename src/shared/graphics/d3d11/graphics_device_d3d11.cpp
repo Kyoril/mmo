@@ -509,8 +509,8 @@ namespace mmo
 		BOOL IsFullscreenState;
 		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&IsFullscreenState, nullptr)));
 
-		const UINT presentFlags = m_tearingSupport && !IsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
-		m_swapChain->Present(0, presentFlags);
+		const UINT presentFlags = m_tearingSupport && !m_vsync && !IsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
+		m_swapChain->Present(m_vsync ? 1 : 0, presentFlags);
 
 		if (m_resizePending)
 		{
