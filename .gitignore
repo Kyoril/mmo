@@ -6,4 +6,5 @@ lib/
 win/
 build/
 
-
+# Ignore fbx files
+deps/fbx/

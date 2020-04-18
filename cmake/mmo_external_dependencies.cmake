@@ -60,3 +60,12 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/luabind_noboost")
 if (MMO_BUILD_TESTS)
 	include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/catch/")
 endif()
+
+
+# ===============================================================================
+# FBX SDK
+# ===============================================================================
+
+if (MMO_BUILD_TOOLS)
+	find_package(FBX)
+endif()
