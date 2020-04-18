@@ -3,6 +3,7 @@
 #pragma once
 
 #include <iterator>
+#include <sstream>
 #include <cassert>
 
 namespace sff
@@ -77,7 +78,13 @@ namespace sff
 			template <class TValue>
 			TValue toInteger() const
 			{
-				return static_cast<TValue>(std::atoll(str().c_str()));
+				TValue var;
+
+				std::istringstream iss;
+				iss.str(str());
+				iss >> var;
+
+				return var;
 			}
 		};
 	}

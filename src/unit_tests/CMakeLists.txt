@@ -11,7 +11,9 @@ target_link_libraries(unit_tests
 	sql_wrapper 
 	mysql_wrapper 
 	auth_protocol 
-	game_protocol)
+	game_protocol
+	hpak
+	hpak_v1_0)
 	
 target_link_libraries(unit_tests ${OPENSSL_LIBRARIES})
 set_property(TARGET unit_tests PROPERTY FOLDER "tests")
