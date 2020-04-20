@@ -8,7 +8,7 @@
 #include "base/non_copyable.h"
 
 #include <string>
-
+#include <memory>
 
 namespace mmo
 {
