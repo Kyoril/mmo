@@ -14,6 +14,20 @@
 
 namespace mmo
 {
+	/// Enumerates supported graphics api's.
+	enum class GraphicsApi : uint8
+	{
+		/// Default value for unknown / unsupported graphics api's. This value is considered an error.
+		Unknown,
+
+		/// Direct3D 11. Only on windows 7 and newer.
+		D3D11,
+		/// OpenGL. Should work on all platforms.
+		OpenGL,
+
+		// TODO: Add more graphics api enum values here
+	};
+
 	/// Enumerates possible blend modes.
 	enum class BlendMode
 	{

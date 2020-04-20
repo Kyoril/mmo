@@ -5,7 +5,6 @@
 // client-supported platforms.
 
 #ifdef _WIN32
-#	define NOMINMAX
 #	define WIN32_LEAN_AND_MEAN
 #	include <Windows.h>
 #else
@@ -290,8 +289,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	int argc = 0;
 	PCHAR* argv = CommandLineToArgvA(GetCommandLine(), &argc);
 
-	// Finally, run the common main function on all platforms
-	return mmo::CommonMain(argc, argv);
+	// If no debugger is attached, encapsule the common main function in a try/catch 
+	// block to catch exceptions and display an error message to the user.
+	if (!::IsDebuggerPresent())
+	{
+		try
+		{
+			// Run the common main function
+			return mmo::CommonMain(argc, argv);
+		}
+		catch (const std::exception& e)
+		{
+			// Display the error message
+			MessageBoxA(nullptr, e.what(), "Error", MB_OK | MB_ICONERROR | MB_TASKMODAL);
+			return 1;
+		}
+	}
+	else
+	{
+		// Debugger is present, so just run common main function uncatched, as the debugger
+		// should handle uncaught exceptions
+		return mmo::CommonMain(argc, argv);
+	}
 }
 
 #else

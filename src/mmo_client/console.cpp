@@ -73,6 +73,7 @@ namespace mmo
 		static ConsoleVar* s_gxResolutionCVar = nullptr;
 		static ConsoleVar* s_gxWindowedCVar = nullptr;
 		static ConsoleVar* s_gxVSyncCVar = nullptr;
+		static ConsoleVar* s_gxApiCVar = nullptr;
 
 
 		/// Helper struct for automatic gx cvar table.
@@ -89,6 +90,7 @@ namespace mmo
 		/// serialized when the games config file is serialized.
 		static const std::vector<GxCVarHelper> s_gxCVars = 
 		{
+			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar,			nullptr },
 			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
 			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar,		nullptr },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar,			nullptr },
@@ -165,7 +167,6 @@ namespace mmo
 	}
 
 
-
 	// Console implementation
 
 	void Console::Initialize(const std::filesystem::path& configFile)
@@ -191,8 +192,46 @@ namespace mmo
 		s_consoleVisible = false;
 		s_consoleWindowHeight = 210;
 
+
+		// Set default graphics api
+		GraphicsApi defaultApi =
+#if PLATFORM_WINDOWS
+			GraphicsApi::D3D11;
+#else
+			GraphicsApi::OpenGL;
+#endif
+
+		// Check for console var values
+		GraphicsApi api = GraphicsApi::Unknown;
+		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "d3d11") == 0)
+		{
+			api = GraphicsApi::D3D11;
+		}
+		else if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "gl") == 0)
+		{
+			api = GraphicsApi::OpenGL;
+		}
+
+		// Use platform default api if unknown api was provided
+		if (api == GraphicsApi::Unknown) api = defaultApi;
+
 		// Initialize the graphics api
-		auto& device = GraphicsDevice::CreateD3D11();
+		switch (api)
+		{
+#if PLATFORM_WINDOWS
+		case GraphicsApi::D3D11:
+			GraphicsDevice::CreateD3D11();
+			break;
+#endif
+		case GraphicsApi::OpenGL:
+			// TODO: Create OpenGL graphics device here
+		default:
+			throw std::runtime_error("Unsuppoted graphics API value used!");
+			break;
+		}
+
+		// Get the current graphics device object
+		auto& device = GraphicsDevice::Get();
 		device.SetWindowTitle("MMORPG");
 
 		// Query the viewport size
