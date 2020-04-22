@@ -18,6 +18,7 @@
 #include "base/typedefs.h"
 #include "base/utilities.h"
 #include "base/signal.h"
+#include "log/default_log_levels.h"
 
 #include <memory>
 #include <string>
@@ -25,6 +26,7 @@
 #include <map>
 
 #include "lua.hpp"
+#include "luabind/object.hpp"
 
 
 namespace mmo
@@ -97,20 +99,28 @@ namespace mmo
 		bool Lua_IsVisible() const;
 
 	public:
-		/// Registers a new frame event by name. If the event already exists, it's instance
-		/// is returned instead.
-		/// @param name Name of the event.
-		/// @returns Reference to the FrameEvent object.
-		FrameEvent& RegisterEvent(std::string name);
-		/// Tries to find an event by name.
-		/// @param name The name of the event that is searched.
-		/// @return nullptr if the event doesn't exist, otherwise a pointer on the FrameEvent object.
-		FrameEvent* FindEvent(const std::string& name);
-		/// Unregisters an event from this frame by name.
+		/// Register a lua function as an event handler.
+		void RegisterEvent(const std::string& name, const luabind::object& fn);
+		/// Removes a registered event function for a given event name.
 		void UnregisterEvent(const std::string& name);
-		/// Triggers a frame event by name.
-		/// @returns false if the event doesn't exist.
-		bool TriggerEvent(const std::string& name);
+		/// 
+		template<typename ...Args>
+		bool TriggerEvent(const std::string& name, Args&&... args)
+		{
+			const auto it = m_eventFunctionsByName.find(name);
+			if (it == m_eventFunctionsByName.end())
+				return false;
+
+			try
+			{
+				it->second(args...);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Lua error: " << e.what());
+			}
+			return true;
+		}
 
 	public:
 		/// Adds a new state imagery.
@@ -314,8 +324,8 @@ namespace mmo
 		std::map<std::string, StateImagery> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
 		std::map<std::string, ImagerySection> m_sectionsByName;
-		/// Contains all registered events by name.
-		std::map<std::string, FrameEvent, StrCaseIComp> m_eventsByName;
+		/// Event function callbacks by name.
+		std::map<std::string, luabind::object, StrCaseIComp> m_eventFunctionsByName;
 		/// 
 		std::map<std::string, Property, StrCaseIComp> m_propertiesByName;
 		/// Whether this frame can receive the input focus on click.

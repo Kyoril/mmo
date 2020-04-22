@@ -2,6 +2,8 @@
 
 #include "button.h"
 
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -11,7 +13,7 @@ namespace mmo
 		: Frame(type, name)
 	{
 		// Register events
-		RegisterEvent(ButtonClickedEvent);
+		//RegisterEvent(ButtonClickedEvent);
 
 		// Buttons are focusable by default
 		m_focusable = true;
@@ -24,11 +26,17 @@ namespace mmo
 			const Rect frame = GetAbsoluteFrameRect();
 			if (frame.IsPointInRect(position))
 			{
-				// Try to execute lua script event first
-				const FrameEvent* clickedEvent = FindEvent(ButtonClickedEvent);
-				if (clickedEvent)
+				// Trigger lua clicked event handler if there is any
+				if (m_clickedHandler.is_valid())
 				{
-					(*clickedEvent)();
+					try
+					{
+						m_clickedHandler();
+					}
+					catch (const luabind::error& e)
+					{
+						ELOG("Lua error: " << e.what());
+					}
 				}
 
 				// Afterwards, signal the event
@@ -38,5 +46,10 @@ namespace mmo
 
 		// Call super class method
 		Frame::OnMouseUp(button, buttons, position);
+	}
+
+	void Button::SetLuaClickedHandler(const luabind::object & fn)
+	{
+		m_clickedHandler = fn;
 	}
 }

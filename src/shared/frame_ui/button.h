@@ -21,5 +21,11 @@ namespace mmo
 
 	public:
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
+
+	public:
+		void SetLuaClickedHandler(const luabind::object& fn);
+
+	private:
+		luabind::object m_clickedHandler;
 	};
 }

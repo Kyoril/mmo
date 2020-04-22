@@ -102,11 +102,11 @@ namespace mmo
 		if (m_hasEventsTag)
 		{
 			// We are in an Events tag - try to find the frame event by name.
-			m_frameEvent = m_frames.top()->FindEvent(element);
+			/*m_frameEvent = m_frames.top()->FindEvent(element);
 			if (m_frameEvent != nullptr)
 			{
 				return;
-			}
+			}*/
 
 			WLOG("Event '" << element << "' is not supported!");
 		}

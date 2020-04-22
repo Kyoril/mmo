@@ -85,7 +85,7 @@ namespace mmo
 		if (result != auth::auth_result::Success)
 		{
 			// TODO: In case there was an error, update the UI to display an error message
-			FrameManager::Get().TriggerLuaEvent("AUTH_FAILED");
+			FrameManager::Get().TriggerLuaEvent("AUTH_FAILED", static_cast<int32>(result));
 		}
 		else
 		{
@@ -98,6 +98,9 @@ namespace mmo
 		// TODO: We want to show a realm list to the user so he can choose a
 		// realm to connect to. But for now, we will just connect with the first realm
 		// available (if there is any).
+
+		// Trigger the lua event
+		s_frameMgr.TriggerLuaEvent("REALM_LIST");
 
 		// Check if there are realms available
 		const auto& realms = m_loginConnector.GetRealms();

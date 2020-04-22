@@ -97,11 +97,32 @@ namespace mmo
 		/// Executes lua code.
 		void ExecuteLua(const std::string& code);
 		/// Triggers a lua event.
-		void TriggerLuaEvent(const std::string& eventName);
+		template<typename ...Args>
+		void TriggerLuaEvent(const std::string & eventName, Args&&... args)
+		{
+			auto eventIt = m_eventFrames.find(eventName);
+			if (eventIt == m_eventFrames.end())
+				return;
+
+			// Iterate through every frame
+			for (const auto& weakFrame : eventIt->second)
+			{
+				if (auto strongFrame = weakFrame.lock())
+				{
+					// Push this variable
+					luabind::object o = luabind::object(m_luaState, strongFrame.get());
+
+					// Raise event script
+					strongFrame->TriggerEvent(eventName, o, args...);
+				}
+			}
+		}
+
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
 
 		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
+		void FrameUnregisterEvent(FramePtr frame, const std::string& eventName);
 
 	public:
 		/// Registers a new factory for a certain frame type.

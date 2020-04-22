@@ -311,10 +311,13 @@ namespace mmo
 				.def("Hide", &Frame::Lua_Hide)
 				.def("Enable", &Frame::Lua_Enable)
 				.def("Disable", &Frame::Lua_Disable)
-				.def("RegisterEvent", &Frame::Lua_RegisterEvent)
+				.def("RegisterEvent", &Frame::RegisterEvent)
 				.def("GetName", &Frame::Lua_GetName)
 				.def("IsVisible", &Frame::Lua_IsVisible),
-				
+			
+			luabind::class_<Button, Frame>("Button")
+				.def("SetClickedHandler", &Button::SetLuaClickedHandler),
+
 			luabind::def("DebugLog", &FrameDebugLog)
 		];
 	
@@ -405,7 +408,16 @@ namespace mmo
 
 			// Expose global variable
 			auto globals = luabind::globals(m_luaState);
-			globals[name.c_str()] = newFrame.get();
+
+			// HACK
+			if (type == "Button")
+			{
+				globals[name.c_str()] = std::static_pointer_cast<Button>(newFrame).get();
+			}
+			else
+			{
+				globals[name.c_str()] = newFrame.get();
+			}
 		}
 
 		return newFrame;
@@ -582,38 +594,6 @@ namespace mmo
 		}
 	}
 
-	void FrameManager::TriggerLuaEvent(const std::string & eventName)
-	{
-		auto eventIt = m_eventFrames.find(eventName);
-		if (eventIt == m_eventFrames.end())
-			return;
-
-		// Push event variable
-		lua_pushstring(m_luaState, eventName.c_str());
-		lua_setglobal(m_luaState, "event");
-
-		// Iterate through every frame
-		for (const auto& weakFrame : eventIt->second)
-		{
-			if (auto strongFrame = weakFrame.lock())
-			{
-				// Push this variable
-				luabind::object o = luabind::object(m_luaState, strongFrame.get());
-				o.push(m_luaState);
-				lua_setglobal(m_luaState, "this");
-
-				// Raise event script
-				strongFrame->TriggerEvent("OnEvent");
-
-				// Pop this variable
-				lua_pop(m_luaState, 1);
-			}
-		}
-
-		// Pop event variable
-		lua_pop(m_luaState, 1);
-	}
-
 	void FrameManager::SetCaptureWindow(FramePtr capture)
 	{
 		// Notify the previous input capture frame that it no longer captures the input
@@ -636,6 +616,31 @@ namespace mmo
 	void FrameManager::FrameRegisterEvent(FramePtr frame, const std::string & eventName)
 	{
 		m_eventFrames[eventName].emplace_back(std::move(frame));
+	}
+
+	void FrameManager::FrameUnregisterEvent(FramePtr frame, const std::string & eventName)
+	{
+		auto it = m_eventFrames.find(eventName);
+		if (it != m_eventFrames.end())
+		{
+			for (auto frameIt = it->second.begin(); frameIt != it->second.end();)
+			{
+				auto strongFrame = frameIt->lock();
+				if (!strongFrame)
+				{
+					frameIt = it->second.erase(frameIt);
+					continue;
+				}
+
+				if (strongFrame.get() == frame.get())
+				{
+					frameIt = it->second.erase(frameIt);
+					return;
+				}
+				
+				frameIt++;
+			}
+		}
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

@@ -33,9 +33,6 @@ namespace mmo
 		m_propConnections += AddProperty("Enabled").Changed.connect(this, &Frame::OnEnabledPropertyChanged);
 		m_propConnections += AddProperty("Visible").Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
-
-		// Add events
-		RegisterEvent("OnEvent");
 	}
 
 	void Frame::Copy(Frame & other)
@@ -50,12 +47,6 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
-
-		// Copy registered event handlers
-		for (const auto& pair : m_eventsByName)
-		{
-			other.m_eventsByName[pair.first] = pair.second;
-		}
 
 		// Add section reference
 		for (const auto& pair : m_sectionsByName)
@@ -194,61 +185,27 @@ namespace mmo
 		SetEnabled(false);
 	}
 
-	void Frame::Lua_RegisterEvent(const char* eventName)
-	{
-		ASSERT(eventName);
-
-		FrameManager::Get().FrameRegisterEvent(shared_from_this(), eventName);
-	}
-
 	bool Frame::Lua_IsVisible() const
 	{
 		return IsVisible(false);
 	}
 
-	FrameEvent & Frame::RegisterEvent(std::string name)
+	void Frame::RegisterEvent(const std::string & name, const luabind::object & fn)
 	{
-		auto* evt = FindEvent(name);
-		if (evt)
-		{
-			return *evt;
-		}
+		m_eventFunctionsByName[name] = fn;
 
-		const auto result = m_eventsByName.insert(std::make_pair(name, FrameEvent()));
-		return result.first->second;
-	}
-
-	FrameEvent * Frame::FindEvent(const std::string & name)
-	{
-		const auto it = m_eventsByName.find(name);
-		if (it != m_eventsByName.end())
-		{
-			return &it->second;
-		}
-
-		return nullptr;
+		FrameManager::Get().FrameRegisterEvent(shared_from_this(), name);
 	}
 
 	void Frame::UnregisterEvent(const std::string & name)
 	{
-		const auto it = m_eventsByName.find(name);
-		if (it != m_eventsByName.end())
+		const auto it = m_eventFunctionsByName.find(name);
+		if (it != m_eventFunctionsByName.end())
 		{
-			m_eventsByName.erase(it);
-		}
-	}
-
-	bool Frame::TriggerEvent(const std::string & name)
-	{
-		// Find the named event and try to execute it's assigned lua script code.
-		const FrameEvent* evt = FindEvent(name);
-		if (evt)
-		{
-			(*evt)();
-			return true;
+			m_eventFunctionsByName.erase(it);
 		}
 
-		return false;
+		FrameManager::Get().FrameUnregisterEvent(shared_from_this(), name);
 	}
 
 	void Frame::AddImagerySection(ImagerySection& section)
