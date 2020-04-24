@@ -5,7 +5,6 @@
 #include "console_var.h"
 #include "event_loop.h"
 #include "screen.h"
-#include "game_script.h"
 
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
@@ -62,9 +61,6 @@ namespace mmo
 	static std::mutex s_consoleLogMutex;
 	/// A connection that binds a function which displays the content of the LOG macros in the console.
 	static scoped_connection s_consoleLogConn;
-	static scoped_connection s_frameMgrUpdateCon;
-	/// Game script instance.
-	static std::unique_ptr<GameScript> s_gameScript;
 
 
 	// Graphics CVar stuff
@@ -263,15 +259,6 @@ namespace mmo
 		// Initialize the screen system
 		Screen::Initialize();
 
-		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>();
-
-		// Initialize the frame manager
-		FrameManager::Initialize(&s_gameScript->GetLuaState());
-
-		// Connect idle event
-		s_frameMgrUpdateCon = EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp) { FrameManager::Get().Update(deltaSeconds); });
-
 		// Assign console log signal
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ s_consoleLogMutex };
@@ -316,15 +303,6 @@ namespace mmo
 
 		// Remove the console layer
 		Screen::RemoveLayer(s_consoleLayer);
-
-		// Reset game script instance
-		s_gameScript.release();
-
-		// Disconnect idle event for frame manager
-		s_frameMgrUpdateCon.disconnect();
-
-		// Destroy the frame manager
-		FrameManager::Destroy();
 
 		// Destroy the screen system
 		Screen::Destroy();

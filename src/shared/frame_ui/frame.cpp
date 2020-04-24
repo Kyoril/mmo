@@ -149,42 +149,6 @@ namespace mmo
 		return false;
 	}
 
-	void Frame::Lua_SetText(const char* text)
-	{
-		ASSERT(text);
-		SetText(text);
-	}
-
-	const char* Frame::Lua_GetText()
-	{
-		return GetText().c_str();
-	}
-
-	const char * Frame::Lua_GetName()
-	{
-		return m_name.c_str();
-	}
-
-	void Frame::Lua_Show()
-	{
-		SetVisible(true);
-	}
-
-	void Frame::Lua_Hide()
-	{
-		SetVisible(false);
-	}
-
-	void Frame::Lua_Enable()
-	{
-		SetEnabled(true);
-	}
-
-	void Frame::Lua_Disable()
-	{
-		SetEnabled(false);
-	}
-
 	bool Frame::Lua_IsVisible() const
 	{
 		return IsVisible(false);
@@ -568,6 +532,16 @@ namespace mmo
 
 		// Register ourself as parent frame
 		frame->m_parent = this;
+	}
+
+	void Frame::RemoveAllChildren()
+	{
+		// Clear children vector
+		m_children.clear();
+
+		// Invalidate
+		m_needsLayout = true;
+		m_needsRedraw = true;
 	}
 
 	Rect Frame::GetRelativeFrameRect()

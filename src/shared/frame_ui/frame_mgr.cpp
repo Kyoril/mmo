@@ -284,11 +284,6 @@ namespace mmo
 		}
 	}
 
-	static void FrameDebugLog(const std::string& msg)
-	{
-		DLOG(msg);
-	}
-
 	FrameManager& FrameManager::Get()
 	{
 		static FrameManager s_frameMgr;
@@ -305,20 +300,19 @@ namespace mmo
 		luabind::module(luaState)
 		[
 			luabind::class_<Frame>("Frame")
-				.def("SetText", &Frame::Lua_SetText)
-				.def("GetText", &Frame::Lua_GetText)
-				.def("Show", &Frame::Lua_Show)
-				.def("Hide", &Frame::Lua_Hide)
-				.def("Enable", &Frame::Lua_Enable)
-				.def("Disable", &Frame::Lua_Disable)
+				.def("SetText", &Frame::SetText)
+				.def("GetText", &Frame::GetText)
+				.def("Show", &Frame::Show)
+				.def("Hide", &Frame::Hide)
+				.def("Enable", &Frame::Enable)
+				.def("Disable", &Frame::Disable)
 				.def("RegisterEvent", &Frame::RegisterEvent)
-				.def("GetName", &Frame::Lua_GetName)
-				.def("IsVisible", &Frame::Lua_IsVisible),
+				.def("GetName", &Frame::GetName)
+				.def("IsVisible", &Frame::Lua_IsVisible)
+				.def("RemoveAllChildren", &Frame::RemoveAllChildren),
 			
 			luabind::class_<Button, Frame>("Button")
-				.def("SetClickedHandler", &Button::SetLuaClickedHandler),
-
-			luabind::def("DebugLog", &FrameDebugLog)
+				.def("SetClickedHandler", &Button::SetLuaClickedHandler)
 		];
 	
 		// Register default frame renderer factory methods

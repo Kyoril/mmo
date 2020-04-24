@@ -22,12 +22,15 @@ namespace mmo
 		}
 	};
 
+	class LoginConnector;
+
 	/// This class manages everything related to lua scripts for the game client.
 	class GameScript final
 		: public NonCopyable
 	{
 	public:
-		GameScript();
+		GameScript(
+			LoginConnector& loginConnector);
 
 	public:
 		/// Gets the current lua state
@@ -40,6 +43,8 @@ namespace mmo
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
+	private:
+		LoginConnector& m_loginConnector;
 		/// The current lua state.
 		LuaStatePtr m_luaState;
 		/// Whether the global functions have been registered.

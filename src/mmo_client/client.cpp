@@ -25,6 +25,7 @@
 #include "game_state_mgr.h"
 #include "login_state.h"
 #include "screen.h"
+#include "game_script.h"
 
 #include <fstream>
 #include <thread>
@@ -128,7 +129,8 @@ namespace mmo
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
 	static scoped_connection_container s_frameUiConnections;
-
+	/// Game script instance.
+	static std::unique_ptr<GameScript> s_gameScript;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -170,6 +172,18 @@ namespace mmo
 
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
+
+		// Initialize the game script instance
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector);
+
+		// Initialize the frame manager
+		FrameManager::Initialize(&s_gameScript->GetLuaState());
+
+		// Connect idle event
+		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp) 
+		{ 
+			FrameManager::Get().Update(deltaSeconds); 
+		});
 
 		// Watch for mouse events
 		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y) {
@@ -226,6 +240,12 @@ namespace mmo
 
 		// Disconnect FrameUI connections
 		s_frameUiConnections.disconnect();
+
+		// Reset game script instance
+		s_gameScript.release();
+
+		// Destroy the frame manager
+		FrameManager::Destroy();
 
 		// Destroy the network thread
 		NetDestroy();

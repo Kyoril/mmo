@@ -101,32 +101,10 @@ namespace mmo
 
 		// Trigger the lua event
 		s_frameMgr.TriggerLuaEvent("REALM_LIST");
-
-		// Check if there are realms available
-		const auto& realms = m_loginConnector.GetRealms();
-		if (realms.empty())
-		{
-			DLOG("No realms available");
-			return;
-		}
-
-		// Get the first realm
-		const auto& realm = realms[0];
-		ILOG("Connecting to realm '" << realm.name << "'...");
-
-		// Connect to the first realm available
-		m_realmConnector.Connect(
-			realm.address, 
-			realm.port, 
-			m_loginConnector.GetAccountName(),
-			realm.name, 
-			m_loginConnector.GetSessionKey());
 	}
 
 	void LoginState::OnRealmAuthenticated()
 	{
 		ILOG("[Realm] Success!");
-
-
 	}
 }

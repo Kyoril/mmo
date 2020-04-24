@@ -88,14 +88,6 @@ namespace mmo
 
 	public:
 		// Lua wrappers
-		void Lua_SetText(const char* text);
-		const char* Lua_GetText();
-		const char* Lua_GetName();
-		void Lua_Show();
-		void Lua_Hide();
-		void Lua_Enable();
-		void Lua_Disable();
-		void Lua_RegisterEvent(const char* eventName);
 		bool Lua_IsVisible() const;
 
 	public:
@@ -242,6 +234,8 @@ namespace mmo
 		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
 		/// Adds a frame to the list of child frames.
 		virtual void AddChild(Pointer frame);
+		/// Removes all child frames.
+		void RemoveAllChildren();
 		/// Gets the geometry buffer that is used to render this frame.
 		GeometryBuffer& GetGeometryBuffer();
 		/// 
