@@ -12,6 +12,7 @@
 #include "frame_ui/font_mgr.h"
 #include "frame_ui/geometry_buffer.h"
 #include "base/assign_on_exit.h"
+#include "assets/asset_registry.h"
 
 #include <mutex>
 #include <algorithm>
@@ -178,6 +179,9 @@ namespace mmo
 		// Initialize the cvar manager
 		ConsoleVarMgr::Initialize();
 
+		// Register locale cvar
+		auto localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
+
 		// Register graphics variables
 		RegisterGraphicsCVars();
 
@@ -188,6 +192,15 @@ namespace mmo
 		s_consoleVisible = false;
 		s_consoleWindowHeight = 210;
 
+		// Load the locale archive
+		ILOG("Locale: " << localeCVar->GetStringValue());
+		std::string localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
+#ifndef _DEBUG
+		localeArchive += ".hpak";
+#endif
+
+		// Initialize the asset registry
+		AssetRegistry::Initialize(std::filesystem::current_path() / "Data", { "Interface.hpak", "Fonts.hpak", localeArchive });
 
 		// Set default graphics api
 		GraphicsApi defaultApi =

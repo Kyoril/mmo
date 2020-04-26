@@ -40,7 +40,6 @@ namespace mmo
 		// In debug builds, we skip loading hpak archives as debug builds are not 
 		// for distribution, which is the only purpose of hpak files. Also, even in
 		// release builds, we allow loading files from the file system.
-#ifndef _DEBUG
 		// Iterate through files
 		for (const std::string& file : archives)
 		{
@@ -49,11 +48,18 @@ namespace mmo
 			if (std::filesystem::exists(archivePath))
 			{
 				// Add archive to the list of archives
-				auto archive = std::make_shared<HPAKArchive>(archivePath.string());
-				s_archives.emplace_front(std::move(archive));
+				if (archivePath.extension() == "hpak")
+				{
+#ifndef _DEBUG
+					s_archives.emplace_front(std::make_shared<HPAKArchive>(archivePath.string()));
+#endif
+				}
+				else
+				{
+					s_archives.emplace_front(std::make_shared<FileSystemArchive>(archivePath.string()));
+				}
 			}
 		}
-#endif
 
 		// Finally, add the file system archive
 		auto archive = std::make_shared<FileSystemArchive>(s_basePath.string());

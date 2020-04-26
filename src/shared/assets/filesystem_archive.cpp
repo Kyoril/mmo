@@ -65,7 +65,7 @@ namespace mmo
 			}
 			else
 			{
-				files.push_back(relPath + "/" + entry);
+				files.push_back((std::filesystem::path(relPath) / entry).generic_string());
 			}
 		}
 	}
