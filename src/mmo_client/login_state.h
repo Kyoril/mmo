@@ -42,7 +42,9 @@ namespace mmo
 		/// 
 		void OnRealmListUpdated();
 
-		void OnRealmAuthenticated();
+		void OnRealmAuthenticationResult(uint8 result);
+		/// 
+		void OnCharListUpdated();
 
 	private:
 

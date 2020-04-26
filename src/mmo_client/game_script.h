@@ -23,6 +23,7 @@ namespace mmo
 	};
 
 	class LoginConnector;
+	class RealmConnector;
 
 	/// This class manages everything related to lua scripts for the game client.
 	class GameScript final
@@ -30,7 +31,8 @@ namespace mmo
 	{
 	public:
 		GameScript(
-			LoginConnector& loginConnector);
+			LoginConnector& loginConnector,
+			RealmConnector& realmConnector);
 
 	public:
 		/// Gets the current lua state
@@ -45,6 +47,7 @@ namespace mmo
 
 	private:
 		LoginConnector& m_loginConnector;
+		RealmConnector& m_realmConnector;
 		/// The current lua state.
 		LuaStatePtr m_luaState;
 		/// Whether the global functions have been registered.

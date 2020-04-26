@@ -3,6 +3,7 @@
 #include "game_script.h"
 #include "console.h"
 #include "login_connector.h"
+#include "realm_connector.h"
 
 #include <string>
 #include <functional>
@@ -47,8 +48,9 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector)
 		: m_loginConnector(loginConnector)
+		, m_realmConnector(realmConnector)
 		, m_globalFunctionsRegistered(false)
 	{
 		// Initialize the lua state instance
@@ -76,12 +78,16 @@ namespace mmo
 			luabind::class_<LoginConnector>("LoginConnector")
 				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator()),
 
+			luabind::class_<RealmConnector>("RealmConnector")
+				.def("ConnectToRealm", &RealmConnector::ConnectToRealm),
+
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("print", &Script_Print)
 		];
 
 		// Set login connector instance
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
+		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

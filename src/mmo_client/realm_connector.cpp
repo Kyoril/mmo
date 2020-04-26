@@ -83,7 +83,7 @@ namespace mmo
 		// TODO: Validate result code
 
 		// Authentication has been successful!
-		Authenticated();
+		AuthenticationResult(result);
 
 		return PacketParseResult::Pass;
 	}
@@ -127,6 +127,22 @@ namespace mmo
 	PacketParseResult RealmConnector::connectionPacketReceived(game::IncomingPacket & packet)
 	{
 		return HandleIncomingPacket(packet);
+	}
+
+	void RealmConnector::SetLoginData(const std::string & accountName, const BigNumber & sessionKey)
+	{
+		m_account = accountName;
+		m_sessionKey = sessionKey;
+	}
+
+	void RealmConnector::ConnectToRealm(const RealmData & data)
+	{
+		m_realmAddress = data.address;
+		m_realmPort = data.port;
+		m_realmName = data.name;
+
+		// Connect to the server
+		connect(m_realmAddress, m_realmPort, *this, m_ioService);
 	}
 
 	void RealmConnector::Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey)

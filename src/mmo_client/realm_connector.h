@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include "base/typedefs.h"
+#include "realm_data.h"
+
 #include "game_protocol/game_connector.h"
 #include "base/big_number.h"
 #include "base/sha1.h"
@@ -19,8 +20,8 @@ namespace mmo
 		, public game::IConnectorListener
 	{
 	public:
-		/// Signal that is fired when the authentication has been successful.
-		signal<void()> Authenticated;
+		/// Signal that is fired when the client successfully authenticated at the realm list.
+		signal<void(uint8)> AuthenticationResult;
 		/// Signal that is fired when the client received a new character list packet.
 		signal<void()> CharListUpdated;
 
@@ -57,6 +58,10 @@ namespace mmo
 		// ~ End IConnectorListener
 
 	public:
+		/// Sets login data
+		void SetLoginData(const std::string& accountName, const BigNumber& sessionKey);
+		/// 
+		void ConnectToRealm(const RealmData& data);
 		/// Tries to connect to the given realm server.
 		/// @param realmAddress The ip address of the realm.
 		/// @param realmPort The port of the realm.

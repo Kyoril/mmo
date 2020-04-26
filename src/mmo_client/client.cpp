@@ -174,7 +174,7 @@ namespace mmo
 		ASSERT(s_loginConnector && s_realmConnector);
 
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector);
 
 		// Initialize the frame manager
 		FrameManager::Initialize(&s_gameScript->GetLuaState());

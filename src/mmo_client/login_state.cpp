@@ -50,8 +50,10 @@ namespace mmo
 		m_loginConnections += m_loginConnector.AuthenticationResult.connect(*this, &LoginState::OnAuthenticationResult);
 		m_loginConnections += m_loginConnector.RealmListUpdated.connect(*this, &LoginState::OnRealmListUpdated);
 
-		// Register realm signal
-		m_loginConnections += m_realmConnector.Authenticated.connect(*this, &LoginState::OnRealmAuthenticated);
+		// Register for signals of the realm connector instance
+		m_loginConnections += m_realmConnector.AuthenticationResult.connect(*this, &LoginState::OnRealmAuthenticationResult);
+		m_loginConnections += m_realmConnector.CharListUpdated.connect(*this, &LoginState::OnCharListUpdated);
+
 	}
 
 	void LoginState::OnLeave()
@@ -89,8 +91,17 @@ namespace mmo
 		}
 		else
 		{
+			// Setup realm connector for connection
+			m_realmConnector.SetLoginData(m_loginConnector.GetAccountName(), m_loginConnector.GetSessionKey());
+
+			// Successfully authenticated
 			FrameManager::Get().TriggerLuaEvent("AUTH_SUCCESS");
 		}
+	}
+
+	void LoginState::OnCharListUpdated()
+	{
+		s_frameMgr.TriggerLuaEvent("CHAR_LIST");
 	}
 
 	void LoginState::OnRealmListUpdated()
@@ -102,9 +113,18 @@ namespace mmo
 		// Trigger the lua event
 		s_frameMgr.TriggerLuaEvent("REALM_LIST");
 	}
-
-	void LoginState::OnRealmAuthenticated()
+	
+	void LoginState::OnRealmAuthenticationResult(uint8 result)
 	{
-		ILOG("[Realm] Success!");
+		if (result != auth::auth_result::Success)
+		{
+			// TODO: In case there was an error, update the UI to display an error message
+			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_FAILED", static_cast<int32>(result));
+		}
+		else
+		{
+			// Successfully authenticated
+			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_SUCCESS");
+		}
 	}
 }
