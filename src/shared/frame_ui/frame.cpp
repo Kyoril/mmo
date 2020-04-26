@@ -154,6 +154,16 @@ namespace mmo
 		return IsVisible(false);
 	}
 
+	Frame::Pointer Frame::Clone()
+	{
+		// Duplicate list item and copy attributes over
+		auto newFrame = FrameManager::Get().Create(m_type, "", true);
+		Copy(*newFrame);
+
+		// Return new frame
+		return newFrame;
+	}
+
 	void Frame::RegisterEvent(const std::string & name, const luabind::object & fn)
 	{
 		m_eventFunctionsByName[name] = fn;

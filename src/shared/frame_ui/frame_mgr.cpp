@@ -37,7 +37,7 @@ namespace mmo
 		// This could be useful to prevent loading files twice which seems like a common
 		// thing to do for file loading.
 
-		/// A list of files that have been loaded.
+		/// A list of files that have been loaded."
 		static std::set<std::string> s_tocFiles;
 
 
@@ -299,6 +299,20 @@ namespace mmo
 		// Expose classes and methods to the lua state
 		luabind::module(luaState)
 		[
+			luabind::class_<AnchorPoint>("AnchorPoint")
+				.enum_("type")
+				[
+					luabind::value("NONE", 0),
+
+					luabind::value("TOP", 1),
+					luabind::value("RIGHT", 2),
+					luabind::value("BOTTOM", 3),
+					luabind::value("LEFT", 4),
+
+					luabind::value("H_CENTER", 5),
+					luabind::value("V_CENTER", 6)
+				],
+
 			luabind::class_<Frame>("Frame")
 				.def("SetText", &Frame::SetText)
 				.def("GetText", &Frame::GetText)
@@ -309,7 +323,11 @@ namespace mmo
 				.def("RegisterEvent", &Frame::RegisterEvent)
 				.def("GetName", &Frame::GetName)
 				.def("IsVisible", &Frame::Lua_IsVisible)
-				.def("RemoveAllChildren", &Frame::RemoveAllChildren),
+				.def("RemoveAllChildren", &Frame::RemoveAllChildren)
+				.def("Clone", &Frame::Clone)
+				.def("AddChild", &Frame::AddChild)
+				.def("SetAnchor", &Frame::SetAnchor)
+				.property("userData", &Frame::GetUserData, &Frame::SetUserData),
 			
 			luabind::class_<Button, Frame>("Button")
 				.def("SetClickedHandler", &Button::SetLuaClickedHandler)

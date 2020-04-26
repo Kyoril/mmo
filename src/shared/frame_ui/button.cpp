@@ -31,7 +31,7 @@ namespace mmo
 				{
 					try
 					{
-						m_clickedHandler();
+						m_clickedHandler(this);
 					}
 					catch (const luabind::error& e)
 					{

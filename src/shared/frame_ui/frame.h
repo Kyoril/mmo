@@ -89,6 +89,9 @@ namespace mmo
 	public:
 		// Lua wrappers
 		bool Lua_IsVisible() const;
+		inline void SetUserData(const luabind::object& data) { m_userData = data; }
+		inline const luabind::object& GetUserData() const { return m_userData; }
+		Pointer Clone();
 
 	public:
 		/// Register a lua function as an event handler.
@@ -194,7 +197,7 @@ namespace mmo
 		/// Determines if the set anchors can be used to determine the frame size.
 		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
 		/// Sets an anchor for this frame.
-		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint, Pointer relativeTo, float offset = 0.0f);
+		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);
 		/// Gets the parent frame.
@@ -326,6 +329,8 @@ namespace mmo
 		bool m_focusable;
 		/// Sets the font of this frame.
 		FontPtr m_font;
+		/// User data used by lua.
+		luabind::object m_userData;
 
 	protected:
 		scoped_connection_container m_propConnections;

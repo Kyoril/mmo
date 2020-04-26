@@ -45,6 +45,8 @@ namespace mmo
 	public:
 		/// Sets the tiling mode for this component.
 		void SetTilingMode(ImageTilingMode mode);
+		void SetTint(argb_t tint);
+		inline argb_t GetTint() const noexcept { return m_tint; }
 
 	public:
 		// ~Begin FrameComponent
@@ -61,5 +63,7 @@ namespace mmo
 		uint16 m_height;
 		/// The tiling mode of the image.
 		ImageTilingMode m_tiling;
+		/// Color tint.
+		Color m_tint = Color::White;
 	};
 }

@@ -112,6 +112,7 @@ namespace mmo
 			Rect(contentRect.left, 0.0f, contentRect.right, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 
+
 		// Center
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,

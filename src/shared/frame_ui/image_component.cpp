@@ -29,7 +29,12 @@ namespace mmo
 		ASSERT(m_frame);
 
 		auto copy = std::make_unique<ImageComponent>(*m_frame, m_filename);
+		
 		CopyBaseAttributes(*copy);
+
+		copy->m_tiling = m_tiling;
+		copy->m_tint = m_tint;
+
 		return copy;
 	}
 	
@@ -39,6 +44,10 @@ namespace mmo
 		ASSERT(m_frame);
 		m_frame->GetGeometryBuffer().SetActiveTexture(m_texture);
 		
+		// Calculate final color
+		Color finalColor = m_tint;
+		finalColor *= color;
+
 		const Rect frameRect = GetArea(area);
 
 		// Default source rect encapsules the whole image area
@@ -60,7 +69,7 @@ namespace mmo
 
 		// Create the rectangle
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
-			color,
+			finalColor,
 			frameRect,
 			srcRect,
 			m_texture->GetWidth(), m_texture->GetHeight());
@@ -69,6 +78,11 @@ namespace mmo
 	void ImageComponent::SetTilingMode(ImageTilingMode mode)
 	{
 		m_tiling = mode;
+	}
+
+	void ImageComponent::SetTint(argb_t tint)
+	{
+		m_tint = tint;
 	}
 
 	Size ImageComponent::GetSize() const

@@ -170,11 +170,11 @@ namespace mmo
 		std::unique_ptr<game::Server> playerServer;
 		try
 		{
-			playerServer.reset(new mmo::game::Server(std::ref(ioService), constants::DefaultRealmPlayerPort, std::bind(&mmo::game::Connection::Create, std::ref(ioService), nullptr)));
+			playerServer.reset(new mmo::game::Server(std::ref(ioService), config.playerPort, std::bind(&mmo::game::Connection::Create, std::ref(ioService), nullptr)));
 		}
 		catch (const mmo::BindFailedException &)
 		{
-			ELOG("Could not bind on tcp port " << constants::DefaultRealmPlayerPort << "! Maybe there is another server instance running on this port?");
+			ELOG("Could not bind on tcp port " << config.playerPort << "! Maybe there is another server instance running on this port?");
 			return 1;
 		}
 

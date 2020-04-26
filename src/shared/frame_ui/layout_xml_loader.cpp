@@ -71,6 +71,7 @@ namespace mmo
 	static const std::string ImageComponentElement("ImageComponent");
 	static const std::string ImageComponentTextureAttribute("texture");
 	static const std::string ImageComponentTilingAttribute("tiling");
+	static const std::string ImageComponentTintAttribute("tint");
 	static const std::string BorderComponentElement("BorderComponent");
 	static const std::string BorderComponentBorderSizeAttribute("borderSize");
 	static const std::string BorderComponentTopSizeAttribute("topSize");
@@ -729,6 +730,7 @@ namespace mmo
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
 		const std::string tilingAttr(attributes.GetValueAsString(ImageComponentTilingAttribute));
+		const std::string tint(attributes.GetValueAsString(ImageComponentTintAttribute));
 
 		// Check for texture name existance
 		if (texture.empty())
@@ -743,6 +745,18 @@ namespace mmo
 		if (attributes.Exists(ImageComponentTilingAttribute))
 		{
 			component->SetTilingMode(ImageTilingModeByName(tilingAttr));
+		}
+		// Apply tint
+		if (attributes.Exists(ImageComponentTintAttribute))
+		{
+			argb_t argb;
+
+			std::stringstream colorStream;
+			colorStream.str(tint);
+			colorStream.clear();
+
+			colorStream >> std::hex >> argb;
+			component->SetTint(argb);
 		}
 
 		m_component = std::move(component);

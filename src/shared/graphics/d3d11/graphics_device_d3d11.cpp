@@ -357,8 +357,8 @@ namespace mmo
 
 		sd.Filter = D3D11_FILTER_ANISOTROPIC;
 		sd.MaxAnisotropy = D3D11_MAX_MAXANISOTROPY;
-		sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-		sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		sd.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+		sd.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 		sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 
 		VERIFY(SUCCEEDED(m_device->CreateSamplerState(&sd, &m_samplerState)));

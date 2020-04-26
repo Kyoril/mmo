@@ -7,6 +7,8 @@
 #include "base/macros.h"
 #include "base/non_copyable.h"
 
+#include "log/default_log_levels.h"
+
 #include <string>
 #include <memory>
 
@@ -63,14 +65,17 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
-		Anchor(AnchorPoint point, AnchorPoint relativePoint, std::weak_ptr<Frame> relativeTo, float offset)
+		Anchor(AnchorPoint point, AnchorPoint relativePoint, std::shared_ptr<Frame> relativeTo, float offset)
 			: m_point(point)
 			, m_relativePoint(relativePoint)
 			, m_offset(offset)
-			, m_relativeTo(std::move(relativeTo))
+			, m_relativeTo(relativeTo)
 		{
 			ASSERT(m_point != AnchorPoint::None);
-			ASSERT(m_relativePoint != AnchorPoint::None);
+			if (m_relativePoint == AnchorPoint::None)
+			{
+				m_relativePoint = m_point;
+			}
 		}
 
 	public:
@@ -82,13 +87,13 @@ namespace mmo
 	public:
 		inline AnchorPoint GetPoint() const { return m_point; }
 		inline AnchorPoint GetRelativePoint() const { return m_relativePoint; }
-		inline Frame* GetRelativeTo() const { return m_relativeTo.lock().get(); }
+		inline Frame* GetRelativeTo() const { return m_relativeTo.get(); }
 		inline float GetOffset() const { return m_offset; }
 
 	private:
 		AnchorPoint m_point;
 		AnchorPoint m_relativePoint;
 		float m_offset;
-		std::weak_ptr<Frame> m_relativeTo;
+		std::shared_ptr<Frame> m_relativeTo;
 	};
 }
