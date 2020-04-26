@@ -48,7 +48,7 @@ namespace mmo
 			if (std::filesystem::exists(archivePath))
 			{
 				// Add archive to the list of archives
-				if (archivePath.extension() == "hpak")
+				if (archivePath.extension() == ".hpak")
 				{
 #ifndef _DEBUG
 					s_archives.emplace_front(std::make_shared<HPAKArchive>(archivePath.string()));
