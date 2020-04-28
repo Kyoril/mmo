@@ -813,12 +813,21 @@ namespace mmo
 
 		// Grab attributes
 		const std::string name(attributes.GetValueAsString(PropertyNameAttribute));
-		const std::string value(attributes.GetValueAsString(PropertyValueAttribute));
+		std::string value(attributes.GetValueAsString(PropertyValueAttribute));
 
 		// Verify attributes
 		if (name.empty())
 		{
 			throw std::runtime_error("Property needs to have a name!");
+		}
+
+		// HACK: Add translation in here. We don't want to set it in the frame's SetText, because
+		// input boxes for example may change their text frequently and may not be localized when the
+		// user enters a localization string id there
+		if (name == "Text")
+		{
+			// Apply localization
+			value = Localize(FrameManager::Get().GetLocalization(), value);
 		}
 
 		// Add the property to the frame or (if it already exists) just set it's value

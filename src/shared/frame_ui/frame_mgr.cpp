@@ -290,6 +290,14 @@ namespace mmo
 		return s_frameMgr;
 	}
 
+	namespace
+	{
+		const std::string& LuaLocalize(const std::string& id)
+		{
+			return Localize(FrameManager::Get().GetLocalization(), id);
+		}
+	}
+
 	void FrameManager::Initialize(lua_State* luaState)
 	{
 		// Verify and register lua state
@@ -299,6 +307,8 @@ namespace mmo
 		// Expose classes and methods to the lua state
 		luabind::module(luaState)
 		[
+			luabind::def("Localize", &LuaLocalize),
+
 			luabind::class_<AnchorPoint>("AnchorPoint")
 				.enum_("type")
 				[
@@ -340,6 +350,12 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
 		FrameManager::Get().RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
+
+		// Load localization
+		if (!FrameManager::Get().m_localization.LoadFromFile())
+		{
+			ELOG("Failed to load localization data!");
+		}
 	}
 
 	void FrameManager::Destroy()

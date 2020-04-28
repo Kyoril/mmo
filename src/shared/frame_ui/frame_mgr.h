@@ -4,6 +4,8 @@
 
 #include "frame.h"
 #include "key.h"
+#include "localization.h"
+#include "localizer.h"
 
 #include "base/non_copyable.h"
 #include "base/utilities.h"
@@ -69,6 +71,7 @@ namespace mmo
 			float Size;
 			float Outline;
 		};
+
 	public:
 		/// Creates a new frame using the given type.
 		FramePtr Create(const std::string& type, const std::string& name, bool isCopy = false);
@@ -140,7 +143,9 @@ namespace mmo
 
 	public:
 		/// Gets the root frame or nullptr if there is none.
-		inline FramePtr GetTopFrame() const { return m_topFrame; }
+		inline FramePtr GetTopFrame() const noexcept { return m_topFrame; }
+		/// Gets the localization instance.
+		inline const Localization& GetLocalization() const noexcept { return m_localization; }
 
 	private:
 		/// A map of mouse-down frames.
@@ -160,5 +165,7 @@ namespace mmo
 		/// A map of font infos, keyed by a unique name. This is useful to make
 		/// setting fonts in xml easier.
 		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
+		/// The localization data.
+		Localization m_localization;
 	};
 }
