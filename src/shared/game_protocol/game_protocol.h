@@ -29,6 +29,12 @@ namespace mmo
 				AuthSession = 0x00,
 				/// Sent by the client to request the character list.
 				CharEnum = 0x01,
+				/// Creates a new character.
+				CreateChar = 0x02,
+				/// Deletes an existing character.
+				DeleteChar = 0x03,
+				/// Enters the world with a selected character.
+				EnterWorld = 0x04,
 
 				/// Counter constant
 				Count_,
@@ -46,6 +52,12 @@ namespace mmo
 				AuthSessionResponse = 0x01,
 				/// Sent by the realm as response to the CharEnum packet.
 				CharEnum = 0x02,
+				/// Resonse of the server for a character creation packet.
+				CharCreateResponse = 0x03,
+				/// Response of the server for a character deletion packet.
+				CharDeleteResponse = 0x04,
+				/// Response of the server for a enter world packet.
+				NewWorld = 0x05,
 
 				/// Counter constant
 				Count_,
