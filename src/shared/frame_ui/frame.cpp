@@ -464,6 +464,24 @@ namespace mmo
 		}
 	}
 
+	Size Frame::GetIntrinsicSize()
+	{
+		Size intrinsicSize;
+
+		// Iterate through all child frames and use their intrinsic sizes as well
+		for (auto& child : m_children)
+		{
+			// Grab the child's intrinsic size value
+			auto childIntrinsic = child->GetIntrinsicSize();
+
+			// Take the maximum value of it
+			intrinsicSize.width = std::max(childIntrinsic.width, intrinsicSize.width);
+			intrinsicSize.height = std::max(childIntrinsic.height, intrinsicSize.height);
+		}
+
+		return intrinsicSize;
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do

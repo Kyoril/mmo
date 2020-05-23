@@ -101,5 +101,6 @@ namespace mmo
 
 	private:
 		PacketParseResult OnAuthSession(game::IncomingPacket& packet);
+		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 	};
 }

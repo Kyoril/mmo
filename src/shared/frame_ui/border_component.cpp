@@ -36,7 +36,7 @@ namespace mmo
 		return copy;
 	}
 
-	void BorderComponent::Render(const Rect& area, const Color& color) const
+	void BorderComponent::Render(const Rect& area, const Color& color)
 	{
 		// Bind the texture object
 		ASSERT(m_frame);

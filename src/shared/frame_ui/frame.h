@@ -222,6 +222,8 @@ namespace mmo
 		inline bool IsFocusable() const noexcept { return m_focusable; }
 		/// Invalidates all children.
 		void InvalidateChildren(bool recursive = true);
+		/// Calculates the intrinsic frame size.
+		Size GetIntrinsicSize();
 
 	public:
 		/// Gets a string object holding the name of this frame.

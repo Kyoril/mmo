@@ -8,6 +8,7 @@
 #include "base/big_number.h"
 #include "base/sha1.h"
 #include "base/signal.h"
+#include "game/character_view.h"
 
 #include "asio/io_service.hpp"
 
@@ -48,6 +49,8 @@ namespace mmo
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 		/// Handles the AuthSessionResponse packet.
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
+		/// Handles the CharEnum packet.
+		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -68,6 +71,14 @@ namespace mmo
 		/// @param accountName Name of the player account.
 		/// @param realmName The realm's display name.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
+
+	public:
+		/// Gets a constant list of character views.
+		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
+
+	private:
+		/// A list of character views.
+		std::vector<CharacterView> m_characterViews;
 	};
 }
 

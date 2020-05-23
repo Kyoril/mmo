@@ -127,7 +127,7 @@ namespace mmo
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.
 		/// @param color The argbv color value.
 		void DrawText(const std::string& text, const Point& position, GeometryBuffer& buffer, float scale = 1.0f, argb_t color = 0xFFFFFFFF);
-		
+
 	public:
 		/// Gets the default spacing between two lines of text in pixels.
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.

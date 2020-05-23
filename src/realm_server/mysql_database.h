@@ -18,6 +18,11 @@ namespace mmo
 		/// Tries to establish a connection to the MySQL server.
 		bool load();
 
+	public:
+		// ~ Begin IDatabase
+		virtual std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) final override;
+		// ~ End IDatabase
+
 	private:
 		void PrintDatabaseError();
 

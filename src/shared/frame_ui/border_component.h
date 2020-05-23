@@ -26,7 +26,7 @@ namespace mmo
 
 	public:
 		// ~Begin FrameComponent
-		void Render(const Rect& area, const Color& color = Color::White) const override;
+		void Render(const Rect& area, const Color& color = Color::White) override;
 		virtual Size GetSize() const override;
 		// ~End FrameComponent
 

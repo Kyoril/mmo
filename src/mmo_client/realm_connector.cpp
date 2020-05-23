@@ -72,18 +72,50 @@ namespace mmo
 
 	PacketParseResult RealmConnector::OnAuthSessionResponse(game::IncomingPacket & packet)
 	{
-		uint8 result = 0;
+		// No longer accept these packets from here on!
+		ClearPacketHandler(game::realm_client_packet::AuthSessionResponse);
 
 		// Try to read packet data
+		uint8 result = 0;
 		if (!(packet >> io::read<uint8>(result)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		// TODO: Validate result code
-
 		// Authentication has been successful!
 		AuthenticationResult(result);
+
+		// Was this a success?
+		if (result == game::auth_result::Success)
+		{
+			// From here on, we accept CharEnum packets
+			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
+
+			// And now, we ask for the character list
+			sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::CharEnum);
+				// This packet is empty
+				packet.Finish();
+			});
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnCharEnum(game::IncomingPacket & packet)
+	{
+		// Delete old characters in cache
+		m_characterViews.clear();
+
+		// Load new character view list
+		if (!(packet >> io::read_container<uint8>(m_characterViews)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Notify about character list update
+		CharListUpdated();
 
 		return PacketParseResult::Pass;
 	}

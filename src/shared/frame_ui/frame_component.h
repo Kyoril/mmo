@@ -45,7 +45,7 @@ namespace mmo
 
 	public:
 		/// Renders the frame object.
-		virtual void Render(const Rect& area, const Color& color = Color::White) const = 0;
+		virtual void Render(const Rect& area, const Color& color = Color::White) = 0;
 
 	protected:
 		/// The frame that owns this component.

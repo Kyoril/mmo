@@ -54,16 +54,30 @@ namespace mmo
 		virtual std::unique_ptr<FrameComponent> Copy() const override;
 
 	public:
+		/// Gets the horizontal text alignment.
 		inline HorizontalAlignment GetHorizontalAlignment() const { return m_horzAlignment; }
+		/// Sets the horizontal text alignment.
 		void SetHorizontalAlignment(HorizontalAlignment alignment);
+		/// Gets the vertical text alignment.
 		inline VerticalAlignment GetVerticalAlignment() const { return m_vertAlignment; }
+		/// Sets the vertical text alignment.
 		void SetVerticalAlignment(VerticalAlignment alignment);
+		/// Gets the global text color.
 		inline const Color& GetColor() const { return m_color; }
+		/// Sets the global text color.
 		void SetColor(const Color& color);
+		/// Determines the number of lines.
+		inline uint32 GetLineCount() const noexcept { return m_lineCache.size(); }
+
+	private:
+		/// This function caches some values required for rendering the text using this component's properites.
+		void CacheText(const Rect& area);
+		/// Applies text wrapping to the line cache.
+		void ApplyWrapping(const Rect& frameRect);
 
 	public:
 		// FrameComponent overrides
-		void Render(const Rect& area, const Color& color = Color::White) const override;
+		void Render(const Rect& area, const Color& color = Color::White) override;
 
 	private:
 		/// The color to use when rendering text.
@@ -72,5 +86,7 @@ namespace mmo
 		HorizontalAlignment m_horzAlignment = HorizontalAlignment::Left;
 		/// 
 		VerticalAlignment m_vertAlignment = VerticalAlignment::Top;
+		/// A cache for text lines with wrapping applied.
+		std::vector<std::string> m_lineCache;
 	};
 }

@@ -6,10 +6,12 @@
 #include "base/non_copyable.h"
 #include "log/log_exception.h"
 #include "base/sha1.h"
+#include "game/character_view.h"
 
 #include <functional>
 #include <exception>
 #include <optional>
+#include <vector>
 
 
 namespace mmo
@@ -19,6 +21,9 @@ namespace mmo
 	{
 		virtual ~IDatabase();
 
+		/// Gets the list of characters that belong to a certain character id.
+		/// @param accountId Id of the account.
+		virtual std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) = 0;
 	};
 
 

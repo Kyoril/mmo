@@ -38,7 +38,7 @@ namespace mmo
 		return copy;
 	}
 	
-	void ImageComponent::Render(const Rect& area, const Color& color) const
+	void ImageComponent::Render(const Rect& area, const Color& color)
 	{
 		// Bind the texture object
 		ASSERT(m_frame);

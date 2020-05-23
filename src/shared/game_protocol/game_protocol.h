@@ -27,7 +27,8 @@ namespace mmo
 			{
 				/// Sent by the client to respond to a AuthChallenge from a realm server.
 				AuthSession = 0x00,
-
+				/// Sent by the client to request the character list.
+				CharEnum = 0x01,
 
 				/// Counter constant
 				Count_,
@@ -42,12 +43,43 @@ namespace mmo
 				/// Sent by the client immediatly after connecting to challenge it for authentication.
 				AuthChallenge = 0x00,
 				/// Send by the realm as response.
-				AuthSessionResponse,
-
+				AuthSessionResponse = 0x01,
+				/// Sent by the realm as response to the CharEnum packet.
+				CharEnum = 0x02,
 
 				/// Counter constant
 				Count_,
 			};
 		}
+
+
+		////////////////////////////////////////////////////////////////////////////////
+		// Typedefs
+
+		/// Enumerates possible authentification result codes.
+		namespace auth_result
+		{
+			enum Type
+			{
+				/// Success.
+				Success,
+				/// Could not log in at this time. Please try again later.
+				FailDbBusy,
+				/// Unable to validate game version. This may be caused by file corruption or interference of another program. Please visit <site> for more information and possible solutions to this issue.
+				FailVersionInvalid,
+				/// Downloading...
+				FailVersionUpdate,
+				/// Unable to connect.
+				FailInvalidServer,
+				/// Unable to connect.
+				FailNoAccess,
+				/// Internal error.
+				FailInternalError,
+
+				Count_
+			};
+		}
+
+		typedef auth_result::Type AuthResult;
 	}
 }

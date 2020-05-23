@@ -87,6 +87,8 @@ namespace mmo
 
 	PacketParseResult Player::OnAuthSession(game::IncomingPacket & packet)
 	{
+		ClearPacketHandler(game::client_realm_packet::AuthSession);
+
 		// Read packet data
 		if (!(packet
 			>> io::read<uint32>(m_build)
@@ -140,6 +142,29 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnCharEnum(game::IncomingPacket & packet)
+	{
+		// RequestHandler
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
+			if (auto strongThis = weakThis.lock())
+			{
+				// We have a char enum result, send this to the client
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::CharEnum);
+					packet << io::write_dynamic_range<uint8>(*result);
+					packet.Finish();
+				});
+			}
+		};
+
+		// Execute
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, 0);
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -169,9 +194,12 @@ namespace mmo
 		// Send the response to the client
 		m_connection->sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::AuthSessionResponse);
-			packet << io::write<uint8>(0);	// TODO: Write real packet content
+			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
 			packet.Finish();
 		});
+
+		// Enable CharEnum packets
+		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
