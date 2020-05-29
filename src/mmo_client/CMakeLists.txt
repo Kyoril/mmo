@@ -1,3 +1,6 @@
+# We require 3.16 for the VS_DPI_AWARE option below, otherwise the application will be scaled by windows
+# which will result in blurry madness on high dpi monitors
+cmake_minimum_required(VERSION 3.16)
 
 # Add executable
 add_gui_exe(mmo_client)
@@ -27,3 +30,6 @@ target_link_libraries(mmo_client ${OPENSSL_LIBRARIES})
 
 # Add project to a solution folder for better organization
 set_property(TARGET mmo_client PROPERTY FOLDER "client")
+
+# Client is dpi aware
+set_property(TARGET mmo_client PROPERTY VS_DPI_AWARE "PerMonitor")
