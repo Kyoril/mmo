@@ -5,6 +5,10 @@
 
 #include "base/macros.h"
 
+#include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx11.h"
+
 
 namespace mmo
 {
@@ -14,6 +18,8 @@ namespace mmo
 		: m_windowHandle(nullptr)
 	{
 		CreateWindowHandle();
+
+
 	}
 
 	void MainWindow::EnsureWindowClassCreated()
@@ -30,7 +36,6 @@ namespace mmo
 			wc.hInstance = GetModuleHandle(nullptr);
 			wc.lpfnWndProc = WindowMsgProc;
 			wc.lpszClassName = TEXT(s_mainWindowClassName);
-			wc.lpszMenuName = MAKEINTRESOURCE(IDR_MENU1);
 			RegisterClassEx(&wc);
 
 			s_windowClassCreated = true;
@@ -46,15 +51,11 @@ namespace mmo
 			return;
 		}
 
-		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMORPG Editor"), WS_OVERLAPPEDWINDOW,
+		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMOEdit"), WS_OVERLAPPEDWINDOW,
 			CW_USEDEFAULT, CW_USEDEFAULT, 1024, 720, nullptr, nullptr, GetModuleHandle(nullptr), this);
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
-	}
-
-	void MainWindow::CreateStatusBar()
-	{
 	}
 
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)

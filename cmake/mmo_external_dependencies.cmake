@@ -81,3 +81,15 @@ option(protobuf_BUILD_EXAMPLES OFF)
 option(protobuf_MSVC_STATIC_RUNTIME OFF)
 option(protobuf_WITH_ZLIB OFF)
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/protobuf/src/")
+
+
+
+# ===============================================================================
+# Protobuffer
+# ===============================================================================
+
+# If we want to build the editor, we need imgui for now
+if (MMO_BUILD_EDITOR)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui/examples)
+endif()
