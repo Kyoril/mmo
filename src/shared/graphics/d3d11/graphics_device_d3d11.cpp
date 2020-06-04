@@ -421,13 +421,32 @@ namespace mmo
 		m_clearColorFloat[2] = (float)b / 255.0f;
 	}
 
-	void GraphicsDeviceD3D11::Create()
+	void GraphicsDeviceD3D11::Create(const GraphicsDeviceDesc& desc)
 	{
 		// Create the device
-		GraphicsDevice::Create();
+		GraphicsDevice::Create(desc);
 
-		// Create an internal window
-		CreateInternalWindow(m_width, m_height);
+		// Default size
+		m_width = desc.width;
+		m_height = desc.height;
+
+		// Create an internal window if set
+		if (desc.customWindowHandle == nullptr)
+		{
+			CreateInternalWindow(m_width, m_height);
+		}
+		else
+		{
+			m_windowHandle = reinterpret_cast<HWND>(desc.customWindowHandle);
+
+			// Ask for window client rect
+			RECT cr;
+			GetClientRect(m_windowHandle, &cr);
+
+			// Apply size
+			m_width = cr.right - cr.left;
+			m_height = cr.bottom - cr.top;
+		}
 
 		// Initialize Direct3D
 		CreateD3D11();
@@ -440,6 +459,9 @@ namespace mmo
 			// Reset buffer references
 			m_depthStencilView.Reset();
 			m_renderTargetView.Reset();
+
+			m_width = m_pendingWidth;
+			m_height = m_pendingHeight;
 
 			// Resize buffers
 			VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(2, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_tearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
@@ -533,16 +555,15 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Resize(uint16 Width, uint16 Height)
 	{
-		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
-
 		if (!m_swapChain || (Width == m_width && Height == m_height))
 			return;
+
+		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
 
 		GraphicsDevice::Resize(Width, Height);
 
 		m_pendingWidth = Width;
 		m_pendingHeight = Height;
-
 		m_resizePending = true;
 	}
 

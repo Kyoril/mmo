@@ -28,6 +28,15 @@ namespace mmo
 		// TODO: Add more graphics api enum values here
 	};
 
+	/// This struct describes how a graphics device should be created.
+	struct GraphicsDeviceDesc final
+	{
+		/// If a custom window handle should be used.
+		void* customWindowHandle = nullptr;
+		uint16 width = 1280;
+		uint16 height = 720;
+	};
+
 	/// Enumerates possible blend modes.
 	enum class BlendMode
 	{
@@ -88,7 +97,7 @@ namespace mmo
 	public:
 #ifdef _WIN32
 		/// Creates a new d3d11 graphics device object and makes it the current one.
-		static GraphicsDevice& CreateD3D11();
+		static GraphicsDevice& CreateD3D11(const GraphicsDeviceDesc& desc);
 #endif
 		/// Gets the current graphics device object. Will throw an exception if there
 		/// is no graphics device at the time.
@@ -100,7 +109,7 @@ namespace mmo
 		/// Sets the clear color.
 		virtual void SetClearColor(uint32 clearColor);
 		/// Called to create the device and do some initialization stuff.
-		virtual void Create();
+		virtual void Create(const GraphicsDeviceDesc& desc);
 		/// Clears the back buffer as well as the depth buffer.
 		virtual void Clear(ClearFlags Flags = ClearFlags::None) = 0;
 		/// Presents the back buffer on screen.

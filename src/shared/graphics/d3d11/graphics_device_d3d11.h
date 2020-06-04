@@ -22,7 +22,7 @@ namespace mmo
 	public:
 		// ~ Begin GraphicsDevice
 		virtual void SetClearColor(uint32 clearColor) override;
-		virtual void Create() override;
+		virtual void Create(const GraphicsDeviceDesc& desc) override;
 		virtual void Clear(ClearFlags Flags = ClearFlags::None) override;
 		virtual void Present() override;
 		virtual void Resize(uint16 Width, uint16 Height) override;

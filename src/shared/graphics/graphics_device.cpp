@@ -25,13 +25,13 @@ namespace mmo
 	}
 
 #ifdef _WIN32
-	GraphicsDevice & GraphicsDevice::CreateD3D11()
+	GraphicsDevice & GraphicsDevice::CreateD3D11(const GraphicsDeviceDesc& desc)
 	{
 		assert(!s_currentDevice);
 
 		// Allocate a new graphics device object
 		s_currentDevice = std::make_unique<GraphicsDeviceD3D11>();
-		s_currentDevice->Create();
+		s_currentDevice->Create(desc);
 
 		return *s_currentDevice;
 	}
@@ -53,8 +53,10 @@ namespace mmo
 		m_clearColor = clearColor;
 	}
 
-	void GraphicsDevice::Create()
+	void GraphicsDevice::Create(const GraphicsDeviceDesc& desc)
 	{
+		m_viewW = desc.width;
+		m_viewH = desc.height;
 	}
 
 	void GraphicsDevice::Resize(uint16 Width, uint16 Height)

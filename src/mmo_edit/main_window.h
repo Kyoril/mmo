@@ -4,6 +4,8 @@
 
 #include "base/non_copyable.h"
 
+#include "imgui.h"
+
 #include <Windows.h>
 
 
@@ -20,6 +22,12 @@ namespace mmo
 		void EnsureWindowClassCreated();
 		/// Creates the internal window handle.
 		void CreateWindowHandle();
+		/// Initialize ImGui.
+		void InitImGui();
+		/// Render ImGui.
+		void RenderImGui();
+
+		void ShutdownImGui();
 
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
@@ -30,7 +38,7 @@ namespace mmo
 
 	private:
 		HWND m_windowHandle;
-
-		HWND m_statusBarHandle;
+		/// The dock space flags.
+		ImGuiDockNodeFlags m_dockSpaceFlags;
 	};
 }

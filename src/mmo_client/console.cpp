@@ -224,12 +224,16 @@ namespace mmo
 		// Use platform default api if unknown api was provided
 		if (api == GraphicsApi::Unknown) api = defaultApi;
 
+		GraphicsDeviceDesc desc;
+		desc.width = 1600;
+		desc.height = 900;
+
 		// Initialize the graphics api
 		switch (api)
 		{
 #if PLATFORM_WINDOWS
 		case GraphicsApi::D3D11:
-			GraphicsDevice::CreateD3D11();
+			GraphicsDevice::CreateD3D11(desc);
 			break;
 #endif
 		case GraphicsApi::OpenGL:
