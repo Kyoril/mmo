@@ -9,6 +9,7 @@
 #ifdef _WIN32
 #	include "imgui_impl_win32.h"
 #	include "imgui_impl_dx11.h"
+#	include "imgui_internal.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #endif
 
@@ -128,11 +129,24 @@ namespace mmo
 			}
 
 			// Add a frame
-			if (ImGui::Begin("Objects"))
+			if (ImGui::Begin("Objects", &m_showObjects))
 			{
 				ImGui::Text("Test");
 			}
 			ImGui::End();
+
+			// Add the viewport
+			if (ImGui::Begin("Viewport", &m_showViewport))
+			{
+			}
+			ImGui::End();
+
+			// Initialize the layout
+			if (m_applyDefaultLayout)
+			{
+				// Set the default dock layout
+				ImGuiDefaultDockLayout();
+			}
 		}
 		ImGui::End();
 
@@ -143,6 +157,25 @@ namespace mmo
 		// Update and Render additional Platform Windows
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
+	}
+
+	void MainWindow::ImGuiDefaultDockLayout()
+	{
+		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+
+		ImGui::DockBuilderRemoveNode(dockspace_id);
+		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+		ImGuiID dock_main_id = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		ImGuiID dock_id_prop = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 300.0f / ImGui::GetMainViewport()->Size.x, nullptr, &dock_main_id);
+
+		ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
+		ImGui::DockBuilderDockWindow("Objects", dock_id_prop);
+		ImGui::DockBuilderFinish(dockspace_id);
+
+		// Finish default layout
+		m_applyDefaultLayout = false;
 	}
 
 	void MainWindow::ShutdownImGui()
@@ -163,7 +196,7 @@ namespace mmo
 		io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI
 
 		// Setup Dear ImGui style
-		ImGui::StyleColorsLight();
+		ImGui::StyleColorsDark();
 
 		// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 		ImGuiStyle& style = ImGui::GetStyle();

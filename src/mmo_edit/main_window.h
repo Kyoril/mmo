@@ -27,6 +27,8 @@ namespace mmo
 		/// Render ImGui.
 		void RenderImGui();
 
+		void ImGuiDefaultDockLayout();
+
 		void ShutdownImGui();
 
 	private:
@@ -40,5 +42,10 @@ namespace mmo
 		HWND m_windowHandle;
 		/// The dock space flags.
 		ImGuiDockNodeFlags m_dockSpaceFlags;
+
+		bool m_applyDefaultLayout = true;
+
+		bool m_showViewport = true;
+		bool m_showObjects = true;
 	};
 }
