@@ -69,3 +69,15 @@ endif()
 if (MMO_BUILD_TOOLS)
 	find_package(FBX)
 endif()
+
+
+
+# ===============================================================================
+# Protobuffer
+# ===============================================================================
+
+option(protobuf_BUILD_TESTS OFF)
+option(protobuf_BUILD_EXAMPLES OFF)
+option(protobuf_MSVC_STATIC_RUNTIME OFF)
+option(protobuf_WITH_ZLIB OFF)
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/protobuf/src/")
