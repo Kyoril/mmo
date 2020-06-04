@@ -277,9 +277,18 @@ macro(add_exe name)
 endmacro()
 
 macro(add_gui_exe name)
+	set (add_sources ${ARGN})
+
 	file(GLOB sources "*.cpp")
 	file(GLOB headers "*.h" "*.hpp")
 	file(GLOB resources "*.rc")
+	
+	# Append additional sources if any
+	list(LENGTH add_sources num_add_sources)
+    if (${num_add_sources} GREATER 0)
+		list(APPEND sources ${add_sources})
+	endif()
+	
 	#remove_pch_cpp(sources "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp")
 	if(MMO_UNITY_BUILD)
 		message(STATUS "Unity build enabled for ${name}")

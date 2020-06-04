@@ -2,8 +2,18 @@
 # which will result in blurry madness on high dpi monitors
 cmake_minimum_required(VERSION 3.16)
 
+# Imgui sources
+file(GLOB imgui_src 
+	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui_draw.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui_widgets.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_win32.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_dx11.cpp")
+
+message(STATUS "Add src: ${imgui_src}")
+
 # Add executable
-add_gui_exe(mmo_edit)
+add_gui_exe(mmo_edit ${imgui_src})
 
 target_link_libraries(mmo_edit 
 	base 
