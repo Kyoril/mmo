@@ -83,6 +83,7 @@ namespace mmo
 		std::mutex m_packetHandlerMutex;
 		uint32 m_seed;								// Random generated seed used for packet header encryption
 		uint32 m_clientSeed;
+		uint64 m_accountId;
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;

@@ -27,7 +27,7 @@ namespace mmo
 	{
 	public:
 		/// Callback for ClientAuthSession results.
-		typedef std::function<void(bool success, const BigNumber& sessionKey)> ClientAuthSessionCallback;
+		typedef std::function<void(bool success, uint64 accountId, const BigNumber& sessionKey)> ClientAuthSessionCallback;
 
 	private:
 		/// Contains data passed by a ClientAuthSession packet.

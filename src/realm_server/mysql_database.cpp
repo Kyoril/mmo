@@ -69,6 +69,9 @@ namespace mmo
 						charClass, 
 						gender, 
 						(flags & character_flags::Dead) != 0));
+
+				// Next line entry
+				row = row.Next(select);
 			}
 
 			return result;

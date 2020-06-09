@@ -30,6 +30,7 @@ namespace mmo
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
+		, m_accountId(0)
 	{
 		// Generate random encryption seed
 		std::uniform_int_distribution<uint32> dist;
@@ -109,7 +110,7 @@ namespace mmo
 
 		// Setup a weak callback handler
 		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto callbackHandler = [weakThis](bool succeeded, const BigNumber& sessionKey) {
+		auto callbackHandler = [weakThis](bool succeeded, uint64 accountId, const BigNumber& sessionKey) {
 			// Obtain strong reference to see if the client connection is still valid
 			auto strongThis = weakThis.lock();
 			if (strongThis)
@@ -118,6 +119,7 @@ namespace mmo
 				if (succeeded)
 				{
 					// Store session key
+					strongThis->m_accountId = accountId;
 					strongThis->InitializeSession(sessionKey);
 				}
 				else
@@ -149,6 +151,9 @@ namespace mmo
 		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
 			if (auto strongThis = weakThis.lock())
 			{
+				DLOG("Sending char list...");
+				DLOG("Number of characters: " << (*result).size());
+
 				// We have a char enum result, send this to the client
 				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& packet)
 				{
@@ -157,10 +162,17 @@ namespace mmo
 					packet.Finish();
 				});
 			}
+			else {
+				WLOG("Could not send char list (client no longer available!)");
+			}
 		};
 
+		// Testing...
+		DLOG("Requesting char list for account " << m_accountId << "...");
+
 		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, 0);
+		ASSERT(m_accountId != 0);
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
 
 		return PacketParseResult::Pass;
 	}

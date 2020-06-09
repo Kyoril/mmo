@@ -100,7 +100,7 @@ namespace mmo
 		});
 	}
 
-	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, BigNumber sessionKey)
+	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, BigNumber sessionKey)
 	{
 		if (result == auth::auth_result::Success)
 		{
@@ -115,7 +115,7 @@ namespace mmo
 		}
 
 		// Send response packet to the realm server
-		m_connection->sendSinglePacket([requestId, result, &sessionKey](auth::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([requestId, result, accountId, &sessionKey](auth::OutgoingPacket& packet) {
 			packet.Start(auth::login_realm_packet::ClientAuthSessionResponse);
 			packet
 				<< io::write<uint64>(requestId)
@@ -124,6 +124,7 @@ namespace mmo
 			if (result == auth::auth_result::Success)
 			{
 				packet
+					<< io::write<uint64>(accountId)
 					<< io::write_dynamic_range<uint16>(sessionKey.asByteArray());
 			}
 
@@ -459,7 +460,7 @@ namespace mmo
 				}
 
 				// Send the response
-				strongThis->SendAuthSessionResult(requestId, authResult, sessionKey);
+				strongThis->SendAuthSessionResult(requestId, authResult, result->first, sessionKey);
 			}
 		};
 

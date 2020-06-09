@@ -41,6 +41,19 @@ namespace mmo
 			return &realms[index];
 		}
 
+
+		static const mmo::CharacterView* Script_GetCharacterData(RealmConnector& connector, int32 index)
+		{
+			const auto& chars = connector.GetCharacterViews();
+			if (index < 0 || index >= chars.size())
+			{
+				ELOG("GetCharacter: Invalid character index provided (" << index << ")");
+				return nullptr;
+			}
+
+			return &chars[index];
+		}
+
 		static void Script_Print(const std::string& text)
 		{
 			ILOG(text);
@@ -75,11 +88,16 @@ namespace mmo
 				.def_readonly("id", &mmo::RealmData::id)
 				.def_readonly("name", &mmo::RealmData::name),
 
+			luabind::class_<mmo::CharacterView>("CharacterView")
+				.def_readonly("guid", &mmo::CharacterView::GetGuid)
+				.def_readonly("name", &mmo::CharacterView::GetName),
+
 			luabind::class_<LoginConnector>("LoginConnector")
 				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator()),
 
 			luabind::class_<RealmConnector>("RealmConnector")
-				.def("ConnectToRealm", &RealmConnector::ConnectToRealm),
+				.def("ConnectToRealm", &RealmConnector::ConnectToRealm)
+				.def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator()),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("print", &Script_Print)
