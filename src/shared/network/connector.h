@@ -89,7 +89,9 @@ namespace mmo
 	{
 		if (Connector<P, MySocket>::getSocket().is_open())
 		{
-			Connector<P, MySocket>::getSocket().shutdown(asio::socket_base::shutdown_both);
+			// Close the socket if it is opened already
+			asio::error_code ec;
+			Connector<P, MySocket>::getSocket().shutdown(asio::socket_base::shutdown_both, ec);
 			Connector<P, MySocket>::getSocket().close();
 		}
 
