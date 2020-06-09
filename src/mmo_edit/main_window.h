@@ -8,6 +8,9 @@
 
 #include <Windows.h>
 
+#include <vector>
+#include <string>
+
 
 namespace mmo
 {
@@ -47,5 +50,10 @@ namespace mmo
 
 		bool m_showViewport = true;
 		bool m_showObjects = true;
+		bool m_showWorlds = false;
+
+		int m_selectedWorld = -1;
+
+		std::vector<std::string> m_worlds;
 	};
 }

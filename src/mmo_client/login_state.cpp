@@ -54,6 +54,7 @@ namespace mmo
 		m_loginConnections += m_realmConnector.AuthenticationResult.connect(*this, &LoginState::OnRealmAuthenticationResult);
 		m_loginConnections += m_realmConnector.CharListUpdated.connect(*this, &LoginState::OnCharListUpdated);
 
+		m_loginConnections += m_realmConnector.Disconnected.connect(*this, &LoginState::OnRealmDisconnected);
 	}
 
 	void LoginState::OnLeave()
@@ -102,6 +103,12 @@ namespace mmo
 	void LoginState::OnCharListUpdated()
 	{
 		s_frameMgr.TriggerLuaEvent("CHAR_LIST");
+	}
+
+	void LoginState::OnRealmDisconnected()
+	{
+		// Trigger the lua event
+		s_frameMgr.TriggerLuaEvent("REALM_DISCONNECTED");
 	}
 
 	void LoginState::OnRealmListUpdated()

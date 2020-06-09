@@ -35,6 +35,9 @@ namespace mmo
 		desc.customWindowHandle = m_windowHandle;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
 
+		m_worlds.push_back("Alesta");
+		m_worlds.push_back("Test");
+
 		// Initialize imgui
 		InitImGui();
 
@@ -117,6 +120,7 @@ namespace mmo
 			{
 				if (ImGui::BeginMenu("Project"))
 				{
+					if (ImGui::MenuItem("Worlds")) m_showWorlds = true;
 					if (ImGui::MenuItem("Close", nullptr))
 					{
 						// Terminate the application
@@ -140,6 +144,33 @@ namespace mmo
 			{
 			}
 			ImGui::End();
+
+			static auto vector_getter = [](void* vec, int idx, const char** out_text)
+			{
+				auto& vector = *static_cast<std::vector<std::string>*>(vec);
+				if (idx < 0 || idx >= static_cast<int>(vector.size())) { return false; }
+				*out_text = vector.at(idx).c_str();
+				return true;
+			};
+
+			// World window
+			if (m_showWorlds)
+			{
+				if (ImGui::Begin("Worlds", &m_showWorlds))
+				{
+					ImGui::PushItemWidth(-1);
+					if (ImGui::ListBox("", &m_selectedWorld, vector_getter, (void*)&m_worlds, m_worlds.size(), -1))
+					{
+						// Handle selection changed event
+					}
+					ImGui::PopItemWidth();
+
+					ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+					ImGui::Button("Open");
+					ImGui::PopItemFlag();
+				}
+				ImGui::End();
+			}
 
 			// Initialize the layout
 			if (m_applyDefaultLayout)

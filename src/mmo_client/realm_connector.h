@@ -26,6 +26,8 @@ namespace mmo
 		/// Signal that is fired when the client received a new character list packet.
 		signal<void()> CharListUpdated;
 
+		signal<void()> Disconnected;
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;

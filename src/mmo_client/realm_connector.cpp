@@ -149,6 +149,8 @@ namespace mmo
 
 		// Clear packet handlers
 		ClearPacketHandlers();
+
+		Disconnected();
 	}
 
 	void RealmConnector::connectionMalformedPacket()
