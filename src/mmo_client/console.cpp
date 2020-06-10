@@ -245,7 +245,7 @@ namespace mmo
 
 		// Get the current graphics device object
 		auto& device = GraphicsDevice::Get();
-		device.SetWindowTitle("MMORPG");
+		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 
 		// Query the viewport size
 		device.GetViewport(nullptr, nullptr, &s_lastViewportWidth, &s_lastViewportHeight, nullptr, nullptr);

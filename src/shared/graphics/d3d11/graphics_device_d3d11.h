@@ -21,11 +21,10 @@ namespace mmo
 	{
 	public:
 		// ~ Begin GraphicsDevice
+		virtual void Reset() final override;
 		virtual void SetClearColor(uint32 clearColor) final override;
 		virtual void Create(const GraphicsDeviceDesc& desc) final override;
 		virtual void Clear(ClearFlags Flags = ClearFlags::None) final override;
-		virtual void Present() final override;
-		virtual void Resize(uint16 Width, uint16 Height) final override;
 		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) final override;
 		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) final override;
 		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) final override;
@@ -34,7 +33,6 @@ namespace mmo
 		virtual void SetTopologyType(TopologyType InType) final override;
 		virtual void SetVertexFormat(VertexFormat InFormat) final override;
 		virtual void SetBlendMode(BlendMode InBlendMode) final override;
-		virtual void SetWindowTitle(const char windowTitle[]) final override;
 		virtual void CaptureState() final override;
 		virtual void RestoreState() final override;
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) final override;
@@ -53,23 +51,19 @@ namespace mmo
 			m_indexCount = InIndexCount;
 		}
 
+		inline bool HasTearingSupport() const noexcept { return m_tearingSupport; }
+
+		inline bool IsVSyncEnabled() const noexcept { return m_vsync; }
+
 	public:
 		inline operator ID3D11Device&() const { return *m_device.Get(); }
 		inline operator ID3D11DeviceContext&() const { return *m_immContext.Get(); }
-		inline operator IDXGISwapChain&() const { return *m_swapChain.Get(); }
-		inline operator ID3D11RenderTargetView&() const { return *m_renderTargetView.Get(); }
 
 	private:
-		/// Ensures that the internal window class is created.
-		void EnsureWindowClassCreated();
 		/// Checks support for GSync displays.
 		void CheckTearingSupport();
-		/// Creates an internal render window.
-		void CreateInternalWindow(uint16 width, uint16 height);
 		/// Creates the d3d11 device objects.
 		void CreateD3D11();
-		/// Creates resources that might be recreated if the buffer sizes change.
-		void CreateSizeDependantResources();
 		/// Creates the supported input layouts so that we have them loaded right up front.
 		void CreateInputLayouts();
 		/// Creates all supported blend states.
@@ -84,20 +78,10 @@ namespace mmo
 		void CreateDepthStates();
 
 	private:
-		/// The render window callback procedure for internally created windows.
-		static LRESULT RenderWindowProc(HWND Wnd, UINT Msg, WPARAM WParam, LPARAM LParam);
-
-	private:
 		/// The d3d11 device object.
 		ComPtr<ID3D11Device> m_device;
 		/// The immediate context used to generate the final image.
 		ComPtr<ID3D11DeviceContext> m_immContext;
-		/// The swap chain.
-		ComPtr<IDXGISwapChain> m_swapChain;
-		/// Render target view.
-		ComPtr<ID3D11RenderTargetView> m_renderTargetView;
-		/// Depth and stencil buffer view.
-		ComPtr<ID3D11DepthStencilView> m_depthStencilView;
 		/// Opaque blend state (default).
 		ComPtr<ID3D11BlendState> m_opaqueBlendState;
 		/// Blend state with alpha blending enabled.
@@ -118,27 +102,11 @@ namespace mmo
 		std::map<VertexFormat, ShaderPtr> PixelShaders;
 		/// The best supported feature level.
 		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_9_1;
-		/// The window handle.
-		HWND m_windowHandle = nullptr;
-		/// Whether it's our own window (which we need to destroy ourself).
-		bool m_ownWindow = false;
 		/// Whether the device supports GSync displays.
 		bool m_tearingSupport = false;
-
-		uint16 m_width = 1600;
-
-		uint16 m_height = 900;
-
-		uint16 m_pendingWidth = 0, m_pendingHeight = 0;
-
-		bool m_resizePending = false;
-
 		bool m_matrixDirty = false;
-
 		uint32 m_indexCount = 0;
-
 		FLOAT m_clearColorFloat[4];
-
 		bool m_vsync = true;
 	};
 }

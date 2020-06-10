@@ -51,23 +51,6 @@ namespace mmo
 	};
 
 
-	/// Enumerates possible clear flags.
-	enum class ClearFlags
-	{
-		/// Nothing is cleared at all.
-		None = 0,
-		/// The color buffer is cleared.
-		Color = 1,
-		/// The depth buffer is cleared.
-		Depth = 2,
-		/// The stencil buffer is cleared.
-		Stencil = 4,
-
-		ColorDepth = Color | Depth,
-		All = Color | Depth | Stencil,
-	};
-
-
 	/// Enumerates primitive topology types.
 	enum class TopologyType
 	{
@@ -113,16 +96,14 @@ namespace mmo
 		static void Destroy();
 
 	public:
+		/// Resets the graphics device for a new frame.
+		virtual void Reset() = 0;
 		/// Sets the clear color.
 		virtual void SetClearColor(uint32 clearColor);
 		/// Called to create the device and do some initialization stuff.
 		virtual void Create(const GraphicsDeviceDesc& desc);
 		/// Clears the back buffer as well as the depth buffer.
 		virtual void Clear(ClearFlags Flags = ClearFlags::None) = 0;
-		/// Presents the back buffer on screen.
-		virtual void Present() = 0;
-		/// Resizes the graphics device.
-		virtual void Resize(uint16 Width, uint16 Height);
 		/// Creates a new vertex buffer.
 		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) = 0;
 		/// Creates a new index buffer.
@@ -139,8 +120,6 @@ namespace mmo
 		virtual void SetVertexFormat(VertexFormat InFormat) = 0;
 		/// 
 		virtual void SetBlendMode(BlendMode InBlendMode) = 0;
-		/// Sets the title of the auto created graphics window.
-		virtual void SetWindowTitle(const char windowTitle[]) = 0;
 		/// Captures the current render state so that it can be restored later on.
 		virtual void CaptureState() = 0;
 		/// Restores the pushed render state.
@@ -164,6 +143,9 @@ namespace mmo
 		/// Creates a new render texture.
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) = 0;
 
+	public:
+		inline RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
+
 	protected:
 		Matrix4 m_transform[TransformType::Count];
 		uint32 m_clearColor = 0xFF000000;
@@ -173,5 +155,6 @@ namespace mmo
 		int32 m_viewH;
 		float m_viewMinZ;
 		float m_viewMaxZ;
+		RenderWindowPtr m_autoCreatedWindow;
 	};
 }

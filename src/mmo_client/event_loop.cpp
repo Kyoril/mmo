@@ -96,6 +96,9 @@ namespace mmo
 		// Capture timestamp
 		GameTime lastIdle = GetAsyncTimeMs();
 
+		auto& gx = GraphicsDevice::Get();
+		auto gxWindow = gx.GetAutoCreatedWindow();
+
 		// Run the event loop until the operating system tells us to stop here
 		while (true)
 		{
@@ -111,15 +114,18 @@ namespace mmo
 			// Raise idle event
 			Idle(timePassed, currentTime);
 
-			// Get graphics device object
-			auto& gx = GraphicsDevice::Get();
-			gx.Clear(ClearFlags::All);
+			// Reset state for new frame
+			gx.Reset();
 
-			// Raise paint event
+			// Activate the main window as render target and clear it
+			gxWindow->Activate();
+			gxWindow->Clear(mmo::ClearFlags::All);
+
+			// Paint contents
 			Paint();
 
 			// Flip buffers
-			gx.Present();
+			gxWindow->Update();
 		}
 	}
 

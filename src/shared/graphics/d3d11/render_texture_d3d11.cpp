@@ -1,3 +1,5 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
+
 #include "render_texture_d3d11.h"
 #include "graphics_device_d3d11.h"
 
@@ -9,7 +11,59 @@ namespace mmo
 {
 	RenderTextureD3D11::RenderTextureD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height)
 		: RenderTexture(std::move(name), width, height)
-		, m_device(device)
+		, RenderTargetD3D11(device)
+	{
+		CreateResources();
+	}
+
+	void RenderTextureD3D11::LoadRaw(void * data, size_t dataSize)
+	{
+		throw std::runtime_error("Method not implemented");
+	}
+
+	void RenderTextureD3D11::Bind(ShaderType shader, uint32 slot)
+	{
+		ID3D11DeviceContext& context = m_device;
+
+		ID3D11ShaderResourceView* const views = m_shaderResourceView.Get();
+		switch (shader)
+		{
+		case ShaderType::VertexShader:
+			context.VSSetShaderResources(slot, 1, &views);
+			break;
+		case ShaderType::PixelShader:
+			context.PSSetShaderResources(slot, 1, &views);
+			break;
+		}
+	}
+
+	void RenderTextureD3D11::Activate()
+	{
+		RenderTargetD3D11::Activate();
+
+		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
+	}
+
+	void RenderTextureD3D11::Clear(ClearFlags flags)
+	{
+		RenderTargetD3D11::Clear(flags);
+	}
+
+	void RenderTextureD3D11::Resize(uint16 width, uint16 height)
+	{
+		m_width = width;
+		m_height = height;
+
+		// Reset resources
+		m_shaderResourceView.Reset();
+		m_renderTargetView.Reset();
+		m_renderTargetTex.Reset();
+
+		// Recreate resources with new dimensions
+		CreateResources();
+	}
+
+	void RenderTextureD3D11::CreateResources()
 	{
 		// Obtain the d3d11 device object
 		ID3D11Device& d3dDev = m_device;
@@ -45,35 +99,5 @@ namespace mmo
 		shaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
 		shaderResourceViewDesc.Texture2D.MipLevels = 1;
 		d3dDev.CreateShaderResourceView(m_renderTargetTex.Get(), &shaderResourceViewDesc, &m_shaderResourceView);
-	}
-
-	void RenderTextureD3D11::LoadRaw(void * data, size_t dataSize)
-	{
-		throw std::runtime_error("Method not implemented");
-	}
-
-	void RenderTextureD3D11::Bind(ShaderType shader, uint32 slot)
-	{
-		ID3D11DeviceContext& context = m_device;
-
-		ID3D11ShaderResourceView* const views = m_shaderResourceView.Get();
-		switch (shader)
-		{
-		case ShaderType::VertexShader:
-			context.VSSetShaderResources(slot, 1, &views);
-			break;
-		case ShaderType::PixelShader:
-			context.PSSetShaderResources(slot, 1, &views);
-			break;
-		}
-	}
-
-	void RenderTextureD3D11::Activate()
-	{
-		ID3D11DeviceContext& context = m_device;
-
-		// Set the current render target
-		ID3D11RenderTargetView* RenderTargets[1] = { m_renderTargetView.Get() };
-		context.OMSetRenderTargets(1, RenderTargets, nullptr /*TODO*/);
 	}
 }

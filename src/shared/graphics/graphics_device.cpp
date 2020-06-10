@@ -59,11 +59,6 @@ namespace mmo
 		m_viewH = desc.height;
 	}
 
-	void GraphicsDevice::Resize(uint16 Width, uint16 Height)
-	{
-		
-	}
-
 	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
 	{
 		m_transform[(uint32)type] = matrix;

@@ -17,34 +17,6 @@
 
 namespace mmo
 {
-	/// Name of the render window class.
-	static const TCHAR s_d3d11WindowClassName[] = TEXT("D3D11 Render Window");
-
-
-	void GraphicsDeviceD3D11::EnsureWindowClassCreated()
-	{
-		static bool s_windowClassCreated = false;
-		if (!s_windowClassCreated)
-		{
-			// Create the window class structure
-			WNDCLASSEX wc;
-			ZeroMemory(&wc, sizeof(wc));
-
-			// Prepare struct
-			wc.cbSize = sizeof(wc);
-			wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-			wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-			wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-			wc.hInstance = GetModuleHandle(nullptr);
-			wc.lpfnWndProc = &GraphicsDeviceD3D11::RenderWindowProc;
-			wc.lpszClassName = s_d3d11WindowClassName;
-			wc.style = CS_OWNDC;
-
-			VERIFY(RegisterClassEx(&wc) >= 0);
-			s_windowClassCreated = true;
-		}
-	}
-
 	void GraphicsDeviceD3D11::CheckTearingSupport()
 	{
 		// Rather than create the 1.5 factory interface directly, we create the 1.4
@@ -66,37 +38,6 @@ namespace mmo
 		}
 
 		m_tearingSupport = SUCCEEDED(hr) && allowTearing;
-	}
-
-	void GraphicsDeviceD3D11::CreateInternalWindow(uint16 width, uint16 height)
-	{
-		// Prevent double initialization
-		ASSERT(m_windowHandle == nullptr);
-
-		// Make sure the window class has been created
-		EnsureWindowClassCreated();
-
-		// Create the actual window
-		const DWORD ws = WS_OVERLAPPEDWINDOW;
-
-		// Calculate the real window size needed to make the client area the requestes size
-		RECT r = { 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
-		AdjustWindowRect(&r, ws, FALSE);
-
-		const UINT sx = GetSystemMetrics(SM_CXSCREEN);
-		const UINT sy = GetSystemMetrics(SM_CYSCREEN);
-		const UINT x = sx / 2 - (r.right - r.left) / 2;
-		const UINT y = sy / 2 - (r.bottom - r.top) / 2;
-
-		// Create the actual window
-		VERIFY((m_windowHandle = CreateWindowEx(0, s_d3d11WindowClassName, TEXT("D3D11 Render Window"),
-			ws, x, y, r.right - r.left, r.bottom - r.top, nullptr, nullptr,
-			GetModuleHandle(nullptr), nullptr)));
-		m_ownWindow = true;
-
-		// Make the window visible on screen
-		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
-		UpdateWindow(m_windowHandle);
 	}
 
 	void GraphicsDeviceD3D11::CreateD3D11()
@@ -128,42 +69,6 @@ namespace mmo
 			&m_featureLevel,
 			&m_immContext)));
 
-		// Grab the dxgi device object
-		ComPtr<IDXGIDevice> DXGIDevice;
-		VERIFY(SUCCEEDED(m_device.As(&DXGIDevice)));
-
-		// Query the adapter that created the device
-		ComPtr<IDXGIAdapter> DXGIAdapter;
-		VERIFY(SUCCEEDED(DXGIDevice->GetAdapter(&DXGIAdapter)));
-
-		// Now query the factory that created the adapter object
-		ComPtr<IDXGIFactory5> DXGIFactory;
-		VERIFY(SUCCEEDED(DXGIAdapter->GetParent(IID_PPV_ARGS(&DXGIFactory))));
-
-		// Grab the window size
-		RECT cr;
-		VERIFY(GetClientRect(m_windowHandle, &cr));
-
-		// We now can create a swap chain using the factory
-		DXGI_SWAP_CHAIN_DESC scd;
-		ZeroMemory(&scd, sizeof(scd));
-		scd.BufferCount = 2;
-		scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		scd.BufferDesc.Width = cr.right - cr.left;
-		scd.BufferDesc.Height = cr.bottom - cr.top;
-		scd.BufferDesc.RefreshRate.Numerator = 60;	// TODO: Determine monitor refresh rate in Hz and use the value here to
-		scd.BufferDesc.RefreshRate.Denominator = 1;	// support high refresh rate monitors
-		scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-		scd.Flags = m_tearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
-		scd.OutputWindow = m_windowHandle;
-		scd.SampleDesc.Count = 1;
-		scd.SwapEffect = m_tearingSupport ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD;
-		scd.Windowed = TRUE;
-		VERIFY(SUCCEEDED(DXGIFactory->CreateSwapChain(m_device.Get(), &scd, &m_swapChain)));
-
-		// Finally, create size dependant resources
-		CreateSizeDependantResources();
-
 		// Create input layouts
 		CreateInputLayouts();
 
@@ -181,39 +86,6 @@ namespace mmo
 
 		// Setup depth states
 		CreateDepthStates();
-	}
-
-	void GraphicsDeviceD3D11::CreateSizeDependantResources()
-	{
-		ASSERT(m_device);
-		ASSERT(m_swapChain);
-
-		// Create the render target view
-		ComPtr<ID3D11Texture2D> renderTargetBuffer;
-		VERIFY(SUCCEEDED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&renderTargetBuffer))));
-
-		// Create the render target view
-		VERIFY(SUCCEEDED(m_device->CreateRenderTargetView(renderTargetBuffer.Get(), nullptr, &m_renderTargetView)));
-
-		// Create a depth buffer
-		D3D11_TEXTURE2D_DESC texd;
-		ZeroMemory(&texd, sizeof(texd));
-		texd.Width = m_width;
-		texd.Height = m_height;
-		texd.ArraySize = 1;
-		texd.MipLevels = 1;
-		texd.SampleDesc.Count = 1;
-		texd.Format = DXGI_FORMAT_D32_FLOAT;
-		texd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-		ComPtr<ID3D11Texture2D> depthBuffer;
-		VERIFY(SUCCEEDED(m_device->CreateTexture2D(&texd, nullptr, &depthBuffer)));
-
-		// Create the depth stencil view
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvd;
-		ZeroMemory(&dsvd, sizeof(dsvd));
-		dsvd.Format = DXGI_FORMAT_D32_FLOAT;
-		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
-		VERIFY(SUCCEEDED(m_device->CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
 
 	void GraphicsDeviceD3D11::CreateInputLayouts()
@@ -392,88 +264,8 @@ namespace mmo
 		VERIFY( SUCCEEDED(m_device->CreateDepthStencilState(&depthStencilDesc, m_depthStencilState.GetAddressOf())));
 	}
 
-	LRESULT GraphicsDeviceD3D11::RenderWindowProc(HWND Wnd, UINT Msg, WPARAM WParam, LPARAM LParam)
+	void GraphicsDeviceD3D11::Reset()
 	{
-		switch (Msg)
-		{
-		case WM_DESTROY:
-			PostQuitMessage(0);
-			return 0;
-		case WM_CLOSE:
-			DestroyWindow(Wnd);
-			return 0;
-		case WM_SIZE:
-			GraphicsDevice::Get().Resize(LOWORD(LParam), HIWORD(LParam));
-			return 1;
-		}
-
-		return DefWindowProc(Wnd, Msg, WParam, LParam);
-	}
-
-	void GraphicsDeviceD3D11::SetClearColor(uint32 clearColor)
-	{
-		// Set clear color value in base device
-		GraphicsDevice::SetClearColor(clearColor);
-
-		// Calculate d3d11 float clear color values
-		BYTE r = GetRValue(clearColor);
-		BYTE g = GetGValue(clearColor);
-		BYTE b = GetBValue(clearColor);
-		m_clearColorFloat[0] = (float)r / 255.0f;
-		m_clearColorFloat[1] = (float)g / 255.0f;
-		m_clearColorFloat[2] = (float)b / 255.0f;
-	}
-
-	void GraphicsDeviceD3D11::Create(const GraphicsDeviceDesc& desc)
-	{
-		// Create the device
-		GraphicsDevice::Create(desc);
-
-		// Default size
-		m_width = desc.width;
-		m_height = desc.height;
-
-		// Create an internal window if set
-		if (desc.customWindowHandle == nullptr)
-		{
-			CreateInternalWindow(m_width, m_height);
-		}
-		else
-		{
-			m_windowHandle = reinterpret_cast<HWND>(desc.customWindowHandle);
-
-			// Ask for window client rect
-			RECT cr;
-			GetClientRect(m_windowHandle, &cr);
-
-			// Apply size
-			m_width = cr.right - cr.left;
-			m_height = cr.bottom - cr.top;
-		}
-
-		// Initialize Direct3D
-		CreateD3D11();
-	}
-
-	void GraphicsDeviceD3D11::Clear(ClearFlags Flags)
-	{
-		if (m_resizePending)
-		{
-			// Reset buffer references
-			m_depthStencilView.Reset();
-			m_renderTargetView.Reset();
-
-			m_width = m_pendingWidth;
-			m_height = m_pendingHeight;
-
-			// Resize buffers
-			VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(2, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_tearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
-
-			// Create size dependent resources
-			CreateSizeDependantResources();
-			m_resizePending = false;
-		}
-
 		// Clear the state
 		m_immContext->ClearState();
 
@@ -496,77 +288,53 @@ namespace mmo
 		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
 		m_immContext->VSSetConstantBuffers(0, 1, Buffers);
 
-		// Set the current render target
-		ID3D11RenderTargetView* RenderTargets[1] = { m_renderTargetView.Get() };
-		m_immContext->OMSetRenderTargets(1, RenderTargets, m_depthStencilView.Get());
-
-		// Clear the color buffer?
-		const uint32 Converted = static_cast<uint32>(Flags);
-		if ((Converted & static_cast<uint32>(ClearFlags::Color)) != 0)
-		{
-			// Clear render target and depth stencil view
-			m_immContext->ClearRenderTargetView(m_renderTargetView.Get(), m_clearColorFloat);
-		}
-
-		// Clear depth stencil view
-		if ((Converted & static_cast<uint32>(ClearFlags::Depth)) != 0)
-		{
-			m_immContext->ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
-		}
-
-		// Bind viewport
-		D3D11_VIEWPORT Viewport;
-		ZeroMemory(&Viewport, sizeof(Viewport));
-		Viewport.TopLeftX = m_viewX;
-		Viewport.TopLeftY = m_viewY;
-		Viewport.Width = m_viewW;
-		Viewport.Height = m_viewH;
-		Viewport.MaxDepth = 1.0f;
-		m_immContext->RSSetViewports(1, &Viewport);
-
 		// Default blend state
 		m_immContext->OMSetBlendState(m_opaqueBlendState.Get(), nullptr, 0xffffffff);
+
+		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
 
-	void GraphicsDeviceD3D11::Present()
+	void GraphicsDeviceD3D11::SetClearColor(uint32 clearColor)
 	{
-		BOOL IsFullscreenState;
-		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&IsFullscreenState, nullptr)));
+		// Set clear color value in base device
+		GraphicsDevice::SetClearColor(clearColor);
 
-		const UINT presentFlags = m_tearingSupport && !m_vsync && !IsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
-		m_swapChain->Present(m_vsync ? 1 : 0, presentFlags);
+		// Calculate d3d11 float clear color values
+		BYTE r = GetRValue(clearColor);
+		BYTE g = GetGValue(clearColor);
+		BYTE b = GetBValue(clearColor);
+		m_clearColorFloat[0] = (float)r / 255.0f;
+		m_clearColorFloat[1] = (float)g / 255.0f;
+		m_clearColorFloat[2] = (float)b / 255.0f;
+	}
 
-		if (m_resizePending)
+	void GraphicsDeviceD3D11::Create(const GraphicsDeviceDesc& desc)
+	{
+		// Create the device
+		GraphicsDevice::Create(desc);
+
+		// Initialize Direct3D
+		CreateD3D11();
+
+		// Create an automatic render window if requested
+		if (desc.customWindowHandle == nullptr)
 		{
-			// Reset buffer references
-			m_depthStencilView.Reset();
-			m_renderTargetView.Reset();
-
-			m_width = m_pendingWidth;
-			m_height = m_pendingHeight;
-
-			// Resize buffers
-			VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(2, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_tearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
-
-			// Create size dependent resources
-			CreateSizeDependantResources();
-
-			m_resizePending = false;
+			m_autoCreatedWindow = CreateRenderWindow("__auto_window__", desc.width, desc.height);
+		}
+		else
+		{
+			m_autoCreatedWindow = std::make_shared<RenderWindowD3D11>(*this, "__auto_window__", (HWND)desc.customWindowHandle);
 		}
 	}
 
-	void GraphicsDeviceD3D11::Resize(uint16 Width, uint16 Height)
+	void GraphicsDeviceD3D11::Clear(ClearFlags Flags)
 	{
-		if (!m_swapChain || (Width == m_width && Height == m_height))
-			return;
+		// Reset the current state
+		Reset();
 
-		GraphicsDevice::SetViewport(m_viewX, m_viewY, Width, Height, m_viewMinZ, m_viewMaxZ);
-
-		GraphicsDevice::Resize(Width, Height);
-
-		m_pendingWidth = Width;
-		m_pendingHeight = Height;
-		m_resizePending = true;
+		// Set the current render target
+		m_autoCreatedWindow->Activate();
+		m_autoCreatedWindow->Clear(Flags);
 	}
 
 	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
@@ -689,21 +457,16 @@ namespace mmo
 		m_immContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFF);
 	}
 
-	void GraphicsDeviceD3D11::SetWindowTitle(const char windowTitle[])
-	{
-		SetWindowTextA(m_windowHandle, windowTitle);
-	}
-
 	void GraphicsDeviceD3D11::CaptureState()
 	{
 		// Get the current state
-
+		TODO("Implement this method");
 	}
 
 	void GraphicsDeviceD3D11::RestoreState()
 	{
 		// Reapply the previous state
-
+		TODO("Implement this method");
 	}
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
