@@ -59,6 +59,35 @@ namespace mmo
 		m_viewH = desc.height;
 	}
 
+	void GraphicsDevice::CaptureState()
+	{
+		for (uint32 i = 0; i < TransformType::Count; ++i)
+		{
+			m_restoreTransforms[i] = m_transform[i];
+		}
+
+		m_restoreRenderTarget = m_renderTarget;
+	}
+
+	void GraphicsDevice::RestoreState()
+	{
+		for (uint32 i = 0; i < TransformType::Count; ++i)
+		{
+			m_transform[i] = m_restoreTransforms[i];
+		}
+
+		if (m_restoreRenderTarget)
+		{
+			m_restoreRenderTarget->Activate();
+		}
+		m_restoreRenderTarget = nullptr;
+	}
+
+	Matrix4 GraphicsDevice::GetTransformMatrix(TransformType type) const
+	{
+		return m_transform[(uint32)type];
+	}
+
 	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
 	{
 		m_transform[(uint32)type] = matrix;

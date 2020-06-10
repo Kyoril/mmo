@@ -459,14 +459,13 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::CaptureState()
 	{
-		// Get the current state
-		TODO("Implement this method");
+		GraphicsDevice::CaptureState();
 	}
 
 	void GraphicsDeviceD3D11::RestoreState()
 	{
-		// Reapply the previous state
-		TODO("Implement this method");
+		GraphicsDevice::RestoreState();
+		m_matrixDirty = true;
 	}
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(TransformType type, Matrix4 const & matrix)

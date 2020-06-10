@@ -26,6 +26,7 @@
 #include "login_state.h"
 #include "screen.h"
 #include "game_script.h"
+#include "model_renderer.h"
 
 #include <fstream>
 #include <thread>
@@ -176,6 +177,12 @@ namespace mmo
 		// Initialize the frame manager
 		FrameManager::Initialize(&s_gameScript->GetLuaState());
 
+		// Register model renderer
+		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string& name)
+		{
+			return std::make_unique<ModelRenderer>(name);
+		});
+
 		// Connect idle event
 		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp) 
 		{ 
@@ -240,6 +247,9 @@ namespace mmo
 
 		// Reset game script instance
 		s_gameScript.release();
+
+		// Unregister model renderer
+		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
 
 		// Destroy the frame manager
 		FrameManager::Destroy();

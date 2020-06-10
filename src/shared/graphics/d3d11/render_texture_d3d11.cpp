@@ -39,6 +39,7 @@ namespace mmo
 
 	void RenderTextureD3D11::Activate()
 	{
+		RenderTarget::Activate();
 		RenderTargetD3D11::Activate();
 
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
@@ -99,5 +100,25 @@ namespace mmo
 		shaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
 		shaderResourceViewDesc.Texture2D.MipLevels = 1;
 		d3dDev.CreateShaderResourceView(m_renderTargetTex.Get(), &shaderResourceViewDesc, &m_shaderResourceView);
+
+		// Create a depth buffer
+		D3D11_TEXTURE2D_DESC texd;
+		ZeroMemory(&texd, sizeof(texd));
+		texd.Width = m_width;
+		texd.Height = m_height;
+		texd.ArraySize = 1;
+		texd.MipLevels = 1;
+		texd.SampleDesc.Count = 1;
+		texd.Format = DXGI_FORMAT_D32_FLOAT;
+		texd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+		ComPtr<ID3D11Texture2D> depthBuffer;
+		VERIFY(SUCCEEDED(d3dDev.CreateTexture2D(&texd, nullptr, &depthBuffer)));
+
+		// Create the depth stencil view
+		D3D11_DEPTH_STENCIL_VIEW_DESC dsvd;
+		ZeroMemory(&dsvd, sizeof(dsvd));
+		dsvd.Format = DXGI_FORMAT_D32_FLOAT;
+		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+		VERIFY(SUCCEEDED(d3dDev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
 }

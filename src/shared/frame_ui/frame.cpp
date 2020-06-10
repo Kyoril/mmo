@@ -402,10 +402,20 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
-	void Frame::Invalidate() noexcept
+	void Frame::Invalidate(bool includeLayout) noexcept
 	{
 		m_needsRedraw = true;
-		m_needsLayout = true;
+
+		if (includeLayout)
+		{
+			m_needsLayout = true;
+		}
+
+		// We need to invalidate the parent unfortunately otherwise this window won't receive a render next frame
+		if (m_parent)
+		{
+			m_parent->Invalidate(includeLayout);
+		}
 	}
 
 	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
@@ -690,7 +700,10 @@ namespace mmo
 		if (m_needsRedraw)
 		{
 			// dispose of already cached geometry.
-			m_geometryBuffer.Reset();
+			if (!(m_flags & static_cast<uint32>(FrameFlags::ManualResetBuffer)))
+			{
+				m_geometryBuffer.Reset();
+			}
 
 			// Signal rendering started
 			RenderingStarted();
@@ -706,11 +719,11 @@ namespace mmo
 				PopulateGeometryBuffer();
 			}
 
-			// Signal rendering ended
-			RenderingEnded();
-
 			// mark ourselves as no longer needed a redraw.
 			m_needsRedraw = false;
+
+			// Signal rendering ended
+			RenderingEnded();
 		}
 	}
 

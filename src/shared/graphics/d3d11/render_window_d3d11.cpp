@@ -64,6 +64,7 @@ namespace mmo
 
 	void RenderWindowD3D11::Activate()
 	{
+		RenderTarget::Activate();
 		RenderTargetD3D11::Activate();
 
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);

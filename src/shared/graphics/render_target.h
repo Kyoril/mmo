@@ -26,6 +26,7 @@ namespace mmo
 
 	/// 
 	class RenderTarget
+		: public std::enable_shared_from_this<RenderTarget>
 	{
 	public:
 		explicit RenderTarget(std::string name, uint16 width, uint16 height) noexcept;
@@ -33,7 +34,7 @@ namespace mmo
 
 	public:
 		/// Activates the render target and makes all following render commands target this render target.
-		virtual void Activate() = 0;
+		virtual void Activate();
 		/// Clears the render target.
 		virtual void Clear(ClearFlags flags) = 0;
 		/// Resizes the render target to the new size. Note that this might not happen immediatly, depending on the render target.

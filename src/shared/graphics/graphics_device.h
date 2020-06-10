@@ -121,9 +121,11 @@ namespace mmo
 		/// 
 		virtual void SetBlendMode(BlendMode InBlendMode) = 0;
 		/// Captures the current render state so that it can be restored later on.
-		virtual void CaptureState() = 0;
+		virtual void CaptureState();
 		/// Restores the pushed render state.
-		virtual void RestoreState() = 0;
+		virtual void RestoreState();
+		/// Gets the transform matrix for a certain type of transform.
+		virtual Matrix4 GetTransformMatrix(TransformType type) const;
 		/// Sets the transform matrix for a certain type of transform.
 		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix);
 		/// Create a new texture object.
@@ -146,8 +148,11 @@ namespace mmo
 	public:
 		inline RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 
+		inline void RenderTargetActivated(RenderTargetPtr target) { m_renderTarget = target; }
+
 	protected:
 		Matrix4 m_transform[TransformType::Count];
+		Matrix4 m_restoreTransforms[TransformType::Count];
 		uint32 m_clearColor = 0xFF000000;
 		int32 m_viewX;
 		int32 m_viewY;
@@ -156,5 +161,7 @@ namespace mmo
 		float m_viewMinZ;
 		float m_viewMaxZ;
 		RenderWindowPtr m_autoCreatedWindow;
+		RenderTargetPtr m_renderTarget;
+		RenderTargetPtr m_restoreRenderTarget;
 	};
 }

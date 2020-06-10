@@ -296,6 +296,7 @@ namespace mmo
 			if (s_initialized)
 			{
 				GraphicsDevice::Get().Reset();
+				GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Clear(ClearFlags::All);
 				RenderImGui();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();

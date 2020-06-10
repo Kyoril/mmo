@@ -46,6 +46,13 @@ namespace mmo
 		Visible,
 	};
 
+	enum class FrameFlags
+	{
+		None = 0,
+
+		ManualResetBuffer = 0x01
+	};
+
 
 	/// This is the base class to represent a simple frame.
 	class Frame
@@ -205,7 +212,7 @@ namespace mmo
 		/// Determines whether the frame is currently hovered.
 		bool IsHovered() const;
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
-		void Invalidate() noexcept;
+		void Invalidate(bool includeLayout = true) noexcept;
 		/// Tries to retrieve a child frame at the given position.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
 		/// Makes this frame capture input events.
@@ -258,6 +265,11 @@ namespace mmo
 		virtual Rect GetAbsoluteFrameRect();
 		/// Gets the font of this frame, or it's parent frames.
 		FontPtr GetFont() const;
+
+		inline uint32 GetFlags() const noexcept { return m_flags; }
+		inline void AddFlags(uint32 flags) noexcept { m_flags |= flags; }
+		inline void RemoveFlags(uint32 flags) noexcept { m_flags &= ~flags; }
+		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
 	protected:
 		virtual void DrawSelf();
@@ -333,6 +345,8 @@ namespace mmo
 		FontPtr m_font;
 		/// User data used by lua.
 		luabind::object m_userData;
+
+		uint32 m_flags = 0;
 
 	protected:
 		scoped_connection_container m_propConnections;
