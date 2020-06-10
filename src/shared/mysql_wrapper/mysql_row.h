@@ -34,7 +34,11 @@ namespace mmo
 
 					std::istringstream iss;
 					iss.str(field);
-					iss >> value;
+
+					F tmp;
+					iss >> tmp;
+
+					value = static_cast<T>(tmp);
 				}
 				catch(...)
 				{

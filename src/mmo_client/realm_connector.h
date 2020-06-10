@@ -73,6 +73,11 @@ namespace mmo
 		/// @param accountName Name of the player account.
 		/// @param realmName The realm's display name.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
+		/// Sends an enter world request using the given character.
+		void EnterWorld(const CharacterView& character);
+
+		/// Gets the realm name.
+		inline const std::string& GetRealmName() const { return m_realmName; }
 
 	public:
 		/// Gets a constant list of character views.

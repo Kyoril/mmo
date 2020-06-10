@@ -190,4 +190,16 @@ namespace mmo
 		// Connect to the server
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
 	}
+
+	void RealmConnector::EnterWorld(const CharacterView & character)
+	{
+		const uint64 guid = character.GetGuid();
+
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::EnterWorld);
+			packet
+				<< io::write<uint64>(guid);
+			packet.Finish();
+		});
+	}
 }

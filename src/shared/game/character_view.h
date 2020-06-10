@@ -25,7 +25,7 @@ namespace mmo
 
 	public:
 		/// Default constructor.
-		CharacterView() = default;
+		CharacterView() noexcept = default;
 		/// Initialize a constant character view.
 		CharacterView(
 			uint64 guid,
@@ -36,8 +36,9 @@ namespace mmo
 			uint32 raceId, 
 			uint32 classId,
 			uint8 gender, 
-			bool dead)
-			: m_name(std::move(name))
+			bool dead) noexcept
+			: m_guid(guid)
+			, m_name(std::move(name))
 			, m_level(level)
 			, m_mapId(mapId)
 			, m_zoneId(zoneId)

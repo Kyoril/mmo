@@ -97,7 +97,9 @@ namespace mmo
 
 			luabind::class_<RealmConnector>("RealmConnector")
 				.def("ConnectToRealm", &RealmConnector::ConnectToRealm)
-				.def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator()),
+				.def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
+				.def("GetRealmName", &RealmConnector::GetRealmName)
+				.def("EnterWorld", &RealmConnector::EnterWorld),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("print", &Script_Print)

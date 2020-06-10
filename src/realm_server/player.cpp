@@ -151,9 +151,6 @@ namespace mmo
 		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
 			if (auto strongThis = weakThis.lock())
 			{
-				DLOG("Sending char list...");
-				DLOG("Number of characters: " << (*result).size());
-
 				// We have a char enum result, send this to the client
 				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& packet)
 				{
@@ -173,6 +170,28 @@ namespace mmo
 		// Execute
 		ASSERT(m_accountId != 0);
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnEnterWorld(game::IncomingPacket & packet)
+	{
+		uint64 guid = 0;
+		if (!(packet >> io::read<uint64>(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Log this
+		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
+
+		// TODO: Ensure that the character exists and belongs to our account by trying to load the given character
+
+		// TODO: Find a world node for the character's map id
+
+		// TODO: Send character data to the given world node so that the character can spawn there
+
+		// TODO: From here on, act as proxy for the world node
 
 		return PacketParseResult::Pass;
 	}
@@ -212,6 +231,7 @@ namespace mmo
 
 		// Enable CharEnum packets
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
+		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

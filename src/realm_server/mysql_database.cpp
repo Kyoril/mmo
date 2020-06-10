@@ -51,7 +51,7 @@ namespace mmo
 				uint32 index = 0;
 				row.GetField(index++, guid);
 				row.GetField(index++, name);
-				row.GetField(index++, level);
+				row.GetField<uint8, uint16>(index++, level);
 				row.GetField(index++, map);
 				row.GetField(index++, zone);
 				row.GetField(index++, race);
