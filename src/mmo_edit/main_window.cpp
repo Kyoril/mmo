@@ -295,15 +295,16 @@ namespace mmo
 		case WM_PAINT:
 			if (s_initialized)
 			{
-				GraphicsDevice::Get().Clear(ClearFlags::All);
+				GraphicsDevice::Get().Reset();
+				GraphicsDevice::Get().GetAutoCreatedWindow()->Clear(ClearFlags::All);
 				RenderImGui();
-				GraphicsDevice::Get().Present();
+				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();
 			}
 			return 0;
 		case WM_SIZE:
 			if (s_initialized)
 			{
-				GraphicsDevice::Get().Resize(LOWORD(lparam), HIWORD(lparam));
+				GraphicsDevice::Get().GetAutoCreatedWindow()->Resize(LOWORD(lparam), HIWORD(lparam));
 			}
 			return 0;
 		case WM_COMMAND:

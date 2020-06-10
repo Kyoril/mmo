@@ -208,7 +208,7 @@ namespace mmo
 		// Create the actual window
 		VERIFY((m_handle = CreateWindowEx(0, s_d3d11RenderWindowClassName, TEXT("D3D11 Render Window"),
 			ws, x, y, r.right - r.left, r.bottom - r.top, nullptr, nullptr,
-			GetModuleHandle(nullptr), nullptr)));
+			GetModuleHandle(nullptr), this)));
 		m_ownHandle = true;
 
 		// Make the window visible on screen

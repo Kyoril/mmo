@@ -247,6 +247,11 @@ namespace mmo
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 
+		// Terminate the event loop if the main window get's closed
+		device.GetAutoCreatedWindow()->Closed.connect([]() {
+			EventLoop::Terminate(0);
+		});
+
 		// Query the viewport size
 		device.GetViewport(nullptr, nullptr, &s_lastViewportWidth, &s_lastViewportHeight, nullptr, nullptr);
 
