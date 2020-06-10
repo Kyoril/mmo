@@ -183,6 +183,9 @@ namespace mmo
 		// No longer resize pending
 		m_pendingWidth = 0;
 		m_pendingHeight = 0;
+
+		// Notify observers
+		Resized(m_width, m_height);
 	}
 
 	void RenderWindowD3D11::CreateWindowHandle()

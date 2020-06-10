@@ -251,6 +251,14 @@ namespace mmo
 		device.GetAutoCreatedWindow()->Closed.connect([]() {
 			EventLoop::Terminate(0);
 		});
+		device.GetAutoCreatedWindow()->Resized.connect([](uint16 width, uint16 height) {
+			auto topFrame = FrameManager::Get().GetTopFrame();
+			if (topFrame)
+			{
+				topFrame->Invalidate();
+				topFrame->InvalidateChildren();
+			}
+		});
 
 		// Query the viewport size
 		device.GetViewport(nullptr, nullptr, &s_lastViewportWidth, &s_lastViewportHeight, nullptr, nullptr);
