@@ -20,6 +20,7 @@
 
 #define UNREACHABLE() ASSERT(! "This code path should not be reached!")
 
+#define TODO(msg) ASSERT(! "TODO: " ## msg)
 
 #ifdef _WIN32
 #	define PLATFORM_WINDOWS 1

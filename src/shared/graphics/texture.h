@@ -2,8 +2,9 @@
 
 #pragma once
 
-#include "tex_v1_0/header.h"
+#include "shader_base.h"
 
+#include "tex_v1_0/header.h"
 #include "tex/pre_header.h"
 #include "tex/pre_header_load.h"
 #include "tex_v1_0/header_load.h"
@@ -32,6 +33,8 @@ namespace mmo
 		virtual void LoadRaw(void* data, size_t dataSize) = 0;
 		/// Unloads the header file.
 		virtual void Unload();
+		/// Binds this texture to a given shader stage and slot index.
+		virtual void Bind(ShaderType shader, uint32 slot = 0) = 0;
 		/// Gets the width of this texture in pixels.
 		virtual uint16 GetWidth() const { return m_header.width; }
 		/// Gets the height of this texture in pixels.

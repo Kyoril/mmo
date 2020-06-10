@@ -16,33 +16,35 @@ using Microsoft::WRL::ComPtr;
 namespace mmo
 {
 	/// This is the d3d11 implementation of the graphics device class.
-	class GraphicsDeviceD3D11
+	class GraphicsDeviceD3D11 final
 		: public GraphicsDevice
 	{
 	public:
 		// ~ Begin GraphicsDevice
-		virtual void SetClearColor(uint32 clearColor) override;
-		virtual void Create(const GraphicsDeviceDesc& desc) override;
-		virtual void Clear(ClearFlags Flags = ClearFlags::None) override;
-		virtual void Present() override;
-		virtual void Resize(uint16 Width, uint16 Height) override;
-		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
-		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
-		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
-		virtual void Draw(uint32 vertexCount, uint32 start = 0) override;
-		virtual void DrawIndexed() override;
-		virtual void SetTopologyType(TopologyType InType) override;
-		virtual void SetVertexFormat(VertexFormat InFormat) override;
-		virtual void SetBlendMode(BlendMode InBlendMode) override;
-		virtual void SetWindowTitle(const char windowTitle[]) override;
-		virtual void CaptureState() override;
-		virtual void RestoreState() override;
-		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
-		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) override;
-		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
-		virtual void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) override;
-		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) override;
-		virtual void ResetClipRect() override;
+		virtual void SetClearColor(uint32 clearColor) final override;
+		virtual void Create(const GraphicsDeviceDesc& desc) final override;
+		virtual void Clear(ClearFlags Flags = ClearFlags::None) final override;
+		virtual void Present() final override;
+		virtual void Resize(uint16 Width, uint16 Height) final override;
+		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) final override;
+		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) final override;
+		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) final override;
+		virtual void Draw(uint32 vertexCount, uint32 start = 0) final override;
+		virtual void DrawIndexed() final override;
+		virtual void SetTopologyType(TopologyType InType) final override;
+		virtual void SetVertexFormat(VertexFormat InFormat) final override;
+		virtual void SetBlendMode(BlendMode InBlendMode) final override;
+		virtual void SetWindowTitle(const char windowTitle[]) final override;
+		virtual void CaptureState() final override;
+		virtual void RestoreState() final override;
+		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) final override;
+		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) final override;
+		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) final override;
+		virtual void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) final override;
+		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) final override;
+		virtual void ResetClipRect() final override;
+		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) final override;
+		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) final override;
 		// ~ End GraphicsDevice
 
 	public:

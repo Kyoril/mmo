@@ -6,6 +6,9 @@
 #include "vertex_shader_d3d11.h"
 #include "pixel_shader_d3d11.h"
 #include "texture_d3d11.h"
+#include "render_texture_d3d11.h"
+#include "render_window_d3d11.h"
+
 #include "base/macros.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -476,7 +479,6 @@ namespace mmo
 
 		// Set rasterizer state
 		m_immContext->RSSetState(m_defaultRasterizerState.Get());
-
 		m_immContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
 
 		// Update the constant buffer
@@ -718,8 +720,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::BindTexture(TexturePtr texture, ShaderType shader, uint32 slot)
 	{
-		auto texD3D11 = std::static_pointer_cast<TextureD3D11>(texture);
-		texD3D11->Bind(shader, slot);
+		// TODO: Mark the BindTexture method obsolete? Technically it's no longer being needed
+		texture->Bind(shader, slot);
 	}
 
 	void GraphicsDeviceD3D11::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
@@ -754,5 +756,15 @@ namespace mmo
 	void GraphicsDeviceD3D11::ResetClipRect()
 	{
 		m_immContext->RSSetState(m_defaultRasterizerState.Get());
+	}
+
+	RenderWindowPtr GraphicsDeviceD3D11::CreateRenderWindow(std::string name, uint16 width, uint16 height)
+	{
+		return std::make_shared<RenderWindowD3D11>(*this, std::move(name), width, height);
+	}
+
+	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height)
+	{
+		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
 	}
 }

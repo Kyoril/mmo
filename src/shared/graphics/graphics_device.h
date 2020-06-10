@@ -10,6 +10,8 @@
 #include "pixel_shader.h"
 #include "vertex_format.h"
 #include "texture.h"
+#include "render_window.h"
+#include "render_texture.h"
 
 
 namespace mmo
@@ -28,6 +30,7 @@ namespace mmo
 		// TODO: Add more graphics api enum values here
 	};
 
+
 	/// This struct describes how a graphics device should be created.
 	struct GraphicsDeviceDesc final
 	{
@@ -37,6 +40,7 @@ namespace mmo
 		uint16 height = 720;
 	};
 
+
 	/// Enumerates possible blend modes.
 	enum class BlendMode
 	{
@@ -45,6 +49,7 @@ namespace mmo
 		/// Alpha blending enabled.
 		Alpha,
 	};
+
 
 	/// Enumerates possible clear flags.
 	enum class ClearFlags
@@ -62,6 +67,7 @@ namespace mmo
 		All = Color | Depth | Stencil,
 	};
 
+
 	/// Enumerates primitive topology types.
 	enum class TopologyType
 	{
@@ -71,6 +77,7 @@ namespace mmo
 		TriangleList,
 		TriangleStrip
 	};
+
 
 	enum TransformType
 	{
@@ -152,6 +159,10 @@ namespace mmo
 		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) = 0;
 		/// Resets the clipping rect if there is any.
 		virtual void ResetClipRect() = 0;
+		/// Creates a new render window.
+		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) = 0;
+		/// Creates a new render texture.
+		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) = 0;
 
 	protected:
 		Matrix4 m_transform[TransformType::Count];
