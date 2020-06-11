@@ -61,25 +61,34 @@ namespace mmo
 
 	void GraphicsDevice::CaptureState()
 	{
+		// Remember transformation matrices
 		for (uint32 i = 0; i < TransformType::Count; ++i)
 		{
 			m_restoreTransforms[i] = m_transform[i];
 		}
 
+		// Remember the current render target
 		m_restoreRenderTarget = m_renderTarget;
 	}
 
 	void GraphicsDevice::RestoreState()
 	{
+		// Restore transformation matrices
 		for (uint32 i = 0; i < TransformType::Count; ++i)
 		{
 			m_transform[i] = m_restoreTransforms[i];
 		}
 
-		if (m_restoreRenderTarget)
+		// Reactivate old render target if it has changed and if there was an old
+		// render target (which should almost everytime be the case but whatever)
+		if (m_restoreRenderTarget && 
+			m_restoreRenderTarget != m_renderTarget)
 		{
 			m_restoreRenderTarget->Activate();
 		}
+
+		// No longer keep the old render target referenced so that it is allowed
+		// to be free'd.
 		m_restoreRenderTarget = nullptr;
 	}
 
@@ -91,6 +100,9 @@ namespace mmo
 	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
 	{
 		m_transform[(uint32)type] = matrix;
+
+		// TODO: This should not be done here. Instead, it should be up to the respective
+		// graphics device implementation to do this if needed.
 		m_transform[(uint32)type].Transpose();
 	}
 
