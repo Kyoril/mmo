@@ -531,13 +531,13 @@ namespace mmo
 				// Invalidate the old hover frame if there was any
 				if (prevFrame)
 				{
-					prevFrame->Invalidate();
+					prevFrame->Invalidate(false);
 				}
 
 				// Invalidate the new hover frame if there is any
 				if (m_hoverFrame)
 				{
-					m_hoverFrame->Invalidate();
+					m_hoverFrame->Invalidate(false);
 				}
 			}
 		}

@@ -410,12 +410,6 @@ namespace mmo
 		{
 			m_needsLayout = true;
 		}
-
-		// We need to invalidate the parent unfortunately otherwise this window won't receive a render next frame
-		if (m_parent)
-		{
-			m_parent->Invalidate(includeLayout);
-		}
 	}
 
 	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
