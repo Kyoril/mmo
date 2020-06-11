@@ -440,6 +440,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetBlendMode(BlendMode InBlendMode)
 	{
+		GraphicsDevice::SetBlendMode(InBlendMode);
+
 		ID3D11BlendState* blendState = nullptr;
 
 		// Set blend state

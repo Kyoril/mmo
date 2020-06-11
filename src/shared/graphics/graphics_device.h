@@ -119,7 +119,7 @@ namespace mmo
 		/// 
 		virtual void SetVertexFormat(VertexFormat InFormat) = 0;
 		/// 
-		virtual void SetBlendMode(BlendMode InBlendMode) = 0;
+		virtual void SetBlendMode(BlendMode InBlendMode);
 		/// Captures the current render state so that it can be restored later on.
 		virtual void CaptureState();
 		/// Restores the pushed render state.
@@ -163,5 +163,7 @@ namespace mmo
 		RenderWindowPtr m_autoCreatedWindow;
 		RenderTargetPtr m_renderTarget;
 		RenderTargetPtr m_restoreRenderTarget;
+		BlendMode m_blendMode;
+		BlendMode m_restoreBlendMode;
 	};
 }

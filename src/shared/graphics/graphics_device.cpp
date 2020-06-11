@@ -59,6 +59,11 @@ namespace mmo
 		m_viewH = desc.height;
 	}
 
+	void GraphicsDevice::SetBlendMode(BlendMode InBlendMode)
+	{
+		m_blendMode = InBlendMode;
+	}
+
 	void GraphicsDevice::CaptureState()
 	{
 		// Remember transformation matrices
@@ -66,6 +71,9 @@ namespace mmo
 		{
 			m_restoreTransforms[i] = m_transform[i];
 		}
+
+		// Save blend mode
+		m_restoreBlendMode = m_blendMode;
 
 		// Remember the current render target
 		m_restoreRenderTarget = m_renderTarget;
@@ -77,6 +85,12 @@ namespace mmo
 		for (uint32 i = 0; i < TransformType::Count; ++i)
 		{
 			m_transform[i] = m_restoreTransforms[i];
+		}
+
+		// Restore blend mode
+		if (m_blendMode != m_restoreBlendMode)
+		{
+			SetBlendMode(m_restoreBlendMode);
 		}
 
 		// Reactivate old render target if it has changed and if there was an old
