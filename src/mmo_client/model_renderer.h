@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "model_frame.h"
+
 #include "frame_ui/frame_renderer.h"
 #include "graphics/render_texture.h"
 #include "graphics/vertex_buffer.h"
@@ -32,11 +34,8 @@ namespace mmo
 
 	private:
 		RenderTexturePtr m_renderTexture;
-
 		Rect m_lastFrameRect;
+		ModelFrame* m_modelFrame;
 		scoped_connection m_frameRenderEndCon;
-
-		VertexBufferPtr m_vBuffer;
-		IndexBufferPtr m_iBuffer;
 	};
 }

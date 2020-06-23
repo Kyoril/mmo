@@ -26,6 +26,7 @@
 #include "login_state.h"
 #include "screen.h"
 #include "game_script.h"
+#include "model_frame.h"
 #include "model_renderer.h"
 
 #include <fstream>
@@ -121,6 +122,84 @@ namespace mmo
 }
 
 
+////////////////////////////////////////////////////////////////
+// FrameUI stuff
+
+namespace mmo
+{
+	static scoped_connection_container s_frameUiConnections;
+	static std::unique_ptr<GameScript> s_gameScript;
+
+
+	/// Initializes everything related to FrameUI.
+	bool InitializeFrameUI()
+	{
+		// Initialize the frame manager
+		FrameManager::Initialize(&s_gameScript->GetLuaState());
+
+		// Register model renderer
+		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string& name)
+		{
+			return std::make_unique<ModelRenderer>(name);
+		});
+
+		// Register model frame type
+		FrameManager::Get().RegisterFrameFactory("Model", [](const std::string& name) {
+			return std::make_shared<ModelFrame>(name);
+		});
+
+		// Connect idle event
+		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
+		{
+			FrameManager::Get().Update(deltaSeconds);
+		});
+
+		// Watch for mouse events
+		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseMoved(Point(x, y));
+			return false;
+		});
+		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
+			return false;
+		});
+		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y) {
+			FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
+			return false;
+		});
+
+		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key) {
+			FrameManager::Get().NotifyKeyDown(key);
+			return false;
+		});
+		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint) {
+			FrameManager::Get().NotifyKeyChar(codepoint);
+			return false;
+		});
+		s_frameUiConnections += EventLoop::KeyUp.connect([](int32 key) {
+			FrameManager::Get().NotifyKeyUp(key);
+			return false;
+		});
+
+
+		return true;
+	}
+
+	/// Destroys everything related to FrameUI.
+	void DestroyFrameUI()
+	{
+		// Disconnect FrameUI connections
+		s_frameUiConnections.disconnect();
+
+		// Unregister model renderer
+		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
+		FrameManager::Get().UnregisterFrameFactory("Model");
+
+		// Destroy the frame manager
+		FrameManager::Destroy();
+	}
+}
+
 
 ////////////////////////////////////////////////////////////////
 // Initialization and destruction
@@ -129,9 +208,6 @@ namespace mmo
 {
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
-	static scoped_connection_container s_frameUiConnections;
-	/// Game script instance.
-	static std::unique_ptr<GameScript> s_gameScript;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -174,47 +250,11 @@ namespace mmo
 		// Initialize the game script instance
 		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector);
 
-		// Initialize the frame manager
-		FrameManager::Initialize(&s_gameScript->GetLuaState());
-
-		// Register model renderer
-		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string& name)
+		// Setup FrameUI library
+		if (!InitializeFrameUI())
 		{
-			return std::make_unique<ModelRenderer>(name);
-		});
-
-		// Connect idle event
-		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp) 
-		{ 
-			FrameManager::Get().Update(deltaSeconds); 
-		});
-
-		// Watch for mouse events
-		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y) {
-			FrameManager::Get().NotifyMouseMoved(Point(x, y)); 
-			return false; 
-		});
-		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y) {
-			FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
 			return false;
-		});
-		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y) {
-			FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			return false;
-		});
-
-		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key) {
-			FrameManager::Get().NotifyKeyDown(key);
-			return false;
-		});
-		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint) {
-			FrameManager::Get().NotifyKeyChar(codepoint);
-			return false;
-		});
-		s_frameUiConnections += EventLoop::KeyUp.connect([](int32 key) {
-			FrameManager::Get().NotifyKeyUp(key);
-			return false;
-		});
+		}
 
 		// Register game states
 		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));
@@ -242,17 +282,10 @@ namespace mmo
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
-		// Disconnect FrameUI connections
-		s_frameUiConnections.disconnect();
+		DestroyFrameUI();
 
 		// Reset game script instance
 		s_gameScript.release();
-
-		// Unregister model renderer
-		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
-
-		// Destroy the frame manager
-		FrameManager::Destroy();
 
 		// Destroy the network thread
 		NetDestroy();

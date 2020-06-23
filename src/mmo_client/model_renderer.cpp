@@ -8,24 +8,21 @@ namespace mmo
 {
 	ModelRenderer::ModelRenderer(const std::string & name)
 		: FrameRenderer(name)
+		, m_modelFrame(nullptr)
 	{
-		const POS_COL_VERTEX vertices[3] = {
-			{  0.0f,  1.0f, 0.0f, Color(1.0f, 0.0f, 0.0f) },
-			{  0.5f,  0.0f, 0.0f, Color(0.0f, 1.0f, 0.0f) },
-			{  1.0f,  1.0f, 0.0f, Color(0.0f, 0.0f, 1.0f) }
-		};
-
-		const uint16 indices[3] = { 0, 1, 2 };
-
-		// Allocate buffers
-		m_vBuffer = GraphicsDevice::Get().CreateVertexBuffer(3, sizeof(POS_COL_VERTEX), false, vertices);
-		m_iBuffer = GraphicsDevice::Get().CreateIndexBuffer(3, IndexBufferSize::Index_16, indices);
 	}
 
 	void ModelRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		// Anything to render here?
-		if (!m_renderTexture)
+		if (!m_renderTexture || !m_modelFrame)
+		{
+			return;
+		}
+
+		// Get the model frame's mesh and stop if there is no mesh to render
+		auto mesh = m_modelFrame->GetMesh();
+		if (!mesh)
 		{
 			return;
 		}
@@ -71,18 +68,15 @@ namespace mmo
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 
-		// TODO: Render the actual model in here
+		// Setup transforms (TODO: use frame transform properties)
 		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
 		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
 		gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
-		gx.SetBlendMode(BlendMode::Opaque);
-		gx.SetVertexFormat(VertexFormat::PosColor);
-		gx.SetTopologyType(TopologyType::TriangleList);
-		m_vBuffer->Set();
-		m_iBuffer->Set();
-		gx.DrawIndexed();
 
-		// Restore state
+		// Render the actual mesh
+		mesh->Render();
+
+		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();
 		m_frame->GetGeometryBuffer().Draw();
 
@@ -92,6 +86,11 @@ namespace mmo
 
 	void ModelRenderer::NotifyFrameAttached()
 	{
+		// Try to obtain the model frame instance. We do the cast here so that
+		// we avoid a cast every time the frame is rendered. DynamicCast is used since
+		// this renderer should not crash the game when not attached to a ModelFrame for now.
+		m_modelFrame = dynamic_cast<ModelFrame*>(m_frame);
+
 		// We reset the buffer contents manually as we only really need to change it when the
 		// frame is moved
 		m_frame->AddFlags((uint32)FrameFlags::ManualResetBuffer);
@@ -120,5 +119,6 @@ namespace mmo
 
 		// Reset the render texture
 		m_renderTexture.reset();
+		m_modelFrame = nullptr;
 	}
 }

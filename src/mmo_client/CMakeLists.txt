@@ -22,7 +22,9 @@ target_link_libraries(mmo_client
 	assets
 	frame_ui
 	expat
-	game)
+	game
+	mesh
+	mesh_v1_0)
 
 # Link external dependency libraries
 target_link_libraries(mmo_client lua)
