@@ -41,6 +41,8 @@ namespace mmo
 		virtual uint16 GetHeight() const { return m_header.height; }
 		/// Gets the memory usage of this texture in bytes on the gpu.
 		virtual uint32 GetMemorySize() const { return 0; }
+		/// Gets the underlying texture object.
+		virtual void* GetTextureObject() const = 0;
 
 	protected:
 		/// Texture file header.

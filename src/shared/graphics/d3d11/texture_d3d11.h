@@ -21,6 +21,7 @@ namespace mmo
 		virtual void LoadRaw(void* data, size_t dataSize) final override;
 		/// Gets the memory usage of this texture in bytes on the gpu.
 		virtual uint32 GetMemorySize() const;
+		virtual void* GetTextureObject() const final override { return m_shaderView.Get(); }
 
 	private:
 		void CreateShaderResourceView();

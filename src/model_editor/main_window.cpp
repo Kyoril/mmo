@@ -3,6 +3,7 @@
 #include "main_window.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
 
 #ifdef _WIN32
@@ -20,9 +21,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace mmo
 {
+	// The viewport's render target
 	static RenderTexturePtr s_viewportRT;
-	static VertexBufferPtr s_triangleVB;
-	static IndexBufferPtr s_triangleIB;
 
 	static constexpr char* s_mainWindowClassName = "MainWindow";
 
@@ -30,8 +30,9 @@ namespace mmo
 
 	MainWindow::MainWindow()
 		: m_windowHandle(nullptr)
+		, m_imguiContext(nullptr)
 	{
-		// Create the native window
+		// Create the native platform window
 		CreateWindowHandle();
 
 		// Initialize the graphics device
@@ -44,8 +45,10 @@ namespace mmo
 
 		// Setup the viewport render texture
 		s_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", 800, 600);
-
 		s_initialized = true;
+
+		// Log success
+		ILOG("Model Editor initialized");
 	}
 
 	void MainWindow::EnsureWindowClassCreated()
@@ -77,8 +80,18 @@ namespace mmo
 			return;
 		}
 
+		const UINT desktopWidth = ::GetSystemMetrics(SM_CXSCREEN);
+		const UINT desktopHeight = ::GetSystemMetrics(SM_CYSCREEN);
+		const UINT w = desktopWidth * 0.75f;
+		const UINT h = desktopHeight * 0.75f;
+		const UINT x = desktopWidth / 2 - w / 2;
+		const UINT y = desktopHeight / 2 - h / 2;
+
 		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMO Model Editor"), WS_OVERLAPPEDWINDOW,
-			CW_USEDEFAULT, CW_USEDEFAULT, 1024, 720, nullptr, nullptr, GetModuleHandle(nullptr), this);
+			x, y, w, h, nullptr, nullptr, GetModuleHandle(nullptr), this);
+
+		// We accept file drops
+		DragAcceptFiles(m_windowHandle, TRUE);
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
@@ -100,8 +113,8 @@ namespace mmo
 		ImGui::SetNextWindowPos(viewport->GetWorkPos());
 		ImGui::SetNextWindowSize(viewport->GetWorkSize());
 		ImGui::SetNextWindowViewport(viewport->ID);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+
 		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
@@ -110,11 +123,13 @@ namespace mmo
 		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
 			window_flags |= ImGuiWindowFlags_NoBackground;
 
-		// Begin the dockspace window
+
+		// Begin the dockspace window with disabled padding
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		ImGui::Begin("DockSpace", nullptr, window_flags);
-		ImGui::PopStyleVar();
-		ImGui::PopStyleVar(2);
+		ImGui::PopStyleVar(3);
 		{
 			ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
@@ -122,13 +137,31 @@ namespace mmo
 			// The main menu
 			if (ImGui::BeginMenuBar())
 			{
-				if (ImGui::BeginMenu("Project"))
+				// File menu
+				if (ImGui::BeginMenu("File"))
 				{
-					if (ImGui::MenuItem("Close", nullptr))
+					if (ImGui::MenuItem("Exit", nullptr))
 					{
 						// Terminate the application
 						PostQuitMessage(0);
 					}
+
+					ImGui::EndMenu();
+				}
+
+				// View menu
+				if (ImGui::BeginMenu("View"))
+				{
+					m_logWindow.DrawViewMenuItem();
+
+					if (ImGui::MenuItem("Test", nullptr))
+					{
+						for (int i = 0; i < 7; ++i)
+						{
+							DLOG("Testing " << i + 1 << "...");
+						}
+					}
+
 					ImGui::EndMenu();
 				}
 
@@ -149,10 +182,13 @@ namespace mmo
 				}
 
 				// Ugly hack to get the shader resource view in here... need to wrap that up somehow!
-				ImGui::Image(reinterpret_cast<RenderTextureD3D11*>(s_viewportRT.get())->GetShaderResourceView(), availableSpace);
+				ImGui::Image(s_viewportRT->GetTextureObject(), availableSpace);
 			}
 			ImGui::End();
 			ImGui::PopStyleVar();
+
+			// Render log window
+			m_logWindow.Draw();
 
 			// Initialize the layout
 			if (m_applyDefaultLayout)
@@ -177,13 +213,14 @@ namespace mmo
 		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
 
 		ImGui::DockBuilderRemoveNode(dockspace_id);
-		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace); // Add empty node
+		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
 		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
 		ImGuiID dock_main_id = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		ImGuiID dock_id_prop = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 300.0f / ImGui::GetMainViewport()->Size.x, nullptr, &dock_main_id);
-
+		ImGuiID dock_log_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dock_main_id);
+		
 		ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
+		ImGui::DockBuilderDockWindow("Log", dock_log_id);
 		ImGui::DockBuilderFinish(dockspace_id);
 
 		// Finish default layout
@@ -192,14 +229,29 @@ namespace mmo
 
 	void MainWindow::ShutdownImGui()
 	{
+		ASSERT(m_imguiContext);
 
+		// Shutdown d3d11 and win32 implementation of imgui
+		ImGui_ImplDX11_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+
+		// And destroy the context
+		ImGui::DestroyContext(m_imguiContext);
+	}
+
+	bool MainWindow::OnFileDrop(std::string filename)
+	{
+		// TODO: Check the filename and try to import the file using the fbx importer
+		ILOG("Importing file " << filename << "...");
+
+		return true;
 	}
 
 	void MainWindow::InitImGui()
 	{
 		// Setup Dear ImGui context
 		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
+		m_imguiContext = ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
@@ -231,7 +283,7 @@ namespace mmo
 		io.Fonts->AddFontDefault();
 
 		// Dockspace flags
-		m_dockSpaceFlags = ImGuiDockNodeFlags_None;
+		m_dockSpaceFlags = ImGuiDockNodeFlags_None;//ImGuiDockNodeFlags_AutoHideTabBar;
 	}
 
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -281,6 +333,8 @@ namespace mmo
 				s_viewportRT->Activate();
 				s_viewportRT->Clear(mmo::ClearFlags::All);
 
+				// TODO: draw
+
 				s_viewportRT->Update();
 
 				// Now render the main
@@ -288,6 +342,24 @@ namespace mmo
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Clear(ClearFlags::All);
 				RenderImGui();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();
+			}
+			return 0;
+		case WM_DROPFILES:
+			{
+				UINT fileCount = DragQueryFileA((HDROP)wparam, 0xFFFFFFFF, nullptr, 0);
+				for (UINT i = 0; i < fileCount; ++i)
+				{
+					UINT fileNameLen = DragQueryFileA((HDROP)wparam, i, nullptr, 0);
+
+					CHAR* fileName = new CHAR[fileNameLen + 1];
+					if (DragQueryFileA((HDROP)wparam, i, fileName, fileNameLen + 1) != 0)
+					{
+						OnFileDrop(fileName);
+					}
+					delete[] fileName;
+				}
+
+				DragFinish((HDROP)wparam);
 			}
 			return 0;
 		case WM_SIZE:

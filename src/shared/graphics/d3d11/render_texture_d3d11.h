@@ -25,6 +25,7 @@ namespace mmo
 		virtual void Clear(ClearFlags flags) final override;
 		virtual void Resize(uint16 width, uint16 height) final override;
 		virtual void Update() final override {};
+		virtual void* GetTextureObject() const final override { return m_shaderResourceView.Get(); }
 
 	public:
 		inline ID3D11ShaderResourceView* GetShaderResourceView() const { return m_shaderResourceView.Get(); }

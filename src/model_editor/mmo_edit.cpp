@@ -14,8 +14,6 @@
 
 
 
-
-
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {

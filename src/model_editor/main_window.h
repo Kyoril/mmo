@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "log_window.h"
+
 #include "base/non_copyable.h"
 
 #include "imgui.h"
@@ -34,6 +36,8 @@ namespace mmo
 
 		void ShutdownImGui();
 
+		bool OnFileDrop(std::string filename);
+
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
@@ -50,5 +54,9 @@ namespace mmo
 		bool m_showViewport = true;
 
 		ImVec2 m_lastAvailViewportSize;
+
+		ImGuiContext* m_imguiContext;
+
+		LogWindow m_logWindow;
 	};
 }
