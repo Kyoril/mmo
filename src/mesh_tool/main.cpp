@@ -8,6 +8,8 @@
 #include "log/log_std_stream.h"
 #include "math/vector3.h"
 #include "base/pluralize.h"
+#include "mesh_v1_0/header.h"
+#include "mesh_v1_0/header_save.h"
 
 #include "cxxopts/cxxopts.hpp"
 #include "fbxsdk.h"
@@ -354,6 +356,12 @@ int main(int argc, char** argv)
 
 		// Notify about mesh count
 		DLOG("Found " << g_meshEntries.size() << " " << mmo::Pluralize("mesh", g_meshEntries.size()) << "!");
+		for (const auto& meshEntry : g_meshEntries)
+		{
+			DLOG("\tMesh '" << meshEntry.name << "'");
+			DLOG("\t\t" << meshEntry.vertices.size() << " vertices");
+			DLOG("\t\t" << meshEntry.indices.size() / 3 << " triangles");
+		}
 
 		// Open the output file
 		std::ofstream dstFile{ targetFile.c_str(), std::ios::out | std::ios::binary };
@@ -363,14 +371,50 @@ int main(int argc, char** argv)
 			return 1;
 		}
 
-		// Output buffer
-		std::vector<uint8> buffer;
+		// BinaryIO sink object
+		io::StreamSink sink{ dstFile };
 
-		// Write the file
+		// Write mesh format header
+		mmo::mesh::v1_0::Header meshHeader;
+		mmo::mesh::v1_0::HeaderSaver headerSaver{ sink, meshHeader };
 		{
-			// TODO
+			// Write submesh chunk infos
+			mmo::mesh::v1_0::SubMeshChunkSaver subMeshChunkSaver{ sink };
+			{
+				io::Writer writer{ sink };
 
+				// Writer number of sub meshes
+				writer
+					<< io::write<uint32>(g_meshEntries.size());
+
+				// Now for each submesh, write the vertex and index data
+				for (const auto& meshEntry : g_meshEntries)
+				{
+					writer
+						<< io::write<uint32>(meshEntry.vertices.size())
+						<< io::write<uint32>(meshEntry.indices.size())
+						<< io::write<uint32>(meshEntry.maxIndex);
+
+					for (const auto& vertex : meshEntry.vertices)
+					{
+						writer.writePOD(vertex.position);
+						writer.writePOD(vertex.normal);
+						writer.writePOD(vertex.color);
+						writer.writePOD(vertex.texCoord);
+					}
+
+					for (const auto& index : meshEntry.indices)
+					{
+						writer
+							<< io::write<uint32>(index);
+					}
+
+					meshEntry.vertices;
+				}
+			}
+			subMeshChunkSaver.Finish();
 		}
+		headerSaver.Finish();
 
 		// Delete the FBX SDK manager. All the objects that have been allocated 
 		// using the FBX SDK manager and that haven't been explicitly destroyed 

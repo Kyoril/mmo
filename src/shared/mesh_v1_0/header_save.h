@@ -17,6 +17,20 @@ namespace mmo
 		{
 			struct Header;
 
+
+			class SubMeshChunkSaver
+			{
+			public:
+				explicit SubMeshChunkSaver(io::ISink &destination);
+				void Finish();
+
+			private:
+
+				io::ISink &m_destination;
+				size_t m_chunkSizePos;
+				size_t m_contentPos;
+			};
+
 			struct HeaderSaver
 			{
 				explicit HeaderSaver(io::ISink &destination, const Header& header);
@@ -31,6 +45,8 @@ namespace mmo
 #ifdef _DEBUG
 				bool m_finished;
 #endif
+				size_t m_vertexChunkSizePos;
+				size_t m_indexChunkSizePos;
 			};
 		}
 	}

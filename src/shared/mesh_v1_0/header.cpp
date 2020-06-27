@@ -9,8 +9,10 @@ namespace mmo
 	{
 		namespace v1_0
 		{
-			Header::Header(VersionId version)
-				: version(version)
+			Header::Header()
+				: version(Version_1_0)
+				, vertexChunkOffset(0)
+				, indexChunkOffset(0)
 			{
 			}
 		}

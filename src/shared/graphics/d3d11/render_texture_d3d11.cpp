@@ -12,6 +12,7 @@ namespace mmo
 	RenderTextureD3D11::RenderTextureD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height)
 		: RenderTexture(std::move(name), width, height)
 		, RenderTargetD3D11(device)
+		, m_resizePending(false)
 	{
 		CreateResources();
 	}
@@ -39,6 +40,19 @@ namespace mmo
 
 	void RenderTextureD3D11::Activate()
 	{
+		if (m_resizePending)
+		{
+			m_resizePending = false;
+
+			// Reset resources
+			m_shaderResourceView.Reset();
+			m_renderTargetView.Reset();
+			m_renderTargetTex.Reset();
+
+			// Recreate resources with new dimensions
+			CreateResources();
+		}
+
 		RenderTarget::Activate();
 		RenderTargetD3D11::Activate();
 
@@ -54,14 +68,7 @@ namespace mmo
 	{
 		m_width = width;
 		m_height = height;
-
-		// Reset resources
-		m_shaderResourceView.Reset();
-		m_renderTargetView.Reset();
-		m_renderTargetTex.Reset();
-
-		// Recreate resources with new dimensions
-		CreateResources();
+		m_resizePending = true;
 	}
 
 	void RenderTextureD3D11::CreateResources()

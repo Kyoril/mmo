@@ -26,13 +26,16 @@ namespace mmo
 		virtual void Resize(uint16 width, uint16 height) final override;
 		virtual void Update() final override {};
 
+	public:
+		inline ID3D11ShaderResourceView* GetShaderResourceView() const { return m_shaderResourceView.Get(); }
+
 	private:
 		void CreateResources();
 
 	private:
 		ComPtr<ID3D11Texture2D> m_renderTargetTex;
 		ComPtr<ID3D11ShaderResourceView> m_shaderResourceView;
-
+		bool m_resizePending;
 	};
 
 }

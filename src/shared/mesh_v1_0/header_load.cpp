@@ -14,6 +14,10 @@ namespace mmo
 		{
 			bool LoadHeader(Header &header, io::Reader &reader)
 			{
+				reader
+					>> io::read<uint32>(header.vertexChunkOffset)
+					>> io::read<uint32>(header.indexChunkOffset);
+
 				return reader;
 			}
 		}

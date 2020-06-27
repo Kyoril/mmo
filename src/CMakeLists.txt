@@ -14,6 +14,7 @@ if (MMO_BUILD_CLIENT)
 endif()
 if (MMO_BUILD_EDITOR)
 	add_subdirectory(mmo_edit)
+	add_subdirectory(model_editor)
 endif()
 
 if ((WIN32 OR APPLE) AND MMO_BUILD_LAUNCHER)

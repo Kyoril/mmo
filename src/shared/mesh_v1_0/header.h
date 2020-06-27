@@ -15,11 +15,15 @@ namespace mmo
 	{
 		namespace v1_0
 		{
+			static const std::array<char, 4> SubMeshChunkMagic = { {'S', 'U', 'B', 'M'} };
+
 			struct Header
 			{
 				VersionId version;
+				uint32 vertexChunkOffset;
+				uint32 indexChunkOffset;
 
-				explicit Header(VersionId version);
+				explicit Header();
 			};
 		}
 	}

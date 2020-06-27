@@ -52,7 +52,7 @@ namespace mmo
 		{
 		case mesh::Version_1_0:
 			{
-				mesh::v1_0::Header header{ preHeader.version };
+				mesh::v1_0::Header header;
 				if (!mesh::v1_0::LoadHeader(header, reader))
 				{
 					throw std::runtime_error("Failed to load mesh header!");
