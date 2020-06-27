@@ -21,12 +21,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace mmo
 {
-	// The viewport's render target
-	static RenderTexturePtr s_viewportRT;
-
 	static constexpr char* s_mainWindowClassName = "MainWindow";
-
 	static bool s_initialized = false;
+
 
 	MainWindow::MainWindow()
 		: m_windowHandle(nullptr)
@@ -44,7 +41,6 @@ namespace mmo
 		InitImGui();
 
 		// Setup the viewport render texture
-		s_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", 800, 600);
 		s_initialized = true;
 
 		// Log success
@@ -123,7 +119,6 @@ namespace mmo
 		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
 			window_flags |= ImGuiWindowFlags_NoBackground;
 
-
 		// Begin the dockspace window with disabled padding
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -153,14 +148,7 @@ namespace mmo
 				if (ImGui::BeginMenu("View"))
 				{
 					m_logWindow.DrawViewMenuItem();
-
-					if (ImGui::MenuItem("Test", nullptr))
-					{
-						for (int i = 0; i < 7; ++i)
-						{
-							DLOG("Testing " << i + 1 << "...");
-						}
-					}
+					m_viewportWindow.DrawViewMenuItem();
 
 					ImGui::EndMenu();
 				}
@@ -168,38 +156,8 @@ namespace mmo
 				ImGui::EndMenuBar();
 			}
 
-			// Add the viewport
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
-			if (ImGui::Begin("Viewport", &m_showViewport))
-			{
-				ImVec2 viewportPos = ImGui::GetWindowContentRegionMin();
-				viewportPos.x += ImGui::GetWindowPos().x;
-				viewportPos.y += ImGui::GetWindowPos().y;
-
-				ImVec2 availableSpace = ImGui::GetContentRegionAvail();
-				if (m_lastAvailViewportSize.x != availableSpace.x ||
-					m_lastAvailViewportSize.y != availableSpace.y)
-				{
-					// Resize viewport
-					s_viewportRT->Resize(availableSpace.x, availableSpace.y);
-					m_lastAvailViewportSize = availableSpace;
-				}
-
-				// Ugly hack to get the shader resource view in here... need to wrap that up somehow!
-				ImGui::Image(s_viewportRT->GetTextureObject(), availableSpace);
-
-				const std::string instructionText = "Drag & Drop an FBX file to create a new model";
-				const ImVec2 textSize = ImGui::CalcTextSize(instructionText.c_str(), nullptr);
-
-				ImGui::GetWindowDrawList()->AddText(
-					ImGui::GetFont(), 
-					ImGui::GetFontSize(),
-					ImVec2(viewportPos.x + (m_lastAvailViewportSize.x / 2.0f - textSize.x / 2.0f), viewportPos.y + (m_lastAvailViewportSize.y / 2.0f - textSize.y / 2.0f)),
-					IM_COL32_WHITE, 
-					instructionText.c_str());
-			}
-			ImGui::End();
-			ImGui::PopStyleVar();
+			// Draw the viewport window
+			m_viewportWindow.Draw();
 
 			// Render log window
 			m_logWindow.Draw();
@@ -342,14 +300,8 @@ namespace mmo
 		case WM_PAINT:
 			if (s_initialized)
 			{
-				// Render the scene first
-				GraphicsDevice::Get().Reset();
-				s_viewportRT->Activate();
-				s_viewportRT->Clear(mmo::ClearFlags::All);
-
-				// TODO: draw
-
-				s_viewportRT->Update();
+				// Render game viewport contents
+				m_viewportWindow.Render();
 
 				// Now render the main
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();

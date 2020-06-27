@@ -66,7 +66,7 @@ endif()
 # FBX SDK
 # ===============================================================================
 
-if (MMO_BUILD_TOOLS)
+if (MMO_BUILD_TOOLS OR MMO_BUILD_EDITOR)
 	find_package(FBX)
 endif()
 

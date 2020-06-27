@@ -12,6 +12,8 @@ file(GLOB imgui_src
 
 message(STATUS "Add src: ${imgui_src}")
 
+include_directories(${FBXSDK_INCLUDE_DIR})
+
 # Add executable
 add_gui_exe(model_editor ${imgui_src})
 
@@ -30,7 +32,8 @@ target_link_libraries(model_editor
 	assets
 	mesh
 	mesh_v1_0)
-
+	
+target_link_libraries(model_editor ${FBXSDK_LIBRARIES})
 target_link_libraries(model_editor ${OPENSSL_LIBRARIES})
 set_property(TARGET model_editor PROPERTY FOLDER "editor")
 

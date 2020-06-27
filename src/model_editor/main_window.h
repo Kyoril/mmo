@@ -3,10 +3,9 @@
 #pragma once
 
 #include "log_window.h"
+#include "viewport_window.h"
 
 #include "base/non_copyable.h"
-
-#include "imgui.h"
 
 #include <Windows.h>
 
@@ -51,14 +50,9 @@ namespace mmo
 		ImGuiDockNodeFlags m_dockSpaceFlags;
 
 		bool m_applyDefaultLayout = true;
-		bool m_showViewport = true;
-
-		ImVec2 m_lastAvailViewportSize;
-
 		ImGuiContext* m_imguiContext;
 
 		LogWindow m_logWindow;
-
-		ImVec2 m_viewportPosition;
+		ViewportWindow m_viewportWindow;
 	};
 }

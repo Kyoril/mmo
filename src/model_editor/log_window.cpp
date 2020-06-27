@@ -64,9 +64,13 @@ namespace mmo
 				}
 
 				ImGui::SameLine();
+				ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+				ImGui::SameLine();
 
 				// Draw text filter
 				m_filter.Draw("Filter");
+
+				ImGui::Separator();
 
 				// Draw the log window contents
 				ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
