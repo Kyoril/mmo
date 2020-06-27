@@ -16,10 +16,12 @@
 namespace mmo
 {
 	/// This class manages the main window of the application.
-	class MainWindow final : public NonCopyable
+	class MainWindow final 
+		: public NonCopyable
 	{
 	public:
 		explicit MainWindow();
+		~MainWindow();
 
 	private:
 		/// Ensures that the window class has been created by creating it if needed.

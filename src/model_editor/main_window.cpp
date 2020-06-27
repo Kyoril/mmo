@@ -12,11 +12,10 @@
 #	include "imgui_internal.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #	include "graphics/d3d11/render_texture_d3d11.h"
-#endif
-
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 
 
 namespace mmo
@@ -45,6 +44,18 @@ namespace mmo
 
 		// Log success
 		ILOG("Model Editor initialized");
+	}
+
+	MainWindow::~MainWindow()
+	{
+		// No longer initialized
+		s_initialized = false;
+
+		// Terminate ImGui
+		ShutdownImGui();
+
+		// Tear down graphics device
+		GraphicsDevice::Destroy();
 	}
 
 	void MainWindow::EnsureWindowClassCreated()
