@@ -58,5 +58,7 @@ namespace mmo
 		ImGuiContext* m_imguiContext;
 
 		LogWindow m_logWindow;
+
+		ImVec2 m_viewportPosition;
 	};
 }

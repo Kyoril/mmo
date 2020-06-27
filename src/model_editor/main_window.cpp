@@ -172,6 +172,10 @@ namespace mmo
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
 			if (ImGui::Begin("Viewport", &m_showViewport))
 			{
+				ImVec2 viewportPos = ImGui::GetWindowContentRegionMin();
+				viewportPos.x += ImGui::GetWindowPos().x;
+				viewportPos.y += ImGui::GetWindowPos().y;
+
 				ImVec2 availableSpace = ImGui::GetContentRegionAvail();
 				if (m_lastAvailViewportSize.x != availableSpace.x ||
 					m_lastAvailViewportSize.y != availableSpace.y)
@@ -183,6 +187,16 @@ namespace mmo
 
 				// Ugly hack to get the shader resource view in here... need to wrap that up somehow!
 				ImGui::Image(s_viewportRT->GetTextureObject(), availableSpace);
+
+				const std::string instructionText = "Drag & Drop an FBX file to create a new model";
+				const ImVec2 textSize = ImGui::CalcTextSize(instructionText.c_str(), nullptr);
+
+				ImGui::GetWindowDrawList()->AddText(
+					ImGui::GetFont(), 
+					ImGui::GetFontSize(),
+					ImVec2(viewportPos.x + (m_lastAvailViewportSize.x / 2.0f - textSize.x / 2.0f), viewportPos.y + (m_lastAvailViewportSize.y / 2.0f - textSize.y / 2.0f)),
+					IM_COL32_WHITE, 
+					instructionText.c_str());
 			}
 			ImGui::End();
 			ImGui::PopStyleVar();

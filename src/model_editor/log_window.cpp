@@ -78,10 +78,10 @@ namespace mmo
 						for (const auto& entry : m_logEntries)
 						{
 							const auto& line = entry.message;
-							if (m_filter.PassFilter(&line.front(), &line.back()))
+							if (m_filter.PassFilter(&line.front(), &line.back() + 1))
 							{
 								ImGui::PushStyleColor(ImGuiCol_Text, LogLevelColor(entry.level->color));
-								ImGui::TextUnformatted(&line.front(), &line.back());
+								ImGui::TextUnformatted(&line.front(), &line.back() + 1);
 								ImGui::PopStyleColor();
 							}
 						}
@@ -97,7 +97,7 @@ namespace mmo
 								const auto& line = m_logEntries[line_no].message;
 
 								ImGui::PushStyleColor(ImGuiCol_Text, LogLevelColor(m_logEntries[line_no].level->color));
-								ImGui::TextUnformatted(&line.front(), &line.back());
+								ImGui::TextUnformatted(&line.front(), &line.back() + 1);
 								ImGui::PopStyleColor();
 							}
 						}
