@@ -14,8 +14,6 @@ namespace mmo
 		m_logConnection = mmo::g_DefaultLog.signal().connect([this](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ m_logWindowMutex };
 			m_logEntries.push_back(entry);
-
-			m_selectedItem = m_logEntries.size() - 1;
 		});
 	}
 
@@ -82,10 +80,10 @@ namespace mmo
 						for (const auto& entry : m_logEntries)
 						{
 							const auto& line = entry.message;
-							if (m_filter.PassFilter(&line.front(), &line.back() + 1))
+							if (m_filter.PassFilter(line.c_str()))
 							{
 								ImGui::PushStyleColor(ImGuiCol_Text, LogLevelColor(entry.level->color));
-								ImGui::TextUnformatted(&line.front(), &line.back() + 1);
+								ImGui::TextUnformatted(line.c_str());
 								ImGui::PopStyleColor();
 							}
 						}
@@ -101,7 +99,7 @@ namespace mmo
 								const auto& line = m_logEntries[line_no].message;
 
 								ImGui::PushStyleColor(ImGuiCol_Text, LogLevelColor(m_logEntries[line_no].level->color));
-								ImGui::TextUnformatted(&line.front(), &line.back() + 1);
+								ImGui::TextUnformatted(line.c_str());
 								ImGui::PopStyleColor();
 							}
 						}

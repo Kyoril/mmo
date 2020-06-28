@@ -4,6 +4,7 @@
 
 #include "log_window.h"
 #include "viewport_window.h"
+#include "fbx_import.h"
 
 #include "base/non_copyable.h"
 
@@ -56,5 +57,6 @@ namespace mmo
 
 		LogWindow m_logWindow;
 		ViewportWindow m_viewportWindow;
+		FbxImport m_importer;
 	};
 }

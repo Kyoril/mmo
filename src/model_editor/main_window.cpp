@@ -224,8 +224,12 @@ namespace mmo
 
 	bool MainWindow::OnFileDrop(std::string filename)
 	{
-		// TODO: Check the filename and try to import the file using the fbx importer
-		ILOG("Importing file " << filename << "...");
+		ILOG("Importing fbx file " << filename << "...");
+		if (!m_importer.LoadScene(filename.c_str()))
+		{
+			ELOG("Failed to load fbx file " << filename);
+			return false;
+		}
 
 		return true;
 	}
