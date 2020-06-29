@@ -32,7 +32,6 @@ namespace mmo
 
 		int lFileMajor, lFileMinor, lFileRevision;
 		int lSDKMajor, lSDKMinor, lSDKRevision;
-		//int lFileFormat = -1;
 		int i, lAnimStackCount;
 		bool lStatus;
 

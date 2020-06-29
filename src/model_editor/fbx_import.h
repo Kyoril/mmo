@@ -51,6 +51,8 @@ namespace mmo
 	public:
 		bool LoadScene(const char* pFilename);
 
+		inline const std::vector<MeshEntry>& GetMeshEntries() const noexcept { return m_meshEntries; }
+
 	private:
 		void InitializeSdkObjects();
 		void DestroySdkObjects();

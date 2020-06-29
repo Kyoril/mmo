@@ -4,6 +4,8 @@
 
 #include "base/non_copyable.h"
 #include "graphics/render_texture.h"
+#include "graphics/vertex_buffer.h"
+#include "graphics/index_buffer.h"
 
 #include "imgui.h"
 
@@ -19,6 +21,8 @@ namespace mmo
 	public:
 		/// Renders the actual 3d viewport content.
 		void Render();
+
+		void SetMesh(VertexBufferPtr vertBuf, IndexBufferPtr indexBuf);
 
 	public:
 		/// Draws the viewport window.
@@ -36,5 +40,7 @@ namespace mmo
 		bool m_visible;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;
+		VertexBufferPtr m_vertBuf;
+		IndexBufferPtr m_indexBuf;
 	};
 }

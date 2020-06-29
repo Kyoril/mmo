@@ -193,8 +193,9 @@ namespace mmo
 		/// Returns a normalized copy of this vector.
 		inline Vector3 NormalizedCopy() const
 		{
-			const float length = GetLength();
-			ASSERT(length > 0.0f);
+			float length = GetLength();
+			if (length <= 0.0f) length = 0.0001f;
+			//ASSERT(length > 0.0f);
 
 			Vector3 v = *this;
 			return v / length;

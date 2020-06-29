@@ -114,10 +114,6 @@ namespace mmo
 	void GraphicsDevice::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
 	{
 		m_transform[(uint32)type] = matrix;
-
-		// TODO: This should not be done here. Instead, it should be up to the respective
-		// graphics device implementation to do this if needed.
-		m_transform[(uint32)type].Transpose();
 	}
 
 	void GraphicsDevice::GetViewport(int32 * x, int32 * y, int32 * w, int32 * h, float * minZ, float * maxZ)

@@ -21,9 +21,9 @@ namespace mmo
 			struct
 			{
 				float m11, m12, m13, m14,
-					m21, m22, m23, m24,
-					m31, m32, m33, m34,
-					m41, m42, m43, m44;
+					  m21, m22, m23, m24,
+					  m31, m32, m33, m34,
+					  m41, m42, m43, m44;
 			};
 			float m[4][4];
 			float f[16];
@@ -31,7 +31,8 @@ namespace mmo
 
 	public:
 
-		explicit Matrix4(float m11 = 1.0f, float m12 = 0.0f, float m13 = 0.0f, float m14 = 0.0f,
+		explicit Matrix4(
+			float m11 = 1.0f, float m12 = 0.0f, float m13 = 0.0f, float m14 = 0.0f,
 			float m21 = 0.0f, float m22 = 1.0f, float m23 = 0.0f, float m24 = 0.0f,
 			float m31 = 0.0f, float m32 = 0.0f, float m33 = 1.0f, float m34 = 0.0f,
 			float m41 = 0.0f, float m42 = 0.0f, float m43 = 0.0f, float m44 = 1.0f)
@@ -46,10 +47,10 @@ namespace mmo
 
 		static Matrix4 MakeTranslation(const Vector3& v)
 		{
-			return Matrix4( 1.0f, 0.0f, 0.0f, v.x,
-							0.0f, 1.0f, 0.0f, v.y,
-							0.0f, 0.0f, 1.0f, v.z,
-							0.0f, 0.0f, 0.0f, 1.0f);
+			return Matrix4( 1.0f, 0.0f, 0.0f, 0.0f,
+							0.0f, 1.0f, 0.0f, 0.0f,
+							0.0f, 0.0f, 1.0f, 0.0f,
+							v.x, v.y, v.z, 1.0f);
 		}
 
 		static Matrix4 MakeScale(float scalar)
@@ -143,25 +144,27 @@ namespace mmo
 
 		inline static Matrix4 MakeProjection(const float fFOV, const float fAspect, const float fNearPlane, const float fFarPlane)
 		{
-			const float s = 1.0f / tanf(fFOV * 0.5f);
-			const float Q = fFarPlane / (fFarPlane - fNearPlane);
+			const float yScale = 1.0f / tanf(fFOV * 0.5f);
+			const float xScale = yScale / fAspect;
 
-			return Matrix4(s / fAspect, 0.0f, 0.0f, 0.0f,
-				0.0f, s, 0.0f, 0.0f,
-				0.0f, 0.0f, Q, 1.0f,
-				0.0f, 0.0f, -Q * fNearPlane, 0.0f);
+			return Matrix4(
+				xScale,	0.0f,	0.0f,												0.0f,
+				0.0f,	yScale,	0.0f,												0.0f,
+				0.0f,	0.0f,	fFarPlane / (fFarPlane - fNearPlane),				1.0f,
+				0.0f,	0.0f,	-fNearPlane * fFarPlane / (fFarPlane - fNearPlane),	0.0f);
 		}
 
 		inline static Matrix4 MakeOrthographic(float l, float r, float b, float t, float zn, float zf)
 		{
 			return Matrix4(
-				2.f / (r - l), 0.0f, 0.0f, 0.0f,
-				0.0f, 2.f / (t - b), 0.0f, 0.0f,
-				0.0f, 0.0f, 1.f / (zf - zn), 0.0f,
-				(l + r) / (l - r), (t + b) / (b - t), zn / (zn - zf), 1.0f);
+				2.f / (r - l), 0.0f, 0.0f, (l + r) / (l - r),
+				0.0f, 2.f / (t - b), 0.0f, (t + b) / (b - t),
+				0.0f, 0.0f, 1.f / (zf - zn), zn / (zn - zf),
+				0.0f, 0.0f, 0.0f, 1.0f);
 		}
 
-		inline static Matrix4 MakeView(const Vector3& vPos,
+		inline static Matrix4 MakeView(
+			const Vector3& vPos,
 			const Vector3& vLookAt,
 			const Vector3& vUp = Vector3(0.0f, 1.0f, 0.0f))
 		{
@@ -175,11 +178,11 @@ namespace mmo
 			Vector3 vYAxis(vZAxis.Cross(vXAxis).NormalizedCopy());
 
 			// Rotationsmatrix erzeugen und die Translationsmatrix mit ihr multiplizieren
-			return Matrix4::MakeTranslation(-vPos) *
-				Matrix4(vXAxis.x, vYAxis.x, vZAxis.x, 0.0f,
-					vXAxis.y, vYAxis.y, vZAxis.y, 0.0f,
-					vXAxis.z, vYAxis.z, vZAxis.z, 0.0f,
-					0.0f, 0.0f, 0.0f, 1.0f);
+			return Matrix4(
+				vXAxis.x, vYAxis.x, vZAxis.x, 0.0f,
+				vXAxis.y, vYAxis.y, vZAxis.y, 0.0f,
+				vXAxis.z, vYAxis.z, vZAxis.z, 0.0f,
+				-vXAxis.Dot(vPos), -vYAxis.Dot(vPos), -vZAxis.Dot(vPos), 1.0f);
 		}
 
 		void Transpose()

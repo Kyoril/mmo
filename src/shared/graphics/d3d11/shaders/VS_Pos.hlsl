@@ -5,16 +5,14 @@
 cbuffer Matrices
 {
 	float4x4 matWorld;
-	float4x4 matView;
-	float4x4 matProj;
+	float4x4 matViewProj;
 };
 
 VertexOut main(VertexIn input)
 {
 	VertexOut output;
 
-	float4x4 worldViewProj = mul(matWorld, mul(matView, matProj));
-	output.pos = mul(float4(input.pos.xyz, 1.0), worldViewProj);
+	output.pos = mul(float4(input.pos.xyz, 1.0), mul(matWorld, matViewProj));
 
 	return output;
 }

@@ -200,7 +200,7 @@ namespace mmo
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
 		cbd.Usage = D3D11_USAGE_DEFAULT;
-		cbd.ByteWidth = sizeof(Matrix4) * 3;
+		cbd.ByteWidth = sizeof(Matrix4) * 2;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 		D3D11_SUBRESOURCE_DATA sd;
@@ -215,7 +215,7 @@ namespace mmo
 		// Create the default rasterizer state
 		D3D11_RASTERIZER_DESC rd;
 		ZeroMemory(&rd, sizeof(rd));
-		rd.FillMode = D3D11_FILL_SOLID;
+		rd.FillMode = D3D11_FILL_WIREFRAME;
 		rd.CullMode = D3D11_CULL_NONE;
 		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_defaultRasterizerState)));
 
@@ -313,6 +313,9 @@ namespace mmo
 		// Create the device
 		GraphicsDevice::Create(desc);
 
+		// Apply vertical sync value
+		m_vsync = desc.vsync;
+
 		// Initialize Direct3D
 		CreateD3D11();
 
@@ -364,9 +367,14 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
 	{
+		const Matrix4 matrices[2] = {
+			m_transform[0],
+			m_transform[1] * m_transform[2]
+		};
+
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, matrices, 0, 0);
 
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
@@ -374,9 +382,14 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::DrawIndexed()
 	{
+		const Matrix4 matrices[2] = {
+			m_transform[0],
+			m_transform[1] * m_transform[2]
+		};
+
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, matrices, 0, 0);
 
 		// Execute draw command
 		m_immContext->DrawIndexed(m_indexCount, 0, 0);

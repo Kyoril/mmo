@@ -34,6 +34,7 @@ namespace mmo
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
 		desc.customWindowHandle = m_windowHandle;
+		desc.vsync = false;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
 
 		// Initialize imgui
@@ -229,6 +230,37 @@ namespace mmo
 		{
 			ELOG("Failed to load fbx file " << filename);
 			return false;
+		}
+
+		// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
+		const auto& meshes = m_importer.GetMeshEntries();
+		if (meshes.size() > 0)
+		{
+			const auto& mesh = meshes.front();
+
+			std::vector<POS_COL_VERTEX> vertices;
+			vertices.resize(mesh.vertices.size());
+
+			for (size_t i = 0; i < mesh.vertices.size(); ++i)
+			{
+				vertices[i].pos[0] = mesh.vertices[i].position.x;
+				vertices[i].pos[1] = mesh.vertices[i].position.y;
+				vertices[i].pos[2] = mesh.vertices[i].position.z;
+				vertices[i].color = 0xFFAEAEAE;
+			}
+
+			VertexBufferPtr vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
+
+			std::vector<uint16> indices;
+			indices.resize(mesh.indices.size());
+
+			for (size_t i = 0; i < mesh.indices.size(); ++i)
+			{
+				indices[i] = static_cast<uint16>(mesh.indices[i]);
+			}
+
+			IndexBufferPtr indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
+			m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
 		}
 
 		return true;

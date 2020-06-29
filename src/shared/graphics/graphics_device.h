@@ -38,6 +38,7 @@ namespace mmo
 		void* customWindowHandle = nullptr;
 		uint16 width = 1280;
 		uint16 height = 720;
+		bool vsync = true;
 	};
 
 
