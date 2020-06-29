@@ -8,6 +8,7 @@
 #include "texture_d3d11.h"
 #include "render_texture_d3d11.h"
 #include "render_window_d3d11.h"
+#include "rasterizer_state_hash.h"
 
 #include "base/macros.h"
 
@@ -79,7 +80,7 @@ namespace mmo
 		CreateConstantBuffers();
 
 		// Create rasterizer state
-		CreateRasterizerStates();
+		InitRasterizerState();
 
 		// Create sampler state
 		CreateSamplerStates();
@@ -210,19 +211,13 @@ namespace mmo
 		VERIFY(SUCCEEDED(m_device->CreateBuffer(&cbd, nullptr, &m_matrixBuffer)));
 	}
 
-	void GraphicsDeviceD3D11::CreateRasterizerStates()
+	void GraphicsDeviceD3D11::InitRasterizerState()
 	{
 		// Create the default rasterizer state
-		D3D11_RASTERIZER_DESC rd;
-		ZeroMemory(&rd, sizeof(rd));
-		rd.FillMode = D3D11_FILL_WIREFRAME;
-		rd.CullMode = D3D11_CULL_NONE;
-		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_defaultRasterizerState)));
-
-		// Create the rasterizer state with support for scissor rects
-		rd.ScissorEnable = TRUE;
-		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&rd, &m_scissorRasterizerState)));
-		
+		ZeroMemory(&m_rasterizerDesc, sizeof(m_rasterizerDesc));
+		m_rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+		m_rasterizerDesc.CullMode = D3D11_CULL_NONE;
+		m_rasterizerDescChanged = true;
 	}
 
 	void GraphicsDeviceD3D11::CreateSamplerStates()
@@ -264,13 +259,53 @@ namespace mmo
 		VERIFY( SUCCEEDED(m_device->CreateDepthStencilState(&depthStencilDesc, m_depthStencilState.GetAddressOf())));
 	}
 
+	void GraphicsDeviceD3D11::CreateRasterizerState(bool set)
+	{
+		// Create hash generator
+		const RasterizerStateHash hashGen;
+
+		// Generate hash from rasterizer desc
+		m_rasterizerHash = hashGen(m_rasterizerDesc);
+		
+		ComPtr<ID3D11RasterizerState> state;
+		VERIFY(SUCCEEDED(m_device->CreateRasterizerState(&m_rasterizerDesc, state.GetAddressOf())));
+		m_rasterizerStates[m_rasterizerHash] = state;
+
+		// Activate new state if requested
+		if (set)
+		{
+			m_immContext->RSSetState(state.Get());
+		}
+	}
+
+	void GraphicsDeviceD3D11::UpdateCurrentRasterizerState()
+	{
+		// Need rasterizer state update?
+		if (m_rasterizerDescChanged)
+		{
+			// Calculate the current hash
+			const RasterizerStateHash hashGen;
+			const size_t hash = hashGen(m_rasterizerDesc);
+
+			// Check if rasterizer state for this hash has already been created
+			auto it = m_rasterizerStates.find(hash);
+			if (it == m_rasterizerStates.end())
+			{
+				// Not yet created, so create and activate it
+				CreateRasterizerState(true);
+			}
+			else
+			{
+				// State exists, so activate it
+				m_immContext->RSSetState(it->second.Get());
+			}
+		}
+	}
+
 	void GraphicsDeviceD3D11::Reset()
 	{
 		// Clear the state
 		m_immContext->ClearState();
-
-		// Set rasterizer state
-		m_immContext->RSSetState(m_defaultRasterizerState.Get());
 		m_immContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
 
 		// Update the constant buffer
@@ -367,6 +402,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
 	{
+		UpdateCurrentRasterizerState();
+
 		const Matrix4 matrices[2] = {
 			m_transform[0],
 			m_transform[1] * m_transform[2]
@@ -382,6 +419,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::DrawIndexed()
 	{
+		UpdateCurrentRasterizerState();
+
 		const Matrix4 matrices[2] = {
 			m_transform[0],
 			m_transform[1] * m_transform[2]
@@ -527,12 +566,15 @@ namespace mmo
 		clipRect.right = x + w;
 		clipRect.bottom = y + h;
 		m_immContext->RSSetScissorRects(1, &clipRect);
-		m_immContext->RSSetState(m_scissorRasterizerState.Get());
+
+		m_rasterizerDesc.ScissorEnable = TRUE;
+		m_rasterizerDescChanged = true;
 	}
 
 	void GraphicsDeviceD3D11::ResetClipRect()
 	{
-		m_immContext->RSSetState(m_defaultRasterizerState.Get());
+		m_rasterizerDesc.ScissorEnable = FALSE;
+		m_rasterizerDescChanged = true;
 	}
 
 	RenderWindowPtr GraphicsDeviceD3D11::CreateRenderWindow(std::string name, uint16 width, uint16 height)
@@ -543,5 +585,48 @@ namespace mmo
 	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height)
 	{
 		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
+	}
+
+	namespace
+	{
+		static D3D11_FILL_MODE D3D11FillMode(FillMode mode)
+		{
+			switch (mode)
+			{
+			case FillMode::Wireframe:
+				return D3D11_FILL_WIREFRAME;
+			}
+
+			return D3D11_FILL_SOLID;
+		}
+
+		static D3D11_CULL_MODE D3D11CullMode(FaceCullMode mode)
+		{
+			switch (mode)
+			{
+			case FaceCullMode::Back:
+				return D3D11_CULL_BACK;
+			case FaceCullMode::Front:
+				return D3D11_CULL_FRONT;
+			}
+
+			return D3D11_CULL_NONE;
+		}
+	}
+
+	void GraphicsDeviceD3D11::SetFillMode(FillMode mode)
+	{
+		GraphicsDevice::SetFillMode(mode);
+
+		m_rasterizerDesc.FillMode = D3D11FillMode(mode);
+		m_rasterizerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetFaceCullMode(FaceCullMode mode)
+	{
+		GraphicsDevice::SetFaceCullMode(mode);
+
+		m_rasterizerDesc.CullMode = D3D11CullMode(mode);
+		m_rasterizerDescChanged = true;
 	}
 }

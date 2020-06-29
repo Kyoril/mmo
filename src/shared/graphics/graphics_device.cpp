@@ -21,6 +21,8 @@ namespace mmo
 		, m_viewH(900)
 		, m_viewMinZ(0.001f)
 		, m_viewMaxZ(100.0f)
+		, m_fillMode(FillMode::Solid)
+		, m_cullMode(FaceCullMode::Back)
 	{
 	}
 
@@ -77,6 +79,9 @@ namespace mmo
 
 		// Remember the current render target
 		m_restoreRenderTarget = m_renderTarget;
+
+		m_restoreFillMode = m_fillMode;
+		m_restoreCullMode = m_cullMode;
 	}
 
 	void GraphicsDevice::RestoreState()
@@ -99,6 +104,16 @@ namespace mmo
 			m_restoreRenderTarget != m_renderTarget)
 		{
 			m_restoreRenderTarget->Activate();
+		}
+
+		if (m_restoreFillMode != m_fillMode)
+		{
+			SetFillMode(m_restoreFillMode);
+		}
+
+		if (m_restoreCullMode != m_cullMode)
+		{
+			SetFaceCullMode(m_restoreCullMode);
 		}
 
 		// No longer keep the old render target referenced so that it is allowed
@@ -134,5 +149,15 @@ namespace mmo
 		m_viewH = h;
 		m_viewMinZ = minZ;
 		m_viewMaxZ = maxZ;
+	}
+
+	void GraphicsDevice::SetFillMode(FillMode mode)
+	{
+		m_fillMode = mode;
+	}
+
+	void GraphicsDevice::SetFaceCullMode(FaceCullMode mode)
+	{
+		m_cullMode = mode;
 	}
 }

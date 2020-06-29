@@ -28,6 +28,9 @@ namespace mmo
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 
+		gx.SetFillMode(FillMode::Wireframe);
+		gx.SetFaceCullMode(FaceCullMode::Back);
+
 		if (m_vertBuf && m_indexBuf)
 		{
 			const float aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;

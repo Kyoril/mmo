@@ -72,6 +72,26 @@ namespace mmo
 		Count
 	};
 
+	/// Enumerates possible polygon fill modes.
+	enum class FillMode
+	{
+		/// Polygons will be rendered solid.
+		Solid,
+		/// Only the edges of polygons will be rendered.
+		Wireframe,
+	};
+
+	/// Enumerates possible face cull modes.
+	enum class FaceCullMode
+	{
+		/// No front- or backface culling enabled.
+		None,
+		/// Back-facing polygons will be culled.
+		Back,
+		/// Fron-facing polygons will be culled.
+		Front,
+	};
+
 
 	/// This is the base class of a graphics device object.
 	class GraphicsDevice
@@ -145,6 +165,10 @@ namespace mmo
 		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) = 0;
 		/// Creates a new render texture.
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) = 0;
+		/// Sets the fill mode of polygons.
+		virtual void SetFillMode(FillMode mode);
+		/// Sets the cull mode of polygons.
+		virtual void SetFaceCullMode(FaceCullMode mode);
 
 	public:
 		inline RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
@@ -166,5 +190,9 @@ namespace mmo
 		RenderTargetPtr m_restoreRenderTarget;
 		BlendMode m_blendMode;
 		BlendMode m_restoreBlendMode;
+		FillMode m_fillMode;
+		FillMode m_restoreFillMode;
+		FaceCullMode m_cullMode;
+		FaceCullMode m_restoreCullMode;
 	};
 }

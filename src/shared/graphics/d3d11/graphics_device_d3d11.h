@@ -43,6 +43,8 @@ namespace mmo
 		virtual void ResetClipRect() final override;
 		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) final override;
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) final override;
+		virtual void SetFillMode(FillMode mode) final override;
+		virtual void SetFaceCullMode(FaceCullMode mode) final override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -50,9 +52,7 @@ namespace mmo
 		{
 			m_indexCount = InIndexCount;
 		}
-
 		inline bool HasTearingSupport() const noexcept { return m_tearingSupport; }
-
 		inline bool IsVSyncEnabled() const noexcept { return m_vsync; }
 
 	public:
@@ -71,11 +71,15 @@ namespace mmo
 		/// Creates default constant buffers for internal shaders.
 		void CreateConstantBuffers();
 		/// Creates the supported rasterizer states.
-		void CreateRasterizerStates();
+		void InitRasterizerState();
 		/// Creates the supported sampler states.
 		void CreateSamplerStates();
 		/// Creates the supported depth states.
 		void CreateDepthStates();
+
+		void CreateRasterizerState(bool set = true);
+
+		void UpdateCurrentRasterizerState();
 
 	private:
 		/// The d3d11 device object.
@@ -86,10 +90,8 @@ namespace mmo
 		ComPtr<ID3D11BlendState> m_opaqueBlendState;
 		/// Blend state with alpha blending enabled.
 		ComPtr<ID3D11BlendState> m_alphaBlendState;
-		/// Default rasterizer state.
-		ComPtr<ID3D11RasterizerState> m_defaultRasterizerState;
-		/// Rasterizer state with support for scissor rects.
-		ComPtr<ID3D11RasterizerState> m_scissorRasterizerState;
+		/// Rasterizer states.
+		std::map<size_t, ComPtr<ID3D11RasterizerState>> m_rasterizerStates;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
 		/// The default texture sampler.
@@ -109,5 +111,8 @@ namespace mmo
 		FLOAT m_clearColorFloat[4];
 		bool m_vsync = true;
 		RenderTargetPtr m_renderTarget;
+		D3D11_RASTERIZER_DESC m_rasterizerDesc;
+		bool m_rasterizerDescChanged = false;
+		size_t m_rasterizerHash = 0;
 	};
 }
