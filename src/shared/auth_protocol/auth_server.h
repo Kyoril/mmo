@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "auth_protocol.h"
 #include "auth_connection.h"
 #include "network/server.h"
 

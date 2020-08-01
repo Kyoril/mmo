@@ -25,9 +25,9 @@ namespace mmo
 		/// Unloads the archive.
 		virtual void Unload() = 0;
 		/// Gets the archive name.
-		virtual const std::string& GetName() const = 0;
+		[[nodiscard]] virtual const std::string& GetName() const = 0;
 		/// Gets the archive mode.
-		virtual ArchiveMode GetMode() const = 0;
+		[[nodiscard]] virtual ArchiveMode GetMode() const = 0;
 		/// Tries to open a file for reading.
 		virtual std::unique_ptr<std::istream> Open(const std::string& filename) = 0;
 		/// Enumerates all files the archive contains.

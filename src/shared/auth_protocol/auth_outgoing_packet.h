@@ -9,7 +9,7 @@ namespace mmo
 {
 	namespace auth
 	{
-		class OutgoingPacket 
+		class OutgoingPacket final
 			: public io::Writer
 		{
 		public:

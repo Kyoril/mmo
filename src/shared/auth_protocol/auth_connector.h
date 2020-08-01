@@ -51,8 +51,8 @@ namespace mmo
 			void ClearPacketHandler(uint8 opCode)
 			{
 				std::scoped_lock lock{ m_packetHandlerMutex };
-				
-				auto it = m_packetHandlers.find(opCode);
+
+				const auto it = m_packetHandlers.find(opCode);
 				if (it != m_packetHandlers.end())
 				{
 					m_packetHandlers.erase(it);

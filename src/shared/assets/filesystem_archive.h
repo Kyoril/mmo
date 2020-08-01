@@ -22,12 +22,12 @@ namespace mmo
 		FileSystemArchive(const std::string& name);
 
 	public:
-		virtual void Load() override;
-		virtual void Unload() override;
-		virtual const std::string& GetName() const override;
-		virtual ArchiveMode GetMode() const override;
-		virtual std::unique_ptr<std::istream> Open(const std::string& filename) override;
-		virtual void EnumerateFiles(std::vector<std::string>& files) override;
+		void Load() override;
+		void Unload() override;
+		[[nodiscard]] const std::string& GetName() const override;
+		[[nodiscard]] ArchiveMode GetMode() const override;
+		std::unique_ptr<std::istream> Open(const std::string& filename) override;
+		void EnumerateFiles(std::vector<std::string>& files) override;
 
 	private:
 

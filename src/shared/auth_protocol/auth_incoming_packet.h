@@ -19,9 +19,8 @@ namespace mmo
 			IncomingPacket();
 			
 		public:
-			inline uint8 GetId() const { return m_id; }
-			inline uint32 GetSize() const { return m_size; }
-
+			[[nodiscard]] uint8 GetId() const { return m_id; }
+			[[nodiscard]] uint32 GetSize() const { return m_size; }
 
 			static ReceiveState Start(IncomingPacket &packet, io::MemorySource &source);
 
