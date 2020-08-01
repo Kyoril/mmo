@@ -1,42 +1,40 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
 #include "sink.h"
+#include "base/non_copyable.h"
+
 
 namespace io
 {
 	class Writer
+		: public mmo::NonCopyable
 	{
-	private:
-
-		Writer(const Writer &other) = delete;
-		Writer &operator=(const Writer &other) = delete;
-
 	public:
-
 		explicit Writer(ISink &sink)
 			: m_sink(sink)
 		{
 		}
+		virtual ~Writer() = default;
 
-		ISink &sink()
-		{
-			return m_sink;
-		}
+		
+	public:
+		ISink &Sink() { return m_sink; }
+		[[nodiscard]] const ISink &Sink() const { return m_sink; }
 
 		template <class T>
-		void writePOD(const T &pod)
+		void WritePOD(const T &pod)
 		{
-			m_sink.write(
+			m_sink.Write(
 			    reinterpret_cast<const char *>(&pod),
 			    sizeof(pod));
 		}
 
 		template <class T>
-		void writePOD(std::size_t position, const T &pod)
+		void WritePOD(std::size_t position, const T &pod)
 		{
-			m_sink.overwrite(
+			m_sink.Overwrite(
 			    position,
 			    reinterpret_cast<const char *>(&pod),
 			    sizeof(pod));
@@ -51,7 +49,7 @@ namespace io
 #define BINARY_IO_WRITER_OPERATOR(type) \
 	inline Writer &operator << (Writer &w, type value) \
 	{ \
-		w.writePOD(value); \
+		w.WritePOD(value); \
 		return w; \
 	}
 
@@ -72,7 +70,7 @@ namespace io
 #define BINARY_IO_WRITER_FLOAT_OPERATOR(type) \
 	inline Writer &operator << (Writer &w, type value) \
 	{ \
-		w.writePOD(value); \
+		w.WritePOD(value); \
 		return w; \
 	}
 

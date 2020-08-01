@@ -25,11 +25,11 @@ namespace mmo
 				io::Writer writer(destination);
 				SavePreHeader(PreHeader(m_header.version), writer);
 
-				m_vertexChunkSizePos = destination.position();
+				m_vertexChunkSizePos = destination.Position();
 				writer
 					<< io::write<uint32>(m_header.vertexChunkOffset);
 
-				m_indexChunkSizePos = destination.position();
+				m_indexChunkSizePos = destination.Position();
 				writer
 					<< io::write<uint32>(m_header.indexChunkOffset);
 			}
@@ -47,12 +47,12 @@ namespace mmo
 
 				if (m_header.vertexChunkOffset != 0)
 				{
-					writer.writePOD(m_vertexChunkSizePos, m_header.vertexChunkOffset);
+					writer.WritePOD(m_vertexChunkSizePos, m_header.vertexChunkOffset);
 				}
 
 				if (m_header.indexChunkOffset != 0)
 				{
-					writer.writePOD(m_indexChunkSizePos, m_header.indexChunkOffset);
+					writer.WritePOD(m_indexChunkSizePos, m_header.indexChunkOffset);
 				}
 #ifdef _DEBUG
 				m_finished = true;
@@ -66,19 +66,19 @@ namespace mmo
 				writer
 					<< io::write_range(SubMeshChunkMagic);
 
-				m_chunkSizePos = destination.position();
+				m_chunkSizePos = destination.Position();
 				writer
 					<< io::write<uint32>(0);
 
-				m_contentPos = destination.position();
+				m_contentPos = destination.Position();
 			}
 
 			void SubMeshChunkSaver::Finish()
 			{
-				const uint32 contentDiff = static_cast<uint32>(m_destination.position() - m_contentPos);
+				const uint32 contentDiff = static_cast<uint32>(m_destination.Position() - m_contentPos);
 
 				io::Writer writer{ m_destination };
-				writer.writePOD(m_chunkSizePos, contentDiff);
+				writer.WritePOD(m_chunkSizePos, contentDiff);
 			}
 		}
 	}

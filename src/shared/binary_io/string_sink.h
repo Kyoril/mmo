@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
@@ -31,27 +31,27 @@ namespace io
 			return m_buffer;
 		}
 
-		virtual std::size_t write(const char *src, std::size_t size) override
+		std::size_t Write(const char *src, std::size_t size) override
 		{
 			m_buffer.append(src, size);
 			return size;
 		}
 
-		virtual std::size_t overwrite(std::size_t position, const char *src, std::size_t size) override
+		std::size_t Overwrite(std::size_t position, const char *src, std::size_t size) override
 		{
 			assert((position + size) <= m_buffer.size());
 
-			char *const dest = &m_buffer[0] + position;
+			const auto dest = &m_buffer[0] + position;
 			std::memcpy(dest, src, size);
 			return size;
 		}
 
-		virtual std::size_t position() override
+		std::size_t Position() override
 		{
 			return m_buffer.size();
 		}
 
-		virtual void flush() override
+		void Flush() override
 		{
 		}
 

@@ -20,7 +20,7 @@ namespace mmo
 				io::Writer writer(destination);
 				savePreHeader(PreHeader(Version_1_0), writer);
 
-				m_fileCountPosition = destination.position();
+				m_fileCountPosition = destination.Position();
 				writer
 				        << io::write<uint32>(0);
 			}
@@ -29,7 +29,7 @@ namespace mmo
 			{
 				io::Writer writer(m_destination);
 
-				writer.writePOD(m_fileCountPosition, static_cast<uint32>(fileCount));
+				writer.WritePOD(m_fileCountPosition, static_cast<uint32>(fileCount));
 			}
 
 
@@ -46,19 +46,19 @@ namespace mmo
 				        << io::write<uint16>(compression)
 				        ;
 
-				m_offsetPosition = destination.position();
+				m_offsetPosition = destination.Position();
 				writer
 				        << io::write<uint64>(0);
 
-				m_sizePosition = destination.position();
+				m_sizePosition = destination.Position();
 				writer
 				        << io::write<uint64>(0);
 
-				m_originalSizePosition = destination.position();
+				m_originalSizePosition = destination.Position();
 				writer
 				        << io::write<uint64>(0);
 
-				m_digestPosition = destination.position();
+				m_digestPosition = destination.Position();
 				for (size_t i = 0; i < 20; ++i)
 				{
 					writer << io::write<uint8>(0);
@@ -73,17 +73,17 @@ namespace mmo
 			{
 				io::Writer writer(m_destination);
 
-				writer.writePOD(m_offsetPosition,
+				writer.WritePOD(m_offsetPosition,
 				                static_cast<uint64>(offset));
 
-				writer.writePOD(m_sizePosition,
+				writer.WritePOD(m_sizePosition,
 				                static_cast<uint64>(size));
 
-				writer.writePOD(m_originalSizePosition,
+				writer.WritePOD(m_originalSizePosition,
 				                static_cast<uint64>(originalSize));
 
 				ASSERT(digest.size() == 20);
-				writer.sink().overwrite(
+				writer.Sink().Overwrite(
 				    m_digestPosition,
 				    reinterpret_cast<const char *>(digest.data()),
 				    digest.size());

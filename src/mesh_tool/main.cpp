@@ -397,10 +397,10 @@ int main(int argc, char** argv)
 
 					for (const auto& vertex : meshEntry.vertices)
 					{
-						writer.writePOD(vertex.position);
-						writer.writePOD(vertex.normal);
-						writer.writePOD(vertex.color);
-						writer.writePOD(vertex.texCoord);
+						writer.WritePOD(vertex.position);
+						writer.WritePOD(vertex.normal);
+						writer.WritePOD(vertex.color);
+						writer.WritePOD(vertex.texCoord);
 					}
 
 					for (const auto& index : meshEntry.indices)
@@ -409,7 +409,7 @@ int main(int argc, char** argv)
 							<< io::write<uint32>(index);
 					}
 
-					meshEntry.vertices;
+					//meshEntry.vertices;
 				}
 			}
 			subMeshChunkSaver.Finish();

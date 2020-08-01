@@ -1,8 +1,10 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
 #include "sink.h"
+
+#include <string>
 
 namespace io
 {
@@ -21,14 +23,14 @@ namespace io
 
 		void write(const Char *str)
 		{
-			m_sink.write(
+			m_sink.Write(
 			    reinterpret_cast<const char *>(str),
 			    getStringLength(str) * sizeof(Char));
 		}
 
 		void write(const std::basic_string<Char> &str)
 		{
-			m_sink.write(
+			m_sink.Write(
 			    reinterpret_cast<const char *>(str.data()),
 			    str.size() * sizeof(Char));
 		}

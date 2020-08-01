@@ -67,25 +67,25 @@ namespace mmo
 	// Graphics CVar stuff
 	namespace
 	{
-		static ConsoleVar* s_gxResolutionCVar = nullptr;
-		static ConsoleVar* s_gxWindowedCVar = nullptr;
-		static ConsoleVar* s_gxVSyncCVar = nullptr;
-		static ConsoleVar* s_gxApiCVar = nullptr;
+		ConsoleVar* s_gxResolutionCVar = nullptr;
+		ConsoleVar* s_gxWindowedCVar = nullptr;
+		ConsoleVar* s_gxVSyncCVar = nullptr;
+		ConsoleVar* s_gxApiCVar = nullptr;
 
 
 		/// Helper struct for automatic gx cvar table.
-		typedef struct
+		struct GxCVarHelper
 		{
 			std::string name;
 			std::string description;
 			std::string defaultValue;
 			ConsoleVar** outputVar = nullptr;
 			std::function<ConsoleVar::ChangedSignal::signature_type> changedHandler = nullptr;
-		} GxCVarHelper;
+		};
 
 		/// A list of automatically registered and unregistered console variables that are also
 		/// serialized when the games config file is serialized.
-		static const std::vector<GxCVarHelper> s_gxCVars = 
+		const std::vector<GxCVarHelper> s_gxCVars = 
 		{
 			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar,			nullptr },
 			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
@@ -105,7 +105,7 @@ namespace mmo
 
 
 		/// Registers the automatically managed gx cvars from the table above.
-		static void RegisterGraphicsCVars()
+		void RegisterGraphicsCVars()
 		{
 			// Register console variables from the table
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
@@ -120,7 +120,7 @@ namespace mmo
 		}
 
 		/// Unregisters the automatically managed gx cvars from the table above.
-		static void UnregisterGraphicsCVars()
+		void UnregisterGraphicsCVars()
 		{
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVarMgr::UnregisterConsoleVar(x.name);
@@ -180,7 +180,7 @@ namespace mmo
 		ConsoleVarMgr::Initialize();
 
 		// Register locale cvar
-		auto localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
+		const auto localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 
 		// Register graphics variables
 		RegisterGraphicsCVars();
@@ -194,13 +194,13 @@ namespace mmo
 
 		// Load the locale archive
 		ILOG("Locale: " << localeCVar->GetStringValue());
-		std::string localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
+		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
 
 		// Initialize the asset registry
 		AssetRegistry::Initialize(std::filesystem::current_path() / "Data", { "Interface.hpak", "Fonts.hpak", localeArchive, localeArchive + ".hpak" });
 
 		// Set default graphics api
-		GraphicsApi defaultApi =
+		const GraphicsApi defaultApi =
 #if PLATFORM_WINDOWS
 			GraphicsApi::D3D11;
 #else
@@ -208,7 +208,7 @@ namespace mmo
 #endif
 
 		// Check for console var values
-		GraphicsApi api = GraphicsApi::Unknown;
+		auto api = GraphicsApi::Unknown;
 		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "d3d11") == 0)
 		{
 			api = GraphicsApi::D3D11;
@@ -263,9 +263,9 @@ namespace mmo
 		// Create the vertex buffer for the console background
 		const POS_COL_VERTEX vertices[] = {
 			{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-			{ { (float)s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
-			{ { (float)s_lastViewportWidth, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 },
-			{ { 0.0f, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 }
+			{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
+			{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
+			{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
 		};
 
 		// Setup vertices
@@ -375,7 +375,7 @@ namespace mmo
 		// Build command structure and add it
 		ConsoleCommand cmd;
 		cmd.category = category;
-		cmd.help = std::move(help);
+		cmd.help = help;
 		cmd.handler = std::move(handler);
 		s_consoleCommands.emplace(command, cmd);
 	}
@@ -383,22 +383,22 @@ namespace mmo
 	inline void Console::UnregisterCommand(const std::string & command)
 	{
 		// Remove the respective iterator
-		auto it = s_consoleCommands.find(command);
+		const auto it = s_consoleCommands.find(command);
 		if (it != s_consoleCommands.end())
 		{
 			s_consoleCommands.erase(it);
 		}
 	}
 
-	void Console::ExecuteCommand(std::string commandLine)
+	void Console::ExecuteCommand(const std::string& commandLine)
 	{
 		// Will hold the command name
 		std::string command;
 		std::string arguments;
 
 		// Find the first space and use it to get the command
-		auto space = commandLine.find(' ');
-		if (space == commandLine.npos)
+		const auto space = commandLine.find(' ');
+		if (space == std::string::npos)
 		{
 			command = commandLine;
 		}
@@ -415,7 +415,7 @@ namespace mmo
 		}
 
 		// Check if such argument exists
-		auto it = s_consoleCommands.find(command);
+		const auto it = s_consoleCommands.find(command);
 		if (it == s_consoleCommands.end())
 		{
 			ELOG("Unknown console command \"" << command << "\"");
@@ -429,7 +429,7 @@ namespace mmo
 		}
 	}
 
-	bool Console::KeyDown(int32 key)
+	bool Console::KeyDown(const int32 key)
 	{
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)
@@ -482,13 +482,13 @@ namespace mmo
 			s_consoleTextGeom->Reset();
 			
 			// Calculate start point
-			mmo::Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) };
+			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) };
 
-			int32 index = 0;
+			auto index = 0;
 
 			// Determine max visible entries in console window
 			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
-			for (auto it = s_consoleLog.begin(); it != s_consoleLog.end(); it++)
+			for (auto& it : s_consoleLog)
 			{
 				// Skip as many items as required to reach the console scroll offset
 				if (index++ < s_consoleScrollOffset)
@@ -500,7 +500,7 @@ namespace mmo
 				startPoint.y -= s_consoleFont->GetHeight();
 
 				// Draw line of text
-				s_consoleFont->DrawText(it->message, startPoint, *s_consoleTextGeom, 1.0f, it->color);
+				s_consoleFont->DrawText(it.message, startPoint, *s_consoleTextGeom, 1.0f, it.color);
 
 				// Stop it here
 				if (startPoint.y < 0.0f)
@@ -513,21 +513,21 @@ namespace mmo
 		}
 
 		// Obtain viewport info
-		int32 s_vpWidth = 0, s_vpHeight = 0;
-		gx.GetViewport(nullptr, nullptr, &s_vpWidth, &s_vpHeight, nullptr, nullptr);
+		auto vpWidth = 0, vpHeight = 0;
+		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
 
 		// Check for changes in viewport size, in which case we would need to update the contents of our vertex buffer
-		if (s_vpWidth != s_lastViewportWidth || s_vpHeight != s_lastViewportHeight)
+		if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
 		{
-			s_lastViewportWidth = s_vpWidth;
-			s_lastViewportHeight = s_vpHeight;
+			s_lastViewportWidth = vpWidth;
+			s_lastViewportHeight = vpHeight;
 
 			// Create the vertex buffer for the console background
 			const POS_COL_VERTEX vertices[] = {
 				{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-				{ { (float)s_lastViewportWidth, 0.0f, 0.0f }, 0xc0000000 },
-				{ { (float)s_lastViewportWidth, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 },
-				{ { 0.0f, (float)s_consoleWindowHeight, 0.0f }, 0xc0000000 }
+				{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
+				{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
+				{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
 			};
 
 			// Update vertex buffer data
@@ -542,7 +542,7 @@ namespace mmo
 		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
 
 		// Update transform
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, s_vpWidth, s_vpHeight, 0.0f, 100.0f));
+		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
 
 		// Prepare drawing mode
 		gx.SetVertexFormat(VertexFormat::PosColor);

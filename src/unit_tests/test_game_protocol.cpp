@@ -38,7 +38,7 @@ TEST_CASE("GamePacketCheck", "[game_protocol]")
 	p.Finish();
 
 	// Flush sink to ensure everything is serialized properly
-	sink.flush();
+	sink.Flush();
 
 	// Now verify that the buffer contents are as expected
 	CHECK(*((uint16*)(&buffer[0])) == opCode);

@@ -38,7 +38,7 @@ TEST_CASE("AuthPacketCheck", "[auth_protocol]")
 	p.Finish();
 
 	// Flush sink to ensure everything is serialized properly
-	sink.flush();
+	sink.Flush();
 
 	// Now verify that the buffer contents are as expected
 	CHECK(buffer[0] == opCode);

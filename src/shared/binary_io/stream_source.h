@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
@@ -8,7 +8,8 @@
 
 namespace io
 {
-	class StreamSource : public ISource
+	class StreamSource
+		: public ISource
 	{
 	public:
 
@@ -21,20 +22,20 @@ namespace io
 			m_stream.seekg(old, std::ios::beg);
 		}
 
-		virtual bool end() const override
+		[[nodiscard]] bool end() const override
 		{
 			return m_stream.eof();
 		}
 
-		virtual std::size_t read(char *dest, std::size_t size) override
+		std::size_t read(char *dest, std::size_t size) override
 		{
 			m_stream.read(dest, static_cast<std::streamsize>(size));
 			return static_cast<std::size_t>(m_stream.gcount());
 		}
 
-		virtual std::size_t skip(std::size_t size) override
+		std::size_t skip(std::size_t size) override
 		{
-			const std::streampos old = m_stream.tellg();
+			const auto old = m_stream.tellg();
 			m_stream.seekg(
 			    old + static_cast<std::streamoff>(size),
 			    std::ios::beg);
@@ -42,19 +43,19 @@ namespace io
 			return static_cast<std::size_t>(new_ - old);
 		}
 
-		virtual void seek(std::size_t pos) override
+		void seek(std::size_t pos) override
 		{
 			m_stream.seekg(
 			    pos,
 			    std::ios::beg);
 		}
 
-		virtual std::size_t size() const override
+		std::size_t size() const override
 		{
 			return m_streamSize;
 		}
 
-		virtual std::size_t position() const override
+		std::size_t position() const override
 		{
 			return static_cast<std::size_t>(m_stream.tellg());
 		}

@@ -31,13 +31,13 @@ namespace mmo
 					<< io::write<uint16>(header.width)
 					<< io::write<uint16>(header.height);
 
-				m_mipPosition = writer.sink().position();
+				m_mipPosition = writer.Sink().Position();
 				writer
 					<< io::write_range(header.mipmapOffsets)
 					<< io::write_range(header.mipmapLengths);
 
 				// Remember content position
-				m_contentPosition = writer.sink().position();
+				m_contentPosition = writer.Sink().Position();
 			}
 
 			HeaderSaver::~HeaderSaver()
@@ -57,14 +57,14 @@ namespace mmo
 				// Rewrite mip offsets and lengths again
 				for (const auto& mipOffset : m_header.mipmapOffsets)
 				{
-					writer.writePOD(offset, mipOffset);
+					writer.WritePOD(offset, mipOffset);
 					offset += sizeof(mipOffset);
 				}
 
 				// Rewrite mip offsets and lengths again
 				for (const auto& mipLength : m_header.mipmapLengths)
 				{
-					writer.writePOD(offset, mipLength);
+					writer.WritePOD(offset, mipLength);
 					offset += sizeof(mipLength);
 				}
 

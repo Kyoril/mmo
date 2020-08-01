@@ -44,7 +44,7 @@ namespace mmo
 				packet.Start(auth::client_login_packet::LogonChallenge);
 
 				// Write the actual packet content
-				const size_t contentStart = packet.sink().position();
+				const size_t contentStart = packet.Sink().Position();
 				packet
 					<< io::write<uint8>(mmo::Major)	// Version
 					<< io::write<uint8>(mmo::Minor)

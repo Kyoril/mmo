@@ -67,7 +67,7 @@ namespace mmo
 		/// Removes a registered console command.
 		static void UnregisterCommand(const std::string& command);
 		/// Executes the given command line to execute console commands.
-		static void ExecuteCommand(std::string commandLine);
+		static void ExecuteCommand(const std::string& commandLine);
 
 	private:
 		/// Executed when a key has been pressed. Repeated.

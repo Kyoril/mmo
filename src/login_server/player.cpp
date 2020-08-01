@@ -107,7 +107,7 @@ namespace mmo
 			packet.Start(mmo::auth::login_client_packet::RealmList);
 
 			// Remember realm count position and write placeholder value
-			const size_t realmCountPos = packet.sink().position();
+			const size_t realmCountPos = packet.Sink().Position();
 			packet << io::write<uint16>(0);
 
 			// The realm counter
@@ -136,7 +136,7 @@ namespace mmo
 			});
 
 			// Now overwrite realm count with the actual realm count
-			packet.sink().overwrite(realmCountPos, reinterpret_cast<const char*>(&realmCount), sizeof(realmCount));
+			packet.Sink().Overwrite(realmCountPos, reinterpret_cast<const char*>(&realmCount), sizeof(realmCount));
 
 			// Finish the packet
 			packet.Finish();

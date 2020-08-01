@@ -288,8 +288,8 @@ int main(int argc, char** argv)
 			v1_0::HeaderSaver saver{ sink, header };
 
 			// After the header, now write the pixel data
-			size_t contentPos = sink.position();
-			header.mipmapOffsets[0] = static_cast<uint32>(sink.position());
+			size_t contentPos = sink.Position();
+			header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
 
 			// Apply compression
 			if (compress)
@@ -309,12 +309,12 @@ int main(int argc, char** argv)
 				ILOG("Compressed size: " << buffer.size());
 
 				header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
-				sink.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+				sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
 			}
 			else
 			{
 				header.mipmapLengths[0] = static_cast<uint32>(pixelData.size());
-				sink.write(reinterpret_cast<const char*>(pixelData.data()), pixelData.size());
+				sink.Write(reinterpret_cast<const char*>(pixelData.data()), pixelData.size());
 			}
 
 			// TODO: Generate mip maps and serialize them as well

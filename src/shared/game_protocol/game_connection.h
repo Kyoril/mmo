@@ -48,7 +48,7 @@ namespace mmo
 			{
 				io::StringSink sink(getSendBuffer());
 
-				const size_t bufferPos = sink.position();
+				const size_t bufferPos = sink.Position();
 
 				typename Protocol::OutgoingPacket packet(sink);
 				generator(packet);

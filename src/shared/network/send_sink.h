@@ -22,7 +22,7 @@ namespace mmo
 		{
 		}
 
-		virtual void flush()
+		virtual void Flush()
 		{
 			m_connection.flush();
 		}

@@ -19,19 +19,19 @@ namespace mmo
 			*this
 				<< io::write<uint16>(id);
 
-			m_sizePos = sink().position();
+			m_sizePos = Sink().Position();
 			*this
 				<< io::write<uint32>(0);
 
-			m_bodyPos = sink().position();
+			m_bodyPos = Sink().Position();
 		}
 
 		void OutgoingPacket::Finish()
 		{
-			const size_t endPos = sink().position();
+			const size_t endPos = Sink().Position();
 
 			const uint32 packetSize = endPos - m_bodyPos;
-			sink().overwrite(m_sizePos, reinterpret_cast<const char*>(&packetSize), sizeof(packetSize));
+			Sink().Overwrite(m_sizePos, reinterpret_cast<const char*>(&packetSize), sizeof(packetSize));
 		}
 	}
 }

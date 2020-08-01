@@ -33,7 +33,7 @@ namespace mmo
 			void OutgoingAnswer::finish()
 			{
 				writeHeaders();
-				m_dest.write("\r\n", 2);
+				m_dest.Write("\r\n", 2);
 			}
 
 			void OutgoingAnswer::finishWithContent(const String &type, const char *content, std::size_t size)
@@ -49,7 +49,7 @@ namespace mmo
 				sstr.write(content, static_cast<std::streamsize>(size));
 
 				const std::string str = sstr.str();
-				m_dest.write(str.data(), str.size());
+				m_dest.Write(str.data(), str.size());
 			}
 
 
@@ -87,7 +87,7 @@ namespace mmo
 				sstr << m_additionalHeaders;
 
 				const std::string str = sstr.str();
-				m_dest.write(str.data(), str.size());
+				m_dest.Write(str.data(), str.size());
 			}
 
 

@@ -34,7 +34,7 @@ namespace mmo
 
 				io::Writer sinkWriter(sink);
 				sinkWriter << io::write_range(m_buffer);
-				sink.flush();
+				sink.Flush();
 			}
 
 		private:

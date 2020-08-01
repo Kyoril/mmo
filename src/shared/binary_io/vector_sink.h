@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
@@ -10,10 +10,10 @@
 
 namespace io
 {
-	class VectorSink : public ISink
+	class VectorSink final
+		: public ISink
 	{
 	public:
-
 		typedef std::vector<char> Buffer;
 
 
@@ -21,24 +21,18 @@ namespace io
 			: m_buffer(buffer)
 		{
 		}
+		
 
-		Buffer &buffer()
-		{
-			return m_buffer;
-		}
+		Buffer &buffer() { return m_buffer; }
+		[[nodiscard]] const Buffer &buffer() const { return m_buffer; }
 
-		const Buffer &buffer() const
-		{
-			return m_buffer;
-		}
-
-		virtual std::size_t write(const char *src, std::size_t size) override
+		std::size_t Write(const char *src, std::size_t size) override
 		{
 			m_buffer.insert(m_buffer.end(), src, src + size);
 			return size;
 		}
 
-		virtual std::size_t overwrite(std::size_t position, const char *src, std::size_t size) override
+		std::size_t Overwrite(std::size_t position, const char *src, std::size_t size) override
 		{
 			assert((position + size) <= m_buffer.size());
 
@@ -47,12 +41,12 @@ namespace io
 			return size;
 		}
 
-		virtual std::size_t position() override
+		std::size_t Position() override
 		{
 			return m_buffer.size();
 		}
 
-		virtual void flush() override
+		void Flush() override
 		{
 		}
 
