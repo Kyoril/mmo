@@ -10,37 +10,35 @@ namespace mmo
 {
 	namespace hpak
 	{
-		std::uintmax_t AllocationMap::allocate(std::uintmax_t size)
+		std::uintmax_t AllocationMap::Allocate(std::uintmax_t size)
 		{
-			return *allocateImpl(
+			return *AllocateImpl(
 			           size,
 			           0,
 			           std::numeric_limits<std::uintmax_t>::max());
 		}
 
-		bool AllocationMap::reserve(std::uintmax_t offset, std::uintmax_t size)
+		bool AllocationMap::Reserve(std::uintmax_t offset, std::uintmax_t size)
 		{
-			return allocateImpl(
+			return AllocateImpl(
 			           size,
 			           offset,
 			           offset + 1).has_value();
 		}
 
-		std::uintmax_t AllocationMap::getEnd() const
+		std::uintmax_t AllocationMap::GetEnd() const
 		{
 			if (m_entries.empty())
 			{
 				return 0;
 			}
-			else
-			{
-				const auto &back = m_entries.back();
-				return (back.offset + back.size);
-			}
+			
+			const auto &back = m_entries.back();
+			return (back.offset + back.size);
 		}
 
 
-		std::optional<std::uintmax_t> AllocationMap::allocateImpl(
+		std::optional<std::uintmax_t> AllocationMap::AllocateImpl(
 		    std::uintmax_t size,
 		    std::uintmax_t begin,
 		    std::uintmax_t end)
@@ -71,7 +69,7 @@ namespace mmo
 				return result;
 			}
 
-			Entry newEntry;
+			Entry newEntry{};
 			newEntry.offset = beginOfFreeSpace;
 			newEntry.size = size;
 			m_entries.insert(i, newEntry);

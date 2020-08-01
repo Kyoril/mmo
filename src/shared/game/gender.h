@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "base/typedefs.h"
-
 namespace mmo
 {
 	enum Gender

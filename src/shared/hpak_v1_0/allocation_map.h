@@ -12,9 +12,9 @@ namespace mmo
 	{
 		struct AllocationMap
 		{
-			std::uintmax_t allocate(std::uintmax_t size);
-			bool reserve(std::uintmax_t offset, std::uintmax_t size);
-			std::uintmax_t getEnd() const;
+			std::uintmax_t Allocate(std::uintmax_t size);
+			bool Reserve(std::uintmax_t offset, std::uintmax_t size);
+			[[nodiscard]] std::uintmax_t GetEnd() const;
 
 		private:
 
@@ -27,7 +27,7 @@ namespace mmo
 
 			EntryVector m_entries;
 
-			std::optional<std::uintmax_t> allocateImpl(
+			std::optional<std::uintmax_t> AllocateImpl(
 			    std::uintmax_t size,
 			    std::uintmax_t begin,
 			    std::uintmax_t end);

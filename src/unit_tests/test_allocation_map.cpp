@@ -15,8 +15,8 @@ namespace
 		uint32 offset,
 		uint32 size)
 	{
-		REQUIRE(map.reserve(offset, size));
-		REQUIRE(!map.reserve(offset, size));
+		REQUIRE(map.Reserve(offset, size));
+		REQUIRE(!map.Reserve(offset, size));
 	}
 }
 
@@ -31,10 +31,10 @@ TEST_CASE("AllocationMapSimple", "[allocation_map]")
 
 	for (size_t i = 0; i < (2 * blockSize); ++i)
 	{
-		REQUIRE(!map.reserve(i, 1));
+		REQUIRE(!map.Reserve(i, 1));
 	}
 
-	REQUIRE(map.allocate(1) == (2 * blockSize));
+	REQUIRE(map.Allocate(1) == (2 * blockSize));
 }
 
 TEST_CASE("AllocationMapHole", "[allocation_map]")
@@ -48,19 +48,19 @@ TEST_CASE("AllocationMapHole", "[allocation_map]")
 
 	for (size_t i = 0; i < blockSize; ++i)
 	{
-		REQUIRE(!map.reserve(i, 1));
+		REQUIRE(!map.Reserve(i, 1));
 	}
 
 	for (size_t i = 2 * blockSize; i < (3 * blockSize); ++i)
 	{
-		REQUIRE(!map.reserve(i, 1));
+		REQUIRE(!map.Reserve(i, 1));
 	}
 
 	CheckedReserve(map, blockSize, blockSize);
 
 	for (size_t i = 0; i < 10; ++i)
 	{
-		REQUIRE(map.allocate(1) == ((3 * blockSize) + i));
+		REQUIRE(map.Allocate(1) == ((3 * blockSize) + i));
 	}
 }
 
@@ -76,5 +76,5 @@ TEST_CASE("AllocationReverseReserve", "[allocation_map]")
 		CheckedReserve(map, i - blockSize, blockSize);
 	}
 
-	REQUIRE(map.allocate(1) == (blockSize * blockCount));
+	REQUIRE(map.Allocate(1) == (blockSize * blockCount));
 }

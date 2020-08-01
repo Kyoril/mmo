@@ -1,7 +1,9 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 
 #include "gender.h"
+#include "base/typedefs.h"
 
 #include <algorithm>
 
@@ -21,22 +23,22 @@ namespace mmo
 	class CharacterView final
 	{
 		friend io::Writer& operator<<(io::Writer& writer, const CharacterView& characterView);
-		friend io::Reader& operator>>(io::Reader& reader, CharacterView& out_characterView);
+		friend io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView);
 
 	public:
 		/// Default constructor.
 		CharacterView() noexcept = default;
 		/// Initialize a constant character view.
 		CharacterView(
-			uint64 guid,
-			std::string name, 
-			uint8 level, 
-			uint32 mapId, 
-			uint32 zoneId,
-			uint32 raceId, 
-			uint32 classId,
-			uint8 gender, 
-			bool dead) noexcept
+			const uint64 guid,
+			std::string name,
+			const uint8 level,
+			const uint32 mapId,
+			const uint32 zoneId,
+			const uint32 raceId,
+			const uint32 classId,
+			const uint8 gender, 
+			const bool dead) noexcept
 			: m_guid(guid)
 			, m_name(std::move(name))
 			, m_level(level)
@@ -51,27 +53,27 @@ namespace mmo
 
 	public:
 		/// Gets the Guid of the character.
-		inline uint64 GetGuid() const { return m_guid; }
+		[[nodiscard]] uint64 GetGuid() const { return m_guid; }
 		/// Gets the name of the character.
-		inline const std::string& GetName() const { return m_name; }
+		[[nodiscard]] const std::string& GetName() const { return m_name; }
 		/// Gets the character level.
-		inline uint8 GetLevel() const { return m_level; }
+		[[nodiscard]] uint8 GetLevel() const { return m_level; }
 		/// Gets the map id of the character.
-		inline uint32 GetMapId() const { return m_mapId; }
+		[[nodiscard]] uint32 GetMapId() const { return m_mapId; }
 		/// Gets the zone id of the character.
-		inline uint32 GetZoneId() const { return m_zoneId; }
+		[[nodiscard]] uint32 GetZoneId() const { return m_zoneId; }
 		/// Gets the race id of the character.
-		inline uint32 GetRaceId() const { return m_raceId; }
+		[[nodiscard]] uint32 GetRaceId() const { return m_raceId; }
 		/// Gets the class id of the character.
-		inline uint32 GetClassId() const { return m_classId; }
+		[[nodiscard]] uint32 GetClassId() const { return m_classId; }
 		/// Gets the gender of the character.
-		inline uint8 GetGender() const { return m_gender; }
+		[[nodiscard]] uint8 GetGender() const { return m_gender; }
 		/// Gets whether the character is currently dead.
-		inline bool IsDead() const { return m_dead; }
+		[[nodiscard]] bool IsDead() const { return m_dead; }
 
 	private:
 		/// The character guid.
-		uint64 m_guid;
+		uint64 m_guid{};
 		/// The character name.
 		std::string m_name;
 		/// The character level.
@@ -95,5 +97,5 @@ namespace mmo
 
 
 	io::Writer& operator<<(io::Writer& writer, const CharacterView& characterView);
-	io::Reader& operator>>(io::Reader& reader, CharacterView& out_characterView);
+	io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView);
 }

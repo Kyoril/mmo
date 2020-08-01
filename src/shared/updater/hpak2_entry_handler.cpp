@@ -69,7 +69,7 @@ namespace mmo
 
 			//reserve space for the header
 			const std::uintmax_t headerOffset = 0;
-			allocator.reserve(headerOffset, headerSize);
+			allocator.Reserve(headerOffset, headerSize);
 
 			std::optional<size_t> firstCopiedFileIndex;
 
@@ -92,7 +92,7 @@ namespace mmo
 					const auto &present = *requiredFile.present;
 					const auto previousOffset = present.offset;
 
-					if (allocator.reserve(
+					if (allocator.Reserve(
 					            previousOffset,
 					            requiredFile.compressedSize))
 					{
@@ -178,7 +178,7 @@ namespace mmo
 				auto &newEntry = layout[i]->entry;
 				if (!newEntry.offset)
 				{
-					newEntry.offset = allocator.allocate(newEntry.compressedSize);
+					newEntry.offset = allocator.Allocate(newEntry.compressedSize);
 				}
 
 				ASSERT(layout[i]->writeContent);

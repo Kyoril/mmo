@@ -1,3 +1,4 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #pragma once
 

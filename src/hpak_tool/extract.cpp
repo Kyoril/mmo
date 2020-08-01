@@ -51,7 +51,7 @@ namespace mmo
 					        << " (offset " << fileEntry.contentOffset << ")"
 					        << " seems to overlap with the header (" << headerSize << ")\n";
 				}
-				else if (!allocator.reserve(
+				else if (!allocator.Reserve(
 				             fileEntry.contentOffset,
 				             fileEntry.size))
 				{
@@ -155,7 +155,7 @@ namespace mmo
 				// Create an allocation map instance. This is used to validate the archive (for example
 				// check for overlaps).
 				hpak::AllocationMap allocator;
-				allocator.reserve(0, headerSize);
+				allocator.Reserve(0, headerSize);
 
 				// Extract all files
 				return details::extractFiles(

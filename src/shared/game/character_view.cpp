@@ -1,3 +1,4 @@
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "character_view.h"
 
@@ -21,17 +22,17 @@ namespace mmo
 			<< io::write<uint8>(characterView.m_dead ? 1 : 0);
 	}
 
-	io::Reader& operator>>(io::Reader& reader, CharacterView& out_characterView)
+	io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView)
 	{
 		return reader
-			>> io::read<uint64>(out_characterView.m_guid)
-			>> io::read_container<uint8>(out_characterView.m_name)
-			>> io::read<uint8>(out_characterView.m_level)
-			>> io::read<uint32>(out_characterView.m_mapId)
-			>> io::read<uint32>(out_characterView.m_zoneId)
-			>> io::read<uint32>(out_characterView.m_raceId)
-			>> io::read<uint32>(out_characterView.m_classId)
-			>> io::read<uint8>(out_characterView.m_gender)
-			>> io::read<uint8>(out_characterView.m_dead);
+			>> io::read<uint64>(outCharacterView.m_guid)
+			>> io::read_container<uint8>(outCharacterView.m_name)
+			>> io::read<uint8>(outCharacterView.m_level)
+			>> io::read<uint32>(outCharacterView.m_mapId)
+			>> io::read<uint32>(outCharacterView.m_zoneId)
+			>> io::read<uint32>(outCharacterView.m_raceId)
+			>> io::read<uint32>(outCharacterView.m_classId)
+			>> io::read<uint8>(outCharacterView.m_gender)
+			>> io::read<uint8>(outCharacterView.m_dead);
 	}
 }
