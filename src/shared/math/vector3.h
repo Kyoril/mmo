@@ -30,7 +30,13 @@ namespace mmo
 
 	public:
 
-		inline explicit Vector3(float inX = 0.0f, float inY = 0.0f, float inZ = 0.0f)
+		inline Vector3()
+			: x(0.0f)
+			, y(0.0f)
+			, z(0.0f)
+		{
+		}
+		inline Vector3(float inX, float inY, float inZ)
 			: x(inX)
 			, y(inY)
 			, z(inZ)

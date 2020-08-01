@@ -69,9 +69,9 @@ namespace mmo
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 
 		// Setup transforms (TODO: use frame transform properties)
-		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
+		gx.SetTransformMatrix(TransformType::World, Matrix4::IDENTITY);
+		gx.SetTransformMatrix(TransformType::View, Matrix4::IDENTITY);
+		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f));
 
 		// Render the actual mesh
 		mesh->Render();

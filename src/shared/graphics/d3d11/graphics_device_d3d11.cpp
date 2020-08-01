@@ -194,14 +194,14 @@ namespace mmo
 	void GraphicsDeviceD3D11::CreateConstantBuffers()
 	{
 		// Fill matrix array with identity matrices
-		m_transform[0] = Matrix4::Identity;
-		m_transform[1] = Matrix4::Identity;
-		m_transform[2] = Matrix4::Identity;
+		m_transform[0] = Matrix4::IDENTITY;
+		m_transform[1] = Matrix4::IDENTITY;
+		m_transform[2] = Matrix4::IDENTITY;
 
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
 		cbd.Usage = D3D11_USAGE_DEFAULT;
-		cbd.ByteWidth = sizeof(Matrix4) * 2;
+		cbd.ByteWidth = sizeof(Matrix4) * 3;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 		D3D11_SUBRESOURCE_DATA sd;
@@ -302,6 +302,36 @@ namespace mmo
 		}
 	}
 
+	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane)
+	{
+		Matrix4 dest = Matrix4::ZERO;
+
+		const float theta = fovRadians * 0.5;
+		float h = 1 / std::tan(theta);
+		float w = h / aspect;
+		float q, qn;
+		
+		q = farPlane / (farPlane - nearPlane);
+		qn = -q * nearPlane;
+
+		dest[0][0] = w;
+		dest[1][1] = h;
+		dest[2][2] = -q;
+		dest[3][2] = -1.0f;
+		dest[2][3] = qn;
+
+		return dest;
+	}
+
+	Matrix4 GraphicsDeviceD3D11::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane)
+	{
+		return Matrix4(
+			2.f / (right - left), 0.0f, 0.0f, (left + right) / (left - right),
+			0.0f, 2.f / (top - bottom), 0.0f, (top + bottom) / (bottom - top),
+			0.0f, 0.0f, 1.f / (farPlane - nearPlane), nearPlane / (nearPlane - farPlane),
+			0.0f, 0.0f, 0.0f, 1.0f);
+	}
+
 	void GraphicsDeviceD3D11::Reset()
 	{
 		// Clear the state
@@ -312,9 +342,9 @@ namespace mmo
 		if (m_matrixDirty)
 		{
 			// Reset transforms
-			m_transform[0] = Matrix4::Identity;
-			m_transform[1] = Matrix4::Identity;
-			m_transform[2] = Matrix4::Identity;
+			m_transform[0] = Matrix4::IDENTITY;
+			m_transform[1] = Matrix4::IDENTITY;
+			m_transform[2] = Matrix4::IDENTITY;
 			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 			m_matrixDirty = false;
 		}
@@ -404,14 +434,9 @@ namespace mmo
 	{
 		UpdateCurrentRasterizerState();
 
-		const Matrix4 matrices[2] = {
-			m_transform[0],
-			m_transform[1] * m_transform[2]
-		};
-
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, matrices, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
@@ -421,14 +446,9 @@ namespace mmo
 	{
 		UpdateCurrentRasterizerState();
 
-		const Matrix4 matrices[2] = {
-			m_transform[0],
-			m_transform[1] * m_transform[2]
-		};
-
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, matrices, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 
 		// Execute draw command
 		m_immContext->DrawIndexed(m_indexCount, 0, 0);

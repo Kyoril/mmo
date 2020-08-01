@@ -13,6 +13,8 @@
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #	include "graphics/d3d11/render_texture_d3d11.h"
 
+#	include <windowsx.h>
+
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
@@ -27,6 +29,10 @@ namespace mmo
 	MainWindow::MainWindow()
 		: m_windowHandle(nullptr)
 		, m_imguiContext(nullptr)
+		, m_lastMouseX(0)
+		, m_lastMouseY(0)
+		, m_leftButtonPressed(false)
+		, m_rightButtonPressed(false)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -138,7 +144,7 @@ namespace mmo
 		ImGui::Begin("DockSpace", nullptr, window_flags);
 		ImGui::PopStyleVar(3);
 		{
-			ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+			const auto dockspace_id = ImGui::GetID("MyDockSpace");
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
 
 			// The main menu
@@ -194,24 +200,24 @@ namespace mmo
 
 	void MainWindow::ImGuiDefaultDockLayout()
 	{
-		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
 
-		ImGui::DockBuilderRemoveNode(dockspace_id);
-		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
-		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+		ImGui::DockBuilderRemoveNode(dockSpaceId);
+		ImGui::DockBuilderAddNode(dockSpaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
-		ImGuiID dock_main_id = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		ImGuiID dock_log_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dock_main_id);
+		auto dock_main_id = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		const auto dock_log_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dock_main_id);
 		
 		ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
 		ImGui::DockBuilderDockWindow("Log", dock_log_id);
-		ImGui::DockBuilderFinish(dockspace_id);
+		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
 		m_applyDefaultLayout = false;
 	}
 
-	void MainWindow::ShutdownImGui()
+	void MainWindow::ShutdownImGui() const
 	{
 		ASSERT(m_imguiContext);
 
@@ -225,6 +231,9 @@ namespace mmo
 
 	bool MainWindow::OnFileDrop(std::string filename)
 	{
+		m_leftButtonPressed = false;
+		m_rightButtonPressed = false;
+
 		ILOG("Importing fbx file " << filename << "...");
 		if (!m_importer.LoadScene(filename.c_str()))
 		{
@@ -264,6 +273,52 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	void MainWindow::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	{
+		m_lastMouseX = x;
+		m_lastMouseY = y;
+
+		if (button == 0)
+		{
+			m_leftButtonPressed = true;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = true;
+		}
+	}
+
+	void MainWindow::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	{
+		if (button == 0)
+		{
+			m_leftButtonPressed = false;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = false;
+		}
+	}
+
+	void MainWindow::OnMouseMoved(uint16 x, uint16 y)
+	{
+		// Calculate mouse move delta
+		const int16 deltaX = x - m_lastMouseX;
+		const int16 deltaY = y - m_lastMouseY;
+
+		if (m_rightButtonPressed)
+		{
+			m_viewportWindow.MoveCamera(Vector3((float)deltaX / 96.0f, (float)deltaY / 96.0f, 0.0f));
+		}
+		else if (m_leftButtonPressed)
+		{
+			m_viewportWindow.MoveCameraTarget(Vector3((float)deltaX / 96.0f, (float)deltaY / 96.0f, 0.0f));
+		}
+
+		m_lastMouseX = x;
+		m_lastMouseY = y;
 	}
 
 	void MainWindow::InitImGui()
@@ -356,6 +411,27 @@ namespace mmo
 				RenderImGui();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();
 			}
+			return 0;
+		case WM_LBUTTONDOWN:
+			OnMouseButtonDown(0, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_RBUTTONDOWN:
+			OnMouseButtonDown(1, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MBUTTONDOWN:
+			OnMouseButtonDown(2, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_LBUTTONUP:
+			OnMouseButtonUp(0, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_RBUTTONUP:
+			OnMouseButtonUp(1, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MBUTTONUP:
+			OnMouseButtonUp(2, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MOUSEMOVE:
+			OnMouseMoved(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
 			return 0;
 		case WM_DROPFILES:
 			{

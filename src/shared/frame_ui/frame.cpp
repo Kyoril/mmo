@@ -504,9 +504,9 @@ namespace mmo
 
 			gx.SetTopologyType(TopologyType::TriangleList);
 			gx.SetBlendMode(BlendMode::Alpha);
-			gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-			gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-			gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 0.0f, 100.0f));
+			gx.SetTransformMatrix(TransformType::World, Matrix4::IDENTITY);
+			gx.SetTransformMatrix(TransformType::View, Matrix4::IDENTITY);
+			gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 100.0f));
 		}
 
 		// Draw self

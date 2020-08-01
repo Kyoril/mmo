@@ -13,6 +13,8 @@
 #include "render_window.h"
 #include "render_texture.h"
 
+#include "math/matrix4.h"
+
 
 namespace mmo
 {
@@ -145,6 +147,10 @@ namespace mmo
 		virtual void CaptureState();
 		/// Restores the pushed render state.
 		virtual void RestoreState();
+		/// Creates a projection matrix for this render api.
+		virtual Matrix4 MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane) = 0;
+		/// Creates an orthographic projection matrix for this render api.
+		virtual Matrix4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane) = 0;
 		/// Gets the transform matrix for a certain type of transform.
 		virtual Matrix4 GetTransformMatrix(TransformType type) const;
 		/// Sets the transform matrix for a certain type of transform.

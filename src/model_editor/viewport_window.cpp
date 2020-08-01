@@ -4,6 +4,7 @@
 
 #include "graphics/graphics_device.h"
 
+#include <DirectXMath.h>
 
 namespace mmo
 {
@@ -12,9 +13,10 @@ namespace mmo
 	ViewportWindow::ViewportWindow()
 		: m_visible(true)
 	{
+		m_cameraPos = Vector3(0.0f, 0.0f, 5.0f);
 	}
 
-	void ViewportWindow::Render()
+	void ViewportWindow::Render() const
 	{
 		// Only render if the viewport is visible at all
 		if (!m_visible || m_viewportRT == nullptr)
@@ -34,9 +36,9 @@ namespace mmo
 		if (m_vertBuf && m_indexBuf)
 		{
 			const float aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-			Matrix4 view = Matrix4::MakeView(Vector3(0.0f, 0.0f, 5.0f), Vector3());
-			Matrix4 proj = Matrix4::MakeProjection(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
-			
+			const Matrix4 view = Matrix4::GetTrans(0.0f, 0.0f, -5.0f);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
+			const Matrix4 proj = gx.MakeProjectionMatrix(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
+
 			// Setup camera mode
 			gx.SetTransformMatrix(TransformType::View, view);
 			gx.SetTransformMatrix(TransformType::Projection, proj);
@@ -59,6 +61,16 @@ namespace mmo
 		m_indexBuf = std::move(indexBuf);
 	}
 
+	void ViewportWindow::MoveCamera(const Vector3 & offset)
+	{
+		m_cameraPos += offset;
+	}
+
+	void ViewportWindow::MoveCameraTarget(const Vector3 & offset)
+	{
+		m_cameraLookAt += offset;
+	}
+
 	bool ViewportWindow::Draw()
 	{
 		// Anything to draw at all?
@@ -69,16 +81,16 @@ namespace mmo
 		if (ImGui::Begin("Viewport", &m_visible))
 		{
 			// Determine the current viewport position
-			ImVec2 viewportPos = ImGui::GetWindowContentRegionMin();
+			auto viewportPos = ImGui::GetWindowContentRegionMin();
 			viewportPos.x += ImGui::GetWindowPos().x;
 			viewportPos.y += ImGui::GetWindowPos().y;
 
 			// Determine the available size for the viewport window and either create the render target
 			// or resize it if needed
-			ImVec2 availableSpace = ImGui::GetContentRegionAvail();
+			const auto availableSpace = ImGui::GetContentRegionAvail();
 			if (m_viewportRT == nullptr)
 			{
-				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", availableSpace.x, availableSpace.y);
+				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
 				m_lastAvailViewportSize = availableSpace;
 			}
 			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
@@ -94,7 +106,7 @@ namespace mmo
 			if (!m_vertBuf || !m_indexBuf)
 			{
 				// Calculate the size required to render the viewport instruction text on screen (used for alignment calculations)
-				const ImVec2 textSize = ImGui::CalcTextSize(s_viewportInstructionText.c_str(), nullptr);
+				const auto textSize = ImGui::CalcTextSize(s_viewportInstructionText.c_str(), nullptr);
 
 				// Draw the instruction text at the center of the viewport window
 				ImGui::GetWindowDrawList()->AddText(

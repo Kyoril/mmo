@@ -37,14 +37,14 @@ namespace mmo
 			if (layer.flags & ScreenLayerFlags::IdentityTransform)
 			{
 				// Layer is enabled, reset transforms
-				gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-				gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
+				gx.SetTransformMatrix(TransformType::World, Matrix4::IDENTITY);
+				gx.SetTransformMatrix(TransformType::View, Matrix4::IDENTITY);
 			}
 
 			// If the layer is marked as screen space, setup orthographic matrix
 			if (layer.flags & ScreenLayerFlags::IdentityProjection)
 			{
-				gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
+				gx.SetTransformMatrix(TransformType::Projection, Matrix4::IDENTITY);
 			}
 
 			// Call the paint function of the layer

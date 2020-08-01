@@ -25,15 +25,15 @@ namespace mmo
 		ID3D11DeviceContext& context = m_device;
 
 		// Clear the color buffer?
-		const uint32 Converted = static_cast<uint32>(flags);
-		if ((Converted & static_cast<uint32>(ClearFlags::Color)) != 0)
+		const auto converted = static_cast<uint32>(flags);
+		if ((converted & static_cast<uint32>(ClearFlags::Color)) != 0)
 		{
 			// Clear render target and depth stencil view
 			context.ClearRenderTargetView(m_renderTargetView.Get(), m_clearColorFloat);
 		}
 
 		// Clear depth stencil view
-		if ((Converted & static_cast<uint32>(ClearFlags::Depth)) != 0)
+		if ((converted & static_cast<uint32>(ClearFlags::Depth)) != 0)
 		{
 			context.ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
 		}

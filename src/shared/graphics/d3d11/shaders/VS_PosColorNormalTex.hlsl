@@ -7,15 +7,23 @@
 
 cbuffer Matrices
 {
-	float4x4 matWorld;
-	float4x4 matViewProj;
+	matrix matWorld;
+	matrix matView;
+	matrix matProj;
 };
 
 VertexOut main(VertexIn input)
 {
 	VertexOut output;
 
-	output.pos = mul(float4(input.pos.xyz, 1.0), mul(matWorld, matViewProj));
+	// Change the position vector to be 4 units for proper matrix calculations.
+	input.pos.w = 1.0f;
+
+	// Calculate the position of the vertex against the world, view, and projection matrices.
+	output.pos = mul(input.pos, matWorld);
+	output.pos = mul(output.pos, matView);
+	output.pos = mul(output.pos, matProj);
+
 	output.color = input.color;
 	output.normal = input.normal;
 	output.uv1 = input.uv1;

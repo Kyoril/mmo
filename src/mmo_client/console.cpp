@@ -542,7 +542,7 @@ namespace mmo
 		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
 
 		// Update transform
-		gx.SetTransformMatrix(TransformType::Projection, Matrix4::MakeOrthographic(0.0f, s_vpWidth, s_vpHeight, 0.0f, 0.0f, 100.0f));
+		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, s_vpWidth, s_vpHeight, 0.0f, 100.0f));
 
 		// Prepare drawing mode
 		gx.SetVertexFormat(VertexFormat::PosColor);

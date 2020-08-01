@@ -14,6 +14,9 @@ namespace mmo
 		, RenderTargetD3D11(device)
 		, m_resizePending(false)
 	{
+		ASSERT(width > 0);
+		ASSERT(height > 0);
+		
 		CreateResources();
 	}
 
@@ -35,6 +38,8 @@ namespace mmo
 		case ShaderType::PixelShader:
 			context.PSSetShaderResources(slot, 1, &views);
 			break;
+		default:
+			throw std::runtime_error("Shader type not yet supported for binding!");
 		}
 	}
 
@@ -74,7 +79,7 @@ namespace mmo
 	void RenderTextureD3D11::CreateResources()
 	{
 		// Obtain the d3d11 device object
-		ID3D11Device& d3dDev = m_device;
+		ID3D11Device& d3d_dev = m_device;
 
 		// Initialize the render target texture description.
 		D3D11_TEXTURE2D_DESC textureDesc;
@@ -91,14 +96,14 @@ namespace mmo
 		textureDesc.MiscFlags = 0;
 
 		// Create the render target texture.
-		VERIFY(SUCCEEDED(d3dDev.CreateTexture2D(&textureDesc, nullptr, &m_renderTargetTex)));
+		VERIFY(SUCCEEDED(d3d_dev.CreateTexture2D(&textureDesc, nullptr, &m_renderTargetTex)));
 
 		// Setup the description of the render target view.
 		D3D11_RENDER_TARGET_VIEW_DESC renderTargetViewDesc;
 		renderTargetViewDesc.Format = textureDesc.Format;
 		renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 		renderTargetViewDesc.Texture2D.MipSlice = 0;
-		VERIFY(SUCCEEDED(d3dDev.CreateRenderTargetView(m_renderTargetTex.Get(), &renderTargetViewDesc, &m_renderTargetView)));
+		VERIFY(SUCCEEDED(d3d_dev.CreateRenderTargetView(m_renderTargetTex.Get(), &renderTargetViewDesc, &m_renderTargetView)));
 
 		// Setup the description of the shader resource view.
 		D3D11_SHADER_RESOURCE_VIEW_DESC shaderResourceViewDesc;
@@ -106,7 +111,7 @@ namespace mmo
 		shaderResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 		shaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
 		shaderResourceViewDesc.Texture2D.MipLevels = 1;
-		d3dDev.CreateShaderResourceView(m_renderTargetTex.Get(), &shaderResourceViewDesc, &m_shaderResourceView);
+		d3d_dev.CreateShaderResourceView(m_renderTargetTex.Get(), &shaderResourceViewDesc, &m_shaderResourceView);
 
 		// Create a depth buffer
 		D3D11_TEXTURE2D_DESC texd;
@@ -119,13 +124,13 @@ namespace mmo
 		texd.Format = DXGI_FORMAT_D32_FLOAT;
 		texd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 		ComPtr<ID3D11Texture2D> depthBuffer;
-		VERIFY(SUCCEEDED(d3dDev.CreateTexture2D(&texd, nullptr, &depthBuffer)));
+		VERIFY(SUCCEEDED(d3d_dev.CreateTexture2D(&texd, nullptr, &depthBuffer)));
 
 		// Create the depth stencil view
 		D3D11_DEPTH_STENCIL_VIEW_DESC dsvd;
 		ZeroMemory(&dsvd, sizeof(dsvd));
 		dsvd.Format = DXGI_FORMAT_D32_FLOAT;
 		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
-		VERIFY(SUCCEEDED(d3dDev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
+		VERIFY(SUCCEEDED(d3d_dev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
 }

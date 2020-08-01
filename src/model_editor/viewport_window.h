@@ -6,6 +6,7 @@
 #include "graphics/render_texture.h"
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
+#include "math/vector3.h"
 
 #include "imgui.h"
 
@@ -20,9 +21,12 @@ namespace mmo
 
 	public:
 		/// Renders the actual 3d viewport content.
-		void Render();
+		void Render() const;
 
 		void SetMesh(VertexBufferPtr vertBuf, IndexBufferPtr indexBuf);
+
+		void MoveCamera(const Vector3& offset);
+		void MoveCameraTarget(const Vector3& offset);
 
 	public:
 		/// Draws the viewport window.
@@ -42,5 +46,7 @@ namespace mmo
 		RenderTexturePtr m_viewportRT;
 		VertexBufferPtr m_vertBuf;
 		IndexBufferPtr m_indexBuf;
+		Vector3 m_cameraPos;
+		Vector3 m_cameraLookAt;
 	};
 }

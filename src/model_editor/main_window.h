@@ -26,7 +26,7 @@ namespace mmo
 
 	private:
 		/// Ensures that the window class has been created by creating it if needed.
-		void EnsureWindowClassCreated();
+		static void EnsureWindowClassCreated();
 		/// Creates the internal window handle.
 		void CreateWindowHandle();
 		/// Initialize ImGui.
@@ -36,9 +36,13 @@ namespace mmo
 
 		void ImGuiDefaultDockLayout();
 
-		void ShutdownImGui();
+		void ShutdownImGui() const;
 
 		bool OnFileDrop(std::string filename);
+
+		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y);
+		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y);
+		void OnMouseMoved(uint16 x, uint16 y);
 
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
@@ -58,5 +62,8 @@ namespace mmo
 		LogWindow m_logWindow;
 		ViewportWindow m_viewportWindow;
 		FbxImport m_importer;
+		int16 m_lastMouseX, m_lastMouseY;
+		bool m_leftButtonPressed;
+		bool m_rightButtonPressed;
 	};
 }

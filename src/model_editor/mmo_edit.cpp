@@ -30,7 +30,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	mmo::MainWindow mainWindow;
 
 	// Run the message loop
-	MSG msg = { 0 };
+	MSG msg = { nullptr };
 	while (GetMessage(&msg, nullptr, 0, 0))
 	{
 		TranslateMessage(&msg);
