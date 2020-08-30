@@ -65,5 +65,6 @@ namespace mmo
 		int16 m_lastMouseX, m_lastMouseY;
 		bool m_leftButtonPressed;
 		bool m_rightButtonPressed;
+		bool m_fileLoaded;
 	};
 }

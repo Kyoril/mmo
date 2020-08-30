@@ -6,6 +6,9 @@
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
 
+#include "base/filesystem.h"
+#include "base/utilities.h"
+
 #ifdef _WIN32
 #	include "imgui_impl_win32.h"
 #	include "imgui_impl_dx11.h"
@@ -33,6 +36,7 @@ namespace mmo
 		, m_lastMouseY(0)
 		, m_leftButtonPressed(false)
 		, m_rightButtonPressed(false)
+		, m_fileLoaded(false)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -153,6 +157,14 @@ namespace mmo
 				// File menu
 				if (ImGui::BeginMenu("File"))
 				{
+					if (ImGui::MenuItem("Save Mesh", nullptr, false, m_fileLoaded))
+					{
+						// TODO: export mesh / open export dialog
+						DLOG("TODO: Save mesh...");
+					}
+
+					ImGui::Separator();
+					
 					if (ImGui::MenuItem("Exit", nullptr))
 					{
 						// Terminate the application
@@ -234,44 +246,55 @@ namespace mmo
 		m_leftButtonPressed = false;
 		m_rightButtonPressed = false;
 
-		ILOG("Importing fbx file " << filename << "...");
-		if (!m_importer.LoadScene(filename.c_str()))
+		const std::filesystem::path p { filename };
+		if (_strcmpi(p.extension().string().c_str(), ".fbx") == 0)
 		{
-			ELOG("Failed to load fbx file " << filename);
-			return false;
-		}
-
-		// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
-		const auto& meshes = m_importer.GetMeshEntries();
-		if (meshes.size() > 0)
-		{
-			const auto& mesh = meshes.front();
-
-			std::vector<POS_COL_VERTEX> vertices;
-			vertices.resize(mesh.vertices.size());
-
-			for (size_t i = 0; i < mesh.vertices.size(); ++i)
+			ILOG("Importing fbx file " << filename << "...");
+			if (!m_importer.LoadScene(filename.c_str()))
 			{
-				vertices[i].pos[0] = mesh.vertices[i].position.x;
-				vertices[i].pos[1] = mesh.vertices[i].position.y;
-				vertices[i].pos[2] = mesh.vertices[i].position.z;
-				vertices[i].color = 0xFFAEAEAE;
+				ELOG("Failed to load fbx file " << filename);
+				return false;
 			}
 
-			VertexBufferPtr vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
-
-			std::vector<uint16> indices;
-			indices.resize(mesh.indices.size());
-
-			for (size_t i = 0; i < mesh.indices.size(); ++i)
+			// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
+			const auto& meshes = m_importer.GetMeshEntries();
+			if (meshes.size() > 0)
 			{
-				indices[i] = static_cast<uint16>(mesh.indices[i]);
+				const auto& mesh = meshes.front();
+
+				std::vector<POS_COL_VERTEX> vertices;
+				vertices.resize(mesh.vertices.size());
+
+				for (size_t i = 0; i < mesh.vertices.size(); ++i)
+				{
+					vertices[i].pos[0] = mesh.vertices[i].position.x;
+					vertices[i].pos[1] = mesh.vertices[i].position.y;
+					vertices[i].pos[2] = mesh.vertices[i].position.z;
+					vertices[i].color = 0xFFAEAEAE;
+				}
+
+				VertexBufferPtr vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
+
+				std::vector<uint16> indices;
+				indices.resize(mesh.indices.size());
+
+				for (size_t i = 0; i < mesh.indices.size(); ++i)
+				{
+					indices[i] = static_cast<uint16>(mesh.indices[i]);
+				}
+
+				IndexBufferPtr indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
+				m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
+
+				m_fileLoaded = true;
 			}
-
-			IndexBufferPtr indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
-			m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
 		}
-
+		else
+		{
+			ELOG("Unsupported file extension '" << p.extension().string() << "'");
+		}
+		
+		
 		return true;
 	}
 
