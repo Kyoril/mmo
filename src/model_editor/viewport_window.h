@@ -48,5 +48,6 @@ namespace mmo
 		IndexBufferPtr m_indexBuf;
 		Vector3 m_cameraPos;
 		Vector3 m_cameraLookAt;
+		bool m_wireFrame;
 	};
 }

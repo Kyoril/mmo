@@ -12,6 +12,7 @@ namespace mmo
 
 	ViewportWindow::ViewportWindow()
 		: m_visible(true)
+		, m_wireFrame(false)
 	{
 		m_cameraPos = Vector3(0.0f, 0.0f, 5.0f);
 	}
@@ -30,14 +31,14 @@ namespace mmo
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 
-		gx.SetFillMode(FillMode::Wireframe);
+		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 		gx.SetFaceCullMode(FaceCullMode::Back);
 
 		if (m_vertBuf && m_indexBuf)
 		{
-			const float aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-			const Matrix4 view = Matrix4::GetTrans(0.0f, 0.0f, -5.0f);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
-			const Matrix4 proj = gx.MakeProjectionMatrix(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
+			const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
+			const auto view = Matrix4::GetTrans(0.0f, 0.0f, -5.0f);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
+			const auto proj = gx.MakeProjectionMatrix(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
 
 			// Setup camera mode
 			gx.SetTransformMatrix(TransformType::View, view);
@@ -47,8 +48,10 @@ namespace mmo
 			gx.SetTopologyType(TopologyType::TriangleList);
 			gx.SetVertexFormat(VertexFormat::PosColor);
 			gx.SetBlendMode(BlendMode::Opaque);
+			
 			m_vertBuf->Set();
 			m_indexBuf->Set();
+			
 			gx.DrawIndexed();
 		}
 		
@@ -124,7 +127,17 @@ namespace mmo
 
 	bool ViewportWindow::DrawViewMenuItem()
 	{
-		if (ImGui::MenuItem("Viewport", nullptr, &m_visible)) Show();
+		if (ImGui::MenuItem("Viewport", nullptr, &m_visible)) 
+		{
+			Show();
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Wireframe", nullptr, m_wireFrame))
+		{
+			m_wireFrame = !m_wireFrame;
+		}
 
 		return false;
 	}
