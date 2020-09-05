@@ -4,7 +4,6 @@
 
 #include "base/non_copyable.h"
 #include "base/signal.h"
-#include "base/clock.h"
 #include "base/typedefs.h"
 
 namespace mmo
@@ -21,7 +20,7 @@ namespace mmo
 		/// Mouse wheel has been pressed (not scrolled!)
 		MouseButton_Middle = 2,
 
-		// Some mices have additional two buttons
+		// Some mice have additional two buttons
 
 		/// Fourth button (if available)
 		MouseButton_Four = 3,

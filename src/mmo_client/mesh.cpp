@@ -10,15 +10,15 @@ namespace mmo
 {
 	SubMesh & Mesh::CreateSubMesh()
 	{
-		auto submesh = std::make_unique<SubMesh>(*this);
-		m_subMeshes.emplace_back(std::move(submesh));
+		auto subMesh = std::make_unique<SubMesh>(*this);
+		m_subMeshes.emplace_back(std::move(subMesh));
 
 		return *m_subMeshes.back();
 	}
 
 	SubMesh & Mesh::CreateSubMesh(const std::string & name)
 	{
-		SubMesh& mesh = CreateSubMesh();
+		auto& mesh = CreateSubMesh();
 		NameSubMesh(m_subMeshes.size() - 1, name);
 
 		return mesh;
@@ -36,7 +36,7 @@ namespace mmo
 
 	SubMesh* Mesh::GetSubMesh(const std::string & name)
 	{
-		auto index = m_subMeshNames.find(name);
+		const auto index = m_subMeshNames.find(name);
 		if (index != m_subMeshNames.end())
 		{
 			return &GetSubMesh(index->second);
@@ -48,14 +48,14 @@ namespace mmo
 	void Mesh::DestroySubMesh(uint16 index)
 	{
 		// Get iterator and advance
-		auto submeshIt = m_subMeshes.begin();
+		auto subMeshIt = m_subMeshes.begin();
 		if (index > 0)
 		{
-			std::advance(submeshIt, index);
+			std::advance(subMeshIt, index);
 		}
 
-		// Remove submesh at the given index
-		m_subMeshes.erase(submeshIt);
+		// Remove sub mesh at the given index
+		m_subMeshes.erase(subMeshIt);
 
 		// Fix name index map
 		for (auto it = m_subMeshNames.begin(); it != m_subMeshNames.end(); ++it)
@@ -74,7 +74,7 @@ namespace mmo
 
 	void Mesh::DestroySubMesh(const std::string & name)
 	{
-		auto index = m_subMeshNames.find(name);
+		const auto index = m_subMeshNames.find(name);
 		if (index != m_subMeshNames.end())
 		{
 			DestroySubMesh(index->second);
@@ -84,14 +84,15 @@ namespace mmo
 
 	void Mesh::Render()
 	{
-		// TODO: Eventually, these should be set by the submeshes but for now, this
-		// is what is supported by the mesh class.
+		// TODO: Eventually, these should be set by the sub meshes but for now,
+		// this is what is supported by the mesh class.
+		
 		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList); 
 		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorNormalTex1);
 
-		for (auto& submesh : m_subMeshes)
+		for (auto& subMesh : m_subMeshes)
 		{
-			submesh->Render();
+			subMesh->Render();
 		}
 	}
 }

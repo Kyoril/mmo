@@ -8,19 +8,15 @@
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
 
-#include <iomanip>
 
 namespace mmo
 {
 	RealmConnector::RealmConnector(asio::io_service & io)
 		: game::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
+		, m_realmPort(0)
 		, m_serverSeed(0)
 		, m_clientSeed(0)
-	{
-	}
-
-	RealmConnector::~RealmConnector()
 	{
 	}
 
@@ -92,11 +88,11 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
 
 			// And now, we ask for the character list
-			sendSinglePacket([](game::OutgoingPacket& packet)
+			sendSinglePacket([](game::OutgoingPacket& outPacket)
 			{
-				packet.Start(game::client_realm_packet::CharEnum);
+				outPacket.Start(game::client_realm_packet::CharEnum);
 				// This packet is empty
-				packet.Finish();
+				outPacket.Finish();
 			});
 		}
 

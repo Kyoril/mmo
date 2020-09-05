@@ -15,7 +15,7 @@ namespace mmo
 	/// Helper class for deleting a lua_State in a smart pointer.
 	struct LuaStateDeleter final
 	{
-		void operator()(lua_State* state)
+		void operator()(lua_State* state) const
 		{
 			// Call lua_close on the state to delete it
 			lua_close(state);

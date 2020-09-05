@@ -37,7 +37,7 @@ namespace mmo
 		if (m_lastFrameRect.GetSize() != frameRect.GetSize())
 		{
 			// Resize render target
-			m_renderTexture->Resize(frameRect.GetWidth(), frameRect.GetHeight());
+			m_renderTexture->Resize(static_cast<uint16>(frameRect.GetWidth()), static_cast<uint16>(frameRect.GetHeight()));
 		}
 
 		// If frame rect mismatches or buffer empty...
@@ -69,8 +69,8 @@ namespace mmo
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 
 		// Setup transforms (TODO: use frame transform properties)
-		gx.SetTransformMatrix(TransformType::World, Matrix4::IDENTITY);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::IDENTITY);
+		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
+		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
 		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f));
 
 		// Render the actual mesh
@@ -93,14 +93,14 @@ namespace mmo
 
 		// We reset the buffer contents manually as we only really need to change it when the
 		// frame is moved
-		m_frame->AddFlags((uint32)FrameFlags::ManualResetBuffer);
+		m_frame->AddFlags(static_cast<uint32>(FrameFlags::ManualResetBuffer));
 
 		// Get the frame's last rectangle and initialize it
 		m_lastFrameRect = m_frame->GetAbsoluteFrameRect();
 
 		// Create the render texture
 		m_renderTexture = GraphicsDevice::Get().CreateRenderTexture(
-			m_frame->GetName(), m_lastFrameRect.GetWidth(), m_lastFrameRect.GetHeight());
+			m_frame->GetName(), static_cast<uint16>(m_lastFrameRect.GetWidth()), static_cast<uint16>(m_lastFrameRect.GetHeight()));
 		ASSERT(m_renderTexture);
 
 		// After the frame has been rendered, invalidate it to re-render next frame automatically
@@ -112,7 +112,7 @@ namespace mmo
 	void ModelRenderer::NotifyFrameDetached()
 	{
 		// We no longer manually reset the frame
-		m_frame->RemoveFlags((uint32)FrameFlags::ManualResetBuffer);
+		m_frame->RemoveFlags(static_cast<uint32>(FrameFlags::ManualResetBuffer));
 
 		// Disconnect frame rendered event
 		m_frameRenderEndCon.disconnect();

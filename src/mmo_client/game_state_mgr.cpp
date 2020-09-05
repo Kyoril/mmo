@@ -7,10 +7,7 @@
 
 namespace mmo
 {
-	GameStateMgr::GameStateMgr()
-	{
-		// 
-	}
+	GameStateMgr::GameStateMgr() = default;
 
 	void GameStateMgr::RemoveAllGameStates()
 	{
@@ -23,7 +20,7 @@ namespace mmo
 		m_gameStates.clear();
 	}
 
-	void GameStateMgr::AddGameState(std::shared_ptr<IGameState> gameState)
+	void GameStateMgr::AddGameState(const std::shared_ptr<IGameState> gameState)
 	{
 		ASSERT(gameState);
 		ASSERT(m_gameStates.find(gameState->GetName()) == m_gameStates.end());
@@ -52,7 +49,7 @@ namespace mmo
 
 	GameStateMgr & GameStateMgr::Get()
 	{
-		static GameStateMgr s_gameStateMgr;
-		return s_gameStateMgr;
+		static GameStateMgr gameStateMgr;
+		return gameStateMgr;
 	}
 }

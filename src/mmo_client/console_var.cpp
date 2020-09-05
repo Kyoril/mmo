@@ -9,6 +9,7 @@
 
 #include <map>
 #include <algorithm>
+#include <utility>
 
 
 namespace mmo
@@ -168,10 +169,10 @@ namespace mmo
 		}
 
 		// Setup a new console variable
-		auto emplaced = s_consoleVars.emplace(std::make_pair(name, ConsoleVar(name, description, std::move(defaultValue))));
-		ASSERT(emplaced.first != s_consoleVars.end());
-
-		return &emplaced.first->second;
+		const auto [key, _] = s_consoleVars.emplace(std::make_pair(name, ConsoleVar(name, description, std::move(defaultValue))));
+		ASSERT(key != s_consoleVars.end());
+		
+		return &key->second;
 	}
 
 	bool ConsoleVarMgr::UnregisterConsoleVar(const std::string & name)
@@ -179,7 +180,7 @@ namespace mmo
 		auto it = s_consoleVars.find(name);
 		if (it == s_consoleVars.end())
 		{
-			// CVar didnt exist!
+			// CVar didn't exist!
 			return false;
 		}
 
@@ -190,7 +191,7 @@ namespace mmo
 
 	ConsoleVar * ConsoleVarMgr::FindConsoleVar(const std::string & name, bool allowUnregistered)
 	{
-		auto it = s_consoleVars.find(name);
+		const auto it = s_consoleVars.find(name);
 		if (it == s_consoleVars.end())
 		{
 			return nullptr;
@@ -210,9 +211,9 @@ namespace mmo
 		return &(it->second);
 	}
 
-	ConsoleVar::ConsoleVar(const std::string & name, const std::string & description, std::string defaultValue)
-		: m_name(name)
-		, m_description(description)
+	ConsoleVar::ConsoleVar(std::string name, std::string description, std::string defaultValue)
+		: m_name(std::move(name))
+		, m_description(std::move(description))
 		, m_defaultValue(std::move(defaultValue))
 	{
 		Reset();

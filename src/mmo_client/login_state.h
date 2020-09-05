@@ -30,9 +30,9 @@ namespace mmo
 
 	public:
 		// Inherited via IGameState
-		virtual void OnEnter() override;
-		virtual void OnLeave() override;
-		virtual const std::string & GetName() const override;
+		void OnEnter() override;
+		void OnLeave() override;
+		const std::string & GetName() const override;
 
 	private:
 		/// Called when the screen layer should be painted. Should paint the scene.

@@ -109,7 +109,7 @@ TEST_CASE("Vector3Transform", "[math]")
 	REQUIRE(v1.IsValid());
 
 	// Identity matrix should not motify the vector
-	CHECK(Matrix4::IDENTITY * v1 == v1);
+	CHECK(Matrix4::Identity * v1 == v1);
 	
 	// Translate the vector on the x axis
 	const Matrix4 trans = Matrix4::GetTrans(3.0f, 0.0f, 0.0f);

@@ -24,11 +24,11 @@ namespace mmo
 
 	public:
 		/// Default constructor.
-		inline Matrix4()
+		Matrix4()
 		{
 		}
 
-		inline Matrix4(
+		Matrix4(
 			float m00, float m01, float m02, float m03,
 			float m10, float m11, float m12, float m13,
 			float m20, float m21, float m22, float m23,
@@ -52,7 +52,7 @@ namespace mmo
 			m[3][3] = m33;
 		}
 
-		inline Matrix4(const float* arr)
+		Matrix4(const float* arr)
 		{
 			std::memcpy(m, arr, 16 * sizeof(float));
 		}
@@ -60,7 +60,7 @@ namespace mmo
 		/// Creates a standard 4x4 transformation matrix with a zero translation part from a rotation/scaling 3x3 matrix.
 		/*inline Matrix4(const Matrix3& m3x3)
 		{
-			operator=(IDENTITY);
+			operator=(Identity);
 			operator=(m3x3);
 		}*/
 
@@ -69,12 +69,12 @@ namespace mmo
 		{
 			Matrix3 m3x3;
 			rot.ToRotationMatrix(m3x3);
-			operator=(IDENTITY);
+			operator=(Identity);
 			operator=(m3x3);
 		}*/
 
 		/// Exchange the contents of this matrix with another.
-		inline void swap(Matrix4& other)
+		void swap(Matrix4& other)
 		{
 			std::swap(m[0][0], other.m[0][0]);
 			std::swap(m[0][1], other.m[0][1]);
@@ -94,19 +94,19 @@ namespace mmo
 			std::swap(m[3][3], other.m[3][3]);
 		}
 
-		inline float* operator [] (size_t iRow)
+		float* operator [] (size_t iRow)
 		{
 			ASSERT(iRow < 4);
 			return m[iRow];
 		}
 
-		inline const float *operator [] (size_t iRow) const
+		const float *operator [] (size_t iRow) const
 		{
 			ASSERT(iRow < 4);
 			return m[iRow];
 		}
 
-		inline Matrix4 Concatenate(const Matrix4 &m2) const
+		Matrix4 Concatenate(const Matrix4 &m2) const
 		{
 			Matrix4 r;
 			r.m[0][0] = m[0][0] * m2.m[0][0] + m[0][1] * m2.m[1][0] + m[0][2] * m2.m[2][0] + m[0][3] * m2.m[3][0];
@@ -132,12 +132,12 @@ namespace mmo
 			return r;
 		}
 
-		inline Matrix4 operator * (const Matrix4 &m2) const
+		Matrix4 operator * (const Matrix4 &m2) const
 		{
 			return Concatenate(m2);
 		}
 
-		inline Vector3 operator * (const Vector3 &v) const
+		Vector3 operator * (const Vector3 &v) const
 		{
 			Vector3 r;
 
@@ -174,7 +174,7 @@ namespace mmo
 			return ret;
 		}*/
 
-		inline Matrix4 operator + (const Matrix4 &m2) const
+		Matrix4 operator + (const Matrix4 &m2) const
 		{
 			Matrix4 r;
 
@@ -201,7 +201,7 @@ namespace mmo
 			return r;
 		}
 
-		inline Matrix4 operator - (const Matrix4 &m2) const
+		Matrix4 operator - (const Matrix4 &m2) const
 		{
 			Matrix4 r;
 			r.m[0][0] = m[0][0] - m2.m[0][0];
@@ -227,7 +227,7 @@ namespace mmo
 			return r;
 		}
 
-		inline bool operator == (const Matrix4& m2) const
+		bool operator == (const Matrix4& m2) const
 		{
 			if (
 				m[0][0] != m2.m[0][0] || m[0][1] != m2.m[0][1] || m[0][2] != m2.m[0][2] || m[0][3] != m2.m[0][3] ||
@@ -238,7 +238,7 @@ namespace mmo
 			return true;
 		}
 
-		inline bool operator != (const Matrix4& m2) const
+		bool operator != (const Matrix4& m2) const
 		{
 			if (
 				m[0][0] != m2.m[0][0] || m[0][1] != m2.m[0][1] || m[0][2] != m2.m[0][2] || m[0][3] != m2.m[0][3] ||
@@ -256,7 +256,7 @@ namespace mmo
 			m[2][0] = mat3.m[2][0]; m[2][1] = mat3.m[2][1]; m[2][2] = mat3.m[2][2];
 		}*/
 
-		inline Matrix4 Transpose(void) const
+		Matrix4 Transpose(void) const
 		{
 			return Matrix4(m[0][0], m[1][0], m[2][0], m[3][0],
 				m[0][1], m[1][1], m[2][1], m[3][1],
@@ -264,19 +264,19 @@ namespace mmo
 				m[0][3], m[1][3], m[2][3], m[3][3]);
 		}
 
-		inline void SetTrans(const Vector3& v)
+		void SetTrans(const Vector3& v)
 		{
 			m[0][3] = v.x;
 			m[1][3] = v.y;
 			m[2][3] = v.z;
 		}
 
-		inline Vector3 GetTrans() const
+		Vector3 GetTrans() const
 		{
 			return Vector3(m[0][3], m[1][3], m[2][3]);
 		}
 
-		inline void MakeTrans(const Vector3& v)
+		void MakeTrans(const Vector3& v)
 		{
 			m[0][0] = 1.0; m[0][1] = 0.0; m[0][2] = 0.0; m[0][3] = v.x;
 			m[1][0] = 0.0; m[1][1] = 1.0; m[1][2] = 0.0; m[1][3] = v.y;
@@ -284,7 +284,7 @@ namespace mmo
 			m[3][0] = 0.0; m[3][1] = 0.0; m[3][2] = 0.0; m[3][3] = 1.0;
 		}
 
-		inline void MakeTrans(float tx, float ty, float tz)
+		void MakeTrans(float tx, float ty, float tz)
 		{
 			m[0][0] = 1.0; m[0][1] = 0.0; m[0][2] = 0.0; m[0][3] = tx;
 			m[1][0] = 0.0; m[1][1] = 1.0; m[1][2] = 0.0; m[1][3] = ty;
@@ -292,7 +292,7 @@ namespace mmo
 			m[3][0] = 0.0; m[3][1] = 0.0; m[3][2] = 0.0; m[3][3] = 1.0;
 		}
 
-		inline static Matrix4 GetTrans(const Vector3& v)
+		static Matrix4 GetTrans(const Vector3& v)
 		{
 			Matrix4 r;
 
@@ -304,7 +304,7 @@ namespace mmo
 			return r;
 		}
 
-		inline static Matrix4 GetTrans(float t_x, float t_y, float t_z)
+		static Matrix4 GetTrans(float t_x, float t_y, float t_z)
 		{
 			Matrix4 r;
 
@@ -316,14 +316,14 @@ namespace mmo
 			return r;
 		}
 
-		inline void SetScale(const Vector3& v)
+		void SetScale(const Vector3& v)
 		{
 			m[0][0] = v.x;
 			m[1][1] = v.y;
 			m[2][2] = v.z;
 		}
 
-		inline static Matrix4 GetScale(const Vector3& v)
+		static Matrix4 GetScale(const Vector3& v)
 		{
 			Matrix4 r;
 			r.m[0][0] = v.x; r.m[0][1] = 0.0; r.m[0][2] = 0.0; r.m[0][3] = 0.0;
@@ -334,7 +334,7 @@ namespace mmo
 			return r;
 		}
 
-		inline static Matrix4 GetScale(float s_x, float s_y, float s_z)
+		static Matrix4 GetScale(float s_x, float s_y, float s_z)
 		{
 			Matrix4 r;
 			r.m[0][0] = s_x; r.m[0][1] = 0.0; r.m[0][2] = 0.0; r.m[0][3] = 0.0;
@@ -358,7 +358,7 @@ namespace mmo
 			m3x3.m[2][2] = m[2][2];
 		}´*/
 
-		inline bool HasScale() const
+		bool HasScale() const
 		{
 			// check magnitude of column vectors (==local axes)
 			float t = m[0][0] * m[0][0] + m[1][0] * m[1][0] + m[2][0] * m[2][0];
@@ -374,7 +374,7 @@ namespace mmo
 			return false;
 		}
 
-		inline bool HasNegativeScale() const
+		bool HasNegativeScale() const
 		{
 			return Determinant() < 0;
 		}
@@ -386,12 +386,11 @@ namespace mmo
 			return Quaternion(m3x3);
 		}*/
 
-		static const Matrix4 ZERO;
-		static const Matrix4 ZEROAFFINE;
-		static const Matrix4 IDENTITY;
-		static const Matrix4 CLIPSPACE2DTOIMAGESPACE;
+		static const Matrix4 Zero;
+		static const Matrix4 ZeroAffine;
+		static const Matrix4 Identity;
 
-		inline Matrix4 operator*(float scalar) const
+		Matrix4 operator*(float scalar) const
 		{
 			return Matrix4(
 				scalar*m[0][0], scalar*m[0][1], scalar*m[0][2], scalar*m[0][3],
@@ -410,13 +409,13 @@ namespace mmo
 		//void MakeInverseTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation);
 		//void Decomposition(Vector3& position, Vector3& scale, Quaternion& orientation) const;
 
-		inline bool IsAffine() const
+		bool IsAffine() const
 		{
 			return m[3][0] == 0 && m[3][1] == 0 && m[3][2] == 0 && m[3][3] == 1;
 		}
 
 		Matrix4 InverseAffine() const;
-		inline Matrix4 ConcatenateAffine(const Matrix4 &m2) const
+		Matrix4 ConcatenateAffine(const Matrix4 &m2) const
 		{
 			ASSERT(IsAffine() && m2.IsAffine());
 
@@ -439,7 +438,7 @@ namespace mmo
 				0, 0, 0, 1);
 		}
 
-		inline Vector3 TransformDirectionAffine(const Vector3& v) const
+		Vector3 TransformDirectionAffine(const Vector3& v) const
 		{
 			ASSERT(IsAffine());
 
@@ -449,7 +448,7 @@ namespace mmo
 				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z);
 		}
 
-		inline Vector3 TransformAffine(const Vector3& v) const
+		Vector3 TransformAffine(const Vector3& v) const
 		{
 			ASSERT(IsAffine());
 
@@ -458,26 +457,5 @@ namespace mmo
 				m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3],
 				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]);
 		}
-
-		/*inline Vector4 transformAffine(const Vector4& v) const
-		{
-			ASSERT(IsAffine());
-
-			return Vector4(
-				m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
-				m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3] * v.w,
-				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
-				v.w);
-		}*/
 	};
-
-	/*inline Vector4 operator * (const Vector4& v, const Matrix4& mat)
-	{
-		return Vector4(
-			v.x*mat[0][0] + v.y*mat[1][0] + v.z*mat[2][0] + v.w*mat[3][0],
-			v.x*mat[0][1] + v.y*mat[1][1] + v.z*mat[2][1] + v.w*mat[3][1],
-			v.x*mat[0][2] + v.y*mat[1][2] + v.z*mat[2][2] + v.w*mat[3][2],
-			v.x*mat[0][3] + v.y*mat[1][3] + v.z*mat[2][3] + v.w*mat[3][3]
-		);
-	}*/
 }

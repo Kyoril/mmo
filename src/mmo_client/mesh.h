@@ -22,11 +22,9 @@ namespace mmo
 		typedef std::map<std::string, uint16> SubMeshNameMap;
 
 	public:
-		Mesh()
-		{
-		}
+		Mesh() = default;
 
-	public:
+	public: 
 		SubMesh& CreateSubMesh();
 		SubMesh& CreateSubMesh(const std::string& name);
 		void NameSubMesh(uint16 index, const std::string& name);
@@ -37,10 +35,10 @@ namespace mmo
 		void Render();
 
 	public:
-		inline const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
-		inline uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
-		inline const AABB& GetBounds() const noexcept { return m_aabb; }
-		inline float GetBoundRadius() const noexcept { return m_boundRadius; }
+		const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
+		uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
+		const AABB& GetBounds() const noexcept { return m_aabb; }
+		float GetBoundRadius() const noexcept { return m_boundRadius; }
 
 	private:
 		SubMeshList m_subMeshes;

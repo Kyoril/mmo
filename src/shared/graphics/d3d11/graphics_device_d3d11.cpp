@@ -194,9 +194,9 @@ namespace mmo
 	void GraphicsDeviceD3D11::CreateConstantBuffers()
 	{
 		// Fill matrix array with identity matrices
-		m_transform[0] = Matrix4::IDENTITY;
-		m_transform[1] = Matrix4::IDENTITY;
-		m_transform[2] = Matrix4::IDENTITY;
+		m_transform[0] = Matrix4::Identity;
+		m_transform[1] = Matrix4::Identity;
+		m_transform[2] = Matrix4::Identity;
 
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
@@ -304,7 +304,7 @@ namespace mmo
 
 	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane)
 	{
-		Matrix4 dest = Matrix4::ZERO;
+		Matrix4 dest = Matrix4::Zero;
 
 		const float theta = fovRadians * 0.5;
 		float h = 1 / std::tan(theta);
@@ -342,9 +342,9 @@ namespace mmo
 		if (m_matrixDirty)
 		{
 			// Reset transforms
-			m_transform[0] = Matrix4::IDENTITY;
-			m_transform[1] = Matrix4::IDENTITY;
-			m_transform[2] = Matrix4::IDENTITY;
+			m_transform[0] = Matrix4::Identity;
+			m_transform[1] = Matrix4::Identity;
+			m_transform[2] = Matrix4::Identity;
 			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 			m_matrixDirty = false;
 		}

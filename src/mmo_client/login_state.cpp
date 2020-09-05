@@ -6,15 +6,7 @@
 #include "console.h"
 
 #include "assets/asset_registry.h"
-#include "base/macros.h"
-#include "base/utilities.h"
-#include "log/default_log_levels.h"
 #include "frame_ui/frame_mgr.h"
-#include "base/constants.h"
-
-#include "asio.hpp"
-
-#include <set>
 
 
 namespace mmo

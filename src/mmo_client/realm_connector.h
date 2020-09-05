@@ -6,7 +6,6 @@
 
 #include "game_protocol/game_connector.h"
 #include "base/big_number.h"
-#include "base/sha1.h"
 #include "base/signal.h"
 #include "game/character_view.h"
 
@@ -44,7 +43,6 @@ namespace mmo
 		/// Initializes a new instance of the RealmConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
 		explicit RealmConnector(asio::io_service &io);
-		~RealmConnector();
 
 	private:
 		/// Handles the LogonChallenge packet.
@@ -56,10 +54,10 @@ namespace mmo
 
 	public:
 		// ~ Begin IConnectorListener
-		virtual bool connectionEstablished(bool success) override;
-		virtual void connectionLost() override;
-		virtual void connectionMalformedPacket() override;
-		virtual PacketParseResult connectionPacketReceived(game::IncomingPacket &packet) override;
+		bool connectionEstablished(bool success) override;
+		void connectionLost() override;
+		void connectionMalformedPacket() override;
+		PacketParseResult connectionPacketReceived(game::IncomingPacket &packet) override;
 		// ~ End IConnectorListener
 
 	public:
@@ -72,12 +70,13 @@ namespace mmo
 		/// @param realmPort The port of the realm.
 		/// @param accountName Name of the player account.
 		/// @param realmName The realm's display name.
+		/// @param sessionKey The session key.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
 		/// Sends an enter world request using the given character.
 		void EnterWorld(const CharacterView& character);
 
 		/// Gets the realm name.
-		inline const std::string& GetRealmName() const { return m_realmName; }
+		const std::string& GetRealmName() const { return m_realmName; }
 
 	public:
 		/// Gets a constant list of character views.

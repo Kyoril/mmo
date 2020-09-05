@@ -17,7 +17,7 @@ namespace mmo
 		SubMesh(Mesh& parent);
 
 	public:
-		void Render();
+		void Render() const;
 
 	private:
 

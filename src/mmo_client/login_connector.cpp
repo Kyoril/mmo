@@ -25,7 +25,6 @@ namespace mmo
 
 	LoginConnector::~LoginConnector()
 	{
-		// Unregister cvar
 		ConsoleVarMgr::UnregisterConsoleVar("realmlist");
 		s_realmlistCVar = nullptr;
 	}
@@ -215,13 +214,13 @@ namespace mmo
 			RegisterPacketHandler(auth::login_client_packet::LogonProof, *this, &LoginConnector::OnLogonProof);
 
 			// Send response packet
-			sendSinglePacket([&](auth::OutgoingPacket &packet)
+			sendSinglePacket([&](auth::OutgoingPacket &outPacket)
 			{
 				// Proof packet contains only A and M1 hash value
-				packet.Start(auth::client_login_packet::LogonProof);
-				packet << io::write_range(m_A.asByteArray());
-				packet << io::write_range(M1hash);
-				packet.Finish();
+				outPacket.Start(auth::client_login_packet::LogonProof);
+				outPacket << io::write_range(m_A.asByteArray());
+				outPacket << io::write_range(M1hash);
+				outPacket.Finish();
 			});
 		}
 		else
@@ -287,7 +286,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Sucessfully parsed the packet
+		// Successfully parsed the packet
 		return PacketParseResult::Pass;
 	}
 
@@ -329,7 +328,7 @@ namespace mmo
 	void LoginConnector::Connect(const std::string & username, const std::string & password)
 	{
 		// Apply username and convert it to uppercase letters
-		m_accountName = std::move(username);
+		m_accountName = username;
 		std::transform(m_accountName.begin(), m_accountName.end(), m_accountName.begin(), ::toupper);
 
 		// Apply password in uppercase letters

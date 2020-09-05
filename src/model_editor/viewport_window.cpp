@@ -8,8 +8,10 @@
 
 namespace mmo
 {
-	static const std::string s_viewportInstructionText = "Drag & Drop an FBX file to create a new model";
+	/// The text that is being rendered when there is no mesh loaded in the editor.
+	static const char* s_viewportInstructionText = "Drag & Drop an FBX file to create a new model";
 
+	
 	ViewportWindow::ViewportWindow()
 		: m_visible(true)
 		, m_wireFrame(false)
@@ -109,7 +111,7 @@ namespace mmo
 			if (!m_vertBuf || !m_indexBuf)
 			{
 				// Calculate the size required to render the viewport instruction text on screen (used for alignment calculations)
-				const auto textSize = ImGui::CalcTextSize(s_viewportInstructionText.c_str(), nullptr);
+				const auto textSize = ImGui::CalcTextSize(s_viewportInstructionText, nullptr);
 
 				// Draw the instruction text at the center of the viewport window
 				ImGui::GetWindowDrawList()->AddText(
@@ -117,7 +119,7 @@ namespace mmo
 					ImGui::GetFontSize(),
 					ImVec2(viewportPos.x + (m_lastAvailViewportSize.x / 2.0f - textSize.x / 2.0f), viewportPos.y + (m_lastAvailViewportSize.y / 2.0f - textSize.y / 2.0f)),
 					IM_COL32_WHITE,
-					s_viewportInstructionText.c_str());
+					s_viewportInstructionText);
 			}
 		}
 		ImGui::End();

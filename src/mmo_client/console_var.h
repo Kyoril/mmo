@@ -4,7 +4,6 @@
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
-#include "base/macros.h"		// For ASSERT
 #include "base/signal.h"
 
 #include <string>
@@ -36,27 +35,27 @@ namespace mmo
 		ChangedSignal Changed;
 
 	public:
-		explicit ConsoleVar(const std::string& name, const std::string& description, std::string defaultValue);
+		explicit ConsoleVar(std::string name, std::string description, std::string defaultValue);
 
 	public:
 		// Make ConsoleVar movable
-		ConsoleVar(ConsoleVar&& other)
-			: m_intValue(0)
-			, m_floatValue(0.0f)
-			, m_flags(CVF_None)
+		ConsoleVar(ConsoleVar&& other) noexcept
+			: m_floatValue(0.0f)
 		{
 			swap(other);
 		}
 
-		ConsoleVar& operator=(ConsoleVar&& other)
+		ConsoleVar& operator=(ConsoleVar&& other) noexcept
 		{
 			if (this != &other)
 			{
 				swap(other);
 			}
+			
+			return *this;
 		}
 
-		void swap(ConsoleVar& other)
+		void swap(ConsoleVar& other) noexcept
 		{
 			m_name = std::move(other.m_name);
 			m_description = std::move(other.m_description);
@@ -68,57 +67,57 @@ namespace mmo
 		}
 
 	public:
-		/// Determines whether a flag has been set.
-		inline bool HasFlag(ConsoleVarFlags flags) const 
+		/// @brief Determines whether a flag has been set.
+		[[nodiscard]] bool HasFlag(ConsoleVarFlags flags) const 
 		{
 			return (m_flags & flags) != 0;
 		}
-		/// Sets a given flag.
-		inline void SetFlag(ConsoleVarFlags flags)
+		/// @brief Sets a given flag.
+		void SetFlag(ConsoleVarFlags flags)
 		{
 			m_flags |= flags;
 		}
-		/// Clears all flags.
-		inline void ClearFlags()
+		/// @brief Clears all flags.
+		void ClearFlags()
 		{
 			m_flags = CVF_None;
 		}
-		/// Removes the given flag or flags.
-		inline void RemoveFlag(ConsoleVarFlags flags)
+		/// @brief Removes the given flag or flags.
+		void RemoveFlag(ConsoleVarFlags flags)
 		{
 			m_flags &= ~flags;
 		}
-		/// Determines whether the value of this console variable has been modified.
+		/// @brief Determines whether the value of this console variable has been modified.
 		/// @remarks Note that this also returns true, if the value matches the default 
 		/// value but has been set using the Set method instead of the Reset method.
-		inline bool HasBeenModified() const
+		[[nodiscard]] bool HasBeenModified() const
 		{
 			return HasFlag(CVF_Modified);
 		}
-		/// Whether this console variable is valid to use.
-		inline bool IsValid() const
+		/// @brief Whether this console variable is valid to use.
+		[[nodiscard]] bool IsValid() const
 		{
 			return !HasFlag(CVF_Unregistered);
 		}
-		/// Gets the name of this console variable.
-		inline const std::string& GetName() const 
+		/// @brief Gets the name of this console variable.
+		[[nodiscard]] const std::string& GetName() const 
 		{
 			return m_name;
 		}
-		/// Gets a descriptive string.
-		inline const std::string& GetDescription() const
+		/// @brief Gets a descriptive string.
+		[[nodiscard]] const std::string& GetDescription() const
 		{
 			return m_description;
 		}
-		/// Gets the default value of this variable.
-		inline const std::string& GetDefaultValue() const
+		/// @brief Gets the default value of this variable.
+		[[nodiscard]] const std::string& GetDefaultValue() const
 		{
 			return m_defaultValue;
 		}
 
 	private:
 		/// Triggers the Changed signal if the variable has not been marked as unregistered.
-		inline void NotifyChanged(const std::string& oldValue)
+		void NotifyChanged(const std::string& oldValue)
 		{
 			if (IsValid())
 			{
@@ -130,19 +129,19 @@ namespace mmo
 		/// Sets the current value as string value. Also sets the CVF_Modified flag.
 		void Set(std::string value)
 		{
-			const std::string oldValue = std::move(m_stringValue);
+			const auto oldValue = std::move(m_stringValue);
 
 			m_stringValue = std::move(value);
 			m_intValue = std::atoi(m_stringValue.c_str());
-			m_floatValue = std::atof(m_stringValue.c_str());
+			m_floatValue = static_cast<float>(std::atof(m_stringValue.c_str()));
 			SetFlag(CVF_Modified);
 
 			NotifyChanged(oldValue);
 		}
-		/// Sets the current value as int32 value. Also sets the CVF_Modified flag.
+		/// @brief Sets the current value as int32 value. Also sets the CVF_Modified flag.
 		void Set(int32 value)
 		{
-			const std::string oldValue = std::move(m_stringValue);
+			const auto oldValue = std::move(m_stringValue);
 
 			m_stringValue = std::to_string(value);
 			m_intValue = value;
@@ -151,10 +150,10 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
-		/// Sets the current value as float value. Also sets the CVF_Modified flag.
+		/// @brief Sets the current value as float value. Also sets the CVF_Modified flag.
 		void Set(float value)
 		{
-			const std::string oldValue = std::move(m_stringValue);
+			const auto oldValue = std::move(m_stringValue);
 
 			m_stringValue = std::to_string(value);
 			m_intValue = static_cast<int32>(value);
@@ -163,11 +162,11 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
-		inline void Set(bool value)
+		void Set(bool value)
 		{
 			Set(value ? 1 : 0);
 		}
-		/// Resets the current value to use the default value. Also removes the CVF_Modified flag.
+		/// @brief Resets the current value to use the default value. Also removes the CVF_Modified flag.
 		void Reset()
 		{
 			const std::string oldValue = std::move(m_stringValue);
@@ -177,23 +176,23 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
-		/// Gets the current string value.
-		inline const std::string& GetStringValue() const
+		/// @brief Gets the current string value.
+		[[nodiscard]] const std::string& GetStringValue() const
 		{
 			return m_stringValue;
 		}
 		/// Gets the current int32 value.
-		inline int32 GetIntValue() const
+		[[nodiscard]] int32 GetIntValue() const
 		{
 			return m_intValue;
 		}
 		/// Gets the current float value.
-		inline float GetFloatValue() const
+		[[nodiscard]] float GetFloatValue() const
 		{
 			return m_floatValue;
 		}
 		/// Gets the current bool value.
-		inline bool GetBoolValue() const
+		[[nodiscard]] bool GetBoolValue() const
 		{
 			return GetIntValue() != 0;
 		}
@@ -208,18 +207,18 @@ namespace mmo
 		/// The current value as string.
 		std::string m_stringValue;
 		/// A cache of the current value as int32.
-		int32 m_intValue;
+		int32 m_intValue{};
 		/// A cache of the current value as float.
-		float m_floatValue;
+		float m_floatValue{};
 		/// Console variable flags
-		uint32 m_flags;
+		uint32 m_flags{};
 	};
 
 	/// Class that manages console variables.
 	class ConsoleVarMgr final : public NonCopyable
 	{
 	private:
-		/// Make this class non-instancable
+		// This class can't be constructed.
 		ConsoleVarMgr() = delete;
 
 	public:
@@ -232,7 +231,7 @@ namespace mmo
 	public:
 		/// Registers a new console variable.
 		static ConsoleVar* RegisterConsoleVar(const std::string& name, const std::string& description, std::string defaultValue = "");
-		/// Unregisters a registered console variable.
+		/// Remove a registered console variable.
 		static bool UnregisterConsoleVar(const std::string& name);
 		/// Finds a registered console variable if it exists.
 		static ConsoleVar* FindConsoleVar(const std::string& name, bool allowUnregistered = false);

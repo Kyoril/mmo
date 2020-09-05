@@ -2,6 +2,7 @@
 
 #include "event_loop.h"
 
+#include "base/clock.h"
 #include "graphics/graphics_device.h"
 
 #ifdef _WIN32
@@ -11,7 +12,6 @@
 #endif
 
 #include <thread>
-#include <chrono>
 
 
 namespace mmo
@@ -39,20 +39,20 @@ namespace mmo
 	{
 #ifdef _WIN32
 		// Process windows messages
-		MSG msg = { 0 };
+		MSG msg = { nullptr };
 		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
 			// Process input messages
 			switch (msg.message)
 			{
 			case WM_KEYDOWN:
-				KeyDown(msg.wParam);
+				KeyDown(static_cast<int32>(msg.wParam));
 				break;
 			case WM_CHAR:
 				KeyChar(static_cast<uint16>(msg.wParam));
 				break;
 			case WM_KEYUP:
-				KeyUp(msg.wParam);
+				KeyUp(static_cast<int32>(msg.wParam));
 				break;
 			case WM_LBUTTONDOWN:
 				MouseDown(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
@@ -94,7 +94,7 @@ namespace mmo
 	void EventLoop::Run()
 	{
 		// Capture timestamp
-		GameTime lastIdle = GetAsyncTimeMs();
+		auto lastIdle = GetAsyncTimeMs();
 
 		auto& gx = GraphicsDevice::Get();
 		auto gxWindow = gx.GetAutoCreatedWindow();
@@ -107,8 +107,8 @@ namespace mmo
 				break;
 
 			// Get current timestamp
-			GameTime currentTime = GetAsyncTimeMs();
-			float timePassed = static_cast<float>((currentTime - lastIdle) / 1000.0);
+			auto currentTime = GetAsyncTimeMs();
+			auto timePassed = static_cast<float>((currentTime - lastIdle) / 1000.0);
 			lastIdle = currentTime;
 
 			// Raise idle event

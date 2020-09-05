@@ -3,32 +3,26 @@
 
 namespace mmo
 {
-	const Matrix4 Matrix4::ZERO(
+	const Matrix4 Matrix4::Zero(
 		0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 0);
 
-	const Matrix4 Matrix4::ZEROAFFINE(
+	const Matrix4 Matrix4::ZeroAffine(
 		0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 1);
 
-	const Matrix4 Matrix4::IDENTITY(
+	const Matrix4 Matrix4::Identity(
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
 		0, 0, 0, 1);
 
-	const Matrix4 Matrix4::CLIPSPACE2DTOIMAGESPACE(
-		0.5, 0, 0, 0.5,
-		0, -0.5, 0, 0.5,
-		0, 0, 1, 0,
-		0, 0, 0, 1);
 
-
-	inline static float MINOR(const Matrix4& m, const size_t r0, const size_t r1, const size_t r2, const size_t c0, const size_t c1, const size_t c2)
+	static float Minor(const Matrix4& m, const size_t r0, const size_t r1, const size_t r2, const size_t c0, const size_t c1, const size_t c2)
 	{
 		return m[r0][c0] * (m[r1][c1] * m[r2][c2] - m[r2][c1] * m[r1][c2]) -
 			m[r0][c1] * (m[r1][c0] * m[r2][c2] - m[r2][c0] * m[r1][c2]) +
@@ -38,33 +32,33 @@ namespace mmo
 	Matrix4 Matrix4::Adjoint() const
 	{
 		return Matrix4(
-			MINOR(*this, 1, 2, 3, 1, 2, 3),
-			-MINOR(*this, 0, 2, 3, 1, 2, 3),
-			MINOR(*this, 0, 1, 3, 1, 2, 3),
-			-MINOR(*this, 0, 1, 2, 1, 2, 3),
+			Minor(*this, 1, 2, 3, 1, 2, 3),
+			-Minor(*this, 0, 2, 3, 1, 2, 3),
+			Minor(*this, 0, 1, 3, 1, 2, 3),
+			-Minor(*this, 0, 1, 2, 1, 2, 3),
 
-			-MINOR(*this, 1, 2, 3, 0, 2, 3),
-			MINOR(*this, 0, 2, 3, 0, 2, 3),
-			-MINOR(*this, 0, 1, 3, 0, 2, 3),
-			MINOR(*this, 0, 1, 2, 0, 2, 3),
+			-Minor(*this, 1, 2, 3, 0, 2, 3),
+			Minor(*this, 0, 2, 3, 0, 2, 3),
+			-Minor(*this, 0, 1, 3, 0, 2, 3),
+			Minor(*this, 0, 1, 2, 0, 2, 3),
 
-			MINOR(*this, 1, 2, 3, 0, 1, 3),
-			-MINOR(*this, 0, 2, 3, 0, 1, 3),
-			MINOR(*this, 0, 1, 3, 0, 1, 3),
-			-MINOR(*this, 0, 1, 2, 0, 1, 3),
+			Minor(*this, 1, 2, 3, 0, 1, 3),
+			-Minor(*this, 0, 2, 3, 0, 1, 3),
+			Minor(*this, 0, 1, 3, 0, 1, 3),
+			-Minor(*this, 0, 1, 2, 0, 1, 3),
 
-			-MINOR(*this, 1, 2, 3, 0, 1, 2),
-			MINOR(*this, 0, 2, 3, 0, 1, 2),
-			-MINOR(*this, 0, 1, 3, 0, 1, 2),
-			MINOR(*this, 0, 1, 2, 0, 1, 2));
+			-Minor(*this, 1, 2, 3, 0, 1, 2),
+			Minor(*this, 0, 2, 3, 0, 1, 2),
+			-Minor(*this, 0, 1, 3, 0, 1, 2),
+			Minor(*this, 0, 1, 2, 0, 1, 2));
 	}
 
 	float Matrix4::Determinant() const
 	{
-		return m[0][0] * MINOR(*this, 1, 2, 3, 1, 2, 3) -
-			m[0][1] * MINOR(*this, 1, 2, 3, 0, 2, 3) +
-			m[0][2] * MINOR(*this, 1, 2, 3, 0, 1, 3) -
-			m[0][3] * MINOR(*this, 1, 2, 3, 0, 1, 2);
+		return m[0][0] * Minor(*this, 1, 2, 3, 1, 2, 3) -
+			m[0][1] * Minor(*this, 1, 2, 3, 0, 2, 3) +
+			m[0][2] * Minor(*this, 1, 2, 3, 0, 1, 3) -
+			m[0][3] * Minor(*this, 1, 2, 3, 0, 1, 2);
 	}
 
 	Matrix4 Matrix4::Inverse() const
@@ -172,64 +166,5 @@ namespace mmo
 			r20, r21, r22, r23,
 			0, 0, 0, 1);
 	}
-
-	/*void Matrix4::MakeTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation)
-	{
-		// Ordering:
-		//    1. Scale
-		//    2. Rotate
-		//    3. Translate
-
-		Matrix3 rot3x3;
-		orientation.ToRotationMatrix(rot3x3);
-
-		// Set up final matrix with scale, rotation and translation
-		m[0][0] = scale.x * rot3x3[0][0]; m[0][1] = scale.y * rot3x3[0][1]; m[0][2] = scale.z * rot3x3[0][2]; m[0][3] = position.x;
-		m[1][0] = scale.x * rot3x3[1][0]; m[1][1] = scale.y * rot3x3[1][1]; m[1][2] = scale.z * rot3x3[1][2]; m[1][3] = position.y;
-		m[2][0] = scale.x * rot3x3[2][0]; m[2][1] = scale.y * rot3x3[2][1]; m[2][2] = scale.z * rot3x3[2][2]; m[2][3] = position.z;
-
-		// No projection term
-		m[3][0] = 0; m[3][1] = 0; m[3][2] = 0; m[3][3] = 1;
-	}*/
-
-	/*void Matrix4::MakeInverseTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation)
-	{
-		// Invert the parameters
-		Vector3 invTranslate = -position;
-		Vector3 invScale(1 / scale.x, 1 / scale.y, 1 / scale.z);
-		Quaternion invRot = orientation.Inverse();
-
-		// Because we're inverting, order is translation, rotation, scale
-		// So make translation relative to scale & rotation
-		invTranslate = invRot * invTranslate; // rotate
-		invTranslate *= invScale; // scale
-
-		// Next, make a 3x3 rotation matrix
-		Matrix3 rot3x3;
-		invRot.ToRotationMatrix(rot3x3);
-
-		// Set up final matrix with scale, rotation and translation
-		m[0][0] = invScale.x * rot3x3[0][0]; m[0][1] = invScale.x * rot3x3[0][1]; m[0][2] = invScale.x * rot3x3[0][2]; m[0][3] = invTranslate.x;
-		m[1][0] = invScale.y * rot3x3[1][0]; m[1][1] = invScale.y * rot3x3[1][1]; m[1][2] = invScale.y * rot3x3[1][2]; m[1][3] = invTranslate.y;
-		m[2][0] = invScale.z * rot3x3[2][0]; m[2][1] = invScale.z * rot3x3[2][1]; m[2][2] = invScale.z * rot3x3[2][2]; m[2][3] = invTranslate.z;
-
-		// No projection term
-		m[3][0] = 0; m[3][1] = 0; m[3][2] = 0; m[3][3] = 1;
-	}*/
-
-	/*void Matrix4::Decomposition(Vector3& position, Vector3& scale, Quaternion& orientation) const
-	{
-		ASSERT(isAffine());
-
-		Matrix3 m3x3;
-		extract3x3Matrix(m3x3);
-
-		Matrix3 matQ;
-		Vector3 vecU;
-		m3x3.QDUDecomposition(matQ, scale, vecU);
-
-		orientation = Quaternion(matQ);
-		position = Vector3(m[0][3], m[1][3], m[2][3]);
-	}*/
 
 }

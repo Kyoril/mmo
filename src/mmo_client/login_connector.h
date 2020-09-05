@@ -70,18 +70,18 @@ namespace mmo
 
 	public:
 		/// Gets realm data.
-		inline const std::vector<RealmData>& GetRealms() const { return m_realms; }
+		const std::vector<RealmData>& GetRealms() const { return m_realms; }
 		/// Gets the session key.
-		inline const BigNumber& GetSessionKey() const { return m_sessionKey; }
+		const BigNumber& GetSessionKey() const { return m_sessionKey; }
 		/// Gets the account name.
-		inline const std::string& GetAccountName() const { return m_accountName; }
+		const std::string& GetAccountName() const { return m_accountName; }
 
 	public:
 		// ~ Begin IConnectorListener
-		virtual bool connectionEstablished(bool success) override;
-		virtual void connectionLost() override;
-		virtual void connectionMalformedPacket() override;
-		virtual PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
+		bool connectionEstablished(bool success) override;
+		void connectionLost() override;
+		void connectionMalformedPacket() override;
+		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
 		// ~ End IConnectorListener
 
 	private:

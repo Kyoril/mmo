@@ -14,7 +14,7 @@ namespace mmo
 		D3D11_BUFFER_DESC BufferDesc;
 		ZeroMemory(&BufferDesc, sizeof(BufferDesc));
 		BufferDesc.Usage = m_dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
-		BufferDesc.ByteWidth = static_cast<UINT>(VertexSize * VertexCount);
+		BufferDesc.ByteWidth = static_cast<UINT>(m_vertexSize * m_vertexCount);
 		BufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 		BufferDesc.CPUAccessFlags = m_dynamic ? D3D11_CPU_ACCESS_WRITE : 0;
 		BufferDesc.MiscFlags = 0;
@@ -49,7 +49,7 @@ namespace mmo
 	{
 		ID3D11Buffer* Buffers[1] = { Buffer.Get() };
 
-		UINT Stride = static_cast<UINT>(VertexSize);
+		UINT Stride = static_cast<UINT>(m_vertexSize);
 		UINT Offset = 0;
 
 		ID3D11DeviceContext& Context = Device;

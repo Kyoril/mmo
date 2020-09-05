@@ -20,17 +20,16 @@ namespace mmo
 		ModelRenderer(const std::string& name);
 
 	public:
-		/// Renders a given frame using this renderer instance.
-		/// @param frame The frame instance to render.
+		/// @brief Renders a given frame using this renderer instance.
 		/// @param colorOverride An optional color override for tinting.
 		/// @param clipper An optional clip rect.
-		virtual void Render(
+		void Render(
 			optional<Color> colorOverride = optional<Color>(),
-			optional<Rect> clipper = optional<Rect>()) final override;
+			optional<Rect> clipper = optional<Rect>()) override;
 		/// Called to notify the renderer that a frame has been attached.
-		virtual void NotifyFrameAttached() final override;
+		void NotifyFrameAttached() override;
 		/// Called to notify the renderer that a frame has been detached.
-		virtual void NotifyFrameDetached() final override;
+		void NotifyFrameDetached() override;
 
 	private:
 		RenderTexturePtr m_renderTexture;

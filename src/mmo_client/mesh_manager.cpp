@@ -23,14 +23,14 @@ namespace mmo
 	MeshPtr MeshManager::Load(const std::string & filename)
 	{
 		// Try to find the mesh first before trying to load it again
-		auto it = m_meshes.find(filename);
+		const auto it = m_meshes.find(filename);
 		if (it != m_meshes.end())
 		{
 			return it->second;
 		}
 
 		// Try to load the file from the registry
-		auto filePtr = AssetRegistry::OpenFile(filename);
+		const auto filePtr = AssetRegistry::OpenFile(filename);
 		ASSERT(filePtr && "Unable to load mesh file");
 
 		// Create readers
@@ -45,7 +45,7 @@ namespace mmo
 		}
 
 		// Create the resulting mesh
-		MeshPtr mesh = std::make_shared<Mesh>();
+		auto mesh = std::make_shared<Mesh>();
 
 		// Depending on the format version, load the real mesh data now
 		switch (preHeader.version)
@@ -59,8 +59,6 @@ namespace mmo
 				}
 			}
 			break;
-		default:
-			throw std::runtime_error("Unsupported mesh file format version!");
 		}
 
 		// Store the mesh in the cache

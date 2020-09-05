@@ -18,18 +18,18 @@ namespace mmo
 	namespace
 	{
 		/// Allows executing a console command from within lua.
-		static void Script_RunConsoleCommand(const char* cmdLine)
+		void Script_RunConsoleCommand(const char* cmdLine)
 		{
 			ASSERT(cmdLine);
 			Console::ExecuteCommand(cmdLine);
 		}
 
-		static int32 Script_GetRealmCount(LoginConnector& connector)
+		int32 Script_GetRealmCount(LoginConnector& connector)
 		{
 			return static_cast<int32>(connector.GetRealms().size());
 		}
 
-		static const mmo::RealmData* Script_GetRealmData(LoginConnector& connector, int32 index)
+		const mmo::RealmData* Script_GetRealmData(LoginConnector& connector, int32 index)
 		{
 			const auto& realms = connector.GetRealms();
 			if (index < 0 || index >= realms.size())
@@ -42,7 +42,7 @@ namespace mmo
 		}
 
 
-		static const mmo::CharacterView* Script_GetCharacterData(RealmConnector& connector, int32 index)
+		const mmo::CharacterView* Script_GetCharacterData(RealmConnector& connector, int32 index)
 		{
 			const auto& chars = connector.GetCharacterViews();
 			if (index < 0 || index >= chars.size())
@@ -54,7 +54,7 @@ namespace mmo
 			return &chars[index];
 		}
 
-		static void Script_Print(const std::string& text)
+		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
 		}

@@ -24,7 +24,6 @@
 #include "realm_connector.h"
 #include "game_state_mgr.h"
 #include "login_state.h"
-#include "screen.h"
 #include "game_script.h"
 #include "model_frame.h"
 #include "model_renderer.h"
@@ -109,7 +108,7 @@ namespace mmo
 	/// first parameter as username and the other parameters as password.
 	static void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
 	{
-		std::size_t spacePos = arguments.find(' ');
+		const auto spacePos = arguments.find(' ');
 		if (spacePos == arguments.npos)
 		{
 			ELOG("Invalid argument count!");
@@ -132,7 +131,7 @@ namespace mmo
 
 
 	/// Initializes everything related to FrameUI.
-	bool InitializeFrameUI()
+	bool InitializeFrameUi()
 	{
 		// Initialize the frame manager
 		FrameManager::Initialize(&s_gameScript->GetLuaState());
@@ -214,7 +213,7 @@ namespace mmo
 	{
 		// Receive the current working directory
 		std::error_code error;
-		auto current_path = std::filesystem::current_path(error);
+		const auto currentPath = std::filesystem::current_path(error);
 		if (error)
 		{
 			ELOG("Could not obtain working directory: " << error);
@@ -222,10 +221,10 @@ namespace mmo
 		}
 
 		// Ensure the logs directory exists
-		std::filesystem::create_directories(current_path / "Logs");
+		std::filesystem::create_directories(currentPath / "Logs");
 
 		// Setup the log file connection after opening the log file
-		s_logFile.open((current_path / "Logs" / "Client.log").string().c_str(), std::ios::out);
+		s_logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
 		if (s_logFile)
 		{
 			s_logConn = g_DefaultLog.signal().connect(
@@ -239,7 +238,7 @@ namespace mmo
 		EventLoop::Initialize();
 
 		// Initialize the console client which also loads the config file
-		Console::Initialize(current_path / "Config" / "Config.cfg");
+		Console::Initialize(currentPath / "Config" / "Config.cfg");
 
 		// Initialize network threads
 		NetInit();
@@ -251,7 +250,7 @@ namespace mmo
 		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector);
 
 		// Setup FrameUI library
-		if (!InitializeFrameUI())
+		if (!InitializeFrameUi())
 		{
 			return false;
 		}
@@ -346,10 +345,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 #endif
 
 	// Split command line arguments
-	int argc = 0;
-	PCHAR* argv = CommandLineToArgvA(GetCommandLine(), &argc);
+	auto argc = 0;
+	const auto argv = CommandLineToArgvA(GetCommandLine(), &argc);
 
-	// If no debugger is attached, encapsule the common main function in a try/catch 
+	// If no debugger is attached, encapsulate the common main function in a try/catch 
 	// block to catch exceptions and display an error message to the user.
 	if (!::IsDebuggerPresent())
 	{

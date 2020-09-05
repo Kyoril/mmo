@@ -4,6 +4,8 @@
 
 #include "buffer_base.h"
 
+#include "base/typedefs.h"
+
 #include <memory>
 
 
@@ -14,19 +16,19 @@ namespace mmo
 	{
 	public:
 		/// 
-		VertexBuffer(size_t InVertexCount, size_t InVertexSize, bool dynamic);
+		VertexBuffer(uint32 vertexCount, uint32 vertexSize, bool dynamic);
 		/// Virtual default destructor because of inheritance.
 		virtual ~VertexBuffer() = default;
 
 	public:
 
-		inline size_t GetVertexCount() const { return VertexCount; }
-		inline size_t GetVertexSize() const { return VertexSize; }
-		inline bool IsDynamic() const { return m_dynamic; }
+		[[nodiscard]] uint32 GetVertexCount() const { return m_vertexCount; }
+		[[nodiscard]] uint32 GetVertexSize() const { return m_vertexSize; }
+		[[nodiscard]] bool IsDynamic() const { return m_dynamic; }
 
 	protected:
-		size_t VertexCount;
-		size_t VertexSize;
+		uint32 m_vertexCount;
+		uint32 m_vertexSize;
 		bool m_dynamic;
 	};
 

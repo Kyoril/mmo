@@ -13,7 +13,7 @@ namespace mmo
 	{
 	}
 
-	void SubMesh::Render()
+	void SubMesh::Render() const
 	{
 		ASSERT(m_vertexBuffer);
 

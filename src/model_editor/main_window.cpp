@@ -218,11 +218,11 @@ namespace mmo
 		ImGui::DockBuilderAddNode(dockSpaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
 		ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
-		auto dock_main_id = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		const auto dock_log_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dock_main_id);
+		auto dockMainId = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		const auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
 		
-		ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
-		ImGui::DockBuilderDockWindow("Log", dock_log_id);
+		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
+		ImGui::DockBuilderDockWindow("Log", dockLogId);
 		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
@@ -258,7 +258,7 @@ namespace mmo
 
 			// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
 			const auto& meshes = m_importer.GetMeshEntries();
-			if (meshes.size() > 0)
+			if (!meshes.empty())
 			{
 				const auto& mesh = meshes.front();
 
@@ -273,7 +273,7 @@ namespace mmo
 					vertices[i].color = 0xFFAEAEAE;
 				}
 
-				VertexBufferPtr vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
+				auto vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
 
 				std::vector<uint16> indices;
 				indices.resize(mesh.indices.size());
@@ -283,7 +283,7 @@ namespace mmo
 					indices[i] = static_cast<uint16>(mesh.indices[i]);
 				}
 
-				IndexBufferPtr indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
+				auto indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
 				m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
 
 				m_fileLoaded = true;
@@ -333,11 +333,11 @@ namespace mmo
 
 		if (m_rightButtonPressed)
 		{
-			m_viewportWindow.MoveCamera(Vector3((float)deltaX / 96.0f, (float)deltaY / 96.0f, 0.0f));
+			m_viewportWindow.MoveCamera(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
 		}
 		else if (m_leftButtonPressed)
 		{
-			m_viewportWindow.MoveCameraTarget(Vector3((float)deltaX / 96.0f, (float)deltaY / 96.0f, 0.0f));
+			m_viewportWindow.MoveCameraTarget(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
 		}
 
 		m_lastMouseX = x;
@@ -390,17 +390,17 @@ namespace mmo
 			return true;
 
 		// If this is the creation message, we will set the class long to the instance pointer
-		// of the mainwindow instance which was provided in CreateWindowEx as the last parameter
+		// of the main window instance which was provided in CreateWindowEx as the last parameter
 		// so that we can get the instance everywhere from the window handle.
 		if (msg == WM_NCCREATE)
 		{
-			LPCREATESTRUCT createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
+			auto createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
 			SetWindowLongPtr(wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
 		}
 		else
 		{
 			// Retrieve the window instance
-			MainWindow* window = reinterpret_cast<MainWindow*>(GetWindowLongPtr(wnd, GWLP_USERDATA));
+			auto* window = reinterpret_cast<MainWindow*>(GetWindowLongPtr(wnd, GWLP_USERDATA));
 			if (window)
 			{
 				// Call the MsgProc instance function

@@ -6,20 +6,14 @@
 #include "base/io_array.h"
 
 
-namespace mmo
+namespace mmo::mesh::v1_0
 {
-	namespace mesh
+	bool LoadHeader(Header &header, io::Reader &reader)
 	{
-		namespace v1_0
-		{
-			bool LoadHeader(Header &header, io::Reader &reader)
-			{
-				reader
-					>> io::read<uint32>(header.vertexChunkOffset)
-					>> io::read<uint32>(header.indexChunkOffset);
+		reader
+			>> io::read<uint32>(header.vertexChunkOffset)
+			>> io::read<uint32>(header.indexChunkOffset);
 
-				return reader;
-			}
-		}
+		return reader;
 	}
 }
