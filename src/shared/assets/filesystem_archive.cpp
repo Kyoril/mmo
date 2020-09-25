@@ -48,6 +48,11 @@ namespace mmo
 		EnumerateFilesImpl(m_name, "", files);
 	}
 
+	std::unique_ptr<std::ostream> FileSystemArchive::Create(const std::string& filename)
+	{
+		return m_writer.writeFile(filename, false, true);
+	}
+
 	void FileSystemArchive::EnumerateFilesImpl(const virtual_dir::Path & root, const virtual_dir::Path& relPath, std::vector<std::string>& files)
 	{
 		// Iterate through all files

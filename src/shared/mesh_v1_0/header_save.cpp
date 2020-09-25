@@ -73,9 +73,9 @@ namespace mmo
 				m_contentPos = destination.Position();
 			}
 
-			void SubMeshChunkSaver::Finish()
+			void SubMeshChunkSaver::Finish() const
 			{
-				const uint32 contentDiff = static_cast<uint32>(m_destination.Position() - m_contentPos);
+				const auto contentDiff = static_cast<uint32>(m_destination.Position() - m_contentPos);
 
 				io::Writer writer{ m_destination };
 				writer.WritePOD(m_chunkSizePos, contentDiff);

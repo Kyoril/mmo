@@ -10,8 +10,6 @@
 #include "base/utilities.h"
 #include "base/macros.h"
 
-#include <fstream>
-#include <array>
 #include <list>
 #include <map>
 
@@ -24,6 +22,8 @@ namespace mmo
 	static std::list<std::shared_ptr<IArchive>> s_archives;
 	/// Hashed file name list
 	static std::map<std::string, std::shared_ptr<IArchive>, StrCaseIComp> s_files;
+	/// The filesystem archive pointing to the base path.
+	static std::shared_ptr<FileSystemArchive> s_filesystemArchive;
 
 
 	void AssetRegistry::Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives)
@@ -35,7 +35,7 @@ namespace mmo
 		ILOG("Initializing asset registry with base path " << basePath);
 
 		// Remember base path
-		s_basePath = basePath;
+		s_basePath = std::filesystem::absolute(basePath);
 
 		// In debug builds, we skip loading hpak archives as debug builds are not 
 		// for distribution, which is the only purpose of hpak files. Also, even in
@@ -44,7 +44,7 @@ namespace mmo
 		for (const std::string& file : archives)
 		{
 			// Check if the file exists
-			std::filesystem::path archivePath = s_basePath / file;
+			auto archivePath = s_basePath / file;
 			if (std::filesystem::exists(archivePath))
 			{
 				// Add archive to the list of archives
@@ -62,8 +62,8 @@ namespace mmo
 		}
 
 		// Finally, add the file system archive
-		auto archive = std::make_shared<FileSystemArchive>(s_basePath.string());
-		s_archives.emplace_front(std::move(archive));
+		s_filesystemArchive = std::make_shared<FileSystemArchive>(s_basePath.string());
+		s_archives.emplace_front(s_filesystemArchive);
 
 		// Iterate through all archives
 		for (auto& archive : s_archives)
@@ -99,12 +99,15 @@ namespace mmo
 
 		// Remove all archives
 		s_archives.clear();
+
+		// Reset filesystem archive
+		s_filesystemArchive.reset();
 	}
 
 	std::unique_ptr<std::istream> AssetRegistry::OpenFile(const std::string & filename)
 	{
 		// Try to find the requested file
-		auto it = s_files.find(filename);
+		const auto it = s_files.find(filename);
 		if (it == s_files.end())
 		{
 			return nullptr;
@@ -112,5 +115,30 @@ namespace mmo
 
 		// Open file from archive
 		return it->second->Open(filename);
+	}
+
+	bool AssetRegistry::HasFile(const std::string& filename)
+	{
+		// Try to find the requested file
+		const auto it = s_files.find(filename);
+		return it != s_files.end();
+	}
+
+	std::unique_ptr<std::ostream> AssetRegistry::CreateNewFile(const std::string& filename)
+	{
+		ASSERT(s_filesystemArchive != nullptr);
+		
+		// Creating a file always creates a real physical file as HPAK is not yet supported
+		auto filePtr = s_filesystemArchive->Create(filename);
+		if (filePtr != nullptr)
+		{
+			// Register file
+			auto archive = std::static_pointer_cast<IArchive>(s_filesystemArchive);
+			s_files.emplace(filename, std::move(archive));
+
+			DLOG("Successfully created new file " << filename << " in asset registry");
+		}
+
+		return filePtr;
 	}
 }

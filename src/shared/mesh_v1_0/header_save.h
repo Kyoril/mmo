@@ -22,7 +22,7 @@ namespace mmo
 			{
 			public:
 				explicit SubMeshChunkSaver(io::ISink &destination);
-				void Finish();
+				void Finish() const;
 
 			private:
 
@@ -31,8 +31,9 @@ namespace mmo
 				size_t m_contentPos;
 			};
 
-			struct HeaderSaver
+			class HeaderSaver
 			{
+			public:
 				explicit HeaderSaver(io::ISink &destination, const Header& header);
 				~HeaderSaver();
 

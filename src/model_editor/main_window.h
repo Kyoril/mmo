@@ -15,12 +15,15 @@
 
 namespace mmo
 {
+	class Configuration;
+	
+	
 	/// This class manages the main window of the application.
 	class MainWindow final 
 		: public NonCopyable
 	{
 	public:
-		explicit MainWindow();
+		explicit MainWindow(Configuration& config);
 		~MainWindow();
 
 	private:
@@ -51,6 +54,7 @@ namespace mmo
 		LRESULT CALLBACK MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 	private:
+		Configuration& m_config;
 		HWND m_windowHandle;
 		/// The dock space flags.
 		ImGuiDockNodeFlags m_dockSpaceFlags;

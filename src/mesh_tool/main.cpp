@@ -2,8 +2,6 @@
 
 #include "binary_io/stream_sink.h"
 #include "binary_io/writer.h"
-#include "binary_io/reader.h"
-#include "binary_io/stream_source.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "math/vector3.h"
@@ -40,20 +38,20 @@ namespace mmo
 		Vector3 texCoord;
 		/// Vertex color
 		uint32 color;
-	};
+    };
 
-	/// Contains mesh data.
-	struct MeshEntry
-	{
-		/// Name of the mesh.
-		std::string name;
-		/// Vertex data.
-		std::vector<Vertex> vertices;
-		/// Index data.
-		std::vector<uint32> indices;
-		/// Max index to determine whether we can use 16 bit index buffers.
-		uint32 maxIndex;
-	};
+    /// Contains mesh data.
+    struct MeshEntry
+    {
+	    /// Name of the mesh.
+	    std::string name;
+	    /// Vertex data.
+	    std::vector<Vertex> vertices;
+	    /// Index data.
+	    std::vector<uint32> indices;
+	    /// Max index to determine whether we can use 16 bit index buffers.
+	    uint32 maxIndex;
+    };
 }
 
 /// A list of mesh entries found in the fbx scene.

@@ -57,6 +57,8 @@ namespace mmo
 				{
 					throw std::runtime_error("Failed to load mesh header!");
 				}
+
+				
 			}
 			break;
 		}

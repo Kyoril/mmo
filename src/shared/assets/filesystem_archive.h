@@ -29,6 +29,9 @@ namespace mmo
 		std::unique_ptr<std::istream> Open(const std::string& filename) override;
 		void EnumerateFiles(std::vector<std::string>& files) override;
 
+	public:
+		std::unique_ptr<std::ostream> Create(const std::string& filename);
+
 	private:
 
 		void EnumerateFilesImpl(const virtual_dir::Path& root, const virtual_dir::Path& relPath, std::vector<std::string>& files);

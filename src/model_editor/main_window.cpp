@@ -5,6 +5,8 @@
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
+#include "assets/asset_registry.h"
+#include "configuration.h"
 
 #include "base/filesystem.h"
 #include "base/utilities.h"
@@ -29,8 +31,9 @@ namespace mmo
 	static bool s_initialized = false;
 
 
-	MainWindow::MainWindow()
-		: m_windowHandle(nullptr)
+	MainWindow::MainWindow(Configuration& config)
+		: m_config(config)
+		, m_windowHandle(nullptr)
 		, m_imguiContext(nullptr)
 		, m_lastMouseX(0)
 		, m_lastMouseY(0)
@@ -49,6 +52,17 @@ namespace mmo
 
 		// Initialize imgui
 		InitImGui();
+
+		// Try to initialize the asset registry
+		if (!config.assetRegistryPath.empty())
+		{
+			// Initialize the asset registry using the given path
+			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
+		}
+		else
+		{
+			WLOG("Unable to initialize asset registry: No asset registry path provided!");
+		}
 
 		// Setup the viewport render texture
 		s_initialized = true;
@@ -161,6 +175,15 @@ namespace mmo
 					{
 						// TODO: export mesh / open export dialog
 						DLOG("TODO: Save mesh...");
+
+						auto filePtr = AssetRegistry::CreateNewFile("Models/Test.mesh");
+						if (filePtr == nullptr)
+						{
+							ELOG("Unable to save mesh!");
+							return;
+						}
+
+						filePtr->write("Hello world\n", 11);
 					}
 
 					ImGui::Separator();
