@@ -237,7 +237,8 @@ namespace mmo
 		// Extract the resolution
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
-
+		desc.vsync = s_gxVSyncCVar->GetBoolValue();
+		
 		// Initialize the graphics api
 		switch (api)
 		{
