@@ -16,7 +16,7 @@ namespace mmo
 		: m_visible(true)
 		, m_wireFrame(false)
 	{
-		m_cameraPos = Vector3(0.0f, 0.0f, 5.0f);
+		m_cameraPos = Vector3(0.0f, 0.0f, -5.0f);
 	}
 
 	void ViewportWindow::Render() const
@@ -39,7 +39,7 @@ namespace mmo
 		if (m_vertBuf && m_indexBuf)
 		{
 			const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-			const auto view = Matrix4::GetTrans(0.0f, 0.0f, -5.0f);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
+			const auto view = Matrix4::GetTrans(m_cameraPos);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
 			const auto proj = gx.MakeProjectionMatrix(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
 
 			// Setup camera mode
@@ -73,7 +73,7 @@ namespace mmo
 
 	void ViewportWindow::MoveCameraTarget(const Vector3 & offset)
 	{
-		m_cameraLookAt += offset;
+		m_cameraRotation = m_cameraRotation * Quaternion(offset.x, Vector3::UnitY);
 	}
 
 	bool ViewportWindow::Draw()

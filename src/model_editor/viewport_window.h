@@ -7,6 +7,7 @@
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
 #include "math/vector3.h"
+#include "math/quaternion.h"
 
 #include "imgui.h"
 
@@ -47,7 +48,7 @@ namespace mmo
 		VertexBufferPtr m_vertBuf;
 		IndexBufferPtr m_indexBuf;
 		Vector3 m_cameraPos;
-		Vector3 m_cameraLookAt;
+		Quaternion m_cameraRotation;
 		bool m_wireFrame;
 	};
 }

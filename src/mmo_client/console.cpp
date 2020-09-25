@@ -161,6 +161,19 @@ namespace mmo
 			s_consoleScrollOffset = std::min(s_consoleScrollOffset, 
 				static_cast<int32>(s_consoleLog.size()) - maxVisibleEntries);
 		}
+
+		void ExtractResolution(const std::string& resolutionString, uint16& out_width, uint16& out_height)
+		{
+			const auto delimiter = resolutionString.find('x');
+			if (delimiter == std::string::npos)
+			{
+				return;
+			}
+
+			// Split string and handle both parts separately
+			out_width = static_cast<uint16>(std::atoi(resolutionString.substr(0, delimiter).c_str()));
+			out_height = static_cast<uint16>(std::atoi(resolutionString.substr(delimiter + 1).c_str()));
+		}
 	}
 
 
@@ -174,13 +187,13 @@ namespace mmo
 		// Register some default console commands
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
-		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediatly.");
+		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
 
 		// Initialize the cvar manager
 		ConsoleVarMgr::Initialize();
 
 		// Register locale cvar
-		const auto localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
+		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 
 		// Register graphics variables
 		RegisterGraphicsCVars();
@@ -221,9 +234,9 @@ namespace mmo
 		// Use platform default api if unknown api was provided
 		if (api == GraphicsApi::Unknown) api = defaultApi;
 
+		// Extract the resolution
 		GraphicsDeviceDesc desc;
-		desc.width = 1600;
-		desc.height = 900;
+		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 
 		// Initialize the graphics api
 		switch (api)
@@ -236,7 +249,7 @@ namespace mmo
 		case GraphicsApi::OpenGL:
 			// TODO: Create OpenGL graphics device here
 		default:
-			throw std::runtime_error("Unsuppoted graphics API value used!");
+			throw std::runtime_error("Unsupported graphics API value used!");
 			break;
 		}
 

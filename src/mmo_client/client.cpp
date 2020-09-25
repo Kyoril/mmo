@@ -47,7 +47,7 @@ namespace mmo
 	static std::shared_ptr<RealmConnector> s_realmConnector;
 
 
-	// Runs the network thread to handle incoming packets.
+	/// Runs the network thread to handle incoming packets.
 	void NetWorkProc()
 	{
 		// Run the network thread
@@ -346,7 +346,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// Split command line arguments
 	auto argc = 0;
-	const auto argv = CommandLineToArgvA(GetCommandLine(), &argc);
+	auto* const argv = CommandLineToArgvA(GetCommandLine(), &argc);
 
 	// If no debugger is attached, encapsulate the common main function in a try/catch 
 	// block to catch exceptions and display an error message to the user.
@@ -364,12 +364,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			return 1;
 		}
 	}
-	else
-	{
-		// Debugger is present, so just run common main function uncatched, as the debugger
-		// should handle uncaught exceptions
-		return mmo::CommonMain(argc, argv);
-	}
+
+	// Debugger is present, so just run common main function uncatched, as the debugger
+	// should handle uncaught exceptions
+	return mmo::CommonMain(argc, argv);
 }
 
 #else
