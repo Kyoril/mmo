@@ -75,4 +75,14 @@ namespace mmo
 		bool operator>=(const Degree& d) const { return m_value >= d.m_value; }
 		bool operator>(const Degree& d) const { return m_value > d.m_value; }
 	};
+
+	inline Degree operator * (float a, const Degree& b)
+	{
+		return Degree(a * b.GetValueRadians());
+	}
+
+	inline Degree operator / (float a, const Degree& b)
+	{
+		return Degree(a / b.GetValueRadians());
+	}
 }

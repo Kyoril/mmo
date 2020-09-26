@@ -75,4 +75,15 @@ namespace mmo
 		bool operator>=(const Radian& r) const { return m_value >= r.m_value; }
 		bool operator>(const Radian& r) const { return m_value > r.m_value; }
 	};
+
+
+	inline Radian operator * (float a, const Radian& b)
+	{
+		return Radian(a * b.GetValueRadians());
+	}
+
+	inline Radian operator / (float a, const Radian& b)
+	{
+		return Radian(a / b.GetValueRadians());
+	}
 }

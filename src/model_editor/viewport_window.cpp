@@ -16,7 +16,8 @@ namespace mmo
 		: m_visible(true)
 		, m_wireFrame(false)
 	{
-		m_cameraPos = Vector3(0.0f, 0.0f, -5.0f);
+		m_cameraPos = Vector3(0.0f, 0.0f, 5.0f);
+		m_cameraRotation = Quaternion::Identity;
 	}
 
 	void ViewportWindow::Render() const
@@ -38,13 +39,11 @@ namespace mmo
 
 		if (m_vertBuf && m_indexBuf)
 		{
-			const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-			const auto view = Matrix4::GetTrans(m_cameraPos);// Matrix4::MakeView(m_cameraPos, m_cameraLookAt);
-			const auto proj = gx.MakeProjectionMatrix(60.0f * 3.1415927f / 180.0f, aspect, 0.001f, 100.0f);
+			const auto view = MakeViewMatrix(m_cameraPos, m_cameraRotation);
 
 			// Setup camera mode
 			gx.SetTransformMatrix(TransformType::View, view);
-			gx.SetTransformMatrix(TransformType::Projection, proj);
+			gx.SetTransformMatrix(TransformType::Projection, m_projMatrix);
 
 			// Draw buffers
 			gx.SetTopologyType(TopologyType::TriangleList);
@@ -73,7 +72,10 @@ namespace mmo
 
 	void ViewportWindow::MoveCameraTarget(const Vector3 & offset)
 	{
-		m_cameraRotation = m_cameraRotation * Quaternion(offset.x, Vector3::UnitY);
+		const auto yaw = m_cameraRotation.GetYaw() + Radian(offset.x);
+		const auto pitch = m_cameraRotation.GetPitch() + Radian(offset.y);
+		
+		m_cameraRotation = Quaternion(yaw, Vector3::UnitY) * Quaternion(pitch, Vector3::UnitX);
 	}
 
 	bool ViewportWindow::Draw()
@@ -97,11 +99,15 @@ namespace mmo
 			{
 				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
 				m_lastAvailViewportSize = availableSpace;
+				
+				UpdateProjectionMatrix();
 			}
 			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 			{
 				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
 				m_lastAvailViewportSize = availableSpace;
+
+				UpdateProjectionMatrix();
 			}
 
 			// Render the render target content into the window as image object
@@ -142,5 +148,11 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void ViewportWindow::UpdateProjectionMatrix()
+	{
+		const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
+		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(Degree(60.0f).GetValueRadians(), aspect, 0.001f, 100.0f);
 	}
 }

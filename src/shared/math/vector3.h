@@ -157,6 +157,17 @@ namespace mmo
 			return Vector3(!x, !y, !z);
 		}
 
+		float operator [] (const size_t i) const
+		{
+			ASSERT(i < 3);
+			return *(&x + i);
+		}
+		float& operator [] (const size_t i)
+		{
+			ASSERT(i < 3);
+			return *(&x + i);
+		}
+		
 		// Dot product
 		inline float operator*(Vector3 const& b)
 		{

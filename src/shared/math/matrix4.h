@@ -10,6 +10,8 @@
 #include <utility>
 #include <cstring>
 
+#include "matrix3.h"
+
 
 namespace mmo
 {
@@ -94,6 +96,13 @@ namespace mmo
 			std::swap(m[3][3], other.m[3][3]);
 		}
 
+		void operator = (const Matrix3& mat3)
+		{
+			m[0][0] = mat3.m[0][0]; m[0][1] = mat3.m[0][1]; m[0][2] = mat3.m[0][2];
+			m[1][0] = mat3.m[1][0]; m[1][1] = mat3.m[1][1]; m[1][2] = mat3.m[1][2];
+			m[2][0] = mat3.m[2][0]; m[2][1] = mat3.m[2][1]; m[2][2] = mat3.m[2][2];
+		}
+		
 		float* operator [] (size_t iRow)
 		{
 			ASSERT(iRow < 4);

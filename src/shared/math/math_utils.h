@@ -6,7 +6,11 @@
 
 namespace mmo
 {
-    static const float PosInfinity = std::numeric_limits<float>::infinity();
+    class Vector3;
+    class Matrix4;
+	class Quaternion;
+	
+	static const float PosInfinity = std::numeric_limits<float>::infinity();
     static const float NegInfinity = -std::numeric_limits<float>::infinity();
     static const float Pi = static_cast<float>(4.0f * ::atanf(1.0f));
     static const float TwoPi = 2.0f * Pi;
@@ -18,4 +22,7 @@ namespace mmo
 
     static float DegreesToRadians(float degrees) { return degrees * Deg2Rad; }
     static float RadiansToDegrees(float radians) { return radians * Rad2Deg; }
+
+
+    Matrix4 MakeViewMatrix(const Vector3& position, const Quaternion& orientation);
 }

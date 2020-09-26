@@ -10,6 +10,7 @@
 #include "math/quaternion.h"
 
 #include "imgui.h"
+#include "math/matrix4.h"
 
 namespace mmo
 {
@@ -37,10 +38,13 @@ namespace mmo
 
 	public:
 		/// Makes the viewport window visible.
-		inline void Show() noexcept { m_visible = true; }
+		void Show() noexcept { m_visible = true; }
 		/// Determines whether the viewport window is currently visible.
-		inline bool IsVisible() const noexcept { return m_visible; }
+		bool IsVisible() const noexcept { return m_visible; }
 
+	private:
+		void UpdateProjectionMatrix();
+		
 	private:
 		bool m_visible;
 		ImVec2 m_lastAvailViewportSize;
@@ -50,5 +54,6 @@ namespace mmo
 		Vector3 m_cameraPos;
 		Quaternion m_cameraRotation;
 		bool m_wireFrame;
+		Matrix4 m_projMatrix;
 	};
 }
