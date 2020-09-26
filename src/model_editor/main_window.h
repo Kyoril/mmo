@@ -4,6 +4,7 @@
 
 #include "log_window.h"
 #include "viewport_window.h"
+#include "asset_window.h"
 #include "fbx_import.h"
 
 #include "base/non_copyable.h"
@@ -46,6 +47,8 @@ namespace mmo
 		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y);
 		void OnMouseMoved(uint16 x, uint16 y);
 
+		void RenderSaveDialog();
+		
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
@@ -64,10 +67,13 @@ namespace mmo
 
 		LogWindow m_logWindow;
 		ViewportWindow m_viewportWindow;
+		AssetWindow m_assetWindow;
 		FbxImport m_importer;
 		int16 m_lastMouseX, m_lastMouseY;
 		bool m_leftButtonPressed;
 		bool m_rightButtonPressed;
 		bool m_fileLoaded;
+
+		std::string m_modelName;
 	};
 }

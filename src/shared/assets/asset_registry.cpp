@@ -141,4 +141,16 @@ namespace mmo
 
 		return filePtr;
 	}
+
+	std::vector<std::string> AssetRegistry::ListFiles()
+	{
+		std::vector<std::string> result;
+
+		for (const auto& file : s_files)
+		{
+			result.push_back(file.first);
+		}
+		
+		return result;
+	}
 }

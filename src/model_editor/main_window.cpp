@@ -15,6 +15,7 @@
 #	include "imgui_impl_win32.h"
 #	include "imgui_impl_dx11.h"
 #	include "imgui_internal.h"
+#	include "misc/cpp/imgui_stdlib.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #	include "graphics/d3d11/render_texture_d3d11.h"
 
@@ -165,26 +166,15 @@ namespace mmo
 			const auto dockspace_id = ImGui::GetID("MyDockSpace");
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
 
+			bool showSaveDialog = false;
+			
 			// The main menu
 			if (ImGui::BeginMenuBar())
 			{
 				// File menu
 				if (ImGui::BeginMenu("File"))
 				{
-					if (ImGui::MenuItem("Save Mesh", nullptr, false, m_fileLoaded))
-					{
-						// TODO: export mesh / open export dialog
-						DLOG("TODO: Save mesh...");
-
-						auto filePtr = AssetRegistry::CreateNewFile("Models/Test.mesh");
-						if (filePtr == nullptr)
-						{
-							ELOG("Unable to save mesh!");
-							return;
-						}
-
-						filePtr->write("Hello world\n", 11);
-					}
+					showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, false, m_fileLoaded);
 
 					ImGui::Separator();
 					
@@ -215,6 +205,18 @@ namespace mmo
 			// Render log window
 			m_logWindow.Draw();
 
+			m_assetWindow.Draw();
+
+			if (showSaveDialog)
+			{
+				if (!ImGui::IsPopupOpen("Save"))
+				{
+					ImGui::OpenPopup("Save");
+				}
+			}
+
+			RenderSaveDialog();
+
 			// Initialize the layout
 			if (m_applyDefaultLayout)
 			{
@@ -242,10 +244,12 @@ namespace mmo
 		ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
 		auto dockMainId = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		const auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 300.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
-		
+		auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+		const auto dockAssetsId = ImGui::DockBuilderSplitNode(dockLogId, ImGuiDir_Left, 0.5f, nullptr, &dockLogId);
+
 		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 		ImGui::DockBuilderDockWindow("Log", dockLogId);
+		ImGui::DockBuilderDockWindow("Assets", dockAssetsId);
 		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
@@ -365,6 +369,44 @@ namespace mmo
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+	}
+
+	void MainWindow::RenderSaveDialog()
+	{
+		if (ImGui::BeginPopupModal("Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Please choose a name for your model:");
+			ImGui::InputText("Base name", &m_modelName);
+
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, m_modelName.empty());
+			if (ImGui::Button("Save", ImVec2(80, 0)))
+			{
+				std::filesystem::path filename = "Models";
+				filename /= m_modelName;
+				filename /= m_modelName + ".mesh";
+				
+				// Create the file name
+				auto filePtr = AssetRegistry::CreateNewFile(filename.string());
+				if (filePtr == nullptr)
+				{
+					ELOG("Unable to save mesh!");
+					return;
+				}
+
+				filePtr->write("Hello world\n", 11);
+				
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::PopItemFlag();
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel", ImVec2(80, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
 	}
 
 	void MainWindow::InitImGui()

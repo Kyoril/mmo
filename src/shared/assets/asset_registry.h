@@ -32,5 +32,7 @@ namespace mmo
 		static bool HasFile(const std::string& filename);
 		/// Creates a new file for writing. Returns nullptr if the file couldn't be created.
 		static std::unique_ptr<std::ostream> CreateNewFile(const std::string& filename);
+		/// Returns a list of file names in the asset registry.
+		static std::vector<std::string> ListFiles();
 	};
 }

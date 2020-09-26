@@ -4,8 +4,6 @@
 
 #include "graphics/graphics_device.h"
 
-#include <DirectXMath.h>
-
 namespace mmo
 {
 	/// The text that is being rendered when there is no mesh loaded in the editor.
@@ -39,9 +37,15 @@ namespace mmo
 
 		if (m_vertBuf && m_indexBuf)
 		{
-			const auto view = MakeViewMatrix(m_cameraPos, m_cameraRotation);
+			const auto view = MakeViewMatrix(m_cameraPos, Quaternion::Identity);
 
 			// Setup camera mode
+			Matrix3 rot{};
+			m_cameraRotation.ToRotationMatrix(rot);
+			Matrix4 world = Matrix4::Identity;
+			world = rot;
+			
+			gx.SetTransformMatrix(TransformType::World, world);
 			gx.SetTransformMatrix(TransformType::View, view);
 			gx.SetTransformMatrix(TransformType::Projection, m_projMatrix);
 
@@ -67,15 +71,23 @@ namespace mmo
 
 	void ViewportWindow::MoveCamera(const Vector3 & offset)
 	{
-		m_cameraPos += offset;
+		m_cameraPos.z += offset.y;
+		if (m_cameraPos.z < 1.0f) m_cameraPos.z = 1.0f;
+		if (m_cameraPos.z > 100.0f) m_cameraPos.z = 100.0f;
 	}
 
 	void ViewportWindow::MoveCameraTarget(const Vector3 & offset)
 	{
-		const auto yaw = m_cameraRotation.GetYaw() + Radian(offset.x);
-		const auto pitch = m_cameraRotation.GetPitch() + Radian(offset.y);
-		
-		m_cameraRotation = Quaternion(yaw, Vector3::UnitY) * Quaternion(pitch, Vector3::UnitX);
+		const auto yaw = Radian(offset.x);
+		Quaternion qYaw{ yaw, Vector3::UnitY };
+		qYaw.Normalize();
+
+		const auto pitch = Radian(offset.y);
+		Quaternion qPitch{ pitch, Vector3::UnitX };
+		qPitch.Normalize();
+
+		m_cameraRotation = qYaw * m_cameraRotation;
+		m_cameraRotation = qPitch * m_cameraRotation;
 	}
 
 	bool ViewportWindow::Draw()

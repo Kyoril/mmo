@@ -7,10 +7,10 @@ file(GLOB imgui_src
 	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui_draw.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/imgui_widgets.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/misc/cpp/imgui_stdlib.h"
+	"${PROJECT_SOURCE_DIR}/deps/imgui/misc/cpp/imgui_stdlib.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_win32.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_dx11.cpp")
-
-message(STATUS "Add src: ${imgui_src}")
 
 include_directories(${FBXSDK_INCLUDE_DIR})
 
