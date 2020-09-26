@@ -4,9 +4,42 @@
 
 #include "math/vector3.h"
 #include "math/matrix4.h"
-#include "math/aabb.h"
+#include "math/angle.h"
+#include "math/radian.h"
+#include "math/degree.h"
 
 using namespace mmo;
+
+
+TEST_CASE("RadianToDegreeConversion", "[math]")
+{
+	const float testDegree = 180.0f;
+	
+	const Radian r{ Degree(testDegree) };
+	CHECK(fabsf(r.GetValueDegrees() - testDegree) <= FLT_EPSILON);
+}
+
+TEST_CASE("DegreeToRadianConversion", "[math]")
+{
+	const float testRadian = Pi;
+
+	const Degree d{ Radian(testRadian) };
+	CHECK(fabsf(d.GetValueRadians() - testRadian) <= FLT_EPSILON);
+}
+
+TEST_CASE("AngleUnitToRadianConversion", "[math]")
+{
+	// Ensure angle unit is set to Degree
+	Angle::SetAngleUnit(AngleUnit::Degree);
+
+	// Initialize angle unit in degree
+	const Angle a{ 180.0f };
+
+	const Degree d = a;
+	const Radian r = a;
+	CHECK(fabsf(d.GetValueAngleUnits() - 180.0f) <= FLT_EPSILON);
+	CHECK(fabsf(r.GetValueAngleUnits() - 180.0f) <= FLT_EPSILON);
+}
 
 
 TEST_CASE("Vector3Constructor", "[math]")

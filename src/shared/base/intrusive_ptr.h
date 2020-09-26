@@ -61,7 +61,7 @@ namespace mmo
 			}
 		}
 
-		intrusive_ptr(intrusive_ptr&& p)
+		intrusive_ptr(intrusive_ptr&& p) noexcept
 			: ptr{ p.ptr }
 		{
 			p.ptr = nullptr;
@@ -150,7 +150,7 @@ namespace mmo
 			return (*this = p.ptr);
 		}
 
-		intrusive_ptr& operator = (intrusive_ptr&& p)
+		intrusive_ptr& operator = (intrusive_ptr&& p) noexcept
 		{
 			if (ptr) {
 				ptr->release();

@@ -6,7 +6,6 @@
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"
-#include "graphics/graphics_device.h"
 #include "base/signal.h"
 #include "auth_protocol/auth_protocol.h"
 
