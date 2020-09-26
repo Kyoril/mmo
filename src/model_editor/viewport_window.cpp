@@ -153,6 +153,6 @@ namespace mmo
 	void ViewportWindow::UpdateProjectionMatrix()
 	{
 		const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(Degree(60.0f).GetValueRadians(), aspect, 0.001f, 100.0f);
+		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(Degree(45.0f).GetValueRadians(), aspect, 0.001f, 100.0f);
 	}
 }
