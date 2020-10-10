@@ -4,6 +4,8 @@
 #include "frame_ui/color.h"
 #include "frame_ui/geometry_helper.h"
 
+#include "math/quaternion.h"
+
 namespace mmo
 {
 	ModelRenderer::ModelRenderer(const std::string & name)
@@ -70,9 +72,8 @@ namespace mmo
 
 		// Setup transforms (TODO: use frame transform properties)
 		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , 16.0f / 9.0f, 0.01f, 100.0f));
-		//gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f));
+		gx.SetTransformMatrix(TransformType::View, MakeViewMatrix(Vector3(0.0f, 0.0f, 5.0f), Quaternion::Identity));
+		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
 
 		// Render the actual mesh
 		mesh->Render();

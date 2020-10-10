@@ -19,8 +19,7 @@ namespace mmo
 	public:
 		void Render() const;
 
-	private:
-
+	public:
 		Mesh& m_parent;
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;

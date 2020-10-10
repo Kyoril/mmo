@@ -21,20 +21,20 @@ namespace mmo
 		if (m_material)
 		{
 			m_material->Set();
+		}
+		
+		// Setup buffers
+		m_vertexBuffer->Set();
 
-			// Setup buffers
-			m_vertexBuffer->Set();
-
-			// Render
-			if (m_indexBuffer)
-			{
-				m_indexBuffer->Set();
-				GraphicsDevice::Get().DrawIndexed();
-			}
-			else
-			{
-				GraphicsDevice::Get().Draw(m_vertexBuffer->GetVertexCount(), 0);
-			}
+		// Render
+		if (m_indexBuffer)
+		{
+			m_indexBuffer->Set();
+			GraphicsDevice::Get().DrawIndexed();
+		}
+		else
+		{
+			GraphicsDevice::Get().Draw(m_vertexBuffer->GetVertexCount(), 0);
 		}
 	}
 }

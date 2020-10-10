@@ -88,7 +88,7 @@ namespace mmo
 		// this is what is supported by the mesh class.
 		
 		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList); 
-		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorNormalTex1);
+		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColor);
 
 		for (auto& subMesh : m_subMeshes)
 		{

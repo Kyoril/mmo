@@ -450,8 +450,7 @@ namespace mmo
 						if (!meshes.empty())
 						{
 							const auto& mesh = meshes.front();
-							
-							const bool bUse16BitIndices = mesh.indices.size() <= std::numeric_limits<uint16>().max();
+							const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
 							
 							// Write index data
 							writer

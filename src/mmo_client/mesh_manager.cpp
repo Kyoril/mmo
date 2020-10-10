@@ -11,6 +11,8 @@
 #include "binary_io/stream_source.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
+#include "graphics/graphics_device.h"
+#include "mesh/chunk_writer.h"
 
 
 namespace mmo
@@ -61,6 +63,115 @@ namespace mmo
 					return nullptr;
 				}
 
+				// Create a submesh
+				SubMesh& submesh = mesh->CreateSubMesh("Default");
+				
+				// Load vertex chunk
+				source.seek(header.vertexChunkOffset);
+				ASSERT(reader);
+				{
+					// Read chunk magic
+					ChunkMagic vertexMagic;
+					source.read(&vertexMagic[0], vertexMagic.size());
+					ASSERT(reader);
+					ASSERT(vertexMagic == mesh::v1_0::VertexChunkMagic);
+
+					// Read chunk size
+					uint32 chunkSize = 0;
+					reader >> io::read<uint32>(chunkSize);
+					ASSERT(reader);
+
+					uint32 vertexCount = 0;
+					reader >> io::read<uint32>(vertexCount);
+
+					// Read vertex data
+					std::vector<POS_COL_VERTEX> vertices;
+					vertices.resize(vertexCount);
+
+					// Iterate through vertices
+					for (POS_COL_VERTEX& v : vertices)
+					{
+						reader
+							>> io::read<float>(v.pos[0])
+							>> io::read<float>(v.pos[1])
+							>> io::read<float>(v.pos[2]);
+						ASSERT(reader);
+
+						// Color
+						reader
+							>> io::read<uint32>(v.color);
+						v.color = 0xFFFEFEFE;
+						ASSERT(reader);
+
+						// Uvw
+						reader
+							>> io::skip<float>()
+							>> io::skip<float>()
+							>> io::skip<float>();
+						ASSERT(reader);
+
+						// Normal
+						reader
+							>> io::skip<float>()
+							>> io::skip<float>()
+							>> io::skip<float>();
+						ASSERT(reader);
+					}
+
+					// Create the vertex buffer
+					submesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false,
+						&vertices[0]);
+				}
+
+				// Load index chunk
+				source.seek(header.indexChunkOffset);
+				ASSERT(reader);
+				{
+					// Read chunk magic
+					ChunkMagic indexMagic;
+					source.read(&indexMagic[0], indexMagic.size());
+					ASSERT(reader);
+					ASSERT(indexMagic == mesh::v1_0::IndexChunkMagic);
+
+					// Read chunk size
+					uint32 chunkSize = 0;
+					reader >> io::read<uint32>(chunkSize);
+					ASSERT(reader);
+
+					uint32 indexCount = 0;
+					bool use16BitIndices = false;
+					reader
+						>> io::read<uint32>(indexCount)
+						>> io::read<uint8>(use16BitIndices);
+					ASSERT(reader);
+
+					if (use16BitIndices)
+					{
+						std::vector<uint16> indices;
+						indices.resize(indexCount);
+
+						for (uint16& index : indices)
+						{
+							reader >> io::read<uint16>(index);
+							ASSERT(reader);
+						}
+
+						submesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_16, &indices[0]);
+					}
+					else
+					{
+						std::vector<uint32> indices;
+						indices.resize(indexCount);
+
+						for (uint32& index : indices)
+						{
+							reader >> io::read<uint32>(index);
+							ASSERT(reader);
+						}
+
+						submesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_32, &indices[0]);
+					}
+				}
 				
 			}
 			break;

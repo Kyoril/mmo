@@ -5,8 +5,7 @@
 #include "base/typedefs.h"
 #include "base/sha1.h"
 #include "mesh/magic.h"
-
-#include <array>
+#include "mesh/chunk_writer.h"
 
 
 namespace mmo
@@ -15,9 +14,9 @@ namespace mmo
 	{
 		namespace v1_0
 		{
-			static const std::array<char, 4> SubMeshChunkMagic = { {'S', 'U', 'B', 'M'} };
-			static const std::array<char, 4> VertexChunkMagic = { {'V', 'E', 'R', 'T'} };
-			static const std::array<char, 4> IndexChunkMagic = { {'I', 'N', 'D', 'X'} };
+			static const ChunkMagic SubMeshChunkMagic = { {'S', 'U', 'B', 'M'} };
+			static const ChunkMagic VertexChunkMagic = { {'V', 'E', 'R', 'T'} };
+			static const ChunkMagic IndexChunkMagic = { {'I', 'N', 'D', 'X'} };
 
 			struct Header
 			{
