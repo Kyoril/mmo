@@ -6,18 +6,17 @@
 #include "math/matrix4.h"
 #include "vertex_buffer.h"
 #include "index_buffer.h"
-#include "vertex_shader.h"
 #include "pixel_shader.h"
 #include "vertex_format.h"
 #include "texture.h"
 #include "render_window.h"
 #include "render_texture.h"
 
-#include "math/matrix4.h"
-
 
 namespace mmo
 {
+	class Radian;
+
 	/// Enumerates supported graphics api's.
 	enum class GraphicsApi : uint8
 	{
@@ -148,7 +147,7 @@ namespace mmo
 		/// Restores the pushed render state.
 		virtual void RestoreState();
 		/// Creates a projection matrix for this render api.
-		virtual Matrix4 MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane) = 0;
+		virtual Matrix4 MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane) = 0;
 		/// Creates an orthographic projection matrix for this render api.
 		virtual Matrix4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane) = 0;
 		/// Gets the transform matrix for a certain type of transform.

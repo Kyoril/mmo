@@ -10,6 +10,7 @@
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 
 
 namespace mmo
@@ -41,7 +42,8 @@ namespace mmo
 		mesh::PreHeader preHeader;
 		if (!mesh::LoadPreHeader(preHeader, reader))
 		{
-			throw std::runtime_error("Failed to load mesh pre header!");
+			ELOG("Failed to load mesh pre header of file " << filename);
+			return nullptr;
 		}
 
 		// Create the resulting mesh
@@ -55,7 +57,8 @@ namespace mmo
 				mesh::v1_0::Header header;
 				if (!mesh::v1_0::LoadHeader(header, reader))
 				{
-					throw std::runtime_error("Failed to load mesh header!");
+					ELOG("Failed to load mesh header of file " << filename);
+					return nullptr;
 				}
 
 				

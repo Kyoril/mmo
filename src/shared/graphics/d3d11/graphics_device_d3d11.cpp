@@ -11,6 +11,7 @@
 #include "rasterizer_state_hash.h"
 
 #include "base/macros.h"
+#include "math/radian.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -302,11 +303,11 @@ namespace mmo
 		}
 	}
 
-	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane)
+	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)
 	{
 		Matrix4 dest = Matrix4::Zero;
 
-		const float theta = fovRadians * 0.5;
+		const float theta = fovY.GetValueRadians() * 0.5f;
 		float h = 1 / std::tan(theta);
 		float w = h / aspect;
 		float q, qn;

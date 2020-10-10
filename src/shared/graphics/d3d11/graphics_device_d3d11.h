@@ -21,7 +21,7 @@ namespace mmo
 	{
 	public:
 		// ~ Begin GraphicsDevice
-		virtual Matrix4 MakeProjectionMatrix(float fovRadians, float aspect, float nearPlane, float farPlane) final override;
+		virtual Matrix4 MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane) final override;
 		virtual Matrix4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane) final override;
 		virtual void Reset() final override;
 		virtual void SetClearColor(uint32 clearColor) final override;
