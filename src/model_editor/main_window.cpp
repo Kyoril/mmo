@@ -10,6 +10,10 @@
 
 #include "base/filesystem.h"
 #include "base/utilities.h"
+#include "mesh/chunk_writer.h"
+#include "mesh_v1_0/header.h"
+#include "mesh_v1_0/header_save.h"
+#include "binary_io/stream_sink.h"
 
 #ifdef _WIN32
 #	include "imgui_impl_win32.h"
@@ -393,8 +397,84 @@ namespace mmo
 					return;
 				}
 
-				filePtr->write("Hello world\n", 11);
+				// Setup mesh header
+				mesh::v1_0::Header header;
+				header.version = mesh::Version_1_0;
+				header.vertexChunkOffset = 0;
+				header.indexChunkOffset = 0;
 				
+				// Create a mesh header saver
+				io::StreamSink sink{ *filePtr };
+				io::Writer writer{ sink };
+
+				// Write the mesh header
+				mesh::v1_0::HeaderSaver saver{ sink, header };
+				{
+					// Write the vertex chunk data
+					header.vertexChunkOffset = static_cast<uint32>(sink.Position());
+					ChunkWriter vertexChunkWriter{ mesh::v1_0::VertexChunkMagic, writer };
+					{
+						const auto& meshes = m_importer.GetMeshEntries();
+						if (!meshes.empty())
+						{
+							const auto& mesh = meshes.front();
+
+							// Write vertex data
+							writer << io::write<uint32>(mesh.vertices.size());
+							for (size_t i = 0; i < mesh.vertices.size(); ++i)
+							{
+								writer
+									<< io::write<float>(mesh.vertices[i].position.x)
+									<< io::write<float>(mesh.vertices[i].position.y)
+									<< io::write<float>(mesh.vertices[i].position.z);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].color);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].texCoord.x)
+									<< io::write<uint32>(mesh.vertices[i].texCoord.y)
+									<< io::write<uint32>(mesh.vertices[i].texCoord.z);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].normal.x)
+									<< io::write<uint32>(mesh.vertices[i].normal.y)
+									<< io::write<uint32>(mesh.vertices[i].normal.z);
+							}
+						}
+					}
+					vertexChunkWriter.Finish();
+
+					// Write the index chunk data
+					header.indexChunkOffset = static_cast<uint32>(sink.Position());
+					ChunkWriter indexChunkWriter{ mesh::v1_0::IndexChunkMagic, writer };
+					{
+						const auto& meshes = m_importer.GetMeshEntries();
+						if (!meshes.empty())
+						{
+							const auto& mesh = meshes.front();
+							
+							const bool bUse16BitIndices = mesh.indices.size() <= std::numeric_limits<uint16>().max();
+							
+							// Write index data
+							writer
+								<< io::write<uint32>(mesh.indices.size())
+								<< io::write<uint8>(bUse16BitIndices);
+
+							for (size_t i = 0; i < mesh.indices.size(); ++i)
+							{
+								if (bUse16BitIndices)
+								{
+									writer << io::write<uint16>(mesh.indices[i]);
+								}
+								else
+								{
+									writer << io::write<uint32>(mesh.indices[i]);
+								}
+							}
+						}
+					}
+					indexChunkWriter.Finish();
+				}
+				saver.Finish();
+
 				ImGui::CloseCurrentPopup();
 			}
 			ImGui::PopItemFlag();
