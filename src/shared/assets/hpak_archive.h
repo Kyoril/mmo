@@ -6,6 +6,8 @@
 
 #include "hpak_v1_0/header.h"
 
+#include <fstream>
+
 namespace mmo
 {
 	class HPAKArchive

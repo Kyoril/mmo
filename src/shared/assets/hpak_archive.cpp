@@ -12,7 +12,6 @@
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 
-#include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
