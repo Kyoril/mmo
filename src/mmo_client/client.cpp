@@ -109,7 +109,7 @@ namespace mmo
 	static void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
 	{
 		const auto spacePos = arguments.find(' ');
-		if (spacePos == arguments.npos)
+		if (spacePos == std::string::npos)
 		{
 			ELOG("Invalid argument count!");
 			return;

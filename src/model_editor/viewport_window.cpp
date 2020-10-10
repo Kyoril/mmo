@@ -33,7 +33,7 @@ namespace mmo
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-		gx.SetFaceCullMode(FaceCullMode::Back);
+		gx.SetFaceCullMode(FaceCullMode::Front);
 
 		if (m_vertBuf && m_indexBuf)
 		{

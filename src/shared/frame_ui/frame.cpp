@@ -4,12 +4,8 @@
 #include "frame_mgr.h"
 #include "font_mgr.h"
 #include "default_renderer.h"
-#include "button_renderer.h"
-#include "textfield_renderer.h"
 
-#include "base/utilities.h"
 #include "base/macros.h"
-#include "log/default_log_levels.h"
 
 #include <algorithm>
 
