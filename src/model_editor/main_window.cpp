@@ -391,7 +391,7 @@ namespace mmo
 			{
 				std::filesystem::path filename = "Models";
 				filename /= m_modelName;
-				filename /= m_modelName + ".mesh";
+				filename /= m_modelName + ".hmsh";
 				
 				// Create the file name
 				auto filePtr = AssetRegistry::CreateNewFile(filename.string());
