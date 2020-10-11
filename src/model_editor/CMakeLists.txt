@@ -31,7 +31,8 @@ target_link_libraries(model_editor
 	tex_v1_0 
 	assets
 	mesh
-	mesh_v1_0)
+	mesh_v1_0
+	imaging)
 	
 target_link_libraries(model_editor ${FBXSDK_LIBRARIES})
 target_link_libraries(model_editor ${OPENSSL_LIBRARIES})

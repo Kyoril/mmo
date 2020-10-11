@@ -1,6 +1,6 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
-#include "tga_image_parser.h"
+#include "imaging/tga_image_parser.h"
 
 #include "tex/pre_header.h"
 #include "tex/pre_header_load.h"
