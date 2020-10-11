@@ -210,7 +210,15 @@ namespace mmo
 		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
 
 		// Initialize the asset registry
-		AssetRegistry::Initialize(std::filesystem::current_path() / "Data", { "Interface.hpak", "Fonts.hpak", "Models.hpak", localeArchive, localeArchive + ".hpak" });
+		AssetRegistry::Initialize(std::filesystem::current_path() / "Data", 
+			{
+				"Interface.hpak",
+				"Fonts.hpak",
+				"Models.hpak",
+				"Textures.hpak",
+				localeArchive,
+				localeArchive + ".hpak"
+			});
 
 		// Set default graphics api
 		const GraphicsApi defaultApi =
