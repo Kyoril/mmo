@@ -124,19 +124,21 @@ namespace mmo
 {
 	namespace updating
 	{
-		struct Win32TerminalProgressHandler
-				: IPrepareProgressHandler
-				, IUpdaterProgressHandler
+		struct Win32ProgressHandler
+			: IPrepareProgressHandler
+			, IUpdaterProgressHandler
 		{
 			virtual void updateFile(const std::string &name, std::uintmax_t size, std::uintmax_t loaded) override
 			{
 				std::scoped_lock guiLock{ m_guiMutex };
 
 				// Increment download counter
-				if (loaded >= lastUpdateStatus)
+				if (loaded > lastUpdateStatus)
 				{
 					updated += loaded - lastUpdateStatus;
 				}
+
+				// Update last update status
 				lastUpdateStatus = loaded;
 
 				// Status string
@@ -144,18 +146,24 @@ namespace mmo
 				statusStream << "Updating file " << name << "...";
 				SetDlgItemTextA(dialogHandle, IDC_STATUS_LABEL, statusStream.str().c_str());
 
+				const auto loadedMB = static_cast<float>(loaded) / 1024.0f / 1024.0f;
+				const auto sizeMB = static_cast<float>(size) / 1024.0f / 1024.0f;
+
 				// Current file
 				std::stringstream currentStream;
-				currentStream << loaded << " / " << size << " bytes";
+				currentStream << std::fixed << std::setprecision(2) << loadedMB << " / " << std::setprecision(2) << sizeMB << " MB";
 				SetDlgItemTextA(dialogHandle, IDC_CURRENT, currentStream.str().c_str());
 
 				// Progress bar
 				int percent = static_cast<int>(static_cast<float>(updated) / static_cast<float>(updateSize) * 100.0f);
 				SendMessageA(GetDlgItem(dialogHandle, IDC_PROGRESS_BAR), PBM_SETPOS, percent, 0);
 
+				const auto updatedMb = static_cast<float>(updated) / 1024.0f / 1024.0f;
+				const auto updateSizeMb = static_cast<float>(updateSize) / 1024.0f / 1024.0f;
+				
 				// Overall progress
 				std::stringstream totalStream;
-				totalStream << updated << " / " << updateSize << " bytes (" << percent << "%)";
+				totalStream << std::fixed << std::setprecision(2) << updatedMb << " / " << std::setprecision(2) << updateSizeMb << " MB (" << percent << "%)";
 				SetDlgItemTextA(dialogHandle, IDC_TOTAL, totalStream.str().c_str());
 
 				// Log file process
@@ -354,7 +362,7 @@ namespace mmo
 
 		bool doUnpackArchives = false;
 
-		mmo::updating::Win32TerminalProgressHandler progressHandler;
+		mmo::updating::Win32ProgressHandler progressHandler;
 
 		auto source = mmo::updating::openSourceFromUrl(
 			mmo::updating::UpdateURL(UpdateSourceUrl)
