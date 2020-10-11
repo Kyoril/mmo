@@ -100,7 +100,6 @@ namespace mmo
 						// Color
 						reader
 							>> io::read<uint32>(v.color);
-						v.color = 0xFFFEFEFE;
 						ASSERT(reader);
 
 						// Uvw

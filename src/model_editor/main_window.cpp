@@ -334,6 +334,10 @@ namespace mmo
 		m_lastMouseX = x;
 		m_lastMouseY = y;
 
+		// Only capture mouse button pressed when the hovered imgui window is the viewport
+		if (m_imguiContext->HoveredWindow && strcmp(m_imguiContext->HoveredWindow->Name, "Viewport") != 0)
+			return;
+		
 		if (button == 0)
 		{
 			m_leftButtonPressed = true;

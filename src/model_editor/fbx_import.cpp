@@ -192,7 +192,7 @@ namespace mmo
 					vertex.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
 
 					// TODO: Grab vertex normal and texture coordinates
-
+					
 					// TODO: Grab vertex color?
 					vertex.color = 0xffffffff;
 
