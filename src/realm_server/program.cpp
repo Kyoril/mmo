@@ -4,6 +4,8 @@
 #include "login_connector.h"
 #include "player_manager.h"
 #include "player.h"
+#include "world_manager.h"
+#include "world.h"
 #include "mysql_database.h"
 #include "configuration.h"
 #include "version.h"
@@ -141,7 +143,46 @@ namespace mmo
 		// Create the world service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		WorldManager worldManager{ config.maxWorlds };
+
+		// Create the world server
+		std::unique_ptr<game::Server> worldServer;
+		try
+		{
+			worldServer.reset(new mmo::game::Server(std::ref(ioService), config.worldPort, std::bind(&mmo::game::Connection::Create, std::ref(ioService), nullptr)));
+		}
+		catch (const mmo::BindFailedException&)
+		{
+			ELOG("Could not bind on tcp port " << config.worldPort << "! Maybe there is another server instance running on this port?");
+			return 1;
+		}
+
+		// Careful: Called by multiple threads!
+		const auto createWorld = [&worldManager, &asyncDatabase](std::shared_ptr<World::Client> connection)
+		{
+			asio::ip::address address;
+
+			try
+			{
+				address = connection->getRemoteAddress();
+			}
+			catch (const asio::system_error& error)
+			{
+				ELOG(error.what());
+				return;
+			}
+
+			auto world = std::make_shared<World>(worldManager, asyncDatabase, connection, address.to_string());
+			ILOG("Incoming world node connection from " << address);
+			worldManager.AddWorld(std::move(world));
+
+			// Now we can start receiving data
+			connection->startReceiving();
+		};
+
+		// Start accepting incoming world node connections
+		const scoped_connection worldNodeConnected{ worldServer->connected().connect(createWorld) };
+		worldServer->startAccept();
 
 
 
