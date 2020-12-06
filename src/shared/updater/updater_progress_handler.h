@@ -3,14 +3,11 @@
 #include <string>
 #include <cstdint>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct IUpdaterProgressHandler
 	{
-		struct IUpdaterProgressHandler
-		{
-			virtual ~IUpdaterProgressHandler();
-			virtual void updateFile(const std::string &name, std::uintmax_t size, std::uintmax_t loaded) = 0;
-		};
-	}
+		virtual ~IUpdaterProgressHandler() = default;
+		virtual void updateFile(const std::string &name, std::uintmax_t size, std::uintmax_t loaded) = 0;
+	};
 }

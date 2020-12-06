@@ -2,10 +2,8 @@
 #include "update_source.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
-	{
 		PrepareParameters::PrepareParameters(
 		    std::unique_ptr<IUpdateSource> source,
 		    std::set<std::string> conditionsSet,
@@ -18,8 +16,5 @@ namespace mmo
 		{
 		}
 
-		PrepareParameters::~PrepareParameters()
-		{
-		}
-	}
+		PrepareParameters::~PrepareParameters() = default;
 }

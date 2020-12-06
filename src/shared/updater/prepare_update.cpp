@@ -6,50 +6,43 @@
 #include "parse_entry.h"
 #include "simple_file_format/sff_load_file.h"
 
-#include <exception>
 
-
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	PreparedUpdate prepareUpdate(
+	    const std::string &outputDir,
+	    const PrepareParameters &parameters
+	)
 	{
-		PreparedUpdate prepareUpdate(
-		    const std::string &outputDir,
-		    const PrepareParameters &parameters
-		)
+		const auto listFile = parameters.source->readFile("list.txt");
+
+		std::string sourceContent;
+		sff::read::tree::Table<std::string::const_iterator> sourceTable;
+		sff::loadTableFromFile(sourceTable, sourceContent, *listFile.content);
+
+		UpdateListProperties listProperties;
+		listProperties.version = sourceTable.getInteger<unsigned>("version", 0);
+		if (listProperties.version <= 1)
 		{
-			const auto listFile = parameters.source->readFile("list.txt");
-
-			std::string sourceContent;
-			sff::read::tree::Table<std::string::const_iterator> sourceTable;
-			sff::loadTableFromFile(sourceTable, sourceContent, *listFile.content);
-
-			UpdateListProperties listProperties;
-			listProperties.version = sourceTable.getInteger<unsigned>("version", 0);
-			if (listProperties.version <= 1)
+			const auto *const root = sourceTable.getTable("root");
+			if (!root)
 			{
-				const auto *const root = sourceTable.getTable("root");
-				if (!root)
-				{
-					throw std::runtime_error("Root directory entry is missing");
-				}
+				throw std::runtime_error("Root directory entry is missing");
+			}
 
-				FileSystemEntryHandler fileSystem;
-				return parseEntry(
-				           parameters,
-				           listProperties,
-				           *root,
-				           "",
-				           outputDir,
-				           fileSystem
-				       );
-			}
-			else
-			{
-				throw std::runtime_error(
-				    "Unsupported update list version: " +
-				    std::to_string(listProperties.version));
-			}
+			FileSystemEntryHandler fileSystem;
+			return parseEntry(
+			           parameters,
+			           listProperties,
+			           *root,
+			           "",
+			           outputDir,
+			           fileSystem
+			       );
 		}
+
+		throw std::runtime_error(
+		    "Unsupported update list version: " +
+		    std::to_string(listProperties.version));
 	}
 }

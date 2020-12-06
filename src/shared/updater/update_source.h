@@ -3,17 +3,13 @@
 #include "update_source_file.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct IUpdateSource
 	{
-		struct IUpdateSource
-		{
-			virtual ~IUpdateSource();
-			virtual UpdateSourceFile readFile(
-			    const std::string &path
-			) = 0;
-		};
-
-	}
+		virtual ~IUpdateSource() = default;
+		virtual UpdateSourceFile readFile(
+		    const std::string &path
+		) = 0;
+	};
 }

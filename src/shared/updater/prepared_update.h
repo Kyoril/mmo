@@ -5,48 +5,45 @@
 #include <vector>
 #include <cstdint>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct UpdateParameters;
+
+
+	struct PreparedUpdateStep
 	{
-		struct UpdateParameters;
+		typedef std::function<bool (const UpdateParameters &)> StepFunction;
 
 
-		struct PreparedUpdateStep
+		std::string destinationPath;
+		StepFunction step;
+
+
+		PreparedUpdateStep();
+		PreparedUpdateStep(std::string destinationPath, StepFunction step);
+		//TODO: move operations
+	};
+
+
+	struct PreparedUpdate
+	{
+		struct Estimates
 		{
-			typedef std::function<bool (const UpdateParameters &)> StepFunction;
+			std::uintmax_t downloadSize;
+			std::uintmax_t updateSize;		// Uncompressed update size for better progress!
 
-
-			std::string destinationPath;
-			StepFunction step;
-
-
-			PreparedUpdateStep();
-			PreparedUpdateStep(std::string destinationPath, StepFunction step);
-			//TODO: move operations
+			Estimates();
 		};
 
 
-		struct PreparedUpdate
-		{
-			struct Estimates
-			{
-				std::uintmax_t downloadSize;
-				std::uintmax_t updateSize;		// Uncompressed update size for better progress!
-
-				Estimates();
-			};
+		std::vector<PreparedUpdateStep> steps;
+		Estimates estimates;
 
 
-			std::vector<PreparedUpdateStep> steps;
-			Estimates estimates;
+		PreparedUpdate();
+		//TODO: move operations
+	};
 
 
-			PreparedUpdate();
-			//TODO: move operations
-		};
-
-
-		PreparedUpdate accumulate(std::vector<PreparedUpdate> updates);
-	}
+	PreparedUpdate accumulate(std::vector<PreparedUpdate> updates);
 }

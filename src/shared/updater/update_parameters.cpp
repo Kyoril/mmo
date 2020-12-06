@@ -2,23 +2,18 @@
 #include "update_source.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	UpdateParameters::UpdateParameters(
+	    std::unique_ptr<IUpdateSource> source,
+	    bool doUnpackArchives,
+	    IUpdaterProgressHandler &progressHandler
+	)
+		: source(std::move(source))
+		, doUnpackArchives(doUnpackArchives)
+		, progressHandler(progressHandler)
 	{
-		UpdateParameters::UpdateParameters(
-		    std::unique_ptr<IUpdateSource> source,
-		    bool doUnpackArchives,
-		    IUpdaterProgressHandler &progressHandler
-		)
-			: source(std::move(source))
-			, doUnpackArchives(doUnpackArchives)
-			, progressHandler(progressHandler)
-		{
-		}
-
-		UpdateParameters::~UpdateParameters()
-		{
-		}
 	}
+
+	UpdateParameters::~UpdateParameters() = default;
 }

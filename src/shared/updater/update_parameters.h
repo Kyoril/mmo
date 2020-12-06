@@ -2,27 +2,24 @@
 
 #include <memory>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct IUpdaterProgressHandler;
+	struct IUpdateSource;
+
+
+	struct UpdateParameters
 	{
-		struct IUpdaterProgressHandler;
-		struct IUpdateSource;
+		std::unique_ptr<IUpdateSource> source;
+		bool doUnpackArchives;
+		IUpdaterProgressHandler &progressHandler;
 
 
-		struct UpdateParameters
-		{
-			std::unique_ptr<IUpdateSource> source;
-			bool doUnpackArchives;
-			IUpdaterProgressHandler &progressHandler;
-
-
-			UpdateParameters(
-			    std::unique_ptr<IUpdateSource> source,
-			    bool doUnpackArchives,
-			    IUpdaterProgressHandler &progressHandler
-			);
-			~UpdateParameters();
-		};
-	}
+		UpdateParameters(
+		    std::unique_ptr<IUpdateSource> source,
+		    bool doUnpackArchives,
+		    IUpdaterProgressHandler &progressHandler
+		);
+		~UpdateParameters();
+	};
 }

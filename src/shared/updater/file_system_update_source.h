@@ -5,20 +5,17 @@
 #include "base/filesystem.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct FileSystemUpdateSource : IUpdateSource
 	{
-		struct FileSystemUpdateSource : IUpdateSource
-		{
-			explicit FileSystemUpdateSource(std::filesystem::path root);
-			virtual UpdateSourceFile readFile(
-			    const std::string &path
-			) override;
+		explicit FileSystemUpdateSource(std::filesystem::path root);
+		virtual UpdateSourceFile readFile(
+		    const std::string &path
+		) override;
 
-		private:
+	private:
 
-			std::filesystem::path m_root;
-		};
-	}
+		std::filesystem::path m_root;
+	};
 }

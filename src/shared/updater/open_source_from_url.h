@@ -2,14 +2,11 @@
 
 #include <memory>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
-	{
-		struct IUpdateSource;
-		struct UpdateURL;
+	struct IUpdateSource;
+	struct UpdateURL;
 
 
-		std::unique_ptr<IUpdateSource> openSourceFromUrl(const UpdateURL &url);
-	}
+	std::unique_ptr<IUpdateSource> openSourceFromUrl(const UpdateURL &url);
 }

@@ -1,12 +1,9 @@
 #pragma once
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct UpdateListProperties
 	{
-		struct UpdateListProperties
-		{
-			unsigned version;
-		};
-	}
+		unsigned version;
+	};
 }

@@ -4,28 +4,25 @@
 #include <string>
 #include <set>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct IPrepareProgressHandler;
+	struct IUpdateSource;
+
+
+	struct PrepareParameters
 	{
-		struct IPrepareProgressHandler;
-		struct IUpdateSource;
+		std::unique_ptr<IUpdateSource> source;
+		std::set<std::string> conditionsSet;
+		bool doUnpackArchives;
+		IPrepareProgressHandler &progressHandler;
 
 
-		struct PrepareParameters
-		{
-			std::unique_ptr<IUpdateSource> source;
-			std::set<std::string> conditionsSet;
-			bool doUnpackArchives;
-			IPrepareProgressHandler &progressHandler;
-
-
-			PrepareParameters(
-			    std::unique_ptr<IUpdateSource> source,
-			    std::set<std::string> conditionsSet,
-			    bool doUnpackArchives,
-			    IPrepareProgressHandler &progressHandler);
-			~PrepareParameters();
-		};
-	}
+		PrepareParameters(
+		    std::unique_ptr<IUpdateSource> source,
+		    std::set<std::string> conditionsSet,
+		    bool doUnpackArchives,
+		    IPrepareProgressHandler &progressHandler);
+		~PrepareParameters();
+	};
 }

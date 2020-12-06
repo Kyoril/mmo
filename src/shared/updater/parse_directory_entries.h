@@ -4,22 +4,19 @@
 #include "prepared_update.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
-	{
-		struct PrepareParameters;
-		struct UpdateListProperties;
-		struct IFileEntryHandler;
+	struct PrepareParameters;
+	struct UpdateListProperties;
+	struct IFileEntryHandler;
 
 
-		PreparedUpdate parseDirectoryEntries(
-		    const PrepareParameters &parameters,
-		    const UpdateListProperties &listProperties,
-		    const std::string &source,
-		    const std::string &destination,
-		    const sff::read::tree::Array<std::string::const_iterator> &entries,
-		    IFileEntryHandler &handler
-		);
-	}
+	PreparedUpdate parseDirectoryEntries(
+	    const PrepareParameters &parameters,
+	    const UpdateListProperties &listProperties,
+	    const std::string &source,
+	    const std::string &destination,
+	    const sff::read::tree::Array<std::string::const_iterator> &entries,
+	    IFileEntryHandler &handler
+	);
 }

@@ -6,89 +6,86 @@
 #include <iostream>
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	namespace
 	{
-		namespace
+		std::string makeRandomString()
 		{
-			std::string makeRandomString()
-			{
-				return std::to_string(GetAsyncTimeMs());
-			}
+			return std::to_string(GetAsyncTimeMs());
 		}
+	}
 
-		ApplicationUpdate updateApplication(
-		    const std::filesystem::path &applicationPath,
-		    const PreparedUpdate &preparedUpdate
-		)
+	ApplicationUpdate updateApplication(
+	    const std::filesystem::path &applicationPath,
+	    const PreparedUpdate &preparedUpdate
+	)
+	{
+		ApplicationUpdate update;
+
+		for (const mmo::updating::PreparedUpdateStep & step : preparedUpdate.steps)
 		{
-			ApplicationUpdate update;
-
-			for (const mmo::updating::PreparedUpdateStep & step : preparedUpdate.steps)
+			try
 			{
-				try
+				if (!std::filesystem::equivalent(applicationPath, step.destinationPath))
 				{
-					if (!std::filesystem::equivalent(applicationPath, step.destinationPath))
-					{
-						continue;
-					}
-				}
-				catch (const std::filesystem::filesystem_error &ex)
-				{
-					std::cerr << ex.what() << '\n';
 					continue;
 				}
+			}
+			catch (const std::filesystem::filesystem_error &ex)
+			{
+				std::cerr << ex.what() << '\n';
+				continue;
+			}
 
-				update.perform = [applicationPath, step](
-				                     const UpdateParameters & updateParameters,
-				                     const char * const * argv,
-				                     size_t argc) -> void
+			update.perform = [applicationPath, step](
+			                     const UpdateParameters & updateParameters,
+			                     const char * const * argv,
+			                     size_t argc) -> void
+			{
+				const std::filesystem::path executableCopy =
+				applicationPath.string() +
+				"." +
+				makeRandomString();
+
+				std::filesystem::rename(
+				    applicationPath,
+				    executableCopy
+				);
+
+				try
 				{
-					const std::filesystem::path executableCopy =
-					applicationPath.string() +
-					"." +
-					makeRandomString();
+					while (step.step(updateParameters)) {
+						;
+					}
 
-					std::filesystem::rename(
-					    applicationPath,
-					    executableCopy
-					);
-
+					mmo::makeExecutable(applicationPath.string());
+				}
+				catch (...)
+				{
+					//revert the copy in case of error
 					try
 					{
-						while (step.step(updateParameters)) {
-							;
-						}
-
-						mmo::makeExecutable(applicationPath.string());
+						std::filesystem::rename(
+						    executableCopy,
+						    applicationPath
+						);
 					}
 					catch (...)
 					{
-						//revert the copy in case of error
-						try
-						{
-							std::filesystem::rename(
-							    executableCopy,
-							    applicationPath
-							);
-						}
-						catch (...)
-						{
-						}
-
-						throw;
 					}
 
-					std::vector<std::string> arguments(argv, argv + argc);
-					arguments.push_back("--remove-previous \"" + executableCopy.string() + "\"");
-					mmo::createProcess(applicationPath.string(), arguments);
-				};
+					throw;
+				}
 
-				break;
-			}
+				std::vector<std::string> arguments(argv, argv + argc);
+				arguments.push_back("--remove-previous \"" + executableCopy.string() + "\"");
+				mmo::createProcess(applicationPath.string(), arguments);
+			};
 
-			return update;
+			break;
 		}
+
+		return update;
 	}
 }

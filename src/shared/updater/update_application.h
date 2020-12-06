@@ -4,23 +4,20 @@
 
 #include <functional>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct PreparedUpdate;
+	struct UpdateParameters;
+
+
+	struct ApplicationUpdate
 	{
-		struct PreparedUpdate;
-		struct UpdateParameters;
+		std::function<void (const UpdateParameters &, const char *const *, size_t)> perform;
+	};
 
 
-		struct ApplicationUpdate
-		{
-			std::function<void (const UpdateParameters &, const char *const *, size_t)> perform;
-		};
-
-
-		ApplicationUpdate updateApplication(
-		    const std::filesystem::path &applicationPath,
-		    const PreparedUpdate &preparedUpdate
-		);
-	}
+	ApplicationUpdate updateApplication(
+	    const std::filesystem::path &applicationPath,
+	    const PreparedUpdate &preparedUpdate
+	);
 }

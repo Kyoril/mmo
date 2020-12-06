@@ -14,6 +14,7 @@
 #include "binary_io/vector_sink.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
+#include "base/macros.h"
 
 
 namespace mmo

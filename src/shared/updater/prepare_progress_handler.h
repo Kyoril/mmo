@@ -2,14 +2,11 @@
 
 #include <string>
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
+	struct IPrepareProgressHandler
 	{
-		struct IPrepareProgressHandler
-		{
-			virtual ~IPrepareProgressHandler();
-			virtual void beginCheckLocalCopy(const std::string &name) = 0;
-		};
-	}
+		virtual ~IPrepareProgressHandler() = default;
+		virtual void beginCheckLocalCopy(const std::string &name) = 0;
+	};
 }

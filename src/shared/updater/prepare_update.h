@@ -3,16 +3,13 @@
 #include "prepared_update.h"
 
 
-namespace mmo
+namespace mmo::updating
 {
-	namespace updating
-	{
-		struct PrepareParameters;
+	struct PrepareParameters;
 
 
-		PreparedUpdate prepareUpdate(
-		    const std::string &outputDir,
-		    const PrepareParameters &parameters
-		);
-	}
+	PreparedUpdate prepareUpdate(
+	    const std::string &outputDir,
+	    const PrepareParameters &parameters
+	);
 }
