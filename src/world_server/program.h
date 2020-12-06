@@ -14,7 +14,7 @@ namespace mmo
 	{
 	public:
 		/// Runs the application and returns an error code.
-		int32 run();
+		int32 run(const std::string& configFileName);
 
 	public:
 		/// Set to true to restart the program after successful termination

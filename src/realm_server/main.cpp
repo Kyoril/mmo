@@ -7,7 +7,6 @@
 #include "cxxopts/cxxopts.hpp"
 
 #include "program.h"
-#include "player_manager.h"
 #include "player.h"
 
 #include <iostream>

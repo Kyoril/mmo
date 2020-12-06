@@ -13,14 +13,8 @@ namespace mmo
 		/// Config file version: used to detect new configuration files
 		static const uint32 WorldConfigVersion;
 
-		/// The port to be used by game clients to log in.
-		uint16 playerPort;
-		/// The port to be used by world nodes to log in.
-		uint16 worldPort;
 		/// Maximum number of player connections.
 		size_t maxPlayers;
-		/// Maximum number of world node connections.
-		size_t maxWorlds;
 
 		/// The port to be used for a mysql connection.
 		uint16 mysqlPort;
@@ -52,13 +46,9 @@ namespace mmo
 
 
 		/// The ip address or dns name of the login server to use.
-		String loginServerAddress;
+		String realmServerAddress;
 		/// The port of the login server to use.
-		uint16 loginServerPort;
-		/// The name of the realm used to authenticate at the login server.
-		String realmName;
-		/// The password hash of the realm used to authenticate at the login server.
-		String realmPasswordHash;
+		uint16 realmServerPort;
 
 
 		explicit Configuration();

@@ -18,26 +18,21 @@ namespace mmo
 	const uint32 Configuration::WorldConfigVersion = 0x01;
 
 	Configuration::Configuration()
-		: playerPort(mmo::constants::DefaultRealmPlayerPort)
-        , worldPort(mmo::constants::DefaultRealmWorldPort)
-		, maxPlayers((std::numeric_limits<decltype(maxPlayers)>::max)())
-		, maxWorlds(constants::MaxRealmCount)
+		: maxPlayers((std::numeric_limits<decltype(maxPlayers)>::max)())
 		, mysqlPort(mmo::constants::DefaultMySQLPort)
 		, mysqlHost("127.0.0.1")
 		, mysqlUser("mmo")
 		, mysqlPassword("")
-		, mysqlDatabase("mmo_realm_01")
+		, mysqlDatabase("mmo_world_01")
 		, isLogActive(true)
-		, logFileName("logs/realm_01")
+		, logFileName("logs/world_01")
 		, isLogFileBuffering(false)
-		, webPort(8090)
-		, webSSLPort(8091)
+		, webPort(8094)
+		, webSSLPort(8095)
 		, webUser("mmo-web")
 		, webPassword("test")
-		, loginServerAddress("127.0.0.1")
-		, loginServerPort(constants::DefaultLoginRealmPort)
-		, realmName("YOUR_REALM_NAME_HERE")
-		, realmPasswordHash("0000000000000000000000000000000000000000")
+		, realmServerAddress("127.0.0.1")
+		, realmServerPort(constants::DefaultRealmWorldPort)
 	{
 	}
 
@@ -97,12 +92,10 @@ namespace mmo
 				mysqlDatabase = mysqlDatabaseTable->getString("database", mysqlDatabase);
 			}
 
-			if (const Table *const realmConfig = global.getTable("realmConfig"))
+			if (const Table *const realmConfig = global.getTable("worldConfig"))
 			{
-				loginServerAddress = realmConfig->getString("loginServerAddress", loginServerAddress);
-				loginServerPort = realmConfig->getInteger("loginServerPort", loginServerPort);
-				realmName = realmConfig->getString("realmName", realmName);
-				realmPasswordHash = realmConfig->getString("realmPasswordHash", realmPasswordHash);
+				realmServerAddress = realmConfig->getString("realmServerAddress", realmServerAddress);
+				realmServerPort = realmConfig->getInteger("realmServerPort", realmServerPort);
 			}
 			else
 			{
@@ -120,14 +113,7 @@ namespace mmo
 
 			if (const Table *const playerManager = global.getTable("playerManager"))
 			{
-				playerPort = playerManager->getInteger("port", playerPort);
 				maxPlayers = playerManager->getInteger("maxCount", maxPlayers);
-			}
-
-			if (const Table *const worldManager = global.getTable("worldManager"))
-			{
-				worldPort = worldManager->getInteger("port", worldPort);
-				maxWorlds = worldManager->getInteger("maxCount", maxWorlds);
 			}
 
 			if (const Table *const log = global.getTable("log"))
@@ -186,18 +172,10 @@ namespace mmo
 
 		global.writer.newLine();
 
-		global.writer.lineComment(" **************************************************************************");
-		global.writer.lineComment(" This section contains important realm configuration settings.");
-		global.writer.lineComment(" The realmName and realmPasswordHash must be known to the login server in order for this realm to authenticate.");
-		global.writer.lineComment(" The realm name is handled in uppercase letters and must be unique.");
-		global.writer.lineComment(" The realm password hash is built as follows: sha1(UPPERCASE_REALM_NAME:UPPERCASE_REALM_PASSWORD)");
-		global.writer.lineComment(" **************************************************************************");
 		{
-			sff::write::Table<Char> realmConfig(global, "realmConfig", sff::write::MultiLine);
-			realmConfig.addKey("loginServerAddress", loginServerAddress);
-			realmConfig.addKey("loginServerPort", loginServerPort);
-			realmConfig.addKey("realmName", realmName);
-			realmConfig.addKey("realmPasswordHash", realmPasswordHash);
+			sff::write::Table<Char> realmConfig(global, "worldConfig", sff::write::MultiLine);
+			realmConfig.addKey("realmServerAddress", realmServerAddress);
+			realmConfig.addKey("realmServerPort", realmServerPort);
 			realmConfig.Finish();
 		}
 
@@ -216,19 +194,10 @@ namespace mmo
 
 		{
 			sff::write::Table<Char> playerManager(global, "playerManager", sff::write::MultiLine);
-			playerManager.addKey("port", playerPort);
 			playerManager.addKey("maxCount", maxPlayers);
 			playerManager.Finish();
 		}
 
-		global.writer.newLine();
-
-		{
-			sff::write::Table<Char> worldManager(global, "worldManager", sff::write::MultiLine);
-			worldManager.addKey("port", worldPort);
-			worldManager.addKey("maxCount", maxWorlds);
-			worldManager.Finish();
-		}
 		
 		global.writer.newLine();
 

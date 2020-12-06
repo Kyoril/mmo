@@ -8,9 +8,9 @@
 #include "log/log_std_stream.h"
 #include "log/log_entry.h"
 #include "log/default_log_levels.h"
-#include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_server.h"
-#include "base/constants.h"
+#include "configuration.h"
+#include "realm_connector.h"
 
 #include <fstream>
 #include <sstream>
@@ -18,7 +18,6 @@
 #include <iomanip>
 #include <algorithm>
 #include <vector>
-#include <mutex>
 #include <thread>
 
 #include "base/filesystem.h"
@@ -48,7 +47,7 @@ namespace mmo
 		}
 	}
 
-	int32 Program::run()
+	int32 Program::run(const std::string& configFileName)
 	{
 		// This is the main ioService object
 		asio::io_service ioService;
@@ -65,7 +64,11 @@ namespace mmo
 		// Load config file
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		Configuration config;
+		if (!config.load(configFileName))
+		{
+			return 1;
+		}
 
 
 
@@ -73,7 +76,23 @@ namespace mmo
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
+		scoped_connection genericLogConnection;
+		if (config.isLogActive)
+		{
+			auto logOptions = g_DefaultFileLogOptions;
+			logOptions.alwaysFlush = !config.isLogFileBuffering;
+
+			// Setup the log file connection after opening the log file
+			m_logFile.open(generateLogFileName(config.logFileName).c_str(), std::ios::app);
+			if (m_logFile)
+			{
+				genericLogConnection = g_DefaultLog.signal().connect(
+					[this, logOptions](const LogEntry& entry)
+					{
+						printLogEntry(m_logFile, entry, logOptions);
+					});
+			}
+		}
 
 		// Display version infos
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");
@@ -92,8 +111,9 @@ namespace mmo
 		// Create the realm connector service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
-
+		auto realmConnector =
+			std::make_shared<RealmConnector>(std::ref(ioService));
+		realmConnector->connect(config.realmServerAddress, config.realmServerPort, *realmConnector, ioService);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the web service
