@@ -25,6 +25,10 @@ namespace mmo
 		inline std::string::value_type GetMaskCodePoint() const { return m_maskCodePoint; }
 		/// Sets whether the text should be masked.
 		void SetTextMasked(bool value);
+		/// Sets whether the text field accepts tabs as text input.
+		void SetAcceptsTab(bool value) { m_acceptsTab = value; }
+		/// Determines whether the text field accepts tabs as text input.
+		bool AcceptsTab() const noexcept { return m_acceptsTab; }
 		/// Sets the mask code point to use when rendering the text masked.
 		void SetMaskCodePoint(std::string::value_type value);
 		/// 
@@ -57,6 +61,7 @@ namespace mmo
 	private:
 		/// 
 		void OnMaskedPropChanged(const Property& property);
+		void OnAcceptTabChanged(const Property& property);
 
 	private:
 		/// Whether the text of this textfield should be masked.
@@ -78,5 +83,7 @@ namespace mmo
 		Color m_disabledColor;
 
 		Rect m_textAreaOffset;
+
+		bool m_acceptsTab;
 	};
 }

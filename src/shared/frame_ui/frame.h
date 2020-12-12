@@ -255,9 +255,11 @@ namespace mmo
 		/// 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position); 
 		//// 
-		virtual void OnKeyDown(Key key) {};
+		virtual void OnKeyDown(Key key) {}
 		/// 
-		virtual void OnKeyChar(uint16 codepoint) {};
+		virtual void OnKeyChar(uint16 codepoint) {}
+		/// 
+		virtual void OnKeyUp(Key key) {}
 
 	public:
 		virtual Rect GetRelativeFrameRect();

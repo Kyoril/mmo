@@ -17,9 +17,11 @@ namespace mmo
 		, m_horzAlign(HorizontalAlignment::Left)
 		, m_vertAlign(VerticalAlignment::Center)
 		, m_textAreaOffset(Point(10.0f, 10.0f), Size())
+		, m_acceptsTab(false)
 	{
 		// Add the masked property
 		m_propConnections += AddProperty("Masked", "false").Changed.connect(this, &TextField::OnMaskedPropChanged);
+		m_propConnections += AddProperty("AcceptsTab", "false").Changed.connect(this, &TextField::OnAcceptTabChanged);
 
 		// Text fields are focusable by default
 		m_focusable = true;
@@ -215,6 +217,16 @@ namespace mmo
 
 	void TextField::OnKeyDown(Key key)
 	{
+		if (!AcceptsTab() && key == 0x09)		// VK_TAB
+		{
+			return;
+		}
+
+		if (key == 0x0D)	// VK_RETURN
+		{
+			return;
+		}
+		
 		if (key == 0x08)		// VK_BACKSPACE
 		{
 			if (m_text.empty())
@@ -245,6 +257,16 @@ namespace mmo
 
 	void TextField::OnKeyChar(uint16 codepoint)
 	{
+		if (!AcceptsTab() && codepoint == 0x09)		// VK_TAB
+		{
+			return;
+		}
+
+		if (codepoint == 0x0D)	// VK_RETURN
+		{
+			return;
+		}
+		
 		if (codepoint == 0x8)
 			return;
 
@@ -287,5 +309,10 @@ namespace mmo
 	void TextField::OnMaskedPropChanged(const Property& property)
 	{
 		SetTextMasked(property.GetBoolValue());
+	}
+
+	void TextField::OnAcceptTabChanged(const Property& property)
+	{
+		SetAcceptsTab(property.GetBoolValue());
 	}
 }
