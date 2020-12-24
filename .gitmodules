@@ -8,3 +8,6 @@
 	path = deps/imgui
 	url = https://github.com/ocornut/imgui
 	branch = docking
+[submodule "data/client"]
+	path = data/client
+	url = https://github.com/Kyoril/mmo-data

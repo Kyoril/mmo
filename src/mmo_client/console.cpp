@@ -64,6 +64,12 @@ namespace mmo
 	static scoped_connection s_consoleLogConn;
 
 
+	namespace
+	{
+		ConsoleVar* s_dataPathCVar = nullptr;
+	}
+	
+
 	// Graphics CVar stuff
 	namespace
 	{
@@ -192,6 +198,9 @@ namespace mmo
 		// Initialize the cvar manager
 		ConsoleVarMgr::Initialize();
 
+		// Register current path console var
+		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
+		
 		// Register locale cvar
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 
@@ -210,7 +219,7 @@ namespace mmo
 		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
 
 		// Initialize the asset registry
-		AssetRegistry::Initialize(std::filesystem::current_path() / "Data", 
+		AssetRegistry::Initialize(s_dataPathCVar->GetStringValue(),
 			{
 				"Interface.hpak",
 				"Fonts.hpak",
