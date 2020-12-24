@@ -333,7 +333,7 @@ namespace mmo
 #include "base/win_utility.h"
 
 /// Procedural entry point on windows platforms.
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 {
 	// Setup log to print each log entry to the debug output on windows
 #ifdef _DEBUG
