@@ -63,32 +63,39 @@ namespace mmo
 			{
 				m_listener = &Listener_;
 			}
+			
 			Listener* getListener() const
 			{
 				return m_listener;
 			}
+			
 			void resetListener() override
 			{
 				m_listener = nullptr;
 			}
+			
 			asio::ip::address getRemoteAddress() const override
 			{
 				return m_socket->lowest_layer().remote_endpoint().address();
 			}
+			
 			Buffer &getSendBuffer() override
 			{
 				return m_sendBuffer;
 			}
+			
 			void startReceiving() override
 			{
 				asio::ip::tcp::no_delay Option(true);
 				m_socket->lowest_layer().set_option(Option);
 				BeginReceive();
 			}
+			
 			void resumeParsing() override
 			{
 				ParsePackets();
 			}
+			
 			void flush() override
 			{
 				if (m_sendBuffer.empty())
@@ -109,6 +116,7 @@ namespace mmo
 
 				BeginSend();
 			}
+			
 			void close() override
 			{
 				if (m_isParsingIncomingData)
