@@ -23,6 +23,8 @@ namespace mmo
 		, m_viewMaxZ(100.0f)
 		, m_fillMode(FillMode::Solid)
 		, m_cullMode(FaceCullMode::Back)
+		, m_texAddressMode(TextureAddressMode::Wrap)
+		, m_texFilter(TextureFilter::Anisotropic)
 	{
 	}
 
@@ -82,6 +84,9 @@ namespace mmo
 
 		m_restoreFillMode = m_fillMode;
 		m_restoreCullMode = m_cullMode;
+		
+		m_restoreTexAddressMode = m_texAddressMode;
+		m_restoreTexFilter = m_texFilter;
 	}
 
 	void GraphicsDevice::RestoreState()
@@ -99,7 +104,7 @@ namespace mmo
 		}
 
 		// Reactivate old render target if it has changed and if there was an old
-		// render target (which should almost everytime be the case but whatever)
+		// render target (which should almost every time be the case but whatever)
 		if (m_restoreRenderTarget && 
 			m_restoreRenderTarget != m_renderTarget)
 		{
@@ -116,6 +121,16 @@ namespace mmo
 			SetFaceCullMode(m_restoreCullMode);
 		}
 
+		if (m_restoreTexAddressMode != m_texAddressMode)
+		{
+			SetTextureAddressMode(m_restoreTexAddressMode);
+		}
+		
+		if (m_restoreTexFilter != m_texFilter)
+		{
+			SetTextureFilter(m_restoreTexFilter);
+		}
+		
 		// No longer keep the old render target referenced so that it is allowed
 		// to be free'd.
 		m_restoreRenderTarget = nullptr;
@@ -159,5 +174,15 @@ namespace mmo
 	void GraphicsDevice::SetFaceCullMode(FaceCullMode mode)
 	{
 		m_cullMode = mode;
+	}
+
+	void GraphicsDevice::SetTextureAddressMode(TextureAddressMode mode)
+	{
+		m_texAddressMode = mode;
+	}
+
+	void GraphicsDevice::SetTextureFilter(TextureFilter filter)
+	{
+		m_texFilter = filter;
 	}
 }

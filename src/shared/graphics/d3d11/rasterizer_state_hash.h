@@ -14,16 +14,16 @@ namespace mmo
 		size_t operator()(const D3D11_RASTERIZER_DESC& desc) const 
 		{
 			DynamicHash hash;
-			hash.Add(desc.AntialiasedLineEnable);
-			hash.Add(desc.CullMode);
-			hash.Add(desc.DepthBias);
-			hash.Add(desc.DepthBiasClamp);
-			hash.Add(desc.DepthClipEnable);
-			hash.Add(desc.FillMode);
-			hash.Add(desc.FrontCounterClockwise);
-			hash.Add(desc.MultisampleEnable);
-			hash.Add(desc.ScissorEnable);
-			hash.Add(desc.SlopeScaledDepthBias);
+			hash.Add64(desc.AntialiasedLineEnable);
+			hash.Add64(desc.CullMode);
+			hash.Add64(desc.DepthBias);
+			hash.AddFloat(desc.DepthBiasClamp);
+			hash.Add64(desc.DepthClipEnable);
+			hash.Add64(desc.FillMode);
+			hash.Add64(desc.FrontCounterClockwise);
+			hash.Add64(desc.MultisampleEnable);
+			hash.Add64(desc.ScissorEnable);
+			hash.AddFloat(desc.SlopeScaledDepthBias);
 			return hash;
 		}
 	};

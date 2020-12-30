@@ -89,11 +89,36 @@ namespace mmo
 		None,
 		/// Back-facing polygons will be culled.
 		Back,
-		/// Fron-facing polygons will be culled.
+		/// Front-facing polygons will be culled.
 		Front,
 	};
 
+	/// Enumerates possible face cull modes.
+	enum class TextureAddressMode
+	{
+		/// Coordinates are clamped if exceeding the range of 0..1.
+		Clamp,
+		/// Coordinates are wrapped if exceeding the range of 0..1.
+		Wrap,
+		/// Coordinates are mirrored if exceeding the range of 0..1.
+		Mirror,
+		/// Anything outside of the range of 0..1 is rendered using a border color.
+		Border,
+	};
 
+	/// Enumerates possible face cull modes.
+	enum class TextureFilter
+	{
+		/// No texture filtering.
+		None,
+		/// Bilinear filter.
+		Bilinear,
+		/// Trilinear filter.
+		Trilinear,
+		/// Anisotropic filter
+		Anisotropic,
+	};
+	
 	/// This is the base class of a graphics device object.
 	class GraphicsDevice
 		: public NonCopyable
@@ -174,6 +199,10 @@ namespace mmo
 		virtual void SetFillMode(FillMode mode);
 		/// Sets the cull mode of polygons.
 		virtual void SetFaceCullMode(FaceCullMode mode);
+		/// Sets the texture address mode used when sampling textures.
+		virtual void SetTextureAddressMode(TextureAddressMode mode);
+		/// Sets the texture filter to be used when sampling textures.
+		virtual void SetTextureFilter(TextureFilter filter);
 
 	public:
 		inline RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
@@ -199,5 +228,9 @@ namespace mmo
 		FillMode m_restoreFillMode;
 		FaceCullMode m_cullMode;
 		FaceCullMode m_restoreCullMode;
+		TextureAddressMode m_texAddressMode;
+		TextureAddressMode m_restoreTexAddressMode;
+		TextureFilter m_texFilter;
+		TextureFilter m_restoreTexFilter;
 	};
 }

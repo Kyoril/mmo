@@ -9,6 +9,7 @@
 #include "render_texture_d3d11.h"
 #include "render_window_d3d11.h"
 #include "rasterizer_state_hash.h"
+#include "sampler_state_hash.h"
 
 #include "base/macros.h"
 #include "math/radian.h"
@@ -19,6 +20,68 @@
 
 namespace mmo
 {
+	namespace
+	{
+		static D3D11_FILL_MODE D3D11FillMode(FillMode mode)
+		{
+			switch (mode)
+			{
+			case FillMode::Wireframe:
+				return D3D11_FILL_WIREFRAME;
+			}
+
+			return D3D11_FILL_SOLID;
+		}
+
+		static D3D11_CULL_MODE D3D11CullMode(FaceCullMode mode)
+		{
+			switch (mode)
+			{
+			case FaceCullMode::Back:
+				return D3D11_CULL_BACK;
+			case FaceCullMode::Front:
+				return D3D11_CULL_FRONT;
+			}
+
+			return D3D11_CULL_NONE;
+		}
+
+		static D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(TextureAddressMode mode)
+		{
+			switch (mode)
+			{
+			case TextureAddressMode::Clamp:
+				return D3D11_TEXTURE_ADDRESS_CLAMP;
+			case TextureAddressMode::Wrap:
+				return D3D11_TEXTURE_ADDRESS_WRAP;
+			case TextureAddressMode::Border:
+				return D3D11_TEXTURE_ADDRESS_BORDER;
+			case TextureAddressMode::Mirror:
+				return D3D11_TEXTURE_ADDRESS_MIRROR;
+			}
+
+			return D3D11_TEXTURE_ADDRESS_CLAMP;
+		}
+
+		static D3D11_FILTER D3D11TextureFilter(TextureFilter mode)
+		{
+			switch (mode)
+			{
+			case TextureFilter::None:
+				return D3D11_FILTER_MIN_MAG_MIP_POINT;
+			case TextureFilter::Bilinear:
+				return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+			case TextureFilter::Trilinear:
+				return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+			case TextureFilter::Anisotropic:
+				return D3D11_FILTER_ANISOTROPIC;
+			}
+
+			return D3D11_FILTER_ANISOTROPIC;
+		}
+	}
+
+	
 	void GraphicsDeviceD3D11::CheckTearingSupport()
 	{
 		// Rather than create the 1.5 factory interface directly, we create the 1.4
@@ -84,7 +147,7 @@ namespace mmo
 		InitRasterizerState();
 
 		// Create sampler state
-		CreateSamplerStates();
+		InitSamplerState();
 
 		// Setup depth states
 		CreateDepthStates();
@@ -214,25 +277,36 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::InitRasterizerState()
 	{
-		// Create the default rasterizer state
 		ZeroMemory(&m_rasterizerDesc, sizeof(m_rasterizerDesc));
 		m_rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 		m_rasterizerDesc.CullMode = D3D11_CULL_NONE;
 		m_rasterizerDescChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::CreateSamplerStates()
+	void GraphicsDeviceD3D11::InitSamplerState()
 	{
-		D3D11_SAMPLER_DESC sd;
-		ZeroMemory(&sd, sizeof(sd));
+		ZeroMemory(&m_samplerDesc, sizeof(m_samplerDesc));
+		m_samplerDesc.Filter = D3D11TextureFilter(m_texFilter);
+		m_samplerDesc.MaxAnisotropy = D3D11_MAX_MAXANISOTROPY;
+		m_samplerDesc.AddressU = D3D11TextureAddressMode(m_texAddressMode);
+		m_samplerDesc.AddressV = D3D11TextureAddressMode(m_texAddressMode);
+		m_samplerDesc.AddressW = D3D11TextureAddressMode(m_texAddressMode);
+		m_samplerDescChanged = true;
+	}
 
-		sd.Filter = D3D11_FILTER_ANISOTROPIC;
-		sd.MaxAnisotropy = D3D11_MAX_MAXANISOTROPY;
-		sd.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-		sd.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-		sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	ID3D11SamplerState* GraphicsDeviceD3D11::CreateSamplerState()
+	{
+		// Create hash generator
+		const SamplerStateHash hashGen;
 
-		VERIFY(SUCCEEDED(m_device->CreateSamplerState(&sd, &m_samplerState)));
+		// Generate hash from rasterizer desc
+		m_samplerHash = hashGen(m_samplerDesc);
+
+		ComPtr<ID3D11SamplerState> state;
+		VERIFY(SUCCEEDED(m_device->CreateSamplerState(&m_samplerDesc, &state)));
+		m_samplerStates[m_samplerHash] = state;
+
+		return state.Get();
 	}
 
 	void GraphicsDeviceD3D11::CreateDepthStates()
@@ -286,21 +360,41 @@ namespace mmo
 		{
 			// Calculate the current hash
 			const RasterizerStateHash hashGen;
-			const size_t hash = hashGen(m_rasterizerDesc);
+			m_rasterizerHash = hashGen(m_rasterizerDesc);
 
-			// Check if rasterizer state for this hash has already been created
-			auto it = m_rasterizerStates.find(hash);
-			if (it == m_rasterizerStates.end())
-			{
-				// Not yet created, so create and activate it
-				CreateRasterizerState(true);
-			}
-			else
-			{
-				// State exists, so activate it
-				m_immContext->RSSetState(it->second.Get());
-			}
+			m_rasterizerDescChanged = false;
 		}
+		
+		// Check if rasterizer state for this hash has already been created
+		auto it = m_rasterizerStates.find(m_rasterizerHash);
+		if (it == m_rasterizerStates.end())
+		{
+			// Not yet created, so create and activate it
+			CreateRasterizerState(true);
+		}
+		else
+		{
+			// State exists, so activate it
+			m_immContext->RSSetState(it->second.Get());
+		}
+	}
+
+	ID3D11SamplerState* GraphicsDeviceD3D11::GetCurrentSamplerState()
+	{
+		ID3D11SamplerState* result = nullptr;
+		
+		// Check if sampler state for this hash has already been created
+		auto it = m_samplerStates.find(m_samplerHash);
+		if (it == m_samplerStates.end())
+		{
+			result = CreateSamplerState();
+		}
+		else
+		{
+			result = it->second.Get();
+		}
+
+		return result;
 	}
 
 	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)
@@ -357,6 +451,9 @@ namespace mmo
 		// Default blend state
 		m_immContext->OMSetBlendState(m_opaqueBlendState.Get(), nullptr, 0xffffffff);
 
+		// Rasterizer state
+		UpdateCurrentRasterizerState();
+		
 		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
 
@@ -506,7 +603,7 @@ namespace mmo
 			pixIt->second->Set();
 
 			// Set sampler state
-			ID3D11SamplerState* const samplerStates = m_samplerState.Get();
+			ID3D11SamplerState* const samplerStates = GetCurrentSamplerState();
 			m_immContext->PSSetSamplers(0, 1, &samplerStates);
 		}
 	}
@@ -608,33 +705,6 @@ namespace mmo
 		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
 	}
 
-	namespace
-	{
-		static D3D11_FILL_MODE D3D11FillMode(FillMode mode)
-		{
-			switch (mode)
-			{
-			case FillMode::Wireframe:
-				return D3D11_FILL_WIREFRAME;
-			}
-
-			return D3D11_FILL_SOLID;
-		}
-
-		static D3D11_CULL_MODE D3D11CullMode(FaceCullMode mode)
-		{
-			switch (mode)
-			{
-			case FaceCullMode::Back:
-				return D3D11_CULL_BACK;
-			case FaceCullMode::Front:
-				return D3D11_CULL_FRONT;
-			}
-
-			return D3D11_CULL_NONE;
-		}
-	}
-
 	void GraphicsDeviceD3D11::SetFillMode(FillMode mode)
 	{
 		GraphicsDevice::SetFillMode(mode);
@@ -649,5 +719,19 @@ namespace mmo
 
 		m_rasterizerDesc.CullMode = D3D11CullMode(mode);
 		m_rasterizerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetTextureAddressMode(TextureAddressMode mode)
+	{
+		m_samplerDesc.AddressU = D3D11TextureAddressMode(mode);
+		m_samplerDesc.AddressV = D3D11TextureAddressMode(mode);
+		m_samplerDesc.AddressW = D3D11TextureAddressMode(mode);
+		m_samplerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetTextureFilter(TextureFilter filter)
+	{
+		m_samplerDesc.Filter = D3D11TextureFilter(filter);
+		m_samplerDescChanged = true;
 	}
 }

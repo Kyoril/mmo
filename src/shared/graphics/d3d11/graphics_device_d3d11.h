@@ -47,6 +47,8 @@ namespace mmo
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) final override;
 		virtual void SetFillMode(FillMode mode) final override;
 		virtual void SetFaceCullMode(FaceCullMode mode) final override;
+		virtual void SetTextureAddressMode(TextureAddressMode mode) final override;
+		virtual void SetTextureFilter(TextureFilter filter) final override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -74,14 +76,18 @@ namespace mmo
 		void CreateConstantBuffers();
 		/// Creates the supported rasterizer states.
 		void InitRasterizerState();
-		/// Creates the supported sampler states.
-		void CreateSamplerStates();
+		/// Initializes the default sampler state desc.
+		void InitSamplerState();
+		/// Creates the supported sampler state.
+		ID3D11SamplerState* CreateSamplerState();
 		/// Creates the supported depth states.
 		void CreateDepthStates();
 
 		void CreateRasterizerState(bool set = true);
 
 		void UpdateCurrentRasterizerState();
+		
+		ID3D11SamplerState* GetCurrentSamplerState();
 
 	private:
 		/// The d3d11 device object.
@@ -94,10 +100,10 @@ namespace mmo
 		ComPtr<ID3D11BlendState> m_alphaBlendState;
 		/// Rasterizer states.
 		std::map<size_t, ComPtr<ID3D11RasterizerState>> m_rasterizerStates;
+		/// Sampler states.
+		std::map<size_t, ComPtr<ID3D11SamplerState>> m_samplerStates;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
-		/// The default texture sampler.
-		ComPtr<ID3D11SamplerState> m_samplerState;
 		/// The depth stencil state
 		ComPtr<ID3D11DepthStencilState> m_depthStencilState;
 		/// Input layouts.
@@ -116,5 +122,8 @@ namespace mmo
 		D3D11_RASTERIZER_DESC m_rasterizerDesc;
 		bool m_rasterizerDescChanged = false;
 		size_t m_rasterizerHash = 0;
+		D3D11_SAMPLER_DESC m_samplerDesc;
+		bool m_samplerDescChanged = false;
+		size_t m_samplerHash = 0;
 	};
 }

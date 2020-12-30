@@ -29,6 +29,8 @@ namespace mmo
 
 		// Current vertex format
 		auto format = VertexFormat::PosColorTex1;
+		gx.SetTextureAddressMode(TextureAddressMode::Clamp);
+		gx.SetBlendMode(BlendMode::Alpha);
 		gx.SetVertexFormat(format);
 
 		// draw the batches
