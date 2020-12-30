@@ -8,7 +8,7 @@ namespace mmo
 {
 	RenderTargetD3D11::RenderTargetD3D11(GraphicsDeviceD3D11 & device) noexcept
 		: m_device(device)
-		, m_clearColorFloat{0.0f, 0.0f, 0.0f, 1.0f}
+		, m_clearColorFloat{0.0f, 0.0f, 0.0f, 0.0f}
 	{
 	}
 
@@ -27,7 +27,7 @@ namespace mmo
 		// Clear the color buffer?
 		const auto converted = static_cast<uint32>(flags);
 		if ((converted & static_cast<uint32>(ClearFlags::Color)) != 0)
-		{
+		{			
 			// Clear render target and depth stencil view
 			context.ClearRenderTargetView(m_renderTargetView.Get(), m_clearColorFloat);
 		}
