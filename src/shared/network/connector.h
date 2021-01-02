@@ -134,9 +134,12 @@ namespace mmo
 	{
 		if (error.code())
 		{
-			assert(getListener());
-			getListener()->connectionEstablished(false);
-			this->resetListener();
+			if (getListener())
+			{
+				getListener()->connectionEstablished(false);
+				this->resetListener();
+			}
+			
 			return;
 		}
 

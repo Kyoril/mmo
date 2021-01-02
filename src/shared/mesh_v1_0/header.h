@@ -3,7 +3,6 @@
 #pragma once
 
 #include "base/typedefs.h"
-#include "base/sha1.h"
 #include "mesh/magic.h"
 #include "mesh/chunk_writer.h"
 
@@ -18,6 +17,7 @@ namespace mmo
 			static const ChunkMagic VertexChunkMagic = { {'V', 'E', 'R', 'T'} };
 			static const ChunkMagic IndexChunkMagic = { {'I', 'N', 'D', 'X'} };
 
+			
 			struct Header
 			{
 				VersionId version;
