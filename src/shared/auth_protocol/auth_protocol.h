@@ -119,8 +119,8 @@ namespace mmo
 				/// Sent after the login servers LogonChallenge response to finish authentication.
 				LogonProof = 0x01,
 
-				/// Sent to the login server to verify a clients AuthSession request.
-				ClientAuthSession = 0x02,
+				/// Propagates the list of map ids that the sending world node is able to host.
+				PropagateMapList = 0x02,
 			};
 		}
 

@@ -5,6 +5,8 @@
 #include "simple_file_format/sff_write_table.h"
 #include "base/typedefs.h"
 
+#include <set>
+
 namespace mmo
 {
 	/// Manages the login server configuration.
@@ -44,11 +46,16 @@ namespace mmo
 		/// The password for the web user.
 		String webPassword;
 
-
 		/// The ip address or dns name of the login server to use.
 		String realmServerAddress;
 		/// The port of the login server to use.
 		uint16 realmServerPort;
+		/// Set of hosted map ids.
+		std::set<uint64> hostedMaps;
+		/// Authentication name of the world node at the realm server.
+		String realmServerAuthName;
+		/// Password of the world node at the realm server.
+		String realmServerPassword;
 
 
 		explicit Configuration();

@@ -35,6 +35,8 @@ namespace mmo
 		bool HasCapacityBeenReached();
 		/// Adds a new player instance to the manager.
 		void AddWorld(std::shared_ptr<World> added);
+		/// Tries to find a world instance which currently hosting the given map id.
+		std::weak_ptr<World> GetWorldByMapId(uint64 mapId);
 
 	private:
 

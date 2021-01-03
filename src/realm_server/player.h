@@ -7,7 +7,6 @@
 #include "base/non_copyable.h"
 #include "game_protocol/game_protocol.h"
 #include "game_protocol/game_connection.h"
-#include "base/signal.h"
 #include "base/big_number.h"
 
 #include <memory>
@@ -15,11 +14,15 @@
 #include <map>
 #include <cassert>
 
+#include "game/character_view.h"
+
 
 namespace mmo
 {
 	class AsyncDatabase;
 	class LoginConnector;
+	class WorldManager;
+	class World;
 
 
 	/// This class represents a player connction on the login server.
@@ -35,20 +38,23 @@ namespace mmo
 	public:
 		explicit Player(
 			PlayerManager &manager,
+			WorldManager& worldManager,
 			LoginConnector &loginConnector,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
 			const std::string &address);
 
 		/// Gets the player connection class used to send packets to the client.
-		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
+		Client &GetConnection() { assert(m_connection); return *m_connection; }
 		/// Gets the player manager which manages all connected players.
-		inline PlayerManager &GetManager() const { return m_manager; }
+		PlayerManager &GetManager() const { return m_manager; }
+		/// Gets the world manager which manages all connected world nodes.
+		WorldManager& GetWorldManager() const { return m_worldManager; }
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
-		inline bool IsAuthentificated() const { return !m_sessionKey.isZero(); }
+		bool IsAuthentificated() const { return !m_sessionKey.isZero(); }
 		/// Gets the account name the player is logged in with.
-		inline const std::string &GetAccountName() const { return m_accountName; }
+		const std::string &GetAccountName() const { return m_accountName; }
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -56,6 +62,10 @@ namespace mmo
 		/// Initializes the session by providing a session key. The connection to the client will 
 		/// be encrypted from here on.
 		void InitializeSession(const BigNumber& sessionKey);
+
+	protected:
+		/// Enables or disables handling of EnterWorld packets from the client.
+		void EnableEnterWorldPacket(bool enable);
 
 	public:
 		/// Registers a packet handler.
@@ -73,6 +83,7 @@ namespace mmo
 
 	private:
 		PlayerManager &m_manager;
+		WorldManager &m_worldManager;
 		LoginConnector &m_loginConnector;
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
@@ -87,6 +98,10 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
+
+		std::map<uint64, CharacterView> m_characterViews;
+
+		std::weak_ptr<World> m_world;
 
 	private:
 		/// Closes the connection if still connected.

@@ -216,29 +216,29 @@ namespace mmo
 				}
 
 				// Send packet with result
-				strongThis->m_connection->sendSinglePacket([authResult, &strongThis](auth::OutgoingPacket& packet) {
-					packet.Start(auth::login_realm_packet::LogonChallenge);
-					packet << io::write<uint8>(authResult);
+				strongThis->m_connection->sendSinglePacket([authResult, &strongThis](auth::OutgoingPacket& outPacket) {
+					outPacket.Start(auth::login_realm_packet::LogonChallenge);
+					outPacket << io::write<uint8>(authResult);
 
 					// On success, there are more data values to write
 					if (authResult == auth::auth_result::Success)
 					{
 						// Write B with 32 byte length and g
 						std::vector<uint8> B_ = strongThis->m_B.asByteArray(32);
-						packet
+						outPacket
 							<< io::write_range(B_.begin(), B_.end())
 							<< io::write<uint8>(constants::srp::g.asUInt32());
 
 						// Write N with 32 byte length
 						const std::vector<uint8> N_ = constants::srp::N.asByteArray(32);
-						packet << io::write_range(N_.begin(), N_.end());
+						outPacket << io::write_range(N_.begin(), N_.end());
 
 						// Write s
 						const std::vector<uint8> s_ = strongThis->m_s.asByteArray();
-						packet << io::write_range(s_.begin(), s_.end());
+						outPacket << io::write_range(s_.begin(), s_.end());
 					}
 
-					packet.Finish();
+					outPacket.Finish();
 				});
 			}
 		};

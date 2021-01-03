@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "base/filesystem.h"
+#include "base/timer_queue.h"
 
 namespace mmo
 {
@@ -51,6 +52,9 @@ namespace mmo
 	{
 		// This is the main ioService object
 		asio::io_service ioService;
+
+		// This is the main timer queue
+		TimerQueue timerQueue{ ioService };
 
 		// The database service object and keep-alive object
 		asio::io_service dbService;
@@ -112,8 +116,8 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		auto realmConnector =
-			std::make_shared<RealmConnector>(std::ref(ioService));
-		realmConnector->connect(config.realmServerAddress, config.realmServerPort, *realmConnector, ioService);
+			std::make_shared<RealmConnector>(std::ref(ioService), std::ref(timerQueue), std::cref(config.hostedMaps));
+		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the web service

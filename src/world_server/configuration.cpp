@@ -33,6 +33,8 @@ namespace mmo
 		, webPassword("test")
 		, realmServerAddress("127.0.0.1")
 		, realmServerPort(constants::DefaultRealmWorldPort)
+		, realmServerAuthName("WorldNode01")
+		, realmServerPassword("")
 	{
 	}
 
@@ -96,6 +98,22 @@ namespace mmo
 			{
 				realmServerAddress = realmConfig->getString("realmServerAddress", realmServerAddress);
 				realmServerPort = realmConfig->getInteger("realmServerPort", realmServerPort);
+
+				realmServerAuthName = realmConfig->getString("realmServerAuthName", realmServerAuthName);
+				realmServerPassword = realmConfig->getString("realmServerPassword", realmServerPassword);
+				
+				const auto* hostedMapsArr = realmConfig->getArray("hostedMaps");
+				if (hostedMapsArr != nullptr)
+				{
+					for (size_t i = 0; i < hostedMapsArr->getSize(); ++i)
+					{
+						const auto mapId = hostedMapsArr->getOptionalInt<uint64>(i);
+						if (mapId.has_value())
+						{
+							hostedMaps.insert(mapId.value());
+						}
+					}
+				}
 			}
 			else
 			{
@@ -176,6 +194,16 @@ namespace mmo
 			sff::write::Table<Char> realmConfig(global, "worldConfig", sff::write::MultiLine);
 			realmConfig.addKey("realmServerAddress", realmServerAddress);
 			realmConfig.addKey("realmServerPort", realmServerPort);
+			realmConfig.addKey("realmServerAuthName", realmServerAuthName);
+			realmConfig.addKey("realmServerPassword", realmServerPassword);
+
+			sff::write::Array<Char> hostedMapsArr(realmConfig, "hostedMaps", sff::write::Comma);
+			{
+				hostedMapsArr.addElement(0);
+			}
+			
+			hostedMapsArr.Finish();
+			
 			realmConfig.Finish();
 		}
 

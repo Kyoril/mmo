@@ -2,6 +2,8 @@
 
 #include "mysql_database.h"
 
+#include <utility>
+
 #include "mysql_wrapper/mysql_row.h"
 #include "mysql_wrapper/mysql_select.h"
 #include "mysql_wrapper/mysql_statement.h"
@@ -11,8 +13,8 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(const mysql::DatabaseInfo &connectionInfo)
-		: m_connectionInfo(connectionInfo)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo)
+		: m_connectionInfo(std::move(connectionInfo))
 	{
 	}
 
@@ -84,7 +86,48 @@ namespace mmo
 
 		return {};
 	}
-	
+
+	std::optional<WorldAuthData> MySQLDatabase::GetWorldAuthData(std::string name)
+	{
+		mysql::Select select(m_connection, "SELECT id,name,s,v FROM world WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				// Create the structure and fill it with data
+				WorldAuthData data{};
+				row.GetField(0, data.id);
+				row.GetField(1, data.name);
+				row.GetField(2, data.s);
+				row.GetField(3, data.v);
+				return std::optional<WorldAuthData>(data);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	void MySQLDatabase::WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build)
+	{
+		if (!m_connection.Execute("UPDATE world SET k = '"
+			+ m_connection.EscapeString(sessionKey)
+			+ "', last_login = NOW(), last_ip = '"
+			+ m_connection.EscapeString(ip)
+			+ "', last_build = '"
+			+ m_connection.EscapeString(build)
+			+ "' WHERE id = " + std::to_string(worldId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update world table on login");
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorMessage());

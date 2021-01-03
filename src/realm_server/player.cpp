@@ -1,19 +1,17 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2021, Robin Klimonow. All rights reserved.
 
 #include "player.h"
 #include "player_manager.h"
+#include "world_manager.h"
+#include "world.h"
 #include "login_connector.h"
 #include "database.h"
 #include "version.h"
 
 #include "base/random.h"
-#include "base/constants.h"
 #include "base/sha1.h"
-#include "base/clock.h"
-#include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
-#include <iomanip>
 #include <functional>
 
 
@@ -21,22 +19,23 @@ namespace mmo
 {
 	Player::Player(
 		PlayerManager& playerManager,
+		WorldManager& worldManager,
 		LoginConnector &loginConnector,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address)
 		: m_manager(playerManager)
+		, m_worldManager(worldManager)
 		, m_loginConnector(loginConnector)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
 		, m_accountId(0)
 	{
-		// Generate random encryption seed
+		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
 		m_seed = dist(RandomGenerator);
 
-		// Setup ourself as listener
 		m_connection->setListener(*this);
 	}
 
@@ -151,15 +150,23 @@ namespace mmo
 		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
 			if (auto strongThis = weakThis.lock())
 			{
-				// We have a char enum result, send this to the client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& packet)
+				// Copy character view data
+				strongThis->m_characterViews.clear();
+				for(const auto& charView : result.value())
 				{
-					packet.Start(game::realm_client_packet::CharEnum);
-					packet << io::write_dynamic_range<uint8>(*result);
-					packet.Finish();
+					strongThis->m_characterViews[charView.GetGuid()] = charView;
+				}
+				
+				// Send result data to requesting client
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::CharEnum);
+					outPacket << io::write_dynamic_range<uint8>(*result);
+					outPacket.Finish();
 				});
 			}
-			else {
+			else 
+			{
 				WLOG("Could not send char list (client no longer available!)");
 			}
 		};
@@ -176,19 +183,42 @@ namespace mmo
 
 	PacketParseResult Player::OnEnterWorld(game::IncomingPacket & packet)
 	{
+		EnableEnterWorldPacket(false);
+
 		uint64 guid = 0;
 		if (!(packet >> io::read<uint64>(guid)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		// Log this
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
 
-		// TODO: Ensure that the character exists and belongs to our account by trying to load the given character
+		// Ensure that the character exists and belongs to our account
+		const auto charViewIt = m_characterViews.find(guid);
+		if (charViewIt == m_characterViews.end())
+		{
+			WLOG("Client tried to log in with a character that doesn't exist or doesn't belong to the account of that player!");
+			return PacketParseResult::Disconnect;
+		}
 
-		// TODO: Find a world node for the character's map id
+		// Cache the characters current map id
+		const auto mapId = charViewIt->second.GetMapId();
+		
+		// Find a world node for the character's map id
+		m_world = m_worldManager.GetWorldByMapId(mapId);
 
+		// Check if world instance exists
+		const auto strongWorld = m_world.lock();
+		if (!strongWorld)
+		{
+			WLOG("No world node available which is able to host map " << mapId);
+			EnableEnterWorldPacket(true);
+			return PacketParseResult::Pass;
+		}
+
+		// Create a new map instance for the current map id of the character
+		strongWorld->RequestMapInstanceCreation(mapId);
+		
 		// TODO: Send character data to the given world node so that the character can spawn there
 
 		// TODO: From here on, act as proxy for the world node
@@ -232,6 +262,18 @@ namespace mmo
 		// Enable CharEnum packets
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
+	}
+
+	void Player::EnableEnterWorldPacket(bool enable)
+	{
+		if (enable)
+		{
+			RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
+		}
+		else
+		{
+			ClearPacketHandler(game::client_realm_packet::EnterWorld);
+		}
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

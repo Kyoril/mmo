@@ -146,10 +146,10 @@ namespace mmo
 		WorldManager worldManager{ config.maxWorlds };
 
 		// Create the world server
-		std::unique_ptr<game::Server> worldServer;
+		std::unique_ptr<auth::Server> worldServer;
 		try
 		{
-			worldServer.reset(new mmo::game::Server(std::ref(ioService), config.worldPort, std::bind(&mmo::game::Connection::Create, std::ref(ioService), nullptr)));
+			worldServer.reset(new mmo::auth::Server(std::ref(ioService), config.worldPort, std::bind(&mmo::auth::Connection::create, std::ref(ioService), nullptr)));
 		}
 		catch (const mmo::BindFailedException&)
 		{
@@ -220,7 +220,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &asyncDatabase, &loginConnector](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -234,7 +234,7 @@ namespace mmo
 				return;
 			}
 
-			auto player = std::make_shared<Player>(playerManager, *loginConnector, asyncDatabase, connection, address.to_string());
+			auto player = std::make_shared<Player>(playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 

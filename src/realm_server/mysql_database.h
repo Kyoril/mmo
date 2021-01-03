@@ -13,14 +13,16 @@ namespace mmo
 		: public IDatabase
 	{
 	public:
-		explicit MySQLDatabase(const mysql::DatabaseInfo &connectionInfo);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo);
 
 		/// Tries to establish a connection to the MySQL server.
 		bool load();
 
 	public:
 		// ~ Begin IDatabase
-		virtual std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) final override;
+		std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) final override;
+		std::optional<WorldAuthData> GetWorldAuthData(std::string name) final override;
+		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
 		// ~ End IDatabase
 
 	private:

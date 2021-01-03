@@ -16,6 +16,19 @@
 
 namespace mmo
 {
+	/// Contains data used by a world for authentication.
+	struct WorldAuthData final
+	{
+		/// The unique world id.
+		uint64 id;
+		/// Name of the world.
+		std::string name;
+		/// Password salt.
+		std::string s;
+		/// Password verifier.
+		std::string v;
+	};
+	
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -24,6 +37,11 @@ namespace mmo
 		/// Gets the list of characters that belong to a certain character id.
 		/// @param accountId Id of the account.
 		virtual std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) = 0;
+		/// Obtains world data by it's name.
+		/// @param name Name of the world.
+		virtual std::optional<WorldAuthData> GetWorldAuthData(std::string name) = 0;
+		/// 
+		virtual void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
 	};
 
 
