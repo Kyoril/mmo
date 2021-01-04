@@ -43,7 +43,7 @@ int main(int argc, const char* argv[])
 
 	// Open stdout log output
 	auto options = mmo::g_DefaultConsoleLogOptions;
-	options.alwaysFlush = false;
+	options.alwaysFlush = true;
 
 	// Add cout to the list of log output streams
 	std::mutex coutLogMutex;

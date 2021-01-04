@@ -1,0 +1,29 @@
+version: "3.7"
+
+services:
+
+  builder:
+    image: builder
+    build: .
+
+  login:
+    build: docker/login_server
+    depends_on:
+      - builder
+      - db
+
+  db:
+    image: mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_DATABASE: mmo_login
+      MYSQL_ROOT_PASSWORD: <MODIFY>
+      MYSQL_USER: mmo
+      MYSQL_PASSWORD: <MODIFY>
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080

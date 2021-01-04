@@ -1,10 +1,11 @@
+# Image to use as the base for other containers
 FROM ubuntu:18.04
 
 # Setup CMake from kitware's repository (see details at https://apt.kitware.com/)
 RUN apt-get update && apt-get install -y \
 	apt-transport-https \
-	ca-certificates \ 
-	gnupg \ 
+	ca-certificates \
+	gnupg \
 	software-properties-common \
 	wget
 RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | \
@@ -26,11 +27,16 @@ RUN apt-get update && apt-get install -y \
 	libssl-dev \
 	libmysqlclient-dev
 
-# Build artifacts
+# Build common artifacts
 COPY . /app
 
-RUN cd /app && \
-	mkdir -p build && \
+WORKDIR /app
+
+COPY --from=builder /app/build build
+
+RUN mkdir -p build && \
 	cd build && \
 	cmake /app && \
 	make
+
+CMD [ "true" ]

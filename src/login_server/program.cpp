@@ -128,7 +128,7 @@ namespace mmo
 		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
 		AsyncDatabase asyncDatabase{ *database, async, sync };
 
-
+		ILOG("Database loaded successfully");
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the realm service
