@@ -47,6 +47,47 @@ namespace mmo
 		m_manager.PlayerDisconnected(*this);
 	}
 
+	void Player::DoCharEnum()
+	{
+		// RequestHandler
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
+			if (auto strongThis = weakThis.lock())
+			{
+				// Lock around m_characterViews
+				{
+					std::scoped_lock<std::mutex> lock{ strongThis->m_charViewMutex };
+
+					// Copy character view data
+					strongThis->m_characterViews.clear();
+					for (const auto& charView : result.value())
+					{
+						strongThis->m_characterViews[charView.GetGuid()] = charView;
+					}
+				}
+
+				// Send result data to requesting client
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
+					{
+						outPacket.Start(game::realm_client_packet::CharEnum);
+						outPacket << io::write_dynamic_range<uint8>(*result);
+						outPacket.Finish();
+					});
+			}
+			else
+			{
+				WLOG("Could not send char list (client no longer available!)");
+			}
+		};
+
+		// Testing...
+		DLOG("Requesting char list for account " << m_accountId << "...");
+
+		// Execute
+		ASSERT(m_accountId != 0);
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
+	}
+
 	void Player::connectionLost()
 	{
 		ILOG("Client " << m_address << " disconnected");
@@ -145,38 +186,7 @@ namespace mmo
 
 	PacketParseResult Player::OnCharEnum(game::IncomingPacket & packet)
 	{
-		// RequestHandler
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
-			if (auto strongThis = weakThis.lock())
-			{
-				// Copy character view data
-				strongThis->m_characterViews.clear();
-				for(const auto& charView : result.value())
-				{
-					strongThis->m_characterViews[charView.GetGuid()] = charView;
-				}
-				
-				// Send result data to requesting client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
-				{
-					outPacket.Start(game::realm_client_packet::CharEnum);
-					outPacket << io::write_dynamic_range<uint8>(*result);
-					outPacket.Finish();
-				});
-			}
-			else 
-			{
-				WLOG("Could not send char list (client no longer available!)");
-			}
-		};
-
-		// Testing...
-		DLOG("Requesting char list for account " << m_accountId << "...");
-
-		// Execute
-		ASSERT(m_accountId != 0);
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
+		DoCharEnum();
 
 		return PacketParseResult::Pass;
 	}
@@ -193,16 +203,22 @@ namespace mmo
 
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
 
-		// Ensure that the character exists and belongs to our account
-		const auto charViewIt = m_characterViews.find(guid);
-		if (charViewIt == m_characterViews.end())
+		// Obtain the map id of the selected character
+		uint32 mapId = 0;
 		{
-			WLOG("Client tried to log in with a character that doesn't exist or doesn't belong to the account of that player!");
-			return PacketParseResult::Disconnect;
+			std::scoped_lock<std::mutex> lock{ m_charViewMutex };
+			
+			// Ensure that the character exists and belongs to our account
+			const auto charViewIt = m_characterViews.find(guid);
+			if (charViewIt == m_characterViews.end())
+			{
+				WLOG("Client tried to log in with a character that doesn't exist or doesn't belong to the account of that player!");
+				return PacketParseResult::Disconnect;
+			}
+			
+			// Cache the characters current map id
+			mapId = charViewIt->second.GetMapId();
 		}
-
-		// Cache the characters current map id
-		const auto mapId = charViewIt->second.GetMapId();
 		
 		// Find a world node for the character's map id
 		m_world = m_worldManager.GetWorldByMapId(mapId);
@@ -222,6 +238,56 @@ namespace mmo
 		// TODO: Send character data to the given world node so that the character can spawn there
 
 		// TODO: From here on, act as proxy for the world node
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnCreateChar(game::IncomingPacket& packet)
+	{
+		
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnDeleteChar(game::IncomingPacket& packet)
+	{
+		ASSERT(IsAuthentificated());
+		
+		uint64 charGuid = 0;
+		if (!(packet >> io::read<uint64>(charGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Lock around m_characterViews
+		std::scoped_lock<std::mutex> lock{ m_charViewMutex };
+		
+		// Check if such a character exists
+		const auto charIt = m_characterViews.find(charGuid);
+		if (charIt == m_characterViews.end())
+		{
+			WLOG("Tried to delete character 0x" << std::hex << charGuid << " which doesn't exist or belong to the players account!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Database callback handler
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		auto handler = [weakThis](bool success) {
+			if (auto strongThis = weakThis.lock())
+			{
+				if (success)
+				{
+					strongThis->DoCharEnum();
+				}
+				else
+				{
+					ELOG("Failed to delete character!");
+				}
+			}
+		};
+		
+		DLOG("Deleting character 0x" << std::hex << charGuid << " from account 0x" << std::hex << m_accountId << "...");
+		m_database.asyncRequest<void>([charGuid](auto&& database) { database->DeleteCharacter(charGuid); }, std::move(handler));
 
 		return PacketParseResult::Pass;
 	}
@@ -261,6 +327,8 @@ namespace mmo
 
 		// Enable CharEnum packets
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
+		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
+		RegisterPacketHandler(game::client_realm_packet::DeleteChar, *this, &Player::OnDeleteChar);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 

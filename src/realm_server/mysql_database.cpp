@@ -128,6 +128,15 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::DeleteCharacter(uint64 characterGuid)
+	{
+		if (!m_connection.Execute("UPDATE characters SET deleted_account = account, account_id = NULL, deleted_at = NOW() WHERE id = " + std::to_string(characterGuid) + " AND account_id IS NOT NULL LIMIT 1;"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update characters table");
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorMessage());

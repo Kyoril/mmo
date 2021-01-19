@@ -99,6 +99,7 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 
+		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;
 
 		std::weak_ptr<World> m_world;
@@ -106,7 +107,9 @@ namespace mmo
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
-
+		/// Requests the current character list from the database and notifies the client.
+		void DoCharEnum();
+	
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()
 		void connectionLost() override;
@@ -119,5 +122,7 @@ namespace mmo
 		PacketParseResult OnAuthSession(game::IncomingPacket& packet);
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 		PacketParseResult OnEnterWorld(game::IncomingPacket& packet);
+		PacketParseResult OnCreateChar(game::IncomingPacket& packet);
+		PacketParseResult OnDeleteChar(game::IncomingPacket& packet);
 	};
 }

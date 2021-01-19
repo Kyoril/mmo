@@ -34,4 +34,5 @@ add_subdirectory(xml_handler)
 add_subdirectory(data)
 add_subdirectory(game)
 add_subdirectory(scene_graph)
+add_subdirectory(terrain)
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <list>
+#include <map>
 
 namespace mmo
 {

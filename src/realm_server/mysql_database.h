@@ -23,6 +23,7 @@ namespace mmo
 		std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) final override;
 		std::optional<WorldAuthData> GetWorldAuthData(std::string name) final override;
 		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
+		void DeleteCharacter(uint64 characterGuid) final override;
 		// ~ End IDatabase
 
 	private:

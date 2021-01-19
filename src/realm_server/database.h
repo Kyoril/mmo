@@ -42,6 +42,8 @@ namespace mmo
 		virtual std::optional<WorldAuthData> GetWorldAuthData(std::string name) = 0;
 		/// 
 		virtual void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
+		/// Deletes a character with the given guid.
+		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 	};
 
 

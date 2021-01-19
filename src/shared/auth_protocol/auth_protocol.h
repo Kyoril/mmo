@@ -106,6 +106,11 @@ namespace mmo
 				LogonChallenge = 0x00,
 				/// Sent as response to a worlds LogonProof packet for authentication.
 				LogonProof = 0x01,
+
+				/// Sent when a player character wants to join a world instance.
+				PlayerCharacterJoin = 0x02,
+				/// Sent when a player character should leave his world instance on this world node.
+				PlayerCharacterLeave = 0x03,
 			};
 		}
 
@@ -121,6 +126,19 @@ namespace mmo
 
 				/// Propagates the list of map ids that the sending world node is able to host.
 				PropagateMapList = 0x02,
+
+				/// Send when a map instance has been created.
+				InstanceCreated = 0x03,
+				/// Sent when a map instance has been destroyed.
+				InstanceDestroyed = 0x04,
+
+				/// Sent when a player character joined a world instance on a world node.
+				PlayerCharacterJoined = 0x05,
+				/// Sent when joining of a player character failed.
+				PlayerCharacterJoinFailed = 0x06,
+				/// Sent when a player character leaves the instance.
+				PlayerCharacterLeft = 0x07,
+				
 			};
 		}
 
