@@ -61,3 +61,7 @@ TODO: finish
 Bootstrapping: `docker-compose --file=docker-compose.init.yml build`
 
 Once bootstrapped: `docker-compose up --build`
+
+Force container recreation: `docker-compose up --force-recreate`
+
+Remove dangling images: `docker image prune --filter="dangling=true"`
