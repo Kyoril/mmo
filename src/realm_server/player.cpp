@@ -11,6 +11,8 @@
 #include "base/random.h"
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
+#include "math/vector3.h"
+#include "math/degree.h"
 
 #include <functional>
 
@@ -244,7 +246,42 @@ namespace mmo
 
 	PacketParseResult Player::OnCreateChar(game::IncomingPacket& packet)
 	{
+		std::string characterName;
+		if (!(packet >> io::read_container<uint8>(characterName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 		
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		auto handler = [weakThis](bool success) {
+			if (auto strongThis = weakThis.lock())
+			{
+				if (success)
+				{
+					strongThis->DoCharEnum();
+				}
+				else
+				{
+					ELOG("Failed to create character!");
+				}
+			}
+		};
+
+		// TODO: Load real start values from static game data instead of hard code it here. However,
+		// the infrastructure isn't read yet.
+		const uint32 level = 1;
+		const uint32 race = 1;
+		const uint32 map = 0;
+		const uint32 hp = 1;
+		const uint32 gender = 0;
+		const Vector3 position;
+		const Degree rotation;
+		
+		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
+		m_database.asyncRequest<void>([characterName, level, race, map, hp, gender, &position, &rotation, this](auto&& database)
+		{
+			database->CreateCharacter(characterName, this->m_accountId, map, level, hp, race, gender, position, rotation);
+		}, std::move(handler));
 		
 		return PacketParseResult::Pass;
 	}

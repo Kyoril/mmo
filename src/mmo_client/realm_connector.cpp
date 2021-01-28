@@ -198,4 +198,24 @@ namespace mmo
 			packet.Finish();
 		});
 	}
+
+	void RealmConnector::CreateCharacter(const std::string& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CreateChar);
+			packet << io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::DeleteCharacter(const CharacterView& character)
+	{
+		const uint64 guid = character.GetGuid();
+
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::DeleteChar);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
 }

@@ -24,6 +24,7 @@ namespace mmo
 		std::optional<WorldAuthData> GetWorldAuthData(std::string name) final override;
 		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
 		void DeleteCharacter(uint64 characterGuid) final override;
+		void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation) final override;
 		// ~ End IDatabase
 
 	private:

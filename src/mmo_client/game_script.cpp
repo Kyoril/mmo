@@ -69,6 +69,8 @@ namespace mmo
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
 
+		luaL_openlibs(m_luaState.get());
+		
 		// Initialize luabind
 		luabind::open(m_luaState.get());
 
@@ -99,7 +101,9 @@ namespace mmo
 				.def("ConnectToRealm", &RealmConnector::ConnectToRealm)
 				.def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
 				.def("GetRealmName", &RealmConnector::GetRealmName)
-				.def("EnterWorld", &RealmConnector::EnterWorld),
+				.def("EnterWorld", &RealmConnector::EnterWorld)
+				.def("CreateCharacter", &RealmConnector::CreateCharacter)
+				.def("DeleteCharacter", &RealmConnector::DeleteCharacter),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("print", &Script_Print)

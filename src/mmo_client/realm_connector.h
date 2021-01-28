@@ -74,6 +74,10 @@ namespace mmo
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
 		/// Sends an enter world request using the given character.
 		void EnterWorld(const CharacterView& character);
+		/// Sends the command to create a new character to the realm.
+		void CreateCharacter(const std::string& name);
+		/// Sends the command to delete a character to the realm.
+		void DeleteCharacter(const CharacterView& character);
 
 		/// Gets the realm name.
 		const std::string& GetRealmName() const { return m_realmName; }
