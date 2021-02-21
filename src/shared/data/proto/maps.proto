@@ -1,19 +1,37 @@
-syntax = "proto2";
+syntax = "proto3";
 package mmo;
 
-
+/* Base type for a map with shared values. */
 message MapEntry {
-	required uint32 id = 1;
-	required string name = 2;
+	uint32 id = 1;
+	string name = 2;
 	enum MapInstanceType {
 		GLOBAL = 0;
 		DUNGEON = 1;
 		RAID = 2;
 		BATTLEGROUND = 3;
 	}
-	optional MapInstanceType instancetype = 3 [default = GLOBAL];
+	MapInstanceType instancetype = 3;
 }
 
-message Maps {
-	repeated MapEntry entry = 1;
+/* Client version of a map entry which has additional client-only data. */
+message MapClientPartEntry {
+
+}
+
+/* Server version of a map entry which has additional server-only data. */
+message MapServerPartEntry {
+
+}
+
+/* Editor version of a map entry which has all data available for a map in any scope. */
+message MapEditorEntry {
+	MapEntry base = 1;
+	MapClientPartEntry client = 2;
+	MapServerPartEntry server = 3;
+}
+
+/* An enumeration of maps. */
+message EditorMaps {
+	repeated MapEditorEntry entry = 1;
 }

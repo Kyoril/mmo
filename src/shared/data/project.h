@@ -14,7 +14,7 @@
 
 namespace mmo
 {
-	typedef TemplateManager<mmo::Maps, mmo::MapEntry> MapManager;
+	typedef TemplateManager<mmo::EditorMaps, mmo::MapEditorEntry> MapManager;
 
 
 	/// This class contains contains all the static game data like item templates.
@@ -106,7 +106,7 @@ namespace mmo
 			auto saveStart = GetAsyncTimeMs();
 
 			const std::filesystem::path dataPath = directory;
-			const auto realmDataPath = (dataPath / "wowpp");
+			const auto realmDataPath = (dataPath / "mmo");
 
 			typedef ProjectSaver RealmProjectSaver;
 			typedef ProjectSaver::Manager ManagerEntry;

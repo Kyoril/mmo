@@ -46,7 +46,7 @@ namespace mmo
 			for (int i = 0; i < m_data.entry_size(); ++i)
 			{
 				T2 *entry = m_data.mutable_entry(i);
-				m_templatesById[entry->id()] = entry;
+				m_templatesById[entry->base().id()] = entry;
 			}
 
 			return true;
