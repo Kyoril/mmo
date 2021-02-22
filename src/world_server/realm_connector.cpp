@@ -1,6 +1,8 @@
 // Copyright (C) 2021, Robin Klimonow. All rights reserved.
 
 #include "realm_connector.h"
+#include "world_instance_manager.h"
+#include "world_instance.h"
 #include "version.h"
 
 #include "base/clock.h"
@@ -11,10 +13,11 @@
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds)
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, WorldInstanceManager& worldInstanceManager)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
+		, m_worldInstanceManager(worldInstanceManager)
 		, m_willTerminate(false)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
@@ -284,7 +287,9 @@ namespace mmo
 			if (std::equal(M2hash.begin(), M2hash.end(), serverM2.begin()))
 			{
 				ILOG("Successfully authenticated at the realm server! Players should now be ready to play on this world node!");
-
+				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterJoin, *this, &RealmConnector::OnPlayerCharacterJoin);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterLeave, *this, &RealmConnector::OnPlayerCharacterLeave);
+				
 				PropagateHostedMapIds();
 			}
 			else
@@ -301,6 +306,25 @@ namespace mmo
 			OnLoginError(static_cast<auth::AuthResult>(result));
 			return PacketParseResult::Disconnect;
 		}
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerCharacterJoin(auth::IncomingPacket& packet)
+	{
+		// Read packet data
+		
+		DLOG("Player character wants to join world...");
+
+		// Just a little test for now
+		m_worldInstanceManager.CreateInstance(0);
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerCharacterLeave(auth::IncomingPacket& packet)
+	{
+		DLOG("Player character should leave world...");
+		
 		return PacketParseResult::Pass;
 	}
 

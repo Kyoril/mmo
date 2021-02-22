@@ -388,5 +388,11 @@ namespace mmo
 		// create an instance for a given map id for us and notify us as soon as this has happened.
 		// Instance creation might fail, in which case we also want to be notified about failure and
 		// the reason of failure!
+
+		GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
+				outPacket.Finish();
+			});
 	}
 }

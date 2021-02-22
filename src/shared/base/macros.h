@@ -3,7 +3,9 @@
 
 #include <cassert>
 
-#define ASSERT(x) assert(x)
+#ifndef ASSERT
+#	define ASSERT(x) assert(x)
+#endif
 
 #ifdef _DEBUG
 #	define VERIFY(x) ASSERT(x)

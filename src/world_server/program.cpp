@@ -124,7 +124,7 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		auto realmConnector =
-			std::make_shared<RealmConnector>(std::ref(ioService), std::ref(timerQueue), std::cref(config.hostedMaps));
+			std::make_shared<RealmConnector>(std::ref(ioService), std::ref(timerQueue), std::cref(config.hostedMaps), std::ref(worldInstanceManager));
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

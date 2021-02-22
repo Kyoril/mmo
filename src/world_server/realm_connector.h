@@ -14,6 +14,7 @@
 namespace mmo
 {
 	class TimerQueue;
+	class WorldInstanceManager;
 
 	/// A connector which will try to log in to a realm server.
 	class RealmConnector final
@@ -25,7 +26,7 @@ namespace mmo
 		/// @param io The io service to be used in order to create the internal socket.
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
-		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds);
+		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, WorldInstanceManager& worldInstanceManager);
 		/// Default destructor.
 		virtual ~RealmConnector();
 
@@ -41,6 +42,10 @@ namespace mmo
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket& packet);
 		// Handles the LogonProof packet from the server.
 		PacketParseResult OnLogonProof(auth::IncomingPacket& packet);
+		/// Handles a packet of a character that wants to enter a world.
+		PacketParseResult OnPlayerCharacterJoin(auth::IncomingPacket& packet);
+		/// Handles a packet of a character that should leave a world.
+		PacketParseResult OnPlayerCharacterLeave(auth::IncomingPacket& packet);
 
 		void Reset();
 		
@@ -54,6 +59,7 @@ namespace mmo
 		// Internal io service
 		asio::io_service& m_ioService;
 		TimerQueue& m_timerQueue;
+		WorldInstanceManager& m_worldInstanceManager;
 		
 		std::string m_authName;
 
