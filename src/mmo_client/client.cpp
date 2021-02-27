@@ -27,6 +27,8 @@
 #include "game_script.h"
 #include "model_frame.h"
 #include "model_renderer.h"
+#include "world_frame.h"
+#include "world_renderer.h"
 
 #include <fstream>
 #include <thread>
@@ -147,6 +149,17 @@ namespace mmo
 			return std::make_shared<ModelFrame>(name);
 		});
 
+		// Register world renderer
+		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [](const std::string& name)
+			{
+				return std::make_unique<WorldRenderer>(name);
+			});
+
+		// Register world frame type
+		FrameManager::Get().RegisterFrameFactory("World", [](const std::string& name) {
+			return std::make_shared<WorldFrame>(name);
+			});
+		
 		// Connect idle event
 		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
 		{
@@ -189,6 +202,10 @@ namespace mmo
 	{
 		// Disconnect FrameUI connections
 		s_frameUiConnections.disconnect();
+
+		// Unregister world renderer
+		FrameManager::Get().RemoveFrameRenderer("WorldRenderer");
+		FrameManager::Get().UnregisterFrameFactory("World");
 
 		// Unregister model renderer
 		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
