@@ -3,9 +3,13 @@
 
 #include <bitset>
 #include <array>
+#include <memory>
 
 #include "base/typedefs.h"
 #include "base/signal.h"
+
+#include "math/vector3.h"
+#include "math/angle.h"
 
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
@@ -209,7 +213,7 @@ namespace mmo
 	}
 	
 	/// This is the base class of server side object, spawned on the world server.
-	class GameObject
+	class GameObject : public std::enable_shared_from_this<GameObject>
 	{
 	public:
 		explicit GameObject(uint64 guid);
@@ -221,12 +225,13 @@ namespace mmo
 			m_fields.Initialize(object_fields::ObjectFieldCount);
 		}
 		
-	
 	public:
 		/// Gets the objects globally unique identifier value.
 		uint64 GetGuid() const { return m_fields.GetFieldValue<uint64>(object_fields::Guid); }
-
+	
 	protected:
 		ObjectFieldMap m_fields;
+		Vector3 m_position;
+		Angle m_rotation;
 	};
 }

@@ -13,6 +13,7 @@ namespace mmo
 		explicit WorldInstance(WorldInstanceManager& manager);
 	
 	public:
+		
 		/// Called to update the world instance once every tick.
 		void Update(const RegularUpdate& update);
 

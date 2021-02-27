@@ -23,11 +23,12 @@ namespace mmo
 	void WorldInstanceManager::OnUpdate()
 	{
 		const auto timestamp = GetAsyncTimeMs();
-		const float deltaTime = static_cast<float>(m_lastTick - timestamp) / 30.0f;
+		const auto deltaSeconds = static_cast<float>(timestamp - m_lastTick) / 1000.0f;
+		m_lastTick = timestamp;
 		
-		const RegularUpdate update{ timestamp, deltaTime };
+		const RegularUpdate update{ timestamp, deltaSeconds };
 		Update(update);
-
+		
 		ScheduleNextUpdate();
 	}
 

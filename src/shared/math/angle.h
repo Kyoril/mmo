@@ -58,7 +58,7 @@ namespace mmo
 		 * \brief Default constructor which assigns an angle unit value.
 		 * \param angle The value in angle units.
 		 */
-		explicit Angle(float angle)
+		explicit Angle(float angle = 0.0f)
 			: m_value(angle)
 		{
 		}

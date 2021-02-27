@@ -29,7 +29,7 @@ namespace mmo
 		{
 			if (QueryPerformanceFrequency(&timestamp))
 			{
-				s_qpcScaleToMs = 1000.0 / timestamp.QuadPart;
+				s_qpcScaleToMs = 1000.0 / static_cast<double>(timestamp.QuadPart);
 				s_qpcExists = true;
 			}
 
@@ -39,10 +39,10 @@ namespace mmo
 		if (s_qpcExists)
 		{
 			QueryPerformanceCounter(&timestamp);
-			return timestamp.QuadPart * s_qpcScaleToMs;
+			return static_cast<GameTime>(static_cast<double>(timestamp.QuadPart) * s_qpcScaleToMs);
 		}
 
-		return ::GetTickCount64();
+		return static_cast<GameTime>(::GetTickCount64());
 #else
         struct timeval tp;
         gettimeofday(&tp, nullptr);
