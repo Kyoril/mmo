@@ -134,13 +134,13 @@ namespace mmo
 		/// Serializes only fields that have been changed.
 		io::Writer& SerializeChanges(io::Writer& w) const
 		{
-			for (size_t i = 0; i < NumFields; i += 8)
+			for (size_t i = 0; i < m_data.size(); i += 8)
 			{
 				uint8 flag = 0;
 
 				for (size_t j = 0; j < 8; ++j)
 				{
-					if (i + j < NumFields)
+					if (i + j < m_data.size())
 					{
 						if (m_changes[i + j]) flag |= 1 << j;
 					}
@@ -149,7 +149,7 @@ namespace mmo
 				io::write<uint8>(flag);
 			}
 
-			for (size_t i = 0; i < NumFields; ++i)
+			for (size_t i = 0; i < m_data.size(); ++i)
 			{
 				if (m_changes[i])
 				{
