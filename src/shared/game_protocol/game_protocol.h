@@ -58,11 +58,23 @@ namespace mmo
 				CharDeleteResponse = 0x04,
 				/// Response of the server for a enter world packet.
 				NewWorld = 0x05,
+				/// Entering the world failed.
+				EnterWorldFailed = 0x06,
 
 				/// Counter constant
 				Count_,
 			};
 		}
+
+		namespace player_login_response
+		{
+			enum Type
+			{
+				NoWorldServer,
+				NoCharacter,
+
+			};
+		};
 
 
 		////////////////////////////////////////////////////////////////////////////////

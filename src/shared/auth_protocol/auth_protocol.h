@@ -138,7 +138,6 @@ namespace mmo
 				PlayerCharacterJoinFailed = 0x06,
 				/// Sent when a player character leaves the instance.
 				PlayerCharacterLeft = 0x07,
-				
 			};
 		}
 
@@ -147,7 +146,7 @@ namespace mmo
 		////////////////////////////////////////////////////////////////////////////////
 		// Typedefs
 
-		/// Enumerates possible authentification result codes.
+		/// Enumerates possible authentication result codes.
 		namespace auth_result
 		{
 			enum Type
@@ -188,65 +187,7 @@ namespace mmo
 		}
 
 		typedef auth_result::Type AuthResult;
-
-		/// Enumerates possible client platform architectures.
-		enum class AuthPlatform
-		{
-			/// 32 bit platform.
-			x86 = 0x00,
-			/// 64 bit platform.
-			x64 = 0x01
-		};
-
-		// Read and convert AuthPlatform value operator
-		inline io::Reader& operator>>(io::Reader& reader, AuthPlatform& out_platform)
-		{
-			uint32 val = 0;
-			if ((reader >> io::read<uint32>(val)))
-			{
-				switch (val)
-				{
-				case 0x00783836:
-					out_platform = AuthPlatform::x86;
-					break;
-				default:
-					reader.setFailure();
-					break;
-				}
-			}
-
-			return reader;
-		}
-
-		/// Enumerates possible operating systems a client can run on.
-		enum class AuthSystem
-		{
-			Windows,
-			MacOS
-		};
-
-		inline io::Reader& operator>>(io::Reader& reader, AuthSystem& out_system)
-		{
-			uint32 val = 0;
-			if ((reader >> io::read<uint32>(val)))
-			{
-				switch (val)
-				{
-				case 0x0057696e:
-					out_system = AuthSystem::Windows;
-					break;
-				case 0x004f5358:
-					out_system = AuthSystem::MacOS;
-					break;
-				default:
-					reader.setFailure();
-					break;
-				}
-			}
-
-			return reader;
-		}
-
+		
 		/// Enumerates possible client localizations.
 		enum class AuthLocale
 		{

@@ -56,12 +56,8 @@ namespace mmo
 
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
-
-		// Reset the logo frame ui
+		
 		s_frameMgr.ResetTopFrame();
-
-		// Reset texture
-		m_texture.reset();
 	}
 
 	const std::string & LoginState::GetName() const

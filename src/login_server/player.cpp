@@ -181,8 +181,6 @@ namespace mmo
 			>> io::read<uint8>(m_version2)
 			>> io::read<uint8>(m_version3)
 			>> io::read<uint16>(m_build)
-			>> m_platform
-			>> m_system
 			>> m_locale
 			>> io::read_container<uint8>(m_accountName)))
 		{

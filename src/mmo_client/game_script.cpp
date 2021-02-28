@@ -4,9 +4,13 @@
 #include "console.h"
 #include "login_connector.h"
 #include "realm_connector.h"
+#include "game_state_mgr.h"
+#include "world_state.h"
+
 
 #include <string>
 #include <functional>
+
 
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
@@ -41,6 +45,10 @@ namespace mmo
 			return &realms[index];
 		}
 
+		void Script_EnterWorld()
+		{
+			GameStateMgr::Get().SetGameState(WorldState::Name);
+		}
 
 		const mmo::CharacterView* Script_GetCharacterData(RealmConnector& connector, int32 index)
 		{
@@ -106,6 +114,7 @@ namespace mmo
 				.def("DeleteCharacter", &RealmConnector::DeleteCharacter),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
+			luabind::def("EnterWorld", &Script_EnterWorld),
 			luabind::def("print", &Script_Print)
 		];
 

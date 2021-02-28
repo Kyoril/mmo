@@ -13,7 +13,7 @@
 
 namespace mmo
 {
-	/// This class represents the game state manager. It manges all available game states
+	/// This class represents the game state manager. It manages all available game states
 	/// as well as the current game state.
 	class GameStateMgr final
 		: public NonCopyable

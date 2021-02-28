@@ -49,8 +49,6 @@ namespace mmo
 					<< io::write<uint8>(mmo::Minor)
 					<< io::write<uint8>(mmo::Build)
 					<< io::write<uint16>(mmo::Revision)
-					<< io::write<uint32>(0x00783836)	// Platform: x86
-					<< io::write<uint32>(0x0057696e)	// System: Win
 					<< io::write<uint32>(0x64654445)	// Locale: deDE
 					<< io::write_dynamic_range<uint8>(m_accountName);
 

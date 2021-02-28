@@ -73,10 +73,8 @@ namespace mmo
 		RealmManager &m_realmManager;
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
-		std::string m_address;						// IP address in string format
-		std::string m_accountName;						// Account name in uppercase letters
-		auth::AuthPlatform m_platform;			// Client platform (32 Bit / 64 Bit)
-		auth::AuthSystem m_system;				// User system (Windows, Mac)
+		std::string m_address;					// IP address in string format
+		std::string m_accountName;				// Account name in uppercase letters
 		auth::AuthLocale m_locale;				// Client language
 		uint8 m_version1;						// Major version: X.0.0.00000
 		uint8 m_version2;						// Minor version: 0.X.0.00000
