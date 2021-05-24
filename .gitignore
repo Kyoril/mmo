@@ -8,3 +8,4 @@ build/
 
 # Ignore fbx files
 deps/fbx/
+.vs/
