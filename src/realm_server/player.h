@@ -67,6 +67,11 @@ namespace mmo
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
 
+		void JoinWorld();
+
+		void OnWorldJoined();
+		void OnWorldJoinFailed();
+	
 	public:
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint16 opCode, PacketHandler &&handler);
@@ -98,6 +103,7 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
+		uint64 m_characterGuid;
 
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;

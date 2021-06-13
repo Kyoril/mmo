@@ -91,8 +91,7 @@ namespace mmo
 				ClientAuthSession = 0x02,
 			};
 		}
-
-
+		
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Realm <-> World section
@@ -111,6 +110,9 @@ namespace mmo
 				PlayerCharacterJoin = 0x02,
 				/// Sent when a player character should leave his world instance on this world node.
 				PlayerCharacterLeave = 0x03,
+				
+				/// A packet which will be forwarded to the game client.
+				ProxyPacket = 0x04,
 			};
 		}
 
@@ -138,6 +140,9 @@ namespace mmo
 				PlayerCharacterJoinFailed = 0x06,
 				/// Sent when a player character leaves the instance.
 				PlayerCharacterLeft = 0x07,
+				
+				/// A packet which will be forwarded to the game client.
+				ProxyPacket = 0x08,
 			};
 		}
 

@@ -463,4 +463,44 @@ namespace io
 	{
 		return detail::ReadString(value);
 	}
+	
+	namespace detail
+	{
+		struct ReadablePackedGuid
+		{
+			std::uint64_t& guid;
+
+			ReadablePackedGuid(std::uint64_t& guid_)
+				: guid(guid_)
+			{
+			}
+		};
+		
+		inline Reader &operator >> (Reader &r, const ReadablePackedGuid &surr)
+		{
+			std::uint8_t bitMask = 0;
+			r >> io::read<std::uint8_t>(bitMask);
+			if (!r) return r;
+			
+			surr.guid = 0;
+			
+			std::uint8_t value = 0;
+			for (size_t i = 0; i < sizeof(std::uint8_t); ++i)
+			{
+				if (bitMask & (1 << i))
+				{
+					r >> io::read<std::uint8_t>(value);
+					surr.guid |= static_cast<std::uint64_t>(value) << i;
+				}
+			}
+			
+			return r;
+		}
+		
+	}
+	
+	inline detail::ReadablePackedGuid read_packed_guid(std::uint64_t& plain_guid)
+	{
+		return detail::ReadablePackedGuid(plain_guid);
+	}
 }

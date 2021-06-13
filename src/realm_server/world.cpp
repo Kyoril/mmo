@@ -12,6 +12,7 @@
 
 #include "base/big_number.h"
 #include "base/constants.h"
+#include "base/utilities.h"
 
 
 namespace mmo
@@ -66,7 +67,7 @@ namespace mmo
 			auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
-				WLOG("Packet 0x" << std::hex << packetId << " is either unhandled or simply currently not handled");
+				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
 				return PacketParseResult::Disconnect;
 			}
 
@@ -244,17 +245,16 @@ namespace mmo
 
 		// Calculate M1 hash on server using values sent by the client and compare it against
 		// the M1 hash sent by the client to see if the passwords do match.
-		const BigNumber M1{ hash.data(), hash.size() };
-		auto sArr = M1.asByteArray(20);
-		if (std::equal(sArr.begin(), sArr.end(), rec_M1.begin()))
+		const BigNumber m1{ hash.data(), hash.size() };
+		if (auto sArr = m1.asByteArray(20); std::equal(sArr.begin(), sArr.end(), rec_M1.begin()))
 		{
 			// Finish SRP6 by calculating the M2 hash value that is sent back to the client for
 			// verification as well.
-			m_m2 = Sha1_BigNumbers({ A, M1, K });
+			m_m2 = Sha1_BigNumbers({ A, m1, K });
 			m_sessionKey = 0;
 			
 			// Handler method
-			std::weak_ptr<World> weakThis{ shared_from_this() };
+			std::weak_ptr weakThis{ shared_from_this() };
 			auto handler = [weakThis, K](bool success)
 			{
 				if (auto strongThis = weakThis.lock())
@@ -269,6 +269,9 @@ namespace mmo
 						// database maybe.
 						strongThis->m_sessionKey = K;
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PropagateMapList, *strongThis, &World::OnPropagateMapList);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoined, *strongThis, &World::OnPlayerCharacterJoined);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoinFailed, *strongThis, &World::OnPlayerCharacterJoinFailed);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterLeft, *strongThis, &World::OnPlayerCharacterLeft);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -295,7 +298,10 @@ namespace mmo
 
 			// Store session key in account database
 			m_database.asyncRequest<void>(
-				std::bind(&IDatabase::WorldLogin, std::placeholders::_1, m_worldId, K.asHexStr(), m_address, versionBuilder.str()),
+				[this, sessionKey = K.asHexStr(), capture1 = versionBuilder.str()](auto&& database)
+				{
+					database->WorldLogin(m_worldId, sessionKey, m_address, capture1);
+				},
 				std::move(handler));
 
 			// Stop here since we wait for the database callback
@@ -331,6 +337,23 @@ namespace mmo
 		});
 	}
 
+	void World::ConsumeOnCharacterJoinedCallback(uint64 characterGuid, bool success)
+	{
+		JoinWorldCallback callback = nullptr;
+
+		{
+			std::scoped_lock<std::mutex> lock { m_joinCallbackMutex};
+
+			if (const auto result = m_joinCallbacks.find(characterGuid); result != m_joinCallbacks.end())
+			{
+				callback = std::move(result->second);
+				m_joinCallbacks.erase(result);
+			}
+		}
+
+		callback(success);
+	}
+
 	PacketParseResult World::OnPropagateMapList(auth::IncomingPacket& packet)
 	{
 		std::scoped_lock<std::mutex> lock{ m_hostedMapIdMutex };
@@ -348,6 +371,22 @@ namespace mmo
 		}
 		
 		return PacketParseResult::Pass;
+	}
+
+	void World::Join(uint64 characterId, JoinWorldCallback callback)
+	{
+		// TODO: What if we already have a waiting callback? Right now we just discard the old one
+		if (callback)
+		{
+			m_joinCallbacks[characterId] = std::move(callback);	
+		}
+		
+		GetConnection().sendSinglePacket([characterId](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
+			outPacket << io::write_packed_guid(characterId);
+			outPacket.Finish();
+		});
 	}
 
 	void World::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
@@ -389,10 +428,47 @@ namespace mmo
 		// Instance creation might fail, in which case we also want to be notified about failure and
 		// the reason of failure!
 
-		GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
-			{
-				outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
-				outPacket.Finish();
-			});
+		
+	}
+	
+	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		if (!(packet >> io::read_packed_guid(characterGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		DLOG("Player character " << log_hex_digit(characterGuid) << " successfully joined world instance!");
+		ConsumeOnCharacterJoinedCallback(characterGuid, true);
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnPlayerCharacterJoinFailed(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		if (!(packet >> io::read_packed_guid(characterGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		DLOG("Player character " << log_hex_digit(characterGuid) << " failed to join world instance!");
+		ConsumeOnCharacterJoinedCallback(characterGuid, false);
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnPlayerCharacterLeft(auth::IncomingPacket& packet)
+	{
+		uint64 playerGuid = 0;
+		if (!(packet >> io::read_packed_guid(playerGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		DLOG("Player character " << log_hex_digit(playerGuid) << " left world instance!");
+		
+		return PacketParseResult::Pass;
 	}
 }
