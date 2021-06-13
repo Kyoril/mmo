@@ -117,7 +117,7 @@ namespace mmo
 			auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
-				WLOG("Packet 0x" << std::hex << packetId << " is either unhandled or simply currently not handled");
+				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
 				return PacketParseResult::Disconnect;
 			}
 
@@ -234,13 +234,26 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Create a new map instance for the current map id of the character
-		strongWorld->RequestMapInstanceCreation(mapId);
-		
-		// TODO: Send character data to the given world node so that the character can spawn there
-
-		// TODO: From here on, act as proxy for the world node
-
+		// Send join request
+		std::weak_ptr weakThis = shared_from_this();
+		strongWorld->Join(guid, [weakThis] (bool success)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+			
+			if (success)
+			{
+				strongThis->OnWorldJoined();
+			}
+			else
+			{
+				strongThis->OnWorldJoinFailed();
+			}
+		});
+	
 		return PacketParseResult::Pass;
 	}
 
@@ -379,6 +392,32 @@ namespace mmo
 		{
 			ClearPacketHandler(game::client_realm_packet::EnterWorld);
 		}
+	}
+
+	void Player::JoinWorld()
+	{
+		const auto strongWorld = m_world.lock();
+		if (strongWorld)
+		{
+			strongWorld->GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
+				outPacket << io::write<uint32>(0);
+				outPacket.Finish();
+			});	
+		}
+	}
+
+	void Player::OnWorldJoined()
+	{
+		// TODO: Implementation
+		DLOG("TODO: Implement " << __FUNCTION__);
+	}
+
+	void Player::OnWorldJoinFailed()
+	{
+		// TODO: Implementation
+		DLOG("TODO: Implement " << __FUNCTION__);
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

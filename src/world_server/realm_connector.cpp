@@ -5,6 +5,7 @@
 #include "world_instance.h"
 #include "version.h"
 
+#include "base/utilities.h"
 #include "base/clock.h"
 #include "base/constants.h"
 #include "base/timer_queue.h"
@@ -308,15 +309,28 @@ namespace mmo
 		}
 		return PacketParseResult::Pass;
 	}
-
+	
 	PacketParseResult RealmConnector::OnPlayerCharacterJoin(auth::IncomingPacket& packet)
 	{
 		// Read packet data
+		uint64 guid = 0;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 		
-		DLOG("Player character wants to join world...");
+		DLOG("Player character " << log_hex_digit(guid) << " wants to join world...");
 
 		// Just a little test for now
-		m_worldInstanceManager.CreateInstance(0);
+		WorldInstance& instance = m_worldInstanceManager.CreateInstance(0);
+
+		// TODO: For now, just tell the realm server that we joined
+		sendSinglePacket([guid](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::PlayerCharacterJoined);
+			outPacket << io::write_packed_guid(guid);
+			outPacket.Finish();
+		});
 		
 		return PacketParseResult::Pass;
 	}

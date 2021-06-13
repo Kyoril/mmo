@@ -280,30 +280,30 @@ namespace io
 
 	namespace detail
 	{
-		struct PackedGuid
+		struct WritablePackedGuid
 		{
-			const unsigned long long &guid;
+			const std::uint64_t& guid;
 
-			PackedGuid(const unsigned long long &guid_)
+			WritablePackedGuid(const std::uint64_t& guid_)
 				: guid(guid_)
 			{
 			}
 		};
 
-		inline Writer &operator << (Writer &w, const PackedGuid &surr)
+		inline Writer &operator << (Writer &w, const WritablePackedGuid &surr)
 		{
-			unsigned long long guid = surr.guid;
+			std::uint64_t guid = surr.guid;
 
-			unsigned char packGUID[8 + 1];
+			std::uint8_t packGUID[8 + 1];
 			packGUID[0] = 0;
 			size_t size = 1;
 
-			for (unsigned char  i = 0; guid != 0; ++i)
+			for (std::uint8_t i = 0; guid != 0; ++i)
 			{
 				if (guid & 0xFF)
 				{
-					packGUID[0] |= static_cast<unsigned char>(1 << i);
-					packGUID[size] = static_cast<unsigned char>(guid & 0xFF);
+					packGUID[0] |= static_cast<std::uint8_t>(1 << i);
+					packGUID[size] = static_cast<std::uint8_t>(guid & 0xFF);
 					++size;
 				}
 
@@ -315,8 +315,8 @@ namespace io
 		}
 	}
 
-	inline detail::PackedGuid write_packed_guid(const unsigned long long &plain_guid)
+	inline detail::WritablePackedGuid write_packed_guid(const std::uint64_t& plain_guid)
 	{
-		return detail::PackedGuid(plain_guid);
+		return detail::WritablePackedGuid(plain_guid);
 	}
 }

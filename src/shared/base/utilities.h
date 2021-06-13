@@ -2,9 +2,9 @@
 #pragma once
 
 #include <string>
-#include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <iomanip>
 #include <vector>
 #ifndef _MSC_VER
 #	include <strings.h>
@@ -96,5 +96,34 @@ namespace mmo
 		{
 			out_tokens.emplace_back(std::move(token));
 		}
+	}
+	
+	namespace detail
+	{
+		template<class T>
+		struct WritableHexDigit
+		{
+			const T& digit;
+
+			explicit WritableHexDigit(const T& in_digit)
+				: digit(in_digit)
+			{
+			}
+		};
+		
+		template<class T>
+		std::ostream &operator <<(std::ostream &stream, const WritableHexDigit<T> &digit)
+		{
+			return stream
+				<< "0x" 
+				<< std::hex << std::setfill('0') << std::setw(sizeof(digit.digit) * 2)
+				<< digit.digit;
+		}
+	}
+	
+	template<typename T>
+	static detail::WritableHexDigit<T> log_hex_digit(const T& digit)
+	{
+		return detail::WritableHexDigit<T>(digit);
 	}
 }

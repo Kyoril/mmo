@@ -21,6 +21,8 @@ namespace mmo
 {
 	class AsyncDatabase;
 
+	/// Callback executed after a world join returned a result.
+	typedef std::function<void(bool success)> JoinWorldCallback;
 
 	/// This class represents a world node connection on the realm server.
 	class World final
@@ -45,6 +47,7 @@ namespace mmo
 		WorldManager &GetManager() const { return m_manager; }
 		/// Gets the name of this world.
 		const String& GetWorldName() const { return m_worldName; }
+		void Join(uint64 characterId, JoinWorldCallback callback);
 
 	public:
 		/// Registers a packet handler.
@@ -90,6 +93,8 @@ namespace mmo
 		BigNumber m_reconnectProof;
 		BigNumber m_reconnectKey;
 		SHA1Hash m_m2;
+		std::mutex m_joinCallbackMutex;
+		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
 
 	private:
 		/// Closes the connection if still connected.
@@ -97,6 +102,8 @@ namespace mmo
 
 		void SendAuthProof(auth::AuthResult result);
 
+		void ConsumeOnCharacterJoinedCallback(uint64 characterGuid, bool success);
+	
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()
 		void connectionLost() override;
@@ -104,7 +111,7 @@ namespace mmo
 		void connectionMalformedPacket() override;
 		/// @copydoc mmo::auth::IConnectionListener::connectionPacketReceived()
 		PacketParseResult connectionPacketReceived(auth::IncomingPacket &packet) override;
-
+		
 	private:
 		/// Handles an incoming packet with packet id LogonChallenge.
 		/// @param packet The packet data.
@@ -115,5 +122,10 @@ namespace mmo
 		/// Handles an incoming packet with packet id OnPropagateMapList.
 		/// @param packet The packet data.
 		PacketParseResult OnPropagateMapList(auth::IncomingPacket& packet);
+		
+		PacketParseResult OnPlayerCharacterJoined(auth::IncomingPacket& packet);
+		PacketParseResult OnPlayerCharacterJoinFailed(auth::IncomingPacket& packet);
+		PacketParseResult OnPlayerCharacterLeft(auth::IncomingPacket& packet);
 	};
+
 }
