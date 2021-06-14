@@ -51,7 +51,7 @@ namespace mmo
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
 		/// Handles the CharEnum packet.
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
-		PacketParseResult OnNewWorld(game::IncomingPacket& packet);
+		PacketParseResult OnLoginVerifyWorld(game::IncomingPacket& packet);
 		PacketParseResult OnEnterWorldFailed(game::IncomingPacket& packet);
 
 	public:

@@ -205,12 +205,14 @@ namespace mmo
 
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
 
+		// TODO: Load actual character data from database
+		
 		// Obtain the map id of the selected character
 		uint32 mapId = 0;
+		CharacterView charView;
 		{
 			std::scoped_lock<std::mutex> lock{ m_charViewMutex };
 			
-			// Ensure that the character exists and belongs to our account
 			const auto charViewIt = m_characterViews.find(guid);
 			if (charViewIt == m_characterViews.end())
 			{
@@ -218,8 +220,7 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 			
-			// Cache the characters current map id
-			mapId = charViewIt->second.GetMapId();
+			charView = charViewIt->second;
 		}
 		
 		// Find a world node for the character's map id
@@ -410,14 +411,28 @@ namespace mmo
 
 	void Player::OnWorldJoined()
 	{
-		// TODO: Implementation
-		DLOG("TODO: Implement " << __FUNCTION__);
+		m_connection->sendSinglePacket([](game::OutgoingPacket& out_packet)
+		{
+			out_packet.Start(game::realm_client_packet::LoginVerifyWorld);
+			out_packet
+				<< io::write<uint32>(0)	// TODO: map id
+				<< io::write<float>(0)	// TODO: current x
+				<< io::write<float>(0)	// TODO: current y
+				<< io::write<float>(0)	// TODO: current z
+				<< io::write<float>(0)	// TODO: current rotation yaw in radians
+			;
+			out_packet.Finish();
+		});
 	}
 
 	void Player::OnWorldJoinFailed()
 	{
-		// TODO: Implementation
-		DLOG("TODO: Implement " << __FUNCTION__);
+		m_connection->sendSinglePacket([](game::OutgoingPacket& out_packet)
+		{
+			out_packet.Start(game::realm_client_packet::EnterWorldFailed);
+			// TODO: Send error code?
+			out_packet.Finish();
+		});
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

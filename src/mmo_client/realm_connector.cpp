@@ -86,7 +86,7 @@ namespace mmo
 		{
 			// From here on, we accept CharEnum packets
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
-			RegisterPacketHandler(game::realm_client_packet::NewWorld, *this, &RealmConnector::OnNewWorld);
+			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &RealmConnector::OnLoginVerifyWorld);
 			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &RealmConnector::OnEnterWorldFailed);
 
 			// And now, we ask for the character list
@@ -118,13 +118,13 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult RealmConnector::OnNewWorld(game::IncomingPacket& packet)
+	PacketParseResult RealmConnector::OnLoginVerifyWorld(game::IncomingPacket& packet)
 	{
 		DLOG("New world packet received");
 		
 		return PacketParseResult::Pass;
 	}
-
+	
 	PacketParseResult RealmConnector::OnEnterWorldFailed(game::IncomingPacket& packet)
 	{
 		ELOG("Failed to enter world!");

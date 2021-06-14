@@ -57,7 +57,7 @@ namespace mmo
 				/// Response of the server for a character deletion packet.
 				CharDeleteResponse = 0x04,
 				/// Response of the server for a enter world packet.
-				NewWorld = 0x05,
+				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
 
