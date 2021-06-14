@@ -8,6 +8,7 @@
 #include <memory>
 #include <istream>
 #include <ostream>
+#include <vector>
 
 
 namespace mmo

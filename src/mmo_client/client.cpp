@@ -29,6 +29,7 @@
 #include "model_renderer.h"
 #include "world_frame.h"
 #include "world_renderer.h"
+#include "loading_screen.h"
 
 #include <fstream>
 #include <thread>
