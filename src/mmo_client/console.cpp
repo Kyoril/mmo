@@ -267,10 +267,9 @@ namespace mmo
 			break;
 #endif
 		case GraphicsApi::OpenGL:
-			// TODO: Create OpenGL graphics device here
+			throw std::runtime_error("OpenGL device creation is not currently supported!");
 		default:
 			throw std::runtime_error("Unsupported graphics API value used!");
-			break;
 		}
 
 		// Get the current graphics device object
