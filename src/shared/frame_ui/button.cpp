@@ -12,9 +12,6 @@ namespace mmo
 	Button::Button(const std::string & type, const std::string & name)
 		: Frame(type, name)
 	{
-		// Register events
-		//RegisterEvent(ButtonClickedEvent);
-
 		// Buttons are focusable by default
 		m_focusable = true;
 	}
@@ -23,8 +20,7 @@ namespace mmo
 	{
 		if (button == MouseButton::Left)
 		{
-			const Rect frame = GetAbsoluteFrameRect();
-			if (frame.IsPointInRect(position))
+			if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 			{
 				// Trigger lua clicked event handler if there is any
 				if (m_clickedHandler.is_valid())

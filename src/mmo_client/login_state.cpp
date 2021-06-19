@@ -4,6 +4,9 @@
 #include "login_connector.h"
 #include "realm_connector.h"
 #include "console.h"
+#include "game_state_mgr.h"
+#include "loading_screen.h"
+#include "world_state.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
@@ -63,6 +66,17 @@ namespace mmo
 	const std::string & LoginState::GetName() const
 	{
 		return LoginState::Name;
+	}
+
+	void LoginState::EnterWorld(const CharacterView& character)
+	{
+		// TODO: Load data
+		LoadingScreen::Show();
+		
+		// Send packet
+		m_realmConnector.EnterWorld(character);
+		
+		GameStateMgr::Get().SetGameState(WorldState::Name);
 	}
 
 	void LoginState::OnPaint()

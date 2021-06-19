@@ -6,10 +6,12 @@
 #include "realm_connector.h"
 #include "game_state_mgr.h"
 #include "world_state.h"
+#include "login_state.h"
 
 
 #include <string>
 #include <functional>
+#include <utility>
 
 
 #include "luabind/luabind.hpp"
@@ -27,12 +29,7 @@ namespace mmo
 			ASSERT(cmdLine);
 			Console::ExecuteCommand(cmdLine);
 		}
-
-		int32 Script_GetRealmCount(LoginConnector& connector)
-		{
-			return static_cast<int32>(connector.GetRealms().size());
-		}
-
+		
 		const mmo::RealmData* Script_GetRealmData(LoginConnector& connector, int32 index)
 		{
 			const auto& realms = connector.GetRealms();
@@ -49,19 +46,7 @@ namespace mmo
 		{
 			GameStateMgr::Get().SetGameState(WorldState::Name);
 		}
-
-		const mmo::CharacterView* Script_GetCharacterData(RealmConnector& connector, int32 index)
-		{
-			const auto& chars = connector.GetCharacterViews();
-			if (index < 0 || index >= chars.size())
-			{
-				ELOG("GetCharacter: Invalid character index provided (" << index << ")");
-				return nullptr;
-			}
-
-			return &chars[index];
-		}
-
+		
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
@@ -69,10 +54,10 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, std::shared_ptr<LoginState> loginState)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
-		, m_globalFunctionsRegistered(false)
+		, m_loginState(std::move(loginState))
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -94,24 +79,31 @@ namespace mmo
 		// Register common functions
 		luabind::module(m_luaState.get())
 		[
-			luabind::class_<mmo::RealmData>("RealmData")
-				.def_readonly("id", &mmo::RealmData::id)
-				.def_readonly("name", &mmo::RealmData::name),
+			luabind::scope(
+				luabind::class_<mmo::RealmData>("RealmData")
+					.def_readonly("id", &mmo::RealmData::id)
+					.def_readonly("name", &mmo::RealmData::name)),
 
-			luabind::class_<mmo::CharacterView>("CharacterView")
-				.def_readonly("guid", &mmo::CharacterView::GetGuid)
-				.def_readonly("name", &mmo::CharacterView::GetName),
+			luabind::scope(
+				luabind::class_<mmo::CharacterView>("CharacterView")
+					.def_readonly("guid", &mmo::CharacterView::GetGuid)
+					.def_readonly("name", &mmo::CharacterView::GetName)),
 
-			luabind::class_<LoginConnector>("LoginConnector")
-				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator()),
+			luabind::scope(
+				luabind::class_<LoginConnector>("LoginConnector")
+					.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())),
 
-			luabind::class_<RealmConnector>("RealmConnector")
-				.def("ConnectToRealm", &RealmConnector::ConnectToRealm)
-				.def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
-				.def("GetRealmName", &RealmConnector::GetRealmName)
-				.def("EnterWorld", &RealmConnector::EnterWorld)
-				.def("CreateCharacter", &RealmConnector::CreateCharacter)
-				.def("DeleteCharacter", &RealmConnector::DeleteCharacter),
+			luabind::scope(
+				luabind::class_<RealmConnector>("RealmConnector")
+	               .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
+	               .def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
+	               .def("GetRealmName", &RealmConnector::GetRealmName)
+	               .def("CreateCharacter", &RealmConnector::CreateCharacter)
+	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
+
+			luabind::scope(
+				luabind::class_<LoginState>("LoginState")
+					.def("EnterWorld", &LoginState::EnterWorld)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("EnterWorld", &Script_EnterWorld),
@@ -121,6 +113,7 @@ namespace mmo
 		// Set login connector instance
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
+		luabind::globals(m_luaState.get())["loginState"] = m_loginState.get();
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

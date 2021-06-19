@@ -36,6 +36,8 @@
 #include <memory>
 #include <mutex>
 
+#include "world_state.h"
+
 
 ////////////////////////////////////////////////////////////////
 // Network handler
@@ -263,18 +265,24 @@ namespace mmo
 
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
+		
+		// Register game states
+		const auto loginState = std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector);
+		GameStateMgr::Get().AddGameState(loginState);
 
+		const auto worldState = std::make_shared<WorldState>(*s_realmConnector);
+		GameStateMgr::Get().AddGameState(worldState);
+		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector);
-
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState);
+		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
 		{
 			return false;
 		}
 
-		// Register game states
-		GameStateMgr::Get().AddGameState(std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector));
+		// Enter login state
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 
 		// Lets setup a test command
