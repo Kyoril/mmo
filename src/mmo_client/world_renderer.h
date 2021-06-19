@@ -5,8 +5,6 @@
 
 #include "frame_ui/frame_renderer.h"
 #include "graphics/render_texture.h"
-#include "graphics/vertex_buffer.h"
-#include "graphics/index_buffer.h"
 #include "base/signal.h"
 
 

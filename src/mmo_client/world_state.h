@@ -6,6 +6,8 @@
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "scene_graph/scene.h"
+#include "scene_graph/camera.h"
 #include "base/signal.h"
 
 
@@ -43,5 +45,6 @@ namespace mmo
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
+		Scene m_scene;
 	};
 }

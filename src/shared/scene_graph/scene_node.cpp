@@ -5,7 +5,4 @@
 
 namespace mmo
 {
-	namespace scene_graph
-	{
-	}
 }

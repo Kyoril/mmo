@@ -5,16 +5,13 @@
 
 namespace mmo
 {
-	namespace scene_graph
+	/// Interface for a renderable object in a scene.
+	class IRenderable
 	{
-		/// Interface for a renderable object in a scene.
-		class IRenderable
-		{
-		public:
-			virtual ~IRenderable() = default;
+	public:
+		virtual ~IRenderable() = default;
 
-		public:
+	public:
 
-		};
-	}
+	};
 }

@@ -7,17 +7,14 @@
 
 namespace mmo
 {
-	namespace scene_graph
+	/// This class is a node inside of a scene. Nodes can be used to group
+	/// movable objects together and move them around in a scene.
+	/// Each scene has exactly one root node, which can have one or multiple
+	/// child nodes and/or attached movable objects to it.
+	class SceneNode final
+		: public NonCopyable
 	{
-		/// This class is a node inside of a scene. Nodes can be used to group
-		/// movable objects together and move them around in a scene.
-		/// Each scene has exactly one root node, which can have one or multiple
-		/// child nodes and/or attached movable objects to it.
-		class SceneNode final
-			: public NonCopyable
-		{
-		public:
+	public:
 
-		};
 	}
 }

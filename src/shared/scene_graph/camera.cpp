@@ -5,7 +5,9 @@
 
 namespace mmo
 {
-	namespace scene_graph
+	Camera::Camera(Scene& scene, String name)
+		: MovableObject(scene)
+		, m_name(std::move(name))
 	{
 	}
 }
