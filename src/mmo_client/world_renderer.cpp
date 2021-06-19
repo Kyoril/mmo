@@ -69,6 +69,8 @@ namespace mmo
 		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
 
 		// TODO: Render world scene
+
+		
 		
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();
