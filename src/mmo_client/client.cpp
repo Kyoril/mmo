@@ -316,7 +316,6 @@ namespace mmo
 		NetDestroy();
 
 		// Destroy the graphics device object
-		GraphicsDevice::Destroy();
 		Console::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();

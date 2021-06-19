@@ -15,9 +15,7 @@ namespace mmo
 {
 	const std::string WorldState::Name = "world";
 
-	static FrameManager& s_frameMgr = FrameManager::Get();
-
-
+	
 	WorldState::WorldState(RealmConnector& realmConnector)
 		: m_realmConnector(realmConnector)
 	{
@@ -26,15 +24,15 @@ namespace mmo
 	void WorldState::OnEnter()
 	{
 		// Make the top frame element
-		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopGameFrame");
+		auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
 		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
-		s_frameMgr.SetTopFrame(topFrame);
+		FrameManager::Get().SetTopFrame(topFrame);
 
 		// Load ui file
-		s_frameMgr.LoadUIFile("Interface/GameUI/GameUI.toc");
+		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
 
 		// Register drawing of the game ui
 		m_paintLayer = Screen::AddLayer(std::bind(&WorldState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -49,7 +47,7 @@ namespace mmo
 		Screen::RemoveLayer(m_paintLayer);
 
 		// Reset the logo frame ui
-		s_frameMgr.ResetTopFrame();
+		FrameManager::Get().ResetTopFrame();
 	}
 
 	const std::string& WorldState::GetName() const
@@ -65,7 +63,7 @@ namespace mmo
 	void WorldState::OnRealmDisconnected()
 	{
 		// Trigger the lua event
-		s_frameMgr.TriggerLuaEvent("REALM_DISCONNECTED");
+		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 
 		// Go back to login state
 		GameStateMgr::Get().SetGameState(LoginState::Name);

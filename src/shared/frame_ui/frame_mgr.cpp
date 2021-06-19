@@ -26,8 +26,6 @@
 
 namespace mmo
 {
-	static FrameManager &s_frameMgr = FrameManager::Get();
-
 	// Forward declaration for detail methods
 	void LoadUIFile(const std::string& filename);
 
@@ -285,10 +283,12 @@ namespace mmo
 		}
 	}
 
+	static std::unique_ptr<FrameManager> s_frameMgr;
+	
 	FrameManager& FrameManager::Get()
 	{
-		static FrameManager s_frameMgr;
-		return s_frameMgr;
+		ASSERT(s_frameMgr);
+		return *s_frameMgr;
 	}
 
 	namespace
@@ -301,9 +301,12 @@ namespace mmo
 
 	void FrameManager::Initialize(lua_State* luaState)
 	{
+		ASSERT(!s_frameMgr);
+		s_frameMgr = std::make_unique<FrameManager>();
+		
 		// Verify and register lua state
 		ASSERT(luaState);
-		FrameManager::Get().m_luaState = luaState;
+		s_frameMgr->m_luaState = luaState;
 
 		// Expose classes and methods to the lua state
 		luabind::module(luaState)
@@ -351,12 +354,12 @@ namespace mmo
 		RegisterDefaultRenderers();
 
 		// Register frame factories
-		FrameManager::Get().RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
-		FrameManager::Get().RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
-		FrameManager::Get().RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
+		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
+		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 
 		// Load localization
-		if (!FrameManager::Get().m_localization.LoadFromFile())
+		if (!s_frameMgr->m_localization.LoadFromFile())
 		{
 			ELOG("Failed to load localization data!");
 		}
@@ -364,14 +367,7 @@ namespace mmo
 
 	void FrameManager::Destroy()
 	{
-		auto& frameMgr = FrameManager::Get();
-
-		// Unregister all frame and renderer factories
-		frameMgr.ClearFrameFactories();
-		frameMgr.m_rendererFactories.clear();
-
-		// No longer use the lua state
-		frameMgr.m_luaState = nullptr;
+		s_frameMgr.reset();
 	}
 
 	void FrameManager::LoadUIFile(const std::string& filename)

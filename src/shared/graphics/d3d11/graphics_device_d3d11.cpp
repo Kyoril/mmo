@@ -134,6 +134,10 @@ namespace mmo
 			&m_featureLevel,
 			&m_immContext)));
 
+#ifdef _DEBUG
+		m_device->QueryInterface(__uuidof(ID3D11Debug), &m_d3dDebug);
+#endif
+		
 		// Create input layouts
 		CreateInputLayouts();
 
@@ -395,6 +399,22 @@ namespace mmo
 		}
 
 		return result;
+	}
+
+	GraphicsDeviceD3D11::GraphicsDeviceD3D11()
+		: m_rasterizerDesc()
+		, m_samplerDesc()
+	{
+	}
+
+	GraphicsDeviceD3D11::~GraphicsDeviceD3D11()
+	{
+#ifdef _DEBUG
+		if (m_d3dDebug)
+		{
+			m_d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+		}
+#endif
 	}
 
 	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)

@@ -15,10 +15,7 @@
 namespace mmo
 {
 	const std::string LoginState::Name = "login";
-
-	static FrameManager &s_frameMgr = FrameManager::Get();
-
-
+	
 	LoginState::LoginState(LoginConnector & loginConnector, RealmConnector & realmConnector)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
@@ -27,16 +24,18 @@ namespace mmo
 
 	void LoginState::OnEnter()
 	{
+		FrameManager& frameMgr = FrameManager::Get();
+		
 		// Make the top frame element
-		auto topFrame = s_frameMgr.CreateOrRetrieve("Frame", "TopFrame");
+		auto topFrame = frameMgr.CreateOrRetrieve("Frame", "TopFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
 		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
-		s_frameMgr.SetTopFrame(topFrame);
+		frameMgr.SetTopFrame(topFrame);
 
 		// Load ui file
-		s_frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
+		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
 
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -60,7 +59,7 @@ namespace mmo
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
 		
-		s_frameMgr.ResetTopFrame();
+		FrameManager::Get().ResetTopFrame();
 	}
 
 	const std::string & LoginState::GetName() const
@@ -103,13 +102,13 @@ namespace mmo
 
 	void LoginState::OnCharListUpdated()
 	{
-		s_frameMgr.TriggerLuaEvent("CHAR_LIST");
+		FrameManager::Get().TriggerLuaEvent("CHAR_LIST");
 	}
 
 	void LoginState::OnRealmDisconnected()
 	{
 		// Trigger the lua event
-		s_frameMgr.TriggerLuaEvent("REALM_DISCONNECTED");
+		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 	}
 
 	void LoginState::OnRealmListUpdated()
@@ -119,7 +118,7 @@ namespace mmo
 		// available (if there is any).
 
 		// Trigger the lua event
-		s_frameMgr.TriggerLuaEvent("REALM_LIST");
+		FrameManager::Get().TriggerLuaEvent("REALM_LIST");
 	}
 	
 	void LoginState::OnRealmAuthenticationResult(uint8 result)

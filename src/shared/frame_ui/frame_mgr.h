@@ -40,6 +40,8 @@ namespace mmo
 		std::map<std::string, std::vector<std::weak_ptr<Frame>>> m_eventFrames;
 
 	private:
+		friend std::unique_ptr<FrameManager> std::make_unique<FrameManager>();
+		
 		/// Private destructor to avoid instancing.
 		FrameManager() = default;
 
@@ -143,9 +145,9 @@ namespace mmo
 
 	public:
 		/// Gets the root frame or nullptr if there is none.
-		inline FramePtr GetTopFrame() const noexcept { return m_topFrame; }
+		FramePtr GetTopFrame() const noexcept { return m_topFrame; }
 		/// Gets the localization instance.
-		inline const Localization& GetLocalization() const noexcept { return m_localization; }
+		const Localization& GetLocalization() const noexcept { return m_localization; }
 
 	private:
 		/// A map of mouse-down frames.
