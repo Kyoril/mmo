@@ -282,8 +282,7 @@ namespace mmo
 			EventLoop::Terminate(0);
 		});
 		device.GetAutoCreatedWindow()->Resized.connect([](uint16 width, uint16 height) {
-			auto topFrame = FrameManager::Get().GetTopFrame();
-			if (topFrame)
+			if (auto topFrame = FrameManager::Get().GetTopFrame(); topFrame)
 			{
 				topFrame->Invalidate();
 				topFrame->InvalidateChildren();
@@ -404,7 +403,7 @@ namespace mmo
 	inline void Console::RegisterCommand(const std::string & command, ConsoleCommandHandler handler, ConsoleCommandCategory category, const std::string & help)
 	{
 		// Don't do anything if this console command is already registered
-		auto it = s_consoleCommands.find(command);
+		const auto it = s_consoleCommands.find(command);
 		if (it != s_consoleCommands.end())
 		{
 			return;

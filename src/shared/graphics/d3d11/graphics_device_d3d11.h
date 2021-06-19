@@ -20,48 +20,52 @@ namespace mmo
 		: public GraphicsDevice
 	{
 	public:
+		GraphicsDeviceD3D11();
+		~GraphicsDeviceD3D11() override;
+		
+	public:
 		// ~ Begin GraphicsDevice
-		virtual Matrix4 MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane) final override;
-		virtual Matrix4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane) final override;
-		virtual void Reset() final override;
-		virtual void SetClearColor(uint32 clearColor) final override;
-		virtual void Create(const GraphicsDeviceDesc& desc) final override;
-		virtual void Clear(ClearFlags Flags = ClearFlags::None) final override;
-		virtual VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) final override;
-		virtual IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) final override;
-		virtual ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) final override;
-		virtual void Draw(uint32 vertexCount, uint32 start = 0) final override;
-		virtual void DrawIndexed() final override;
-		virtual void SetTopologyType(TopologyType InType) final override;
-		virtual void SetVertexFormat(VertexFormat InFormat) final override;
-		virtual void SetBlendMode(BlendMode InBlendMode) final override;
-		virtual void CaptureState() final override;
-		virtual void RestoreState() final override;
-		virtual void SetTransformMatrix(TransformType type, Matrix4 const& matrix) final override;
-		virtual TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) final override;
-		virtual void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) final override;
-		virtual void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) final override;
-		virtual void SetClipRect(int32 x, int32 y, int32 w, int32 h) final override;
-		virtual void ResetClipRect() final override;
-		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) final override;
-		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) final override;
-		virtual void SetFillMode(FillMode mode) final override;
-		virtual void SetFaceCullMode(FaceCullMode mode) final override;
-		virtual void SetTextureAddressMode(TextureAddressMode mode) final override;
-		virtual void SetTextureFilter(TextureFilter filter) final override;
+		Matrix4 MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane) override;
+		Matrix4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane) override;
+		void Reset() override;
+		void SetClearColor(uint32 clearColor) override;
+		void Create(const GraphicsDeviceDesc& desc) override;
+		void Clear(ClearFlags Flags = ClearFlags::None) override;
+		VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
+		IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
+		ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
+		void Draw(uint32 vertexCount, uint32 start = 0) override;
+		void DrawIndexed() override;
+		void SetTopologyType(TopologyType InType) override;
+		void SetVertexFormat(VertexFormat InFormat) override;
+		void SetBlendMode(BlendMode InBlendMode) override;
+		void CaptureState() override;
+		void RestoreState() override;
+		void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
+		TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) override;
+		void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
+		void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) override;
+		void SetClipRect(int32 x, int32 y, int32 w, int32 h) override;
+		void ResetClipRect() override;
+		RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) override;
+		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
+		void SetFillMode(FillMode mode) override;
+		void SetFaceCullMode(FaceCullMode mode) override;
+		void SetTextureAddressMode(TextureAddressMode mode) override;
+		void SetTextureFilter(TextureFilter filter) override;
 		// ~ End GraphicsDevice
 
 	public:
-		inline void SetIndexCount(UINT InIndexCount)
+		void SetIndexCount(UINT InIndexCount)
 		{
 			m_indexCount = InIndexCount;
 		}
-		inline bool HasTearingSupport() const noexcept { return m_tearingSupport; }
-		inline bool IsVSyncEnabled() const noexcept { return m_vsync; }
+		bool HasTearingSupport() const noexcept { return m_tearingSupport; }
+		bool IsVSyncEnabled() const noexcept { return m_vsync; }
 
 	public:
-		inline operator ID3D11Device&() const { return *m_device.Get(); }
-		inline operator ID3D11DeviceContext&() const { return *m_immContext.Get(); }
+		operator ID3D11Device&() const { return *m_device.Get(); }
+		operator ID3D11DeviceContext&() const { return *m_immContext.Get(); }
 
 	private:
 		/// Checks support for GSync displays.
@@ -116,7 +120,7 @@ namespace mmo
 		bool m_tearingSupport = false;
 		bool m_matrixDirty = false;
 		uint32 m_indexCount = 0;
-		FLOAT m_clearColorFloat[4];
+		FLOAT m_clearColorFloat[4] = {};
 		bool m_vsync = true;
 		RenderTargetPtr m_renderTarget;
 		D3D11_RASTERIZER_DESC m_rasterizerDesc;
@@ -125,5 +129,9 @@ namespace mmo
 		D3D11_SAMPLER_DESC m_samplerDesc;
 		bool m_samplerDescChanged = false;
 		size_t m_samplerHash = 0;
+
+#ifdef _DEBUG
+		ComPtr<ID3D11Debug> m_d3dDebug;
+#endif
 	};
 }
