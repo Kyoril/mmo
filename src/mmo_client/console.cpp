@@ -17,6 +17,8 @@
 #include <mutex>
 #include <algorithm>
 
+#include "loading_screen.h"
+
 
 namespace mmo
 {
@@ -317,6 +319,9 @@ namespace mmo
 		// Initialize the screen system
 		Screen::Initialize();
 
+		// Initialize loading screen
+		LoadingScreen::Init();
+
 		// Assign console log signal
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ s_consoleLogMutex };
@@ -361,7 +366,9 @@ namespace mmo
 
 		// Remove the console layer
 		Screen::RemoveLayer(s_consoleLayer);
-
+		
+		LoadingScreen::Destroy();
+		
 		// Destroy the screen system
 		Screen::Destroy();
 		

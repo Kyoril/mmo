@@ -12,6 +12,8 @@
 
 namespace mmo
 {
+	class LoginState;
+
 	/// Helper class for deleting a lua_State in a smart pointer.
 	struct LuaStateDeleter final
 	{
@@ -32,7 +34,8 @@ namespace mmo
 	public:
 		GameScript(
 			LoginConnector& loginConnector,
-			RealmConnector& realmConnector);
+			RealmConnector& realmConnector,
+			std::shared_ptr<LoginState> loginState);
 
 	public:
 		/// Gets the current lua state
@@ -52,5 +55,7 @@ namespace mmo
 		LuaStatePtr m_luaState;
 		/// Whether the global functions have been registered.
 		bool m_globalFunctionsRegistered = false;
+
+		std::shared_ptr<LoginState> m_loginState;
 	};
 }

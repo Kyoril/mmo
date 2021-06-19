@@ -1,13 +1,17 @@
 // Copyright (C) 2019, Robin Klimonow. All rights reserved.
 
 #include "game_state_mgr.h"
+#include "event_loop.h"
 
 #include "base/macros.h"
 
 
 namespace mmo
 {
-	GameStateMgr::GameStateMgr() = default;
+	GameStateMgr::GameStateMgr()
+	{
+		m_idleConnection = EventLoop::Idle.connect(*this, &GameStateMgr::Idle);
+	}
 
 	void GameStateMgr::RemoveAllGameStates()
 	{
@@ -30,21 +34,36 @@ namespace mmo
 
 	void GameStateMgr::RemoveGameState(const std::string & name)
 	{
-		ASSERT(m_gameStates.find(name) != m_gameStates.end());
-		m_gameStates.erase(m_gameStates.find(name));
+		const auto gameStateIt = m_gameStates.find(name);
+		ASSERT(gameStateIt != m_gameStates.end());
+		ASSERT(gameStateIt->second != m_currentState);
+		
+		m_gameStates.erase(gameStateIt);
 	}
 
 	void GameStateMgr::SetGameState(const std::string & name)
 	{
-		ASSERT(m_gameStates.find(name) != m_gameStates.end());
-		
-		if (m_currentState)
-		{
-			m_currentState->OnLeave();
-		}
+		const auto it = m_gameStates.find(name);
+		ASSERT(it != m_gameStates.end());
 
-		m_currentState = m_gameStates.find(name)->second;
-		m_currentState->OnEnter();
+		m_pendingState = it->second;
+	}
+
+	void GameStateMgr::Idle(float deltaSeconds, GameTime timestamp)
+	{
+		auto pendingState = m_pendingState.lock();
+		m_pendingState.reset();
+			
+		if (pendingState)
+		{
+			if (m_currentState)
+			{
+				m_currentState->OnLeave();
+			}
+
+			m_currentState = std::move(pendingState);
+			m_currentState->OnEnter();
+		}
 	}
 
 	GameStateMgr & GameStateMgr::Get()

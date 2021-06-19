@@ -16,6 +16,7 @@
 
 #include <set>
 #include <string>
+#include <utility>
 
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
@@ -309,38 +310,41 @@ namespace mmo
 		[
 			luabind::def("Localize", &LuaLocalize),
 
-			luabind::class_<AnchorPoint>("AnchorPoint")
-				.enum_("type")
-				[
-					luabind::value("NONE", 0),
+			luabind::scope(
+				luabind::class_<AnchorPoint>("AnchorPoint")
+					.enum_("type")
+					[
+						luabind::value("NONE", 0),
 
-					luabind::value("TOP", 1),
-					luabind::value("RIGHT", 2),
-					luabind::value("BOTTOM", 3),
-					luabind::value("LEFT", 4),
+						luabind::value("TOP", 1),
+						luabind::value("RIGHT", 2),
+						luabind::value("BOTTOM", 3),
+						luabind::value("LEFT", 4),
 
-					luabind::value("H_CENTER", 5),
-					luabind::value("V_CENTER", 6)
-				],
+						luabind::value("H_CENTER", 5),
+						luabind::value("V_CENTER", 6)
+					]),
 
-			luabind::class_<Frame>("Frame")
-				.def("SetText", &Frame::SetText)
-				.def("GetText", &Frame::GetText)
-				.def("Show", &Frame::Show)
-				.def("Hide", &Frame::Hide)
-				.def("Enable", &Frame::Enable)
-				.def("Disable", &Frame::Disable)
-				.def("RegisterEvent", &Frame::RegisterEvent)
-				.def("GetName", &Frame::GetName)
-				.def("IsVisible", &Frame::Lua_IsVisible)
-				.def("RemoveAllChildren", &Frame::RemoveAllChildren)
-				.def("Clone", &Frame::Clone)
-				.def("AddChild", &Frame::AddChild)
-				.def("SetAnchor", &Frame::SetAnchor)
-				.property("userData", &Frame::GetUserData, &Frame::SetUserData),
+			luabind::scope(
+				luabind::class_<Frame>("Frame")
+	               .def("SetText", &Frame::SetText)
+	               .def("GetText", &Frame::GetText)
+	               .def("Show", &Frame::Show)
+	               .def("Hide", &Frame::Hide)
+	               .def("Enable", &Frame::Enable)
+	               .def("Disable", &Frame::Disable)
+	               .def("RegisterEvent", &Frame::RegisterEvent)
+	               .def("GetName", &Frame::GetName)
+	               .def("IsVisible", &Frame::Lua_IsVisible)
+	               .def("RemoveAllChildren", &Frame::RemoveAllChildren)
+	               .def("Clone", &Frame::Clone)
+	               .def("AddChild", &Frame::AddChild)
+	               .def("SetAnchor", &Frame::SetAnchor)
+	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
 			
-			luabind::class_<Button, Frame>("Button")
-				.def("SetClickedHandler", &Button::SetLuaClickedHandler)
+			luabind::scope(
+				luabind::class_<Button, Frame>("Button")
+					.def("SetClickedHandler", &Button::SetLuaClickedHandler))
 		];
 	
 		// Register default frame renderer factory methods
@@ -412,7 +416,7 @@ namespace mmo
 	{
 		if (!isCopy)
 		{
-			auto it = m_framesByName.find(name);
+			const auto it = m_framesByName.find(name);
 			if (it != m_framesByName.end())
 			{
 				return nullptr;
@@ -420,7 +424,7 @@ namespace mmo
 		}
 
 		// Retrieve the frame factory by type
-		auto factoryIt = m_frameFactories.find(type);
+		const auto factoryIt = m_frameFactories.find(type);
 		if (factoryIt == m_frameFactories.end())
 		{
 			ELOG("Can not create a frame of type " << type);
@@ -460,7 +464,7 @@ namespace mmo
 		}
 
 		// Retrieve the frame factory by type
-		auto factoryIt = m_frameFactories.find(type);
+		const auto factoryIt = m_frameFactories.find(type);
 		if (factoryIt == m_frameFactories.end())
 		{
 			ELOG("Can not create a frame of type " << type);
@@ -475,7 +479,7 @@ namespace mmo
 
 	FramePtr FrameManager::Find(const std::string & name)
 	{
-		auto it = m_framesByName.find(name);
+		const auto it = m_framesByName.find(name);
 		if (it != m_framesByName.end())
 		{
 			return it->second;
@@ -491,6 +495,9 @@ namespace mmo
 
 	void FrameManager::ResetTopFrame()
 	{
+		m_mouseDownFrames.clear();
+		m_framesByName.clear();
+		
 		m_topFrame.reset();
 	}
 
@@ -673,11 +680,11 @@ namespace mmo
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)
 	{
-		auto it = m_frameFactories.find(elementName);
+		const auto it = m_frameFactories.find(elementName);
 		FATAL(it == m_frameFactories.end(), "Frame factory already registered!");
 
 		// Register factory
-		m_frameFactories[elementName] = factory;
+		m_frameFactories[elementName] = std::move(factory);
 	}
 
 	void FrameManager::UnregisterFrameFactory(const std::string & elementName)

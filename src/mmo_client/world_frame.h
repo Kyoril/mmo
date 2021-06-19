@@ -12,5 +12,8 @@ namespace mmo
 	public:
 		/// Default constructor.
 		explicit WorldFrame(const std::string& name);
+
+	public:
+		void SetAsCurrentWorldFrame();
 	};
 }

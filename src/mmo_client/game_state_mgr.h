@@ -4,11 +4,14 @@
 
 #include "base/non_copyable.h"
 #include "base/utilities.h"
+#include "base/signal.h"
 
 #include "game_state.h"
 
 #include <memory>
 #include <map>
+
+#include "model_frame.h"
 
 
 namespace mmo
@@ -32,6 +35,8 @@ namespace mmo
 		/// Sets the current game state.
 		void SetGameState(const std::string& name);
 
+		void Idle(float deltaSeconds, GameTime timestamp);
+	
 	public:
 		/// Gets the global 
 		static GameStateMgr& Get();
@@ -41,5 +46,8 @@ namespace mmo
 		std::map<std::string, std::shared_ptr<IGameState>, StrCaseIComp> m_gameStates;
 		/// The current game state.
 		std::shared_ptr<IGameState> m_currentState;
+		/// The pending game state.
+		std::weak_ptr<IGameState> m_pendingState;
+		scoped_connection m_idleConnection;
 	};
 }
