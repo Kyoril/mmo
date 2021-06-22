@@ -23,6 +23,7 @@ namespace mmo
 		static Vector3 UnitX;
 		static Vector3 UnitY;
 		static Vector3 UnitZ;
+		static Vector3 UnitScale;
 
 	public:
 
@@ -120,9 +121,10 @@ namespace mmo
 		}
 		inline Vector3 operator*(const Vector3& b) const
 		{
-			Vector3 v = *this;
-			v *= b;
-			return v;
+            return Vector3(
+                x * b.x,
+                y * b.y,
+                z * b.z);
 		}
 		inline Vector3 operator/(float b) const
 		{
@@ -173,7 +175,7 @@ namespace mmo
 		{
 			return Dot(b);
 		}
-
+	
 	public:
 
 		/// Caluclates the dot product of this vector and another one.

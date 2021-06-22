@@ -1,4 +1,6 @@
 #include "world_renderer.h"
+#include "scene_graph/scene.h"
+#include "scene_graph/camera.h"
 
 #include "frame_ui/frame.h"
 #include "frame_ui/color.h"
@@ -8,9 +10,11 @@
 
 namespace mmo
 {
-	WorldRenderer::WorldRenderer(const std::string & name)
+	WorldRenderer::WorldRenderer(const std::string & name, Scene& worldScene)
 		: FrameRenderer(name)
 		, m_worldFrame(nullptr)
+		, m_worldScene(worldScene)
+		, m_camera(nullptr)
 	{
 	}
 
@@ -68,9 +72,11 @@ namespace mmo
 		gx.SetTransformMatrix(TransformType::View, MakeViewMatrix(Vector3(0.0f, 0.0f, 5.0f), Quaternion::Identity));
 		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
 
-		// TODO: Render world scene
-
-		
+		// Render world scene
+		if (m_camera)
+		{
+			m_worldScene.Render(*m_camera);
+		}
 		
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();

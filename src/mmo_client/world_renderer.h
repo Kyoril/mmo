@@ -10,12 +10,15 @@
 
 namespace mmo
 {
+	class Scene;
+	class Camera;
+
 	/// This class renders a 3d world into a texture which is then rendered in the frame as content.
 	class WorldRenderer final
 		: public FrameRenderer
 	{
 	public:
-		WorldRenderer(const std::string& name);
+		WorldRenderer(const std::string& name, Scene& worldScene);
 
 	public:
 		/// @brief Renders a given frame using this renderer instance.
@@ -34,5 +37,8 @@ namespace mmo
 		Rect m_lastFrameRect;
 		WorldFrame* m_worldFrame;
 		scoped_connection m_frameRenderEndCon;
+
+		Scene& m_worldScene;
+		Camera* m_camera;
 	};
 }

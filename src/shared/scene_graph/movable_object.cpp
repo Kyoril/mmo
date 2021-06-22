@@ -5,4 +5,8 @@
 
 namespace mmo
 {
+	MovableObject::MovableObject(Scene& scene)
+		: m_scene(scene)
+	{
+	}
 }
