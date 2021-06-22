@@ -12,7 +12,7 @@ namespace mmo
 	class MovableObject
 	{
 	public:
-		MovableObject(Scene& scene);
+		explicit MovableObject(Scene& scene);
 		virtual ~MovableObject() = default;
 
 	public:
@@ -20,7 +20,7 @@ namespace mmo
 	
 	public:
 		Scene& m_scene;
-		SceneNode* m_parentNode;
-		bool m_visible;
+		SceneNode* m_parentNode{};
+		bool m_visible{};
 	};
 }

@@ -24,7 +24,8 @@ target_link_libraries(mmo_client
 	expat
 	game
 	mesh
-	mesh_v1_0)
+	mesh_v1_0
+	scene_graph)
 
 # Link external dependency libraries
 target_link_libraries(mmo_client lua)

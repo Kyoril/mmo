@@ -6,6 +6,8 @@
 #include "realm_connector.h"
 #include "console.h"
 #include "login_state.h"
+#include "world_frame.h"
+#include "world_renderer.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
@@ -23,6 +25,17 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
+		// Register world renderer
+		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
+			{
+				return std::make_unique<WorldRenderer>(name, std::ref(m_scene));
+			});
+
+		// Register world frame type
+		FrameManager::Get().RegisterFrameFactory("World", [](const std::string& name) {
+			return std::make_shared<WorldFrame>(name);
+			});
+		
 		// Make the top frame element
 		auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
@@ -40,14 +53,18 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		// Reset the logo frame ui
+		FrameManager::Get().ResetTopFrame();
+		
+		// Remove world renderer
+		FrameManager::Get().RemoveFrameRenderer("WorldRenderer");
+		FrameManager::Get().UnregisterFrameFactory("World");
+
 		// Disconnect all active connections
 		m_realmConnections.disconnect();
 
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
-
-		// Reset the logo frame ui
-		FrameManager::Get().ResetTopFrame();
 	}
 
 	const std::string& WorldState::GetName() const

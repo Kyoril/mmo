@@ -4,6 +4,7 @@
 #include "camera.h"
 
 #include "base/macros.h"
+#include "graphics/graphics_device.h"
 
 
 namespace mmo
@@ -61,6 +62,16 @@ namespace mmo
 
 	void Scene::Render(Camera& camera)
 	{
+		auto& gx = GraphicsDevice::Get();
+
+		gx.CaptureState();
+
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
+		gx.SetTransformMatrix(View, camera.GetViewMatrix());
+
+		// TODO: Render all objects
 		
+		gx.RestoreState();
 	}
 }
