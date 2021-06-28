@@ -12,6 +12,8 @@ file(GLOB imgui_src
 	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_win32.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/examples/imgui_impl_dx11.cpp")
 
+include_directories(${FBXSDK_INCLUDE_DIR})
+
 # Add executable
 add_gui_exe(mmo_edit ${imgui_src})
 
@@ -28,8 +30,11 @@ target_link_libraries(mmo_edit
 	hpak_v1_0 
 	tex_v1_0 
 	assets
-	frame_ui)
-
+	mesh
+	mesh_v1_0
+	imaging)
+	
+target_link_libraries(mmo_edit ${FBXSDK_LIBRARIES})
 target_link_libraries(mmo_edit ${OPENSSL_LIBRARIES})
 set_property(TARGET mmo_edit PROPERTY FOLDER "editor")
 

@@ -2,27 +2,34 @@
 
 #pragma once
 
-#include "base/non_copyable.h"
+#include "log_window.h"
+#include "viewport_window.h"
+#include "asset_window.h"
+#include "fbx_import.h"
 
-#include "imgui.h"
+#include "base/non_copyable.h"
 
 #include <Windows.h>
 
-#include <vector>
 #include <string>
 
 
 namespace mmo
 {
+	class Configuration;
+	
+	
 	/// This class manages the main window of the application.
-	class MainWindow final : public NonCopyable
+	class MainWindow final 
+		: public NonCopyable
 	{
 	public:
-		explicit MainWindow();
+		explicit MainWindow(Configuration& config);
+		~MainWindow();
 
 	private:
 		/// Ensures that the window class has been created by creating it if needed.
-		void EnsureWindowClassCreated();
+		static void EnsureWindowClassCreated();
 		/// Creates the internal window handle.
 		void CreateWindowHandle();
 		/// Initialize ImGui.
@@ -32,8 +39,16 @@ namespace mmo
 
 		void ImGuiDefaultDockLayout();
 
-		void ShutdownImGui();
+		void ShutdownImGui() const;
 
+		bool OnFileDrop(std::string filename);
+
+		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y);
+		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y);
+		void OnMouseMoved(uint16 x, uint16 y);
+
+		void RenderSaveDialog();
+		
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
@@ -42,18 +57,23 @@ namespace mmo
 		LRESULT CALLBACK MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 	private:
+		Configuration& m_config;
 		HWND m_windowHandle;
 		/// The dock space flags.
 		ImGuiDockNodeFlags m_dockSpaceFlags;
 
 		bool m_applyDefaultLayout = true;
+		ImGuiContext* m_imguiContext;
 
-		bool m_showViewport = true;
-		bool m_showObjects = true;
-		bool m_showWorlds = false;
+		LogWindow m_logWindow;
+		ViewportWindow m_viewportWindow;
+		AssetWindow m_assetWindow;
+		FbxImport m_importer;
+		int16 m_lastMouseX, m_lastMouseY;
+		bool m_leftButtonPressed;
+		bool m_rightButtonPressed;
+		bool m_fileLoaded;
 
-		int m_selectedWorld = -1;
-
-		std::vector<std::string> m_worlds;
+		std::string m_modelName;
 	};
 }

@@ -1,47 +1,91 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "main_window.h"
-#include "resource.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
+#include "assets/asset_registry.h"
+#include "configuration.h"
+
+#include "base/filesystem.h"
+#include "base/utilities.h"
+#include "mesh/chunk_writer.h"
+#include "mesh_v1_0/header.h"
+#include "mesh_v1_0/header_save.h"
+#include "binary_io/stream_sink.h"
 
 #ifdef _WIN32
 #	include "imgui_impl_win32.h"
 #	include "imgui_impl_dx11.h"
 #	include "imgui_internal.h"
+#	include "misc/cpp/imgui_stdlib.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
-#endif
+#	include "graphics/d3d11/render_texture_d3d11.h"
 
+#	include <windowsx.h>
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 
 
 namespace mmo
 {
 	static constexpr char* s_mainWindowClassName = "MainWindow";
-
 	static bool s_initialized = false;
 
-	MainWindow::MainWindow()
-		: m_windowHandle(nullptr)
+
+	MainWindow::MainWindow(Configuration& config)
+		: m_config(config)
+		, m_windowHandle(nullptr)
+		, m_imguiContext(nullptr)
+		, m_lastMouseX(0)
+		, m_lastMouseY(0)
+		, m_leftButtonPressed(false)
+		, m_rightButtonPressed(false)
+		, m_fileLoaded(false)
 	{
-		// Create the native window
+		// Create the native platform window
 		CreateWindowHandle();
 
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
 		desc.customWindowHandle = m_windowHandle;
+		desc.vsync = false;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
-
-		m_worlds.push_back("Alesta");
-		m_worlds.push_back("Test");
 
 		// Initialize imgui
 		InitImGui();
 
+		// Try to initialize the asset registry
+		if (!config.assetRegistryPath.empty())
+		{
+			// Initialize the asset registry using the given path
+			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
+		}
+		else
+		{
+			WLOG("Unable to initialize asset registry: No asset registry path provided!");
+		}
+
+		// Setup the viewport render texture
 		s_initialized = true;
+
+		// Log success
+		ILOG("Model Editor initialized");
+	}
+
+	MainWindow::~MainWindow()
+	{
+		// No longer initialized
+		s_initialized = false;
+
+		// Terminate ImGui
+		ShutdownImGui();
+
+		// Tear down graphics device
+		GraphicsDevice::Destroy();
 	}
 
 	void MainWindow::EnsureWindowClassCreated()
@@ -73,8 +117,18 @@ namespace mmo
 			return;
 		}
 
-		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMOEdit"), WS_OVERLAPPEDWINDOW,
-			CW_USEDEFAULT, CW_USEDEFAULT, 1024, 720, nullptr, nullptr, GetModuleHandle(nullptr), this);
+		const UINT desktopWidth = ::GetSystemMetrics(SM_CXSCREEN);
+		const UINT desktopHeight = ::GetSystemMetrics(SM_CYSCREEN);
+		const UINT w = desktopWidth * 0.75f;
+		const UINT h = desktopHeight * 0.75f;
+		const UINT x = desktopWidth / 2 - w / 2;
+		const UINT y = desktopHeight / 2 - h / 2;
+
+		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMO Model Editor"), WS_OVERLAPPEDWINDOW,
+			x, y, w, h, nullptr, nullptr, GetModuleHandle(nullptr), this);
+
+		// We accept file drops
+		DragAcceptFiles(m_windowHandle, TRUE);
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
@@ -96,8 +150,8 @@ namespace mmo
 		ImGui::SetNextWindowPos(viewport->GetWorkPos());
 		ImGui::SetNextWindowSize(viewport->GetWorkSize());
 		ImGui::SetNextWindowViewport(viewport->ID);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+
 		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
@@ -106,71 +160,66 @@ namespace mmo
 		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
 			window_flags |= ImGuiWindowFlags_NoBackground;
 
-		// Begin the dockspace window
+		// Begin the dockspace window with disabled padding
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		ImGui::Begin("DockSpace", nullptr, window_flags);
-		ImGui::PopStyleVar();
-		ImGui::PopStyleVar(2);
+		ImGui::PopStyleVar(3);
 		{
-			ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+			const auto dockspace_id = ImGui::GetID("MyDockSpace");
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
 
+			bool showSaveDialog = false;
+			
 			// The main menu
 			if (ImGui::BeginMenuBar())
 			{
-				if (ImGui::BeginMenu("Project"))
+				// File menu
+				if (ImGui::BeginMenu("File"))
 				{
-					if (ImGui::MenuItem("Worlds")) m_showWorlds = true;
-					if (ImGui::MenuItem("Close", nullptr))
+					showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, false, m_fileLoaded);
+
+					ImGui::Separator();
+					
+					if (ImGui::MenuItem("Exit", nullptr))
 					{
 						// Terminate the application
 						PostQuitMessage(0);
 					}
+
+					ImGui::EndMenu();
+				}
+
+				// View menu
+				if (ImGui::BeginMenu("View"))
+				{
+					m_logWindow.DrawViewMenuItem();
+					m_viewportWindow.DrawViewMenuItem();
+
 					ImGui::EndMenu();
 				}
 
 				ImGui::EndMenuBar();
 			}
 
-			// Add a frame
-			if (ImGui::Begin("Objects", &m_showObjects))
-			{
-				ImGui::Text("Test");
-			}
-			ImGui::End();
+			// Draw the viewport window
+			m_viewportWindow.Draw();
 
-			// Add the viewport
-			if (ImGui::Begin("Viewport", &m_showViewport))
-			{
-			}
-			ImGui::End();
+			// Render log window
+			m_logWindow.Draw();
 
-			static auto vector_getter = [](void* vec, int idx, const char** out_text)
-			{
-				auto& vector = *static_cast<std::vector<std::string>*>(vec);
-				if (idx < 0 || idx >= static_cast<int>(vector.size())) { return false; }
-				*out_text = vector.at(idx).c_str();
-				return true;
-			};
+			m_assetWindow.Draw();
 
-			// World window
-			if (m_showWorlds)
+			if (showSaveDialog)
 			{
-				if (ImGui::Begin("Worlds", &m_showWorlds))
+				if (!ImGui::IsPopupOpen("Save"))
 				{
-					ImGui::PushItemWidth(-1);
-					if (ImGui::ListBox("", &m_selectedWorld, vector_getter, (void*)&m_worlds, m_worlds.size(), -1))
-					{
-						// Handle selection changed event
-					}
-					ImGui::PopItemWidth();
-
-					ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-					ImGui::Button("Open");
-					ImGui::PopItemFlag();
+					ImGui::OpenPopup("Save");
 				}
-				ImGui::End();
 			}
+
+			RenderSaveDialog();
 
 			// Initialize the layout
 			if (m_applyDefaultLayout)
@@ -192,33 +241,262 @@ namespace mmo
 
 	void MainWindow::ImGuiDefaultDockLayout()
 	{
-		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
 
-		ImGui::DockBuilderRemoveNode(dockspace_id);
-		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace); // Add empty node
-		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+		ImGui::DockBuilderRemoveNode(dockSpaceId);
+		ImGui::DockBuilderAddNode(dockSpaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
-		ImGuiID dock_main_id = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		ImGuiID dock_id_prop = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 300.0f / ImGui::GetMainViewport()->Size.x, nullptr, &dock_main_id);
+		auto dockMainId = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+		const auto dockAssetsId = ImGui::DockBuilderSplitNode(dockLogId, ImGuiDir_Left, 0.5f, nullptr, &dockLogId);
 
-		ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
-		ImGui::DockBuilderDockWindow("Objects", dock_id_prop);
-		ImGui::DockBuilderFinish(dockspace_id);
+		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
+		ImGui::DockBuilderDockWindow("Log", dockLogId);
+		ImGui::DockBuilderDockWindow("Assets", dockAssetsId);
+		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
 		m_applyDefaultLayout = false;
 	}
 
-	void MainWindow::ShutdownImGui()
+	void MainWindow::ShutdownImGui() const
 	{
+		ASSERT(m_imguiContext);
 
+		// Shutdown d3d11 and win32 implementation of imgui
+		ImGui_ImplDX11_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+
+		// And destroy the context
+		ImGui::DestroyContext(m_imguiContext);
+	}
+
+	bool MainWindow::OnFileDrop(std::string filename)
+	{
+		m_leftButtonPressed = false;
+		m_rightButtonPressed = false;
+
+		const std::filesystem::path p { filename };
+		if (_strcmpi(p.extension().string().c_str(), ".fbx") == 0)
+		{
+			ILOG("Importing fbx file " << filename << "...");
+			if (!m_importer.LoadScene(filename.c_str()))
+			{
+				ELOG("Failed to load fbx file " << filename);
+				return false;
+			}
+
+			// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
+			const auto& meshes = m_importer.GetMeshEntries();
+			if (!meshes.empty())
+			{
+				const auto& mesh = meshes.front();
+
+				std::vector<POS_COL_VERTEX> vertices;
+				vertices.resize(mesh.vertices.size());
+
+				for (size_t i = 0; i < mesh.vertices.size(); ++i)
+				{
+					vertices[i].pos[0] = mesh.vertices[i].position.x;
+					vertices[i].pos[1] = mesh.vertices[i].position.y;
+					vertices[i].pos[2] = mesh.vertices[i].position.z;
+					vertices[i].color = 0xFFAEAEAE;
+				}
+
+				auto vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
+
+				std::vector<uint16> indices;
+				indices.resize(mesh.indices.size());
+
+				for (size_t i = 0; i < mesh.indices.size(); ++i)
+				{
+					indices[i] = static_cast<uint16>(mesh.indices[i]);
+				}
+
+				auto indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
+				m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
+
+				m_fileLoaded = true;
+			}
+		}
+		else
+		{
+			ELOG("Unsupported file extension '" << p.extension().string() << "'");
+		}
+		
+		
+		return true;
+	}
+
+	void MainWindow::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	{
+		m_lastMouseX = x;
+		m_lastMouseY = y;
+
+		// Only capture mouse button pressed when the hovered imgui window is the viewport
+		if (m_imguiContext->HoveredWindow && strcmp(m_imguiContext->HoveredWindow->Name, "Viewport") != 0)
+			return;
+		
+		if (button == 0)
+		{
+			m_leftButtonPressed = true;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = true;
+		}
+	}
+
+	void MainWindow::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	{
+		if (button == 0)
+		{
+			m_leftButtonPressed = false;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = false;
+		}
+	}
+
+	void MainWindow::OnMouseMoved(uint16 x, uint16 y)
+	{
+		// Calculate mouse move delta
+		const int16 deltaX = x - m_lastMouseX;
+		const int16 deltaY = y - m_lastMouseY;
+
+		if (m_rightButtonPressed)
+		{
+			m_viewportWindow.MoveCamera(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
+		}
+		else if (m_leftButtonPressed)
+		{
+			m_viewportWindow.MoveCameraTarget(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
+		}
+
+		m_lastMouseX = x;
+		m_lastMouseY = y;
+	}
+
+	void MainWindow::RenderSaveDialog()
+	{
+		if (ImGui::BeginPopupModal("Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Please choose a name for your model:");
+			ImGui::InputText("Base name", &m_modelName);
+
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, m_modelName.empty());
+			if (ImGui::Button("Save", ImVec2(80, 0)))
+			{
+				std::filesystem::path filename = "Models";
+				filename /= m_modelName;
+				filename /= m_modelName + ".hmsh";
+				
+				// Create the file name
+				auto filePtr = AssetRegistry::CreateNewFile(filename.string());
+				if (filePtr == nullptr)
+				{
+					ELOG("Unable to save mesh!");
+					return;
+				}
+
+				// Setup mesh header
+				mesh::v1_0::Header header;
+				header.version = mesh::Version_1_0;
+				header.vertexChunkOffset = 0;
+				header.indexChunkOffset = 0;
+				
+				// Create a mesh header saver
+				io::StreamSink sink{ *filePtr };
+				io::Writer writer{ sink };
+
+				// Write the mesh header
+				mesh::v1_0::HeaderSaver saver{ sink, header };
+				{
+					// Write the vertex chunk data
+					header.vertexChunkOffset = static_cast<uint32>(sink.Position());
+					ChunkWriter vertexChunkWriter{ mesh::v1_0::VertexChunkMagic, writer };
+					{
+						const auto& meshes = m_importer.GetMeshEntries();
+						if (!meshes.empty())
+						{
+							const auto& mesh = meshes.front();
+
+							// Write vertex data
+							writer << io::write<uint32>(mesh.vertices.size());
+							for (size_t i = 0; i < mesh.vertices.size(); ++i)
+							{
+								writer
+									<< io::write<float>(mesh.vertices[i].position.x)
+									<< io::write<float>(mesh.vertices[i].position.y)
+									<< io::write<float>(mesh.vertices[i].position.z);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].color);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].texCoord.x)
+									<< io::write<uint32>(mesh.vertices[i].texCoord.y)
+									<< io::write<uint32>(mesh.vertices[i].texCoord.z);
+								writer
+									<< io::write<uint32>(mesh.vertices[i].normal.x)
+									<< io::write<uint32>(mesh.vertices[i].normal.y)
+									<< io::write<uint32>(mesh.vertices[i].normal.z);
+							}
+						}
+					}
+					vertexChunkWriter.Finish();
+
+					// Write the index chunk data
+					header.indexChunkOffset = static_cast<uint32>(sink.Position());
+					ChunkWriter indexChunkWriter{ mesh::v1_0::IndexChunkMagic, writer };
+					{
+						const auto& meshes = m_importer.GetMeshEntries();
+						if (!meshes.empty())
+						{
+							const auto& mesh = meshes.front();
+							const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
+							
+							// Write index data
+							writer
+								<< io::write<uint32>(mesh.indices.size())
+								<< io::write<uint8>(bUse16BitIndices);
+
+							for (size_t i = 0; i < mesh.indices.size(); ++i)
+							{
+								if (bUse16BitIndices)
+								{
+									writer << io::write<uint16>(mesh.indices[i]);
+								}
+								else
+								{
+									writer << io::write<uint32>(mesh.indices[i]);
+								}
+							}
+						}
+					}
+					indexChunkWriter.Finish();
+				}
+				saver.Finish();
+
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::PopItemFlag();
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel", ImVec2(80, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
 	}
 
 	void MainWindow::InitImGui()
 	{
 		// Setup Dear ImGui context
 		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
+		m_imguiContext = ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
@@ -250,7 +528,7 @@ namespace mmo
 		io.Fonts->AddFontDefault();
 
 		// Dockspace flags
-		m_dockSpaceFlags = ImGuiDockNodeFlags_None;
+		m_dockSpaceFlags = ImGuiDockNodeFlags_None;//ImGuiDockNodeFlags_AutoHideTabBar;
 	}
 
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -260,17 +538,17 @@ namespace mmo
 			return true;
 
 		// If this is the creation message, we will set the class long to the instance pointer
-		// of the mainwindow instance which was provided in CreateWindowEx as the last parameter
+		// of the main window instance which was provided in CreateWindowEx as the last parameter
 		// so that we can get the instance everywhere from the window handle.
 		if (msg == WM_NCCREATE)
 		{
-			LPCREATESTRUCT createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
+			auto createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
 			SetWindowLongPtr(wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
 		}
 		else
 		{
 			// Retrieve the window instance
-			MainWindow* window = reinterpret_cast<MainWindow*>(GetWindowLongPtr(wnd, GWLP_USERDATA));
+			auto* window = reinterpret_cast<MainWindow*>(GetWindowLongPtr(wnd, GWLP_USERDATA));
 			if (window)
 			{
 				// Call the MsgProc instance function
@@ -295,11 +573,53 @@ namespace mmo
 		case WM_PAINT:
 			if (s_initialized)
 			{
-				GraphicsDevice::Get().Reset();
+				// Render game viewport contents
+				m_viewportWindow.Render();
+
+				// Now render the main
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Clear(ClearFlags::All);
 				RenderImGui();
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();
+			}
+			return 0;
+		case WM_LBUTTONDOWN:
+			OnMouseButtonDown(0, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_RBUTTONDOWN:
+			OnMouseButtonDown(1, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MBUTTONDOWN:
+			OnMouseButtonDown(2, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_LBUTTONUP:
+			OnMouseButtonUp(0, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_RBUTTONUP:
+			OnMouseButtonUp(1, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MBUTTONUP:
+			OnMouseButtonUp(2, GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_MOUSEMOVE:
+			OnMouseMoved(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+			return 0;
+		case WM_DROPFILES:
+			{
+				UINT fileCount = DragQueryFileA((HDROP)wparam, 0xFFFFFFFF, nullptr, 0);
+				for (UINT i = 0; i < fileCount; ++i)
+				{
+					UINT fileNameLen = DragQueryFileA((HDROP)wparam, i, nullptr, 0);
+
+					CHAR* fileName = new CHAR[fileNameLen + 1];
+					if (DragQueryFileA((HDROP)wparam, i, fileName, fileNameLen + 1) != 0)
+					{
+						OnFileDrop(fileName);
+					}
+					delete[] fileName;
+				}
+
+				DragFinish((HDROP)wparam);
 			}
 			return 0;
 		case WM_SIZE:
@@ -308,13 +628,6 @@ namespace mmo
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Resize(LOWORD(lparam), HIWORD(lparam));
 			}
 			return 0;
-		case WM_COMMAND:
-			switch (LOWORD(wparam))
-			{
-			case ID_PROJECT_EXIT:
-				DestroyWindow(wnd);
-				return 0;
-			}
 		}
 
 		return DefWindowProc(wnd, msg, wparam, lparam);

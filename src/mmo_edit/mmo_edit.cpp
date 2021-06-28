@@ -2,18 +2,13 @@
 
 #include "main_window.h"
 
-#include "base/typedefs.h"
 #include "log/default_log_levels.h"
-#include "log/log_std_stream.h"
 #include "graphics/graphics_device.h"
-#include "assets/asset_registry.h"
 #include "base/filesystem.h"
 #include "base/win_utility.h"
+#include "configuration.h"
 
 #include <mutex>
-
-
-
 
 
 /// Procedural entry point on windows platforms.
@@ -28,11 +23,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	});
 #endif
 
+	// Load configuration file
+	mmo::Configuration config;
+	config.Load("./config/model_editor.cfg");
+
 	// Initialize the main window instance
-	mmo::MainWindow mainWindow;
+	mmo::MainWindow mainWindow { config };
 
 	// Run the message loop
-	MSG msg = { 0 };
+	MSG msg = { nullptr };
 	while (GetMessage(&msg, nullptr, 0, 0))
 	{
 		TranslateMessage(&msg);
