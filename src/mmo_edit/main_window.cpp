@@ -2,6 +2,8 @@
 
 #include "main_window.h"
 
+#include <imgui_internal.h>
+
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
@@ -16,9 +18,8 @@
 #include "binary_io/stream_sink.h"
 
 #ifdef _WIN32
-#	include "imgui_impl_win32.h"
-#	include "imgui_impl_dx11.h"
-#	include "imgui_internal.h"
+#	include "backends/imgui_impl_win32.h"
+#	include "backends/imgui_impl_dx11.h"
 #	include "misc/cpp/imgui_stdlib.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #	include "graphics/d3d11/render_texture_d3d11.h"
@@ -73,7 +74,7 @@ namespace mmo
 		s_initialized = true;
 
 		// Log success
-		ILOG("Model Editor initialized");
+		ILOG("MMO Edit initialized");
 	}
 
 	MainWindow::~MainWindow()
@@ -124,7 +125,7 @@ namespace mmo
 		const UINT x = desktopWidth / 2 - w / 2;
 		const UINT y = desktopHeight / 2 - h / 2;
 
-		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMO Model Editor"), WS_OVERLAPPEDWINDOW,
+		m_windowHandle = CreateWindowEx(0, TEXT(s_mainWindowClassName), TEXT("MMO Edit"), WS_OVERLAPPEDWINDOW,
 			x, y, w, h, nullptr, nullptr, GetModuleHandle(nullptr), this);
 
 		// We accept file drops
@@ -147,8 +148,8 @@ namespace mmo
 
 		// Get the viewport and make the dockspace window fullscreen
 		ImGuiViewport* viewport = ImGui::GetMainViewport();
-		ImGui::SetNextWindowPos(viewport->GetWorkPos());
-		ImGui::SetNextWindowSize(viewport->GetWorkSize());
+		ImGui::SetNextWindowPos(viewport->WorkPos);
+		ImGui::SetNextWindowSize(viewport->WorkSize);
 		ImGui::SetNextWindowViewport(viewport->ID);
 
 

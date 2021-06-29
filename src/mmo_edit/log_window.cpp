@@ -2,10 +2,9 @@
 
 #include "log_window.h"
 
-#include "log/default_log.h"
+#include <imgui_internal.h>
 
-#include "imgui.h"
-#include "imgui_internal.h"
+#include "log/default_log.h"
 
 namespace mmo
 {
