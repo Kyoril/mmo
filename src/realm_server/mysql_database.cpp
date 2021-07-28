@@ -143,7 +143,7 @@ namespace mmo
 	{
 		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, gender, hp, x, y, z, o) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
-			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(race) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " + 
+			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " + 
 			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ");"))
 		{
 			PrintDatabaseError();
