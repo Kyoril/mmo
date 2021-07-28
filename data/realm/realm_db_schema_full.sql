@@ -4,8 +4,6 @@ MySQL - 8.0.22 : Database - mmo_realm
 *********************************************************************
 */
 
-USE `mmo_realm`;
-
 /*!40101 SET NAMES utf8 */;
 
 /*!40101 SET SQL_MODE=''*/;
@@ -36,8 +34,9 @@ CREATE TABLE `characters` (
   `hp` int NOT NULL,
   `deleted_at` datetime DEFAULT NULL,
   `deleted_account` bigint unsigned DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UNIQUE_NAME` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
 /*Table structure for table `world` */
 
