@@ -87,7 +87,8 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
 					.def_readonly("guid", &mmo::CharacterView::GetGuid)
-					.def_readonly("name", &mmo::CharacterView::GetName)),
+					.def_readonly("name", &mmo::CharacterView::GetName)
+					.def_readonly("level", &mmo::CharacterView::GetLevel)),
 
 			luabind::scope(
 				luabind::class_<LoginConnector>("LoginConnector")
