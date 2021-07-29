@@ -5,12 +5,16 @@
 #include "base/non_copyable.h"
 #include "math/matrix4.h"
 #include "math/quaternion.h"
+#include "math/aabb.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
+#include <set>
 
 
 namespace mmo
 {
+	class MovableObject;
+
 	/// Enumerates available transform spaces.
 	enum class TransformSpace : uint8
 	{
@@ -126,35 +130,49 @@ namespace mmo
 		/// @returns nullptr if a child with the given name could not be found.
 		SceneNode* RemoveChild(const String& name);
 
+		void Update(bool updateChildren, bool parentHasChanged);
+		void UpdateBounds();
+
+		const Matrix4& GetFullTransform();
+
 	protected:
-		/// Name of this node.
+		/// @brief Name of this node.
 		String m_name;
-		/// The parent node.
+		/// @brief The parent node.
 		SceneNode* m_parent;
-		/// Flag to indicate own transform from parent is out of date.
+		/// @brief Flag to indicate own transform from parent is out of date.
 		bool m_needParentUpdate;
-		/// Child nodes, mapped by name.
+		/// @brief Child nodes, mapped by name.
 		ChildNodeMap m_children;
-		/// The local orientation of this node.
+		/// @brief The local orientation of this node.
 		Quaternion m_orientation;
-		/// The cached orientation of this node combined with it's parent node's world orientation.
+		/// @brief The cached orientation of this node combined with it's parent node's world orientation.
 		Quaternion m_derivedOrientation;
-		/// Whether this node inherits it's orientation from the parent node.
+		/// @brief Whether this node inherits it's orientation from the parent node.
 		bool m_inheritOrientation;
-		/// The local position of the node.
+		/// @brief The local position of the node.
 		Vector3 m_position;
-		/// The cached position of this node combined with it's parent node's world position.
+		/// @brief The cached position of this node combined with it's parent node's world position.
 		Vector3 m_derivedPosition;
-		/// The local scale of this node.
+		/// @brief The local scale of this node.
 		Vector3 m_scale;
-		/// The cached scale of this node combined with it's parent node's world scale.
+		/// @brief The cached scale of this node combined with it's parent node's world scale.
 		Vector3 m_derivedScale;
-		/// Whether this node inherits it's scale from its parent node.
+		/// @brief Whether this node inherits it's scale from its parent node.
 		bool m_inheritScale;
-		/// The cached transform matrix of this node.
+		/// @brief The cached transform matrix of this node.
 		Matrix4 m_cachedTransform;
-		/// Whether the cached transform matrix is invalid and needs to be recalculated.
+		/// @brief Whether the cached transform matrix is invalid and needs to be recalculated.
 		bool m_cachedTransformInvalid;
+		/// @brief Bounding box.
+		AABB m_bounds;
+
+		typedef std::unordered_map<String, std::unique_ptr<MovableObject>> ObjectMap;
+		ObjectMap m_objectsByName;
+
+		typedef std::set<SceneNode*> ChildUpdateSet;
+		ChildUpdateSet m_childrenToUpdate;
+		bool m_needChildUpdates = false;
 
 	protected:
 		void UpdateFromParent();

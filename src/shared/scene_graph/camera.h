@@ -30,6 +30,8 @@ namespace mmo
 		const Matrix4& GetProjectionMatrix() const;
 		const Matrix4& GetViewMatrix() const;
 
+		const AABB& GetBounds() const override { return m_bounds; }
+
 	protected:
 		void UpdateFrustum() const;
 	
@@ -46,5 +48,6 @@ namespace mmo
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;
 		float m_left, m_right, m_top, m_bottom;
+		AABB m_bounds;
 	};
 }

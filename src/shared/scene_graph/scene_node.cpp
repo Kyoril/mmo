@@ -2,6 +2,7 @@
 
 #include "scene_node.h"
 #include "scene.h"
+#include "movable_object.h"
 
 
 namespace mmo
@@ -259,6 +260,62 @@ namespace mmo
 
 		child->SetParent(nullptr);
 		return child;
+	}
+
+	void SceneNode::Update(bool updateChildren, bool parentHasChanged)
+	{
+		if (m_needParentUpdate || parentHasChanged)
+		{
+			UpdateFromParent();
+		}
+
+		if (updateChildren)
+		{
+			if (m_needChildUpdates || parentHasChanged)
+			{
+				for(auto& child : m_children)
+				{
+					child.second->Update(true, true);
+				}
+			}
+			else
+			{
+				for (auto& child : m_childrenToUpdate)
+				{
+					child->Update(true, false);
+				}
+			}
+
+			m_childrenToUpdate.clear();
+			m_needChildUpdates = false;
+		}
+
+		UpdateBounds();
+	}
+
+	void SceneNode::UpdateBounds()
+	{
+		m_bounds.SetNull();
+
+		// Iterate through all objects
+		for (auto& it : m_objectsByName)
+		{
+			m_bounds.Combine(it.second->GetWorldBounds(true));
+		}
+	}
+
+	const Matrix4& SceneNode::GetFullTransform()
+	{
+		if (m_cachedTransformInvalid)
+		{
+			m_cachedTransform.MakeTransform(
+				GetDerivedPosition(),
+				GetDerivedScale(),
+				GetDerivedOrientation());
+			m_cachedTransformInvalid = false;
+		}
+
+		return m_cachedTransform;
 	}
 
 	void SceneNode::UpdateFromParent()

@@ -11,7 +11,7 @@ namespace mmo
 		, m_name(std::move(name))
 		, m_viewInvalid(true)
 	{
-		
+		m_bounds = AABB(Vector3(-.1f, -.1f, -.1f), Vector3(.1f, .1f, .1f));
 	}
 
 	const Matrix4& Camera::GetProjectionMatrix() const

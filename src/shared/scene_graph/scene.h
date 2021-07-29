@@ -8,6 +8,8 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
+#include "scene_node.h"
+
 
 namespace mmo
 {
@@ -40,13 +42,20 @@ namespace mmo
 		Camera* GetCamera(const String& name);
 		/// Destroys all registered cameras.
 		void DestroyAllCameras();
+
+		SceneNode& GetRootSceneNode();
 		
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera);
+		void UpdateSceneGraph();
+
+	protected:
+		void RenderVisibleObjects();
 
 	public:
 		typedef std::map<String, std::unique_ptr<Camera>> Cameras;
 		Cameras m_cameras;
+		std::unique_ptr<SceneNode> m_rootNode;
 	};
 }

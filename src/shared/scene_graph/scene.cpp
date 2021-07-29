@@ -66,12 +66,39 @@ namespace mmo
 
 		gx.CaptureState();
 
+		// TODO: Render all objects
+		UpdateSceneGraph();
+
+		// Clear current render target
+		gx.Clear(ClearFlags::All);
+		gx.SetFillMode(FillMode::Solid);
+
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
 		gx.SetTransformMatrix(View, camera.GetViewMatrix());
 
-		// TODO: Render all objects
-		
+		RenderVisibleObjects();
+
 		gx.RestoreState();
+	}
+
+	void Scene::UpdateSceneGraph()
+	{
+		GetRootSceneNode().Update(true, false);
+	}
+
+	void Scene::RenderVisibleObjects()
+	{
+
+	}
+
+	SceneNode& Scene::GetRootSceneNode() 
+	{
+		if (!m_rootNode)
+		{
+			m_rootNode = std::make_unique<SceneNode>("__root__");
+		}
+
+		return *m_rootNode;
 	}
 }

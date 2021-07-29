@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "matrix3.h"
+#include "quaternion.h"
 
 
 namespace mmo
@@ -354,7 +355,7 @@ namespace mmo
 			return r;
 		}
 
-		/*inline void Extract3x3Matrix(Matrix3& m3x3) const
+		inline void Extract3x3Matrix(Matrix3& m3x3) const
 		{
 			m3x3.m[0][0] = m[0][0];
 			m3x3.m[0][1] = m[0][1];
@@ -365,7 +366,7 @@ namespace mmo
 			m3x3.m[2][0] = m[2][0];
 			m3x3.m[2][1] = m[2][1];
 			m3x3.m[2][2] = m[2][2];
-		}´*/
+		}
 
 		bool HasScale() const
 		{
@@ -388,12 +389,12 @@ namespace mmo
 			return Determinant() < 0;
 		}
 
-		/*inline Quaternion extractQuaternion() const
+		inline Quaternion ExtractQuaternion() const
 		{
 			Matrix3 m3x3;
 			Extract3x3Matrix(m3x3);
 			return Quaternion(m3x3);
-		}*/
+		}
 
 		static const Matrix4 Zero;
 		static const Matrix4 ZeroAffine;
@@ -414,9 +415,9 @@ namespace mmo
 		float Determinant() const;
 		Matrix4 Inverse() const;
 
-		//void MakeTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation);
-		//void MakeInverseTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation);
-		//void Decomposition(Vector3& position, Vector3& scale, Quaternion& orientation) const;
+		void MakeTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation);
+		void MakeInverseTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation);
+		void Decomposition(Vector3& position, Vector3& scale, Quaternion& orientation) const;
 
 		bool IsAffine() const
 		{

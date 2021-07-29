@@ -67,11 +67,6 @@ namespace mmo
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 
-		// Setup transforms (TODO: use frame transform properties)
-		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, MakeViewMatrix(Vector3(0.0f, 0.0f, 5.0f), Quaternion::Identity));
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
-
 		// Render world scene
 		if (m_camera)
 		{

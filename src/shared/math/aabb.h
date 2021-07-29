@@ -31,6 +31,13 @@ namespace mmo
 		/// the total maximum of both boxes.
 		void Combine(const AABB& other);
 
+		/// @brief Resets the bounding box to be empty.
+		void SetNull()
+		{
+			min = Vector3::Zero;
+			max = Vector3::Zero;
+		}
+
 	public:
 		/// Calculates the total volume of the bounding box.
 		inline float GetVolume() const
