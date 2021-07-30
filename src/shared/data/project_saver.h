@@ -35,7 +35,7 @@ namespace mmo
 				, save([this, name, &manager](
 					        const String & fileName) mutable -> bool
 			{
-				return this->saveManagerToFile(fileName, name, manager);
+				return this->SaveManagerToFile(fileName, name, manager);
 			})
 				, hash([this, &manager](const String &hashString)
 			{
@@ -47,7 +47,7 @@ namespace mmo
 		private:
 
 			template<class T>
-			static bool saveManagerToFile(
+			static bool SaveManagerToFile(
 				const String &filename,
 				const String &name,
 				T &manager)
@@ -59,7 +59,7 @@ namespace mmo
 					return false;
 				}
 
-				return manager.save(file);
+				return manager.Save(file);
 			}
 		};
 

@@ -17,6 +17,9 @@
 #include "mesh_v1_0/header_save.h"
 #include "binary_io/stream_sink.h"
 
+#include "data/project_loader.h"
+#include "data/project_saver.h"
+
 #ifdef _WIN32
 #	include "backends/imgui_impl_win32.h"
 #	include "backends/imgui_impl_dx11.h"
@@ -46,6 +49,7 @@ namespace mmo
 		, m_leftButtonPressed(false)
 		, m_rightButtonPressed(false)
 		, m_fileLoaded(false)
+		, m_worldsWindow(m_project)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -75,6 +79,12 @@ namespace mmo
 
 		// Log success
 		ILOG("MMO Edit initialized");
+
+		// Try to load project
+		if (!m_project.Load(m_config.projectPath))
+		{
+			ELOG("Unable to load project!");
+		}
 	}
 
 	MainWindow::~MainWindow()
@@ -152,7 +162,6 @@ namespace mmo
 		ImGui::SetNextWindowSize(viewport->WorkSize);
 		ImGui::SetNextWindowViewport(viewport->ID);
 
-
 		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
@@ -179,7 +188,17 @@ namespace mmo
 				// File menu
 				if (ImGui::BeginMenu("File"))
 				{
-					showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, false, m_fileLoaded);
+					if (ImGui::MenuItem("Save Project", nullptr, nullptr, m_projectLoaded))
+					{
+						if (!m_project.Save(m_config.projectPath))
+						{
+							ELOG("Failed to save project");
+						}
+					}
+
+					ImGui::Separator();
+
+					showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, nullptr, m_fileLoaded);
 
 					ImGui::Separator();
 					
@@ -197,6 +216,9 @@ namespace mmo
 				{
 					m_logWindow.DrawViewMenuItem();
 					m_viewportWindow.DrawViewMenuItem();
+					ImGui::Separator();
+
+					m_worldsWindow.DrawViewMenuItem();
 
 					ImGui::EndMenu();
 				}
@@ -209,8 +231,8 @@ namespace mmo
 
 			// Render log window
 			m_logWindow.Draw();
-
 			m_assetWindow.Draw();
+			m_worldsWindow.Draw();
 
 			if (showSaveDialog)
 			{

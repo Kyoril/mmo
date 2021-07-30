@@ -8,11 +8,9 @@
 #include "world_state.h"
 #include "login_state.h"
 
-
 #include <string>
 #include <functional>
 #include <utility>
-
 
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"

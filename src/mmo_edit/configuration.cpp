@@ -18,6 +18,7 @@ namespace mmo
 
 	Configuration::Configuration()
 		: assetRegistryPath("")
+		, projectPath("")
 	{
 	}
 
@@ -71,6 +72,7 @@ namespace mmo
 			if (const Table* const dataTable = global.getTable("data"))
 			{
 				assetRegistryPath = dataTable->getString("assetRegistryPath", assetRegistryPath);
+				projectPath = dataTable->getString("projectPath", projectPath);
 			}
 		}
 		catch (const sff::read::ParseException<Iterator>& e)
@@ -114,6 +116,7 @@ namespace mmo
 		{
 			sff::write::Table<Char> dataTable(global, "data", sff::write::MultiLine);
 			dataTable.addKey("assetRegistryPath", assetRegistryPath);
+			dataTable.addKey("projectPath", projectPath);
 			dataTable.Finish();
 		}
 		

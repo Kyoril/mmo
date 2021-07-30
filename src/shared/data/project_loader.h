@@ -32,11 +32,13 @@ namespace mmo
 		DataLoadContext()
 		{
 		}
+
 		virtual ~DataLoadContext()
 		{
 
 		}
-		bool executeLoadLater()
+
+		bool ExecuteLoadLater()
 		{
 			bool success = true;
 
@@ -74,7 +76,7 @@ namespace mmo
 							const String & hash,
 					        Context & context) mutable -> bool
 			{
-				return this->loadManagerFromFile(file, fileName, hash, context, manager, name);
+				return this->LoadManagerFromFile(file, fileName, hash, context, manager, name);
 			})
 			{
 			}
@@ -82,7 +84,7 @@ namespace mmo
 		private:
 
 			template<typename T>
-			static bool loadManagerFromFile(
+			static bool LoadManagerFromFile(
 				std::istream &file,
 				const String &fileName,
 				const String &hash,
@@ -91,7 +93,7 @@ namespace mmo
 				const String &arrayName)
 			{
 				manager.hashString = hash;
-				return manager.load(file);
+				return manager.Load(file);
 			}
 		};
 
@@ -99,7 +101,7 @@ namespace mmo
 
 		typedef String::const_iterator StringIterator;
 
-		static bool load(virtual_dir::IReader &directory, const Managers &managers, Context &context)
+		static bool Load(virtual_dir::IReader &directory, const Managers &managers, Context &context)
 		{
 			const virtual_dir::Path projectFilePath = "project.txt";
 			const auto projectFile = directory.readFile(projectFilePath, false);
@@ -111,7 +113,7 @@ namespace mmo
 
 			std::string fileContent;
 			sff::read::tree::Table<StringIterator> fileTable;
-			if (!loadSffFile(fileTable, *projectFile, fileContent, projectFilePath))
+			if (!LoadSffFile(fileTable, *projectFile, fileContent, projectFilePath))
 			{
 				return false;
 			}
@@ -165,12 +167,11 @@ namespace mmo
 				}
 			}
 
-			return success &&
-				    context.executeLoadLater();
+			return success && context.ExecuteLoadLater();
 		}
 
 		template <class FileName>
-		static bool loadSffFile(
+		static bool LoadSffFile(
 			sff::read::tree::Table<StringIterator> &fileTable,
 			std::istream &source,
 			std::string &content,

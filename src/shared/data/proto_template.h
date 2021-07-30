@@ -1,6 +1,12 @@
 
 #pragma once
 
+#include "base/typedefs.h"
+
+#include <unordered_map>
+#include <istream>
+#include <ostream>
+
 #include "google/protobuf/io/coded_stream.h"
 #include "google/protobuf/io/zero_copy_stream_impl.h"
 
@@ -22,13 +28,13 @@ namespace mmo
 	private:
 
 		T1 m_data;
-		std::map<uint32, T2 *> m_templatesById;
+		std::unordered_map<uint32, T2 *> m_templatesById;
 
 	public:
 
 		/// Called when this list should be loaded.
 		/// @param stream The stream to load data from.
-		bool load(std::istream &stream)
+		bool Load(std::istream &stream)
 		{
 			// Set byte limit to 128MB
 			const int byteLimit = 1024 * 1024 * 128;
@@ -46,7 +52,7 @@ namespace mmo
 			for (int i = 0; i < m_data.entry_size(); ++i)
 			{
 				T2 *entry = m_data.mutable_entry(i);
-				m_templatesById[entry->base().id()] = entry;
+				m_templatesById[entry->id()] = entry;
 			}
 
 			return true;
@@ -54,7 +60,7 @@ namespace mmo
 
 		/// Called when this list should be saved.
 		/// @param stream The stream to write data to.
-		bool save(std::ostream &stream) const
+		bool Save(std::ostream &stream) const
 		{
 			if (!m_data.SerializeToOstream(&stream))
 			{
@@ -64,28 +70,28 @@ namespace mmo
 			return true;
 		}
 
-		void clear()
+		void Clear()
 		{
 			m_templatesById.clear();
 			m_data.clear_entry();
 		}
 
 		/// Gets a list of all template entries in this list.
-		const T1 &getTemplates() const
+		const T1 &GetTemplates() const
 		{
 			return m_data;
 		}
 
-		T1 &getTemplates()
+		T1 &GetTemplates()
 		{
 			return m_data;
 		}
 
 		/// Adds a new entry using the specified id.
-		T2 *add(uint32 id)
+		T2 *Add(uint32 id)
 		{
 			// Check id for existance
-			if (getById(id) != nullptr) {
+			if (GetById(id) != nullptr) {
 				return nullptr;
 			}
 
@@ -99,7 +105,7 @@ namespace mmo
 		}
 
 		/// Removes an existing entry from the data set.
-		void remove(uint32 id)
+		void Remove(uint32 id)
 		{
 			// Remove entry from id list
 			auto it = m_templatesById.find(id);
@@ -124,7 +130,7 @@ namespace mmo
 		}
 
 		/// Retrieves a pointer to an object by its id.
-		const T2 *getById(uint32 id) const
+		const T2 *GetById(uint32 id) const
 		{
 			const auto it = m_templatesById.find(id);
 			if (it == m_templatesById.end()) {
@@ -134,7 +140,7 @@ namespace mmo
 			return it->second;
 		}
 
-		T2 *getById(uint32 id)
+		T2 *GetById(uint32 id)
 		{
 			const auto it = m_templatesById.find(id);
 			if (it == m_templatesById.end()) {

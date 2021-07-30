@@ -20,6 +20,9 @@ namespace mmo
 		 * \brief Path to the asset registry used to store assets.
 		 */
 		String assetRegistryPath;
+		
+		/// @brief Path to the editor project.
+		String projectPath;
 
 
 	public:

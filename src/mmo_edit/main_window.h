@@ -6,10 +6,15 @@
 #include "viewport_window.h"
 #include "asset_window.h"
 #include "fbx_import.h"
+#include "worlds_window.h"
+
+#include "data/project.h"
 
 #include "base/non_copyable.h"
 
-#include <Windows.h>
+#ifdef _WIN32
+#	include <Windows.h>
+#endif
 
 #include <string>
 
@@ -73,6 +78,11 @@ namespace mmo
 		bool m_leftButtonPressed;
 		bool m_rightButtonPressed;
 		bool m_fileLoaded;
+
+		bool m_projectLoaded;
+		Project m_project;
+
+		WorldsWindow m_worldsWindow;
 
 		std::string m_modelName;
 	};

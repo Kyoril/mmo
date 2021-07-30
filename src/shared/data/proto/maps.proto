@@ -12,26 +12,10 @@ message MapEntry {
 		BATTLEGROUND = 3;
 	}
 	MapInstanceType instancetype = 3;
-}
-
-/* Client version of a map entry which has additional client-only data. */
-message MapClientPartEntry {
-
-}
-
-/* Server version of a map entry which has additional server-only data. */
-message MapServerPartEntry {
-
-}
-
-/* Editor version of a map entry which has all data available for a map in any scope. */
-message MapEditorEntry {
-	MapEntry base = 1;
-	MapClientPartEntry client = 2;
-	MapServerPartEntry server = 3;
+	string directory = 4;
 }
 
 /* An enumeration of maps. */
-message EditorMaps {
-	repeated MapEditorEntry entry = 1;
+message Maps {
+	repeated MapEntry entry = 1;
 }

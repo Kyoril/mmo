@@ -14,7 +14,7 @@
 
 namespace mmo
 {
-	typedef TemplateManager<mmo::EditorMaps, mmo::MapEditorEntry> MapManager;
+	typedef TemplateManager<mmo::Maps, mmo::MapEntry> MapManager;
 
 
 	/// This class contains contains all the static game data like item templates.
@@ -48,8 +48,7 @@ namespace mmo
 
 		/// Loads the project.
 		/// @param directory The path to load this project from.
-		bool load(
-			const String &directory)
+		bool Load(const String &directory)
 		{
 			// Remember last used path
 			m_lastPath = directory;
@@ -69,8 +68,7 @@ namespace mmo
 				WLOG(message);
 			};
 
-			const std::filesystem::path dataPath = directory;
-			const auto realmDataPath = (dataPath / "mmo");
+			const std::filesystem::path dataPath = std::filesystem::path(directory) / "data";
 
 			typedef ProjectLoader<DataLoadContext> RealmProjectLoader;
 			typedef RealmProjectLoader::ManagerEntry ManagerEntry;
@@ -78,8 +76,8 @@ namespace mmo
 			RealmProjectLoader::Managers managers;
 			managers.push_back(ManagerEntry("maps", maps));
 
-			virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
-			if (!RealmProjectLoader::load(
+			virtual_dir::FileSystemReader virtualDirectory(dataPath);
+			if (!RealmProjectLoader::Load(
 				        virtualDirectory,
 				        managers,
 				        context))
@@ -96,8 +94,7 @@ namespace mmo
 
 		/// Saves the project.
 		/// @param directory The path to save this project to.
-		bool save(
-			const String &directory)
+		bool Save(const String &directory)
 		{
 			// Remember last used path
 			m_lastPath = directory;
@@ -105,8 +102,7 @@ namespace mmo
 			ILOG("Saving data...");
 			auto saveStart = GetAsyncTimeMs();
 
-			const std::filesystem::path dataPath = directory;
-			const auto realmDataPath = (dataPath / "mmo");
+			const std::filesystem::path dataPath = std::filesystem::path(directory) / "data";
 
 			typedef ProjectSaver RealmProjectSaver;
 			typedef ProjectSaver::Manager ManagerEntry;
@@ -114,7 +110,7 @@ namespace mmo
 			RealmProjectSaver::Managers managers;
 			managers.push_back(ManagerEntry("maps", "maps", maps));
 
-			if (!RealmProjectSaver::save(realmDataPath, managers))
+			if (!RealmProjectSaver::save(dataPath, managers))
 			{
 				ELOG("Could not save data project!");
 				return false;
