@@ -9,8 +9,6 @@
 #include "mysql_wrapper/mysql_statement.h"
 #include "log/default_log_levels.h"
 #include "game/character_flags.h"
-#include "math/vector3.h"
-#include "math/degree.h"
 
 
 namespace mmo
@@ -139,12 +137,12 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation)
+	void MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const float x, const float y, const float z, const float orientation)
 	{
 		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, gender, hp, x, y, z, o) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
-			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " + 
-			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ");"))
+			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(x) + ", " + 
+			std::to_string(y) + ", " + std::to_string(z) + ", " + std::to_string(orientation) + ");"))
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not create character entry");
