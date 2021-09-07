@@ -1,7 +1,6 @@
 # This file tries to find external dependencies and sets them up.
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/mmo_dependencies")
-message(STATUS "Adding module path: ${CMAKE_CURRENT_SOURCE_DIR}/mmo_dependencies")
 
 # ===============================================================================
 # ASIO (standalone)
@@ -45,15 +44,6 @@ include_directories(${MYSQL_INCLUDE_DIR})
 
 
 # ===============================================================================
-# Luabind
-# ===============================================================================
-
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/lua")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/luabind_noboost")
-
-
-
-# ===============================================================================
 # Catch
 # ===============================================================================
 
@@ -61,35 +51,3 @@ if (MMO_BUILD_TESTS)
 	include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/catch/")
 endif()
 
-
-# ===============================================================================
-# FBX SDK
-# ===============================================================================
-
-if (MMO_BUILD_TOOLS OR MMO_BUILD_EDITOR)
-	find_package(FBX)
-endif()
-
-
-
-# ===============================================================================
-# Protobuffer
-# ===============================================================================
-
-option(protobuf_BUILD_TESTS OFF)
-option(protobuf_BUILD_EXAMPLES OFF)
-option(protobuf_MSVC_STATIC_RUNTIME OFF)
-option(protobuf_WITH_ZLIB OFF)
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/protobuf/src/")
-
-
-
-# ===============================================================================
-# Protobuffer
-# ===============================================================================
-
-# If we want to build the editor, we need imgui for now
-if (MMO_BUILD_EDITOR)
-	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui)
-	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui/examples)
-endif()
