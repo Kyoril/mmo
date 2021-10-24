@@ -38,6 +38,7 @@ namespace mmo
 		BigNumber m_sessionKey;
 		uint32 m_serverSeed;
 		uint32 m_clientSeed;
+		uint32 m_realmId;
 
 	public:
 		/// Initializes a new instance of the RealmConnector class.
@@ -83,6 +84,9 @@ namespace mmo
 
 		/// Gets the realm name.
 		const std::string& GetRealmName() const { return m_realmName; }
+
+		/// Gets the id of the realm.
+		uint32 GetRealmId() const { return m_realmId; }
 
 	public:
 		/// Gets a constant list of character views.

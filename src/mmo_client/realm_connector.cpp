@@ -17,6 +17,7 @@ namespace mmo
 		, m_realmPort(0)
 		, m_serverSeed(0)
 		, m_clientSeed(0)
+		, m_realmId(0)
 	{
 	}
 
@@ -183,6 +184,7 @@ namespace mmo
 
 	void RealmConnector::ConnectToRealm(const RealmData & data)
 	{
+		m_realmId = data.id;
 		m_realmAddress = data.address;
 		m_realmPort = data.port;
 		m_realmName = data.name;

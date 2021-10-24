@@ -22,6 +22,8 @@
 
 namespace mmo
 {
+	ConsoleVar* s_lastRealmVar = nullptr;
+
 	struct ConsoleLogEntry final
 	{
 		argb_t color;
@@ -202,6 +204,7 @@ namespace mmo
 
 		// Register current path console var
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
+		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		
 		// Register locale cvar
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");

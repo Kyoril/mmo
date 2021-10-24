@@ -4,6 +4,7 @@
 #include "login_connector.h"
 #include "realm_connector.h"
 #include "console.h"
+#include "console_var.h"
 #include "game_state_mgr.h"
 #include "loading_screen.h"
 #include "world_state.h"
@@ -14,6 +15,8 @@
 
 namespace mmo
 {
+	extern ConsoleVar* s_lastRealmVar;
+
 	const std::string LoginState::Name = "login";
 	
 	LoginState::LoginState(LoginConnector & loginConnector, RealmConnector & realmConnector)
@@ -27,7 +30,7 @@ namespace mmo
 		FrameManager& frameMgr = FrameManager::Get();
 		
 		// Make the top frame element
-		auto topFrame = frameMgr.CreateOrRetrieve("Frame", "TopFrame");
+		const auto topFrame = frameMgr.CreateOrRetrieve("Frame", "TopFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
@@ -107,30 +110,44 @@ namespace mmo
 
 	void LoginState::OnRealmDisconnected()
 	{
-		// Trigger the lua event
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 	}
 
 	void LoginState::OnRealmListUpdated()
 	{
-		// TODO: We want to show a realm list to the user so he can choose a
-		// realm to connect to. But for now, we will just connect with the first realm
-		// available (if there is any).
+		const int32 lastRealmId = s_lastRealmVar == nullptr ? -1 : s_lastRealmVar->GetIntValue();
+		if (lastRealmId >= 0)
+		{
+			const auto& realms = m_loginConnector.GetRealms();
+			const auto it = std::find_if(realms.begin(), realms.end(), [lastRealmId](const RealmData& realm)
+			{
+				return realm.id == static_cast<uint32>(lastRealmId);
+			});
 
-		// Trigger the lua event
+			if (it != realms.end())
+			{
+				m_realmConnector.ConnectToRealm(*it);
+
+				FrameManager::Get().TriggerLuaEvent("CONNECTING_TO_REALM");
+				return;
+			}
+		}
+		
 		FrameManager::Get().TriggerLuaEvent("REALM_LIST");
+
 	}
 	
 	void LoginState::OnRealmAuthenticationResult(uint8 result)
 	{
 		if (result != auth::auth_result::Success)
 		{
-			// TODO: In case there was an error, update the UI to display an error message
 			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_FAILED", static_cast<int32>(result));
 		}
 		else
 		{
-			// Successfully authenticated
+			ASSERT(s_lastRealmVar);
+			s_lastRealmVar->Set(static_cast<int32>(m_realmConnector.GetRealmId()));
+		
 			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_SUCCESS");
 		}
 	}
