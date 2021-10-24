@@ -21,6 +21,26 @@ mark_as_advanced(MMO_UNITY_FILES_PER_UNIT)
 # on a public server to avoid GM power abuse, but which you might need on development servers to test certain things quickly).
 option(MMO_WITH_DEV_COMMANDS "If checked, developer commands will be available." OFF)
 
+if (WIN32)
+	option(MMO_BUILD_CLIENT "If checked, will try to build the client." ON)
+else()
+	option(MMO_BUILD_CLIENT "If checked, will try to build the client." OFF)
+endif()
+
+if (WIN32 OR APPLE)
+	option(MMO_BUILD_LAUNCHER "If checked, will try to build the launcher." OFF)
+endif()
+
+# If enabled, the editor will be built. The editor can be used to modify static game data like creature spawns etc.
+# However, it's a heavy tool with heavy dependencies and thus you might not want to build this yourself, so this option is 
+# turned OFF by default.
+option(MMO_BUILD_EDITOR "If checked, will try to build the editor. You will need to have QT 5 installed to build this." OFF)
+
+# If enabled, additional tools (most likely console tools) are build for things like navmesh generation. This does not require
+# additional dependencies, but is turned OFF so that the standard cmake options will simply build the servers to make things
+# easier for linux builds.
+option(MMO_BUILD_TOOLS "If checked, will try to build tools." OFF)
+
 # If enabled, unit tests will be built.
 option(MMO_BUILD_TESTS "If checked, will try to test programs." ON)
 
@@ -48,6 +68,30 @@ if (MMO_BUILD_TESTS)
 	add_definitions("-DMMO_BUILD_TESTS=1")
 else()
 	add_definitions("-DMMO_BUILD_TESTS=0")
+endif()
+
+if (MMO_BUILD_EDITOR)
+	add_definitions("-DMMO_BUILD_EDITOR=1")
+else()
+	add_definitions("-DMMO_BUILD_EDITOR=0")
+endif()
+
+if (MMO_BUILD_LAUNCHER)
+	add_definitions("-DMMO_BUILD_LAUNCHER=1")
+else()
+	add_definitions("-DMMO_BUILD_LAUNCHER=0")
+endif()
+
+if (MMO_BUILD_TOOLS)
+	add_definitions("-DMMO_BUILD_TOOLS=1")
+else()
+	add_definitions("-DMMO_BUILD_TOOLS=0")
+endif()
+
+if (MMO_BUILD_CLIENT)
+	add_definitions("-DMMO_BUILD_CLIENT=1")
+else()
+	add_definitions("-DMMO_BUILD_CLIENT=0")
 endif()
 
 # TODO: Add more option-specific settings here as you need
