@@ -143,11 +143,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Verify the client build immediatly for validity
+		// Verify the client build immediately for validity
 		if (m_build != mmo::Revision)
 		{
-			ELOG("Unsupported client build " << m_build);
+#ifdef _DEBUG
+			WLOG("Client is using a different build than the realm server (C " << m_build << ", S " << Revision << "). There might be incompatibilities");
+#else
+			ELOG("Client is using unsupported client build " << m_build);
 			return PacketParseResult::Disconnect;
+#endif
 		}
 
 		// Setup a weak callback handler
