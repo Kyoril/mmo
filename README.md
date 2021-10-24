@@ -4,8 +4,8 @@ Login Screen             |  Character Selection Screen
 :-------------------------:|:-------------------------:
 <img src="https://user-images.githubusercontent.com/9358023/85418557-34ccf280-b571-11ea-866c-7e18aaf989b6.png" width="600">  |  <img src="https://cdn.discordapp.com/attachments/679667054424359054/793784839647395850/unknown.png" width="600">
 
-# What is this project about?
-This project will grow to a fully fledged MMORPG prototype. This means, that it will contain all tools required to build an MMORPG from scratch.
+# What is this?
+This repository contains code for servers which can be used to run an MMORPG prototype using Unreal Engine 5. It does **NOT** contain client files, tools or any game assets. These are hosted in separate repositories.
 
 # You mentioned prototype - what does that mean?
 Since this is designed to be a protoype, it won't be a massive MMORPG with dozens of races, classes and maps. It will probably contain one race, one or two classes, one or two small maps. The scope may grow over time, if the effort required to so is reasonable.
@@ -16,11 +16,9 @@ If you want to contact the author of this project, feel free to join the discord
 # Supported platforms
 There are three supported platforms:
 
-* Windows: Everything is supported, Windows 10 is highly recommended although it should also work on Windows 7
-* Linux: No support for client, game editor and launcher due to missing gui and graphics api implementation
-* Mac OS X: No support for client and game editor due to missing graphics api implementation
-
-While support for the Mac OS X game client may be available in the future, I don't plan anything for Linux at all, as I mainly use Linux for running the game servers and I don't run a desktop linux distribution personally to test and support it, nor do I have the time to do so right now.
+* Windows: This is the main development OS for me, so it is fully supported. Windows 10 is highly recommended although it should also work on Windows 7 and newer.
+* Linux: Full support for the servers.
+* Mac OS X: Compile and run of the servers should be possible, however I do not support it officially.
 
 # What do I need to build?
 In order to build this project, you need to meet certain requirements:
