@@ -16,6 +16,9 @@
 
 namespace mmo
 {
+	class Degree;
+	class Vector3;
+
 	/// Contains data used by a world for authentication.
 	struct WorldAuthData final
 	{
@@ -45,7 +48,7 @@ namespace mmo
 		/// Deletes a character with the given guid.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 		/// Creates a new character on the given account.
-		virtual void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, float x, float y, float z, float orientation) = 0;
+		virtual void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation) = 0;
 	};
 
 

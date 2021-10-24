@@ -1,0 +1,21 @@
+syntax = "proto3";
+package mmo;
+
+/* Base type for a map with shared values. */
+message MapEntry {
+	uint32 id = 1;
+	string name = 2;
+	enum MapInstanceType {
+		GLOBAL = 0;
+		DUNGEON = 1;
+		RAID = 2;
+		BATTLEGROUND = 3;
+	}
+	MapInstanceType instancetype = 3;
+	string directory = 4;
+}
+
+/* An enumeration of maps. */
+message Maps {
+	repeated MapEntry entry = 1;
+}

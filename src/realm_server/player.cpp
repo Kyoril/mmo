@@ -11,6 +11,8 @@
 #include "base/random.h"
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
+#include "math/vector3.h"
+#include "math/degree.h"
 
 #include <functional>
 
@@ -286,13 +288,13 @@ namespace mmo
 		const uint32 map = 0;
 		const uint32 hp = 1;
 		const uint32 gender = 0;
-		const float x = 0.0f, y = 0.0f, z = 0.0f;
-		const float orientation = 0.0f;
+		const Vector3 position;
+		const Degree rotation;
 		
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest<void>([characterName, level, race, map, hp, gender, x, y, z, orientation, this](auto&& database)
+		m_database.asyncRequest<void>([characterName, level, race, map, hp, gender, &position, &rotation, this](auto&& database)
 		{
-			database->CreateCharacter(characterName, this->m_accountId, map, level, hp, race, gender, x, y, z, orientation);
+			database->CreateCharacter(characterName, this->m_accountId, map, level, hp, race, gender, position, rotation);
 		}, std::move(handler));
 		
 		return PacketParseResult::Pass;
