@@ -27,6 +27,8 @@ namespace mmo
 
 		signal<void()> Disconnected;
 
+		signal<void(game::player_login_response::Type)> EnterWorldFailed;
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;

@@ -72,7 +72,6 @@ namespace mmo
 			{
 				NoWorldServer,
 				NoCharacter,
-
 			};
 		};
 

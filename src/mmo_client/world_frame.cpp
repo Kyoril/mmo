@@ -13,6 +13,11 @@ namespace mmo
 	{
 	}
 
+	void WorldFrame::RenderWorld()
+	{
+
+	}
+
 	void WorldFrame::SetAsCurrentWorldFrame()
 	{
 		ASSERT(!s_currentWorldFrame.lock() && "There can't be more than one world frame!");

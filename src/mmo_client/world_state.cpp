@@ -17,6 +17,7 @@ namespace mmo
 {
 	const std::string WorldState::Name = "world";
 
+	extern CharacterView s_selectedCharacter;
 	
 	WorldState::WorldState(RealmConnector& realmConnector)
 		: m_realmConnector(realmConnector)
@@ -47,22 +48,27 @@ namespace mmo
 		// Load ui file
 		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
 
+		m_realmConnections += m_realmConnector.EnterWorldFailed.connect(*this, &WorldState::OnEnterWorldFailed);
+
+		// Send enter world request to server
+		m_realmConnector.EnterWorld(s_selectedCharacter);
+
 		// Register drawing of the game ui
 		m_paintLayer = Screen::AddLayer(std::bind(&WorldState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
 	}
 
 	void WorldState::OnLeave()
 	{
+		// Disconnect all active connections
+		m_realmConnections.disconnect();
+
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
 		
 		// Remove world renderer
 		FrameManager::Get().RemoveFrameRenderer("WorldRenderer");
 		FrameManager::Get().UnregisterFrameFactory("World");
-
-		// Disconnect all active connections
-		m_realmConnections.disconnect();
-
+		
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
 	}
@@ -83,6 +89,11 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 
 		// Go back to login state
+		GameStateMgr::Get().SetGameState(LoginState::Name);
+	}
+
+	void WorldState::OnEnterWorldFailed(game::player_login_response::Type error)
+	{
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 }

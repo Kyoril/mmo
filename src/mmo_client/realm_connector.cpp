@@ -128,8 +128,15 @@ namespace mmo
 	
 	PacketParseResult RealmConnector::OnEnterWorldFailed(game::IncomingPacket& packet)
 	{
-		ELOG("Failed to enter world!");
-		
+		game::player_login_response::Type response;
+		if(!(packet >> io::read<uint8>(response)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ELOG("Failed to enter world: " << response);
+		EnterWorldFailed(response);
+
 		return PacketParseResult::Pass;
 	}
 

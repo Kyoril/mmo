@@ -235,6 +235,15 @@ namespace mmo
 		if (!strongWorld)
 		{
 			WLOG("No world node available which is able to host map " << mapId);
+
+			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket) 
+			{
+				outPacket.Start(game::realm_client_packet::EnterWorldFailed);
+				outPacket
+					<< io::write<uint8>(game::player_login_response::NoWorldServer);
+				outPacket.Finish();
+			});
+
 			EnableEnterWorldPacket(true);
 			return PacketParseResult::Pass;
 		}

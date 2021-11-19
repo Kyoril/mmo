@@ -9,6 +9,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"
 #include "base/signal.h"
+#include "game_protocol/game_protocol.h"
 
 
 namespace mmo
@@ -39,6 +40,8 @@ namespace mmo
 		void OnPaint();
 		// 
 		void OnRealmDisconnected();
+
+		void OnEnterWorldFailed(game::player_login_response::Type error);
 
 	private:
 		

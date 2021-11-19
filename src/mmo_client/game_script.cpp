@@ -18,6 +18,8 @@
 
 namespace mmo
 {
+	CharacterView s_selectedCharacter;
+
 	// Static script methods
 	namespace
 	{
@@ -40,8 +42,10 @@ namespace mmo
 			return &realms[index];
 		}
 
-		void Script_EnterWorld()
+		void Script_EnterWorld(const CharacterView& characterView)
 		{
+			s_selectedCharacter = characterView;
+
 			GameStateMgr::Get().SetGameState(WorldState::Name);
 		}
 		
