@@ -35,7 +35,7 @@ namespace mmo
 	/// Map of case insensitive registered console commands.
 	std::map<std::string, Console::ConsoleCommand, StrCaseIComp> Console::s_consoleCommands;
 	/// Am event that listens for KeyDown events from the event loop to handle console input.
-	static scoped_connection s_consoleKeyDownEvent;
+	static scoped_connection_container s_consoleKeyEvents;
 	/// Whether the console window is currently visible on screen or not.
 	static bool s_consoleVisible = false;
 	/// The current height of the console window in pixels, counted from the top edge.
@@ -67,6 +67,11 @@ namespace mmo
 	/// A connection that binds a function which displays the content of the LOG macros in the console.
 	static scoped_connection s_consoleLogConn;
 
+	static std::vector<std::string> s_commandHistory;
+
+	static int s_commandHistoryIndex = 0;
+
+	static std::string s_consoleInput;
 
 	namespace
 	{
@@ -81,7 +86,6 @@ namespace mmo
 		ConsoleVar* s_gxWindowedCVar = nullptr;
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
-
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -105,7 +109,6 @@ namespace mmo
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
 		};
-
 
 		/// Triggered when a gxcvar is changed to invalidate the current graphics settings.
 		static void GxCVarChanged(ConsoleVar& var, const std::string& oldValue)
@@ -357,13 +360,18 @@ namespace mmo
 		s_consoleLayer = Screen::AddLayer(&Console::Paint, 100.0f, ScreenLayerFlags::IdentityTransform);
 
 		// Watch for the console key event
-		s_consoleKeyDownEvent = EventLoop::KeyDown.connect(&Console::KeyDown);
+		s_consoleKeyEvents += 
+		{
+			EventLoop::KeyDown.connect(&Console::KeyDown),
+			EventLoop::KeyChar.connect(&Console::KeyChar),
+			EventLoop::KeyUp.connect(&Console::KeyUp)
+		};
 	}
 	
 	void Console::Destroy()
 	{
 		// Disconnect the key events
-		s_consoleKeyDownEvent.disconnect();
+		s_consoleKeyEvents.disconnect();
 
 		// Remove the console layer
 		Screen::RemoveLayer(s_consoleLayer);
@@ -483,19 +491,85 @@ namespace mmo
 			return false;
 		}
 
+		if (!s_consoleVisible)
+		{
+			return true;
+		}
+
+		if (key == 0x0D && !s_consoleInput.empty())
+		{
+			ExecuteCommand(s_consoleInput);
+			
+			s_commandHistory.emplace_back(std::move(s_consoleInput));
+			if (s_commandHistory.size() > 50)
+			{
+				s_commandHistory.erase(s_commandHistory.begin());
+			}
+
+			s_commandHistoryIndex = s_commandHistory.size();
+			s_consoleTextDirty = true;
+		}
+
+		if (key == 0x26)	// UP
+		{
+			s_commandHistoryIndex = std::max(0, s_commandHistoryIndex - 1);
+			if (s_commandHistoryIndex >= s_commandHistory.size())
+			{
+				return true;
+			}
+
+			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
+			s_consoleTextDirty = true;
+		}
+		else if (key == 0x28) // DOWN
+		{
+			s_commandHistoryIndex = std::min<int>(s_commandHistoryIndex + 1, s_commandHistory.size());
+			if (s_commandHistoryIndex >= s_commandHistory.size())
+			{
+				return true;
+			}
+
+			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
+			s_consoleTextDirty = true;
+		}
+		
+		if (key == 0x08)
+		{
+			if (s_consoleInput.empty())
+				return false;
+
+			s_consoleInput.pop_back();
+			s_consoleTextDirty = true;
+		}
+
 		// Enable console scrolling by pressing the PAGE_UP / PAGE_DOWN keys
 		if (key == 0x21 || key == 0x22)
 		{
-			if (key == 0x21)	// PG_UP
+			if (key == 0x21)
 			{
 				EnsureConsoleScrolling(1);
 			}
-			else				// PG_DOWN
+			else
 			{
 
 				EnsureConsoleScrolling(-1);
 			}
 
+		}
+
+		return true;
+	}
+
+	bool Console::KeyChar(uint16 codepoint)
+	{
+		if (s_consoleVisible)
+		{
+			if (codepoint == 0xf6 || codepoint == 0xC0 || codepoint == 0xDC || codepoint == 0x0D || codepoint == 0x8 || codepoint == 0x26 || codepoint == 0x28)
+				return false;
+
+			s_consoleInput.push_back(static_cast<char>(codepoint & 0xff));
+			s_consoleTextDirty = true;
+			return false;
 		}
 
 		return true;
@@ -521,7 +595,11 @@ namespace mmo
 			s_consoleTextGeom->Reset();
 			
 			// Calculate start point
-			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) };
+			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) - s_consoleFont->GetHeight() };
+			
+			// Draw line of text
+			s_consoleFont->DrawText("> ", startPoint, *s_consoleTextGeom, 1.0f);
+			s_consoleFont->DrawText(s_consoleInput, startPoint + Point(16.0f, 0.0f), *s_consoleTextGeom, 1.0f);
 
 			auto index = 0;
 

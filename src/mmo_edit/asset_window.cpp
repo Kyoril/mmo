@@ -3,6 +3,8 @@
 #include "asset_window.h"
 #include "assets/asset_registry.h"
 
+#include "log/default_log_levels.h"
+
 #include <imgui.h>
 
 namespace mmo
@@ -17,7 +19,15 @@ namespace mmo
 		// If there are no children, we don't need to continue
 		if (entry.children.empty())
 		{
-			ImGui::Selectable(name.c_str());
+			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+			{
+				if (std::filesystem::path(name).extension() == ".hmsh")
+				{
+					DLOG("Open model " << entry.fullPath);
+
+
+				}
+			}
 		}
 		else
 		{

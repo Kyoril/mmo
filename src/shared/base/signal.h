@@ -437,6 +437,14 @@ namespace mmo
             return *this;
         }
 
+        scoped_connection_container& operator += (std::initializer_list<connection> list)
+        {
+            for (auto const& connection : list) {
+                append(connection);
+            }
+            return *this;
+        }
+
         void disconnect()
         {
             connections.clear();

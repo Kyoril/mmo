@@ -89,7 +89,7 @@ namespace mmo
 
 	void Scene::RenderVisibleObjects()
 	{
-
+		
 	}
 
 	SceneNode& Scene::GetRootSceneNode() 

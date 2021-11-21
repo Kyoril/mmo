@@ -72,6 +72,8 @@ namespace mmo
 	private:
 		/// Executed when a key has been pressed. Repeated.
 		static bool KeyDown(int32 key);
+		/// Executed when a key character has been fired.
+		static bool KeyChar(uint16 codepoint);
 		/// Executed when a key has been released.
 		static bool KeyUp(int32 key);
 		/// Executed when the console should be painted (paint signal in event loop is fired).
