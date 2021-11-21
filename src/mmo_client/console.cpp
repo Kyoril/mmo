@@ -147,7 +147,7 @@ namespace mmo
 	{
 		/// Changes the console scrolling value by an amount and ensures that the scroll index
 		/// stays in the expected range so that no overflow / underflow occurrs.
-		inline void EnsureConsoleScrolling(int32 Amount)
+		inline void ApplyConsoleScrolling(int32 Amount)
 		{
 			// Ensure that s_consoleTextDirty is set to true at the end of the function,
 			// no matter how we exit it.
@@ -547,12 +547,12 @@ namespace mmo
 		{
 			if (key == 0x21)
 			{
-				EnsureConsoleScrolling(1);
+				ApplyConsoleScrolling(1);
 			}
 			else
 			{
 
-				EnsureConsoleScrolling(-1);
+				ApplyConsoleScrolling(-1);
 			}
 
 		}
