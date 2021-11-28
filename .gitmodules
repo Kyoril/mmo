@@ -11,6 +11,3 @@
 [submodule "data/client"]
 	path = data/client
 	url = https://github.com/Kyoril/mmo-data
-[submodule "data/editor"]
-	path = data/editor
-	url = https://github.com/Kyoril/mmo-editor-data
