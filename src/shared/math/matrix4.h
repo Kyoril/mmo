@@ -61,20 +61,20 @@ namespace mmo
 		}
 
 		/// Creates a standard 4x4 transformation matrix with a zero translation part from a rotation/scaling 3x3 matrix.
-		/*inline Matrix4(const Matrix3& m3x3)
+		inline Matrix4(const Matrix3& m3x3)
 		{
 			operator=(Identity);
 			operator=(m3x3);
-		}*/
+		}
 
 		/// Creates a standard 4x4 transformation matrix with a zero translation part from a rotation/scaling Quaternion.
-		/*inline Matrix4(const Quaternion& rot)
+		inline Matrix4(const Quaternion& rot)
 		{
 			Matrix3 m3x3;
 			rot.ToRotationMatrix(m3x3);
 			operator=(Identity);
 			operator=(m3x3);
-		}*/
+		}
 
 		/// Exchange the contents of this matrix with another.
 		void swap(Matrix4& other)
@@ -258,14 +258,7 @@ namespace mmo
 				return true;
 			return false;
 		}
-
-		/*inline void operator = (const Matrix3& mat3)
-		{
-			m[0][0] = mat3.m[0][0]; m[0][1] = mat3.m[0][1]; m[0][2] = mat3.m[0][2];
-			m[1][0] = mat3.m[1][0]; m[1][1] = mat3.m[1][1]; m[1][2] = mat3.m[1][2];
-			m[2][0] = mat3.m[2][0]; m[2][1] = mat3.m[2][1]; m[2][2] = mat3.m[2][2];
-		}*/
-
+		
 		Matrix4 Transpose(void) const
 		{
 			return Matrix4(m[0][0], m[1][0], m[2][0], m[3][0],

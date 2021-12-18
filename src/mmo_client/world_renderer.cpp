@@ -16,6 +16,8 @@ namespace mmo
 		, m_worldScene(worldScene)
 		, m_camera(nullptr)
 	{
+		// TODO: Remove me!
+		//m_camera = m_worldScene.CreateCamera("Default");
 	}
 
 	void WorldRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)

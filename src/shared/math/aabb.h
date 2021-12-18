@@ -26,6 +26,7 @@ namespace mmo
 		/// Transforms the bounding box using the given 4x4 matrix. Keep in mind,
 		/// that the result will still be an AXIS ALIGNED bounding box.
 		void Transform(const Matrix4& matrix);
+
 		/// Combines another axis aligned bounding box with this one, so that the 
 		/// new minimum is the total minimum of both boxes and the new maximum is
 		/// the total maximum of both boxes.
@@ -34,8 +35,12 @@ namespace mmo
 		/// @brief Resets the bounding box to be empty.
 		void SetNull()
 		{
-			min = Vector3::Zero;
-			max = Vector3::Zero;
+			min = max = Vector3::Zero;
+		}
+
+		[[nodiscard]] bool IsNull() const
+		{
+			return max == min;
 		}
 
 	public:
@@ -45,22 +50,26 @@ namespace mmo
 			const Vector3 e = max - min;
 			return e.x * e.y * e.z;
 		}
+
 		/// Calculates the total surface area of the bounding box.
 		inline float GetSurfaceArea() const
 		{
 			const Vector3 e = max - min;
 			return 2.0f * (e.x*e.y + e.x*e.z + e.y*e.z);
 		}
+
 		/// Calculates the center of the bounding box.
 		inline Vector3 GetCenter() const
 		{
 			return (max + min) * 0.5f;
 		}
+
 		/// Calculates the bounding box extents (half the size).
 		inline Vector3 GetExtents() const
 		{
 			return GetSize() * 0.5f;
 		}
+
 		/// Calculates the size of the bounding box on all three axes.
 		inline Vector3 GetSize() const
 		{

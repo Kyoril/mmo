@@ -199,6 +199,7 @@ namespace mmo
 		{
 			return x * x + y * y + z * z;
 		}
+
 		/// Normalizes this vector.
 		inline float Normalize()
 		{
@@ -209,6 +210,7 @@ namespace mmo
 			z /= length;
 			return length;
 		}
+
 		/// Returns a normalized copy of this vector.
 		inline Vector3 NormalizedCopy() const
 		{
@@ -219,14 +221,17 @@ namespace mmo
 			Vector3 v = *this;
 			return v / length;
 		}
+
 		/// Checks if this vector is almost equal to another vector, but allows some
 		/// minimal offset for each component due to imprecise floating points.
-		inline float IsNearlyEqual(const Vector3& other, float epsilon = FLT_EPSILON) const
+		inline bool IsNearlyEqual(const Vector3& other, float epsilon = FLT_EPSILON) const
 		{
-			return (abs(x - other.x) <= epsilon &&
-				abs(y - other.y) <= epsilon &&
-				abs(z - other.z) <= epsilon);
+			return
+				fabs(x - other.x) <= epsilon &&
+				fabs(y - other.y) <= epsilon &&
+				fabs(z - other.z) <= epsilon;
 		}
+
 		/// Checks whether all components of this vector are valid numbers.
 		inline bool IsValid() const
 		{
