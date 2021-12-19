@@ -22,21 +22,22 @@ namespace mmo
 		, public NonCopyable
 	{
 	public:
-		Camera(Scene& scene, String name);
+		Camera(const String& name);
 
 	public:
-		const String& GetName() const { return m_name; }
-
 		const Matrix4& GetProjectionMatrix() const;
 		const Matrix4& GetViewMatrix() const;
-
-		const AABB& GetBounds() const override { return m_bounds; }
-
+		
 	protected:
 		void UpdateFrustum() const;
-	
+
+	public:
+		[[nodiscard]] const String& GetMovableType() const override;
+		[[nodiscard]] const AABB& GetBoundingBox() const override;
+		[[nodiscard]] float GetBoundingRadius() const override;
+		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
+
 	private:
-		String m_name;
 		Radian m_fovY;
 		float m_farDist;
 		float m_nearDist;
@@ -48,6 +49,5 @@ namespace mmo
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;
 		float m_left, m_right, m_top, m_bottom;
-		AABB m_bounds;
 	};
 }

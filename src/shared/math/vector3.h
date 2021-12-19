@@ -107,18 +107,21 @@ namespace mmo
 			v += b;
 			return v;
 		}
+
 		inline Vector3 operator-(Vector3 const& b) const
 		{
 			Vector3 v = *this;
 			v -= b;
 			return v;
 		}
+
 		inline Vector3 operator*(float b) const
 		{
 			Vector3 v = *this;
 			v *= b;
 			return v;
 		}
+
 		inline Vector3 operator*(const Vector3& b) const
 		{
             return Vector3(
@@ -126,12 +129,14 @@ namespace mmo
                 y * b.y,
                 z * b.z);
 		}
+
 		inline Vector3 operator/(float b) const
 		{
 			Vector3 v = *this;
 			v /= b;
 			return v;
 		}
+
 		inline Vector3 operator/(const Vector3& b) const
 		{
 			Vector3 v = *this;
@@ -144,6 +149,7 @@ namespace mmo
 		{
 			return x == other.x && y == other.y && z == other.z;
 		}
+
 		inline bool operator!=(Vector3 const& other) const
 		{
 			return x != other.x || y != other.y || z != other.z;
@@ -154,6 +160,7 @@ namespace mmo
 		{
 			return Vector3(-x, -y, -z);
 		}
+
 		inline Vector3 operator!() const
 		{
 			return Vector3(!x, !y, !z);
@@ -164,6 +171,7 @@ namespace mmo
 			ASSERT(i < 3);
 			return *(&x + i);
 		}
+
 		float& operator [] (const size_t i)
 		{
 			ASSERT(i < 3);

@@ -28,6 +28,9 @@ namespace mmo
 		/// Loads a mesh from file or retrieves it from the cache.
 		MeshPtr Load(const std::string& filename);
 
+		/// Creates a mesh manually.
+		MeshPtr CreateManual(const std::string& name);
+
 	private:
 		/// A map of loaded meshes. Used to cache. Case-insensitive file names.
 		std::map<std::string, MeshPtr, StrCaseIComp> m_meshes;

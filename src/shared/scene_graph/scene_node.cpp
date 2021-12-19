@@ -300,7 +300,7 @@ namespace mmo
 		// Iterate through all objects
 		for (auto& it : m_objectsByName)
 		{
-			m_bounds.Combine(it.second->GetWorldBounds(true));
+			m_bounds.Combine(it.second->GetWorldBoundingBox(true));
 		}
 	}
 
@@ -316,6 +316,10 @@ namespace mmo
 		}
 
 		return m_cachedTransform;
+	}
+
+	void SceneNode::DetachObject(MovableObject& object)
+	{
 	}
 
 	void SceneNode::UpdateFromParent()

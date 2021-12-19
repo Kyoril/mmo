@@ -65,7 +65,8 @@ namespace mmo
 
 				// Create a submesh
 				SubMesh& submesh = mesh->CreateSubMesh("Default");
-				
+				submesh.m_useSharedVertices = false;
+
 				// Load vertex chunk
 				source.seek(header.vertexChunkOffset);
 				ASSERT(reader);
@@ -180,6 +181,17 @@ namespace mmo
 		m_meshes[filename] = mesh;
 
 		// And return the mesh pointer
+		return mesh;
+	}
+
+	MeshPtr MeshManager::CreateManual(const std::string& name)
+	{
+		const auto it = m_meshes.find(name);
+		ASSERT(it == m_meshes.end());
+
+		auto mesh = std::make_shared<Mesh>();
+		m_meshes[name] = mesh;
+
 		return mesh;
 	}
 }

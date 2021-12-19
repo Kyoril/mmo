@@ -10,21 +10,30 @@ namespace mmo
 {
 	SubMesh::SubMesh(Mesh & parent)
 		: m_parent(parent)
+		, m_vertexBuffer(nullptr)
+		, m_indexBuffer(nullptr)
 	{
 	}
 
 	void SubMesh::Render() const
 	{
-		ASSERT(m_vertexBuffer);
-
 		// Activate the material
 		if (m_material)
 		{
 			m_material->Set();
 		}
-		
-		// Setup buffers
-		m_vertexBuffer->Set();
+
+		// Set vertex buffer
+		if (m_useSharedVertices)
+		{
+			ASSERT(m_parent.m_vertexBuffer);
+			m_parent.m_vertexBuffer->Set();
+		}
+		else
+		{
+			ASSERT(m_vertexBuffer);
+			m_vertexBuffer->Set();
+		}
 
 		// Render
 		if (m_indexBuffer)

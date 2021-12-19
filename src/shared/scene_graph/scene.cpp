@@ -23,7 +23,9 @@ namespace mmo
 			return nullptr;
 		}
 
-		auto camera = std::make_unique<Camera>(*this, name);
+		auto camera = std::make_unique<Camera>(name);
+		camera->SetScene(this);
+
 		const auto insertedCamIt = 
 			m_cameras.emplace(Cameras::value_type(name, std::move(camera)));
 

@@ -46,7 +46,15 @@ namespace mmo
 		const auto it = m_gameStates.find(name);
 		ASSERT(it != m_gameStates.end());
 
-		m_pendingState = it->second;
+		if (!m_currentState)
+		{
+			m_currentState = it->second;
+			m_currentState->OnEnter();
+		}
+		else
+		{
+			m_pendingState = it->second;	
+		}
 	}
 
 	void GameStateMgr::Idle(float deltaSeconds, GameTime timestamp)

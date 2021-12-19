@@ -38,7 +38,7 @@ namespace mmo
 			});
 		
 		// Make the top frame element
-		auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
+		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);

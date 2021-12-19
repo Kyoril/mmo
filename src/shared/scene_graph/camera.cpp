@@ -6,12 +6,10 @@
 
 namespace mmo
 {
-	Camera::Camera(Scene& scene, String name)
-		: MovableObject(scene)
-		, m_name(std::move(name))
+	Camera::Camera(const String& name)
+		: MovableObject(name)
 		, m_viewInvalid(true)
 	{
-		m_bounds = AABB(Vector3(-.1f, -.1f, -.1f), Vector3(.1f, .1f, .1f));
 	}
 
 	const Matrix4& Camera::GetProjectionMatrix() const
@@ -39,5 +37,28 @@ namespace mmo
 		m_viewMatrix = Matrix4::Identity;
 		
 		m_viewInvalid = false;
+	}
+
+	const String& Camera::GetMovableType() const
+	{
+		static String cameraMovableType = "Camera";
+		return cameraMovableType;
+	}
+
+	const AABB& Camera::GetBoundingBox() const
+	{
+		static AABB replaceMe;
+		return replaceMe;
+	}
+
+	float Camera::GetBoundingRadius() const
+	{
+		// TODO
+		return 0.0f;
+	}
+
+	void Camera::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
+	{
+		// TODO
 	}
 }

@@ -17,6 +17,9 @@ namespace mmo
 {
 	class Mesh final
 	{
+        friend class SubMesh;
+		friend class MeshSerializer;
+
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
 		typedef std::map<std::string, uint16> SubMeshNameMap;
@@ -34,19 +37,25 @@ namespace mmo
 		void DestroySubMesh(const std::string& name);
 		void Render();
 
+		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
+		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
+
 	public:
 		const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
 		uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
 		const AABB& GetBounds() const noexcept { return m_aabb; }
 		float GetBoundRadius() const noexcept { return m_boundRadius; }
 
+	public:
+		VertexBufferPtr m_vertexBuffer;
+		IndexBufferPtr m_indexBuffer;
+
 	private:
 		SubMeshList m_subMeshes;
 		SubMeshNameMap m_subMeshNames;
 		AABB m_aabb;
 		float m_boundRadius;
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
+		String m_skeletonName;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

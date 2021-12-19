@@ -16,6 +16,8 @@ namespace mmo
 
 		enum VersionId
 		{
+			Latest,
+
 		    Version_1_0 = 0x100
 		};
 	}

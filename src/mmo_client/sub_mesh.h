@@ -18,11 +18,12 @@ namespace mmo
 
 	public:
 		void Render() const;
-
+		
 	public:
 		Mesh& m_parent;
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
 		MaterialPtr m_material;
+		bool m_useSharedVertices { true };
 	};
 }

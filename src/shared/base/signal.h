@@ -146,6 +146,31 @@ namespace mmo
         value_type current{};
     };
 
+    template<class T, T Default>
+    struct any_or
+    {
+	    typedef T value_type;
+        typedef T result_type;
+
+        template <class U>
+        void operator () (U&& value)
+        {
+            if (!has_value || value > current) {
+                current = std::forward<U>(value);
+                has_value = true;
+            }
+        }
+
+        result_type result()
+        {
+            return std::move(current);
+        }
+
+    private:
+        value_type current{Default};
+        bool has_value{ false };
+    };
+
     template <class T>
     struct range
     {

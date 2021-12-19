@@ -47,6 +47,7 @@ namespace mmo
 		const_iterator cbegin() const { return m_children.cbegin(); }
 		const_iterator cend() const { return m_children.cend(); }
 		size_t size() const { return m_children.size(); }
+		bool IsInSceneGraph() const noexcept { return m_isInSceneGraph; }
 
 	public:
 		/// Called when the node transformation has been updated.
@@ -62,62 +63,89 @@ namespace mmo
 	public:
 		/// Gets the name of this node.
 		const String& GetName() const { return m_name; }
+
 		/// Gets the parent scene node.
 		SceneNode* GetParent() const { return m_parent; }
+
 		/// Updates the parent of this scene node.
 		/// @param parent The new parent scene node or nullptr, if no new parent should be used.
 		void SetParent(SceneNode* parent);
+
 		/// Invalidates the node.
 		void Invalidate();
 
 		/// Gets the derived orientation of the node.
 		const Quaternion& GetDerivedOrientation();
+
 		/// Gets the local orientation of the node.
 		const Quaternion& GetOrientation() const { return m_orientation; }
+
 		/// Sets the new local orientation of the node.
 		void SetOrientation(const Quaternion& orientation);
+
 		/// Sets the new absolute orientation of the node.
 		void SetDerivedOrientation(const Quaternion& orientation);
+
 		/// Rotates the node around the forward axis.
 		void Roll(const Radian& angle, TransformSpace relativeTo);
+
 		/// Rotates the node around the horizontal axis.
 		void Pitch(const Radian& angle, TransformSpace relativeTo);
+
 		/// Rotates the node around the vertical axis.
 		void Yaw(const Radian& angle, TransformSpace relativeTo);
+
 		/// Rotates the node on the given axis.
 		void Rotate(const Vector3& axis, const Radian& angle, TransformSpace relativeTo);
+
 		/// Rotates the node by using the given delta quaternion.
 		void Rotate(const Quaternion& delta, TransformSpace relativeTo);
+
 		/// Gets the derived scale of the node.
 		const Vector3& GetDerivedScale();
+
 		/// Gets the local scale of the node.
 		const Vector3& GetScale() const { return m_scale; }
+
 		/// Sets the scale value.
 		void SetScale(const Vector3& scale);
+
 		/// Scales the node. A value of Vector3::UnitScale won't do anything at all.
 		void Scale(const Vector3& scaleOnAxis);
+
 		/// Gets the derived position of the node.
 		const Vector3& GetDerivedPosition();
+
 		/// Gets the local position of the node.
 		const Vector3& GetPosition() const { return m_position; }
+
 		/// Updates the position of the node.
 		void SetPosition(const Vector3& position);
+
 		/// Sets the derived position.
 		void SetDerivedPosition(const Vector3& position);
+
 		/// Converts the given world position into a local position.
 		Vector3 ConvertWorldToLocalPosition(const Vector3 &worldPos);
+
 		/// Converts the given local position into a world position.
 		Vector3 ConvertLocalToWorldPosition(const Vector3 &localPos);
+
 		/// Converts the given local orientation into a world position.
 		Quaternion ConvertWorldToLocalOrientation(const Quaternion &worldOrientation);
+
 		/// Converts the given world orientation into a local position.
 		Quaternion ConvertLocalToWorldOrientation(const Quaternion &localOrientation);
+
 		/// Sets whether derived orientation will be inherited from parent.
 		void SetInheritOrientation(bool inherit);
+
 		/// Sets whether derived scale will be inherited from parent.
 		void SetInheritScale(bool inherit);
+
 		/// Gets whether derived orientation is inherited by the parent.
 		bool IsInheritingOrientation() const { return m_inheritOrientation; }
+
 		/// Gets whether derived scale is inherited by the parent.
 		bool IsInheritingScale() const { return m_inheritScale; }
 		
@@ -126,14 +154,18 @@ namespace mmo
 
 		/// Adds a child scene node. The node must not have a parent already.
 		void AddChild(SceneNode& child);
+
 		/// Removes a child by name and returns it.
 		/// @returns nullptr if a child with the given name could not be found.
 		SceneNode* RemoveChild(const String& name);
 
 		void Update(bool updateChildren, bool parentHasChanged);
+
 		void UpdateBounds();
 
 		const Matrix4& GetFullTransform();
+
+		void DetachObject(MovableObject& object);
 
 	protected:
 		/// @brief Name of this node.
@@ -166,6 +198,8 @@ namespace mmo
 		bool m_cachedTransformInvalid;
 		/// @brief Bounding box.
 		AABB m_bounds;
+
+		bool m_isInSceneGraph { false };
 
 		typedef std::unordered_map<String, std::unique_ptr<MovableObject>> ObjectMap;
 		ObjectMap m_objectsByName;
