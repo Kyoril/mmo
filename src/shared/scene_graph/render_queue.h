@@ -1,8 +1,18 @@
 #pragma once
 #include <map>
+#include <memory>
+
+#include "math/aabb.h"
+#include "renderable.h"
+#include "base/signal.h"
+#include "base/typedefs.h"
 
 namespace mmo
 {
+	class MovableObject;
+	class Sphere;
+	class Camera;
+
 	enum RenderQueueGroupId
 	{
         /// Use this queue for objects which must be rendered first e.g. backgrounds
@@ -57,18 +67,75 @@ namespace mmo
 		
 	};
 
+	struct VisibleObjectsBoundsInfo
+	{
+		AABB aabb;
+		float minDistance;
+		float maxDistance;
+		float minDistanceInFrustum;
+		float maxDistanceInFrustum;
+
+	public:
+		VisibleObjectsBoundsInfo();
+
+		void Reset();
+
+		void Merge(const AABB& boxBounds, const Sphere& sphereBounds, const Camera& cam);
+
+		void MergeNonRenderedButInFrustum(const AABB& boxBounds, const Sphere& sphereBounds, const Camera& cam);
+	};
+
+	class RenderQueue;
+
 	class RenderQueueGroup
 	{
     public:
         typedef std::map<uint16, RenderPriorityGroup*, std::less<> > PriorityMap;
+
+	public:
+		explicit RenderQueueGroup(RenderQueue& queue);
+
+	private:
+		RenderQueue& m_queue;
 	};
 
 	class RenderQueue
 	{
 	public:
+		signal<bool(Renderable& renderable, uint8 groupID, uint16 priority, RenderQueue& queue)> renderableQueued;
+
+	public:
+        typedef std::map<uint8, std::unique_ptr<RenderQueueGroup>> RenderQueueGroupMap;
+
+	protected:
+		RenderQueueGroupMap m_groups;
+		uint8 m_defaultGroup;
+		uint16 m_defaultRenderablePriority;
 		
-        typedef std::map<uint8, RenderQueueGroup*> RenderQueueGroupMap;
+	public:
+		RenderQueue();
+		virtual ~RenderQueue();
 
+		void Clear();
 
+		void AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority);
+
+		void AddRenderable(Renderable& renderable, uint8 groupId);
+
+		void AddRenderable(Renderable& renderable);
+		
+		[[nodiscard]] RenderQueueGroup* GetQueueGroup(uint8 groupId);
+
+		[[nodiscard]] uint8 GetDefaultQueueGroup() const { return m_defaultGroup; }
+
+		void SetDefaultRenderablePriority(const uint16 priority) { m_defaultRenderablePriority = priority; }
+
+		[[nodiscard]] uint16 GetDefaultRenderablePriority() const { return m_defaultRenderablePriority; }
+
+		void SetDefaultQueueGroup(const uint8 group) { m_defaultGroup = group; }
+
+		void Combine(const RenderQueue& other);
+
+		void ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds);
 	};
 }

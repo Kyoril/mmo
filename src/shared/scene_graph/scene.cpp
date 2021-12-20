@@ -9,6 +9,11 @@
 
 namespace mmo
 {
+	Scene::Scene()
+	{
+		m_renderQueue = std::make_unique<RenderQueue>();
+	}
+
 	void Scene::Clear()
 	{
 		m_cameras.clear();
@@ -17,11 +22,7 @@ namespace mmo
 	Camera* Scene::CreateCamera(const String& name)
 	{
 		ASSERT(!name.empty());
-		
-		if (m_cameras.find(name) != m_cameras.end())
-		{
-			return nullptr;
-		}
+		ASSERT(m_cameras.find(name) == m_cameras.end());
 
 		auto camera = std::make_unique<Camera>(name);
 		camera->SetScene(this);
@@ -29,18 +30,20 @@ namespace mmo
 		const auto insertedCamIt = 
 			m_cameras.emplace(Cameras::value_type(name, std::move(camera)));
 
-		return insertedCamIt.first->second.get();
+		auto* cam = insertedCamIt.first->second.get();
+		m_camVisibleObjectsMap[cam] = VisibleObjectsBoundsInfo();
+
+		return cam;
 	}
 
-	void Scene::DestroyCamera(Camera& camera)
+	void Scene::DestroyCamera(const Camera& camera)
 	{
 		DestroyCamera(camera.GetName());
 	}
 
 	void Scene::DestroyCamera(const String& name)
 	{
-		const auto cameraIt = m_cameras.find(name);
-		if (cameraIt != m_cameras.end())
+		if (const auto cameraIt = m_cameras.find(name); cameraIt != m_cameras.end())
 		{
 			m_cameras.erase(cameraIt);
 		}
@@ -49,12 +52,14 @@ namespace mmo
 	Camera* Scene::GetCamera(const String& name)
 	{
 		const auto cameraIt = m_cameras.find(name);
-		if (cameraIt != m_cameras.end())
-		{
-			return cameraIt->second.get();
-		}
+		ASSERT(cameraIt != m_cameras.end());
+		
+		return cameraIt->second.get();
+	}
 
-		return nullptr;
+	bool Scene::HasCamera(const String& name)
+	{
+		return m_cameras.find(name) != m_cameras.end();
 	}
 
 	void Scene::DestroyAllCameras()
@@ -62,7 +67,7 @@ namespace mmo
 		m_cameras.clear();
 	}
 
-	void Scene::Render(Camera& camera)
+	void Scene::Render(const Camera& camera)
 	{
 		auto& gx = GraphicsDevice::Get();
 
