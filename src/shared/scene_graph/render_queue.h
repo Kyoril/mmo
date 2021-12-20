@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 
 namespace mmo
 {
@@ -31,5 +32,43 @@ namespace mmo
 		
 		/// Final possible render queue, don't exceed this
 		Max = 105
+	};
+
+	class QueuedRenderableCollection
+	{
+	public:
+		enum class OrganisationMode : uint8
+		{
+			/// Group by pass
+			Group = 1,
+			/// Sort descending camera distance
+			SortDescending = 2,
+			/// Sort ascending camera distance
+			///	overlaps with descending since both use same sort
+			SortAscending = 6
+		};
+		
+	protected:
+
+	};
+
+	class RenderPriorityGroup
+	{
+		
+	};
+
+	class RenderQueueGroup
+	{
+    public:
+        typedef std::map<uint16, RenderPriorityGroup*, std::less<> > PriorityMap;
+	};
+
+	class RenderQueue
+	{
+	public:
+		
+        typedef std::map<uint8, RenderQueueGroup*> RenderQueueGroupMap;
+
+
 	};
 }

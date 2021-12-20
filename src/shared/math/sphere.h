@@ -12,7 +12,7 @@ namespace mmo
 
 	public:
 
-		Sphere() noexcept = default;
+		Sphere() = default;
 		Sphere(const Vector3& center, float radius) noexcept;
 
 	public:
