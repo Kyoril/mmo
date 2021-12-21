@@ -162,7 +162,7 @@ namespace mmo
 		/// 
 		virtual void DrawIndexed() = 0;
 		/// 
-		virtual void SetTopologyType(TopologyType InType) = 0;
+		virtual void SetTopologyType(TopologyType InType);
 		/// 
 		virtual void SetVertexFormat(VertexFormat InFormat) = 0;
 		/// 
@@ -222,6 +222,8 @@ namespace mmo
 		RenderWindowPtr m_autoCreatedWindow;
 		RenderTargetPtr m_renderTarget;
 		RenderTargetPtr m_restoreRenderTarget;
+		TopologyType m_topologyType;
+		TopologyType m_captureTopologyType;
 		BlendMode m_blendMode;
 		BlendMode m_restoreBlendMode;
 		FillMode m_fillMode;

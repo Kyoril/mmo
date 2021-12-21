@@ -3,9 +3,45 @@
 
 #include "movable_object.h"
 #include "camera.h"
+#include "pass.h"
+#include "queued_renderable_visitor.h"
 
 namespace mmo
 {
+	void QueuedRenderableCollection::AddRenderable(Pass* pass, Renderable* rend)
+	{
+		if (m_organisationMode & SortDescending)
+		{
+
+		}
+
+		if (m_organisationMode & PassGroup)
+		{
+
+		}
+	}
+
+	void RenderPriorityGroup::AddRenderable(const Renderable& renderable)
+	{
+		// TODO: Determine renderable type
+		AddSolidRenderable(renderable);
+	}
+
+	void RenderPriorityGroup::AddTransparentRenderable(const Renderable& renderable)
+	{
+
+	}
+
+	void RenderPriorityGroup::AddUnsortedTransparentRenderable(const Renderable& renderable)
+	{
+
+	}
+
+	void RenderPriorityGroup::AddSolidRenderable(const Renderable& renderable)
+	{
+		
+	}
+
 	VisibleObjectsBoundsInfo::VisibleObjectsBoundsInfo()
 	{
 		Reset();
@@ -30,8 +66,7 @@ namespace mmo
 		maxDistanceInFrustum = std::max(maxDistanceInFrustum, camDistToCenter + sphereBounds.GetRadius());
 	}
 
-	void VisibleObjectsBoundsInfo::MergeNonRenderedButInFrustum(const AABB& boxBounds, const Sphere& sphereBounds,
-		const Camera& cam)
+	void VisibleObjectsBoundsInfo::MergeNonRenderedButInFrustum(const AABB& boxBounds, const Sphere& sphereBounds, const Camera& cam)
 	{
 		const Vector3 vsSpherePos = cam.GetViewMatrix() * sphereBounds.GetCenter();
 		const float camDistToCenter = vsSpherePos.GetLength();
@@ -44,6 +79,22 @@ namespace mmo
 	{
 	}
 
+	void RenderQueueGroup::Clear()
+	{
+
+	}
+
+	void RenderQueueGroup::AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority)
+	{
+		auto it = m_priorityGroups.find(priority);
+		if (it == m_priorityGroups.end())
+		{
+			it = m_priorityGroups.insert(std::make_pair(priority, std::make_unique<RenderPriorityGroup>())).first;
+		}
+
+		it->second->AddRenderable(renderable);
+	}
+
 	RenderQueue::RenderQueue()
 		: m_defaultGroup(Main)
 		, m_defaultRenderablePriority(100)
@@ -53,11 +104,15 @@ namespace mmo
 
 	RenderQueue::~RenderQueue()
 	{
+
 	}
 
 	void RenderQueue::Clear()
 	{
-		// TODO
+		for (const auto& group : m_groups)
+		{
+			group.second->Clear();
+		}
 	}
 
 	void RenderQueue::AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority)

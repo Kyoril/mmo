@@ -13,9 +13,7 @@
 #include "frame_ui/geometry_buffer.h"
 #include "base/assign_on_exit.h"
 
-#include "mesh_manager.h"
 #include "mesh.h"
-#include "sub_mesh.h"
 
 #include "assets/asset_registry.h"
 
@@ -120,16 +118,14 @@ namespace mmo
 		{
 			// TODO: Set pending graphics changes so that they can be submitted all at once.
 		}
-
-
+		
 		/// Registers the automatically managed gx cvars from the table above.
 		void RegisterGraphicsCVars()
 		{
 			// Register console variables from the table
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
-
-				// Eventually assign the output variable if asked to do so.
+				
 				if (x.outputVar != nullptr)
 				{
 					*x.outputVar = output;
@@ -154,28 +150,19 @@ namespace mmo
 		/// stays in the expected range so that no overflow / underflow occurrs.
 		inline void ApplyConsoleScrolling(int32 Amount)
 		{
-			// Ensure that s_consoleTextDirty is set to true at the end of the function,
-			// no matter how we exit it.
 			AssignOnExit<bool> invalidateGraphics{ s_consoleTextDirty, true };
-
-			// Increase the scrolling amount
+			
 			s_consoleScrollOffset += Amount;
-
-			// Always enforce positive scroll offset value
 			s_consoleScrollOffset = std::max(0, s_consoleScrollOffset);
-
-			// Max visible console lines 
+			
 			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
-
-			// Ensure there are enough entries so that scrolling is needed
+			
 			if (s_consoleLog.size() < maxVisibleEntries)
 			{
-				// Without scrolling, there is no need to change the scroll offset
 				s_consoleScrollOffset = 0;
 				return;
 			}
-
-			// Enforce max scroll value
+			
 			s_consoleScrollOffset = std::min(s_consoleScrollOffset, 
 				static_cast<int32>(s_consoleLog.size()) - maxVisibleEntries);
 		}
@@ -199,39 +186,29 @@ namespace mmo
 
 	void Console::Initialize(const std::filesystem::path& configFile)
 	{
-		// Ensure the folder is created
 		std::filesystem::create_directories(configFile.parent_path());
-
-		// Register some default console commands
+		
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
-
-		// Initialize the cvar manager
+		
 		ConsoleVarMgr::Initialize();
-
-		// Register current path console var
+		
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		
-		// Register locale cvar
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
-
-		// Register graphics variables
+		
 		RegisterGraphicsCVars();
-
-		// Load the config file
+		
 		console_commands::ConsoleCommand_Run("run", configFile.string());
-
-		// Console is hidden by default
+		
 		s_consoleVisible = false;
 		s_consoleWindowHeight = 210;
-
-		// Load the locale archive
+		
 		ILOG("Locale: " << localeCVar->GetStringValue());
 		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
-
-		// Initialize the asset registry
+		
 		AssetRegistry::Initialize(s_dataPathCVar->GetStringValue(),
 			{
 				"Interface.hpak",
@@ -241,16 +218,14 @@ namespace mmo
 				localeArchive,
 				localeArchive + ".hpak"
 			});
-
-		// Set default graphics api
+		
 		const GraphicsApi defaultApi =
 #if PLATFORM_WINDOWS
 			GraphicsApi::D3D11;
 #else
 			GraphicsApi::OpenGL;
 #endif
-
-		// Check for console var values
+		
 		auto api = GraphicsApi::Unknown;
 		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "d3d11") == 0)
 		{
@@ -260,16 +235,13 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
-
-		// Use platform default api if unknown api was provided
+		
 		if (api == GraphicsApi::Unknown) api = defaultApi;
-
-		// Extract the resolution
+		
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 		
-		// Initialize the graphics api
 		switch (api)
 		{
 #if PLATFORM_WINDOWS
@@ -282,12 +254,10 @@ namespace mmo
 		default:
 			throw std::runtime_error("Unsupported graphics API value used!");
 		}
-
-		// Get the current graphics device object
+		
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
-
-		// Terminate the event loop if the main window get's closed
+		
 		device.GetAutoCreatedWindow()->Closed.connect([]() {
 			EventLoop::Terminate(0);
 		});
@@ -298,40 +268,30 @@ namespace mmo
 				topFrame->InvalidateChildren();
 			}
 		});
-
-		// Query the viewport size
+		
 		device.GetViewport(nullptr, nullptr, &s_lastViewportWidth, &s_lastViewportHeight, nullptr, nullptr);
-
-		// Create the vertex buffer for the console background
+		
 		const POS_COL_VERTEX vertices[] = {
 			{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
 			{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
 			{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
 			{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
 		};
-
-		// Setup vertices
+		
 		s_consoleVertBuf = device.CreateVertexBuffer(4, sizeof(POS_COL_VERTEX), true, vertices);
-
-		// Setup indices
+		
 		const uint16 indices[] = { 0, 1, 2, 2, 3, 0 };
 		s_consoleIndBuf = device.CreateIndexBuffer(6, IndexBufferSize::Index_16, indices);
-
-		// Load the console font
-		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 12.0f, 0.0f);
-
-		// Create a geometry buffer for the console output text
+		
+		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 16.0f, 0.0f);
+		
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();
 		s_consoleTextDirty = true;
 		s_consoleLog.clear();
-
-		// Initialize the screen system
+		
 		Screen::Initialize();
-
-		// Initialize loading screen
 		LoadingScreen::Init();
-
-		// Assign console log signal
+		
 		s_consoleLogConn = mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ s_consoleLogMutex };
 
@@ -360,11 +320,9 @@ namespace mmo
 
 			s_consoleTextDirty = true;
 		});
-
-		// Add the console layer
+		
 		s_consoleLayer = Screen::AddLayer(&Console::Paint, 100.0f, ScreenLayerFlags::IdentityTransform);
-
-		// Watch for the console key event
+		
 		s_consoleKeyEvents += 
 		{
 			EventLoop::KeyDown.connect(&Console::KeyDown),
@@ -375,56 +333,40 @@ namespace mmo
 	
 	void Console::Destroy()
 	{
-		// Disconnect the key events
 		s_consoleKeyEvents.disconnect();
-
-		// Remove the console layer
-		Screen::RemoveLayer(s_consoleLayer);
 		
+		Screen::RemoveLayer(s_consoleLayer);
 		LoadingScreen::Destroy();
 		
-		// Destroy the screen system
 		Screen::Destroy();
 		
-		// Close connection
 		s_consoleLogConn.disconnect();
-
-		// Delete console text geometry
+		
 		s_consoleTextGeom.reset();
-
-		// Delete console font object
+		
 		s_consoleFont.reset();
-
-		// Reset vertex and index buffer
+		
 		s_consoleIndBuf.reset();
 		s_consoleVertBuf.reset();
 		s_consoleLog.clear();
-
-		// Unregister graphics console variables and do so before we destroy the graphics device, so that
-		// no variables could ever affect the graphics device after it has been destroyed
+		
 		UnregisterGraphicsCVars();
-
-		// Destroy the graphics device
+		
 		GraphicsDevice::Destroy();
-
-		// Destroy the cvar manager
+		
 		ConsoleVarMgr::Destroy();
-
-		// Remove default console commands
+		
 		UnregisterCommand("run");
 		UnregisterCommand("ver");
 	}
 
 	inline void Console::RegisterCommand(const std::string & command, ConsoleCommandHandler handler, ConsoleCommandCategory category, const std::string & help)
 	{
-		// Don't do anything if this console command is already registered
-		const auto it = s_consoleCommands.find(command);
-		if (it != s_consoleCommands.end())
+		if (const auto it = s_consoleCommands.find(command); it != s_consoleCommands.end())
 		{
 			return;
 		}
-
-		// Build command structure and add it
+		
 		ConsoleCommand cmd;
 		cmd.category = category;
 		cmd.help = help;
@@ -434,9 +376,7 @@ namespace mmo
 
 	inline void Console::UnregisterCommand(const std::string & command)
 	{
-		// Remove the respective iterator
-		const auto it = s_consoleCommands.find(command);
-		if (it != s_consoleCommands.end())
+		if (const auto it = s_consoleCommands.find(command); it != s_consoleCommands.end())
 		{
 			s_consoleCommands.erase(it);
 		}
@@ -444,11 +384,9 @@ namespace mmo
 
 	void Console::ExecuteCommand(const std::string& commandLine)
 	{
-		// Will hold the command name
 		std::string command;
 		std::string arguments;
-
-		// Find the first space and use it to get the command
+		
 		const auto space = commandLine.find(' ');
 		if (space == std::string::npos)
 		{
@@ -459,22 +397,19 @@ namespace mmo
 			command = commandLine.substr(0, space);
 			arguments = commandLine.substr(space + 1);
 		}
-
-		// If somehow the command is empty, just stop here without saying anything.
+		
 		if (command.empty())
 		{
 			return;
 		}
-
-		// Check if such argument exists
+		
 		const auto it = s_consoleCommands.find(command);
 		if (it == s_consoleCommands.end())
 		{
 			ELOG("Unknown console command \"" << command << "\"");
 			return;
 		}
-
-		// Now execute the console commands handler if there is any
+		
 		if (it->second.handler)
 		{
 			it->second.handler(command, arguments);
@@ -486,7 +421,6 @@ namespace mmo
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)
 		{
-			// Show the console window again
 			s_consoleVisible = !s_consoleVisible;
 			if (s_consoleVisible && s_consoleWindowHeight <= 0)
 			{
@@ -587,14 +521,13 @@ namespace mmo
 
 	void Console::Paint()
 	{
-		// Nothing to render here eventually
 		if (!s_consoleVisible)
-			return;
+		{
+			return;	
+		}
 
-		// Get the current graphics device
 		auto& gx = GraphicsDevice::Get();
 
-		// Create console text geometry
 		if (s_consoleTextDirty)
 		{
 			s_consoleTextGeom->Reset();
@@ -634,11 +567,9 @@ namespace mmo
 			s_consoleTextDirty = false;
 		}
 
-		// Obtain viewport info
 		auto vpWidth = 0, vpHeight = 0;
 		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
 
-		// Check for changes in viewport size, in which case we would need to update the contents of our vertex buffer
 		if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
 		{
 			s_lastViewportWidth = vpWidth;
@@ -659,29 +590,20 @@ namespace mmo
 			*lock[2] = vertices[2];
 			*lock[3] = vertices[3];
 		}
-
-		// Set up a clipping rect
+		
 		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
-
-		// Update transform
 		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
-
-		// Prepare drawing mode
+		
 		gx.SetVertexFormat(VertexFormat::PosColor);
 		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetBlendMode(BlendMode::Alpha);
-
-		// Set buffers
+		
 		s_consoleVertBuf->Set();
 		s_consoleIndBuf->Set();
-
-		// Draw buffer content
 		gx.DrawIndexed();
-
-		// Draw text
+		
 		s_consoleTextGeom->Draw();
-
-		// Clear the clip rect again
+		
 		gx.ResetClipRect();
 	}
 }

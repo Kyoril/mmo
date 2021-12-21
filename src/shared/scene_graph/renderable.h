@@ -3,9 +3,14 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "graphics/graphics_device.h"
 
 namespace mmo
 {
+	class Camera;
+	class Scene;
+	class RenderOperation;
+
 	/// Interface for a renderable object in a scene.
 	class Renderable
 	{
@@ -30,6 +35,22 @@ namespace mmo
 		virtual ~Renderable() = default;
 
 	public:
+        
+        virtual bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice)
+		{
+            return true;
+		}
+
+        virtual void PostRender(Scene& scene, GraphicsDevice& graphicsDevice)
+        {
+        }
+
+        virtual void GetRenderOperation(RenderOperation& operation) = 0;
+
+		[[nodiscard]] virtual float GetSquaredViewDepth(const Camera& camera) const = 0;
+        
+        [[nodiscard]] virtual bool GetCastsShadows() const { return false; }
+
 
 	};
 }

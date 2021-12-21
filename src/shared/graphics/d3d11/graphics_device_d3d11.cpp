@@ -598,6 +598,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetTopologyType(TopologyType InType)
 	{
+		GraphicsDevice::SetTopologyType(InType);
+
 		const D3D11_PRIMITIVE_TOPOLOGY Topology = D3DTopologyType(InType);
 		ASSERT(Topology != D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED);
 

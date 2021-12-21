@@ -9,6 +9,7 @@
 
 namespace mmo
 {
+	class Pass;
 	class MovableObject;
 	class Sphere;
 	class Camera;
@@ -47,10 +48,10 @@ namespace mmo
 	class QueuedRenderableCollection
 	{
 	public:
-		enum class OrganisationMode : uint8
+		enum OrganizationMode
 		{
 			/// Group by pass
-			Group = 1,
+			PassGroup = 1,
 			/// Sort descending camera distance
 			SortDescending = 2,
 			/// Sort ascending camera distance
@@ -58,13 +59,27 @@ namespace mmo
 			SortAscending = 6
 		};
 		
+		void AddRenderable(Pass* pass, Renderable* rend);
+		
 	protected:
-
+		
+		uint8 m_organisationMode { 0 };
 	};
 
 	class RenderPriorityGroup
 	{
-		
+	public:
+		void AddRenderable(const Renderable& renderable);
+
+	private:
+		void AddTransparentRenderable(const Renderable& renderable);
+
+		void AddUnsortedTransparentRenderable(const Renderable& renderable);
+
+		void AddSolidRenderable(const Renderable& renderable);
+
+	private:
+		QueuedRenderableCollection m_solidCollection;
 	};
 
 	struct VisibleObjectsBoundsInfo
@@ -90,13 +105,19 @@ namespace mmo
 	class RenderQueueGroup
 	{
     public:
-        typedef std::map<uint16, RenderPriorityGroup*, std::less<> > PriorityMap;
+        typedef std::map<uint16, std::unique_ptr<RenderPriorityGroup>, std::less<> > PriorityMap;
 
 	public:
 		explicit RenderQueueGroup(RenderQueue& queue);
 
+	public:
+        void Clear();
+
+		void AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority);
+
 	private:
 		RenderQueue& m_queue;
+		PriorityMap m_priorityGroups;
 	};
 
 	class RenderQueue

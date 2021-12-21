@@ -63,6 +63,11 @@ namespace mmo
 		m_viewH = desc.height;
 	}
 
+	void GraphicsDevice::SetTopologyType(TopologyType InType)
+	{
+		m_topologyType = InType;
+	}
+
 	void GraphicsDevice::SetBlendMode(BlendMode InBlendMode)
 	{
 		m_blendMode = InBlendMode;
@@ -87,6 +92,8 @@ namespace mmo
 		
 		m_restoreTexAddressMode = m_texAddressMode;
 		m_restoreTexFilter = m_texFilter;
+
+		m_captureTopologyType = m_topologyType;
 	}
 
 	void GraphicsDevice::RestoreState()
@@ -129,6 +136,11 @@ namespace mmo
 		if (m_restoreTexFilter != m_texFilter)
 		{
 			SetTextureFilter(m_restoreTexFilter);
+		}
+
+		if (m_topologyType != m_captureTopologyType)
+		{
+			SetTopologyType(m_captureTopologyType);
 		}
 		
 		// No longer keep the old render target referenced so that it is allowed

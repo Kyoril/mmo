@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 
+#include "queued_renderable_visitor.h"
 #include "render_queue.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
@@ -14,7 +15,22 @@
 
 namespace mmo
 {
+	class Scene;
 	class Camera;
+
+	class SceneQueuedRenderableVisitor : public QueuedRenderableVisitor
+	{
+	public:
+		void Visit(RenderablePass& rp) override;
+		bool Visit(const Pass& p) override;
+		void Visit(Renderable& r) override;
+
+	public:
+		/// Target SM to send renderables to
+		Scene* targetScene;
+		/// Scissoring if requested?
+		bool scissoring;
+	};
 
 	/// This class contains all objects of a scene that can be rendered.
 	class Scene final
@@ -61,6 +77,10 @@ namespace mmo
 
 	protected:
 		void RenderVisibleObjects();
+
+		void RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode);
+		
+		void RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode);
 
 	public:
 		typedef std::map<String, std::unique_ptr<Camera>> Cameras;

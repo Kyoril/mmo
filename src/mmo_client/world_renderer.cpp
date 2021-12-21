@@ -16,6 +16,8 @@ namespace mmo
 		, m_worldScene(worldScene)
 		, m_camera(nullptr)
 	{
+		m_worldGrid = std::make_unique<WorldGrid>(GraphicsDevice::Get());
+
 		// TODO: Remove me!
 		//m_camera = m_worldScene.CreateCamera("Default");
 	}
@@ -74,6 +76,8 @@ namespace mmo
 		{
 			m_worldScene.Render(*m_camera);
 		}
+		
+		m_worldGrid->Render();
 		
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();

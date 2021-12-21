@@ -2,6 +2,7 @@
 #pragma once
 
 #include "world_frame.h"
+#include "world_grid.h"
 
 #include "frame_ui/frame_renderer.h"
 #include "graphics/render_texture.h"
@@ -40,5 +41,7 @@ namespace mmo
 
 		Scene& m_worldScene;
 		Camera* m_camera;
+
+		std::unique_ptr<WorldGrid> m_worldGrid;
 	};
 }

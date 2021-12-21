@@ -9,6 +9,19 @@
 
 namespace mmo
 {
+	void SceneQueuedRenderableVisitor::Visit(RenderablePass& rp)
+	{
+	}
+
+	bool SceneQueuedRenderableVisitor::Visit(const Pass& p)
+	{
+		return true;
+	}
+
+	void SceneQueuedRenderableVisitor::Visit(Renderable& r)
+	{
+	}
+
 	Scene::Scene()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
@@ -70,14 +83,11 @@ namespace mmo
 	void Scene::Render(const Camera& camera)
 	{
 		auto& gx = GraphicsDevice::Get();
-
-		gx.CaptureState();
-
+		
 		// TODO: Render all objects
 		UpdateSceneGraph();
 
 		// Clear current render target
-		gx.Clear(ClearFlags::All);
 		gx.SetFillMode(FillMode::Solid);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
@@ -85,8 +95,6 @@ namespace mmo
 		gx.SetTransformMatrix(View, camera.GetViewMatrix());
 
 		RenderVisibleObjects();
-
-		gx.RestoreState();
 	}
 
 	void Scene::UpdateSceneGraph()
@@ -97,6 +105,32 @@ namespace mmo
 	void Scene::RenderVisibleObjects()
 	{
 		
+	}
+
+	void Scene::RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode)
+	{
+		//	for (const auto &groupIt : group)
+		//	{
+	    //		RenderPriorityGroup* pPriorityGrp = groupIt.getNext();
+		// 
+	    //		// Sort the queue first
+	    //		pPriorityGrp->sort(mCameraInProgress);
+		//		
+	    //		// Do solids
+	    //		RenderObjects(pPriorityGrp->getSolidsBasic(), om, true, true);
+		// 
+		//		// Do unsorted transparents
+		//		RenderObjects(pPriorityGrp->getTransparentsUnsorted(), om, true, true);
+		// 
+	    //		// Do transparents (always descending)
+	    //		RenderObjects(pPriorityGrp->getTransparents(), 
+		//			QueuedRenderableCollection::OM_SORT_DESCENDING, true, true);
+		//	}
+	}
+
+	void Scene::RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode)
+	{
+
 	}
 
 	SceneNode& Scene::GetRootSceneNode() 
