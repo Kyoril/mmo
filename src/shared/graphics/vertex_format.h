@@ -3,7 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
-
+#include "math/vector3.h"
 
 namespace mmo
 {
@@ -28,34 +28,34 @@ namespace mmo
 
 	struct POS_VERTEX
 	{
-		float pos[3];
+		Vector3 pos;
 	};
 
 	struct POS_COL_VERTEX
 	{
-		float pos[3];
+		Vector3 pos;
 		uint32 color;
 	};
 
 	struct POS_COL_TEX_VERTEX
 	{
-		float pos[3];
+		Vector3 pos;
 		uint32 color;
 		float uv[2];
 	};
 
 	struct POS_COL_NORMAL_VERTEX
 	{
-		float pos[3];
+		Vector3 pos;
 		uint32 color;
-		float normal[3];
+		Vector3 normal;
 	};
 
 	struct POS_COL_NORMAL_TEX_VERTEX
 	{
-		float pos[3];
+		Vector3 pos;
 		uint32 color;
-		float normal[3];
+		Vector3 normal;
 		float uv[2];
 	};
 }

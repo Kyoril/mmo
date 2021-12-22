@@ -1,5 +1,6 @@
 #pragma once
 
+#include "manual_render_object.h"
 #include "base/typedefs.h"
 #include "graphics/graphics_device.h"
 #include "math/vector3.h"
@@ -21,10 +22,11 @@ namespace mmo
 		void Render() const;
 
 	private:
-		void SetupGrid();
+		void SetupGrid() const;
 		
 	private:
-		GraphicsDevice& m_graphicsDevice;
+		GraphicsDevice& m_device;
+		std::unique_ptr<ManualRenderObject> m_renderObject;
 		uint8 m_numRows { 48 };
 		uint8 m_numCols { 48 };
 		uint8 m_largeGrid { 16 };

@@ -26,7 +26,6 @@ namespace mmo
 		static Vector3 UnitScale;
 
 	public:
-
 		float x, y, z;
 
 	public:
@@ -50,6 +49,9 @@ namespace mmo
 			, z(other.z)
 		{
 		}
+
+		[[nodiscard]] float* Ptr() { return &x; }
+		[[nodiscard]] const float* Ptr() const { return &x; }
 
 		// Logarithmic
 		inline Vector3& operator+=(Vector3 const& other)

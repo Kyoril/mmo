@@ -210,7 +210,7 @@ namespace mmo
 					authResult = auth::auth_result::Success;
 
 					strongThis->m_b.setRand(19 * 8);
-					BigNumber gmod = constants::srp::g.modExp(strongThis->m_b, constants::srp::N);
+					const BigNumber gmod = constants::srp::g.modExp(strongThis->m_b, constants::srp::N);
 					strongThis->m_B = ((strongThis->m_v * 3) + gmod) % constants::srp::N;
 
 					assert(gmod.getNumBytes() <= 32);

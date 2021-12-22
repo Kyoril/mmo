@@ -4,8 +4,6 @@
 
 #include "color.h"
 
-#include <algorithm>
-
 
 namespace mmo
 {
@@ -100,17 +98,13 @@ namespace mmo
 		{
 			return 0;
 		}
-		else
+
+		if (lum < 0.5f)
 		{
-			if (lum < 0.5f)
-			{
-				return (maxVal - minVal) / (maxVal + minVal);
-			}
-			else
-			{
-				return (maxVal - minVal) / (2 - maxVal - minVal);
-			}
+			return (maxVal - minVal) / (maxVal + minVal);
 		}
+
+		return (maxVal - minVal) / (2 - maxVal - minVal);
 	}
 
 	float Color::GetLumination() const noexcept
@@ -119,7 +113,6 @@ namespace mmo
 		const float minVal = MinComponentVal();
 
 		return (maxVal + minVal) / 2;
-
 	}
 
 	void Color::SetARGB(argb_t argb) noexcept

@@ -72,11 +72,12 @@ namespace mmo
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 
 		// Render world scene
-		if (m_camera)
+		/*if (m_camera)
 		{
 			m_worldScene.Render(*m_camera);
-		}
+		}*/
 		
+		m_worldGrid->UpdatePosition(Vector3(0.0f, 5.0f, 0.0));
 		m_worldGrid->Render();
 		
 		// Restore state before drawing the frame's geometry buffer

@@ -1,11 +1,15 @@
 
 #include "world_grid.h"
 
+#include "frame_ui/color.h"
+
 namespace mmo
 {
 	WorldGrid::WorldGrid(GraphicsDevice& device)
-		: m_graphicsDevice(device)
+		: m_device(device)
 	{
+		m_renderObject = std::make_unique<ManualRenderObject>(m_device);
+
 		SetupGrid();
 	}
 	
@@ -13,9 +17,9 @@ namespace mmo
 	{
 		Vector3 newPosition(position.x, position.y, position.z);
 
-		newPosition.x = static_cast<float>(floorf(newPosition.x / m_gridSize + 0.5f)) * m_gridSize;
-		newPosition.y = static_cast<float>(floorf(newPosition.y / m_gridSize + 0.5f)) * m_gridSize;
-		newPosition.z = static_cast<float>(floorf(newPosition.z / m_gridSize + 0.5f)) * m_gridSize;
+		newPosition.x = floorf(newPosition.x / m_gridSize + 0.5f) * m_gridSize;
+		newPosition.y = floorf(newPosition.y / m_gridSize + 0.5f) * m_gridSize;
+		newPosition.z = floorf(newPosition.z / m_gridSize + 0.5f) * m_gridSize;
 
 		return newPosition;
 	}
@@ -41,102 +45,59 @@ namespace mmo
 
 	void WorldGrid::Render() const
 	{
-		Matrix4 world;
-		world.SetTrans(m_origin);
+		Matrix4 world = Matrix4::Identity;
+		world.MakeTrans(m_origin);
 
-		Matrix4 view;
-		view.SetTrans(m_origin + Vector3::UnitY);
-
-		m_graphicsDevice.SetTransformMatrix(World, world);
-		m_graphicsDevice.SetTransformMatrix(View, view);
+		const Matrix4 view = MakeViewMatrix(Vector3(0.0f, 5.0f, 5.0f), 
+			Quaternion(Degree(-45), Vector3::UnitX));
 		
-		m_graphicsDevice.SetTopologyType(TopologyType::LineList);
-		m_graphicsDevice.SetVertexFormat(VertexFormat::PosColor);
-		m_graphicsDevice.SetBlendMode(BlendMode::Opaque);
-		m_graphicsDevice.SetFaceCullMode(FaceCullMode::None);
+		m_device.SetTransformMatrix(World, world);
+		m_device.SetTransformMatrix(View, view);
+		m_device.SetTransformMatrix(Projection, 
+			m_device.MakeProjectionMatrix(Degree(60.0f), 16.0f / 9.0f, 0.001f, 512.0f));
+		
+		m_device.SetTopologyType(TopologyType::LineList);
+		m_device.SetVertexFormat(VertexFormat::PosColor);
+		m_device.SetBlendMode(BlendMode::Opaque);
 
-		m_vertexBuffer->Set();
-		m_graphicsDevice.Draw(m_vertexBuffer->GetVertexCount());
+		m_renderObject->Render();
 	}
 
-	void WorldGrid::SetupGrid()
+	void WorldGrid::SetupGrid() const
 	{
-		const float width = m_gridSize * m_numCols;
-		const float height = m_gridSize * m_numRows;
+		m_renderObject->Clear();
+		
+		const float width = m_numCols * m_gridSize;
+		const float height = m_numRows * m_gridSize;
+		
+		const Vector3 gridOrigin { -width / 2.0f, 0.0f, -height / 2.0f };
+		
+		const auto operation = m_renderObject->AddLineListOperation();
+		
+		const Color darkColor(0.4f, 0.4f, 0.4f);
+		const Color lightColor = Color::White;
 		
 		Vector3 start, end;
-		const Vector3 gridOrigin { -width / 2.0f, 0.0f, -height / 2.0f };
-
-		start.y = 0.0f;
-		end.y = 0.0f;
-
-		const auto vertexCount = m_numRows * 2 + m_numCols * 2;
-		std::vector<POS_COL_VERTEX> vertices( vertexCount, {{0.0f, 0.0f, 0.0f}, 0});
-		
-		Vector3 position;
-		for (auto i = 0; i < m_numRows * 2; i += 2)
+		for (auto i = 0; i < m_numRows; ++i)
 		{
-			start.x = 0.0f;
-			start.z = i * m_gridSize;
+			start.z = m_gridSize * i;
 
 			end.x = width;
 			end.z = start.z;
-			
-			if (i % m_largeGrid != 0)
-			{
-				vertices[i].color = 0xFFFFFFFF;
-				vertices[i + 1].color = 0xFFFFFFFF;
-			}
-			else
-			{
-				vertices[i].color = 0xFFA0A0A0;
-				vertices[i + 1].color = 0xFFFFFFFF;
-			}
 
-			position = gridOrigin + start;
-			vertices[i].pos[0] = position.x;
-			vertices[i].pos[1] = position.y;
-			vertices[i].pos[2] = position.z;
-			
-			position = gridOrigin + end;
-			vertices[i + 1].pos[0] = position.x;
-			vertices[i + 1].pos[1] = position.y;
-			vertices[i + 1].pos[2] = position.z;
+			auto& line = operation->AddLine(gridOrigin + start, gridOrigin + end);
+			line.SetColor(i % m_largeGrid != 0 ? darkColor : lightColor);
 		}
 
-		start.y = 0.0f;
 		start.z = 0.0f;
-		for (auto i = 0; i < m_numCols * 2; i += 2)
+		for (auto i = 0; i < m_numCols; ++i)
 		{
-			const auto j = i + m_numRows * 2;
-
-			start.x = i * m_gridSize;
+			start.x = m_gridSize * i;
 			end.x = start.x;
 			end.z = height;
 			
-			if (i % m_largeGrid != 0)
-			{
-				vertices[j].color = 0xFFFFFFFF;
-				vertices[j + 1].color = 0xFFFFFFFF;
-			}
-			else
-			{
-				vertices[j].color = 0xFFA0A0A0;
-				vertices[j + 1].color = 0xFFFFFFFF;
-			}
-
-			position = gridOrigin + start;
-			vertices[j].pos[0] = position.x;
-			vertices[j].pos[1] = position.y;
-			vertices[j].pos[2] = position.z;
-			
-			position = gridOrigin + end;
-			vertices[j + 1].pos[0] = position.x;
-			vertices[j + 1].pos[1] = position.y;
-			vertices[j + 1].pos[2] = position.z;
+			auto& line = operation->AddLine(gridOrigin + start, gridOrigin + end);
+			line.SetColor(i % m_largeGrid != 0 ? darkColor : lightColor);
 		}
-		
-		m_vertexBuffer = m_graphicsDevice.CreateVertexBuffer(vertices.size(),
-			sizeof(POS_COL_VERTEX), false, vertices.data());
 	}
 }
