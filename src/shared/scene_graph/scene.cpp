@@ -29,6 +29,7 @@ namespace mmo
 
 	void Scene::Clear()
 	{
+		m_rootNode->RemoveAllChildren();
 		m_cameras.clear();
 	}
 

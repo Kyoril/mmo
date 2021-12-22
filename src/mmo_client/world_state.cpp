@@ -26,6 +26,8 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
+		m_defaultCamera = m_scene.CreateCamera("Default");
+
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
 			{
@@ -59,6 +61,9 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_defaultCamera = nullptr;
+		m_scene.Clear();
+
 		// Disconnect all active connections
 		m_realmConnections.disconnect();
 

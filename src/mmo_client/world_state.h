@@ -32,12 +32,15 @@ namespace mmo
 	public:
 		// Inherited via IGameState
 		void OnEnter() override;
+
 		void OnLeave() override;
+
 		const std::string& GetName() const override;
 
 	private:
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
+
 		// 
 		void OnRealmDisconnected();
 
@@ -49,5 +52,6 @@ namespace mmo
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
 		Scene m_scene;
+		Camera* m_defaultCamera { nullptr };
 	};
 }

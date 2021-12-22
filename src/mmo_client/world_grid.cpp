@@ -48,8 +48,8 @@ namespace mmo
 		Matrix4 world = Matrix4::Identity;
 		world.MakeTrans(m_origin);
 
-		const Matrix4 view = MakeViewMatrix(Vector3(0.0f, 5.0f, 5.0f), 
-			Quaternion(Degree(-45), Vector3::UnitX));
+		const Matrix4 view = MakeViewMatrix(Vector3(0.0f, 25.0f, 5.0f), 
+			Quaternion(Degree(-25), Vector3::UnitX));
 		
 		m_device.SetTransformMatrix(World, world);
 		m_device.SetTransformMatrix(View, view);

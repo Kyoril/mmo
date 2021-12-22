@@ -7,6 +7,11 @@
 
 namespace mmo
 {
+	void SceneNode::RemoveAllChildren()
+	{
+		m_children.clear();
+	}
+
 	SceneNode::SceneNode(String name)
 		: m_name(std::move(name))
 		, m_parent(nullptr)

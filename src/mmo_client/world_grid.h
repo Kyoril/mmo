@@ -30,7 +30,7 @@ namespace mmo
 		uint8 m_numRows { 48 };
 		uint8 m_numCols { 48 };
 		uint8 m_largeGrid { 16 };
-		float m_gridSize { 1.0f };
+		float m_gridSize { 33.3333f };
 		Vector3 m_origin;
 
 		VertexBufferPtr m_vertexBuffer;

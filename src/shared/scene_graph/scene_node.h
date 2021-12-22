@@ -48,6 +48,7 @@ namespace mmo
 		const_iterator cend() const { return m_children.cend(); }
 		size_t size() const { return m_children.size(); }
 		bool IsInSceneGraph() const noexcept { return m_isInSceneGraph; }
+		void RemoveAllChildren();
 
 	public:
 		/// Called when the node transformation has been updated.
