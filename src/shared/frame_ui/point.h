@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
+#include <ostream>
 
 
 namespace mmo
@@ -115,5 +116,11 @@ namespace mmo
 	{
 		p /= scalar;
 		return p;
+	}
+	
+	inline std::ostream& operator<<(std::ostream& stream, const Point& point)
+	{
+		return stream << "("
+			<< point.x << ", " << point.y << ")";
 	}
 }

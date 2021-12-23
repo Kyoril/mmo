@@ -12,6 +12,8 @@
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
 
+#include "event_loop.h"
+
 
 namespace mmo
 {
@@ -57,6 +59,12 @@ namespace mmo
 
 		// Register drawing of the game ui
 		m_paintLayer = Screen::AddLayer(std::bind(&WorldState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
+
+		m_inputConnections += {
+			EventLoop::MouseDown.connect(this, &WorldState::OnMouseDown),
+			EventLoop::MouseUp.connect(this, &WorldState::OnMouseUp),
+			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove)
+		};
 	}
 
 	void WorldState::OnLeave()
@@ -64,7 +72,7 @@ namespace mmo
 		m_defaultCamera = nullptr;
 		m_scene.Clear();
 
-		// Disconnect all active connections
+		m_inputConnections.disconnect();
 		m_realmConnections.disconnect();
 
 		// Reset the logo frame ui
@@ -81,6 +89,54 @@ namespace mmo
 	const std::string& WorldState::GetName() const
 	{
 		return WorldState::Name;
+	}
+
+	bool WorldState::OnMouseDown(MouseButton button, int32 x, int32 y)
+	{
+		m_lastMousePosition = Point(x, y);
+
+		if (button == MouseButton_Left)
+		{
+			m_leftButtonDown = true;
+		}
+		else if (button == MouseButton_Right)
+		{
+			m_rightButtonDown = true;
+		}
+
+		return true;
+	}
+
+	bool WorldState::OnMouseUp(MouseButton button, int32 x, int32 y)
+	{
+		m_lastMousePosition = Point(x, y);
+
+		if (button == MouseButton_Left)
+		{
+			m_leftButtonDown = false;
+		}
+		else if (button == MouseButton_Right)
+		{
+			m_rightButtonDown = false;
+		}
+
+		return true;
+	}
+
+	bool WorldState::OnMouseMove(int32 x, int32 y)
+	{
+		if (!m_leftButtonDown)
+		{
+			return false;
+		}
+
+		const Point position(x, y);
+		const Point delta = position - m_lastMousePosition;
+		m_lastMousePosition = position;
+
+		DLOG("Rotating camera (Delta: " << delta << ")");
+
+		return true;
 	}
 
 	void WorldState::OnPaint()

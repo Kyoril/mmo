@@ -26,6 +26,7 @@ namespace mmo
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseUp;
 	signal<bool(int32, int32)> EventLoop::MouseMove;
 
+	static int s_captureCount = 0;
 
 	void EventLoop::Initialize()
 	{
@@ -34,6 +35,27 @@ namespace mmo
 	void EventLoop::Destroy()
 	{
 	}
+
+#ifdef _WIN32
+	// TODO: better way of handling
+	void IncreaseCapture(HWND wnd)
+	{
+		if (s_captureCount++ == 0)
+		{
+			::SetCapture(wnd);
+		}
+	}
+
+	void DecreaseCapture()
+	{
+		if (--s_captureCount == 0)
+		{
+			::ReleaseCapture();	
+		}
+
+		if (s_captureCount < 0) s_captureCount = 0;
+	}
+#endif
 
 	bool EventLoop::ProcessOsInput()
 	{
@@ -55,21 +77,27 @@ namespace mmo
 				KeyUp(static_cast<int32>(msg.wParam));
 				break;
 			case WM_LBUTTONDOWN:
+				IncreaseCapture(msg.hwnd);
 				MouseDown(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_LBUTTONUP:
+				DecreaseCapture();
 				MouseUp(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_RBUTTONDOWN:
+				IncreaseCapture(msg.hwnd);
 				MouseDown(MouseButton_Right, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_RBUTTONUP:
+				DecreaseCapture();
 				MouseUp(MouseButton_Right, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MBUTTONDOWN:
+				IncreaseCapture(msg.hwnd);
 				MouseDown(MouseButton_Middle, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MBUTTONUP:
+				DecreaseCapture();
 				MouseUp(MouseButton_Middle, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MOUSEMOVE:

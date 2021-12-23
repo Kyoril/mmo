@@ -38,6 +38,13 @@ namespace mmo
 		const std::string& GetName() const override;
 
 	private:
+		bool OnMouseDown(MouseButton button, int32 x, int32 y);
+
+		bool OnMouseUp(MouseButton button, int32 x, int32 y);
+
+		bool OnMouseMove(int32 x, int32 y);
+
+	private:
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
 
@@ -51,7 +58,12 @@ namespace mmo
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
+		scoped_connection_container m_inputConnections;
 		Scene m_scene;
 		Camera* m_defaultCamera { nullptr };
+
+		bool m_leftButtonDown { false };
+		bool m_rightButtonDown { false };
+		Point m_lastMousePosition {};
 	};
 }
