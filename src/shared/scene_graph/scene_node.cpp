@@ -3,6 +3,7 @@
 #include "scene_node.h"
 #include "scene.h"
 #include "movable_object.h"
+#include "base/unordered_map_erase_if.h"
 
 
 namespace mmo
@@ -12,10 +13,27 @@ namespace mmo
 		m_children.clear();
 	}
 
-	SceneNode::SceneNode(String name)
+	SceneNode::SceneNode(Scene& scene)
+		: m_parent(nullptr)
+		, m_needParentUpdate(false)
+		, m_parentNotified(false)
+		, m_orientation(Quaternion::Identity)
+		, m_derivedOrientation(Quaternion::Identity)
+		, m_inheritOrientation(true)
+		, m_scale(Vector3::UnitScale)
+		, m_derivedScale(Vector3::UnitScale)
+		, m_inheritScale(true)
+		, m_cachedTransformInvalid(true)
+	{
+		static uint32 index = 0;
+		m_name = "SceneNode_" + std::to_string(index);
+	}
+
+	SceneNode::SceneNode(Scene& scene, String name)
 		: m_name(std::move(name))
 		, m_parent(nullptr)
 		, m_needParentUpdate(false)
+		, m_parentNotified(false)
 		, m_orientation(Quaternion::Identity)
 		, m_derivedOrientation(Quaternion::Identity)
 		, m_inheritOrientation(true)
@@ -34,7 +52,8 @@ namespace mmo
 		}
 		
 		m_parent = parent;
-		Invalidate();
+		m_parentNotified = false;
+		NeedUpdate();
 
 		if (m_parent)
 		{
@@ -44,12 +63,6 @@ namespace mmo
 		{
 			nodeDetached(*this);
 		}
-	}
-
-	void SceneNode::Invalidate()
-	{
-		m_needParentUpdate = true;
-		m_cachedTransformInvalid = true;
 	}
 
 	const Quaternion& SceneNode::GetDerivedOrientation()
@@ -67,7 +80,7 @@ namespace mmo
 		m_orientation = orientation;
 		m_orientation.Normalize();
 
-		Invalidate();
+		NeedUpdate();
 	}
 
 	void SceneNode::SetDerivedOrientation(const Quaternion& orientation)
@@ -118,7 +131,7 @@ namespace mmo
 			break;
 		}
 
-		Invalidate();
+		NeedUpdate();
 	}
 
 	const Vector3& SceneNode::GetDerivedScale()
@@ -134,13 +147,13 @@ namespace mmo
 	void SceneNode::SetScale(const Vector3& scale)
 	{
 		m_scale = scale;
-        Invalidate();
+        NeedUpdate();
 	}
 
 	void SceneNode::Scale(const Vector3& scaleOnAxis)
 	{
         m_scale = scaleOnAxis * m_scale;
-        Invalidate();
+        NeedUpdate();
 	}
 
 	const Vector3& SceneNode::GetDerivedPosition()
@@ -156,7 +169,7 @@ namespace mmo
 	void SceneNode::SetPosition(const Vector3& position)
 	{
 		m_position = position;
-        Invalidate();
+        NeedUpdate();
 	}
 
 	void SceneNode::SetDerivedPosition(const Vector3& position)
@@ -210,13 +223,13 @@ namespace mmo
 	void SceneNode::SetInheritOrientation(bool inherit)
 	{
         m_inheritOrientation = inherit;
-        Invalidate();
+        NeedUpdate();
 	}
 
 	void SceneNode::SetInheritScale(bool inherit)
 	{
         m_inheritScale = inherit;
-        Invalidate();
+        NeedUpdate();
 	}
 
 	void SceneNode::Translate(const Vector3& delta, TransformSpace relativeTo)
@@ -241,7 +254,7 @@ namespace mmo
 			break;
 		}
 
-		Invalidate();
+		NeedUpdate();
 	}
 
 	void SceneNode::AddChild(SceneNode& child)
@@ -323,8 +336,65 @@ namespace mmo
 		return m_cachedTransform;
 	}
 
+	void SceneNode::AttachObject(MovableObject& obj)
+	{
+		ASSERT(!obj.IsAttached());
+		
+        obj.NotifyAttachmentChanged(this);
+		
+        // Also add to name index
+        const std::pair<ObjectMap::iterator, bool> insresult = 
+            m_objectsByName.insert(ObjectMap::value_type(obj.GetName(), &obj));
+        assert(insresult.second && "Object was not attached because an object of the same name was already attached to this scene node.");
+        (void)insresult;
+        
+        NeedUpdate();
+	}
+
 	void SceneNode::DetachObject(MovableObject& object)
 	{
+		std::erase_if(m_objectsByName, [&object](const std::pair<String, MovableObject*> value)
+		{
+			return value.second == &object;
+		});
+
+        object.NotifyAttachmentChanged(nullptr);
+
+        NeedUpdate();
+	}
+
+	void SceneNode::NeedUpdate(bool forceParentUpdate)
+	{
+		m_needParentUpdate = true;
+		m_needChildUpdates = true;
+        m_cachedTransformInvalid = true;
+
+        // Make sure we're not root and parent hasn't been notified before
+        if (m_parent && (!m_parentNotified || forceParentUpdate))
+        {
+            m_parent->RequestUpdate(*this, forceParentUpdate);
+			m_parentNotified = true;
+        }
+		
+        m_childrenToUpdate.clear();
+	}
+
+	void SceneNode::RequestUpdate(SceneNode& child, bool forceParentUpdate)
+	{
+		// If we're already going to update everything this doesn't matter
+        if (m_needChildUpdates)
+        {
+            return;
+        }
+
+        m_childrenToUpdate.insert(&child);
+
+        // Request selective update of me, if we didn't do it before
+        if (m_parent && (!m_parentNotified || forceParentUpdate))
+		{
+            m_parent->RequestUpdate(*this, forceParentUpdate);
+			m_parentNotified = true;
+		}
 	}
 
 	void SceneNode::UpdateFromParent()

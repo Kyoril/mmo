@@ -9,6 +9,7 @@
 
 #include <map>
 #include <algorithm>
+#include <fstream>
 #include <utility>
 
 
@@ -35,7 +36,8 @@ namespace mmo
 			{ "set", console_commands::ConsoleCommand_Set, ConsoleCommandCategory::Default, "Sets a console variable to a given value." },
 			{ "reset", console_commands::ConsoleCommand_Reset, ConsoleCommandCategory::Default, "Resets a console variable to it's default value." },
 			{ "unset", console_commands::ConsoleCommand_Unset, ConsoleCommandCategory::Default, "Removes a console variable."},
-			{ "cvarlist", console_commands::ConsoleCommand_CVarList, ConsoleCommandCategory::Default, "Lists all console variables." }
+			{ "cvarlist", console_commands::ConsoleCommand_CVarList, ConsoleCommandCategory::Default, "Lists all console variables." },
+			{ "saveconfig", console_commands::ConsoleCommand_SaveConfig, ConsoleCommandCategory::Default, "Saves all console variables into a config file." }
 
 			// TODO: Add your console var mgr commands to this list to make them register and unregister automatically
 		};
@@ -111,9 +113,29 @@ namespace mmo
 			std::for_each(s_consoleVars.begin(), s_consoleVars.end(), [](std::pair<const std::string, ConsoleVar>& p) {
 				if (p.second.IsValid())
 				{
-					ILOG("\t" << p.second.GetName() << ":\t" << p.second.GetStringValue());
+					ILOG("\t" << p.second.GetName() << ":\t" << p.second.GetStringValue() << "(Modified: " << p.second.HasBeenModified() << ")");
 				}
 			});
+		}
+
+		void ConsoleCommand_SaveConfig(const std::string& cmd, const std::string& args)
+		{
+			std::fstream configFile("Config/Config.cfg", std::ios::out);
+			if (!configFile)
+			{
+				ELOG("Unable to save config file!");
+				return;
+			}
+
+			for(auto& pair : s_consoleVars)
+			{
+				configFile << "set " << pair.second.GetName() << " " << pair.second.GetStringValue() << "\n";
+			}
+
+			configFile.flush();
+			configFile.close();
+
+			ILOG("Successfully saved config file!");
 		}
 	}
 

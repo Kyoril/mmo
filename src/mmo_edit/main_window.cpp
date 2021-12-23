@@ -36,7 +36,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace mmo
 {
-	static constexpr char* s_mainWindowClassName = "MainWindow";
+	static const char* s_mainWindowClassName = "MainWindow";
 	static bool s_initialized = false;
 
 

@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 
+#include <stdexcept>
 #include <variant>
 #include <string>
 

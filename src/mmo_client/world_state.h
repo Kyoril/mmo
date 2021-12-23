@@ -3,6 +3,7 @@
 #pragma once
 
 #include "game_state.h"
+#include "manual_render_object.h"
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"
@@ -53,6 +54,16 @@ namespace mmo
 
 		void OnEnterWorldFailed(game::player_login_response::Type error);
 
+		void RegisterGameplayCommands();
+
+		void RemoveGameplayCommands();
+
+		void ToggleAxisVisibility();
+
+		void EnsureDebugAxisCreated();
+
+		void RenderDebugAxis();
+
 	private:
 		
 		RealmConnector& m_realmConnector;
@@ -61,9 +72,12 @@ namespace mmo
 		scoped_connection_container m_inputConnections;
 		Scene m_scene;
 		Camera* m_defaultCamera { nullptr };
-
+		SceneNode* m_cameraNode { nullptr };
+		std::unique_ptr<ManualRenderObject> m_debugAxis;
+		
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Point m_lastMousePosition {};
+		bool m_axisVisible { false };
 	};
 }

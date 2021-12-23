@@ -43,9 +43,14 @@ namespace mmo
 			virtual ~EncryptedConnector() = default;
 
 		public:
-			Listener *getListener() const
+			Listener *GetListener() const
 			{
 				return dynamic_cast<Listener *>(Super::getListener());
+			}
+			
+			void SetListener(Listener& _listener)
+			{
+				return Super::setListener(dynamic_cast<typename Super::Listener&>(_listener));
 			}
 
 		public:
@@ -113,7 +118,7 @@ namespace mmo
 			void connect(const std::string &host, uint16 port, Listener &listener,
 				asio::io_service &ioService)
 			{
-				setListener(listener);
+				SetListener(listener);
 				ASSERT(GetListener());
 
 				m_port = port;
@@ -150,8 +155,8 @@ namespace mmo
 			{
 				if (error.code())
 				{
-					assert(getListener());
-					getListener()->connectionEstablished(false);
+					assert(GetListener());
+					GetListener()->connectionEstablished(false);
 					this->resetListener();
 					return;
 				}
@@ -181,7 +186,7 @@ namespace mmo
 			{
 				if (!error.code())
 				{
-					if (getListener()->connectionEstablished(true))
+					if (GetListener()->connectionEstablished(true))
 					{
 						this->startReceiving();
 					}
@@ -193,9 +198,9 @@ namespace mmo
 				}
 				else if (iterator == asio::ip::tcp::resolver::iterator())
 				{
-					if (getListener())
+					if (GetListener())
 					{
-						getListener()->connectionEstablished(false);
+						GetListener()->connectionEstablished(false);
 						this->resetListener();
 					}
 					return;

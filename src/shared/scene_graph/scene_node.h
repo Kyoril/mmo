@@ -13,6 +13,7 @@
 
 namespace mmo
 {
+	class Scene;
 	class MovableObject;
 
 	/// Enumerates available transform spaces.
@@ -49,6 +50,7 @@ namespace mmo
 		size_t size() const { return m_children.size(); }
 		bool IsInSceneGraph() const noexcept { return m_isInSceneGraph; }
 		void RemoveAllChildren();
+		void NotifyRootNode() noexcept { m_isInSceneGraph = true; }
 
 	public:
 		/// Called when the node transformation has been updated.
@@ -59,7 +61,8 @@ namespace mmo
 		signal<void(const SceneNode&)> nodeDetached;
 
 	public:
-		explicit SceneNode(String name);
+		explicit SceneNode(Scene& scene);
+		explicit SceneNode(Scene& scene, String name);
 
 	public:
 		/// Gets the name of this node.
@@ -71,10 +74,7 @@ namespace mmo
 		/// Updates the parent of this scene node.
 		/// @param parent The new parent scene node or nullptr, if no new parent should be used.
 		void SetParent(SceneNode* parent);
-
-		/// Invalidates the node.
-		void Invalidate();
-
+		
 		/// Gets the derived orientation of the node.
 		const Quaternion& GetDerivedOrientation();
 
@@ -166,7 +166,13 @@ namespace mmo
 
 		const Matrix4& GetFullTransform();
 
+		void AttachObject(MovableObject& obj);
+
 		void DetachObject(MovableObject& object);
+		
+        void NeedUpdate(bool forceParentUpdate = false);
+		
+        void RequestUpdate(SceneNode& child, bool forceParentUpdate = false);
 
 	protected:
 		/// @brief Name of this node.
@@ -175,6 +181,8 @@ namespace mmo
 		SceneNode* m_parent;
 		/// @brief Flag to indicate own transform from parent is out of date.
 		bool m_needParentUpdate;
+		
+		bool m_parentNotified;
 		/// @brief Child nodes, mapped by name.
 		ChildNodeMap m_children;
 		/// @brief The local orientation of this node.
@@ -202,7 +210,7 @@ namespace mmo
 
 		bool m_isInSceneGraph { false };
 
-		typedef std::unordered_map<String, std::unique_ptr<MovableObject>> ObjectMap;
+		typedef std::unordered_map<String, MovableObject*> ObjectMap;
 		ObjectMap m_objectsByName;
 
 		typedef std::set<SceneNode*> ChildUpdateSet;

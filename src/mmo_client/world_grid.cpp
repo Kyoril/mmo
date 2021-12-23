@@ -52,9 +52,9 @@ namespace mmo
 			Quaternion(Degree(-25), Vector3::UnitX));
 		
 		m_device.SetTransformMatrix(World, world);
-		m_device.SetTransformMatrix(View, view);
-		m_device.SetTransformMatrix(Projection, 
-			m_device.MakeProjectionMatrix(Degree(60.0f), 16.0f / 9.0f, 0.001f, 512.0f));
+		//m_device.SetTransformMatrix(View, view);
+		//m_device.SetTransformMatrix(Projection, 
+		//	m_device.MakeProjectionMatrix(Degree(60.0f), 16.0f / 9.0f, 0.001f, 512.0f));
 		
 		m_device.SetTopologyType(TopologyType::LineList);
 		m_device.SetVertexFormat(VertexFormat::PosColor);

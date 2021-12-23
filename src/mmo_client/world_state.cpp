@@ -12,6 +12,9 @@
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
 
+#include "console_commands.h"
+#include "console_var.h"
+
 #include "event_loop.h"
 
 
@@ -20,6 +23,16 @@ namespace mmo
 	const std::string WorldState::Name = "world";
 
 	extern CharacterView s_selectedCharacter;
+
+	// Console variables for gameplay
+	static ConsoleVar* s_mouseSensitivityCVar = nullptr;
+	static ConsoleVar* s_invertVMouseCVar = nullptr;
+
+	// Console command names
+	namespace command_names
+	{
+		static const char* ToggleAxis = "ToggleAxis";	
+	}
 	
 	WorldState::WorldState(RealmConnector& realmConnector)
 		: m_realmConnector(realmConnector)
@@ -28,7 +41,19 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
+		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
+		m_scene.GetRootSceneNode().AddChild(*m_cameraNode);
+
 		m_defaultCamera = m_scene.CreateCamera("Default");
+		m_cameraNode->AttachObject(*m_defaultCamera);
+		m_cameraNode->SetPosition(Vector3(0.0f, 15.0f, 0.0f));
+		m_cameraNode->SetOrientation(Quaternion(Degree(-25), Vector3::UnitX));
+
+		if (!s_mouseSensitivityCVar)
+		{
+			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
+			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "true");
+		}
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
@@ -65,10 +90,14 @@ namespace mmo
 			EventLoop::MouseUp.connect(this, &WorldState::OnMouseUp),
 			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove)
 		};
+		
+		RegisterGameplayCommands();
 	}
 
 	void WorldState::OnLeave()
 	{
+		RemoveGameplayCommands();
+
 		m_defaultCamera = nullptr;
 		m_scene.Clear();
 
@@ -134,7 +163,16 @@ namespace mmo
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
 
-		DLOG("Rotating camera (Delta: " << delta << ")");
+		if (delta.x != 0.0f)
+		{
+			m_cameraNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::World);
+		}
+		
+		if (delta.y != 0.0f)
+		{
+			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
+			m_cameraNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
+		}
 
 		return true;
 	}
@@ -142,6 +180,11 @@ namespace mmo
 	void WorldState::OnPaint()
 	{
 		FrameManager::Get().Draw();
+
+		if (m_axisVisible)
+		{
+			RenderDebugAxis();
+		}
 	}
 	
 	void WorldState::OnRealmDisconnected()
@@ -156,5 +199,78 @@ namespace mmo
 	void WorldState::OnEnterWorldFailed(game::player_login_response::Type error)
 	{
 		GameStateMgr::Get().SetGameState(LoginState::Name);
+	}
+
+	void WorldState::RegisterGameplayCommands()
+	{
+		Console::RegisterCommand(command_names::ToggleAxis, [this](const std::string&, const std::string&)
+		{
+			ToggleAxisVisibility();
+		}, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
+	}
+
+	void WorldState::RemoveGameplayCommands()
+	{
+		const String commandsToRemove[] = {
+			command_names::ToggleAxis
+		};
+
+		for (const auto& command : commandsToRemove)
+		{
+			Console::UnregisterCommand(command);	
+		}
+	}
+
+	void WorldState::ToggleAxisVisibility()
+	{
+		m_axisVisible = !m_axisVisible;
+		if (m_axisVisible)
+		{
+			EnsureDebugAxisCreated();
+
+			ILOG("DebugAxis visible");
+		}
+		else
+		{
+			ILOG("DebugAxis hidden");
+		}
+	}
+
+	void WorldState::EnsureDebugAxisCreated()
+	{
+		if (m_debugAxis)
+		{
+			return;
+		}
+
+		m_debugAxis = std::make_unique<ManualRenderObject>(GraphicsDevice::Get());
+
+		const auto operation = m_debugAxis->AddLineListOperation();
+
+		auto& xLine = operation->AddLine(Vector3::Zero, Vector3::UnitX);
+		xLine.SetColor(Color(1.0f, 0.0f, 0.0f));
+
+		auto& yLine = operation->AddLine(Vector3::Zero, Vector3::UnitY);
+		yLine.SetColor(Color(0.0f, 1.0f, 0.0f));
+
+		auto& zLine = operation->AddLine(Vector3::Zero, Vector3::UnitZ);
+		zLine.SetColor(Color(0.0f, 0.0f, 1.0f));
+	}
+
+	void WorldState::RenderDebugAxis()
+	{
+		int32 x, y, w, h;
+		GraphicsDevice::Get().GetViewport(&x, &y, &w, &h);
+
+		const Vector3 cameraDirection = m_defaultCamera->GetDerivedOrientation() * (Vector3::UnitZ * -1.0f);
+
+		Matrix4 worldMatrix;
+		worldMatrix.MakeTrans(m_defaultCamera->GetDerivedPosition() + cameraDirection * 5.0f);
+
+		GraphicsDevice::Get().SetTransformMatrix(World, worldMatrix);
+		GraphicsDevice::Get().SetTransformMatrix(View, m_defaultCamera->GetViewMatrix());
+		GraphicsDevice::Get().SetTransformMatrix(Projection, m_defaultCamera->GetProjectionMatrix());
+
+		m_debugAxis->Render();
 	}
 }

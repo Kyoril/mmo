@@ -72,7 +72,7 @@ namespace mmo
 
 		[[nodiscard]] virtual bool ParentIsTagPoint() const noexcept { return m_parentIsTagPoint; }
 
-		virtual void NotifyAttached(SceneNode& parent, bool isTagPoint = false);
+		virtual void NotifyAttachmentChanged(SceneNode* parent, bool isTagPoint = false);
 
 		virtual bool IsAttached() const;
 

@@ -138,9 +138,30 @@ namespace mmo
 	{
 		if (!m_rootNode)
 		{
-			m_rootNode = std::make_unique<SceneNode>("__root__");
+			m_rootNode = &CreateSceneNode("__root__");
+			m_rootNode->NotifyRootNode();
 		}
 
 		return *m_rootNode;
+	}
+
+	SceneNode& Scene::CreateSceneNode()
+	{
+		auto sceneNode = std::make_unique<SceneNode>(*this);
+		SceneNode* rawNode = sceneNode.get();
+
+		ASSERT(m_sceneNodes.find(rawNode->GetName()) == m_sceneNodes.end());
+		m_sceneNodes[sceneNode->GetName()] = std::move(sceneNode);
+
+		return *rawNode;
+	}
+
+	SceneNode& Scene::CreateSceneNode(const String& name)
+	{
+		ASSERT(m_sceneNodes.find(name) == m_sceneNodes.end());
+		
+		auto sceneNode = std::make_unique<SceneNode>(*this, name);
+		m_sceneNodes[name] = std::move(sceneNode);
+		return *m_sceneNodes[name];
 	}
 }

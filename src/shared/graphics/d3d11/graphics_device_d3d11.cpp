@@ -440,11 +440,27 @@ namespace mmo
 
 	Matrix4 GraphicsDeviceD3D11::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane)
 	{
-		return Matrix4(
-			2.f / (right - left), 0.0f, 0.0f, (left + right) / (left - right),
-			0.0f, 2.f / (top - bottom), 0.0f, (top + bottom) / (bottom - top),
-			0.0f, 0.0f, 1.f / (farPlane - nearPlane), nearPlane / (nearPlane - farPlane),
-			0.0f, 0.0f, 0.0f, 1.0f);
+		const float inv_w = 1 / (right - left);
+		const float inv_h = 1 / (top - bottom);
+		const float inv_d = 1 / (farPlane - nearPlane);
+
+		const float A = 2 * inv_w;
+		const float B = 2 * inv_h;
+		const float C = - (right + left) * inv_w;
+		const float D = - (top + bottom) * inv_h;
+
+		const float q = - 2 * inv_d;
+		const float qn = - (farPlane + nearPlane) * inv_d;
+		
+		Matrix4 result = Matrix4::Zero;
+		result[0][0] = A;
+		result[0][3] = C;
+		result[1][1] = B;
+		result[1][3] = D;
+		result[2][2] = q;
+		result[2][3] = qn;
+		result[3][3] = 1;
+		return result;
 	}
 
 	void GraphicsDeviceD3D11::Reset()

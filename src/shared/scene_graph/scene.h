@@ -37,6 +37,10 @@ namespace mmo
 		: public NonCopyable
 	{
 	public:
+		typedef std::map<String, std::unique_ptr<Camera>> Cameras;
+        typedef std::map<String, std::unique_ptr<SceneNode>> SceneNodes;
+
+	public:
 		Scene();
 
 		/// Removes everything from the scene, completely wiping it.
@@ -69,6 +73,10 @@ namespace mmo
 		void DestroyAllCameras();
 
 		SceneNode& GetRootSceneNode();
+
+		SceneNode& CreateSceneNode();
+
+		SceneNode& CreateSceneNode(const String& name);
 		
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
@@ -81,11 +89,12 @@ namespace mmo
 		void RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode);
 		
 		void RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode);
-
+		
 	public:
-		typedef std::map<String, std::unique_ptr<Camera>> Cameras;
 		Cameras m_cameras;
-		std::unique_ptr<SceneNode> m_rootNode;
+        SceneNodes m_sceneNodes;
+
+		SceneNode* m_rootNode { nullptr };
 
 		std::unique_ptr<RenderQueue> m_renderQueue;
 		

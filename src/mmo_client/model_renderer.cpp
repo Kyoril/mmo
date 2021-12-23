@@ -73,7 +73,8 @@ namespace mmo
 		// Setup transforms (TODO: use frame transform properties)
 		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
 		gx.SetTransformMatrix(TransformType::View, MakeViewMatrix(Vector3(0.0f, 0.0f, 5.0f), Quaternion::Identity));
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
+		gx.SetTransformMatrix(TransformType::Projection, 
+			gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
 
 		// Render the actual mesh
 		mesh->Render();

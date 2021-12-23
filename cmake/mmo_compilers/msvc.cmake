@@ -16,7 +16,7 @@ endif()
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Enable c++17 features
-add_definitions("/std:c++17")
+add_definitions("/std:c++latest")
 
 # We want to use Vista or later API since we need this for
 # GetTickCount64 which is not available on XP and prior

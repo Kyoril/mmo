@@ -75,7 +75,7 @@ namespace mmo
 			m_worldScene.Render(*m_camera);
 		}
 		
-		m_worldGrid->UpdatePosition(Vector3(0.0f, 5.0f, 0.0));
+		m_worldGrid->UpdatePosition(m_camera->GetDerivedPosition());
 		m_worldGrid->Render();
 		
 		// Restore state before drawing the frame's geometry buffer

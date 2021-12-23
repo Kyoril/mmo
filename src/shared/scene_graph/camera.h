@@ -36,6 +36,10 @@ namespace mmo
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
+		
+        const Quaternion& GetDerivedOrientation() const;
+
+        const Vector3& GetDerivedPosition() const;
 
 	private:
 		Radian m_fovY;
@@ -43,8 +47,8 @@ namespace mmo
 		float m_nearDist;
 		float m_aspect;
 		float m_orthoHeight;
-		Quaternion m_lastParentOrientation;
-		Vector3 m_lastParentPosition;
+		mutable Quaternion m_lastParentOrientation;
+		mutable Vector3 m_lastParentPosition;
 		mutable Matrix4 m_projMatrix;
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;

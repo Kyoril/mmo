@@ -77,11 +77,11 @@ namespace mmo
 		return m_parentNode;
 	}
 
-	void MovableObject::NotifyAttached(SceneNode& parent, const bool isTagPoint)
+	void MovableObject::NotifyAttachmentChanged(SceneNode* parent, const bool isTagPoint)
 	{
-        const bool different = &parent != m_parentNode;
+        const bool different = parent != m_parentNode;
 
-        m_parentNode = &parent;
+        m_parentNode = parent;
         m_parentIsTagPoint = isTagPoint;
 		
         // Call listener (note, only called if there's something to do)
