@@ -16,9 +16,15 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/asio/asio/include")
 # ===============================================================================
 
 # Find OpenSSL
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL)
 if (NOT OPENSSL_FOUND)
 	message(FATAL_ERROR "Couldn't find OpenSSL libraries on your system. If you're on windows, please download and install Win64 OpenSSL v1.0.2o from this website: https://slproweb.com/products/Win32OpenSSL.html!")
+endif()
+
+if (WIN32)
+	list(APPEND OPENSSL_LIBRARIES "crypt32.lib;ws2_32.lib")
+	message(STATUS "Libs: ${OPENSSL_LIBRARIES}")
 endif()
 
 # Check openssl version infos (right now, we want to make sure we don't use 1.1.X, but 1.0.2)

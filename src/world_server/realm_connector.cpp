@@ -22,6 +22,15 @@ namespace mmo
 		, m_willTerminate(false)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
+
+		m_worldInstanceManager.instanceCreated += [&](const InstanceId id)
+		{
+			NotifyInstanceCreated(id);
+		};
+		m_worldInstanceManager.instanceDestroyed += [&](const InstanceId id)
+		{
+			NotifyInstanceDestroyed(id);
+		};
 	}
 
 	RealmConnector::~RealmConnector() = default;
@@ -145,8 +154,8 @@ namespace mmo
 		m_realmPort = port;
 
 		// Apply username and convert it to uppercase letters
-		m_authName = std::move(worldName);
-		std::transform(m_authName.begin(), m_authName.end(), m_authName.begin(), ::toupper);
+		m_authName = worldName;
+		std::ranges::transform(m_authName, m_authName.begin(), ::toupper);
 
 		// Calculate auth hash
 		bool hexParseError = false;
@@ -244,7 +253,7 @@ namespace mmo
 
 		// Notify the user
 		WLOG("Server will terminate in 5 seconds...");
-		m_timerQueue.AddEvent(std::move(termination), m_timerQueue.GetNow() + constants::OneSecond * 5);
+		m_timerQueue.AddEvent(termination, m_timerQueue.GetNow() + constants::OneSecond * 5);
 	}
 
 	void RealmConnector::PropagateHostedMapIds()
@@ -261,12 +270,32 @@ namespace mmo
 	void RealmConnector::UpdateHostedMapList(const std::set<uint64>& mapIds)
 	{
 		m_hostedMapIds.clear();
-		std::copy(mapIds.begin(), mapIds.end(), std::back_inserter(m_hostedMapIds));
+		std::ranges::copy(mapIds, std::back_inserter(m_hostedMapIds));
 
 		if (!m_sessionKey.isZero())
 		{
 			PropagateHostedMapIds();
 		}
+	}
+
+	void RealmConnector::NotifyInstanceCreated(InstanceId instanceId)
+	{
+		sendSinglePacket([instanceId](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::InstanceCreated);
+			outPacket << instanceId;
+			outPacket.Finish();
+		});
+	}
+
+	void RealmConnector::NotifyInstanceDestroyed(InstanceId instanceId)
+	{
+		sendSinglePacket([instanceId](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::InstanceDestroyed);
+			outPacket << instanceId;
+			outPacket.Finish();
+		});
 	}
 
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
@@ -347,7 +376,7 @@ namespace mmo
 		return HandleIncomingPacket(packet);
 	}
 
-	bool RealmConnector::connectionEstablished(bool success)
+	bool RealmConnector::connectionEstablished(const bool success)
 	{
 		if (success)
 		{

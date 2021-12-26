@@ -52,7 +52,8 @@ namespace io
 		w.WritePOD(value); \
 		return w; \
 	}
-
+	
+	BINARY_IO_WRITER_OPERATOR(std::byte)
 	BINARY_IO_WRITER_OPERATOR(signed char)
 	BINARY_IO_WRITER_OPERATOR(unsigned char)
 	BINARY_IO_WRITER_OPERATOR(char)
@@ -189,7 +190,6 @@ namespace io
 	{
 		return detail::WriteRange<typename R::const_iterator>(range.begin(), range.end());
 	}
-
 
 	namespace detail
 	{

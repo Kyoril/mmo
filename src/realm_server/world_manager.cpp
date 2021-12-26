@@ -39,7 +39,7 @@ namespace mmo
 		return m_worlds.size() >= m_capacity;
 	}
 
-	void WorldManager::AddWorld(std::shared_ptr<World> added)
+	void WorldManager::AddWorld(const std::shared_ptr<World> added)
 	{
 		std::scoped_lock<std::mutex> lock{m_worldsMutex};
 
@@ -47,24 +47,37 @@ namespace mmo
 		m_worlds.push_back(added);
 	}
 
-	std::weak_ptr<World> WorldManager::GetWorldByMapId(uint64 mapId)
+	std::weak_ptr<World> WorldManager::GetIdealWorldNode(MapId mapId, InstanceId instanceId)
 	{
-		std::scoped_lock<std::mutex> lock{ m_worldsMutex };
+		std::scoped_lock lock{ m_worldsMutex };
 
-		const auto p = std::find_if(
-			m_worlds.begin(),
-			m_worlds.end(),
-			[mapId](const std::shared_ptr<World>& p)
+		if (!instanceId.is_nil())
+		{
+			const auto instanceIt = std::ranges::find_if(m_worlds, [instanceId](const std::shared_ptr<World>& worldNode)
+	            {
+	                return worldNode->IsHostingInstanceId(instanceId);
+	            }
+			);
+
+			if (instanceIt != m_worlds.end())
 			{
-				return p->IsHostingMapId(mapId);
+				return *instanceIt;
 			}
+		}
+		
+		// TODO: Implement load balancer strategy here
+
+		const auto mapIt = std::ranges::find_if(m_worlds, [mapId](const std::shared_ptr<World>& worldNode)
+            {
+                return worldNode->IsHostingMapId(mapId);
+            }
 		);
 
-		if (p == m_worlds.end())
+		if (mapIt == m_worlds.end())
 		{
 			return std::weak_ptr<World>();
 		}
 
-		return *p;
+		return *mapIt;
 	}
 }

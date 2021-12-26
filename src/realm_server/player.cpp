@@ -114,7 +114,7 @@ namespace mmo
 			std::scoped_lock lock{ m_packetHandlerMutex };
 
 			// Check for packet handlers
-			auto handlerIt = m_packetHandlers.find(packetId);
+			const auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
 				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
@@ -210,64 +210,18 @@ namespace mmo
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
 
 		// TODO: Load actual character data from database
-		
-		// Obtain the map id of the selected character
-		uint32 mapId = 0;
-		CharacterView charView;
-		{
-			std::scoped_lock<std::mutex> lock{ m_charViewMutex };
-			
-			const auto charViewIt = m_characterViews.find(guid);
-			if (charViewIt == m_characterViews.end())
-			{
-				WLOG("Client tried to log in with a character that doesn't exist or doesn't belong to the account of that player!");
-				return PacketParseResult::Disconnect;
-			}
-			
-			charView = charViewIt->second;
-		}
-		
-		// Find a world node for the character's map id
-		m_world = m_worldManager.GetWorldByMapId(mapId);
-
-		// Check if world instance exists
-		const auto strongWorld = m_world.lock();
-		if (!strongWorld)
-		{
-			WLOG("No world node available which is able to host map " << mapId);
-
-			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket) 
-			{
-				outPacket.Start(game::realm_client_packet::EnterWorldFailed);
-				outPacket
-					<< io::write<uint8>(game::player_login_response::NoWorldServer);
-				outPacket.Finish();
-			});
-
-			EnableEnterWorldPacket(true);
-			return PacketParseResult::Pass;
-		}
-
-		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
-		strongWorld->Join(guid, [weakThis] (bool success)
+		auto handler = [weakThis](const std::optional<CharacterData> characterData)
 		{
 			const auto strongThis = weakThis.lock();
-			if (!strongThis)
+			if (strongThis)
 			{
-				return;
+				strongThis->OnCharacterData(characterData);
 			}
-			
-			if (success)
-			{
-				strongThis->OnWorldJoined();
-			}
-			else
-			{
-				strongThis->OnWorldJoinFailed();
-			}
-		});
-	
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, guid);
+		
 		return PacketParseResult::Pass;
 	}
 
@@ -396,7 +350,7 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
-	void Player::EnableEnterWorldPacket(bool enable)
+	void Player::EnableEnterWorldPacket(const bool enable)
 	{
 		if (enable)
 		{
@@ -408,7 +362,7 @@ namespace mmo
 		}
 	}
 
-	void Player::JoinWorld()
+	void Player::JoinWorld() const
 	{
 		const auto strongWorld = m_world.lock();
 		if (strongWorld)
@@ -422,8 +376,10 @@ namespace mmo
 		}
 	}
 
-	void Player::OnWorldJoined()
+	void Player::OnWorldJoined() const
 	{
+		DLOG("World join succeeded");
+
 		m_connection->sendSinglePacket([](game::OutgoingPacket& out_packet)
 		{
 			out_packet.Start(game::realm_client_packet::LoginVerifyWorld);
@@ -438,21 +394,67 @@ namespace mmo
 		});
 	}
 
-	void Player::OnWorldJoinFailed()
+	void Player::OnWorldJoinFailed(const game::player_login_response::Type response) const
 	{
-		m_connection->sendSinglePacket([](game::OutgoingPacket& out_packet)
+		ELOG("World join failed");
+
+		m_connection->sendSinglePacket([response](game::OutgoingPacket& outPacket)
 		{
-			out_packet.Start(game::realm_client_packet::EnterWorldFailed);
-			// TODO: Send error code?
-			out_packet.Finish();
+			outPacket.Start(game::realm_client_packet::EnterWorldFailed);
+			outPacket << io::write<uint8>(response);
+			outPacket.Finish();
 		});
+	}
+
+	void Player::OnCharacterData(const std::optional<CharacterData> characterData)
+	{
+		if (!characterData)
+		{
+			OnWorldJoinFailed(game::player_login_response::NoCharacter);
+			return;
+		}
+		
+		// Find a world node for the character's map id and instance id
+		m_world = m_worldManager.GetIdealWorldNode(characterData->mapId, characterData->instanceId);
+
+		// Check if world instance exists
+		const auto strongWorld = m_world.lock();
+		if (!strongWorld)
+		{
+			WLOG("No world node available which is able to host map " << characterData->mapId << " and/or instance id " << characterData->instanceId);
+
+			OnWorldJoinFailed(game::player_login_response::NoWorldServer);
+
+			EnableEnterWorldPacket(true);
+		}
+
+		// Send join request
+		std::weak_ptr weakThis = shared_from_this();
+		strongWorld->Join(characterData->characterId, [weakThis] (const bool success)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+			
+			if (success)
+			{
+				strongThis->OnWorldJoined();
+			}
+			else
+			{
+				strongThis->OnWorldJoinFailed(game::player_login_response::NoWorldServer);
+			}
+		});
+	
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
-		auto it = m_packetHandlers.find(opCode);
+		const auto it = m_packetHandlers.find(opCode);
 		if (it == m_packetHandlers.end())
 		{
 			m_packetHandlers.emplace(std::make_pair(opCode, std::forward<PacketHandler>(handler)));
@@ -463,12 +465,11 @@ namespace mmo
 		}
 	}
 
-	void Player::ClearPacketHandler(uint16 opCode)
+	void Player::ClearPacketHandler(const uint16 opCode)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
-		auto it = m_packetHandlers.find(opCode);
-		if (it != m_packetHandlers.end())
+		if (auto it = m_packetHandlers.find(opCode); it != m_packetHandlers.end())
 		{
 			m_packetHandlers.erase(it);
 		}

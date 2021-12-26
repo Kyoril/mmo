@@ -15,7 +15,7 @@ namespace mmo
 		explicit MySQLDatabase(const mysql::DatabaseInfo &connectionInfo);
 
 		/// Tries to establish a connection to the MySQL server.
-		bool load();
+		bool Load();
 
 	public:
 		std::optional<AccountData> getAccountDataByName(std::string name) override;

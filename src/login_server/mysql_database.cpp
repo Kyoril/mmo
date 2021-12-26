@@ -13,7 +13,7 @@ namespace mmo
 	{
 	}
 
-	bool MySQLDatabase::load()
+	bool MySQLDatabase::Load()
 	{
 		if (!m_connection.Connect(m_connectionInfo))
 		{

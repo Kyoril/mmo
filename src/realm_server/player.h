@@ -14,6 +14,7 @@
 #include <map>
 #include <cassert>
 
+#include "game/character_data.h"
 #include "game/character_view.h"
 
 
@@ -63,18 +64,22 @@ namespace mmo
 		/// be encrypted from here on.
 		void InitializeSession(const BigNumber& sessionKey);
 
-	protected:
+	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
 
-		void JoinWorld();
+		void JoinWorld() const;
 
-		void OnWorldJoined();
-		void OnWorldJoinFailed();
-	
+		void OnWorldJoined() const;
+
+		void OnWorldJoinFailed(const game::player_login_response::Type response) const;
+
+		void OnCharacterData(std::optional<CharacterData> characterData);
+
 	public:
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint16 opCode, PacketHandler &&handler);
+
 		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
 		template <class Instance, class Class, class... Args1>
 		void RegisterPacketHandler(uint16 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
@@ -83,6 +88,7 @@ namespace mmo
 				return (object.*method)(Args1(args)...);
 			});
 		}
+
 		/// Clears a packet handler so that the opcode is no longer handled.
 		void ClearPacketHandler(uint16 opCode);
 

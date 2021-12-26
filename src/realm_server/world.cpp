@@ -13,6 +13,7 @@
 #include "base/big_number.h"
 #include "base/constants.h"
 #include "base/utilities.h"
+#include "game/game.h"
 
 
 namespace mmo
@@ -61,10 +62,10 @@ namespace mmo
 
 		{
 			// Lock packet handler access
-			std::scoped_lock<std::mutex> lock{ m_packetHandlerMutex };
+			std::scoped_lock lock{ m_packetHandlerMutex };
 
 			// Check for packet handlers
-			auto handlerIt = m_packetHandlers.find(packetId);
+			const auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
 				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
@@ -97,7 +98,7 @@ namespace mmo
 		ILOG("Received logon challenge for world " << m_worldName << "...");
 
 		// RequestHandler
-		std::weak_ptr<World> weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{ shared_from_this() };
 		auto handler = [weakThis](std::optional<WorldAuthData> result) {
 			if (auto strongThis = weakThis.lock())
 			{
@@ -255,9 +256,9 @@ namespace mmo
 			
 			// Handler method
 			std::weak_ptr weakThis{ shared_from_this() };
-			auto handler = [weakThis, K](bool success)
+			auto handler = [weakThis, K](const bool success)
 			{
-				if (auto strongThis = weakThis.lock())
+				if (const auto strongThis = weakThis.lock())
 				{
 					if (success)
 					{
@@ -272,6 +273,8 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoined, *strongThis, &World::OnPlayerCharacterJoined);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoinFailed, *strongThis, &World::OnPlayerCharacterJoinFailed);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterLeft, *strongThis, &World::OnPlayerCharacterLeft);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceCreated, *strongThis, &World::OnInstanceCreated);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceDestroyed, *strongThis, &World::OnInstanceDestroyed);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -337,12 +340,12 @@ namespace mmo
 		});
 	}
 
-	void World::ConsumeOnCharacterJoinedCallback(uint64 characterGuid, bool success)
+	auto World::ConsumeOnCharacterJoinedCallback(const uint64 characterGuid, bool success) -> void
 	{
 		JoinWorldCallback callback = nullptr;
 
 		{
-			std::scoped_lock<std::mutex> lock { m_joinCallbackMutex};
+			std::scoped_lock lock { m_joinCallbackMutex};
 
 			if (const auto result = m_joinCallbacks.find(characterGuid); result != m_joinCallbacks.end())
 			{
@@ -356,7 +359,7 @@ namespace mmo
 
 	PacketParseResult World::OnPropagateMapList(auth::IncomingPacket& packet)
 	{
-		std::scoped_lock<std::mutex> lock{ m_hostedMapIdMutex };
+		std::scoped_lock lock{ m_hostedMapIdMutex };
 		
 		m_hostedMapIds.clear();
 		if (!(packet >> io::read_container<uint16>(m_hostedMapIds)))
@@ -391,10 +394,9 @@ namespace mmo
 
 	void World::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
-		std::scoped_lock<std::mutex> lock{ m_packetHandlerMutex };
+		std::scoped_lock lock{ m_packetHandlerMutex };
 
-		auto it = m_packetHandlers.find(opCode);
-		if (it == m_packetHandlers.end())
+		if (auto it = m_packetHandlers.find(opCode); it == m_packetHandlers.end())
 		{
 			m_packetHandlers.emplace(std::make_pair(opCode, std::forward<PacketHandler>(handler)));
 		}
@@ -406,22 +408,28 @@ namespace mmo
 
 	void World::ClearPacketHandler(uint16 opCode)
 	{
-		std::scoped_lock<std::mutex> lock{ m_packetHandlerMutex };
+		std::scoped_lock lock{ m_packetHandlerMutex };
 
-		auto it = m_packetHandlers.find(opCode);
+		const auto it = m_packetHandlers.find(opCode);
 		if (it != m_packetHandlers.end())
 		{
 			m_packetHandlers.erase(it);
 		}
 	}
 
-	bool World::IsHostingMapId(uint64 mapId)
+	bool World::IsHostingMapId(const MapId mapId)
 	{
-		std::scoped_lock<std::mutex> lock{ m_hostedMapIdMutex };
-		return std::find(m_hostedMapIds.begin(), m_hostedMapIds.end(), mapId) != m_hostedMapIds.end();
+		std::scoped_lock lock{ m_hostedMapIdMutex };
+		return std::ranges::find(m_hostedMapIds, mapId) != m_hostedMapIds.end();
 	}
 
-	void World::RequestMapInstanceCreation(uint64 mapId)
+	auto World::IsHostingInstanceId(const InstanceId instanceId) -> bool
+	{
+		std::scoped_lock lock{ m_hostedInstanceIdMutex };
+		return std::ranges::find(m_hostedInstanceIds, instanceId) != m_hostedInstanceIds.end();
+	}
+
+	void World::RequestMapInstanceCreation(MapId mapId)
 	{
 		// TODO: Implement this method. This should notify the connected world node that it should
 		// create an instance for a given map id for us and notify us as soon as this has happened.
@@ -456,6 +464,38 @@ namespace mmo
 		DLOG("Player character " << log_hex_digit(characterGuid) << " failed to join world instance!");
 		ConsumeOnCharacterJoinedCallback(characterGuid, false);
 		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnInstanceCreated(auth::IncomingPacket& packet)
+	{
+		InstanceId instanceId;
+		if (!(packet >> instanceId))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		ILOG("New world instance hosted: " << to_string(instanceId));
+
+		std::scoped_lock lock { m_hostedInstanceIdMutex };
+		m_hostedInstanceIds.emplace_back(std::move(instanceId));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnInstanceDestroyed(auth::IncomingPacket& packet)
+	{
+		InstanceId instanceId;
+		if (!(packet >> instanceId))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ILOG("World instance host terminated: " << to_string(instanceId));
+
+		std::scoped_lock lock { m_hostedInstanceIdMutex };
+		m_hostedInstanceIds.emplace_back(std::move(instanceId));
+
 		return PacketParseResult::Pass;
 	}
 

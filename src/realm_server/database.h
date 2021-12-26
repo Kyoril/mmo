@@ -13,6 +13,8 @@
 #include <optional>
 #include <vector>
 
+#include "game/character_data.h"
+
 
 namespace mmo
 {
@@ -35,20 +37,43 @@ namespace mmo
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
-		virtual ~IDatabase();
+		virtual ~IDatabase() override;
 
 		/// Gets the list of characters that belong to a certain character id.
 		/// @param accountId Id of the account.
 		virtual std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) = 0;
+
 		/// Obtains world data by it's name.
 		/// @param name Name of the world.
 		virtual std::optional<WorldAuthData> GetWorldAuthData(std::string name) = 0;
-		/// 
+
+		/// Handles a successful login request for a world by storing it's information into the database.
+		///	@param worldId Id of the world.
+		///	@param sessionKey The current world connection session key.
+		///	@param ip The current public ip address of the world.
+		///	@param build The build version of the world node.
 		virtual void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
+
 		/// Deletes a character with the given guid.
+		///	@param characterGuid Unique id of the character to delete.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
+
 		/// Creates a new character on the given account.
+		///	@param characterName Name of the character. Has to be unique on the realm.
+		///	@param accountId Id of the account the character belongs to.
+		///	@param map The map id where the character is spawned.
+		///	@param level Start level of the character.
+		///	@param hp Current amount of health of the character.
+		///	@param gender The characters gender.
+		///	@param race The character race.
+		///	@param position Position of the character on the map.
+		///	@param orientation Facing of the character in the world.
 		virtual void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation) = 0;
+
+		/// Loads character data of a character who wants to enter a world.
+		///	@param characterId Unique id of the character to load.
+		///	@returns Character data of the character, if the character exists.
+		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId) = 0;
 	};
 
 

@@ -14,10 +14,44 @@ namespace mmo
 		ScheduleNextUpdate();
 	}
 
-	WorldInstance& WorldInstanceManager::CreateInstance(uint32 mapId)
+	WorldInstance& WorldInstanceManager::CreateInstance(uint64 mapId)
 	{
-		std::unique_lock<std::mutex> lock{ m_worldInstanceMutex };
-		return *m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this));
+		std::unique_lock lock{ m_worldInstanceMutex };
+		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this)).get();
+
+		instanceCreated(createdInstance->GetId());
+
+		return *createdInstance;
+	}
+
+	WorldInstance* WorldInstanceManager::GetInstanceById(InstanceId instanceId)
+	{
+		const auto it = std::ranges::find_if(m_worldInstances, [instanceId](const std::unique_ptr<WorldInstance>& instance)
+		{
+			return instance->GetId() == instanceId;
+		});
+
+		if (it == m_worldInstances.end())
+		{
+			return nullptr;
+		}
+
+		return it->get();
+	}
+
+	WorldInstance* WorldInstanceManager::GetInstanceByMap(MapId mapId)
+	{
+		const auto it = std::ranges::find_if(m_worldInstances, [mapId](const std::unique_ptr<WorldInstance>& instance)
+		{
+			return instance->GetMapId() == mapId;
+		});
+
+		if (it == m_worldInstances.end())
+		{
+			return nullptr;
+		}
+
+		return it->get();
 	}
 
 	void WorldInstanceManager::OnUpdate()
@@ -35,7 +69,7 @@ namespace mmo
 	void WorldInstanceManager::Update(const RegularUpdate& update)
 	{
 		std::unique_lock<std::mutex> lock{ m_worldInstanceMutex };
-		for (auto& worldInstance : m_worldInstances)
+		for (const auto& worldInstance : m_worldInstances)
 		{
 			worldInstance->Update(update);
 		}

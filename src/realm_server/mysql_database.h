@@ -16,16 +16,26 @@ namespace mmo
 		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo);
 
 		/// Tries to establish a connection to the MySQL server.
-		bool load();
+		bool Load();
 
 	public:
-		// ~ Begin IDatabase
+		/// @copydoc IDatabase::GetCharacterViewsByAccountId
 		std::optional<std::vector<CharacterView>> GetCharacterViewsByAccountId(uint64 accountId) final override;
+
+		/// @copydoc IDatabase::GetWorldAuthData
 		std::optional<WorldAuthData> GetWorldAuthData(std::string name) final override;
+		
+		/// @copydoc IDatabase::WorldLogin
 		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
+		
+		/// @copydoc IDatabase::DeleteCharacter
 		void DeleteCharacter(uint64 characterGuid) final override;
+		
+		/// @copydoc IDatabase::CreateCharacter
 		void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation) final override;
-		// ~ End IDatabase
+		
+		/// @copydoc IDatabase::CharacterEnterWorld
+		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId) override;
 
 	private:
 		void PrintDatabaseError();

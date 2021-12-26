@@ -5,11 +5,13 @@
 #include "auth_protocol/auth_connector.h"
 #include "base/big_number.h"
 #include "base/sha1.h"
+#include "game/game.h"
 
 #include "asio/io_service.hpp"
 
 #include <set>
 #include <vector>
+
 
 namespace mmo
 {
@@ -27,32 +29,62 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, WorldInstanceManager& worldInstanceManager);
+
 		/// Default destructor.
-		virtual ~RealmConnector();
+		~RealmConnector() override;
 
 	public:
+		/// Sends a login request to the realm in order to authenticate this world node.
 		bool Login(const std::string& serverAddress, uint16 port, const std::string& worldName, std::string password);
 
+		/// Updates the list of map ids that can be hosted by this world node and if connected, propagates this
+		///	list to the realm server.
+		///	@param mapIds Set of map ids that can be hosted.
 		void UpdateHostedMapList(const std::set<uint64>& mapIds);
 		
+		/// Notifies the realm that a world instance has been created.
+		///	@param instanceId The id of the instance that has been created.
+		void NotifyInstanceCreated(InstanceId instanceId);
+
+		/// Notifies the realm that a world instance has been destroyed.
+		///	@param instanceId The id of the instance that has been destroyed.
+		void NotifyInstanceDestroyed(InstanceId instanceId);
+		
 	private:
-		// Perform client-side srp6-a calculations after we received server values
+		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
-		// Handles the LogonChallenge packet from the server.
+
+		/// Handles the LogonChallenge packet from the server.
+		///	@param packet Incoming packet which contains the data sent by the realm.
+		///	@returns Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket& packet);
-		// Handles the LogonProof packet from the server.
+
+		/// Handles the LogonProof packet from the server.
+		///	@param packet Incoming packet which contains the data sent by the realm.
+		///	@returns Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnLogonProof(auth::IncomingPacket& packet);
+
 		/// Handles a packet of a character that wants to enter a world.
+		///	@param packet Incoming packet which contains the data sent by the realm.
+		///	@returns Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnPlayerCharacterJoin(auth::IncomingPacket& packet);
+
 		/// Handles a packet of a character that should leave a world.
+		///	@param packet Incoming packet which contains the data sent by the realm.
+		///	@returns Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnPlayerCharacterLeave(auth::IncomingPacket& packet);
 
+		/// Resets this instance to an unauthenticated state.
 		void Reset();
-		
+
+		/// Handles login error results received by the realm server after a login attempt.
+		///	@param result The error code received by the realm server.
 		void OnLoginError(auth::AuthResult result);
 
+		/// Adds a termination event to the global queue to terminate the server after a certain amount of time.
 		void QueueTermination();
 
+		/// Sends the set of map ids that can be hosted to the realm server.
 		void PropagateHostedMapIds();
 
 	private:

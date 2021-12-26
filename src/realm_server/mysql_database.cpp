@@ -20,7 +20,7 @@ namespace mmo
 	{
 	}
 
-	bool MySQLDatabase::load()
+	bool MySQLDatabase::Load()
 	{
 		if (!m_connection.Connect(m_connectionInfo))
 		{
@@ -149,6 +149,44 @@ namespace mmo
 			PrintDatabaseError();
 			throw mysql::Exception("Could not create character entry");
 		}
+	}
+
+	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId)
+	{
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o FROM characters WHERE id = " + std::to_string(characterId) + " LIMIT 1");
+		if (select.Success())
+		{
+			if (const mysql::Row row(select); row)
+			{
+				CharacterData result(characterId);
+
+				String instanceId;
+				uint8 level = 1;
+				float facing = 0.0f;
+
+				uint32 index = 0;
+				row.GetField(index++, result.name);
+				row.GetField(index++, level);
+				row.GetField(index++, result.mapId);
+				row.GetField(index++, instanceId);
+				row.GetField(index++, result.position.x);
+				row.GetField(index++, result.position.y);
+				row.GetField(index++, result.position.z);
+				row.GetField(index++, facing);
+
+				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
+				result.facing = Radian(facing);
+				
+				return result;
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+		}
+
+		return {};
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

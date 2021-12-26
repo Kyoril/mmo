@@ -118,7 +118,7 @@ namespace mmo
 			config.mysqlPassword, 
 			config.mysqlDatabase 
 		});
-		if (!database->load())
+		if (!database->Load())
 		{
 			ELOG("Could not load the database");
 			return 1;
