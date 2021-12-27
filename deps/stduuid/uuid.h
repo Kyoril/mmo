@@ -276,144 +276,144 @@ namespace uuids
       constexpr wchar_t guid_encoder<wchar_t>[17] = L"0123456789abcdef";
    }
 
-   // --------------------------------------------------------------------------------------------------------------------------
-   // UUID format https://tools.ietf.org/html/rfc4122
-   // --------------------------------------------------------------------------------------------------------------------------
+    // --------------------------------------------------------------------------------------------------------------------------
+    // UUID format https://tools.ietf.org/html/rfc4122
+    // --------------------------------------------------------------------------------------------------------------------------
+    
+    // --------------------------------------------------------------------------------------------------------------------------
+    // Field	                     NDR Data Type	   Octet #	Note
+    // --------------------------------------------------------------------------------------------------------------------------
+    // time_low	                  unsigned long	   0 - 3	   The low field of the timestamp.
+    // time_mid	                  unsigned short	   4 - 5	   The middle field of the timestamp.
+    // time_hi_and_version	      unsigned short	   6 - 7	   The high field of the timestamp multiplexed with the version number.
+    // clock_seq_hi_and_reserved	unsigned small	   8	      The high field of the clock sequence multiplexed with the variant.
+    // clock_seq_low	            unsigned small	   9	      The low field of the clock sequence.
+    // node	                     character	      10 - 15	The spatially unique node identifier.
+    // --------------------------------------------------------------------------------------------------------------------------
+    // 0                   1                   2                   3
+    //  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |                          time_low                             |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |       time_mid                |         time_hi_and_version   |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |clk_seq_hi_res |  clk_seq_low  |         node (0-1)            |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |                         node (2-5)                            |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    
+    // --------------------------------------------------------------------------------------------------------------------------
+    // enumerations
+    // --------------------------------------------------------------------------------------------------------------------------
 
-   // --------------------------------------------------------------------------------------------------------------------------
-   // Field	                     NDR Data Type	   Octet #	Note
-   // --------------------------------------------------------------------------------------------------------------------------
-   // time_low	                  unsigned long	   0 - 3	   The low field of the timestamp.
-   // time_mid	                  unsigned short	   4 - 5	   The middle field of the timestamp.
-   // time_hi_and_version	      unsigned short	   6 - 7	   The high field of the timestamp multiplexed with the version number.
-   // clock_seq_hi_and_reserved	unsigned small	   8	      The high field of the clock sequence multiplexed with the variant.
-   // clock_seq_low	            unsigned small	   9	      The low field of the clock sequence.
-   // node	                     character	      10 - 15	The spatially unique node identifier.
-   // --------------------------------------------------------------------------------------------------------------------------
-   // 0                   1                   2                   3
-   //  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-   // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   // |                          time_low                             |
-   // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   // |       time_mid                |         time_hi_and_version   |
-   // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   // |clk_seq_hi_res |  clk_seq_low  |         node (0-1)            |
-   // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   // |                         node (2-5)                            |
-   // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // indicated by a bit pattern in octet 8, marked with N in xxxxxxxx-xxxx-xxxx-Nxxx-xxxxxxxxxxxx
+    enum class uuid_variant
+    {
+        // NCS backward compatibility (with the obsolete Apollo Network Computing System 1.5 UUID format)
+        // N bit pattern: 0xxx
+        // > the first 6 octets of the UUID are a 48-bit timestamp (the number of 4 microsecond units of time since 1 Jan 1980 UTC);
+        // > the next 2 octets are reserved;
+        // > the next octet is the "address family"; 
+        // > the final 7 octets are a 56-bit host ID in the form specified by the address family
+        ncs,
+        
+        // RFC 4122/DCE 1.1 
+        // N bit pattern: 10xx
+        // > big-endian byte order
+        rfc,
+        
+        // Microsoft Corporation backward compatibility
+        // N bit pattern: 110x
+        // > little endian byte order
+        // > formely used in the Component Object Model (COM) library      
+        microsoft,
+        
+        // reserved for possible future definition
+        // N bit pattern: 111x      
+        reserved
+    };
 
-   // --------------------------------------------------------------------------------------------------------------------------
-   // enumerations
-   // --------------------------------------------------------------------------------------------------------------------------
+    // indicated by a bit pattern in octet 6, marked with M in xxxxxxxx-xxxx-Mxxx-xxxx-xxxxxxxxxxxx   
+    enum class uuid_version
+    {
+        none = 0, // only possible for nil or invalid uuids
+        time_based = 1,  // The time-based version specified in RFC 4122
+        dce_security = 2,  // DCE Security version, with embedded POSIX UIDs.
+        name_based_md5 = 3,  // The name-based version specified in RFS 4122 with MD5 hashing
+        random_number_based = 4,  // The randomly or pseudo-randomly generated version specified in RFS 4122
+        name_based_sha1 = 5   // The name-based version specified in RFS 4122 with SHA1 hashing
+    };
 
-   // indicated by a bit pattern in octet 8, marked with N in xxxxxxxx-xxxx-xxxx-Nxxx-xxxxxxxxxxxx
-   enum class uuid_variant
-   {
-      // NCS backward compatibility (with the obsolete Apollo Network Computing System 1.5 UUID format)
-      // N bit pattern: 0xxx
-      // > the first 6 octets of the UUID are a 48-bit timestamp (the number of 4 microsecond units of time since 1 Jan 1980 UTC);
-      // > the next 2 octets are reserved;
-      // > the next octet is the "address family"; 
-      // > the final 7 octets are a 56-bit host ID in the form specified by the address family
-      ncs,
-      
-      // RFC 4122/DCE 1.1 
-      // N bit pattern: 10xx
-      // > big-endian byte order
-      rfc,
-      
-      // Microsoft Corporation backward compatibility
-      // N bit pattern: 110x
-      // > little endian byte order
-      // > formely used in the Component Object Model (COM) library      
-      microsoft,
-      
-      // reserved for possible future definition
-      // N bit pattern: 111x      
-      reserved
-   };
-
-   // indicated by a bit pattern in octet 6, marked with M in xxxxxxxx-xxxx-Mxxx-xxxx-xxxxxxxxxxxx   
-   enum class uuid_version
-   {
-      none = 0, // only possible for nil or invalid uuids
-      time_based = 1,  // The time-based version specified in RFC 4122
-      dce_security = 2,  // DCE Security version, with embedded POSIX UIDs.
-      name_based_md5 = 3,  // The name-based version specified in RFS 4122 with MD5 hashing
-      random_number_based = 4,  // The randomly or pseudo-randomly generated version specified in RFS 4122
-      name_based_sha1 = 5   // The name-based version specified in RFS 4122 with SHA1 hashing
-   };
-
-   // --------------------------------------------------------------------------------------------------------------------------
-   // uuid class
-   // --------------------------------------------------------------------------------------------------------------------------
-   class uuid
-   {
-   public:
-      using value_type = uint8_t;
-
-      constexpr uuid() noexcept = default;
-
-      uuid(value_type(&arr)[16]) noexcept
-      {
-         std::copy(std::cbegin(arr), std::cend(arr), std::begin(data));
-      }
-
-      constexpr uuid(std::array<value_type, 16> const & arr) noexcept : data{arr} {}
-      
-      template<typename ForwardIterator>
-      explicit uuid(ForwardIterator first, ForwardIterator last)
-      {
-         if (std::distance(first, last) == 16)
-            std::copy(first, last, std::begin(data));
-      }
-      
-      constexpr uuid_variant variant() const noexcept
-      {
-         if ((data[8] & 0x80) == 0x00)
-            return uuid_variant::ncs;
-         else if ((data[8] & 0xC0) == 0x80)
-            return uuid_variant::rfc;
-         else if ((data[8] & 0xE0) == 0xC0)
-            return uuid_variant::microsoft;
-         else
-            return uuid_variant::reserved;
-      }
-
-      constexpr uuid_version version() const noexcept
-      {
-         if ((data[6] & 0xF0) == 0x10)
-            return uuid_version::time_based;
-         else if ((data[6] & 0xF0) == 0x20)
-            return uuid_version::dce_security;
-         else if ((data[6] & 0xF0) == 0x30)
-            return uuid_version::name_based_md5;
-         else if ((data[6] & 0xF0) == 0x40)
-            return uuid_version::random_number_based;
-         else if ((data[6] & 0xF0) == 0x50)
-            return uuid_version::name_based_sha1;
-         else
-            return uuid_version::none;
-      }
-
-      constexpr bool is_nil() const noexcept
-      {
-         for (size_t i = 0; i < data.size(); ++i) if (data[i] != 0) return false;
-         return true;
-      }
-
-      void swap(uuid & other) noexcept
-      {
-         data.swap(other.data);
-      }
-
-      inline std::array<value_type, 16> as_bytes() const
-      {
-         return data;
-      }
-
-      template <typename StringType>
-      constexpr static bool is_valid_uuid(StringType const & in_str) noexcept
+    // --------------------------------------------------------------------------------------------------------------------------
+    // uuid class
+    // --------------------------------------------------------------------------------------------------------------------------
+    class uuid
+    {
+    public:
+        using value_type = uint8_t;
+        
+        constexpr uuid() noexcept = default;
+        
+        uuid(value_type(&arr)[16]) noexcept
+        {
+           std::copy(std::cbegin(arr), std::cend(arr), std::begin(data));
+        }
+        
+        constexpr uuid(std::array<value_type, 16> const & arr) noexcept : data{arr} {}
+        
+        template<typename ForwardIterator>
+        explicit uuid(ForwardIterator first, ForwardIterator last)
+        {
+           if (std::distance(first, last) == 16)
+              std::copy(first, last, std::begin(data));
+        }
+        
+        constexpr uuid_variant variant() const noexcept
+        {
+           if ((data[8] & 0x80) == 0x00)
+              return uuid_variant::ncs;
+           else if ((data[8] & 0xC0) == 0x80)
+              return uuid_variant::rfc;
+           else if ((data[8] & 0xE0) == 0xC0)
+              return uuid_variant::microsoft;
+           else
+              return uuid_variant::reserved;
+        }
+        
+        constexpr uuid_version version() const noexcept
+        {
+           if ((data[6] & 0xF0) == 0x10)
+              return uuid_version::time_based;
+           else if ((data[6] & 0xF0) == 0x20)
+              return uuid_version::dce_security;
+           else if ((data[6] & 0xF0) == 0x30)
+              return uuid_version::name_based_md5;
+           else if ((data[6] & 0xF0) == 0x40)
+              return uuid_version::random_number_based;
+           else if ((data[6] & 0xF0) == 0x50)
+              return uuid_version::name_based_sha1;
+           else
+              return uuid_version::none;
+        }
+        
+        constexpr bool is_nil() const noexcept
+        {
+           for (size_t i = 0; i < data.size(); ++i) if (data[i] != 0) return false;
+           return true;
+        }
+        
+        void swap(uuid & other) noexcept
+        {
+           data.swap(other.data);
+        }
+        
+        inline std::array<value_type, 16> as_bytes() const
+        {
+           return data;
+        }
+        
+        template <typename StringType>
+        constexpr static bool is_valid_uuid(StringType const & in_str) noexcept
       {
          auto str = detail::to_string_view(in_str);
          bool firstDigit = true;
@@ -455,9 +455,9 @@ namespace uuids
 
          return true;
       }
-
-      template <typename StringType>
-      constexpr static std::optional<uuid> from_string(StringType const & in_str) noexcept
+        
+        template <typename StringType>
+        constexpr static std::optional<uuid> from_string(StringType const & in_str) noexcept
       {
          auto str = detail::to_string_view(in_str);
          bool firstDigit = true;
@@ -503,19 +503,38 @@ namespace uuids
          return uuid{ data };
       }
 
+	    template<class CharT = char,
+	        class Traits = std::char_traits<CharT>,
+	        class Allocator = std::allocator<CharT>>
+		inline std::basic_string<CharT, Traits, Allocator> to_string() const
+		{
+			std::basic_string<CharT, Traits, Allocator> uustr{detail::empty_guid<CharT>};
+
+			for (size_t i = 0, index = 0; i < 36; ++i)
+			{
+				if (i == 8 || i == 13 || i == 18 || i == 23)
+				{
+					continue;
+				}
+
+				uustr[i] = detail::guid_encoder<CharT>[data[index] >> 4 & 0x0f];
+				uustr[++i] = detail::guid_encoder<CharT>[data[index] & 0x0f];
+				index++;
+			}
+
+			return uustr;
+		}
+
    private:
-      std::array<value_type, 16> data{ { 0 } };
+		std::array<value_type, 16> data{ { 0 } };
 
-      friend bool operator==(uuid const & lhs, uuid const & rhs) noexcept;
-      friend bool operator<(uuid const & lhs, uuid const & rhs) noexcept;
+		friend bool operator==(uuid const & lhs, uuid const & rhs) noexcept;
+		friend bool operator<(uuid const & lhs, uuid const & rhs) noexcept;
 
-      template <class Elem, class Traits>
-      friend std::basic_ostream<Elem, Traits> & operator<<(std::basic_ostream<Elem, Traits> &s, uuid const & id);  
-
-      template<class CharT, class Traits, class Allocator>
-      friend std::basic_string<CharT, Traits, Allocator> to_string(uuid const& id);
-
-      friend std::hash<uuid>;
+		template <class Elem, class Traits>
+		friend std::basic_ostream<Elem, Traits> & operator<<(std::basic_ostream<Elem, Traits> &s, uuid const & id);  
+        
+		friend std::hash<uuid>;
    };
 
    // --------------------------------------------------------------------------------------------------------------------------
@@ -536,32 +555,11 @@ namespace uuids
    {
       return lhs.data < rhs.data;
    }
-
-   template<class CharT = char,
-            class Traits = std::char_traits<CharT>,
-            class Allocator = std::allocator<CharT>>
-   inline std::basic_string<CharT, Traits, Allocator> to_string(uuid const & id)
-   {
-      std::basic_string<CharT, Traits, Allocator> uustr{detail::empty_guid<CharT>};
-
-      for (size_t i = 0, index = 0; i < 36; ++i)
-      {
-         if (i == 8 || i == 13 || i == 18 || i == 23)
-         {
-            continue;
-         }
-         uustr[i] = detail::guid_encoder<CharT>[id.data[index] >> 4 & 0x0f];
-         uustr[++i] = detail::guid_encoder<CharT>[id.data[index] & 0x0f];
-         index++;
-      }
-
-      return uustr;
-   }
    
    template <class Elem, class Traits>
    std::basic_ostream<Elem, Traits> & operator<<(std::basic_ostream<Elem, Traits> &s, uuid const & id)
    {
-      s << to_string(id);
+      s << id.to_string();
       return s;
    }
 

@@ -475,7 +475,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 		
-		ILOG("New world instance hosted: " << to_string(instanceId));
+		ILOG("New world instance hosted: " << instanceId.to_string());
 
 		std::scoped_lock lock { m_hostedInstanceIdMutex };
 		m_hostedInstanceIds.emplace_back(std::move(instanceId));
@@ -491,7 +491,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		ILOG("World instance host terminated: " << to_string(instanceId));
+		ILOG("World instance host terminated: " << instanceId.to_string());
 
 		std::scoped_lock lock { m_hostedInstanceIdMutex };
 		m_hostedInstanceIds.emplace_back(std::move(instanceId));
