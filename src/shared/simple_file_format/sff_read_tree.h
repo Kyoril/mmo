@@ -11,6 +11,7 @@
 #include <map>
 #include <cstddef>
 #include <cassert>
+#include <limits>
 
 namespace sff
 {
