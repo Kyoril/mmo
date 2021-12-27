@@ -10,6 +10,8 @@ jobs:
     steps:
     - name: Install GCC
       uses: egor-tensin/setup-gcc@v1
+      with:
+        version: latest
     - uses: actions/checkout@v1
     - name: configure
       run: sudo apt-get install libmysqlclient-dev && git submodule update --init && mkdir build && cd build && cmake ../ 
