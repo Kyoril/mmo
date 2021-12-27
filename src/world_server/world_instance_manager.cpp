@@ -5,6 +5,8 @@
 #include "base/clock.h"
 #include "base/timer_queue.h"
 
+#include <ranges>
+
 namespace mmo
 {
 	WorldInstanceManager::WorldInstanceManager(asio::io_context& ioContext)
