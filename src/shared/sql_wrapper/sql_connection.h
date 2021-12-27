@@ -235,10 +235,10 @@ namespace mmo
 
 		/// The Owner template extends a Statement or connection wrapper with
 		/// automatic resource clean-up.
-		/// @param Statement The statement wrapper to extend. Has to provide a
+		/// @tparam Base The statement wrapper to extend. Has to provide a
 		/// default constructor, a Handle constructor, a swap method and a method
 		/// getHandle which returns a pointer which can be managed with Handle.
-		/// @param Handle A unique_ptr-like movable type which manages the
+		/// @tparam Handle A unique_ptr-like movable type which manages the
 		/// lifetime of the internal statement resource.
 		template <class Base, class Handle>
 		class Owner
@@ -246,8 +246,8 @@ namespace mmo
 		{
 		private:
 
-			Owner<Base, Handle>(const Owner<Base, Handle> &Other) = delete;
-			Owner<Base, Handle> &operator=(const Owner<Base, Handle> &Other) = delete;
+			Owner(const Owner &other) = delete;
+			Owner &operator=(const Owner &other) = delete;
 
 		public:
 
