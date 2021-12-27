@@ -15,7 +15,6 @@
 #include <chrono>
 #include <numeric>
 #include <atomic>
-#include <span>
 
 #ifdef _WIN32
 
@@ -45,14 +44,6 @@
 
 namespace uuids
 {
-#ifdef __cpp_lib_span
-   template <class ElementType, std::size_t Extent>
-   using span = std::span<ElementType, Extent>;
-#else
-   template <class ElementType, std::ptrdiff_t Extent>
-   using span = gsl::span<ElementType, Extent>;
-#endif
-
    namespace detail
    {
       template <typename TChar>
@@ -369,11 +360,6 @@ namespace uuids
       }
 
       constexpr uuid(std::array<value_type, 16> const & arr) noexcept : data{arr} {}
-
-      explicit uuid(span<value_type, 16> bytes)
-      {
-         std::copy(std::cbegin(bytes), std::cend(bytes), std::begin(data));
-      }
       
       template<typename ForwardIterator>
       explicit uuid(ForwardIterator first, ForwardIterator last)
@@ -421,9 +407,9 @@ namespace uuids
          data.swap(other.data);
       }
 
-      inline span<std::byte const, 16> as_bytes() const
+      inline std::array<value_type, 16> as_bytes() const
       {
-         return span<std::byte const, 16>(reinterpret_cast<std::byte const*>(data.data()), 16);
+         return data;
       }
 
       template <typename StringType>
@@ -760,7 +746,7 @@ namespace uuids
       void reset() 
       {
          hasher.reset();
-         std::byte bytes[16];
+         uint8_t bytes[16];
          auto nsbytes = nsuuid.as_bytes();
          std::copy(std::cbegin(nsbytes), std::cend(nsbytes), bytes);
          hasher.process_bytes(bytes, 16);
