@@ -3,7 +3,6 @@
 #include "scene_node.h"
 #include "scene.h"
 #include "movable_object.h"
-#include "base/unordered_map_erase_if.h"
 
 
 namespace mmo
@@ -353,9 +352,10 @@ namespace mmo
 
 	void SceneNode::DetachObject(MovableObject& object)
 	{
-		std::erase_if(m_objectsByName, [&object](const std::pair<String, MovableObject*> value)
+		std::erase_if(m_objectsByName, [&object](const auto& item)
 		{
-			return value.second == &object;
+			auto const& [key, value] = item;
+			return value == &object;
 		});
 
         object.NotifyAttachmentChanged(nullptr);
