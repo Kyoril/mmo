@@ -26,8 +26,8 @@ namespace mmo
 	{
 	private:
 
-		Server<C>(const Server<C> &Other) = delete;
-		Server &operator=(const Server<C> &Other) = delete;
+		Server(const Server &Other) = delete;
+		Server &operator=(const Server &Other) = delete;
 
 	public:
 
