@@ -9,7 +9,11 @@ endif()
 # Enable C++20 standard
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
-list(APPEND CMAKE_CXX_FLAGS "-std=c++20 -pthread")
+if (GCC_VERSION VERSION_GREATER 9.0 OR GCC_VERSION VERSION_EQUAL 9.0)
+	list(APPEND CMAKE_CXX_FLAGS "-std=c++2a -pthread")
+else()
+	list(APPEND CMAKE_CXX_FLAGS "-std=c++20 -pthread")
+endif()
 
 # Zlib is required for GCC builds
 find_package(ZLIB REQUIRED)
