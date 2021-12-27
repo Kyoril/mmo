@@ -7,15 +7,22 @@ jobs:
 
     runs-on: ubuntu-latest
     
-    steps:
-    - name: Install GCC
-      uses: egor-tensin/setup-gcc@v1
-      with:
-        version: latest
+    steps:        
     - uses: actions/checkout@v1
+    
     - name: configure
-      run: sudo apt-get install libmysqlclient-dev && git submodule update --init && mkdir build && cd build && cmake ../ 
+      run: sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test && sudo apt-get install gcc-11 g++-11 libmysqlclient-dev && git submodule update --init
+      
+    - name: cmake
+      run:   mkdir build && cd build && cmake ../
+      shell: bash
+      env:
+        CC:   gcc-11
+        CXX:  g++-11
+        
     - name: make
       run: cd build && make
+      
     - name: unit tests
       run: cd bin && ./unit_tests
+      
