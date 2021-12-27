@@ -87,8 +87,8 @@ namespace mmo
 	{
 	private:
 
-		Connection<P, MySocket>(const Connection<P, MySocket> &Other) = delete;
-		Connection<P, MySocket> &operator=(const Connection<P, MySocket> &Other) = delete;
+		Connection(const Connection &Other) = delete;
+		Connection &operator=(const Connection &Other) = delete;
 
 	public:
 
