@@ -5,7 +5,7 @@
 #include "base/clock.h"
 #include "base/timer_queue.h"
 
-#include <ranges>
+#include <algorithm>
 
 namespace mmo
 {
@@ -28,7 +28,7 @@ namespace mmo
 
 	WorldInstance* WorldInstanceManager::GetInstanceById(InstanceId instanceId)
 	{
-		const auto it = std::ranges::find_if(m_worldInstances, [instanceId](const std::unique_ptr<WorldInstance>& instance)
+		const auto it = std::find_if(m_worldInstances.begin(), m_worldInstances.end(), [instanceId](const std::unique_ptr<WorldInstance>& instance)
 		{
 			return instance->GetId() == instanceId;
 		});
@@ -43,7 +43,7 @@ namespace mmo
 
 	WorldInstance* WorldInstanceManager::GetInstanceByMap(MapId mapId)
 	{
-		const auto it = std::ranges::find_if(m_worldInstances, [mapId](const std::unique_ptr<WorldInstance>& instance)
+		const auto it = std::find_if(m_worldInstances.begin(), m_worldInstances.end(), [mapId](const std::unique_ptr<WorldInstance>& instance)
 		{
 			return instance->GetMapId() == mapId;
 		});
