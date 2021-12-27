@@ -2,19 +2,14 @@
 
 #pragma once
 
-#include "typedefs.h"
-
+#include "non_copyable.h"
 
 namespace mmo
 {
 	/// This class is used to generate new ids by using an internal counter.
 	template<typename T>
-	class IdGenerator
+	class IdGenerator : public NonCopyable
 	{
-	private:
-		IdGenerator<T>(const IdGenerator<T> &Other) = delete;
-		IdGenerator<T> &operator=(const IdGenerator<T> &Other) = delete;
-
 	public:
 
 		/// Default constructor.
