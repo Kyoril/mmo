@@ -27,6 +27,7 @@ namespace mmo
 	public:
 		/// Signal that is fired when the client successfully authenticated at the realm list.
 		signal<void(auth::AuthResult)> AuthenticationResult;
+
 		/// Signal that is fired when the client received a realm list packet.
 		signal<void()> RealmListUpdated;
 

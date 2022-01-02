@@ -17,7 +17,7 @@ namespace mmo
 	class WorldInstance
 	{
 	public:
-		explicit WorldInstance(WorldInstanceManager& manager);
+		explicit WorldInstance(WorldInstanceManager& manager, MapId mapId);
 	
 	public:
 		

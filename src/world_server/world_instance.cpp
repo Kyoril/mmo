@@ -7,8 +7,9 @@
 
 namespace mmo
 {
-	WorldInstance::WorldInstance(WorldInstanceManager& manager)
+	WorldInstance::WorldInstance(WorldInstanceManager& manager, MapId mapId)
 		: m_manager(manager)
+		, m_mapId(mapId)
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();

@@ -94,7 +94,7 @@ namespace mmo
 			Connector<P, MySocket>::getSocket().shutdown(asio::socket_base::shutdown_both, ec);
 			Connector<P, MySocket>::getSocket().close();
 		}
-
+		
 		setListener(listener);
 		assert(getListener());
 

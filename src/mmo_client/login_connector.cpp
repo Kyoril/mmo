@@ -72,6 +72,9 @@ namespace mmo
 
 		// Clear packet handlers
 		ClearPacketHandlers();
+
+		m_realms.clear();
+		
 	}
 
 	void LoginConnector::connectionMalformedPacket()
@@ -325,6 +328,10 @@ namespace mmo
 
 	void LoginConnector::Connect(const std::string & username, const std::string & password)
 	{
+		ClearPacketHandlers();
+
+		m_realms.clear();
+
 		// Apply username and convert it to uppercase letters
 		m_accountName = username;
 		std::transform(m_accountName.begin(), m_accountName.end(), m_accountName.begin(), ::toupper);

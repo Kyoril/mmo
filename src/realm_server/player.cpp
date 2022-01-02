@@ -16,6 +16,8 @@
 
 #include <functional>
 
+#include "base/utilities.h"
+
 
 namespace mmo
 {
@@ -44,6 +46,7 @@ namespace mmo
 	void Player::Destroy()
 	{
 		m_connection->resetListener();
+		m_connection->close();
 		m_connection.reset();
 
 		m_manager.PlayerDisconnected(*this);
@@ -208,10 +211,9 @@ namespace mmo
 		}
 
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
-
-		// TODO: Load actual character data from database
+		
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis](const std::optional<CharacterData> characterData)
+		auto handler = [weakThis](const std::optional<CharacterData>& characterData)
 		{
 			const auto strongThis = weakThis.lock();
 			if (strongThis)
@@ -376,27 +378,31 @@ namespace mmo
 		}
 	}
 
-	void Player::OnWorldJoined() const
+	void Player::OnWorldJoined(const InstanceId instanceId)
 	{
-		DLOG("World join succeeded");
+		DLOG("World join succeeded on instance id " << instanceId);
 
-		m_connection->sendSinglePacket([](game::OutgoingPacket& out_packet)
+		ASSERT(m_characterData);
+		m_characterData->instanceId = instanceId;
+
+		m_connection->sendSinglePacket([&](game::OutgoingPacket& outPacket)
 		{
-			out_packet.Start(game::realm_client_packet::LoginVerifyWorld);
-			out_packet
-				<< io::write<uint32>(0)	// TODO: map id
-				<< io::write<float>(0)	// TODO: current x
-				<< io::write<float>(0)	// TODO: current y
-				<< io::write<float>(0)	// TODO: current z
-				<< io::write<float>(0)	// TODO: current rotation yaw in radians
+			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
+			outPacket
+				<< io::write<uint64>(m_characterData->mapId)	
+				<< io::write<float>(m_characterData->position.x)
+				<< io::write<float>(m_characterData->position.y)
+				<< io::write<float>(m_characterData->position.z)
+				<< io::write<float>(m_characterData->facing.GetValueRadians())
 			;
-			out_packet.Finish();
+			outPacket.Finish();
 		});
 	}
 
-	void Player::OnWorldJoinFailed(const game::player_login_response::Type response) const
+	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
 	{
 		ELOG("World join failed");
+		m_characterData.reset();
 
 		m_connection->sendSinglePacket([response](game::OutgoingPacket& outPacket)
 		{
@@ -413,12 +419,15 @@ namespace mmo
 			OnWorldJoinFailed(game::player_login_response::NoCharacter);
 			return;
 		}
+
+		m_characterData = characterData;
 		
 		// Find a world node for the character's map id and instance id
 		m_world = m_worldManager.GetIdealWorldNode(characterData->mapId, characterData->instanceId);
-
+		
 		// Check if world instance exists
 		const auto strongWorld = m_world.lock();
+		NotifyWorldNodeChanged(strongWorld.get());
 		if (!strongWorld)
 		{
 			WLOG("No world node available which is able to host map " << characterData->mapId << " and/or instance id " << characterData->instanceId);
@@ -430,7 +439,7 @@ namespace mmo
 
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
-		strongWorld->Join(characterData->characterId, [weakThis] (const bool success)
+		strongWorld->Join(*characterData, [weakThis] (const InstanceId instanceId, const bool success)
 		{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
@@ -440,7 +449,7 @@ namespace mmo
 			
 			if (success)
 			{
-				strongThis->OnWorldJoined();
+				strongThis->OnWorldJoined(instanceId);
 			}
 			else
 			{
@@ -448,6 +457,24 @@ namespace mmo
 			}
 		});
 	
+	}
+
+	void Player::OnWorldDestroyed(World& world)
+	{
+		m_world.reset();
+		NotifyWorldNodeChanged(nullptr);
+
+		connectionLost();
+	}
+
+	void Player::NotifyWorldNodeChanged(World* worldNode)
+	{
+		m_worldDestroyed.disconnect();
+
+		if (worldNode)
+		{
+			m_worldDestroyed = worldNode->destroyed.connect(this, &Player::OnWorldDestroyed);
+		}
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

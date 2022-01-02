@@ -17,10 +17,10 @@ namespace mmo
 		ScheduleNextUpdate();
 	}
 
-	WorldInstance& WorldInstanceManager::CreateInstance(uint64 mapId)
+	WorldInstance& WorldInstanceManager::CreateInstance(MapId mapId)
 	{
 		std::unique_lock lock{ m_worldInstanceMutex };
-		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this)).get();
+		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, mapId)).get();
 
 		instanceCreated(createdInstance->GetId());
 

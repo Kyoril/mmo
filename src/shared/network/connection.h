@@ -139,6 +139,13 @@ namespace mmo
 
 		void startReceiving() override
 		{
+			m_isClosedOnSend = false;
+			m_isClosedOnParsing = false;
+			m_isParsingIncomingData = false;
+			m_isReceiving = false;
+
+			m_received.clear();
+
 			asio::ip::tcp::no_delay Option(true);
 			m_socket->lowest_layer().set_option(Option);
 			beginReceive();
@@ -325,6 +332,16 @@ namespace mmo
 			std::size_t parsedUntil = 0;
 			do
 			{
+				if (m_isClosedOnParsing)
+				{
+					m_isClosedOnParsing = false;
+					disconnected();
+
+					m_received.clear();
+
+					return;
+				}
+
 				nextPacket = false;
 
 				const size_t availableSize = (m_received.size() - parsedUntil);
@@ -372,16 +389,6 @@ namespace mmo
 						m_received.clear();
 
 						return;
-				}
-
-				if (m_isClosedOnParsing)
-				{
-					m_isClosedOnParsing = false;
-					disconnected();
-
-					m_received.clear();
-
-					return;
 				}
 			} while (nextPacket);
 

@@ -77,7 +77,10 @@ namespace mmo
 		// Load ui file
 		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
 
-		m_realmConnections += m_realmConnector.EnterWorldFailed.connect(*this, &WorldState::OnEnterWorldFailed);
+		m_realmConnections += {
+			m_realmConnector.EnterWorldFailed.connect(*this, &WorldState::OnEnterWorldFailed),
+			m_realmConnector.Disconnected.connect(*this, &WorldState::OnRealmDisconnected)
+		};
 
 		// Send enter world request to server
 		m_realmConnector.EnterWorld(s_selectedCharacter);

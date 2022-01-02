@@ -16,6 +16,8 @@
 #include <vector>
 #include <cassert>
 
+#include "base/signal.h"
+#include "game/character_data.h"
 
 
 namespace mmo
@@ -23,7 +25,7 @@ namespace mmo
 	class AsyncDatabase;
 
 	/// Callback executed after a world join returned a result.
-	typedef std::function<void(bool success)> JoinWorldCallback;
+	typedef std::function<void(InstanceId instanceId, bool success)> JoinWorldCallback;
 
 	/// This class represents a world node connection on the realm server.
 	class World final
@@ -31,6 +33,9 @@ namespace mmo
 		, public auth::IConnectionListener
 		, public std::enable_shared_from_this<World>
 	{
+	public:
+		signal<void(World&)> destroyed;
+
 	public:
 		typedef mmo::Connection<auth::Protocol> Client;
 		typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
@@ -51,7 +56,7 @@ namespace mmo
 		/// Gets the name of this world.
 		const String& GetWorldName() const { return m_worldName; }
 
-		void Join(uint64 characterId, JoinWorldCallback callback);
+		void Join(CharacterData characterData, JoinWorldCallback callback);
 
 	public:
 		/// Registers a packet handler.
@@ -115,7 +120,7 @@ namespace mmo
 
 		void SendAuthProof(auth::AuthResult result);
 
-		void ConsumeOnCharacterJoinedCallback(uint64 characterGuid, bool success);
+		void ConsumeOnCharacterJoinedCallback(uint64 characterGuid, bool success, InstanceId instanceId);
 	
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()

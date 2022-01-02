@@ -62,6 +62,9 @@ namespace mmo
 		// Disconnect all active connections
 		m_loginConnections.disconnect();
 
+		m_loginConnector.resetListener();
+		m_loginConnector.close();
+
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
 		
@@ -149,6 +152,7 @@ namespace mmo
 
 			if (it != realms.end())
 			{
+				ILOG("Connecting to last connected realm " << it->name << "...");
 				m_realmConnector.ConnectToRealm(*it);
 
 				FrameManager::Get().TriggerLuaEvent("CONNECTING_TO_REALM");
@@ -156,6 +160,8 @@ namespace mmo
 			}
 		}
 		
+		DLOG("Refreshing realm list UI");
+
 		FrameManager::Get().TriggerLuaEvent("REALM_LIST");
 		QueueRealmListRequestTimer();
 
@@ -165,6 +171,7 @@ namespace mmo
 	{
 		if (result != auth::auth_result::Success)
 		{
+			ELOG("Error on realm authentication...");
 			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_FAILED", static_cast<int32>(result));
 		}
 		else

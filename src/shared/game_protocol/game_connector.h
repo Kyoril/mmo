@@ -118,6 +118,14 @@ namespace mmo
 			void connect(const std::string &host, uint16 port, Listener &listener,
 				asio::io_service &ioService)
 			{
+				if (Super::getSocket().is_open())
+				{
+					// Close the socket if it is opened already
+					asio::error_code ec;
+					Super::getSocket().shutdown(asio::socket_base::shutdown_both, ec);
+					Super::getSocket().close();
+				}
+				
 				SetListener(listener);
 				ASSERT(GetListener());
 

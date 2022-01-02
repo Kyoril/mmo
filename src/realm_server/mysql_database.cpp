@@ -158,7 +158,8 @@ namespace mmo
 		{
 			if (const mysql::Row row(select); row)
 			{
-				CharacterData result(characterId);
+				CharacterData result;
+				result.characterId = characterId;
 
 				String instanceId;
 				uint8 level = 1;

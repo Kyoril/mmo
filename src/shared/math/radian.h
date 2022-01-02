@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include "binary_io/reader.h"
+#include "binary_io/writer.h"
+
 namespace mmo
 {
 	class Degree;
@@ -86,5 +89,20 @@ namespace mmo
 	inline Radian operator / (float a, const Radian& b)
 	{
 		return Radian(a / b.GetValueRadians());
+	}
+
+	inline io::Reader& operator>>(io::Reader& reader, Radian& radian)
+	{
+		if (float value; reader >> io::read<float>(value))
+		{
+			radian = Radian(value);
+		}
+
+		return reader;
+	}
+	
+	inline io::Writer& operator<<(io::Writer& writer, const Radian& radian)
+	{
+		return writer << io::write<float>(radian.GetValueRadians());
 	}
 }

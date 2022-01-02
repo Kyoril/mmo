@@ -9,6 +9,7 @@
 #include "base/clock.h"
 #include "base/constants.h"
 #include "base/timer_queue.h"
+#include "game/character_data.h"
 #include "log/default_log_levels.h"
 
 
@@ -342,22 +343,47 @@ namespace mmo
 	PacketParseResult RealmConnector::OnPlayerCharacterJoin(auth::IncomingPacket& packet)
 	{
 		// Read packet data
-		uint64 guid = 0;
-		if (!(packet >> io::read_packed_guid(guid)))
+		CharacterData characterData;
+		if (!(packet >> characterData))
 		{
 			return PacketParseResult::Disconnect;
 		}
 		
-		DLOG("Player character " << log_hex_digit(guid) << " wants to join world...");
+		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
+		
+		WorldInstance* instance = nullptr;
+		if (characterData.instanceId.is_nil())
+		{
+			instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+		}
+		else
+		{
+			instance = m_worldInstanceManager.GetInstanceById(characterData.instanceId);
+			if (!instance)
+			{
+				// TODO: Try to load instance id from instance storage
+				WLOG("Unable to find world instance by id " << characterData.instanceId);
+				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			}
+		}
 
-		// Just a little test for now
-		WorldInstance& instance = m_worldInstanceManager.CreateInstance(0);
+		if (!instance)
+		{
+			DLOG("Unable to find any world instance for map id " << log_hex_digit(characterData.mapId) << ": Creating new one");
+			instance = &m_worldInstanceManager.CreateInstance(characterData.mapId);
+			ASSERT(instance);
+		}
 
-		// TODO: For now, just tell the realm server that we joined
-		sendSinglePacket([guid](auth::OutgoingPacket& outPacket)
+		// Apply instance id before sending
+		characterData.instanceId = instance->GetId();
+
+		// TODO: Create game object from character data and spawn in world
+
+		// For now just tell the realm server that we joined
+		sendSinglePacket([&characterData](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::world_realm_packet::PlayerCharacterJoined);
-			outPacket << io::write_packed_guid(guid);
+			outPacket << io::write_packed_guid(characterData.characterId) << characterData.instanceId;
 			outPacket.Finish();
 		});
 		

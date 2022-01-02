@@ -196,6 +196,8 @@ namespace mmo
 		m_realmPort = data.port;
 		m_realmName = data.name;
 
+		
+
 		// Connect to the server
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
 	}

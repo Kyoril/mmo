@@ -14,6 +14,7 @@
 #include <map>
 #include <cassert>
 
+#include "login_connector.h"
 #include "game/character_data.h"
 #include "game/character_view.h"
 
@@ -47,19 +48,24 @@ namespace mmo
 
 		/// Gets the player connection class used to send packets to the client.
 		Client &GetConnection() { assert(m_connection); return *m_connection; }
+
 		/// Gets the player manager which manages all connected players.
 		PlayerManager &GetManager() const { return m_manager; }
+
 		/// Gets the world manager which manages all connected world nodes.
 		WorldManager& GetWorldManager() const { return m_worldManager; }
+
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
 		bool IsAuthentificated() const { return !m_sessionKey.isZero(); }
+
 		/// Gets the account name the player is logged in with.
 		const std::string &GetAccountName() const { return m_accountName; }
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
+
 		/// Initializes the session by providing a session key. The connection to the client will 
 		/// be encrypted from here on.
 		void InitializeSession(const BigNumber& sessionKey);
@@ -70,11 +76,15 @@ namespace mmo
 
 		void JoinWorld() const;
 
-		void OnWorldJoined() const;
+		void OnWorldJoined(const InstanceId instanceId);
 
-		void OnWorldJoinFailed(const game::player_login_response::Type response) const;
+		void OnWorldJoinFailed(const game::player_login_response::Type response);
 
 		void OnCharacterData(std::optional<CharacterData> characterData);
+
+		void OnWorldDestroyed(World& world);
+
+		void NotifyWorldNodeChanged(World* worldNode);
 
 	public:
 		/// Registers a packet handler.
@@ -115,6 +125,9 @@ namespace mmo
 		std::map<uint64, CharacterView> m_characterViews;
 
 		std::weak_ptr<World> m_world;
+
+		std::optional<CharacterData> m_characterData;
+		scoped_connection m_worldDestroyed;
 
 	private:
 		/// Closes the connection if still connected.

@@ -35,6 +35,8 @@ namespace mmo
 
 	void World::Destroy()
 	{
+		destroyed(*this);
+
 		m_connection->resetListener();
 		m_connection.reset();
 
@@ -340,7 +342,7 @@ namespace mmo
 		});
 	}
 
-	auto World::ConsumeOnCharacterJoinedCallback(const uint64 characterGuid, bool success) -> void
+	void World::ConsumeOnCharacterJoinedCallback(const uint64 characterGuid, const bool success, const InstanceId instanceId)
 	{
 		JoinWorldCallback callback = nullptr;
 
@@ -353,8 +355,8 @@ namespace mmo
 				m_joinCallbacks.erase(result);
 			}
 		}
-
-		callback(success);
+		
+		callback(instanceId, success);
 	}
 
 	PacketParseResult World::OnPropagateMapList(auth::IncomingPacket& packet)
@@ -376,18 +378,18 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void World::Join(uint64 characterId, JoinWorldCallback callback)
+	void World::Join(CharacterData characterData, JoinWorldCallback callback)
 	{
 		// TODO: What if we already have a waiting callback? Right now we just discard the old one
 		if (callback)
 		{
-			m_joinCallbacks[characterId] = std::move(callback);	
+			m_joinCallbacks[characterData.characterId] = std::move(callback);	
 		}
 		
-		GetConnection().sendSinglePacket([characterId](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterData](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
-			outPacket << io::write_packed_guid(characterId);
+			outPacket << characterData;
 			outPacket.Finish();
 		});
 	}
@@ -396,7 +398,7 @@ namespace mmo
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
-		if (auto it = m_packetHandlers.find(opCode); it == m_packetHandlers.end())
+		if (const auto it = m_packetHandlers.find(opCode); it == m_packetHandlers.end())
 		{
 			m_packetHandlers.emplace(std::make_pair(opCode, std::forward<PacketHandler>(handler)));
 		}
@@ -442,13 +444,14 @@ namespace mmo
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;
-		if (!(packet >> io::read_packed_guid(characterGuid)))
+		InstanceId instanceId;
+		if (!(packet >> io::read_packed_guid(characterGuid) >> instanceId))
 		{
 			return PacketParseResult::Disconnect;
 		}
 		
 		DLOG("Player character " << log_hex_digit(characterGuid) << " successfully joined world instance!");
-		ConsumeOnCharacterJoinedCallback(characterGuid, true);
+		ConsumeOnCharacterJoinedCallback(characterGuid, true, instanceId);
 		
 		return PacketParseResult::Pass;
 	}
@@ -462,7 +465,7 @@ namespace mmo
 		}
 		
 		DLOG("Player character " << log_hex_digit(characterGuid) << " failed to join world instance!");
-		ConsumeOnCharacterJoinedCallback(characterGuid, false);
+		ConsumeOnCharacterJoinedCallback(characterGuid, false, InstanceId());
 		
 		return PacketParseResult::Pass;
 	}
