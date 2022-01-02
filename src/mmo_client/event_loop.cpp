@@ -62,7 +62,7 @@ namespace mmo
 #ifdef _WIN32
 		// Process windows messages
 		MSG msg = { nullptr };
-		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
 			// Process input messages
 			switch (msg.message)
