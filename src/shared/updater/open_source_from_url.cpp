@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "open_source_from_url.h"
 #include "update_source.h"
 #include "update_url.h"

@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "hpak2_entry_handler.h"
 #include "copy_with_progress.h"
 #include "parse_directory_entries.h"

@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include "simple_file_format/sff_read_tree.h"

@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "log_level.h"
 #include <utility>

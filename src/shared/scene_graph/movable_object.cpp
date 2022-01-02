@@ -1,4 +1,4 @@
-// Copyright (C) 2020, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "movable_object.h"
 #include "movable_object_factory.h"

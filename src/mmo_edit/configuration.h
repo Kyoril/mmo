@@ -1,7 +1,6 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #pragma once
-// Copyright (C) 2020, Robin Klimonow. All rights reserved.
 
 #include "simple_file_format/sff_write_table.h"
 #include "base/typedefs.h"

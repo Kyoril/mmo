@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "localization.h"
 
 #include "assets/asset_registry.h"

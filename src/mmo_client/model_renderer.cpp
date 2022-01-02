@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "model_renderer.h"
 
 #include "frame_ui/frame.h"

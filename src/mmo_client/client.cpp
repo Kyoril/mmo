@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 // This file contains the entry point of the game and takes care of initializing the
 // game as well as starting the main loop for the application. This is used on all

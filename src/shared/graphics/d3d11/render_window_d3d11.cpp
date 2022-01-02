@@ -1,4 +1,4 @@
-// Copyright (C) 2020, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "render_window_d3d11.h"
 #include "graphics_device_d3d11.h"

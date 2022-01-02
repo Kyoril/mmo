@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "quaternion.h"
 #include "matrix3.h"

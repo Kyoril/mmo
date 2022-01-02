@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "graphics_device_d3d11.h"
 #include "vertex_buffer_d3d11.h"

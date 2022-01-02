@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "world_renderer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"

@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #if !defined(_HAS_CXX20) || !_HAS_CXX20

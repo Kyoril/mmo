@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "copy_with_progress.h"
 
 #include "zstr/zstr.hpp"

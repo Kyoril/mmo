@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "http_update_source.h"
 #include "virtual_dir/path.h"
 #include "http_client/send_request.h"

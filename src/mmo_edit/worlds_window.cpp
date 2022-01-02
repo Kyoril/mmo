@@ -1,4 +1,4 @@
-// Copyright (C) 2021, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "worlds_window.h"
 #include "data/project.h"

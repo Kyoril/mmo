@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "create_process.h"
 
 #if defined(__unix__) || defined(__APPLE__)

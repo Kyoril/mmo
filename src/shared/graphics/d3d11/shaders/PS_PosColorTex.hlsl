@@ -1,4 +1,4 @@
-// Copyright (C) 2019, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #define WITH_COLOR 1
 #define WITH_TEX 1

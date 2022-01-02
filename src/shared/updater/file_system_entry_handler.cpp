@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #include "file_system_entry_handler.h"
 #include "prepare_parameters.h"
 #include "prepare_progress_handler.h"
