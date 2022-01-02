@@ -35,6 +35,7 @@
 #include <mutex>
 
 #include "world_state.h"
+#include "base/timer_queue.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -211,9 +212,15 @@ namespace mmo
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
 
+	static asio::io_service s_timerService;
+	static std::unique_ptr<TimerQueue> s_timerQueue;
+	static scoped_connection s_timerConnection;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
+		s_timerQueue = std::make_unique<TimerQueue>(s_timerService);
+
 		// Receive the current working directory
 		std::error_code error;
 		const auto currentPath = std::filesystem::current_path(error);
@@ -240,6 +247,12 @@ namespace mmo
 		// Initialize the event loop
 		EventLoop::Initialize();
 
+		// Run service
+		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime&)
+		{
+			s_timerService.run_one();
+		});
+
 		// Initialize the console client which also loads the config file
 		Console::Initialize(currentPath / "Config" / "Config.cfg");
 
@@ -250,7 +263,7 @@ namespace mmo
 		ASSERT(s_loginConnector && s_realmConnector);
 		
 		// Register game states
-		const auto loginState = std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector);
+		const auto loginState = std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector, *s_timerQueue);
 		GameStateMgr::Get().AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(*s_realmConnector);
@@ -282,7 +295,7 @@ namespace mmo
 	/// Destroys the global game systems.
 	void DestroyGlobal()
 	{
-		// TODO: Destroy systems
+		s_timerConnection.disconnect();
 
 		// Remove login command
 		Console::UnregisterCommand("login");

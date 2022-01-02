@@ -71,8 +71,10 @@ namespace mmo
 	public:
 		/// Gets realm data.
 		const std::vector<RealmData>& GetRealms() const { return m_realms; }
+
 		/// Gets the session key.
 		const BigNumber& GetSessionKey() const { return m_sessionKey; }
+
 		/// Gets the account name.
 		const std::string& GetAccountName() const { return m_accountName; }
 
@@ -87,10 +89,13 @@ namespace mmo
 	private:
 		// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
+
 		// Handles the LogonChallenge packet from the server.
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
+
 		// Handles the LogonProof packet from the server.
 		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
+
 		/// Handles the RealmList packet from the login server.
 		PacketParseResult OnRealmList(auth::IncomingPacket &packet);
 
@@ -101,6 +106,9 @@ namespace mmo
 		/// @param password The password to login with.
 		/// @param ioService The io service used to connect.
 		void Connect(const std::string& username, const std::string& password);
+
+		/// Sends a realm list request to the login server.
+		void SendRealmListRequest();
 	};
 }
 

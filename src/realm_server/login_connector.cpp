@@ -482,7 +482,7 @@ namespace mmo
 		m_timerQueue.AddEvent(std::move(termination), m_timerQueue.GetNow() + constants::OneSecond * 5);
 	}
 
-	bool LoginConnector::Login(const std::string& serverAddress, uint16 port, const std::string & realmName, std::string password)
+	bool LoginConnector::Login(const std::string& serverAddress, const uint16 port, const std::string & realmName, std::string password)
 	{
 		// Reset authentication status
 		Reset();

@@ -10,6 +10,8 @@
 #include "world_state.h"
 
 #include "assets/asset_registry.h"
+#include "base/clock.h"
+#include "base/timer_queue.h"
 #include "frame_ui/frame_mgr.h"
 
 
@@ -19,9 +21,10 @@ namespace mmo
 
 	const std::string LoginState::Name = "login";
 	
-	LoginState::LoginState(LoginConnector & loginConnector, RealmConnector & realmConnector)
+	LoginState::LoginState(LoginConnector & loginConnector, RealmConnector & realmConnector, TimerQueue& timers)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
+		, m_timers(timers)
 	{
 	}
 
@@ -113,6 +116,26 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 	}
 
+	void LoginState::QueueRealmListRequestTimer()
+	{
+		if (!m_loginConnector.IsConnected())
+		{
+			return;
+		}
+
+		if (m_realmConnector.IsConnected())
+		{
+			return;
+		}
+		
+		m_timers.AddEvent(GetAsyncTimeMs() + constants::OneSecond * 10, *this, &LoginState::OnRealmListTimer);
+	}
+
+	void LoginState::OnRealmListTimer()
+	{
+		m_loginConnector.SendRealmListRequest();
+	}
+
 	void LoginState::OnRealmListUpdated()
 	{
 		const int32 lastRealmId = s_lastRealmVar == nullptr ? -1 : s_lastRealmVar->GetIntValue();
@@ -134,6 +157,7 @@ namespace mmo
 		}
 		
 		FrameManager::Get().TriggerLuaEvent("REALM_LIST");
+		QueueRealmListRequestTimer();
 
 	}
 	

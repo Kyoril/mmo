@@ -57,6 +57,11 @@ namespace mmo
 
 				flush();
 			}
+			
+			inline bool IsConnected() const 
+			{
+				return m_socket && m_socket->is_open();
+			}
 
 		public:
 			void setListener(Listener &Listener_) override

@@ -108,26 +108,33 @@ namespace mmo
 		/// Queues a client auth session request for the login connector and waits for response from a login server.
 		/// @returns false if the request couldn't be queued.
 		bool QueueClientAuthSession(const std::string& accountName, uint32 clientSeed, uint32 serverSeed, const SHA1Hash& clientHash, ClientAuthSessionCallback callback);
-
+		
 	private:
 		// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
+
 		/// Called if a login error happened.
 		void OnLoginError(auth::AuthResult result);
+
 		/// Resets the authentication status to the initial state.
 		void Reset();
+
 		/// Queues reconnection event to the timer queue.
 		void QueueReconnect();
+
 		/// Executed when the reconnect timer triggers.
 		void OnReconnectTimer();
+
 		/// Queues app termination in case of errors.
 		void QueueTermination();
 
 	private:
 		// Handles the LogonChallenge packet from the server.
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
+
 		// Handles the LogonProof packet from the server.
 		PacketParseResult OnLogonProof(auth::IncomingPacket &packet);
+
 		// Handles the ClientAuthSessionResponse packet from the login server.
 		PacketParseResult OnClientAuthSessionResponse(auth::IncomingPacket &packet);
 

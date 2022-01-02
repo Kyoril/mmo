@@ -70,7 +70,7 @@ namespace mmo
 
 	void WorldInstanceManager::Update(const RegularUpdate& update)
 	{
-		std::unique_lock<std::mutex> lock{ m_worldInstanceMutex };
+		std::unique_lock lock{ m_worldInstanceMutex };
 		for (const auto& worldInstance : m_worldInstances)
 		{
 			worldInstance->Update(update);

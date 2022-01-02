@@ -12,6 +12,7 @@
 
 namespace mmo
 {
+	class TimerQueue;
 	class CharacterView;
 	class LoginConnector;
 	class RealmConnector;
@@ -22,7 +23,7 @@ namespace mmo
 		: public IGameState
 	{
 	public:
-		explicit LoginState(LoginConnector& loginConnector, RealmConnector& realmConnector);
+		explicit LoginState(LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers);
 
 	public:
 		/// The default name of the login state
@@ -39,16 +40,26 @@ namespace mmo
 	private:
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
+
 		/// 
 		void OnAuthenticationResult(auth::AuthResult result);
+
 		/// 
 		void OnRealmListUpdated();
 
+
 		void OnRealmAuthenticationResult(uint8 result);
+
 		/// 
 		void OnCharListUpdated();
+
 		// 
 		void OnRealmDisconnected();
+
+
+		void QueueRealmListRequestTimer();
+
+		void OnRealmListTimer();
 
 	private:
 
@@ -56,5 +67,6 @@ namespace mmo
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_loginConnections;
+		TimerQueue& m_timers;
 	};
 }

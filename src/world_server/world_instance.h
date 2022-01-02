@@ -1,11 +1,14 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include "base/typedefs.h"
 #include "game/game.h"
 
 namespace mmo
 {
+	class GameObject;
 	class WorldInstanceManager;
 	class RegularUpdate;
 	
@@ -26,9 +29,18 @@ namespace mmo
 		/// Gets the map id of this world instance.
 		[[nodiscard]] MapId GetMapId() const noexcept { return m_mapId; }
 
+		// Not thread safe
+		void AddObjectUpdate(GameObject& object);
+		
+		// Not thread safe
+		void RemoveObjectUpdate(GameObject& object);
+
 	private:
 		WorldInstanceManager& m_manager;
 		InstanceId m_id;
 		MapId m_mapId;
+		volatile bool m_updating { false };
+		std::unordered_set<GameObject*> m_objectUpdates;
+		std::unordered_set<GameObject*> m_queuedObjectUpdates;
 	};
 }

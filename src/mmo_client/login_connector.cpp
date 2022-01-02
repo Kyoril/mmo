@@ -342,4 +342,13 @@ namespace mmo
 		// Connect to the server at localhost
 		connect(s_realmlistCVar->GetStringValue(), constants::DefaultLoginPlayerPort, *this, m_ioService);
 	}
+	
+	void LoginConnector::SendRealmListRequest()
+	{
+		sendSinglePacket([](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::client_login_packet::RealmList);
+			outPacket.Finish();
+		});
+	}
 }
