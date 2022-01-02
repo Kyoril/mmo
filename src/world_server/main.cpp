@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
 	std::string configFileName = "config/world_server.cfg";
 
 	// Prepare command line options
-	cxxopts::Options options("MMO Realm Server", "Realm server for the mmo project.");
+	cxxopts::Options options("MMO World Server", "World server for the mmo project.");
 	options.allow_unrecognised_options().add_options()
 #ifdef __linux__
 	("s,service", "Run this application as a service")
@@ -44,6 +44,21 @@ int main(int argc, char* argv[])
 		WLOG(e.what());
 	}
 	
+	// On linux, we can run the process daemonized. Since we intend windows machines to run as standalone
+	// applications instead, we don't support services on windows os.
+#ifdef __linux__
+	if (results.count("s") > 0)
+	{
+		runAsService = true;
+
+		if (mmo::createService() == mmo::CreateServiceResult::IsObsoleteProcess)
+		{
+			std::cout << "World service is now running." << '\n';
+			return 0;
+		}
+	}
+#endif
+
 	// Open stdout log output
 	auto logOptions = mmo::g_DefaultConsoleLogOptions;
 	logOptions.alwaysFlush = false;

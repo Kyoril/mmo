@@ -148,7 +148,7 @@ namespace mmo
 		{
 #ifdef _DEBUG
 			WLOG("Client is using a different build than the realm server (C " << m_build << ", S " << Revision << "). There might be incompatibilities");
-#else
+#elif 0 // Replace with else to disable incompatible client builds on this realm in release builds
 			ELOG("Client is using unsupported client build " << m_build);
 			return PacketParseResult::Disconnect;
 #endif
