@@ -25,7 +25,8 @@ RUN apt-get update && apt-get install -y \
 	pkg-config \
 	zlib1g-dev \
 	libssl-dev \
-	libmysqlclient-dev
+	libmysqlclient-dev \
+	uuid-dev
 
 # Build common artifacts
 COPY . /app
