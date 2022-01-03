@@ -136,6 +136,11 @@ namespace mmo
 
 	void LoginState::OnRealmListTimer()
 	{
+		if (m_realmConnector.IsConnected())
+		{
+			return;
+		}
+
 		m_loginConnector.SendRealmListRequest();
 	}
 
