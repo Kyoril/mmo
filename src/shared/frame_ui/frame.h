@@ -287,6 +287,8 @@ namespace mmo
 		virtual void OnTextChanged();
 
 	private:
+		/// Executed when the clippedByParent property was changed.
+		void OnClippedByParentChanged(const Property& property);
 		/// Executed when the text property was changed.
 		void OnTextPropertyChanged(const Property& property);
 		/// Executed when the focusable property was changed.

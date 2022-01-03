@@ -46,7 +46,7 @@
 // Note: This will be defined by cmake using a cmake option. Don't define
 // in this code file since it has been split up.
 /// Define this if you want to disable exceptions.
-//#define SIMPLE_NO_EXCEPTIONS
+#define SIMPLE_NO_EXCEPTIONS
 
 namespace mmo
 {

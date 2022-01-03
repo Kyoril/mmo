@@ -22,11 +22,11 @@ namespace mmo
 		// Generate vertex data
 		const GeometryBuffer::Vertex vertices[6]{
 			// First triangle
-			{ { dst.left,	dst.bottom,		0.0f }, color, { uvRect.left,	uvRect.top		} },
-			{ { dst.left,	dst.top,		0.0f }, color, { uvRect.left,	uvRect.bottom	} },
-			{ { dst.right,	dst.top,		0.0f }, color, { uvRect.right,	uvRect.bottom	} },
+			{ { dst.left,	dst.bottom,		0.0f },	color, { uvRect.left,	uvRect.top		} },
+			{ { dst.left,	dst.top,			0.0f },	color, { uvRect.left,	uvRect.bottom	} },
+			{ { dst.right,	dst.top,			0.0f }, color, { uvRect.right,	uvRect.bottom	} },
 			// Second triangle
-			{ { dst.right,	dst.top,		0.0f }, color, { uvRect.right,	uvRect.bottom	} },
+			{ { dst.right,	dst.top,			0.0f }, color, { uvRect.right,	uvRect.bottom	} },
 			{ { dst.right,	dst.bottom,		0.0f }, color, { uvRect.right,	uvRect.top		} },
 			{ { dst.left,	dst.bottom,		0.0f }, color, { uvRect.left,	uvRect.top		} }
 		};

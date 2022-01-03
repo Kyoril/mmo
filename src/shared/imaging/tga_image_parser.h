@@ -7,7 +7,7 @@
 
 namespace mmo
 {
-	/// This class parses png image data.
+	/// This class parses tga image data.
 	class TgaImageParser final : public IImageParser
 	{
 	public:

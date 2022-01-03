@@ -5,6 +5,7 @@ add_subdirectory(luabind_noboost)
 add_subdirectory(freetype)
 add_subdirectory(expat)
 add_subdirectory(protobuf/cmake)
+add_subdirectory(lodepng)
 
 # Move protobuf libraries into proper solution folders
 set_property(TARGET libprotobuf PROPERTY FOLDER "deps")

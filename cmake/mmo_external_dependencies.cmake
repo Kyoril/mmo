@@ -99,3 +99,6 @@ if (MMO_BUILD_EDITOR)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui/examples)
 endif()
+
+
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/lodepng/")

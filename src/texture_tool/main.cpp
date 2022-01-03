@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "imaging/tga_image_parser.h"
-
+#include "imaging/png_image_parser.h"
 #include "tex/pre_header.h"
 #include "tex/pre_header_load.h"
 #include "tex_v1_0/header.h"
@@ -17,6 +17,8 @@
 #include "cxxopts/cxxopts.hpp"
 
 #define STB_DXT_IMPLEMENTATION
+#include <filesystem>
+
 #include "stb_dxt.h"
 
 #include <fstream>
@@ -25,7 +27,7 @@
 #include <mutex>
 
 /// String containing the version of this tool.
-static const std::string VersionStr = "1.1.0";
+static const std::string VersionStr = "1.2.0";
 
 
 namespace
@@ -208,9 +210,26 @@ int main(int argc, char** argv)
 			}
 		}
 
-		// Parse in the source data and determine parameters
+		const auto sourcePath = std::filesystem::path(sourceFile);
+		const auto extension = sourcePath.extension().string();
+		
 		std::unique_ptr<mmo::IImageParser> imageParser;
-		imageParser = std::make_unique<mmo::TgaImageParser>();
+		if (extension == ".png")
+		{
+			ILOG("Using PNG image parser");
+			imageParser = std::make_unique<mmo::PngImageParser>();
+		}
+		else if(extension == ".tga")
+		{
+			ILOG("Using TGA image parser");
+			imageParser = std::make_unique<mmo::TgaImageParser>();
+		}
+
+		if (!imageParser)
+		{
+			ELOG("Unsupported source file extension!");
+			return 1;
+		}
 
 		// Parse image information
 		mmo::SourceImageInfo info;

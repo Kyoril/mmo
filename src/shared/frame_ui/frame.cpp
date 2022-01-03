@@ -24,6 +24,7 @@ namespace mmo
 		, m_focusable(false)
 	{
 		// Register text property for frame
+		m_propConnections += AddProperty("ClippedByParent").Changed.connect(this, &Frame::OnClippedByParentChanged);
 		m_propConnections += AddProperty("Text").Changed.connect(this, &Frame::OnTextPropertyChanged);
 		m_propConnections += AddProperty("Focusable").Changed.connect(this, &Frame::OnFocusablePropertyChanged);
 		m_propConnections += AddProperty("Enabled").Changed.connect(this, &Frame::OnEnabledPropertyChanged);
@@ -327,6 +328,11 @@ namespace mmo
 		{
 			m_clippedByParent = clipped;
 			m_needsRedraw = true;
+
+			if (m_parent)
+			{
+				m_parent->Invalidate(false);
+			}
 		}
 	}
 
@@ -517,7 +523,6 @@ namespace mmo
 		{
 			if (child->IsClippedByParent())
 			{
-				// TODO: set clip rect
 				hasClipRectSet = true;
 			}
 			else if (hasClipRectSet)
@@ -749,6 +754,11 @@ namespace mmo
 	{
 		// Invoke the signal
 		TextChanged();
+	}
+
+	void Frame::OnClippedByParentChanged(const Property& property)
+	{
+		SetClippedByParent(property.GetBoolValue());
 	}
 
 	void Frame::OnTextPropertyChanged(const Property & property)
