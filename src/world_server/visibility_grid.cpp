@@ -4,5 +4,7 @@
 
 namespace mmo
 {
-	
+	VisibilityGrid::VisibilityGrid() = default;
+
+	VisibilityGrid::~VisibilityGrid() = default;
 }

@@ -4,8 +4,8 @@
 
 #include <unordered_set>
 
-#include "base/typedefs.h"
 #include "game/game.h"
+#include "visibility_grid.h"
 
 namespace mmo
 {
@@ -23,7 +23,7 @@ namespace mmo
 		
 		/// Called to update the world instance once every tick.
 		void Update(const RegularUpdate& update);
-
+		
 		/// Gets the id of this world instance.
 		[[nodiscard]] InstanceId GetId() const noexcept { return m_id; }
 		
@@ -43,5 +43,6 @@ namespace mmo
 		volatile bool m_updating { false };
 		std::unordered_set<GameObject*> m_objectUpdates;
 		std::unordered_set<GameObject*> m_queuedObjectUpdates;
+		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
 	};
 }
