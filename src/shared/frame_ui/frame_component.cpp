@@ -33,4 +33,14 @@ namespace mmo
 
 		return r;
 	}
+
+	void FrameComponent::SetFrame(Frame& frame)
+	{
+		if (m_frame != &frame)
+		{
+			m_frame = &frame;
+			
+			OnFrameChanged();	
+		}
+	}
 }

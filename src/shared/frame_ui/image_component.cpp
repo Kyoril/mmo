@@ -4,24 +4,19 @@
 #include "geometry_buffer.h"
 #include "geometry_helper.h"
 #include "frame.h"
-
-#include "base/utilities.h"
 #include "base/macros.h"
 #include "graphics/texture_mgr.h"
-
-#include <utility>
 
 
 namespace mmo
 {
-	ImageComponent::ImageComponent(Frame& frame, std::string filename)
+	ImageComponent::ImageComponent(Frame& frame, const std::string& filename)
 		: FrameComponent(frame)
-		, m_filename(std::move(filename))
 		, m_width(0)
 		, m_height(0)
 		, m_tiling(ImageTilingMode::None)
 	{
-		m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
+		SetImageFile(filename);
 	}
 
 	std::unique_ptr<FrameComponent> ImageComponent::Copy() const
@@ -34,12 +29,26 @@ namespace mmo
 
 		copy->m_tiling = m_tiling;
 		copy->m_tint = m_tint;
+		copy->m_texture = m_texture;
+		copy->m_propertyName = m_propertyName;
 
 		return copy;
 	}
-	
+
+	void ImageComponent::OnFrameChanged()
+	{
+		FrameComponent::OnFrameChanged();
+
+		SetImagePropertyName(m_propertyName);
+	}
+
 	void ImageComponent::Render(const Rect& area, const Color& color)
 	{
+		if (!m_texture)
+		{
+			return;
+		}
+
 		// Bind the texture object
 		ASSERT(m_frame);
 		m_frame->GetGeometryBuffer().SetActiveTexture(m_texture);
@@ -50,7 +59,7 @@ namespace mmo
 
 		const Rect frameRect = GetArea(area);
 
-		// Default source rect encapsules the whole image area
+		// Default source rect encapsulates the whole image area
 		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(m_texture->GetWidth()), static_cast<float>(m_texture->GetHeight())};
 
 		// Apply tiling
@@ -83,6 +92,45 @@ namespace mmo
 	void ImageComponent::SetTint(argb_t tint)
 	{
 		m_tint = tint;
+	}
+
+	void ImageComponent::SetImageFile(const std::string& filename)
+	{
+		m_texture.reset();
+
+		m_filename = filename;
+		if (!m_filename.empty())
+		{
+			m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
+		}
+
+		if (m_frame)
+		{
+			m_frame->Invalidate(false);
+		}
+	}
+
+	void ImageComponent::SetImagePropertyName(std::string propertyName)
+	{
+		m_propertyConnection.disconnect();
+
+		m_propertyName = std::move(propertyName);
+		if (m_propertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_propertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_propertyName);
+			return;
+		}
+
+		m_propertyConnection += observedProperty->Changed += [&](const Property& changedProperty)
+		{
+			SetImageFile(changedProperty.GetValue());
+		};
 	}
 
 	Size ImageComponent::GetSize() const

@@ -35,12 +35,16 @@ namespace mmo
 	public:
 		/// Sets the frame for all components.
 		void SetComponentFrame(Frame& frame);
+
 		/// Adds a new layer to this section.
 		void AddComponent(std::unique_ptr<FrameComponent> component);
+
 		/// Removes a layer by index.
 		void RemoveComponent(uint32 index);
+
 		/// Removes a layer by index.
 		void RemoveAllComponent();
+
 		/// Renders this state imagery.
 		void Render(const Rect& area, const Color& color) const;
 

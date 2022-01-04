@@ -7,8 +7,6 @@
 
 #include "base/non_copyable.h"
 
-#include <map>
-
 
 namespace mmo
 {
@@ -31,17 +29,22 @@ namespace mmo
 	protected:
 		void CopyBaseAttributes(FrameComponent& other) const;
 
+		virtual void OnFrameChanged() {}
+
 	public:
 		/// Gets the size of this frame object in pixels.
 		virtual Size GetSize() const { return Size(); }
+
 		/// Gets the area rectangle of this object.
 		virtual Rect GetArea(const Rect& area) const;
 
 		inline const Rect& GetInset() const { return m_areaInset; }
+
 		/// Sets the area inset.
 		inline void SetInset(const Rect& rect) { m_areaInset = rect; }
+
 		/// Sets the frame that this component belongs to.
-		inline void SetFrame(Frame& frame) { m_frame = &frame; }
+		void SetFrame(Frame& frame);
 
 	public:
 		/// Renders the frame object.
@@ -50,6 +53,7 @@ namespace mmo
 	protected:
 		/// The frame that owns this component.
 		Frame* m_frame;
+
 		/// The area inset.
 		Rect m_areaInset;
 	};

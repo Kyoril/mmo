@@ -12,6 +12,8 @@
 
 namespace mmo
 {
+	class ImageComponent;
+	class FrameEvent;
 	class StateImagery;
 	class ImagerySection;
 
@@ -72,6 +74,8 @@ namespace mmo
 		void ElementInsetEnd();
 		void ElementFontStart(const XmlAttributes& attributes);
 		void ElementFontEnd();
+		void ElementPropertyValueStart(const XmlAttributes& attributes);
+		void ElementPropertyValueEnd();
 
 	private:
 		/// Stack of added frames.
@@ -89,6 +93,7 @@ namespace mmo
 		std::unique_ptr<StateImagery> m_stateImagery;
 		std::unique_ptr<FrameLayer> m_layer;
 		std::unique_ptr<FrameComponent> m_component;
+		ImageComponent* m_imageComponent { nullptr };
 
 		std::string m_text;
 

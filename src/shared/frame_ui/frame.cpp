@@ -44,6 +44,23 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
+		
+		// Set all properties
+		for (const auto& pair : m_propertiesByName)
+		{
+			// It is valid to define new property in xml only to refer to them, so
+			// not all properties have to exist on the other frame already.
+			auto* otherProp = other.GetProperty(pair.first);
+			if (!otherProp)
+			{
+				// Other property doesn't yet exist, add a new one.
+				otherProp = &other.AddProperty(pair.first);
+				otherProp->Set(pair.second.GetValue());
+			}
+
+			// Apply property value
+			otherProp->Set(pair.second.GetValue());
+		}
 
 		// Add section reference
 		for (const auto& pair : m_sectionsByName)
@@ -73,23 +90,6 @@ namespace mmo
 
 				added.AddLayer(newLayer);
 			}
-		}
-
-		// Set all properties
-		for (const auto& pair : m_propertiesByName)
-		{
-			// It is valid to define new property in xml only to refer to them, so
-			// not all properties have to exist on the other frame already.
-			auto* otherProp = other.GetProperty(pair.first);
-			if (!otherProp)
-			{
-				// Other property doesn't yet exist, add a new one.
-				otherProp = &other.AddProperty(pair.first);
-				otherProp->Set(pair.second.GetValue());
-			}
-
-			// Apply property value
-			otherProp->Set(pair.second.GetValue());
 		}
 
 		// Copy all children and their children

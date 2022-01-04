@@ -3,6 +3,7 @@
 #include "layout_xml_loader.h"
 #include "frame_mgr.h"
 #include "frame.h"
+#include "frame_event.h"
 #include "state_imagery.h"
 #include "imagery_section.h"
 #include "image_component.h"
@@ -12,7 +13,7 @@
 #include "xml_handler/xml_attributes.h"
 #include "log/default_log_levels.h"
 #include "base/filesystem.h"
-#include "base/utilities.h"
+
 
 
 namespace mmo
@@ -72,6 +73,8 @@ namespace mmo
 	static const std::string ImageComponentTextureAttribute("texture");
 	static const std::string ImageComponentTilingAttribute("tiling");
 	static const std::string ImageComponentTintAttribute("tint");
+	static const std::string PropertyValueElement("PropertyValue");
+	static const std::string PropertyValuePropertyAttribute("property");
 	static const std::string BorderComponentElement("BorderComponent");
 	static const std::string BorderComponentBorderSizeAttribute("borderSize");
 	static const std::string BorderComponentTopSizeAttribute("topSize");
@@ -190,6 +193,10 @@ namespace mmo
 			{
 				ElementFontStart(attributes);
 			}
+			else if (element == PropertyValueElement)
+			{
+				ElementPropertyValueStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -289,6 +296,10 @@ namespace mmo
 			else if (element == FontElement)
 			{
 				ElementFontEnd();
+			}
+			else if (element == PropertyValueElement)
+			{
+				ElementPropertyValueEnd();
 			}
 		}
 	}
@@ -630,17 +641,16 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementImageryEnd()
 	{
-		// Reset current state imagery object
 		m_frames.top()->AddStateImagery(*m_stateImagery);
 		m_stateImagery.reset();
 	}
 
 	void LayoutXmlLoader::ElementLayerStart(const XmlAttributes & attributes)
 	{
-		// Ensure that the element may appear at this location
 		if (m_layer != nullptr || m_stateImagery == nullptr)
 		{
-			throw std::runtime_error("Unexpected Layer element!");
+			ELOG("Unexpected " << LayerElement << " element!");
+			return;
 		}
 
 		// Add a new layer to the state imagery
@@ -649,7 +659,6 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementLayerEnd()
 	{
-		// Reset the current layer element
 		m_stateImagery->AddLayer(*m_layer);
 		m_layer.reset();
 	}
@@ -659,21 +668,24 @@ namespace mmo
 		// Ensure that the element may appear at this location
 		if (m_layer == nullptr)
 		{
-			throw std::runtime_error("Unexpected Section element!");
+			ELOG("Unexpected " << SectionElement << " element!");
+			return;
 		}
 
 		// Get the section name attribute
 		const std::string section(attributes.GetValueAsString(SectionSectionAttribute));
 		if (section.empty())
 		{
-			throw std::runtime_error("Section element needs to have a section name specified!");
+			ELOG("Section element needs to have a section name specified!");
+			return;
 		}
 
 		// Find section by name
 		const ImagerySection* sectionEntry = m_frames.top()->GetImagerySectionByName(section);
 		if (sectionEntry == nullptr)
 		{
-			throw std::runtime_error("Unable to find section named '" + section + "' in frame '" + m_frames.top()->GetName() + "'!");
+			ELOG("Unable to find section named '" << section << "' in frame '" << m_frames.top()->GetName() << "'!");
+			return;
 		}
 
 		// Add section entry to layer
@@ -689,7 +701,8 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr)
 		{
-			throw std::runtime_error("Unexpected TextComponent element!");
+			ELOG("Unexpected " << TextComponentElement << " element!");
+			return;
 		}
 
 		const std::string color(attributes.GetValueAsString(TextComponentColorAttribute));
@@ -725,21 +738,17 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr)
 		{
-			throw std::runtime_error("Unexpected ImageComponent element!");
+			ELOG("Unexpected " << ImageComponentElement << " element!");
+			return;
 		}
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
 		const std::string tilingAttr(attributes.GetValueAsString(ImageComponentTilingAttribute));
 		const std::string tint(attributes.GetValueAsString(ImageComponentTintAttribute));
-
-		// Check for texture name existance
-		if (texture.empty())
-		{
-			throw std::runtime_error("ImageComponent needs a texture filename!");
-		}
-
+		
 		// Setup component and add it to the current section
 		auto component = std::make_unique<ImageComponent>(*m_frames.top(), texture);
+		m_imageComponent = component.get();
 
 		// Apply tiling mode if set
 		if (attributes.Exists(ImageComponentTilingAttribute))
@@ -765,13 +774,15 @@ namespace mmo
 	void LayoutXmlLoader::ElementImageComponentEnd()
 	{
 		m_section->AddComponent(std::move(m_component));
+		m_imageComponent = nullptr;
 	}
 
 	void LayoutXmlLoader::ElementBorderComponentStart(const XmlAttributes & attributes)
 	{
 		if (m_component != nullptr || m_section == nullptr)
 		{
-			throw std::runtime_error("Unexpected BorderComponent element!");
+			ELOG("Unexpected " << BorderComponentElement << " element!");
+			return;
 		}
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
@@ -780,7 +791,8 @@ namespace mmo
 		// Check for texture name existance
 		if (texture.empty())
 		{
-			throw std::runtime_error("BorderComponent needs a texture filename!");
+			ELOG("BorderComponent needs a texture filename!");
+			return;
 		}
 
 		// Setup component and add it to the current section
@@ -808,7 +820,8 @@ namespace mmo
 	{
 		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
 		{
-			throw std::runtime_error("Unexpected " + PropertyElement + " element!");
+			ELOG("Unexpected " << PropertyElement << " element!");
+			return;
 		}
 
 		// Grab attributes
@@ -818,7 +831,8 @@ namespace mmo
 		// Verify attributes
 		if (name.empty())
 		{
-			throw std::runtime_error("Property needs to have a name!");
+			ELOG("Property needs to have a name!");
+			return;
 		}
 
 		// HACK: Add translation in here. We don't want to set it in the frame's SetText, because
@@ -843,7 +857,8 @@ namespace mmo
 	{
 		if (m_hasEventsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
 		{
-			throw std::runtime_error("Unexpected " + EventsElement + " element!");
+			ELOG("Unexpected " << EventsElement << " element!");
+			return;
 		}
 
 		m_hasEventsTag = true;
@@ -858,7 +873,8 @@ namespace mmo
 	{
 		if (!m_hasAreaTag || !m_component)
 		{
-			throw std::runtime_error("Unexpected " + InsetElement + " element!");
+			ELOG("Unexpected " + InsetElement + " element!");
+			return;
 		}
 
 		if (attributes.Exists(InsetAllAttribute))
@@ -897,7 +913,8 @@ namespace mmo
 		// Check parameters
 		if (size <= 0.0f || file.empty() || name.empty())
 		{
-			throw std::runtime_error("Font needs to have a valid name, file and size defined!");
+			ELOG("Font needs to have a valid name, file and size defined!");
+			return;
 		}
 
 		// Setup a font map
@@ -910,5 +927,30 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementFontEnd()
 	{
+	}
+
+	void LayoutXmlLoader::ElementPropertyValueStart(const XmlAttributes& attributes)
+	{
+		if (!m_component || m_hasAreaTag || !m_hasVisualTag)
+		{
+			ELOG(PropertyValueElement << " tag needs to be placed in a frame component!");
+			return;
+		}
+		
+		const std::string propertyName(attributes.GetValueAsString(PropertyValuePropertyAttribute));
+		if (propertyName.empty())
+		{
+			WLOG("Did not find a valid property name attribute in " << PropertyValueElement << " tag");
+		}
+
+		if (m_imageComponent)
+		{
+			m_imageComponent->SetImagePropertyName(propertyName);
+		}
+	}
+
+	void LayoutXmlLoader::ElementPropertyValueEnd()
+	{
+
 	}
 }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "frame_component.h"
+#include "base/signal.h"
 
 #include "base/typedefs.h"
 #include "graphics/texture.h"
@@ -33,10 +34,13 @@ namespace mmo
 	public:
 		/// Creates a frame texture object from a texture file. The texture manager class
 		/// is used to avoid loading textures twice.
-		explicit ImageComponent(Frame& frame, std::string filename);
+		explicit ImageComponent(Frame& frame, const std::string& filename);
 
 	public:
-		virtual std::unique_ptr<FrameComponent> Copy() const override;
+		std::unique_ptr<FrameComponent> Copy() const override;
+
+	protected:
+		void OnFrameChanged() override;
 
 	public:
 		// FrameComponent overrides
@@ -47,6 +51,8 @@ namespace mmo
 		void SetTilingMode(ImageTilingMode mode);
 		void SetTint(argb_t tint);
 		inline argb_t GetTint() const noexcept { return m_tint; }
+		void SetImageFile(const std::string& filename);
+		void SetImagePropertyName(std::string propertyName);
 
 	public:
 		// ~Begin FrameComponent
@@ -65,5 +71,9 @@ namespace mmo
 		ImageTilingMode m_tiling;
 		/// Color tint.
 		Color m_tint = Color::White;
+
+		std::string m_propertyName;
+
+		scoped_connection_container m_propertyConnection;
 	};
 }
