@@ -156,7 +156,7 @@ namespace mmo
 
 		// Apply username and convert it to uppercase letters
 		m_authName = worldName;
-		std::ranges::transform(m_authName, m_authName.begin(), ::toupper);
+		std::transform(m_authName.begin(), m_authName.end(), m_authName.begin(), ::toupper);
 
 		// Calculate auth hash
 		bool hexParseError = false;
@@ -271,7 +271,7 @@ namespace mmo
 	void RealmConnector::UpdateHostedMapList(const std::set<uint64>& mapIds)
 	{
 		m_hostedMapIds.clear();
-		std::ranges::copy(mapIds, std::back_inserter(m_hostedMapIds));
+		std::copy(mapIds.begin(), mapIds.end(), std::back_inserter(m_hostedMapIds));
 
 		if (!m_sessionKey.isZero())
 		{

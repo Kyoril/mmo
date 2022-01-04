@@ -422,13 +422,13 @@ namespace mmo
 	bool World::IsHostingMapId(const MapId mapId)
 	{
 		std::scoped_lock lock{ m_hostedMapIdMutex };
-		return std::ranges::find(m_hostedMapIds, mapId) != m_hostedMapIds.end();
+		return std::find(m_hostedMapIds.begin(), m_hostedMapIds.end(), mapId) != m_hostedMapIds.end();
 	}
 
 	auto World::IsHostingInstanceId(const InstanceId instanceId) -> bool
 	{
 		std::scoped_lock lock{ m_hostedInstanceIdMutex };
-		return std::ranges::find(m_hostedInstanceIds, instanceId) != m_hostedInstanceIds.end();
+		return std::find(m_hostedInstanceIds.begin(), m_hostedInstanceIds.end(), instanceId) != m_hostedInstanceIds.end();
 	}
 
 	void World::RequestMapInstanceCreation(MapId mapId)

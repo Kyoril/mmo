@@ -53,7 +53,7 @@ namespace mmo
 
 		if (!instanceId.is_nil())
 		{
-			const auto instanceIt = std::ranges::find_if(m_worlds, [instanceId](const std::shared_ptr<World>& worldNode)
+			const auto instanceIt = std::find_if(m_worlds.begin(), m_worlds.end(), [instanceId](const std::shared_ptr<World>& worldNode)
 	            {
 	                return worldNode->IsHostingInstanceId(instanceId);
 	            }
@@ -67,7 +67,7 @@ namespace mmo
 		
 		// TODO: Implement load balancer strategy here
 
-		const auto mapIt = std::ranges::find_if(m_worlds, [mapId](const std::shared_ptr<World>& worldNode)
+		const auto mapIt = std::find_if(m_worlds.begin(), m_worlds.end(), [mapId](const std::shared_ptr<World>& worldNode)
             {
                 return worldNode->IsHostingMapId(mapId);
             }
