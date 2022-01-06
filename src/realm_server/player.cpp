@@ -222,7 +222,8 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, guid);
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld,
+			guid, m_accountId);
 		
 		return PacketParseResult::Pass;
 	}

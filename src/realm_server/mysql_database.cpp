@@ -151,9 +151,9 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId)
+	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o FROM characters WHERE id = " + std::to_string(characterId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)

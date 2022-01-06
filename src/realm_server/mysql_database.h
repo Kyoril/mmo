@@ -35,7 +35,7 @@ namespace mmo
 		void CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation) final override;
 		
 		/// @copydoc IDatabase::CharacterEnterWorld
-		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId) override;
+		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) override;
 
 	private:
 		void PrintDatabaseError();

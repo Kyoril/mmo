@@ -72,8 +72,9 @@ namespace mmo
 
 		/// Loads character data of a character who wants to enter a world.
 		///	@param characterId Unique id of the character to load.
+		///	@param accountId Id of the player account to prevent players from logging in with another account's character.
 		///	@returns Character data of the character, if the character exists.
-		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId) = 0;
+		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) = 0;
 	};
 
 
@@ -179,8 +180,8 @@ namespace mmo
 		/// @param handler A handler callback which will be executed after the request was successful.
 		/// @param method A request callback which will be executed on the database thread without blocking the caller.
 		/// @param b0 Argument which will be forwarded to the handler.
-		template <class ResultHandler, class Result, class A0, class... Args>
-		void asyncRequest(ResultHandler &&handler, Result(IDatabase::*method)(A0), Args&&... b0)
+		template <class ResultHandler, class Result, class... A0, class... Args>
+		void asyncRequest(ResultHandler &&handler, Result(IDatabase::*method)(A0...), Args&&... b0)
 		{
 			auto request = std::bind(method, &m_database, std::forward<Args>(b0)...);
 			auto processor = [this, request, handler]() -> void
