@@ -4,7 +4,7 @@
 
 #include "game_state.h"
 #include "manual_render_object.h"
-#include "mesh.h"
+#include "scene_graph/mesh.h"
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"

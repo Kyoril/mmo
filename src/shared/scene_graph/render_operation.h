@@ -13,8 +13,8 @@ namespace mmo
 
 		bool useIndexes { true };
 
-		VertexBufferPtr vertexBuffer;
+		VertexBuffer* vertexBuffer;
 
-		IndexBufferPtr indexBuffer;
+		IndexBuffer* indexBuffer;
 	};
 }

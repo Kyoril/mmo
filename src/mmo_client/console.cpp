@@ -13,8 +13,6 @@
 #include "frame_ui/geometry_buffer.h"
 #include "base/assign_on_exit.h"
 
-#include "mesh.h"
-
 #include "assets/asset_registry.h"
 
 #include <mutex>

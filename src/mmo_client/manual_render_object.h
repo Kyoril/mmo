@@ -9,18 +9,18 @@
 namespace mmo
 {
 	/// Base class of a render operation.
-	class RenderOperation : public NonCopyable
+	class ManualRenderOperation : public NonCopyable
 	{
 	public:
 		/// Creates a new instance of the RenderOperation class and initializes it.
 		///	@param device The graphics device used to create gpu resources.
-		RenderOperation(GraphicsDevice& device)
+		ManualRenderOperation(GraphicsDevice& device)
 			: m_device(device)
 		{
 		}
 
 		/// Virtual default destructor because of inheritance.
-		virtual ~RenderOperation() override = default;
+		virtual ~ManualRenderOperation() override = default;
 
 	public:
 		/// Gets the topology type to use when rendering this operation. Must be implemented.
@@ -66,24 +66,24 @@ namespace mmo
 	///	once this wrapper class is deleted. Typical use case is to keep this object on the
 	///	stack.
 	template<class T>
-	class RenderOperationRef final : public NonCopyable
+	class ManualRenderOperationRef final : public NonCopyable
 	{
 	public:
 		/// Creates a new instance of the 
-		RenderOperationRef(T& operation)
+		ManualRenderOperationRef(T& operation)
 			: m_operation(&operation)
 		{
 		}
 
 		/// Move operator.
-		RenderOperationRef(RenderOperationRef&& other) noexcept
+		ManualRenderOperationRef(ManualRenderOperationRef&& other) noexcept
 		{
 			m_operation = other.m_operation;
 			other.m_operation = nullptr;
 		}
 
 		/// Overridden destructor
-		~RenderOperationRef() override
+		~ManualRenderOperationRef() override
 		{
 			if (m_operation)
 			{
@@ -102,7 +102,7 @@ namespace mmo
 	};
 
 	/// A special operation which renders a list of lines for a ManualRenderObject.
-	class LineListOperation final : public RenderOperation
+	class ManualLineListOperation final : public ManualRenderOperation
 	{
 	public:
 		/// Contains data for a single line in a line list operation.
@@ -165,8 +165,8 @@ namespace mmo
 	public:
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
-		explicit LineListOperation(GraphicsDevice& device)
-			: RenderOperation(device)
+		explicit ManualLineListOperation(GraphicsDevice& device)
+			: ManualRenderOperation(device)
 		{
 		}
 
@@ -227,7 +227,7 @@ namespace mmo
 
 	public:
 		/// Adds a new render operation to the object which draws a line list.
-		RenderOperationRef<LineListOperation> AddLineListOperation();
+		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation();
 
 		/// Removes all operations.
 		void Clear() noexcept;
@@ -237,6 +237,6 @@ namespace mmo
 
 	private:
 		GraphicsDevice& m_device;
-		std::vector<std::unique_ptr<RenderOperation>> m_operations;
+		std::vector<std::unique_ptr<ManualRenderOperation>> m_operations;
 	};
 }

@@ -164,4 +164,10 @@ namespace mmo
 		m_sceneNodes[name] = std::move(sceneNode);
 		return *m_sceneNodes[name];
 	}
+
+	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
+	{
+		TODO("Create entity");
+		return nullptr;
+	}
 }

@@ -9,9 +9,9 @@ namespace mmo
 	{
 	}
 
-	RenderOperationRef<LineListOperation> ManualRenderObject::AddLineListOperation()
+	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation()
 	{
-		auto operation = std::make_unique<LineListOperation>(m_device);
+		auto operation = std::make_unique<ManualLineListOperation>(m_device);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));

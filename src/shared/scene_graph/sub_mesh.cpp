@@ -5,6 +5,7 @@
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
+#include "scene_graph/render_operation.h"
 
 namespace mmo
 {
@@ -17,12 +18,6 @@ namespace mmo
 
 	void SubMesh::Render() const
 	{
-		// Activate the material
-		if (m_material)
-		{
-			m_material->Set();
-		}
-
 		// Set vertex buffer
 		if (m_useSharedVertices)
 		{
@@ -45,5 +40,23 @@ namespace mmo
 		{
 			GraphicsDevice::Get().Draw(m_vertexBuffer->GetVertexCount(), 0);
 		}
+	}
+
+	void SubMesh::PrepareRenderOperation(RenderOperation& op) const
+	{
+		if (m_useSharedVertices)
+		{
+			ASSERT(m_parent.m_vertexBuffer);
+			op.vertexBuffer = m_parent.m_vertexBuffer.get();
+		}
+		else
+		{
+			ASSERT(m_vertexBuffer);
+			op.vertexBuffer = m_vertexBuffer.get();
+		}
+
+		op.indexBuffer = m_indexBuffer.get();
+		op.useIndexes = m_indexBuffer != nullptr;
+		op.topology = TopologyType::TriangleList;
 	}
 }

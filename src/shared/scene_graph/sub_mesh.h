@@ -2,13 +2,12 @@
 
 #pragma once
 
-#include "material.h"
-
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
 
 namespace mmo
 {
+	class RenderOperation;
 	class Mesh;
 
 	class SubMesh
@@ -18,12 +17,13 @@ namespace mmo
 
 	public:
 		void Render() const;
+
+		void PrepareRenderOperation(RenderOperation& op) const;
 		
 	public:
 		Mesh& m_parent;
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
-		MaterialPtr m_material;
 		bool m_useSharedVertices { true };
 	};
 }

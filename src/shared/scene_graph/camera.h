@@ -41,6 +41,9 @@ namespace mmo
 
         const Vector3& GetDerivedPosition() const;
 
+	public:
+		void UpdateRenderQueue(RenderQueue& queue) override {}
+
 	private:
 		Radian m_fovY;
 		float m_farDist;

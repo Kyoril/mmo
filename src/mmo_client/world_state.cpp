@@ -12,11 +12,10 @@
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
 
-#include "console_commands.h"
 #include "console_var.h"
 
 #include "event_loop.h"
-#include "mesh_manager.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {

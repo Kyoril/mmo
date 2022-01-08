@@ -15,6 +15,7 @@
 
 namespace mmo
 {
+	class Entity;
 	class Scene;
 	class Camera;
 
@@ -77,6 +78,8 @@ namespace mmo
 		SceneNode& CreateSceneNode();
 
 		SceneNode& CreateSceneNode(const String& name);
+
+		Entity* CreateEntity(const String& entityName, const String& meshName);
 		
 	public:
 		/// Renders the current scene by using a specific camera as the origin.

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "mesh.h"
+#include "scene_graph/mesh.h"
 #include "frame_ui/frame.h"
 
 namespace mmo
