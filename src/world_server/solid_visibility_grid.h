@@ -3,6 +3,8 @@
 #include "visibility_grid.h"
 #include "base/grid.h"
 
+#include <memory>
+
 namespace mmo
 {
 	class SolidVisibilityGrid final : public VisibilityGrid
