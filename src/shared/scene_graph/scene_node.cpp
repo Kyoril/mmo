@@ -281,6 +281,8 @@ namespace mmo
 
 	void SceneNode::Update(bool updateChildren, bool parentHasChanged)
 	{
+		m_parentNotified = false;
+
 		if (m_needParentUpdate || parentHasChanged)
 		{
 			UpdateFromParent();

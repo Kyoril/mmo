@@ -35,7 +35,7 @@ namespace mmo
 				DeleteChar = 0x03,
 				/// Enters the world with a selected character.
 				EnterWorld = 0x04,
-
+				
 				/// Counter constant
 				Count_,
 			};
@@ -60,7 +60,14 @@ namespace mmo
 				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
-
+				
+				/// [PROXY] Update game objects.
+				UpdateObject,
+				/// [PROXY] Compressed update game objects.
+				CompressedUpdateObject,
+				/// [PROXY] Destroy game objects.
+				DestroyObject,
+				
 				/// Counter constant
 				Count_,
 			};

@@ -16,7 +16,7 @@
 #include "console_var.h"
 
 #include "event_loop.h"
-
+#include "mesh_manager.h"
 
 namespace mmo
 {
@@ -41,13 +41,20 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
-		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
-		m_scene.GetRootSceneNode().AddChild(*m_cameraNode);
-
 		m_defaultCamera = m_scene.CreateCamera("Default");
+		
+		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
 		m_cameraNode->AttachObject(*m_defaultCamera);
-		m_cameraNode->SetPosition(Vector3(0.0f, 15.0f, 0.0f));
+
+		m_playerNode = &m_scene.CreateSceneNode("Player");
+		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
+		m_playerNode->AddChild(*m_cameraNode);
+		
+		m_cameraNode->SetPosition(Vector3(0.0f, 15.0f, 15.0f));
 		m_cameraNode->SetOrientation(Quaternion(Degree(-25), Vector3::UnitX));
+
+		m_playerMesh = MeshManager::Get().Load("Models/Cube/Cube.hmsh");
+		ASSERT(m_playerMesh);
 
 		if (!s_mouseSensitivityCVar)
 		{
@@ -91,7 +98,9 @@ namespace mmo
 		m_inputConnections += {
 			EventLoop::MouseDown.connect(this, &WorldState::OnMouseDown),
 			EventLoop::MouseUp.connect(this, &WorldState::OnMouseUp),
-			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove)
+			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove),
+			EventLoop::KeyDown.connect(this, &WorldState::OnKeyDown),
+			EventLoop::KeyUp.connect(this, &WorldState::OnKeyUp)
 		};
 		
 		RegisterGameplayCommands();
@@ -180,8 +189,44 @@ namespace mmo
 		return true;
 	}
 
+	bool WorldState::OnKeyDown(int32 key)
+	{
+		switch(key)
+		{
+		case 0x57:
+			m_movementVelocity.z = 1.0f;
+			return false;
+		case 0x53:
+			m_movementVelocity.z = -1.0f;
+			return false;
+		}
+		
+		return true;
+	}
+
+	bool WorldState::OnKeyUp(int32 key)
+	{
+		switch(key)
+		{
+		case 0x57:
+		case 0x53:
+			m_movementVelocity.z = 0.0f;
+			return false;
+		}
+
+		return true;
+	}
+
 	void WorldState::OnPaint()
 	{
+		m_playerNode->Translate(m_movementVelocity, TransformSpace::Local);
+
+		auto& gx = GraphicsDevice::Get();
+		gx.SetTransformMatrix(World, m_playerNode->GetFullTransform());
+		gx.SetTransformMatrix(View, m_defaultCamera->GetViewMatrix());
+		gx.SetTransformMatrix(Projection, m_defaultCamera->GetProjectionMatrix());
+		m_playerMesh->Render();
+
 		FrameManager::Get().Draw();
 
 		if (m_axisVisible)

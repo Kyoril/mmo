@@ -1,8 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "realm_connector.h"
-#include "world_instance_manager.h"
-#include "world_instance.h"
+#include "game/world_instance_manager.h"
+#include "game/world_instance.h"
 #include "version.h"
 
 #include "base/utilities.h"

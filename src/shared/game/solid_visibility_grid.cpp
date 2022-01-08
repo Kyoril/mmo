@@ -23,7 +23,9 @@ namespace mmo
 
 	SolidVisibilityGrid::SolidVisibilityGrid(const TileIndex2D &worldSize)
 		: VisibilityGrid()
-		, m_tiles(GetVisibilityGridLength(worldSize[0], constants::MapWidth / 16.0f), GetVisibilityGridLength(worldSize[1], constants::MapWidth / 16.0f))
+		, m_tiles(
+			GetVisibilityGridLength(worldSize[0], constants::MapWidth / static_cast<float>(constants::MapZonesInParallel)), 
+			GetVisibilityGridLength(worldSize[1], constants::MapWidth / static_cast<float>(constants::MapZonesInParallel)))
 	{
 	}
 

@@ -229,10 +229,16 @@ namespace mmo
 	public:
 		/// Gets the objects globally unique identifier value.
 		uint64 GetGuid() const { return m_fields.GetFieldValue<uint64>(object_fields::Guid); }
-	
+
+		/// Gets the position of this object.
+		const Vector3& GetPosition() const noexcept { return m_position; }
+
+		/// Gets the facing of this object.
+		const Angle& GetFacing() const noexcept { return m_facing; }
+
 	protected:
 		ObjectFieldMap m_fields;
 		Vector3 m_position;
-		Angle m_rotation;
+		Angle m_facing;
 	};
 }

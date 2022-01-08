@@ -11,7 +11,7 @@
 #include "auth_protocol/auth_server.h"
 #include "configuration.h"
 #include "realm_connector.h"
-#include "world_instance_manager.h"
+#include "game/world_instance_manager.h"
 
 #include <fstream>
 #include <sstream>

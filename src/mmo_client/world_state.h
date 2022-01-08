@@ -4,6 +4,7 @@
 
 #include "game_state.h"
 #include "manual_render_object.h"
+#include "mesh.h"
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"
@@ -44,6 +45,10 @@ namespace mmo
 		bool OnMouseUp(MouseButton button, int32 x, int32 y);
 
 		bool OnMouseMove(int32 x, int32 y);
+		
+		bool OnKeyDown(int32 key);
+		
+		bool OnKeyUp(int32 key);
 
 	private:
 		/// Called when the screen layer should be painted. Should paint the scene.
@@ -74,6 +79,10 @@ namespace mmo
 		Camera* m_defaultCamera { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::unique_ptr<ManualRenderObject> m_debugAxis;
+
+		Vector3 m_movementVelocity;
+		SceneNode* m_playerNode { nullptr };
+		MeshPtr m_playerMesh;
 		
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };

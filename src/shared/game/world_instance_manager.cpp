@@ -8,6 +8,8 @@
 
 #include <algorithm>
 
+#include "solid_visibility_grid.h"
+
 namespace mmo
 {
 	WorldInstanceManager::WorldInstanceManager(asio::io_context& ioContext)
@@ -19,8 +21,11 @@ namespace mmo
 
 	WorldInstance& WorldInstanceManager::CreateInstance(MapId mapId)
 	{
+		constexpr int32 maxWorldSize = 64;
+
 		std::unique_lock lock{ m_worldInstanceMutex };
-		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, mapId)).get();
+		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, mapId,
+			std::make_unique<SolidVisibilityGrid>(makeVector(maxWorldSize, maxWorldSize)))).get();
 
 		instanceCreated(createdInstance->GetId());
 
@@ -56,7 +61,7 @@ namespace mmo
 
 		return it->get();
 	}
-
+	
 	void WorldInstanceManager::OnUpdate()
 	{
 		const auto timestamp = GetAsyncTimeMs();
