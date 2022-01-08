@@ -15,7 +15,7 @@
 #include "console_var.h"
 
 #include "event_loop.h"
-#include "scene_graph/mesh_manager.h"
+#include "scene_graph/entity.h"
 
 namespace mmo
 {
@@ -44,16 +44,19 @@ namespace mmo
 		
 		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
 		m_cameraNode->AttachObject(*m_defaultCamera);
+		m_cameraNode->SetPosition(Vector3(0.0f, 0.0f, 3.0f));
+
+		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
+		m_cameraAnchorNode->AddChild(*m_cameraNode);
+		m_cameraAnchorNode->SetPosition(Vector3::UnitY * 0.5f);
 
 		m_playerNode = &m_scene.CreateSceneNode("Player");
-		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
-		m_playerNode->AddChild(*m_cameraNode);
-		
-		m_cameraNode->SetPosition(Vector3(0.0f, 15.0f, 15.0f));
-		m_cameraNode->SetOrientation(Quaternion(Degree(-25), Vector3::UnitX));
+		m_playerNode->AddChild(*m_cameraAnchorNode);
 
-		m_playerMesh = MeshManager::Get().Load("Models/Cube/Cube.hmsh");
-		ASSERT(m_playerMesh);
+		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
+		
+		m_playerEntity = m_scene.CreateEntity("Player", "Models/Cube/Cube.hmsh");
+		m_playerNode->AttachObject(*m_playerEntity);
 
 		if (!s_mouseSensitivityCVar)
 		{
@@ -109,6 +112,8 @@ namespace mmo
 	{
 		RemoveGameplayCommands();
 
+		m_playerEntity = nullptr;
+		m_playerNode = nullptr;
 		m_defaultCamera = nullptr;
 		m_scene.Clear();
 
@@ -176,13 +181,13 @@ namespace mmo
 
 		if (delta.x != 0.0f)
 		{
-			m_cameraNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::World);
+			m_cameraAnchorNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::World);
 		}
 		
 		if (delta.y != 0.0f)
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
-			m_cameraNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
+			m_cameraAnchorNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
 		}
 
 		return true;
@@ -219,12 +224,6 @@ namespace mmo
 	void WorldState::OnPaint()
 	{
 		m_playerNode->Translate(m_movementVelocity, TransformSpace::Local);
-
-		auto& gx = GraphicsDevice::Get();
-		gx.SetTransformMatrix(World, m_playerNode->GetFullTransform());
-		gx.SetTransformMatrix(View, m_defaultCamera->GetViewMatrix());
-		gx.SetTransformMatrix(Projection, m_defaultCamera->GetProjectionMatrix());
-		m_playerMesh->Render();
 
 		FrameManager::Get().Draw();
 

@@ -27,6 +27,21 @@ namespace mmo
 		, m_timers(timers)
 	{
 	}
+	
+	/// This command will try to connect to the login server and make a login attempt using the
+	/// first parameter as username and the other parameters as password.
+	void LoginState::ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
+	{
+		const auto spacePos = arguments.find(' ');
+		if (spacePos == std::string::npos)
+		{
+			ELOG("Invalid argument count!");
+			return;
+		}
+
+		// Try to connect
+		m_loginConnector.Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
+	}
 
 	void LoginState::OnEnter()
 	{
@@ -55,10 +70,18 @@ namespace mmo
 		m_loginConnections += m_realmConnector.CharListUpdated.connect(*this, &LoginState::OnCharListUpdated);
 
 		m_loginConnections += m_realmConnector.Disconnected.connect(*this, &LoginState::OnRealmDisconnected);
+		
+		// Lets setup a test command
+		Console::RegisterCommand("login", [&](const String& command, const String& args)
+			{
+				ConsoleCommand_Login(command, args);
+			}, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 	}
 
 	void LoginState::OnLeave()
 	{
+		Console::UnregisterCommand("login");
+
 		// Disconnect all active connections
 		m_loginConnections.disconnect();
 

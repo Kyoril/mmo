@@ -56,6 +56,7 @@ namespace mmo
         /// @param operation The render operation to setup.
         virtual void PrepareRenderOperation(RenderOperation& operation) = 0;
 
+		[[nodiscard]] virtual const Matrix4& GetWorldTransform() const = 0;
 
 		[[nodiscard]] virtual float GetSquaredViewDepth(const Camera& camera) const = 0;
         

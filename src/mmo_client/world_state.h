@@ -77,12 +77,14 @@ namespace mmo
 		scoped_connection_container m_inputConnections;
 		Scene m_scene;
 		Camera* m_defaultCamera { nullptr };
+		
+		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::unique_ptr<ManualRenderObject> m_debugAxis;
 
 		Vector3 m_movementVelocity;
 		SceneNode* m_playerNode { nullptr };
-		MeshPtr m_playerMesh;
+		Entity* m_playerEntity { nullptr };
 		
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };

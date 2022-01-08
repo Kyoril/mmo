@@ -93,4 +93,25 @@ namespace mmo
 		
 		m_initialized = false;
 	}
+
+	const String& Entity::GetMovableType() const
+	{
+		static String EntityType = "Entity";
+		return EntityType;
+	}
+
+	const AABB& Entity::GetBoundingBox() const
+	{
+		return m_mesh->GetBounds();
+	}
+
+	float Entity::GetBoundingRadius() const
+	{
+		return m_mesh->GetBoundRadius();
+	}
+
+	void Entity::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
+	{
+		// TODO
+	}
 }

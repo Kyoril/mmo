@@ -10,7 +10,6 @@
 #include "base/typedefs.h"
 #include <set>
 
-#include "camera.h"
 #include "render_queue.h"
 
 

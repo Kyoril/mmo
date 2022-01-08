@@ -4,43 +4,41 @@
 
 #include "movable_object.h"
 #include "camera.h"
-#include "pass.h"
-#include "queued_renderable_visitor.h"
 
 namespace mmo
 {
-	void QueuedRenderableCollection::AddRenderable(Pass* pass, Renderable* rend)
+	void QueuedRenderableCollection::AddRenderable(Renderable& rend)
 	{
-		if (m_organisationMode & SortDescending)
-		{
-
-		}
-
-		if (m_organisationMode & PassGroup)
-		{
-
-		}
+		m_renderables.push_back(&rend);
 	}
 
-	void RenderPriorityGroup::AddRenderable(const Renderable& renderable)
+	void QueuedRenderableCollection::Clear()
 	{
-		// TODO: Determine renderable type
+		m_renderables.clear();
+	}
+
+	void QueuedRenderableCollection::AcceptVisitor(QueuedRenderableVisitor& visitor) const
+	{
+		for(auto& renderable : m_renderables)
+		{
+			visitor.Visit(*renderable);
+		}
+	}
+	void RenderPriorityGroup::AddRenderable(Renderable& renderable)
+	{
+		// TODO: Implement non-solid renderables based on material settings
+
 		AddSolidRenderable(renderable);
 	}
 
-	void RenderPriorityGroup::AddTransparentRenderable(const Renderable& renderable)
+	void RenderPriorityGroup::Clear()
 	{
-
+		m_solidCollection.Clear();
 	}
 
-	void RenderPriorityGroup::AddUnsortedTransparentRenderable(const Renderable& renderable)
+	void RenderPriorityGroup::AddSolidRenderable(Renderable& renderable)
 	{
-
-	}
-
-	void RenderPriorityGroup::AddSolidRenderable(const Renderable& renderable)
-	{
-		
+		m_solidCollection.AddRenderable(renderable);
 	}
 
 	VisibleObjectsBoundsInfo::VisibleObjectsBoundsInfo()
@@ -82,10 +80,13 @@ namespace mmo
 
 	void RenderQueueGroup::Clear()
 	{
-
+		for (const auto& [priority, group] : m_priorityGroups)
+		{
+			group->Clear();
+		}
 	}
 
-	void RenderQueueGroup::AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority)
+	void RenderQueueGroup::AddRenderable(Renderable& renderable, uint16 priority)
 	{
 		auto it = m_priorityGroups.find(priority);
 		if (it == m_priorityGroups.end())
@@ -118,7 +119,16 @@ namespace mmo
 
 	void RenderQueue::AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority)
 	{
-		// TODO
+		auto* group = GetQueueGroup(groupId);
+		ASSERT(group);
+		
+		if (!renderableQueued(renderable, groupId, priority, *this))
+		{
+			// TODO: Skip this renderable if the collector works as intended
+			//return;
+		}
+
+		group->AddRenderable(renderable, priority);
 	}
 
 	void RenderQueue::AddRenderable(Renderable& renderable, uint8 groupId)

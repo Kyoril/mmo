@@ -2,6 +2,8 @@
 
 #include "scene.h"
 #include "camera.h"
+#include "mesh_manager.h"
+#include "render_operation.h"
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
@@ -20,6 +22,7 @@ namespace mmo
 
 	void SceneQueuedRenderableVisitor::Visit(Renderable& r)
 	{
+		targetScene->RenderSingleObject(r);
 	}
 
 	Scene::Scene()
@@ -31,6 +34,8 @@ namespace mmo
 	{
 		m_rootNode->RemoveAllChildren();
 		m_cameras.clear();
+		m_camVisibleObjectsMap.clear();
+		m_entities.clear();
 	}
 
 	Camera* Scene::CreateCamera(const String& name)
@@ -84,7 +89,10 @@ namespace mmo
 	void Scene::Render(Camera& camera)
 	{
 		auto& gx = GraphicsDevice::Get();
-		
+
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+
 		UpdateSceneGraph();
 		PrepareRenderQueue();
 
@@ -110,33 +118,10 @@ namespace mmo
 
 	void Scene::RenderVisibleObjects()
 	{
-		
-	}
-
-	void Scene::RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode)
-	{
-		//	for (const auto &groupIt : group)
-		//	{
-	    //		RenderPriorityGroup* pPriorityGrp = groupIt.getNext();
-		// 
-	    //		// Sort the queue first
-	    //		pPriorityGrp->sort(mCameraInProgress);
-		//		
-	    //		// Do solids
-	    //		RenderObjects(pPriorityGrp->getSolidsBasic(), om, true, true);
-		// 
-		//		// Do unsorted transparents
-		//		RenderObjects(pPriorityGrp->getTransparentsUnsorted(), om, true, true);
-		// 
-	    //		// Do transparents (always descending)
-	    //		RenderObjects(pPriorityGrp->getTransparents(), 
-		//			QueuedRenderableCollection::OM_SORT_DESCENDING, true, true);
-		//	}
-	}
-
-	void Scene::RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode)
-	{
-
+		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
+		{
+			RenderQueueGroupObjects(*group);
+		}
 	}
 
 	void Scene::InitRenderQueue()
@@ -155,6 +140,45 @@ namespace mmo
 	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds)
 	{
 		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true);
+	}
+
+	void Scene::RenderObjects(const QueuedRenderableCollection& objects)
+	{
+		objects.AcceptVisitor(m_renderableVisitor);
+	}
+	
+	void Scene::RenderQueueGroupObjects(RenderQueueGroup& group)
+	{
+		for(const auto& [priority, priorityGroup] : group)
+		{
+			RenderObjects(priorityGroup->GetSolids());
+		}
+	}
+
+	void Scene::RenderSingleObject(Renderable& renderable)
+	{
+		RenderOperation op { };
+		renderable.PrepareRenderOperation(op);
+
+		op.vertexBuffer->Set();
+		if (op.useIndexes)
+		{
+			ASSERT(op.indexBuffer);
+			op.indexBuffer->Set();
+		}
+
+		GraphicsDevice::Get().SetTopologyType(op.topology);
+		GraphicsDevice::Get().SetVertexFormat(op.vertexFormat);
+		GraphicsDevice::Get().SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		if (op.useIndexes)
+		{
+			GraphicsDevice::Get().DrawIndexed();
+		}
+		else
+		{
+			GraphicsDevice::Get().Draw(op.vertexBuffer->GetVertexCount());
+		}
 	}
 
 	SceneNode& Scene::GetRootSceneNode() 
@@ -190,8 +214,13 @@ namespace mmo
 
 	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
 	{
-		TODO("Create entity");
-		return nullptr;
+		auto mesh = MeshManager::Get().Load(meshName);
+		ASSERT(mesh);
+
+		//const auto entity = ;
+		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
+		
+		return entityIt->second.get();
 	}
 
 	RenderQueue& Scene::GetRenderQueue()

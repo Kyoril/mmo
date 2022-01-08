@@ -32,9 +32,11 @@ namespace mmo
 	public:
 		// Inherited via IGameState
 		void OnEnter() override;
-		void OnLeave() override;
-		const std::string & GetName() const override;
 
+		void OnLeave() override;
+
+		const std::string & GetName() const override;
+		
 		void EnterWorld(const CharacterView & character);
 	
 	private:
@@ -59,7 +61,10 @@ namespace mmo
 
 		void QueueRealmListRequestTimer();
 
+
 		void OnRealmListTimer();
+		
+		void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments);
 
 	private:
 

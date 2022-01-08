@@ -36,4 +36,9 @@ namespace mmo
 
 		return m_cachedCameraDist;
 	}
+
+	const Matrix4& SubEntity::GetWorldTransform() const
+	{
+		return m_parent.GetParentNodeFullTransform();
+	}
 }

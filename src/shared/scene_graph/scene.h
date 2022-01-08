@@ -11,11 +11,11 @@
 #include "base/typedefs.h"
 
 #include "scene_node.h"
+#include "entity.h"
 
 
 namespace mmo
 {
-	class Entity;
 	class Scene;
 	class Camera;
 
@@ -65,7 +65,7 @@ namespace mmo
 
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
-		/// @returns Pointer to the camera or nullptr if the camera doesn't exist.
+		/// @returns Pointer to the camera or nullptr if the camera does not exist.
 		Camera* GetCamera(const String& name);
 		
 		bool HasCamera(const String& name);
@@ -86,30 +86,36 @@ namespace mmo
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera);
+
 		void UpdateSceneGraph();
-
-	protected:
-		void RenderVisibleObjects();
-
-		void RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode);
 		
-		void RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode);
+		void RenderSingleObject(Renderable& renderable);
 
+	private:
+		void RenderVisibleObjects();
+		
 		void InitRenderQueue();
 
 		void PrepareRenderQueue();
 
 		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
 
-	public:
+		void RenderObjects(const QueuedRenderableCollection& objects);
+
+		void RenderQueueGroupObjects(RenderQueueGroup& group);
+
+	private:
 		Cameras m_cameras;
         SceneNodes m_sceneNodes;
-
 		SceneNode* m_rootNode { nullptr };
-
 		std::unique_ptr<RenderQueue> m_renderQueue;
-		
+
 		typedef std::map<const Camera*, VisibleObjectsBoundsInfo> CamVisibleObjectsMap;
 		CamVisibleObjectsMap m_camVisibleObjectsMap;
+
+		typedef std::map<String, std::unique_ptr<Entity>> EntityMap;
+		EntityMap m_entities;
+		
+		SceneQueuedRenderableVisitor m_renderableVisitor;
 	};
 }

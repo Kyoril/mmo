@@ -9,6 +9,7 @@
 #include "renderable.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
+#include "queued_renderable_visitor.h"
 
 namespace mmo
 {
@@ -54,24 +55,26 @@ namespace mmo
 			SortAscending = 6
 		};
 		
-		void AddRenderable(Pass* pass, Renderable* rend);
-		
+		void AddRenderable(Renderable& rend);
+
+		void Clear();
+
+		void AcceptVisitor(QueuedRenderableVisitor& visitor) const;
+
 	protected:
-		
-		uint8 m_organisationMode { 0 };
+		std::vector<Renderable*> m_renderables;
 	};
 
 	class RenderPriorityGroup
 	{
 	public:
-		void AddRenderable(const Renderable& renderable);
+		void AddRenderable(Renderable& renderable);
+		void Clear();
+
+		[[nodiscard]] const QueuedRenderableCollection& GetSolids() const noexcept { return m_solidCollection; }
 
 	private:
-		void AddTransparentRenderable(const Renderable& renderable);
-
-		void AddUnsortedTransparentRenderable(const Renderable& renderable);
-
-		void AddSolidRenderable(const Renderable& renderable);
+		void AddSolidRenderable(Renderable& renderable);
 
 	private:
 		QueuedRenderableCollection m_solidCollection;
@@ -80,10 +83,10 @@ namespace mmo
 	struct VisibleObjectsBoundsInfo
 	{
 		AABB aabb;
-		float minDistance;
-		float maxDistance;
-		float minDistanceInFrustum;
-		float maxDistanceInFrustum;
+		float minDistance{0.0f};
+		float maxDistance{0.0f};
+		float minDistanceInFrustum{0.0f};
+		float maxDistanceInFrustum{0.0f};
 
 	public:
 		VisibleObjectsBoundsInfo();
@@ -108,7 +111,10 @@ namespace mmo
 	public:
         void Clear();
 
-		void AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority);
+		void AddRenderable(Renderable& renderable, uint16 priority);
+
+		PriorityMap::iterator begin() { return m_priorityGroups.begin(); }
+		PriorityMap::iterator end() { return m_priorityGroups.end(); }
 
 	private:
 		RenderQueue& m_queue;
@@ -153,5 +159,9 @@ namespace mmo
 		void Combine(const RenderQueue& other);
 
 		void ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds);
+
+
+		RenderQueueGroupMap::iterator begin() { return m_groups.begin(); }
+		RenderQueueGroupMap::iterator end() { return m_groups.end(); }
 	};
 }

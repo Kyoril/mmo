@@ -45,6 +45,8 @@ namespace mmo
 
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
 
+		const Matrix4& GetWorldTransform() const override;
+
 
 	private:
 		Entity& m_parent;

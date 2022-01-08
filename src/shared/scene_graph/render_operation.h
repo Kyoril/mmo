@@ -11,6 +11,8 @@ namespace mmo
 	public:
 		TopologyType topology { TopologyType::TriangleList };
 
+		VertexFormat vertexFormat { VertexFormat::PosColor };
+
 		bool useIndexes { true };
 
 		VertexBuffer* vertexBuffer;

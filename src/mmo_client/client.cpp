@@ -12,7 +12,6 @@
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
-#include "graphics/graphics_device.h"
 #include "assets/asset_registry.h"
 #include "base/filesystem.h"
 
@@ -26,8 +25,6 @@
 #include "model_frame.h"
 #include "model_renderer.h"
 #include "world_frame.h"
-#include "world_renderer.h"
-#include "loading_screen.h"
 
 #include <fstream>
 #include <thread>
@@ -104,26 +101,6 @@ namespace mmo
 		s_loginConnector.reset();
 	}
 }
-
-
-namespace mmo
-{
-	/// This command will try to connect to the login server and make a login attempt using the
-	/// first parameter as username and the other parameters as password.
-	static void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments)
-	{
-		const auto spacePos = arguments.find(' ');
-		if (spacePos == std::string::npos)
-		{
-			ELOG("Invalid argument count!");
-			return;
-		}
-
-		// Try to connect
-		s_loginConnector->Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
-	}
-}
-
 
 ////////////////////////////////////////////////////////////////
 // FrameUI stuff
@@ -280,9 +257,6 @@ namespace mmo
 
 		// Enter login state
 		GameStateMgr::Get().SetGameState(LoginState::Name);
-
-		// Lets setup a test command
-		Console::RegisterCommand("login", ConsoleCommand_Login, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 
 		// Run the RunOnce script
 		Console::ExecuteCommand("run Config/RunOnce.cfg");

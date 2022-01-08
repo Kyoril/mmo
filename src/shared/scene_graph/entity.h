@@ -16,7 +16,7 @@ namespace mmo
 
 		typedef LinearSet<Entity*> EntitySet;
 
-	protected:
+	public:
 		Entity();
 
 		Entity(const String& name, MeshPtr mesh);
@@ -58,5 +58,11 @@ namespace mmo
 		void Initialize();
 
 		void Deinitialize();
+	public:
+
+		[[nodiscard]] const String& GetMovableType() const override;
+		[[nodiscard]] const AABB& GetBoundingBox() const override;
+		[[nodiscard]] float GetBoundingRadius() const override;
+		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
 	};
 }
