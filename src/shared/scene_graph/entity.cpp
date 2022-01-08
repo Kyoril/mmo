@@ -35,7 +35,7 @@ namespace mmo
 		return static_cast<uint32>(m_subEntities.size());
 	}
 	
-	void Entity::UpdateRenderQueue(RenderQueue& renderQueue)
+	void Entity::PopulateRenderQueue(RenderQueue& renderQueue)
 	{
 		for (const auto& subEntity : m_subEntities)
 		{

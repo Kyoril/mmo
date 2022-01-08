@@ -44,9 +44,8 @@ namespace mmo::console_commands
 			line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](int ch) {
 				return !std::isspace(ch);
 			}));
-
-			// Check if line is empty, and if not, execute it
-			if (!line.empty())
+			
+			if (!line.empty() && line[0] != '#')
 			{
 				Console::ExecuteCommand(line);
 			}

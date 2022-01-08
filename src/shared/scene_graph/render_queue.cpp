@@ -158,6 +158,7 @@ namespace mmo
 			return;
 		}
 
-		// TODO
+		movableObject.PopulateRenderQueue(*this);
+		visibleBounds.Merge(movableObject.GetWorldBoundingBox(true), movableObject.GetWorldBoundingSphere(true), camera);
 	}
 }

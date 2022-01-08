@@ -131,6 +131,6 @@ namespace mmo
 		[[nodiscard]] virtual bool IsDebugDisplayEnabled(void) const noexcept { return m_debugDisplay; }
 
 		/// @brief Method by which the movable must add Renderable instances to the rendering queue.
-		virtual void UpdateRenderQueue(RenderQueue& queue) = 0;
+		virtual void PopulateRenderQueue(RenderQueue& queue) = 0;
 	};
 }

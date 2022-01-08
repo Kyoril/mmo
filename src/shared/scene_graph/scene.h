@@ -81,9 +81,11 @@ namespace mmo
 
 		Entity* CreateEntity(const String& entityName, const String& meshName);
 		
+		RenderQueue& GetRenderQueue();
+
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
-		void Render(const Camera& camera);
+		void Render(Camera& camera);
 		void UpdateSceneGraph();
 
 	protected:
@@ -92,7 +94,13 @@ namespace mmo
 		void RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode);
 		
 		void RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode);
-		
+
+		void InitRenderQueue();
+
+		void PrepareRenderQueue();
+
+		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
+
 	public:
 		Cameras m_cameras;
         SceneNodes m_sceneNodes;
@@ -102,6 +110,6 @@ namespace mmo
 		std::unique_ptr<RenderQueue> m_renderQueue;
 		
 		typedef std::map<const Camera*, VisibleObjectsBoundsInfo> CamVisibleObjectsMap;
-		CamVisibleObjectsMap m_camVisibleObjectsMap; 
+		CamVisibleObjectsMap m_camVisibleObjectsMap;
 	};
 }

@@ -35,7 +35,7 @@ namespace mmo
 		virtual void SetCurrentCamera(Camera& cam) override;
 		
 		/// @copydoc MovableObject::UpdateRenderQueue
-		virtual void UpdateRenderQueue(RenderQueue& renderQueue) override;
+		virtual void PopulateRenderQueue(RenderQueue& renderQueue) override;
 
 	protected:
 		MeshPtr m_mesh;

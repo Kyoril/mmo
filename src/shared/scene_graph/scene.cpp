@@ -81,12 +81,17 @@ namespace mmo
 		m_cameras.clear();
 	}
 
-	void Scene::Render(const Camera& camera)
+	void Scene::Render(Camera& camera)
 	{
 		auto& gx = GraphicsDevice::Get();
 		
-		// TODO: Render all objects
 		UpdateSceneGraph();
+		PrepareRenderQueue();
+
+		const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
+		ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
+		visibleObjectsIt->second.Reset();
+		FindVisibleObjects(camera, visibleObjectsIt->second);
 
 		// Clear current render target
 		gx.SetFillMode(FillMode::Solid);
@@ -134,6 +139,24 @@ namespace mmo
 
 	}
 
+	void Scene::InitRenderQueue()
+	{
+		m_renderQueue = std::make_unique<RenderQueue>();
+
+		// TODO: Maybe initialize some properties for special render queues
+	}
+
+	void Scene::PrepareRenderQueue()
+	{
+		auto& renderQueue = GetRenderQueue();
+		renderQueue.Clear();
+	}
+
+	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds)
+	{
+		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true);
+	}
+
 	SceneNode& Scene::GetRootSceneNode() 
 	{
 		if (!m_rootNode)
@@ -169,5 +192,16 @@ namespace mmo
 	{
 		TODO("Create entity");
 		return nullptr;
+	}
+
+	RenderQueue& Scene::GetRenderQueue()
+	{
+		if (!m_renderQueue)
+		{
+			InitRenderQueue();
+		}
+
+		ASSERT(m_renderQueue);
+		return *m_renderQueue;
 	}
 }
