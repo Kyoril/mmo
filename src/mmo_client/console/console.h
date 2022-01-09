@@ -64,18 +64,20 @@ namespace mmo
 			ConsoleCommandHandler handler,
 			ConsoleCommandCategory category = ConsoleCommandCategory::Default,
 			const std::string& help = std::string());
+
 		/// Removes a registered console command.
 		static void UnregisterCommand(const std::string& command);
+
 		/// Executes the given command line to execute console commands.
 		static void ExecuteCommand(const std::string& commandLine);
 
 	private:
 		/// Executed when a key has been pressed. Repeated.
 		static bool KeyDown(int32 key);
+
 		/// Executed when a key character has been fired.
 		static bool KeyChar(uint16 codepoint);
-		/// Executed when a key has been released.
-		static bool KeyUp(int32 key);
+
 		/// Executed when the console should be painted (paint signal in event loop is fired).
 		static void Paint();
 

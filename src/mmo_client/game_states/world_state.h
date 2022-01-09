@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "game_state.h"
+#include "game_states/game_state.h"
 #include "scene_graph/mesh.h"
 #include "screen.h"
 #include "world_grid.h"
@@ -46,6 +46,8 @@ namespace mmo
 		bool OnMouseUp(MouseButton button, int32 x, int32 y);
 
 		bool OnMouseMove(int32 x, int32 y);
+
+		bool OnMouseWheel(int32 delta);
 		
 		bool OnKeyDown(int32 key);
 		

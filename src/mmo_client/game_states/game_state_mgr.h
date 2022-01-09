@@ -6,7 +6,7 @@
 #include "base/utilities.h"
 #include "base/signal.h"
 
-#include "game_state.h"
+#include "game_states/game_state.h"
 
 #include <memory>
 #include <map>

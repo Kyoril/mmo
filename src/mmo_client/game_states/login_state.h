@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "game_state.h"
+#include "game_states/game_state.h"
 #include "screen.h"
 
 #include "frame_ui/frame_mgr.h"

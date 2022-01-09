@@ -19,8 +19,8 @@
 #include "console/console.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
-#include "game_state_mgr.h"
-#include "login_state.h"
+#include "game_states/game_state_mgr.h"
+#include "game_states/login_state.h"
 #include "game_script.h"
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
@@ -30,7 +30,7 @@
 #include <thread>
 #include <memory>
 
-#include "world_state.h"
+#include "game_states/world_state.h"
 #include "base/timer_queue.h"
 
 

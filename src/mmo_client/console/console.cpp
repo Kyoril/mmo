@@ -323,9 +323,8 @@ namespace mmo
 		
 		s_consoleKeyEvents += 
 		{
-			EventLoop::KeyDown.connect(&Console::KeyDown),
-			EventLoop::KeyChar.connect(&Console::KeyChar),
-			EventLoop::KeyUp.connect(&Console::KeyUp)
+			EventLoop::KeyDown.connect(&Console::KeyDown, true),
+			EventLoop::KeyChar.connect(&Console::KeyChar, true),
 		};
 	}
 	
@@ -432,7 +431,7 @@ namespace mmo
 		{
 			return true;
 		}
-
+		
 		if (key == 0x0D && !s_consoleInput.empty())
 		{
 			ExecuteCommand(s_consoleInput);
@@ -445,6 +444,8 @@ namespace mmo
 
 			s_commandHistoryIndex = s_commandHistory.size();
 			s_consoleTextDirty = true;
+			
+			abort_emission();
 		}
 
 		if (key == 0x26)	// UP
@@ -457,6 +458,8 @@ namespace mmo
 
 			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
 			s_consoleTextDirty = true;
+
+			abort_emission();
 		}
 		else if (key == 0x28) // DOWN
 		{
@@ -468,6 +471,8 @@ namespace mmo
 
 			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
 			s_consoleTextDirty = true;
+
+			abort_emission();
 		}
 		
 		if (key == 0x08)
@@ -477,6 +482,8 @@ namespace mmo
 
 			s_consoleInput.pop_back();
 			s_consoleTextDirty = true;
+
+			abort_emission();
 		}
 
 		// Enable console scrolling by pressing the PAGE_UP / PAGE_DOWN keys
@@ -492,6 +499,7 @@ namespace mmo
 				ApplyConsoleScrolling(-1);
 			}
 
+			abort_emission();
 		}
 
 		return true;
@@ -506,17 +514,15 @@ namespace mmo
 
 			s_consoleInput.push_back(static_cast<char>(codepoint & 0xff));
 			s_consoleTextDirty = true;
+
+			abort_emission();
+
 			return false;
 		}
 
 		return true;
 	}
-
-	bool Console::KeyUp(int32 key)
-	{
-		return true;
-	}
-
+	
 	void Console::Paint()
 	{
 		if (!s_consoleVisible)

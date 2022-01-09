@@ -7,15 +7,17 @@ file(GLOB srcFiles "*.cpp" "*.h")
 file(GLOB consoleSrcFiles "console/*.cpp" "console/*.h")
 file(GLOB netSrcFiles "net/*.cpp" "net/*.h")
 file(GLOB uiSrcFiles "ui/*.cpp" "ui/*.h")
+file(GLOB gsSrcFiles "game_states/*.cpp" "game_states/*.h")
 
 source_group(src FILES ${srcFiles})
 source_group(src\\console FILES ${consoleSrcFiles})
 source_group(src\\net FILES ${netSrcFiles})
 source_group(src\\ui FILES ${uiSrcFiles})
+source_group(src\\game_states FILES ${gsSrcFiles})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles})
+add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles} ${gsSrcFiles})
 
 # Link internal libraries
 target_link_libraries(mmo_client 

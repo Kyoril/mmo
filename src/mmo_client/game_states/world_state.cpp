@@ -4,7 +4,7 @@
 #include "game_state_mgr.h"
 
 #include "event_loop.h"
-#include "login_state.h"
+#include "game_states/login_state.h"
 #include "net/realm_connector.h"
 #include "ui/world_frame.h"
 #include "ui/world_renderer.h"
@@ -84,6 +84,7 @@ namespace mmo
 			EventLoop::MouseUp.connect(this, &WorldState::OnMouseUp),
 			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove),
 			EventLoop::KeyDown.connect(this, &WorldState::OnKeyDown),
+			EventLoop::MouseWheel.connect(this, &WorldState::OnMouseWheel),
 			EventLoop::KeyUp.connect(this, &WorldState::OnKeyUp),
 			EventLoop::Idle.connect(this, &WorldState::OnIdle)
 		};
@@ -165,7 +166,7 @@ namespace mmo
 
 		if (delta.x != 0.0f)
 		{
-			m_cameraAnchorNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::World);
+			m_cameraAnchorNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Parent);
 		}
 		
 		if (delta.y != 0.0f)
@@ -183,9 +184,11 @@ namespace mmo
 		{
 		case 0x57:
 			m_movementVelocity.z = 1.0f;
+			abort_emission();
 			return false;
 		case 0x53:
 			m_movementVelocity.z = -1.0f;
+			abort_emission();
 			return false;
 		}
 		
@@ -199,6 +202,7 @@ namespace mmo
 		case 0x57:
 		case 0x53:
 			m_movementVelocity.z = 0.0f;
+			abort_emission();
 			return false;
 		}
 
@@ -209,6 +213,14 @@ namespace mmo
 	{
 		// TODO: 7.0f = player movement speed
 		m_playerNode->Translate(m_movementVelocity * 7.0f * deltaSeconds, TransformSpace::Local);
+	}
+	
+	bool WorldState::OnMouseWheel(int32 delta)
+	{
+		m_cameraNode->Translate(Vector3::UnitZ * static_cast<float>(delta), TransformSpace::Local);
+
+		abort_emission();
+		return true;
 	}
 
 	void WorldState::OnPaint()
