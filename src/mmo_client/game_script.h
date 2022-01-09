@@ -50,9 +50,12 @@ namespace mmo
 
 	private:
 		LoginConnector& m_loginConnector;
+
 		RealmConnector& m_realmConnector;
+
 		/// The current lua state.
 		LuaStatePtr m_luaState;
+
 		/// Whether the global functions have been registered.
 		bool m_globalFunctionsRegistered = false;
 

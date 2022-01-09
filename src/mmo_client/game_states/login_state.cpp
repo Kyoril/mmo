@@ -41,6 +41,8 @@ namespace mmo
 
 		// Try to connect
 		m_loginConnector.Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
+		
+		FrameManager::Get().TriggerLuaEvent("LOGIN_CONNECT");
 	}
 
 	void LoginState::OnEnter()
