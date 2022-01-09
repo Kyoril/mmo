@@ -8,13 +8,13 @@
 namespace mmo
 {
 	class GameObject;
-	class ITileSubscriber;
+	class TileSubscriber;
 
 	class VisibilityTile
 	{
 	public:
 		typedef LinearSet<GameObject *> GameObjects;
-		typedef LinearSet<ITileSubscriber *> Watchers;
+		typedef LinearSet<TileSubscriber *> Watchers;
 
 	public:
 		explicit VisibilityTile() = default;

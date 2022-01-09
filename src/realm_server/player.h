@@ -55,6 +55,10 @@ namespace mmo
 		/// Gets the world manager which manages all connected world nodes.
 		WorldManager& GetWorldManager() const { return m_worldManager; }
 
+		[[nodiscard]] bool HasCharacterGuid() const noexcept { return m_characterData.has_value(); }
+
+		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
+
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
 		bool IsAuthentificated() const { return !m_sessionKey.isZero(); }
@@ -69,6 +73,8 @@ namespace mmo
 		/// Initializes the session by providing a session key. The connection to the client will 
 		/// be encrypted from here on.
 		void InitializeSession(const BigNumber& sessionKey);
+		
+		void SendProxyPacket(uint16 packetId, const std::vector<char> &buffer);
 
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
@@ -119,7 +125,6 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
-		uint64 m_characterGuid;
 
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;

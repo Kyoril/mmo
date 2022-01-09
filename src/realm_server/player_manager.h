@@ -38,6 +38,8 @@ namespace mmo
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);
 
+		Player* GetPlayerByCharacterGuid(uint64 characterGuid);
+
 	private:
 
 		Players m_players;

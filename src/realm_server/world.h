@@ -22,6 +22,7 @@
 
 namespace mmo
 {
+	class PlayerManager;
 	class AsyncDatabase;
 
 	/// Callback executed after a world join returned a result.
@@ -43,6 +44,7 @@ namespace mmo
 	public:
 		explicit World(
 			WorldManager &manager,
+			PlayerManager& playerManager,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
 			const std::string &address);
@@ -57,6 +59,8 @@ namespace mmo
 		const String& GetWorldName() const { return m_worldName; }
 
 		void Join(CharacterData characterData, JoinWorldCallback callback);
+
+		void Leave(ObjectGuid characterGuid);
 
 	public:
 		/// Registers a packet handler.
@@ -89,6 +93,7 @@ namespace mmo
 		
 	private:
 		WorldManager &m_manager;
+		PlayerManager& m_playerManager;
 		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
@@ -154,6 +159,8 @@ namespace mmo
 		PacketParseResult OnInstanceCreated(auth::IncomingPacket& packet);
 
 		PacketParseResult OnInstanceDestroyed(auth::IncomingPacket& packet);
+		
+		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
 	};
 
 }

@@ -6,6 +6,7 @@
 #include "base/constants.h"
 #include "base/random.h"
 #include "base/sha1.h"
+#include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 
 
@@ -89,7 +90,7 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
 			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &RealmConnector::OnLoginVerifyWorld);
 			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &RealmConnector::OnEnterWorldFailed);
-
+			
 			// And now, we ask for the character list
 			sendSinglePacket([](game::OutgoingPacket& outPacket)
 			{
@@ -122,7 +123,7 @@ namespace mmo
 	PacketParseResult RealmConnector::OnLoginVerifyWorld(game::IncomingPacket& packet)
 	{
 		DLOG("New world packet received");
-		
+
 		return PacketParseResult::Pass;
 	}
 	
@@ -139,7 +140,7 @@ namespace mmo
 
 		return PacketParseResult::Pass;
 	}
-
+	
 	bool RealmConnector::connectionEstablished(bool success)
 	{
 		if (success)
@@ -217,7 +218,7 @@ namespace mmo
 	void RealmConnector::EnterWorld(const CharacterView & character)
 	{
 		const uint64 guid = character.GetGuid();
-
+		
 		sendSinglePacket([guid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::EnterWorld);
 			packet

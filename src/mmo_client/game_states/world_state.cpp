@@ -1,6 +1,9 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "world_state.h"
+
+#include <zstr/zstr.hpp>
+
 #include "game_state_mgr.h"
 
 #include "event_loop.h"
@@ -90,10 +93,14 @@ namespace mmo
 		};
 		
 		RegisterGameplayCommands();
+
+		SetupPacketHandler();
 	}
 
 	void WorldState::OnLeave()
 	{
+		RemovePacketHandler();
+
 		RemoveGameplayCommands();
 
 		m_worldGrid.reset();
@@ -308,6 +315,20 @@ namespace mmo
 		m_debugAxis->SetVisible(false);
 	}
 
+	void WorldState::SetupPacketHandler()
+	{
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &WorldState::OnUpdateObject);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
+	}
+
+	void WorldState::RemovePacketHandler() const
+	{
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::DestroyObjects);
+	}
+
 	void WorldState::OnRealmDisconnected()
 	{
 		// Trigger the lua event
@@ -353,5 +374,43 @@ namespace mmo
 		{
 			ILOG("DebugAxis hidden");
 		}
+	}
+	
+	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
+	{
+		DLOG("Received UpdateObject packet");
+
+		// TODO: Update the actual game object
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket& packet)
+	{
+		TODO("Implement");
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket& packet)
+	{
+		uint16 objectCount = 0;
+		if (!(packet >> io::read<uint16>(objectCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		for (auto i = 0; i < objectCount; ++i)
+		{
+			ObjectGuid id;
+			if (!(packet >> io::read<uint64>(id)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			// TODO: Destroy the actual game object if possible
+			DLOG("Despawning object " << log_hex_digit(id));
+		}
+		
+		return PacketParseResult::Pass;
 	}
 }

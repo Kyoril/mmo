@@ -12,6 +12,8 @@
 #include "configuration.h"
 #include "realm_connector.h"
 #include "game/world_instance_manager.h"
+#include "player_manager.h"
+#include "game/game_object_factory.h"
 
 #include <fstream>
 #include <sstream>
@@ -63,8 +65,8 @@ namespace mmo
 		// Keep the database service alive / busy until this object is alive
 		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
-
-
+		PlayerManager playerManager;
+		
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,14 +119,19 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		WorldInstanceManager worldInstanceManager{ ioService };
-		
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		auto realmConnector =
-			std::make_shared<RealmConnector>(std::ref(ioService), std::ref(timerQueue), std::cref(config.hostedMaps), std::ref(worldInstanceManager));
+			std::make_shared<RealmConnector>(
+				std::ref(ioService), 
+				std::ref(timerQueue), 
+				std::cref(config.hostedMaps),
+				std::ref(playerManager),
+				std::ref(worldInstanceManager),
+				std::make_unique<GameObjectFactory>());
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

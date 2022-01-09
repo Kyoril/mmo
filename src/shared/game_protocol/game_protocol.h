@@ -46,7 +46,7 @@ namespace mmo
 		{
 			enum Type
 			{
-				/// Sent by the client immediatly after connecting to challenge it for authentication.
+				/// Sent by the client immediately after connecting to challenge it for authentication.
 				AuthChallenge = 0x00,
 				/// Send by the realm as response.
 				AuthSessionResponse = 0x01,
@@ -66,7 +66,7 @@ namespace mmo
 				/// [PROXY] Compressed update game objects.
 				CompressedUpdateObject,
 				/// [PROXY] Destroy game objects.
-				DestroyObject,
+				DestroyObjects,
 				
 				/// Counter constant
 				Count_,

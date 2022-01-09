@@ -50,11 +50,15 @@ namespace mmo
 	private:
 		/// Handles the LogonChallenge packet.
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
+
 		/// Handles the AuthSessionResponse packet.
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
+
 		/// Handles the CharEnum packet.
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
+
 		PacketParseResult OnLoginVerifyWorld(game::IncomingPacket& packet);
+
 		PacketParseResult OnEnterWorldFailed(game::IncomingPacket& packet);
 
 	public:
@@ -68,8 +72,10 @@ namespace mmo
 	public:
 		/// Sets login data
 		void SetLoginData(const std::string& accountName, const BigNumber& sessionKey);
+
 		/// 
 		void ConnectToRealm(const RealmData& data);
+
 		/// Tries to connect to the given realm server.
 		/// @param realmAddress The ip address of the realm.
 		/// @param realmPort The port of the realm.
@@ -77,10 +83,13 @@ namespace mmo
 		/// @param realmName The realm's display name.
 		/// @param sessionKey The session key.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
+
 		/// Sends an enter world request using the given character.
 		void EnterWorld(const CharacterView& character);
+
 		/// Sends the command to create a new character to the realm.
 		void CreateCharacter(const std::string& name);
+
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);
 

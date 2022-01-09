@@ -43,6 +43,9 @@ namespace mmo
 		// Not thread safe
 		void RemoveObjectUpdate(GameObject& object);
 
+		VisibilityGrid& GetGrid() const;
+
+
 	private:
 		WorldInstanceManager& m_manager;
 		InstanceId m_id;

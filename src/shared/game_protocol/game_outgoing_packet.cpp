@@ -7,31 +7,38 @@ namespace mmo
 {
 	namespace game
 	{
-		OutgoingPacket::OutgoingPacket(io::ISink &sink)
+		OutgoingPacket::OutgoingPacket(io::ISink &sink, const bool proxy)
 			: io::Writer(sink)
-			, m_sizePos(0)
-			, m_bodyPos(0)
+			, m_proxy(proxy)
 		{
 		}
 
-		void OutgoingPacket::Start(uint16 id)
+		void OutgoingPacket::Start(const uint16 id)
 		{
-			*this
-				<< io::write<uint16>(id);
+			m_id = id;
+			
+			if (!m_proxy)
+			{
+				*this
+					<< io::write<uint16>(id);
 
-			m_sizePos = Sink().Position();
-			*this
-				<< io::write<uint32>(0);
+				m_sizePos = Sink().Position();
+				*this
+					<< io::write<uint32>(0);
 
-			m_bodyPos = Sink().Position();
+				m_bodyPos = Sink().Position();
+			}
 		}
 
 		void OutgoingPacket::Finish()
 		{
-			const size_t endPos = Sink().Position();
+			if (!m_proxy)
+			{
+				const size_t endPos = Sink().Position();
 
-			const uint32 packetSize = endPos - m_bodyPos;
-			Sink().Overwrite(m_sizePos, reinterpret_cast<const char*>(&packetSize), sizeof(packetSize));
+				m_size = endPos - m_bodyPos;
+				Sink().Overwrite(m_sizePos, reinterpret_cast<const char*>(&m_size), sizeof(m_size));
+			}
 		}
 	}
 }

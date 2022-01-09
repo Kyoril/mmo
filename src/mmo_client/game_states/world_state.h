@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "connection.h"
 #include "game_states/game_state.h"
 #include "scene_graph/mesh.h"
 #include "screen.h"
@@ -18,6 +19,11 @@
 
 namespace mmo
 {
+	namespace game
+	{
+		class IncomingPacket;
+	}
+
 	class LoginConnector;
 	class RealmConnector;
 
@@ -42,6 +48,7 @@ namespace mmo
 		const std::string& GetName() const override;
 
 	private:
+		// EventLoop connections
 		bool OnMouseDown(MouseButton button, int32 x, int32 y);
 
 		bool OnMouseUp(MouseButton button, int32 x, int32 y);
@@ -60,7 +67,13 @@ namespace mmo
 		void OnPaint();
 
 	private:
+		// Setup stuff
+
 		void SetupWorldScene();
+
+		void SetupPacketHandler();
+
+		void RemovePacketHandler() const;
 
 	private:
 		// 
@@ -73,6 +86,14 @@ namespace mmo
 		void RemoveGameplayCommands();
 
 		void ToggleAxisVisibility();
+
+	private:
+				
+		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);
+		
+		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket& packet);
+
+		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
 
 	private:
 		

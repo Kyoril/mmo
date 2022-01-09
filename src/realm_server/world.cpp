@@ -10,20 +10,26 @@
 
 #include <functional>
 
+#include "player.h"
+#include "player_manager.h"
+#include "vector_sink.h"
 #include "base/big_number.h"
 #include "base/constants.h"
 #include "base/utilities.h"
 #include "game/game.h"
+#include "game_protocol/game_outgoing_packet.h"
 
 
 namespace mmo
 {
 	World::World(
 		WorldManager& worldManager,
+		PlayerManager& playerManager,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address)
 		: m_manager(worldManager)
+		, m_playerManager(playerManager)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
@@ -277,6 +283,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterLeft, *strongThis, &World::OnPlayerCharacterLeft);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceCreated, *strongThis, &World::OnInstanceCreated);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceDestroyed, *strongThis, &World::OnInstanceDestroyed);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::ProxyPacket, *strongThis, &World::OnProxyPacket);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -394,6 +401,16 @@ namespace mmo
 		});
 	}
 
+	void World::Leave(ObjectGuid characterGuid)
+	{
+		GetConnection().sendSinglePacket([characterGuid](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::realm_world_packet::PlayerCharacterLeave);
+			outPacket << io::write_packed_guid(characterGuid);
+			outPacket.Finish();
+		});
+	}
+
 	void World::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
@@ -499,6 +516,42 @@ namespace mmo
 		std::scoped_lock lock { m_hostedInstanceIdMutex };
 		m_hostedInstanceIds.emplace_back(std::move(instanceId));
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnProxyPacket(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid;
+		uint16 packetId;
+		uint32 packetSize;
+		std::vector<uint8> packetContent;
+		if (!(packet 
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint16>(packetId)
+			>> io::read<uint32>(packetSize)
+			>> io::read_container<uint32>(packetContent)
+			))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		DLOG("[PROXY]\tTo " << log_hex_digit(characterGuid) << ":\tID " << log_hex_digit(packetId) << " - " << packetSize << " bytes");
+		
+		auto* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			WLOG("Could not find player to redirect proxy packet");
+			return PacketParseResult::Pass;
+		}
+
+		std::vector<char> outBuffer;
+		io::VectorSink sink { outBuffer };
+
+		game::OutgoingPacket proxyPacket(sink, true);
+		proxyPacket
+			<< io::write_range(packetContent);
+		player->SendProxyPacket(packetId, outBuffer);
+		
 		return PacketParseResult::Pass;
 	}
 
