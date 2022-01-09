@@ -31,6 +31,14 @@ namespace mmo
 		}
 	}
 
+	void SceneNode::RemoveFromParent() const
+	{
+		if (m_parent)
+		{
+			m_parent->RemoveChild(m_name);
+		}
+	}
+
 	SceneNode::SceneNode(Scene& scene)
 		: m_parent(nullptr)
 		, m_needParentUpdate(false)

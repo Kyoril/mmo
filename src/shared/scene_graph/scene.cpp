@@ -228,7 +228,7 @@ namespace mmo
 
 	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
 	{
-		ASSERT(m_entities.find(name) == m_entities.end());
+		ASSERT(m_entities.find(entityName) == m_entities.end());
 
 		auto mesh = MeshManager::Get().Load(meshName);
 		ASSERT(mesh);

@@ -84,7 +84,8 @@ namespace mmo
 			EventLoop::MouseUp.connect(this, &WorldState::OnMouseUp),
 			EventLoop::MouseMove.connect(this, &WorldState::OnMouseMove),
 			EventLoop::KeyDown.connect(this, &WorldState::OnKeyDown),
-			EventLoop::KeyUp.connect(this, &WorldState::OnKeyUp)
+			EventLoop::KeyUp.connect(this, &WorldState::OnKeyUp),
+			EventLoop::Idle.connect(this, &WorldState::OnIdle)
 		};
 		
 		RegisterGameplayCommands();
@@ -204,16 +205,15 @@ namespace mmo
 		return true;
 	}
 
+	void WorldState::OnIdle(float deltaSeconds, GameTime timestamp)
+	{
+		// TODO: 7.0f = player movement speed
+		m_playerNode->Translate(m_movementVelocity * 7.0f * deltaSeconds, TransformSpace::Local);
+	}
+
 	void WorldState::OnPaint()
 	{
-		m_playerNode->Translate(m_movementVelocity, TransformSpace::Local);
-
 		FrameManager::Get().Draw();
-
-		if (m_axisVisible)
-		{
-			RenderDebugAxis();
-		}
 	}
 
 	void WorldState::SetupWorldScene()
@@ -247,6 +247,11 @@ namespace mmo
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
+
+		// Debug axis object
+		m_debugAxis = std::make_unique<AxisDisplay>(m_scene, "WorldDebugAxis");
+		m_scene.GetRootSceneNode().AddChild(m_debugAxis->GetSceneNode());
+		m_debugAxis->SetVisible(false);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -285,54 +290,14 @@ namespace mmo
 
 	void WorldState::ToggleAxisVisibility()
 	{
-		m_axisVisible = !m_axisVisible;
-		if (m_axisVisible)
+		m_debugAxis->SetVisible(!m_debugAxis->IsVisible());
+		if (m_debugAxis->IsVisible())
 		{
-			EnsureDebugAxisCreated();
-
 			ILOG("DebugAxis visible");
 		}
 		else
 		{
 			ILOG("DebugAxis hidden");
 		}
-	}
-
-	void WorldState::EnsureDebugAxisCreated()
-	{
-		/*if (m_debugAxis)
-		{
-			return;
-		}
-
-		m_debugAxis = std::make_unique<ManualRenderObject>(GraphicsDevice::Get());
-
-		const auto operation = m_debugAxis->AddLineListOperation();
-
-		auto& xLine = operation->AddLine(Vector3::Zero, Vector3::UnitX);
-		xLine.SetColor(Color(1.0f, 0.0f, 0.0f));
-
-		auto& yLine = operation->AddLine(Vector3::Zero, Vector3::UnitY);
-		yLine.SetColor(Color(0.0f, 1.0f, 0.0f));
-
-		auto& zLine = operation->AddLine(Vector3::Zero, Vector3::UnitZ);
-		zLine.SetColor(Color(0.0f, 0.0f, 1.0f));*/
-	}
-
-	void WorldState::RenderDebugAxis()
-	{
-		/*int32 x, y, w, h;
-		GraphicsDevice::Get().GetViewport(&x, &y, &w, &h);
-
-		const Vector3 cameraDirection = m_defaultCamera->GetDerivedOrientation() * (Vector3::UnitZ * -1.0f);
-
-		Matrix4 worldMatrix;
-		worldMatrix.MakeTrans(m_defaultCamera->GetDerivedPosition() + cameraDirection * 5.0f);
-
-		GraphicsDevice::Get().SetTransformMatrix(World, worldMatrix);
-		GraphicsDevice::Get().SetTransformMatrix(View, m_defaultCamera->GetViewMatrix());
-		GraphicsDevice::Get().SetTransformMatrix(Projection, m_defaultCamera->GetProjectionMatrix());
-
-		m_debugAxis->Render();*/
 	}
 }

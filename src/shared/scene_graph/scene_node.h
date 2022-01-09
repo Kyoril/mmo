@@ -54,6 +54,7 @@ namespace mmo
 		void RemoveAllChildren();
 		void NotifyRootNode() noexcept { m_isInSceneGraph = true; }
 		void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
+		void RemoveFromParent() const;
 
 	public:
 		/// Called when the node transformation has been updated.
@@ -158,7 +159,7 @@ namespace mmo
 
 		/// Adds a child scene node. The node must not have a parent already.
 		void AddChild(SceneNode& child);
-
+		
 		/// Removes a child by name and returns it.
 		/// @returns nullptr if a child with the given name could not be found.
 		SceneNode* RemoveChild(const String& name);

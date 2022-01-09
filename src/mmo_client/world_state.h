@@ -3,7 +3,6 @@
 #pragma once
 
 #include "game_state.h"
-#include "manual_render_object.h"
 #include "scene_graph/mesh.h"
 #include "screen.h"
 #include "world_grid.h"
@@ -11,6 +10,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/axis_display.h"
 #include "base/signal.h"
 #include "game_protocol/game_protocol.h"
 
@@ -50,7 +50,9 @@ namespace mmo
 		bool OnKeyDown(int32 key);
 		
 		bool OnKeyUp(int32 key);
-		
+
+		void OnIdle(float deltaSeconds, GameTime timestamp);
+
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
 
@@ -69,10 +71,6 @@ namespace mmo
 
 		void ToggleAxisVisibility();
 
-		void EnsureDebugAxisCreated();
-
-		void RenderDebugAxis();
-
 	private:
 		
 		RealmConnector& m_realmConnector;
@@ -84,7 +82,7 @@ namespace mmo
 		
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
-		//std::unique_ptr<ManualRenderObject> m_debugAxis;
+		std::unique_ptr<AxisDisplay> m_debugAxis;
 
 		Vector3 m_movementVelocity;
 		SceneNode* m_playerNode { nullptr };
@@ -95,6 +93,5 @@ namespace mmo
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Point m_lastMousePosition {};
-		bool m_axisVisible { false };
 	};
 }

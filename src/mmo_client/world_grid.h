@@ -2,10 +2,10 @@
 
 #pragma once
 
-#include "manual_render_object.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
 #include "scene_graph/movable_object.h"
+#include "scene_graph/manual_render_object.h"
 
 namespace mmo
 {
