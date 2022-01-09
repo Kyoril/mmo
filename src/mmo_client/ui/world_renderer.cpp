@@ -8,8 +8,6 @@
 #include "frame_ui/color.h"
 #include "frame_ui/geometry_helper.h"
 
-#include "math/quaternion.h"
-
 namespace mmo
 {
 	WorldRenderer::WorldRenderer(const std::string & name, Scene& worldScene)
@@ -18,7 +16,6 @@ namespace mmo
 		, m_worldScene(worldScene)
 		, m_camera(nullptr)
 	{
-		m_worldGrid = std::make_unique<WorldGrid>(GraphicsDevice::Get());
 		m_camera = m_worldScene.GetCamera("Default");
 	}
 
@@ -76,9 +73,6 @@ namespace mmo
 		{
 			m_worldScene.Render(*m_camera);
 		}
-		
-		m_worldGrid->UpdatePosition(m_camera->GetDerivedPosition());
-		m_worldGrid->Render();
 		
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();

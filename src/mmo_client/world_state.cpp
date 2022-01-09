@@ -38,23 +38,7 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
-		m_defaultCamera = m_scene.CreateCamera("Default");
-		
-		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
-		m_cameraNode->AttachObject(*m_defaultCamera);
-		m_cameraNode->SetPosition(Vector3(0.0f, 0.0f, 3.0f));
-
-		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
-		m_cameraAnchorNode->AddChild(*m_cameraNode);
-		m_cameraAnchorNode->SetPosition(Vector3::UnitY * 0.5f);
-
-		m_playerNode = &m_scene.CreateSceneNode("Player");
-		m_playerNode->AddChild(*m_cameraAnchorNode);
-
-		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
-		
-		m_playerEntity = m_scene.CreateEntity("Player", "Models/Cube/Cube.hmsh");
-		m_playerNode->AttachObject(*m_playerEntity);
+		SetupWorldScene();
 
 		if (!s_mouseSensitivityCVar)
 		{
@@ -110,6 +94,7 @@ namespace mmo
 	{
 		RemoveGameplayCommands();
 
+		m_worldGrid.reset();
 		m_playerEntity = nullptr;
 		m_playerNode = nullptr;
 		m_defaultCamera = nullptr;
@@ -230,7 +215,40 @@ namespace mmo
 			RenderDebugAxis();
 		}
 	}
-	
+
+	void WorldState::SetupWorldScene()
+	{
+		// Default camera for the player
+		m_defaultCamera = m_scene.CreateCamera("Default");
+
+		// Camera node which will hold the camera but is a child of an anchor node
+		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
+		m_cameraNode->AttachObject(*m_defaultCamera);
+		m_cameraNode->SetPosition(Vector3(0.0f, 0.0f, 3.0f));
+
+		// Anchor node for the camera. This node is directly attached to the player node and marks
+		// the target view point of the camera. By adding the camera node as a child, we can rotate
+		// the anchor node which results in the camera orbiting around the player entity.
+		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
+		m_cameraAnchorNode->AddChild(*m_cameraNode);
+		m_cameraAnchorNode->SetPosition(Vector3::UnitY * 0.5f);
+
+		// The player node. Add the camera anchor node as child node
+		m_playerNode = &m_scene.CreateSceneNode("Player");
+		m_playerNode->AddChild(*m_cameraAnchorNode);
+
+		// Add the player node to the world scene to make it visible
+		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
+
+		// Create the player entity (currently using a default mesh) and attach the entity
+		// to the players scene node to make it visible and movable in the world scene
+		m_playerEntity = m_scene.CreateEntity("Player", "Models/Cube/Cube.hmsh");
+		m_playerNode->AttachObject(*m_playerEntity);
+
+		// Create the world grid in the scene. The world grid component will handle the rest for us
+		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
+	}
+
 	void WorldState::OnRealmDisconnected()
 	{
 		// Trigger the lua event
@@ -282,7 +300,7 @@ namespace mmo
 
 	void WorldState::EnsureDebugAxisCreated()
 	{
-		if (m_debugAxis)
+		/*if (m_debugAxis)
 		{
 			return;
 		}
@@ -298,12 +316,12 @@ namespace mmo
 		yLine.SetColor(Color(0.0f, 1.0f, 0.0f));
 
 		auto& zLine = operation->AddLine(Vector3::Zero, Vector3::UnitZ);
-		zLine.SetColor(Color(0.0f, 0.0f, 1.0f));
+		zLine.SetColor(Color(0.0f, 0.0f, 1.0f));*/
 	}
 
 	void WorldState::RenderDebugAxis()
 	{
-		int32 x, y, w, h;
+		/*int32 x, y, w, h;
 		GraphicsDevice::Get().GetViewport(&x, &y, &w, &h);
 
 		const Vector3 cameraDirection = m_defaultCamera->GetDerivedOrientation() * (Vector3::UnitZ * -1.0f);
@@ -315,6 +333,6 @@ namespace mmo
 		GraphicsDevice::Get().SetTransformMatrix(View, m_defaultCamera->GetViewMatrix());
 		GraphicsDevice::Get().SetTransformMatrix(Projection, m_defaultCamera->GetProjectionMatrix());
 
-		m_debugAxis->Render();
+		m_debugAxis->Render();*/
 	}
 }

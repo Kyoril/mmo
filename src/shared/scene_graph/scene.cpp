@@ -36,6 +36,7 @@ namespace mmo
 		m_cameras.clear();
 		m_camVisibleObjectsMap.clear();
 		m_entities.clear();
+		m_manualRenderObjects.clear();
 	}
 
 	Camera* Scene::CreateCamera(const String& name)
@@ -181,6 +182,19 @@ namespace mmo
 		}
 	}
 
+	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)
+	{
+		ASSERT(m_manualRenderObjects.find(name) == m_manualRenderObjects.end());
+
+		// TODO: No longer use singleton graphics device
+		auto [iterator, created] = 
+			m_manualRenderObjects.emplace(
+				name, 
+				std::make_unique<ManualRenderObject>(GraphicsDevice::Get()));
+		
+		return iterator->second.get();
+	}
+
 	SceneNode& Scene::GetRootSceneNode() 
 	{
 		if (!m_rootNode)
@@ -214,10 +228,11 @@ namespace mmo
 
 	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
 	{
+		ASSERT(m_entities.find(name) == m_entities.end());
+
 		auto mesh = MeshManager::Get().Load(meshName);
 		ASSERT(mesh);
-
-		//const auto entity = ;
+		
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
 		
 		return entityIt->second.get();

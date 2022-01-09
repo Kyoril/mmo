@@ -3,7 +3,6 @@
 #pragma once
 
 #include "ui/world_frame.h"
-#include "world_grid.h"
 
 #include "frame_ui/frame_renderer.h"
 #include "graphics/render_texture.h"
@@ -29,8 +28,10 @@ namespace mmo
 		void Render(
 			optional<Color> colorOverride = optional<Color>(),
 			optional<Rect> clipper = optional<Rect>()) override;
+
 		/// Called to notify the renderer that a frame has been attached.
 		void NotifyFrameAttached() override;
+
 		/// Called to notify the renderer that a frame has been detached.
 		void NotifyFrameDetached() override;
 
@@ -42,7 +43,5 @@ namespace mmo
 
 		Scene& m_worldScene;
 		Camera* m_camera;
-
-		std::unique_ptr<WorldGrid> m_worldGrid;
 	};
 }

@@ -6,6 +6,7 @@
 #include "manual_render_object.h"
 #include "scene_graph/mesh.h"
 #include "screen.h"
+#include "world_grid.h"
 
 #include "frame_ui/frame_mgr.h"
 #include "scene_graph/scene.h"
@@ -49,11 +50,14 @@ namespace mmo
 		bool OnKeyDown(int32 key);
 		
 		bool OnKeyUp(int32 key);
-
-	private:
+		
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
 
+	private:
+		void SetupWorldScene();
+
+	private:
 		// 
 		void OnRealmDisconnected();
 
@@ -80,11 +84,13 @@ namespace mmo
 		
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
-		std::unique_ptr<ManualRenderObject> m_debugAxis;
+		//std::unique_ptr<ManualRenderObject> m_debugAxis;
 
 		Vector3 m_movementVelocity;
 		SceneNode* m_playerNode { nullptr };
 		Entity* m_playerEntity { nullptr };
+
+		std::unique_ptr<WorldGrid> m_worldGrid;
 		
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };

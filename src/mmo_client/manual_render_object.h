@@ -5,34 +5,41 @@
 #include "base/non_copyable.h"
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
+#include "scene_graph/movable_object.h"
+#include "scene_graph/render_queue.h"
 
 namespace mmo
 {
+	class ManualRenderObject;
+
 	/// Base class of a render operation.
-	class ManualRenderOperation : public NonCopyable
+	class ManualRenderOperation : public NonCopyable, public Renderable
 	{
 	public:
 		/// Creates a new instance of the RenderOperation class and initializes it.
 		///	@param device The graphics device used to create gpu resources.
-		ManualRenderOperation(GraphicsDevice& device)
+		///	@param parent The parent object where this operation belongs to.
+		ManualRenderOperation(GraphicsDevice& device, ManualRenderObject& parent)
 			: m_device(device)
+			, m_parent(parent)
 		{
 		}
 
 		/// Virtual default destructor because of inheritance.
 		virtual ~ManualRenderOperation() override = default;
 
-	public:
+	protected:
 		/// Gets the topology type to use when rendering this operation. Must be implemented.
 		[[nodiscard]] virtual TopologyType GetTopologyType() const noexcept = 0;
 
 		/// Gets the vertex format used when rendering this operation. Must be implemented.
 		[[nodiscard]] virtual VertexFormat GetFormat() const noexcept = 0;
 
+	public:
 		/// Creates the gpu resources used for rendering this operation, like the vertex and/or
 		///	index buffer. If no index buffer is generated, only the vertex buffer is used. Must
 		///	be implemented.
-		virtual void Finish() = 0;
+		virtual void Finish();
 
 	public:
 		/// Renders the operation using the graphics device provided when the operation was created.
@@ -56,8 +63,14 @@ namespace mmo
 			}
 		}
 
+		void PrepareRenderOperation(RenderOperation& operation) override;
+		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
+		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
+		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+
 	protected:
 		GraphicsDevice& m_device;
+		ManualRenderObject& m_parent;
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
 	};
@@ -165,42 +178,63 @@ namespace mmo
 	public:
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
-		explicit ManualLineListOperation(GraphicsDevice& device)
-			: ManualRenderOperation(device)
+		///	@param parent The parent object where this operation belongs to.
+		explicit ManualLineListOperation(GraphicsDevice& device, ManualRenderObject& parent)
+			: ManualRenderOperation(device, parent)
 		{
 		}
 
-	public:
-		/// @copydoc RenderOperation::GetTopologyType
+	protected:
+		/// @copydoc ManualRenderOperation::GetTopologyType
 		[[nodiscard]] TopologyType GetTopologyType() const noexcept override
 		{
 			return TopologyType::LineList;
 		}
 
-		/// @copydoc RenderOperation::GetFormat
+		/// @copydoc ManualRenderOperation::GetFormat
 		[[nodiscard]] VertexFormat GetFormat() const noexcept override
 		{
 			return VertexFormat::PosColor;
 		}
 
-		/// @copydoc RenderOperation::Finish
+	public:
+		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
 		{
 			ASSERT(!m_lines.empty() && "At least one line has to be added!");
-
+			
 			std::vector<POS_COL_VERTEX> vertices;
 			vertices.reserve(m_lines.size() * 2);
 
+			bool firstLine = true;
+
 			for(auto& line : m_lines)
 			{
+
 				const POS_COL_VERTEX v1 { line.GetStartPosition(), line.GetStartColor() };
 				vertices.emplace_back(v1);
 
 				const POS_COL_VERTEX v2 { line.GetEndPosition(), line.GetEndColor() };
 				vertices.emplace_back(v2);
+				
+				if (firstLine)
+				{
+					m_boundingBox.min = TakeMinimum(line.GetStartPosition(), line.GetEndPosition());
+					m_boundingBox.max = TakeMaximum(line.GetStartPosition(), line.GetEndPosition());
+					firstLine = false;
+				}
+				else
+				{
+					m_boundingBox.min = TakeMinimum(m_boundingBox.min, line.GetStartPosition());
+					m_boundingBox.min = TakeMinimum(m_boundingBox.min, line.GetEndPosition());
+					m_boundingBox.max = TakeMaximum(m_boundingBox.max, line.GetStartPosition());
+					m_boundingBox.max = TakeMaximum(m_boundingBox.max, line.GetEndPosition());
+				}
 			}
 
 			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
+			
+			ManualRenderOperation::Finish();
 		}
 
 	public:
@@ -210,16 +244,21 @@ namespace mmo
 			m_lines.emplace_back(start, end);
 			return m_lines.back();
 		}
-		
+
+		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
+
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
+		AABB m_boundingBox;
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess
 	///	around with the low level graphics api.
-	class ManualRenderObject final
+	class ManualRenderObject final : public MovableObject
 	{
+		friend class ManualRenderOperation;
+
 	public:
 		/// Creates a new instance of the ManualRenderObject class and initializes it.
 		///	@param device The graphics device object to use for gpu resource creation and rendering.
@@ -232,11 +271,41 @@ namespace mmo
 		/// Removes all operations.
 		void Clear() noexcept;
 
-		/// Renders all operations which were added to the object.
-		void Render() const;
+	public:
+		/// @brief Sets the render queue group id, which controls when exactly this object will be rendered.
+		/// @param renderQueueGroupId The render queue group id of this object.
+		void SetRenderQueueGroupId(uint8 renderQueueGroupId);
+
+		/// @brief Sets the priority of this object in it's render queue group.
+		///	       The higher the priority, the earlier it will be rendered.
+		/// @param priority The priority of this object in the render queue group.
+		void SetRenderQueueGroupPriority(uint16 priority);
+
+	public:
+		/// @copydoc MovableObject::GetMovableType
+		[[nodiscard]] const String& GetMovableType() const override;
+
+		/// @copydoc MovableObject::GetBoundingBox
+		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_worldAABB; }
+		
+		/// @copydoc MovableObject::GetBoundingRadius
+		[[nodiscard]] float GetBoundingRadius() const override { return m_boundingRadius; }
+		
+		/// @copydoc MovableObject::VisitRenderables
+		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
+		
+		/// @copydoc MovableObject::PopulateRenderQueue
+		void PopulateRenderQueue(RenderQueue& queue) override;
+
+	private:
+		void NotifyOperationUpdated();
 
 	private:
 		GraphicsDevice& m_device;
 		std::vector<std::unique_ptr<ManualRenderOperation>> m_operations;
+		AABB m_worldAABB;
+		float m_boundingRadius { 0.0f };
+		uint8 m_renderQueueGroupId { Main };
+		uint16 m_renderQueueGroupPriority { 0 };
 	};
 }

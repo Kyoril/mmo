@@ -12,6 +12,7 @@
 
 #include "scene_node.h"
 #include "entity.h"
+#include "mmo_client/world_grid.h"
 
 
 namespace mmo
@@ -91,6 +92,8 @@ namespace mmo
 		
 		void RenderSingleObject(Renderable& renderable);
 
+		ManualRenderObject* CreateManualRenderObject(const String& name);
+
 	private:
 		void RenderVisibleObjects();
 		
@@ -115,6 +118,9 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<Entity>> EntityMap;
 		EntityMap m_entities;
+		
+		typedef std::map<String, std::unique_ptr<ManualRenderObject>> ManualRenderObjectMap;
+		ManualRenderObjectMap m_manualRenderObjects;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 	};
