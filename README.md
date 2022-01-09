@@ -3,6 +3,7 @@
 Login Screen             |  Character Selection Screen
 :-------------------------:|:-------------------------:
 <img src="https://user-images.githubusercontent.com/9358023/85418557-34ccf280-b571-11ea-866c-7e18aaf989b6.png" width="600">  |  <img src="https://cdn.discordapp.com/attachments/679667054424359054/793784839647395850/unknown.png" width="600">
+<img src="https://user-images.githubusercontent.com/9358023/148674874-c648dd2b-e5f7-487c-be13-9778a4a79f45.png" width=600">  |  -
 
 # What is this project about?
 This project will grow to a fully fledged MMORPG prototype. This means, that it will contain all tools required to build an MMORPG from scratch.
@@ -39,10 +40,17 @@ In order to build this project on windows, you need to do the following steps:
 * Run: git submodule update --init
 * Create a new directory called "win" in the cloned directory (this directory is ignored by git, don't worry)
 * Run cmake, use the cloned directory as source and the "win" directory as build directory
-* Choose Visual Studio 15 2017 (or newer) as compiler, and make sure that you use the x64 (Win64) platform
+* Choose Visual Studio 17 2022 (or newer) as compiler, and make sure that you use the x64 (Win64) platform
 * Click Configure and Generate the solution
 * Open the solution and build it in the Debug or Release build configuration
 * Your binaries will be generated in a directory called "bin" inside your cloned directory (ignored by git as well, don't worry)
+
+**NOTE:** By default, only the servers are built. If you want to build everything, please enable the respective options:
+
+* MMO_BUILD_CLIENT: Build the game client
+* MMO_BUILD_EDITOR: Build the editor
+* MMO_BUILD_TOOLS: Build tools like the texture tool for converting png and tga into the engine's optimized texture format
+* MMO_BUILD_LAUNCHER: Build the launcher which downloads / patches the game client
 
 # How to build on Linux?
 Building on linux is similar to building on windows, except that you won't use an IDE here (you can, if you want, but I don't support it. I mainly use linux for server builds.
