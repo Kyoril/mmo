@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "login_connector.h"
-#include "console_var.h"
+#include "console/console_var.h"
 #include "version.h"
 
 #include "base/constants.h"

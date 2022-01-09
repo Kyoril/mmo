@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "world_frame.h"
+#include "ui/world_frame.h"
 #include "world_grid.h"
 
 #include "frame_ui/frame_renderer.h"

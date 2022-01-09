@@ -16,20 +16,19 @@
 #include "base/filesystem.h"
 
 #include "event_loop.h"
-#include "console.h"
-#include "login_connector.h"
-#include "realm_connector.h"
+#include "console/console.h"
+#include "net/login_connector.h"
+#include "net/realm_connector.h"
 #include "game_state_mgr.h"
 #include "login_state.h"
 #include "game_script.h"
-#include "model_frame.h"
-#include "model_renderer.h"
-#include "world_frame.h"
+#include "ui/model_frame.h"
+#include "ui/model_renderer.h"
+#include "ui/world_frame.h"
 
 #include <fstream>
 #include <thread>
 #include <memory>
-#include <mutex>
 
 #include "world_state.h"
 #include "base/timer_queue.h"

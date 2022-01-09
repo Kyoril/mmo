@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "model_frame.h"
+#include "ui/model_frame.h"
 
 #include "frame_ui/frame_renderer.h"
 #include "graphics/render_texture.h"

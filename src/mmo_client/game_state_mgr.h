@@ -11,7 +11,7 @@
 #include <memory>
 #include <map>
 
-#include "model_frame.h"
+#include "ui/model_frame.h"
 
 
 namespace mmo

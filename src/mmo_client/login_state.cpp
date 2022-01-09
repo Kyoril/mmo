@@ -1,10 +1,10 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "login_state.h"
-#include "login_connector.h"
-#include "realm_connector.h"
-#include "console.h"
-#include "console_var.h"
+#include "net/login_connector.h"
+#include "net/realm_connector.h"
+#include "console/console.h"
+#include "console/console_var.h"
 #include "game_state_mgr.h"
 #include "loading_screen.h"
 #include "world_state.h"

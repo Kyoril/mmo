@@ -3,18 +3,16 @@
 #include "world_state.h"
 #include "game_state_mgr.h"
 
-#include "realm_connector.h"
-#include "console.h"
+#include "event_loop.h"
 #include "login_state.h"
-#include "world_frame.h"
-#include "world_renderer.h"
+#include "net/realm_connector.h"
+#include "ui/world_frame.h"
+#include "ui/world_renderer.h"
+#include "console/console.h"
+#include "console/console_var.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
-
-#include "console_var.h"
-
-#include "event_loop.h"
 #include "scene_graph/entity.h"
 
 namespace mmo
