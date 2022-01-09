@@ -3,7 +3,7 @@
 Login Screen             |  Character Selection Screen
 :-------------------------:|:-------------------------:
 <img src="https://user-images.githubusercontent.com/9358023/85418557-34ccf280-b571-11ea-866c-7e18aaf989b6.png" width="600">  |  <img src="https://cdn.discordapp.com/attachments/679667054424359054/793784839647395850/unknown.png" width="600">
-![grafik](https://user-images.githubusercontent.com/9358023/148674907-02b033c2-a892-4ffd-b2b6-fead925f39be.png)  |  -
+<img src="https://user-images.githubusercontent.com/9358023/148674907-02b033c2-a892-4ffd-b2b6-fead925f39be.png" width="600">  |  -
 
 # What is this project about?
 This project will grow to a fully fledged MMORPG prototype. This means, that it will contain all tools required to build an MMORPG from scratch.
