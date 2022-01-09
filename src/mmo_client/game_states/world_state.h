@@ -13,6 +13,7 @@
 #include "scene_graph/axis_display.h"
 #include "base/signal.h"
 #include "game_protocol/game_protocol.h"
+#include "math/radian.h"
 
 
 namespace mmo
@@ -89,6 +90,7 @@ namespace mmo
 		Vector3 m_movementVelocity;
 		SceneNode* m_playerNode { nullptr };
 		Entity* m_playerEntity { nullptr };
+		Radian m_rotation;
 
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		

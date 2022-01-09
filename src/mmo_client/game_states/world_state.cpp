@@ -132,6 +132,11 @@ namespace mmo
 		else if (button == MouseButton_Right)
 		{
 			m_rightButtonDown = true;
+
+			m_playerNode->SetOrientation(
+				Quaternion(m_cameraNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
+			m_cameraAnchorNode->SetOrientation(
+				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
 		}
 
 		return true;
@@ -155,7 +160,7 @@ namespace mmo
 
 	bool WorldState::OnMouseMove(int32 x, int32 y)
 	{
-		if (!m_leftButtonDown)
+		if (!m_leftButtonDown && !m_rightButtonDown)
 		{
 			return false;
 		}
@@ -164,9 +169,10 @@ namespace mmo
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
 
+		SceneNode* yawNode = m_leftButtonDown ? m_cameraAnchorNode : m_playerNode;
 		if (delta.x != 0.0f)
 		{
-			m_cameraAnchorNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Parent);
+			yawNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
 		}
 		
 		if (delta.y != 0.0f)
@@ -183,11 +189,33 @@ namespace mmo
 		switch(key)
 		{
 		case 0x57:
-			m_movementVelocity.z = 1.0f;
+			m_movementVelocity.z = -1.0f;
 			abort_emission();
 			return false;
 		case 0x53:
-			m_movementVelocity.z = -1.0f;
+			m_movementVelocity.z = 1.0f;
+			abort_emission();
+			return false;
+		case 0x41:
+			if (m_rightButtonDown)
+			{
+				m_movementVelocity.x = -1.0f;
+			}
+			else
+			{
+				m_rotation = Degree(180.0f);	
+			}
+			abort_emission();
+			return false;
+		case 0x44:
+			if (m_rightButtonDown)
+			{
+				m_movementVelocity.x = 1.0f;
+			}
+			else
+			{
+				m_rotation = Degree(-180.0f);	
+			}
 			abort_emission();
 			return false;
 		}
@@ -204,6 +232,15 @@ namespace mmo
 			m_movementVelocity.z = 0.0f;
 			abort_emission();
 			return false;
+		case 0x41:
+		case 0x44:
+			if (m_rightButtonDown)
+			{
+				m_movementVelocity.x = 0.0f;
+			}
+			m_rotation = Degree(0.0f);
+			abort_emission();
+			return false;
 		}
 
 		return true;
@@ -211,8 +248,13 @@ namespace mmo
 
 	void WorldState::OnIdle(float deltaSeconds, GameTime timestamp)
 	{
+		m_playerNode->Yaw(m_rotation * deltaSeconds, TransformSpace::World);
+
 		// TODO: 7.0f = player movement speed
-		m_playerNode->Translate(m_movementVelocity * 7.0f * deltaSeconds, TransformSpace::Local);
+		if (m_movementVelocity.GetSquaredLength() != 0.0f)
+		{
+			m_playerNode->Translate(m_movementVelocity.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
+		}
 	}
 	
 	bool WorldState::OnMouseWheel(int32 delta)

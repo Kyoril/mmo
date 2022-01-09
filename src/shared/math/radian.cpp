@@ -14,6 +14,7 @@ namespace mmo
 
 	Radian& Radian::operator=(const Degree& d)
 	{
+		m_value = d.GetValueRadians();
 		return *this;
 	}
 
