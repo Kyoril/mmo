@@ -9,3 +9,7 @@ build/
 # Ignore fbx files
 deps/fbx/
 .vs/
+
+.DS_Store
+**/.DS_Store
+

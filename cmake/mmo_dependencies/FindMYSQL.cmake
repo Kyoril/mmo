@@ -41,7 +41,9 @@ else()
 		NAMES "mysql.h"
 		PATHS "/usr/include/mysql"
 			  "/usr/local/include/mysql"
-			  "/usr/mysql/include/mysql" )
+			  "/usr/mysql/include/mysql"
+              "/opt/homebrew/opt/mysql-client@8.0/include/mysql"
+              "/opt/homebrew/opt/mysql@8.0/include/mysql")
 	
 	find_library( MYSQL_LIBRARY
 		NAMES "mysqlclient" "mysqlclient_r libmysql"
@@ -52,7 +54,9 @@ else()
 			  "/usr/local/lib/mysql"
 			  "/usr/local/lib64/mysql"
 			  "/usr/mysql/lib/mysql"
-			  "/usr/mysql/lib64/mysql" )
+			  "/usr/mysql/lib64/mysql"
+              "/opt/homebrew/opt/mysql-client@8.0/lib"
+              "/opt/homebrew/opt/mysql@8.0/lib")
 endif()
 
 if( MYSQL_INCLUDE_DIR AND EXISTS "${MYSQL_INCLUDE_DIR}/mysql_version.h" )

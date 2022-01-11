@@ -5,6 +5,8 @@
 #if defined(WIN32) || defined(_WIN32)
 #	include <winsock2.h>
 #	include <mysql.h>
+#elif defined(__APPLE__)
+#    include <mysql.h>
 #else
 #	include <mysql/mysql.h>
 #endif

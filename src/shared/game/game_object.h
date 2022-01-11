@@ -4,6 +4,7 @@
 
 #include <bitset>
 #include <array>
+#include <vector>
 #include <memory>
 
 #include "base/typedefs.h"
