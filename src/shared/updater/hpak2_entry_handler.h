@@ -7,6 +7,7 @@
 #include "hpak_v1_0/magic.h"
 
 #include <fstream>
+#include <unordered_map>
 
 
 namespace mmo::updating
