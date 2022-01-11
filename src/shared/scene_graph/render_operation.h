@@ -11,10 +11,12 @@ namespace mmo
 	public:
 		TopologyType topology { TopologyType::TriangleList };
 
+		VertexFormat vertexFormat { VertexFormat::PosColor };
+
 		bool useIndexes { true };
 
-		VertexBufferPtr vertexBuffer;
+		VertexBuffer* vertexBuffer;
 
-		IndexBufferPtr indexBuffer;
+		IndexBuffer* indexBuffer;
 	};
 }

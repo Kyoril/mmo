@@ -13,6 +13,7 @@ namespace mmo
 		typedef T value_type;
 		typedef std::vector<T> Elements;
 		typedef typename Elements::const_iterator const_iterator;
+		typedef typename Elements::iterator iterator;
 
 	public:
 
@@ -158,6 +159,16 @@ namespace mmo
 		void swap(LinearSet &other)
 		{
 			m_elements.swap(other.m_elements);
+		}
+		
+		iterator begin()
+		{
+			return m_elements.begin();
+		}
+
+		iterator end()
+		{
+			return m_elements.end();
 		}
 
 		const_iterator begin() const

@@ -16,8 +16,6 @@
 
 #include <functional>
 
-#include "base/utilities.h"
-
 
 namespace mmo
 {
@@ -45,6 +43,14 @@ namespace mmo
 
 	void Player::Destroy()
 	{
+		if (const auto strongWorld = m_world.lock())
+		{
+			if (HasCharacterGuid())
+			{
+				strongWorld->Leave(GetCharacterGuid());
+			}
+		}
+
 		m_connection->resetListener();
 		m_connection->close();
 		m_connection.reset();
@@ -351,6 +357,31 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
 		RegisterPacketHandler(game::client_realm_packet::DeleteChar, *this, &Player::OnDeleteChar);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
+	}
+
+	void Player::SendProxyPacket(uint16 packetId, const std::vector<char>& buffer)
+	{
+		const auto bufferSize = buffer.size();
+		if (bufferSize == 0)
+		{
+			return;	
+		}
+
+		// Write native packet
+		mmo::Buffer &sendBuffer = m_connection->getSendBuffer();
+		io::StringSink sink(sendBuffer);
+
+		// Get the end of the buffer (needed for encryption)
+		const size_t bufferPos = sendBuffer.size();
+
+		game::Protocol::OutgoingPacket packet(sink, true);
+		packet.Start(packetId);
+		packet
+			<< io::write_range(buffer);
+		packet.Finish();
+		
+		m_connection->GetCrypt().EncryptSend(reinterpret_cast<uint8*>(&sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
+		m_connection->flush();
 	}
 
 	void Player::EnableEnterWorldPacket(const bool enable)

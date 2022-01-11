@@ -15,8 +15,10 @@ namespace mmo
 
 		/// Left mouse button.
 		MouseButton_Left = 0,
+
 		/// Right mouse button.
 		MouseButton_Right = 1,
+
 		/// Mouse wheel has been pressed (not scrolled!)
 		MouseButton_Middle = 2,
 
@@ -24,6 +26,7 @@ namespace mmo
 
 		/// Fourth button (if available)
 		MouseButton_Four = 3,
+
 		/// Fifth button (if available)
 		MouseButton_Five = 4,
 	};
@@ -32,37 +35,49 @@ namespace mmo
 	class EventLoop : public NonCopyable
 	{
 	public:
-		/// This event is fired regularly to update the game logic.
+		/// @brief This event is fired regularly to update the game logic.
 		static signal<void(float deltaSeconds, GameTime timestamp)> Idle;
-		/// This event is fired regularly to render the game.
+
+		/// @brief This event is fired regularly to render the game.
 		static signal<void()> Paint;
-		/// This event is fired when the OS reports that a key has been pressed.
+
+		/// @brief This event is fired when the OS reports that a key has been pressed.
 		static signal<bool(int32 key)> KeyDown;
-		/// This event is fired when the OS reports that a key has been released.
+
+		/// @brief This event is fired when the OS reports that a key has been released.
 		static signal<bool(int32 key)> KeyUp;
-		/// This event is fired when the OS reports a key char input event.
+
+		/// @brief This event is fired when the OS reports a key char input event.
 		static signal<bool(uint16 codepoint)> KeyChar;
-		/// This event is fired regularly to render the game.
+
+		/// @brief This event is fired when a mouse button was pressed.
 		static signal<bool(EMouseButton button, int32 x, int32 y)> MouseDown;
-		/// This event is fired regularly to render the game.
+
+		/// @brief This event is fired when a mouse button was released.
 		static signal<bool(EMouseButton button, int32 x, int32 y)> MouseUp;
-		/// This event is fired regularly to render the game.
+
+		/// @brief This event is fired whenever the mouse was moved.
 		static signal<bool(int32 x, int32 y)> MouseMove;
 
+		/// @brief This event is fired whenever the mouse wheel axis changed.
+		static signal<bool(int32 delta)> MouseWheel;
+
 	public:
-		/// Initializes the event loop.
+		/// @brief Initializes the event loop.
 		static void Initialize();
-		/// Destroys the event loop.
+
+		/// @brief Destroys the event loop.
 		static void Destroy();
 
 	private:
-		/// This method handles operating system messages
+		/// @brief This method handles operating system messages
 		static bool ProcessOsInput();
 
 	public:
-		/// Runs the event loop.
+		/// @brief Runs the event loop.
 		static void Run();
-		/// Terminates the event loop.
+
+		/// @brief Terminates the event loop.
 		static void Terminate(int32 exitCode);
 	};
 }

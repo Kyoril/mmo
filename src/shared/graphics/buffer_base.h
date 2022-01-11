@@ -4,6 +4,7 @@
 
 #include "base/non_copyable.h"
 
+#include <cstddef>
 
 namespace mmo
 {
@@ -46,7 +47,7 @@ namespace mmo
 		{
 			return Memory;
 		}
-		T* operator[](size_t Index)
+		T* operator[](std::size_t Index)
 		{
 			return Memory + Index;
 		}

@@ -12,11 +12,14 @@
 #include <set>
 #include <vector>
 
+#include "game/game_object_factory.h"
+
 
 namespace mmo
 {
 	class TimerQueue;
 	class WorldInstanceManager;
+	class PlayerManager;
 
 	/// A connector which will try to log in to a realm server.
 	class RealmConnector final
@@ -28,7 +31,8 @@ namespace mmo
 		/// @param io The io service to be used in order to create the internal socket.
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
-		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, WorldInstanceManager& worldInstanceManager);
+		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
+			std::unique_ptr<GameObjectFactory> gameObjectFactory);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -49,7 +53,14 @@ namespace mmo
 		/// Notifies the realm that a world instance has been destroyed.
 		///	@param instanceId The id of the instance that has been destroyed.
 		void NotifyInstanceDestroyed(InstanceId instanceId);
-		
+
+		/// @brief Sends a proxy packet directly to the client with the given character guid.
+		/// @param characterGuid 
+		/// @param packetId 
+		/// @param packetSize 
+		/// @param packetContent 
+		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent);
+
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
@@ -91,7 +102,9 @@ namespace mmo
 		// Internal io service
 		asio::io_service& m_ioService;
 		TimerQueue& m_timerQueue;
+		PlayerManager& m_playerManager;
 		WorldInstanceManager& m_worldInstanceManager;
+		std::unique_ptr<GameObjectFactory> m_objectFactory;
 		
 		std::string m_authName;
 

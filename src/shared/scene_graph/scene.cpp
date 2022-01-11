@@ -2,6 +2,8 @@
 
 #include "scene.h"
 #include "camera.h"
+#include "mesh_manager.h"
+#include "render_operation.h"
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
@@ -20,6 +22,7 @@ namespace mmo
 
 	void SceneQueuedRenderableVisitor::Visit(Renderable& r)
 	{
+		targetScene->RenderSingleObject(r);
 	}
 
 	Scene::Scene()
@@ -31,6 +34,9 @@ namespace mmo
 	{
 		m_rootNode->RemoveAllChildren();
 		m_cameras.clear();
+		m_camVisibleObjectsMap.clear();
+		m_entities.clear();
+		m_manualRenderObjects.clear();
 	}
 
 	Camera* Scene::CreateCamera(const String& name)
@@ -81,12 +87,20 @@ namespace mmo
 		m_cameras.clear();
 	}
 
-	void Scene::Render(const Camera& camera)
+	void Scene::Render(Camera& camera)
 	{
 		auto& gx = GraphicsDevice::Get();
-		
-		// TODO: Render all objects
+
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+
 		UpdateSceneGraph();
+		PrepareRenderQueue();
+
+		const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
+		ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
+		visibleObjectsIt->second.Reset();
+		FindVisibleObjects(camera, visibleObjectsIt->second);
 
 		// Clear current render target
 		gx.SetFillMode(FillMode::Solid);
@@ -105,33 +119,80 @@ namespace mmo
 
 	void Scene::RenderVisibleObjects()
 	{
+		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
+		{
+			RenderQueueGroupObjects(*group);
+		}
+	}
+
+	void Scene::InitRenderQueue()
+	{
+		m_renderQueue = std::make_unique<RenderQueue>();
+
+		// TODO: Maybe initialize some properties for special render queues
+	}
+
+	void Scene::PrepareRenderQueue()
+	{
+		auto& renderQueue = GetRenderQueue();
+		renderQueue.Clear();
+	}
+
+	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds)
+	{
+		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true);
+	}
+
+	void Scene::RenderObjects(const QueuedRenderableCollection& objects)
+	{
+		objects.AcceptVisitor(m_renderableVisitor);
+	}
+	
+	void Scene::RenderQueueGroupObjects(RenderQueueGroup& group)
+	{
+		for(const auto& [priority, priorityGroup] : group)
+		{
+			RenderObjects(priorityGroup->GetSolids());
+		}
+	}
+
+	void Scene::RenderSingleObject(Renderable& renderable)
+	{
+		RenderOperation op { };
+		renderable.PrepareRenderOperation(op);
+
+		op.vertexBuffer->Set();
+		if (op.useIndexes)
+		{
+			ASSERT(op.indexBuffer);
+			op.indexBuffer->Set();
+		}
+
+		GraphicsDevice::Get().SetTopologyType(op.topology);
+		GraphicsDevice::Get().SetVertexFormat(op.vertexFormat);
+		GraphicsDevice::Get().SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		if (op.useIndexes)
+		{
+			GraphicsDevice::Get().DrawIndexed();
+		}
+		else
+		{
+			GraphicsDevice::Get().Draw(op.vertexBuffer->GetVertexCount());
+		}
+	}
+
+	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)
+	{
+		ASSERT(m_manualRenderObjects.find(name) == m_manualRenderObjects.end());
+
+		// TODO: No longer use singleton graphics device
+		auto [iterator, created] = 
+			m_manualRenderObjects.emplace(
+				name, 
+				std::make_unique<ManualRenderObject>(GraphicsDevice::Get()));
 		
-	}
-
-	void Scene::RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode)
-	{
-		//	for (const auto &groupIt : group)
-		//	{
-	    //		RenderPriorityGroup* pPriorityGrp = groupIt.getNext();
-		// 
-	    //		// Sort the queue first
-	    //		pPriorityGrp->sort(mCameraInProgress);
-		//		
-	    //		// Do solids
-	    //		RenderObjects(pPriorityGrp->getSolidsBasic(), om, true, true);
-		// 
-		//		// Do unsorted transparents
-		//		RenderObjects(pPriorityGrp->getTransparentsUnsorted(), om, true, true);
-		// 
-	    //		// Do transparents (always descending)
-	    //		RenderObjects(pPriorityGrp->getTransparents(), 
-		//			QueuedRenderableCollection::OM_SORT_DESCENDING, true, true);
-		//	}
-	}
-
-	void Scene::RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode)
-	{
-
+		return iterator->second.get();
 	}
 
 	SceneNode& Scene::GetRootSceneNode() 
@@ -163,5 +224,28 @@ namespace mmo
 		auto sceneNode = std::make_unique<SceneNode>(*this, name);
 		m_sceneNodes[name] = std::move(sceneNode);
 		return *m_sceneNodes[name];
+	}
+
+	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
+	{
+		ASSERT(m_entities.find(entityName) == m_entities.end());
+
+		auto mesh = MeshManager::Get().Load(meshName);
+		ASSERT(mesh);
+		
+		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
+		
+		return entityIt->second.get();
+	}
+
+	RenderQueue& Scene::GetRenderQueue()
+	{
+		if (!m_renderQueue)
+		{
+			InitRenderQueue();
+		}
+
+		ASSERT(m_renderQueue);
+		return *m_renderQueue;
 	}
 }

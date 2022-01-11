@@ -142,6 +142,8 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the world service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		
+		PlayerManager playerManager{ config.maxPlayers };
 
 		WorldManager worldManager{ config.maxWorlds };
 
@@ -158,7 +160,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &asyncDatabase](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -172,7 +174,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(worldManager, asyncDatabase, connection, address.to_string());
+			auto world = std::make_shared<World>(worldManager, playerManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 
@@ -204,8 +206,6 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the player service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
-
-		PlayerManager playerManager{ config.maxPlayers };
 
 		// Create the player server
 		std::unique_ptr<game::Server> playerServer;

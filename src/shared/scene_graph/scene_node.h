@@ -10,6 +10,8 @@
 #include "base/typedefs.h"
 #include <set>
 
+#include "render_queue.h"
+
 
 namespace mmo
 {
@@ -51,6 +53,8 @@ namespace mmo
 		bool IsInSceneGraph() const noexcept { return m_isInSceneGraph; }
 		void RemoveAllChildren();
 		void NotifyRootNode() noexcept { m_isInSceneGraph = true; }
+		void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
+		void RemoveFromParent() const;
 
 	public:
 		/// Called when the node transformation has been updated.
@@ -155,7 +159,7 @@ namespace mmo
 
 		/// Adds a child scene node. The node must not have a parent already.
 		void AddChild(SceneNode& child);
-
+		
 		/// Removes a child by name and returns it.
 		/// @returns nullptr if a child with the given name could not be found.
 		SceneNode* RemoveChild(const String& name);
@@ -173,7 +177,7 @@ namespace mmo
         void NeedUpdate(bool forceParentUpdate = false);
 		
         void RequestUpdate(SceneNode& child, bool forceParentUpdate = false);
-
+		
 	protected:
 		/// @brief Name of this node.
 		String m_name;
@@ -206,7 +210,7 @@ namespace mmo
 		/// @brief Whether the cached transform matrix is invalid and needs to be recalculated.
 		bool m_cachedTransformInvalid;
 		/// @brief Bounding box.
-		AABB m_bounds;
+		AABB m_worldAABB;
 
 		bool m_isInSceneGraph { false };
 

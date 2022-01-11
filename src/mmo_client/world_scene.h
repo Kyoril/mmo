@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "connection.h"
 #include "base/non_copyable.h"
 
 namespace mmo

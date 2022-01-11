@@ -35,17 +35,28 @@ namespace mmo
 		virtual ~Renderable() = default;
 
 	public:
-        
+
+        /// @brief Called just before the renderable is being rendered.
+        /// @param scene The scene that this renderable belongs to.
+        /// @param graphicsDevice The graphics device that is used for rendering.
+        /// @return true if the automatic rendering should proceed, false to skip rendering.
         virtual bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice)
 		{
             return true;
 		}
 
+        /// @brief Called immediately after the renderable has been rendered.
+        /// @param scene The scene that this renderable belongs to.
+        /// @param graphicsDevice The graphics dvice that was used for rendering.
         virtual void PostRender(Scene& scene, GraphicsDevice& graphicsDevice)
         {
         }
 
-        virtual void GetRenderOperation(RenderOperation& operation) = 0;
+        /// @brief Gets the render operation which tells the engine how this renderable should be rendered.
+        /// @param operation The render operation to setup.
+        virtual void PrepareRenderOperation(RenderOperation& operation) = 0;
+
+		[[nodiscard]] virtual const Matrix4& GetWorldTransform() const = 0;
 
 		[[nodiscard]] virtual float GetSquaredViewDepth(const Camera& camera) const = 0;
         

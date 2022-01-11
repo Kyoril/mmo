@@ -10,6 +10,7 @@
 
 namespace mmo
 {
+	class RenderQueue;
 	class MovableObjectFactory;
 	class SceneNode;
 	class Scene;
@@ -128,5 +129,8 @@ namespace mmo
 		virtual void SetDebugDisplayEnabled(const bool enabled) noexcept { m_debugDisplay = enabled; }
 
 		[[nodiscard]] virtual bool IsDebugDisplayEnabled(void) const noexcept { return m_debugDisplay; }
+
+		/// @brief Method by which the movable must add Renderable instances to the rendering queue.
+		virtual void PopulateRenderQueue(RenderQueue& queue) = 0;
 	};
 }

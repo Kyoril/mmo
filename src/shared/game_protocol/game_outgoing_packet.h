@@ -13,15 +13,24 @@ namespace mmo
 			: public io::Writer
 		{
 		public:
-
-			OutgoingPacket(io::ISink &sink);
+			OutgoingPacket(io::ISink &sink, bool proxy = false);
 
 			void Start(uint16 id);
 			void Finish();
 
+		public:
+			/// @brief Gets the id of this packet.
+			[[nodiscard]] uint16 GetId() const noexcept { return m_id; }
+
+			/// @brief Gets the size of this packet in bytes.
+			[[nodiscard]] uint32 GetSize() const noexcept { return m_size; }
+
 		private:
-			size_t m_sizePos;
-			size_t m_bodyPos;
+			uint16 m_id { 0 };
+			uint32 m_size { 0 };
+			size_t m_sizePos { 0 };
+			size_t m_bodyPos { 0 };
+			bool m_proxy { false };
 		};
 	}
 }

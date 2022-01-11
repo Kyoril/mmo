@@ -3,6 +3,7 @@
 #include "scene_node.h"
 #include "scene.h"
 #include "movable_object.h"
+#include "render_queue.h"
 
 
 namespace mmo
@@ -10,6 +11,32 @@ namespace mmo
 	void SceneNode::RemoveAllChildren()
 	{
 		m_children.clear();
+	}
+
+	void SceneNode::FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren)
+	{
+		// TODO: Check if this object is visible itself
+
+		for (auto& [name, object] : m_objectsByName)
+		{
+			renderQueue.ProcessVisibleObject(*object, camera, visibleObjectBounds);
+		}
+
+		if (includeChildren)
+		{
+			for (const auto& [name, child] : m_children)
+			{
+				child->FindVisibleObjects(camera, renderQueue, visibleObjectBounds, includeChildren);
+			}
+		}
+	}
+
+	void SceneNode::RemoveFromParent() const
+	{
+		if (m_parent)
+		{
+			m_parent->RemoveChild(m_name);
+		}
 	}
 
 	SceneNode::SceneNode(Scene& scene)
@@ -279,8 +306,10 @@ namespace mmo
 		return child;
 	}
 
-	void SceneNode::Update(bool updateChildren, bool parentHasChanged)
+	void SceneNode::Update(const bool updateChildren, const bool parentHasChanged)
 	{
+		m_parentNotified = false;
+
 		if (m_needParentUpdate || parentHasChanged)
 		{
 			UpdateFromParent();
@@ -290,9 +319,9 @@ namespace mmo
 		{
 			if (m_needChildUpdates || parentHasChanged)
 			{
-				for(auto& child : m_children)
+				for(const auto& [name, child] : m_children)
 				{
-					child.second->Update(true, true);
+					child->Update(true, true);
 				}
 			}
 			else
@@ -312,12 +341,19 @@ namespace mmo
 
 	void SceneNode::UpdateBounds()
 	{
-		m_bounds.SetNull();
+		m_worldAABB.SetNull();
 
 		// Iterate through all objects
-		for (auto& it : m_objectsByName)
+		for (const auto& [name, child] : m_objectsByName)
 		{
-			m_bounds.Combine(it.second->GetWorldBoundingBox(true));
+			m_worldAABB.Combine(child->GetWorldBoundingBox(true));
+		}
+
+		// Merge with children
+		for (const auto& childIt : m_children)
+		{
+			// We expect the child node to already be up to date here, so use it's bound as is
+			m_worldAABB.Combine(childIt.second->m_worldAABB);
 		}
 	}
 
@@ -435,7 +471,10 @@ namespace mmo
 		// Matrix is now invalid, but derived values are valid
 		m_cachedTransformInvalid = true;
 		m_needParentUpdate = false;
-		
+
+		// Update bound
+
+
 		updated(*this);
 	}
 }

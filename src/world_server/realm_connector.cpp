@@ -1,8 +1,11 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "realm_connector.h"
-#include "world_instance_manager.h"
-#include "world_instance.h"
+
+#include "player.h"
+#include "player_manager.h"
+#include "game/world_instance_manager.h"
+#include "game/world_instance.h"
 #include "version.h"
 
 #include "base/utilities.h"
@@ -10,15 +13,17 @@
 #include "base/constants.h"
 #include "base/timer_queue.h"
 #include "game/character_data.h"
+#include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, WorldInstanceManager& worldInstanceManager)
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactory> gameObjectFactory)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
+		, m_playerManager(playerManager)
 		, m_worldInstanceManager(worldInstanceManager)
 		, m_willTerminate(false)
 	{
@@ -299,6 +304,21 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize,
+		const std::vector<char>& packetContent)
+	{
+		sendSinglePacket([characterGuid, packetId, packetSize, &packetContent](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::ProxyPacket);
+			outPacket
+				<< io::write<uint64>(characterGuid)
+				<< io::write<uint16>(packetId)
+				<< io::write<uint32>(packetSize)
+				<< io::write_dynamic_range<uint32>(packetContent);
+			outPacket.Finish();
+		});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);
@@ -377,7 +397,15 @@ namespace mmo
 		// Apply instance id before sending
 		characterData.instanceId = instance->GetId();
 
-		// TODO: Create game object from character data and spawn in world
+		// Create the character object
+		auto characterObject = m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player);
+
+		// Create a new player object
+		auto player = std::make_shared<Player>(*this, characterObject);
+		m_playerManager.AddPlayer(player);
+
+		// Enter the world using the character object
+		instance->AddGameObject(*characterObject);
 
 		// For now just tell the realm server that we joined
 		sendSinglePacket([&characterData](auth::OutgoingPacket& outPacket)
@@ -392,8 +420,20 @@ namespace mmo
 
 	PacketParseResult RealmConnector::OnPlayerCharacterLeave(auth::IncomingPacket& packet)
 	{
-		DLOG("Player character should leave world...");
-		
+		ObjectGuid characterGuid;
+		if (!(packet >> io::read_packed_guid(characterGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		m_playerManager.RemovePlayer(player);
+
 		return PacketParseResult::Pass;
 	}
 

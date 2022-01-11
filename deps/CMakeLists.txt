@@ -2,10 +2,15 @@
 add_subdirectory(zlib)
 add_subdirectory(lua)
 add_subdirectory(luabind_noboost)
-add_subdirectory(freetype)
 add_subdirectory(expat)
 add_subdirectory(protobuf/cmake)
-add_subdirectory(lodepng)
+
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+	add_subdirectory(freetype)
+endif()
+if (MMO_BUILD_TOOLS)
+	add_subdirectory(lodepng)
+endif()
 
 # Move protobuf libraries into proper solution folders
 set_property(TARGET libprotobuf PROPERTY FOLDER "deps")

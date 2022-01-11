@@ -35,7 +35,7 @@ namespace mmo
 				DeleteChar = 0x03,
 				/// Enters the world with a selected character.
 				EnterWorld = 0x04,
-
+				
 				/// Counter constant
 				Count_,
 			};
@@ -46,7 +46,7 @@ namespace mmo
 		{
 			enum Type
 			{
-				/// Sent by the client immediatly after connecting to challenge it for authentication.
+				/// Sent by the client immediately after connecting to challenge it for authentication.
 				AuthChallenge = 0x00,
 				/// Send by the realm as response.
 				AuthSessionResponse = 0x01,
@@ -60,7 +60,14 @@ namespace mmo
 				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
-
+				
+				/// [PROXY] Update game objects.
+				UpdateObject,
+				/// [PROXY] Compressed update game objects.
+				CompressedUpdateObject,
+				/// [PROXY] Destroy game objects.
+				DestroyObjects,
+				
 				/// Counter constant
 				Count_,
 			};

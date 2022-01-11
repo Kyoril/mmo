@@ -11,6 +11,8 @@
 #include "base/typedefs.h"
 
 #include "scene_node.h"
+#include "entity.h"
+#include "mmo_client/world_grid.h"
 
 
 namespace mmo
@@ -64,7 +66,7 @@ namespace mmo
 
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
-		/// @returns Pointer to the camera or nullptr if the camera doesn't exist.
+		/// @returns Pointer to the camera or nullptr if the camera does not exist.
 		Camera* GetCamera(const String& name);
 		
 		bool HasCamera(const String& name);
@@ -77,28 +79,49 @@ namespace mmo
 		SceneNode& CreateSceneNode();
 
 		SceneNode& CreateSceneNode(const String& name);
+
+		Entity* CreateEntity(const String& entityName, const String& meshName);
 		
+		RenderQueue& GetRenderQueue();
+
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
-		void Render(const Camera& camera);
+		void Render(Camera& camera);
+
 		void UpdateSceneGraph();
+		
+		void RenderSingleObject(Renderable& renderable);
 
-	protected:
+		ManualRenderObject* CreateManualRenderObject(const String& name);
+
+	private:
 		void RenderVisibleObjects();
+		
+		void InitRenderQueue();
 
-		void RenderQueueGroupObjects(RenderQueueGroup& group, QueuedRenderableCollection::OrganizationMode organizationMode);
-		
-		void RenderObjects(const QueuedRenderableCollection& objects, QueuedRenderableCollection::OrganizationMode organizationMode);
-		
-	public:
+		void PrepareRenderQueue();
+
+		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
+
+		void RenderObjects(const QueuedRenderableCollection& objects);
+
+		void RenderQueueGroupObjects(RenderQueueGroup& group);
+
+	private:
 		Cameras m_cameras;
         SceneNodes m_sceneNodes;
-
 		SceneNode* m_rootNode { nullptr };
-
 		std::unique_ptr<RenderQueue> m_renderQueue;
-		
+
 		typedef std::map<const Camera*, VisibleObjectsBoundsInfo> CamVisibleObjectsMap;
-		CamVisibleObjectsMap m_camVisibleObjectsMap; 
+		CamVisibleObjectsMap m_camVisibleObjectsMap;
+
+		typedef std::map<String, std::unique_ptr<Entity>> EntityMap;
+		EntityMap m_entities;
+		
+		typedef std::map<String, std::unique_ptr<ManualRenderObject>> ManualRenderObjectMap;
+		ManualRenderObjectMap m_manualRenderObjects;
+		
+		SceneQueuedRenderableVisitor m_renderableVisitor;
 	};
 }

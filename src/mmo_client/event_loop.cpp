@@ -25,6 +25,7 @@ namespace mmo
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseDown;
 	signal<bool(EMouseButton, int32, int32)> EventLoop::MouseUp;
 	signal<bool(int32, int32)> EventLoop::MouseMove;
+	signal<bool(int32)> EventLoop::MouseWheel;
 
 	static int s_captureCount = 0;
 
@@ -104,6 +105,7 @@ namespace mmo
 				MouseMove(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
 				break;
 			case WM_MOUSEWHEEL:
+				MouseWheel(static_cast<int16>(HIWORD(msg.wParam)) / WHEEL_DELTA);
 				break;
 			}
 
@@ -114,7 +116,7 @@ namespace mmo
 		// If WM_QUIT is received, quit
 		return (msg.message != WM_QUIT);
 #else
-		ASSERT(!"TODO: Implement os input handling on operating system!");
+		TODO("Implement os input handling on operating system!");
 		return true;
 #endif
 	}
@@ -125,7 +127,7 @@ namespace mmo
 		auto lastIdle = GetAsyncTimeMs();
 
 		auto& gx = GraphicsDevice::Get();
-		auto gxWindow = gx.GetAutoCreatedWindow();
+		const auto gxWindow = gx.GetAutoCreatedWindow();
 
 		// Run the event loop until the operating system tells us to stop here
 		while (true)
