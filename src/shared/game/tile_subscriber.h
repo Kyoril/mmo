@@ -12,11 +12,11 @@ namespace mmo
 		virtual ~TileSubscriber() = default;
 
 	public:
-		virtual const GameObject& GetGameObject() const = 0;
+		virtual const GameObjectS& GetGameObject() const = 0;
 
-		virtual void NotifyObjectsSpawned(std::vector<GameObject*> objects) const = 0;
+		virtual void NotifyObjectsSpawned(std::vector<GameObjectS*> objects) const = 0;
 
-		virtual void NotifyObjectsDespawned(std::vector<GameObject*> objects) const = 0;
+		virtual void NotifyObjectsDespawned(std::vector<GameObjectS*> objects) const = 0;
 
 		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) = 0;
 	};

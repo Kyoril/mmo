@@ -8,7 +8,7 @@
 #include "visibility_grid.h"
 #include "visibility_tile.h"
 #include "binary_io/vector_sink.h"
-#include "game/game_object.h"
+#include "game/game_object_s.h"
 #include "game/each_tile_in_region.h"
 
 namespace mmo
@@ -35,7 +35,7 @@ namespace mmo
 		m_objectUpdates = m_queuedObjectUpdates;
 	}
 
-	void WorldInstance::AddGameObject(GameObject& added)
+	void WorldInstance::AddGameObject(GameObjectS& added)
 	{
 		m_objectsByGuid.emplace(added.GetGuid(), &added);
 
@@ -65,7 +65,7 @@ namespace mmo
 		added.spawned(*this);
 	}
 
-	void WorldInstance::RemoveGameObject(GameObject& remove)
+	void WorldInstance::RemoveGameObject(GameObjectS& remove)
 	{
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
 		if (it == m_objectsByGuid.end())
@@ -102,7 +102,7 @@ namespace mmo
 		remove.despawned(remove);
 	}
 
-	void WorldInstance::AddObjectUpdate(GameObject& object)
+	void WorldInstance::AddObjectUpdate(GameObjectS& object)
 	{
 		if (m_updating)
 		{
@@ -114,7 +114,7 @@ namespace mmo
 		}
 	}
 
-	void WorldInstance::RemoveObjectUpdate(GameObject& object)
+	void WorldInstance::RemoveObjectUpdate(GameObjectS& object)
 	{
 
 	}

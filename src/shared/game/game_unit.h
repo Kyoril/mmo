@@ -2,17 +2,17 @@
 
 #pragma once
 
-#include "game_object.h"
+#include "game_object_s.h"
 
 namespace mmo
 {
 	/// @brief Represents a living object (unit) in the game world.
-	class GameUnit : public GameObject
+	class GameUnit : public GameObjectS
 	{
 	public:
 
 		GameUnit(const ObjectGuid guid)
-			: GameObject(guid)
+			: GameObjectS(guid)
 		{
 		}
 

@@ -1,15 +1,15 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
-#include "game_object.h"
+#include "game_object_s.h"
 
 #include "base/clock.h"
 #include "binary_io/vector_sink.h"
 
 namespace mmo
 {
-	GameObject::GameObject(const uint64 guid)
+	GameObjectS::GameObjectS(const uint64 guid)
 	{
-		GameObject::PrepareFieldMap();
+		GameObjectS::PrepareFieldMap();
 
 		// Setup fields
 		m_fields.SetFieldValue(object_fields::Guid, guid);
@@ -18,21 +18,21 @@ namespace mmo
 		m_fields.SetFieldValue(object_fields::Scale, 1.0f);
 	}
 
-	GameObject::~GameObject()
+	GameObjectS::~GameObjectS()
 	{
 	}
 
-	ObjectTypeId GameObject::GetTypeId() const
+	ObjectTypeId GameObjectS::GetTypeId() const
 	{
 		return ObjectTypeId::Object;
 	}
 
-	void GameObject::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
+	void GameObjectS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		// TODO
 	}
 
-	void CreateUpdateBlocks(GameObject& object, std::vector<std::vector<char>>& out_blocks)
+	void CreateUpdateBlocks(GameObjectS& object, std::vector<std::vector<char>>& out_blocks)
 	{
 		// Write create object packet
 		std::vector<char> createBlock;

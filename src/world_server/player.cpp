@@ -8,7 +8,7 @@
 
 namespace mmo
 {
-	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameObject> characterObject)
+	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameObjectS> characterObject)
 		: m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 	{
@@ -24,7 +24,7 @@ namespace mmo
 		}
 	}
 
-	void Player::NotifyObjectsSpawned(std::vector<GameObject*> object) const
+	void Player::NotifyObjectsSpawned(std::vector<GameObjectS*> object) const
 	{
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		SendPacket([](game::OutgoingPacket& outPacket)
@@ -35,7 +35,7 @@ namespace mmo
 		});
 	}
 
-	void Player::NotifyObjectsDespawned(std::vector<GameObject*> object) const
+	void Player::NotifyObjectsDespawned(std::vector<GameObjectS*> object) const
 	{
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		SendPacket([&tile](game::OutgoingPacket& outPacket)

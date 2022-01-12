@@ -5,12 +5,12 @@
 
 namespace mmo
 {
-	std::shared_ptr<GameObject> GameObjectFactory::CreateGameObject(ObjectGuid guid, ObjectTypeId typeId)
+	std::shared_ptr<GameObjectS> GameObjectFactory::CreateGameObject(ObjectGuid guid, ObjectTypeId typeId)
 	{
 		switch(typeId)
 		{
 		case ObjectTypeId::Object:
-			return std::make_unique<GameObject>(guid);
+			return std::make_unique<GameObjectS>(guid);
 		case ObjectTypeId::Unit:
 			return std::make_unique<GameUnit>(guid);
 		case ObjectTypeId::Player:

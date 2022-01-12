@@ -10,7 +10,7 @@
 
 namespace mmo
 {
-	class GameObject;
+	class GameObjectS;
 	class WorldInstanceManager;
 	class RegularUpdate;
 	class VisibilityGrid;
@@ -33,16 +33,16 @@ namespace mmo
 		[[nodiscard]] MapId GetMapId() const noexcept { return m_mapId; }
 		
 		/// Adds a game object to this world instance.
-		void AddGameObject(GameObject &added);
+		void AddGameObject(GameObjectS &added);
 
 		/// Removes a specific game object from this world.
-		void RemoveGameObject(GameObject &remove);
+		void RemoveGameObject(GameObjectS &remove);
 
 		// Not thread safe
-		void AddObjectUpdate(GameObject& object);
+		void AddObjectUpdate(GameObjectS& object);
 		
 		// Not thread safe
-		void RemoveObjectUpdate(GameObject& object);
+		void RemoveObjectUpdate(GameObjectS& object);
 
 		VisibilityGrid& GetGrid() const;
 
@@ -52,11 +52,11 @@ namespace mmo
 		InstanceId m_id;
 		MapId m_mapId;
 		volatile bool m_updating { false };
-		std::unordered_set<GameObject*> m_objectUpdates;
-		std::unordered_set<GameObject*> m_queuedObjectUpdates;
+		std::unordered_set<GameObjectS*> m_objectUpdates;
+		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;
 		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
 		
-		typedef std::unordered_map<uint64, GameObject*> GameObjectsByGuid;
+		typedef std::unordered_map<uint64, GameObjectS*> GameObjectsByGuid;
 		GameObjectsByGuid m_objectsByGuid;
 	};
 }

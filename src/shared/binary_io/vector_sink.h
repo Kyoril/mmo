@@ -4,17 +4,18 @@
 
 #include "sink.h"
 
-#include <vector>
-#include <cstring>
 #include <cassert>
+#include <cstring>
+#include <vector>
 
 namespace io
 {
+	template<typename VectorType = char>
 	class VectorSink final
 		: public ISink
 	{
 	public:
-		typedef std::vector<char> Buffer;
+		typedef std::vector<VectorType> Buffer;
 
 
 		explicit VectorSink(Buffer &buffer)
@@ -24,6 +25,7 @@ namespace io
 		
 
 		Buffer &buffer() { return m_buffer; }
+
 		[[nodiscard]] const Buffer &buffer() const { return m_buffer; }
 
 		std::size_t Write(const char *src, std::size_t size) override

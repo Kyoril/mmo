@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game_object.h"
+#include "game_object_s.h"
 
 #include <memory>
 
@@ -13,6 +13,6 @@ namespace mmo
 		/// @param guid The guid of the object.
 		/// @param typeId The type id.
 		/// @return A new game object.
-		std::shared_ptr<GameObject> CreateGameObject(ObjectGuid guid, ObjectTypeId typeId);
+		std::shared_ptr<GameObjectS> CreateGameObject(ObjectGuid guid, ObjectTypeId typeId);
 	};
 }
