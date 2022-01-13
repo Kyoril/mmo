@@ -64,6 +64,10 @@ namespace mmo
 		/// @param name Name of the camera to remove.
 		void DestroyCamera(const String& name);
 
+		void DestroyEntity(const Entity& entity);
+
+		void DestroySceneNode(const SceneNode& sceneNode);
+
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
 		/// @returns Pointer to the camera or nullptr if the camera does not exist.

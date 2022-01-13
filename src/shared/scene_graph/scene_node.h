@@ -67,6 +67,7 @@ namespace mmo
 	public:
 		explicit SceneNode(Scene& scene);
 		explicit SceneNode(Scene& scene, String name);
+		~SceneNode() override;
 
 	public:
 		/// Gets the name of this node.
@@ -177,6 +178,8 @@ namespace mmo
         void NeedUpdate(bool forceParentUpdate = false);
 		
         void RequestUpdate(SceneNode& child, bool forceParentUpdate = false);
+
+		void CancelUpdate(SceneNode& child);
 		
 	protected:
 		/// @brief Name of this node.

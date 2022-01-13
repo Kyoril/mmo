@@ -5,6 +5,7 @@
 #include "game/each_tile_in_region.h"
 #include "game/each_tile_in_sight.h"
 #include "game/visibility_tile.h"
+#include "game/game_object_s.h"
 
 namespace mmo
 {
@@ -20,29 +21,36 @@ namespace mmo
 	{
 		if (m_worldInstance && m_character)
 		{
+			
+			VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+			tile.GetWatchers().optionalRemove(this);
 			m_worldInstance->RemoveGameObject(*m_character);
 		}
 	}
 
-	void Player::NotifyObjectsSpawned(std::vector<GameObjectS*> object) const
+	void Player::NotifyObjectsSpawned(std::vector<GameObjectS*>& objects) const
 	{
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-		SendPacket([](game::OutgoingPacket& outPacket)
+		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::UpdateObject);
-			// TODO: Write spawn packet (others)
+			outPacket << io::write<uint16>(objects.size());
+			for (const auto& object : objects)
+			{
+				object->WriteObjectUpdateBlock(outPacket);
+			}
 			outPacket.Finish();
 		});
 	}
 
-	void Player::NotifyObjectsDespawned(std::vector<GameObjectS*> object) const
+	void Player::NotifyObjectsDespawned(std::vector<GameObjectS*>& objects) const
 	{
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-		SendPacket([&tile](game::OutgoingPacket& outPacket)
+		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::DestroyObjects);
-			outPacket << io::write<uint16>(tile.GetGameObjects().size());
-			for (const auto *gameObject : tile.GetGameObjects())
+			outPacket << io::write<uint16>(objects.size());
+			for (const auto *gameObject : objects)
 			{
 				outPacket << io::write_packed_guid(gameObject->GetGuid());
 			}
@@ -72,13 +80,6 @@ namespace mmo
 		
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		tile.GetWatchers().add(this);
-
-		SendPacket([](game::OutgoingPacket& outPacket)
-		{
-			outPacket.Start(game::realm_client_packet::UpdateObject);
-			// TODO: Self spawn packet
-			outPacket.Finish();
-		});
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)

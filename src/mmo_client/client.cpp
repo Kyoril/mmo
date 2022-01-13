@@ -39,6 +39,16 @@
 
 namespace mmo
 {
+	static asio::io_service s_timerService;
+	
+	void DispatchOnGameThread(std::function<void()>&& f)
+	{
+		s_timerService.post(std::move(f));
+	}
+}
+
+namespace mmo
+{
 	// The io service used for networking
 	static asio::io_service s_networkIO;
 	static std::unique_ptr<asio::io_service::work> s_networkWork;
@@ -188,7 +198,6 @@ namespace mmo
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
 
-	static asio::io_service s_timerService;
 	static std::unique_ptr<TimerQueue> s_timerQueue;
 	static scoped_connection s_timerConnection;
 

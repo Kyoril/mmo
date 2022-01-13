@@ -3,6 +3,7 @@
 #pragma once
 
 #include "connection.h"
+#include "player_controller.h"
 #include "game_states/game_state.h"
 #include "scene_graph/mesh.h"
 #include "screen.h"
@@ -13,6 +14,7 @@
 #include "scene_graph/camera.h"
 #include "scene_graph/axis_display.h"
 #include "base/signal.h"
+#include "game/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "math/radian.h"
 
@@ -102,21 +104,9 @@ namespace mmo
 		scoped_connection_container m_realmConnections;
 		scoped_connection_container m_inputConnections;
 		Scene m_scene;
-		Camera* m_defaultCamera { nullptr };
-		
-		SceneNode* m_cameraAnchorNode { nullptr };
-		SceneNode* m_cameraNode { nullptr };
+		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
-
-		Vector3 m_movementVelocity;
-		SceneNode* m_playerNode { nullptr };
-		Entity* m_playerEntity { nullptr };
-		Radian m_rotation;
-
 		std::unique_ptr<WorldGrid> m_worldGrid;
-		
-		bool m_leftButtonDown { false };
-		bool m_rightButtonDown { false };
-		Point m_lastMousePosition {};
+		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
 	};
 }

@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "world_state.h"
+#include "client.h"
 
 #include <zstr/zstr.hpp>
 
@@ -16,6 +17,8 @@
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
+#include "game/field_map.h"
+#include "game/object_type_id.h"
 #include "scene_graph/entity.h"
 
 namespace mmo
@@ -23,10 +26,6 @@ namespace mmo
 	const std::string WorldState::Name = "world";
 
 	extern CharacterView s_selectedCharacter;
-
-	// Console variables for gameplay
-	static ConsoleVar* s_mouseSensitivityCVar = nullptr;
-	static ConsoleVar* s_invertVMouseCVar = nullptr;
 
 	// Console command names
 	namespace command_names
@@ -42,12 +41,6 @@ namespace mmo
 	void WorldState::OnEnter()
 	{
 		SetupWorldScene();
-
-		if (!s_mouseSensitivityCVar)
-		{
-			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
-			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "true");
-		}
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
@@ -103,10 +96,9 @@ namespace mmo
 
 		RemoveGameplayCommands();
 
+		m_gameObjectsById.clear();
+		m_playerController.reset();
 		m_worldGrid.reset();
-		m_playerEntity = nullptr;
-		m_playerNode = nullptr;
-		m_defaultCamera = nullptr;
 		m_scene.Clear();
 
 		m_inputConnections.disconnect();
@@ -130,145 +122,42 @@ namespace mmo
 
 	bool WorldState::OnMouseDown(MouseButton button, int32 x, int32 y)
 	{
-		m_lastMousePosition = Point(x, y);
-
-		if (button == MouseButton_Left)
-		{
-			m_leftButtonDown = true;
-		}
-		else if (button == MouseButton_Right)
-		{
-			m_rightButtonDown = true;
-
-			m_playerNode->SetOrientation(
-				Quaternion(m_cameraNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
-			m_cameraAnchorNode->SetOrientation(
-				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
-		}
-
+		m_playerController->OnMouseDown(button, x, y);
 		return true;
 	}
 
 	bool WorldState::OnMouseUp(MouseButton button, int32 x, int32 y)
 	{
-		m_lastMousePosition = Point(x, y);
-
-		if (button == MouseButton_Left)
-		{
-			m_leftButtonDown = false;
-		}
-		else if (button == MouseButton_Right)
-		{
-			m_rightButtonDown = false;
-		}
-
+		m_playerController->OnMouseUp(button, x, y);
 		return true;
 	}
 
 	bool WorldState::OnMouseMove(int32 x, int32 y)
 	{
-		if (!m_leftButtonDown && !m_rightButtonDown)
-		{
-			return false;
-		}
-
-		const Point position(x, y);
-		const Point delta = position - m_lastMousePosition;
-		m_lastMousePosition = position;
-
-		SceneNode* yawNode = m_leftButtonDown ? m_cameraAnchorNode : m_playerNode;
-		if (delta.x != 0.0f)
-		{
-			yawNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
-		}
-		
-		if (delta.y != 0.0f)
-		{
-			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
-			m_cameraAnchorNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
-		}
-
+		m_playerController->OnMouseMove(x, y);
 		return true;
 	}
 
 	bool WorldState::OnKeyDown(int32 key)
 	{
-		switch(key)
-		{
-		case 0x57:
-			m_movementVelocity.z = -1.0f;
-			abort_emission();
-			return false;
-		case 0x53:
-			m_movementVelocity.z = 1.0f;
-			abort_emission();
-			return false;
-		case 0x41:
-			if (m_rightButtonDown)
-			{
-				m_movementVelocity.x = -1.0f;
-			}
-			else
-			{
-				m_rotation = Degree(180.0f);	
-			}
-			abort_emission();
-			return false;
-		case 0x44:
-			if (m_rightButtonDown)
-			{
-				m_movementVelocity.x = 1.0f;
-			}
-			else
-			{
-				m_rotation = Degree(-180.0f);	
-			}
-			abort_emission();
-			return false;
-		}
-		
+		m_playerController->OnKeyDown(key);
 		return true;
 	}
 
 	bool WorldState::OnKeyUp(int32 key)
 	{
-		switch(key)
-		{
-		case 0x57:
-		case 0x53:
-			m_movementVelocity.z = 0.0f;
-			abort_emission();
-			return false;
-		case 0x41:
-		case 0x44:
-			if (m_rightButtonDown)
-			{
-				m_movementVelocity.x = 0.0f;
-			}
-			m_rotation = Degree(0.0f);
-			abort_emission();
-			return false;
-		}
-
+		m_playerController->OnKeyUp(key);
 		return true;
 	}
 
 	void WorldState::OnIdle(float deltaSeconds, GameTime timestamp)
 	{
-		m_playerNode->Yaw(m_rotation * deltaSeconds, TransformSpace::World);
-
-		// TODO: 7.0f = player movement speed
-		if (m_movementVelocity.GetSquaredLength() != 0.0f)
-		{
-			m_playerNode->Translate(m_movementVelocity.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
-		}
+		m_playerController->Update(deltaSeconds);
 	}
 	
 	bool WorldState::OnMouseWheel(int32 delta)
 	{
-		m_cameraNode->Translate(Vector3::UnitZ * static_cast<float>(delta), TransformSpace::Local);
-
-		abort_emission();
+		m_playerController->OnMouseWheel(delta);
 		return true;
 	}
 
@@ -279,32 +168,7 @@ namespace mmo
 
 	void WorldState::SetupWorldScene()
 	{
-		// Default camera for the player
-		m_defaultCamera = m_scene.CreateCamera("Default");
-
-		// Camera node which will hold the camera but is a child of an anchor node
-		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
-		m_cameraNode->AttachObject(*m_defaultCamera);
-		m_cameraNode->SetPosition(Vector3(0.0f, 0.0f, 3.0f));
-
-		// Anchor node for the camera. This node is directly attached to the player node and marks
-		// the target view point of the camera. By adding the camera node as a child, we can rotate
-		// the anchor node which results in the camera orbiting around the player entity.
-		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
-		m_cameraAnchorNode->AddChild(*m_cameraNode);
-		m_cameraAnchorNode->SetPosition(Vector3::UnitY * 0.5f);
-
-		// The player node. Add the camera anchor node as child node
-		m_playerNode = &m_scene.CreateSceneNode("Player");
-		m_playerNode->AddChild(*m_cameraAnchorNode);
-
-		// Add the player node to the world scene to make it visible
-		m_scene.GetRootSceneNode().AddChild(*m_playerNode);
-
-		// Create the player entity (currently using a default mesh) and attach the entity
-		// to the players scene node to make it visible and movable in the world scene
-		m_playerEntity = m_scene.CreateEntity("Player", "Models/Cube/Cube.hmsh");
-		m_playerNode->AttachObject(*m_playerEntity);
+		m_playerController = std::make_unique<PlayerController>(m_scene);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
@@ -378,11 +242,42 @@ namespace mmo
 	
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
 	{
-		DLOG("Received UpdateObject packet");
+		uint16 numObjectUpdates;
+		if (!(packet >> io::read<uint16>(numObjectUpdates)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
-		// TODO: Update the actual game object
+		auto result = PacketParseResult::Disconnect;
+		for (auto i = 0; i < numObjectUpdates; ++i)
+		{
+			result = PacketParseResult::Disconnect;
 
-		return PacketParseResult::Pass;
+			ObjectTypeId typeId;
+			if (!(packet >> io::read<uint8>(typeId)))
+			{
+				break;
+			}
+
+			// TODO: switch typeId
+
+			// Create game object from deserialization
+			auto object = std::make_shared<GameObjectC>(m_scene);
+			object->Deserialize(packet);
+
+			// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
+			if (m_gameObjectsById.empty())
+			{
+				m_playerController->SetControlledObject(object);
+			}
+
+			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
+			m_gameObjectsById[object->GetGuid()] = std::move(object);
+			
+			result = PacketParseResult::Pass;
+		}
+		
+		return result;
 	}
 
 	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket& packet)
@@ -402,13 +297,24 @@ namespace mmo
 		for (auto i = 0; i < objectCount; ++i)
 		{
 			ObjectGuid id;
-			if (!(packet >> io::read<uint64>(id)))
+			if (!(packet >> io::read_packed_guid(id)))
 			{
 				return PacketParseResult::Disconnect;
 			}
-
-			// TODO: Destroy the actual game object if possible
+			
+			if (m_playerController->GetControlledObject() &&
+				m_playerController->GetControlledObject()->GetGuid() == id)
+			{
+				ELOG("Despawn of player controlled object!");
+				m_playerController->SetControlledObject(nullptr);
+			}
+			
 			DLOG("Despawning object " << log_hex_digit(id));
+			const auto objectIt = m_gameObjectsById.find(id);
+			if (objectIt != m_gameObjectsById.end())
+			{
+				m_gameObjectsById.erase(objectIt);
+			}
 		}
 		
 		return PacketParseResult::Pass;

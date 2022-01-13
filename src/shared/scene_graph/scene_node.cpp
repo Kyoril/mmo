@@ -10,7 +10,13 @@ namespace mmo
 {
 	void SceneNode::RemoveAllChildren()
 	{
+		for (const auto& child : m_children)
+		{
+			child.second->SetParent(nullptr);
+		}
+
 		m_children.clear();
+		m_childrenToUpdate.clear();
 	}
 
 	void SceneNode::FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren)
@@ -52,7 +58,7 @@ namespace mmo
 		, m_cachedTransformInvalid(true)
 	{
 		static uint32 index = 0;
-		m_name = "SceneNode_" + std::to_string(index);
+		m_name = "SceneNode_" + std::to_string(index++);
 	}
 
 	SceneNode::SceneNode(Scene& scene, String name)
@@ -70,16 +76,27 @@ namespace mmo
 	{
 	}
 
+	SceneNode::~SceneNode()
+	{
+		if (m_parent)
+		{
+			m_parent->RemoveChild(m_name);
+			m_parent = nullptr;
+		}
+	}
+
 	void SceneNode::SetParent(SceneNode* parent)
 	{
-		if (m_parent == parent)
-		{
-			return;
-		}
+		const bool different = parent != m_parent;
 		
 		m_parent = parent;
 		m_parentNotified = false;
 		NeedUpdate();
+
+		if (!different)
+		{
+			return;
+		}
 
 		if (m_parent)
 		{
@@ -300,8 +317,10 @@ namespace mmo
 		}
 
 		SceneNode* child = it->second;
-		m_children.erase(it);
 
+		CancelUpdate(*child);
+
+		m_children.erase(it);
 		child->SetParent(nullptr);
 		return child;
 	}
@@ -430,6 +449,17 @@ namespace mmo
 		{
             m_parent->RequestUpdate(*this, forceParentUpdate);
 			m_parentNotified = true;
+		}
+	}
+
+	void SceneNode::CancelUpdate(SceneNode& child)
+	{
+		m_childrenToUpdate.erase(&child);
+
+		if (m_childrenToUpdate.empty() && m_parent && !m_needChildUpdates)
+		{
+			m_parent->CancelUpdate(*this);
+			m_parentNotified = false;
 		}
 	}
 

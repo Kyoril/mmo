@@ -21,6 +21,8 @@ namespace mmo
 
 		Entity(const String& name, MeshPtr mesh);
 
+		virtual ~Entity() override = default;
+
 	public:
 		[[nodiscard]] const MeshPtr& GetMesh() const noexcept { return m_mesh; }
 

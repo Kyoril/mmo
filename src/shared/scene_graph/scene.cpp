@@ -69,6 +69,26 @@ namespace mmo
 		}
 	}
 
+	void Scene::DestroyEntity(const Entity& entity)
+	{
+		const auto entityIt = m_entities.find(entity.GetName());
+		if (entityIt != m_entities.end())
+		{
+			m_entities.erase(entityIt);
+		}
+	}
+
+	void Scene::DestroySceneNode(const SceneNode& sceneNode)
+	{
+		ASSERT(&sceneNode != m_rootNode);
+
+		const auto nodeIt = m_sceneNodes.find(sceneNode.GetName());
+		if (nodeIt != m_sceneNodes.end())
+		{
+			m_sceneNodes.erase(nodeIt);
+		}
+	}
+
 	Camera* Scene::GetCamera(const String& name)
 	{
 		const auto cameraIt = m_cameras.find(name);

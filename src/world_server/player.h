@@ -41,10 +41,10 @@ namespace mmo
 		const GameObjectS& GetGameObject() const override { return *m_character; }
 
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
-		void NotifyObjectsSpawned(std::vector<GameObjectS*> object) const override;
+		void NotifyObjectsSpawned(std::vector<GameObjectS*>& object) const override;
 
 		/// @copydoc TileSubscriber::NotifyObjectsDespawned
-		void NotifyObjectsDespawned(std::vector<GameObjectS*> object) const override;
+		void NotifyObjectsDespawned(std::vector<GameObjectS*>& object) const override;
 
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) override;

@@ -7,6 +7,7 @@
 #include "log/default_log_levels.h"
 #include "visibility_grid.h"
 #include "visibility_tile.h"
+#include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "game/game_object_s.h"
 #include "game/each_tile_in_region.h"
@@ -51,18 +52,19 @@ namespace mmo
 		auto &tile = m_visibilityGrid->RequireTile(gridIndex);
 		tile.GetGameObjects().add(&added);
 		
+		added.spawned(*this);
+
 		ForEachTileInSight(
 		    *m_visibilityGrid,
 		    tile.GetPosition(),
 		    [&added](VisibilityTile & tile)
 		{
+		    std::vector objects { &added };
 		    for (const auto *subscriber : tile.GetWatchers())
 			{
-				subscriber->NotifyObjectsSpawned({ &added });
+				subscriber->NotifyObjectsSpawned(objects);
 			}
 		});
-		
-		added.spawned(*this);
 	}
 
 	void WorldInstance::RemoveGameObject(GameObjectS& remove)
@@ -86,20 +88,23 @@ namespace mmo
 			return;
 		}
 
+		DLOG("Removing object " << log_hex_digit(remove.GetGuid()) << " from world instance ...");
+
 		tile->GetGameObjects().remove(&remove);
+		remove.despawned(remove);
 
 		ForEachTileInSight(
 		    *m_visibilityGrid,
 		    tile->GetPosition(),
 		    [&remove](VisibilityTile & tile)
 		{
+		    std::vector objects { &remove };
 		    for (const auto *subscriber : tile.GetWatchers())
 			{
-				subscriber->NotifyObjectsDespawned({ &remove });
+				subscriber->NotifyObjectsDespawned(objects);
 			}
 		});
 		
-		remove.despawned(remove);
 	}
 
 	void WorldInstance::AddObjectUpdate(GameObjectS& object)

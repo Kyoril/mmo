@@ -16,23 +16,32 @@ namespace mmo
 		m_fields.SetFieldValue(object_fields::Type, ObjectTypeId::Object);
 		m_fields.SetFieldValue(object_fields::Entry, 0);
 		m_fields.SetFieldValue(object_fields::Scale, 1.0f);
+		m_fields.MarkAsUnchanged();
 	}
 
-	GameObjectS::~GameObjectS()
-	{
-	}
+	GameObjectS::~GameObjectS() = default;
 
 	ObjectTypeId GameObjectS::GetTypeId() const
 	{
 		return ObjectTypeId::Object;
 	}
 
-	void GameObjectS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
+	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
 	{
-		// TODO
+		writer
+			<< io::write<uint8>(GetTypeId());
+
+		if (creation)
+		{
+			m_fields.SerializeComplete(writer);
+		}
+		else
+		{
+			m_fields.SerializeChanges(writer);
+		}
 	}
 
-	void CreateUpdateBlocks(GameObjectS& object, std::vector<std::vector<char>>& out_blocks)
+	void CreateUpdateBlocks(const GameObjectS& object, std::vector<std::vector<char>>& outBlocks)
 	{
 		// Write create object packet
 		std::vector<char> createBlock;
@@ -46,5 +55,7 @@ namespace mmo
 			<< io::write_packed_guid(object.GetGuid())
 			<< io::write<uint8>(object.GetTypeId())
 			<< io::write<uint8>(updateFlags);
+
+		object.m_fields.SerializeComplete(writer);
 	}
 }

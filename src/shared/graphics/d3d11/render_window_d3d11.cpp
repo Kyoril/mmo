@@ -77,8 +77,8 @@ namespace mmo
 
 	void RenderWindowD3D11::Resize(uint16 width, uint16 height)
 	{
-		ASSERT(width > 0);
-		ASSERT(height > 0);
+		if (width == 0) return;
+		if (height == 0) return;
 
 		m_pendingWidth = width;
 		m_pendingHeight = height;
