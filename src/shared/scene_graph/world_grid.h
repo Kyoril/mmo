@@ -61,6 +61,13 @@ namespace mmo
 		/// @param interval The new interval for displaying large lines.
 		void SetLargeGridInterval(const uint8 interval) { m_largeGrid = interval; m_invalidated = true; }
 
+		/// @brief Sets whether the world grid object will be visible.
+		/// @param visible True if the grid should be visible on screen.
+		void SetVisible(const bool visible) { ASSERT(m_renderObject); m_renderObject->SetVisible(visible); }
+
+		/// @brief Determines whether the world grid is visible on the screen.
+		[[nodiscard]] bool IsVisible() const { ASSERT(m_renderObject); return m_renderObject->IsVisible(); }
+
 	private:
 		/// @brief Setup the render object for rendering the world grid.
 		void SetupGrid() const;

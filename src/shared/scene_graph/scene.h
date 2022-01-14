@@ -10,17 +10,17 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
-#include "scene_node.h"
+#include "camera.h"
 #include "entity.h"
-#include "mmo_client/world_grid.h"
+#include "manual_render_object.h"
+#include "scene_node.h"
 
 
 namespace mmo
 {
 	class Scene;
-	class Camera;
 
-	class SceneQueuedRenderableVisitor : public QueuedRenderableVisitor
+	class SceneQueuedRenderableVisitor final : public QueuedRenderableVisitor
 	{
 	public:
 		void Visit(RenderablePass& rp) override;
@@ -29,9 +29,9 @@ namespace mmo
 
 	public:
 		/// Target SM to send renderables to
-		Scene* targetScene;
+		Scene* targetScene { nullptr };
 		/// Scissoring if requested?
-		bool scissoring;
+		bool scissoring { false };
 	};
 
 	/// This class contains all objects of a scene that can be rendered.

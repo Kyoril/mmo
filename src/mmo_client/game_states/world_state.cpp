@@ -30,7 +30,8 @@ namespace mmo
 	// Console command names
 	namespace command_names
 	{
-		static const char* ToggleAxis = "ToggleAxis";	
+		static const char* ToggleAxis = "ToggleAxis";
+		static const char* ToggleGrid = "ToggleGrid";
 	}
 	
 	WorldState::WorldState(RealmConnector& realmConnector)
@@ -213,12 +214,18 @@ namespace mmo
 		{
 			ToggleAxisVisibility();
 		}, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
+
+		Console::RegisterCommand(command_names::ToggleGrid, [this](const std::string&, const std::string&)
+		{
+			ToggleGridVisibility();
+		}, ConsoleCommandCategory::Debug, "Toggles visibility of the world grid display.");
 	}
 
 	void WorldState::RemoveGameplayCommands()
 	{
 		const String commandsToRemove[] = {
-			command_names::ToggleAxis
+			command_names::ToggleAxis,
+			command_names::ToggleGrid
 		};
 
 		for (const auto& command : commandsToRemove)
@@ -239,7 +246,20 @@ namespace mmo
 			ILOG("DebugAxis hidden");
 		}
 	}
-	
+
+	void WorldState::ToggleGridVisibility()
+	{
+		m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
+		if (m_worldGrid->IsVisible())
+		{
+			ILOG("WorldGrid visible");
+		}
+		else
+		{
+			ILOG("WorldGrid hidden");
+		}
+	}
+
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
 	{
 		uint16 numObjectUpdates;

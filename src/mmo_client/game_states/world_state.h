@@ -4,19 +4,16 @@
 
 #include "connection.h"
 #include "player_controller.h"
-#include "game_states/game_state.h"
-#include "scene_graph/mesh.h"
 #include "screen.h"
-#include "world_grid.h"
+#include "game_states/game_state.h"
 
-#include "frame_ui/frame_mgr.h"
-#include "scene_graph/scene.h"
-#include "scene_graph/camera.h"
-#include "scene_graph/axis_display.h"
 #include "base/signal.h"
+#include "frame_ui/frame_mgr.h"
 #include "game/game_object_c.h"
 #include "game_protocol/game_protocol.h"
-#include "math/radian.h"
+#include "scene_graph/world_grid.h"
+#include "scene_graph/axis_display.h"
+#include "scene_graph/scene.h"
 
 
 namespace mmo
@@ -88,6 +85,8 @@ namespace mmo
 		void RemoveGameplayCommands();
 
 		void ToggleAxisVisibility();
+
+		void ToggleGridVisibility();
 
 	private:
 				
