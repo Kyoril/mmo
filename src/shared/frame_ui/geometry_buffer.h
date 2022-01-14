@@ -34,23 +34,31 @@ namespace mmo
 		/// Draws the current hardware buffer. If the buffer is out of sync, it
 		/// will also be updated.
 		void Draw();
+
 		/// Sets the current clipping rectangle for drawing the geometry buffer.
 		void SetClippingRegion(const Rect& region);
+
 		/// Appends a new vertex to the buffer.
 		void AppendVertex(const Vertex& vertex);
+
 		/// Appends multiple vertices at once to the buffer.
 		void AppendGeometry(const Vertex* const buffer, uint32 count);
+
 		/// Sets the active texture. Not that this will not immediatly start a new
 		/// batch. This only happens when adding a new vertex after changing the
 		/// active texture.
 		void SetActiveTexture(const TexturePtr& texture);
+
 		/// Resets all contents of the geometry buffer to free memory. Note that this
 		/// will not destroy the existing hardware buffer!
 		void Reset();
+
 		/// Gets the active texture.
 		TexturePtr GetActiveTexture() const;
+
 		/// Gets the number of vertices in the buffer.
 		uint32 GetVertexCount() const;
+
 		/// Gets the number of batches in the buffer.
 		uint32 GetBatchCount() const;
 

@@ -21,10 +21,18 @@ namespace mmo
 		, m_viewH(900)
 		, m_viewMinZ(0.001f)
 		, m_viewMaxZ(100.0f)
+		, m_topologyType()
+		, m_captureTopologyType()
+		, m_blendMode()
+		, m_restoreBlendMode()
 		, m_fillMode(FillMode::Solid)
+		, m_restoreFillMode()
 		, m_cullMode(FaceCullMode::Back)
-		, m_texAddressMode(TextureAddressMode::Wrap)
-		, m_texFilter(TextureFilter::Anisotropic)
+		, m_restoreCullMode()
+		, m_texAddressMode{}
+		, m_restoreTexAddressMode{}
+		, m_texFilter()
+		, m_restoreTexFilter()
 	{
 	}
 
@@ -90,7 +98,10 @@ namespace mmo
 		m_restoreFillMode = m_fillMode;
 		m_restoreCullMode = m_cullMode;
 		
-		m_restoreTexAddressMode = m_texAddressMode;
+		m_restoreTexAddressMode[0] = m_texAddressMode[0];
+		m_restoreTexAddressMode[1] = m_texAddressMode[1];
+		m_restoreTexAddressMode[2] = m_texAddressMode[2];
+
 		m_restoreTexFilter = m_texFilter;
 
 		m_captureTopologyType = m_topologyType;
@@ -128,9 +139,11 @@ namespace mmo
 			SetFaceCullMode(m_restoreCullMode);
 		}
 
-		if (m_restoreTexAddressMode != m_texAddressMode)
+		if ((m_restoreTexAddressMode[0] != m_texAddressMode[0]) ||
+			(m_restoreTexAddressMode[1] != m_texAddressMode[1]) ||
+			(m_restoreTexAddressMode[2] != m_texAddressMode[2]))
 		{
-			SetTextureAddressMode(m_restoreTexAddressMode);
+			SetTextureAddressMode(m_restoreTexAddressMode[0], m_restoreTexAddressMode[1], m_restoreTexAddressMode[2]);
 		}
 		
 		if (m_restoreTexFilter != m_texFilter)
@@ -188,11 +201,14 @@ namespace mmo
 		m_cullMode = mode;
 	}
 
-	void GraphicsDevice::SetTextureAddressMode(TextureAddressMode mode)
+	void GraphicsDevice::SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV,
+		TextureAddressMode modeW)
 	{
-		m_texAddressMode = mode;
+		m_texAddressMode[0] = modeU;
+		m_texAddressMode[1] = modeV;
+		m_texAddressMode[2] = modeW;
 	}
-
+	
 	void GraphicsDevice::SetTextureFilter(TextureFilter filter)
 	{
 		m_texFilter = filter;

@@ -54,11 +54,10 @@ namespace mmo
 		const float borderSize = m_borderInset;
 
 		const auto scale = FrameManager::Get().GetUIScale();
-
-		const Size scaledBorderSize = Size(borderSize * scale.x, borderSize * scale.y);
+		const auto scaledBorderSize = Size(borderSize * scale.x, borderSize * scale.y);
 		
 		// A rectangle that represents the content area in the frame rect
-		const Rect contentRect = Rect(
+		const auto contentRect = Rect(
 			m_borderSizeRect.left, 
 			m_borderSizeRect.top,
 			m_texture->GetWidth() - m_borderSizeRect.right, 

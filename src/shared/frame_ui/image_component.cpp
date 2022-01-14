@@ -23,12 +23,13 @@ namespace mmo
 	{
 		ASSERT(m_frame);
 
-		auto copy = std::make_unique<ImageComponent>(*m_frame, m_filename);
+		auto copy = std::make_unique<ImageComponent>(*m_frame, "");
 		
 		CopyBaseAttributes(*copy);
 
 		copy->m_tiling = m_tiling;
 		copy->m_tint = m_tint;
+		copy->m_filename = m_filename;
 		copy->m_texture = m_texture;
 		copy->m_propertyName = m_propertyName;
 
@@ -87,6 +88,24 @@ namespace mmo
 	void ImageComponent::SetTilingMode(ImageTilingMode mode)
 	{
 		m_tiling = mode;
+
+		if (m_texture)
+		{
+			m_texture->SetTextureAddressModeW(TextureAddressMode::Clamp);
+			if (m_tiling == ImageTilingMode::Horizontally || m_tiling == ImageTilingMode::Both)
+			{
+				m_texture->SetTextureAddressModeU(TextureAddressMode::Wrap);
+			}
+			if (m_tiling == ImageTilingMode::Vertically || m_tiling == ImageTilingMode::Both)
+			{
+				m_texture->SetTextureAddressModeV(TextureAddressMode::Wrap);
+			}
+			if (m_tiling == ImageTilingMode::None)
+			{
+				m_texture->SetTextureAddressModeU(TextureAddressMode::Clamp);
+				m_texture->SetTextureAddressModeV(TextureAddressMode::Clamp);
+			}
+		}
 	}
 
 	void ImageComponent::SetTint(argb_t tint)
@@ -102,6 +121,23 @@ namespace mmo
 		if (!m_filename.empty())
 		{
 			m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
+			if (m_texture)
+			{
+				m_texture->SetTextureAddressModeW(TextureAddressMode::Clamp);
+				if (m_tiling == ImageTilingMode::Horizontally || m_tiling == ImageTilingMode::Both)
+				{
+					m_texture->SetTextureAddressModeU(TextureAddressMode::Wrap);
+				}
+				if (m_tiling == ImageTilingMode::Vertically || m_tiling == ImageTilingMode::Both)
+				{
+					m_texture->SetTextureAddressModeV(TextureAddressMode::Wrap);
+				}
+				if (m_tiling == ImageTilingMode::None)
+				{
+					m_texture->SetTextureAddressModeU(TextureAddressMode::Clamp);
+					m_texture->SetTextureAddressModeV(TextureAddressMode::Clamp);
+				}
+			}
 		}
 
 		if (m_frame)

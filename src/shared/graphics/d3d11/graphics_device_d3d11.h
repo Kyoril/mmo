@@ -34,6 +34,7 @@ namespace mmo
 		VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
 		IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
 		ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
+		void UpdateSamplerState();
 		void Draw(uint32 vertexCount, uint32 start = 0) override;
 		void DrawIndexed() override;
 		void SetTopologyType(TopologyType InType) override;
@@ -51,7 +52,7 @@ namespace mmo
 		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
 		void SetFillMode(FillMode mode) override;
 		void SetFaceCullMode(FaceCullMode mode) override;
-		void SetTextureAddressMode(TextureAddressMode mode) override;
+		void SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV, TextureAddressMode modeW) override;
 		void SetTextureFilter(TextureFilter filter) override;
 		// ~ End GraphicsDevice
 

@@ -93,32 +93,6 @@ namespace mmo
 		Front,
 	};
 
-	/// Enumerates possible face cull modes.
-	enum class TextureAddressMode
-	{
-		/// Coordinates are clamped if exceeding the range of 0..1.
-		Clamp,
-		/// Coordinates are wrapped if exceeding the range of 0..1.
-		Wrap,
-		/// Coordinates are mirrored if exceeding the range of 0..1.
-		Mirror,
-		/// Anything outside of the range of 0..1 is rendered using a border color.
-		Border,
-	};
-
-	/// Enumerates possible face cull modes.
-	enum class TextureFilter
-	{
-		/// No texture filtering.
-		None,
-		/// Bilinear filter.
-		Bilinear,
-		/// Trilinear filter.
-		Trilinear,
-		/// Anisotropic filter
-		Anisotropic,
-	};
-	
 	/// This is the base class of a graphics device object.
 	class GraphicsDevice
 		: public NonCopyable
@@ -200,7 +174,15 @@ namespace mmo
 		/// Sets the cull mode of polygons.
 		virtual void SetFaceCullMode(FaceCullMode mode);
 		/// Sets the texture address mode used when sampling textures.
-		virtual void SetTextureAddressMode(TextureAddressMode mode);
+		virtual void SetTextureAddressMode(TextureAddressMode mode) { SetTextureAddressMode(mode, mode, mode); }
+		/// Sets the texture address mode used when sampling textures.
+		virtual void SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV, TextureAddressMode modeW);
+		/// Sets the texture address mode used when sampling textures.
+		void SetTextureAddressModeU(TextureAddressMode mode) { SetTextureAddressMode(mode, m_texAddressMode[1], m_texAddressMode[2]); }
+		/// Sets the texture address mode used when sampling textures.
+		void SetTextureAddressModeV(TextureAddressMode mode) { SetTextureAddressMode(m_texAddressMode[0], mode, m_texAddressMode[2]); }
+		/// Sets the texture address mode used when sampling textures.
+		void SetTextureAddressModeW(TextureAddressMode mode)  { SetTextureAddressMode(m_texAddressMode[0], m_texAddressMode[1], mode); }
 		/// Sets the texture filter to be used when sampling textures.
 		virtual void SetTextureFilter(TextureFilter filter);
 
@@ -230,8 +212,8 @@ namespace mmo
 		FillMode m_restoreFillMode;
 		FaceCullMode m_cullMode;
 		FaceCullMode m_restoreCullMode;
-		TextureAddressMode m_texAddressMode;
-		TextureAddressMode m_restoreTexAddressMode;
+		TextureAddressMode m_texAddressMode[3];
+		TextureAddressMode m_restoreTexAddressMode[3];
 		TextureFilter m_texFilter;
 		TextureFilter m_restoreTexFilter;
 	};

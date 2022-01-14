@@ -292,9 +292,9 @@ namespace mmo
 		ZeroMemory(&m_samplerDesc, sizeof(m_samplerDesc));
 		m_samplerDesc.Filter = D3D11TextureFilter(m_texFilter);
 		m_samplerDesc.MaxAnisotropy = D3D11_MAX_MAXANISOTROPY;
-		m_samplerDesc.AddressU = D3D11TextureAddressMode(m_texAddressMode);
-		m_samplerDesc.AddressV = D3D11TextureAddressMode(m_texAddressMode);
-		m_samplerDesc.AddressW = D3D11TextureAddressMode(m_texAddressMode);
+		m_samplerDesc.AddressU = D3D11TextureAddressMode(m_texAddressMode[0]);
+		m_samplerDesc.AddressV = D3D11TextureAddressMode(m_texAddressMode[1]);
+		m_samplerDesc.AddressW = D3D11TextureAddressMode(m_texAddressMode[2]);
 		m_samplerDescChanged = true;
 	}
 
@@ -564,6 +564,20 @@ namespace mmo
 		return nullptr;
 	}
 
+	void GraphicsDeviceD3D11::UpdateSamplerState()
+	{
+		if (m_samplerDescChanged)
+		{
+			const SamplerStateHash hashGen;
+			m_samplerHash = hashGen(m_samplerDesc);
+
+			// Set sampler state
+			ID3D11SamplerState* const samplerStates = GetCurrentSamplerState();
+			m_immContext->PSSetSamplers(0, 1, &samplerStates);
+			m_samplerDescChanged = false;
+		}
+	}
+
 	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
 	{
 		UpdateCurrentRasterizerState();
@@ -572,6 +586,8 @@ namespace mmo
 		m_matrixDirty = false;
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 
+		UpdateSamplerState();
+		
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
 	}
@@ -583,6 +599,8 @@ namespace mmo
 		// Update the constant buffer
 		m_matrixDirty = false;
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+		
+		UpdateSamplerState();
 
 		// Execute draw command
 		m_immContext->DrawIndexed(m_indexCount, 0, 0);
@@ -639,10 +657,6 @@ namespace mmo
 		if (pixIt != PixelShaders.end())
 		{
 			pixIt->second->Set();
-
-			// Set sampler state
-			ID3D11SamplerState* const samplerStates = GetCurrentSamplerState();
-			m_immContext->PSSetSamplers(0, 1, &samplerStates);
 		}
 	}
 
@@ -759,14 +773,17 @@ namespace mmo
 		m_rasterizerDescChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::SetTextureAddressMode(TextureAddressMode mode)
+	void GraphicsDeviceD3D11::SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV,
+		TextureAddressMode modeW)
 	{
-		m_samplerDesc.AddressU = D3D11TextureAddressMode(mode);
-		m_samplerDesc.AddressV = D3D11TextureAddressMode(mode);
-		m_samplerDesc.AddressW = D3D11TextureAddressMode(mode);
+		GraphicsDevice::SetTextureAddressMode(modeU, modeV, modeW);
+		
+		m_samplerDesc.AddressU = D3D11TextureAddressMode(modeU);
+		m_samplerDesc.AddressV = D3D11TextureAddressMode(modeV);
+		m_samplerDesc.AddressW = D3D11TextureAddressMode(modeW);
 		m_samplerDescChanged = true;
 	}
-
+	
 	void GraphicsDeviceD3D11::SetTextureFilter(TextureFilter filter)
 	{
 		m_samplerDesc.Filter = D3D11TextureFilter(filter);
