@@ -32,13 +32,13 @@ namespace mmo
 
 	FontPtr FontManager::FindCachedFont(const std::string & filename, float size, float outline) const
 	{
-		auto cacheIt = m_fontCache.find(filename);
+		const auto cacheIt = m_fontCache.find(filename);
 		if (cacheIt != m_fontCache.end())
 		{
-			auto sizeIt = cacheIt->second.find(size);
+			const auto sizeIt = cacheIt->second.find(size);
 			if (sizeIt != cacheIt->second.end())
 			{
-				auto outlineIt = sizeIt->second.find(outline);
+				const auto outlineIt = sizeIt->second.find(outline);
 				if (outlineIt != sizeIt->second.end())
 				{
 					return outlineIt->second;

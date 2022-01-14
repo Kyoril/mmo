@@ -122,6 +122,15 @@ namespace mmo
 	/// Initializes everything related to FrameUI.
 	bool InitializeFrameUi()
 	{
+		auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
+		if (window)
+		{
+			s_frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
+			{
+				FrameManager::Get().NotifyScreenSizeChanged(width, height);
+			});
+		}
+
 		// Initialize the frame manager
 		FrameManager::Initialize(&s_gameScript->GetLuaState());
 
@@ -168,8 +177,7 @@ namespace mmo
 			FrameManager::Get().NotifyKeyUp(key);
 			return false;
 		});
-
-
+		
 		return true;
 	}
 

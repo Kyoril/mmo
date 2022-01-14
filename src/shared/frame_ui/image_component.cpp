@@ -73,7 +73,7 @@ namespace mmo
 			m_tiling == ImageTilingMode::Both)
 		{
 			const float factorY = frameRect.GetHeight() / static_cast<float>(m_texture->GetHeight());
-			srcRect.SetWidth(factorY * srcRect.GetHeight());
+			srcRect.SetHeight(factorY * srcRect.GetHeight());
 		}
 
 		// Create the rectangle

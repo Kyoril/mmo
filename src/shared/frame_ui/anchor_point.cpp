@@ -2,6 +2,7 @@
 
 #include "anchor_point.h"
 
+#include "frame_mgr.h"
 #include "base/utilities.h"
 
 
@@ -59,9 +60,19 @@ namespace mmo
 		return AnchorPoint::None;
 	}
 
+	inline bool IsHorizontalPoint(AnchorPoint point)
+	{
+		return point == anchor_point::Left ||
+			point == anchor_point::Right ||
+			point == anchor_point::HorizontalCenter;
+	}
+
 	void Anchor::ApplyToAbsRect(Rect & rect, const Rect & parentRect, bool hasOppositeAnchor)
 	{
-		const float offset = GetValueByPoint(parentRect, m_relativePoint) + m_offset;
+		auto scale = FrameManager::Get().GetUIScale();
+		const float scaledOffset = m_offset * (IsHorizontalPoint(m_point) ? scale.x : scale.y);
+		
+		const float offset = GetValueByPoint(parentRect, m_relativePoint) + scaledOffset;
 
 		switch (m_point)
 		{

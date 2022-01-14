@@ -234,29 +234,42 @@ namespace mmo
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }
+
 		/// Renders the frame and it's child frames if it needs to be rendered.
 		void Render();
+
 		/// Updates animation logic of the frame and it's component (like the frame renderer if there is any). 
 		/// Should be called once per frame.
 		virtual void Update(float elapsed);
+
 		/// Gets the pixel size of this frame.
 		virtual inline Size GetPixelSize() const { return m_pixelSize; }
+
 		/// Sets the pixel size of this frame.
 		virtual inline void SetPixelSize(Size newSize) { m_pixelSize = newSize; m_needsRedraw = true; }
+
 		/// Adds a frame to the list of child frames.
 		virtual void AddChild(Pointer frame);
+
 		/// Removes all child frames.
 		void RemoveAllChildren();
+
 		/// Gets the geometry buffer that is used to render this frame.
 		GeometryBuffer& GetGeometryBuffer();
+
 		/// 
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position);
+
+
 		/// 
-		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position); 
-		//// 
+		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
+
+		/// 
 		virtual void OnKeyDown(Key key) {}
+
 		/// 
 		virtual void OnKeyChar(uint16 codepoint) {}
+
 		/// 
 		virtual void OnKeyUp(Key key) {}
 

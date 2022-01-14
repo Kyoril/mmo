@@ -10,6 +10,8 @@
 
 #include <utility>
 
+#include "frame_mgr.h"
+
 
 namespace mmo
 {
@@ -51,6 +53,10 @@ namespace mmo
 		// Border size
 		const float borderSize = m_borderInset;
 
+		const auto scale = FrameManager::Get().GetUIScale();
+
+		const Size scaledBorderSize = Size(borderSize * scale.x, borderSize * scale.y);
+		
 		// A rectangle that represents the content area in the frame rect
 		const Rect contentRect = Rect(
 			m_borderSizeRect.left, 
@@ -63,60 +69,59 @@ namespace mmo
 		// Top left corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			position, 
+			Rect(position, scaledBorderSize),
 			Rect(0.0f, contentRect.bottom, contentRect.left, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom left corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			position + Point(0.0f, size.height - borderSize),
+			Rect(position + Point(0.0f, size.height - scaledBorderSize.height), scaledBorderSize),
 			Rect(0.0f, 0.0f, contentRect.left, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			position + Point(size.width - borderSize, size.height - borderSize),
+			Rect(position + Point(size.width - scaledBorderSize.width, size.height - scaledBorderSize.height), scaledBorderSize),
 			Rect(contentRect.right, 0.0f, m_texture->GetWidth(), contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Top right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			position + Point(size.width - borderSize, 0.0f),
+			Rect(position + Point(size.width - scaledBorderSize.width, 0.0f), scaledBorderSize),
 			Rect(contentRect.right, contentRect.bottom, m_texture->GetWidth(), m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
-
+		
 		// Edges
 
 		// Top edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			Rect(position + Point(contentRect.left, 0.0f), Size(size.width - borderSize * 2, borderSize)),
+			Rect(position + Point(scaledBorderSize.width, 0.0f), Size(size.width - scaledBorderSize.width * 2, scaledBorderSize.height)),
 			Rect(contentRect.left, contentRect.bottom, contentRect.right, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Left edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			Rect(position + Point(0.0f, contentRect.top), Size(borderSize, size.height - borderSize * 2)),
+			Rect(position + Point(0.0f, scaledBorderSize.height), Size(scaledBorderSize.width, size.height - scaledBorderSize.height * 2)),
 			Rect(0.0f, contentRect.top, contentRect.left, contentRect.bottom),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Right edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			Rect(position + Point(size.width - borderSize, contentRect.top), Size(borderSize, size.height - borderSize * 2)),
+			Rect(position + Point(size.width - scaledBorderSize.width, scaledBorderSize.height), Size(scaledBorderSize.width, size.height - scaledBorderSize.height * 2)),
 			Rect(contentRect.right, contentRect.top, m_texture->GetWidth(), contentRect.bottom),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			Rect(position + Point(borderSize, size.height - borderSize), Size(size.width - borderSize * 2, borderSize)),
+			Rect(position + Point(scaledBorderSize.width, size.height - scaledBorderSize.height), Size(size.width - scaledBorderSize.width * 2, scaledBorderSize.height)),
 			Rect(contentRect.left, 0.0f, contentRect.right, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
-
-
+		
 		// Center
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
-			Rect(position + contentRect.GetPosition(), Size(size.width - borderSize * 2, size.height - borderSize * 2)),
+			Rect(position + Point(scaledBorderSize.width, scaledBorderSize.height), Size(size.width - scaledBorderSize.width * 2, size.height - scaledBorderSize.height * 2)),
 			contentRect,
 			m_texture->GetWidth(), m_texture->GetHeight());
 	}

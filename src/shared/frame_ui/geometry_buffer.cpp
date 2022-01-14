@@ -28,8 +28,8 @@ namespace mmo
 		}
 
 		// Current vertex format
-		auto format = VertexFormat::PosColorTex1;
-		gx.SetTextureAddressMode(TextureAddressMode::Clamp);
+		constexpr auto format = VertexFormat::PosColorTex1;
+		gx.SetTextureAddressMode(TextureAddressMode::Wrap);
 		gx.SetBlendMode(BlendMode::Alpha);
 		gx.SetVertexFormat(format);
 

@@ -580,7 +580,7 @@ namespace mmo
 	Rect Frame::GetRelativeFrameRect()
 	{
 		// Use the internal size property as the default value
-		Size mySize = GetPixelSize();
+		const Size mySize = GetPixelSize() * FrameManager::Get().GetUIScaleSize();
 
 		// Return the rectangle with the calculated size
 		return Rect(Point(), mySize);
@@ -634,10 +634,10 @@ namespace mmo
 
 		// This rect will contain the absolute parent rectangle
 		const Rect parentRect = GetParentRect();
-
+		
 		// Add parent rect offset to the relative rect
 		m_absRectCache.Offset(parentRect.GetPosition());
-		m_absRectCache.Offset(m_position);
+		m_absRectCache.Offset(m_position * FrameManager::Get().GetUIScale());
 
 		// Apply anchor points
 		for (const auto& anchor : m_anchors)

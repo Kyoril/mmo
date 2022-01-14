@@ -298,6 +298,16 @@ namespace mmo
 			return Localize(FrameManager::Get().GetLocalization(), id);
 		}
 	}
+	
+	void FrameManager::SetNativeResolution(const Size& nativeResolution)
+	{
+		m_nativeResolution = nativeResolution;
+
+		if (m_topFrame)
+		{
+			m_topFrame->InvalidateChildren();
+		}
+	}
 
 	void FrameManager::Initialize(lua_State* luaState)
 	{
@@ -369,7 +379,7 @@ namespace mmo
 	{
 		s_frameMgr.reset();
 	}
-
+	
 	void FrameManager::LoadUIFile(const std::string& filename)
 	{
 		// Clear all loaded toc files
@@ -612,6 +622,11 @@ namespace mmo
 		}
 
 		// TODO: Forward the event
+	}
+
+	void FrameManager::NotifyScreenSizeChanged(float width, float height)
+	{
+		m_uiScale = Point(width / m_nativeResolution.width, height / m_nativeResolution.height);
 	}
 
 	void FrameManager::ExecuteLua(const std::string & code)
