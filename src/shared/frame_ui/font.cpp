@@ -594,7 +594,7 @@ namespace mmo
 				const FontImage* const image = glyph->GetImage();
 				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 
-				image->Draw(glyphPos, glyph->GetImage()->GetSize(), buffer, color);
+				image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, buffer, color);
 
 				for (size_t i = 0; i < iterations; ++i)
 				{

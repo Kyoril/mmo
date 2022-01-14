@@ -9,6 +9,8 @@
 
 #include <utility>
 
+#include "frame_mgr.h"
+
 
 namespace mmo
 {
@@ -125,6 +127,8 @@ namespace mmo
 
 	void TextComponent::Render(const Rect& area, const Color& color)
 	{
+		const float textScale = FrameManager::Get().GetUIScale().y;
+
 		// Grab a font pointer
 		FontPtr font = m_frame->GetFont();
 		if (font)
@@ -156,7 +160,7 @@ namespace mmo
 			for (const auto& line : m_lineCache)
 			{
 				// Calculate the text width and cache it for later use
-				const float width = font->GetTextWidth(line);
+				const float width = font->GetTextWidth(line, textScale);
 
 				// Apply horizontal alignment
 				position.x = frameRect.GetPosition().x;
@@ -174,8 +178,8 @@ namespace mmo
 				c *= m_color;
 
 				// Determine the position to render the font at
-				font->DrawText(line, position, m_frame->GetGeometryBuffer(), 1.0f, c);
-				position.y += font->GetHeight();
+				font->DrawText(line, position, m_frame->GetGeometryBuffer(), textScale, c);
+				position.y += font->GetHeight(textScale);
 			}
 		}
 	}
