@@ -26,6 +26,26 @@ namespace mmo
 		SetupCamera();
 	}
 
+	PlayerController::~PlayerController()
+	{
+		m_controlledObject.reset();
+
+		if (m_defaultCamera)
+		{
+			m_scene.DestroyCamera(*m_defaultCamera);
+		}
+
+		if (m_cameraNode)
+		{
+			m_scene.DestroySceneNode(*m_cameraNode);
+		}
+
+		if (m_cameraAnchorNode)
+		{
+			m_scene.DestroySceneNode(*m_cameraAnchorNode);
+		}
+	}
+
 	void PlayerController::Update(float deltaSeconds)
 	{
 		if (!m_controlledObject)

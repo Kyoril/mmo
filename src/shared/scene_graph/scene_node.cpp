@@ -78,6 +78,8 @@ namespace mmo
 
 	SceneNode::~SceneNode()
 	{
+		RemoveAllChildren();
+
 		if (m_parent)
 		{
 			m_parent->RemoveChild(m_name);

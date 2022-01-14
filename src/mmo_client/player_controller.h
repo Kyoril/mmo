@@ -17,6 +17,8 @@ namespace mmo
 	public:
 		PlayerController(Scene& scene);
 
+		~PlayerController();
+
 	public:
 		void Update(float deltaSeconds);
 		

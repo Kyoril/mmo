@@ -96,7 +96,7 @@ namespace mmo
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
-
+		
 		m_gameObjectsById.clear();
 		m_playerController.reset();
 		m_worldGrid.reset();
