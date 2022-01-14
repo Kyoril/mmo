@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "textfield.h"
+
+#include "frame_mgr.h"
 #include "text_component.h"
 
 #include "log/default_log_levels.h"
@@ -89,6 +91,8 @@ namespace mmo
 			return -1;
 		}
 
+		const float textScale = FrameManager::Get().GetUIScale().y;
+
 		// Check for out of bounds
 		if (position.x <= m_textAreaOffset.left)
 		{
@@ -112,7 +116,7 @@ namespace mmo
 			if (glyph != nullptr)
 			{				
 				// Advance offset
-				const float advance = glyph->GetAdvance(1.0f);
+				const float advance = glyph->GetAdvance(textScale);
 				if (x + advance > position.x)
 				{
 					return index;
@@ -159,6 +163,8 @@ namespace mmo
 		{
 			return m_textAreaOffset.left;
 		}
+		
+		const float textScale = FrameManager::Get().GetUIScale().y;
 
 		// Check for font
 		auto font = GetFont();
@@ -183,7 +189,7 @@ namespace mmo
 			if (glyph != nullptr)
 			{
 				// Advance offset
-				const float advance = glyph->GetAdvance(1.0f);
+				const float advance = glyph->GetAdvance(textScale);
 
 				// Advance
 				x += advance;

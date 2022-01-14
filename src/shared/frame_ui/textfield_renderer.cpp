@@ -3,6 +3,7 @@
 #include "textfield_renderer.h"
 #include "state_imagery.h"
 #include "frame.h"
+#include "frame_mgr.h"
 #include "geometry_helper.h"
 #include "textfield.h"
 
@@ -60,6 +61,8 @@ namespace mmo
 
 		// TODO: Draw the text field selection background
 
+		const float textScale = FrameManager::Get().GetUIScale().y;
+
 			// Get the text field
 		auto* textField = static_cast<TextField*>(m_frame);
 
@@ -80,8 +83,8 @@ namespace mmo
 			const std::string& text = m_frame->GetVisualText();
 
 			// Calculate the width for formatting
-			const float textWidth = font->GetTextWidth(text);
-			const float textHeight = font->GetHeight();
+			const float textWidth = font->GetTextWidth(text, textScale);
+			const float textHeight = font->GetHeight(textScale);
 
 			// Calculate final text position in component
 			Point position = frameRect.GetPosition();
@@ -107,7 +110,7 @@ namespace mmo
 			}
 
 			// Draw the text
-			font->DrawText(text, position, m_frame->GetGeometryBuffer(), 1.0f);
+			font->DrawText(text, position, m_frame->GetGeometryBuffer(), textScale);
 		}
 
 		// If the frame has captured user input...
