@@ -14,15 +14,39 @@ namespace mmo
 		: m_visible(true)
 		, m_wireFrame(false)
 	{
-		m_cameraPos = Vector3(0.0f, 0.0f, 5.0f);
-		m_cameraRotation = Quaternion::Identity;
+		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
+		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
+		m_cameraAnchor->AddChild(*m_cameraNode);
+		m_camera = m_scene.CreateCamera("Camera");
+		m_cameraNode->AttachObject(*m_camera);
+		m_cameraNode->SetPosition(Vector3::UnitZ * 15.0f);
+		m_cameraAnchor->SetOrientation(Quaternion(Degree(-45.0f), Vector3::UnitX));
+
+		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 	}
 
-	void ViewportWindow::Render() const
+	ViewportWindow::~ViewportWindow()
+	{
+		m_worldGrid.reset();
+		m_axisDisplay.reset();
+		m_scene.Clear();
+	}
+
+	void ViewportWindow::Render()
 	{
 		// Only render if the viewport is visible at all
 		if (!m_visible || m_viewportRT == nullptr)
 			return;
+
+		if (!m_worldGrid)
+		{
+			m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");	
+		}
+		if (!m_axisDisplay)
+		{
+			m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
+			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
+		}
 
 		auto& gx = GraphicsDevice::Get();
 
@@ -31,34 +55,11 @@ namespace mmo
 		m_viewportRT->Activate();
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
+		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-		gx.SetFaceCullMode(FaceCullMode::Front);
-
-		if (m_vertBuf && m_indexBuf)
-		{
-			const auto view = MakeViewMatrix(m_cameraPos, Quaternion::Identity);
-
-			// Setup camera mode
-			Matrix3 rot{};
-			m_cameraRotation.ToRotationMatrix(rot);
-			Matrix4 world = Matrix4::Identity;
-			world = rot;
-			
-			gx.SetTransformMatrix(TransformType::World, world);
-			gx.SetTransformMatrix(TransformType::View, view);
-			gx.SetTransformMatrix(TransformType::Projection, m_projMatrix);
-
-			// Draw buffers
-			gx.SetTopologyType(TopologyType::TriangleList);
-			gx.SetVertexFormat(VertexFormat::PosColor);
-			gx.SetBlendMode(BlendMode::Opaque);
-			
-			m_vertBuf->Set();
-			m_indexBuf->Set();
-			
-			gx.DrawIndexed();
-		}
+		
+		m_scene.Render(*m_camera);
 		
 		m_viewportRT->Update();
 	}
@@ -71,23 +72,24 @@ namespace mmo
 
 	void ViewportWindow::MoveCamera(const Vector3 & offset)
 	{
-		m_cameraPos.z += offset.y;
-		if (m_cameraPos.z < 1.0f) m_cameraPos.z = 1.0f;
-		if (m_cameraPos.z > 100.0f) m_cameraPos.z = 100.0f;
+		if (!m_cameraAnchor)
+		{
+			return;
+		}
+
+		m_cameraAnchor->Yaw(Radian(offset.x), TransformSpace::World);
+		m_cameraAnchor->Pitch(Radian(offset.y), TransformSpace::Local);
 	}
 
 	void ViewportWindow::MoveCameraTarget(const Vector3 & offset)
 	{
-		const auto yaw = Radian(offset.x);
-		Quaternion qYaw{ yaw, Vector3::UnitY };
-		qYaw.Normalize();
+		if (!m_cameraAnchor)
+		{
+			return;
+		}
 
-		const auto pitch = Radian(offset.y);
-		Quaternion qPitch{ pitch, Vector3::UnitX };
-		qPitch.Normalize();
-
-		m_cameraRotation = qYaw * m_cameraRotation;
-		m_cameraRotation = qPitch * m_cameraRotation;
+		m_cameraAnchor->Yaw(Radian(offset.x), TransformSpace::World);
+		m_cameraAnchor->Pitch(Radian(offset.y), TransformSpace::Local);
 	}
 
 	bool ViewportWindow::Draw()
@@ -111,15 +113,11 @@ namespace mmo
 			{
 				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
 				m_lastAvailViewportSize = availableSpace;
-				
-				UpdateProjectionMatrix();
 			}
 			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 			{
 				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
 				m_lastAvailViewportSize = availableSpace;
-
-				UpdateProjectionMatrix();
 			}
 
 			// Render the render target content into the window as image object
@@ -160,11 +158,5 @@ namespace mmo
 		}
 
 		return false;
-	}
-
-	void ViewportWindow::UpdateProjectionMatrix()
-	{
-		const auto aspect = m_lastAvailViewportSize.x / m_lastAvailViewportSize.y;
-		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(Degree(45.0f), aspect, 0.001f, 100.0f);
 	}
 }

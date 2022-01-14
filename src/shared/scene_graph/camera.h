@@ -36,7 +36,9 @@ namespace mmo
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
-		
+
+		void SetAspectRatio(const float aspect);
+
         const Quaternion& GetDerivedOrientation() const;
 
         const Vector3& GetDerivedPosition() const;

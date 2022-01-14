@@ -68,6 +68,12 @@ namespace mmo
 		// TODO
 	}
 
+	void Camera::SetAspectRatio(const float aspect)
+	{
+		m_aspect = aspect;
+		m_viewInvalid = true;
+	}
+
 	const Quaternion& Camera::GetDerivedOrientation() const
 	{
 		if (m_parentNode)

@@ -9,6 +9,12 @@
 #include "math/vector3.h"
 #include "math/quaternion.h"
 
+#include "scene_graph/scene.h"
+#include "scene_graph/camera.h"
+#include "scene_graph/scene_node.h"
+#include "scene_graph/world_grid.h"
+#include "scene_graph/axis_display.h"
+
 #include "imgui.h"
 #include "math/matrix4.h"
 
@@ -20,10 +26,11 @@ namespace mmo
 	{
 	public:
 		explicit ViewportWindow();
+		~ViewportWindow() override;
 
 	public:
 		/// Renders the actual 3d viewport content.
-		void Render() const;
+		void Render();
 
 		void SetMesh(VertexBufferPtr vertBuf, IndexBufferPtr indexBuf);
 
@@ -41,19 +48,20 @@ namespace mmo
 		void Show() noexcept { m_visible = true; }
 		/// Determines whether the viewport window is currently visible.
 		bool IsVisible() const noexcept { return m_visible; }
-
-	private:
-		void UpdateProjectionMatrix();
-		
+				
 	private:
 		bool m_visible;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;
 		VertexBufferPtr m_vertBuf;
 		IndexBufferPtr m_indexBuf;
-		Vector3 m_cameraPos;
-		Quaternion m_cameraRotation;
 		bool m_wireFrame;
-		Matrix4 m_projMatrix;
+
+		Scene m_scene;
+		SceneNode* m_cameraAnchor { nullptr };
+		SceneNode* m_cameraNode { nullptr };
+		Camera* m_camera { nullptr };
+		std::unique_ptr<AxisDisplay> m_axisDisplay;
+		std::unique_ptr<WorldGrid> m_worldGrid;
 	};
 }

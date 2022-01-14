@@ -35,7 +35,9 @@ target_link_libraries(mmo_edit
 	mesh_v1_0
 	imaging
 	data
-	libprotobuf)
+	libprotobuf
+	scene_graph
+	frame_ui)
 	
 target_link_libraries(mmo_edit ${FBXSDK_LIBRARIES})
 target_link_libraries(mmo_edit ${OPENSSL_LIBRARIES})

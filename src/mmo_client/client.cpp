@@ -24,7 +24,6 @@
 #include "game_script.h"
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
-#include "ui/world_frame.h"
 
 #include <fstream>
 #include <thread>
