@@ -238,6 +238,7 @@ namespace mmo
 		
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
+		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 		
 		switch (api)

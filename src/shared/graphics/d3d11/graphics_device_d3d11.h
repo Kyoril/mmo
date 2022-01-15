@@ -48,7 +48,7 @@ namespace mmo
 		void SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ) override;
 		void SetClipRect(int32 x, int32 y, int32 w, int32 h) override;
 		void ResetClipRect() override;
-		RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) override;
+		RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height, bool fullScreen) override;
 		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
 		void SetFillMode(FillMode mode) override;
 		void SetFaceCullMode(FaceCullMode mode) override;

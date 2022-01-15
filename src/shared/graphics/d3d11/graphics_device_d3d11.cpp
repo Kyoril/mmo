@@ -526,7 +526,7 @@ namespace mmo
 		// Create an automatic render window if requested
 		if (desc.customWindowHandle == nullptr)
 		{
-			m_autoCreatedWindow = CreateRenderWindow("__auto_window__", desc.width, desc.height);
+			m_autoCreatedWindow = CreateRenderWindow("__auto_window__", desc.width, desc.height, !desc.windowed);
 		}
 		else
 		{
@@ -752,9 +752,9 @@ namespace mmo
 		m_rasterizerDescChanged = true;
 	}
 
-	RenderWindowPtr GraphicsDeviceD3D11::CreateRenderWindow(std::string name, uint16 width, uint16 height)
+	RenderWindowPtr GraphicsDeviceD3D11::CreateRenderWindow(std::string name, uint16 width, uint16 height, bool fullScreen)
 	{
-		return std::make_shared<RenderWindowD3D11>(*this, std::move(name), width, height);
+		return std::make_shared<RenderWindowD3D11>(*this, std::move(name), width, height, fullScreen);
 	}
 
 	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height)

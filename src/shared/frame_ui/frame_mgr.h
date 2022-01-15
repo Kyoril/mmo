@@ -206,7 +206,7 @@ namespace mmo
 		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
 		/// The localization data.
 		Localization m_localization;
-		Size m_nativeResolution { 1920.0f, 1080.0f };
+		Size m_nativeResolution { 3840.0f, 2160.0f };
 		Point m_uiScale { 1.0f, 1.0f };
 	};
 }

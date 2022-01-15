@@ -21,7 +21,7 @@ namespace mmo
 		, public RenderTargetD3D11
 	{
 	public:
-		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height);
+		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height, bool fullScreen);
 		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, HWND externalHandle);
 
 	public:
@@ -64,5 +64,7 @@ namespace mmo
 		uint16 m_pendingHeight;
 		/// 
 		bool m_resizePending;
+
+		bool m_fullScreen;
 	};
 }

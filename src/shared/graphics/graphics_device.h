@@ -40,6 +40,7 @@ namespace mmo
 		uint16 width = 1280;
 		uint16 height = 720;
 		bool vsync = true;
+		bool windowed = true;
 	};
 
 
@@ -166,7 +167,7 @@ namespace mmo
 		/// Resets the clipping rect if there is any.
 		virtual void ResetClipRect() = 0;
 		/// Creates a new render window.
-		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height) = 0;
+		virtual RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height, bool fullScreen) = 0;
 		/// Creates a new render texture.
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) = 0;
 		/// Sets the fill mode of polygons.

@@ -13,13 +13,14 @@ namespace mmo
 	/// Name of the render window class.
 	static const TCHAR s_d3d11RenderWindowClassName[] = TEXT("D3D11RenderWindow");
 
-	RenderWindowD3D11::RenderWindowD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height)
+	RenderWindowD3D11::RenderWindowD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height, bool fullScreen)
 		: RenderWindow(std::move(name), width, height)
 		, RenderTargetD3D11(device)
 		, m_handle(nullptr)
 		, m_pendingWidth(0)
 		, m_pendingHeight(0)
 		, m_resizePending(false)
+		, m_fullScreen(fullScreen)
 	{
 		// Create the window handle first
 		CreateWindowHandle();
@@ -38,6 +39,7 @@ namespace mmo
 		, m_pendingWidth(0)
 		, m_pendingHeight(0)
 		, m_resizePending(false)
+		, m_fullScreen(false)
 	{
 		ASSERT(externalHandle);
 		
@@ -253,7 +255,7 @@ namespace mmo
 		scd.OutputWindow = m_handle;
 		scd.SampleDesc.Count = 1;
 		scd.SwapEffect = m_device.HasTearingSupport() ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD;
-		scd.Windowed = TRUE;
+		scd.Windowed = !m_fullScreen;
 		VERIFY(SUCCEEDED(DXGIFactory->CreateSwapChain(&d3dDev, &scd, &m_swapChain)));
 	}
 
