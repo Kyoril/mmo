@@ -167,7 +167,7 @@ namespace mmo
 		const float textScale = FrameManager::Get().GetUIScale().y;
 
 		// Check for font
-		auto font = GetFont();
+		const auto font = GetFont();
 		if (!font)
 		{
 			return m_textAreaOffset.left;

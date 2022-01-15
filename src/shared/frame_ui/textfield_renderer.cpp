@@ -64,7 +64,7 @@ namespace mmo
 		const float textScale = FrameManager::Get().GetUIScale().y;
 
 			// Get the text field
-		auto* textField = static_cast<TextField*>(m_frame);
+		const auto* textField = dynamic_cast<TextField*>(m_frame);
 
 		const auto& textAreaOffsets = textField->GetTextAreaOffsets();
 
@@ -76,7 +76,7 @@ namespace mmo
 		frameRect.bottom -= textAreaOffsets.bottom;
 
 		// Retrieve the font
-		FontPtr font = m_frame->GetFont();
+		const FontPtr font = m_frame->GetFont();
 		if (font)
 		{
 			// We got a font, now draw the text

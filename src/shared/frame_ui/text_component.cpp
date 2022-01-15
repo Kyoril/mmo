@@ -73,9 +73,11 @@ namespace mmo
 
 	void TextComponent::ApplyWrapping(const Rect& area)
 	{
+		const float textScale = FrameManager::Get().GetUIScale().y;
+		
 		if (area.GetWidth() > 0.0f && !m_lineCache.empty())
 		{
-			FontPtr font = m_frame->GetFont();
+			const FontPtr font = m_frame->GetFont();
 
 			// Iterate through each line, character per character
 			auto lineIt = m_lineCache.begin();
@@ -101,7 +103,7 @@ namespace mmo
 					const auto* glyph = font->GetGlyphData(c);
 					if (glyph)
 					{
-						offset += glyph->GetAdvance(1.0f);
+						offset += glyph->GetAdvance(textScale);
 						if (offset > area.right)
 						{
 							offset = area.left;
@@ -119,7 +121,7 @@ namespace mmo
 				// Next line
 				if (!wrapped)
 				{
-					lineIt++;
+					++lineIt;
 				}
 			}
 		}
@@ -149,11 +151,11 @@ namespace mmo
 			// Apply vertical alignment formatting
 			if (m_vertAlignment == VerticalAlignment::Center)
 			{
-				position.y += frameRect.GetHeight() * 0.5f - font->GetHeight() * 0.5f;
+				position.y += frameRect.GetHeight() * 0.5f - font->GetHeight(textScale) * 0.5f;
 			}
 			else if (m_vertAlignment == VerticalAlignment::Bottom)
 			{
-				position.y += frameRect.GetHeight() - font->GetHeight();
+				position.y += frameRect.GetHeight() - font->GetHeight(textScale);
 			}
 
 			// Now, render each line of text, separately
