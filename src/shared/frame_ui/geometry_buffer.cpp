@@ -36,10 +36,7 @@ namespace mmo
 		uint32 pos = 0;
 		for (const auto& batch : m_batches)
 		{
-			// Bind texture
 			gx.BindTexture(batch.first, ShaderType::PixelShader, 0);
-			gx.SetTextureAddressMode(batch.first->GetTextureAddressModeU(), batch.first->GetTextureAddressModeV(), batch.first->GetTextureAddressModeW());
-			gx.SetTextureFilter(batch.first->GetTextureFilter());
 
 			// Setup geometry
 			m_hwBuffer->Set();

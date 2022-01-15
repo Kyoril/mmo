@@ -181,5 +181,8 @@ namespace mmo
 			context.PSSetShaderResources(slot, 1, &views);
 			break;
 		}
+
+		m_device.SetTextureAddressMode(GetTextureAddressModeU(), GetTextureAddressModeV(), GetTextureAddressModeW());
+		m_device.SetTextureFilter(GetTextureFilter());
 	}
 }

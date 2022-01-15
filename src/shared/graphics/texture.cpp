@@ -43,4 +43,11 @@ namespace mmo
 	{
 
 	}
+
+	void Texture::SetDebugName(String debugName)
+	{
+#ifdef _DEBUG
+		m_debugName = std::move(debugName);
+#endif
+	}
 }

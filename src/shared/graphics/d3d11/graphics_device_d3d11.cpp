@@ -302,8 +302,6 @@ namespace mmo
 	{
 		// Create hash generator
 		const SamplerStateHash hashGen;
-
-		// Generate hash from rasterizer desc
 		m_samplerHash = hashGen(m_samplerDesc);
 
 		ComPtr<ID3D11SamplerState> state;
@@ -386,9 +384,16 @@ namespace mmo
 	ID3D11SamplerState* GraphicsDeviceD3D11::GetCurrentSamplerState()
 	{
 		ID3D11SamplerState* result = nullptr;
-		
+
+		if (m_samplerDescChanged)
+		{
+			const SamplerStateHash hashGen;
+			m_samplerHash = hashGen(m_samplerDesc);
+			m_samplerDescChanged = false;
+		}
+
 		// Check if sampler state for this hash has already been created
-		auto it = m_samplerStates.find(m_samplerHash);
+		const auto it = m_samplerStates.find(m_samplerHash);
 		if (it == m_samplerStates.end())
 		{
 			result = CreateSamplerState();
@@ -489,7 +494,7 @@ namespace mmo
 
 		// Rasterizer state
 		UpdateCurrentRasterizerState();
-		
+	
 		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
 
@@ -585,8 +590,6 @@ namespace mmo
 		// Update the constant buffer
 		m_matrixDirty = false;
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
-
-		UpdateSamplerState();
 		
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
@@ -600,8 +603,6 @@ namespace mmo
 		m_matrixDirty = false;
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 		
-		UpdateSamplerState();
-
 		// Execute draw command
 		m_immContext->DrawIndexed(m_indexCount, 0, 0);
 	}
@@ -690,6 +691,7 @@ namespace mmo
 	{
 		GraphicsDevice::RestoreState();
 		m_matrixDirty = true;
+		m_samplerDescChanged = true;
 	}
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
@@ -708,6 +710,9 @@ namespace mmo
 	{
 		// TODO: Mark the BindTexture method obsolete? Technically it's no longer being needed
 		texture->Bind(shader, slot);
+		
+		ID3D11SamplerState* const samplerStates = GetCurrentSamplerState();
+		m_immContext->PSSetSamplers(0, 1, &samplerStates);
 	}
 
 	void GraphicsDeviceD3D11::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
@@ -786,6 +791,8 @@ namespace mmo
 	
 	void GraphicsDeviceD3D11::SetTextureFilter(TextureFilter filter)
 	{
+		GraphicsDevice::SetTextureFilter(filter);
+
 		m_samplerDesc.Filter = D3D11TextureFilter(filter);
 		m_samplerDescChanged = true;
 	}

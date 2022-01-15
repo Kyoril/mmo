@@ -89,6 +89,10 @@ namespace mmo
 		
 		virtual void SetFilter(TextureFilter filter) { m_filter = filter; }
 
+		void SetDebugName(String debugName);
+
+		[[nodiscard]] const String& GetDebugName() const noexcept { return m_debugName; }
+
 	protected:
 		/// Texture file header.
 		tex::v1_0::Header m_header;
@@ -96,6 +100,7 @@ namespace mmo
 		TextureAddressMode m_addressModeV { TextureAddressMode::Wrap };
 		TextureAddressMode m_addressModeW { TextureAddressMode::Wrap };
 		TextureFilter m_filter { TextureFilter::Anisotropic };
+		String m_debugName;
 	};
 
 	/// A texture pointer object.

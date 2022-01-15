@@ -17,13 +17,14 @@ namespace mmo
 		size_t operator()(const D3D11_SAMPLER_DESC& desc) const
 		{			
 			DynamicHash hash;
-			hash.Add64(desc.AddressU);
-			hash.Add64(desc.AddressV);
-			hash.Add64(desc.AddressW);
-			hash.Add64(desc.Filter);
+			// Modify values to get more uniqueness
+			hash.Add32(desc.AddressU * 7);
+			hash.Add32(desc.AddressV * 17);
+			hash.Add32(desc.AddressW * 19);
+			hash.Add32(desc.Filter);
 			hash.AddFloat(desc.MipLODBias);
-			hash.Add64(desc.MaxAnisotropy);
-			hash.Add64(desc.ComparisonFunc);
+			hash.Add32(desc.MaxAnisotropy);
+			hash.Add32(desc.ComparisonFunc);
 			hash.AddFloat(desc.BorderColor[0]);
 			hash.AddFloat(desc.BorderColor[1]);
 			hash.AddFloat(desc.BorderColor[2]);
