@@ -239,7 +239,11 @@ namespace mmo
 
 		// Try to open the file using the asset registry system
 		auto file = AssetRegistry::OpenFile(filename);
-		ASSERT(file);
+		if (!file)
+		{
+			ELOG("Failed to load ui file " << filename << ": File not found!");
+			return;
+		}
 
 		// Call the respective subroutine depending on the file extension
 		if (extension == ".toc")

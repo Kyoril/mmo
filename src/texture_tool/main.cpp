@@ -239,7 +239,7 @@ int main(int argc, char** argv)
 			ELOG("Failed to parse source image file!");
 			return 1;
 		}
-
+		
 		// Open the output file
 		std::ofstream dstFile{ targetFile.c_str(), std::ios::out | std::ios::binary };
 		if (!dstFile)

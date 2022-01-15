@@ -9,7 +9,14 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	add_subdirectory(freetype)
 endif()
 if (MMO_BUILD_TOOLS)
-	add_subdirectory(lodepng)
+	# LibPNG
+	set(PNG_SHARED OFF CACHE BOOL "description")
+	set(PNG_TESTS OFF CACHE BOOL "description")
+	set(PNG_BUILD_ZLIB ON CACHE BOOL "description")
+	include_directories(zlib)
+	add_subdirectory(libpng)
+	set_property(TARGET png_static PROPERTY FOLDER "deps")
+	set_property(TARGET genfiles PROPERTY FOLDER "deps")
 endif()
 
 # Move protobuf libraries into proper solution folders
