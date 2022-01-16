@@ -43,6 +43,10 @@ namespace mmo
 
         const Vector3& GetDerivedPosition() const;
 
+		void SetFillMode(const FillMode fillMode) { m_fillMode = fillMode; }
+
+		[[nodiscard]] FillMode GetFillMode() const noexcept { return m_fillMode; }
+
 	public:
 		void PopulateRenderQueue(RenderQueue& queue) override {}
 
@@ -58,5 +62,6 @@ namespace mmo
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;
 		float m_left, m_right, m_top, m_bottom;
+		FillMode m_fillMode { FillMode::Solid };
 	};
 }

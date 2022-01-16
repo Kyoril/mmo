@@ -6,17 +6,17 @@
 #include "event_loop.h"
 #include "screen.h"
 
-#include "log/default_log_levels.h"
-#include "graphics/graphics_device.h"
-#include "frame_ui/frame_mgr.h"
-#include "frame_ui/font_mgr.h"
-#include "frame_ui/geometry_buffer.h"
 #include "base/assign_on_exit.h"
+#include "frame_ui/font_mgr.h"
+#include "frame_ui/frame_mgr.h"
+#include "frame_ui/geometry_buffer.h"
+#include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 
 #include "assets/asset_registry.h"
 
-#include <mutex>
 #include <algorithm>
+#include <mutex>
 
 #include "loading_screen.h"
 
@@ -70,7 +70,7 @@ namespace mmo
 
 	static std::vector<std::string> s_commandHistory;
 
-	static int s_commandHistoryIndex = 0;
+	static int32_t s_commandHistoryIndex = 0;
 
 	static std::string s_consoleInput;
 

@@ -91,6 +91,8 @@ namespace mmo
 
 		void ToggleGridVisibility();
 
+		void ToggleWireframe();
+
 	private:
 				
 		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);

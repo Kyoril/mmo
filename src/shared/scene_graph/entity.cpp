@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "entity.h"
 #include "scene_graph/render_queue.h"

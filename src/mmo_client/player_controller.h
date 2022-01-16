@@ -38,6 +38,8 @@ namespace mmo
 
 		[[nodiscard]] const std::shared_ptr<GameObjectC>& GetControlledObject() const noexcept { return m_controlledObject; }
 
+		[[nodiscard]] Camera& GetCamera() const { ASSERT(m_defaultCamera); return *m_defaultCamera;}
+
 	private:
 		void SetupCamera();
 

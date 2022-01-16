@@ -123,7 +123,7 @@ namespace mmo
 		FindVisibleObjects(camera, visibleObjectsIt->second);
 
 		// Clear current render target
-		gx.SetFillMode(FillMode::Solid);
+		gx.SetFillMode(camera.GetFillMode());
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());

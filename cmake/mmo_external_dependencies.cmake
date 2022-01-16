@@ -98,6 +98,8 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/protobuf/src/")
 if (MMO_BUILD_EDITOR)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui/examples)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui-node-editor)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui-node-editor/examples)
 endif()
 
 

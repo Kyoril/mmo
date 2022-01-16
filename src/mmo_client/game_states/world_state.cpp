@@ -32,6 +32,7 @@ namespace mmo
 	{
 		static const char* ToggleAxis = "ToggleAxis";
 		static const char* ToggleGrid = "ToggleGrid";
+		static const char* ToggleWire = "ToggleWire";
 	}
 	
 	WorldState::WorldState(RealmConnector& realmConnector)
@@ -241,13 +242,19 @@ namespace mmo
 		{
 			ToggleGridVisibility();
 		}, ConsoleCommandCategory::Debug, "Toggles visibility of the world grid display.");
+		
+		Console::RegisterCommand(command_names::ToggleWire, [this](const std::string&, const std::string&)
+		{
+			ToggleWireframe();
+		}, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
 	}
 
 	void WorldState::RemoveGameplayCommands()
 	{
 		const String commandsToRemove[] = {
 			command_names::ToggleAxis,
-			command_names::ToggleGrid
+			command_names::ToggleGrid,
+			command_names::ToggleWire
 		};
 
 		for (const auto& command : commandsToRemove)
@@ -279,6 +286,20 @@ namespace mmo
 		else
 		{
 			ILOG("WorldGrid hidden");
+		}
+	}
+
+	void WorldState::ToggleWireframe()
+	{
+		auto& camera = m_playerController->GetCamera();
+		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
+		if (camera.GetFillMode() == FillMode::Wireframe)
+		{
+			ILOG("Wireframe active");
+		}
+		else
+		{
+			ILOG("Wireframe inactive");
 		}
 	}
 
