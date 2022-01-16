@@ -38,9 +38,48 @@ namespace mmo
 			max = TakeMaximum(max, v);
 		}
 	}
+	
+	void AABB::Combine(const Vector3& v)
+	{
+		min = TakeMinimum(min, v);
+		max = TakeMaximum(max, v);
+	}
+
 	void AABB::Combine(const AABB & other)
 	{
 		min = TakeMinimum(min, other.min);
 		max = TakeMaximum(max, other.max);
+	}
+
+	bool AABB::Intersects(const AABB& b2) const
+	{
+		if (IsNull() || b2.IsNull())
+		{
+			return false;	
+		}
+			
+		// Use up to 6 separating planes
+		if (max.x < b2.min.x) return false;
+		if (max.y < b2.min.y) return false;
+		if (max.z < b2.min.z) return false;
+
+		if (min.x > b2.max.x) return false;
+		if (min.y > b2.max.y) return false;
+		if (min.z > b2.max.z) return false;
+			
+		return true;
+
+	}
+
+	bool AABB::Intersects(const Vector3& v) const
+	{
+		if (IsNull())
+		{
+			return false;
+		}
+
+		return v.x >= min.x  &&  v.x <= max.x  && 
+			v.y >= min.y  &&  v.y <= max.y  && 
+			v.z >= min.z  &&  v.z <= max.z;
 	}
 }

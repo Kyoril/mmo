@@ -17,7 +17,7 @@ namespace mmo
 		MaterialManager() = default;
 
 	public:
-		~MaterialManager() = default;
+		~MaterialManager() override = default;
 
 	public:
 		static MaterialManager& Get();

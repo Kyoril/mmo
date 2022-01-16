@@ -25,8 +25,13 @@ namespace mmo
 		Camera(const String& name);
 
 	public:
-		const Matrix4& GetProjectionMatrix() const;
-		const Matrix4& GetViewMatrix() const;
+		[[nodiscard]] const Matrix4& GetProjectionMatrix() const;
+
+		[[nodiscard]] const Matrix4& GetViewMatrix() const;
+
+		[[nodiscard]] float GetNearClipDistance() const noexcept { return m_nearDist; }
+
+		[[nodiscard]] float GetFarClipDistance() const noexcept { return m_farDist; }
 		
 	protected:
 		void UpdateFrustum() const;
@@ -52,8 +57,8 @@ namespace mmo
 
 	private:
 		Radian m_fovY;
-		float m_farDist;
-		float m_nearDist;
+		float m_farDist { 1000.0f };
+		float m_nearDist { 0.01f };
 		float m_aspect;
 		float m_orthoHeight;
 		mutable Quaternion m_lastParentOrientation;

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "constants.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
@@ -80,20 +81,38 @@ namespace mmo
 		bool operator>(const Radian& r) const { return m_value > r.m_value; }
 	};
 
+	inline Radian ACos(const float value)
+    {
+        if ( -1.0f < value )
+        {
+            if ( value < 1.0f )
+                return Radian(acos(value));
+            
+			return Radian(0.0f);
+        }
+		
+		return Radian(Pi);
+    }
+	
+    inline float Sin (const Radian& value)
+	{
+		return sin(value.GetValueRadians());
+	}
 
-	inline Radian operator * (float a, const Radian& b)
+	inline Radian operator * (const float a, const Radian& b)
 	{
 		return Radian(a * b.GetValueRadians());
 	}
 
-	inline Radian operator / (float a, const Radian& b)
+	inline Radian operator / (const float a, const Radian& b)
 	{
 		return Radian(a / b.GetValueRadians());
 	}
 
 	inline io::Reader& operator>>(io::Reader& reader, Radian& radian)
 	{
-		if (float value; reader >> io::read<float>(value))
+		float value; 
+		if (reader >> io::read<float>(value))
 		{
 			radian = Radian(value);
 		}

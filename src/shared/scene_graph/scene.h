@@ -98,6 +98,12 @@ namespace mmo
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 
+		[[nodiscard]] float GetShadowFarDistance() const noexcept { return m_defaultShadowFarDist; }
+
+		[[nodiscard]] float GetShadowFarDistanceSquared() const noexcept { return m_defaultShadowFarDist * m_defaultShadowFarDist; }
+
+		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; }
+
 	private:
 		void RenderVisibleObjects();
 		
@@ -127,5 +133,7 @@ namespace mmo
 		ManualRenderObjectMap m_manualRenderObjects;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
+
+		float m_defaultShadowFarDist { 0.0f };
 	};
 }

@@ -27,6 +27,8 @@ namespace mmo
 		/// Transforms the bounding box using the given 4x4 matrix. Keep in mind,
 		/// that the result will still be an AXIS ALIGNED bounding box.
 		void Transform(const Matrix4& matrix);
+		
+		void Combine(const Vector3& other);
 
 		/// Combines another axis aligned bounding box with this one, so that the 
 		/// new minimum is the total minimum of both boxes and the new maximum is
@@ -76,6 +78,10 @@ namespace mmo
 		{
 			return max - min;
 		}
+
+		bool Intersects(const AABB& b2) const;
+
+		bool Intersects(const Vector3& v) const;
 
 	public:
 		/// Minimum bounding box vector.

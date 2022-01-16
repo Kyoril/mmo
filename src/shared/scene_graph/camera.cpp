@@ -10,8 +10,6 @@ namespace mmo
 	Camera::Camera(const String& name)
 		: MovableObject(name)
 		, m_fovY(Radian(Pi / 4.0f))
-		, m_farDist(1000.0f)
-		, m_nearDist(0.001f)
 		, m_aspect(16.0f / 9.0f)
 		, m_orthoHeight(1000)
 		, m_viewInvalid(true)

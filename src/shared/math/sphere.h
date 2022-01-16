@@ -33,6 +33,11 @@ namespace mmo
 		}
 
 		[[nodiscard]] bool Intersects(const AABB& box) const;
+		
+		[[nodiscard]] bool Intersects(const Vector3& v) const
+		{
+            return (v - m_center).GetSquaredLength() <= ::sqrtf(m_radius);
+		}
 
 		[[nodiscard]] bool Contains(const Vector3& point) const
 		{

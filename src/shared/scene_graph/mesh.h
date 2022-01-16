@@ -5,13 +5,13 @@
 #include "sub_mesh.h"
 
 #include "base/typedefs.h"
-#include "math/aabb.h"
-#include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
+#include "graphics/vertex_buffer.h"
+#include "math/aabb.h"
 
-#include <vector>
-#include <memory>
 #include <map>
+#include <memory>
+#include <vector>
 
 namespace mmo
 {

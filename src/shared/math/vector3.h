@@ -12,9 +12,14 @@
 #include <cfloat>
 #include <ostream>
 
+#include "clamp.h"
+#include "radian.h"
+
 
 namespace mmo
 {
+	class Quaternion;
+
 	/// This class represents a three-dimensional vector.
 	class Vector3
 	{
@@ -24,6 +29,9 @@ namespace mmo
 		static Vector3 UnitY;
 		static Vector3 UnitZ;
 		static Vector3 UnitScale;
+		static Vector3 NegativeUnitX;
+		static Vector3 NegativeUnitY;
+		static Vector3 NegativeUnitZ;
 
 	public:
 		float x, y, z;
@@ -249,15 +257,38 @@ namespace mmo
 			// false, that's why we do checks against x == x etc. here
 			return x == x && y == y && z == z;
 		}
+		
+		inline Radian AngleBetween(const Vector3& dest) const
+		{
+			float lenProduct = GetLength() * dest.GetLength();
+
+			// Divide by zero check
+			if(lenProduct < 1e-6f)
+			{
+				lenProduct = 1e-6f;	
+			}
+
+			float f = Dot(dest) / lenProduct;
+			f = Clamp(f, -1.0f, 1.0f);
+			return ACos(f);
+		}
+
+		inline bool IsZeroLength() const
+        {
+	        const float squaredLength = (x * x) + (y * y) + (z * z);
+            return (squaredLength < (1e-06 * 1e-06));
+        }
+
+		inline Quaternion GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis = Zero) const;
 	};
 
-	inline std::ostream& operator<<(std::ostream& o, const Vector3& b)
+	inline std::ostream& operator<<(std::ostream& o, const mmo::Vector3& b)
 	{
 		return o
 			<< "(" << b.x << ", " << b.y << ", " << b.z << ")";
 	}
 
-	inline io::Writer& operator<<(io::Writer& w, const Vector3& b)
+	inline io::Writer& operator<<(io::Writer& w, const mmo::Vector3& b)
 	{
 		return w
 			<< io::write<float>(b.x)
@@ -265,7 +296,7 @@ namespace mmo
 			<< io::write<float>(b.z);
 	}
 
-	inline io::Reader& operator>>(io::Reader& r, Vector3& b)
+	inline io::Reader& operator>>(io::Reader& r, mmo::Vector3& b)
 	{
 		return r
 			>> io::read<float>(b.x)
