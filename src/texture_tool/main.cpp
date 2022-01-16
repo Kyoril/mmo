@@ -212,14 +212,16 @@ int main(int argc, char** argv)
 
 		const auto sourcePath = std::filesystem::path(sourceFile);
 		const auto extension = sourcePath.extension().string();
+		std::string lowerExtension;
+		std::transform(extension.begin(), extension.end(), std::back_inserter(lowerExtension), ::tolower);
 		
 		std::unique_ptr<mmo::IImageParser> imageParser;
-		if (extension == ".png")
+		if (lowerExtension == ".png")
 		{
 			ILOG("Using PNG image parser");
 			imageParser = std::make_unique<mmo::PngImageParser>();
 		}
-		else if(extension == ".tga")
+		else if(lowerExtension == ".tga")
 		{
 			ILOG("Using TGA image parser");
 			imageParser = std::make_unique<mmo::TgaImageParser>();
@@ -227,7 +229,7 @@ int main(int argc, char** argv)
 
 		if (!imageParser)
 		{
-			ELOG("Unsupported source file extension!");
+			ELOG("Unsupported source file extension " << lowerExtension);
 			return 1;
 		}
 

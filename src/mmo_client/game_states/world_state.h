@@ -26,6 +26,9 @@ namespace mmo
 	class LoginConnector;
 	class RealmConnector;
 
+	class Entity;
+	class SceneNode;
+
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class WorldState final
@@ -107,5 +110,12 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
+
+		SceneNode* m_archNode { nullptr };
+		SceneNode* m_towerLeftNode { nullptr };
+		SceneNode* m_towerRightNode { nullptr };
+		Entity* m_archEntity { nullptr };
+		Entity* m_towerLeftEntity { nullptr };
+		Entity* m_towerRightEntity { nullptr };
 	};
 }

@@ -178,6 +178,28 @@ namespace mmo
 		m_debugAxis = std::make_unique<AxisDisplay>(m_scene, "WorldDebugAxis");
 		m_scene.GetRootSceneNode().AddChild(m_debugAxis->GetSceneNode());
 		m_debugAxis->SetVisible(false);
+
+		m_archEntity = m_scene.CreateEntity("FortressArch01", "Models/Fortress_Arch_01/Fortress_Arch_01.hmsh");
+		m_towerLeftEntity = m_scene.CreateEntity("FortressTowerLeft01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
+		m_towerRightEntity = m_scene.CreateEntity("FortressTowerRight01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
+
+		m_archNode = &m_scene.CreateSceneNode("FortressArch01");
+		m_scene.GetRootSceneNode().AddChild(*m_archNode);
+		m_archNode->SetPosition({1.1f, 0.0f, -0.1f });
+		m_archNode->SetOrientation(Quaternion(Degree(-90), Vector3::UnitX));
+		m_archNode->AttachObject(*m_archEntity);
+		
+		m_towerLeftNode = &m_scene.CreateSceneNode("FortressTowerLeft01");
+		m_scene.GetRootSceneNode().AddChild(*m_towerLeftNode);
+		m_towerLeftNode->SetPosition({-7.45f, -0.05f, -0.2f });
+		m_towerLeftNode->SetOrientation(Quaternion(Degree(-90), Vector3::UnitX));
+		m_towerLeftNode->AttachObject(*m_towerLeftEntity);
+
+		m_towerRightNode = &m_scene.CreateSceneNode("FortressTowerRight01");
+		m_scene.GetRootSceneNode().AddChild(*m_towerRightNode);
+		m_towerRightNode->SetPosition({9.55f, -0.05f, -0.2f });
+		m_towerRightNode->SetOrientation(Quaternion(Degree(-90), Vector3::UnitX));
+		m_towerRightNode->AttachObject(*m_towerRightEntity);
 	}
 
 	void WorldState::SetupPacketHandler()
