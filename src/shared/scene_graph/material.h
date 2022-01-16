@@ -3,6 +3,8 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "graphics/pixel_shader.h"
+#include "graphics/vertex_shader.h"
 
 #include <memory>
 
@@ -14,7 +16,7 @@ namespace mmo
 		/// @brief The material is completely opaque and lit.
 		Opaque,
 
-		/// @brief The mateiral is unlit.
+		/// @brief The material is unlit.
 		Unlit,
 
 		/// @brief The material is lit and masked (binary alpha).
@@ -72,12 +74,27 @@ namespace mmo
 
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const noexcept { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
+
+
+		void SetVertexShader(const std::shared_ptr<VertexShader>& vertexShader) { m_vertexShader = vertexShader; }
+
+		/// @brief Gets the vertex shader that is being used.
+		///	@return The vertex shader that is being used.
+		[[nodiscard]] const std::shared_ptr<VertexShader>& GetVertexShader() const noexcept { return m_vertexShader; }
 		
+		void SetPixelShader(const std::shared_ptr<PixelShader>& pixelShader) { m_pixelShader = pixelShader; }
+
+		/// @brief Gets the pixel shader that is currently being used.
+		/// @return The pixel shader to use when rendering something using this material.
+		[[nodiscard]] const std::shared_ptr<PixelShader>& GetPixelShader() const noexcept { return m_pixelShader; }
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
 		bool m_castShadow { true };
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
+		std::shared_ptr<VertexShader> m_vertexShader;
+		std::shared_ptr<PixelShader> m_pixelShader;
 	};
 }

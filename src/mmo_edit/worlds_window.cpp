@@ -51,13 +51,13 @@ namespace mmo
                 {
                     // TODO: Add a new map
                 }
-
-                /*TODO: If map selected... */ ImGui::PushDisabled();
+                
+                ImGui::BeginDisabled();
                 if (ImGui::Button("Delete World", ImVec2(250, 0)))
                 {
                     // TODO: Delete selected map and unselect
                 }
-                /*TODO: If map selected... */ ImGui::PopDisabled();
+                ImGui::EndDisabled();
 
                 ImGui::EndGroup();
             }

@@ -283,10 +283,12 @@ macro(add_gui_exe name)
 	file(GLOB headers "*.h" "*.hpp")
 	file(GLOB resources "*.rc")
 	
+	source_group(src FILES ${headers} ${sources})
+	
 	# Append additional sources if any
 	list(LENGTH add_sources num_add_sources)
     if (${num_add_sources} GREATER 0)
-		list(APPEND sources ${add_sources})
+		list(APPEND additionalSources ${add_sources})
 	endif()
 	
 	#remove_pch_cpp(sources "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp")
@@ -295,9 +297,9 @@ macro(add_gui_exe name)
 		include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 		enable_unity_build(${name} sources)
 	endif()
-	add_executable(${name} WIN32 MACOSX_BUNDLE ${resources} ${headers} ${sources})
+	
+	add_executable(${name} WIN32 MACOSX_BUNDLE ${resources} ${headers} ${sources} ${additionalSources})
 	#add_precompiled_header(${name} "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
-	source_group(src FILES ${headers} ${sources})
 	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
 		target_link_libraries(${name} stdc++fs)
 	endif()

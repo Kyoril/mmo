@@ -33,12 +33,139 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"
+#include "imgui_node_editor.h"
+#include "imgui-node-editor/examples/blueprints-example/utilities/widgets.h"
+#include "imgui-node-editor/examples/blueprints-example/utilities/builders.h"
+
+static ImTextureID s_headerBackground = nullptr;
+
+namespace ed = ax::NodeEditor;
+
+enum class PinType
+{
+    Flow,
+    Bool,
+    Int,
+    Float,
+    String,
+    Object,
+    Function,
+    Delegate,
+};
+
+enum class PinKind
+{
+    Output,
+    Input
+};
+
+enum class NodeType
+{
+    Blueprint,
+    Simple,
+    Tree,
+    Comment,
+    Houdini
+};
+
+struct Node;
+
+struct Pin
+{
+    ed::PinId   ID;
+    ::Node*     Node;
+    std::string Name;
+    PinType     Type;
+    PinKind     Kind;
+
+    Pin(int id, const char* name, PinType type):
+        ID(id), Node(nullptr), Name(name), Type(type), Kind(PinKind::Input)
+    {
+    }
+};
+
+struct Node
+{
+    ed::NodeId ID;
+    std::string Name;
+    std::vector<Pin> Inputs;
+    std::vector<Pin> Outputs;
+    ImColor Color;
+    NodeType Type;
+    ImVec2 Size;
+
+    std::string State;
+    std::string SavedState;
+
+    Node(int id, const char* name, ImColor color = ImColor(255, 255, 255)):
+        ID(id), Name(name), Color(color), Type(NodeType::Blueprint), Size(0, 0)
+    {
+    }
+};
+
+static const int            s_PinIconSize = 24;
+
+ImColor GetIconColor(PinType type)
+{
+    switch (type)
+    {
+        default:
+        case PinType::Flow:     return ImColor(255, 255, 255);
+        case PinType::Bool:     return ImColor(220,  48,  48);
+        case PinType::Int:      return ImColor( 68, 201, 156);
+        case PinType::Float:    return ImColor(147, 226,  74);
+        case PinType::String:   return ImColor(124,  21, 153);
+        case PinType::Object:   return ImColor( 51, 150, 215);
+        case PinType::Function: return ImColor(218,   0, 183);
+        case PinType::Delegate: return ImColor(255,  48,  48);
+    }
+};
+
+void DrawPinIcon(const Pin& pin, bool connected, int alpha)
+{
+	ax::Drawing::IconType iconType;
+    ImColor  color = GetIconColor(pin.Type);
+    color.Value.w = alpha / 255.0f;
+    switch (pin.Type)
+    {
+        case PinType::Flow:     iconType = ax::Drawing::IconType::Flow;   break;
+        case PinType::Bool:     iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::Int:      iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::Float:    iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::String:   iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::Object:   iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::Function: iconType = ax::Drawing::IconType::Circle; break;
+        case PinType::Delegate: iconType = ax::Drawing::IconType::Square; break;
+        default:
+            return;
+    }
+
+    ax::Widgets::Icon(ImVec2(s_PinIconSize, s_PinIconSize), iconType, connected, color, ImColor(32, 32, 32, alpha));
+};
+
+struct Link
+{
+    ed::LinkId ID;
+
+    ed::PinId StartPinID;
+    ed::PinId EndPinID;
+
+    ImColor Color;
+
+    Link(ed::LinkId id, ed::PinId startPinId, ed::PinId endPinId):
+        ID(id), StartPinID(startPinId), EndPinID(endPinId), Color(255, 255, 255)
+    {
+    }
+};
 
 namespace mmo
 {
 	static const char* s_mainWindowClassName = "MainWindow";
 	static bool s_initialized = false;
-
+	
+	static ed::EditorContext* s_context = nullptr;
 
 	MainWindow::MainWindow(Configuration& config)
 		: m_config(config)
@@ -73,7 +200,11 @@ namespace mmo
 		{
 			WLOG("Unable to initialize asset registry: No asset registry path provided!");
 		}
-
+		
+	    ed::Config editorConfig;
+	    editorConfig.SettingsFile = "Simple.json";
+	    s_context = ed::CreateEditor(&editorConfig);
+		
 		// Setup the viewport render texture
 		s_initialized = true;
 
@@ -91,6 +222,8 @@ namespace mmo
 	{
 		// No longer initialized
 		s_initialized = false;
+		
+		ed::DestroyEditor(s_context);
 
 		// Terminate ImGui
 		ShutdownImGui();
@@ -228,6 +361,8 @@ namespace mmo
 
 			// Draw the viewport window
 			m_viewportWindow.Draw();
+
+			RenderSimpleNodeEditor();
 
 			// Render log window
 			m_logWindow.Draw();
@@ -552,6 +687,36 @@ namespace mmo
 
 		// Dockspace flags
 		m_dockSpaceFlags = ImGuiDockNodeFlags_None;//ImGuiDockNodeFlags_AutoHideTabBar;
+	}
+
+	void MainWindow::RenderSimpleNodeEditor()
+	{
+		Pin pin(0, "time", PinType::Float);
+		pin.Kind = PinKind::Output;
+
+		// Add the viewport
+		if (ImGui::Begin("Nodes"))
+		{
+		    ed::SetCurrentEditor(s_context);
+		    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
+		    int uniqueId = 1;
+		    // Start drawing nodes.
+		    ed::BeginNode(uniqueId++);
+		        ImGui::Text("Get Time");
+		        /*ed::BeginPin(uniqueId++, ed::PinKind::Input);
+		            DrawPinIcon(pin, false, 255);
+		        ed::EndPin();*/
+		        ImGui::SameLine();
+		        ed::BeginPin(uniqueId++, ed::PinKind::Output);
+				ed::PinPivotAlignment(ImVec2(1.0f, 0.5f));
+				ed::PinPivotSize(ImVec2(0, 0));
+				DrawPinIcon(pin, false, 255);
+		        ed::EndPin();
+		    ed::EndNode();
+		    ed::End();
+		    ed::SetCurrentEditor(nullptr);
+		}
+		ImGui::End();
 	}
 
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)

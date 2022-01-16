@@ -11,9 +11,24 @@ file(GLOB imgui_src
 	"${PROJECT_SOURCE_DIR}/deps/imgui/misc/cpp/imgui_stdlib.h"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/misc/cpp/imgui_stdlib.cpp"
 	"${PROJECT_SOURCE_DIR}/deps/imgui/backends/imgui_impl_win32.cpp"
-	"${PROJECT_SOURCE_DIR}/deps/imgui/backends/imgui_impl_dx11.cpp")
+	"${PROJECT_SOURCE_DIR}/deps/imgui/backends/imgui_impl_dx11.cpp"
+
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/crude_json.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_canvas.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_node_editor.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_node_editor_api.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_node_editor_internal.inl"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_extra_math.inl"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_bezier_math.inl"
+	
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/builders.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/widgets.cpp"
+	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/drawing.cpp"
+)
 
 include_directories(${FBXSDK_INCLUDE_DIR})
+
+source_group(src\\imgui FILES ${imgui_src})
 
 # Add executable
 add_gui_exe(mmo_edit ${imgui_src})

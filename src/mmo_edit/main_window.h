@@ -39,6 +39,9 @@ namespace mmo
 		void CreateWindowHandle();
 		/// Initialize ImGui.
 		void InitImGui();
+
+		void RenderSimpleNodeEditor();
+
 		/// Render ImGui.
 		void RenderImGui();
 

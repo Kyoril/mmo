@@ -14,6 +14,3 @@
 [submodule "data/editor"]
 	path = data/editor
 	url = https://github.com/Kyoril/mmo-editor-data
-[submodule "deps/imgui-node-editor"]
-	path = deps/imgui-node-editor
-	url = https://github.com/thedmd/imgui-node-editor
