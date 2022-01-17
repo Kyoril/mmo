@@ -4,7 +4,7 @@
 
 #include "base/typedefs.h"
 #include "mesh/magic.h"
-#include "mesh/chunk_writer.h"
+#include "base/chunk_writer.h"
 
 
 namespace mmo

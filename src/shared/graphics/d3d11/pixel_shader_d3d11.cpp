@@ -10,6 +10,11 @@ namespace mmo
 		: PixelShader()
 		, Device(InDevice)
 	{
+		std::copy(
+			static_cast<const uint8*>(InShaderCode), 
+			static_cast<const uint8*>(InShaderCode) + InShaderCodeSize, 
+			std::back_inserter(m_byteCode));
+
 		ID3D11Device& D3DDevice = Device;
 		VERIFY(SUCCEEDED(D3DDevice.CreatePixelShader(InShaderCode, InShaderCodeSize, nullptr, &Shader)));
 	}

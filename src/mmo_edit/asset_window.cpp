@@ -7,6 +7,9 @@
 
 #include <imgui.h>
 
+#include "graphics/texture_mgr.h"
+#include "graphics/texture.h"
+
 namespace mmo
 {	
 	AssetWindow::AssetWindow()
@@ -14,38 +17,41 @@ namespace mmo
 	{
 	}
 
-	void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path)
+	void AssetWindow::RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path)
 	{
 		// If there are no children, we don't need to continue
 		if (entry.children.empty())
 		{
-			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-			{
-				if (std::filesystem::path(name).extension() == ".hmsh")
-				{
-					DLOG("Open model " << entry.fullPath);
-
-
-				}
-			}
+			return;
 		}
-		else
+		
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow;
+		if (m_selectedEntry == &entry)
 		{
-			// There are children, render them
-			if (ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				const auto childPath = path + "/" + name;
-				for(const auto& child : entry.children)
-				{
-					RenderAssetEntry(child.first, child.second, childPath);
-				}
+			flags |= ImGuiTreeNodeFlags_Selected;
+		}
 
-				ImGui::TreePop();
+		// There are children, render them
+		if (ImGui::TreeNodeEx(name.c_str(), flags))
+		{
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+			{
+				DLOG("Selected: " << path << "/" << name);
+				m_selectedPath = path + "/" + name;
+				m_selectedEntry = &entry;
 			}
+			
+			const auto childPath = path + "/" + name;
+			for(const auto& child : entry.children)
+			{
+				RenderAssetEntry(child.first, child.second, childPath);
+			}
+
+			ImGui::TreePop();
 		}
 	}
 
-	void AddAssetToMap(AssetEntry& parent, const std::string& assetPath)
+	void AssetWindow::AddAssetToMap(AssetEntry& parent, const std::string& assetPath)
 	{
 		// Check if we are done already
 		const auto separatorIndex = assetPath.find('/');
@@ -83,10 +89,19 @@ namespace mmo
 		// Gather a list of all assets
 		if (m_assets.empty())
 		{
+			static bool s_folderIconLoaded = false;
+			if (!s_folderIconLoaded)
+			{
+				m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
+				s_folderIconLoaded = true;
+			}
+
 			// Gather a list of all assets in the registry
 			const auto assets = AssetRegistry::ListFiles();
 			for(const auto& asset : assets)
 			{
+				if (asset.starts_with(".")) continue;
+
 				// Split asset path
 				const auto separatorIndex = asset.find('/');
 				if (separatorIndex == std::string::npos)
@@ -123,10 +138,60 @@ namespace mmo
 			{
 				RenderAssetEntry(asset.first, asset.second, path);
 			}
+			
 
 			ImGui::EndChild();
 			
 			ImGui::NextColumn();
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+			ImGui::BeginChild("assetPreview", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+			{
+				const ImVec2 size = ImGui::GetWindowSize();
+
+				
+				const int32 colCount = static_cast<int32>(size.x / (128.0f + 10.0f + ImGui::GetStyle().ColumnsMinSpacing));
+				if (colCount > 0)
+				{
+					ImGui::Columns(colCount, nullptr, false);
+
+					if (m_selectedEntry)
+					{
+						const ImTextureID folderTexture = m_folderTexture ? m_folderTexture->GetTextureObject() : nullptr;
+						
+						for (const auto& [name, entry] : m_selectedEntry->children)
+						{
+							if (!entry.children.empty())
+							{
+								ImGui::Spacing();
+								ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
+								ImGui::TextWrapped(name.c_str());
+							}
+							else
+							{
+								ImTextureID imTexture = nullptr;
+								if (name.ends_with(".htex"))
+								{
+									const auto texture = TextureManager::Get().CreateOrRetrieve(entry.fullPath);
+									if (texture)
+									{
+										imTexture = texture->GetTextureObject();
+									}
+								}
+
+								ImGui::Spacing();
+								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
+								ImGui::TextWrapped(name.c_str());
+							}
+							
+							ImGui::NextColumn();
+						}
+					}
+				}
+				
+			}
+			ImGui::EndChild();
+			ImGui::PopStyleColor();
 			
 			ImGui::Columns(1);
 		}

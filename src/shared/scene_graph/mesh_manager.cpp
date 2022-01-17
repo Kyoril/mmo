@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
-#include "mesh/chunk_writer.h"
+#include "base/chunk_writer.h"
 
 
 namespace mmo

@@ -11,6 +11,10 @@ namespace mmo
 	class PixelShader : public ShaderBase
 	{
 	public:
+		PixelShader() = default;
+		virtual ~PixelShader() override = default;
 
+	public:
+		[[nodiscard]] ShaderType GetType() const noexcept override { return ShaderType::PixelShader; }
 	};
 }

@@ -12,7 +12,7 @@
 
 #include "base/filesystem.h"
 #include "base/utilities.h"
-#include "mesh/chunk_writer.h"
+#include "base/chunk_writer.h"
 #include "mesh_v1_0/header.h"
 #include "mesh_v1_0/header_save.h"
 #include "binary_io/stream_sink.h"

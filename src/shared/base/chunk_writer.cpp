@@ -2,7 +2,6 @@
 
 #include "chunk_writer.h"
 
-
 #include "base/macros.h"
 #include "binary_io/writer.h"
 

@@ -7,7 +7,7 @@
 #include "binary_io/writer.h"
 #include "mesh/pre_header.h"
 
-#include "mesh/chunk_writer.h"
+#include "base/chunk_writer.h"
 #include "mesh_v1_0/header.h"
 #include "mesh_v1_0/header_save.h"
 

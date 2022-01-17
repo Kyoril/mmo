@@ -8,6 +8,7 @@
 
 
 #include "base/non_copyable.h"
+#include "graphics/texture.h"
 
 namespace mmo
 {
@@ -37,7 +38,16 @@ namespace mmo
 		bool IsVisible() const noexcept { return m_visible; }
 
 	private:
+		
+		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);
+		
+		void AddAssetToMap(AssetEntry& parent, const std::string& assetPath);
+
+	private:
 		bool m_visible;
 		std::map<std::string, AssetEntry> m_assets;
+		std::string m_selectedPath;
+		TexturePtr m_folderTexture;
+		const AssetEntry* m_selectedEntry { nullptr };
 	};
 }

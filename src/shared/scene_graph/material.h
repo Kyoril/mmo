@@ -74,7 +74,8 @@ namespace mmo
 
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const noexcept { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
-		
+
+	public:
 		void SetVertexShader(const std::shared_ptr<VertexShader>& vertexShader) { m_vertexShader = vertexShader; }
 
 		/// @brief Gets the vertex shader that is being used.

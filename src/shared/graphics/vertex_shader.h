@@ -11,6 +11,10 @@ namespace mmo
 	class VertexShader : public ShaderBase
 	{
 	public:
+		VertexShader() = default;
+		virtual ~VertexShader() override = default;
 
+	public:
+		[[nodiscard]] ShaderType GetType() const noexcept override { return ShaderType::VertexShader; }
 	};
 }

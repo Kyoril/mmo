@@ -7,6 +7,8 @@
 
 #include <stdexcept>
 
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -32,7 +34,8 @@ namespace mmo
 		auto file = AssetRegistry::OpenFile(filename);
 		if (!file)
 		{
-			throw std::runtime_error("Failed to open file " + filename);
+			ELOG("Failed to open file " << filename);
+			return nullptr;
 		}
 
 		// Create a new texture object
