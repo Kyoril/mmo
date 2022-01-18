@@ -28,6 +28,7 @@ file(GLOB imgui_src
 
 file(GLOB editor_windows_src "editor_windows/*.h" "editor_windows/*.cpp")
 file(GLOB preview_providers_src "preview_providers/*.h" "preview_providers/*.cpp")
+file(GLOB editors_src "editors/*.h" "editors/*.cpp")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${FBXSDK_INCLUDE_DIR})
@@ -35,9 +36,10 @@ include_directories(${FBXSDK_INCLUDE_DIR})
 source_group(src\\imgui FILES ${imgui_src})
 source_group(src\\editor_windows FILES ${editor_windows_src})
 source_group(src\\preview_providers FILES ${preview_providers_src})
+source_group(src\\editors FILES ${editors_src})
 
 # Add executable
-add_gui_exe(mmo_edit ${imgui_src} ${editor_windows_src} ${preview_providers_src})
+add_gui_exe(mmo_edit ${imgui_src} ${editor_windows_src} ${preview_providers_src} ${editors_src})
 
 target_link_libraries(mmo_edit 
 	base 
