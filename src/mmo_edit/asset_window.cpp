@@ -1,12 +1,10 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "asset_window.h"
-#include "assets/asset_registry.h"
-
-#include "log/default_log_levels.h"
 
 #include <imgui.h>
 
+#include "assets/asset_registry.h"
 #include "graphics/texture.h"
 #include "graphics/texture_mgr.h"
 
@@ -117,6 +115,13 @@ namespace mmo
 		if (ImGui::Begin(m_name.c_str(), &m_visible))
 		{
 			ImGui::Columns(2, nullptr, true);
+			static bool s_widthSet = false;
+			if (!s_widthSet)
+			{
+				ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
+				s_widthSet = true;
+			}
+
 			ImGui::BeginChild("assetFolderScrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 			
 			const std::string path;
@@ -124,7 +129,6 @@ namespace mmo
 			{
 				RenderAssetEntry(asset.first, asset.second, path);
 			}
-			
 			ImGui::EndChild();
 			
 			ImGui::NextColumn();
@@ -154,15 +158,14 @@ namespace mmo
 							else
 							{
 								ImTextureID imTexture = nullptr;
-								
+
 								const auto& extension = std::filesystem::path(name).extension().string();
 								auto* previewProvider = m_previewProviderManager.GetPreviewProviderForExtension(extension);
 								if (previewProvider)
 								{
 									imTexture = previewProvider->GetAssetPreview(entry.fullPath);
 								}								
-
-								ImGui::Spacing();
+								
 								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
 								ImGui::TextWrapped(name.c_str());
 							}

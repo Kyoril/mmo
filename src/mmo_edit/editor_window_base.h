@@ -7,6 +7,15 @@
 
 namespace mmo
 {
+	enum class DockDirection
+	{
+		Top,
+		Left,
+		Right,
+		Bottom,
+		Center
+	};
+
 	/// @brief Base class of a dockable editor ui window.
 	class EditorWindowBase
 	{
@@ -37,6 +46,21 @@ namespace mmo
 
 		/// @brief Called when it's time to draw the window.
 		virtual bool Draw() = 0;
+
+		/// @brief Determines whether the window is dockable.
+		/// @return True if the window is dockable, false otherwise.
+		[[nodiscard]] virtual bool IsDockable() const noexcept { return false; }
+
+		/// @brief Determines whethe the window is resizable.
+		/// @return True if the window is resizable.
+		[[nodiscard]] virtual bool IsResizable() const noexcept { return true; }
+
+		/// @brief Gets the default dock direction of the window.
+		///	@return The default dock direction of the window.
+		[[nodiscard]] virtual DockDirection GetDefaultDockDirection() const noexcept { return DockDirection::Bottom; }
+
+		/// @brief Gets the default dock size of the window.
+		[[nodiscard]] virtual float GetDefaultDockSize() const noexcept { return 400.0f; }
 
 	protected:
 		String m_name;

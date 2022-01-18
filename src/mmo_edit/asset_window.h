@@ -31,7 +31,10 @@ namespace mmo
 	public:
 		/// Draws the viewport window.
 		bool Draw() override;
-		
+
+	public:
+		bool IsDockable() const noexcept override { return true; }
+
 	private:
 		
 		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);
@@ -44,6 +47,7 @@ namespace mmo
 		std::map<std::string, AssetEntry> m_assets;
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
+		float m_columnWidth { 350.0f };
 
 	};
 }

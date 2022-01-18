@@ -39,6 +39,12 @@ namespace mmo
 		/// Creates the internal window handle.
 		void CreateWindowHandle();
 
+		/// @brief 
+		/// @param window 
+		void HandleEditorWindow(EditorWindowBase& window);
+
+		void HandleMainMenu(bool& showSaveDialog);
+
 		/// Initialize ImGui.
 		void InitImGui();
 

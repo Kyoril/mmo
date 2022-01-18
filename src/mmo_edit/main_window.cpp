@@ -278,6 +278,83 @@ namespace mmo
 		UpdateWindow(m_windowHandle);
 	}
 
+	void MainWindow::HandleEditorWindow(EditorWindowBase& window)
+	{
+		bool visible = window.IsVisible();
+		if (visible)
+		{
+			ImGuiWindowFlags flags = ImGuiWindowFlags_None;
+
+			if (!window.IsResizable()) flags |= ImGuiWindowFlags_NoResize;
+			if (!window.IsDockable()) flags |= ImGuiWindowFlags_NoDocking;
+
+			if (ImGui::Begin(window.GetName().c_str(), &visible, flags))
+			{
+				window.Draw();
+			}
+			ImGui::End();
+
+			window.SetVisible(visible);
+		}
+	}
+
+	void MainWindow::HandleMainMenu(bool& showSaveDialog)
+	{
+		if (ImGui::BeginMenuBar())
+		{
+			// File menu
+			if (ImGui::BeginMenu("File"))
+			{
+				if (ImGui::MenuItem("Save Project", nullptr, nullptr, m_projectLoaded))
+				{
+					if (!m_project.Save(m_config.projectPath))
+					{
+						ELOG("Failed to save project");
+					}
+				}
+
+				ImGui::Separator();
+
+				showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, nullptr, m_fileLoaded);
+
+				ImGui::Separator();
+					
+				if (ImGui::MenuItem("Exit", nullptr))
+				{
+					// Terminate the application
+					PostQuitMessage(0);
+				}
+
+				ImGui::EndMenu();
+			}
+
+			// View menu
+			if (ImGui::BeginMenu("View"))
+			{
+				for (const auto& window : m_editorWindows)
+				{
+					if (ImGui::MenuItem(window->GetName().c_str(), nullptr, window->IsVisible()))
+					{
+						window->Open();
+					}
+				}
+
+				if (!m_editorWindows.empty())
+				{
+					ImGui::Separator();	
+				}
+					
+				m_logWindow.DrawViewMenuItem();
+				m_viewportWindow.DrawViewMenuItem();
+				m_worldsWindow.DrawViewMenuItem();
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMenuBar();
+		}
+	}
+
 	void MainWindow::RenderImGui()
 	{
 		// Start the Dear ImGui frame
@@ -316,59 +393,7 @@ namespace mmo
 			bool showSaveDialog = false;
 			
 			// The main menu
-			if (ImGui::BeginMenuBar())
-			{
-				// File menu
-				if (ImGui::BeginMenu("File"))
-				{
-					if (ImGui::MenuItem("Save Project", nullptr, nullptr, m_projectLoaded))
-					{
-						if (!m_project.Save(m_config.projectPath))
-						{
-							ELOG("Failed to save project");
-						}
-					}
-
-					ImGui::Separator();
-
-					showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, nullptr, m_fileLoaded);
-
-					ImGui::Separator();
-					
-					if (ImGui::MenuItem("Exit", nullptr))
-					{
-						// Terminate the application
-						PostQuitMessage(0);
-					}
-
-					ImGui::EndMenu();
-				}
-
-				// View menu
-				if (ImGui::BeginMenu("View"))
-				{
-					for (const auto& window : m_editorWindows)
-					{
-						if (ImGui::MenuItem(window->GetName().c_str(), nullptr, window->IsVisible()))
-						{
-							window->Open();
-						}
-					}
-
-					if (!m_editorWindows.empty())
-					{
-						ImGui::Separator();	
-					}
-					
-					m_logWindow.DrawViewMenuItem();
-					m_viewportWindow.DrawViewMenuItem();
-					m_worldsWindow.DrawViewMenuItem();
-
-					ImGui::EndMenu();
-				}
-
-				ImGui::EndMenuBar();
-			}
+			HandleMainMenu(showSaveDialog);
 
 			// Draw the viewport window
 			m_viewportWindow.Draw();
@@ -376,10 +401,7 @@ namespace mmo
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
 			{
-				if (window->IsVisible())
-				{
-					window->Draw();	
-				}
+				HandleEditorWindow(*window);
 			}
 
 			// Render log window
@@ -423,12 +445,41 @@ namespace mmo
 		ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
 		auto dockMainId = dockSpaceId; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
-		auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
-		const auto dockAssetsId = ImGui::DockBuilderSplitNode(dockLogId, ImGuiDir_Left, 0.5f, nullptr, &dockLogId);
+		//auto dockLogId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+
+		auto bottomId =  ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Down, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+		auto topId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+		auto leftId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+		auto rightId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+
+		for(const auto& window : m_editorWindows)
+		{
+			if (!window->IsDockable()) continue;
+
+			switch(window->GetDefaultDockDirection())
+			{
+			case DockDirection::Bottom:
+				ImGui::DockBuilderDockWindow(window->GetName().c_str(), bottomId);
+				break;
+			case DockDirection::Left:
+				ImGui::DockBuilderDockWindow(window->GetName().c_str(), leftId);
+				break;
+			case DockDirection::Right:
+				ImGui::DockBuilderDockWindow(window->GetName().c_str(), rightId);
+				break;
+			case DockDirection::Top:
+				ImGui::DockBuilderDockWindow(window->GetName().c_str(), topId);
+				break;
+			default:
+				ImGui::DockBuilderDockWindow(window->GetName().c_str(), dockMainId);
+				break;
+			}
+		}
+
+		//const auto dockAssetsId = ImGui::DockBuilderSplitNode(dockLogId, ImGuiDir_Left, 0.5f, nullptr, &dockLogId);
 
 		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
-		ImGui::DockBuilderDockWindow("Log", dockLogId);
-		ImGui::DockBuilderDockWindow("Assets", dockAssetsId);
+		ImGui::DockBuilderDockWindow("Log", bottomId);
 		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
