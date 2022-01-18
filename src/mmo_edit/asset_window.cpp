@@ -7,16 +7,50 @@
 
 #include <imgui.h>
 
-#include "graphics/texture_mgr.h"
 #include "graphics/texture.h"
+#include "graphics/texture_mgr.h"
 
 namespace mmo
-{	
-	AssetWindow::AssetWindow()
-		: m_visible(true)
-	{
-	}
+{
 
+	AssetWindow::AssetWindow(const String& name, PreviewProviderManager& previewProviderManager)
+		: EditorWindowBase(name)
+		, m_previewProviderManager(previewProviderManager)
+	{
+		
+		m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
+		
+		// Gather a list of all assets in the registry
+		const auto assets = AssetRegistry::ListFiles();
+		for(const auto& asset : assets)
+		{
+			if (asset.starts_with(".")) continue;
+
+			// Split asset path
+			const auto separatorIndex = asset.find('/');
+			if (separatorIndex == std::string::npos)
+			{
+				m_assets[asset] = { asset, {} };
+			}
+			else
+			{
+				const auto name = asset.substr(0, separatorIndex);
+				const auto remainingPath = asset.substr(separatorIndex + 1);
+				
+				auto entryIt = m_assets.find(name);
+				if (entryIt == m_assets.end())
+				{
+					AssetEntry& parent = (m_assets[name] = { name, {} });
+					AddAssetToMap(parent, remainingPath);
+				}
+				else
+				{
+					AddAssetToMap(entryIt->second, remainingPath);
+				}
+			}
+		}
+	}
+	
 	void AssetWindow::RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path)
 	{
 		// If there are no children, we don't need to continue
@@ -36,8 +70,6 @@ namespace mmo
 		{
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{
-				DLOG("Selected: " << path << "/" << name);
-				m_selectedPath = path + "/" + name;
 				m_selectedEntry = &entry;
 			}
 			
@@ -79,56 +111,10 @@ namespace mmo
 			AddAssetToMap(childIt->second, remainingPath);
 		}
 	}
-	
+
 	bool AssetWindow::Draw()
 	{
-		// Anything to draw at all?
-		if (!m_visible)
-			return false;
-
-		// Gather a list of all assets
-		if (m_assets.empty())
-		{
-			static bool s_folderIconLoaded = false;
-			if (!s_folderIconLoaded)
-			{
-				m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
-				s_folderIconLoaded = true;
-			}
-
-			// Gather a list of all assets in the registry
-			const auto assets = AssetRegistry::ListFiles();
-			for(const auto& asset : assets)
-			{
-				if (asset.starts_with(".")) continue;
-
-				// Split asset path
-				const auto separatorIndex = asset.find('/');
-				if (separatorIndex == std::string::npos)
-				{
-					m_assets[asset] = { asset, {} };
-				}
-				else
-				{
-					const auto name = asset.substr(0, separatorIndex);
-					const auto remainingPath = asset.substr(separatorIndex + 1);
-					
-					auto entryIt = m_assets.find(name);
-					if (entryIt == m_assets.end())
-					{
-						AssetEntry& parent = (m_assets[name] = { name, {} });
-						AddAssetToMap(parent, remainingPath);
-					}
-					else
-					{
-						AddAssetToMap(entryIt->second, remainingPath);
-					}
-				}
-			}
-		}
-		
-		// Add the viewport
-		if (ImGui::Begin("Assets", &m_visible))
+		if (ImGui::Begin(m_name.c_str(), &m_visible))
 		{
 			ImGui::Columns(2, nullptr, true);
 			ImGui::BeginChild("assetFolderScrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
@@ -139,16 +125,14 @@ namespace mmo
 				RenderAssetEntry(asset.first, asset.second, path);
 			}
 			
-
 			ImGui::EndChild();
 			
 			ImGui::NextColumn();
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
-			ImGui::BeginChild("assetPreview", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::BeginChild("assetPreview", ImVec2(0, 0));
 			{
 				const ImVec2 size = ImGui::GetWindowSize();
-
 				
 				const int32 colCount = static_cast<int32>(size.x / (128.0f + 10.0f + ImGui::GetStyle().ColumnsMinSpacing));
 				if (colCount > 0)
@@ -170,20 +154,19 @@ namespace mmo
 							else
 							{
 								ImTextureID imTexture = nullptr;
-								if (name.ends_with(".htex"))
+								
+								const auto& extension = std::filesystem::path(name).extension().string();
+								auto* previewProvider = m_previewProviderManager.GetPreviewProviderForExtension(extension);
+								if (previewProvider)
 								{
-									const auto texture = TextureManager::Get().CreateOrRetrieve(entry.fullPath);
-									if (texture)
-									{
-										imTexture = texture->GetTextureObject();
-									}
-								}
+									imTexture = previewProvider->GetAssetPreview(entry.fullPath);
+								}								
 
 								ImGui::Spacing();
 								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
 								ImGui::TextWrapped(name.c_str());
 							}
-							
+
 							ImGui::NextColumn();
 						}
 					}
@@ -197,11 +180,6 @@ namespace mmo
 		}
 		ImGui::End();
 
-		return false;
-	}
-
-	bool AssetWindow::DrawViewMenuItem()
-	{
 		return false;
 	}
 }

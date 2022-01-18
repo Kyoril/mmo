@@ -347,10 +347,21 @@ namespace mmo
 				// View menu
 				if (ImGui::BeginMenu("View"))
 				{
+					for (const auto& window : m_editorWindows)
+					{
+						if (ImGui::MenuItem(window->GetName().c_str(), nullptr, window->IsVisible()))
+						{
+							window->Open();
+						}
+					}
+
+					if (!m_editorWindows.empty())
+					{
+						ImGui::Separator();	
+					}
+					
 					m_logWindow.DrawViewMenuItem();
 					m_viewportWindow.DrawViewMenuItem();
-					ImGui::Separator();
-
 					m_worldsWindow.DrawViewMenuItem();
 
 					ImGui::EndMenu();
@@ -362,11 +373,17 @@ namespace mmo
 			// Draw the viewport window
 			m_viewportWindow.Draw();
 
-			RenderSimpleNodeEditor();
+			// Draw the editor window modules
+			for (const auto& window : m_editorWindows)
+			{
+				if (window->IsVisible())
+				{
+					window->Draw();	
+				}
+			}
 
 			// Render log window
 			m_logWindow.Draw();
-			m_assetWindow.Draw();
 			m_worldsWindow.Draw();
 
 			if (showSaveDialog)
@@ -648,6 +665,20 @@ namespace mmo
 			}
 			ImGui::EndPopup();
 		}
+	}
+
+	void MainWindow::AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow)
+	{
+		ASSERT(editorWindow);
+		m_editorWindows.emplace_back(std::move(editorWindow));
+	}
+
+	void MainWindow::RemoveEditorWindow(const String& name)
+	{
+		std::erase_if(m_editorWindows, [&name](const std::unique_ptr<EditorWindowBase>& window)
+		{
+			return window->GetName() == name;
+		});
 	}
 
 	void MainWindow::InitImGui()

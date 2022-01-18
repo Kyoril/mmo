@@ -7,9 +7,18 @@
 #include "base/filesystem.h"
 #include "base/win_utility.h"
 #include "configuration.h"
+#include "asset_preview_provider.h"
+#include "texture_preview_provider.h"
 
 #include <mutex>
 
+namespace mmo
+{
+	void AddDefaultPreviewProviders(PreviewProviderManager& manager)
+	{
+		manager.AddPreviewProvider(std::make_unique<mmo::TexturePreviewProvider>());
+	}
+}
 
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
@@ -29,6 +38,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// Initialize the main window instance
 	mmo::MainWindow mainWindow { config };
+
+	// Setup preview provider manager
+	mmo::PreviewProviderManager previewProviderManager;
+	AddDefaultPreviewProviders(previewProviderManager);
+
+	// Setup asset window
+	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager);
+	mainWindow.AddEditorWindow(std::move(assetWindow));
 
 	// Run the message loop
 	MSG msg = { nullptr };

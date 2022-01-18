@@ -4,11 +4,12 @@
 
 #include <map>
 #include <string>
-#include <vector>
-
 
 #include "base/non_copyable.h"
 #include "graphics/texture.h"
+
+#include "editor_window_base.h"
+#include "preview_provider_manager.h"
 
 namespace mmo
 {
@@ -20,23 +21,17 @@ namespace mmo
 	
 	/// Manages the available model files in the asset registry.
 	class AssetWindow final
-		: public NonCopyable
+		: public EditorWindowBase
+		, public NonCopyable
 	{
 	public:
-		explicit AssetWindow();
+		explicit AssetWindow(const String& name, PreviewProviderManager& previewProviderManager);
+		~AssetWindow() override = default;
 
 	public:
 		/// Draws the viewport window.
-		bool Draw();
-		/// Draws the view menu item for this window.
-		bool DrawViewMenuItem();
-
-	public:
-		/// Makes the viewport window visible.
-		void Show() noexcept { m_visible = true; }
-		/// Determines whether the viewport window is currently visible.
-		bool IsVisible() const noexcept { return m_visible; }
-
+		bool Draw() override;
+		
 	private:
 		
 		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);
@@ -44,10 +39,11 @@ namespace mmo
 		void AddAssetToMap(AssetEntry& parent, const std::string& assetPath);
 
 	private:
-		bool m_visible;
+		PreviewProviderManager& m_previewProviderManager;
+		bool m_visible { true };
 		std::map<std::string, AssetEntry> m_assets;
-		std::string m_selectedPath;
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
+
 	};
 }
