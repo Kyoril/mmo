@@ -152,7 +152,10 @@ namespace mmo
 							if (!entry.children.empty())
 							{
 								ImGui::Spacing();
-								ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
+								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0)))
+								{
+									m_selectedEntry = &entry;
+								}
 								ImGui::TextWrapped(name.c_str());
 							}
 							else

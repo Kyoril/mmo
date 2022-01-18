@@ -2,15 +2,19 @@
 
 #include "main_window.h"
 
-#include "log/default_log_levels.h"
-#include "graphics/graphics_device.h"
-#include "base/filesystem.h"
 #include "base/win_utility.h"
 #include "configuration.h"
-#include "asset_preview_provider.h"
-#include "texture_preview_provider.h"
 
-#include <mutex>
+#include "preview_providers/preview_provider_manager.h"
+#include "preview_providers/texture_preview_provider.h"
+
+#include "editor_windows/asset_window.h"
+#include "editor_windows/log_window.h"
+
+#ifdef _DEBUG
+#	include "log/default_log_levels.h"
+#	include <mutex>
+#endif
 
 namespace mmo
 {
@@ -36,8 +40,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	mmo::Configuration config;
 	config.Load("./config/model_editor.cfg");
 
+	// Create log window before main window so that we already subscribe to log events as early as possible
+	auto logWindow = std::make_unique<mmo::LogWindow>();
+
 	// Initialize the main window instance
 	mmo::MainWindow mainWindow { config };
+	mainWindow.AddEditorWindow(std::move(logWindow));
 
 	// Setup preview provider manager
 	mmo::PreviewProviderManager previewProviderManager;

@@ -9,7 +9,7 @@
 #include "graphics/texture.h"
 
 #include "editor_window_base.h"
-#include "preview_provider_manager.h"
+#include "preview_providers/preview_provider_manager.h"
 
 namespace mmo
 {

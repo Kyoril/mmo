@@ -4,40 +4,34 @@
 
 #include <imgui_internal.h>
 
-#include "base/macros.h"
-#include "log/default_log_levels.h"
-#include "graphics/graphics_device.h"
-#include "assets/asset_registry.h"
 #include "configuration.h"
-
-#include "base/filesystem.h"
-#include "base/utilities.h"
+#include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "base/filesystem.h"
+#include "base/macros.h"
+#include "base/utilities.h"
+#include "binary_io/stream_sink.h"
+#include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 #include "mesh_v1_0/header.h"
 #include "mesh_v1_0/header_save.h"
-#include "binary_io/stream_sink.h"
-
-#include "data/project_loader.h"
-#include "data/project_saver.h"
 
 #ifdef _WIN32
-#	include "backends/imgui_impl_win32.h"
+#	include <windowsx.h>
+
 #	include "backends/imgui_impl_dx11.h"
-#	include "misc/cpp/imgui_stdlib.h"
+#	include "backends/imgui_impl_win32.h"
 #	include "graphics/d3d11/graphics_device_d3d11.h"
 #	include "graphics/d3d11/render_texture_d3d11.h"
-
-#	include <windowsx.h>
+#	include "misc/cpp/imgui_stdlib.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
 
 #define IMGUI_DEFINE_MATH_OPERATORS
-#include "imgui_internal.h"
 #include "imgui_node_editor.h"
 #include "imgui-node-editor/examples/blueprints-example/utilities/widgets.h"
-#include "imgui-node-editor/examples/blueprints-example/utilities/builders.h"
 
 static ImTextureID s_headerBackground = nullptr;
 
@@ -343,8 +337,7 @@ namespace mmo
 				{
 					ImGui::Separator();	
 				}
-					
-				m_logWindow.DrawViewMenuItem();
+
 				m_viewportWindow.DrawViewMenuItem();
 				m_worldsWindow.DrawViewMenuItem();
 
@@ -405,7 +398,6 @@ namespace mmo
 			}
 
 			// Render log window
-			m_logWindow.Draw();
 			m_worldsWindow.Draw();
 
 			if (showSaveDialog)
@@ -475,11 +467,8 @@ namespace mmo
 				break;
 			}
 		}
-
-		//const auto dockAssetsId = ImGui::DockBuilderSplitNode(dockLogId, ImGuiDir_Left, 0.5f, nullptr, &dockLogId);
-
+		
 		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
-		ImGui::DockBuilderDockWindow("Log", bottomId);
 		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout

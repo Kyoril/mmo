@@ -2,11 +2,10 @@
 
 #pragma once
 
-#include "log_window.h"
 #include "viewport_window.h"
-#include "asset_window.h"
 #include "fbx_import.h"
 #include "worlds_window.h"
+#include "editor_windows/editor_window_base.h"
 
 #include "data/project.h"
 
@@ -17,6 +16,7 @@
 #endif
 
 #include <string>
+
 
 
 namespace mmo
@@ -87,8 +87,7 @@ namespace mmo
 
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
-
-		LogWindow m_logWindow;
+		
 		ViewportWindow m_viewportWindow;
 		FbxImport m_importer;
 		int16 m_lastMouseX, m_lastMouseY;
