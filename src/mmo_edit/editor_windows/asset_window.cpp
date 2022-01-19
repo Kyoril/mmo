@@ -11,8 +11,9 @@
 namespace mmo
 {
 
-	AssetWindow::AssetWindow(const String& name, PreviewProviderManager& previewProviderManager)
+	AssetWindow::AssetWindow(const String& name, PreviewProviderManager& previewProviderManager, EditorHost& host)
 		: EditorWindowBase(name)
+		, m_host(host)
 		, m_previewProviderManager(previewProviderManager)
 	{
 		
@@ -69,6 +70,7 @@ namespace mmo
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{
 				m_selectedEntry = &entry;
+				m_host.SetCurrentPath(entry.fullPath);
 			}
 			
 			const auto childPath = path + "/" + name;
@@ -152,9 +154,10 @@ namespace mmo
 							if (!entry.children.empty())
 							{
 								ImGui::Spacing();
-								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0)))
+								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
 								{
 									m_selectedEntry = &entry;
+									m_host.SetCurrentPath(entry.fullPath);
 								}
 								ImGui::TextWrapped(name.c_str());
 							}
@@ -169,7 +172,7 @@ namespace mmo
 									imTexture = previewProvider->GetAssetPreview(entry.fullPath);
 								}								
 								
-								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0), 1, ImVec4(0, 0, 0, 0));
+								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0));
 								ImGui::TextWrapped(name.c_str());
 							}
 

@@ -69,25 +69,25 @@ namespace mmo
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position, scaledBorderSize),
-			Rect(0.0f, contentRect.bottom, contentRect.left, m_texture->GetHeight()),
+			Rect(0.0f, 0.0f, contentRect.left, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom left corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position + Point(0.0f, size.height - scaledBorderSize.height), scaledBorderSize),
-			Rect(0.0f, 0.0f, contentRect.left, contentRect.top),
+			Rect(0.0f, contentRect.bottom, contentRect.left, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Bottom right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position + Point(size.width - scaledBorderSize.width, size.height - scaledBorderSize.height), scaledBorderSize),
-			Rect(contentRect.right, 0.0f, m_texture->GetWidth(), contentRect.top),
+			Rect(contentRect.right, contentRect.bottom, m_texture->GetWidth(), m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Top right corner
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position + Point(size.width - scaledBorderSize.width, 0.0f), scaledBorderSize),
-			Rect(contentRect.right, contentRect.bottom, m_texture->GetWidth(), m_texture->GetHeight()),
+			Rect(contentRect.right, 0.0f, m_texture->GetWidth(), contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		
 		// Edges
@@ -96,7 +96,7 @@ namespace mmo
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position + Point(scaledBorderSize.width, 0.0f), Size(size.width - scaledBorderSize.width * 2, scaledBorderSize.height)),
-			Rect(contentRect.left, contentRect.bottom, contentRect.right, m_texture->GetHeight()),
+			Rect(contentRect.left, 0.0f, contentRect.right, contentRect.top),
 			m_texture->GetWidth(), m_texture->GetHeight());
 		// Left edge
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
@@ -114,9 +114,9 @@ namespace mmo
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,
 			Rect(position + Point(scaledBorderSize.width, size.height - scaledBorderSize.height), Size(size.width - scaledBorderSize.width * 2, scaledBorderSize.height)),
-			Rect(contentRect.left, 0.0f, contentRect.right, contentRect.top),
+			Rect(contentRect.left, contentRect.bottom, contentRect.right, m_texture->GetHeight()),
 			m_texture->GetWidth(), m_texture->GetHeight());
-		
+
 		// Center
 		GeometryHelper::CreateRect(m_frame->GetGeometryBuffer(),
 			color,

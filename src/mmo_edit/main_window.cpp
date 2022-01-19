@@ -487,12 +487,29 @@ namespace mmo
 		ImGui::DestroyContext(m_imguiContext);
 	}
 
-	bool MainWindow::OnFileDrop(std::string filename)
+	bool MainWindow::OnFileDrop(const std::string filename)
 	{
 		m_leftButtonPressed = false;
 		m_rightButtonPressed = false;
 
 		const std::filesystem::path p { filename };
+
+		String extension = p.extension().string();
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+		for (const auto& import : m_imports)
+		{
+			if (!import->SupportsExtension(extension))
+			{
+				continue;
+			}
+
+			return import->ImportFromFile(p, m_selectedPath);
+		}
+
+		WLOG("Unsupported file extension " << extension);
+
+#if 0
 		if (_strcmpi(p.extension().string().c_str(), ".fbx") == 0)
 		{
 			ILOG("Importing fbx file " << filename << "...");
@@ -539,7 +556,7 @@ namespace mmo
 		{
 			ELOG("Unsupported file extension '" << p.extension().string() << "'");
 		}
-		
+#endif
 		
 		return true;
 	}
@@ -719,6 +736,12 @@ namespace mmo
 		{
 			return window->GetName() == name;
 		});
+	}
+
+	void MainWindow::AddImport(std::unique_ptr<ImportBase> import)
+	{
+		ASSERT(import);
+		m_imports.emplace_back(std::move(import));
 	}
 
 	void MainWindow::InitImGui()

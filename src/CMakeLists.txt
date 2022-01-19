@@ -27,7 +27,6 @@ add_subdirectory(update_compiler)
 
 if (MMO_BUILD_TOOLS)
 	add_subdirectory(hpak_tool)
-	add_subdirectory(texture_tool)
 endif()
 
 if (MMO_BUILD_TESTS)

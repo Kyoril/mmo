@@ -11,6 +11,8 @@
 #include "editor_window_base.h"
 #include "preview_providers/preview_provider_manager.h"
 
+#include "editor_host.h"
+
 namespace mmo
 {
 	struct AssetEntry
@@ -25,7 +27,7 @@ namespace mmo
 		, public NonCopyable
 	{
 	public:
-		explicit AssetWindow(const String& name, PreviewProviderManager& previewProviderManager);
+		explicit AssetWindow(const String& name, PreviewProviderManager& previewProviderManager, EditorHost& host);
 		~AssetWindow() override = default;
 
 	public:
@@ -36,18 +38,17 @@ namespace mmo
 		bool IsDockable() const noexcept override { return true; }
 
 	private:
-		
 		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);
 		
 		void AddAssetToMap(AssetEntry& parent, const std::string& assetPath);
 
 	private:
 		PreviewProviderManager& m_previewProviderManager;
+		EditorHost& m_host;
 		bool m_visible { true };
 		std::map<std::string, AssetEntry> m_assets;
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
 		float m_columnWidth { 350.0f };
-
 	};
 }

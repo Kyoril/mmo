@@ -58,7 +58,6 @@ target_link_libraries(mmo_edit
 	assets
 	mesh
 	mesh_v1_0
-	imaging
 	data
 	libprotobuf
 	scene_graph

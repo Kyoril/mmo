@@ -4,12 +4,15 @@
 
 #include "base/win_utility.h"
 #include "configuration.h"
+#include "assets/asset_registry.h"
 
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
 
 #include "editor_windows/asset_window.h"
 #include "editor_windows/log_window.h"
+
+#include "import/texture_import.h"
 
 #ifdef _DEBUG
 #	include "log/default_log_levels.h"
@@ -52,8 +55,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	AddDefaultPreviewProviders(previewProviderManager);
 
 	// Setup asset window
-	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager);
+	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
+
+	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 
 	// Run the message loop
 	MSG msg = { nullptr };

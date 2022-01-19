@@ -6,6 +6,7 @@
 #include "worlds_window.h"
 #include "editor_windows/editor_window_base.h"
 #include "import/fbx_import.h"
+#include "editor_host.h"
 
 #include "data/project.h"
 #include "base/non_copyable.h"
@@ -16,6 +17,7 @@
 
 #include <string>
 
+#include "import/import_base.h"
 
 
 namespace mmo
@@ -26,6 +28,7 @@ namespace mmo
 	/// This class manages the main window of the application.
 	class MainWindow final 
 		: public NonCopyable
+		, public EditorHost
 	{
 	public:
 		explicit MainWindow(Configuration& config);
@@ -70,6 +73,8 @@ namespace mmo
 		void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow);
 
 		void RemoveEditorWindow(const String& name);
+
+		void AddImport(std::unique_ptr<ImportBase> import);
 		
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
@@ -78,6 +83,11 @@ namespace mmo
 
 		/// Instanced window callback procedure.
 		LRESULT CALLBACK MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
+	public:
+		void SetCurrentPath(const Path& selectedPath) override { m_selectedPath = selectedPath; }
+
+		const Path& GetCurrentPath() const noexcept override { return m_selectedPath; }
 
 	private:
 		Configuration& m_config;
@@ -96,5 +106,7 @@ namespace mmo
 		WorldsWindow m_worldsWindow;
 		std::string m_modelName;
 		std::vector<std::unique_ptr<EditorWindowBase>> m_editorWindows;
+		std::vector<std::unique_ptr<ImportBase>> m_imports;
+		Path m_selectedPath;
 	};
 }
