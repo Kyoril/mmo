@@ -3,12 +3,11 @@
 #pragma once
 
 #include "viewport_window.h"
-#include "fbx_import.h"
 #include "worlds_window.h"
 #include "editor_windows/editor_window_base.h"
+#include "import/fbx_import.h"
 
 #include "data/project.h"
-
 #include "base/non_copyable.h"
 
 #ifdef _WIN32
@@ -71,37 +70,31 @@ namespace mmo
 		void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow);
 
 		void RemoveEditorWindow(const String& name);
-
+		
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
 		static LRESULT CALLBACK WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
 		/// Instanced window callback procedure.
 		LRESULT CALLBACK MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 	private:
 		Configuration& m_config;
 		HWND m_windowHandle;
-		/// The dock space flags.
 		ImGuiDockNodeFlags m_dockSpaceFlags;
-
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
-		
 		ViewportWindow m_viewportWindow;
 		FbxImport m_importer;
 		int16 m_lastMouseX, m_lastMouseY;
 		bool m_leftButtonPressed;
 		bool m_rightButtonPressed;
 		bool m_fileLoaded;
-
 		bool m_projectLoaded;
 		Project m_project;
-
 		WorldsWindow m_worldsWindow;
-
 		std::string m_modelName;
-
 		std::vector<std::unique_ptr<EditorWindowBase>> m_editorWindows;
 	};
 }

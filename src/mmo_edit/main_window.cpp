@@ -360,7 +360,7 @@ namespace mmo
 		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
 
 		// Get the viewport and make the dockspace window fullscreen
-		ImGuiViewport* viewport = ImGui::GetMainViewport();
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->WorkPos);
 		ImGui::SetNextWindowSize(viewport->WorkSize);
 		ImGui::SetNextWindowViewport(viewport->ID);
