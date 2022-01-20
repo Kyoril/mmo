@@ -4,6 +4,8 @@
 
 #include "graphics/graphics_device.h"
 
+#include "imgui_internal.h"
+
 namespace mmo
 {
 	/// The text that is being rendered when there is no mesh loaded in the editor.
@@ -52,6 +54,7 @@ namespace mmo
 
 		// Render the scene first
 		gx.Reset();
+		gx.SetClearColor(Color::Black);
 		m_viewportRT->Activate();
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
@@ -109,6 +112,7 @@ namespace mmo
 			// Determine the available size for the viewport window and either create the render target
 			// or resize it if needed
 			const auto availableSpace = ImGui::GetContentRegionAvail();
+			
 			if (m_viewportRT == nullptr)
 			{
 				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));

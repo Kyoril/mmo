@@ -75,7 +75,8 @@ namespace mmo
 		void RemoveEditorWindow(const String& name);
 
 		void AddImport(std::unique_ptr<ImportBase> import);
-		
+		void ApplyDefaultStyle();
+
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
