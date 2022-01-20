@@ -8,9 +8,10 @@
 #include "math/aabb.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
-#include <set>
-
 #include "render_queue.h"
+
+#include <set>
+#include <unordered_map>
 
 
 namespace mmo
