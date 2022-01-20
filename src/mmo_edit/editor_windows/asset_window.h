@@ -27,6 +27,7 @@ namespace mmo
 		, public NonCopyable
 	{
 	public:
+		void RebuildAssetList();
 		explicit AssetWindow(const String& name, PreviewProviderManager& previewProviderManager, EditorHost& host);
 		~AssetWindow() override = default;
 

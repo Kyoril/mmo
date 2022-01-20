@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "import_base.h"
+
 namespace mmo
 {
 	/// Represents a single vertex of a mesh.
@@ -42,7 +44,8 @@ namespace mmo
 
 	/// This class can be used to extract relevant informations out of an fbx file.
 	class FbxImport final
-		: public NonCopyable
+		: public ImportBase
+		, public NonCopyable
 	{
 	public:
 		explicit FbxImport();
@@ -56,8 +59,13 @@ namespace mmo
 	private:
 		void InitializeSdkObjects();
 		void DestroySdkObjects();
-
 		void TraverseScene(FbxNode& node);
+		bool SaveMeshFile(const String& filename, const Path& assetPath);
+
+	public:
+		bool ImportFromFile(const Path& filename, const Path& currentAssetPath) override;
+
+		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
 	private:
 		/// A list of mesh entries found in the fbx scene.

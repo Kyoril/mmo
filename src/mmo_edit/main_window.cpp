@@ -292,7 +292,7 @@ namespace mmo
 		}
 	}
 
-	void MainWindow::HandleMainMenu(bool& showSaveDialog)
+	void MainWindow::HandleMainMenu()
 	{
 		if (ImGui::BeginMenuBar())
 		{
@@ -306,11 +306,7 @@ namespace mmo
 						ELOG("Failed to save project");
 					}
 				}
-
-				ImGui::Separator();
-
-				showSaveDialog = ImGui::MenuItem("Save Mesh", nullptr, nullptr, m_fileLoaded);
-
+				
 				ImGui::Separator();
 					
 				if (ImGui::MenuItem("Exit", nullptr))
@@ -337,8 +333,7 @@ namespace mmo
 				{
 					ImGui::Separator();	
 				}
-
-				m_viewportWindow.DrawViewMenuItem();
+				
 				m_worldsWindow.DrawViewMenuItem();
 
 				ImGui::EndMenu();
@@ -382,33 +377,32 @@ namespace mmo
 		{
 			const auto dockspace_id = ImGui::GetID("MyDockSpace");
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
-
-			bool showSaveDialog = false;
 			
 			// The main menu
-			HandleMainMenu(showSaveDialog);
-
-			// Draw the viewport window
-			m_viewportWindow.Draw();
-
+			HandleMainMenu();
+			
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
 			{
 				HandleEditorWindow(*window);
 			}
+			
+			// Draw the editor window modules
+			for (const auto& editor : m_editors)
+			{
+				editor->Draw();
+			}
 
 			// Render log window
 			m_worldsWindow.Draw();
 
-			if (showSaveDialog)
+			const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
+			std::erase_if(m_uninitializedEditorInstances, [dockSpaceId](const String& name)
 			{
-				if (!ImGui::IsPopupOpen("Save"))
-				{
-					ImGui::OpenPopup("Save");
-				}
-			}
-
-			RenderSaveDialog();
+				ImGui::DockBuilderDockWindow(name.c_str(), dockSpaceId);
+				return true;
+			});
+			ImGui::DockBuilderFinish(dockSpaceId);
 
 			// Initialize the layout
 			if (m_applyDefaultLayout)
@@ -468,7 +462,6 @@ namespace mmo
 			}
 		}
 		
-		ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 		ImGui::DockBuilderFinish(dockSpaceId);
 
 		// Finish default layout
@@ -504,59 +497,16 @@ namespace mmo
 				continue;
 			}
 
-			return import->ImportFromFile(p, m_selectedPath);
+			const bool result = import->ImportFromFile(p, m_selectedPath);
+			if (result)
+			{
+				assetImported(m_selectedPath);
+			}
+
+			return result;
 		}
 
 		WLOG("Unsupported file extension " << extension);
-
-#if 0
-		if (_strcmpi(p.extension().string().c_str(), ".fbx") == 0)
-		{
-			ILOG("Importing fbx file " << filename << "...");
-			if (!m_importer.LoadScene(filename.c_str()))
-			{
-				ELOG("Failed to load fbx file " << filename);
-				return false;
-			}
-
-			// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
-			const auto& meshes = m_importer.GetMeshEntries();
-			if (!meshes.empty())
-			{
-				const auto& mesh = meshes.front();
-
-				std::vector<POS_COL_VERTEX> vertices;
-				vertices.resize(mesh.vertices.size());
-
-				for (size_t i = 0; i < mesh.vertices.size(); ++i)
-				{
-					vertices[i].pos[0] = mesh.vertices[i].position.x;
-					vertices[i].pos[1] = mesh.vertices[i].position.y;
-					vertices[i].pos[2] = mesh.vertices[i].position.z;
-					vertices[i].color = 0xFFAEAEAE;
-				}
-
-				auto vertBuf = GraphicsDevice::Get().CreateVertexBuffer(mesh.vertices.size(), sizeof(POS_COL_VERTEX), false, &vertices[0]);
-
-				std::vector<uint16> indices;
-				indices.resize(mesh.indices.size());
-
-				for (size_t i = 0; i < mesh.indices.size(); ++i)
-				{
-					indices[i] = static_cast<uint16>(mesh.indices[i]);
-				}
-
-				auto indexBuf = GraphicsDevice::Get().CreateIndexBuffer(mesh.indices.size(), IndexBufferSize::Index_16, &indices[0]);
-				m_viewportWindow.SetMesh(std::move(vertBuf), std::move(indexBuf));
-
-				m_fileLoaded = true;
-			}
-		}
-		else
-		{
-			ELOG("Unsupported file extension '" << p.extension().string() << "'");
-		}
-#endif
 		
 		return true;
 	}
@@ -600,130 +550,17 @@ namespace mmo
 
 		if (m_rightButtonPressed)
 		{
-			m_viewportWindow.MoveCamera(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
+			//m_viewportWindow.MoveCamera(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
 		}
 		else if (m_leftButtonPressed)
 		{
-			m_viewportWindow.MoveCameraTarget(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
+			//m_viewportWindow.MoveCameraTarget(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
 		}
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
 	}
-
-	void MainWindow::RenderSaveDialog()
-	{
-		if (ImGui::BeginPopupModal("Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-		{
-			ImGui::Text("Please choose a name for your model:");
-			ImGui::InputText("Base name", &m_modelName);
-
-			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, m_modelName.empty());
-			if (ImGui::Button("Save", ImVec2(80, 0)))
-			{
-				std::filesystem::path filename = "Models";
-				filename /= m_modelName;
-				filename /= m_modelName + ".hmsh";
-				
-				// Create the file name
-				auto filePtr = AssetRegistry::CreateNewFile(filename.string());
-				if (filePtr == nullptr)
-				{
-					ELOG("Unable to save mesh!");
-					return;
-				}
-
-				// Setup mesh header
-				mesh::v1_0::Header header;
-				header.version = mesh::Version_1_0;
-				header.vertexChunkOffset = 0;
-				header.indexChunkOffset = 0;
-				
-				// Create a mesh header saver
-				io::StreamSink sink{ *filePtr };
-				io::Writer writer{ sink };
-
-				// Write the mesh header
-				mesh::v1_0::HeaderSaver saver{ sink, header };
-				{
-					// Write the vertex chunk data
-					header.vertexChunkOffset = static_cast<uint32>(sink.Position());
-					ChunkWriter vertexChunkWriter{ mesh::v1_0::VertexChunkMagic, writer };
-					{
-						const auto& meshes = m_importer.GetMeshEntries();
-						if (!meshes.empty())
-						{
-							const auto& mesh = meshes.front();
-
-							// Write vertex data
-							writer << io::write<uint32>(mesh.vertices.size());
-							for (size_t i = 0; i < mesh.vertices.size(); ++i)
-							{
-								writer
-									<< io::write<float>(mesh.vertices[i].position.x)
-									<< io::write<float>(mesh.vertices[i].position.y)
-									<< io::write<float>(mesh.vertices[i].position.z);
-								writer
-									<< io::write<uint32>(mesh.vertices[i].color);
-								writer
-									<< io::write<uint32>(mesh.vertices[i].texCoord.x)
-									<< io::write<uint32>(mesh.vertices[i].texCoord.y)
-									<< io::write<uint32>(mesh.vertices[i].texCoord.z);
-								writer
-									<< io::write<uint32>(mesh.vertices[i].normal.x)
-									<< io::write<uint32>(mesh.vertices[i].normal.y)
-									<< io::write<uint32>(mesh.vertices[i].normal.z);
-							}
-						}
-					}
-					vertexChunkWriter.Finish();
-
-					// Write the index chunk data
-					header.indexChunkOffset = static_cast<uint32>(sink.Position());
-					ChunkWriter indexChunkWriter{ mesh::v1_0::IndexChunkMagic, writer };
-					{
-						const auto& meshes = m_importer.GetMeshEntries();
-						if (!meshes.empty())
-						{
-							const auto& mesh = meshes.front();
-							const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
-							
-							// Write index data
-							writer
-								<< io::write<uint32>(mesh.indices.size())
-								<< io::write<uint8>(bUse16BitIndices);
-
-							for (size_t i = 0; i < mesh.indices.size(); ++i)
-							{
-								if (bUse16BitIndices)
-								{
-									writer << io::write<uint16>(mesh.indices[i]);
-								}
-								else
-								{
-									writer << io::write<uint32>(mesh.indices[i]);
-								}
-							}
-						}
-					}
-					indexChunkWriter.Finish();
-				}
-				saver.Finish();
-
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::PopItemFlag();
-
-			ImGui::SameLine();
-
-			if (ImGui::Button("Cancel", ImVec2(80, 0)))
-			{
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
-	}
-
+	
 	void MainWindow::AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow)
 	{
 		ASSERT(editorWindow);
@@ -742,6 +579,12 @@ namespace mmo
 	{
 		ASSERT(import);
 		m_imports.emplace_back(std::move(import));
+	}
+
+	void MainWindow::AddEditor(std::unique_ptr<EditorBase> editor)
+	{
+		ASSERT(editor);
+		m_editors.emplace_back(std::move(editor));
 	}
 
 	void MainWindow::ApplyDefaultStyle()
@@ -925,8 +768,7 @@ namespace mmo
 		case WM_PAINT:
 			if (s_initialized)
 			{
-				// Render game viewport contents
-				m_viewportWindow.Render();
+				beforeUiUpdate();
 
 				// Now render the main
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();
@@ -983,5 +825,29 @@ namespace mmo
 		}
 
 		return DefWindowProc(wnd, msg, wparam, lparam);
+	}
+
+	bool MainWindow::OpenAsset(const Path& assetPath)
+	{
+		auto extension = assetPath.extension().string();
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+		for (const auto& editor : m_editors)
+		{
+			if (!editor->CanLoadAsset(extension))
+			{
+				continue;
+			}
+
+			const bool result = editor->OpenAsset(assetPath);
+			if (result)
+			{
+				m_uninitializedEditorInstances.emplace_back(assetPath.filename().string());
+			}
+			return result;
+		}
+
+		WLOG("No editor available for asset " << assetPath);
+		return false;
 	}
 }

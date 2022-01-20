@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "viewport_window.h"
 #include "worlds_window.h"
 #include "editor_windows/editor_window_base.h"
 #include "import/fbx_import.h"
@@ -17,6 +16,7 @@
 
 #include <string>
 
+#include "editors/editor_base.h"
 #include "import/import_base.h"
 
 
@@ -45,7 +45,7 @@ namespace mmo
 		/// @param window 
 		void HandleEditorWindow(EditorWindowBase& window);
 
-		void HandleMainMenu(bool& showSaveDialog);
+		void HandleMainMenu();
 
 		/// Initialize ImGui.
 		void InitImGui();
@@ -66,17 +66,18 @@ namespace mmo
 		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y);
 
 		void OnMouseMoved(uint16 x, uint16 y);
-
-		void RenderSaveDialog();
-
-	public:
-		void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow);
-
-		void RemoveEditorWindow(const String& name);
-
-		void AddImport(std::unique_ptr<ImportBase> import);
+		
 		void ApplyDefaultStyle();
 
+	public:
+		void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow) override;
+
+		void RemoveEditorWindow(const String& name) override;
+
+		void AddImport(std::unique_ptr<ImportBase> import);
+
+		void AddEditor(std::unique_ptr<EditorBase> editor);
+		
 	private:
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
@@ -89,6 +90,8 @@ namespace mmo
 		void SetCurrentPath(const Path& selectedPath) override { m_selectedPath = selectedPath; }
 
 		const Path& GetCurrentPath() const noexcept override { return m_selectedPath; }
+		
+		bool OpenAsset(const Path& assetPath) override;
 
 	private:
 		Configuration& m_config;
@@ -96,7 +99,6 @@ namespace mmo
 		ImGuiDockNodeFlags m_dockSpaceFlags;
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
-		ViewportWindow m_viewportWindow;
 		FbxImport m_importer;
 		int16 m_lastMouseX, m_lastMouseY;
 		bool m_leftButtonPressed;
@@ -108,6 +110,8 @@ namespace mmo
 		std::string m_modelName;
 		std::vector<std::unique_ptr<EditorWindowBase>> m_editorWindows;
 		std::vector<std::unique_ptr<ImportBase>> m_imports;
+		std::vector<std::unique_ptr<EditorBase>> m_editors;
 		Path m_selectedPath;
+		std::vector<String> m_uninitializedEditorInstances;
 	};
 }

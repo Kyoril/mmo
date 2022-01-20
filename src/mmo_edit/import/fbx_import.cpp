@@ -2,7 +2,14 @@
 
 #include "fbx_import.h"
 
+#include "stream_sink.h"
+#include "assets/asset_registry.h"
+#include "base/chunk_writer.h"
+#include "graphics/graphics_device.h"
+#include "graphics/vertex_format.h"
 #include "log/default_log_levels.h"
+#include "mesh_v1_0/header.h"
+#include "mesh_v1_0/header_save.h"
 
 
 #ifdef IOS_REF
@@ -129,6 +136,12 @@ namespace mmo
 			return 1;
 		}
 
+		if (m_scene->GetGlobalSettings().GetAxisSystem() != FbxAxisSystem::DirectX)
+		{
+			FbxAxisSystem::DirectX.ConvertScene(m_scene);
+			m_scene->GetGlobalSettings().SetAxisSystem(FbxAxisSystem::DirectX);
+		}
+
 		// Traverse through all nodes
 		TraverseScene(*rootNode);
 
@@ -240,5 +253,118 @@ namespace mmo
 		{
 			TraverseScene(*node.GetChild(i));
 		}
+	}
+
+	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath)
+	{
+		std::filesystem::path p = (assetPath / filename).string() + ".hmsh";
+		
+		// Create the file name
+		const auto filePtr = AssetRegistry::CreateNewFile(p.string());
+		if (filePtr == nullptr)
+		{
+			ELOG("Unable to create mesh file " << p);
+			return false;
+		}
+
+		// Setup mesh header
+		mesh::v1_0::Header header;
+		header.version = mesh::Version_1_0;
+		header.vertexChunkOffset = 0;
+		header.indexChunkOffset = 0;
+		
+		// Create a mesh header saver
+		io::StreamSink sink{ *filePtr };
+		io::Writer writer{ sink };
+
+		// Write the mesh header
+		mesh::v1_0::HeaderSaver saver{ sink, header };
+		{
+			// Write the vertex chunk data
+			header.vertexChunkOffset = static_cast<uint32>(sink.Position());
+			ChunkWriter vertexChunkWriter{ mesh::v1_0::VertexChunkMagic, writer };
+			{
+				const auto& meshes = m_meshEntries;
+				if (!meshes.empty())
+				{
+					const auto& mesh = meshes.front();
+
+					// Write vertex data
+					writer << io::write<uint32>(mesh.vertices.size());
+					for (size_t i = 0; i < mesh.vertices.size(); ++i)
+					{
+						writer
+							<< io::write<float>(mesh.vertices[i].position.x)
+							<< io::write<float>(mesh.vertices[i].position.y)
+							<< io::write<float>(mesh.vertices[i].position.z);
+						writer
+							<< io::write<uint32>(mesh.vertices[i].color);
+						writer
+							<< io::write<uint32>(mesh.vertices[i].texCoord.x)
+							<< io::write<uint32>(mesh.vertices[i].texCoord.y)
+							<< io::write<uint32>(mesh.vertices[i].texCoord.z);
+						writer
+							<< io::write<uint32>(mesh.vertices[i].normal.x)
+							<< io::write<uint32>(mesh.vertices[i].normal.y)
+							<< io::write<uint32>(mesh.vertices[i].normal.z);
+					}
+				}
+			}
+			vertexChunkWriter.Finish();
+
+			// Write the index chunk data
+			header.indexChunkOffset = static_cast<uint32>(sink.Position());
+			ChunkWriter indexChunkWriter{ mesh::v1_0::IndexChunkMagic, writer };
+			{
+				const auto& meshes = m_meshEntries;
+				if (!meshes.empty())
+				{
+					const auto& mesh = meshes.front();
+					const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
+					
+					// Write index data
+					writer
+						<< io::write<uint32>(mesh.indices.size())
+						<< io::write<uint8>(bUse16BitIndices);
+
+					for (size_t i = 0; i < mesh.indices.size(); ++i)
+					{
+						if (bUse16BitIndices)
+						{
+							writer << io::write<uint16>(mesh.indices[i]);
+						}
+						else
+						{
+							writer << io::write<uint32>(mesh.indices[i]);
+						}
+					}
+				}
+			}
+			indexChunkWriter.Finish();
+		}
+		saver.Finish();
+		return true;
+	}
+
+	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
+	{
+		if (!LoadScene(filename.string().c_str()))
+		{
+			return false;
+		}
+
+		// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
+		if (m_meshEntries.empty())
+		{
+			WLOG("FBX has no geometry data!");
+			return false;
+		}
+
+		return SaveMeshFile(filename.filename().replace_extension().string(), currentAssetPath);
+	}
+
+	bool FbxImport::SupportsExtension(const String& extension) const noexcept
+	{
+		return extension == ".fbx";
 	}
 }

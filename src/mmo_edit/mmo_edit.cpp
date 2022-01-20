@@ -13,6 +13,11 @@
 #include "editor_windows/log_window.h"
 
 #include "import/texture_import.h"
+#include "import/fbx_import.h"
+
+#include "editors/model_editor.h"
+#include "editors/material_editor.h"
+#include "editors/texture_editor.h"
 
 #ifdef _DEBUG
 #	include "log/default_log_levels.h"
@@ -59,6 +64,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
+	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
+
+	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
 
 	// Run the message loop
 	MSG msg = { nullptr };

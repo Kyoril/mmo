@@ -7,18 +7,15 @@
 #include "assets/asset_registry.h"
 #include "graphics/texture.h"
 #include "graphics/texture_mgr.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
-
-	AssetWindow::AssetWindow(const String& name, PreviewProviderManager& previewProviderManager, EditorHost& host)
-		: EditorWindowBase(name)
-		, m_host(host)
-		, m_previewProviderManager(previewProviderManager)
+	void AssetWindow::RebuildAssetList()
 	{
-		
-		m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
-		
+		m_selectedEntry = nullptr;
+		m_assets.clear();
+
 		// Gather a list of all assets in the registry
 		const auto assets = AssetRegistry::ListFiles();
 		for(const auto& asset : assets)
@@ -35,19 +32,46 @@ namespace mmo
 			{
 				const auto name = asset.substr(0, separatorIndex);
 				const auto remainingPath = asset.substr(separatorIndex + 1);
-				
+
 				auto entryIt = m_assets.find(name);
 				if (entryIt == m_assets.end())
 				{
 					AssetEntry& parent = (m_assets[name] = { name, {} });
 					AddAssetToMap(parent, remainingPath);
+
+					if (m_host.GetCurrentPath() == parent.fullPath)
+					{
+						m_selectedEntry = &parent;
+					}
 				}
 				else
 				{
 					AddAssetToMap(entryIt->second, remainingPath);
+					
+					if (m_host.GetCurrentPath() == entryIt->second.fullPath)
+					{
+						m_selectedEntry = &entryIt->second;
+					}
 				}
 			}
 		}
+	}
+
+	AssetWindow::AssetWindow(const String& name, PreviewProviderManager& previewProviderManager, EditorHost& host)
+		: EditorWindowBase(name)
+		, m_previewProviderManager(previewProviderManager)
+		, m_host(host)
+	{
+		m_host.assetImported.connect([&](const Path& p)
+		{
+			m_selectedEntry = nullptr;
+			m_assets.clear();
+
+			RebuildAssetList();
+		});
+
+		m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
+		RebuildAssetList();
 	}
 	
 	void AssetWindow::RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path)
@@ -117,19 +141,19 @@ namespace mmo
 		if (ImGui::Begin(m_name.c_str(), &m_visible))
 		{
 			ImGui::Columns(2, nullptr, true);
-			static bool s_widthSet = false;
-			if (!s_widthSet)
+			static bool widthSet = false;
+			if (!widthSet)
 			{
 				ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
-				s_widthSet = true;
+				widthSet = true;
 			}
 
 			ImGui::BeginChild("assetFolderScrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 			
 			const std::string path;
-			for (const auto& asset: m_assets)
+			for (const auto& [name, entry]: m_assets)
 			{
-				RenderAssetEntry(asset.first, asset.second, path);
+				RenderAssetEntry(name, entry, path);
 			}
 			ImGui::EndChild();
 			
@@ -140,20 +164,19 @@ namespace mmo
 			{
 				const ImVec2 size = ImGui::GetWindowSize();
 				
-				const int32 colCount = static_cast<int32>(size.x / (128.0f + 10.0f + ImGui::GetStyle().ColumnsMinSpacing));
+				const auto colCount = static_cast<int32>(size.x / (128.0f + 10.0f + ImGui::GetStyle().ColumnsMinSpacing));
 				if (colCount > 0)
 				{
 					ImGui::Columns(colCount, nullptr, false);
 
 					if (m_selectedEntry)
 					{
-						const ImTextureID folderTexture = m_folderTexture ? m_folderTexture->GetTextureObject() : nullptr;
+						const ImTextureID folderTexture = (m_folderTexture ? m_folderTexture->GetTextureObject() : nullptr);
 						
 						for (const auto& [name, entry] : m_selectedEntry->children)
 						{
 							if (!entry.children.empty())
 							{
-								ImGui::Spacing();
 								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
 								{
 									m_selectedEntry = &entry;
@@ -172,7 +195,10 @@ namespace mmo
 									imTexture = previewProvider->GetAssetPreview(entry.fullPath);
 								}								
 								
-								ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0));
+								if (ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
+								{
+									m_host.OpenAsset(entry.fullPath);
+								}
 								ImGui::TextWrapped(name.c_str());
 							}
 

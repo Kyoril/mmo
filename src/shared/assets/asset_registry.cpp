@@ -127,16 +127,24 @@ namespace mmo
 	std::unique_ptr<std::ostream> AssetRegistry::CreateNewFile(const std::string& filename)
 	{
 		ASSERT(s_filesystemArchive != nullptr);
-		
+
+		std::string converted = filename;
+
+		size_t index;
+		while((index = converted.find('\\')) != std::string::npos)
+		{
+			converted[index] = '/';
+		}
+
 		// Creating a file always creates a real physical file as HPAK is not yet supported
-		auto filePtr = s_filesystemArchive->Create(filename);
+		auto filePtr = s_filesystemArchive->Create(converted);
 		if (filePtr != nullptr)
 		{
 			// Register file
 			auto archive = std::static_pointer_cast<IArchive>(s_filesystemArchive);
-			s_files.emplace(filename, std::move(archive));
+			s_files.emplace(converted, std::move(archive));
 
-			DLOG("Successfully created new file " << filename << " in asset registry");
+			DLOG("Successfully created new file " << converted << " in asset registry");
 		}
 
 		return filePtr;
