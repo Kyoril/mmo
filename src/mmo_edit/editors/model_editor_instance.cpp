@@ -18,8 +18,8 @@ namespace mmo
 		m_cameraAnchor->AddChild(*m_cameraNode);
 		m_camera = m_scene.CreateCamera("Camera");
 		m_cameraNode->AttachObject(*m_camera);
-		m_cameraNode->SetPosition(Vector3::UnitZ * 15.0f);
-		m_cameraAnchor->SetOrientation(Quaternion(Degree(-45.0f), Vector3::UnitX));
+		m_cameraNode->SetPosition(Vector3::UnitZ * 35.0f);
+		m_cameraAnchor->SetOrientation(Quaternion(Degree(-35.0f), Vector3::UnitX));
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 

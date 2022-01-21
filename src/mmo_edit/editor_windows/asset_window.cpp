@@ -175,9 +175,12 @@ namespace mmo
 						
 						for (const auto& [name, entry] : m_selectedEntry->children)
 						{
+							ImGui::PushID(entry.fullPath.c_str());
+
+							// Is this a non-empty entry, so a folder?
 							if (!entry.children.empty())
 							{
-								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
+								if (ImGui::ImageButton(folderTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 2, ImVec4(0, 0, 0, 0)))
 								{
 									m_selectedEntry = &entry;
 									m_host.SetCurrentPath(entry.fullPath);
@@ -201,6 +204,8 @@ namespace mmo
 								}
 								ImGui::TextWrapped(name.c_str());
 							}
+
+							ImGui::PopID();
 
 							ImGui::NextColumn();
 						}

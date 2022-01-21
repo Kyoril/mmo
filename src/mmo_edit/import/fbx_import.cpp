@@ -112,7 +112,7 @@ namespace mmo
 			//IOS_REF.SetBoolProp(IMP_FBX_ANIMATION, true);
 			IOS_REF.SetBoolProp(IMP_FBX_GLOBAL_SETTINGS, true);
 		}
-
+		
 		// Import the scene.
 		lStatus = lImporter->Import(m_scene);
 
@@ -123,11 +123,13 @@ namespace mmo
 
 		// Destroy the importer.
 		lImporter->Destroy();
+		
+		//FbxAxisSystem::DirectX.ConvertScene(m_scene);
 
 		// Create a converter
 		FbxGeometryConverter converter(m_sdkManager);
 		converter.Triangulate(m_scene, true);
-
+		
 		// Find root node
 		FbxNode* rootNode = m_scene->GetRootNode();
 		if (rootNode == nullptr)
@@ -135,13 +137,6 @@ namespace mmo
 			ELOG("Fbx file has no root node!");
 			return 1;
 		}
-
-		if (m_scene->GetGlobalSettings().GetAxisSystem() != FbxAxisSystem::DirectX)
-		{
-			FbxAxisSystem::DirectX.ConvertScene(m_scene);
-			m_scene->GetGlobalSettings().SetAxisSystem(FbxAxisSystem::DirectX);
-		}
-
 		// Traverse through all nodes
 		TraverseScene(*rootNode);
 
@@ -186,6 +181,8 @@ namespace mmo
 			mmo::MeshEntry entry;
 			entry.name = node.GetName();
 			entry.maxIndex = 0;
+			
+			const auto& transform = node.EvaluateGlobalTransform();
 
 			// Gets the control points of the mesh
 			FbxVector4* vertices = mesh->GetControlPoints();
@@ -201,7 +198,7 @@ namespace mmo
 					mmo::Vertex vertex;
 
 					// Grab the vertex position data
-					FbxVector4 vertexPos = vertices[iVert];
+					FbxVector4 vertexPos = transform.MultT(vertices[iVert]);
 					vertex.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
 
 					// TODO: Grab vertex normal and texture coordinates
