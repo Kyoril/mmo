@@ -4,6 +4,12 @@
 
 namespace mmo
 {
+	Sphere::Sphere(const Vector3& center, const float radius) noexcept
+		: m_radius(radius)
+		, m_center(center)
+	{
+	}
+
 	bool Sphere::Intersects(const AABB& box) const
 	{
 		if (box.IsNull()) 

@@ -90,6 +90,15 @@ namespace mmo
 		Vector3 max;
 	};
 
+	inline float GetBoundingRadiusFromAABB(const AABB& aabb)
+	{
+		Vector3 magnitude = aabb.max;
+		magnitude.Ceil(-aabb.max);
+		magnitude.Ceil(aabb.min);
+		magnitude.Ceil(-aabb.min);
+		return magnitude.GetLength();
+	}
+
 	/// Syntactic sugar for transforming an axis aligned bounding box using a 4x4 matrix.
 	inline AABB operator*(const Matrix4& mat, const AABB& bb)
 	{

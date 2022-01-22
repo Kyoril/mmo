@@ -12,6 +12,7 @@
 #include "sampler_state_hash.h"
 
 #include "base/macros.h"
+#include "graphics/depth_stencil_hash.h"
 #include "math/radian.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -313,27 +314,26 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::CreateDepthStates()
 	{
-		D3D11_DEPTH_STENCIL_DESC depthStencilDesc;
-		depthStencilDesc.DepthEnable = TRUE;
-		depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-		depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
-		depthStencilDesc.StencilEnable = FALSE;
-		depthStencilDesc.StencilReadMask = 0xFF;
-		depthStencilDesc.StencilWriteMask = 0xFF;
+		m_depthStencilDesc.DepthEnable = FALSE;
+		m_depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		m_depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+		m_depthStencilDesc.StencilEnable = FALSE;
+		m_depthStencilDesc.StencilReadMask = 0xFF;
+		m_depthStencilDesc.StencilWriteMask = 0xFF;
 
 		// Stencil operations if pixel is front-facing
-		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
-		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
-		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+		m_depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+		m_depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+		m_depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+		m_depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
 
 		// Stencil operations if pixel is back-facing
-		depthStencilDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-		depthStencilDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
-		depthStencilDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
-		depthStencilDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
-
-		VERIFY( SUCCEEDED(m_device->CreateDepthStencilState(&depthStencilDesc, m_depthStencilState.GetAddressOf())));
+		m_depthStencilDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+		m_depthStencilDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+		m_depthStencilDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+		m_depthStencilDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+		
+		m_depthStencilChanged = true;
 	}
 
 	void GraphicsDeviceD3D11::CreateRasterizerState(bool set)
@@ -378,6 +378,37 @@ namespace mmo
 		{
 			// State exists, so activate it
 			m_immContext->RSSetState(it->second.Get());
+		}
+	}
+
+	void GraphicsDeviceD3D11::UpdateDepthStencilState()
+	{
+		if (m_depthStencilChanged)
+		{
+			const auto hash = DepthStencilHash()(m_depthStencilDesc);
+			if (hash != m_depthStencilHash)
+			{
+				auto it = m_depthStencilStates.find(hash);
+				if (it == m_depthStencilStates.end())
+				{
+					ComPtr<ID3D11DepthStencilState> depthStencilState;
+					VERIFY( SUCCEEDED(m_device->CreateDepthStencilState(&m_depthStencilDesc, depthStencilState.GetAddressOf())));
+
+					it = m_depthStencilStates.emplace(hash, depthStencilState).first;
+					ASSERT(it != m_depthStencilStates.end());
+				}
+				
+				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
+				m_depthStencilHash = hash;
+			}
+			else
+			{
+				const auto it = m_depthStencilStates.find(m_depthStencilHash);
+				ASSERT(it != m_depthStencilStates.end());
+				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
+			}
+
+			m_depthStencilChanged = false;
 		}
 	}
 
@@ -472,7 +503,6 @@ namespace mmo
 	{
 		// Clear the state
 		m_immContext->ClearState();
-		m_immContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
 
 		// Update the constant buffer
 		if (m_matrixDirty)
@@ -494,6 +524,7 @@ namespace mmo
 
 		// Rasterizer state
 		UpdateCurrentRasterizerState();
+		UpdateDepthStencilState();
 	
 		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
@@ -586,6 +617,7 @@ namespace mmo
 	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
 	{
 		UpdateCurrentRasterizerState();
+		UpdateDepthStencilState();
 
 		// Update the constant buffer
 		m_matrixDirty = false;
@@ -598,7 +630,8 @@ namespace mmo
 	void GraphicsDeviceD3D11::DrawIndexed()
 	{
 		UpdateCurrentRasterizerState();
-
+		UpdateDepthStencilState();
+		
 		// Update the constant buffer
 		m_matrixDirty = false;
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
@@ -778,8 +811,7 @@ namespace mmo
 		m_rasterizerDescChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV,
-		TextureAddressMode modeW)
+	void GraphicsDeviceD3D11::SetTextureAddressMode(const TextureAddressMode modeU, const TextureAddressMode modeV, const TextureAddressMode modeW)
 	{
 		GraphicsDevice::SetTextureAddressMode(modeU, modeV, modeW);
 		
@@ -789,11 +821,54 @@ namespace mmo
 		m_samplerDescChanged = true;
 	}
 	
-	void GraphicsDeviceD3D11::SetTextureFilter(TextureFilter filter)
+	void GraphicsDeviceD3D11::SetTextureFilter(const TextureFilter filter)
 	{
 		GraphicsDevice::SetTextureFilter(filter);
 
 		m_samplerDesc.Filter = D3D11TextureFilter(filter);
 		m_samplerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetDepthEnabled(const bool enable)
+	{
+		GraphicsDevice::SetDepthEnabled(enable);
+
+		m_depthStencilDesc.DepthEnable = enable ? TRUE : FALSE;
+		m_depthStencilChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetDepthWriteEnabled(const bool enable)
+	{
+		GraphicsDevice::SetDepthWriteEnabled(enable);
+
+		m_depthStencilDesc.DepthWriteMask = enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+		m_depthStencilChanged = true;
+	}
+
+	namespace
+	{
+		inline D3D11_COMPARISON_FUNC MapComparison(const DepthTestMethod comparison)
+		{
+			switch(comparison)
+			{
+			case DepthTestMethod::Never: return D3D11_COMPARISON_NEVER;
+			case DepthTestMethod::Less: return D3D11_COMPARISON_LESS;
+			case DepthTestMethod::Equal: return D3D11_COMPARISON_EQUAL;
+			case DepthTestMethod::LessEqual: return D3D11_COMPARISON_LESS_EQUAL;;
+			case DepthTestMethod::Greater: return D3D11_COMPARISON_GREATER;
+			case DepthTestMethod::NotEqual: return D3D11_COMPARISON_NOT_EQUAL;
+			case DepthTestMethod::GreaterEqual: return D3D11_COMPARISON_GREATER_EQUAL;
+			}
+
+			return D3D11_COMPARISON_ALWAYS;
+		}
+	}
+
+	void GraphicsDeviceD3D11::SetDepthTestComparison(const DepthTestMethod comparison)
+	{
+		GraphicsDevice::SetDepthTestComparison(comparison);
+		
+		m_depthStencilDesc.DepthFunc = MapComparison(comparison);
+		m_depthStencilChanged = true;
 	}
 }

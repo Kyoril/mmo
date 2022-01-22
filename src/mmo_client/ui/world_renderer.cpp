@@ -67,13 +67,15 @@ namespace mmo
 		// Activate render target
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
-
+		
 		// Render world scene
 		if (m_camera)
 		{
 			m_worldScene.Render(*m_camera);
 		}
-		
+
+		m_renderTexture->Update();
+
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();
 		m_frame->GetGeometryBuffer().Draw();

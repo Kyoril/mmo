@@ -204,6 +204,20 @@ namespace mmo
 		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
 		/// Sets an anchor for this frame.
 		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
+
+		/// Sets the size for this frame.
+		void SetSize(float width, float height);
+
+		/// Sets an width for this frame.
+		void SetWidth(float width);
+
+		/// Sets the height for this frame.
+		void SetHeight(float height);
+		
+		float GetWidth() const { return m_pixelSize.width; }
+
+		float GetHeight() const { return m_pixelSize.height; }
+
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);
 		/// Gets the parent frame.
@@ -250,6 +264,9 @@ namespace mmo
 
 		/// Adds a frame to the list of child frames.
 		virtual void AddChild(Pointer frame);
+		
+		/// Adds a frame to the list of child frames.
+		virtual uint32 GetChildCount() const { return m_children.size(); }
 
 		/// Removes all child frames.
 		void RemoveAllChildren();

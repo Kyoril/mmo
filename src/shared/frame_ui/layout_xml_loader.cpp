@@ -343,7 +343,7 @@ namespace mmo
 			templateFrame = FrameManager::Get().Find(inherits);
 			if (templateFrame == nullptr)
 			{
-				throw std::runtime_error("Unable to find template frame '" + inherits + "'");
+				ELOG("Unable to find template frame '" << inherits << "'");
 			}
 
 			// Override frame type to be used
@@ -351,7 +351,7 @@ namespace mmo
 		}
 
 		// Attempt to create the frame
-		FramePtr frame = FrameManager::Get().Create(type, name);
+		const FramePtr frame = FrameManager::Get().Create(type, name);
 		if (!frame)
 		{
 			throw std::runtime_error("Could not create frame named!");

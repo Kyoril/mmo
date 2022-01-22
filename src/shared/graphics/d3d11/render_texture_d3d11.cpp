@@ -55,6 +55,7 @@ namespace mmo
 			m_resizePending = false;
 
 			// Reset resources
+			m_depthStencilView.Reset();
 			m_shaderResourceView.Reset();
 			m_renderTargetView.Reset();
 			m_renderTargetTex.Reset();

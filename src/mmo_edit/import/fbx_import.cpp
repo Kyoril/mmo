@@ -5,6 +5,7 @@
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
 #include "graphics/vertex_format.h"
 #include "log/default_log_levels.h"
@@ -128,15 +129,18 @@ namespace mmo
 
 		// Create a converter
 		FbxGeometryConverter converter(m_sdkManager);
-		converter.Triangulate(m_scene, true);
+		if (!converter.Triangulate(m_scene, true))
+		{
+			ELOG("Failed to triangulate mesh");
+		}
 		
 		// Find root node
 		FbxNode* rootNode = m_scene->GetRootNode();
 		if (rootNode == nullptr)
 		{
 			ELOG("Fbx file has no root node!");
-			return 1;
 		}
+
 		// Traverse through all nodes
 		TraverseScene(*rootNode);
 
@@ -168,80 +172,165 @@ namespace mmo
 		//Delete the FBX Manager. All the objects that have been allocated using the FBX Manager and that haven't been explicitly destroyed are also automatically destroyed.
 		if (m_sdkManager) m_sdkManager->Destroy();
 	}
+	
+    FbxColor GetFBXColor(FbxMesh *pMesh, const int polyIndex, const int polyPointIndex)
+    {
+        int lControlPointIndex = pMesh->GetPolygonVertex(polyIndex, polyPointIndex);
+        int vertexId = polyIndex * 3 + polyPointIndex;
+
+        FbxColor color;
+        for (int l = 0; l < pMesh->GetElementVertexColorCount(); l++)
+        {
+            FbxGeometryElementVertexColor* leVtxc = pMesh->GetElementVertexColor( l);
+
+            switch (leVtxc->GetMappingMode())
+            {
+            case FbxGeometryElement::eByControlPoint:
+                switch (leVtxc->GetReferenceMode())
+                {
+                case FbxGeometryElement::eDirect:
+                    color = leVtxc->GetDirectArray().GetAt(lControlPointIndex);
+                    break;
+                case FbxGeometryElement::eIndexToDirect:
+                    {
+                        int id = leVtxc->GetIndexArray().GetAt(lControlPointIndex);
+                        color = leVtxc->GetDirectArray().GetAt(id);
+                    }
+                    break;
+                default:
+                    break; // other reference modes not shown here!
+                }
+                break;
+
+            case FbxGeometryElement::eByPolygonVertex:
+                {
+                    switch (leVtxc->GetReferenceMode())
+                    {
+                    case FbxGeometryElement::eDirect:
+                        color = leVtxc->GetDirectArray().GetAt(vertexId);
+                        break;
+                    case FbxGeometryElement::eIndexToDirect:
+                        {
+                            int id = leVtxc->GetIndexArray().GetAt(vertexId);
+                            color = leVtxc->GetDirectArray().GetAt(id);
+                        }
+                        break;
+                    default:
+                        break; // other reference modes not shown here!
+                    }
+                }
+                break;
+
+            case FbxGeometryElement::eByPolygon: // doesn't make much sense for UVs
+            case FbxGeometryElement::eAllSame:   // doesn't make much sense for UVs
+            case FbxGeometryElement::eNone:       // doesn't make much sense for UVs
+                break;
+            }
+        }
+        return color;
+    }
+
+	int GetUVSets(FbxNode *pNode, FbxMesh *pMesh)
+    {
+		int numUvSets = 0;
+
+        if( pNode && pMesh) 
+        {
+            for( int i = 0; i < pMesh->GetElementUVCount(); ++i )
+            {
+	            const FbxGeometryElementUV* uvElement = pMesh->GetElementUV(i);
+				if (uvElement->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
+				{
+					++numUvSets;
+				}
+            }
+        }
+
+        return numUvSets;
+    }
 
 	void FbxImport::TraverseScene(FbxNode & node)
 	{
 		// Find mesh nodes
-		const FbxMesh* mesh = node.GetMesh();
+		FbxMesh* mesh = node.GetMesh();
 		if (mesh)
 		{
-			ILOG("Geometry Node: " << node.GetName());
+			if( mesh->CheckIfVertexNormalsCCW() )
+            {
+                WLOG("Counter clockwise normals detected.");
+            }
 
+            if(mesh->GetLayer(0)->GetNormals() == nullptr)
+            {
+                ILOG("Recomputing normals...");
+                mesh->InitNormals();
+                mesh->GenerateNormals();
+            }
+
+			ILOG("Geometry Node: " << node.GetName());
+			
 			// Create a new mesh entry
 			mmo::MeshEntry entry;
 			entry.name = node.GetName();
 			entry.maxIndex = 0;
 			
 			const auto& transform = node.EvaluateGlobalTransform();
+			
+			FbxVector4* vertices = mesh->GetControlPoints();
+			
+			const int uvSetCount = GetUVSets(&node, mesh);
+			ILOG("Number of UV sets: " << uvSetCount);
 
 			// Gets the control points of the mesh
-			FbxVector4* vertices = mesh->GetControlPoints();
-			int vertexCount = mesh->GetControlPointsCount();
-			ILOG("\tVertices: " << vertexCount);
+			const auto polyCount = mesh->GetPolygonCount();
+			entry.vertices.reserve(mesh->GetControlPointsCount());
+			ILOG("\tTriangles: " << polyCount);
 
-			if (vertexCount > 0)
+			for (int face = 0; face < polyCount; ++face)
 			{
-				// Copy it's vertex data
-				entry.vertices.reserve(vertexCount);
-				for (int iVert = 0; iVert < vertexCount; ++iVert)
+				for (int vertex = 0; vertex < 3; ++vertex)
 				{
-					mmo::Vertex vertex;
+					const int vertexId = mesh->GetPolygonVertex(face, vertex);
 
-					// Grab the vertex position data
-					FbxVector4 vertexPos = transform.MultT(vertices[iVert]);
-					vertex.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
+					mmo::Vertex v;
 
-					// TODO: Grab vertex normal and texture coordinates
-					
-					// TODO: Grab vertex color?
-					vertex.color = 0xffffffff;
+					// Get position
+					FbxVector4 vertexPos = transform.MultT(vertices[vertexId]);
 
-					// Save vertex
-					entry.vertices.push_back(vertex);
-				}
+					// Get vertex color
+					const auto vertexColor = GetFBXColor(mesh, face, vertexId);
 
-				// Index count for the meshes geometry
-				int* indices = mesh->GetPolygonVertices();
-				int indexCount = mesh->GetPolygonCount() * 3;
-				ILOG("\tTriangles: " << (indexCount / 3));
-
-				if (indexCount >= 3)
-				{
-					// Output all faces for testing
-					for (int iInd = 0; iInd < indexCount; iInd++)
+					// Get UVW
+					if (uvSetCount > 0)
 					{
-						// Negative index?
-						if (indices[iInd] < 0)
-						{
-							WLOG("Negative index found in mesh node '" << entry.name << "'!");
-							break;
-						}
-
-						entry.indices.push_back(indices[iInd]);
-						if (static_cast<uint32>(indices[iInd]) > entry.maxIndex)
-						{
-							entry.maxIndex = indices[iInd];
-						}
+						int uvIndex = mesh->GetTextureUVIndex(face, vertexId);
+						FbxGeometryElementUV* uv = mesh->GetElementUV(0);
+						FbxVector2 uvVector = uv->GetDirectArray().GetAt(uvIndex);
+						v.texCoord = Vector3(uvVector[0], uvVector[1], 0.0f);
 					}
-
-					// Check that all indices were valid / have been added
-					if (entry.indices.size() == indexCount)
+					else
 					{
-						// Save mesh entry
-						m_meshEntries.push_back(entry);
+						v.texCoord = Vector3::Zero;
+					}
+					
+					v.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
+					v.color = Color(vertexColor.mRed, vertexColor.mGreen, vertexColor.mBlue, vertexColor.mAlpha);
+					v.normal = Vector3::UnitZ;
+
+					entry.vertices.emplace_back(std::move(v));
+					entry.indices.push_back(entry.indices.size() - 1);
+
+					if (static_cast<uint32>(vertexId) > entry.maxIndex)
+					{
+						entry.maxIndex = vertexId;
 					}
 				}
 			}
+
+			ILOG("\tVertices: " << entry.vertices.size());
+			
+			// Save mesh entry
+			m_meshEntries.push_back(entry);
 		}
 
 		// Recursively traverse child nodes
@@ -297,13 +386,13 @@ namespace mmo
 						writer
 							<< io::write<uint32>(mesh.vertices[i].color);
 						writer
-							<< io::write<uint32>(mesh.vertices[i].texCoord.x)
-							<< io::write<uint32>(mesh.vertices[i].texCoord.y)
-							<< io::write<uint32>(mesh.vertices[i].texCoord.z);
+							<< io::write<float>(mesh.vertices[i].texCoord.x)
+							<< io::write<float>(mesh.vertices[i].texCoord.y)
+							<< io::write<float>(mesh.vertices[i].texCoord.z);
 						writer
-							<< io::write<uint32>(mesh.vertices[i].normal.x)
-							<< io::write<uint32>(mesh.vertices[i].normal.y)
-							<< io::write<uint32>(mesh.vertices[i].normal.z);
+							<< io::write<float>(mesh.vertices[i].normal.x)
+							<< io::write<float>(mesh.vertices[i].normal.y)
+							<< io::write<float>(mesh.vertices[i].normal.z);
 					}
 				}
 			}

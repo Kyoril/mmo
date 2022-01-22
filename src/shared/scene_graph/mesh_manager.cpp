@@ -51,6 +51,8 @@ namespace mmo
 		// Create the resulting mesh
 		auto mesh = std::make_shared<Mesh>();
 
+		AABB boundingBox;
+
 		// Depending on the format version, load the real mesh data now
 		switch (preHeader.version)
 		{
@@ -86,17 +88,23 @@ namespace mmo
 					reader >> io::read<uint32>(vertexCount);
 
 					// Read vertex data
-					std::vector<POS_COL_VERTEX> vertices;
+					std::vector<POS_COL_NORMAL_TEX_VERTEX> vertices;
 					vertices.resize(vertexCount);
 
+					Vector3 min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+					Vector3 max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
+
 					// Iterate through vertices
-					for (POS_COL_VERTEX& v : vertices)
+					for (POS_COL_NORMAL_TEX_VERTEX& v : vertices)
 					{
 						reader
 							>> io::read<float>(v.pos[0])
 							>> io::read<float>(v.pos[1])
 							>> io::read<float>(v.pos[2]);
 						ASSERT(reader);
+
+						min = TakeMinimum(v.pos, min);
+						max = TakeMaximum(v.pos, max);
 
 						// Color
 						reader
@@ -105,21 +113,24 @@ namespace mmo
 
 						// Uvw
 						reader
-							>> io::skip<float>()
-							>> io::skip<float>()
+							>> io::read<float>(v.uv[0])
+							>> io::read<float>(v.uv[1])
 							>> io::skip<float>();
 						ASSERT(reader);
 
 						// Normal
 						reader
-							>> io::skip<float>()
-							>> io::skip<float>()
-							>> io::skip<float>();
+							>> io::read<float>(v.normal[0])
+							>> io::read<float>(v.normal[1])
+							>> io::read<float>(v.normal[2]);
 						ASSERT(reader);
 					}
 
+					AABB box { min, max };
+					boundingBox.Combine(box);
+
 					// Create the vertex buffer
-					submesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false,
+					submesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_TEX_VERTEX), false,
 						&vertices[0]);
 				}
 
@@ -176,6 +187,8 @@ namespace mmo
 			}
 			break;
 		}
+
+		mesh->SetBounds(boundingBox);
 
 		// Store the mesh in the cache
 		m_meshes[filename] = mesh;

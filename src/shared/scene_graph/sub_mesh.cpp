@@ -5,6 +5,7 @@
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
+#include "graphics/texture_mgr.h"
 #include "scene_graph/render_operation.h"
 
 namespace mmo
@@ -44,6 +45,9 @@ namespace mmo
 
 	void SubMesh::PrepareRenderOperation(RenderOperation& op) const
 	{
+		GraphicsDevice::Get().BindTexture(
+			TextureManager::Get().CreateOrRetrieve("Textures/Crate/Crate.htex"), ShaderType::PixelShader, 0);
+
 		if (m_useSharedVertices)
 		{
 			ASSERT(m_parent.m_vertexBuffer);
@@ -58,5 +62,6 @@ namespace mmo
 		op.indexBuffer = m_indexBuffer.get();
 		op.useIndexes = m_indexBuffer != nullptr;
 		op.topology = TopologyType::TriangleList;
+		op.vertexFormat = VertexFormat::PosColorNormalTex1;
 	}
 }

@@ -89,6 +89,15 @@ namespace mmo
 		}
 	}
 
+	Light& Scene::CreateLight(const String& name, LightType type)
+	{
+		auto light = std::make_unique<Light>(name);
+		light->SetType(type);
+
+		auto [iterator, inserted] = m_lights.emplace(name, std::move(light));
+		return *iterator->second.get();
+	}
+
 	Camera* Scene::GetCamera(const String& name)
 	{
 		const auto cameraIt = m_cameras.find(name);
@@ -124,6 +133,11 @@ namespace mmo
 
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
+
+		// Enable depth test & write & set comparison method to less
+		gx.SetDepthEnabled(true);
+		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthTestComparison(DepthTestMethod::Less);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
@@ -173,6 +187,58 @@ namespace mmo
 		for(const auto& [priority, priorityGroup] : group)
 		{
 			RenderObjects(priorityGroup->GetSolids());
+		}
+	}
+
+	void Scene::NotifyLightsDirty()
+	{
+		++m_lightsDirtyCounter;
+	}
+
+	void Scene::FindLightsAffectingCamera(const Camera& camera)
+	{
+		m_testLightInfos.clear();
+		m_testLightInfos.reserve(m_lights.size());
+
+		for (const auto& [name, light] : m_lights)
+		{
+			if (!light->IsVisible())
+			{
+				continue;
+			}
+
+			LightInfo lightInfo;
+			lightInfo.light = light.get();
+			lightInfo.type = light->GetType();
+			lightInfo.lightMask = 0;	// TODO
+			lightInfo.castsShadow = false;	// TODO
+
+			// Directional lights don't have a position and thus are always visible
+			if (lightInfo.type == LightType::Directional)
+			{
+				lightInfo.position = Vector3::Zero;
+				lightInfo.range = 0.0f;
+			}
+			else
+			{
+				// Do a visibility check (culling) for each non directional light
+				lightInfo.range = light->GetAttenuationRange();
+				lightInfo.position = light->GetDerivedPosition();
+
+				const Sphere sphere{lightInfo.position, lightInfo.range};
+				if (!camera.IsVisible(sphere))
+				{
+					continue;
+				}
+			}
+			
+			m_testLightInfos.emplace_back(std::move(lightInfo));
+		}
+
+		if (m_cachedLightInfos != m_testLightInfos)
+		{
+			m_cachedLightInfos = m_testLightInfos;
+			NotifyLightsDirty();
 		}
 	}
 

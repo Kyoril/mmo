@@ -5,6 +5,8 @@
 #include "scene_node.h"
 #include "graphics/graphics_device.h"
 
+#include "math/sphere.h"
+
 namespace mmo
 {
 	Camera::Camera(const String& name)
@@ -32,15 +34,75 @@ namespace mmo
 
 	void Camera::UpdateFrustum() const
 	{
-		//if (!m_viewInvalid)
-		//{
-		//	return;
-		//}
+		if (!IsFrustumOutOfDate())
+		{
+			return;
+		}
+
+		float left, right, bottom, top;
+		CalcProjectionParameters(left, right, bottom, top);
 
 		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(m_fovY, m_aspect, m_nearDist, m_farDist);
 		m_viewMatrix = MakeViewMatrix(GetParentSceneNode()->GetDerivedPosition(), GetParentSceneNode()->GetDerivedOrientation());
 		
 		m_viewInvalid = false;
+	}
+
+	void Camera::UpdateView() const
+	{
+		if (!IsViewOutOfDate())
+		{
+			return;
+		}
+		
+		const Quaternion& orientation = GetOrientationForViewUpdate();
+		const Vector3& position = GetPositionForViewUpdate();
+		m_viewMatrix = MakeViewMatrix(position, orientation);
+		m_recalcView = false;
+
+		m_recalcFrustumPlanes = true;
+		m_recalcWorldSpaceCorners = true;
+
+		if (m_obliqueDepthProjection)
+		{
+			m_recalcFrustum = true;
+		}
+	}
+
+	bool Camera::IsViewOutOfDate() const
+	{
+		if (m_parentNode)
+		{
+			if (m_recalcView ||
+				m_parentNode->GetDerivedOrientation() != m_lastParentOrientation ||
+				m_parentNode->GetDerivedPosition() != m_lastParentPosition)
+			{
+				m_lastParentOrientation = m_parentNode->GetDerivedOrientation();
+				m_lastParentPosition = m_parentNode->GetDerivedPosition();
+				m_recalcView = true;
+			}
+		}
+
+		return m_recalcView;
+	}
+
+	bool Camera::IsFrustumOutOfDate() const
+	{
+		if (m_obliqueDepthProjection)
+		{
+			if (IsViewOutOfDate())
+			{
+				m_recalcFrustum = true;
+			}
+
+			// TODO
+		}
+
+		return m_recalcFrustum;
+	}
+
+	void Camera::CalcProjectionParameters(float& left, float& right, float& bottom, float& top) const
+	{
 	}
 
 	const String& Camera::GetMovableType() const
@@ -90,5 +152,12 @@ namespace mmo
 		}
 
 		return m_lastParentPosition;
+	}
+
+	bool Camera::IsVisible(const Sphere& bound) const
+	{
+		UpdateFrustum();
+
+		return true;
 	}
 }

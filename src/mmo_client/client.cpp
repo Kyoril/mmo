@@ -276,6 +276,13 @@ namespace mmo
 		// Run the RunOnce script
 		Console::ExecuteCommand("run Config/RunOnce.cfg");
 
+		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
+		if (window)
+		{
+			FrameManager::Get().NotifyScreenSizeChanged(
+			window->GetWidth(), window->GetHeight());	
+		}
+
 		// TODO: Initialize other systems
 
 		return true;

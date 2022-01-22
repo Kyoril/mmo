@@ -31,6 +31,7 @@ namespace mmo
 		if (m_entity)
 		{
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
+			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
 		}
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);

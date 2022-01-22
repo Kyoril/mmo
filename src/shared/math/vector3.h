@@ -279,7 +279,14 @@ namespace mmo
             return (squaredLength < (1e-06 * 1e-06));
         }
 
-		inline Quaternion GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis = Zero) const;
+		Quaternion GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis = Zero) const;
+
+		inline void Ceil(const Vector3& other)
+		{
+			if (other.x > x) x = other.x;
+			if (other.y > y) y = other.y;
+			if (other.z > z) z = other.z;
+		}
 	};
 
 	inline std::ostream& operator<<(std::ostream& o, const mmo::Vector3& b)

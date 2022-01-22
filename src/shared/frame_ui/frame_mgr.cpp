@@ -356,7 +356,13 @@ namespace mmo
 	               .def("RemoveAllChildren", &Frame::RemoveAllChildren)
 	               .def("Clone", &Frame::Clone)
 	               .def("AddChild", &Frame::AddChild)
+	               .def("GetChildCount", &Frame::GetChildCount)
 	               .def("SetAnchor", &Frame::SetAnchor)
+	               .def("SetSize", &Frame::SetSize)
+	               .def("SetWidth", &Frame::SetWidth)
+	               .def("SetHeight", &Frame::SetHeight)
+	               .def("GetWidth", &Frame::GetWidth)
+	               .def("GetHeight", &Frame::GetHeight)
 	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
 			
 			luabind::scope(
@@ -513,6 +519,10 @@ namespace mmo
 
 	void FrameManager::Draw() const
 	{
+		// Disable depth test & write
+		GraphicsDevice::Get().SetDepthEnabled(false);
+		GraphicsDevice::Get().SetDepthWriteEnabled(false);
+
 		// Render top frame if there is any
 		if (m_topFrame != nullptr)
 		{

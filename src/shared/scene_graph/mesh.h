@@ -35,6 +35,7 @@ namespace mmo
 		SubMesh* GetSubMesh(const std::string& name);
 		void DestroySubMesh(uint16 index);
 		void DestroySubMesh(const std::string& name);
+		void SetBounds(const AABB& bounds);
 		void Render();
 
 		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
@@ -54,7 +55,7 @@ namespace mmo
 		SubMeshList m_subMeshes;
 		SubMeshNameMap m_subMeshNames;
 		AABB m_aabb;
-		float m_boundRadius;
+		float m_boundRadius { 0.0f };
 		String m_skeletonName;
 	};
 

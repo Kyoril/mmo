@@ -94,6 +94,18 @@ namespace mmo
 		Front,
 	};
 
+	enum class DepthTestMethod
+	{
+		Never,
+        Less,
+        Equal,
+        LessEqual,
+        Greater,
+        NotEqual,
+        GreaterEqual,
+        Always
+	};
+
 	/// This is the base class of a graphics device object.
 	class GraphicsDevice
 		: public NonCopyable
@@ -187,6 +199,12 @@ namespace mmo
 		/// Sets the texture filter to be used when sampling textures.
 		virtual void SetTextureFilter(TextureFilter filter);
 
+		virtual void SetDepthEnabled(bool enable);
+
+		virtual void SetDepthWriteEnabled(bool enable);
+
+		virtual void SetDepthTestComparison(DepthTestMethod comparison);
+
 	public:
 		inline RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 
@@ -217,5 +235,11 @@ namespace mmo
 		TextureAddressMode m_restoreTexAddressMode[3];
 		TextureFilter m_texFilter;
 		TextureFilter m_restoreTexFilter;
+		bool m_depthEnabled { false };
+		bool m_restoreDepthEnable { false };
+		bool m_depthWrite { false };
+		bool m_restoreDepthWrite { false };
+		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
+		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
 	};
 }

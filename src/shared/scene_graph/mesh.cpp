@@ -65,7 +65,8 @@ namespace mmo
 				m_subMeshNames.erase(it);
 				break;
 			}
-			else if (it->second > index)
+			
+			if (it->second > index)
 			{
 				it->second--;
 			}
@@ -82,13 +83,19 @@ namespace mmo
 		}
 	}
 
+	void Mesh::SetBounds(const AABB& bounds)
+	{
+		m_aabb = bounds;
+		m_boundRadius = GetBoundingRadiusFromAABB(m_aabb);
+	}
+	
 	void Mesh::Render()
 	{
 		// TODO: Eventually, these should be set by the sub meshes but for now,
 		// this is what is supported by the mesh class.
 		
 		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList); 
-		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColor);
+		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorNormalTex1);
 
 		for (auto& subMesh : m_subMeshes)
 		{

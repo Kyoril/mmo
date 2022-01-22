@@ -7,6 +7,8 @@
 
 #include <utility>
 
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -81,6 +83,7 @@ namespace mmo
 	{
 		if (width == 0) return;
 		if (height == 0) return;
+		if (width == m_width && height == m_height) return;
 
 		m_pendingWidth = width;
 		m_pendingHeight = height;
@@ -125,7 +128,7 @@ namespace mmo
 			wc.hInstance = GetModuleHandle(nullptr);
 			wc.lpfnWndProc = &RenderWindowD3D11::RenderWindowProc;
 			wc.lpszClassName = s_d3d11RenderWindowClassName;
-			wc.style = CS_OWNDC;
+			wc.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 
 			VERIFY(RegisterClassEx(&wc) >= 0);
 			s_windowClassCreated = true;

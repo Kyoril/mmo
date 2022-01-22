@@ -54,6 +54,12 @@ namespace mmo
 		void SetFaceCullMode(FaceCullMode mode) override;
 		void SetTextureAddressMode(TextureAddressMode modeU, TextureAddressMode modeV, TextureAddressMode modeW) override;
 		void SetTextureFilter(TextureFilter filter) override;
+		
+		void SetDepthEnabled(bool enable) override;
+
+		void SetDepthWriteEnabled(bool enable) override;
+
+		void SetDepthTestComparison(DepthTestMethod comparison) override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -91,6 +97,8 @@ namespace mmo
 		void CreateRasterizerState(bool set = true);
 
 		void UpdateCurrentRasterizerState();
+
+		void UpdateDepthStencilState();
 		
 		ID3D11SamplerState* GetCurrentSamplerState();
 
@@ -107,10 +115,9 @@ namespace mmo
 		std::map<size_t, ComPtr<ID3D11RasterizerState>> m_rasterizerStates;
 		/// Sampler states.
 		std::map<size_t, ComPtr<ID3D11SamplerState>> m_samplerStates;
+		std::map<size_t, ComPtr<ID3D11DepthStencilState>> m_depthStencilStates;
 		/// Constant buffer for vertex shader which contains the matrices.
 		ComPtr<ID3D11Buffer> m_matrixBuffer;
-		/// The depth stencil state
-		ComPtr<ID3D11DepthStencilState> m_depthStencilState;
 		/// Input layouts.
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		std::map<VertexFormat, ShaderPtr> VertexShaders;
@@ -130,6 +137,9 @@ namespace mmo
 		D3D11_SAMPLER_DESC m_samplerDesc;
 		bool m_samplerDescChanged = false;
 		size_t m_samplerHash = 0;
+		D3D11_DEPTH_STENCIL_DESC m_depthStencilDesc;
+		size_t m_depthStencilHash = 0;
+		bool m_depthStencilChanged = false;
 
 #ifdef _DEBUG
 		ComPtr<ID3D11Debug> m_d3dDebug;

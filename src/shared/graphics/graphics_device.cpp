@@ -89,6 +89,10 @@ namespace mmo
 			m_restoreTransforms[i] = m_transform[i];
 		}
 
+		m_restoreDepthEnable = m_depthEnabled;
+		m_restoreDepthWrite = m_depthWrite;
+		m_restoreDepthComparison = m_depthComparison;
+
 		// Save blend mode
 		m_restoreBlendMode = m_blendMode;
 
@@ -121,6 +125,21 @@ namespace mmo
 			SetBlendMode(m_restoreBlendMode);
 		}
 
+		if (m_depthEnabled != m_restoreDepthEnable)
+		{
+			SetDepthEnabled(m_restoreDepthEnable);
+		}
+
+		if (m_restoreDepthWrite != m_depthWrite)
+		{
+			SetDepthWriteEnabled(m_restoreDepthEnable);
+		}
+		
+		if (m_restoreDepthComparison != m_depthComparison)
+		{
+			SetDepthTestComparison(m_restoreDepthComparison);
+		}
+		
 		// Reactivate old render target if it has changed and if there was an old
 		// render target (which should almost every time be the case but whatever)
 		if (m_restoreRenderTarget && 
@@ -209,8 +228,23 @@ namespace mmo
 		m_texAddressMode[2] = modeW;
 	}
 	
-	void GraphicsDevice::SetTextureFilter(TextureFilter filter)
+	void GraphicsDevice::SetTextureFilter(const TextureFilter filter)
 	{
 		m_texFilter = filter;
+	}
+
+	void GraphicsDevice::SetDepthEnabled(const bool enable)
+	{
+		m_depthEnabled = enable;
+	}
+
+	void GraphicsDevice::SetDepthWriteEnabled(const bool enable)
+	{
+		m_depthWrite = enable;
+	}
+
+	void GraphicsDevice::SetDepthTestComparison(const DepthTestMethod comparison)
+	{
+		m_depthComparison = comparison;
 	}
 }

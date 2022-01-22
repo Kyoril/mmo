@@ -47,6 +47,12 @@ namespace mmo
 
 	void AABB::Combine(const AABB & other)
 	{
+		if (IsNull())
+		{
+			min = other.min;
+			max = other.max;
+		}
+
 		min = TakeMinimum(min, other.min);
 		max = TakeMaximum(max, other.max);
 	}

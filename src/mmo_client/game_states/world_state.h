@@ -13,6 +13,7 @@
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/axis_display.h"
+#include "scene_graph/light.h"
 #include "scene_graph/scene.h"
 
 
@@ -76,7 +77,7 @@ namespace mmo
 		void SetupPacketHandler();
 
 		void RemovePacketHandler() const;
-
+		
 	private:
 		// 
 		void OnRealmDisconnected();
@@ -119,5 +120,6 @@ namespace mmo
 		Entity* m_archEntity { nullptr };
 		Entity* m_towerLeftEntity { nullptr };
 		Entity* m_towerRightEntity { nullptr };
+		Light* m_sunLight { nullptr };
 	};
 }

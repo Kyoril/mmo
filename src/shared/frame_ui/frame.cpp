@@ -384,8 +384,37 @@ namespace mmo
 	{
 		// Create a new anchor
 		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo, offset);
-		m_needsRedraw = true;
-		m_needsLayout = true;
+		Invalidate();
+	}
+
+	void Frame::SetSize(const float width, const float height)
+	{
+		m_pixelSize = Size(width, height);
+
+		if (!AnchorsSatisfySize())
+		{
+			Invalidate();	
+		}
+	}
+
+	void Frame::SetWidth(const float width)
+	{
+		m_pixelSize.width = width;
+		
+		if (!AnchorsSatisfySize())
+		{
+			Invalidate();	
+		}
+	}
+
+	void Frame::SetHeight(const float height)
+	{
+		m_pixelSize.height = height;
+
+		if (!AnchorsSatisfySize())
+		{
+			Invalidate();	
+		}
 	}
 
 	void Frame::ClearAnchor(AnchorPoint point)
@@ -557,7 +586,8 @@ namespace mmo
 		// We can't add ourself as child frame
 		if (frame.get() == this)
 		{
-			throw std::runtime_error("Frame can't be it's own child frame!");
+			ELOG("Frame can't be it's own child frame!");
+			return;
 		}
 
 		// Add to the list of children

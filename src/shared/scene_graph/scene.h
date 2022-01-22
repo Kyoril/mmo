@@ -12,6 +12,7 @@
 
 #include "camera.h"
 #include "entity.h"
+#include "light.h"
 #include "manual_render_object.h"
 #include "scene_node.h"
 
@@ -68,6 +69,8 @@ namespace mmo
 
 		void DestroySceneNode(const SceneNode& sceneNode);
 
+		Light& CreateLight(const String& name, LightType type);
+
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
 		/// @returns Pointer to the camera or nullptr if the camera does not exist.
@@ -117,6 +120,38 @@ namespace mmo
 
 		void RenderQueueGroupObjects(RenderQueueGroup& group);
 
+		void NotifyLightsDirty();
+		void FindLightsAffectingCamera(const Camera& camera);
+
+		struct LightInfo
+		{
+			Light* light;
+			LightType type;
+			float range;
+			Vector3 position;
+			uint32 lightMask;
+			bool castsShadow;
+
+			bool operator==(const LightInfo& rhs) const
+			{
+				return light == rhs.light && type == rhs.type &&
+					range == rhs.range && position == rhs.position && lightMask == rhs.lightMask && castsShadow == rhs.castsShadow;
+			}
+
+			bool operator!=(const LightInfo& rhs) const
+			{
+				return !(*this == rhs);
+			}
+		};
+
+		typedef std::set<Light*> LightSet;
+		typedef std::vector<LightInfo> LightInfoList;
+
+		LightSet m_lightsAffectingCamera;
+		LightInfoList m_cachedLightInfos;
+		LightInfoList m_testLightInfos;
+		uint32 m_lightsDirtyCounter { 0 };
+
 	private:
 		Cameras m_cameras;
         SceneNodes m_sceneNodes;
@@ -131,6 +166,9 @@ namespace mmo
 		
 		typedef std::map<String, std::unique_ptr<ManualRenderObject>> ManualRenderObjectMap;
 		ManualRenderObjectMap m_manualRenderObjects;
+
+		typedef std::map<String, std::unique_ptr<Light>> LightObjectMap;
+		LightObjectMap m_lights;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
