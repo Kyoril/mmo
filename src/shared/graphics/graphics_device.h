@@ -229,8 +229,8 @@ namespace mmo
 		BlendMode m_restoreBlendMode;
 		FillMode m_fillMode;
 		FillMode m_restoreFillMode;
-		FaceCullMode m_cullMode;
-		FaceCullMode m_restoreCullMode;
+		FaceCullMode m_cullMode { FaceCullMode::Front };
+		FaceCullMode m_restoreCullMode { FaceCullMode::Front };
 		TextureAddressMode m_texAddressMode[3];
 		TextureAddressMode m_restoreTexAddressMode[3];
 		TextureFilter m_texFilter;

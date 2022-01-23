@@ -28,6 +28,15 @@ namespace mmo
 	Scene::Scene()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
+
+		// Create default material
+		m_defaultMaterial = std::make_shared<Material>("SceneDefault");
+		m_defaultMaterial->SetType(MaterialType::Opaque);
+		m_defaultMaterial->SetTwoSided(false);
+		m_defaultMaterial->SetCastShadows(true);
+		m_defaultMaterial->SetReceivesShadows(true);
+
+		// Setup shaders (TODO)
 	}
 
 	void Scene::Clear()
@@ -254,17 +263,49 @@ namespace mmo
 			op.indexBuffer->Set();
 		}
 
-		GraphicsDevice::Get().SetTopologyType(op.topology);
-		GraphicsDevice::Get().SetVertexFormat(op.vertexFormat);
-		GraphicsDevice::Get().SetTransformMatrix(World, renderable.GetWorldTransform());
+		auto& gx = GraphicsDevice::Get();
 
-		if (op.useIndexes)
+		// Grab material with fallback to default material of the scene
+		auto material = renderable.GetMaterial();
+		if (!material)
 		{
-			GraphicsDevice::Get().DrawIndexed();
+			material = m_defaultMaterial;
+		}
+
+		// Activate material vertex- and pixel shader if set
+		if (material->GetVertexShader())
+		{
+			material->GetVertexShader()->Set();
+		}
+		if (material->GetPixelShader())
+		{
+			material->GetPixelShader()->Set();
+		}
+
+		gx.SetFaceCullMode(material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
+		gx.SetBlendMode(material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
+
+		// TODO: Set light-dependent settings
+		if (material->IsLit())
+		{
 		}
 		else
 		{
-			GraphicsDevice::Get().Draw(op.vertexBuffer->GetVertexCount());
+			
+		}
+		
+		gx.SetTopologyType(op.topology);
+		gx.SetVertexFormat(op.vertexFormat);
+
+		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		if (op.useIndexes)
+		{
+			gx.DrawIndexed();
+		}
+		else
+		{
+			gx.Draw(op.vertexBuffer->GetVertexCount());
 		}
 	}
 

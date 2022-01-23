@@ -45,8 +45,9 @@ namespace mmo
 
 	void SubMesh::PrepareRenderOperation(RenderOperation& op) const
 	{
+		GraphicsDevice::Get().SetBlendMode(BlendMode::Opaque);
 		GraphicsDevice::Get().BindTexture(
-			TextureManager::Get().CreateOrRetrieve("Textures/Crate/Crate.htex"), ShaderType::PixelShader, 0);
+			TextureManager::Get().CreateOrRetrieve("Textures/Brick_04/T_brick_04_BaseColor.htex"), ShaderType::PixelShader, 0);
 
 		if (m_useSharedVertices)
 		{

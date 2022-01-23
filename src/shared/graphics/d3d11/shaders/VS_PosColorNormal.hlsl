@@ -24,7 +24,10 @@ VertexOut main(VertexIn input)
 	output.pos = mul(output.pos, matProj);
 
 	output.color = input.color;
-	output.normal = input.normal;
+
+	// Calculate the normal vector against the world matrix only.
+    output.normal = mul(input.normal, (float3x3)matWorld);
+    output.normal = normalize(output.normal);
 
 	return output;
 }

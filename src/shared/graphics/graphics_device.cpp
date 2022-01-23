@@ -27,8 +27,6 @@ namespace mmo
 		, m_restoreBlendMode()
 		, m_fillMode(FillMode::Solid)
 		, m_restoreFillMode()
-		, m_cullMode(FaceCullMode::Back)
-		, m_restoreCullMode()
 		, m_texAddressMode{}
 		, m_restoreTexAddressMode{}
 		, m_texFilter()

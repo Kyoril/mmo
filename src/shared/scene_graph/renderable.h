@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "material.h"
 #include "base/typedefs.h"
 #include "graphics/graphics_device.h"
 
@@ -47,7 +48,7 @@ namespace mmo
 
         /// @brief Called immediately after the renderable has been rendered.
         /// @param scene The scene that this renderable belongs to.
-        /// @param graphicsDevice The graphics dvice that was used for rendering.
+        /// @param graphicsDevice The graphics device that was used for rendering.
         virtual void PostRender(Scene& scene, GraphicsDevice& graphicsDevice)
         {
         }
@@ -61,7 +62,7 @@ namespace mmo
 		[[nodiscard]] virtual float GetSquaredViewDepth(const Camera& camera) const = 0;
         
         [[nodiscard]] virtual bool GetCastsShadows() const { return false; }
-
-
+        
+        [[nodiscard]] virtual const std::shared_ptr<Material>& GetMaterial() = 0;
 	};
 }

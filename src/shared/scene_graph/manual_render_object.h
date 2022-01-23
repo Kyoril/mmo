@@ -247,10 +247,13 @@ namespace mmo
 
 		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
 
+		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
+
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
 		AABB m_boundingBox;
+		std::shared_ptr<Material> m_material; // TODO
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess

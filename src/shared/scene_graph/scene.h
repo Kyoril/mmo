@@ -20,6 +20,7 @@
 namespace mmo
 {
 	class Scene;
+	class Material;
 
 	class SceneQueuedRenderableVisitor final : public QueuedRenderableVisitor
 	{
@@ -173,5 +174,7 @@ namespace mmo
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
 		float m_defaultShadowFarDist { 0.0f };
+
+		std::shared_ptr<Material> m_defaultMaterial;
 	};
 }

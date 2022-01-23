@@ -113,6 +113,10 @@ namespace mmo
 
 		void GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry);
 
+		void LoadMeshUvs(FbxMesh& mesh, MeshGeometry& geometry);
+
+		void LoadMeshNormals(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry);
+
 
 	public:
 		/// @copydoc ImportBase::ImportFromFile

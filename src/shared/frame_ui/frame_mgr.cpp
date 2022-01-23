@@ -522,6 +522,7 @@ namespace mmo
 		// Disable depth test & write
 		GraphicsDevice::Get().SetDepthEnabled(false);
 		GraphicsDevice::Get().SetDepthWriteEnabled(false);
+		GraphicsDevice::Get().SetFaceCullMode(FaceCullMode::None);
 
 		// Render top frame if there is any
 		if (m_topFrame != nullptr)

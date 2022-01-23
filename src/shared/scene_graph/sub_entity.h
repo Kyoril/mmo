@@ -47,6 +47,7 @@ namespace mmo
 
 		const Matrix4& GetWorldTransform() const override;
 
+		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_material; }
 
 	private:
 		Entity& m_parent;
@@ -62,5 +63,7 @@ namespace mmo
 
 		mutable float m_cachedCameraDist { 0.0f };
 		mutable const Camera* m_cachedCamera { nullptr };
+
+		std::shared_ptr<Material> m_material;
 	};
 }

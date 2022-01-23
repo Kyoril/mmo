@@ -195,7 +195,7 @@ namespace mmo
                     break;
                 case FbxGeometryElement::eIndexToDirect:
                     {
-                        int id = leVtxc->GetIndexArray().GetAt(lControlPointIndex);
+	                    const int id = leVtxc->GetIndexArray().GetAt(lControlPointIndex);
                         color = leVtxc->GetDirectArray().GetAt(id);
                     }
                     break;
@@ -213,7 +213,7 @@ namespace mmo
                         break;
                     case FbxGeometryElement::eIndexToDirect:
                         {
-                            int id = leVtxc->GetIndexArray().GetAt(vertexId);
+	                        const int id = leVtxc->GetIndexArray().GetAt(vertexId);
                             color = leVtxc->GetDirectArray().GetAt(id);
                         }
                         break;
@@ -387,7 +387,9 @@ namespace mmo
 
 	void FbxImport::GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry)
 	{
-		const bool allAttributesByControlPoints = geometry.uvSets[0].uvs.size() == geometry.positions.size();
+		const bool allUvsByControlPoints = geometry.uvSets[0].uvs.size() == geometry.positions.size();
+		const bool allNormalsByControlPoints = geometry.normals.size() == geometry.positions.size();
+		const bool allAttributesByControlPoints = allUvsByControlPoints && allNormalsByControlPoints;
 		if (allAttributesByControlPoints)
 		{
 			DLOG("Vertex attributes by control points");
@@ -398,6 +400,17 @@ namespace mmo
 			for (size_t i = 0; i < geometry.positions.size(); ++i)
 			{
 				entry.vertices[i].position = geometry.positions[i];
+			}
+			
+			for (size_t i = 0; i < geometry.uvSets[0].uvs.size(); ++i)
+			{
+				entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
+			}
+
+			for (size_t i = 0; i < geometry.normals.size(); ++i)
+			{
+				entry.vertices[i].normal = geometry.normals[i];
+				entry.vertices[i].normal.Normalize();
 			}
 
 			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
@@ -419,7 +432,27 @@ namespace mmo
 			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
 			{
 				entry.vertices[i].position = geometry.positions[geometry.polygonIndices[i]];
-				entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
+
+				if (allNormalsByControlPoints)
+				{
+					entry.vertices[i].normal = geometry.normals[geometry.polygonIndices[i]];	
+				}
+				else
+				{
+					entry.vertices[i].normal = geometry.normals[i];
+				}
+
+				entry.vertices[i].normal.Normalize();
+				
+				if (allUvsByControlPoints)
+				{
+					entry.vertices[i].texCoord = geometry.uvSets[0].uvs[geometry.polygonIndices[i]];
+				}
+				else
+				{
+					entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
+				}
+				
 				entry.vertices[i].color = 0xffffffff;
 				
 				entry.indices[i] = i;
@@ -427,6 +460,87 @@ namespace mmo
 				if (entry.indices[i] > entry.maxIndex)
 				{
 					entry.maxIndex = entry.indices[i];
+				}
+			}
+		}
+	}
+
+	void FbxImport::LoadMeshUvs(FbxMesh& mesh, MeshGeometry& geometry)
+	{
+		FbxStringList uvNames;
+		mesh.GetUVSetNames(uvNames);
+
+		const char* uvName = nullptr;
+		if (uvNames.GetCount())
+		{
+			uvName = uvNames[0];
+		}
+
+		FbxGeometryElementUV* uv = mesh.GetElementUV(0);
+		const auto mappingMode = uv->GetMappingMode();
+		if (mappingMode == FbxLayerElement::eByControlPoint)
+		{
+			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
+			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
+			{
+				int lUvIndex = lIndex;
+				if (uv->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
+				{
+					lUvIndex = uv->GetIndexArray().GetAt(lIndex);
+				}
+				auto lCurrentUv = uv->GetDirectArray().GetAt(lUvIndex);
+				geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUv[0], 1.0f - lCurrentUv[1], 0.0f));
+			}
+		}
+		else
+		{
+			const int polygonCount = mesh.GetPolygonCount();
+			for (int polygonIndex = 0; polygonIndex < polygonCount; ++polygonIndex)
+			{
+				for (int vertexIndex = 0; vertexIndex < 3; ++vertexIndex)
+				{
+					bool lUnmappedUV;
+					FbxVector2 lCurrentUV;
+					mesh.GetPolygonVertexUV(polygonIndex, vertexIndex, uvName, lCurrentUV, lUnmappedUV);
+					geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUV[0], 1.0f - lCurrentUV[1], 0.0f));
+				}
+			}
+		}
+	}
+
+	void FbxImport::LoadMeshNormals(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry)
+	{
+		const auto transform = node.EvaluateGlobalTransform().Inverse().Transpose();
+
+		auto* normalElem = mesh.GetElementNormal(0);
+		const auto mappingMode = normalElem->GetMappingMode();
+		if (mappingMode == FbxLayerElement::eByControlPoint)
+		{
+			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
+			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
+			{
+				int lNormalIndex = lIndex;
+				if (normalElem->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
+				{
+					lNormalIndex = normalElem->GetIndexArray().GetAt(lIndex);
+				}
+
+				const auto lCurrentNormal = transform.MultT(normalElem->GetDirectArray().GetAt(lNormalIndex));
+				geometry.normals.emplace_back(Vector3(lCurrentNormal[0], lCurrentNormal[1], lCurrentNormal[2]));
+			}
+		}
+		else if (mappingMode != FbxLayerElement::eNone)
+		{
+			const int polygonCount = mesh.GetPolygonCount();
+			for (int polygonIndex = 0; polygonIndex < polygonCount; ++polygonIndex)
+			{
+				for (int vertexIndex = 0; vertexIndex < 3; ++vertexIndex)
+				{
+					FbxVector4 lCurrentNormal;
+					mesh.GetPolygonVertexNormal(polygonIndex, vertexIndex, lCurrentNormal);
+					
+					lCurrentNormal = transform.MultT(lCurrentNormal);
+					geometry.normals.emplace_back(Vector3(lCurrentNormal[0], lCurrentNormal[1], lCurrentNormal[2]));
 				}
 			}
 		}
@@ -471,48 +585,10 @@ namespace mmo
 		
 
 		// Load normals
-
+		LoadMeshNormals(node, mesh, geometry);
 
 		// Load UVs
-		FbxStringList lUVNames;
-		mesh.GetUVSetNames(lUVNames);
-
-		const char* lUVName = nullptr;
-		if (lUVNames.GetCount())
-		{
-			lUVName = lUVNames[0];
-		}
-
-		FbxGeometryElementUV* uv = mesh.GetElementUV(0);
-		const auto mappingMode = uv->GetMappingMode();
-		if (mappingMode == FbxLayerElement::eByControlPoint)
-		{
-			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
-			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
-			{
-				int lUvIndex = lIndex;
-				if (uv->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
-				{
-					lUvIndex = uv->GetIndexArray().GetAt(lIndex);
-				}
-				auto lCurrentUv = uv->GetDirectArray().GetAt(lUvIndex);
-				geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUv[0], 1.0f - lCurrentUv[1], 0.0f));
-			}
-		}
-		else
-		{
-			const int lPolygonCount = mesh.GetPolygonCount();
-			for (int lPolygonIndex = 0; lPolygonIndex < lPolygonCount; ++lPolygonIndex)
-			{
-				for (int lVerticeIndex = 0; lVerticeIndex < 3; ++lVerticeIndex)
-				{
-					bool lUnmappedUV;
-					FbxVector2 lCurrentUV;
-					mesh.GetPolygonVertexUV(lPolygonIndex, lVerticeIndex, lUVName, lCurrentUV, lUnmappedUV);
-					geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUV[0], 1.0f - lCurrentUV[1], 0.0f));
-				}
-			}
-		}
+		LoadMeshUvs(mesh, geometry);
 
 		// Load polygon indices
         if (!LoadMeshPolygons(mesh, geometry))
@@ -523,52 +599,6 @@ namespace mmo
 		// Setup vertices and indices
 		GenerateMeshEntry(entry, geometry);
 
-#if 0
-        // Gets the control points of the mesh
-		entry.vertices.reserve(mesh->GetControlPointsCount());
-		ILOG("\tTriangles: " << polyCount);
-
-		for (int face = 0; face < polyCount; ++face)
-		{
-			for (int vertex = 0; vertex < 3; ++vertex)
-			{
-				const int vertexId = mesh->GetPolygonVertex(face, vertex);
-
-				mmo::Vertex v;
-				
-				// Get vertex color
-				const auto vertexColor = GetFBXColor(mesh, face, vertexId);
-
-				// Get UVW
-				if (uvSetCount > 0)
-				{
-					int uvIndex = mesh->GetTextureUVIndex(face, vertexId);
-					FbxGeometryElementUV* uv = mesh->GetElementUV(0);
-					FbxVector2 uvVector = uv->GetDirectArray().GetAt(uvIndex);
-					v.texCoord = Vector3(uvVector[0], 1.0f - uvVector[1], 0.0f);
-				}
-				else
-				{
-					v.texCoord = Vector3::Zero;
-				}
-				
-				v.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
-				v.color = Color(vertexColor.mRed, vertexColor.mGreen, vertexColor.mBlue, vertexColor.mAlpha);
-				v.normal = Vector3::UnitZ;
-
-				entry.vertices.emplace_back(std::move(v));
-				entry.indices.push_back(entry.indices.size() - 1);
-
-				if (static_cast<uint32>(vertexId) > entry.maxIndex)
-				{
-					entry.maxIndex = vertexId;
-				}
-			}
-		}
-
-		ILOG("\tVertices: " << entry.vertices.size());
-#endif
-		
 		// Save mesh entry
 		m_meshEntries.emplace_back(std::move(entry));
 
