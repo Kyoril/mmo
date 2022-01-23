@@ -7,7 +7,6 @@
 #include "base/chunk_writer.h"
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
-#include "graphics/vertex_format.h"
 #include "log/default_log_levels.h"
 #include "mesh_v1_0/header.h"
 #include "mesh_v1_0/header_save.h"
@@ -30,7 +29,7 @@ namespace mmo
 		DestroySdkObjects();
 	}
 
-	bool FbxImport::LoadScene(const char * pFilename)
+	bool FbxImport::LoadScene(const String& filename)
 	{
 		// Remove existing mesh entries
 		m_meshEntries.clear();
@@ -50,7 +49,7 @@ namespace mmo
 		FbxImporter* lImporter = FbxImporter::Create(m_sdkManager, "");
 
 		// Initialize the importer by providing a filename.
-		const bool lImportStatus = lImporter->Initialize(pFilename, -1, m_sdkManager->GetIOSettings());
+		const bool lImportStatus = lImporter->Initialize(filename.c_str(), -1, m_sdkManager->GetIOSettings());
 		lImporter->GetFileVersion(lFileMajor, lFileMinor, lFileRevision);
 
 		if (!lImportStatus)
@@ -62,7 +61,7 @@ namespace mmo
 			if (lImporter->GetStatus().GetCode() == FbxStatus::eInvalidFileVersion)
 			{
 				ELOG("FBX file format version for this FBX SDK is " << lSDKMajor << "." << lSDKMinor << "." << lSDKRevision);
-				ELOG("FBX file format version for file '" << pFilename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
+				ELOG("FBX file format version for file '" << filename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
 			}
 
 			return false;
@@ -72,7 +71,7 @@ namespace mmo
 
 		if (lImporter->IsFBX())
 		{
-			ILOG("FBX file format version for file '" << pFilename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
+			ILOG("FBX file format version for file '" << filename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
 
 			// From this point, it is possible to access animation stack information without
 			// the expense of loading the entire file.
@@ -125,8 +124,6 @@ namespace mmo
 		// Destroy the importer.
 		lImporter->Destroy();
 		
-		//FbxAxisSystem::DirectX.ConvertScene(m_scene);
-
 		// Create a converter
 		FbxGeometryConverter converter(m_sdkManager);
 		if (!converter.Triangulate(m_scene, true))
@@ -140,9 +137,11 @@ namespace mmo
 		{
 			ELOG("Fbx file has no root node!");
 		}
-
-		// Traverse through all nodes
-		TraverseScene(*rootNode);
+		else
+		{
+			// Traverse through all nodes
+			TraverseScene(*rootNode);	
+		}
 
 		return lStatus;
 	}
@@ -170,7 +169,10 @@ namespace mmo
 	void FbxImport::DestroySdkObjects()
 	{
 		//Delete the FBX Manager. All the objects that have been allocated using the FBX Manager and that haven't been explicitly destroyed are also automatically destroyed.
-		if (m_sdkManager) m_sdkManager->Destroy();
+		if (m_sdkManager) 
+		{
+			m_sdkManager->Destroy();
+		}
 	}
 	
     FbxColor GetFBXColor(FbxMesh *pMesh, const int polyIndex, const int polyPointIndex)
@@ -229,108 +231,24 @@ namespace mmo
         }
         return color;
     }
-
-	int GetUVSets(FbxNode *pNode, FbxMesh *pMesh)
-    {
-		int numUvSets = 0;
-
-        if( pNode && pMesh) 
-        {
-            for( int i = 0; i < pMesh->GetElementUVCount(); ++i )
-            {
-	            const FbxGeometryElementUV* uvElement = pMesh->GetElementUV(i);
-				if (uvElement->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-				{
-					++numUvSets;
-				}
-            }
-        }
-
-        return numUvSets;
-    }
-
+	
 	void FbxImport::TraverseScene(FbxNode & node)
 	{
-		// Find mesh nodes
-		FbxMesh* mesh = node.GetMesh();
-		if (mesh)
+		const auto* attribute = node.GetNodeAttribute();
+		if (attribute)
 		{
-			if( mesh->CheckIfVertexNormalsCCW() )
-            {
-                WLOG("Counter clockwise normals detected.");
-            }
-
-            if(mesh->GetLayer(0)->GetNormals() == nullptr)
-            {
-                ILOG("Recomputing normals...");
-                mesh->InitNormals();
-                mesh->GenerateNormals();
-            }
-
-			ILOG("Geometry Node: " << node.GetName());
-			
-			// Create a new mesh entry
-			mmo::MeshEntry entry;
-			entry.name = node.GetName();
-			entry.maxIndex = 0;
-			
-			const auto& transform = node.EvaluateGlobalTransform();
-			
-			FbxVector4* vertices = mesh->GetControlPoints();
-			
-			const int uvSetCount = GetUVSets(&node, mesh);
-			ILOG("Number of UV sets: " << uvSetCount);
-
-			// Gets the control points of the mesh
-			const auto polyCount = mesh->GetPolygonCount();
-			entry.vertices.reserve(mesh->GetControlPointsCount());
-			ILOG("\tTriangles: " << polyCount);
-
-			for (int face = 0; face < polyCount; ++face)
+			if (attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
 			{
-				for (int vertex = 0; vertex < 3; ++vertex)
+				auto* mesh = node.GetMesh();
+				if (!mesh)
 				{
-					const int vertexId = mesh->GetPolygonVertex(face, vertex);
-
-					mmo::Vertex v;
-
-					// Get position
-					FbxVector4 vertexPos = transform.MultT(vertices[vertexId]);
-
-					// Get vertex color
-					const auto vertexColor = GetFBXColor(mesh, face, vertexId);
-
-					// Get UVW
-					if (uvSetCount > 0)
-					{
-						int uvIndex = mesh->GetTextureUVIndex(face, vertexId);
-						FbxGeometryElementUV* uv = mesh->GetElementUV(0);
-						FbxVector2 uvVector = uv->GetDirectArray().GetAt(uvIndex);
-						v.texCoord = Vector3(uvVector[0], 1.0f - uvVector[1], 0.0f);
-					}
-					else
-					{
-						v.texCoord = Vector3::Zero;
-					}
-					
-					v.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
-					v.color = Color(vertexColor.mRed, vertexColor.mGreen, vertexColor.mBlue, vertexColor.mAlpha);
-					v.normal = Vector3::UnitZ;
-
-					entry.vertices.emplace_back(std::move(v));
-					entry.indices.push_back(entry.indices.size() - 1);
-
-					if (static_cast<uint32>(vertexId) > entry.maxIndex)
-					{
-						entry.maxIndex = vertexId;
-					}
+					WLOG("Found mesh node without mesh, skipping node " << node.GetName());
+				}
+				else if (!LoadMesh(node, *mesh))
+				{
+					WLOG("Failed to load mesh node " << node.GetName() << ", skipping");
 				}
 			}
-
-			ILOG("\tVertices: " << entry.vertices.size());
-			
-			// Save mesh entry
-			m_meshEntries.push_back(entry);
 		}
 
 		// Recursively traverse child nodes
@@ -341,9 +259,9 @@ namespace mmo
 		}
 	}
 
-	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath)
+	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath) const
 	{
-		std::filesystem::path p = (assetPath / filename).string() + ".hmsh";
+		const std::filesystem::path p = (assetPath / filename).string() + ".hmsh";
 		
 		// Create the file name
 		const auto filePtr = AssetRegistry::CreateNewFile(p.string());
@@ -432,9 +350,274 @@ namespace mmo
 		return true;
 	}
 
+	bool FbxImport::LoadMeshPolygons(FbxMesh& mesh, MeshGeometry& geometry)
+	{
+		const auto* polygonVertices = mesh.GetPolygonVertices();
+		if (!polygonVertices)
+		{
+			ELOG("Unable to get polygon vertices");
+			return false;
+		}
+
+		const auto polyCount = mesh.GetPolygonCount();
+		for (size_t polygon = 0; polygon < polyCount; ++polygon)
+		{
+			const auto polygonSize = mesh.GetPolygonSize(polygon);
+			if (polygonSize != 3)
+			{
+				ELOG("Detected non-triangle polygon");
+				return false;
+			}
+
+			for (size_t polygonVertex = 0; polygonVertex < polygonSize; ++polygonVertex)
+			{
+				const auto polygonVertexId = mesh.GetPolygonVertex(polygon, polygonVertex);
+				if (polygonVertexId < 0)
+				{
+					ELOG("Detected polygon with invalid vertex id");
+					return false;
+				}
+
+				geometry.polygonIndices.emplace_back(polygonVertexId);
+			}
+		}
+
+		return true;
+	}
+
+	void FbxImport::GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry)
+	{
+		const bool allAttributesByControlPoints = geometry.uvSets[0].uvs.size() == geometry.positions.size();
+		if (allAttributesByControlPoints)
+		{
+			DLOG("Vertex attributes by control points");
+
+			entry.vertices.resize(geometry.positions.size(), Vertex { Vector3::Zero, Vector3::UnitZ, Vector3::Zero, Color::White});
+			entry.indices.resize(geometry.polygonIndices.size(), 0);
+
+			for (size_t i = 0; i < geometry.positions.size(); ++i)
+			{
+				entry.vertices[i].position = geometry.positions[i];
+			}
+
+			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
+			{
+				entry.indices[i] = geometry.polygonIndices[i];
+				if (entry.indices[i] > entry.maxIndex)
+				{
+					entry.maxIndex = entry.indices[i];
+				}
+			}
+		}
+		else
+		{
+			DLOG("Vertex attributes by polygon vertex");
+
+			entry.vertices.resize(geometry.uvSets[0].uvs.size(), Vertex { Vector3::Zero, Vector3::UnitZ, Vector3::Zero, Color::White});
+			entry.indices.resize(geometry.polygonIndices.size(), 0);
+
+			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
+			{
+				entry.vertices[i].position = geometry.positions[geometry.polygonIndices[i]];
+				entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
+				entry.vertices[i].color = 0xffffffff;
+				
+				entry.indices[i] = i;
+
+				if (entry.indices[i] > entry.maxIndex)
+				{
+					entry.maxIndex = entry.indices[i];
+				}
+			}
+		}
+	}
+
+	bool FbxImport::LoadMesh(FbxNode& node, FbxMesh& mesh)
+	{
+        if(mesh.GetLayer(0)->GetNormals() == nullptr)
+        {
+            ILOG("Mesh is missing normal information, recalculating normals using FBX SDK...");
+            mesh.InitNormals();
+            mesh.GenerateNormals(true, true, true);
+        }
+		
+		if(mesh.CheckIfVertexNormalsCCW())
+        {
+            WLOG("Counter clockwise normals detected.");
+        }
+
+		ILOG("Processing mesh node " << node.GetName() << "...");
+		
+		// Create a new mesh entry
+		MeshEntry entry {};
+		entry.name = node.GetName();
+		entry.maxIndex = 0;
+
+		MeshGeometry geometry{};
+
+		// Determine number of uv sets for mesh and reserve uv set memory
+		if (!InitializeUvSets(mesh, geometry))
+		{
+			return false;
+		}
+
+		// Load positions (node is required to transform the vertex positions accordingly. A mesh can be assigned to multiple nodes!)
+		if (!LoadMeshVertexPositions(node, mesh, geometry))
+		{
+			return false;
+		}
+
+		// Load colors
+		
+
+		// Load normals
+
+
+		// Load UVs
+		FbxStringList lUVNames;
+		mesh.GetUVSetNames(lUVNames);
+
+		const char* lUVName = nullptr;
+		if (lUVNames.GetCount())
+		{
+			lUVName = lUVNames[0];
+		}
+
+		FbxGeometryElementUV* uv = mesh.GetElementUV(0);
+		const auto mappingMode = uv->GetMappingMode();
+		if (mappingMode == FbxLayerElement::eByControlPoint)
+		{
+			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
+			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
+			{
+				int lUvIndex = lIndex;
+				if (uv->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
+				{
+					lUvIndex = uv->GetIndexArray().GetAt(lIndex);
+				}
+				auto lCurrentUv = uv->GetDirectArray().GetAt(lUvIndex);
+				geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUv[0], 1.0f - lCurrentUv[1], 0.0f));
+			}
+		}
+		else
+		{
+			const int lPolygonCount = mesh.GetPolygonCount();
+			for (int lPolygonIndex = 0; lPolygonIndex < lPolygonCount; ++lPolygonIndex)
+			{
+				for (int lVerticeIndex = 0; lVerticeIndex < 3; ++lVerticeIndex)
+				{
+					bool lUnmappedUV;
+					FbxVector2 lCurrentUV;
+					mesh.GetPolygonVertexUV(lPolygonIndex, lVerticeIndex, lUVName, lCurrentUV, lUnmappedUV);
+					geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUV[0], 1.0f - lCurrentUV[1], 0.0f));
+				}
+			}
+		}
+
+		// Load polygon indices
+        if (!LoadMeshPolygons(mesh, geometry))
+        {
+	        return false;
+        }
+
+		// Setup vertices and indices
+		GenerateMeshEntry(entry, geometry);
+
+#if 0
+        // Gets the control points of the mesh
+		entry.vertices.reserve(mesh->GetControlPointsCount());
+		ILOG("\tTriangles: " << polyCount);
+
+		for (int face = 0; face < polyCount; ++face)
+		{
+			for (int vertex = 0; vertex < 3; ++vertex)
+			{
+				const int vertexId = mesh->GetPolygonVertex(face, vertex);
+
+				mmo::Vertex v;
+				
+				// Get vertex color
+				const auto vertexColor = GetFBXColor(mesh, face, vertexId);
+
+				// Get UVW
+				if (uvSetCount > 0)
+				{
+					int uvIndex = mesh->GetTextureUVIndex(face, vertexId);
+					FbxGeometryElementUV* uv = mesh->GetElementUV(0);
+					FbxVector2 uvVector = uv->GetDirectArray().GetAt(uvIndex);
+					v.texCoord = Vector3(uvVector[0], 1.0f - uvVector[1], 0.0f);
+				}
+				else
+				{
+					v.texCoord = Vector3::Zero;
+				}
+				
+				v.position = mmo::Vector3(vertexPos[0], vertexPos[1], vertexPos[2]);
+				v.color = Color(vertexColor.mRed, vertexColor.mGreen, vertexColor.mBlue, vertexColor.mAlpha);
+				v.normal = Vector3::UnitZ;
+
+				entry.vertices.emplace_back(std::move(v));
+				entry.indices.push_back(entry.indices.size() - 1);
+
+				if (static_cast<uint32>(vertexId) > entry.maxIndex)
+				{
+					entry.maxIndex = vertexId;
+				}
+			}
+		}
+
+		ILOG("\tVertices: " << entry.vertices.size());
+#endif
+		
+		// Save mesh entry
+		m_meshEntries.emplace_back(std::move(entry));
+
+		return true;
+	}
+
+	bool FbxImport::InitializeUvSets(FbxMesh& mesh, MeshGeometry& geometry)
+	{
+		int32 numUvSets = 0;
+
+        for(int32 i = 0; i < mesh.GetElementUVCount(); ++i )
+        {
+            const FbxGeometryElementUV* element = mesh.GetElementUV(i);
+			if (element->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
+			{
+				++numUvSets;
+			}
+        }
+
+		ILOG("\tNumber of UV Sets: " << numUvSets);
+		geometry.uvSets.resize(numUvSets);
+		
+		return true;
+	}
+
+	bool FbxImport::LoadMeshVertexPositions(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry)
+	{
+		// Global transform used to transform vertices into the expected orientation
+		const auto& transform = node.EvaluateGlobalTransform();
+
+		const auto* vertices = mesh.GetControlPoints();
+		const auto vertexCount = mesh.GetControlPointsCount();
+
+		ILOG("\tPosition count: " << vertexCount);
+		geometry.positions.resize(vertexCount, Vector3::Zero);
+
+		// Load positions
+		for (size_t i = 0; i < vertexCount; ++i)
+		{
+			const auto transformedPosition = transform.MultT(vertices[i]);
+			geometry.positions[i] = Vector3(transformedPosition[0], transformedPosition[1], transformedPosition[2]);
+		}
+
+		return true;
+	}
+
 	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
-		if (!LoadScene(filename.string().c_str()))
+		if (!LoadScene(filename.string()))
 		{
 			return false;
 		}
