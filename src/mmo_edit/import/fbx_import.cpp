@@ -306,7 +306,7 @@ namespace mmo
 						int uvIndex = mesh->GetTextureUVIndex(face, vertexId);
 						FbxGeometryElementUV* uv = mesh->GetElementUV(0);
 						FbxVector2 uvVector = uv->GetDirectArray().GetAt(uvIndex);
-						v.texCoord = Vector3(uvVector[0], uvVector[1], 0.0f);
+						v.texCoord = Vector3(uvVector[0], 1.0f - uvVector[1], 0.0f);
 					}
 					else
 					{

@@ -165,10 +165,6 @@ namespace mmo
 		: m_config(config)
 		, m_windowHandle(nullptr)
 		, m_imguiContext(nullptr)
-		, m_lastMouseX(0)
-		, m_lastMouseY(0)
-		, m_leftButtonPressed(false)
-		, m_rightButtonPressed(false)
 		, m_fileLoaded(false)
 		, m_worldsWindow(m_project)
 	{
@@ -482,9 +478,6 @@ namespace mmo
 
 	bool MainWindow::OnFileDrop(const std::string filename)
 	{
-		m_leftButtonPressed = false;
-		m_rightButtonPressed = false;
-
 		const std::filesystem::path p { filename };
 
 		String extension = p.extension().string();
@@ -513,52 +506,26 @@ namespace mmo
 
 	void MainWindow::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
 	{
-		m_lastMouseX = x;
-		m_lastMouseY = y;
-
-		// Only capture mouse button pressed when the hovered imgui window is the viewport
-		if (m_imguiContext->HoveredWindow && strcmp(m_imguiContext->HoveredWindow->Name, "Viewport") != 0)
-			return;
-		
-		if (button == 0)
+		if (m_activeEditorInstance)
 		{
-			m_leftButtonPressed = true;
-		}
-		else if (button == 1)
-		{
-			m_rightButtonPressed = true;
+			m_activeEditorInstance->OnMouseButtonDown(button, x, y);
 		}
 	}
 
 	void MainWindow::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
 	{
-		if (button == 0)
+		if (m_activeEditorInstance)
 		{
-			m_leftButtonPressed = false;
-		}
-		else if (button == 1)
-		{
-			m_rightButtonPressed = false;
+			m_activeEditorInstance->OnMouseButtonUp(button, x, y);
 		}
 	}
 
 	void MainWindow::OnMouseMoved(uint16 x, uint16 y)
 	{
-		// Calculate mouse move delta
-		const int16 deltaX = x - m_lastMouseX;
-		const int16 deltaY = y - m_lastMouseY;
-
-		if (m_rightButtonPressed)
+		if (m_activeEditorInstance)
 		{
-			//m_viewportWindow.MoveCamera(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
+			m_activeEditorInstance->OnMouseMoved(x, y);
 		}
-		else if (m_leftButtonPressed)
-		{
-			//m_viewportWindow.MoveCameraTarget(Vector3(static_cast<float>(deltaX) / 96.0f, static_cast<float>(deltaY) / 96.0f, 0.0f));
-		}
-
-		m_lastMouseX = x;
-		m_lastMouseY = y;
 	}
 	
 	void MainWindow::AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow)
@@ -849,5 +816,18 @@ namespace mmo
 
 		WLOG("No editor available for asset " << assetPath);
 		return false;
+	}
+
+	void MainWindow::SetActiveEditorInstance(EditorInstance* instance)
+	{
+		m_activeEditorInstance = instance;
+	}
+
+	void MainWindow::EditorInstanceClosed(EditorInstance& instance)
+	{
+		if (&instance == m_activeEditorInstance)
+		{
+			m_activeEditorInstance = nullptr;
+		}
 	}
 }

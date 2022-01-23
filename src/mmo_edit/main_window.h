@@ -92,6 +92,10 @@ namespace mmo
 		const Path& GetCurrentPath() const noexcept override { return m_selectedPath; }
 		
 		bool OpenAsset(const Path& assetPath) override;
+		
+		void SetActiveEditorInstance(EditorInstance* instance) override;
+		
+		void EditorInstanceClosed(EditorInstance& instance) override;
 
 	private:
 		Configuration& m_config;
@@ -100,9 +104,6 @@ namespace mmo
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
 		FbxImport m_importer;
-		int16 m_lastMouseX, m_lastMouseY;
-		bool m_leftButtonPressed;
-		bool m_rightButtonPressed;
 		bool m_fileLoaded;
 		bool m_projectLoaded;
 		Project m_project;
@@ -113,5 +114,6 @@ namespace mmo
 		std::vector<std::unique_ptr<EditorBase>> m_editors;
 		Path m_selectedPath;
 		std::vector<String> m_uninitializedEditorInstances;
+		EditorInstance* m_activeEditorInstance { nullptr };
 	};
 }

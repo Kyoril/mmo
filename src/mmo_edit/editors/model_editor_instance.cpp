@@ -8,8 +8,8 @@
 
 namespace mmo
 {
-	ModelEditorInstance::ModelEditorInstance(ModelEditor& editor, Path asset)
-		: EditorInstance(std::move(asset))
+	ModelEditorInstance::ModelEditorInstance(EditorHost& host, ModelEditor& editor, Path asset)
+		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
 		, m_wireFrame(false)
 	{
@@ -95,5 +95,48 @@ namespace mmo
 
 		// Render the render target content into the window as image object
 		ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+	}
+
+	void ModelEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	{
+		m_lastMouseX = x;
+		m_lastMouseY = y;
+		
+		if (button == 0)
+		{
+			m_leftButtonPressed = true;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = true;
+		}
+	}
+
+	void ModelEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	{
+		if (button == 0)
+		{
+			m_leftButtonPressed = false;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = false;
+		}
+	}
+
+	void ModelEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
+	{
+		// Calculate mouse move delta
+		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
+		const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
+
+		if (m_leftButtonPressed || m_rightButtonPressed)
+		{
+			m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
+			m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+		}
+
+		m_lastMouseX = x;
+		m_lastMouseY = y;
 	}
 }

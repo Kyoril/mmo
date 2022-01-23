@@ -20,7 +20,7 @@ namespace mmo
 	class ModelEditorInstance final : public EditorInstance
 	{
 	public:
-		explicit ModelEditorInstance(ModelEditor& editor, Path asset);
+		explicit ModelEditorInstance(EditorHost& host, ModelEditor& editor, Path asset);
 		~ModelEditorInstance() override;
 
 	public:
@@ -28,6 +28,12 @@ namespace mmo
 		void Render();
 
 		void Draw() override;
+		
+		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y) override;
+
+		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y) override;
+
+		void OnMouseMoved(uint16 x, uint16 y) override;
 
 	private:
 		ModelEditor& m_editor;
@@ -35,7 +41,6 @@ namespace mmo
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;
 		bool m_wireFrame;
-
 		Scene m_scene;
 		SceneNode* m_cameraAnchor { nullptr };
 		SceneNode* m_cameraNode { nullptr };
@@ -43,5 +48,8 @@ namespace mmo
 		Camera* m_camera { nullptr };
 		std::unique_ptr<AxisDisplay> m_axisDisplay;
 		std::unique_ptr<WorldGrid> m_worldGrid;
+		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
+		bool m_leftButtonPressed { false };
+		bool m_rightButtonPressed { false };
 	};
 }

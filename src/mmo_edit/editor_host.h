@@ -9,6 +9,8 @@ using Path = std::filesystem::path;
 
 namespace mmo
 {
+	class EditorInstance;
+
 	class EditorHost
 	{
 	public:
@@ -28,5 +30,9 @@ namespace mmo
 		virtual void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow) = 0;
 
 		virtual void RemoveEditorWindow(const String& name) = 0;
+
+		virtual void SetActiveEditorInstance(EditorInstance* instance) = 0;
+
+		virtual void EditorInstanceClosed(EditorInstance& instance) = 0;
 	};
 }
