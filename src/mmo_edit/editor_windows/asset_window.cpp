@@ -212,11 +212,19 @@ namespace mmo
 					}
 				}
 				
+				if (ImGui::BeginPopupContextWindow("AssetContextMenu", ImGuiPopupFlags_MouseButtonRight))
+			    {
+					m_host.ShowAssetCreationContextMenu();
+
+			        ImGui::EndPopup();
+			    }
 			}
+
 			ImGui::EndChild();
 			ImGui::PopStyleColor();
 			
 			ImGui::Columns(1);
+
 		}
 		ImGui::End();
 

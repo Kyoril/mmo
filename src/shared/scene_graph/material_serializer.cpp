@@ -12,6 +12,7 @@ namespace mmo
 	static const ChunkMagic MaterialAttributeChunk = { {'A', 'T', 'T', 'R'} };
 	static const ChunkMagic MaterialVertexShaderChunk = { {'V', 'R', 'T', 'X'} };
 	static const ChunkMagic MaterialPixelShaderChunk = { {'P', 'I', 'X', 'L'} };
+	static const ChunkMagic MaterialTextureChunk = { {'T', 'E', 'X', 'T'} };
 
 	struct MaterialAttributes
 	{
@@ -54,7 +55,19 @@ namespace mmo
 			writer.WritePOD(attributes);
 			attributeChunkWriter.Finish();
 		}
-		
+
+		// Texture chunk
+		{
+			ChunkWriter textureChunkWriter { MaterialTextureChunk, writer };
+			writer << io::write<uint8>(material.GetTextureFiles().size());
+			for(const auto& textureFileName : material.GetTextureFiles())
+			{
+				writer << io::write_dynamic_range<uint8>(textureFileName);
+			}
+		}
+
+		// Shader
+
 		// TODO: Serialize vertex and pixel shader byte code per platform?
 
 	}

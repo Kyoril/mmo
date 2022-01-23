@@ -36,9 +36,15 @@ namespace mmo
 	public:
 		bool OpenAsset(const Path& asset);
 		
+		/// @brief Determines whether the editor supports asset creation.
+		[[nodiscard]] virtual bool CanCreateAssets() const { return false; }
+
 		/// @brief Determines whether the editor can load the given asset by it's extension.
 		[[nodiscard]] virtual bool CanLoadAsset(const String& extension) const = 0;
 		
+		/// @brief Adds creation items to a context menu.
+		virtual void AddCreationContextMenuItems() { };
+
 	public:
 		/// @brief Gets the editor host.
 		[[nodiscard]] EditorHost& GetHost() const noexcept { return m_host; }

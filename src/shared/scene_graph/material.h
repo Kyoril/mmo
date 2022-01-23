@@ -8,8 +8,14 @@
 
 #include <memory>
 
+#include "graphics/texture.h"
+
 namespace mmo
 {
+	class ShaderCompiler;
+	class GraphicsDevice;
+	class MaterialCompiler;
+
 	/// @brief Enumerates possible material types.
 	enum class MaterialType
 	{
@@ -76,17 +82,19 @@ namespace mmo
 		[[nodiscard]] bool IsLit() const noexcept { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
 
 	public:
-		void SetVertexShader(const std::shared_ptr<VertexShader>& vertexShader) { m_vertexShader = vertexShader; }
+		/// @brief Gets the texture files referenced by this material, in order.
+		[[nodiscard]] const std::vector<String>& GetTextureFiles() const noexcept { return m_textureFiles; }
 
-		/// @brief Gets the vertex shader that is being used.
-		///	@return The vertex shader that is being used.
-		[[nodiscard]] const std::shared_ptr<VertexShader>& GetVertexShader() const noexcept { return m_vertexShader; }
+		/// @brief Ensures that the material is loaded.
+		void Update();
+
+		/// @brief Compiles the material.
+		/// @param compiler The compiler to use for compiling the material.
+		bool Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler);
 		
-		void SetPixelShader(const std::shared_ptr<PixelShader>& pixelShader) { m_pixelShader = pixelShader; }
+		void BindShaders(GraphicsDevice& device);
 
-		/// @brief Gets the pixel shader that is currently being used.
-		/// @return The pixel shader to use when rendering something using this material.
-		[[nodiscard]] const std::shared_ptr<PixelShader>& GetPixelShader() const noexcept { return m_pixelShader; }
+		void BindTextures(GraphicsDevice& device);
 
 	private:
 		String m_name;
@@ -94,7 +102,14 @@ namespace mmo
 		bool m_castShadow { true };
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
-		std::shared_ptr<VertexShader> m_vertexShader;
-		std::shared_ptr<PixelShader> m_pixelShader;
+		ShaderPtr m_vertexShader;
+		ShaderPtr m_pixelShader;
+		std::vector<String> m_textureFiles;
+		std::vector<TexturePtr> m_textures;
+		bool m_texturesChanged { true };
+		std::vector<uint8> m_vertexShaderCode;
+		bool m_vertexShaderChanged { true };
+		std::vector<uint8> m_pixelShaderCode;
+		bool m_pixelShaderChanged { true };
 	};
 }

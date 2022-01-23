@@ -97,6 +97,8 @@ namespace mmo
 		
 		void EditorInstanceClosed(EditorInstance& instance) override;
 
+		void ShowAssetCreationContextMenu() override;
+
 	private:
 		Configuration& m_config;
 		HWND m_windowHandle;

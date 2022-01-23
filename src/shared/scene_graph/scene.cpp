@@ -271,16 +271,10 @@ namespace mmo
 		{
 			material = m_defaultMaterial;
 		}
-
-		// Activate material vertex- and pixel shader if set
-		if (material->GetVertexShader())
-		{
-			material->GetVertexShader()->Set();
-		}
-		if (material->GetPixelShader())
-		{
-			material->GetPixelShader()->Set();
-		}
+		
+		// Bind textures to the render stage
+		material->BindShaders(gx);
+		material->BindTextures(gx);
 
 		gx.SetFaceCullMode(material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
 		gx.SetBlendMode(material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);

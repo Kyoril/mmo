@@ -67,6 +67,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
 
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
 
 	// Run the message loop
 	MSG msg = { nullptr };

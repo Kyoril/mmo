@@ -745,7 +745,7 @@ namespace mmo
 		texture->Bind(shader, slot);
 		
 		ID3D11SamplerState* const samplerStates = GetCurrentSamplerState();
-		m_immContext->PSSetSamplers(0, 1, &samplerStates);
+		m_immContext->PSSetSamplers(slot, 1, &samplerStates);
 	}
 
 	void GraphicsDeviceD3D11::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
