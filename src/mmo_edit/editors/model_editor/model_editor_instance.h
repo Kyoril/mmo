@@ -1,10 +1,12 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include "base/signal.h"
 
 #include <imgui.h>
 
-#include "editor_instance.h"
+#include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"

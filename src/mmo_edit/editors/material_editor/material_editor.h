@@ -4,7 +4,7 @@
 
 #include <map>
 
-#include "editor_base.h"
+#include "editors/editor_base.h"
 
 namespace mmo
 {

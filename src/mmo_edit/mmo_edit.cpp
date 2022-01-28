@@ -15,9 +15,9 @@
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
 
-#include "editors/model_editor.h"
-#include "editors/material_editor.h"
-#include "editors/texture_editor.h"
+#include "editors/model_editor/model_editor.h"
+#include "editors/material_editor/material_editor.h"
+#include "editors/texture_editor/texture_editor.h"
 
 #ifdef _DEBUG
 #	include "log/default_log_levels.h"

@@ -66,7 +66,7 @@ namespace mmo
 			return;
 		}
 
-		std::shared_ptr<Material> material = std::make_shared<Material>("Material");
+		const std::shared_ptr<Material> material = std::make_shared<Material>("Material");
 		material->SetType(MaterialType::Opaque);
 		material->SetCastShadows(true);
 		material->SetReceivesShadows(true);

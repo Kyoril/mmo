@@ -201,9 +201,9 @@ namespace mmo
 
 		// Prevent double initialization
 		ASSERT(m_handle == nullptr);
-
+		
 		// Create the actual window
-		const DWORD ws = WS_OVERLAPPEDWINDOW;
+		const DWORD ws = m_fullScreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
 
 		// Calculate the real window size needed to make the client area the requestes size
 		RECT r = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };

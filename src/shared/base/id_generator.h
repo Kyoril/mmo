@@ -17,7 +17,24 @@ namespace mmo
 		///                 an invalid value, and thus, the counter should start at 1.
 		IdGenerator(T idOffset = 0)
 			: m_nextId(idOffset)
+			, m_initial(idOffset)
 		{
+		}
+
+		IdGenerator(IdGenerator&& other) noexcept
+			: m_nextId(std::move(other.m_nextId))
+		{
+		}
+
+		IdGenerator& operator=(IdGenerator&& other) noexcept
+		{
+			if (this == &other)
+			{
+				return *this;
+			}
+
+			m_nextId = std::move(other.m_nextId);
+		    return *this;
 		}
 
 		/// Generates a new id.
@@ -34,8 +51,14 @@ namespace mmo
 			if (id >= m_nextId) m_nextId = id + 1;
 		}
 
+		void Reset()
+		{
+			m_nextId = m_initial;
+		}
+
 	private:
 
+		T m_initial;
 		T m_nextId;
 	};
 }

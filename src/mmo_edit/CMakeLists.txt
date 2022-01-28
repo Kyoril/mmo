@@ -29,6 +29,9 @@ file(GLOB imgui_src
 file(GLOB editor_windows_src "editor_windows/*.h" "editor_windows/*.cpp")
 file(GLOB preview_providers_src "preview_providers/*.h" "preview_providers/*.cpp")
 file(GLOB editors_src "editors/*.h" "editors/*.cpp")
+file(GLOB mat_editor_src "editors/material_editor/*.h" "editors/material_editor/*.cpp")
+file(GLOB model_editor_src "editors/model_editor/*.h" "editors/model_editor/*.cpp")
+file(GLOB tex_editor_src "editors/texture_editor/*.h" "editors/texture_editor/*.cpp")
 file(GLOB import_src "import/*.h" "import/*.cpp")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -38,10 +41,13 @@ source_group(src\\imgui FILES ${imgui_src})
 source_group(src\\editor_windows FILES ${editor_windows_src})
 source_group(src\\preview_providers FILES ${preview_providers_src})
 source_group(src\\editors FILES ${editors_src})
+source_group(src\\editors\\material_editor FILES ${mat_editor_src})
+source_group(src\\editors\\model_editor FILES ${model_editor_src})
+source_group(src\\editors\\texture_editor FILES ${tex_editor_src})
 source_group(src\\import FILES ${import_src})
 
 # Add executable
-add_gui_exe(mmo_edit ${imgui_src} ${editor_windows_src} ${preview_providers_src} ${editors_src} ${import_src})
+add_gui_exe(mmo_edit ${imgui_src} ${editor_windows_src} ${preview_providers_src} ${editors_src} ${mat_editor_src} ${model_editor_src} ${tex_editor_src} ${import_src})
 
 target_link_libraries(mmo_edit 
 	base 
