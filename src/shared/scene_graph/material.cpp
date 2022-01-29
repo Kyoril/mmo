@@ -4,7 +4,6 @@
 #include "material_compiler.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
-
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
@@ -45,7 +44,7 @@ namespace mmo
 
 	bool Material::Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler)
 	{
-		compiler.GenerateShaderCode(*this);
+		compiler.GenerateShaderCode(*this, shaderCompiler);
 
 		// Compile vertex shader
 		ShaderCompileResult vertexOutput;

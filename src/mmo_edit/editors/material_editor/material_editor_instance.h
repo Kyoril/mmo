@@ -5,6 +5,7 @@
 #include <span>
 
 #include "editors/editor_instance.h"
+#include "scene_graph/material.h"
 
 namespace mmo
 {
@@ -38,10 +39,7 @@ namespace mmo
 	class MaterialEditorInstance final : public EditorInstance
 	{
 	public:
-		MaterialEditorInstance(EditorHost& host, const Path& assetPath)
-			: EditorInstance(host, assetPath)
-		{
-		}
+		MaterialEditorInstance(EditorHost& host, const Path& assetPath);
 
 	public:
 		/// @copydoc EditorInstance::Draw
@@ -54,5 +52,6 @@ namespace mmo
 		float m_previewSize { 400.0f };
 		float m_detailsSize { 100.0f };
 		CreateNodeDialog m_createDialog;
+		std::shared_ptr<Material> m_material;
 	};
 }

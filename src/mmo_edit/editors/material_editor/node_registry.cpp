@@ -12,7 +12,8 @@ namespace mmo
 			ConstFloatNode::GetStaticTypeInfo(),
 			MaterialNode::GetStaticTypeInfo(),
 			TextureNode::GetStaticTypeInfo(),
-			TextureCoordNode::GetStaticTypeInfo()
+			TextureCoordNode::GetStaticTypeInfo(),
+			MultiplyNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();
@@ -35,7 +36,7 @@ namespace mmo
 	    typeInfo.name     = name;
 	    typeInfo.factory  = factory;
 
-	    m_CustomNodes.push_back(std::move(typeInfo));
+	    m_CustomNodes.emplace_back(std::move(typeInfo));
 
 	    RebuildTypes();
 
@@ -57,7 +58,7 @@ namespace mmo
 	    RebuildTypes();
 	}
 
-	Node* NodeRegistry::Create(uint32_t typeId, MaterialGraph& material)
+	Node* NodeRegistry::Create(const uint32_t typeId, MaterialGraph& material) const
 	{
 		for (const auto& nodeInfo : m_Types)
 	    {
@@ -70,7 +71,7 @@ namespace mmo
 	    return nullptr;
 	}
 
-	Node* NodeRegistry::Create(std::string_view typeName, MaterialGraph& material)
+	Node* NodeRegistry::Create(std::string_view typeName, MaterialGraph& material) const
 	{
 		for (auto& nodeInfo : m_Types)
 	    {

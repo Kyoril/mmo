@@ -79,7 +79,7 @@ namespace mmo
 	    void ForgetPin(const Pin* pin);
 
 	    /// @brief Clears the whole material graph, resetting it into an empty state.
-	    void Clear();
+	    void Clear(bool destroy = false);
 
 	    /// @brief Gets a view on the nodes.
 	    /// @return The nodes as view.
@@ -140,11 +140,15 @@ namespace mmo
 	    /// @return A list of pointers to linked pins for the given pin.
 	    [[nodiscard]] std::vector<Pin*> FindPinsLinkedTo(const Pin& pin) const;
 
+
+		void Compile(MaterialCompiler& compiler);
+
 	private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
 	    std::vector<Node*> m_nodes;
 	    std::vector<Pin*> m_pins;
+		Node* m_rootNode { nullptr };
 	};
 
 }

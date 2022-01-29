@@ -1,6 +1,7 @@
 #pragma once
 
 #include <imgui.h>
+#include <optional>
 #include <span>
 #include <variant>
 #include <vector>
@@ -11,11 +12,13 @@
 #include "imgui_node_editor.h"
 #include "link_query_result.h"
 #include "node_type_info.h"
+#include "scene_graph/material_compiler.h"
 
 namespace ed = ax::NodeEditor;
 
 namespace mmo
 {
+	class MaterialCompiler;
 	class MaterialGraph;
 
 	/// @brief Enumerates possible pin types.
@@ -85,7 +88,7 @@ namespace mmo
 	    Node* m_node = nullptr;
 		PinType m_type = PinType::Material;
 	    std::string_view m_name;
-		const Pin* m_link = nullptr;
+		mutable const Pin* m_link = nullptr;
 
 	public:
 	    Pin(Node* node, PinType type, std::string_view name = "");
@@ -283,6 +286,27 @@ namespace mmo
 	    std::string m_value;
 	};
 
+	class MaterialPin final : public Pin
+	{
+	public:
+		static constexpr auto TypeId = PinType::Material;
+
+	    MaterialPin()
+			: MaterialPin(nullptr)
+	    {
+	    }
+	    MaterialPin(Node* node)
+			: Pin(node, PinType::Material)
+	    {
+	    }
+	    MaterialPin(Node* node, std::string_view name)
+			: Pin(node, PinType::Material, name)
+	    {
+	    }
+
+	    PinValue GetValue() const override { return const_cast<MaterialPin*>(this); }
+	};
+	
 	namespace detail
 	{
 		constexpr inline uint32 fnv_1a_hash(const char string[], size_t size)
@@ -326,7 +350,6 @@ namespace mmo
         return GetStaticTypeInfo(); \
     }
 
-
 	class Node
 	{
 		friend class MaterialGraph;
@@ -369,6 +392,10 @@ namespace mmo
 
 		uint32 GetId() const { return m_id; }
 
+		std::optional<uint32> GetPinIndex(const Pin& pin);
+
+		virtual void Compile(MaterialCompiler& compiler) = 0;
+
 	protected:
 		uint32 m_id;
 		MaterialGraph* m_material;
@@ -388,22 +415,34 @@ namespace mmo
 	    std::span<Pin*> GetInputPins() override { return m_InputPins; }
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
+		
+		void Compile(MaterialCompiler& compiler) override;
+
+		const MaterialPin& GetBaseColorPin() const noexcept { return m_baseColor; }
+		const MaterialPin& GetMetallicPin() const noexcept { return m_metallic; }
+		const MaterialPin& GetSpecularPin() const noexcept { return m_specular; }
+		const MaterialPin& GetRoughnessPin() const noexcept { return m_roughness; }
+		const MaterialPin& GetEmissivePin() const noexcept { return m_emissive; }
+		const MaterialPin& GetOpacityPin() const noexcept { return m_opacity; }
+		const MaterialPin& GetOpacityMaskPin() const noexcept { return m_opacityMask; }
+		const MaterialPin& GetNormalPin() const noexcept { return m_normal; }
 
 	private:
-	    AnyPin m_baseColor = { this, "Base Color" };
-	    AnyPin m_metallic = { this, "Metallic" };
-		AnyPin m_specular = { this, "Specular" };
-		AnyPin m_roughness = { this, "Roughness" };
-		AnyPin m_emissive = { this, "Emissive Color" };
-		AnyPin m_opacity = { this, "Opacity" };
-		AnyPin m_opacityMask = { this, "Opacity Mask" };
-		AnyPin m_normal = { this, "Normal" };
+	    MaterialPin m_baseColor = { this, "Base Color" };
+	    MaterialPin m_metallic = { this, "Metallic" };
+		MaterialPin m_specular = { this, "Specular" };
+		MaterialPin m_roughness = { this, "Roughness" };
+		MaterialPin m_emissive = { this, "Emissive Color" };
+		MaterialPin m_opacity = { this, "Opacity" };
+		MaterialPin m_opacityMask = { this, "Opacity Mask" };
+		MaterialPin m_normal = { this, "Normal" };
 
 	    Pin* m_InputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
 	};
-
+	
 	class ConstFloatNode final : public Node
 	{
+	public:
 		static const uint32 Color;
 
 	public:
@@ -419,11 +458,41 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
+		void Compile(MaterialCompiler& compiler) override { }
+
 	private:
 	    FloatPin m_Float = { this };
 	    Pin* m_OutputPins[1] = { &m_Float };
 	};
-	
+
+	class MultiplyNode final : public Node
+	{
+	public:
+	    MAT_NODE(MultiplyNode, "Multiply")
+
+	    MultiplyNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		void Compile(MaterialCompiler& compiler) override { }
+
+	private:
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which provides a texture coordinate expression.
 	class TextureCoordNode final : public Node
 	{
 		static const uint32 Color;
@@ -439,9 +508,16 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
+		void Compile(MaterialCompiler& compiler) override { compiler.NotifyTextureCoordinateIndex(m_uvCoordIndex); }
+
 	private:
-	    AnyPin m_uvs = { this };
-		
+		/// @brief Index of the uv coordinate set to use.
+		uint8 m_uvCoordIndex { 0 };
+
+	    /// @brief The uv output pin.
+	    MaterialPin m_uvs = { this };
+
+	    /// @brief List of output pins as an array.
 	    Pin* m_outputPins[1] = { &m_uvs };
 	};
 
@@ -461,15 +537,23 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-	private:
-	    AnyPin m_uvs = { this, "UVs" };
+		[[nodiscard]] std::string_view GetTexture() const { return m_texture; }
+		
+		void SetTexture(const std::string_view texture) { m_texture = texture; }
 
-	    AnyPin m_rgb = { this, "RGB" };
-		AnyPin m_r = { this, "R" };
-		AnyPin m_g = { this, "G" };
-		AnyPin m_b = { this, "B" };
-		AnyPin m_a = { this, "A" };
-		AnyPin m_rgba = { this, "RGBA" };
+		void Compile(MaterialCompiler& compiler) override { compiler.AddTexture(m_texture); }
+
+	private:
+		std::string m_texture;
+
+	    MaterialPin m_uvs = { this, "UVs" };
+
+	    MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_rgba = { this, "RGBA" };
 		
 	    Pin* m_inputPins[1] = { &m_uvs };
 	    Pin* m_outputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_rgba };

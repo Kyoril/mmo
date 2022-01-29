@@ -18,9 +18,9 @@ namespace mmo
 
 	    void UnregisterNodeType(std::string_view name);
 		
-	    [[nodiscard]] Node* Create(uint32_t typeId, MaterialGraph& material);
+	    [[nodiscard]] Node* Create(uint32_t typeId, MaterialGraph& material) const;
 
-	    [[nodiscard]] Node* Create(std::string_view typeName, MaterialGraph& material);
+	    [[nodiscard]] Node* Create(std::string_view typeName, MaterialGraph& material) const;
 
 	    [[nodiscard]] std::span<const NodeTypeInfo* const> GetTypes() const;
 

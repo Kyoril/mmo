@@ -56,6 +56,7 @@ namespace mmo
 	    }
 
 	    m_link = &pin;
+		pin.m_link = this;
 
 	    m_node->WasLinked(*this, pin);
 	    pin.m_node->WasLinked(*this, pin);
@@ -72,6 +73,7 @@ namespace mmo
 
 	    const auto link = m_link;
 	    m_link = nullptr;
+		link->m_link = nullptr;
 
 	    m_node->WasUnlinked(*this, *link);
 	    link->m_node->WasUnlinked(*this, *link);
@@ -188,7 +190,40 @@ namespace mmo
 
 	    return {true};
 	}
-    
+
+	std::optional<uint32> Node::GetPinIndex(const Pin& pin)
+	{
+		uint32 index = 0;
+
+		for (const auto& inputPin : GetInputPins())
+		{
+			if (inputPin == &pin)
+			{
+				return index;
+			}
+		}
+
+		index = 0;
+
+		for (const auto& outputPin : GetOutputPins())
+		{
+			if (outputPin == &pin)
+			{
+				return index;
+			}
+		}
+
+		return {};
+	}
+
+	void MaterialNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_baseColor.IsLinked())
+		{
+			m_baseColor.GetLink()->GetNode()->Compile(compiler);
+		}
+	}
+
 	ImColor GetIconColor(const PinType type)
 	{
 	    switch (type)

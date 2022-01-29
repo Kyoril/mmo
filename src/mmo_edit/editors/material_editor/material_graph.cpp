@@ -2,6 +2,8 @@
 
 #include "material_graph.h"
 
+#include "base/macros.h"
+
 namespace mmo
 {
 	MaterialGraph::MaterialGraph(std::shared_ptr<NodeRegistry> nodeRegistry)
@@ -11,10 +13,14 @@ namespace mmo
 		{
 			m_nodeRegistry = std::make_shared<NodeRegistry>();
 		}
+
+		Clear();
 	}
 
-	MaterialGraph::MaterialGraph(const MaterialGraph& other): m_nodeRegistry(other.m_nodeRegistry)
+	MaterialGraph::MaterialGraph(const MaterialGraph& other)
+		: m_nodeRegistry(other.m_nodeRegistry)
 	{
+		Clear();
 	}
 
 	MaterialGraph::MaterialGraph(MaterialGraph&& other) noexcept
@@ -22,7 +28,10 @@ namespace mmo
 		, m_idGenerator(std::move(other.m_idGenerator))
 		, m_nodes(std::move(other.m_nodes))
 		, m_pins(std::move(other.m_pins))
+		, m_rootNode(other.m_rootNode)
 	{
+		other.m_rootNode = nullptr;
+
 		for (const auto& node : m_nodes)
 		{
 			node->m_material = this; 
@@ -31,7 +40,7 @@ namespace mmo
 
 	MaterialGraph::~MaterialGraph()
 	{
-		Clear();
+		Clear(true);
 	}
 
 	MaterialGraph& MaterialGraph::operator=(const MaterialGraph& other)
@@ -41,6 +50,7 @@ namespace mmo
 
 	    Clear();
 
+		m_rootNode = other.m_rootNode;
 	    m_nodeRegistry = other.m_nodeRegistry;
 	    return *this;
 	}
@@ -56,6 +66,8 @@ namespace mmo
 	    m_idGenerator = std::move(other.m_idGenerator);
 	    m_nodes = std::move(other.m_nodes);
 	    m_pins = std::move(other.m_pins);
+		m_rootNode = other.m_rootNode;
+		other.m_rootNode = nullptr;
 
 	    for (const auto& node : m_nodes)
 	    {
@@ -122,17 +134,23 @@ namespace mmo
 
 	    m_pins.erase(pinIt);
 	}
-
-	void MaterialGraph::Clear()
+	
+	void MaterialGraph::Clear(const bool destroy)
 	{
 		for (const auto node : m_nodes)
 		{
 			delete node;
 		}
 
+		m_rootNode = nullptr;
 	    m_nodes.resize(0);
 	    m_pins.resize(0);
 	    m_idGenerator.Reset();
+
+		if (!destroy)
+		{
+			m_rootNode = CreateNode<MaterialNode>();
+		}
 	}
 
 	std::span<const Node* const> MaterialGraph::GetNodes() const
@@ -230,5 +248,11 @@ namespace mmo
 	    }
 
 	    return result;
+	}
+
+	void MaterialGraph::Compile(MaterialCompiler& compiler)
+	{
+		ASSERT(m_rootNode);
+		m_rootNode->Compile(compiler);
 	}
 }

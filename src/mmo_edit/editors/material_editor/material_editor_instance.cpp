@@ -16,6 +16,11 @@
 
 #include <cinttypes>
 
+#include "assets/asset_registry.h"
+#include "graphics/d3d11/shader_compiler_d3d11.h"
+#include "log/default_log_levels.h"
+#include "scene_graph/material_deserializer.h"
+
 
 namespace ImGui
 {
@@ -568,6 +573,104 @@ namespace mmo
 	    return {};
 	}
 
+	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
+		: EditorInstance(host, assetPath)
+	{
+		m_material = std::make_shared<Material>("");
+
+		const auto file = AssetRegistry::OpenFile(assetPath.string());
+		if (!file)
+		{
+			ELOG("Unable to open material asset " << assetPath);
+			return;
+		}
+
+		io::StreamSource source { *file };
+		io::Reader reader { source };
+
+		MaterialDeserializer deserializer { *m_material };
+		if (!deserializer.Read(reader))
+		{
+			ELOG("Failed to read material file " << assetPath);
+			return;
+		}
+	}
+		
+	static void ShowPlaceholderObject(const char* prefix, int uid)
+	{
+	    // Use object uid as identifier. Most commonly you could also use the object pointer as a base ID.
+	    ImGui::PushID(uid);
+
+	    // Text and Tree nodes are less high than framed widgets, using AlignTextToFramePadding() we add vertical spacing to make the tree lines equal high.
+	    ImGui::TableNextRow();
+	    ImGui::TableSetColumnIndex(0);
+	    ImGui::AlignTextToFramePadding();
+	    bool node_open = ImGui::TreeNode("Object", "%s_%u", prefix, uid);
+	    ImGui::TableSetColumnIndex(1);
+	    ImGui::Text("my sailor is rich");
+
+	    if (node_open)
+	    {
+			ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+            ImGui::TreeNodeEx("Field", flags, "Texture");
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::BeginCombo("test", "(None)"))
+			{
+				const auto files = AssetRegistry::ListFiles();
+				for (auto& file : files)
+				{
+					if (!file.ends_with(".htex"))
+						continue;
+					
+					ImGui::PushID(file.c_str());
+					if (ImGui::Selectable(file.c_str()))
+					{
+						DLOG("Selected texture " << file);
+					}
+					ImGui::PopID();
+				}
+				
+				ImGui::EndCombo();
+			}
+            ImGui::NextColumn();
+
+	        /*static float placeholder_members[8] = { 0.0f, 0.0f, 1.0f, 3.1416f, 100.0f, 999.0f };
+	        for (int i = 0; i < 8; i++)
+	        {
+	            ImGui::PushID(i); // Use field index as identifier.
+	            if (i < 2)
+	            {
+	                ShowPlaceholderObject("Child", 424242);
+	            }
+	            else
+	            {
+	                // Here we use a TreeNode to highlight on hover (we could use e.g. Selectable as well)
+	                ImGui::TableNextRow();
+	                ImGui::TableSetColumnIndex(0);
+	                ImGui::AlignTextToFramePadding();
+	                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+	                ImGui::TreeNodeEx("Field", flags, "Field_%d", i);
+
+	                ImGui::TableSetColumnIndex(1);
+	                ImGui::SetNextItemWidth(-FLT_MIN);
+	                if (i >= 5)
+	                    ImGui::InputFloat("##value", &placeholder_members[i], 1.0f);
+	                else
+	                    ImGui::DragFloat("##value", &placeholder_members[i], 0.01f);
+	                ImGui::NextColumn();
+	            }
+	            ImGui::PopID();
+	        }*/
+	        ImGui::TreePop();
+	    }
+	    ImGui::PopID();
+	}
+
 	void MaterialEditorInstance::Draw()
 	{
         if (!s_context)
@@ -579,17 +682,28 @@ namespace mmo
 			ed::SetCurrentEditor(s_context);
 
 			s_material = std::make_unique<MaterialGraph>();
-			s_material->CreateNode<ConstFloatNode>();
-			s_material->CreateNode<MaterialNode>();
 		}
 
 		ImGui::Columns(2, "HorizontalSplitter");
         {
+			ImVec2 size = ImGui::GetWindowContentRegionMax();
+			m_previewSize = size.y / 2.0f;
+			m_detailsSize = m_previewSize;
+
 	        ImGui::Splitter(false, 2.0f, &m_previewSize, &m_detailsSize, 100.0f, 100.0f);
 
 	        if (ImGui::BeginChild("preview", ImVec2(0, m_previewSize)))
 	        {
 				ImGui::Text("Preview");
+
+				if (ImGui::Button("Compile"))
+				{
+					MaterialCompiler compiler;
+					s_material->Compile(compiler);
+
+					std::unique_ptr<ShaderCompiler> shaderCompiler = std::make_unique<ShaderCompilerD3D11>();
+					compiler.GenerateShaderCode(*m_material, *shaderCompiler);
+				}
 	        }
 
 			ImGui::EndChild();
@@ -597,6 +711,14 @@ namespace mmo
 	        if (ImGui::BeginChild("details", ImVec2(0, m_detailsSize)))
 	        {
 				ImGui::Text("Details");
+							
+			    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
+			    {
+					ShowPlaceholderObject("Object", 0);
+			        ImGui::EndTable();
+			    }
+			    ImGui::PopStyleVar();
 	        }
 
 			ImGui::EndChild();

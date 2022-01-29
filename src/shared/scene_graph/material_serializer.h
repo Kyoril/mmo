@@ -1,4 +1,5 @@
 #pragma once
+#include "base/typedefs.h"
 
 namespace io
 {
@@ -21,6 +22,14 @@ namespace mmo
 
 	typedef material_version::Type MaterialVersion;
 	
+	
+	struct MaterialAttributes
+	{
+		uint8 twoSided;
+		uint8 castShadows;
+		uint8 receiveShadows;
+		uint8 materialType;
+	};
 
 	class MaterialSerializer
 	{

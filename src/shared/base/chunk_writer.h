@@ -15,14 +15,19 @@ namespace io
 namespace mmo
 {
 	typedef std::array<char, 4> ChunkMagic;
-
+	
+	inline const uint32& operator*(const ChunkMagic& magic)
+	{
+		return *reinterpret_cast<const uint32*>(&magic[0]);
+	}
+	
 	// The chunk writer
-	class ChunkWriter
+	class ChunkWriter final
 		: public NonCopyable
 	{
 	public:
 		ChunkWriter(const ChunkMagic& magic, io::Writer& writer);
-		virtual ~ChunkWriter();
+		~ChunkWriter() override;
 		
 	public:
 		void Finish();

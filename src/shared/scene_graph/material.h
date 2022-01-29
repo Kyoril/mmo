@@ -81,6 +81,10 @@ namespace mmo
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const noexcept { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
 
+		/// @brief Sets the name of the material.
+		/// @param name The material name.
+		void SetName(const std::string_view name) noexcept { m_name = name; }
+
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.
 		[[nodiscard]] const std::vector<String>& GetTextureFiles() const noexcept { return m_textureFiles; }

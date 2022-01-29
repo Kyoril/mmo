@@ -13,15 +13,7 @@ namespace mmo
 	static const ChunkMagic MaterialVertexShaderChunk = { {'V', 'R', 'T', 'X'} };
 	static const ChunkMagic MaterialPixelShaderChunk = { {'P', 'I', 'X', 'L'} };
 	static const ChunkMagic MaterialTextureChunk = { {'T', 'E', 'X', 'T'} };
-
-	struct MaterialAttributes
-	{
-		uint8 twoSided;
-		uint8 castShadows;
-		uint8 receiveShadows;
-		uint8 materialType;
-	};
-
+	
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
 		if (version == material_version::Latest)
