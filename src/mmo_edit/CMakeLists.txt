@@ -21,9 +21,9 @@ file(GLOB imgui_src
 	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_extra_math.inl"
 	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_bezier_math.inl"
 	
-	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/builders.cpp"
-	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/widgets.cpp"
-	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/drawing.cpp"
+	#"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/builders.cpp"
+	#"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/widgets.cpp"
+	#"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/examples/blueprints-example/utilities/drawing.cpp"
 )
 
 file(GLOB editor_windows_src "editor_windows/*.h" "editor_windows/*.cpp")

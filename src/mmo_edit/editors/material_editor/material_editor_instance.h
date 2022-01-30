@@ -64,6 +64,8 @@ namespace mmo
 
 		void RenderMaterialPreview();
 
+		void HandleDeleteAction(MaterialGraph& material);
+
 	private:
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;

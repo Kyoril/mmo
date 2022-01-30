@@ -24,6 +24,10 @@
 #     define CRUDE_ASSERT(expr) assert(expr)
 # endif
 
+# ifndef CRUDE_JSON_IO
+#     define CRUDE_JSON_IO 1
+# endif
+
 namespace crude_json {
 
 struct value;
@@ -92,6 +96,8 @@ struct value
     void push_back(const value& value);
     void push_back(value&& value);
 
+    size_t erase(const string& key);
+
     bool is_primitive()  const { return is_string() || is_number() || is_boolean() || is_null(); }
     bool is_structured() const { return is_object() || is_array();   }
     bool is_null()       const { return m_Type == type_t::null;      }
@@ -105,6 +111,9 @@ struct value
     template <typename T> const T& get() const;
     template <typename T>       T& get();
 
+    template <typename T> const T* get_ptr() const;
+    template <typename T>       T* get_ptr();
+
     string dump(const int indent = -1, const char indent_char = ' ') const;
 
     void swap(value& other);
@@ -113,6 +122,11 @@ struct value
 
     // Returns discarded value for invalid inputs.
     static value parse(const string& data);
+
+# if CRUDE_JSON_IO
+    static std::pair<value, bool> load(const string& path);
+    bool save(const string& path, const int indent = -1, const char indent_char = ' ') const;
+# endif
 
 private:
     struct parser;
@@ -217,6 +231,17 @@ template <> inline       string&  value::get<string>()        { CRUDE_ASSERT(m_T
 template <> inline       boolean& value::get<boolean>()       { CRUDE_ASSERT(m_Type == type_t::boolean); return *boolean_ptr(m_Storage); }
 template <> inline       number&  value::get<number>()        { CRUDE_ASSERT(m_Type == type_t::number);  return *number_ptr(m_Storage);  }
 
+template <> inline const object*  value::get_ptr<object>()  const { if (m_Type == type_t::object)  return object_ptr(m_Storage);  else return nullptr; }
+template <> inline const array*   value::get_ptr<array>()   const { if (m_Type == type_t::array)   return array_ptr(m_Storage);   else return nullptr; }
+template <> inline const string*  value::get_ptr<string>()  const { if (m_Type == type_t::string)  return string_ptr(m_Storage);  else return nullptr; }
+template <> inline const boolean* value::get_ptr<boolean>() const { if (m_Type == type_t::boolean) return boolean_ptr(m_Storage); else return nullptr; }
+template <> inline const number*  value::get_ptr<number>()  const { if (m_Type == type_t::number)  return number_ptr(m_Storage);  else return nullptr; }
+
+template <> inline       object*  value::get_ptr<object>()        { if (m_Type == type_t::object)  return object_ptr(m_Storage);  else return nullptr; }
+template <> inline       array*   value::get_ptr<array>()         { if (m_Type == type_t::array)   return array_ptr(m_Storage);   else return nullptr; }
+template <> inline       string*  value::get_ptr<string>()        { if (m_Type == type_t::string)  return string_ptr(m_Storage);  else return nullptr; }
+template <> inline       boolean* value::get_ptr<boolean>()       { if (m_Type == type_t::boolean) return boolean_ptr(m_Storage); else return nullptr; }
+template <> inline       number*  value::get_ptr<number>()        { if (m_Type == type_t::number)  return number_ptr(m_Storage);  else return nullptr; }
 
 } // namespace crude_json
 

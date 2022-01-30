@@ -9,6 +9,7 @@
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
 #include "item_builder.h"
+#include "item_deleter.h"
 #include "material_graph.h"
 #include "material_node.h"
 #include "node_layout.h"
@@ -507,6 +508,49 @@ namespace mmo
 		m_viewportRT->Update();
     }
 
+    void MaterialEditorInstance::HandleDeleteAction(MaterialGraph& material)
+    {
+		ItemDeleter itemDeleter;
+        if (!itemDeleter)
+            return;
+		
+		std::vector<Node*> nodesToDelete;
+        uint32_t brokenLinkCount = 0;
+
+        // Process all nodes marked for deletion
+        while (auto* nodeDeleter = itemDeleter.QueryDeletedNode())
+        {
+            // Remove node, pass 'true' so links attached to node will also be queued for deletion.
+            if (nodeDeleter->Accept(true))
+            {
+                auto node = material.FindNode(static_cast<uint32_t>(nodeDeleter->m_NodeId.Get()));
+                if (node != nullptr)
+                    // Queue nodes for deletion. We need to serve links first to avoid crash.
+                    nodesToDelete.push_back(node);
+            }
+        }
+
+        // Process all links marked for deletion
+        while (auto* linkDeleter = itemDeleter.QueryDeleteLink())
+        {
+            if (linkDeleter->Accept())
+            {
+                auto startPin = material.FindPin(static_cast<uint32_t>(linkDeleter->m_StartPinId.Get()));
+                if (startPin != nullptr && startPin->IsLinked())
+                {
+                    startPin->Unlink();
+                    ++brokenLinkCount;
+                }
+            }
+        }
+
+        // After links was removed, now it is safe to delete nodes.
+        for (const auto* node : nodesToDelete)
+        {
+            material.DeleteNode(node);
+        }
+    }
+
     static std::unique_ptr<MaterialGraph> s_material;
 
 	void CreateNodeDialog::Open(Pin* fromPin)
@@ -848,6 +892,7 @@ namespace mmo
 
 		HandleCreateAction(*s_material);
 
+		HandleDeleteAction(*s_material);
 		
         ed::Suspend();
         m_createDialog.Show(*s_material);
