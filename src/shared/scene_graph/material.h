@@ -3,12 +3,10 @@
 #pragma once
 
 #include "base/typedefs.h"
-#include "graphics/pixel_shader.h"
-#include "graphics/vertex_shader.h"
+#include "graphics/shader_base.h"
+#include "graphics/texture.h"
 
 #include <memory>
-
-#include "graphics/texture.h"
 
 namespace mmo
 {
@@ -84,6 +82,18 @@ namespace mmo
 		/// @brief Sets the name of the material.
 		/// @param name The material name.
 		void SetName(const std::string_view name) noexcept { m_name = name; }
+
+		void ClearTextures();
+
+		void AddTexture(std::string_view texture);
+
+		void SetVertexShaderCode(std::span<uint8> code) noexcept;
+
+		void SetPixelShaderCode(std::span<uint8> code) noexcept;
+
+		[[nodiscard]] std::span<uint8> GetVertexShaderCode() noexcept { return std::span{ m_vertexShaderCode.begin(), m_vertexShaderCode.end() }; }
+		
+		[[nodiscard]] std::span<uint8> GetPixelShaderCode() noexcept { return std::span{ m_pixelShaderCode.begin(), m_pixelShaderCode.end() }; }
 
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.

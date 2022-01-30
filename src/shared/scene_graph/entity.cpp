@@ -44,6 +44,14 @@ namespace mmo
 		}
 	}
 
+	void Entity::SetMaterial(const std::shared_ptr<Material>& material)
+	{
+		for (auto& subEntity : m_subEntities)
+		{
+			subEntity->SetMaterial(material);
+		}
+	}
+
 	void Entity::SetCurrentCamera(Camera& cam)
 	{
 		MovableObject::SetCurrentCamera(cam);

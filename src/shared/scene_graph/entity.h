@@ -41,6 +41,8 @@ namespace mmo
 		/// @copydoc MovableObject::UpdateRenderQueue
 		virtual void PopulateRenderQueue(RenderQueue& renderQueue) override;
 
+		void SetMaterial(const std::shared_ptr<Material>& material);
+
 	protected:
 		MeshPtr m_mesh;
 

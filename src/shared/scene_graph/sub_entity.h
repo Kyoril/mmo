@@ -49,6 +49,8 @@ namespace mmo
 
 		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_material; }
 
+		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_material = material; }
+
 	private:
 		Entity& m_parent;
 		SubMesh& m_subMesh;

@@ -7,9 +7,9 @@
 
 cbuffer Matrices
 {
-	matrix matWorld;
-	matrix matView;
-	matrix matProj;
+	column_major matrix matWorld;
+	column_major matrix matView;
+	column_major matrix matProj;
 };
 
 VertexOut main(VertexIn input)
@@ -25,7 +25,7 @@ VertexOut main(VertexIn input)
 	output.pos = mul(output.pos, matProj);
 
 	output.color = input.color;
-	output.uv1 = input.uv1;
+	output.uv0 = input.uv0;
 
 	 // Calculate the normal vector against the world matrix only.
     output.normal = mul(input.normal, (float3x3)matWorld);

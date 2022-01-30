@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "material_node.h"
 
@@ -271,8 +272,6 @@ namespace mmo
 
 	int32 TextureNode::Compile(MaterialCompiler& compiler)
 	{
-		compiler.AddTexture(m_texturePath.GetPath());
-
 		if (m_compiledExpressionId == IndexNone)
 		{
 			int32 uvExpression = IndexNone;

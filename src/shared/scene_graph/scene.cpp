@@ -272,6 +272,9 @@ namespace mmo
 			material = m_defaultMaterial;
 		}
 		
+		gx.SetTopologyType(op.topology);
+		gx.SetVertexFormat(op.vertexFormat);
+
 		// Bind textures to the render stage
 		material->BindShaders(gx);
 		material->BindTextures(gx);
@@ -288,9 +291,6 @@ namespace mmo
 			
 		}
 		
-		gx.SetTopologyType(op.topology);
-		gx.SetVertexFormat(op.vertexFormat);
-
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
 		if (op.useIndexes)

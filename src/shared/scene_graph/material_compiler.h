@@ -1,9 +1,10 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include <map>
 #include <sstream>
 #include <vector>
-#include <unordered_map>
 
 #include "base/typedefs.h"
 
@@ -23,9 +24,7 @@ namespace mmo
 		[[nodiscard]] const String& GetVertexShaderCode() const noexcept { return m_vertexShaderCode; }
 
 		[[nodiscard]] const String& GetPixelShaderCode() const noexcept { return m_pixelShaderCode; }
-
-		uint32 AddTexture(std::string_view texture);
-
+		
 		void AddGlobalFunction(std::string_view name, std::string_view code);
 
 		int32 AddExpression(std::string_view code);

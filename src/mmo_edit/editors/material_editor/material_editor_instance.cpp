@@ -487,7 +487,27 @@ namespace mmo
         }
     }
 
-	static std::unique_ptr<MaterialGraph> s_material;
+    void MaterialEditorInstance::RenderMaterialPreview()
+    {
+		if (!m_viewportRT) return;
+		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
+
+		auto& gx = GraphicsDevice::Get();
+
+		// Render the scene first
+		gx.Reset();
+		gx.SetClearColor(Color::Black);
+		m_viewportRT->Activate();
+		m_viewportRT->Clear(mmo::ClearFlags::All);
+		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
+		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
+		
+		m_scene.Render(*m_camera);
+		
+		m_viewportRT->Update();
+    }
+
+    static std::unique_ptr<MaterialGraph> s_material;
 
 	void CreateNodeDialog::Open(Pin* fromPin)
 	{
@@ -593,83 +613,61 @@ namespace mmo
 		if (!deserializer.Read(reader))
 		{
 			ELOG("Failed to read material file " << assetPath);
-			return;
+			//return;
+		}
+
+		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
+		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
+		m_cameraAnchor->AddChild(*m_cameraNode);
+		m_camera = m_scene.CreateCamera("Camera");
+		m_cameraNode->AttachObject(*m_camera);
+		m_cameraNode->SetPosition(Vector3::UnitZ * 35.0f);
+		m_cameraAnchor->SetOrientation(Quaternion(Degree(-35.0f), Vector3::UnitX));
+		m_cameraAnchor->Yaw(Degree(-45.0f), TransformSpace::World);
+
+		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
+		
+		m_entity = m_scene.CreateEntity("Entity", "Editor/Sphere.hmsh");
+		if (m_entity)
+		{
+			m_scene.GetRootSceneNode().AttachObject(*m_entity);
+			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
+			
+			m_entity->SetMaterial(m_material);
+		}
+
+		m_renderConnection = host.beforeUiUpdate.connect(this, &MaterialEditorInstance::RenderMaterialPreview);
+	}
+
+	MaterialEditorInstance::~MaterialEditorInstance()
+	{
+		if (m_entity)
+		{
+			m_scene.DestroyEntity(*m_entity);
+		}
+		
+		m_scene.Clear();
+	}
+
+	void MaterialEditorInstance::Compile()
+	{
+		MaterialCompiler compiler;
+		s_material->Compile(compiler);
+
+		std::unique_ptr<ShaderCompiler> shaderCompiler = std::make_unique<ShaderCompilerD3D11>();
+		compiler.GenerateShaderCode(*m_material, *shaderCompiler);
+
+		m_material->Update();
+
+		if (m_entity)
+		{
+			m_entity->SetMaterial(m_material);
 		}
 	}
-		
-	static void ShowPlaceholderObject(const char* prefix, int uid)
+
+	void MaterialEditorInstance::Save()
 	{
-	    // Use object uid as identifier. Most commonly you could also use the object pointer as a base ID.
-	    ImGui::PushID(uid);
-
-	    // Text and Tree nodes are less high than framed widgets, using AlignTextToFramePadding() we add vertical spacing to make the tree lines equal high.
-	    ImGui::TableNextRow();
-	    ImGui::TableSetColumnIndex(0);
-	    ImGui::AlignTextToFramePadding();
-	    bool node_open = ImGui::TreeNode("Object", "%s_%u", prefix, uid);
-	    ImGui::TableSetColumnIndex(1);
-	    ImGui::Text("my sailor is rich");
-
-	    if (node_open)
-	    {
-			ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::AlignTextToFramePadding();
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-            ImGui::TreeNodeEx("Field", flags, "Texture");
-
-            ImGui::TableSetColumnIndex(1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::BeginCombo("test", "(None)"))
-			{
-				const auto files = AssetRegistry::ListFiles();
-				for (auto& file : files)
-				{
-					if (!file.ends_with(".htex"))
-						continue;
-					
-					ImGui::PushID(file.c_str());
-					if (ImGui::Selectable(file.c_str()))
-					{
-						DLOG("Selected texture " << file);
-					}
-					ImGui::PopID();
-				}
-				
-				ImGui::EndCombo();
-			}
-            ImGui::NextColumn();
-
-	        /*static float placeholder_members[8] = { 0.0f, 0.0f, 1.0f, 3.1416f, 100.0f, 999.0f };
-	        for (int i = 0; i < 8; i++)
-	        {
-	            ImGui::PushID(i); // Use field index as identifier.
-	            if (i < 2)
-	            {
-	                ShowPlaceholderObject("Child", 424242);
-	            }
-	            else
-	            {
-	                // Here we use a TreeNode to highlight on hover (we could use e.g. Selectable as well)
-	                ImGui::TableNextRow();
-	                ImGui::TableSetColumnIndex(0);
-	                ImGui::AlignTextToFramePadding();
-	                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-	                ImGui::TreeNodeEx("Field", flags, "Field_%d", i);
-
-	                ImGui::TableSetColumnIndex(1);
-	                ImGui::SetNextItemWidth(-FLT_MIN);
-	                if (i >= 5)
-	                    ImGui::InputFloat("##value", &placeholder_members[i], 1.0f);
-	                else
-	                    ImGui::DragFloat("##value", &placeholder_members[i], 0.01f);
-	                ImGui::NextColumn();
-	            }
-	            ImGui::PopID();
-	        }*/
-	        ImGui::TreePop();
-	    }
-	    ImGui::PopID();
+		
 	}
 
 	void MaterialEditorInstance::Draw()
@@ -690,7 +688,9 @@ namespace mmo
 
 		ImGui::Columns(2, "HorizontalSplitter");
         {
-			ImVec2 size = ImGui::GetWindowContentRegionMax();
+			ImGui::SetColumnWidth(-1, m_columnWidth);
+        	
+	        const ImVec2 size = ImGui::GetWindowContentRegionMax();
 			m_previewSize = size.y / 2.0f;
 			m_detailsSize = m_previewSize;
 
@@ -698,21 +698,49 @@ namespace mmo
 
 	        if (ImGui::BeginChild("preview", ImVec2(0, m_previewSize)))
 	        {
-				ImGui::Text("Preview");
-
 				if (ImGui::Button("Compile"))
 				{
-					MaterialCompiler compiler;
-					s_material->Compile(compiler);
-
-					std::unique_ptr<ShaderCompiler> shaderCompiler = std::make_unique<ShaderCompilerD3D11>();
-					compiler.GenerateShaderCode(*m_material, *shaderCompiler);
+					Compile();
 				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Save"))
+				{
+					Save();
+				}
+
+				if (ImGui::BeginChild("previewPanel", ImVec2(-1, -1)))
+				{
+					// Determine the current viewport position
+					auto viewportPos = ImGui::GetWindowContentRegionMin();
+					viewportPos.x += ImGui::GetWindowPos().x;
+					viewportPos.y += ImGui::GetWindowPos().y;
+
+					// Determine the available size for the viewport window and either create the render target
+					// or resize it if needed
+					const auto availableSpace = ImGui::GetContentRegionAvail();
+					
+					if (m_viewportRT == nullptr)
+					{
+						m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+						m_lastAvailViewportSize = availableSpace;
+					}
+					else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
+					{
+						m_viewportRT->Resize(availableSpace.x, availableSpace.y);
+						m_lastAvailViewportSize = availableSpace;
+					}
+
+					// Render the render target content into the window as image object
+					ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+				}
+				ImGui::EndChild();
 	        }
 
 			ImGui::EndChild();
 	        
-	        if (ImGui::BeginChild("details", ImVec2(0, m_detailsSize)))
+	        if (ImGui::BeginChild("details", ImVec2(0, -1)))
 	        {
 				ImGui::Text("Details");
 							
@@ -805,8 +833,7 @@ namespace mmo
 			ImGui::EndChild();
         }
 		ImGui::NextColumn();
-        
-
+		
 	    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
 		
 		CommitMaterialNodes(*s_material);
@@ -821,5 +848,24 @@ namespace mmo
 	    ed::End();
 
 	    ed::SetCurrentEditor(nullptr);
+	}
+
+	void MaterialEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	{
+		EditorInstance::OnMouseButtonDown(button, x, y);
+
+
+	}
+
+	void MaterialEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	{
+		EditorInstance::OnMouseButtonUp(button, x, y);
+
+	}
+
+	void MaterialEditorInstance::OnMouseMoved(uint16 x, uint16 y)
+	{
+		EditorInstance::OnMouseMoved(x, y);
+
 	}
 }

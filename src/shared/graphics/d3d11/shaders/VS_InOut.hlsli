@@ -10,18 +10,18 @@ struct VertexIn
 	float3 normal : NORMAL;
 #endif
 #ifdef WITH_TEX
-	float2 uv1 : TEXCOORD0;
+	float2 uv0 : TEXCOORD0;
 #if WITH_TEX > 1
-	float2 uv2 : TEXCOORD1;
+	float2 uv1 : TEXCOORD1;
 #endif
 #if WITH_TEX > 2
-	float2 uv3 : TEXCOORD2;
+	float2 uv2 : TEXCOORD2;
 #endif
 #if WITH_TEX > 3
-	float2 uv4 : TEXCOORD3;
+	float2 uv3 : TEXCOORD3;
 #endif
 #if WITH_TEX > 4
-	float2 uv5 : TEXCOORD4;
+	float2 uv4 : TEXCOORD4;
 #endif
 #endif
 };
@@ -36,18 +36,18 @@ struct VertexOut
 	float3 normal : NORMAL;
 #endif
 #ifdef WITH_TEX
-	float2 uv1 : TEXCOORD0;
+	float2 uv0 : TEXCOORD0;
 #if WITH_TEX > 1
-	float2 uv2 : TEXCOORD1;
+	float2 uv1 : TEXCOORD1;
 #endif
 #if WITH_TEX > 2
-	float2 uv3 : TEXCOORD2;
+	float2 uv2 : TEXCOORD2;
 #endif
 #if WITH_TEX > 3
-	float2 uv4 : TEXCOORD3;
+	float2 uv3 : TEXCOORD3;
 #endif
 #if WITH_TEX > 4
-	float2 uv5 : TEXCOORD4;
+	float2 uv4 : TEXCOORD4;
 #endif
 #endif
 };

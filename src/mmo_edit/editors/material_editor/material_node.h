@@ -535,6 +535,8 @@ namespace mmo
 
 		virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
+		virtual void BeginCompile() { m_compiledExpressionId = IndexNone; }
+
 	protected:
 		uint32 m_id;
 		MaterialGraph* m_material;

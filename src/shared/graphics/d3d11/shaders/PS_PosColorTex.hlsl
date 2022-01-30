@@ -9,5 +9,5 @@ SamplerState texSampler;
 
 float4 main(VertexIn input) : SV_Target
 {
-	return input.color * tex.Sample(texSampler, input.uv1);
+	return input.color * tex.Sample(texSampler, input.uv0);
 }

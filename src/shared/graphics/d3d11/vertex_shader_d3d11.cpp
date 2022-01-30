@@ -23,5 +23,6 @@ namespace mmo
 	{
 		ID3D11DeviceContext& Context = Device;
 		Context.VSSetShader(Shader.Get(), nullptr, 0);
+
 	}
 }

@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "material_compiler.h"
 #include "material.h"
@@ -40,28 +41,19 @@ namespace mmo
 		{
 			DLOG("Successfully compiled pixel shader. Size: " << pixelOutput.code.data.size());
 		}
-	}
 
-	uint32 MaterialCompiler::AddTexture(std::string_view texture)
-	{
-		if (texture.empty())
+		// Set material textures
+		material.ClearTextures();
+		for (const auto& texture : m_textures)
 		{
-			return 0;
+			material.AddTexture(texture);
 		}
 
-		// We have at least one texture coordinate
-		NotifyTextureCoordinateIndex(1);
-
-		const auto textureIt = std::find(m_textures.begin(), m_textures.end(), texture);
-		if (textureIt == m_textures.end())
-		{
-			m_textures.emplace_back(texture);
-			return m_textures.size() - 1;
-		}
-
-		return 0;
+		// Add shader code to the material
+		material.SetVertexShaderCode({vertexOutput.code.data.begin(), vertexOutput.code.data.end() });
+		material.SetPixelShaderCode({pixelOutput.code.data.begin(), pixelOutput.code.data.end() });
 	}
-
+	
 	void MaterialCompiler::AddGlobalFunction(std::string_view name, std::string_view code)
 	{
 		m_globalFunctions.emplace(name, code);
@@ -82,7 +74,7 @@ namespace mmo
 	
 	void MaterialCompiler::NotifyTextureCoordinateIndex(const uint32 texCoordIndex)
 	{
-		m_numTexCoordinates = std::max(texCoordIndex, m_numTexCoordinates);
+		m_numTexCoordinates = std::max(texCoordIndex + 1, m_numTexCoordinates);
 	}
 
 	void MaterialCompiler::SetBaseColorExpression(int32 expression)
@@ -96,6 +88,8 @@ namespace mmo
 		{
 			return IndexNone;
 		}
+
+		NotifyTextureCoordinateIndex(coordinateIndex);
 
 		std::ostringstream strm;
 		strm << "float4(input.uv" << coordinateIndex << ", 0.0, 0.0)";
@@ -157,7 +151,7 @@ namespace mmo
 		}
 
 		std::ostringstream strm;
-		strm << "mul(expr_" << first << ", expr_" << second << ")";
+		strm << "expr_" << first << " * expr_" << second;
 		strm.flush();
 
 		return AddExpression(strm.str());
@@ -205,10 +199,10 @@ namespace mmo
 		m_vertexShaderStream
 			<< "cbuffer Matrices\n"
 			<< "{\n"
-			<< "\tmatrix matWorld;\n"
-			<< "\tmatrix matView;\n"
-			<< "\tmatrix matProj;\n"
-			<< "}\n\n";
+			<< "\tcolumn_major matrix matWorld;\n"
+			<< "\tcolumn_major matrix matView;\n"
+			<< "\tcolumn_major matrix matProj;\n"
+			<< "};\n\n";
 
 		// Main procedure start
 		m_vertexShaderStream
@@ -222,8 +216,8 @@ namespace mmo
 		m_vertexShaderStream
 			<< "\tinput.pos.w = 1.0;\n"
 			<< "\toutput.pos = mul(input.pos, matWorld);\n"
-			<< "\toutput.pos = mul(input.pos, matView);\n"
-			<< "\toutput.pos = mul(input.pos, matProj);\n"
+			<< "\toutput.pos = mul(output.pos, matView);\n"
+			<< "\toutput.pos = mul(output.pos, matProj);\n"
 			<< "\toutput.color = input.color;\n";
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
@@ -307,18 +301,15 @@ namespace mmo
 		{
 			for (const auto& code : m_expressions)
 			{
-				m_pixelShaderStream << code;
+				m_pixelShaderStream << "\t" << code;
 			}
 
 			m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
 		}
 		
-		// Output
-
-
 		// Combining it
 		m_pixelShaderStream
-		<< "\toutputColor = float4(saturate(input.color * lightIntensity).xyz, 1.0) * baseColor;\n";
+		<< "\toutputColor = (ambient + float4(saturate(input.color * lightIntensity).xyz, 1.0)) * baseColor;\n";
 
 		// End of main function
 		m_pixelShaderStream

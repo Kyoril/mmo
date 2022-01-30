@@ -252,6 +252,11 @@ namespace mmo
 
 	void MaterialGraph::Compile(MaterialCompiler& compiler)
 	{
+		for (auto& node : m_nodes)
+		{
+			node->BeginCompile();
+		}
+
 		ASSERT(m_rootNode);
 		m_rootNode->Compile(compiler);
 	}

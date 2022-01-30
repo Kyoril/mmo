@@ -14,6 +14,31 @@ namespace mmo
 	{
 	}
 
+	void Material::ClearTextures()
+	{
+		m_textures.clear();
+		m_textureFiles.clear();
+		m_texturesChanged = true;
+	}
+
+	void Material::AddTexture(std::string_view texture)
+	{
+		m_textureFiles.emplace_back(texture);
+		m_texturesChanged = true;
+	}
+
+	void Material::SetVertexShaderCode(std::span<uint8> code) noexcept
+	{
+		m_vertexShaderCode.assign(code.begin(), code.end());
+		m_vertexShaderChanged = true;
+	}
+
+	void Material::SetPixelShaderCode(std::span<uint8> code) noexcept
+	{
+		m_pixelShaderCode.assign(code.begin(), code.end());
+		m_pixelShaderChanged = true;
+	}
+
 	void Material::Update()
 	{
 		if (m_texturesChanged)
@@ -36,10 +61,31 @@ namespace mmo
 
 		if (m_vertexShaderChanged)
 		{
-			// TODO
+			if (!m_vertexShaderCode.empty())
+			{
+				m_vertexShader = GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, m_vertexShaderCode.data(), m_vertexShaderCode.size());
+			}
+			else
+			{
+				m_vertexShader.reset();
+			}
+
+			m_vertexShaderChanged = false;
 		}
 
-		// TODO
+		if (m_pixelShaderChanged)
+		{
+			if (!m_pixelShaderCode.empty())
+			{
+				m_pixelShader = GraphicsDevice::Get().CreateShader(ShaderType::PixelShader, m_pixelShaderCode.data(), m_pixelShaderCode.size());
+			}
+			else
+			{
+				m_pixelShader.reset();
+			}
+
+			m_pixelShaderChanged = false;
+		}
 	}
 
 	bool Material::Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler)
@@ -80,22 +126,8 @@ namespace mmo
 
 	void Material::BindShaders(GraphicsDevice& device)
 	{
-		if (!m_vertexShader)
-		{
-			if (!m_vertexShaderCode.empty())
-			{
-				m_vertexShader = std::move(device.CreateShader(ShaderType::VertexShader, &m_vertexShaderCode[0], m_vertexShaderCode.size()));
-				m_vertexShader->Set();
-			}
-		}
-		if (!m_pixelShader)
-		{
-			if (!m_pixelShaderCode.empty())
-			{
-				m_pixelShader = std::move(device.CreateShader(ShaderType::PixelShader, &m_pixelShaderCode[0], m_pixelShaderCode.size()));
-				m_pixelShader->Set();
-			}
-		}
+		if (m_vertexShader) m_vertexShader->Set();
+		if (m_pixelShader) m_pixelShader->Set();
 	}
 
 	void Material::BindTextures(GraphicsDevice& device)

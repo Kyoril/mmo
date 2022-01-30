@@ -16,9 +16,9 @@ namespace mmo
 
 	void ShaderCompilerD3D11::Compile(const ShaderCompileInput& input, ShaderCompileResult& output)
 	{
-		UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+		UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
 #if defined( DEBUG ) || defined( _DEBUG )
-		flags |= D3DCOMPILE_DEBUG;
+		//flags |= D3DCOMPILE_DEBUG;
 #endif
 		
 		String profile;
