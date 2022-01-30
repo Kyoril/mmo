@@ -216,12 +216,76 @@ namespace mmo
 		return {};
 	}
 
-	void MaterialNode::Compile(MaterialCompiler& compiler)
+	int32 MaterialNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_baseColor.IsLinked())
 		{
-			m_baseColor.GetLink()->GetNode()->Compile(compiler);
+			const int32 baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler);
+			compiler.SetBaseColorExpression(baseColorExpression);
 		}
+
+		return IndexNone;
+	}
+
+	int32 MultiplyNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			int32 firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+			}
+
+			int32 secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+			}
+
+			m_compiledExpressionId = compiler.AddMultiply(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 TextureCoordNode::Compile(MaterialCompiler& compiler)
+	{
+		compiler.NotifyTextureCoordinateIndex(m_uvCoordIndex);
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddTextureCoordinate(m_uvCoordIndex);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 TextureNode::Compile(MaterialCompiler& compiler)
+	{
+		compiler.AddTexture(m_texturePath.GetPath());
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			int32 uvExpression = IndexNone;
+
+			if (m_uvs.IsLinked())
+			{
+				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler);
+			}
+
+			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression);
+		}
+
+		return m_compiledExpressionId;
 	}
 
 	ImColor GetIconColor(const PinType type)

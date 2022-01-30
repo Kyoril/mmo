@@ -49,6 +49,9 @@ namespace mmo
 			return 0;
 		}
 
+		// We have at least one texture coordinate
+		NotifyTextureCoordinateIndex(1);
+
 		const auto textureIt = std::find(m_textures.begin(), m_textures.end(), texture);
 		if (textureIt == m_textures.end())
 		{
@@ -59,9 +62,105 @@ namespace mmo
 		return 0;
 	}
 
+	void MaterialCompiler::AddGlobalFunction(std::string_view name, std::string_view code)
+	{
+		m_globalFunctions.emplace(name, code);
+	}
+
+	int32 MaterialCompiler::AddExpression(std::string_view code)
+	{
+		const int32 id = m_expressions.size();
+
+		std::ostringstream strm;
+		strm << "float4 expr_" << id << " = " << code << ";\n\n";
+		strm.flush();
+
+		m_expressions.emplace_back(strm.str());
+
+		return id;
+	}
+	
 	void MaterialCompiler::NotifyTextureCoordinateIndex(const uint32 texCoordIndex)
 	{
 		m_numTexCoordinates = std::max(texCoordIndex, m_numTexCoordinates);
+	}
+
+	void MaterialCompiler::SetBaseColorExpression(int32 expression)
+	{
+		m_baseColorExpression = expression;
+	}
+
+	int32 MaterialCompiler::AddTextureCoordinate(int32 coordinateIndex)
+	{
+		if (coordinateIndex >= 8)
+		{
+			return IndexNone;
+		}
+
+		std::ostringstream strm;
+		strm << "float4(input.uv" << coordinateIndex << ", 0.0, 0.0)";
+		strm.flush();
+
+		return AddExpression(strm.str());
+	}
+
+	int32 MaterialCompiler::AddTextureSample(std::string_view texture, const int32 coordinates)
+	{
+		if (texture.empty())
+		{
+			WLOG("Trying to sample empty texture");
+			return IndexNone;
+		}
+
+		int32 textureIndex;
+		for (textureIndex = 0; textureIndex < m_textures.size(); ++textureIndex)
+		{
+			if (m_textures[textureIndex] == texture)
+			{
+				break;
+			}
+		}
+
+		if (textureIndex == m_textures.size())
+		{
+			m_textures.emplace_back(texture);
+		}
+		
+		std::ostringstream strm;
+		strm << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
+		if (coordinates == IndexNone)
+		{
+			strm << "input.uv0";
+		}
+		else
+		{
+			strm << "expr_" << coordinates << ".xy";
+		}
+		strm << ")";
+		strm.flush();
+
+		return AddExpression(strm.str());
+	}
+
+	auto MaterialCompiler::AddMultiply(int32 first, const int32 second) -> int32
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for multiplication");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for multiplication");
+			return IndexNone;
+		}
+
+		std::ostringstream strm;
+		strm << "mul(expr_" << first << ", expr_" << second << ")";
+		strm.flush();
+
+		return AddExpression(strm.str());
 	}
 
 	void MaterialCompiler::GenerateVertexShaderCode()
@@ -72,75 +171,75 @@ namespace mmo
 		m_vertexShaderStream
 			<< "struct VertexIn\n"
 			<< "{\n"
-			<< "float4 pos : SV_POSITION;\n"
-			<< "float4 color : COLOR;\n"
-			<< "float3 normal : NORMAL;\n";
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n"
+			<< "\tfloat3 normal : NORMAL;\n";
 
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			m_vertexShaderStream
-				<< "float2 uv" << i << " : TEXCOORD" << i << "\n";
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 
 		m_vertexShaderStream
-			<< "};\n";
+			<< "};\n\n";
 		
 		// VertexOut struct
 		m_vertexShaderStream
 			<< "struct VertexOut\n"
 			<< "{\n"
-			<< "float4 pos : SV_POSITION;\n"
-			<< "float4 color : COLOR;\n"
-			<< "float3 normal : NORMAL;\n";
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n"
+			<< "\tfloat3 normal : NORMAL;\n";
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			m_vertexShaderStream
-				<< "float2 uv" << i << " : TEXCOORD" << i << "\n";
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 
 		m_vertexShaderStream
-			<< "};\n";
+			<< "};\n\n";
 
 		// Matrix constant buffer
 		m_vertexShaderStream
 			<< "cbuffer Matrices\n"
 			<< "{\n"
-			<< "matrix matWorld;\n"
-			<< "matrix matView;\n"
-			<< "matrix matProj;\n"
-			<< "}\n";
+			<< "\tmatrix matWorld;\n"
+			<< "\tmatrix matView;\n"
+			<< "\tmatrix matProj;\n"
+			<< "}\n\n";
 
 		// Main procedure start
 		m_vertexShaderStream
 			<< "VertexOut main(VertexIn input)\n"
 			<< "{\n"
-			<< "VertexOut output;\n";
+			<< "\tVertexOut output;\n\n";
 
 		// TODO: Extend with custom code
 
 		// Basic transformations
 		m_vertexShaderStream
-			<< "input.pos.w = 1.0;\n"
-			<< "output.pos = mul(input.pos, matWorld);\n"
-			<< "output.pos = mul(input.pos, matView);\n"
-			<< "output.pos = mul(input.pos, matProj);\n"
-			<< "output.color = input.color;\n";
+			<< "\tinput.pos.w = 1.0;\n"
+			<< "\toutput.pos = mul(input.pos, matWorld);\n"
+			<< "\toutput.pos = mul(input.pos, matView);\n"
+			<< "\toutput.pos = mul(input.pos, matProj);\n"
+			<< "\toutput.color = input.color;\n";
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			m_vertexShaderStream
-				<< "output.uv" << i << " = input.uv" << i << ";\n";
+				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
 		}
 
 		m_vertexShaderStream
-			<< "output.normal = mul(input.normal, (float3x3)matWorld);\n"
-			<< "output.normal = normalize(output.normal);\n";
+			<< "\toutput.normal = mul(input.normal, (float3x3)matWorld);\n"
+			<< "\toutput.normal = normalize(output.normal);\n";
 
 		// Main procedure end
 		m_vertexShaderStream
-			<< "return output;\n"
-			<< "}"
+			<< "\n\treturn output;\n"
+			<< "}\n"
 			<< std::endl;
 		
 		m_vertexShaderCode = m_vertexShaderStream.str();
@@ -155,72 +254,79 @@ namespace mmo
 		m_pixelShaderStream
 			<< "struct VertexOut\n"
 			<< "{\n"
-			<< "float4 pos : SV_POSITION;\n"
-			<< "float4 color : COLOR;\n"
-			<< "float3 normal : NORMAL;\n";
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n"
+			<< "\tfloat3 normal : NORMAL;\n";
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			m_pixelShaderStream
-				<< "float2 uv" << i << " : TEXCOORD" << i << "\n";
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 
-		m_pixelShaderStream << "};\n";
+		m_pixelShaderStream << "};\n\n";
 
 		// Add texture samplers
-		for (size_t i = 1; i <= m_textures.size(); ++i)
+		for (size_t i = 0; i < m_textures.size(); ++i)
 		{
 			m_pixelShaderStream << "// " << m_textures[i] << "\n";
 			m_pixelShaderStream << "Texture2D tex" << i << ";\n";
-			m_pixelShaderStream << "SamplerState sampler" << i << ";\n";
+			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
 		}
 
+		for (const auto& [name, code] : m_globalFunctions)
+		{
+			m_pixelShaderStream
+			<< "float4 " << name << "(VertexOut input)\n"
+			<< "{\n"
+			<< code << "\n"
+			<< "}\n\n";
+		}
+		
 		// Start of main function
 		m_pixelShaderStream
 			<< "float4 main(VertexOut input) : SV_Target\n"
-			<< "{"
-			<< "float4 outputColor = float4(1, 1, 1, 1);\n";
+			<< "{\n"
+			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 
-		// Find material pin
-
-
+		// Lighting base
 		m_pixelShaderStream
-			<< "float3 lightDir = normalize(-float3(1.0, -0.5, 1.0));\n"
-			<< "float4 ambient = float4(0.05, 0.15, 0.25, 1.0);\n";
-			
-		// Texture samples
-		for (uint32 i = 0; i < m_textures.size(); ++i)
+			<< "\tfloat3 lightDir = normalize(-float3(1.0, -0.5, 1.0));\n"
+			<< "\tfloat4 ambient = float4(0.05, 0.15, 0.25, 1.0);\n\n";
+
+		// Light intensity expression
+		m_pixelShaderStream
+		<< "\tfloat4 lightIntensity = saturate(dot(input.normal, lightDir));\n\n";
+
+		// BaseColor base
+		m_pixelShaderStream
+		<< "\tfloat4 baseColor = float4(1.0, 1.0, 1.0, 1.0);\n\n";
+		
+		// BaseColor expression?
+		if (m_baseColorExpression != IndexNone)
 		{
-			m_pixelShaderStream
-				<< "float4 texSample" << i << " = tex" << i << ".Sample(sampler" << i << ", input.uv0" << ");";
+			for (const auto& code : m_expressions)
+			{
+				m_pixelShaderStream << code;
+			}
+
+			m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
 		}
 		
-		// TODO: Execute shader graphs
-		
+		// Output
+
+
+		// Combining it
+		m_pixelShaderStream
+		<< "\toutputColor = float4(saturate(input.color * lightIntensity).xyz, 1.0) * baseColor;\n";
+
 		// End of main function
 		m_pixelShaderStream
-			<< "return outputColor;\n"
+			<< "\treturn outputColor;\n"
 			<< "}"
 			<< std::endl;
-
-#if 0
-float4 main(VertexIn input) : SV_Target
-{
-	float4 ambient = float4(0.05, 0.15, 0.25, 1.0);
-    float3 lightDir = normalize(-float3(1.0, -0.5, 1.0));
-    float4 texColor = tex.Sample(texSampler, input.uv1);
-    
-    // Calculate the amount of light on this pixel.
-    float lightIntensity = saturate(dot(input.normal, lightDir));
-
-    float4 color = float4(saturate(input.color * lightIntensity).xyz, 1.0);
-
-	return (ambient + color) * texColor;
-}
-#endif
-
+		
 		m_pixelShaderCode = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
-
 	}
 }

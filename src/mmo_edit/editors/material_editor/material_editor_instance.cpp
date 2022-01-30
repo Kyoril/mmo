@@ -6,6 +6,7 @@
 #include "imgui_internal.h"
 #include "imgui_node_editor.h"
 #include "imgui_node_editor_internal.inl"
+#include "imgui/misc/cpp/imgui_stdlib.h"
 
 #include "item_builder.h"
 #include "material_graph.h"
@@ -683,6 +684,9 @@ namespace mmo
 
 			s_material = std::make_unique<MaterialGraph>();
 		}
+		
+		// Add the viewport
+	    ed::SetCurrentEditor(s_context);
 
 		ImGui::Columns(2, "HorizontalSplitter");
         {
@@ -715,7 +719,84 @@ namespace mmo
 			    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
 			    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
 			    {
-					ShowPlaceholderObject("Object", 0);
+					ed::NodeId selectedNode;
+					if (ed::GetSelectedNodes(&selectedNode, 1) > 0)
+					{
+						auto* node = s_material->FindNode(selectedNode.Get());
+						if (node)
+						{
+							for (auto* prop : node->GetProperties())
+							{
+								ImGui::TableNextRow();
+					            ImGui::TableSetColumnIndex(0);
+					            ImGui::AlignTextToFramePadding();
+					            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+					            ImGui::TreeNodeEx("Field", flags, prop->GetName().data());
+
+					            ImGui::TableSetColumnIndex(1);
+					            ImGui::SetNextItemWidth(-FLT_MIN);
+
+								if (const auto* floatValue = prop->GetValueAs<float>())
+								{
+									float value = *floatValue;
+									
+									if (ImGui::InputFloat(prop->GetName().data(), &value, 0.1f, 100))
+									{
+										prop->SetValue(value);
+									}
+								}
+								else if (const auto* boolValue = prop->GetValueAs<bool>())
+								{
+									bool value = *boolValue;
+									if (ImGui::Checkbox(prop->GetName().data(), &value))
+									{
+										prop->SetValue(value);
+									}
+								}
+								else if (const auto* intValue = prop->GetValueAs<int32>())
+								{
+									int32 value = *intValue;
+									if (ImGui::InputInt(prop->GetName().data(), &value, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank))
+									{
+										prop->SetValue(value);
+									}
+								}
+								else if (const auto* strValue = prop->GetValueAs<String>())
+								{
+									String value = *strValue;
+									if (ImGui::InputText(prop->GetName().data(), &value))
+									{
+										prop->SetValue(value);
+									}
+								}
+								else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
+								{
+									if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)"))
+									{
+										const auto files = AssetRegistry::ListFiles();
+										for (auto& file : files)
+										{
+											if (!pathValue->GetFilter().empty())
+											{
+												if (!file.ends_with(pathValue->GetFilter()))
+													continue;
+											}
+											
+											ImGui::PushID(file.c_str());
+											if (ImGui::Selectable(file.c_str()))
+											{
+												prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
+											}
+											ImGui::PopID();
+										}
+										
+										ImGui::EndCombo();
+									}
+								}
+							}
+						}
+					}
+					
 			        ImGui::EndTable();
 			    }
 			    ImGui::PopStyleVar();
@@ -725,8 +806,6 @@ namespace mmo
         }
 		ImGui::NextColumn();
         
-		// Add the viewport
-	    ed::SetCurrentEditor(s_context);
 
 	    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
 		

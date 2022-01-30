@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <imgui.h>
 #include <optional>
 #include <span>
@@ -350,6 +351,142 @@ namespace mmo
         return GetStaticTypeInfo(); \
     }
 
+	class AssetPathValue
+	{
+	public:
+		AssetPathValue(const std::string_view path, const std::string_view filter)
+			: m_path(path)
+			, m_filter(filter)
+		{
+		}
+
+		void SetPath(const std::string_view value) noexcept { m_path = value; }
+
+		std::string_view GetPath() const noexcept { return m_path; }
+
+		std::string_view GetFilter() const noexcept { return m_filter; }
+
+	private:
+		String m_path;
+		String m_filter;
+	};
+
+	/// @brief Non-generic base class of a node property.
+	class PropertyBase
+	{
+	public:
+		typedef std::variant<int32, float, String, bool, AssetPathValue> ValueType;
+
+	public:
+		PropertyBase(std::string_view name, const ValueType& value)
+			: m_name(name)
+			, m_value(value)
+		{
+		}
+		virtual ~PropertyBase() = default;
+
+	public:
+		/// @brief Gets the name of this property.
+		[[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+
+		/// @brief Gets a constant pointer to the value of the property in the specified type, or nullptr if the type isn't compatible.
+		/// @tparam T The type to cast the value to.
+		/// @return nullptr if the type is incompatible with the actual value, otherwise a const pointer to the value.
+		template<typename T>
+		const T* GetValueAs() const noexcept { return std::get_if<T>(&m_value); }
+
+		/// @brief Sets the value of this property.
+		/// @param value The new value to use.
+		virtual void SetValue(const ValueType& value) noexcept { m_value = value; }
+
+	protected:
+		std::string m_name;
+		ValueType m_value;
+	};
+
+	/// @brief Generic base class of a node property with a specific type.
+	/// @tparam TPropertyType 
+	template<typename TPropertyType>
+	class Property : public PropertyBase
+	{
+	public:
+		Property(std::string_view name, TPropertyType& ref)
+			: PropertyBase(name, ref)
+			, m_ref(ref)
+		{
+		}
+		
+		virtual ~Property() = default;
+
+	public:
+		void SetValue(const ValueType& value) noexcept
+		{
+			const TPropertyType* newValue = std::get_if<TPropertyType>(&value);
+			if (!newValue)
+			{
+				// Incompatible value
+				return;
+			}
+
+			PropertyBase::SetValue(value);
+			m_ref = *newValue;
+		}
+
+	protected:
+		TPropertyType& m_ref;
+	};
+	
+	/// @brief Bool implementation of a node property.
+	class BoolProperty final : public Property<bool>
+	{
+	public:
+		BoolProperty(std::string_view name, bool& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+
+	/// @brief Float implementation of a node property.
+	class FloatProperty final : public Property<float>
+	{
+	public:
+		FloatProperty(std::string_view name, float& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+
+	/// @brief Int implementation of a node property.
+	class IntProperty final : public Property<int>
+	{
+	public:
+		IntProperty(std::string_view name, int32& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+
+	/// @brief String implementation of a node property.
+	class StringProperty final : public Property<String>
+	{
+	public:
+		StringProperty(std::string_view name, String& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+
+	/// @brief AssetPathValue implementation of a node property.
+	class AssetPathProperty final : public Property<AssetPathValue>
+	{
+	public:
+		AssetPathProperty(std::string_view name, AssetPathValue& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+
+	/// @brief Base class of a node in a MaterialGraph.
 	class Node
 	{
 		friend class MaterialGraph;
@@ -394,13 +531,17 @@ namespace mmo
 
 		std::optional<uint32> GetPinIndex(const Pin& pin);
 
-		virtual void Compile(MaterialCompiler& compiler) = 0;
+		virtual int32 Compile(MaterialCompiler& compiler) = 0;
+
+		virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
 	protected:
 		uint32 m_id;
 		MaterialGraph* m_material;
+		int32 m_compiledExpressionId { IndexNone };
 	};
-	
+
+	/// @brief The main node of a material graph, which represents the output node of a material.
 	class MaterialNode final : public Node
 	{
 		static const uint32 Color;
@@ -416,7 +557,9 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 		
-		void Compile(MaterialCompiler& compiler) override;
+		int32 Compile(MaterialCompiler& compiler) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 		const MaterialPin& GetBaseColorPin() const noexcept { return m_baseColor; }
 		const MaterialPin& GetMetallicPin() const noexcept { return m_metallic; }
@@ -428,6 +571,16 @@ namespace mmo
 		const MaterialPin& GetNormalPin() const noexcept { return m_normal; }
 
 	private:
+		bool m_isTwoSided { false };
+		bool m_receivesShadows { true };
+		bool m_castsShadows { true };
+
+		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
+		BoolProperty m_receivesShadowProp { "Receives Shadows", m_receivesShadows };
+		BoolProperty m_castShadowProp { "Casts Shadows", m_receivesShadows };
+
+		PropertyBase* m_properties[3] = { &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp };
+
 	    MaterialPin m_baseColor = { this, "Base Color" };
 	    MaterialPin m_metallic = { this, "Metallic" };
 		MaterialPin m_specular = { this, "Specular" };
@@ -451,17 +604,23 @@ namespace mmo
 	    ConstFloatNode(MaterialGraph& material)
 			: Node(material)
 		{}
-
-		std::string_view GetName() const override { return m_Float.GetStringValue(); }
-
+		
 	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		void Compile(MaterialCompiler& compiler) override { }
+		int32 Compile(MaterialCompiler& compiler) override { return IndexNone; }
+		
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 	private:
-	    FloatPin m_Float = { this };
+		float m_value { 0.0f };
+		FloatProperty m_valueProperty { "Value", m_value };
+
+		PropertyBase* m_properties[1] = { &m_valueProperty };
+
+	    MaterialPin m_Float = { this };
+
 	    Pin* m_OutputPins[1] = { &m_Float };
 	};
 
@@ -480,14 +639,20 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		void Compile(MaterialCompiler& compiler) override { }
+		int32 Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
 	private:
+		float m_values[2] = { 1.0f, 1.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
 	    MaterialPin m_input1 = { this, "A" };
 		MaterialPin m_input2 = { this, "B" };
 		
 	    MaterialPin m_output = { this };
-		
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
 	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
@@ -508,11 +673,17 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		void Compile(MaterialCompiler& compiler) override { compiler.NotifyTextureCoordinateIndex(m_uvCoordIndex); }
+		int32 Compile(MaterialCompiler& compiler) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 	private:
 		/// @brief Index of the uv coordinate set to use.
-		uint8 m_uvCoordIndex { 0 };
+		int32 m_uvCoordIndex { 0 };
+
+		IntProperty m_uvCoordIndexProp { "UV Coordinate Index", m_uvCoordIndex };
+
+		PropertyBase* m_properties[1] = { &m_uvCoordIndexProp };
 
 	    /// @brief The uv output pin.
 	    MaterialPin m_uvs = { this };
@@ -537,14 +708,19 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		[[nodiscard]] std::string_view GetTexture() const { return m_texture; }
+		[[nodiscard]] std::string_view GetTexture() const { return m_texturePath.GetPath(); }
 		
-		void SetTexture(const std::string_view texture) { m_texture = texture; }
+		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
 
-		void Compile(MaterialCompiler& compiler) override { compiler.AddTexture(m_texture); }
+		int32 Compile(MaterialCompiler& compiler) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 	private:
-		std::string m_texture;
+		AssetPathValue m_texturePath { "", ".htex" };
+		AssetPathProperty m_texturePathProp { "Texture", m_texturePath };
+
+		PropertyBase* m_properties[1] = { &m_texturePathProp };
 
 	    MaterialPin m_uvs = { this, "UVs" };
 
