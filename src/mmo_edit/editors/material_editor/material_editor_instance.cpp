@@ -797,6 +797,14 @@ namespace mmo
 										prop->SetValue(value);
 									}
 								}
+								else if (const auto* colValue = prop->GetValueAs<Color>())
+								{
+									Color value = *colValue;
+									if (ImGui::InputFloat4(prop->GetName().data(), value))
+									{
+										prop->SetValue(value);
+									}
+								}
 								else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
 								{
 									if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)"))

@@ -375,7 +375,7 @@ namespace mmo
 	class PropertyBase
 	{
 	public:
-		typedef std::variant<int32, float, String, bool, AssetPathValue> ValueType;
+		typedef std::variant<int32, float, String, bool, AssetPathValue, Color> ValueType;
 
 	public:
 		PropertyBase(std::string_view name, const ValueType& value)
@@ -405,7 +405,7 @@ namespace mmo
 	};
 
 	/// @brief Generic base class of a node property with a specific type.
-	/// @tparam TPropertyType 
+	/// @tparam TPropertyType Specific value type of the property.
 	template<typename TPropertyType>
 	class Property : public PropertyBase
 	{
@@ -451,6 +451,16 @@ namespace mmo
 	{
 	public:
 		FloatProperty(std::string_view name, float& ref)
+			: Property(name, ref)
+		{
+		}
+	};
+	
+	/// @brief Color implementation of a node property.
+	class ColorProperty final : public Property<Color>
+	{
+	public:
+		ColorProperty(std::string_view name, Color& ref)
 			: Property(name, ref)
 		{
 		}
@@ -594,7 +604,8 @@ namespace mmo
 
 	    Pin* m_InputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
 	};
-	
+
+	/// @brief A node which adds a constant float expression.
 	class ConstFloatNode final : public Node
 	{
 	public:
@@ -611,8 +622,8 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override { return IndexNone; }
-		
+		int32 Compile(MaterialCompiler& compiler) override;
+
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 	private:
@@ -625,7 +636,79 @@ namespace mmo
 
 	    Pin* m_OutputPins[1] = { &m_Float };
 	};
+	
+	/// @brief A node which adds a constant vector expression.
+	class ConstVectorNode final : public Node
+	{
+	public:
+		static const uint32 Color;
 
+	public:
+	    MAT_NODE(ConstVectorNode, "Const Vector")
+
+	    ConstVectorNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		mmo::Color m_value { Color::White };
+		ColorProperty m_valueProperty { "Value", m_value };
+
+		PropertyBase* m_properties[1] = { &m_valueProperty };
+
+	    MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_argb = { this, "ARGB" };
+
+	    Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
+	};
+	
+	/// @brief A node which adds an expression addition expression.
+	class AddNode final : public Node
+	{
+	public:
+	    MAT_NODE(AddNode, "Add")
+
+	    AddNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 1.0f, 1.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which adds an expression multiplication expression.
 	class MultiplyNode final : public Node
 	{
 	public:
@@ -656,6 +739,41 @@ namespace mmo
 
 		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
 	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which adds a linear interpolation expression.
+	class LerpNode final : public Node
+	{
+	public:
+	    MAT_NODE(LerpNode, "Lerp")
+
+	    LerpNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[3] = { 0.0f, 1.0f, 0.0f };
+		FloatProperty m_valueProperties[3] = { FloatProperty("Value A", m_values[0]), FloatProperty("Value B", m_values[1]), FloatProperty("Alpha", m_values[2]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		MaterialPin m_input3 = { this, "Alpha" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[3] = { &m_valueProperties[0], &m_valueProperties[1], &m_valueProperties[2] };
+	    Pin* m_inputPins[3] = { &m_input1, &m_input2, &m_input3 };
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 
@@ -694,6 +812,7 @@ namespace mmo
 	    Pin* m_outputPins[1] = { &m_uvs };
 	};
 
+	/// @brief A node which adds a texture sample expression.
 	class TextureNode final : public Node
 	{
 		static const uint32 Color;

@@ -13,7 +13,10 @@ namespace mmo
 			MaterialNode::GetStaticTypeInfo(),
 			TextureNode::GetStaticTypeInfo(),
 			TextureCoordNode::GetStaticTypeInfo(),
-			MultiplyNode::GetStaticTypeInfo()
+			MultiplyNode::GetStaticTypeInfo(),
+			LerpNode::GetStaticTypeInfo(),
+			AddNode::GetStaticTypeInfo(),
+			ConstVectorNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

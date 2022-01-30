@@ -157,6 +157,54 @@ namespace mmo
 		return AddExpression(strm.str());
 	}
 
+	int32 MaterialCompiler::AddAddition(int32 first, int32 second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for addition");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for addition");
+			return IndexNone;
+		}
+
+		std::ostringstream strm;
+		strm << "expr_" << first << " + expr_" << second;
+		strm.flush();
+
+		return AddExpression(strm.str());
+	}
+
+	int32 MaterialCompiler::AddLerp(int32 first, int32 second, int32 alpha)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for lerp");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for lerp");
+			return IndexNone;
+		}
+
+		if (alpha == IndexNone)
+		{
+			WLOG("Missing alpha parameter for lerp");
+			return IndexNone;
+		}
+
+		std::ostringstream strm;
+		strm << "lerp(expr_" << first << ", expr_" << second << ", expr_" << alpha << ")";
+		strm.flush();
+
+		return AddExpression(strm.str());
+	}
+
 	void MaterialCompiler::GenerateVertexShaderCode()
 	{
 		m_vertexShaderStream.clear();

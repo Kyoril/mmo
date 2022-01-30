@@ -110,6 +110,11 @@ namespace mmo
 		void InvertWithAlpha() noexcept;
 
 	public:
+		inline operator float*() const
+		{
+			return &const_cast<Color*>(this)->m_red;
+		}
+
 		inline Color& operator=(argb_t argb) noexcept
 		{
 			SetARGB(argb);

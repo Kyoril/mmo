@@ -39,6 +39,10 @@ namespace mmo
 
 		int32 AddMultiply(int32 first, int32 second);
 
+		int32 AddAddition(int32 first, int32 second);
+		
+		int32 AddLerp(int32 first, int32 second, int32 alpha);
+
 	private:
 		void GenerateVertexShaderCode();
 

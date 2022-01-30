@@ -10,6 +10,7 @@ static ImTextureID s_headerBackground = nullptr;
 namespace mmo
 {
 	const uint32 ConstFloatNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
@@ -228,6 +229,62 @@ namespace mmo
 		return IndexNone;
 	}
 
+	int32 ConstFloatNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 ConstVectorNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			std::ostringstream strm;
+			strm << "float4(";
+			strm << m_value.GetRed() << ", " << m_value.GetGreen() << ", " << m_value.GetBlue() << ", " << m_value.GetAlpha();
+			strm << ")";
+			strm.flush();
+
+			m_compiledExpressionId = compiler.AddExpression(strm.str());
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 AddNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			int32 firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+			}
+
+			int32 secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+			}
+
+			m_compiledExpressionId = compiler.AddAddition(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	int32 MultiplyNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -253,6 +310,46 @@ namespace mmo
 			}
 
 			m_compiledExpressionId = compiler.AddMultiply(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 LerpNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			int32 firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+			}
+
+			int32 secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+			}
+
+			int32 alphaExpression = IndexNone;
+			if (m_input3.IsLinked())
+			{
+				alphaExpression = m_input3.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				alphaExpression = compiler.AddExpression(std::to_string(m_values[2]));
+			}
+
+			m_compiledExpressionId = compiler.AddLerp(firstExpression, secondExpression, alphaExpression);
 		}
 
 		return m_compiledExpressionId;
