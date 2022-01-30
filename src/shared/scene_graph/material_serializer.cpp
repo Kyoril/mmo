@@ -57,11 +57,36 @@ namespace mmo
 			{
 				writer << io::write_dynamic_range<uint8>(textureFileName);
 			}
+
+			textureChunkWriter.Finish();
 		}
 
-		// Shader
+		// Vertex Shader chunk
+		{
+			ChunkWriter shaderChunkWriter { MaterialVertexShaderChunk, writer };
 
-		// TODO: Serialize vertex and pixel shader byte code per platform?
+			// TODO: Number of shaders to write
+			writer << io::write<uint8>(1);
 
+			// TODO: Shader model
+			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
+			writer << io::write_dynamic_range<uint32>(material.GetVertexShaderCode().begin(), material.GetVertexShaderCode().end());
+
+			shaderChunkWriter.Finish();
+		}
+		
+		// Pixel Shader chunk
+		{
+			ChunkWriter shaderChunkWriter { MaterialPixelShaderChunk, writer };
+
+			// TODO: Number of shaders to write
+			writer << io::write<uint8>(1);
+
+			// TODO: Shader model
+			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
+			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode().begin(), material.GetPixelShaderCode().end());
+			
+			shaderChunkWriter.Finish();
+		}
 	}
 }

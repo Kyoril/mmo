@@ -65,4 +65,9 @@ namespace mmo
 		op.topology = TopologyType::TriangleList;
 		op.vertexFormat = VertexFormat::PosColorNormalTex1;
 	}
+
+	void SubMesh::SetMaterial(const std::shared_ptr<Material>& material)
+	{
+		m_material = material;
+	}
 }

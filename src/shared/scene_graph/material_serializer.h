@@ -25,10 +25,10 @@ namespace mmo
 	
 	struct MaterialAttributes
 	{
-		uint8 twoSided;
-		uint8 castShadows;
-		uint8 receiveShadows;
-		uint8 materialType;
+		uint8 twoSided { 0 };
+		uint8 castShadows { 0 };
+		uint8 receiveShadows { 0 };
+		uint8 materialType { 0 };
 	};
 
 	class MaterialSerializer

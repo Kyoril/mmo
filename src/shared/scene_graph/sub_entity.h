@@ -1,5 +1,8 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
+#include "sub_mesh.h"
 #include "scene_graph/renderable.h"
 
 namespace mmo
@@ -7,49 +10,50 @@ namespace mmo
 	class Entity;
 	class SubMesh;
 
+	/// @brief A sub entity of an Entity which represents a certain part.
 	class SubEntity : public Renderable
 	{
 	public:
 		SubEntity(Entity& parent, SubMesh& subMesh);
 
 	public:
+		/// @brief Gets the parent entity that this sub entity belongs to.
 		[[nodiscard]] Entity& GetParent() const noexcept { return m_parent; }
 
+		/// @brief Gets the sub mesh assigned to this sub entity.
 		[[nodiscard]] SubMesh& GetSubMesh() const noexcept { return m_subMesh; }
-
-		//virtual void SetVisible(bool visible);
-
-		//virtual bool IsVisible() const;
-
-		/*virtual void SetRenderQueueGroup(uint8 queueId);
-
-		virtual void SetRenderQueueGroupAndPriority(uint8 queueId, uint16 priority);
-
-		virtual uint8 GetRenderQueueGroup() const;
-
-		virtual uint16 GetRenderQueuePriority() const;
-
-		virtual bool IsRenderQueueGroupSet() const;
-
-		virtual bool IsRenderQueuePrioritySet() const;*/
-
-		virtual void PrepareRenderOperation(RenderOperation& operation) override;
 		
+		/// @copydoc Renderable::PrepareRenderOperation
+		virtual void PrepareRenderOperation(RenderOperation& operation) override;
+
+		/// @brief Sets the start index of this sub entity.
+		/// @param startIndex The start index of this sub entity.
 		void SetStartIndex(const uint32 startIndex) { m_indexStart = startIndex; }
 
+		/// @brief Gets the start index of this sub entity.
+		///	@return The start index of this entity.
 		[[nodiscard]] uint32 GetStartIndex() const noexcept { return m_indexStart; }
 
+		/// @brief Sets the ending index of this sub entity.
+		/// @param endIndex The new ending index of this sub entity.
 		void SetEndIndex(const uint32 endIndex) { m_indexEnd = endIndex; }
 
+		/// @brief Gets the ending index of this sub entity.
+		///	@return The ending index of this sub entity.
 		[[nodiscard]] uint32 GetEndIndex() const noexcept { return m_indexEnd; }
-
+		
+		/// @copydoc Renderable::GetSquaredViewDepth
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
-
+		
+		/// @copydoc Renderable::GetWorldTransform
 		const Matrix4& GetWorldTransform() const override;
 
-		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_material; }
+		/// @copydoc Renderable::GetMaterial
+		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_subMesh.GetMaterial(); }
 
-		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_material = material; }
+		/// @brief Sets the material to use when rendering this renderable.
+		/// @param material The material to use for rendering or nullptr to use a default material.
+		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_subMesh.SetMaterial(material); }
 
 	private:
 		Entity& m_parent;
@@ -65,7 +69,5 @@ namespace mmo
 
 		mutable float m_cachedCameraDist { 0.0f };
 		mutable const Camera* m_cachedCamera { nullptr };
-
-		std::shared_ptr<Material> m_material;
 	};
 }

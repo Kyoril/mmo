@@ -18,10 +18,12 @@
 
 #include <cinttypes>
 
+#include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "graphics/d3d11/shader_compiler_d3d11.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_deserializer.h"
+#include "scene_graph/material_serializer.h"
 
 
 namespace ImGui
@@ -660,6 +662,8 @@ namespace mmo
 			//return;
 		}
 
+		m_material->Update();
+
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
 		m_cameraAnchor->AddChild(*m_cameraNode);
@@ -711,7 +715,23 @@ namespace mmo
 
 	void MaterialEditorInstance::Save()
 	{
-		
+		// Ensure that the material is compiled
+		Compile();
+
+		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
+		if (!file)
+		{
+			ELOG("Failed to open material file " << GetAssetPath() << " for writing!");
+			return;
+		}
+
+		io::StreamSink sink { *file };
+		io::Writer writer { sink };
+
+		MaterialSerializer serializer { };
+		serializer.Export(*m_material, writer);
+
+		ILOG("Successfully saved material");
 	}
 
 	void MaterialEditorInstance::Draw()
@@ -726,179 +746,173 @@ namespace mmo
 
 			s_material = std::make_unique<MaterialGraph>();
 		}
+
+		const auto dockspaceId = ImGui::GetID("##mat_dockspace_");
+		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 		
 		// Add the viewport
 	    ed::SetCurrentEditor(s_context);
 
-		ImGui::Columns(2, "HorizontalSplitter");
-        {
-			ImGui::SetColumnWidth(-1, m_columnWidth);
-        	
-	        const ImVec2 size = ImGui::GetWindowContentRegionMax();
-			m_previewSize = size.y / 2.0f;
-			m_detailsSize = m_previewSize;
+		if (ImGui::Begin("mat_preview_"))
+		{
+			if (ImGui::Button("Compile"))
+			{
+				Compile();
+			}
 
-	        ImGui::Splitter(false, 2.0f, &m_previewSize, &m_detailsSize, 100.0f, 100.0f);
+			ImGui::SameLine();
 
-	        if (ImGui::BeginChild("preview", ImVec2(0, m_previewSize)))
-	        {
-				if (ImGui::Button("Compile"))
+			if (ImGui::Button("Save"))
+			{
+				Save();
+			}
+
+			if (ImGui::BeginChild("previewPanel", ImVec2(-1, -1)))
+			{
+				// Determine the current viewport position
+				auto viewportPos = ImGui::GetWindowContentRegionMin();
+				viewportPos.x += ImGui::GetWindowPos().x;
+				viewportPos.y += ImGui::GetWindowPos().y;
+
+				// Determine the available size for the viewport window and either create the render target
+				// or resize it if needed
+				const auto availableSpace = ImGui::GetContentRegionAvail();
+				
+				if (m_viewportRT == nullptr)
 				{
-					Compile();
+					m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+					m_lastAvailViewportSize = availableSpace;
+				}
+				else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
+				{
+					m_viewportRT->Resize(availableSpace.x, availableSpace.y);
+					m_lastAvailViewportSize = availableSpace;
 				}
 
-				ImGui::SameLine();
-
-				if (ImGui::Button("Save"))
-				{
-					Save();
-				}
-
-				if (ImGui::BeginChild("previewPanel", ImVec2(-1, -1)))
-				{
-					// Determine the current viewport position
-					auto viewportPos = ImGui::GetWindowContentRegionMin();
-					viewportPos.x += ImGui::GetWindowPos().x;
-					viewportPos.y += ImGui::GetWindowPos().y;
-
-					// Determine the available size for the viewport window and either create the render target
-					// or resize it if needed
-					const auto availableSpace = ImGui::GetContentRegionAvail();
-					
-					if (m_viewportRT == nullptr)
-					{
-						m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
-						m_lastAvailViewportSize = availableSpace;
-					}
-					else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-					{
-						m_viewportRT->Resize(availableSpace.x, availableSpace.y);
-						m_lastAvailViewportSize = availableSpace;
-					}
-
-					// Render the render target content into the window as image object
-					ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
-				}
-				ImGui::EndChild();
-	        }
-
+				// Render the render target content into the window as image object
+				ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+			}
 			ImGui::EndChild();
-	        
-	        if (ImGui::BeginChild("details", ImVec2(0, -1)))
-	        {
-				ImGui::Text("Details");
-							
-			    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-			    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-			    {
-					ed::NodeId selectedNode;
-					if (ed::GetSelectedNodes(&selectedNode, 1) > 0)
+		}
+		ImGui::End();
+		
+		if (ImGui::Begin("mat_details_"))
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
+		    {
+				ed::NodeId selectedNode;
+				if (ed::GetSelectedNodes(&selectedNode, 1) > 0)
+				{
+					auto* node = s_material->FindNode(selectedNode.Get());
+					if (node)
 					{
-						auto* node = s_material->FindNode(selectedNode.Get());
-						if (node)
+						for (auto* prop : node->GetProperties())
 						{
-							for (auto* prop : node->GetProperties())
+							ImGui::TableNextRow();
+				            ImGui::TableSetColumnIndex(0);
+				            ImGui::AlignTextToFramePadding();
+				            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+				            ImGui::TreeNodeEx("Field", flags, prop->GetName().data());
+
+				            ImGui::TableSetColumnIndex(1);
+				            ImGui::SetNextItemWidth(-FLT_MIN);
+
+							if (const auto* floatValue = prop->GetValueAs<float>())
 							{
-								ImGui::TableNextRow();
-					            ImGui::TableSetColumnIndex(0);
-					            ImGui::AlignTextToFramePadding();
-					            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-					            ImGui::TreeNodeEx("Field", flags, prop->GetName().data());
-
-					            ImGui::TableSetColumnIndex(1);
-					            ImGui::SetNextItemWidth(-FLT_MIN);
-
-								if (const auto* floatValue = prop->GetValueAs<float>())
+								float value = *floatValue;
+								
+								if (ImGui::InputFloat(prop->GetName().data(), &value, 0.1f, 100))
 								{
-									float value = *floatValue;
-									
-									if (ImGui::InputFloat(prop->GetName().data(), &value, 0.1f, 100))
-									{
-										prop->SetValue(value);
-									}
+									prop->SetValue(value);
 								}
-								else if (const auto* boolValue = prop->GetValueAs<bool>())
+							}
+							else if (const auto* boolValue = prop->GetValueAs<bool>())
+							{
+								bool value = *boolValue;
+								if (ImGui::Checkbox(prop->GetName().data(), &value))
 								{
-									bool value = *boolValue;
-									if (ImGui::Checkbox(prop->GetName().data(), &value))
-									{
-										prop->SetValue(value);
-									}
+									prop->SetValue(value);
 								}
-								else if (const auto* intValue = prop->GetValueAs<int32>())
+							}
+							else if (const auto* intValue = prop->GetValueAs<int32>())
+							{
+								int32 value = *intValue;
+								if (ImGui::InputInt(prop->GetName().data(), &value, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank))
 								{
-									int32 value = *intValue;
-									if (ImGui::InputInt(prop->GetName().data(), &value, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank))
-									{
-										prop->SetValue(value);
-									}
+									prop->SetValue(value);
 								}
-								else if (const auto* strValue = prop->GetValueAs<String>())
+							}
+							else if (const auto* strValue = prop->GetValueAs<String>())
+							{
+								String value = *strValue;
+								if (ImGui::InputText(prop->GetName().data(), &value))
 								{
-									String value = *strValue;
-									if (ImGui::InputText(prop->GetName().data(), &value))
-									{
-										prop->SetValue(value);
-									}
+									prop->SetValue(value);
 								}
-								else if (const auto* colValue = prop->GetValueAs<Color>())
+							}
+							else if (const auto* colValue = prop->GetValueAs<Color>())
+							{
+								Color value = *colValue;
+								if (ImGui::InputFloat4(prop->GetName().data(), value))
 								{
-									Color value = *colValue;
-									if (ImGui::InputFloat4(prop->GetName().data(), value))
-									{
-										prop->SetValue(value);
-									}
+									prop->SetValue(value);
 								}
-								else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
+							}
+							else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
+							{
+								if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)"))
 								{
-									if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)"))
+									const auto files = AssetRegistry::ListFiles();
+									for (auto& file : files)
 									{
-										const auto files = AssetRegistry::ListFiles();
-										for (auto& file : files)
+										if (!pathValue->GetFilter().empty())
 										{
-											if (!pathValue->GetFilter().empty())
-											{
-												if (!file.ends_with(pathValue->GetFilter()))
-													continue;
-											}
-											
-											ImGui::PushID(file.c_str());
-											if (ImGui::Selectable(file.c_str()))
-											{
-												prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
-											}
-											ImGui::PopID();
+											if (!file.ends_with(pathValue->GetFilter()))
+												continue;
 										}
 										
-										ImGui::EndCombo();
+										ImGui::PushID(file.c_str());
+										if (ImGui::Selectable(file.c_str()))
+										{
+											prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
+										}
+										ImGui::PopID();
 									}
+									
+									ImGui::EndCombo();
 								}
 							}
 						}
 					}
-					
-			        ImGui::EndTable();
-			    }
-			    ImGui::PopStyleVar();
-	        }
+				}
+				
+		        ImGui::EndTable();
+		    }
+		    ImGui::PopStyleVar();
+		}
+		ImGui::End();
 
-			ImGui::EndChild();
-        }
-		ImGui::NextColumn();
-		
-	    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
-		
-		CommitMaterialNodes(*s_material);
+		if(ImGui::Begin("mat_graph_"))
+		{
+		    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
+			
+			CommitMaterialNodes(*s_material);
 
-		HandleCreateAction(*s_material);
+			HandleCreateAction(*s_material);
 
-		HandleDeleteAction(*s_material);
-		
-        ed::Suspend();
-        m_createDialog.Show(*s_material);
-        ed::Resume();
-		
-	    ed::End();
+			HandleDeleteAction(*s_material);
+			
+	        ed::Suspend();
+	        m_createDialog.Show(*s_material);
+	        ed::Resume();
+			
+		    ed::End();
+
+		}
+		ImGui::End();
+
+		ImGui::DockBuilderFinish(dockspaceId);
 
 	    ed::SetCurrentEditor(nullptr);
 	}

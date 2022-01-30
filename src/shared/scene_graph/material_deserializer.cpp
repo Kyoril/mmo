@@ -31,8 +31,8 @@ namespace mmo
 			{
 				AddChunkHandler(*MaterialNameChunk, true, *this, &MaterialDeserializer::ReadMaterialNameChunk);
 				AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeChunk);
-				AddChunkHandler(*MaterialVertexShaderChunk, false, SkipChunkHandler{});
-				AddChunkHandler(*MaterialPixelShaderChunk, false, SkipChunkHandler{});
+				AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunk);
+				AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunk);
 				AddChunkHandler(*MaterialTextureChunk, true, *this, &MaterialDeserializer::ReadMaterialTextureChunk);
 			}
 			else
@@ -77,16 +77,139 @@ namespace mmo
 
 	bool MaterialDeserializer::ReadMaterialVertexShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		return true;
+		uint8 shaderCount;
+		if (!(reader >> io::read<uint8>(shaderCount)))
+		{
+			ELOG("Failed to read vertex shader chunk for material " << m_material.GetName());
+			return false;
+		}
+
+		if (shaderCount == 0)
+		{
+			WLOG("Material " << m_material.GetName() << " has no compiled vertex shaders available and might not be used in game client");
+			return true;
+		}
+
+		// Read shader code
+		for (uint8 i = 0; i < shaderCount; ++i)
+		{
+			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
+			String shaderProfile;
+			if (!(reader >> io::read_container<uint8>(shaderProfile)))
+			{
+				return false;
+			}
+
+			uint32 shaderCodeSize;
+			if (!(reader >> io::read<uint32>(shaderCodeSize)))
+			{
+				return false;
+			}
+
+			if (shaderCodeSize == 0)
+			{
+				continue;
+			}
+
+			if (shaderProfile != "D3D_SM5")
+			{
+				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
+				reader >> io::skip(shaderCodeSize);
+			}
+			else
+			{
+				std::vector<uint8> shaderCode;
+				shaderCode.resize(shaderCodeSize);
+				if (!(reader >> io::read_range(shaderCode)))
+				{
+					ELOG("Error while reading D3D_SM5 vertex shader code!");
+					return false;
+				}
+
+				m_material.SetVertexShaderCode({ shaderCode.begin(), shaderCode.end() });
+			}
+		}
+
+		return reader;
 	}
 
 	bool MaterialDeserializer::ReadMaterialPixelShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		return true;
+		uint8 shaderCount;
+		if (!(reader >> io::read<uint8>(shaderCount)))
+		{
+			ELOG("Failed to read pixel shader chunk for material " << m_material.GetName());
+			return false;
+		}
+
+		if (shaderCount == 0)
+		{
+			WLOG("Material " << m_material.GetName() << " has no compiled pixel shaders available and might not be used in game client");
+			return true;
+		}
+
+		// Read shader code
+		for (uint8 i = 0; i < shaderCount; ++i)
+		{
+			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
+			String shaderProfile;
+			if (!(reader >> io::read_container<uint8>(shaderProfile)))
+			{
+				return false;
+			}
+
+			uint32 shaderCodeSize;
+			if (!(reader >> io::read<uint32>(shaderCodeSize)))
+			{
+				return false;
+			}
+
+			if (shaderCodeSize == 0)
+			{
+				continue;
+			}
+
+			if (shaderProfile != "D3D_SM5")
+			{
+				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
+				reader >> io::skip(shaderCodeSize);
+			}
+			else
+			{
+				std::vector<uint8> shaderCode;
+				shaderCode.resize(shaderCodeSize);
+				if (!(reader >> io::read_range(shaderCode)))
+				{
+					ELOG("Error while reading D3D_SM5 pixel shader code!");
+					return false;
+				}
+
+				m_material.SetPixelShaderCode({ shaderCode.begin(), shaderCode.end() });
+			}
+		}
+
+		return reader;
 	}
 
 	bool MaterialDeserializer::ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		return true;
+		m_material.ClearTextures();
+
+		uint8 numTextures;
+		if ((reader >> io::read<uint8>(numTextures)))
+		{
+			for (uint8 i = 0; i < numTextures; ++i)
+			{
+				String textureFile;
+				if (!(reader >> io::read_container<uint8>(textureFile)))
+				{
+					break;
+				}
+
+				m_material.AddTexture(textureFile);
+			}
+		}
+
+		return reader;
 	}
 }
