@@ -1,5 +1,9 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "model_editor_instance.h"
+
+#include <imgui_internal.h>
+
 #include "model_editor.h"
 #include "editor_host.h"
 #include "scene_graph/camera.h"
@@ -73,28 +77,76 @@ namespace mmo
 
 	void ModelEditorInstance::Draw()
 	{
-		// Determine the current viewport position
-		auto viewportPos = ImGui::GetWindowContentRegionMin();
-		viewportPos.x += ImGui::GetWindowPos().x;
-		viewportPos.y += ImGui::GetWindowPos().y;
-
-		// Determine the available size for the viewport window and either create the render target
-		// or resize it if needed
-		const auto availableSpace = ImGui::GetContentRegionAvail();
+		const auto dockspaceId = ImGui::GetID("##model_dockspace_");
+		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 		
-		if (m_viewportRT == nullptr)
+		if (ImGui::Begin("##model_details_"))
 		{
-			m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
-			m_lastAvailViewportSize = availableSpace;
-		}
-		else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-		{
-			m_viewportRT->Resize(availableSpace.x, availableSpace.y);
-			m_lastAvailViewportSize = availableSpace;
-		}
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
+		    {
+				if (m_entity != nullptr)
+				{
+					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
+					{
+						ImGui::PushID(i); // Use field index as identifier.
+						ImGui::TableNextRow();
+					    ImGui::TableSetColumnIndex(0);
+					    ImGui::AlignTextToFramePadding();
+					    bool node_open = ImGui::TreeNode("Object", "SubEntity %zu", i);
+						
+					    if (node_open)
+					    {
+							ImGui::TableNextRow();
+				            ImGui::TableSetColumnIndex(0);
+				            ImGui::AlignTextToFramePadding();
+							ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+				            ImGui::TreeNodeEx("Field", flags, "Material");
 
-		// Render the render target content into the window as image object
-		ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+							ImGui::TableSetColumnIndex(1);
+							ImGui::SetNextItemWidth(-FLT_MIN);
+							
+							ImGui::NextColumn();
+							ImGui::TreePop();
+						}
+						ImGui::PopID();
+					}
+				}
+				
+		        ImGui::EndTable();
+		    }
+		    ImGui::PopStyleVar();
+		}
+		ImGui::End();
+
+		if (ImGui::Begin("##model_ed_viewport_"))
+		{
+			// Determine the current viewport position
+			auto viewportPos = ImGui::GetWindowContentRegionMin();
+			viewportPos.x += ImGui::GetWindowPos().x;
+			viewportPos.y += ImGui::GetWindowPos().y;
+
+			// Determine the available size for the viewport window and either create the render target
+			// or resize it if needed
+			const auto availableSpace = ImGui::GetContentRegionAvail();
+			
+			if (m_viewportRT == nullptr)
+			{
+				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+				m_lastAvailViewportSize = availableSpace;
+			}
+			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
+			{
+				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
+				m_lastAvailViewportSize = availableSpace;
+			}
+
+			// Render the render target content into the window as image object
+			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+		}
+		ImGui::End();
+		
+		ImGui::DockBuilderFinish(dockspaceId);
 	}
 
 	void ModelEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
