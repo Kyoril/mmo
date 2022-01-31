@@ -12,9 +12,9 @@
 #include "item_deleter.h"
 #include "material_graph.h"
 #include "material_node.h"
+#include "node_header_renderer.h"
 #include "node_layout.h"
 #include "node_pin_icons.h"
-#include "node_header_renderer.h"
 
 #include <cinttypes>
 
@@ -22,7 +22,6 @@
 #include "assets/asset_registry.h"
 #include "graphics/d3d11/shader_compiler_d3d11.h"
 #include "log/default_log_levels.h"
-#include "scene_graph/material_deserializer.h"
 #include "scene_graph/material_serializer.h"
 
 

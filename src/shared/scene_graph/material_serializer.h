@@ -1,4 +1,8 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
+
+#include "base/chunk_reader.h"
 #include "base/typedefs.h"
 
 namespace io
@@ -35,5 +39,30 @@ namespace mmo
 	{
 	public:
 		void Export(const Material& material, io::Writer& writer, MaterialVersion version = material_version::Latest);
+	};
+	
+	/// @brief Implementation of the ChunkReader to read chunked material files.
+	class MaterialDeserializer : public ChunkReader
+	{
+	public:
+		/// @brief Creates a new instance of the MaterialChunkReader class and initializes it.
+		/// @param material The material which will be updated by this reader.
+		explicit MaterialDeserializer(Material& material);
+
+	protected:
+		bool ReadMaterialChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialNameChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialAttributeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		
+		bool ReadMaterialVertexShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialPixelShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		
+	private:
+		Material& m_material;
 	};
 }

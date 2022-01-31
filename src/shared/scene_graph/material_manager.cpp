@@ -3,7 +3,7 @@
 #include "material_manager.h"
 
 #include "material.h"
-#include "material_deserializer.h"
+#include "material_serializer.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 
