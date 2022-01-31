@@ -49,11 +49,11 @@ namespace mmo
 		const Matrix4& GetWorldTransform() const override;
 
 		/// @copydoc Renderable::GetMaterial
-		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_subMesh.GetMaterial(); }
+		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_material ? m_material : m_subMesh.GetMaterial(); }
 
 		/// @brief Sets the material to use when rendering this renderable.
 		/// @param material The material to use for rendering or nullptr to use a default material.
-		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_subMesh.SetMaterial(material); }
+		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_material = material; }
 
 	private:
 		Entity& m_parent;
@@ -66,6 +66,8 @@ namespace mmo
 		bool m_renderQueueIdSet { false };
 		uint16 m_renderQueuePriority { 0 };
 		bool m_renderQueuePrioritySet { false };
+
+		MaterialPtr m_material;
 
 		mutable float m_cachedCameraDist { 0.0f };
 		mutable const Camera* m_cachedCamera { nullptr };

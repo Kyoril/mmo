@@ -28,9 +28,7 @@ namespace mmo
 
 		const auto* parent = m_parent.GetParentSceneNode();
 		ASSERT(parent);
-
-		TODO("Implement calculation");
-
+		
 		m_cachedCameraDist = 0.0f;
 		m_cachedCamera = &camera;
 

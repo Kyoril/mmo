@@ -9,8 +9,8 @@
 
 namespace mmo
 {
-	Material::Material(String name)
-		: m_name(std::move(name))
+	Material::Material(const std::string_view name)
+		: m_name(name)
 	{
 	}
 

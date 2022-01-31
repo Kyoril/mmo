@@ -32,7 +32,7 @@ namespace mmo
 		// Material name
 		{
 			ChunkWriter nameChunkWriter { MaterialNameChunk, writer };
-			writer << io::write_dynamic_range<uint8>(material.GetName());
+			writer << io::write_dynamic_range<uint8>(material.GetName().begin(), material.GetName().end());
 			nameChunkWriter.Finish();
 		}
 

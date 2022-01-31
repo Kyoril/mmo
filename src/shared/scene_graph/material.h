@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
 
@@ -36,15 +37,11 @@ namespace mmo
 	{
 	public:
 		/// @brief Creates a new instance of the Material class and initializes it.
-		/// @param name Name of the material.
-		explicit Material(String name);
+		explicit Material(std::string_view name);
 		
 		virtual ~Material() = default;
 
 	public:
-		/// @brief Gets the name of this material.
-		[[nodiscard]] const String& GetName() const noexcept { return m_name; }
-
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
 		void SetTwoSided(const bool value) noexcept { m_twoSided = value; }
@@ -79,6 +76,8 @@ namespace mmo
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const noexcept { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
 
+		[[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+
 		/// @brief Sets the name of the material.
 		/// @param name The material name.
 		void SetName(const std::string_view name) noexcept { m_name = name; }
@@ -109,7 +108,7 @@ namespace mmo
 		void BindShaders(GraphicsDevice& device);
 
 		void BindTextures(GraphicsDevice& device);
-
+		
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -126,4 +125,6 @@ namespace mmo
 		std::vector<uint8> m_pixelShaderCode;
 		bool m_pixelShaderChanged { true };
 	};
+
+	typedef std::shared_ptr<Material> MaterialPtr;
 }

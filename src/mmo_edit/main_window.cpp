@@ -522,8 +522,8 @@ namespace mmo
 		m_dockSpaceFlags = ImGuiDockNodeFlags_None;//ImGuiDockNodeFlags_AutoHideTabBar;
 
 		ApplyDefaultStyle();
-
-		SetTimer(m_windowHandle, 0, 5, [] (HWND hwnd, UINT uint, UINT_PTR uintPtr, DWORD dword) { InvalidateRect(hwnd, nullptr, FALSE); });
+		
+		//SetTimer(m_windowHandle, 0, 5, [] (HWND hwnd, UINT uint, UINT_PTR uintPtr, DWORD dword) { InvalidateRect(hwnd, nullptr, FALSE); });
 	}
 
 	void MainWindow::RenderSimpleNodeEditor()
@@ -585,6 +585,8 @@ namespace mmo
 				GraphicsDevice::Get().GetAutoCreatedWindow()->Update();
 				
 		        EndPaint(wnd, &ps);
+
+				InvalidateRect(wnd, nullptr, FALSE);
 			}
 			return 0;
 		case WM_LBUTTONDOWN:

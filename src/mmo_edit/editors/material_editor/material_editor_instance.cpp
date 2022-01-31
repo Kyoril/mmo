@@ -75,8 +75,6 @@ namespace mmo
 	private:
 	    bool m_released = false;
 	};
-
-	static ed::EditorContext* s_context = nullptr;
 	
 	IconType PinTypeToIconType(const PinType pinType)
 	{
@@ -107,139 +105,7 @@ namespace mmo
 
 	    return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 	}
-
-	bool DrawPinValue(const PinValue& value)
-	{
-	    switch (value.GetType())
-	    {
-	        case PinType::Any:
-	            return false;
-	        case PinType::Material:
-	            return false;
-	        case PinType::Bool:
-	            if (value.As<bool>())
-	                ImGui::TextUnformatted("true");
-	            else
-	                ImGui::TextUnformatted("false");
-	            return true;
-	        case PinType::Int32:
-	            ImGui::Text("%d", value.As<int32_t>());
-	            return true;
-	        case PinType::Float:
-	            ImGui::Text("%g", value.As<float>());
-	            return true;
-	        case PinType::String:
-	            ImGui::Text("%s", value.As<std::string>().c_str());
-	            return true;
-	    }
-
-	    return false;
-	}
-
-	bool EditPinValue(Pin& pin)
-	{
-	    ScopedItemWidth scopedItemWidth{120};
-
-	    auto pinValue = pin.GetValue();
-
-	    switch (pinValue.GetType())
-	    {
-	        case PinType::Any:
-	            return true;
-	        case PinType::Material:
-	            return true;
-	        case PinType::Bool:
-	            pin.SetValue(!pinValue.As<bool>());
-	            return true;
-	        case PinType::Int32:
-	            {
-	                auto value = pinValue.As<int32_t>();
-	                if (ImGui::InputInt("##editor", &value, 1, 100, ImGuiInputTextFlags_EnterReturnsTrue))
-	                {
-	                    pin.SetValue(value);
-	                    return true;
-	                }
-	            }
-	            return false;
-	        case PinType::Float:
-	            {
-	                auto value = pinValue.As<float>();
-	                if (ImGui::InputFloat("##editor", &value, 1, 100, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-	                {
-	                    pin.SetValue(value);
-	                    return true;
-	                }
-	            }
-	            return false;
-	        case PinType::String:
-	            {
-	                auto value = pinValue.As<std::string>();
-	                if (ImGui::InputText("##editor", (char*)value.data(), value.size() + 1, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData* data) -> int
-	                {
-	                    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
-	                    {
-	                        auto& stringValue = *static_cast<std::string*>(data->UserData);
-	                        ImVector<char>* my_str = (ImVector<char>*)data->UserData;
-	                        IM_ASSERT(stringValue.data() == data->Buf);
-	                        stringValue.resize(data->BufSize); // NB: On resizing calls, generally data->BufSize == data->BufTextLen + 1
-	                        data->Buf = (char*)stringValue.data();
-	                    }
-	                    return 0;
-	                }, &value))
-	                {
-	                    value.resize(strlen(value.c_str()));
-	                    pin.SetValue(value);
-	                    return true;
-	                }
-	            }
-	            return false;
-	    }
-
-	    return true;
-	}
-
-	void DrawPinValueWithEditor(Pin& pin)
-	{
-	    auto storage = ImGui::GetStateStorage();
-	    auto activePinId = storage->GetInt(ImGui::GetID("PinValueEditor_ActivePinId"), false);
-
-	    if (activePinId == pin.GetId())
-	    {
-	        if (EditPinValue(pin))
-	        {
-	            ax::NodeEditor::EnableShortcuts(true);
-	            activePinId = 0;
-	        }
-	    }
-	    else
-	    {
-	        // Draw pin value
-	        //PinValueBackgroundRenderer bg;
-	        if (!DrawPinValue(pin.GetValue()))
-	        {
-	            //bg.Discard();
-	            return;
-	        }
-
-	        // Draw invisible button over pin value which triggers an editor if clicked
-	        auto itemMin = ImGui::GetItemRectMin();
-	        auto itemMax = ImGui::GetItemRectMax();
-	        auto itemSize = itemMax - itemMin;
-	        itemSize.x = ImMax(itemSize.x, 1.0f);
-	        itemSize.y = ImMax(itemSize.y, 1.0f);
-
-	        ImGui::SetCursorScreenPos(itemMin);
-
-	        if (ImGui::InvisibleButton("###pin_value_editor", itemSize))
-	        {
-	            activePinId = pin.GetId();
-	            ax::NodeEditor::EnableShortcuts(false);
-	        }
-	    }
-
-	    storage->SetInt(ImGui::GetID("PinValueEditor_ActivePinId"), activePinId);
-	}
-
+		
 	void CommitMaterialNodes(MaterialGraph& material)
     {
         const auto iconSize = ImVec2(ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight());
@@ -333,14 +199,7 @@ namespace mmo
                     ImGui::SameLine();
                     ImGui::TextUnformatted(pin->GetName().data(), pin->GetName().data() + pin->GetName().size());
                 }
-
-                // [3] - Show value/editor when pin is not linked to anything
-                if (!material.HasPinAnyLink(*pin))
-                {
-                    ImGui::SameLine();
-                    DrawPinValueWithEditor(*pin);
-                }
-
+				
                 ed::EndPin();
                 
                 layout.NextRow();
@@ -552,9 +411,7 @@ namespace mmo
             material.DeleteNode(node);
         }
     }
-
-    static std::unique_ptr<MaterialGraph> s_material;
-
+	
 	void CreateNodeDialog::Open(Pin* fromPin)
 	{
 		auto storage = ImGui::GetStateStorage();
@@ -643,7 +500,7 @@ namespace mmo
 	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
 	{
-		m_material = std::make_shared<Material>("");
+		m_material = std::make_shared<Material>(assetPath.string());
 
 		const auto file = AssetRegistry::OpenFile(assetPath.string());
 		if (!file)
@@ -662,6 +519,7 @@ namespace mmo
 			//return;
 		}
 
+		m_material->SetName(assetPath.string());
 		m_material->Update();
 
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
@@ -675,7 +533,7 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 		
-		m_entity = m_scene.CreateEntity("Entity", "Editor/Sphere.hmsh");
+		m_entity = m_scene.CreateEntity(assetPath.string(), "Editor/Sphere.hmsh");
 		if (m_entity)
 		{
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
@@ -700,7 +558,7 @@ namespace mmo
 	void MaterialEditorInstance::Compile()
 	{
 		MaterialCompiler compiler;
-		s_material->Compile(compiler);
+		m_graph->Compile(compiler);
 
 		std::unique_ptr<ShaderCompiler> shaderCompiler = std::make_unique<ShaderCompilerD3D11>();
 		compiler.GenerateShaderCode(*m_material, *shaderCompiler);
@@ -736,24 +594,29 @@ namespace mmo
 
 	void MaterialEditorInstance::Draw()
 	{
-        if (!s_context)
+        if (!m_context)
         {
 		    ed::Config editorConfig;
-		    editorConfig.SettingsFile = "Simple.json";
-		    s_context = ed::CreateEditor(&editorConfig);
+		    m_context = ed::CreateEditor(&editorConfig);
             
-			ed::SetCurrentEditor(s_context);
+			ed::SetCurrentEditor(m_context);
 
-			s_material = std::make_unique<MaterialGraph>();
+			m_graph = std::make_unique<MaterialGraph>();
 		}
 
-		const auto dockspaceId = ImGui::GetID("##mat_dockspace_");
-		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+		ImGui::PushID(GetAssetPath().c_str());
+
+		const auto dockspaceId = ImGui::GetID("MaterialGraph");
+		ImGui::DockSpace(dockspaceId, ImVec2(-1.0f, -1.0f), ImGuiDockNodeFlags_AutoHideTabBar);
 		
 		// Add the viewport
-	    ed::SetCurrentEditor(s_context);
+	    ed::SetCurrentEditor(m_context);
 
-		if (ImGui::Begin("mat_preview_"))
+		String previewId = "Preview##" + GetAssetPath().string();
+		String detailsId = "Details##" + GetAssetPath().string();
+		String graphId = "Material Graph##" + GetAssetPath().string();
+
+		if (ImGui::Begin(previewId.c_str()))
 		{
 			if (ImGui::Button("Compile"))
 			{
@@ -780,7 +643,7 @@ namespace mmo
 				
 				if (m_viewportRT == nullptr)
 				{
-					m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+					m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport_" + GetAssetPath().string(), std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
 					m_lastAvailViewportSize = availableSpace;
 				}
 				else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
@@ -796,7 +659,7 @@ namespace mmo
 		}
 		ImGui::End();
 		
-		if (ImGui::Begin("mat_details_"))
+		if (ImGui::Begin(detailsId.c_str(), nullptr))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
 		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
@@ -804,7 +667,7 @@ namespace mmo
 				ed::NodeId selectedNode;
 				if (ed::GetSelectedNodes(&selectedNode, 1) > 0)
 				{
-					auto* node = s_material->FindNode(selectedNode.Get());
+					auto* node = m_graph->FindNode(selectedNode.Get());
 					if (node)
 					{
 						for (auto* prop : node->GetProperties())
@@ -893,28 +756,48 @@ namespace mmo
 		}
 		ImGui::End();
 
-		if(ImGui::Begin("mat_graph_"))
+		if(ImGui::Begin(graphId.c_str()))
 		{
-		    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
+		    ed::Begin(GetAssetPath().string().c_str(), ImVec2(0.0, 0.0f));
 			
-			CommitMaterialNodes(*s_material);
+			CommitMaterialNodes(*m_graph);
 
-			HandleCreateAction(*s_material);
+			HandleCreateAction(*m_graph);
 
-			HandleDeleteAction(*s_material);
+			HandleDeleteAction(*m_graph);
 			
 	        ed::Suspend();
-	        m_createDialog.Show(*s_material);
+	        m_createDialog.Show(*m_graph);
 	        ed::Resume();
 			
 		    ed::End();
 
 		}
 		ImGui::End();
+		
+		if (m_initDockLayout)
+		{
+			ImGui::DockBuilderRemoveNode(dockspaceId);
+			ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
+			ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+			auto mainId = dockspaceId;
+			auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Left, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
+			auto sideTopId = ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &sideId);
+			
+			ImGui::DockBuilderDockWindow(graphId.c_str(), mainId);
+
+			ImGui::DockBuilderDockWindow(previewId.c_str(), sideTopId);
+			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
+
+			m_initDockLayout = false;
+		}
 
 		ImGui::DockBuilderFinish(dockspaceId);
 
 	    ed::SetCurrentEditor(nullptr);
+
+		ImGui::PopID();
 	}
 
 	void MaterialEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)

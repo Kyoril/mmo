@@ -26,14 +26,19 @@ namespace mmo
 	public:
 		/// Initializes the asset registry.
 		static void Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives);
+
 		/// Destroys the asset registry.
 		static void Destroy();
+
 		/// Opens a file for reading. Returns nullptr if the files doesn't exist.
 		static std::unique_ptr<std::istream> OpenFile(const std::string& filename);
+
 		/// Determines whether a given file name is already taken.
 		static bool HasFile(const std::string& filename);
+
 		/// Creates a new file for writing. Returns nullptr if the file couldn't be created.
 		static std::unique_ptr<std::ostream> CreateNewFile(const std::string& filename);
+
 		/// Returns a list of file names in the asset registry.
 		static std::vector<std::string> ListFiles();
 	};

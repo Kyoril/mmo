@@ -2,9 +2,13 @@
 
 #pragma once
 
-#include <memory>
-
 #include "base/non_copyable.h"
+#include "material.h"
+
+#include <map>
+
+#include "base/utilities.h"
+
 
 namespace mmo
 {
@@ -21,5 +25,19 @@ namespace mmo
 
 	public:
 		static MaterialManager& Get();
+		
+	public:
+		/// Loads a material from file or retrieves it from the cache.
+		MaterialPtr Load(std::string_view filename);
+
+		/// Creates a material manually.
+		MaterialPtr CreateManual(const std::string_view name);
+
+		void Remove(std::string_view filename);
+
+		void RemoveAllUnreferenced();
+
+	private:
+		std::map<std::string, MaterialPtr, StrCaseIComp> m_materials;
 	};
 }

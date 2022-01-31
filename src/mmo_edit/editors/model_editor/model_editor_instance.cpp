@@ -6,8 +6,10 @@
 
 #include "model_editor.h"
 #include "editor_host.h"
+#include "assets/asset_registry.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
 
 namespace mmo
@@ -87,25 +89,50 @@ namespace mmo
 		    {
 				if (m_entity != nullptr)
 				{
+					const auto files = AssetRegistry::ListFiles();
+
 					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
 					{
 						ImGui::PushID(i); // Use field index as identifier.
 						ImGui::TableNextRow();
 					    ImGui::TableSetColumnIndex(0);
 					    ImGui::AlignTextToFramePadding();
-					    bool node_open = ImGui::TreeNode("Object", "SubEntity %zu", i);
-						
-					    if (node_open)
+						const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i);
+
+					    if (nodeOpen)
 					    {
 							ImGui::TableNextRow();
 				            ImGui::TableSetColumnIndex(0);
 				            ImGui::AlignTextToFramePadding();
-							ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+							constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
 				            ImGui::TreeNodeEx("Field", flags, "Material");
 
 							ImGui::TableSetColumnIndex(1);
 							ImGui::SetNextItemWidth(-FLT_MIN);
-							
+
+							// Setup combo
+							String materialName = "(None)";
+							if (m_entity->GetSubEntity(i)->GetMaterial())
+							{
+								materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
+							}
+
+							if (ImGui::BeginCombo("material", materialName.c_str()))
+							{
+								// For each material
+								for (const auto& file : files)
+								{
+									if (!file.ends_with(".hmat")) continue;
+
+									if (ImGui::Selectable(file.c_str()))
+									{
+										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
+									}
+								}
+
+								ImGui::EndCombo();
+							}
+
 							ImGui::NextColumn();
 							ImGui::TreePop();
 						}
