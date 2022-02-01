@@ -33,6 +33,9 @@ namespace mmo
 	public:
 		void Draw();
 
+	protected:
+		virtual void DrawImpl() {};
+
 	public:
 		bool OpenAsset(const Path& asset);
 		

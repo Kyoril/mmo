@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 
 
 namespace mmo
@@ -295,11 +296,11 @@ namespace mmo
 
 		if (op.useIndexes)
 		{
-			gx.DrawIndexed();
+			gx.DrawIndexed(op.startIndex, op.endIndex);
 		}
 		else
 		{
-			gx.Draw(op.vertexBuffer->GetVertexCount());
+			gx.Draw(op.endIndex == 0 ? op.vertexBuffer->GetVertexCount() - op.startIndex : op.endIndex - op.startIndex, op.startIndex);
 		}
 	}
 
@@ -352,7 +353,11 @@ namespace mmo
 		ASSERT(m_entities.find(entityName) == m_entities.end());
 
 		auto mesh = MeshManager::Get().Load(meshName);
-		ASSERT(mesh);
+		if (!mesh)
+		{
+			ELOG("Failed to load mesh " << meshName);
+			return nullptr;
+		}
 		
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
 		

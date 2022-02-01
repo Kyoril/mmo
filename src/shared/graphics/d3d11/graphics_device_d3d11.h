@@ -36,7 +36,7 @@ namespace mmo
 		ShaderPtr CreateShader(ShaderType Type, const void* ShaderCode, size_t ShaderCodeSize) override;
 		void UpdateSamplerState();
 		void Draw(uint32 vertexCount, uint32 start = 0) override;
-		void DrawIndexed() override;
+		void DrawIndexed(uint32 startIndex = 0, uint32 endIndex = 0) override;
 		void SetTopologyType(TopologyType InType) override;
 		void SetVertexFormat(VertexFormat InFormat) override;
 		void SetBlendMode(BlendMode InBlendMode) override;

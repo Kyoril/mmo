@@ -627,7 +627,7 @@ namespace mmo
 		m_immContext->Draw(vertexCount, start);
 	}
 
-	void GraphicsDeviceD3D11::DrawIndexed()
+	void GraphicsDeviceD3D11::DrawIndexed(const uint32 startIndex, const uint32 endIndex)
 	{
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
@@ -637,7 +637,7 @@ namespace mmo
 		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
 		
 		// Execute draw command
-		m_immContext->DrawIndexed(m_indexCount, 0, 0);
+		m_immContext->DrawIndexed(endIndex == 0 ? m_indexCount - startIndex : endIndex - startIndex, startIndex, 0);
 	}
 
 	namespace

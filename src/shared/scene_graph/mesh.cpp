@@ -24,12 +24,12 @@ namespace mmo
 		return mesh;
 	}
 
-	void Mesh::NameSubMesh(uint16 index, const std::string & name)
+	void Mesh::NameSubMesh(const uint16 index, const std::string & name)
 	{
 		m_subMeshNames[name] = index;
 	}
 
-	SubMesh & Mesh::GetSubMesh(uint16 index)
+	SubMesh & Mesh::GetSubMesh(const uint16 index)
 	{
 		return *m_subMeshes[index];
 	}
@@ -45,7 +45,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	void Mesh::DestroySubMesh(uint16 index)
+	void Mesh::DestroySubMesh(const uint16 index)
 	{
 		// Get iterator and advance
 		auto subMeshIt = m_subMeshes.begin();

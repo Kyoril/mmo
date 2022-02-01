@@ -26,22 +26,6 @@ namespace mmo
 		/// @copydoc Renderable::PrepareRenderOperation
 		virtual void PrepareRenderOperation(RenderOperation& operation) override;
 
-		/// @brief Sets the start index of this sub entity.
-		/// @param startIndex The start index of this sub entity.
-		void SetStartIndex(const uint32 startIndex) { m_indexStart = startIndex; }
-
-		/// @brief Gets the start index of this sub entity.
-		///	@return The start index of this entity.
-		[[nodiscard]] uint32 GetStartIndex() const noexcept { return m_indexStart; }
-
-		/// @brief Sets the ending index of this sub entity.
-		/// @param endIndex The new ending index of this sub entity.
-		void SetEndIndex(const uint32 endIndex) { m_indexEnd = endIndex; }
-
-		/// @brief Gets the ending index of this sub entity.
-		///	@return The ending index of this sub entity.
-		[[nodiscard]] uint32 GetEndIndex() const noexcept { return m_indexEnd; }
-		
 		/// @copydoc Renderable::GetSquaredViewDepth
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
 		
@@ -58,8 +42,6 @@ namespace mmo
 	private:
 		Entity& m_parent;
 		SubMesh& m_subMesh;
-		uint32 m_indexStart { 0 };
-		uint32 m_indexEnd { 0 };
 		bool m_visible { false };
 
 		uint8 m_renderQueueId { 0 };

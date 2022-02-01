@@ -33,12 +33,30 @@ namespace mmo
 		/// @brief Sets the material used by this sub mesh.
 		/// @param material The new material to use or nullptr if no material should be used.
 		void SetMaterial(const std::shared_ptr<Material>& material);
+		
+		/// @brief Sets the start index of this sub entity.
+		/// @param startIndex The start index of this sub entity.
+		void SetStartIndex(const uint32 startIndex) { m_indexStart = startIndex; }
 
+		/// @brief Gets the start index of this sub entity.
+		///	@return The start index of this entity.
+		[[nodiscard]] uint32 GetStartIndex() const noexcept { return m_indexStart; }
+
+		/// @brief Sets the ending index of this sub entity.
+		/// @param endIndex The new ending index of this sub entity.
+		void SetEndIndex(const uint32 endIndex) { m_indexEnd = endIndex; }
+
+		/// @brief Gets the ending index of this sub entity.
+		///	@return The ending index of this sub entity.
+		[[nodiscard]] uint32 GetEndIndex() const noexcept { return m_indexEnd; }
+		
 	public:
 		Mesh& m_parent;
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
 		std::shared_ptr<Material> m_material;
 		bool m_useSharedVertices { true };
+		uint32 m_indexStart { 0 };
+		uint32 m_indexEnd { 0 };
 	};
 }

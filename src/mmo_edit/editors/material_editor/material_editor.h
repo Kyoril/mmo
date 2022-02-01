@@ -26,6 +26,9 @@ namespace mmo
 		void AddCreationContextMenuItems() override;
 
 	protected:
+		void DrawImpl() override;
+
+	protected:
 		/// @copydoc EditorBase::OpenAssetImpl 
 		std::shared_ptr<EditorInstance> OpenAssetImpl(const Path& asset) override;
 		
@@ -37,7 +40,8 @@ namespace mmo
 		void CreateNewMaterial();
 
 	private:
-
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
+		bool m_showMaterialNameDialog { false };
+		String m_materialName;
 	};
 }

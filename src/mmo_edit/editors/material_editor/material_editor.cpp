@@ -6,6 +6,9 @@
 #include "log/default_log_levels.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui/misc/cpp/imgui_stdlib.h"
+
 #include "binary_io/stream_sink.h"
 #include "binary_io/writer.h"
 #include "assets/asset_registry.h"
@@ -22,9 +25,42 @@ namespace mmo
 
 	void MaterialEditor::AddCreationContextMenuItems()
 	{
-		if (ImGui::MenuItem("Create Material"))
+		if (ImGui::MenuItem("Create New Material"))
 		{
-			CreateNewMaterial();
+			m_showMaterialNameDialog = true;
+		}
+	}
+
+	void MaterialEditor::DrawImpl()
+	{
+		if (m_showMaterialNameDialog)
+		{
+			ImGui::OpenPopup("Create New Material");
+			m_showMaterialNameDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Create New Material", nullptr, ImGuiWindowFlags_NoResize))
+		{
+			ImGui::Text("Enter a name for the new material:");
+
+			ImGui::InputText("##field", &m_materialName);
+			ImGui::SameLine();
+			ImGui::Text(".hmat");
+			
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Button("Create"))
+			{
+				CreateNewMaterial();
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::TableSetColumnIndex(2);
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
 		}
 	}
 
@@ -57,8 +93,9 @@ namespace mmo
 	void MaterialEditor::CreateNewMaterial()
 	{
 		auto currentPath = m_host.GetCurrentPath();
-		currentPath /= "Material.hmat";
-
+		currentPath /= m_materialName + ".hmat";
+		m_materialName.clear();
+		
 		const auto file = AssetRegistry::CreateNewFile(currentPath.string());
 		if (!file)
 		{
@@ -66,7 +103,7 @@ namespace mmo
 			return;
 		}
 
-		const std::shared_ptr<Material> material = std::make_shared<Material>("Material");
+		const std::shared_ptr<Material> material = std::make_shared<Material>(currentPath.string());
 		material->SetType(MaterialType::Opaque);
 		material->SetCastShadows(true);
 		material->SetReceivesShadows(true);

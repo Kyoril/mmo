@@ -270,83 +270,103 @@ namespace mmo
 			ELOG("Unable to create mesh file " << p);
 			return false;
 		}
-
-		// Setup mesh header
-		mesh::v1_0::Header header;
-		header.version = mesh::Version_1_0;
-		header.vertexChunkOffset = 0;
-		header.indexChunkOffset = 0;
 		
 		// Create a mesh header saver
 		io::StreamSink sink{ *filePtr };
 		io::Writer writer{ sink };
 
-		// Write the mesh header
-		mesh::v1_0::HeaderSaver saver{ sink, header };
+		
+		// Write the vertex chunk data
+		ChunkWriter meshChunk{ mesh::v1_0::MeshChunkMagic, writer };
 		{
-			// Write the vertex chunk data
-			header.vertexChunkOffset = static_cast<uint32>(sink.Position());
-			ChunkWriter vertexChunkWriter{ mesh::v1_0::VertexChunkMagic, writer };
-			{
-				const auto& meshes = m_meshEntries;
-				if (!meshes.empty())
-				{
-					const auto& mesh = meshes.front();
-
-					// Write vertex data
-					writer << io::write<uint32>(mesh.vertices.size());
-					for (size_t i = 0; i < mesh.vertices.size(); ++i)
-					{
-						writer
-							<< io::write<float>(mesh.vertices[i].position.x)
-							<< io::write<float>(mesh.vertices[i].position.y)
-							<< io::write<float>(mesh.vertices[i].position.z);
-						writer
-							<< io::write<uint32>(mesh.vertices[i].color);
-						writer
-							<< io::write<float>(mesh.vertices[i].texCoord.x)
-							<< io::write<float>(mesh.vertices[i].texCoord.y)
-							<< io::write<float>(mesh.vertices[i].texCoord.z);
-						writer
-							<< io::write<float>(mesh.vertices[i].normal.x)
-							<< io::write<float>(mesh.vertices[i].normal.y)
-							<< io::write<float>(mesh.vertices[i].normal.z);
-					}
-				}
-			}
-			vertexChunkWriter.Finish();
-
-			// Write the index chunk data
-			header.indexChunkOffset = static_cast<uint32>(sink.Position());
-			ChunkWriter indexChunkWriter{ mesh::v1_0::IndexChunkMagic, writer };
-			{
-				const auto& meshes = m_meshEntries;
-				if (!meshes.empty())
-				{
-					const auto& mesh = meshes.front();
-					const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
-					
-					// Write index data
-					writer
-						<< io::write<uint32>(mesh.indices.size())
-						<< io::write<uint8>(bUse16BitIndices);
-
-					for (size_t i = 0; i < mesh.indices.size(); ++i)
-					{
-						if (bUse16BitIndices)
-						{
-							writer << io::write<uint16>(mesh.indices[i]);
-						}
-						else
-						{
-							writer << io::write<uint32>(mesh.indices[i]);
-						}
-					}
-				}
-			}
-			indexChunkWriter.Finish();
+			writer << io::write<uint32>(mesh::Version_1_0);
 		}
-		saver.Finish();
+		meshChunk.Finish();
+
+
+		// Write the vertex chunk data
+		ChunkWriter vertexChunkWriter{ mesh::v1_0::MeshVertexChunk, writer };
+		{
+			const auto& meshes = m_meshEntries;
+			if (!meshes.empty())
+			{
+				const auto& mesh = meshes.front();
+
+				// Write vertex data
+				writer << io::write<uint32>(mesh.vertices.size());
+				for (size_t i = 0; i < mesh.vertices.size(); ++i)
+				{
+					writer
+						<< io::write<float>(mesh.vertices[i].position.x)
+						<< io::write<float>(mesh.vertices[i].position.y)
+						<< io::write<float>(mesh.vertices[i].position.z);
+					writer
+						<< io::write<uint32>(mesh.vertices[i].color);
+					writer
+						<< io::write<float>(mesh.vertices[i].texCoord.x)
+						<< io::write<float>(mesh.vertices[i].texCoord.y)
+						<< io::write<float>(mesh.vertices[i].texCoord.z);
+					writer
+						<< io::write<float>(mesh.vertices[i].normal.x)
+						<< io::write<float>(mesh.vertices[i].normal.y)
+						<< io::write<float>(mesh.vertices[i].normal.z);
+				}
+			}
+		}
+		vertexChunkWriter.Finish();
+
+		// Write the index chunk data
+		ChunkWriter indexChunkWriter{ mesh::v1_0::MeshIndexChunk, writer };
+		{
+			const auto& meshes = m_meshEntries;
+			if (!meshes.empty())
+			{
+				const auto& mesh = meshes.front();
+				const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
+				
+				// Write index data
+				writer
+					<< io::write<uint32>(mesh.indices.size())
+					<< io::write<uint8>(bUse16BitIndices);
+
+				for (size_t i = 0; i < mesh.indices.size(); ++i)
+				{
+					if (bUse16BitIndices)
+					{
+						writer << io::write<uint16>(mesh.indices[i]);
+					}
+					else
+					{
+						writer << io::write<uint32>(mesh.indices[i]);
+					}
+				}
+			}
+		}
+		indexChunkWriter.Finish();
+
+		// Write submesh chunks
+		const auto& meshes = m_meshEntries;
+		if (!meshes.empty())
+		{
+			const auto& mesh = meshes.front();
+
+			for(const auto& submesh : mesh.subMeshes)
+			{
+				ChunkWriter submeshChunkWriter{ mesh::v1_0::MeshSubMeshChunk, writer };
+				{
+					// Material name
+					writer
+						<< io::write_dynamic_range<uint16>(String("Material"));
+
+					// Start index & end index
+					writer
+						<< io::write<uint32>(submesh.indexOffset)
+						<< io::write<uint32>(submesh.indexOffset + submesh.triangleCount * 3);
+				}
+				submeshChunkWriter.Finish();
+			}
+		}
+		
 		return true;
 	}
 
@@ -595,6 +615,53 @@ namespace mmo
         {
 	        return false;
         }
+		
+		FbxLayerElementArrayTemplate<int>* lMaterialIndice = nullptr;
+		FbxGeometryElement::EMappingMode lMaterialMappingMode = FbxGeometryElement::eNone;
+		if (mesh.GetElementMaterial())
+		{
+			lMaterialIndice = &mesh.GetElementMaterial()->GetIndexArray();
+			lMaterialMappingMode = mesh.GetElementMaterial()->GetMappingMode();
+			if (lMaterialIndice && lMaterialMappingMode == FbxGeometryElement::eByPolygon)
+			{
+				const int lPolygonCount = mesh.GetPolygonCount();
+				FBX_ASSERT(lMaterialIndice->GetCount() == lPolygonCount);
+
+				if (lMaterialIndice->GetCount() == lPolygonCount)
+				{
+					// Count the faces of each material
+					for (int lPolygonIndex = 0; lPolygonIndex < lPolygonCount; ++lPolygonIndex)
+					{
+						const int lMaterialIndex = lMaterialIndice->GetAt(lPolygonIndex);
+						if (entry.subMeshes.size() < lMaterialIndex + 1)
+						{
+							entry.subMeshes.resize(lMaterialIndex + 1);
+						}
+						entry.subMeshes[lMaterialIndex].triangleCount++;
+					}
+					
+					// Record the offset (how many vertex)
+					const int lMaterialCount = entry.subMeshes.size();
+					int lOffset = 0;
+					for (int lIndex = 0; lIndex < lMaterialCount; ++lIndex)
+					{
+						entry.subMeshes[lIndex].indexOffset = lOffset;
+						lOffset += entry.subMeshes[lIndex].triangleCount * 3;
+					}
+					FBX_ASSERT(lOffset == lPolygonCount * 3);
+				}
+			}
+			else
+			{
+				WLOG("Mesh material not assigned by polygon!");
+				entry.subMeshes.emplace_back(SubMeshEntry { 0, 0 });
+			}
+		}
+		else
+		{
+			WLOG("Mesh has no material assigned to it");
+			entry.subMeshes.emplace_back(SubMeshEntry { 0, 0 });
+		}
 
 		// Setup vertices and indices
 		GenerateMeshEntry(entry, geometry);

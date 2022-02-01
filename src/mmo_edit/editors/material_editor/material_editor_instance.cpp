@@ -23,6 +23,7 @@
 #include "graphics/d3d11/shader_compiler_d3d11.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_serializer.h"
+#include "scene_graph/material_manager.h"
 
 
 namespace ImGui
@@ -499,25 +500,7 @@ namespace mmo
 	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
 	{
-		m_material = std::make_shared<Material>(assetPath.string());
-
-		const auto file = AssetRegistry::OpenFile(assetPath.string());
-		if (!file)
-		{
-			ELOG("Unable to open material asset " << assetPath);
-			return;
-		}
-
-		io::StreamSource source { *file };
-		io::Reader reader { source };
-
-		MaterialDeserializer deserializer { *m_material };
-		if (!deserializer.Read(reader))
-		{
-			ELOG("Failed to read material file " << assetPath);
-			//return;
-		}
-
+		m_material = MaterialManager::Get().Load(assetPath.string());
 		m_material->SetName(assetPath.string());
 		m_material->Update();
 
@@ -653,6 +636,11 @@ namespace mmo
 
 				// Render the render target content into the window as image object
 				ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+				{
+					m_leftButtonPressed = true;
+				}
 			}
 			ImGui::EndChild();
 		}
@@ -802,19 +790,40 @@ namespace mmo
 	void MaterialEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
 	{
 		EditorInstance::OnMouseButtonDown(button, x, y);
-
-
+		
+		m_lastMouseX = x;
+		m_lastMouseY = y;
 	}
 
 	void MaterialEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
 	{
 		EditorInstance::OnMouseButtonUp(button, x, y);
-
+		
+		if (button == 0)
+		{
+			m_leftButtonPressed = false;
+		}
+		else if (button == 1)
+		{
+			m_rightButtonPressed = false;
+		}
 	}
 
 	void MaterialEditorInstance::OnMouseMoved(uint16 x, uint16 y)
 	{
 		EditorInstance::OnMouseMoved(x, y);
+		
+		// Calculate mouse move delta
+		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
+		const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
+		if (m_leftButtonPressed || m_rightButtonPressed)
+		{
+			m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
+			m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+		}
+
+		m_lastMouseX = x;
+		m_lastMouseY = y;
 	}
 }

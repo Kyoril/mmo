@@ -45,10 +45,6 @@ namespace mmo
 
 	void SubMesh::PrepareRenderOperation(RenderOperation& op) const
 	{
-		GraphicsDevice::Get().SetBlendMode(BlendMode::Opaque);
-		GraphicsDevice::Get().BindTexture(
-			TextureManager::Get().CreateOrRetrieve("Textures/Brick_04/T_brick_04_BaseColor.htex"), ShaderType::PixelShader, 0);
-
 		if (m_useSharedVertices)
 		{
 			ASSERT(m_parent.m_vertexBuffer);
@@ -64,6 +60,8 @@ namespace mmo
 		op.useIndexes = m_indexBuffer != nullptr;
 		op.topology = TopologyType::TriangleList;
 		op.vertexFormat = VertexFormat::PosColorNormalTex1;
+		op.startIndex = m_indexStart;
+		op.endIndex = m_indexEnd;
 	}
 
 	void SubMesh::SetMaterial(const std::shared_ptr<Material>& material)

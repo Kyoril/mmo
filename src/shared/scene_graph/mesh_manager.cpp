@@ -2,6 +2,7 @@
 
 #include "mesh_manager.h"
 
+#include "mesh_serializer.h"
 #include "assets/asset_registry.h"
 #include "mesh/pre_header.h"
 #include "mesh/pre_header_load.h"
@@ -34,162 +35,26 @@ namespace mmo
 
 		// Try to load the file from the registry
 		const auto filePtr = AssetRegistry::OpenFile(filename);
-		ASSERT(filePtr && "Unable to load mesh file");
+		if (!filePtr)
+		{
+			ELOG("Unable to load mesh file " << filename);
+			return nullptr;
+		}
 
 		// Create readers
 		io::StreamSource source{ *filePtr };
 		io::Reader reader{ source };
-
-		// Load mesh pre header to determine file format version etc.
-		mesh::PreHeader preHeader;
-		if (!mesh::LoadPreHeader(preHeader, reader))
-		{
-			ELOG("Failed to load mesh pre header of file " << filename);
-			return nullptr;
-		}
-
+		
 		// Create the resulting mesh
 		auto mesh = std::make_shared<Mesh>();
 
-		AABB boundingBox;
-
-		// Depending on the format version, load the real mesh data now
-		switch (preHeader.version)
+		MeshDeserializer deserializer { *mesh };
+		if (!deserializer.Read(reader))
 		{
-		case mesh::Version_1_0:
-			{
-				mesh::v1_0::Header header;
-				if (!mesh::v1_0::LoadHeader(header, reader))
-				{
-					ELOG("Failed to load mesh header of file " << filename);
-					return nullptr;
-				}
-
-				// Create a submesh
-				SubMesh& submesh = mesh->CreateSubMesh("Default");
-				submesh.m_useSharedVertices = false;
-
-				// Load vertex chunk
-				source.seek(header.vertexChunkOffset);
-				ASSERT(reader);
-				{
-					// Read chunk magic
-					ChunkMagic vertexMagic;
-					source.read(&vertexMagic[0], vertexMagic.size());
-					ASSERT(reader);
-					ASSERT(vertexMagic == mesh::v1_0::VertexChunkMagic);
-
-					// Read chunk size
-					uint32 chunkSize = 0;
-					reader >> io::read<uint32>(chunkSize);
-					ASSERT(reader);
-
-					uint32 vertexCount = 0;
-					reader >> io::read<uint32>(vertexCount);
-
-					// Read vertex data
-					std::vector<POS_COL_NORMAL_TEX_VERTEX> vertices;
-					vertices.resize(vertexCount);
-
-					Vector3 min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-					Vector3 max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
-
-					// Iterate through vertices
-					for (POS_COL_NORMAL_TEX_VERTEX& v : vertices)
-					{
-						reader
-							>> io::read<float>(v.pos[0])
-							>> io::read<float>(v.pos[1])
-							>> io::read<float>(v.pos[2]);
-						ASSERT(reader);
-
-						min = TakeMinimum(v.pos, min);
-						max = TakeMaximum(v.pos, max);
-
-						// Color
-						reader
-							>> io::read<uint32>(v.color);
-						ASSERT(reader);
-
-						// Uvw
-						reader
-							>> io::read<float>(v.uv[0])
-							>> io::read<float>(v.uv[1])
-							>> io::skip<float>();
-						ASSERT(reader);
-
-						// Normal
-						reader
-							>> io::read<float>(v.normal[0])
-							>> io::read<float>(v.normal[1])
-							>> io::read<float>(v.normal[2]);
-						ASSERT(reader);
-					}
-
-					AABB box { min, max };
-					boundingBox.Combine(box);
-
-					// Create the vertex buffer
-					submesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_TEX_VERTEX), false,
-						&vertices[0]);
-				}
-
-				// Load index chunk
-				source.seek(header.indexChunkOffset);
-				ASSERT(reader);
-				{
-					// Read chunk magic
-					ChunkMagic indexMagic;
-					source.read(&indexMagic[0], indexMagic.size());
-					ASSERT(reader);
-					ASSERT(indexMagic == mesh::v1_0::IndexChunkMagic);
-
-					// Read chunk size
-					uint32 chunkSize = 0;
-					reader >> io::read<uint32>(chunkSize);
-					ASSERT(reader);
-
-					uint32 indexCount = 0;
-					bool use16BitIndices = false;
-					reader
-						>> io::read<uint32>(indexCount)
-						>> io::read<uint8>(use16BitIndices);
-					ASSERT(reader);
-
-					if (use16BitIndices)
-					{
-						std::vector<uint16> indices;
-						indices.resize(indexCount);
-
-						for (uint16& index : indices)
-						{
-							reader >> io::read<uint16>(index);
-							ASSERT(reader);
-						}
-
-						submesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_16, &indices[0]);
-					}
-					else
-					{
-						std::vector<uint32> indices;
-						indices.resize(indexCount);
-
-						for (uint32& index : indices)
-						{
-							reader >> io::read<uint32>(index);
-							ASSERT(reader);
-						}
-
-						submesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_32, &indices[0]);
-					}
-				}
-				
-			}
-			break;
+			ELOG("Failed to load mesh!");
+			return nullptr;
 		}
-
-		mesh->SetBounds(boundingBox);
-
+		
 		// Store the mesh in the cache
 		m_meshes[filename] = mesh;
 

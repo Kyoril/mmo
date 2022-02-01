@@ -64,7 +64,7 @@ namespace mmo
 			{
 				io::Writer writer{ destination };
 				writer
-					<< io::write_range(SubMeshChunkMagic);
+					<< io::write_range(MeshSubMeshChunk);
 
 				m_chunkSizePos = destination.Position();
 				writer

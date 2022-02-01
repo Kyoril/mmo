@@ -46,6 +46,12 @@ namespace mmo
 		std::vector<int32> polygonIndices;
 	};
 
+	struct SubMeshEntry
+	{
+		uint32 indexOffset { 0 };
+		uint32 triangleCount { 0 };
+	};
+
 	/// Contains mesh data.
 	struct MeshEntry
 	{
@@ -60,6 +66,8 @@ namespace mmo
 
 		/// Max index to determine whether we can use 16 bit index buffers.
 		uint32 maxIndex;
+
+		std::vector<SubMeshEntry> subMeshes;
 	};
 
 	/// This class can be used to extract relevant informations out of an fbx file.

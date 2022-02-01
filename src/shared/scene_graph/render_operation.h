@@ -18,5 +18,9 @@ namespace mmo
 		VertexBuffer* vertexBuffer;
 
 		IndexBuffer* indexBuffer;
+
+		uint32 startIndex { 0 };
+
+		uint32 endIndex { 0 };
 	};
 }

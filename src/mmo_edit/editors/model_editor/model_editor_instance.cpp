@@ -79,10 +79,15 @@ namespace mmo
 
 	void ModelEditorInstance::Draw()
 	{
+		ImGui::PushID(GetAssetPath().c_str());
+
 		const auto dockspaceId = ImGui::GetID("##model_dockspace_");
 		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 		
-		if (ImGui::Begin("##model_details_"))
+		String viewportId = "Viewport##" + GetAssetPath().string();
+		String detailsId = "Details##" + GetAssetPath().string();
+
+		if (ImGui::Begin(detailsId.c_str()))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
 		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
@@ -117,6 +122,7 @@ namespace mmo
 								materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
 							}
 
+							ImGui::PushID(i);
 							if (ImGui::BeginCombo("material", materialName.c_str()))
 							{
 								// For each material
@@ -132,6 +138,7 @@ namespace mmo
 
 								ImGui::EndCombo();
 							}
+							ImGui::PopID();
 
 							ImGui::NextColumn();
 							ImGui::TreePop();
@@ -143,10 +150,17 @@ namespace mmo
 		        ImGui::EndTable();
 		    }
 		    ImGui::PopStyleVar();
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Save"))
+			{
+				Save();
+			}
 		}
 		ImGui::End();
-
-		if (ImGui::Begin("##model_ed_viewport_"))
+		
+		if (ImGui::Begin(viewportId.c_str()))
 		{
 			// Determine the current viewport position
 			auto viewportPos = ImGui::GetWindowContentRegionMin();
@@ -167,28 +181,41 @@ namespace mmo
 				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
 				m_lastAvailViewportSize = availableSpace;
 			}
-
+			
 			// Render the render target content into the window as image object
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+			{
+				m_leftButtonPressed = true;
+			}
 		}
 		ImGui::End();
 		
+		if (m_initDockLayout)
+		{
+			ImGui::DockBuilderRemoveNode(dockspaceId);
+			ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
+			ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+			auto mainId = dockspaceId;
+			const auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
+			
+			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
+			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
+
+			m_initDockLayout = false;
+		}
+
 		ImGui::DockBuilderFinish(dockspaceId);
+
+		ImGui::PopID();
 	}
 
 	void ModelEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
-		
-		if (button == 0)
-		{
-			m_leftButtonPressed = true;
-		}
-		else if (button == 1)
-		{
-			m_rightButtonPressed = true;
-		}
 	}
 
 	void ModelEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
@@ -217,5 +244,10 @@ namespace mmo
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+	}
+
+	void ModelEditorInstance::Save()
+	{
+
 	}
 }

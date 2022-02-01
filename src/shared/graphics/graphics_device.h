@@ -147,7 +147,7 @@ namespace mmo
 		/// 
 		virtual void Draw(uint32 vertexCount, uint32 start = 0) = 0;
 		/// 
-		virtual void DrawIndexed() = 0;
+		virtual void DrawIndexed(uint32 startIndex = 0, uint32 endIndex = 0) = 0;
 		/// 
 		virtual void SetTopologyType(TopologyType InType);
 		/// 

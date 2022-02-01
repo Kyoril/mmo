@@ -38,6 +38,9 @@ namespace mmo
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 	private:
+		void Save();
+
+	private:
 		ModelEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
@@ -53,5 +56,6 @@ namespace mmo
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
 		bool m_rightButtonPressed { false };
+		bool m_initDockLayout { true };
 	};
 }
