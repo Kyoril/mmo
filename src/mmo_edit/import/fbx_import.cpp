@@ -274,7 +274,6 @@ namespace mmo
 		// Create a mesh header saver
 		io::StreamSink sink{ *filePtr };
 		io::Writer writer{ sink };
-
 		
 		// Write the vertex chunk data
 		ChunkWriter meshChunk{ mesh::v1_0::MeshChunkMagic, writer };
@@ -282,8 +281,7 @@ namespace mmo
 			writer << io::write<uint32>(mesh::Version_1_0);
 		}
 		meshChunk.Finish();
-
-
+		
 		// Write the vertex chunk data
 		ChunkWriter vertexChunkWriter{ mesh::v1_0::MeshVertexChunk, writer };
 		{

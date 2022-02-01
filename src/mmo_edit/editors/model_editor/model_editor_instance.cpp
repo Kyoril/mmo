@@ -6,10 +6,13 @@
 
 #include "model_editor.h"
 #include "editor_host.h"
+#include "stream_sink.h"
 #include "assets/asset_registry.h"
+#include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
 
 namespace mmo
@@ -83,9 +86,9 @@ namespace mmo
 
 		const auto dockspaceId = ImGui::GetID("##model_dockspace_");
 		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-		
-		String viewportId = "Viewport##" + GetAssetPath().string();
-		String detailsId = "Details##" + GetAssetPath().string();
+
+		const String viewportId = "Viewport##" + GetAssetPath().string();
+		const String detailsId = "Details##" + GetAssetPath().string();
 
 		if (ImGui::Begin(detailsId.c_str()))
 		{
@@ -212,13 +215,13 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	void ModelEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	void ModelEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
 	}
 
-	void ModelEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	void ModelEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
 		if (button == 0)
 		{
@@ -248,6 +251,19 @@ namespace mmo
 
 	void ModelEditorInstance::Save()
 	{
+		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
+		if (!file)
+		{
+			ELOG("Failed to open mesh file " << GetAssetPath() << " for writing!");
+			return;
+		}
 
+		io::StreamSink sink { *file };
+		io::Writer writer { sink };
+		
+		MeshSerializer serializer;
+		serializer.ExportMesh(*m_entity->GetMesh(), writer);
+
+		ILOG("Successfully saved mesh");
 	}
 }

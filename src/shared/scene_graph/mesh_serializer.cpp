@@ -5,7 +5,6 @@
 #include "material_manager.h"
 #include "mesh.h"
 
-#include "base/macros.h"
 #include "binary_io/writer.h"
 #include "mesh/pre_header.h"
 
@@ -13,7 +12,6 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "mesh_v1_0/header.h"
-#include "mesh_v1_0/header_save.h"
 
 namespace mmo
 {
@@ -24,35 +22,82 @@ namespace mmo
 	
 	void MeshSerializer::ExportMesh(const Mesh& mesh, io::Writer& writer, mesh::VersionId version)
 	{
-		ASSERT(!mesh.GetBounds().IsNull());
-		ASSERT(mesh.GetBoundRadius() != 0.0f);
-
 		if (version == mesh::Latest)
 		{
 			version = mesh::Version_1_0;
 		}
 		
-		// Write file header
-		mesh::v1_0::Header header;
-		header.version = mesh::Version_1_0;
-		header.vertexChunkOffset = 0;
-		header.indexChunkOffset = 0;
-		mesh::v1_0::HeaderSaver saver { writer.Sink(), header };
-
+		// Write the vertex chunk data
+		ChunkWriter meshChunk{ mesh::v1_0::MeshChunkMagic, writer };
 		{
-			ChunkWriter meshChunkWriter { mesh::v1_0::MeshChunkMagic, writer };
-
-			// Whether this mesh has a skeleton link
-			writer << io::write<uint8>(mesh.HasSkeleton());
-
-			// Whether this mesh has shared geometry
-			writer << io::write<uint32>(mesh.m_vertexBuffer->GetVertexCount());
-			
-			meshChunkWriter.Finish();
+			writer << io::write<uint32>(version);
 		}
+		meshChunk.Finish();
+		
+		// Write the vertex chunk data
+		ChunkWriter vertexChunkWriter{ mesh::v1_0::MeshVertexChunk, writer };
+		{
+			/*writer << io::write<uint32>(mesh.vertices.size());
+			for (size_t i = 0; i < mesh.vertices.size(); ++i)
+			{
+				writer
+					<< io::write<float>(mesh.vertices[i].position.x)
+					<< io::write<float>(mesh.vertices[i].position.y)
+					<< io::write<float>(mesh.vertices[i].position.z);
+				writer
+					<< io::write<uint32>(mesh.vertices[i].color);
+				writer
+					<< io::write<float>(mesh.vertices[i].texCoord.x)
+					<< io::write<float>(mesh.vertices[i].texCoord.y)
+					<< io::write<float>(mesh.vertices[i].texCoord.z);
+				writer
+					<< io::write<float>(mesh.vertices[i].normal.x)
+					<< io::write<float>(mesh.vertices[i].normal.y)
+					<< io::write<float>(mesh.vertices[i].normal.z);
+			}*/
+		}
+		vertexChunkWriter.Finish();
 
-		// Finalize file header
-		saver.Finish();
+		// Write the index chunk data
+		ChunkWriter indexChunkWriter{ mesh::v1_0::MeshIndexChunk, writer };
+		{
+			//const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
+			//
+			//writer
+			//	<< io::write<uint32>(mesh.indices.size())
+			//	<< io::write<uint8>(bUse16BitIndices);
+
+			//for (size_t i = 0; i < mesh.indices.size(); ++i)
+			//{
+			//	if (bUse16BitIndices)
+			//	{
+			//		writer << io::write<uint16>(mesh.indices[i]);
+			//	}
+			//	else
+			//	{
+			//		writer << io::write<uint32>(mesh.indices[i]);
+			//	}
+			//}
+		}
+		indexChunkWriter.Finish();
+
+		// Write submesh chunks
+		for(const auto& submesh : mesh.GetSubMeshes())
+		{
+			ChunkWriter submeshChunkWriter{ mesh::v1_0::MeshSubMeshChunk, writer };
+			{
+				// Material name
+				writer
+					<< io::write_dynamic_range<uint16>(submesh->GetMaterial() ? submesh->GetMaterial()->GetName() : String("Default"));
+
+				// Start index & end index
+				writer
+					<< io::write<uint32>(submesh->GetStartIndex())
+					<< io::write<uint32>(submesh->GetEndIndex());
+			}
+			submeshChunkWriter.Finish();
+		}
+		
 	}
 
 	MeshDeserializer::MeshDeserializer(Mesh& mesh)
@@ -94,9 +139,9 @@ namespace mmo
 		vertices.resize(vertexCount);
 		
 		AABB boundingBox;
-		
-		Vector3 min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-		Vector3 max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
+
+		auto min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+		auto max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
 
 		// Iterate through vertices
 		for (POS_COL_NORMAL_TEX_VERTEX& v : vertices)
