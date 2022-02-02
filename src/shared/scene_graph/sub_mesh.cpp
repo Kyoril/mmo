@@ -20,15 +20,18 @@ namespace mmo
 	void SubMesh::Render() const
 	{
 		// Set vertex buffer
+		uint32 vertexCount = 0;
 		if (m_useSharedVertices)
 		{
 			ASSERT(m_parent.m_vertexBuffer);
 			m_parent.m_vertexBuffer->Set();
+			vertexCount = m_parent.m_vertexBuffer->GetVertexCount();
 		}
 		else
 		{
 			ASSERT(m_vertexBuffer);
 			m_vertexBuffer->Set();
+			vertexCount = m_vertexBuffer->GetVertexCount();
 		}
 
 		// Render
@@ -39,7 +42,7 @@ namespace mmo
 		}
 		else
 		{
-			GraphicsDevice::Get().Draw(m_vertexBuffer->GetVertexCount(), 0);
+			GraphicsDevice::Get().Draw(vertexCount, 0);
 		}
 	}
 
