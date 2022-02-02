@@ -10,6 +10,7 @@
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
+#include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
 
 namespace mmo
@@ -57,5 +58,7 @@ namespace mmo
 		bool m_leftButtonPressed { false };
 		bool m_rightButtonPressed { false };
 		bool m_initDockLayout { true };
+		MeshPtr m_mesh;
+		MeshEntry m_entry { };
 	};
 }

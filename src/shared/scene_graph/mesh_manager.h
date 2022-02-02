@@ -3,6 +3,7 @@
 #pragma once
 
 #include "mesh.h"
+#include "mesh_serializer.h"
 
 #include "base/non_copyable.h"
 #include "base/utilities.h"
@@ -27,7 +28,7 @@ namespace mmo
 	public:
 		/// Loads a mesh from file or retrieves it from the cache.
 		MeshPtr Load(const std::string& filename);
-
+		
 		/// Creates a mesh manually.
 		MeshPtr CreateManual(const std::string& name);
 

@@ -350,15 +350,21 @@ namespace mmo
 
 	Entity* Scene::CreateEntity(const String& entityName, const String& meshName)
 	{
-		ASSERT(m_entities.find(entityName) == m_entities.end());
-
-		auto mesh = MeshManager::Get().Load(meshName);
+		const auto mesh = MeshManager::Get().Load(meshName);
 		if (!mesh)
 		{
 			ELOG("Failed to load mesh " << meshName);
 			return nullptr;
 		}
-		
+
+		return CreateEntity(entityName, mesh);
+	}
+
+	Entity* Scene::CreateEntity(const String& entityName, const MeshPtr& mesh)
+	{
+		ASSERT(m_entities.find(entityName) == m_entities.end());
+		ASSERT(mesh);
+
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
 		
 		return entityIt->second.get();

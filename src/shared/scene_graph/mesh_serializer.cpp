@@ -20,7 +20,7 @@ namespace mmo
 	static const ChunkMagic MeshIndexChunk= { {'I', 'N', 'D', 'X'} };
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
 	
-	void MeshSerializer::ExportMesh(const Mesh& mesh, io::Writer& writer, mesh::VersionId version)
+	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, mesh::VersionId version)
 	{
 		if (version == mesh::Latest)
 		{
@@ -37,7 +37,7 @@ namespace mmo
 		// Write the vertex chunk data
 		ChunkWriter vertexChunkWriter{ mesh::v1_0::MeshVertexChunk, writer };
 		{
-			/*writer << io::write<uint32>(mesh.vertices.size());
+			writer << io::write<uint32>(mesh.vertices.size());
 			for (size_t i = 0; i < mesh.vertices.size(); ++i)
 			{
 				writer
@@ -54,46 +54,46 @@ namespace mmo
 					<< io::write<float>(mesh.vertices[i].normal.x)
 					<< io::write<float>(mesh.vertices[i].normal.y)
 					<< io::write<float>(mesh.vertices[i].normal.z);
-			}*/
+			}
 		}
 		vertexChunkWriter.Finish();
 
 		// Write the index chunk data
 		ChunkWriter indexChunkWriter{ mesh::v1_0::MeshIndexChunk, writer };
 		{
-			//const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
-			//
-			//writer
-			//	<< io::write<uint32>(mesh.indices.size())
-			//	<< io::write<uint8>(bUse16BitIndices);
+			const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
+			
+			writer
+				<< io::write<uint32>(mesh.indices.size())
+				<< io::write<uint8>(bUse16BitIndices);
 
-			//for (size_t i = 0; i < mesh.indices.size(); ++i)
-			//{
-			//	if (bUse16BitIndices)
-			//	{
-			//		writer << io::write<uint16>(mesh.indices[i]);
-			//	}
-			//	else
-			//	{
-			//		writer << io::write<uint32>(mesh.indices[i]);
-			//	}
-			//}
+			for (size_t i = 0; i < mesh.indices.size(); ++i)
+			{
+				if (bUse16BitIndices)
+				{
+					writer << io::write<uint16>(mesh.indices[i]);
+				}
+				else
+				{
+					writer << io::write<uint32>(mesh.indices[i]);
+				}
+			}
 		}
 		indexChunkWriter.Finish();
 
 		// Write submesh chunks
-		for(const auto& submesh : mesh.GetSubMeshes())
+		for(const auto& submesh : mesh.subMeshes)
 		{
 			ChunkWriter submeshChunkWriter{ mesh::v1_0::MeshSubMeshChunk, writer };
 			{
 				// Material name
 				writer
-					<< io::write_dynamic_range<uint16>(submesh->GetMaterial() ? submesh->GetMaterial()->GetName() : String("Default"));
+					<< io::write_dynamic_range<uint16>(submesh.material);
 
 				// Start index & end index
 				writer
-					<< io::write<uint32>(submesh->GetStartIndex())
-					<< io::write<uint32>(submesh->GetEndIndex());
+					<< io::write<uint32>(submesh.indexOffset)
+					<< io::write<uint32>(submesh.indexOffset + submesh.triangleCount * 3);
 			}
 			submeshChunkWriter.Finish();
 		}
@@ -103,6 +103,8 @@ namespace mmo
 	MeshDeserializer::MeshDeserializer(Mesh& mesh)
 		: m_mesh(mesh)
 	{
+		m_entry = MeshEntry{};
+
 		AddChunkHandler(*MeshChunkMagic, true, *this, &MeshDeserializer::ReadMeshChunk);
 	}
 
@@ -110,7 +112,7 @@ namespace mmo
 	{
 		uint32 version;
 		reader >> io::read<uint32>(version);
-
+		
 		if (reader)
 		{
 			if (version == mesh_version::Version_0_1)
@@ -134,6 +136,9 @@ namespace mmo
 		uint32 vertexCount;
 		reader >> io::read<uint32>(vertexCount);
 		
+		m_entry.vertices.clear();
+		m_entry.vertices.reserve(vertexCount);
+
 		// Read vertex data
 		std::vector<POS_COL_NORMAL_TEX_VERTEX> vertices;
 		vertices.resize(vertexCount);
@@ -169,6 +174,8 @@ namespace mmo
 				>> io::read<float>(v.normal[0])
 				>> io::read<float>(v.normal[1])
 				>> io::read<float>(v.normal[2]);
+			
+			m_entry.vertices.emplace_back(v.pos, v.normal, Vector3{ v.uv[0], v.uv[1], 0.0f }, v.color);
 		}
 
 		const AABB box { min, max };
@@ -193,6 +200,9 @@ namespace mmo
 			return false;
 		}
 
+		m_entry.indices.clear();
+		m_entry.indices.reserve(indexCount);
+
 		if (use16BitIndices)
 		{
 			std::vector<uint16> indices;
@@ -201,6 +211,8 @@ namespace mmo
 			for (uint16& index : indices)
 			{
 				reader >> io::read<uint16>(index);
+				m_entry.indices.emplace_back(index);
+				m_entry.maxIndex = std::max<uint32>(m_entry.maxIndex, index);
 			}
 
 			m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_16, &indices[0]);
@@ -213,6 +225,8 @@ namespace mmo
 			for (uint32& index : indices)
 			{
 				reader >> io::read<uint32>(index);
+				m_entry.indices.emplace_back(index);
+				m_entry.maxIndex = std::max(m_entry.maxIndex, index);
 			}
 
 			m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_32, &indices[0]);
@@ -235,6 +249,8 @@ namespace mmo
 		subMesh.m_useSharedVertices = true;
 		subMesh.m_indexStart = indexStart;
 		subMesh.m_indexEnd = indexEnd;
+
+		m_entry.subMeshes.emplace_back(std::move(materialName), indexStart, (indexEnd - indexStart) / 3);
 		
 		return reader;
 	}

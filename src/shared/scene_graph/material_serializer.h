@@ -2,8 +2,11 @@
 
 #pragma once
 
+#include <span>
+
 #include "base/chunk_reader.h"
 #include "base/typedefs.h"
+#include "math/vector3.h"
 
 namespace io
 {
@@ -34,7 +37,7 @@ namespace mmo
 		uint8 receiveShadows { 0 };
 		uint8 materialType { 0 };
 	};
-
+	
 	class MaterialSerializer
 	{
 	public:
@@ -61,7 +64,7 @@ namespace mmo
 		bool ReadMaterialPixelShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
-		
+
 	private:
 		Material& m_material;
 	};

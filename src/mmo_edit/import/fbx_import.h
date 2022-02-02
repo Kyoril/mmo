@@ -13,25 +13,10 @@
 #include <vector>
 
 #include "import_base.h"
+#include "scene_graph/mesh_serializer.h"
 
 namespace mmo
 {
-	/// Represents a single vertex of a mesh.
-	struct Vertex
-	{
-		/// Position vector
-		Vector3 position;
-
-		/// Normal vector
-		Vector3 normal;
-
-		/// Texture coordinates
-		Vector3 texCoord;
-
-		/// Vertex color
-		uint32 color;
-	};
-
 	struct MeshUvSet
 	{
 		std::vector<Vector3> uvs;
@@ -44,30 +29,6 @@ namespace mmo
 		std::vector<Vector3> normals;
 		std::vector<uint32> colors;
 		std::vector<int32> polygonIndices;
-	};
-
-	struct SubMeshEntry
-	{
-		uint32 indexOffset { 0 };
-		uint32 triangleCount { 0 };
-	};
-
-	/// Contains mesh data.
-	struct MeshEntry
-	{
-		/// Name of the mesh.
-		std::string name;
-
-		/// Vertex data.
-		std::vector<Vertex> vertices;
-
-		/// Index data.
-		std::vector<uint32> indices;
-
-		/// Max index to determine whether we can use 16 bit index buffers.
-		uint32 maxIndex;
-
-		std::vector<SubMeshEntry> subMeshes;
 	};
 
 	/// This class can be used to extract relevant informations out of an fbx file.

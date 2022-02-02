@@ -4,16 +4,11 @@
 
 #include "mesh_serializer.h"
 #include "assets/asset_registry.h"
-#include "mesh/pre_header.h"
-#include "mesh/pre_header_load.h"
-#include "mesh_v1_0/header.h"
-#include "mesh_v1_0/header_load.h"
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
-#include "base/chunk_writer.h"
 
 
 namespace mmo

@@ -36,7 +36,25 @@ namespace mmo
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 
-		m_entity = m_scene.CreateEntity("Entity", GetAssetPath().string());
+		m_mesh = std::make_shared<Mesh>();
+		MeshDeserializer deserializer { *m_mesh };
+
+		const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string());
+		if (inputFile)
+		{
+			io::StreamSource source { *inputFile };
+			io::Reader reader { source };
+			if (deserializer.Read(reader))
+			{
+				m_entry = deserializer.GetMeshEntry();
+			}
+		}
+		else
+		{
+			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
+		}
+		
+		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
 		{
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
@@ -251,6 +269,19 @@ namespace mmo
 
 	void ModelEditorInstance::Save()
 	{
+		// Apply materials
+		ASSERT(m_entity->GetNumSubEntities() == m_entry.subMeshes.size());
+		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+		{
+			String materialName = "Default";
+			if (const auto& material = m_entity->GetSubEntity(i)->GetMaterial())
+			{
+				materialName = material->GetName();
+			}
+
+			m_entry.subMeshes[i].material = materialName;
+		}
+		
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
@@ -262,7 +293,7 @@ namespace mmo
 		io::Writer writer { sink };
 		
 		MeshSerializer serializer;
-		serializer.ExportMesh(*m_entity->GetMesh(), writer);
+		serializer.ExportMesh(m_entry, writer);
 
 		ILOG("Successfully saved mesh");
 	}

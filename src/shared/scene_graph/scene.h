@@ -89,6 +89,8 @@ namespace mmo
 		SceneNode& CreateSceneNode(const String& name);
 
 		Entity* CreateEntity(const String& entityName, const String& meshName);
+
+		Entity* CreateEntity(const String& entityName, const MeshPtr& mesh);
 		
 		RenderQueue& GetRenderQueue();
 
