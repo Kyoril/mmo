@@ -20,7 +20,7 @@
 
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
-#include "graphics/d3d11/shader_compiler_d3d11.h"
+#include "graphics_d3d11/shader_compiler_d3d11.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"

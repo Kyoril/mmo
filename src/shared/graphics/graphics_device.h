@@ -25,8 +25,12 @@ namespace mmo
 
 		/// Direct3D 11. Only on windows 7 and newer.
 		D3D11,
+
 		/// OpenGL. Should work on all platforms.
 		OpenGL,
+		
+		/// Null. Should work on every platform but not render anything at all.
+		Null,
 
 		// TODO: Add more graphics api enum values here
 	};
@@ -119,6 +123,8 @@ namespace mmo
 		virtual ~GraphicsDevice() = default;
 
 	public:
+		/// Creates a new null graphics device object and makes it the current one.
+		static GraphicsDevice& CreateNull(const GraphicsDeviceDesc& desc);
 #ifdef _WIN32
 		/// Creates a new d3d11 graphics device object and makes it the current one.
 		static GraphicsDevice& CreateD3D11(const GraphicsDeviceDesc& desc);

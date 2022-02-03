@@ -76,7 +76,7 @@ namespace mmo
 	private:
 		bool InitializeUvSets(FbxMesh& mesh, MeshGeometry& geometry);
 
-		bool LoadMeshVertexPositions(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry);
+		bool LoadMeshVertexPositions(FbxNode& node, const FbxMesh& mesh, MeshGeometry& geometry);
 		
 		bool LoadMeshPolygons(FbxMesh& mesh, MeshGeometry& geometry);
 

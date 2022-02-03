@@ -2,11 +2,13 @@
 
 #include "graphics_device.h"
 #ifdef _WIN32
-#	include "d3d11/graphics_device_d3d11.h"
+#	include "graphics_d3d11/graphics_device_d3d11.h"
 #endif
 
 #include <memory>
 #include <cassert>
+
+#include "graphics_null/graphics_device_null.h"
 
 namespace mmo
 {
@@ -32,6 +34,17 @@ namespace mmo
 		, m_texFilter()
 		, m_restoreTexFilter()
 	{
+	}
+	
+	GraphicsDevice& GraphicsDevice::CreateNull(const GraphicsDeviceDesc& desc)
+	{
+		assert(!s_currentDevice);
+
+		// Allocate a new graphics device object
+		s_currentDevice = std::make_unique<GraphicsDeviceNull>();
+		s_currentDevice->Create(desc);
+
+		return *s_currentDevice;
 	}
 
 #ifdef _WIN32

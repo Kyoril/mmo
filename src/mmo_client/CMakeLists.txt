@@ -28,7 +28,6 @@ target_link_libraries(mmo_client
 	network_hdrs 
 	auth_protocol 
 	game_protocol
-	graphics 
 	math 
 	virtual_dir 
 	hpak_v1_0 
@@ -40,6 +39,11 @@ target_link_libraries(mmo_client
 	mesh
 	mesh_v1_0
 	scene_graph)
+	
+target_link_libraries(mmo_client graphics_null)
+if (WIN32)
+	target_link_libraries(mmo_client graphics_d3d11)
+endif()
 
 # Link external dependency libraries
 target_link_libraries(mmo_client lua)

@@ -602,7 +602,7 @@ namespace mmo
 		return true;
 	}
 
-	bool FbxImport::LoadMeshVertexPositions(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry)
+	bool FbxImport::LoadMeshVertexPositions(FbxNode& node, const FbxMesh& mesh, MeshGeometry& geometry)
 	{
 		// Global transform used to transform vertices into the expected orientation
 		const auto& transform = node.EvaluateGlobalTransform();
