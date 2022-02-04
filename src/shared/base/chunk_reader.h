@@ -55,9 +55,9 @@ namespace mmo
 		template<typename TInstance, typename TClass, typename... TArgs>
 		void AddChunkHandler(const uint32 chunkHeader, const bool required, TInstance& instance, bool(TClass::*callback)(TArgs... args))
 		{
-			m_chunkHandlers.emplace(chunkHeader, [&instance, callback](TArgs... args) {
+			m_chunkHandlers[chunkHeader] = [&instance, callback](TArgs... args) {
 				return (instance.*callback)(TArgs(args)...);
-			});
+			};
 			
 			if (required)
 			{
@@ -75,7 +75,7 @@ namespace mmo
 		/// @param callback Callback to execute.
 		void AddChunkHandler(const uint32 chunkHeader, const bool required, ChunkReadCallback callback)
 		{
-			m_chunkHandlers.emplace(chunkHeader, std::move(callback));
+			m_chunkHandlers[chunkHeader] = std::move(callback);
 
 			if (required)
 			{

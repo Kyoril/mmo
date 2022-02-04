@@ -158,6 +158,90 @@ namespace mmo
 		return AddExpression(outputStream.str());
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddDot(const ExpressionIndex first, const ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for dot");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for dot");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "dot(expr_" << first << ", expr_" << second << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str());
+	}
+		
+	ExpressionIndex MaterialCompilerD3D11::AddClamp(const ExpressionIndex value, const ExpressionIndex min, const ExpressionIndex max)
+	{
+		if (value == IndexNone)
+		{
+			WLOG("Missing value parameter for clamp");
+			return IndexNone;
+		}
+
+		if (min == IndexNone)
+		{
+			WLOG("Missing min parameter for clamp");
+			return IndexNone;
+		}
+
+		if (max == IndexNone)
+		{
+			WLOG("Missing max parameter for clamp");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "clamp(expr_" << value << ", expr_" << min << ", expr_" << max << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddOneMinus(const ExpressionIndex input)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter for one minus");
+			return IndexNone;
+		}
+		
+		std::ostringstream outputStream;
+		outputStream << "1.0 - expr_" << input;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddPower(const ExpressionIndex base, const ExpressionIndex exponent)
+	{
+		if (base == IndexNone)
+		{
+			WLOG("Missing base parameter for power");
+			return IndexNone;
+		}
+
+		if (exponent == IndexNone)
+		{
+			WLOG("Missing exponent parameter for power");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "pow(expr_" << base << ", expr_" << exponent << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str());
+	}
+
 	void MaterialCompilerD3D11::GenerateVertexShaderCode()
 	{
 		m_vertexShaderStream.clear();

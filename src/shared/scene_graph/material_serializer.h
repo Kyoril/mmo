@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <span>
-
 #include "base/chunk_reader.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
@@ -23,7 +21,8 @@ namespace mmo
 		{
 			Latest = -1,
 
-			Version_0_1 = 0x0100
+			Version_0_1 = 0x0100,
+			Version_0_2 = 0x0200
 		};	
 	}
 
@@ -38,6 +37,16 @@ namespace mmo
 		uint8 materialType { 0 };
 	};
 	
+	struct MaterialAttributesV2
+	{
+		uint8 twoSided { 0 };
+		uint8 castShadows { 0 };
+		uint8 receiveShadows { 0 };
+		uint8 materialType { 0 };
+		uint8 depthWrite { 1 };
+		uint8 depthTest { 1 };
+	};
+
 	class MaterialSerializer
 	{
 	public:
@@ -58,6 +67,8 @@ namespace mmo
 		bool ReadMaterialNameChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialAttributeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		
+		bool ReadMaterialAttributeV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		
 		bool ReadMaterialVertexShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 

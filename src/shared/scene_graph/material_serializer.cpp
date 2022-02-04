@@ -30,13 +30,18 @@ namespace mmo
 
 		if (reader)
 		{
-			if (version == material_version::Version_0_1)
+			if (version >= material_version::Version_0_1)
 			{
 				AddChunkHandler(*MaterialNameChunk, true, *this, &MaterialDeserializer::ReadMaterialNameChunk);
-				AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeChunk);
 				AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunk);
 				AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunk);
 				AddChunkHandler(*MaterialTextureChunk, true, *this, &MaterialDeserializer::ReadMaterialTextureChunk);
+				AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeChunk);
+
+				if (version >= material_version::Version_0_2)
+				{
+					AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeV2Chunk);
+				}
 			}
 			else
 			{
@@ -73,6 +78,24 @@ namespace mmo
 			m_material.SetType(static_cast<MaterialType>(attributes.materialType));
 			m_material.SetReceivesShadows(attributes.receiveShadows != 0);
 			m_material.SetCastShadows(attributes.castShadows != 0);
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialAttributeV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		MaterialAttributesV2 attributes{};
+		reader.readPOD(attributes);
+
+		if (reader)
+		{
+			m_material.SetTwoSided(attributes.twoSided);
+			m_material.SetType(static_cast<MaterialType>(attributes.materialType));
+			m_material.SetReceivesShadows(attributes.receiveShadows != 0);
+			m_material.SetCastShadows(attributes.castShadows != 0);
+			m_material.SetDepthTestEnabled(attributes.depthTest != 0);
+			m_material.SetDepthWriteEnabled(attributes.depthWrite != 0);
 		}
 
 		return reader;
@@ -218,10 +241,7 @@ namespace mmo
 
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		if (version == material_version::Latest)
-		{
-			version = material_version::Version_0_1;
-		}
+		version = material_version::Version_0_2;
 		
 		// File version chunk
 		{
@@ -239,11 +259,13 @@ namespace mmo
 
 		// Attribute chunk
 		{
-			MaterialAttributes attributes{};
+			MaterialAttributesV2 attributes{};
 			attributes.twoSided = material.IsTwoSided();
 			attributes.castShadows = material.IsCastingShadows();
 			attributes.receiveShadows = material.IsReceivingShadows();
 			attributes.materialType = static_cast<uint8>(material.GetType());
+			attributes.depthWrite = static_cast<uint8>(material.IsDepthWriteEnabled());
+			attributes.depthTest = static_cast<uint8>(material.IsDepthTestEnabled());
 
 			ChunkWriter attributeChunkWriter { MaterialAttributeChunk, writer };
 			writer.WritePOD(attributes);

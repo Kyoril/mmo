@@ -586,12 +586,17 @@ namespace mmo
 		bool m_isTwoSided { false };
 		bool m_receivesShadows { true };
 		bool m_castsShadows { true };
+		bool m_depthTest { true };
+		bool m_depthWrite { true };
 
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
 		BoolProperty m_receivesShadowProp { "Receives Shadows", m_receivesShadows };
 		BoolProperty m_castShadowProp { "Casts Shadows", m_receivesShadows };
+		BoolProperty m_depthTestProp { "Depth Test", m_depthTest };
+		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
 
-		PropertyBase* m_properties[3] = { &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp };
+		PropertyBase* m_properties[5] = { &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
 	    MaterialPin m_metallic = { this, "Metallic" };
@@ -741,7 +746,125 @@ namespace mmo
 	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
+	
+	class DotNode final : public Node
+	{
+	public:
+	    MAT_NODE(DotNode, "Dot")
 
+	    DotNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	class OneMinusNode final : public Node
+	{
+	public:
+	    MAT_NODE(OneMinusNode, "One Minus")
+
+	    OneMinusNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    MaterialPin m_input = { this };
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[1] = { &m_input };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	class ClampNode final : public Node
+	{
+	public:
+	    MAT_NODE(ClampNode, "Clamp")
+
+	    ClampNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 0.0f, 1.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Min Default", m_values[0]), FloatProperty("Max Default", m_values[1]) };
+		
+	    MaterialPin m_input = { this };
+	    MaterialPin m_input1 = { this, "Min" };
+		MaterialPin m_input2 = { this, "Max" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[3] = { &m_input, &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
+	class PowerNode final : public Node
+	{
+	public:
+	    MAT_NODE(PowerNode, "Power")
+
+	    PowerNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		int32 Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_exponent { 2.0f };
+		FloatProperty m_exponentProp = FloatProperty{ "Const Exponent", m_exponent };
+
+	    MaterialPin m_input1 = { this, "Base" };
+		MaterialPin m_input2 = { this, "Exp" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[1] = { &m_exponentProp };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
 	/// @brief A node which adds a linear interpolation expression.
 	class LerpNode final : public Node
 	{

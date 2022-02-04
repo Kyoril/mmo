@@ -16,7 +16,11 @@ namespace mmo
 			MultiplyNode::GetStaticTypeInfo(),
 			LerpNode::GetStaticTypeInfo(),
 			AddNode::GetStaticTypeInfo(),
-			ConstVectorNode::GetStaticTypeInfo()
+			ConstVectorNode::GetStaticTypeInfo(),
+			ClampNode::GetStaticTypeInfo(),
+			DotNode::GetStaticTypeInfo(),
+			OneMinusNode::GetStaticTypeInfo(),
+			PowerNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

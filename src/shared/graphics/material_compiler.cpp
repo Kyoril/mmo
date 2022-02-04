@@ -7,8 +7,11 @@
 
 namespace mmo
 {
-	void MaterialCompiler::GenerateShaderCode(Material& material, ShaderCompiler& shaderCompiler)
+	void MaterialCompiler::Compile(Material& material, ShaderCompiler& shaderCompiler)
 	{
+		material.SetDepthWriteEnabled(m_depthWrite);
+		material.SetDepthTestEnabled(m_depthTest);
+
 		GenerateVertexShaderCode();
 		GeneratePixelShaderCode();
 

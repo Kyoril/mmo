@@ -3,6 +3,7 @@
 #pragma once
 
 #include "renderable.h"
+#include "render_queue.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
 #include "math/aabb.h"
@@ -38,10 +39,10 @@ namespace mmo
 		float m_squaredUpperDistance;
 		float m_minPixelSize;
 		bool m_beyondFarDistance;
-		uint8 m_renderQueueId;
-		bool m_renderQueueIdSet;
-		uint16 m_renderQueuePriority;
-		bool m_renderQueuePrioritySet;
+		uint8 m_renderQueueId { Main };
+		bool m_renderQueueIdSet { false };
+		uint16 m_renderQueuePriority { 100 };
+		bool m_renderQueuePrioritySet { false };
 		uint32 m_queryFlags;
 		uint32 m_visibilityFlags;
 		mutable AABB m_worldAABB;

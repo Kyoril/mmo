@@ -40,6 +40,8 @@ namespace mmo
 
 		[[nodiscard]] Camera& GetCamera() const { ASSERT(m_defaultCamera); return *m_defaultCamera;}
 
+		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledObject ? m_controlledObject->GetSceneNode() : nullptr; }
+
 	private:
 		void SetupCamera();
 

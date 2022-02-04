@@ -277,8 +277,7 @@ namespace mmo
 		gx.SetVertexFormat(op.vertexFormat);
 
 		// Bind textures to the render stage
-		material->BindShaders(gx);
-		material->BindTextures(gx);
+		material->Apply(gx);
 
 		gx.SetFaceCullMode(material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
 		gx.SetBlendMode(material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);

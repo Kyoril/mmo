@@ -95,6 +95,14 @@ namespace mmo
 		
 		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode() const noexcept { return { m_pixelShaderCode }; }
 
+		[[nodiscard]] bool IsDepthTestEnabled() const noexcept { return m_depthTest; }
+		
+		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
+
+		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept { return m_depthWrite; }
+		
+		void SetDepthWriteEnabled(const bool enable) noexcept { m_depthWrite = enable; }
+
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.
 		[[nodiscard]] const std::vector<String>& GetTextureFiles() const noexcept { return m_textureFiles; }
@@ -105,7 +113,10 @@ namespace mmo
 		/// @brief Compiles the material.
 		/// @param compiler The compiler to use for compiling the material.
 		bool Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler);
-		
+
+		void Apply(GraphicsDevice& device);
+
+	private:
 		void BindShaders(GraphicsDevice& device);
 
 		void BindTextures(GraphicsDevice& device);
@@ -125,6 +136,8 @@ namespace mmo
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode;
 		bool m_pixelShaderChanged { true };
+		bool m_depthWrite { true };
+		bool m_depthTest { true };
 	};
 
 	typedef std::shared_ptr<Material> MaterialPtr;

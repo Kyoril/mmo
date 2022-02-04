@@ -44,6 +44,18 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::AddLerp
 		ExpressionIndex AddLerp(ExpressionIndex first, ExpressionIndex second, ExpressionIndex alpha) override;
+		
+		/// @copydoc MaterialCompiler::AddDot
+		ExpressionIndex AddDot(ExpressionIndex first, ExpressionIndex second) override;
+		
+		/// @copydoc MaterialCompiler::AddClamp
+		ExpressionIndex AddClamp(ExpressionIndex value, ExpressionIndex min, ExpressionIndex max) override;
+		
+		/// @copydoc MaterialCompiler::AddOneMinus
+		ExpressionIndex AddOneMinus(ExpressionIndex input) override;
+		
+		/// @copydoc MaterialCompiler::AddPower
+		ExpressionIndex AddPower(ExpressionIndex base, ExpressionIndex exponent) override;
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode

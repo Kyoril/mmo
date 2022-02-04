@@ -4,6 +4,7 @@
 
 #include "imgui_node_editor.h"
 #include "material_graph.h"
+#include "log/default_log_levels.h"
 
 static ImTextureID s_headerBackground = nullptr;
 
@@ -218,18 +219,21 @@ namespace mmo
 		return {};
 	}
 
-	int32 MaterialNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler)
 	{
+		compiler.SetDepthWriteEnabled(m_depthWrite);
+		compiler.SetDepthTestEnabled(m_depthTest);
+
 		if (m_baseColor.IsLinked())
 		{
-			const int32 baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler);
+			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler);
 			compiler.SetBaseColorExpression(baseColorExpression);
 		}
 
 		return IndexNone;
 	}
 
-	int32 ConstFloatNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex ConstFloatNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -239,7 +243,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 ConstVectorNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex ConstVectorNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -255,11 +259,11 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 AddNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex AddNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			int32 firstExpression = IndexNone;
+			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
 				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
@@ -269,7 +273,7 @@ namespace mmo
 				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
 			}
 
-			int32 secondExpression = IndexNone;
+			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
 				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
@@ -285,11 +289,11 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 MultiplyNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex MultiplyNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			int32 firstExpression = IndexNone;
+			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
 				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
@@ -299,7 +303,7 @@ namespace mmo
 				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
 			}
 
-			int32 secondExpression = IndexNone;
+			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
 				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
@@ -310,6 +314,120 @@ namespace mmo
 			}
 
 			m_compiledExpressionId = compiler.AddMultiply(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex DotNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex firstExpression = IndexNone;
+			if (!m_input1.IsLinked())
+			{
+				ELOG("Missing A expression!");
+				return IndexNone;
+			}
+
+			ExpressionIndex secondExpression = IndexNone;
+			if (!m_input2.IsLinked())
+			{
+				ELOG("Missing B expression!");
+				return IndexNone;
+			}
+			
+			firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			
+			m_compiledExpressionId = compiler.AddDot(firstExpression, secondExpression);
+		}
+		
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex OneMinusNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input expression!");
+				return IndexNone;
+			}
+			
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			
+			m_compiledExpressionId = compiler.AddOneMinus(inputExpression);
+		}
+		
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ClampNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex valueExpression = IndexNone;
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing base value expression for clamp");
+				return IndexNone;
+			}
+			
+			valueExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+
+			ExpressionIndex minExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				minExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				minExpression = compiler.AddExpression(std::to_string(m_values[0]));
+			}
+
+			ExpressionIndex maxExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				maxExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				maxExpression = compiler.AddExpression(std::to_string(m_values[1]));
+			}
+
+			m_compiledExpressionId = compiler.AddClamp(valueExpression, minExpression, maxExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex PowerNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex baseExpression = IndexNone;
+			if (!m_input1.IsLinked())
+			{
+				ELOG("Missing base expression");
+				return IndexNone;
+			}
+
+			baseExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			
+			ExpressionIndex exponentExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				exponentExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				exponentExpression = compiler.AddExpression(std::to_string(m_exponent));
+			}
+
+			m_compiledExpressionId = compiler.AddPower(baseExpression, exponentExpression);
 		}
 
 		return m_compiledExpressionId;

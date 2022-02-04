@@ -4,6 +4,7 @@
 #include "movable_object_factory.h"
 #include "scene_node.h"
 #include "render_queue.h"
+#include "scene.h"
 
 
 namespace mmo
@@ -179,7 +180,12 @@ namespace mmo
 		m_renderQueuePriority = priority;
 		m_renderQueuePrioritySet = true;
 	}
-	
+
+	uint8 MovableObject::GetRenderQueueGroup() const noexcept
+	{
+		return m_renderQueueId;
+	}
+
 	const Matrix4& MovableObject::GetParentNodeFullTransform() const
 	{
 		if(m_parentNode)

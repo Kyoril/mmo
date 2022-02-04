@@ -20,8 +20,8 @@
 
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
-#include "graphics_d3d11/shader_compiler_d3d11.h"
 #include "log/default_log_levels.h"
+#include "graphics/shader_compiler.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
 
@@ -543,7 +543,7 @@ namespace mmo
 		m_graph->Compile(*materialCompiler);
 
 		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
-		materialCompiler->GenerateShaderCode(*m_material, *shaderCompiler);
+		materialCompiler->Compile(*m_material, *shaderCompiler);
 
 		m_material->Update();
 
@@ -787,7 +787,7 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	void MaterialEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
+	void MaterialEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		EditorInstance::OnMouseButtonDown(button, x, y);
 		
@@ -795,7 +795,7 @@ namespace mmo
 		m_lastMouseY = y;
 	}
 
-	void MaterialEditorInstance::OnMouseButtonUp(uint32 button, uint16 x, uint16 y)
+	void MaterialEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
 		EditorInstance::OnMouseButtonUp(button, x, y);
 		
@@ -809,7 +809,7 @@ namespace mmo
 		}
 	}
 
-	void MaterialEditorInstance::OnMouseMoved(uint16 x, uint16 y)
+	void MaterialEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
 	{
 		EditorInstance::OnMouseMoved(x, y);
 		

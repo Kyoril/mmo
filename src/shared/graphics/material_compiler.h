@@ -35,7 +35,7 @@ namespace mmo
 		/// @brief Generates shader code.
 		/// @param material 
 		/// @param shaderCompiler 
-		void GenerateShaderCode(Material& material, ShaderCompiler& shaderCompiler);
+		void Compile(Material& material, ShaderCompiler& shaderCompiler);
 
 	public:
 		/// @brief Gets the generated high level vertex shader code.
@@ -86,6 +86,30 @@ namespace mmo
 		/// @param second The second expression of the addition (right side).
 		/// @return Index of the expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddAddition(ExpressionIndex first, ExpressionIndex second) = 0;
+		
+		/// @brief Adds a dot expression.
+		/// @param first The first expression for the multiply (left side).
+		/// @param second The second expression for the multiply (right side).
+		/// @return Index of the dot expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddDot(ExpressionIndex first, ExpressionIndex second) = 0;
+		
+		/// @brief Adds a clamp expression.
+		/// @param value The value expression for the clamp.
+		/// @param min The min value expression for the clamp.
+		/// @param max The max value expression for the clamp.
+		/// @return Index of the clamp expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddClamp(ExpressionIndex value, ExpressionIndex min, ExpressionIndex max) = 0;
+		
+		/// @brief Adds a clamp expression.
+		/// @param input The expression whose values should be subtracted from one.
+		/// @return Index of the one minus expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddOneMinus(ExpressionIndex input) = 0;
+		
+		/// @brief Adds a power expression.
+		/// @param base The expression whose value should be the base.
+		/// @param exponent The expression whose value should be the exponent.
+		/// @return Index of the power expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddPower(ExpressionIndex base, ExpressionIndex exponent) = 0;
 
 		/// @brief Adds a linear interpolation expression.
 		/// @param first Index of the source value expression of the linear interpolation.
@@ -93,6 +117,11 @@ namespace mmo
 		/// @param alpha Index of the alpha value expression of the linear interpolation.
 		/// @return Index of the expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddLerp(ExpressionIndex first, ExpressionIndex second, ExpressionIndex alpha) = 0;
+
+	public:
+		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
+
+		void SetDepthWriteEnabled(const bool enable) noexcept { m_depthWrite = enable; }
 
 	protected:
 		/// @brief Called to generate the vertex shader code.
@@ -114,5 +143,8 @@ namespace mmo
 		String m_pixelShaderCode;
 		std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
+
+		bool m_depthTest { true };
+		bool m_depthWrite { true };
 	};
 }

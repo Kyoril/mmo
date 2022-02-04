@@ -8,13 +8,12 @@
 #include "game_states/game_state.h"
 
 #include "base/signal.h"
-#include "frame_ui/frame_mgr.h"
 #include "game/game_object_c.h"
 #include "game_protocol/game_protocol.h"
-#include "scene_graph/world_grid.h"
 #include "scene_graph/axis_display.h"
 #include "scene_graph/light.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/world_grid.h"
 
 
 namespace mmo
@@ -120,6 +119,7 @@ namespace mmo
 		Entity* m_archEntity { nullptr };
 		Entity* m_towerLeftEntity { nullptr };
 		Entity* m_towerRightEntity { nullptr };
+		Entity* m_skyEntity { nullptr };
 		Light* m_sunLight { nullptr };
 	};
 }

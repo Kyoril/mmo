@@ -21,8 +21,7 @@ namespace mmo
 	{
 		if (m_material)
 		{
-			m_material->BindTextures(GraphicsDevice::Get());
-			m_material->BindShaders(GraphicsDevice::Get());
+			m_material->Apply(GraphicsDevice::Get());
 		}
 
 		// Set vertex buffer

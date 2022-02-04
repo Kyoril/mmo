@@ -40,7 +40,7 @@ namespace mmo
 	{
 		for (const auto& subEntity : m_subEntities)
 		{
-			renderQueue.AddRenderable(*subEntity);
+			renderQueue.AddRenderable(*subEntity, GetRenderQueueGroup());
 		}
 	}
 

@@ -90,7 +90,7 @@ namespace mmo
 
 	bool Material::Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler)
 	{
-		compiler.GenerateShaderCode(*this, shaderCompiler);
+		compiler.Compile(*this, shaderCompiler);
 
 		// Compile vertex shader
 		ShaderCompileResult vertexOutput;
@@ -122,6 +122,15 @@ namespace mmo
 		}
 		
 		return true;
+	}
+
+	void Material::Apply(GraphicsDevice& device)
+	{
+		BindShaders(device);
+		BindTextures(device);
+
+		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+		device.SetDepthWriteEnabled(m_depthWrite);
 	}
 
 	void Material::BindShaders(GraphicsDevice& device)

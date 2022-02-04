@@ -97,7 +97,9 @@ namespace mmo
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
-		
+
+		m_skyEntity->DetachFromParent();
+
 		m_gameObjectsById.clear();
 		m_playerController.reset();
 		m_worldGrid.reset();
@@ -170,6 +172,9 @@ namespace mmo
 
 	void WorldState::SetupWorldScene()
 	{
+		m_skyEntity = m_scene.CreateEntity("SkySphere", "Models/SkySphere.hmsh");
+		m_skyEntity->SetRenderQueueGroup(SkiesEarly);
+
 		m_playerController = std::make_unique<PlayerController>(m_scene);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
@@ -350,6 +355,9 @@ namespace mmo
 			if (m_gameObjectsById.empty())
 			{
 				m_playerController->SetControlledObject(object);
+
+				m_skyEntity->DetachFromParent();
+				m_playerController->GetRootNode()->AttachObject(*m_skyEntity);
 			}
 
 			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
@@ -386,6 +394,8 @@ namespace mmo
 			if (m_playerController->GetControlledObject() &&
 				m_playerController->GetControlledObject()->GetGuid() == id)
 			{
+				m_skyEntity->DetachFromParent();
+
 				ELOG("Despawn of player controlled object!");
 				m_playerController->SetControlledObject(nullptr);
 			}
