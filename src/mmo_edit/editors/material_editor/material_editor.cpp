@@ -6,13 +6,12 @@
 #include "log/default_log_levels.h"
 
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
+#include "assets/asset_registry.h"
 #include "binary_io/stream_sink.h"
 #include "binary_io/writer.h"
-#include "assets/asset_registry.h"
-#include "scene_graph/material.h"
+#include "graphics/material.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/material_serializer.h"
 

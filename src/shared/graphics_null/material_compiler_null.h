@@ -1,0 +1,47 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
+#pragma once
+
+#include "graphics/material_compiler.h"
+
+namespace mmo
+{
+	/// @brief Default implementation of a MaterialCompiler which does not do anything.
+	class MaterialCompilerNull final : public MaterialCompiler
+	{
+	public:
+		/// @copydoc MaterialCompiler::AddGlobalFunction
+		void AddGlobalFunction(std::string_view name, std::string_view code) override;
+		
+		/// @copydoc MaterialCompiler::AddExpression
+		ExpressionIndex AddExpression(std::string_view code) override;
+		
+		/// @copydoc MaterialCompiler::NotifyTextureCoordinateIndex
+		void NotifyTextureCoordinateIndex(uint32 textureCoordinateIndex) override;
+		
+		/// @copydoc MaterialCompiler::SetBaseColorExpression
+		void SetBaseColorExpression(ExpressionIndex expression) override;
+		
+		/// @copydoc MaterialCompiler::AddTextureCoordinate
+		ExpressionIndex AddTextureCoordinate(int32 coordinateIndex) override;
+		
+		/// @copydoc MaterialCompiler::AddTextureSample
+		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates) override;
+		
+		/// @copydoc MaterialCompiler::AddMultiply
+		ExpressionIndex AddMultiply(ExpressionIndex first, ExpressionIndex second) override;
+		
+		/// @copydoc MaterialCompiler::AddAddition
+		ExpressionIndex AddAddition(ExpressionIndex first, ExpressionIndex second) override;
+		
+		/// @copydoc MaterialCompiler::AddLerp
+		ExpressionIndex AddLerp(ExpressionIndex first, ExpressionIndex second, ExpressionIndex alpha) override;
+
+	protected:
+		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
+		void GenerateVertexShaderCode() override;
+		
+		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
+		void GeneratePixelShaderCode() override;
+	};
+}

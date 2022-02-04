@@ -2,6 +2,7 @@
 
 #include "graphics/shader_compiler.h"
 
+
 namespace mmo
 {
 	extern const String ShaderFormat_Null_SM;

@@ -539,11 +539,11 @@ namespace mmo
 
 	void MaterialEditorInstance::Compile()
 	{
-		MaterialCompiler compiler;
-		m_graph->Compile(compiler);
+		const auto materialCompiler = GraphicsDevice::Get().CreateMaterialCompiler();
+		m_graph->Compile(*materialCompiler);
 
-		std::unique_ptr<ShaderCompiler> shaderCompiler = std::make_unique<ShaderCompilerD3D11>();
-		compiler.GenerateShaderCode(*m_material, *shaderCompiler);
+		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
+		materialCompiler->GenerateShaderCode(*m_material, *shaderCompiler);
 
 		m_material->Update();
 

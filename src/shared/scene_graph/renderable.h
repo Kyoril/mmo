@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "material.h"
+#include "graphics/material.h"
 #include "base/typedefs.h"
 #include "graphics/graphics_device.h"
 

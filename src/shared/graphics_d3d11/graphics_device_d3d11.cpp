@@ -1,15 +1,17 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "graphics_device_d3d11.h"
-#include "vertex_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
-#include "vertex_shader_d3d11.h"
+#include "material_compiler_d3d11.h"
 #include "pixel_shader_d3d11.h"
-#include "texture_d3d11.h"
+#include "rasterizer_state_hash.h"
 #include "render_texture_d3d11.h"
 #include "render_window_d3d11.h"
-#include "rasterizer_state_hash.h"
 #include "sampler_state_hash.h"
+#include "shader_compiler_d3d11.h"
+#include "texture_d3d11.h"
+#include "vertex_buffer_d3d11.h"
+#include "vertex_shader_d3d11.h"
 
 #include "base/macros.h"
 #include "graphics/depth_stencil_hash.h"
@@ -17,13 +19,13 @@
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
-
+#pragma comment(lib, "d3dcompiler.lib")
 
 namespace mmo
 {
 	namespace
 	{
-		static D3D11_FILL_MODE D3D11FillMode(FillMode mode)
+		D3D11_FILL_MODE D3D11FillMode(const FillMode mode)
 		{
 			switch (mode)
 			{
@@ -34,7 +36,7 @@ namespace mmo
 			return D3D11_FILL_SOLID;
 		}
 
-		static D3D11_CULL_MODE D3D11CullMode(FaceCullMode mode)
+		D3D11_CULL_MODE D3D11CullMode(const FaceCullMode mode)
 		{
 			switch (mode)
 			{
@@ -47,7 +49,7 @@ namespace mmo
 			return D3D11_CULL_NONE;
 		}
 
-		static D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(TextureAddressMode mode)
+		D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(const TextureAddressMode mode)
 		{
 			switch (mode)
 			{
@@ -64,7 +66,7 @@ namespace mmo
 			return D3D11_TEXTURE_ADDRESS_CLAMP;
 		}
 
-		static D3D11_FILTER D3D11TextureFilter(TextureFilter mode)
+		D3D11_FILTER D3D11TextureFilter(const TextureFilter mode)
 		{
 			switch (mode)
 			{
@@ -112,7 +114,7 @@ namespace mmo
 		CheckTearingSupport();
 
 		// A list of supported feature levels.
-		const D3D_FEATURE_LEVEL supportedFeatureLevels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1 };
+		constexpr D3D_FEATURE_LEVEL supportedFeatureLevels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1 };
 
 		// Setup device flags
 		UINT deviceCreationFlags = 0;
@@ -302,7 +304,7 @@ namespace mmo
 	ID3D11SamplerState* GraphicsDeviceD3D11::CreateSamplerState()
 	{
 		// Create hash generator
-		const SamplerStateHash hashGen;
+		constexpr SamplerStateHash hashGen;
 		m_samplerHash = hashGen(m_samplerDesc);
 
 		ComPtr<ID3D11SamplerState> state;
@@ -336,10 +338,10 @@ namespace mmo
 		m_depthStencilChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::CreateRasterizerState(bool set)
+	void GraphicsDeviceD3D11::CreateRasterizerState(const bool set)
 	{
 		// Create hash generator
-		const RasterizerStateHash hashGen;
+		constexpr RasterizerStateHash hashGen;
 
 		// Generate hash from rasterizer desc
 		m_rasterizerHash = hashGen(m_rasterizerDesc);
@@ -361,14 +363,14 @@ namespace mmo
 		if (m_rasterizerDescChanged)
 		{
 			// Calculate the current hash
-			const RasterizerStateHash hashGen;
+			constexpr RasterizerStateHash hashGen;
 			m_rasterizerHash = hashGen(m_rasterizerDesc);
 
 			m_rasterizerDescChanged = false;
 		}
 		
 		// Check if rasterizer state for this hash has already been created
-		auto it = m_rasterizerStates.find(m_rasterizerHash);
+		const auto it = m_rasterizerStates.find(m_rasterizerHash);
 		if (it == m_rasterizerStates.end())
 		{
 			// Not yet created, so create and activate it
@@ -418,7 +420,7 @@ namespace mmo
 
 		if (m_samplerDescChanged)
 		{
-			const SamplerStateHash hashGen;
+			constexpr SamplerStateHash hashGen;
 			m_samplerHash = hashGen(m_samplerDesc);
 			m_samplerDescChanged = false;
 		}
@@ -439,7 +441,7 @@ namespace mmo
 
 	GraphicsDeviceD3D11::GraphicsDeviceD3D11()
 		: m_rasterizerDesc()
-		, m_samplerDesc()
+		  , m_samplerDesc(), m_depthStencilDesc()
 	{
 	}
 
@@ -453,17 +455,16 @@ namespace mmo
 #endif
 	}
 
-	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)
+	Matrix4 GraphicsDeviceD3D11::MakeProjectionMatrix(const Radian& fovY, const float aspect, const float nearPlane, const float farPlane)
 	{
 		Matrix4 dest = Matrix4::Zero;
 
 		const float theta = fovY.GetValueRadians() * 0.5f;
-		float h = 1 / std::tan(theta);
-		float w = h / aspect;
-		float q, qn;
-		
-		q = farPlane / (farPlane - nearPlane);
-		qn = -q * nearPlane;
+		const float h = 1 / std::tan(theta);
+		const float w = h / aspect;
+
+		const float q = farPlane / (farPlane - nearPlane);
+		const float qn = -q * nearPlane;
 
 		dest[0][0] = w;
 		dest[1][1] = h;
@@ -474,25 +475,25 @@ namespace mmo
 		return dest;
 	}
 
-	Matrix4 GraphicsDeviceD3D11::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearPlane, float farPlane)
+	Matrix4 GraphicsDeviceD3D11::MakeOrthographicMatrix(const float left, const float top, const float right, const float bottom, const float nearPlane, const float farPlane)
 	{
-		const float inv_w = 1 / (right - left);
-		const float inv_h = 1 / (top - bottom);
-		const float inv_d = 1 / (farPlane - nearPlane);
+		const float invW = 1 / (right - left);
+		const float invH = 1 / (top - bottom);
+		const float invD = 1 / (farPlane - nearPlane);
 
-		const float A = 2 * inv_w;
-		const float B = 2 * inv_h;
-		const float C = - (right + left) * inv_w;
-		const float D = - (top + bottom) * inv_h;
+		const float a = 2 * invW;
+		const float b = 2 * invH;
+		const float c = - (right + left) * invW;
+		const float d = - (top + bottom) * invH;
 
-		const float q = - 2 * inv_d;
-		const float qn = - (farPlane + nearPlane) * inv_d;
+		const float q = - 2 * invD;
+		const float qn = - (farPlane + nearPlane) * invD;
 		
 		Matrix4 result = Matrix4::Zero;
-		result[0][0] = A;
-		result[0][3] = C;
-		result[1][1] = B;
-		result[1][3] = D;
+		result[0][0] = a;
+		result[0][3] = c;
+		result[1][1] = b;
+		result[1][3] = d;
 		result[2][2] = q;
 		result[2][3] = qn;
 		result[3][3] = 1;
@@ -511,7 +512,7 @@ namespace mmo
 			m_transform[0] = Matrix4::Identity;
 			m_transform[1] = Matrix4::Identity;
 			m_transform[2] = Matrix4::Identity;
-			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
 			m_matrixDirty = false;
 		}
 
@@ -529,18 +530,18 @@ namespace mmo
 		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
 
-	void GraphicsDeviceD3D11::SetClearColor(uint32 clearColor)
+	void GraphicsDeviceD3D11::SetClearColor(const uint32 clearColor)
 	{
 		// Set clear color value in base device
 		GraphicsDevice::SetClearColor(clearColor);
 
 		// Calculate d3d11 float clear color values
-		BYTE r = GetRValue(clearColor);
-		BYTE g = GetGValue(clearColor);
-		BYTE b = GetBValue(clearColor);
-		m_clearColorFloat[0] = (float)r / 255.0f;
-		m_clearColorFloat[1] = (float)g / 255.0f;
-		m_clearColorFloat[2] = (float)b / 255.0f;
+		const BYTE r = GetRValue(clearColor);
+		const BYTE g = GetGValue(clearColor);
+		const BYTE b = GetBValue(clearColor);
+		m_clearColorFloat[0] = static_cast<float>(r) / 255.0f;
+		m_clearColorFloat[1] = static_cast<float>(g) / 255.0f;
+		m_clearColorFloat[2] = static_cast<float>(b) / 255.0f;
 	}
 
 	void GraphicsDeviceD3D11::Create(const GraphicsDeviceDesc& desc)
@@ -561,38 +562,38 @@ namespace mmo
 		}
 		else
 		{
-			m_autoCreatedWindow = std::make_shared<RenderWindowD3D11>(*this, "__auto_window__", (HWND)desc.customWindowHandle);
+			m_autoCreatedWindow = std::make_shared<RenderWindowD3D11>(*this, "__auto_window__", static_cast<HWND>(desc.customWindowHandle));
 		}
 	}
 
-	void GraphicsDeviceD3D11::Clear(ClearFlags Flags)
+	void GraphicsDeviceD3D11::Clear(const ClearFlags flags)
 	{
 		// Reset the current state
 		Reset();
 
 		// Set the current render target
 		m_autoCreatedWindow->Activate();
-		m_autoCreatedWindow->Clear(Flags);
+		m_autoCreatedWindow->Clear(flags);
 	}
 
-	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
+	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void * initialData)
 	{
-		return std::make_unique<VertexBufferD3D11>(*this, VertexCount, VertexSize, dynamic, InitialData);
+		return std::make_unique<VertexBufferD3D11>(*this, vertexCount, vertexSize, dynamic, initialData);
 	}
 
-	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void * InitialData)
+	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void * initialData)
 	{
-		return std::make_unique<IndexBufferD3D11>(*this, IndexCount, IndexSize, InitialData);
+		return std::make_unique<IndexBufferD3D11>(*this, indexCount, indexSize, initialData);
 	}
 
-	ShaderPtr GraphicsDeviceD3D11::CreateShader(ShaderType Type, const void * ShaderCode, size_t ShaderCodeSize)
+	ShaderPtr GraphicsDeviceD3D11::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
 	{
-		switch (Type)
+		switch (type)
 		{
 		case ShaderType::VertexShader:
-			return std::make_unique<VertexShaderD3D11>(*this, ShaderCode, ShaderCodeSize);
+			return std::make_unique<VertexShaderD3D11>(*this, shaderCode, shaderCodeSize);
 		case ShaderType::PixelShader:
-			return std::make_unique<PixelShaderD3D11>(*this, ShaderCode, ShaderCodeSize);
+			return std::make_unique<PixelShaderD3D11>(*this, shaderCode, shaderCodeSize);
 		default:
 			ASSERT(! "This shader type can't yet be created - implement it for D3D11!");
 		}
@@ -604,7 +605,7 @@ namespace mmo
 	{
 		if (m_samplerDescChanged)
 		{
-			const SamplerStateHash hashGen;
+			constexpr SamplerStateHash hashGen;
 			m_samplerHash = hashGen(m_samplerDesc);
 
 			// Set sampler state
@@ -614,14 +615,14 @@ namespace mmo
 		}
 	}
 
-	void GraphicsDeviceD3D11::Draw(uint32 vertexCount, uint32 start)
+	void GraphicsDeviceD3D11::Draw(const uint32 vertexCount, const uint32 start)
 	{
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
 
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
 		
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
@@ -634,7 +635,7 @@ namespace mmo
 		
 		// Update the constant buffer
 		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, 0, &m_transform, 0, 0);
+		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
 		
 		// Execute draw command
 		m_immContext->DrawIndexed(endIndex == 0 ? m_indexCount - startIndex : endIndex - startIndex, startIndex, 0);
@@ -643,9 +644,9 @@ namespace mmo
 	namespace
 	{
 		/// Determines the D3D11_PRIMITIVE_TOPOLOGY value from an EGxTopologyType value.
-		static inline D3D11_PRIMITIVE_TOPOLOGY D3DTopologyType(TopologyType Type)
+		D3D11_PRIMITIVE_TOPOLOGY D3DTopologyType(const TopologyType type)
 		{
-			switch (Type)
+			switch (type)
 			{
 			case TopologyType::PointList:
 				return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
@@ -664,44 +665,44 @@ namespace mmo
 		}
 	}
 
-	void GraphicsDeviceD3D11::SetTopologyType(TopologyType InType)
+	void GraphicsDeviceD3D11::SetTopologyType(const TopologyType type)
 	{
-		GraphicsDevice::SetTopologyType(InType);
+		GraphicsDevice::SetTopologyType(type);
 
-		const D3D11_PRIMITIVE_TOPOLOGY Topology = D3DTopologyType(InType);
-		ASSERT(Topology != D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED);
+		const D3D11_PRIMITIVE_TOPOLOGY topology = D3DTopologyType(type);
+		ASSERT(topology != D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED);
 
-		m_immContext->IASetPrimitiveTopology(Topology);
+		m_immContext->IASetPrimitiveTopology(topology);
 	}
 
-	void GraphicsDeviceD3D11::SetVertexFormat(VertexFormat InFormat)
+	void GraphicsDeviceD3D11::SetVertexFormat(const VertexFormat format)
 	{
-		auto it = InputLayouts.find(InFormat);
+		const auto it = InputLayouts.find(format);
 		ASSERT(it != InputLayouts.end());
 
 		m_immContext->IASetInputLayout(it->second.Get());
 
-		auto vertIt = VertexShaders.find(InFormat);
-		if (vertIt != VertexShaders.end())
+		const auto vertexShaderIt = VertexShaders.find(format);
+		if (vertexShaderIt != VertexShaders.end())
 		{
-			vertIt->second->Set();
+			vertexShaderIt->second->Set();
 		}
 
-		auto pixIt = PixelShaders.find(InFormat);
-		if (pixIt != PixelShaders.end())
+		const auto pixelShaderIt = PixelShaders.find(format);
+		if (pixelShaderIt != PixelShaders.end())
 		{
-			pixIt->second->Set();
+			pixelShaderIt->second->Set();
 		}
 	}
 
-	void GraphicsDeviceD3D11::SetBlendMode(BlendMode InBlendMode)
+	void GraphicsDeviceD3D11::SetBlendMode(const BlendMode blendMode)
 	{
-		GraphicsDevice::SetBlendMode(InBlendMode);
+		GraphicsDevice::SetBlendMode(blendMode);
 
 		ID3D11BlendState* blendState = nullptr;
 
 		// Set blend state
-		switch (InBlendMode)
+		switch (blendMode)
 		{
 		case BlendMode::Opaque:
 			blendState = m_opaqueBlendState.Get();
@@ -727,7 +728,7 @@ namespace mmo
 		m_samplerDescChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::SetTransformMatrix(TransformType type, Matrix4 const & matrix)
+	void GraphicsDeviceD3D11::SetTransformMatrix(const TransformType type, Matrix4 const & matrix)
 	{
 		// Change the transform values
 		GraphicsDevice::SetTransformMatrix(type, matrix);
@@ -739,7 +740,7 @@ namespace mmo
 		return std::make_shared<TextureD3D11>(*this, width, height);
 	}
 
-	void GraphicsDeviceD3D11::BindTexture(TexturePtr texture, ShaderType shader, uint32 slot)
+	void GraphicsDeviceD3D11::BindTexture(const TexturePtr texture, const ShaderType shader, const uint32 slot)
 	{
 		// TODO: Mark the BindTexture method obsolete? Technically it's no longer being needed
 		texture->Bind(shader, slot);
@@ -748,7 +749,7 @@ namespace mmo
 		m_immContext->PSSetSamplers(slot, 1, &samplerStates);
 	}
 
-	void GraphicsDeviceD3D11::SetViewport(int32 x, int32 y, int32 w, int32 h, float minZ, float maxZ)
+	void GraphicsDeviceD3D11::SetViewport(const int32 x, const int32 y, const int32 w, const int32 h, const float minZ, const float maxZ)
 	{
 		// Call super class method
 		GraphicsDevice::SetViewport(x, y, w, h, minZ, maxZ);
@@ -766,7 +767,7 @@ namespace mmo
 		m_immContext->RSSetViewports(1, &vp);
 	}
 
-	void GraphicsDeviceD3D11::SetClipRect(int32 x, int32 y, int32 w, int32 h)
+	void GraphicsDeviceD3D11::SetClipRect(const int32 x, const int32 y, const int32 w, const int32 h)
 	{
 		D3D11_RECT clipRect;
 		clipRect.left = x;
@@ -795,7 +796,7 @@ namespace mmo
 		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
 	}
 
-	void GraphicsDeviceD3D11::SetFillMode(FillMode mode)
+	void GraphicsDeviceD3D11::SetFillMode(const FillMode mode)
 	{
 		GraphicsDevice::SetFillMode(mode);
 
@@ -803,7 +804,7 @@ namespace mmo
 		m_rasterizerDescChanged = true;
 	}
 
-	void GraphicsDeviceD3D11::SetFaceCullMode(FaceCullMode mode)
+	void GraphicsDeviceD3D11::SetFaceCullMode(const FaceCullMode mode)
 	{
 		GraphicsDevice::SetFaceCullMode(mode);
 
@@ -847,7 +848,7 @@ namespace mmo
 
 	namespace
 	{
-		inline D3D11_COMPARISON_FUNC MapComparison(const DepthTestMethod comparison)
+		D3D11_COMPARISON_FUNC MapComparison(const DepthTestMethod comparison)
 		{
 			switch(comparison)
 			{
@@ -870,5 +871,15 @@ namespace mmo
 		
 		m_depthStencilDesc.DepthFunc = MapComparison(comparison);
 		m_depthStencilChanged = true;
+	}
+
+	std::unique_ptr<MaterialCompiler> GraphicsDeviceD3D11::CreateMaterialCompiler()
+	{
+		return std::make_unique<MaterialCompilerD3D11>();
+	}
+
+	std::unique_ptr<ShaderCompiler> GraphicsDeviceD3D11::CreateShaderCompiler()
+	{
+		return std::make_unique<ShaderCompilerD3D11>();
 	}
 }

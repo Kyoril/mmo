@@ -1,25 +1,25 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "graphics_device_null.h"
-#include "vertex_buffer_null.h"
 #include "index_buffer_null.h"
-#include "vertex_shader_null.h"
 #include "pixel_shader_null.h"
-#include "texture_null.h"
 #include "render_texture_null.h"
 #include "render_window_null.h"
+#include "texture_null.h"
+#include "vertex_buffer_null.h"
+#include "vertex_shader_null.h"
+#include "shader_compiler_null.h"
+#include "material_compiler_null.h"
 
 #include "base/macros.h"
 
 namespace mmo
 {
 	GraphicsDeviceNull::GraphicsDeviceNull()
-	{
-	}
+	= default;
 
 	GraphicsDeviceNull::~GraphicsDeviceNull()
-	{
-	}
+	= default;
 
 	Matrix4 GraphicsDeviceNull::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)
 	{
@@ -238,5 +238,15 @@ namespace mmo
 	{
 		GraphicsDevice::SetDepthTestComparison(comparison);
 		
+	}
+
+	std::unique_ptr<MaterialCompiler> GraphicsDeviceNull::CreateMaterialCompiler()
+	{
+		return std::make_unique<MaterialCompilerNull>();
+	}
+
+	std::unique_ptr<ShaderCompiler> GraphicsDeviceNull::CreateShaderCompiler()
+	{
+		return std::make_unique<ShaderCompilerNull>();
 	}
 }

@@ -82,14 +82,14 @@ namespace mmo
 		m_viewH = desc.height;
 	}
 
-	void GraphicsDevice::SetTopologyType(TopologyType InType)
+	void GraphicsDevice::SetTopologyType(TopologyType type)
 	{
-		m_topologyType = InType;
+		m_topologyType = type;
 	}
 
-	void GraphicsDevice::SetBlendMode(BlendMode InBlendMode)
+	void GraphicsDevice::SetBlendMode(BlendMode blendMode)
 	{
-		m_blendMode = InBlendMode;
+		m_blendMode = blendMode;
 	}
 
 	void GraphicsDevice::CaptureState()

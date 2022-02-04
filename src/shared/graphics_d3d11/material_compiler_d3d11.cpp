@@ -1,88 +1,41 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
-#include "material_compiler.h"
-#include "material.h"
+#include "material_compiler_d3d11.h"
+#include "graphics/material.h"
 #include "graphics/shader_compiler.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
 {
-	void MaterialCompiler::GenerateShaderCode(Material& material, ShaderCompiler& compiler)
-	{
-		GenerateVertexShaderCode();
-		GeneratePixelShaderCode();
-
-		ShaderCompileInput vertexInput;
-		vertexInput.shaderCode = m_vertexShaderCode;
-		vertexInput.shaderType = ShaderType::VertexShader;
-		ShaderCompileResult vertexOutput;
-		compiler.Compile(vertexInput, vertexOutput);
-
-		if (!vertexOutput.succeeded)
-		{
-			ELOG("Error compiling vertex shader: " << vertexOutput.errorMessage);
-		}
-		else
-		{
-			DLOG("Successfully compiled vertex shader. Size: " << vertexOutput.code.data.size());
-		}
-		
-		ShaderCompileInput pixelInput;
-		pixelInput.shaderCode = m_pixelShaderCode;
-		pixelInput.shaderType = ShaderType::PixelShader;
-		ShaderCompileResult pixelOutput;
-		compiler.Compile(pixelInput, pixelOutput);
-
-		if (!pixelOutput.succeeded)
-		{
-			ELOG("Error compiling pixel shader: " << pixelOutput.errorMessage);
-		}
-		else
-		{
-			DLOG("Successfully compiled pixel shader. Size: " << pixelOutput.code.data.size());
-		}
-
-		// Set material textures
-		material.ClearTextures();
-		for (const auto& texture : m_textures)
-		{
-			material.AddTexture(texture);
-		}
-
-		// Add shader code to the material
-		material.SetVertexShaderCode({vertexOutput.code.data });
-		material.SetPixelShaderCode({pixelOutput.code.data });
-	}
-	
-	void MaterialCompiler::AddGlobalFunction(std::string_view name, std::string_view code)
+	void MaterialCompilerD3D11::AddGlobalFunction(const std::string_view name, const std::string_view code)
 	{
 		m_globalFunctions.emplace(name, code);
 	}
 
-	int32 MaterialCompiler::AddExpression(std::string_view code)
+	ExpressionIndex MaterialCompilerD3D11::AddExpression(const std::string_view code)
 	{
 		const int32 id = m_expressions.size();
 
-		std::ostringstream strm;
-		strm << "float4 expr_" << id << " = " << code << ";\n\n";
-		strm.flush();
+		std::ostringstream outputStream;
+		outputStream << "float4 expr_" << id << " = " << code << ";\n\n";
+		outputStream.flush();
 
-		m_expressions.emplace_back(strm.str());
+		m_expressions.emplace_back(outputStream.str());
 
 		return id;
 	}
 	
-	void MaterialCompiler::NotifyTextureCoordinateIndex(const uint32 texCoordIndex)
+	void MaterialCompilerD3D11::NotifyTextureCoordinateIndex(const uint32 textureCoordinateIndex)
 	{
-		m_numTexCoordinates = std::max(texCoordIndex + 1, m_numTexCoordinates);
+		m_numTexCoordinates = std::max(textureCoordinateIndex + 1, m_numTexCoordinates);
 	}
 
-	void MaterialCompiler::SetBaseColorExpression(int32 expression)
+	void MaterialCompilerD3D11::SetBaseColorExpression(const ExpressionIndex expression)
 	{
 		m_baseColorExpression = expression;
 	}
 
-	int32 MaterialCompiler::AddTextureCoordinate(int32 coordinateIndex)
+	ExpressionIndex MaterialCompilerD3D11::AddTextureCoordinate(const int32 coordinateIndex)
 	{
 		if (coordinateIndex >= 8)
 		{
@@ -91,14 +44,14 @@ namespace mmo
 
 		NotifyTextureCoordinateIndex(coordinateIndex);
 
-		std::ostringstream strm;
-		strm << "float4(input.uv" << coordinateIndex << ", 0.0, 0.0)";
-		strm.flush();
+		std::ostringstream outputStream;
+		outputStream << "float4(input.uv" << coordinateIndex << ", 0.0, 0.0)";
+		outputStream.flush();
 
-		return AddExpression(strm.str());
+		return AddExpression(outputStream.str());
 	}
 
-	int32 MaterialCompiler::AddTextureSample(std::string_view texture, const int32 coordinates)
+	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates)
 	{
 		if (texture.empty())
 		{
@@ -120,23 +73,23 @@ namespace mmo
 			m_textures.emplace_back(texture);
 		}
 		
-		std::ostringstream strm;
-		strm << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
+		std::ostringstream outputStream;
+		outputStream << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
 		if (coordinates == IndexNone)
 		{
-			strm << "input.uv0";
+			outputStream << "input.uv0";
 		}
 		else
 		{
-			strm << "expr_" << coordinates << ".xy";
+			outputStream << "expr_" << coordinates << ".xy";
 		}
-		strm << ")";
-		strm.flush();
+		outputStream << ")";
+		outputStream.flush();
 
-		return AddExpression(strm.str());
+		return AddExpression(outputStream.str());
 	}
 
-	auto MaterialCompiler::AddMultiply(int32 first, const int32 second) -> int32
+	ExpressionIndex MaterialCompilerD3D11::AddMultiply(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -150,14 +103,14 @@ namespace mmo
 			return IndexNone;
 		}
 
-		std::ostringstream strm;
-		strm << "expr_" << first << " * expr_" << second;
-		strm.flush();
+		std::ostringstream outputStream;
+		outputStream << "expr_" << first << " * expr_" << second;
+		outputStream.flush();
 
-		return AddExpression(strm.str());
+		return AddExpression(outputStream.str());
 	}
 
-	int32 MaterialCompiler::AddAddition(int32 first, int32 second)
+	ExpressionIndex MaterialCompilerD3D11::AddAddition(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -171,14 +124,14 @@ namespace mmo
 			return IndexNone;
 		}
 
-		std::ostringstream strm;
-		strm << "expr_" << first << " + expr_" << second;
-		strm.flush();
+		std::ostringstream outputStream;
+		outputStream << "expr_" << first << " + expr_" << second;
+		outputStream.flush();
 
-		return AddExpression(strm.str());
+		return AddExpression(outputStream.str());
 	}
 
-	int32 MaterialCompiler::AddLerp(int32 first, int32 second, int32 alpha)
+	ExpressionIndex MaterialCompilerD3D11::AddLerp(const ExpressionIndex first, const ExpressionIndex second, const ExpressionIndex alpha)
 	{
 		if (first == IndexNone)
 		{
@@ -198,14 +151,14 @@ namespace mmo
 			return IndexNone;
 		}
 
-		std::ostringstream strm;
-		strm << "lerp(expr_" << first << ", expr_" << second << ", expr_" << alpha << ")";
-		strm.flush();
+		std::ostringstream outputStream;
+		outputStream << "lerp(expr_" << first << ", expr_" << second << ", expr_" << alpha << ")";
+		outputStream.flush();
 
-		return AddExpression(strm.str());
+		return AddExpression(outputStream.str());
 	}
 
-	void MaterialCompiler::GenerateVertexShaderCode()
+	void MaterialCompilerD3D11::GenerateVertexShaderCode()
 	{
 		m_vertexShaderStream.clear();
 		
@@ -257,9 +210,7 @@ namespace mmo
 			<< "VertexOut main(VertexIn input)\n"
 			<< "{\n"
 			<< "\tVertexOut output;\n\n";
-
-		// TODO: Extend with custom code
-
+		
 		// Basic transformations
 		m_vertexShaderStream
 			<< "\tinput.pos.w = 1.0;\n"
@@ -288,7 +239,7 @@ namespace mmo
 		m_vertexShaderStream.clear();
 	}
 
-	void MaterialCompiler::GeneratePixelShaderCode()
+	void MaterialCompilerD3D11::GeneratePixelShaderCode()
 	{
 		m_pixelShaderStream.clear();
 		

@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "material_serializer.h"
-#include "material.h"
+#include "graphics/material.h"
 
 #include "base/chunk_writer.h"
 #include "binary_io/writer.h"

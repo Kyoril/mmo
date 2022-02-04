@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "material.h"
+#include "graphics/material.h"
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
 

@@ -13,7 +13,7 @@
 #include "imgui_node_editor.h"
 #include "link_query_result.h"
 #include "node_type_info.h"
-#include "scene_graph/material_compiler.h"
+#include "graphics/material_compiler.h"
 
 namespace ed = ax::NodeEditor;
 

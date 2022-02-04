@@ -7,7 +7,7 @@
 
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
-#include "scene_graph/material.h"
+#include "graphics/material.h"
 #include "scene_graph/scene.h"
 
 namespace ax

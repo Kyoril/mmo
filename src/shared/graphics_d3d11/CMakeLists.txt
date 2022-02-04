@@ -13,7 +13,7 @@ if(WIN32)
 	target_sources(graphics_d3d11 PRIVATE ${d3d11_sources} ${d3d11_headers} ${d3d11_vs_shaders} ${d3d11_ps_shaders})
 	source_group(src\\FILES ${d3d11_sources} ${d3d11_headers})
 	source_group(src\\shaders FILES ${d3d11_vs_shaders})
-	source_group(src\\haders FILES ${d3d11_ps_shaders})
+	source_group(src\\shaders FILES ${d3d11_ps_shaders})
 	
 	set_source_files_properties( ${d3d11_vs_shaders} PROPERTIES VS_SHADER_TYPE Vertex VS_SHADER_MODEL 5.0 VS_SHADER_ENTRYPOINT main 
 		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"

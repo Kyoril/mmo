@@ -3,7 +3,7 @@
 #pragma once
 
 #include "base/non_copyable.h"
-#include "material.h"
+#include "graphics/material.h"
 
 #include <map>
 
