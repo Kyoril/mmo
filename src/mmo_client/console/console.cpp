@@ -221,10 +221,10 @@ namespace mmo
 #if PLATFORM_WINDOWS
 			GraphicsApi::D3D11;
 #else
-			GraphicsApi::OpenGL;
+			GraphicsApi::Null;
 #endif
 		
-		auto api = GraphicsApi::Unknown;
+		auto api = defaultApi;
 		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "d3d11") == 0)
 		{
 			api = GraphicsApi::D3D11;
@@ -233,8 +233,6 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
-		
-		if (api == GraphicsApi::Unknown) api = defaultApi;
 		
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
@@ -248,6 +246,9 @@ namespace mmo
 			GraphicsDevice::CreateD3D11(desc);
 			break;
 #endif
+        case GraphicsApi::Null:
+            GraphicsDevice::CreateNull(desc);
+            break;
 		case GraphicsApi::OpenGL:
 			throw std::runtime_error("OpenGL device creation is not currently supported!");
 		default:
@@ -372,7 +373,7 @@ namespace mmo
 		s_consoleCommands.emplace(command, cmd);
 	}
 
-	inline void Console::UnregisterCommand(const std::string & command)
+	void Console::UnregisterCommand(const std::string & command)
 	{
 		if (const auto it = s_consoleCommands.find(command); it != s_consoleCommands.end())
 		{

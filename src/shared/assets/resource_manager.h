@@ -3,6 +3,7 @@
 
 #include "resource.h"
 
+#include <vector>
 #include <atomic>
 #include <map>
 #include <mutex>

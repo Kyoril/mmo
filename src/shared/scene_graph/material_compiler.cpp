@@ -50,8 +50,8 @@ namespace mmo
 		}
 
 		// Add shader code to the material
-		material.SetVertexShaderCode({vertexOutput.code.data.begin(), vertexOutput.code.data.end() });
-		material.SetPixelShaderCode({pixelOutput.code.data.begin(), pixelOutput.code.data.end() });
+		material.SetVertexShaderCode({vertexOutput.code.data });
+		material.SetPixelShaderCode({pixelOutput.code.data });
 	}
 	
 	void MaterialCompiler::AddGlobalFunction(std::string_view name, std::string_view code)

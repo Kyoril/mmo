@@ -29,7 +29,7 @@ namespace mmo
 
 	bool Property::GetBoolValue() const
 	{
-		if (_strcmpi(m_value.c_str(), "true") == 0)
+        if (_stricmp(m_value.c_str(), "true") == 0)
 		{
 			return true;
 		}

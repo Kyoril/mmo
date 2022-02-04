@@ -7,6 +7,7 @@
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
 
+#include <span>
 #include <memory>
 
 namespace mmo
@@ -90,9 +91,9 @@ namespace mmo
 
 		void SetPixelShaderCode(std::span<uint8> code) noexcept;
 
-		[[nodiscard]] std::span<const uint8> GetVertexShaderCode() const noexcept { return std::span{ m_vertexShaderCode.begin(), m_vertexShaderCode.end() }; }
+        [[nodiscard]] std::span<uint8 const> GetVertexShaderCode() const noexcept { return { m_vertexShaderCode}; }
 		
-		[[nodiscard]] std::span<const uint8> GetPixelShaderCode() const noexcept { return std::span{ m_pixelShaderCode.begin(), m_pixelShaderCode.end() }; }
+		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode() const noexcept { return { m_pixelShaderCode }; }
 
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.

@@ -116,7 +116,7 @@ namespace mmo
 		// If WM_QUIT is received, quit
 		return (msg.message != WM_QUIT);
 #else
-		TODO("Implement os input handling on operating system!");
+		//TODO("Implement os input handling on operating system!");
 		return true;
 #endif
 	}

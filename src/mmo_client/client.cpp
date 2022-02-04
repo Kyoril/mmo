@@ -25,12 +25,15 @@
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 
+#include <iostream>
 #include <fstream>
 #include <thread>
 #include <memory>
 
 #include "game_states/world_state.h"
 #include "base/timer_queue.h"
+
+#include "base/executable_path.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -392,6 +395,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 /// Procedural entry point on non-windows platforms.
 int main(int argc, char** argv)
 {
+    // Set working directory
+    std::filesystem::current_path(mmo::GetExecutablePath());
+    
 	// Write everything log entry to cout on non-windows platforms by default
 	std::mutex logMutex;
 	mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry & entry) {

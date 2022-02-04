@@ -2,13 +2,14 @@
 
 #pragma once
 
-#include <span>
-
 #include "base/chunk_reader.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
 
 #include "mesh/magic.h"
+
+#include <vector>
+#include <span>
 
 namespace io
 {

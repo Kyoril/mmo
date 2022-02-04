@@ -129,7 +129,7 @@ namespace mmo
 					return false;
 				}
 
-				m_material.SetVertexShaderCode({ shaderCode.begin(), shaderCode.end() });
+				m_material.SetVertexShaderCode({ shaderCode });
 			}
 		}
 
@@ -187,7 +187,7 @@ namespace mmo
 					return false;
 				}
 
-				m_material.SetPixelShaderCode({ shaderCode.begin(), shaderCode.end() });
+				m_material.SetPixelShaderCode({ shaderCode });
 			}
 		}
 

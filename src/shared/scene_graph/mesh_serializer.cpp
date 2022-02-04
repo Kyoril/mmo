@@ -175,7 +175,7 @@ namespace mmo
 				>> io::read<float>(v.normal[1])
 				>> io::read<float>(v.normal[2]);
 			
-			m_entry.vertices.emplace_back(v.pos, v.normal, Vector3{ v.uv[0], v.uv[1], 0.0f }, v.color);
+            m_entry.vertices.emplace_back(Vertex{v.pos, v.normal, Vector3( v.uv[0], v.uv[1], 0.0f ), v.color});
 		}
 
 		const AABB box { min, max };
@@ -250,7 +250,7 @@ namespace mmo
 		subMesh.m_indexStart = indexStart;
 		subMesh.m_indexEnd = indexEnd;
 
-		m_entry.subMeshes.emplace_back(std::move(materialName), indexStart, (indexEnd - indexStart) / 3);
+        m_entry.subMeshes.emplace_back(SubMeshEntry{std::move(materialName), indexStart, (indexEnd - indexStart) / 3});
 		
 		return reader;
 	}
