@@ -392,6 +392,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 
 #else
 
+#ifdef __APPLE__
+int main_osx(int argc, char* argv[]);
+#endif
+
 /// Procedural entry point on non-windows platforms.
 int main(int argc, char** argv)
 {
@@ -405,8 +409,12 @@ int main(int argc, char** argv)
 		mmo::printLogEntry(std::cout, entry, mmo::g_DefaultConsoleLogOptions);
 	});
 
+#ifdef __APPLE__
+    return main_osx(argc, argv);
+#else
 	// Finally, run the common main function on all platforms
 	return mmo::CommonMain(argc, argv);
+#endif
 }
 
 #endif
