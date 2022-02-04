@@ -97,7 +97,7 @@ namespace mmo
 		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList); 
 		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorNormalTex1);
 
-		for (auto& subMesh : m_subMeshes)
+		for (const auto& subMesh : m_subMeshes)
 		{
 			subMesh->Render();
 		}

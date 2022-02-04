@@ -19,6 +19,12 @@ namespace mmo
 
 	void SubMesh::Render() const
 	{
+		if (m_material)
+		{
+			m_material->BindTextures(GraphicsDevice::Get());
+			m_material->BindShaders(GraphicsDevice::Get());
+		}
+
 		// Set vertex buffer
 		uint32 vertexCount = 0;
 		if (m_useSharedVertices)
