@@ -4,6 +4,8 @@
 
 #include "imgui_node_editor.h"
 #include "material_graph.h"
+#include "reader.h"
+#include "writer.h"
 #include "log/default_log_levels.h"
 
 static ImTextureID s_headerBackground = nullptr;
@@ -30,6 +32,51 @@ namespace mmo
 		{
 			m_node->GetMaterial()->ForgetPin(this);
 		}
+	}
+
+	io::Writer& Pin::Serialize(io::Writer& writer)
+	{
+		writer
+			<< io::write<uint32>(m_id)
+			<< io::write<uint32>(m_link ? m_link->GetId() : 0);
+
+		return writer;
+	}
+
+	io::Reader& Pin::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	{
+		uint32 id, link;
+		if (!(reader
+			>> io::read<uint32>(id)
+			>> io::read<uint32>(link)))
+		{
+			ELOG("Unable to deserialize pin");
+			return reader;
+		}
+
+		m_id = id;
+		if (link != 0)
+		{
+			context.AddPostLoadAction([this, link]()
+			{
+				const auto pin = m_node->GetMaterial()->FindPin(link);
+				if (!pin)
+				{
+					WLOG("Unable to find target pin for pin " << m_id);
+				}
+				else
+				{
+					if (!LinkTo(*pin))
+					{
+						WLOG("Unable to link pin " << m_id << " to target pin " << link);
+					}
+				}
+
+				return true;	
+			});
+		}
+
+		return reader;
 	}
 
 	LinkQueryResult Pin::CanLinkTo(const Pin& pin) const
@@ -160,10 +207,207 @@ namespace mmo
 		return m_innerPin->SetValue(std::move(value));
 	}
 
+	io::Writer& BoolProperty::Serialize(io::Writer& writer)
+	{
+		return writer << io::write<uint8>(*GetValueAs<bool>());
+	}
+
+	io::Reader& BoolProperty::Deserialize(io::Reader& reader)
+	{
+		bool value;
+		if (!(reader >> io::read<uint8>(value)))
+		{
+			ELOG("Unable to read value of bool property " << m_name);
+			return reader;
+		}
+
+		SetValue(value);
+		return reader;
+	}
+
+	io::Writer& FloatProperty::Serialize(io::Writer& writer)
+	{
+		return writer << io::write<float>(*GetValueAs<float>());
+	}
+
+	io::Reader& FloatProperty::Deserialize(io::Reader& reader)
+	{
+		float value;
+		if (!(reader >> io::read<float>(value)))
+		{
+			ELOG("Unable to read value of float property " << m_name);
+			return reader;
+		}
+
+		SetValue(value);
+		return reader;
+	}
+
+	io::Writer& ColorProperty::Serialize(io::Writer& writer)
+	{
+		const Color* value = GetValueAs<Color>();
+
+		return writer
+			<< io::write<float>(value->GetRed())
+			<< io::write<float>(value->GetGreen())
+			<< io::write<float>(value->GetBlue())
+			<< io::write<float>(value->GetAlpha());
+	}
+
+	io::Reader& ColorProperty::Deserialize(io::Reader& reader)
+	{
+		float r, g, b, a;
+		if (!(reader 
+			>> io::read<float>(r)
+			>> io::read<float>(g)
+			>> io::read<float>(b)
+			>> io::read<float>(a)))
+		{
+			ELOG("Unable to read value of color property " << m_name);
+			return reader;
+		}
+
+		SetValue(Color(r, g, b, a));
+		return reader;
+	}
+
+	io::Writer& IntProperty::Serialize(io::Writer& writer)
+	{
+		return writer << io::write<int32>(*GetValueAs<int32>());
+	}
+
+	io::Reader& IntProperty::Deserialize(io::Reader& reader)
+	{
+		int32 value;
+		if (!(reader >> io::read<int32>(value)))
+		{
+			ELOG("Unable to read value of int property " << m_name);
+			return reader;
+		}
+
+		SetValue(value);
+		return reader;
+	}
+
+	io::Writer& StringProperty::Serialize(io::Writer& writer)
+	{
+		return writer << io::write_dynamic_range<uint32>(*GetValueAs<String>());
+	}
+
+	io::Reader& StringProperty::Deserialize(io::Reader& reader)
+	{
+		String value;
+		if (!(reader >> io::read_container<uint32>(value)))
+		{
+			ELOG("Unable to read value of string property " << m_name);
+			return reader;
+		}
+
+		SetValue(value);
+		return reader;
+	}
+
+	io::Writer& AssetPathProperty::Serialize(io::Writer& writer)
+	{
+		return writer << io::write_dynamic_range<uint16>(
+			String(GetValueAs<AssetPathValue>()->GetPath()));
+	}
+
+	io::Reader& AssetPathProperty::Deserialize(io::Reader& reader)
+	{
+		String path;
+		if (!(reader >> io::read_container<uint16>(path)))
+		{
+			ELOG("Unable to read value of string property " << m_name);
+			return reader;
+		}
+
+		const auto* value = GetValueAs<AssetPathValue>();
+		SetValue(AssetPathValue(path, value->GetFilter()));
+
+		return reader;
+	}
+
 	Node::Node(MaterialGraph& material)
 		: m_id(material.MakeNodeId(this))
 		, m_material(&material)
 	{
+	}
+
+	io::Writer& Node::Serialize(io::Writer& writer)
+	{
+		writer
+			<< io::write<uint32>(m_id)
+			<< io::write<uint8>(GetInputPins().size());
+		for(const auto& pin : GetInputPins())
+		{
+			pin->Serialize(writer);
+		}
+
+		writer
+			<< io::write<uint8>(GetOutputPins().size());
+		for(const auto& pin : GetOutputPins())
+		{
+			pin->Serialize(writer);
+		}
+		
+		writer
+			<< io::write<uint8>(GetProperties().size());
+		for(const auto& prop : GetProperties())
+		{
+			prop->Serialize(writer);
+		}
+		
+		return writer;
+	}
+
+	io::Reader& Node::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	{
+		uint8 numInputPins, numOutputPins, numProperties;
+
+		if (!(reader 
+			>> io::read<uint32>(m_id)
+			>> io::read<uint8>(numInputPins)))
+		{
+			ELOG("Unable to deserialize " << GetTypeInfo().displayName << " node");
+			return reader;
+		}
+		
+		for (uint32 i = 0; i < GetInputPins().size() && i < numInputPins; ++i)
+		{
+			if (!(GetInputPins()[i]->Deserialize(reader, context)))
+			{
+				return reader;
+			}
+		}
+
+		if (!(reader >> io::read<uint8>(numOutputPins)))
+		{
+			return reader;
+		}
+		
+		for (uint32 i = 0; i < GetOutputPins().size() && i < numOutputPins; ++i)
+		{
+			if (!(GetOutputPins()[i]->Deserialize(reader, context)))
+			{
+				return reader;
+			}
+		}
+		
+		if (!(reader >> io::read<uint8>(numProperties)))
+		{
+			return reader;
+		}
+		
+		for (uint32 i = 0; i < GetProperties().size() && i < numProperties; ++i)
+		{
+			if (!(GetProperties()[i]->Deserialize(reader)))
+			{
+				return reader;
+			}
+		}
+		
+		return reader;
 	}
 
 	std::unique_ptr<Pin> Node::CreatePin(const PinType pinType, std::string_view name)

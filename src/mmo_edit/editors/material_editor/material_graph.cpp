@@ -3,6 +3,10 @@
 #include "material_graph.h"
 
 #include "base/macros.h"
+#include "binary_io/reader.h"
+#include "binary_io/writer.h"
+#include "base/chunk_writer.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -41,6 +45,82 @@ namespace mmo
 	MaterialGraph::~MaterialGraph()
 	{
 		Clear(true);
+	}
+
+	io::Writer& MaterialGraph::Serialize(io::Writer& writer) const
+	{
+		ChunkWriter chunkWriter { ChunkMagic({'G', 'R', 'P', 'H'}), writer };
+		{
+			writer
+				<< io::write<uint32>(m_nodes.size())
+				<< io::write<uint32>(m_idGenerator.GetCurrentId())
+				<< io::write<uint32>(m_rootNode->GetId());
+
+			for (const auto& node : m_nodes)
+			{
+				writer
+					<< io::write<uint32>(node->GetTypeInfo().id);
+				
+				node->Serialize(writer);
+			}
+		}
+		chunkWriter.Finish();
+		return writer;
+	}
+
+	io::Reader& MaterialGraph::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	{
+		Clear(true);
+
+		uint32 nodeCount, nextNodeId, rootNodeId;
+		if (!(reader 
+			>> io::read<uint32>(nodeCount)
+			>> io::read<uint32>(nextNodeId)
+			>> io::read<uint32>(rootNodeId)))
+		{
+			ELOG("Unable to deserialize material graph!");
+			return reader;
+		}
+
+		for (uint32 i = 0; i < nodeCount; ++i)
+		{
+			uint32 nodeTypeId;
+			if (!(reader >> io::read<uint32>(nodeTypeId)))
+			{
+				ELOG("Unable to deserialize material graph!");
+				return reader;
+			}
+
+			auto* node = CreateNode(nodeTypeId);
+			if (!node)
+			{
+				ELOG("Unable to create node type " << nodeTypeId << " received from deserialization!");
+				return reader;
+			}
+
+			if (!node->Deserialize(reader, context))
+			{
+				ELOG("Unable to deserialize node from file!");
+				return reader;
+			}
+		}
+
+		context.AddPostLoadAction([this, rootNodeId, nextNodeId]()
+		{
+			m_rootNode = FindNode(rootNodeId);
+			if (!m_rootNode)
+			{
+				ELOG("Unable to find old root node!");
+				return false;
+			}
+
+			m_idGenerator.Reset();
+			m_idGenerator.NotifyId(nextNodeId);
+
+			return true;
+		});
+
+		return reader;
 	}
 
 	MaterialGraph& MaterialGraph::operator=(const MaterialGraph& other)

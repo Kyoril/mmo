@@ -238,7 +238,7 @@ namespace mmo
 
 		return reader;
 	}
-
+	
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
 		version = material_version::Version_0_2;

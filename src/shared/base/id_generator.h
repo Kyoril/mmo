@@ -44,6 +44,8 @@ namespace mmo
 			return m_nextId++;
 		}
 
+		[[nodiscard]] T GetCurrentId() const noexcept { return m_nextId; }
+
 		/// Notifies the generator about a used id. The generator will then adjust the next generated
 		/// id, so that there will be no overlaps.
 		void NotifyId(T id)

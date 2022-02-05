@@ -2,15 +2,59 @@
 
 #pragma once
 
+#include <functional>
+
 #include "node_registry.h"
 
 #include "base/id_generator.h"
 
 #include <memory>
 
+namespace io
+{
+	class Reader;
+	class Writer;
+}
+
 namespace mmo
 {
 	class NodeRegistry;
+	
+	class MaterialGraphLoadContext : public NonCopyable
+	{
+	public:
+		typedef std::function<bool()> PostLoadAction;
+
+	public:
+		explicit MaterialGraphLoadContext() = default;
+		virtual ~MaterialGraphLoadContext() override = default;
+		
+		void AddPostLoadAction(PostLoadAction&& action)
+		{
+			m_loadLater.emplace_back(std::move(action));
+		}
+		
+	protected:
+		std::vector<PostLoadAction> m_loadLater;
+	};
+
+	class ExecutableMaterialGraphLoadContext final : public MaterialGraphLoadContext
+	{
+	public:
+		bool PerformAfterLoadActions()
+		{
+			for (const auto& action : m_loadLater)
+			{
+				if (!action())
+				{
+					return false;
+				}
+			}
+
+			m_loadLater.clear();
+			return true;
+		}
+	};
 
 	/// @brief This class manages a material graph, which contains nodes with instructions of a material. It is used by a
 	///	       MaterialCompiler instance to generate required shaders. This is an editor-only class, although the content's
@@ -33,6 +77,11 @@ namespace mmo
 
 		/// @brief Default destructor which frees memory.
 	    ~MaterialGraph();
+
+	public:
+		io::Writer& Serialize(io::Writer& writer) const;
+
+		io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
 
 	public:
 	    /// @brief Copy assignment operator override.

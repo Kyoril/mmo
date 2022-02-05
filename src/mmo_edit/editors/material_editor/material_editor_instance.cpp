@@ -20,6 +20,7 @@
 
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
+#include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
 #include "graphics/shader_compiler.h"
 #include "scene_graph/material_serializer.h"
@@ -605,10 +606,38 @@ namespace mmo
 	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
 	{
-		m_material = MaterialManager::Get().Load(assetPath.string());
-		m_material->SetName(assetPath.string());
-		m_material->Update();
+		m_material = MaterialManager::Get().CreateManual(assetPath.string());
+		m_graph = std::make_unique<MaterialGraph>();
 
+		ExecutableMaterialGraphLoadContext context;
+
+		MaterialDeserializer deserializer { *m_material };
+		deserializer.AddChunkHandler(*ChunkMagic({'G', 'R', 'P', 'H'}), false, [this, &context](io::Reader& reader, uint32, uint32) -> bool
+		{
+			DLOG("Deserializing material graph...");
+			return m_graph->Deserialize(reader, context);
+		});
+
+		const auto file = AssetRegistry::OpenFile(assetPath.string());
+		if (file)
+		{
+			io::StreamSource source { *file };
+			io::Reader reader { source };
+
+			if (!(deserializer.Read(reader)) || !context.PerformAfterLoadActions())
+			{
+				ELOG("Unable to read material file!");
+			}
+			else
+			{
+				m_material->Update();
+			}
+		}
+		else
+		{
+			ELOG("Unable to load material file " << assetPath << ": File does not exist!");
+		}
+		
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
 		m_cameraAnchor->AddChild(*m_cameraNode);
@@ -676,6 +705,9 @@ namespace mmo
 		MaterialSerializer serializer { };
 		serializer.Export(*m_material, writer);
 
+		// Serialize the material graph as well
+		m_graph->Serialize(writer);
+
 		ILOG("Successfully saved material");
 	}
 
@@ -687,8 +719,6 @@ namespace mmo
 		    m_context = ed::CreateEditor(&editorConfig);
             
 			ed::SetCurrentEditor(m_context);
-
-			m_graph = std::make_unique<MaterialGraph>();
 		}
 
 		ImGui::PushID(GetAssetPath().c_str());

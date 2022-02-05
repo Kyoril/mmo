@@ -17,8 +17,15 @@
 
 namespace ed = ax::NodeEditor;
 
+namespace io
+{
+	class Reader;
+	class Writer;
+}
+
 namespace mmo
 {
+	class MaterialGraphLoadContext;
 	class MaterialCompiler;
 	class MaterialGraph;
 
@@ -94,6 +101,11 @@ namespace mmo
 	public:
 	    Pin(Node* node, PinType type, std::string_view name = "");
 		virtual ~Pin();
+
+	public:
+		virtual io::Writer& Serialize(io::Writer& writer);
+
+		virtual io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
 
 	public:
 		virtual bool SetValueType(const PinType type) { return m_type == type; }
@@ -378,12 +390,17 @@ namespace mmo
 		typedef std::variant<int32, float, String, bool, AssetPathValue, Color> ValueType;
 
 	public:
-		PropertyBase(std::string_view name, const ValueType& value)
+		PropertyBase(const std::string_view name, const ValueType& value)
 			: m_name(name)
 			, m_value(value)
 		{
 		}
 		virtual ~PropertyBase() = default;
+
+	public:
+		virtual io::Writer& Serialize(io::Writer& writer) = 0;
+
+		virtual io::Reader& Deserialize(io::Reader& reader) = 0;
 
 	public:
 		/// @brief Gets the name of this property.
@@ -444,6 +461,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
 	/// @brief Float implementation of a node property.
@@ -454,6 +475,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+		
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 	
 	/// @brief Color implementation of a node property.
@@ -464,6 +489,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+		
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
 	/// @brief Int implementation of a node property.
@@ -474,6 +503,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+		
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
 	/// @brief String implementation of a node property.
@@ -484,6 +517,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
 	/// @brief AssetPathValue implementation of a node property.
@@ -494,6 +531,10 @@ namespace mmo
 			: Property(name, ref)
 		{
 		}
+		
+	public:
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
 	/// @brief Base class of a node in a MaterialGraph.
@@ -504,6 +545,11 @@ namespace mmo
 	public:
 		Node(MaterialGraph& material);
 		virtual ~Node() = default;
+
+	public:
+		virtual io::Writer& Serialize(io::Writer& writer);
+
+		virtual io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
 
 	public:
 	    template <typename T>
