@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+
 #pragma once
 
 #include <any>
@@ -5,7 +7,6 @@
 #include <optional>
 #include <span>
 #include <variant>
-#include <vector>
 
 #include "base/typedefs.h"
 #include "frame_ui/color.h"
@@ -25,30 +26,15 @@ namespace io
 
 namespace mmo
 {
-	class MaterialGraphLoadContext;
+	class IMaterialGraphLoadContext;
 	class MaterialCompiler;
 	class MaterialGraph;
 
 	/// @brief Enumerates possible pin types.
 	enum class PinType : uint8
 	{
-		/// @brief Pin accepts any value type.
-		Any,
-
-	    /// @brief Pin accepts boolean values.
-	    Bool,
-
-	    /// @brief Pin accepts integer values.
-	    Int32,
-
-	    /// @brief Pin accepts floating point values.
-	    Float,
-
 	    /// @brief Pin accepts material values.
 	    Material,
-
-	    /// @brief Pin accepts string values.
-	    String
 	};
 	
 	class Node;
@@ -105,7 +91,7 @@ namespace mmo
 	public:
 		virtual io::Writer& Serialize(io::Writer& writer);
 
-		virtual io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
+		virtual io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context);
 
 	public:
 		virtual bool SetValueType(const PinType type) { return m_type == type; }
@@ -138,167 +124,7 @@ namespace mmo
 
 	    [[nodiscard]] std::string_view GetName() const { return m_name; }
 	};
-
-	class AnyPin final : public Pin
-	{
-	public:
-		static constexpr auto TypeId = PinType::Any;
-
-		AnyPin(Node* node, const std::string_view name = "")
-			: Pin(node, PinType::Any, name)
-		{
-		}
-
-	public:
-		bool SetValueType(PinType type) override;
-
-		bool SetValue(PinValue value) override;
-
-		[[nodiscard]] PinType GetValueType() const override { return m_innerPin ? m_innerPin->GetValueType() : Pin::GetValueType(); }
-
-	private:
-		std::unique_ptr<Pin> m_innerPin;
-	};
-
-	class BoolPin final : public Pin
-	{
-	public:
-		static constexpr auto TypeId = PinType::Any;
-
-		 BoolPin(Node* node, bool value = false)
-	        : Pin(node, PinType::Bool)
-	        , m_Value(value)
-	    {
-	    }
-
-	    // C++ implicitly convert literals to bool, this will intercept
-	    // such calls an do the right thing.
-	    template <size_t N>
-	    BoolPin(Node* node, const char (&name)[N], const bool value = false)
-	        : Pin(node, PinType::Bool, name)
-	        , m_Value(value)
-	    {
-	    }
-
-	    BoolPin(Node* node, const std::string_view name, const bool value = false)
-	        : Pin(node, PinType::Bool, name)
-	        , m_Value(value)
-	    {
-	    }
-		
-	    bool SetValue(PinValue value) override
-	    {
-	        if (value.GetType() != TypeId)
-	            return false;
-
-	        m_Value = value.As<bool>();
-
-	        return true;
-	    }
-
-	    PinValue GetValue() const override { return m_Value; }
-
-
-	private:
-		bool m_Value = false;
-	};
 	
-	class Int32Pin final : public Pin
-	{
-	public:
-	    static constexpr auto TypeId = PinType::Int32;
-
-	    Int32Pin(Node* node, int32_t value = 0): Pin(node, PinType::Int32), m_value(value) {}
-	    Int32Pin(Node* node, std::string_view name, int32_t value = 0): Pin(node, PinType::Int32, name), m_value(value) {}
-
-	public:
-	    bool SetValue(PinValue value) override
-	    {
-	        if (value.GetType() != TypeId)
-	            return false;
-
-	        m_value = value.As<int32_t>();
-
-	        return true;
-	    }
-
-	    PinValue GetValue() const override { return m_value; }
-
-	private:
-	    int32_t m_value = 0;
-	};
-
-	class FloatPin final : public Pin
-	{
-	public:
-	    static constexpr auto TypeId = PinType::Float;
-
-	    FloatPin(Node* node, float value = 0.0f): Pin(node, PinType::Float), m_value(value) {}
-	    FloatPin(Node* node, std::string_view name, float value = 0.0f): Pin(node, PinType::Float, name), m_value(value) {}
-
-	public:
-	    bool SetValue(PinValue value) override
-	    {
-	        if (value.GetType() != TypeId)
-	            return false;
-
-	        m_value = value.As<float>();
-
-	        return true;
-	    }
-
-	    PinValue GetValue() const override { return m_value; }
-
-		[[nodiscard]] std::string_view GetStringValue() const
-	    {
-		    if (m_stringDirty)
-		    {
-				m_stringValue = std::to_string(m_value);
-			    m_stringDirty = false;
-		    }
-
-			return m_stringValue;
-	    }
-
-	private:
-	    float m_value = 0.0f;
-		mutable std::string m_stringValue;
-		mutable bool m_stringDirty { true };
-	};
-	
-	class StringPin final : public Pin
-	{
-	public:
-	    static constexpr auto TypeId = PinType::String;
-
-	    StringPin(Node* node, std::string value = "")
-			: Pin(node, PinType::String)
-			, m_value(value)
-		{}
-
-	    StringPin(Node* node, std::string_view name, std::string value = "")
-			: Pin(node, PinType::String, name)
-			, m_value(value)
-		{}
-
-	public:
-	    bool SetValue(PinValue value) override
-	    {
-	        if (value.GetType() != TypeId)
-	        {
-				return false;   
-	        }
-
-	        m_value = value.As<std::string>();
-	        return true;
-	    }
-
-	    PinValue GetValue() const override { return m_value; }
-
-	private:
-	    std::string m_value;
-	};
-
 	class MaterialPin final : public Pin
 	{
 	public:
@@ -543,17 +369,28 @@ namespace mmo
 		friend class MaterialGraph;
 
 	public:
-		Node(MaterialGraph& material);
+		/// @brief Creates a new instance of the Node class and initializes it.
+		/// @param graph The material graph that this node belongs to.
+		Node(MaterialGraph& graph);
+
+		/// @brief Virtual default destructor because of inheritance.
 		virtual ~Node() = default;
 
 	public:
+		/// @brief Serializes the contents of this node using a binary writer.
+		/// @param writer The writer to write the state of this node to.
+		/// @return The writer in the updated state.
 		virtual io::Writer& Serialize(io::Writer& writer);
 
-		virtual io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
+		/// @brief Deserializes the contents of this node using a binary reader.
+		/// @param reader The reader to read the state of this node from.
+		/// @param context A load context which allows to queue post-load actions.
+		/// @return The reader in the updated state.
+		virtual io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context);
 
 	public:
 	    template <typename T>
-	    std::unique_ptr<T> CreatePin(std::string_view name = "")
+	    std::unique_ptr<T> CreatePin(const std::string_view name = "")
 	    {
 		    if (auto pin = CreatePin(T::TypeId, name))
 		    {
@@ -567,31 +404,31 @@ namespace mmo
 
 	    std::unique_ptr<Pin> CreatePin(PinType pinType, std::string_view name = "");
 		
-		virtual NodeTypeInfo GetTypeInfo() const { return {}; }
+		[[nodiscard]] virtual NodeTypeInfo GetTypeInfo() const { return NodeTypeInfo{}; }
 
-	    virtual std::string_view GetName() const;
+	    [[nodiscard]] virtual std::string_view GetName() const;
 
-	    virtual LinkQueryResult AcceptLink(const Pin& receiver, const Pin& provider) const;
+	    [[nodiscard]] virtual LinkQueryResult AcceptLink(const Pin& receiver, const Pin& provider) const;
 
 	    virtual void WasLinked(const Pin& receiver, const Pin& provider) { }
 
 	    virtual void WasUnlinked(const Pin& receiver, const Pin& provider) { }
 
-	    virtual std::span<Pin*> GetInputPins() { return {}; }
+	    [[nodiscard]] virtual std::span<Pin*> GetInputPins() { return {}; }
 
-	    virtual std::span<Pin*> GetOutputPins() { return {}; }
+	    [[nodiscard]] virtual std::span<Pin*> GetOutputPins() { return {}; }
 
-		MaterialGraph* GetMaterial() const { return m_material; }
+		[[nodiscard]] MaterialGraph* GetMaterial() const { return m_material; }
 
-		uint32 GetId() const { return m_id; }
+		[[nodiscard]] uint32 GetId() const { return m_id; }
 
-		std::optional<uint32> GetPinIndex(const Pin& pin);
+		[[nodiscard]] std::optional<uint32> GetPinIndex(const Pin& pin);
 
-		virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
+		[[nodiscard]] virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
 
-		virtual std::span<PropertyBase*> GetProperties() { return {}; }
+		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
-		virtual void BeginCompile() { m_compiledExpressionId = IndexNone; }
+		virtual void NotifyCompilationStarted() { m_compiledExpressionId = IndexNone; }
 
 	protected:
 		uint32 m_id;
@@ -611,7 +448,7 @@ namespace mmo
 			: Node(material)
 		{}
 		
-	    std::span<Pin*> GetInputPins() override { return m_InputPins; }
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 		
@@ -631,7 +468,7 @@ namespace mmo
 	private:
 		bool m_isTwoSided { false };
 		bool m_receivesShadows { true };
-		bool m_castsShadows { true };
+		bool m_castShadows { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
 		bool m_lit { true };
@@ -655,7 +492,7 @@ namespace mmo
 		MaterialPin m_opacityMask = { this, "Opacity Mask" };
 		MaterialPin m_normal = { this, "Normal" };
 
-	    Pin* m_InputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
+	    Pin* m_inputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
 	};
 
 	/// @brief A node which adds a constant float expression.

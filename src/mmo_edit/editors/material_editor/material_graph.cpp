@@ -2,10 +2,10 @@
 
 #include "material_graph.h"
 
+#include "base/chunk_writer.h"
 #include "base/macros.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
-#include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -68,7 +68,7 @@ namespace mmo
 		return writer;
 	}
 
-	io::Reader& MaterialGraph::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	io::Reader& MaterialGraph::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		Clear(true);
 
@@ -330,11 +330,11 @@ namespace mmo
 	    return result;
 	}
 
-	void MaterialGraph::Compile(MaterialCompiler& compiler)
+	void MaterialGraph::Compile(MaterialCompiler& compiler) const
 	{
-		for (auto& node : m_nodes)
+		for (const auto& node : m_nodes)
 		{
-			node->BeginCompile();
+			node->NotifyCompilationStarted();
 		}
 
 		ASSERT(m_rootNode);

@@ -19,41 +19,28 @@ namespace io
 namespace mmo
 {
 	class NodeRegistry;
-	
-	class MaterialGraphLoadContext : public NonCopyable
+
+	/// @brief Interface which describes a load context which is able to collect post-load actions for later execution.
+	///	       This is required as we first need to load all nodes, before we can start to link their respective pins
+	///		   together, otherwise the nodes for the pins would not yet exist.
+	class IMaterialGraphLoadContext
 	{
 	public:
+		/// @brief A post load action. If this returns false, loading will fail.
 		typedef std::function<bool()> PostLoadAction;
 
-	public:
-		explicit MaterialGraphLoadContext() = default;
-		virtual ~MaterialGraphLoadContext() override = default;
-		
-		void AddPostLoadAction(PostLoadAction&& action)
-		{
-			m_loadLater.emplace_back(std::move(action));
-		}
-		
 	protected:
-		std::vector<PostLoadAction> m_loadLater;
-	};
+		/// @brief Protected default constructor to prevent public instantiation.
+		explicit IMaterialGraphLoadContext() = default;
 
-	class ExecutableMaterialGraphLoadContext final : public MaterialGraphLoadContext
-	{
 	public:
-		bool PerformAfterLoadActions()
-		{
-			for (const auto& action : m_loadLater)
-			{
-				if (!action())
-				{
-					return false;
-				}
-			}
+		/// @brief Virtual default destructor because of inheritance.
+		virtual ~IMaterialGraphLoadContext() = default;
 
-			m_loadLater.clear();
-			return true;
-		}
+	public:
+		/// @brief Adds an action to the context for execution after loading has been done.
+		/// @param action The action to perform. The action will be moved.
+		virtual void AddPostLoadAction(PostLoadAction&& action) = 0;
 	};
 
 	/// @brief This class manages a material graph, which contains nodes with instructions of a material. It is used by a
@@ -81,7 +68,7 @@ namespace mmo
 	public:
 		io::Writer& Serialize(io::Writer& writer) const;
 
-		io::Reader& Deserialize(io::Reader& reader, MaterialGraphLoadContext& context);
+		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context);
 
 	public:
 	    /// @brief Copy assignment operator override.
@@ -190,7 +177,7 @@ namespace mmo
 	    [[nodiscard]] std::vector<Pin*> FindPinsLinkedTo(const Pin& pin) const;
 
 
-		void Compile(MaterialCompiler& compiler);
+		void Compile(MaterialCompiler& compiler) const;
 
 	private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;

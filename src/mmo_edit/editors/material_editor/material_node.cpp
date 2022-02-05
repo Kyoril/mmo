@@ -43,7 +43,7 @@ namespace mmo
 		return writer;
 	}
 
-	io::Reader& Pin::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	io::Reader& Pin::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		uint32 id, link;
 		if (!(reader
@@ -158,55 +158,7 @@ namespace mmo
 
 	    return false;
 	}
-
-	bool AnyPin::SetValueType(PinType type)
-	{
-        if (GetValueType() == type)
-	        return true;
-
-	    if (m_innerPin)
-	    {
-	        m_node->GetMaterial()->ForgetPin(m_innerPin.get());
-	        m_innerPin.reset();
-	    }
-
-	    if (type == PinType::Any)
-	        return true;
-
-	    m_innerPin = m_node->CreatePin(type);
-
-	    if (const auto link = GetLink())
-	    {
-	        if (link->GetValueType() != type)
-	        {
-	            Unlink();
-	            LinkTo(*link);
-	        }
-	    }
-
-        const auto linkedToSet = m_node->GetMaterial()->FindPinsLinkedTo(*this);
-	    for (const auto linkedTo : linkedToSet)
-	    {
-	        if (linkedTo->GetValueType() == type)
-	            continue;
-
-	        linkedTo->Unlink();
-	        linkedTo->LinkTo(*this);
-	    }
-
-	    return true;
-	}
-
-	bool AnyPin::SetValue(PinValue value)
-	{
-		if (!m_innerPin)
-		{
-			return false;
-        }
-
-		return m_innerPin->SetValue(std::move(value));
-	}
-
+	
 	io::Writer& BoolProperty::Serialize(io::Writer& writer)
 	{
 		return writer << io::write<uint8>(*GetValueAs<bool>());
@@ -328,9 +280,9 @@ namespace mmo
 		return reader;
 	}
 
-	Node::Node(MaterialGraph& material)
-		: m_id(material.MakeNodeId(this))
-		, m_material(&material)
+	Node::Node(MaterialGraph& graph)
+		: m_id(graph.MakeNodeId(this))
+		, m_material(&graph)
 	{
 	}
 
@@ -361,7 +313,7 @@ namespace mmo
 		return writer;
 	}
 
-	io::Reader& Node::Deserialize(io::Reader& reader, MaterialGraphLoadContext& context)
+	io::Reader& Node::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		uint8 numInputPins, numOutputPins, numProperties;
 
@@ -414,11 +366,7 @@ namespace mmo
 	{
         switch (pinType)
 	    {
-	        case PinType::Any:      return make_unique<AnyPin>(this, name);
-	        case PinType::Bool:     return make_unique<BoolPin>(this, name);
-			case PinType::Int32:    return make_unique<Int32Pin>(this, name);
-	        case PinType::Float:    return make_unique<FloatPin>(this, name);
-	        case PinType::String:   return make_unique<StringPin>(this, name);
+	        case PinType::Material: return make_unique<MaterialPin>(this, name);
 	    }
 
 	    return nullptr;
@@ -440,7 +388,7 @@ namespace mmo
 	    if (receiver.IsOutput() && provider.IsOutput())
 	        return { false, "Output pins cannot be linked together"};
         
-	    if (provider.GetValueType() != receiver.GetValueType() && (provider.GetType() != PinType::Any && receiver.GetType() != PinType::Any))
+	    if (provider.GetValueType() != receiver.GetValueType())
 	        return { false, "Incompatible types"};
 
 	    return {true};
@@ -857,10 +805,6 @@ namespace mmo
 	    switch (type)
 	    {
 	        default:
-	        case PinType::Bool:     return ImColor(220,  48,  48);
-	        case PinType::Int32:    return ImColor( 68, 201, 156);
-	        case PinType::Float:    return ImColor(147, 226,  74);
-	        case PinType::String:   return ImColor(124,  21, 153);
 	        case PinType::Material: return ImColor(255,   255, 255);
 	    }
 	}

@@ -49,6 +49,36 @@ namespace ImGui
 
 namespace mmo
 {
+	/// @brief Private default implementation of the IMaterialGraphLoadContext interface. Allows executing
+	///	       actual collected post-load actions,
+	class ExecutableMaterialGraphLoadContext final : public IMaterialGraphLoadContext, public NonCopyable
+	{
+	public:
+		/// @copydoc IMaterialGraphLoadContext::AddPostLoadAction
+		void AddPostLoadAction(PostLoadAction&& action) override
+		{
+			m_loadLater.emplace_back(std::move(action));
+		}
+
+		/// @brief Performs all post-load actions in order. If any of them returns false, the function will stop and return false as well.
+		/// @return true on success of all actions, false otherwise.
+		bool PerformAfterLoadActions()
+		{
+			for (const auto& action : m_loadLater)
+			{
+				if (!action())
+				{
+					return false;
+				}
+			}
+			
+			return true;
+		}
+		
+	private:
+		std::vector<PostLoadAction> m_loadLater;
+	};
+
 	class ScopedItemWidth final
 	{
 	public:
@@ -81,12 +111,7 @@ namespace mmo
 	{
 	    switch (pinType)
 	    {
-	        case PinType::Any:      return IconType::Circle;
 	        case PinType::Material: return IconType::Circle;
-	        case PinType::Bool:     return IconType::Circle;
-	        case PinType::Int32:    return IconType::Circle;
-	        case PinType::Float:    return IconType::Circle;
-	        case PinType::String:   return IconType::Circle;
 	    }
 
 	    return IconType::Circle;
@@ -96,12 +121,7 @@ namespace mmo
 	{
 	    switch (pinType)
 	    {
-	        case PinType::Any:      return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 	        case PinType::Material: return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	        case PinType::Bool:     return ImVec4(220 / 255.0f,  48 / 255.0f,  48 / 255.0f, 1.0f);
-	        case PinType::Int32:    return ImVec4( 68 / 255.0f, 201 / 255.0f, 156 / 255.0f, 1.0f);
-	        case PinType::Float:    return ImVec4(147 / 255.0f, 226 / 255.0f,  74 / 255.0f, 1.0f);
-	        case PinType::String:   return ImVec4(124 / 255.0f,  21 / 255.0f, 153 / 255.0f, 1.0f);
 	    }
 
 	    return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);

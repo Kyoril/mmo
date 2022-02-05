@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "node_registry.h"
 #include "material_node.h"
