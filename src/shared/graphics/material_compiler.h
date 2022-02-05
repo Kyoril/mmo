@@ -15,6 +15,22 @@ namespace mmo
 	
 	enum { IndexNone = -1 };
 
+	/// @brief Enumerates available expression types.
+	enum class ExpressionType : uint8
+	{
+		/// @brief A single float expression (float).
+		Float_1,
+
+		/// @brief A two-float expression (float2).
+		Float_2,
+
+		/// @brief A three-float expression (float3).
+		Float_3,
+
+		/// @brief A four-float expression (float4).
+		Float_4
+	};
+
 	/// @brief Typedef for a material expression index.
 	using ExpressionIndex = int32;
 
@@ -117,6 +133,19 @@ namespace mmo
 		/// @param alpha Index of the alpha value expression of the linear interpolation.
 		/// @return Index of the expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddLerp(ExpressionIndex first, ExpressionIndex second, ExpressionIndex alpha) = 0;
+
+		/// @brief Adds a world position expression.
+		/// @return The world position expression index or IndexNone in case of an error.
+		virtual ExpressionIndex AddWorldPosition() = 0;
+
+		/// @brief Adds a mask expression.
+		/// @param input The input expression whose value should be used.
+		/// @param r Whether the red channel will be included in the result.
+		/// @param g Whether the green channel will be included in the result.
+		/// @param b Whether the blue channel will be included in the result.
+		/// @param a Whether the alpha channel will be included in the result.
+		/// @return Index of the mask expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddMask(ExpressionIndex input, bool r, bool g, bool b, bool a) = 0;
 
 	public:
 		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }

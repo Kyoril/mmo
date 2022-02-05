@@ -541,7 +541,7 @@ namespace mmo
 
 		std::optional<uint32> GetPinIndex(const Pin& pin);
 
-		virtual int32 Compile(MaterialCompiler& compiler) = 0;
+		virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
 
 		virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
@@ -550,7 +550,7 @@ namespace mmo
 	protected:
 		uint32 m_id;
 		MaterialGraph* m_material;
-		int32 m_compiledExpressionId { IndexNone };
+		ExpressionIndex m_compiledExpressionId { IndexNone };
 	};
 
 	/// @brief The main node of a material graph, which represents the output node of a material.
@@ -569,7 +569,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 		
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -629,7 +629,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -661,7 +661,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -697,7 +697,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -731,7 +731,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -746,6 +746,43 @@ namespace mmo
 
 		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
 	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which applies a mask to the RGBA output of an expression and builds a new expression from it.
+	class MaskNode final : public Node
+	{
+	public:
+	    MAT_NODE(MaskNode, "Mask")
+
+	    MaskNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		bool m_channels[4] = { true, true, false, false };
+		BoolProperty m_valueProperties[4] = {
+			BoolProperty("R", m_channels[0]),
+			BoolProperty("g", m_channels[1]),
+			BoolProperty("B", m_channels[0]),
+			BoolProperty("A", m_channels[3])
+		};
+
+	    MaterialPin m_input = { this };
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[4] = { &m_valueProperties[0], &m_valueProperties[1], &m_valueProperties[2], &m_valueProperties[3] };
+	    Pin* m_inputPins[1] = { &m_input };
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 	
@@ -764,7 +801,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 		
 	private:
 	    MaterialPin m_input1 = { this, "A" };
@@ -790,7 +827,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 		
 	private:
 	    MaterialPin m_input = { this };
@@ -815,7 +852,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -849,7 +886,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -883,7 +920,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -905,6 +942,7 @@ namespace mmo
 	/// @brief A node which provides a texture coordinate expression.
 	class TextureCoordNode final : public Node
 	{
+	public:
 		static const uint32 Color;
 
 	public:
@@ -918,7 +956,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -935,6 +973,30 @@ namespace mmo
 
 	    /// @brief List of output pins as an array.
 	    Pin* m_outputPins[1] = { &m_uvs };
+	};
+	
+	/// @brief A node which provides a pixel's world position as expression.
+	class WorldPositionNode final : public Node
+	{
+	public:
+	    MAT_NODE(WorldPositionNode, "World Position")
+
+	    WorldPositionNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    /// @brief The uv output pin.
+	    MaterialPin m_coordinates = { this };
+
+	    /// @brief List of output pins as an array.
+	    Pin* m_outputPins[1] = { &m_coordinates };
 	};
 
 	/// @brief A node which adds a texture sample expression.
@@ -958,7 +1020,7 @@ namespace mmo
 		
 		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
 
-		int32 Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 

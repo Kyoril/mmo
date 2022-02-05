@@ -320,6 +320,25 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex MaskNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input expression!");
+				return IndexNone;
+			}
+
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			
+			m_compiledExpressionId = compiler.AddMask(inputExpression, m_channels[0], m_channels[1], m_channels[2], m_channels[3]);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex DotNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -481,6 +500,16 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddTextureCoordinate(m_uvCoordIndex);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	int32 WorldPositionNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddWorldPosition();
 		}
 
 		return m_compiledExpressionId;

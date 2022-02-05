@@ -242,6 +242,58 @@ namespace mmo
 		return AddExpression(outputStream.str());
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddWorldPosition()
+	{
+		std::ostringstream outputStream;
+		outputStream << "input.worldPos";
+		outputStream.flush();
+		
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddMask(const ExpressionIndex input, const bool r, const bool g, const bool b, const bool a)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing base parameter for power");
+			return IndexNone;
+		}
+
+		uint32 channelCount = 0;
+		char channels[4] = { 'x', 'x', 'x', 'x' };
+		if (r) channels[channelCount++] = 'r';
+		if (g) channels[channelCount++] = 'g';
+		if (b) channels[channelCount++] = 'b';
+		if (a) channels[channelCount++] = 'a';
+
+		if (channelCount == 0)
+		{
+			WLOG("No channel enabled in mask expression, invalid");
+			return IndexNone;
+		}
+		
+		std::ostringstream outputStream;
+		outputStream << "float4(";
+
+		for (int i = 0; i < 4; ++i)
+		{
+			if (channels[i] == 'x')
+			{
+				outputStream << "0.0";
+			}
+			else
+			{
+				outputStream << "expr_" << input << "." << channels[i];
+			}
+			if (i < 3) outputStream << ", ";
+		}
+
+		outputStream << ")";
+		outputStream.flush();
+		
+		return AddExpression(outputStream.str());
+	}
+
 	void MaterialCompilerD3D11::GenerateVertexShaderCode()
 	{
 		m_vertexShaderStream.clear();
@@ -276,6 +328,8 @@ namespace mmo
 			m_vertexShaderStream
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
+		m_vertexShaderStream
+			<< "\tfloat4 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n";
 
 		m_vertexShaderStream
 			<< "};\n\n";
@@ -299,6 +353,7 @@ namespace mmo
 		m_vertexShaderStream
 			<< "\tinput.pos.w = 1.0;\n"
 			<< "\toutput.pos = mul(input.pos, matWorld);\n"
+			<< "\toutput.worldPos = output.pos;\n"
 			<< "\toutput.pos = mul(output.pos, matView);\n"
 			<< "\toutput.pos = mul(output.pos, matProj);\n"
 			<< "\toutput.color = input.color;\n";
@@ -331,7 +386,7 @@ namespace mmo
 		m_pixelShaderStream
 			<< "struct VertexOut\n"
 			<< "{\n"
-			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 pos : SV_POSITION0;\n"
 			<< "\tfloat4 color : COLOR;\n"
 			<< "\tfloat3 normal : NORMAL;\n";
 		
@@ -340,7 +395,7 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
-
+		m_pixelShaderStream << "\tfloat4 worldPos : TEXCOORD"<< m_numTexCoordinates << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
 		// Add texture samplers

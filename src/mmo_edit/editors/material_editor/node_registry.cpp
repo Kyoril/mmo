@@ -20,7 +20,9 @@ namespace mmo
 			ClampNode::GetStaticTypeInfo(),
 			DotNode::GetStaticTypeInfo(),
 			OneMinusNode::GetStaticTypeInfo(),
-			PowerNode::GetStaticTypeInfo()
+			PowerNode::GetStaticTypeInfo(),
+			WorldPositionNode::GetStaticTypeInfo(),
+			MaskNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

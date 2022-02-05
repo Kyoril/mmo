@@ -56,6 +56,12 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::AddPower
 		ExpressionIndex AddPower(ExpressionIndex base, ExpressionIndex exponent) override;
+		
+		/// @copydoc MaterialCompiler::AddWorldPosition
+		ExpressionIndex AddWorldPosition() override;
+		
+		/// @copydoc MaterialCompiler::AddWorldPosition
+		ExpressionIndex AddMask(ExpressionIndex input, bool r, bool g, bool b, bool a) override;
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode

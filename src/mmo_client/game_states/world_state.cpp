@@ -97,9 +97,7 @@ namespace mmo
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
-
-		m_skyEntity->DetachFromParent();
-
+		
 		m_gameObjectsById.clear();
 		m_playerController.reset();
 		m_worldGrid.reset();
@@ -177,19 +175,15 @@ namespace mmo
 
 	void WorldState::SetupWorldScene()
 	{
-		m_skyEntity = m_scene.CreateEntity("SkySphere", "Models/SkySphere.hmsh");
-		m_skyEntity->SetRenderQueueGroup(SkiesEarly);
-		
 		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
 
 		const auto cloudMaterial = MaterialManager::Get().Load("Models/Clouds.hmat");
 		if (cloudMaterial)
 		{
-			cloudMaterial->SetType(MaterialType::Translucent);
 			m_cloudsEntity->SetMaterial(cloudMaterial);
 		}
 		
-		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
 		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
 
@@ -373,9 +367,6 @@ namespace mmo
 			if (m_gameObjectsById.empty())
 			{
 				m_playerController->SetControlledObject(object);
-
-				m_skyEntity->DetachFromParent();
-				m_playerController->GetRootNode()->AttachObject(*m_skyEntity);
 				
 				m_cloudsNode->RemoveFromParent();
 				m_playerController->GetRootNode()->AddChild(*m_cloudsNode);
@@ -415,7 +406,6 @@ namespace mmo
 			if (m_playerController->GetControlledObject() &&
 				m_playerController->GetControlledObject()->GetGuid() == id)
 			{
-				m_skyEntity->DetachFromParent();
 				m_cloudsNode->RemoveFromParent();
 
 				ELOG("Despawn of player controlled object!");
