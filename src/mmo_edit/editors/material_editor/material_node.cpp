@@ -24,6 +24,14 @@ namespace mmo
 	{
 	}
 
+	Pin::~Pin()
+	{
+		if (m_node)
+		{
+			m_node->GetMaterial()->ForgetPin(this);
+		}
+	}
+
 	LinkQueryResult Pin::CanLinkTo(const Pin& pin) const
 	{
         auto result = m_node->AcceptLink(*this, pin);
@@ -453,11 +461,11 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 LerpNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex LerpNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			int32 firstExpression = IndexNone;
+			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
 				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
@@ -467,7 +475,7 @@ namespace mmo
 				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
 			}
 
-			int32 secondExpression = IndexNone;
+			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
 				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
@@ -477,7 +485,7 @@ namespace mmo
 				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
 			}
 
-			int32 alphaExpression = IndexNone;
+			ExpressionIndex alphaExpression = IndexNone;
 			if (m_input3.IsLinked())
 			{
 				alphaExpression = m_input3.GetLink()->GetNode()->Compile(compiler);
@@ -493,7 +501,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 TextureCoordNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex TextureCoordNode::Compile(MaterialCompiler& compiler)
 	{
 		compiler.NotifyTextureCoordinateIndex(m_uvCoordIndex);
 
@@ -505,7 +513,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 WorldPositionNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex WorldPositionNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -515,7 +523,65 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	int32 TextureNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex VertexNormalNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddVertexNormal();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex AbsNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input expression");
+				return IndexNone;
+			}
+
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			m_compiledExpressionId = compiler.AddAbs(inputExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex DivideNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+			}
+
+			ExpressionIndex secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+			}
+
+			m_compiledExpressionId = compiler.AddDivide(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex TextureNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{

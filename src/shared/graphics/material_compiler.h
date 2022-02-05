@@ -147,6 +147,21 @@ namespace mmo
 		/// @return Index of the mask expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddMask(ExpressionIndex input, bool r, bool g, bool b, bool a) = 0;
 
+		/// @brief Adds a vertex normal expression.
+		/// @return Index of the vertex normal expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddVertexNormal() = 0;
+
+		/// @brief Adds a divide expression.
+		/// @param first Index of first expression. Formula is first / second.
+		/// @param second Index of second expression. Formula is first / second.
+		/// @return Index of the divide expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddDivide(ExpressionIndex first, ExpressionIndex second) = 0;
+
+		/// @brief Adds an abs expression.
+		/// @param input Input expression whose value the abs will be calculated from.
+		/// @return Index of the abs expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddAbs(ExpressionIndex input) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
 

@@ -93,7 +93,7 @@ namespace mmo
 
 	public:
 	    Pin(Node* node, PinType type, std::string_view name = "");
-		virtual ~Pin() = default;
+		virtual ~Pin();
 
 	public:
 		virtual bool SetValueType(const PinType type) { return m_type == type; }
@@ -773,8 +773,8 @@ namespace mmo
 		bool m_channels[4] = { true, true, false, false };
 		BoolProperty m_valueProperties[4] = {
 			BoolProperty("R", m_channels[0]),
-			BoolProperty("g", m_channels[1]),
-			BoolProperty("B", m_channels[0]),
+			BoolProperty("G", m_channels[1]),
+			BoolProperty("B", m_channels[2]),
 			BoolProperty("A", m_channels[3])
 		};
 
@@ -993,12 +993,95 @@ namespace mmo
 		
 	private:
 	    /// @brief The uv output pin.
+	    MaterialPin m_coordinates = { this, "\0" };
+
+	    /// @brief List of output pins as an array.
+	    Pin* m_outputPins[1] = { &m_coordinates };
+	};
+	
+	/// @brief A node which provides a pixel's world position as expression.
+	class VertexNormalNode final : public Node
+	{
+	public:
+	    MAT_NODE(VertexNormalNode, "Vertex Normal")
+
+	    VertexNormalNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    /// @brief The uv output pin.
 	    MaterialPin m_coordinates = { this };
 
 	    /// @brief List of output pins as an array.
 	    Pin* m_outputPins[1] = { &m_coordinates };
 	};
+	
+	class AbsNode final : public Node
+	{
+	public:
+	    MAT_NODE(AbsNode, "Abs")
 
+	    AbsNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    MaterialPin m_input = { this };
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[1] = { &m_input };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which adds an expression multiplication expression.
+	class DivideNode final : public Node
+	{
+	public:
+	    MAT_NODE(DivideNode, "Divide")
+
+	    DivideNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 1.0f, 1.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
 	/// @brief A node which adds a texture sample expression.
 	class TextureNode final : public Node
 	{

@@ -44,6 +44,8 @@ namespace mmo
 	    std::vector<Pin*> m_CreatedLinks;
 
 	    std::vector<const NodeTypeInfo*> m_SortedNodes;
+		
+		ImGuiTextFilter m_filter;
 	};
 
 	/// @brief An editor instance for editing a material.
@@ -73,6 +75,8 @@ namespace mmo
 		void RenderMaterialPreview();
 
 		void HandleDeleteAction(MaterialGraph& material);
+
+		void HandleContextMenuAction(MaterialGraph& material);
 
 	private:
 		scoped_connection m_renderConnection;

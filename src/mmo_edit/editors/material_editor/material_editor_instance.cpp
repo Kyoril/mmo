@@ -412,7 +412,47 @@ namespace mmo
         }
     }
 	
-	void CreateNodeDialog::Open(Pin* fromPin)
+    void MaterialEditorInstance::HandleContextMenuAction(MaterialGraph& material)
+    {
+		if (ed::ShowBackgroundContextMenu())
+        {
+            ed::Suspend();
+            m_createDialog.Open();
+            ed::Resume();
+        }
+
+        ed::NodeId contextNodeId;
+        if (ed::ShowNodeContextMenu(&contextNodeId))
+        {
+            auto node = material.FindNode(static_cast<uint32_t>(contextNodeId.Get()));
+
+            ed::Suspend();
+            //m_nodeContextMenu.Open(node);
+            ed::Resume();
+        }
+
+        ed::PinId contextPinId;
+        if (ed::ShowPinContextMenu(&contextPinId))
+        {
+            auto pin = material.FindPin(static_cast<uint32_t>(contextPinId.Get()));
+
+            ed::Suspend();
+            //m_pinContextMenu.Open(pin);
+            ed::Resume();
+        }
+
+        ed::LinkId contextLinkId;
+        if (ed::ShowLinkContextMenu(&contextLinkId))
+        {
+            auto pin = material.FindPin(static_cast<uint32_t>(contextLinkId.Get()));
+
+            ed::Suspend();
+            //m_linkContextMenu.Open(pin);
+            ed::Resume();
+        }
+    }
+
+    void CreateNodeDialog::Open(Pin* fromPin)
 	{
 		auto storage = ImGui::GetStateStorage();
 	    storage->SetVoidPtr(ImGui::GetID("##create_node_pin"), fromPin);
@@ -424,52 +464,117 @@ namespace mmo
 	void CreateNodeDialog::Show(MaterialGraph& material)
 	{
 		if (!ImGui::IsPopupOpen("##create_node"))
+		{
 			return;
+		}
 
-	    auto storage = ImGui::GetStateStorage();
-	    auto fromPin = reinterpret_cast<Pin*>(storage->GetVoidPtr(ImGui::GetID("##create_node_pin")));
+		const auto storage = ImGui::GetStateStorage();
+		const auto fromPin = reinterpret_cast<Pin*>(storage->GetVoidPtr(ImGui::GetID("##create_node_pin")));
 
-	    if (!ImGui::BeginPopup("##create_node"))
-	        return;
+		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 2.0f);
 
-	    auto popupPosition = ImGui::GetMousePosOnOpeningCurrentPopup();
-
-	    if (m_SortedNodes.empty())
+	    if (ImGui::BeginPopup("##create_node"))
 	    {
-	        auto nodeRegistry = material.GetNodeRegistry();
+			const auto popupPosition = ImGui::GetMousePosOnOpeningCurrentPopup();
 
-	        auto types = nodeRegistry->GetTypes();
+		    if (m_SortedNodes.empty())
+		    {
+			    const auto nodeRegistry = material.GetNodeRegistry();
 
-	        m_SortedNodes.assign(types.begin(), types.end());
-	        std::sort(m_SortedNodes.begin(), m_SortedNodes.end(), [](const auto& lhs, const auto& rhs)
-	        {
-	            return std::lexicographical_compare(
-	                lhs->displayName.begin(), lhs->displayName.end(),
-	                rhs->displayName.begin(), rhs->displayName.end());
-	        });
+		        auto types = nodeRegistry->GetTypes();
+
+		        m_SortedNodes.assign(types.begin(), types.end());
+		        std::sort(m_SortedNodes.begin(), m_SortedNodes.end(), [](const auto& lhs, const auto& rhs)
+		        {
+		            return std::lexicographical_compare(
+		                lhs->displayName.begin(), lhs->displayName.end(),
+		                rhs->displayName.begin(), rhs->displayName.end());
+		        });
+		    }
+			
+			m_filter.Draw("Filter");
+			
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1019f, 0.1019f, 0.1019f, 1.0f));
+			ImGui::BeginChild("scrolling", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+				if (m_filter.IsActive())
+				{
+				    for (const auto nodeTypeInfo : m_SortedNodes)
+				    {
+						const auto displayInfo = nodeTypeInfo->displayName;
+						if (!m_filter.PassFilter(displayInfo.data()))
+						{
+							continue;
+						}
+
+						bool selected = false;
+				        if (ImGui::Selectable(nodeTypeInfo->displayName.data(), &selected))
+				        {
+				            auto node = material.CreateNode(nodeTypeInfo->id);
+				            auto nodePosition = ax::NodeEditor::ScreenToCanvas(popupPosition);
+
+				            ax::NodeEditor::SetNodePosition(node->GetId(), nodePosition);
+
+				            ax::NodeEditor::SelectNode(node->GetId());
+
+				            m_CreatedNode = node;
+				            m_CreatedLinks.clear();
+
+				            if (fromPin)
+				            {
+								CreateLinkToFirstMatchingPin(*node, *fromPin);
+				            }
+				        }
+					}
+				}
+				else
+				{
+					ImGuiListClipper clipper;
+					clipper.Begin(m_SortedNodes.size());
+					while (clipper.Step())
+					{
+						for (int lineNo = clipper.DisplayStart; lineNo < clipper.DisplayEnd; lineNo++)
+						{
+							const auto& nodeTypeInfo = m_SortedNodes[lineNo];
+							
+							bool selected = false;
+					        if (ImGui::Selectable(nodeTypeInfo->displayName.data(), &selected))
+					        {
+					            auto node = material.CreateNode(nodeTypeInfo->id);
+					            auto nodePosition = ax::NodeEditor::ScreenToCanvas(popupPosition);
+
+					            ax::NodeEditor::SetNodePosition(node->GetId(), nodePosition);
+
+					            ax::NodeEditor::SelectNode(node->GetId());
+
+					            m_CreatedNode = node;
+					            m_CreatedLinks.clear();
+
+					            if (fromPin)
+					            {
+									CreateLinkToFirstMatchingPin(*node, *fromPin);
+					            }
+					        }
+						}
+					}
+					clipper.End();
+				}
+
+				ImGui::PopStyleVar();
+
+				if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+				{
+					ImGui::SetScrollHereY(1.0f);
+				}
+			}
+			ImGui::EndChild();
+			ImGui::PopStyleColor();
+		
 	    }
 
-	    for (auto nodeTypeInfo : m_SortedNodes)
-	    {
-	        bool selected = false;
-	        if (ImGui::Selectable(nodeTypeInfo->displayName.data(), &selected))
-	        {
-	            auto node = material.CreateNode(nodeTypeInfo->id);
-	            auto nodePosition = ax::NodeEditor::ScreenToCanvas(popupPosition);
-
-	            ax::NodeEditor::SetNodePosition(node->GetId(), nodePosition);
-
-	            ax::NodeEditor::SelectNode(node->GetId());
-
-	            m_CreatedNode = node;
-	            m_CreatedLinks.clear();
-
-	            if (fromPin)
-	            {
-					CreateLinkToFirstMatchingPin(*node, *fromPin);
-	            }
-	        }
-	    }
+		ImGui::PopStyleVar();
 
 	    ImGui::EndPopup();
 	}
@@ -750,8 +855,8 @@ namespace mmo
 			CommitMaterialNodes(*m_graph);
 
 			HandleCreateAction(*m_graph);
-
 			HandleDeleteAction(*m_graph);
+			HandleContextMenuAction(*m_graph);
 			
 	        ed::Suspend();
 	        m_createDialog.Show(*m_graph);

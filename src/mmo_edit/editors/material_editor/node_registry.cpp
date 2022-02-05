@@ -22,7 +22,10 @@ namespace mmo
 			OneMinusNode::GetStaticTypeInfo(),
 			PowerNode::GetStaticTypeInfo(),
 			WorldPositionNode::GetStaticTypeInfo(),
-			MaskNode::GetStaticTypeInfo()
+			MaskNode::GetStaticTypeInfo(),
+			VertexNormalNode::GetStaticTypeInfo(),
+			AbsNode::GetStaticTypeInfo(),
+			DivideNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

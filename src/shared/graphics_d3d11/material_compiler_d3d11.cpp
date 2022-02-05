@@ -273,24 +273,63 @@ namespace mmo
 		}
 		
 		std::ostringstream outputStream;
-		outputStream << "float4(";
+		outputStream << "expr_" << input << ".";
 
 		for (int i = 0; i < 4; ++i)
 		{
-			if (channels[i] == 'x')
+			if (channels[i] != 'x')
 			{
-				outputStream << "0.0";
+				outputStream << channels[i];
 			}
-			else
-			{
-				outputStream << "expr_" << input << "." << channels[i];
-			}
-			if (i < 3) outputStream << ", ";
 		}
-
-		outputStream << ")";
+		
 		outputStream.flush();
 		
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddVertexNormal()
+	{
+		std::ostringstream outputStream;
+		outputStream << "float4(input.normal, 0.0)";
+		outputStream.flush();
+		
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddDivide(const ExpressionIndex first, const ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for divide");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for divide");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "expr_" << first << " / expr_" << second;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str());
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddAbs(const ExpressionIndex input)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter for abs");
+			return IndexNone;
+		}
+		
+		std::ostringstream outputStream;
+		outputStream << "abs(expr_" << input << ")";
+		outputStream.flush();
+
 		return AddExpression(outputStream.str());
 	}
 

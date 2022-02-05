@@ -118,7 +118,7 @@ namespace mmo
 	    {
 	    	return;
 		}
-
+		
 	    delete *nodeIt;
 
 	    m_nodes.erase(nodeIt);

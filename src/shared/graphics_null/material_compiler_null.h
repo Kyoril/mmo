@@ -54,6 +54,15 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::AddMask
 		ExpressionIndex AddMask(ExpressionIndex input, bool r, bool g, bool b, bool a) override;
+		
+		/// @copydoc MaterialCompiler::AddVertexNormal
+		ExpressionIndex AddVertexNormal() override;
+		
+		/// @copydoc MaterialCompiler::AddDivide
+		ExpressionIndex AddDivide(ExpressionIndex first, ExpressionIndex second) override;
+		
+		/// @copydoc MaterialCompiler::AddAbs
+		ExpressionIndex AddAbs(ExpressionIndex input) override;
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
@@ -61,5 +70,7 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
 		void GeneratePixelShaderCode() override;
+	public:
+		
 	};
 }
