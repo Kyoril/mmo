@@ -52,7 +52,7 @@ namespace mmo
 namespace mmo
 {
 	// The io service used for networking
-	static asio::io_service s_networkIO;
+	static std::unique_ptr<asio::io_service> s_networkIO;
 	static std::unique_ptr<asio::io_service::work> s_networkWork;
 	static std::thread s_networkThread;
 	static std::shared_ptr<LoginConnector> s_loginConnector;
@@ -63,7 +63,7 @@ namespace mmo
 	void NetWorkProc()
 	{
 		// Run the network thread
-		s_networkIO.run();
+		s_networkIO->run();
 	}
 
 	/// Initializes the login connector and starts one or multiple network
@@ -71,12 +71,14 @@ namespace mmo
 	/// thread.
 	void NetInit()
 	{
+		s_networkIO = std::make_unique<asio::io_service>();
+
 		// Keep the worker busy until this object is destroyed
-		s_networkWork = std::make_unique<asio::io_service::work>(s_networkIO);
+		s_networkWork = std::make_unique<asio::io_service::work>(*s_networkIO);
 
 		// Create the login connector instance
-		s_loginConnector = std::make_shared<LoginConnector>(s_networkIO);
-		s_realmConnector = std::make_shared<RealmConnector>(s_networkIO);
+		s_loginConnector = std::make_shared<LoginConnector>(*s_networkIO);
+		s_realmConnector = std::make_shared<RealmConnector>(*s_networkIO);
 
 		// Start a network thread
 		s_networkThread = std::thread(NetWorkProc);
@@ -104,9 +106,11 @@ namespace mmo
 		// Destroy the work object that keeps the worker busy so that
 		// it can actually exit
 		s_networkWork.reset();
+		s_networkIO->stop();
 
 		// Wait for the network thread to stop running
 		s_networkThread.join();
+		s_networkIO->reset();
 
 		s_realmConnector.reset();
 		s_loginConnector.reset();
@@ -297,17 +301,14 @@ namespace mmo
 	void DestroyGlobal()
 	{
 		s_timerConnection.disconnect();
-
-		// Remove login command
-		Console::UnregisterCommand("login");
-
+		
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
 		DestroyFrameUI();
 
 		// Reset game script instance
-		s_gameScript.release();
+		s_gameScript.reset();
 
 		// Destroy the network thread
 		NetDestroy();

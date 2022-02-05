@@ -32,7 +32,7 @@ namespace mmo
 
 	public:
 		explicit Connector(std::unique_ptr<Socket> socket, Listener *listener);
-		virtual ~Connector();
+		virtual ~Connector() override;
 
 	public:
 		virtual void setListener(Listener &listener);
@@ -43,11 +43,9 @@ namespace mmo
 		static std::shared_ptr<Connector> create(asio::io_service &service, Listener *listener = nullptr);
 
 	private:
-
 		std::unique_ptr<asio::ip::tcp::resolver> m_resolver;
 		uint16 m_port;
-
-
+		
 		void handleResolve(const asio::system_error &error, asio::ip::tcp::resolver::iterator iterator);
 		void beginConnect(asio::ip::tcp::resolver::iterator iterator);
 		void handleConnect(const asio::system_error &error, asio::ip::tcp::resolver::iterator iterator);

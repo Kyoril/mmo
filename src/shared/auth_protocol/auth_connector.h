@@ -9,92 +9,92 @@
 
 #include <functional>
 #include <iomanip>
-#include <mutex>
 #include <map>
+#include <mutex>
 
-
-namespace mmo
+namespace mmo::auth
 {
-	namespace auth
-	{
-		/// Basic connector implementation using the Auth protocol. Extends the Connector class
+	/// Basic connector implementation using the Auth protocol. Extends the Connector class
 		/// by thread safe PacketHandler management methods.
-		class AuthConnector 
-			: public mmo::Connector<Protocol>
+	class AuthConnector 
+		: public mmo::Connector<Protocol>
+	{
+	public:
+		typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
+
+	public:
+		explicit AuthConnector(std::unique_ptr<Socket> socket, Listener *listener)
+			: mmo::Connector<Protocol>(std::move(socket), listener)
 		{
-		public:
-			typedef std::function<PacketParseResult(auth::IncomingPacket &)> PacketHandler;
+		}
 
-		public:
-			explicit AuthConnector(std::unique_ptr<Socket> socket, Listener *listener)
-				: mmo::Connector<Protocol>(std::move(socket), listener)
+		virtual ~AuthConnector() override = default;
+
+	public:
+		/// Registers a packet handler for a given op code.
+		void RegisterPacketHandler(const uint8 opCode, PacketHandler&& handler)
+		{
+			std::scoped_lock lock{ m_packetHandlerMutex };
+			m_packetHandlers[opCode] = handler;
+		}
+
+		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
+		template <class Instance, class Class, class... Args1>
+		void RegisterPacketHandler(uint8 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
+		{
+			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
+				return (object.*method)(Args1(args)...);
+			});
+		}
+
+		/// Removes a registered packet handler for a given op code.
+		void ClearPacketHandler(const uint8 opCode)
+		{
+			std::scoped_lock lock{ m_packetHandlerMutex };
+
+			const auto it = m_packetHandlers.find(opCode);
+			if (it != m_packetHandlers.end())
 			{
+				m_packetHandlers.erase(it);
 			}
-			virtual ~AuthConnector() = default;
+		}
 
-		public:
-			/// Registers a packet handler for a given op code.
-			void RegisterPacketHandler(uint8 opCode, PacketHandler&& handler)
+		/// Removes all registered packet handlers.
+		void ClearPacketHandlers()
+		{
+			std::scoped_lock lock{ m_packetHandlerMutex };
+			m_packetHandlers.clear();
+		}
+
+	protected:
+		virtual PacketParseResult HandleIncomingPacket(auth::IncomingPacket &packet)
+		{
+			// Try to retrieve the packet handler in a thread-safe way
+			PacketHandler handler = nullptr;
 			{
 				std::scoped_lock lock{ m_packetHandlerMutex };
-				m_packetHandlers[opCode] = handler;
-			}
-			/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
-			template <class Instance, class Class, class... Args1>
-			void RegisterPacketHandler(uint8 opCode, Instance& object, PacketParseResult(Class::*method)(Args1...))
-			{
-				RegisterPacketHandler(opCode, [&object, method](Args1... args) {
-					return (object.*method)(Args1(args)...);
-				});
-			}
-			/// Removes a registered packet handler for a given op code.
-			void ClearPacketHandler(uint8 opCode)
-			{
-				std::scoped_lock lock{ m_packetHandlerMutex };
 
-				const auto it = m_packetHandlers.find(opCode);
-				if (it != m_packetHandlers.end())
+				// Try to find a registered packet handler
+				const auto it = m_packetHandlers.find(packet.GetId());
+				if (it == m_packetHandlers.end())
 				{
-					m_packetHandlers.erase(it);
-				}
-			}
-			/// Removes all registered packet handlers.
-			void ClearPacketHandlers()
-			{
-				std::scoped_lock lock{ m_packetHandlerMutex };
-				m_packetHandlers.clear();
-			}
-
-		protected:
-			virtual PacketParseResult HandleIncomingPacket(auth::IncomingPacket &packet)
-			{
-				// Try to retrieve the packet handler in a thread-safe way
-				PacketHandler handler = nullptr;
-				{
-					std::scoped_lock lock{ m_packetHandlerMutex };
-
-					// Try to find a registered packet handler
-					auto it = m_packetHandlers.find(packet.GetId());
-					if (it == m_packetHandlers.end())
-					{
-						// Received unhandled server packet
-						WLOG("Received unhandled server op code: 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<uint16>(packet.GetId()));
-						return PacketParseResult::Disconnect;
-					}
-
-					handler = it->second;
+					// Received unhandled server packet
+					WLOG("Received unhandled server op code: 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<uint16>(packet.GetId()));
+					return PacketParseResult::Disconnect;
 				}
 
-				// Call the packet handler
-				return handler(packet);
+				handler = it->second;
 			}
 
-		protected:
-			std::mutex m_packetHandlerMutex;
-			std::map<uint8, PacketHandler> m_packetHandlers;
-		};
+			// Call the packet handler
+			return handler(packet);
+		}
 
-		typedef AuthConnector Connector;
-		typedef mmo::IConnectorListener<Protocol> IConnectorListener;
-	}
+	protected:
+		std::mutex m_packetHandlerMutex;
+		std::map<uint8, PacketHandler> m_packetHandlers;
+	};
+
+	typedef AuthConnector Connector;
+	typedef mmo::IConnectorListener<Protocol> IConnectorListener;
 }

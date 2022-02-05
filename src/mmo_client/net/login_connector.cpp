@@ -7,8 +7,6 @@
 #include "base/constants.h"
 #include "log/default_log_levels.h"
 
-#include <iomanip>
-
 
 namespace mmo
 {
@@ -25,8 +23,6 @@ namespace mmo
 
 	LoginConnector::~LoginConnector()
 	{
-		ConsoleVarMgr::UnregisterConsoleVar("realmlist");
-		s_realmlistCVar = nullptr;
 	}
 
 	bool LoginConnector::connectionEstablished(bool success)

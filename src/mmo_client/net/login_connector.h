@@ -11,8 +11,6 @@
 
 #include "asio/io_service.hpp"
 
-#include <map>
-#include <functional>
 #include <mutex>
 
 
@@ -67,7 +65,7 @@ namespace mmo
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
 		explicit LoginConnector(asio::io_service &io);
-		~LoginConnector();
+		~LoginConnector() override;
 
 	public:
 		/// Gets realm data.

@@ -163,19 +163,19 @@ namespace mmo
 
 	void ConsoleVarMgr::Destroy()
 	{
-		// Prevent double descruction
 		if (!s_consoleVarsInitialized)
 		{
 			ASSERT(! "ConsoleVarMgr has not been initialized or already been destroyed!");
 			return;
 		}
-
-		// Unregister console commands
+		
 		const size_t numElements = countof(s_cvarCommands);
 		for (size_t i = 0; i < numElements; ++i)
 		{
 			Console::UnregisterCommand(s_cvarCommands[i].command);
 		}
+
+		s_consoleVars.clear();
 
 		// No longer initialized
 		s_consoleVarsInitialized = false;
@@ -184,7 +184,7 @@ namespace mmo
 	ConsoleVar * ConsoleVarMgr::RegisterConsoleVar(const std::string & name, const std::string & description, std::string defaultValue)
 	{
 		// Check if such a console var already exists and return the new console variable
-		auto it = s_consoleVars.find(name);
+		const auto it = s_consoleVars.find(name);
 		if (it != s_consoleVars.end())
 		{
 			return &it->second;
@@ -199,7 +199,7 @@ namespace mmo
 
 	bool ConsoleVarMgr::UnregisterConsoleVar(const std::string & name)
 	{
-		auto it = s_consoleVars.find(name);
+		const auto it = s_consoleVars.find(name);
 		if (it == s_consoleVars.end())
 		{
 			// CVar didn't exist!

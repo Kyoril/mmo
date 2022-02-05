@@ -371,7 +371,6 @@ namespace mmo
 								break;
 							case PacketParseResult::Disconnect:
 								m_isClosedOnParsing = true;
-								nextPacket = false;
 								break;
 							}
 						}
