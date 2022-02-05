@@ -256,13 +256,15 @@ namespace mmo
 
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
-		
-		// Register game states
-		const auto loginState = std::make_shared<LoginState>(*s_loginConnector, *s_realmConnector, *s_timerQueue);
-		GameStateMgr::Get().AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(*s_realmConnector);
-		GameStateMgr::Get().AddGameState(worldState);
+		GameStateMgr& gameStateMgr = GameStateMgr::Get();
+
+		// Register game states
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
+		gameStateMgr.AddGameState(loginState);
+
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector);
+		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
 		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState);
@@ -274,7 +276,7 @@ namespace mmo
 		}
 
 		// Enter login state
-		GameStateMgr::Get().SetGameState(LoginState::Name);
+		gameStateMgr.SetGameState(LoginState::Name);
 
 		// Run the RunOnce script
 		Console::ExecuteCommand("run Config/RunOnce.cfg");

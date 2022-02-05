@@ -221,6 +221,7 @@ namespace mmo
 
 	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler)
 	{
+		compiler.SetLit(m_lit);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
 

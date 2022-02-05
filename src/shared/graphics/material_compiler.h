@@ -123,6 +123,8 @@ namespace mmo
 
 		void SetDepthWriteEnabled(const bool enable) noexcept { m_depthWrite = enable; }
 
+		void SetLit(const bool enable) noexcept { m_lit = enable; }
+
 	protected:
 		/// @brief Called to generate the vertex shader code.
 		virtual void GenerateVertexShaderCode() = 0;
@@ -144,6 +146,7 @@ namespace mmo
 		std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 
+		bool m_lit { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
 	};

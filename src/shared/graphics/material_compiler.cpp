@@ -9,6 +9,15 @@ namespace mmo
 {
 	void MaterialCompiler::Compile(Material& material, ShaderCompiler& shaderCompiler)
 	{
+		if (m_lit)
+		{
+			material.SetType(MaterialType::Opaque);
+		}
+		else
+		{
+			material.SetType(MaterialType::Unlit);
+		}
+
 		material.SetDepthWriteEnabled(m_depthWrite);
 		material.SetDepthTestEnabled(m_depthTest);
 

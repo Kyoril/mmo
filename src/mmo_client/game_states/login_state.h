@@ -3,12 +3,12 @@
 #pragma once
 
 #include "game_states/game_state.h"
+
 #include "screen.h"
 
-#include "frame_ui/frame_mgr.h"
-#include "base/signal.h"
 #include "auth_protocol/auth_protocol.h"
-
+#include "base/signal.h"
+#include "frame_ui/frame_mgr.h"
 
 namespace mmo
 {
@@ -20,10 +20,10 @@ namespace mmo
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class LoginState final
-		: public IGameState
+		: public GameState
 	{
 	public:
-		explicit LoginState(LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers);
 
 	public:
 		/// The default name of the login state
@@ -35,7 +35,7 @@ namespace mmo
 
 		void OnLeave() override;
 
-		const std::string & GetName() const override;
+		[[nodiscard]] std::string_view GetName() const override;
 		
 		void EnterWorld(const CharacterView & character);
 	

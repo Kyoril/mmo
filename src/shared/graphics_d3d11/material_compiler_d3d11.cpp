@@ -366,15 +366,18 @@ namespace mmo
 			<< "{\n"
 			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 
-		// Lighting base
-		m_pixelShaderStream
-			<< "\tfloat3 lightDir = normalize(-float3(1.0, -0.5, 1.0));\n"
-			<< "\tfloat4 ambient = float4(0.05, 0.15, 0.25, 1.0);\n\n";
+		if (m_lit)
+		{
+			// Lighting base
+			m_pixelShaderStream
+				<< "\tfloat3 lightDir = normalize(-float3(1.0, -0.5, 1.0));\n"
+				<< "\tfloat4 ambient = float4(0.05, 0.15, 0.25, 1.0);\n\n";
 
-		// Light intensity expression
-		m_pixelShaderStream
-		<< "\tfloat4 lightIntensity = saturate(dot(input.normal, lightDir));\n\n";
-
+			// Light intensity expression
+			m_pixelShaderStream
+				<< "\tfloat4 lightIntensity = saturate(dot(input.normal, lightDir));\n\n";
+		}
+		
 		// BaseColor base
 		m_pixelShaderStream
 		<< "\tfloat4 baseColor = float4(1.0, 1.0, 1.0, 1.0);\n\n";
@@ -391,8 +394,16 @@ namespace mmo
 		}
 		
 		// Combining it
-		m_pixelShaderStream
-		<< "\toutputColor = (ambient + float4(saturate(input.color * lightIntensity).xyz, 1.0)) * baseColor;\n";
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "\toutputColor = (ambient + float4(saturate(input.color * lightIntensity).xyz, 1.0)) * baseColor;\n";
+		}
+		else
+		{
+			m_pixelShaderStream
+				<< "\toutputColor = saturate(input.color * baseColor);\n";
+		}
 
 		// End of main function
 		m_pixelShaderStream

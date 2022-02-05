@@ -32,25 +32,31 @@ namespace mmo
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class WorldState final
-		: public IGameState
+		: public GameState
 	{
 	public:
-		explicit WorldState(RealmConnector& realmConnector);
+		/// @brief Creates a new instance of the WorldState class and initializes it.
+		/// @param gameStateManager The game state manager that this state belongs to.
+		/// @param realmConnector The connector which manages the connection to the realm server.
+		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector);
 
 	public:
-		/// The default name of the world state
+		/// @brief The default name of the world state
 		static const std::string Name;
 
 	public:
-		// Inherited via IGameState
+		/// @copydoc GameState::OnEnter
 		void OnEnter() override;
-
+		
+		/// @copydoc GameState::OnLeave
 		void OnLeave() override;
-
-		const std::string& GetName() const override;
+		
+		/// @copydoc GameState::GetName
+		[[nodiscard]] std::string_view GetName() const override;
 
 	private:
 		// EventLoop connections
+		
 		bool OnMouseDown(MouseButton button, int32 x, int32 y);
 
 		bool OnMouseUp(MouseButton button, int32 x, int32 y);
@@ -78,23 +84,28 @@ namespace mmo
 		void RemovePacketHandler() const;
 		
 	private:
-		// 
+		//
+
 		void OnRealmDisconnected();
 
 		void OnEnterWorldFailed(game::player_login_response::Type error);
 
-		void RegisterGameplayCommands();
+		void RegisterGameplayCommands() const;
 
 		void RemoveGameplayCommands();
 
-		void ToggleAxisVisibility();
+	private:
+		// Gameplay command callbacks
 
-		void ToggleGridVisibility();
+		void ToggleAxisVisibility() const;
 
-		void ToggleWireframe();
+		void ToggleGridVisibility() const;
+
+		void ToggleWireframe() const;
 
 	private:
-				
+		// Network packet handlers
+
 		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);
 		
 		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket& packet);
@@ -102,7 +113,6 @@ namespace mmo
 		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
 
 	private:
-		
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
@@ -120,6 +130,8 @@ namespace mmo
 		Entity* m_towerLeftEntity { nullptr };
 		Entity* m_towerRightEntity { nullptr };
 		Entity* m_skyEntity { nullptr };
+		SceneNode* m_cloudsNode { nullptr };
+		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
 	};
 }

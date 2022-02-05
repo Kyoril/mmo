@@ -1,13 +1,14 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "login_state.h"
-#include "net/login_connector.h"
-#include "net/realm_connector.h"
-#include "console/console.h"
-#include "console/console_var.h"
+
 #include "game_state_mgr.h"
 #include "loading_screen.h"
 #include "world_state.h"
+#include "console/console.h"
+#include "console/console_var.h"
+#include "net/login_connector.h"
+#include "net/realm_connector.h"
 
 #include "assets/asset_registry.h"
 #include "base/clock.h"
@@ -20,13 +21,6 @@ namespace mmo
 	extern ConsoleVar* s_lastRealmVar;
 
 	const std::string LoginState::Name = "login";
-	
-	LoginState::LoginState(LoginConnector & loginConnector, RealmConnector & realmConnector, TimerQueue& timers)
-		: m_loginConnector(loginConnector)
-		, m_realmConnector(realmConnector)
-		, m_timers(timers)
-	{
-	}
 	
 	/// This command will try to connect to the login server and make a login attempt using the
 	/// first parameter as username and the other parameters as password.
@@ -43,6 +37,15 @@ namespace mmo
 		m_loginConnector.Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
 		
 		FrameManager::Get().TriggerLuaEvent("LOGIN_CONNECT");
+	}
+
+	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
+		RealmConnector& realmConnector, TimerQueue& timers)
+		: GameState(gameStateManager)
+		, m_loginConnector(loginConnector)
+		, m_realmConnector(realmConnector)
+		, m_timers(timers)
+	{
 	}
 
 	void LoginState::OnEnter()
@@ -96,9 +99,9 @@ namespace mmo
 		FrameManager::Get().ResetTopFrame();
 	}
 
-	const std::string & LoginState::GetName() const
+	std::string_view LoginState::GetName() const
 	{
-		return LoginState::Name;
+		return Name;
 	}
 
 	void LoginState::EnterWorld(const CharacterView& character)
@@ -118,7 +121,7 @@ namespace mmo
 		FrameManager::Get().Draw();
 	}
 
-	void LoginState::OnAuthenticationResult(auth::AuthResult result)
+	void LoginState::OnAuthenticationResult(const auth::AuthResult result)
 	{
 		if (result != auth::auth_result::Success)
 		{
@@ -197,7 +200,7 @@ namespace mmo
 
 	}
 	
-	void LoginState::OnRealmAuthenticationResult(uint8 result)
+	void LoginState::OnRealmAuthenticationResult(const uint8 result)
 	{
 		if (result != auth::auth_result::Success)
 		{

@@ -3,23 +3,22 @@
 #include "world_state.h"
 #include "client.h"
 
-#include <zstr/zstr.hpp>
-
-#include "game_state_mgr.h"
-
 #include "event_loop.h"
+#include "game_state_mgr.h"
+#include "console/console.h"
 #include "game_states/login_state.h"
 #include "net/realm_connector.h"
 #include "ui/world_frame.h"
 #include "ui/world_renderer.h"
-#include "console/console.h"
-#include "console/console_var.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/field_map.h"
 #include "game/object_type_id.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_manager.h"
+
+#include <zstr/zstr.hpp>
 
 namespace mmo
 {
@@ -30,13 +29,14 @@ namespace mmo
 	// Console command names
 	namespace command_names
 	{
-		static const char* ToggleAxis = "ToggleAxis";
-		static const char* ToggleGrid = "ToggleGrid";
-		static const char* ToggleWire = "ToggleWire";
+		static const char* s_toggleAxis = "ToggleAxis";
+		static const char* s_toggleGrid = "ToggleGrid";
+		static const char* s_toggleWire = "ToggleWire";
 	}
 	
-	WorldState::WorldState(RealmConnector& realmConnector)
-		: m_realmConnector(realmConnector)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
+		: GameState(gameStateManager)
+		, m_realmConnector(realmConnector)
 	{
 	}
 
@@ -119,47 +119,52 @@ namespace mmo
 		Screen::RemoveLayer(m_paintLayer);
 	}
 
-	const std::string& WorldState::GetName() const
+	std::string_view WorldState::GetName() const
 	{
-		return WorldState::Name;
+		return Name;
 	}
 
-	bool WorldState::OnMouseDown(MouseButton button, int32 x, int32 y)
+	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_playerController->OnMouseDown(button, x, y);
 		return true;
 	}
 
-	bool WorldState::OnMouseUp(MouseButton button, int32 x, int32 y)
+	bool WorldState::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_playerController->OnMouseUp(button, x, y);
 		return true;
 	}
 
-	bool WorldState::OnMouseMove(int32 x, int32 y)
+	bool WorldState::OnMouseMove(const int32 x, const int32 y)
 	{
 		m_playerController->OnMouseMove(x, y);
 		return true;
 	}
 
-	bool WorldState::OnKeyDown(int32 key)
+	bool WorldState::OnKeyDown(const int32 key)
 	{
 		m_playerController->OnKeyDown(key);
 		return true;
 	}
 
-	bool WorldState::OnKeyUp(int32 key)
+	bool WorldState::OnKeyUp(const int32 key)
 	{
 		m_playerController->OnKeyUp(key);
 		return true;
 	}
 
-	void WorldState::OnIdle(float deltaSeconds, GameTime timestamp)
+	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		m_playerController->Update(deltaSeconds);
+
+		if (m_cloudsNode && m_cloudsNode->GetParent())
+		{
+			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.025f), TransformSpace::World);
+		}
 	}
 	
-	bool WorldState::OnMouseWheel(int32 delta)
+	bool WorldState::OnMouseWheel(const int32 delta)
 	{
 		m_playerController->OnMouseWheel(delta);
 		return true;
@@ -174,6 +179,19 @@ namespace mmo
 	{
 		m_skyEntity = m_scene.CreateEntity("SkySphere", "Models/SkySphere.hmsh");
 		m_skyEntity->SetRenderQueueGroup(SkiesEarly);
+		
+		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+
+		const auto cloudMaterial = MaterialManager::Get().Load("Models/Clouds.hmat");
+		if (cloudMaterial)
+		{
+			cloudMaterial->SetType(MaterialType::Translucent);
+			m_cloudsEntity->SetMaterial(cloudMaterial);
+		}
+		
+		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
+		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
+		m_cloudsNode->AttachObject(*m_cloudsEntity);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene);
 
@@ -254,19 +272,19 @@ namespace mmo
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
-	void WorldState::RegisterGameplayCommands()
+	void WorldState::RegisterGameplayCommands() const
 	{
-		Console::RegisterCommand(command_names::ToggleAxis, [this](const std::string&, const std::string&)
+		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
 			ToggleAxisVisibility();
 		}, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
-		Console::RegisterCommand(command_names::ToggleGrid, [this](const std::string&, const std::string&)
+		Console::RegisterCommand(command_names::s_toggleGrid, [this](const std::string&, const std::string&)
 		{
 			ToggleGridVisibility();
 		}, ConsoleCommandCategory::Debug, "Toggles visibility of the world grid display.");
 		
-		Console::RegisterCommand(command_names::ToggleWire, [this](const std::string&, const std::string&)
+		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string&, const std::string&)
 		{
 			ToggleWireframe();
 		}, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
@@ -275,9 +293,9 @@ namespace mmo
 	void WorldState::RemoveGameplayCommands()
 	{
 		const String commandsToRemove[] = {
-			command_names::ToggleAxis,
-			command_names::ToggleGrid,
-			command_names::ToggleWire
+			command_names::s_toggleAxis,
+			command_names::s_toggleGrid,
+			command_names::s_toggleWire
 		};
 
 		for (const auto& command : commandsToRemove)
@@ -286,7 +304,7 @@ namespace mmo
 		}
 	}
 
-	void WorldState::ToggleAxisVisibility()
+	void WorldState::ToggleAxisVisibility() const
 	{
 		m_debugAxis->SetVisible(!m_debugAxis->IsVisible());
 		if (m_debugAxis->IsVisible())
@@ -299,7 +317,7 @@ namespace mmo
 		}
 	}
 
-	void WorldState::ToggleGridVisibility()
+	void WorldState::ToggleGridVisibility() const
 	{
 		m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
 		if (m_worldGrid->IsVisible())
@@ -312,7 +330,7 @@ namespace mmo
 		}
 	}
 
-	void WorldState::ToggleWireframe()
+	void WorldState::ToggleWireframe() const
 	{
 		auto& camera = m_playerController->GetCamera();
 		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
@@ -358,6 +376,9 @@ namespace mmo
 
 				m_skyEntity->DetachFromParent();
 				m_playerController->GetRootNode()->AttachObject(*m_skyEntity);
+				
+				m_cloudsNode->RemoveFromParent();
+				m_playerController->GetRootNode()->AddChild(*m_cloudsNode);
 			}
 
 			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
@@ -395,6 +416,7 @@ namespace mmo
 				m_playerController->GetControlledObject()->GetGuid() == id)
 			{
 				m_skyEntity->DetachFromParent();
+				m_cloudsNode->RemoveFromParent();
 
 				ELOG("Despawn of player controlled object!");
 				m_playerController->SetControlledObject(nullptr);

@@ -24,12 +24,12 @@ namespace mmo
 		m_gameStates.clear();
 	}
 
-	void GameStateMgr::AddGameState(const std::shared_ptr<IGameState> gameState)
+	void GameStateMgr::AddGameState(const std::shared_ptr<GameState> gameState)
 	{
 		ASSERT(gameState);
-		ASSERT(m_gameStates.find(gameState->GetName()) == m_gameStates.end());
+		ASSERT(m_gameStates.find(String(gameState->GetName())) == m_gameStates.end());
 
-		m_gameStates[gameState->GetName()] = gameState;
+		m_gameStates[String(gameState->GetName())] = gameState;
 	}
 
 	void GameStateMgr::RemoveGameState(const std::string & name)

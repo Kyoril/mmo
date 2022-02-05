@@ -588,14 +588,16 @@ namespace mmo
 		bool m_castsShadows { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
-
+		bool m_lit { true };
+		
+		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
 		BoolProperty m_receivesShadowProp { "Receives Shadows", m_receivesShadows };
 		BoolProperty m_castShadowProp { "Casts Shadows", m_receivesShadows };
 		BoolProperty m_depthTestProp { "Depth Test", m_depthTest };
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
 
-		PropertyBase* m_properties[5] = { &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+		PropertyBase* m_properties[6] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
 			&m_depthTestProp, &m_depthWriteProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };

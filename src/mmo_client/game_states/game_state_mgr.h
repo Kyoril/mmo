@@ -27,7 +27,7 @@ namespace mmo
 
 	public:
 		/// Adds a new game state to the list of available game states.
-		void AddGameState(std::shared_ptr<IGameState> gameState);
+		void AddGameState(std::shared_ptr<GameState> gameState);
 		/// Removes a game state from the list of available game states.
 		void RemoveGameState(const std::string& name);
 		/// Destroys the game state manager.
@@ -43,11 +43,11 @@ namespace mmo
 
 	private:
 		/// Contains all available game states.
-		std::map<std::string, std::shared_ptr<IGameState>, StrCaseIComp> m_gameStates;
+		std::map<std::string, std::shared_ptr<GameState>, StrCaseIComp> m_gameStates;
 		/// The current game state.
-		std::shared_ptr<IGameState> m_currentState;
+		std::shared_ptr<GameState> m_currentState;
 		/// The pending game state.
-		std::weak_ptr<IGameState> m_pendingState;
+		std::weak_ptr<GameState> m_pendingState;
 		scoped_connection m_idleConnection;
 	};
 }
