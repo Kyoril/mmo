@@ -188,5 +188,8 @@ namespace mmo
 #ifdef _DEBUG
 		ComPtr<ID3D11Debug> m_d3dDebug;
 #endif
+		
+		Matrix4 m_inverseView;
+		Matrix4 m_restoreInverseView;
 	};
 }

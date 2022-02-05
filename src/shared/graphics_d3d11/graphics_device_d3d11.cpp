@@ -268,11 +268,12 @@ namespace mmo
 		m_transform[0] = Matrix4::Identity;
 		m_transform[1] = Matrix4::Identity;
 		m_transform[2] = Matrix4::Identity;
+		m_inverseView = Matrix4::Identity;
 
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
 		cbd.Usage = D3D11_USAGE_DEFAULT;
-		cbd.ByteWidth = sizeof(Matrix4) * 3;
+		cbd.ByteWidth = sizeof(Matrix4) * 4;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 		D3D11_SUBRESOURCE_DATA sd;
@@ -620,9 +621,14 @@ namespace mmo
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
 
-		// Update the constant buffer
-		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
+		if (m_matrixDirty)
+		{
+			const Matrix4 matrices[4] = { m_transform[0], m_transform[1], m_transform[2], m_inverseView };
+				
+			// Update the constant buffer
+			m_matrixDirty = false;
+			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, matrices, 0, 0);
+		}
 		
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
@@ -633,9 +639,14 @@ namespace mmo
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
 		
-		// Update the constant buffer
-		m_matrixDirty = false;
-		m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
+		if (m_matrixDirty)
+		{
+			const Matrix4 matrices[4] = { m_transform[0], m_transform[1], m_transform[2], m_inverseView };
+				
+			// Update the constant buffer
+			m_matrixDirty = false;
+			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, matrices, 0, 0);
+		}
 		
 		// Execute draw command
 		m_immContext->DrawIndexed(endIndex == 0 ? m_indexCount - startIndex : endIndex - startIndex, startIndex, 0);
@@ -719,11 +730,16 @@ namespace mmo
 	void GraphicsDeviceD3D11::CaptureState()
 	{
 		GraphicsDevice::CaptureState();
+
+		m_restoreInverseView = m_inverseView;
 	}
 
 	void GraphicsDeviceD3D11::RestoreState()
 	{
 		GraphicsDevice::RestoreState();
+		
+		m_inverseView = m_restoreInverseView;
+
 		m_matrixDirty = true;
 		m_samplerDescChanged = true;
 	}
@@ -732,6 +748,12 @@ namespace mmo
 	{
 		// Change the transform values
 		GraphicsDevice::SetTransformMatrix(type, matrix);
+
+		if (type == View)
+		{
+			m_inverseView = matrix.Inverse();
+		}
+
 		m_matrixDirty = true;
 	}
 

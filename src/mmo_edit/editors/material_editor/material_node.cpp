@@ -246,7 +246,7 @@ namespace mmo
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value));
+			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value), ExpressionType::Float_1);
 		}
 
 		return m_compiledExpressionId;
@@ -262,7 +262,7 @@ namespace mmo
 			strm << ")";
 			strm.flush();
 
-			m_compiledExpressionId = compiler.AddExpression(strm.str());
+			m_compiledExpressionId = compiler.AddExpression(strm.str(), ExpressionType::Float_4);
 		}
 
 		return m_compiledExpressionId;
@@ -279,7 +279,7 @@ namespace mmo
 			}
 			else
 			{
-				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex secondExpression = IndexNone;
@@ -289,7 +289,7 @@ namespace mmo
 			}
 			else
 			{
-				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddAddition(firstExpression, secondExpression);
@@ -309,7 +309,7 @@ namespace mmo
 			}
 			else
 			{
-				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex secondExpression = IndexNone;
@@ -319,7 +319,7 @@ namespace mmo
 			}
 			else
 			{
-				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddMultiply(firstExpression, secondExpression);
@@ -413,7 +413,7 @@ namespace mmo
 			}
 			else
 			{
-				minExpression = compiler.AddExpression(std::to_string(m_values[0]));
+				minExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex maxExpression = IndexNone;
@@ -423,7 +423,7 @@ namespace mmo
 			}
 			else
 			{
-				maxExpression = compiler.AddExpression(std::to_string(m_values[1]));
+				maxExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddClamp(valueExpression, minExpression, maxExpression);
@@ -452,7 +452,7 @@ namespace mmo
 			}
 			else
 			{
-				exponentExpression = compiler.AddExpression(std::to_string(m_exponent));
+				exponentExpression = compiler.AddExpression(std::to_string(m_exponent), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddPower(baseExpression, exponentExpression);
@@ -472,7 +472,7 @@ namespace mmo
 			}
 			else
 			{
-				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex secondExpression = IndexNone;
@@ -482,7 +482,7 @@ namespace mmo
 			}
 			else
 			{
-				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex alphaExpression = IndexNone;
@@ -492,7 +492,7 @@ namespace mmo
 			}
 			else
 			{
-				alphaExpression = compiler.AddExpression(std::to_string(m_values[2]));
+				alphaExpression = compiler.AddExpression(std::to_string(m_values[2]), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddLerp(firstExpression, secondExpression, alphaExpression);
@@ -518,6 +518,16 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddWorldPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex CameraVectorNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddCameraVector();
 		}
 
 		return m_compiledExpressionId;
@@ -562,7 +572,7 @@ namespace mmo
 			}
 			else
 			{
-				firstExpression = compiler.AddExpression(std::to_string(m_values[0]));
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
 			}
 
 			ExpressionIndex secondExpression = IndexNone;
@@ -572,7 +582,7 @@ namespace mmo
 			}
 			else
 			{
-				secondExpression = compiler.AddExpression(std::to_string(m_values[1]));
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
 			}
 
 			m_compiledExpressionId = compiler.AddDivide(firstExpression, secondExpression);

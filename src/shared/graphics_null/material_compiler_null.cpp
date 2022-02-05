@@ -8,7 +8,7 @@ namespace mmo
 	{
 	}
 
-	ExpressionIndex MaterialCompilerNull::AddExpression(std::string_view code)
+	ExpressionIndex MaterialCompilerNull::AddExpression(std::string_view code, ExpressionType type)
 	{
 		return IndexNone;
 	}
@@ -68,6 +68,11 @@ namespace mmo
 	}
 
 	ExpressionIndex MaterialCompilerNull::AddWorldPosition()
+	{
+		return IndexNone;
+	}
+
+	ExpressionIndex MaterialCompilerNull::AddCameraVector()
 	{
 		return IndexNone;
 	}

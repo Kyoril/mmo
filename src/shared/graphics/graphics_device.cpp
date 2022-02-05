@@ -71,7 +71,7 @@ namespace mmo
 		s_currentDevice.reset();
 	}
 
-	void GraphicsDevice::SetClearColor(uint32 clearColor)
+	void GraphicsDevice::SetClearColor(const uint32 clearColor)
 	{
 		m_clearColor = clearColor;
 	}

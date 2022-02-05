@@ -9,6 +9,7 @@ cbuffer Matrices
 	column_major matrix matWorld;
 	column_major matrix matView;
 	column_major matrix matProj;
+	column_major matrix matInvView;
 };
 
 VertexOut main(VertexIn input)

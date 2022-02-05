@@ -999,6 +999,30 @@ namespace mmo
 	    Pin* m_outputPins[1] = { &m_coordinates };
 	};
 	
+	/// @brief A node which provides a pixel's camera vector (view direction) as expression.
+	class CameraVectorNode final : public Node
+	{
+	public:
+	    MAT_NODE(CameraVectorNode, "Camera Vector")
+
+	    CameraVectorNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    /// @brief The uv output pin.
+	    MaterialPin m_output = { this };
+
+	    /// @brief List of output pins as an array.
+	    Pin* m_outputPins[1] = { &m_output };
+	};
+	
 	/// @brief A node which provides a pixel's world position as expression.
 	class VertexNormalNode final : public Node
 	{

@@ -178,9 +178,12 @@ namespace mmo
 		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
 
-		const auto cloudMaterial = MaterialManager::Get().Load("Models/Clouds.hmat");
+		const auto cloudMaterial = MaterialManager::Get().Load("Models/Sky.hmat");
 		if (cloudMaterial)
 		{
+			cloudMaterial->SetDepthWriteEnabled(false);
+			cloudMaterial->SetDepthTestEnabled(false);
+
 			m_cloudsEntity->SetMaterial(cloudMaterial);
 		}
 		

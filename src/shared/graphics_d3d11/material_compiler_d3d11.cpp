@@ -12,15 +12,38 @@ namespace mmo
 		m_globalFunctions.emplace(name, code);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddExpression(const std::string_view code)
+	ExpressionIndex MaterialCompilerD3D11::AddExpression(const std::string_view code, ExpressionType type)
 	{
+		if (type == ExpressionType::Unknown)
+		{
+			ELOG("Unknown expression type!");
+			return IndexNone;
+		}
+
 		const int32 id = m_expressions.size();
 
 		std::ostringstream outputStream;
-		outputStream << "float4 expr_" << id << " = " << code << ";\n\n";
+		switch(type)
+		{
+		case ExpressionType::Float_1:
+			outputStream << "float";
+			break;
+		case ExpressionType::Float_2:
+			outputStream << "float2";
+			break;
+		case ExpressionType::Float_3:
+			outputStream << "float3";
+			break;
+		case ExpressionType::Float_4:
+			outputStream << "float4";
+			break;
+		}
+
+		outputStream << " expr_" << id << " = " << code << ";\n\n";
 		outputStream.flush();
 
 		m_expressions.emplace_back(outputStream.str());
+		m_expressionTypes.emplace_back(type);
 
 		return id;
 	}
@@ -45,10 +68,10 @@ namespace mmo
 		NotifyTextureCoordinateIndex(coordinateIndex);
 
 		std::ostringstream outputStream;
-		outputStream << "float4(input.uv" << coordinateIndex << ", 0.0, 0.0)";
+		outputStream << "input.uv" << coordinateIndex;
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates)
@@ -86,7 +109,7 @@ namespace mmo
 		outputStream << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddMultiply(const ExpressionIndex first, const ExpressionIndex second)
@@ -102,12 +125,15 @@ namespace mmo
 			WLOG("Missing second parameter for multiplication");
 			return IndexNone;
 		}
+		
+		const ExpressionType firstType = GetExpressionType(first);
+		const ExpressionType secondType = GetExpressionType(second);
 
 		std::ostringstream outputStream;
 		outputStream << "expr_" << first << " * expr_" << second;
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), std::max(firstType, secondType));
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddAddition(const ExpressionIndex first, const ExpressionIndex second)
@@ -123,12 +149,14 @@ namespace mmo
 			WLOG("Missing second parameter for addition");
 			return IndexNone;
 		}
+		
+		const ExpressionType targetType = GetExpressionType(first);
 
 		std::ostringstream outputStream;
 		outputStream << "expr_" << first << " + expr_" << second;
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), targetType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddLerp(const ExpressionIndex first, const ExpressionIndex second, const ExpressionIndex alpha)
@@ -150,12 +178,14 @@ namespace mmo
 			WLOG("Missing alpha parameter for lerp");
 			return IndexNone;
 		}
+		
+		const ExpressionType targetType = GetExpressionType(first);
 
 		std::ostringstream outputStream;
 		outputStream << "lerp(expr_" << first << ", expr_" << second << ", expr_" << alpha << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), targetType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddDot(const ExpressionIndex first, const ExpressionIndex second)
@@ -171,12 +201,14 @@ namespace mmo
 			WLOG("Missing second parameter for dot");
 			return IndexNone;
 		}
+		
+		const ExpressionType targetType = GetExpressionType(first);
 
 		std::ostringstream outputStream;
 		outputStream << "dot(expr_" << first << ", expr_" << second << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), targetType);
 	}
 		
 	ExpressionIndex MaterialCompilerD3D11::AddClamp(const ExpressionIndex value, const ExpressionIndex min, const ExpressionIndex max)
@@ -198,12 +230,14 @@ namespace mmo
 			WLOG("Missing max parameter for clamp");
 			return IndexNone;
 		}
+		
+		const ExpressionType valueType = GetExpressionType(value);
 
 		std::ostringstream outputStream;
 		outputStream << "clamp(expr_" << value << ", expr_" << min << ", expr_" << max << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), valueType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddOneMinus(const ExpressionIndex input)
@@ -214,11 +248,13 @@ namespace mmo
 			return IndexNone;
 		}
 		
+		const ExpressionType valueType = GetExpressionType(input);
+
 		std::ostringstream outputStream;
 		outputStream << "1.0 - expr_" << input;
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), valueType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddPower(const ExpressionIndex base, const ExpressionIndex exponent)
@@ -234,21 +270,32 @@ namespace mmo
 			WLOG("Missing exponent parameter for power");
 			return IndexNone;
 		}
+		
+		const ExpressionType valueType = GetExpressionType(base);
 
 		std::ostringstream outputStream;
 		outputStream << "pow(expr_" << base << ", expr_" << exponent << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), valueType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddWorldPosition()
 	{
 		std::ostringstream outputStream;
-		outputStream << "input.worldPos";
+		outputStream << "input.worldPos.xyz";
 		outputStream.flush();
 		
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
+	}
+	
+	ExpressionIndex MaterialCompilerD3D11::AddCameraVector()
+	{
+		std::ostringstream outputStream;
+		outputStream << "normalize(input.viewDir)";
+		outputStream.flush();
+		
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddMask(const ExpressionIndex input, const bool r, const bool g, const bool b, const bool a)
@@ -265,6 +312,23 @@ namespace mmo
 		if (g) channels[channelCount++] = 'g';
 		if (b) channels[channelCount++] = 'b';
 		if (a) channels[channelCount++] = 'a';
+
+		auto type = ExpressionType::Unknown;
+		switch(channelCount)
+		{
+		case 1:
+			type = ExpressionType::Float_1;
+			break;
+		case 2:
+			type = ExpressionType::Float_2;
+			break;
+		case 3:
+			type = ExpressionType::Float_3;
+			break;
+		case 4:
+			type = ExpressionType::Float_4;
+			break;
+		}
 
 		if (channelCount == 0)
 		{
@@ -285,16 +349,16 @@ namespace mmo
 		
 		outputStream.flush();
 		
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), type);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddVertexNormal()
 	{
 		std::ostringstream outputStream;
-		outputStream << "float4(input.normal, 0.0)";
+		outputStream << "input.normal";
 		outputStream.flush();
 		
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddDivide(const ExpressionIndex first, const ExpressionIndex second)
@@ -310,12 +374,14 @@ namespace mmo
 			WLOG("Missing second parameter for divide");
 			return IndexNone;
 		}
+		
+		const ExpressionType valueType = GetExpressionType(first);
 
 		std::ostringstream outputStream;
 		outputStream << "expr_" << first << " / expr_" << second;
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), valueType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddAbs(const ExpressionIndex input)
@@ -326,11 +392,13 @@ namespace mmo
 			return IndexNone;
 		}
 		
+		const ExpressionType valueType = GetExpressionType(input);
+
 		std::ostringstream outputStream;
 		outputStream << "abs(expr_" << input << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str());
+		return AddExpression(outputStream.str(), valueType);
 	}
 
 	void MaterialCompilerD3D11::GenerateVertexShaderCode()
@@ -368,7 +436,8 @@ namespace mmo
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 		m_vertexShaderStream
-			<< "\tfloat4 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n";
+			<< "\tfloat3 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n"
+			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n";
 
 		m_vertexShaderStream
 			<< "};\n\n";
@@ -380,6 +449,7 @@ namespace mmo
 			<< "\tcolumn_major matrix matWorld;\n"
 			<< "\tcolumn_major matrix matView;\n"
 			<< "\tcolumn_major matrix matProj;\n"
+			<< "\tcolumn_major matrix matInvView;\n"
 			<< "};\n\n";
 
 		// Main procedure start
@@ -392,7 +462,8 @@ namespace mmo
 		m_vertexShaderStream
 			<< "\tinput.pos.w = 1.0;\n"
 			<< "\toutput.pos = mul(input.pos, matWorld);\n"
-			<< "\toutput.worldPos = output.pos;\n"
+			<< "\toutput.worldPos = output.pos.xyz;\n"
+			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
 			<< "\toutput.pos = mul(output.pos, matView);\n"
 			<< "\toutput.pos = mul(output.pos, matProj);\n"
 			<< "\toutput.color = input.color;\n";
@@ -434,7 +505,8 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
-		m_pixelShaderStream << "\tfloat4 worldPos : TEXCOORD"<< m_numTexCoordinates << ";\n";
+		m_pixelShaderStream << "\tfloat3 worldPos : TEXCOORD"<< m_numTexCoordinates << ";\n";
+		m_pixelShaderStream << "\tfloat3 viewDir : TEXCOORD"<< m_numTexCoordinates + 1 << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
 		// Add texture samplers
@@ -484,7 +556,22 @@ namespace mmo
 				m_pixelShaderStream << "\t" << code;
 			}
 
-			m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
+			auto expressionType = GetExpressionType(m_baseColorExpression);
+			if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_4)
+			{
+				m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
+			}
+			else
+			{
+				if (expressionType == ExpressionType::Float_2)
+				{
+					m_pixelShaderStream << "\tbaseColor = float4(expr_" << m_baseColorExpression << ", 1.0, 1.0);\n\n";
+				}
+				else if (expressionType == ExpressionType::Float_3)
+				{
+					m_pixelShaderStream << "\tbaseColor = float4(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+				}
+			}
 		}
 		
 		// Combining it

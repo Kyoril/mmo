@@ -14,7 +14,7 @@ namespace mmo
 		void AddGlobalFunction(std::string_view name, std::string_view code) override;
 		
 		/// @copydoc MaterialCompiler::AddExpression
-		ExpressionIndex AddExpression(std::string_view code) override;
+		ExpressionIndex AddExpression(std::string_view code, ExpressionType type) override;
 		
 		/// @copydoc MaterialCompiler::NotifyTextureCoordinateIndex
 		void NotifyTextureCoordinateIndex(uint32 textureCoordinateIndex) override;
@@ -51,7 +51,10 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::AddWorldPosition
 		ExpressionIndex AddWorldPosition() override;
-		
+
+		/// @copydoc MaterialCompiler::AddCameraVector
+		ExpressionIndex AddCameraVector() override;
+
 		/// @copydoc MaterialCompiler::AddMask
 		ExpressionIndex AddMask(ExpressionIndex input, bool r, bool g, bool b, bool a) override;
 		

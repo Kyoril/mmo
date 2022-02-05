@@ -65,4 +65,14 @@ namespace mmo
 		material.SetVertexShaderCode({vertexOutput.code.data });
 		material.SetPixelShaderCode({pixelOutput.code.data });
 	}
+	
+	ExpressionType MaterialCompiler::GetExpressionType(ExpressionIndex index)
+	{
+		if (index < 0 || index >= m_expressionTypes.size())
+		{
+			return ExpressionType::Unknown;
+		}
+
+		return m_expressionTypes[index];
+	}
 }

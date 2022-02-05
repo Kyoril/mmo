@@ -18,6 +18,8 @@ namespace mmo
 	/// @brief Enumerates available expression types.
 	enum class ExpressionType : uint8
 	{
+		Unknown,
+
 		/// @brief A single float expression (float).
 		Float_1,
 
@@ -68,8 +70,14 @@ namespace mmo
 
 		/// @brief Adds a custom expression.
 		/// @param code Code of the expression.
+		/// @param type Type of the expression.
 		/// @return Expression index or IndexNone in case of an error.
-		virtual ExpressionIndex AddExpression(std::string_view code) = 0;
+		virtual ExpressionIndex AddExpression(std::string_view code, ExpressionType type = ExpressionType::Float_4) = 0;
+
+		/// @brief Gets the expression type.
+		/// @param index 
+		/// @return 
+		virtual ExpressionType GetExpressionType(ExpressionIndex index);
 
 		/// @brief Notifies the compiler that a certain texture coordinate index is required by the material.
 		/// @param textureCoordinateIndex The texture coordinate index required.
@@ -137,6 +145,10 @@ namespace mmo
 		/// @brief Adds a world position expression.
 		/// @return The world position expression index or IndexNone in case of an error.
 		virtual ExpressionIndex AddWorldPosition() = 0;
+		
+		/// @brief Adds a camera vector (view direction) expression.
+		/// @return The camera vector (view direction) expression index or IndexNone in case of an error.
+		virtual ExpressionIndex AddCameraVector() = 0;
 
 		/// @brief Adds a mask expression.
 		/// @param input The input expression whose value should be used.
@@ -182,6 +194,7 @@ namespace mmo
 		
 		std::map<String, String> m_globalFunctions;
 		std::vector<String> m_expressions;
+		std::vector<ExpressionType> m_expressionTypes;
 		int32 m_baseColorExpression { IndexNone };
 
 		Material* m_material { nullptr };
@@ -193,5 +206,6 @@ namespace mmo
 		bool m_lit { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
+
 	};
 }

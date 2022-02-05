@@ -25,7 +25,8 @@ namespace mmo
 			MaskNode::GetStaticTypeInfo(),
 			VertexNormalNode::GetStaticTypeInfo(),
 			AbsNode::GetStaticTypeInfo(),
-			DivideNode::GetStaticTypeInfo()
+			DivideNode::GetStaticTypeInfo(),
+			CameraVectorNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();
