@@ -29,7 +29,7 @@ namespace mmo
 	struct CreateNodeDialog
 	{
 	    void Open(Pin* fromPin = nullptr);
-	    void Show(MaterialGraph& document);
+	    void Show(MaterialGraph& material);
 
 	    Node* GetCreatedNode()       { return m_CreatedNode; }
 	    const Node* GetCreatedNode() const { return m_CreatedNode; }
@@ -38,7 +38,7 @@ namespace mmo
 		std::span<const Pin* const> GetCreatedLinks() const { return {const_cast<const Pin* const*>(m_CreatedLinks.data()), m_CreatedLinks.size() }; }
 
 	private:
-	    std::vector<Pin*> CreateLinkToFirstMatchingPin(Node& node, Pin& fromPin);
+	    static std::vector<Pin*> CreateLinkToFirstMatchingPin(Node& node, Pin& fromPin);
 
 	    Node* m_CreatedNode = nullptr;
 	    std::vector<Pin*> m_CreatedLinks;
@@ -56,7 +56,7 @@ namespace mmo
 		~MaterialEditorInstance() override;
 
 	public:
-		void Compile();
+		void Compile() const;
 		void Save();
 
 	public:
@@ -74,7 +74,7 @@ namespace mmo
 
 		void RenderMaterialPreview();
 
-		void HandleDeleteAction(MaterialGraph& material);
+		static void HandleDeleteAction(MaterialGraph& material);
 
 		void HandleContextMenuAction(MaterialGraph& material);
 

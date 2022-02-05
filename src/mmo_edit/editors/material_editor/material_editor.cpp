@@ -17,9 +17,12 @@
 
 namespace mmo
 {
+	/// @brief Default file extension for material files.
+	static const String MaterialExtension = ".hmat";
+	
 	bool MaterialEditor::CanLoadAsset(const String& extension) const
 	{
-		return extension == ".hmat";
+		return extension == MaterialExtension;
 	}
 
 	void MaterialEditor::AddCreationContextMenuItems()
@@ -44,7 +47,7 @@ namespace mmo
 
 			ImGui::InputText("##field", &m_materialName);
 			ImGui::SameLine();
-			ImGui::Text(".hmat");
+			ImGui::Text(MaterialExtension.c_str());
 			
 			ImGui::TableSetColumnIndex(1);
 			if (ImGui::Button("Create"))
@@ -92,7 +95,7 @@ namespace mmo
 	void MaterialEditor::CreateNewMaterial()
 	{
 		auto currentPath = m_host.GetCurrentPath();
-		currentPath /= m_materialName + ".hmat";
+		currentPath /= m_materialName + MaterialExtension;
 		m_materialName.clear();
 		
 		const auto file = AssetRegistry::CreateNewFile(currentPath.string());

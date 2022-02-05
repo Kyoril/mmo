@@ -424,7 +424,7 @@ namespace mmo
 
 		[[nodiscard]] std::optional<uint32> GetPinIndex(const Pin& pin);
 
-		[[nodiscard]] virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
+		virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
 
 		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
 

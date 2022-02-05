@@ -22,30 +22,10 @@
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
-#include "graphics/shader_compiler.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
+#include "graphics/shader_compiler.h"
 
-
-namespace ImGui
-{
-	bool Splitter(const bool splitVertically, const float thickness, float* size1, float* size2, const float minSize1, const float minSize2, const float splitterLongAxisSize = -1.0f)
-	{
-	    using namespace ImGui;
-	    ImGuiContext& g = *GImGui;
-	    ImGuiWindow* window = g.CurrentWindow;
-	    const ImGuiID id = window->GetID("##Splitter");
-	    ImRect bb;
-	    bb.Min = window->DC.CursorPos + (splitVertically ? ImVec2(*size1, 0.0f) : ImVec2(0.0f, *size1));
-	    bb.Max = bb.Min + CalcItemSize(splitVertically ? ImVec2(thickness, splitterLongAxisSize) : ImVec2(splitterLongAxisSize, thickness), 0.0f, 0.0f);
-	    if (splitVertically)
-	    {
-		    return SplitterBehavior(bb, id, ImGuiAxis_X, size1, size2, minSize1, minSize2, 0.0f);
-	    }
-
-        return SplitterBehavior(bb, id, ImGuiAxis_Y, size1, size2, minSize1, minSize2, 0.0f);
-	}
-}
 
 namespace mmo
 {
@@ -121,10 +101,10 @@ namespace mmo
 	{
 	    switch (pinType)
 	    {
-	        case PinType::Material: return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+		case PinType::Material: return ImVec4{1.0f, 1.0f, 1.0f, 1.0f};
 	    }
 
-	    return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+		return ImVec4{1.0f, 1.0f, 1.0f, 1.0f};
 	}
 		
 	void CommitMaterialNodes(MaterialGraph& material)
@@ -394,7 +374,9 @@ namespace mmo
     {
 		ItemDeleter itemDeleter;
         if (!itemDeleter)
-            return;
+        {
+	        return;
+        }
 		
 		std::vector<Node*> nodesToDelete;
         uint32_t brokenLinkCount = 0;
@@ -402,14 +384,23 @@ namespace mmo
         // Process all nodes marked for deletion
         while (auto* nodeDeleter = itemDeleter.QueryDeletedNode())
         {
-            // Remove node, pass 'true' so links attached to node will also be queued for deletion.
-            if (nodeDeleter->Accept(true))
-            {
-                auto node = material.FindNode(static_cast<uint32_t>(nodeDeleter->m_NodeId.Get()));
-                if (node != nullptr)
-                    // Queue nodes for deletion. We need to serve links first to avoid crash.
-                    nodesToDelete.push_back(node);
-            }
+			if (material.IsRootNode(nodeDeleter->nodeId.Get()))
+			{
+				nodeDeleter->Reject();
+			}
+			else
+			{
+				// Remove node, pass 'true' so links attached to node will also be queued for deletion.
+	            if (nodeDeleter->Accept(true))
+	            {
+	                auto node = material.FindNode(static_cast<uint32_t>(nodeDeleter->nodeId.Get()));
+	                if (node != nullptr)
+	                {
+	                    // Queue nodes for deletion. We need to serve links first to avoid crash.
+	                    nodesToDelete.push_back(node);
+					}
+	            }
+			}
         }
 
         // Process all links marked for deletion
@@ -417,7 +408,7 @@ namespace mmo
         {
             if (linkDeleter->Accept())
             {
-                auto startPin = material.FindPin(static_cast<uint32_t>(linkDeleter->m_StartPinId.Get()));
+	            const auto startPin = material.FindPin(static_cast<uint32_t>(linkDeleter->startPinId.Get()));
                 if (startPin != nullptr && startPin->IsLinked())
                 {
                     startPin->Unlink();
@@ -475,7 +466,7 @@ namespace mmo
 
     void CreateNodeDialog::Open(Pin* fromPin)
 	{
-		auto storage = ImGui::GetStateStorage();
+		const auto storage = ImGui::GetStateStorage();
 	    storage->SetVoidPtr(ImGui::GetID("##create_node_pin"), fromPin);
 	    ImGui::OpenPopup("##create_node");
 
@@ -691,7 +682,7 @@ namespace mmo
 		m_scene.Clear();
 	}
 
-	void MaterialEditorInstance::Compile()
+	void MaterialEditorInstance::Compile() const
 	{
 		const auto materialCompiler = GraphicsDevice::Get().CreateMaterialCompiler();
 		m_graph->Compile(*materialCompiler);

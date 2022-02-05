@@ -340,4 +340,13 @@ namespace mmo
 		ASSERT(m_rootNode);
 		m_rootNode->Compile(compiler);
 	}
+
+	bool MaterialGraph::IsRootNode(const uint32 nodeId) const noexcept
+	{
+		if (!m_rootNode)
+		{
+			return false;
+		}
+		return nodeId == m_rootNode->GetId();
+	}
 }

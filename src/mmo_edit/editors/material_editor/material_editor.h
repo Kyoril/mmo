@@ -8,14 +8,18 @@
 
 namespace mmo
 {
+	/// @brief Editor implementation to support creation and editing of materials.
 	class MaterialEditor final : public EditorBase
 	{
 	public:
+		/// @brief Default constructor.
+		/// @param host Host which provides support for stuff editors might require.
 		explicit MaterialEditor(EditorHost& host)
 			: EditorBase(host)
 		{
 		}
-		
+
+	public:
 		/// @copydoc EditorBase::CanLoadAsset 
 		[[nodiscard]] bool CanLoadAsset(const String& extension) const override;
 		
@@ -26,9 +30,9 @@ namespace mmo
 		void AddCreationContextMenuItems() override;
 
 	protected:
+		/// @copydoc EditorBase::DrawImpl
 		void DrawImpl() override;
-
-	protected:
+		
 		/// @copydoc EditorBase::OpenAssetImpl 
 		std::shared_ptr<EditorInstance> OpenAssetImpl(const Path& asset) override;
 		

@@ -179,7 +179,9 @@ namespace mmo
 
 		void Compile(MaterialCompiler& compiler) const;
 
-	private:
+	    bool IsRootNode(uint32 nodeId) const noexcept;
+
+    private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
 	    std::vector<Node*> m_nodes;
