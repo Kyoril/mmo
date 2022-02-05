@@ -42,7 +42,7 @@ namespace mmo
 
 		/// @brief Performs all post-load actions in order. If any of them returns false, the function will stop and return false as well.
 		/// @return true on success of all actions, false otherwise.
-		bool PerformAfterLoadActions()
+		bool PerformAfterLoadActions() const
 		{
 			for (const auto& action : m_loadLater)
 			{
@@ -503,9 +503,13 @@ namespace mmo
 		                rhs->displayName.begin(), rhs->displayName.end());
 		        });
 		    }
-			
+
+			if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+			{
+				ImGui::SetKeyboardFocusHere(0);
+			}
 			m_filter.Draw("Filter");
-			
+
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1019f, 0.1019f, 0.1019f, 1.0f));
 			ImGui::BeginChild("scrolling", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
 			{
@@ -524,7 +528,7 @@ namespace mmo
 						bool selected = false;
 				        if (ImGui::Selectable(nodeTypeInfo->displayName.data(), &selected))
 				        {
-				            auto node = material.CreateNode(nodeTypeInfo->id);
+					        const auto node = material.CreateNode(nodeTypeInfo->id);
 				            auto nodePosition = ax::NodeEditor::ScreenToCanvas(popupPosition);
 
 				            ax::NodeEditor::SetNodePosition(node->GetId(), nodePosition);
@@ -538,6 +542,10 @@ namespace mmo
 				            {
 								CreateLinkToFirstMatchingPin(*node, *fromPin);
 				            }
+
+							m_filter.Clear();
+							ImGui::CloseCurrentPopup();
+							break;
 				        }
 					}
 				}
@@ -568,6 +576,10 @@ namespace mmo
 					            {
 									CreateLinkToFirstMatchingPin(*node, *fromPin);
 					            }
+								
+								m_filter.Clear();
+								ImGui::CloseCurrentPopup();
+								break;
 					        }
 						}
 					}
@@ -698,7 +710,7 @@ namespace mmo
 		}
 	}
 
-	void MaterialEditorInstance::Save()
+	void MaterialEditorInstance::Save() const
 	{
 		// Ensure that the material is compiled
 		Compile();
