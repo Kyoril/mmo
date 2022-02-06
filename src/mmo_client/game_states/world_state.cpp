@@ -183,6 +183,12 @@ namespace mmo
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
+		m_groundEntity = m_scene.CreateEntity("Ground", "Models/Floor/Floor.hmsh");
+		m_groundNode = &m_scene.CreateSceneNode("Ground");
+		m_groundNode->AttachObject(*m_groundEntity);
+		m_groundNode->SetScale(Vector3::UnitScale * 100.0f);
+		m_scene.GetRootSceneNode().AddChild(*m_groundNode);
+
 		m_playerController = std::make_unique<PlayerController>(m_scene);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us

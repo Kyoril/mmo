@@ -635,6 +635,7 @@ namespace mmo
 		ed::SetCurrentEditor(m_context);
 
 		m_material = MaterialManager::Get().CreateManual(assetPath.string());
+		m_material->SetName(assetPath.string());
 		m_graph = std::make_unique<MaterialGraph>();
 
 		ExecutableMaterialGraphLoadContext context;
@@ -718,6 +719,8 @@ namespace mmo
 	void MaterialEditorInstance::Save() const
 	{
 		ed::SetCurrentEditor(m_context);
+		
+		m_material->SetName(GetAssetPath().string());
 
 		// Ensure that the material is compiled
 		Compile();

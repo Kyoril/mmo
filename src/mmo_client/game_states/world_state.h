@@ -129,6 +129,8 @@ namespace mmo
 		Entity* m_archEntity { nullptr };
 		Entity* m_towerLeftEntity { nullptr };
 		Entity* m_towerRightEntity { nullptr };
+		SceneNode* m_groundNode { nullptr };
+		Entity* m_groundEntity { nullptr };
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
