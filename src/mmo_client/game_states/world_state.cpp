@@ -156,8 +156,9 @@ namespace mmo
 	{
 		m_playerController->Update(deltaSeconds);
 
-		if (m_cloudsNode && m_cloudsNode->GetParent())
+		if (m_cloudsNode && m_playerController->GetRootNode())
 		{
+			m_cloudsNode->SetPosition(m_playerController->GetRootNode()->GetPosition());
 			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.025f), TransformSpace::World);
 		}
 	}
@@ -177,18 +178,10 @@ namespace mmo
 	{
 		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
-
-		const auto cloudMaterial = MaterialManager::Get().Load("Models/Sky.hmat");
-		if (cloudMaterial)
-		{
-			cloudMaterial->SetDepthWriteEnabled(false);
-			cloudMaterial->SetDepthTestEnabled(false);
-
-			m_cloudsEntity->SetMaterial(cloudMaterial);
-		}
-		
 		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
+		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
+		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene);
 
@@ -370,9 +363,6 @@ namespace mmo
 			if (m_gameObjectsById.empty())
 			{
 				m_playerController->SetControlledObject(object);
-				
-				m_cloudsNode->RemoveFromParent();
-				m_playerController->GetRootNode()->AddChild(*m_cloudsNode);
 			}
 
 			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
@@ -409,8 +399,6 @@ namespace mmo
 			if (m_playerController->GetControlledObject() &&
 				m_playerController->GetControlledObject()->GetGuid() == id)
 			{
-				m_cloudsNode->RemoveFromParent();
-
 				ELOG("Despawn of player controlled object!");
 				m_playerController->SetControlledObject(nullptr);
 			}

@@ -629,6 +629,11 @@ namespace mmo
 	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
 	{
+		ed::Config editorConfig;
+		editorConfig.SettingsFile = nullptr;
+	    m_context = ed::CreateEditor(&editorConfig);
+		ed::SetCurrentEditor(m_context);
+
 		m_material = MaterialManager::Get().CreateManual(assetPath.string());
 		m_graph = std::make_unique<MaterialGraph>();
 
@@ -712,6 +717,8 @@ namespace mmo
 
 	void MaterialEditorInstance::Save() const
 	{
+		ed::SetCurrentEditor(m_context);
+
 		// Ensure that the material is compiled
 		Compile();
 
@@ -736,14 +743,6 @@ namespace mmo
 
 	void MaterialEditorInstance::Draw()
 	{
-        if (!m_context)
-        {
-		    ed::Config editorConfig;
-		    m_context = ed::CreateEditor(&editorConfig);
-            
-			ed::SetCurrentEditor(m_context);
-		}
-
 		ImGui::PushID(GetAssetPath().c_str());
 
 		const auto dockspaceId = ImGui::GetID("MaterialGraph");
@@ -752,9 +751,9 @@ namespace mmo
 		// Add the viewport
 	    ed::SetCurrentEditor(m_context);
 
-		String previewId = "Preview##" + GetAssetPath().string();
-		String detailsId = "Details##" + GetAssetPath().string();
-		String graphId = "Material Graph##" + GetAssetPath().string();
+		const String previewId = "Preview##" + GetAssetPath().string();
+		const String detailsId = "Details##" + GetAssetPath().string();
+		const String graphId = "Material Graph##" + GetAssetPath().string();
 
 		if (ImGui::Begin(previewId.c_str()))
 		{
@@ -820,7 +819,7 @@ namespace mmo
 							ImGui::TableNextRow();
 				            ImGui::TableSetColumnIndex(0);
 				            ImGui::AlignTextToFramePadding();
-				            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+							const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
 				            ImGui::TreeNodeEx("Field", flags, prop->GetName().data());
 
 				            ImGui::TableSetColumnIndex(1);
@@ -862,31 +861,56 @@ namespace mmo
 							else if (const auto* colValue = prop->GetValueAs<Color>())
 							{
 								Color value = *colValue;
-								if (ImGui::InputFloat4(prop->GetName().data(), value))
+								if (ImGui::ColorEdit4(prop->GetName().data(), value))
+								{
+									prop->SetValue(value);
+								}
+								if (ImGui::InputFloat4(String(String("##") + prop->GetName().data()).c_str(), value))
 								{
 									prop->SetValue(value);
 								}
 							}
 							else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
 							{
-								if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)"))
+								if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)", ImGuiComboFlags_HeightLargest))
 								{
-									const auto files = AssetRegistry::ListFiles();
-									for (auto& file : files)
+									if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
 									{
-										if (!pathValue->GetFilter().empty())
-										{
-											if (!file.ends_with(pathValue->GetFilter()))
-												continue;
-										}
-										
-										ImGui::PushID(file.c_str());
-										if (ImGui::Selectable(file.c_str()))
-										{
-											prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
-										}
-										ImGui::PopID();
+										ImGui::SetKeyboardFocusHere(0);
 									}
+									m_assetFilter.Draw("##asset_filter");
+
+									if (ImGui::BeginChild("##asset_scroll_area", ImVec2(0, 400)))
+									{
+										const auto files = AssetRegistry::ListFiles();
+										for (auto& file : files)
+										{
+											if (!pathValue->GetFilter().empty())
+											{
+												if (!file.ends_with(pathValue->GetFilter()))
+													continue;
+											}
+
+											if (m_assetFilter.IsActive())
+											{
+												if (!m_assetFilter.PassFilter(file.c_str()))
+												{
+													continue;
+												}
+											}
+											
+											ImGui::PushID(file.c_str());
+											if (ImGui::Selectable(Path(file).filename().string().c_str()))
+											{
+												prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
+
+												m_assetFilter.Clear();
+												ImGui::CloseCurrentPopup();
+											}
+											ImGui::PopID();
+										}
+									}
+									ImGui::EndChild();
 									
 									ImGui::EndCombo();
 								}

@@ -3,6 +3,7 @@
 #include "material_node.h"
 
 #include "imgui_node_editor.h"
+#include "imgui_node_editor_internal.h"
 #include "material_graph.h"
 #include "reader.h"
 #include "writer.h"
@@ -289,7 +290,38 @@ namespace mmo
 	io::Writer& Node::Serialize(io::Writer& writer)
 	{
 		writer
-			<< io::write<uint32>(m_id)
+			<< io::write<uint32>(m_id);
+
+		float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
+		const auto editorContext = reinterpret_cast<ed::Detail::EditorContext*>(ed::GetCurrentEditor());
+		if (editorContext)
+		{
+			ed::Detail::EditorState& state = editorContext->GetState();
+			const auto nodeStateIt = state.m_NodesState.m_Nodes.find(m_id);
+			if (nodeStateIt != state.m_NodesState.m_Nodes.end())
+			{
+				posX = nodeStateIt->second.m_Location.x;
+				posY = nodeStateIt->second.m_Location.y;
+				sizeX = nodeStateIt->second.m_Size.x;
+				sizeY = nodeStateIt->second.m_Size.y;
+			}
+			else
+			{
+				WLOG("Node state not found, empty state will be saved");
+			}
+		}
+		else
+		{
+			WLOG("No editor context given, node state won't be saved");
+		}
+
+		writer
+			<< io::write<float>(posX)
+			<< io::write<float>(posY)
+			<< io::write<float>(sizeX)
+			<< io::write<float>(sizeY);
+
+		writer
 			<< io::write<uint8>(GetInputPins().size());
 		for(const auto& pin : GetInputPins())
 		{
@@ -316,15 +348,39 @@ namespace mmo
 	io::Reader& Node::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		uint8 numInputPins, numOutputPins, numProperties;
-
+		float positionX, positionY, sizeX, sizeY;
 		if (!(reader 
 			>> io::read<uint32>(m_id)
+			>> io::read<float>(positionX)
+			>> io::read<float>(positionY)
+			>> io::read<float>(sizeX)
+			>> io::read<float>(sizeY)
 			>> io::read<uint8>(numInputPins)))
 		{
 			ELOG("Unable to deserialize " << GetTypeInfo().displayName << " node");
 			return reader;
 		}
-		
+
+		const auto editorContext = reinterpret_cast<ed::Detail::EditorContext*>(ed::GetCurrentEditor());
+		if (editorContext)
+		{
+			ed::Detail::EditorState& state = editorContext->GetState();
+			const auto nodeStateIt = state.m_NodesState.m_Nodes.find(m_id);
+			if (nodeStateIt == state.m_NodesState.m_Nodes.end())
+			{
+				state.m_NodesState.m_Nodes.emplace(m_id, ed::Detail::NodeState{ImVec2{positionX, positionY}, ImVec2{sizeX, sizeY}, ImVec2{0.0f, 0.0f}});
+			}
+			else
+			{
+				nodeStateIt->second.m_Location = ImVec2{positionX, positionY};
+				nodeStateIt->second.m_Size = ImVec2{sizeX, sizeY};
+			}
+		}
+		else
+		{
+			DLOG("No editor context given, node state won't be restored");
+		}
+
 		for (uint32 i = 0; i < GetInputPins().size() && i < numInputPins; ++i)
 		{
 			if (!(GetInputPins()[i]->Deserialize(reader, context)))

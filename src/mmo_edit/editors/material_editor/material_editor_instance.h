@@ -98,5 +98,6 @@ namespace mmo
 		std::unique_ptr<MaterialGraph> m_graph;
 		ax::NodeEditor::EditorContext* m_context { nullptr };
 		bool m_initDockLayout { true };
+		ImGuiTextFilter m_assetFilter;
 	};
 }
