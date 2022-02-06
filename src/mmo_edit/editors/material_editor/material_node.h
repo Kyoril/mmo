@@ -930,6 +930,30 @@ namespace mmo
 	    Pin* m_outputPins[1] = { &m_coordinates };
 	};
 	
+	/// @brief A node which provides a pixel's interpolated vertex color as expression.
+	class VertexColorNode final : public Node
+	{
+	public:
+	    MAT_NODE(VertexColorNode, "Vertex Color")
+
+	    VertexColorNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    /// @brief The uv output pin.
+	    MaterialPin m_coordinates = { this };
+
+	    /// @brief List of output pins as an array.
+	    Pin* m_outputPins[1] = { &m_coordinates };
+	};
+	
 	class AbsNode final : public Node
 	{
 	public:
@@ -989,6 +1013,95 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 	
+	/// @brief A node which adds an expression subtraction expression.
+	class SubtractNode final : public Node
+	{
+	public:
+	    MAT_NODE(SubtractNode, "Subtract")
+
+	    SubtractNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 1.0f, 1.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which adds an expression normalization expression.
+	class NormalizeNode final : public Node
+	{
+	public:
+	    MAT_NODE(NormalizeNode, "Normalize")
+
+	    NormalizeNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    MaterialPin m_input = { this };
+		
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[1] = { &m_input };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which appends an input expression's value components.
+	class AppendNode final : public Node
+	{
+	public:
+	    MAT_NODE(AppendNode, "Append")
+
+	    AppendNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		
+	private:
+	    MaterialPin m_inputA = { this, "A" };
+		MaterialPin m_inputB = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[2] = { &m_inputA, &m_inputB };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+
 	/// @brief A node which adds a texture sample expression.
 	class TextureNode final : public Node
 	{

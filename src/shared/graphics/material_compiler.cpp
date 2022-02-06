@@ -7,6 +7,19 @@
 
 namespace mmo
 {
+	uint32 GetExpressionTypeComponentCount(const ExpressionType type)
+	{
+		switch(type)
+		{
+		case ExpressionType::Float_1: return 1;
+		case ExpressionType::Float_2: return 2;
+		case ExpressionType::Float_3: return 3;
+		case ExpressionType::Float_4: return 4;
+		default:
+			return 0;
+		}
+	}
+
 	void MaterialCompiler::Compile(Material& material, ShaderCompiler& shaderCompiler)
 	{
 		if (m_lit)
@@ -74,5 +87,30 @@ namespace mmo
 		}
 
 		return m_expressionTypes[index];
+	}
+
+	void MaterialCompiler::SetBaseColorExpression(ExpressionIndex expression)
+	{
+		m_baseColorExpression = expression;
+	}
+
+	void MaterialCompiler::SetMetallicExpression(ExpressionIndex expression)
+	{
+		m_metallicExpression = expression;
+	}
+
+	void MaterialCompiler::SetRoughnessExpression(ExpressionIndex expression)
+	{
+		m_roughnessExpression = expression;
+	}
+
+	void MaterialCompiler::SetNormalExpression(ExpressionIndex expression)
+	{
+		m_normalExpression = expression;
+	}
+
+	void MaterialCompiler::SetAmbientOcclusionExpression(ExpressionIndex expression)
+	{
+		m_ambientOcclusionExpression = expression;
 	}
 }

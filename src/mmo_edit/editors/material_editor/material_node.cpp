@@ -486,6 +486,24 @@ namespace mmo
 			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler);
 			compiler.SetBaseColorExpression(baseColorExpression);
 		}
+		
+		if (m_normal.IsLinked())
+		{
+			const ExpressionIndex normalExpression = m_normal.GetLink()->GetNode()->Compile(compiler);
+			compiler.SetNormalExpression(normalExpression);
+		}
+
+		if (m_roughness.IsLinked())
+		{
+			const ExpressionIndex roughnessExpression = m_roughness.GetLink()->GetNode()->Compile(compiler);
+			compiler.SetRoughnessExpression(roughnessExpression);
+		}
+
+		if (m_metallic.IsLinked())
+		{
+			const ExpressionIndex metallicExpression = m_metallic.GetLink()->GetNode()->Compile(compiler);
+			compiler.SetMetallicExpression(metallicExpression);
+		}
 
 		return IndexNone;
 	}
@@ -791,6 +809,16 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex VertexColorNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddVertexColor();
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex AbsNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -839,6 +867,82 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex SubtractNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
+			}
+
+			ExpressionIndex secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
+			}
+
+			m_compiledExpressionId = compiler.AddSubtract(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex NormalizeNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input expression for Normalize!");
+				return IndexNone;
+			}
+			
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+
+			m_compiledExpressionId = compiler.AddNormalize(inputExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex AppendNode::Compile(MaterialCompiler& compiler)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputAExpression = IndexNone;
+			if (!m_inputA.IsLinked())
+			{
+				ELOG("Missing input A expression for append!");
+				return IndexNone;
+			}
+			
+			ExpressionIndex inputBExpression = IndexNone;
+			if (!m_inputA.IsLinked())
+			{
+				ELOG("Missing input B expression for append!");
+				return IndexNone;
+			}
+
+			inputAExpression = m_inputA.GetLink()->GetNode()->Compile(compiler);
+			inputBExpression = m_inputB.GetLink()->GetNode()->Compile(compiler);
+
+			m_compiledExpressionId = compiler.AddAppend(inputAExpression, inputBExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex TextureNode::Compile(MaterialCompiler& compiler)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -850,7 +954,7 @@ namespace mmo
 				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler);
 			}
 
-			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression);
+			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false);
 		}
 
 		return m_compiledExpressionId;

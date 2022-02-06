@@ -27,14 +27,11 @@ namespace mmo
 		/// @copydoc MaterialCompiler::NotifyTextureCoordinateIndex
 		void NotifyTextureCoordinateIndex(uint32 textureCoordinateIndex) override;
 		
-		/// @copydoc MaterialCompiler::SetBaseColorExpression
-		void SetBaseColorExpression(ExpressionIndex expression) override;
-		
 		/// @copydoc MaterialCompiler::AddTextureCoordinate
 		ExpressionIndex AddTextureCoordinate(int32 coordinateIndex) override;
 		
 		/// @copydoc MaterialCompiler::AddTextureSample
-		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates) override;
+		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) override;
 		
 		/// @copydoc MaterialCompiler::AddMultiply
 		ExpressionIndex AddMultiply(ExpressionIndex first, ExpressionIndex second) override;
@@ -42,6 +39,9 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddAddition
 		ExpressionIndex AddAddition(ExpressionIndex first, ExpressionIndex second) override;
 		
+		/// @copydoc MaterialCompiler::AddSubtract
+		ExpressionIndex AddSubtract(ExpressionIndex first, ExpressionIndex second) override;
+
 		/// @copydoc MaterialCompiler::AddLerp
 		ExpressionIndex AddLerp(ExpressionIndex first, ExpressionIndex second, ExpressionIndex alpha) override;
 		
@@ -74,6 +74,15 @@ namespace mmo
 
 		/// @copydoc MaterialCompiler::AddAbs
 		ExpressionIndex AddAbs(ExpressionIndex input) override;
+		
+		/// @copydoc MaterialCompiler::AddNormalize
+		ExpressionIndex AddNormalize(ExpressionIndex input) override;
+		
+		/// @copydoc MaterialCompiler::AddVertexColor
+		ExpressionIndex AddVertexColor() override;
+		
+		/// @copydoc MaterialCompiler::AddAppend
+		ExpressionIndex AddAppend(ExpressionIndex first, ExpressionIndex second) override;
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
@@ -81,5 +90,7 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
 		void GeneratePixelShaderCode() override;
+	public:
+		
 	};
 }

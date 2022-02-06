@@ -16,18 +16,13 @@ namespace mmo
 	void MaterialCompilerNull::NotifyTextureCoordinateIndex(uint32 textureCoordinateIndex)
 	{
 	}
-
-	void MaterialCompilerNull::SetBaseColorExpression(ExpressionIndex expression)
-	{
-		
-	}
-
+	
 	ExpressionIndex MaterialCompilerNull::AddTextureCoordinate(int32 coordinateIndex)
 	{
 		return IndexNone;
 	}
 
-	ExpressionIndex MaterialCompilerNull::AddTextureSample(std::string_view texture, ExpressionIndex coordinates)
+	ExpressionIndex MaterialCompilerNull::AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb)
 	{
 		return IndexNone;
 	}
@@ -38,6 +33,11 @@ namespace mmo
 	}
 
 	ExpressionIndex MaterialCompilerNull::AddAddition(ExpressionIndex first, ExpressionIndex second)
+	{
+		return IndexNone;
+	}
+
+	ExpressionIndex MaterialCompilerNull::AddSubtract(ExpressionIndex first, ExpressionIndex second)
 	{
 		return IndexNone;
 	}
@@ -93,6 +93,21 @@ namespace mmo
 	}
 
 	ExpressionIndex MaterialCompilerNull::AddAbs(ExpressionIndex input)
+	{
+		return IndexNone;
+	}
+
+	ExpressionIndex MaterialCompilerNull::AddNormalize(ExpressionIndex input)
+	{
+		return IndexNone;
+	}
+
+	ExpressionIndex MaterialCompilerNull::AddVertexColor()
+	{
+		return IndexNone;
+	}
+
+	ExpressionIndex MaterialCompilerNull::AddAppend(ExpressionIndex first, ExpressionIndex second)
 	{
 		return IndexNone;
 	}

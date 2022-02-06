@@ -20,12 +20,18 @@ namespace mmo
 
 				/// Plain uncompressed RGB data.
 			    RGB = 0,
+
 				/// Plain uncompressed RGBA data.
 				RGBA,
+
 				/// DXT1 compression (doesn't support alpha, high compression, lossy)
 			    DXT1,		// Not yet implemented
+
 				/// DXT5 compression (supports alpha, medium compression, lossy)
 				DXT5,		// Not yet implemented
+				
+				FLOAT_RGB,
+				FLOAT_RGBA,
 			};
 
 			/// Returns a human readable string based on the pixel format.

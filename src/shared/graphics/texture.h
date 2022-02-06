@@ -21,10 +21,13 @@ namespace mmo
 	{
 		/// Coordinates are clamped if exceeding the range of 0..1.
 		Clamp,
+
 		/// Coordinates are wrapped if exceeding the range of 0..1.
 		Wrap,
+
 		/// Coordinates are mirrored if exceeding the range of 0..1.
 		Mirror,
+
 		/// Anything outside of the range of 0..1 is rendered using a border color.
 		Border,
 	};
@@ -34,10 +37,13 @@ namespace mmo
 	{
 		/// No texture filtering.
 		None,
+
 		/// Bilinear filter.
 		Bilinear,
+
 		/// Trilinear filter.
 		Trilinear,
+
 		/// Anisotropic filter
 		Anisotropic,
 	};
@@ -78,16 +84,22 @@ namespace mmo
 		virtual void* GetTextureObject() const = 0;
 
 		virtual TextureAddressMode GetTextureAddressModeU() const { return m_addressModeU; }
+
 		virtual TextureAddressMode GetTextureAddressModeV() const { return m_addressModeV; }
+
 		virtual TextureAddressMode GetTextureAddressModeW() const { return m_addressModeW; }
-		virtual void SetTextureAddressMode(TextureAddressMode mode) { m_addressModeU = m_addressModeV = m_addressModeW = mode; }
-		virtual void SetTextureAddressModeU(TextureAddressMode mode) { m_addressModeU = mode; }
-		virtual void SetTextureAddressModeV(TextureAddressMode mode) { m_addressModeV = mode; }
-		virtual void SetTextureAddressModeW(TextureAddressMode mode) { m_addressModeW = mode; }
+
+		virtual void SetTextureAddressMode(const TextureAddressMode mode) { m_addressModeU = m_addressModeV = m_addressModeW = mode; }
+
+		virtual void SetTextureAddressModeU(const TextureAddressMode mode) { m_addressModeU = mode; }
+
+		virtual void SetTextureAddressModeV(const TextureAddressMode mode) { m_addressModeV = mode; }
+
+		virtual void SetTextureAddressModeW(const TextureAddressMode mode) { m_addressModeW = mode; }
 
 		virtual TextureFilter GetTextureFilter() const { return m_filter; }
 		
-		virtual void SetFilter(TextureFilter filter) { m_filter = filter; }
+		virtual void SetFilter(const TextureFilter filter) { m_filter = filter; }
 
 		void SetDebugName(String debugName);
 

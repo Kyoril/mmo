@@ -52,12 +52,7 @@ namespace mmo
 	{
 		m_numTexCoordinates = std::max(textureCoordinateIndex + 1, m_numTexCoordinates);
 	}
-
-	void MaterialCompilerD3D11::SetBaseColorExpression(const ExpressionIndex expression)
-	{
-		m_baseColorExpression = expression;
-	}
-
+	
 	ExpressionIndex MaterialCompilerD3D11::AddTextureCoordinate(const int32 coordinateIndex)
 	{
 		if (coordinateIndex >= 8)
@@ -74,7 +69,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates)
+	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates, bool srgb)
 	{
 		if (texture.empty())
 		{
@@ -97,6 +92,11 @@ namespace mmo
 		}
 		
 		std::ostringstream outputStream;
+		if (srgb)
+		{
+			outputStream << "pow(";
+		}
+
 		outputStream << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
 		if (coordinates == IndexNone)
 		{
@@ -107,6 +107,12 @@ namespace mmo
 			outputStream << "expr_" << coordinates << ".xy";
 		}
 		outputStream << ")";
+
+		if (srgb)
+		{
+			outputStream << ", 2.2)";
+		}
+
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
@@ -154,6 +160,29 @@ namespace mmo
 
 		std::ostringstream outputStream;
 		outputStream << "expr_" << first << " + expr_" << second;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), targetType);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSubtract(const ExpressionIndex first, const ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for subtract");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for subtract");
+			return IndexNone;
+		}
+		
+		const ExpressionType targetType = GetExpressionType(first);
+
+		std::ostringstream outputStream;
+		outputStream << "expr_" << first << " - expr_" << second;
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), targetType);
@@ -292,7 +321,7 @@ namespace mmo
 	ExpressionIndex MaterialCompilerD3D11::AddCameraVector()
 	{
 		std::ostringstream outputStream;
-		outputStream << "normalize(input.viewDir)";
+		outputStream << "V";
 		outputStream.flush();
 		
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
@@ -401,6 +430,85 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddNormalize(const ExpressionIndex input)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter for normalize");
+			return IndexNone;
+		}
+		
+		const ExpressionType valueType = GetExpressionType(input);
+		if (valueType == ExpressionType::Float_1)
+		{
+			ELOG("Input of normalize must be a vector, but scalar was provided");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "normalize(expr_" << input << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), valueType);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddVertexColor()
+	{
+		std::ostringstream outputStream;
+		outputStream << "input.color";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddAppend(ExpressionIndex first, ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first input parameter of append");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second input parameter of append");
+			return IndexNone;
+		}
+		
+		const ExpressionType sourceType = GetExpressionType(first);
+		const ExpressionType targetType = GetExpressionType(first);
+
+		const uint32 sourceComponentCount = GetExpressionTypeComponentCount(sourceType);
+		const uint32 targetComponentCount = GetExpressionTypeComponentCount(targetType);
+		const uint32 totalComponentCount = sourceComponentCount + targetComponentCount;
+
+		auto outputType = ExpressionType::Unknown;
+		switch(totalComponentCount)
+		{
+		case 1:
+			outputType = ExpressionType::Float_1;
+			break;
+		case 2:
+			outputType = ExpressionType::Float_2;
+			break;
+		case 3:
+			outputType = ExpressionType::Float_3;
+			break;
+		case 4:
+			outputType = ExpressionType::Float_4;
+			break;
+		default:
+			ELOG("Unsupported amount of output components (" << totalComponentCount << ")!");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "float" << totalComponentCount << "(expr_" << first << ", expr_" << second << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), outputType);
+	}
+
 	void MaterialCompilerD3D11::GenerateVertexShaderCode()
 	{
 		m_vertexShaderStream.clear();
@@ -491,7 +599,10 @@ namespace mmo
 	void MaterialCompilerD3D11::GeneratePixelShaderCode()
 	{
 		m_pixelShaderStream.clear();
-		
+
+		m_pixelShaderStream
+			<< "static const float PI = 3.14159265359;\n\n";
+
 		// VertexOut struct
 		m_pixelShaderStream
 			<< "struct VertexOut\n"
@@ -517,13 +628,72 @@ namespace mmo
 			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
 		}
 
+		// tangent normal to world space normal
+		m_pixelShaderStream
+			<< "float3 getNormalFromMap(float3 WorldPos, float2 TexCoords, float3 Normal, float3 inTangentNormal)\n"
+			<< "{\n"
+			<< "\tfloat3 tangentNormal = inTangentNormal * 2.0 - 1.0;\n"
+			<< "\tfloat3 Q1  = ddx(WorldPos);\n"
+			<< "\tfloat3 Q2  = ddy(WorldPos);\n"
+			<< "\tfloat2 st1 = ddx(TexCoords);\n"
+			<< "\tfloat2 st2 = ddy(TexCoords);\n\n"
+			<< "\tfloat3 N   = normalize(Normal);\n"
+			<< "\tfloat3 T  = normalize(Q1*st2.y - Q2*st1.y);\n"
+			<< "\tfloat3 B  = -normalize(cross(N, T));\n"
+			<< "\tfloat3x3 TBN = float3x3(T, B, N);\n\n"
+			<< "\treturn normalize(mul(tangentNormal, TBN));\n"
+			<< "}\n\n";
+		
+		// fresnelSchlick
+		m_pixelShaderStream
+			<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
+			<< "{\n"
+			<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
+			<< "}\n\n";
+
+		// DistributionGGX
+		m_pixelShaderStream
+			<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
+			<< "{\n"
+			<< "\tfloat a      = roughness*roughness;\n"
+			<< "\tfloat a2     = a*a;\n"
+			<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
+			<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
+			<< "\tfloat num   = a2;\n"
+			<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+			<< "\tdenom = PI * denom * denom;\n"
+			<< "\treturn num / denom;\n"
+			<< "}\n\n";
+
+		// GeometrySchlickGGX
+		m_pixelShaderStream
+			<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
+			<< "{\n"
+			<< "\tfloat r = (roughness + 1.0);\n"
+			<< "\tfloat k = (r*r) / 8.0;\n"
+			<< "\tfloat num   = NdotV;\n"
+			<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
+			<< "\treturn num / denom;\n"
+			<< "}\n\n";
+
+		// GeometrySmith
+		m_pixelShaderStream
+			<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
+			<< "{\n"
+			<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
+			<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+			<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
+			<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
+			<< "\treturn ggx1 * ggx2;\n"
+			<< "}\n\n";
+
 		for (const auto& [name, code] : m_globalFunctions)
 		{
 			m_pixelShaderStream
-			<< "float4 " << name << "(VertexOut input)\n"
-			<< "{\n"
-			<< code << "\n"
-			<< "}\n\n";
+				<< "float4 " << name << "(VertexOut input)\n"
+				<< "{\n"
+				<< code << "\n"
+				<< "}\n\n";
 		}
 		
 		// Start of main function
@@ -532,32 +702,73 @@ namespace mmo
 			<< "{\n"
 			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 
-		if (m_lit)
-		{
-			// Lighting base
-			m_pixelShaderStream
-				<< "\tfloat3 lightDir = normalize(-float3(1.0, -0.5, 1.0));\n"
-				<< "\tfloat4 ambient = float4(0.05, 0.15, 0.25, 1.0);\n\n";
+		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
 
-			// Light intensity expression
-			m_pixelShaderStream
-				<< "\tfloat4 lightIntensity = saturate(dot(input.normal, lightDir));\n\n";
+		for (const auto& code : m_expressions)
+		{
+			m_pixelShaderStream << "\t" << code;
+		}
+
+		// Normal
+		if (m_normalExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_normalExpression);
+			if (expression == ExpressionType::Float_4)
+			{
+				m_pixelShaderStream << "\tfloat3 N = getNormalFromMap(input.worldPos, input.uv0, normalize(input.normal), expr_" << m_normalExpression << ".rgb);\n\n";
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat3 N = getNormalFromMap(input.worldPos, input.uv0, normalize(input.normal), float3(expr_" << m_normalExpression << "));\n\n";
+			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
+		}
+
+		// Roughness
+		if (m_roughnessExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_roughnessExpression);
+			if (expression == ExpressionType::Float_1)
+			{
+				m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ";\n\n";
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ".r;\n\n";
+			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
+		}
+		
+		// Metallic
+		if (m_metallicExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_metallicExpression);
+			if (expression == ExpressionType::Float_1)
+			{
+				m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ";\n\n";
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ".r;\n\n";
+			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat metallic = 1.0;\n\n";
 		}
 		
 		// BaseColor base
-		m_pixelShaderStream
-		<< "\tfloat4 baseColor = float4(1.0, 1.0, 1.0, 1.0);\n\n";
-		
-		// BaseColor expression?
+		m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
 		if (m_baseColorExpression != IndexNone)
 		{
-			for (const auto& code : m_expressions)
-			{
-				m_pixelShaderStream << "\t" << code;
-			}
-
-			auto expressionType = GetExpressionType(m_baseColorExpression);
-			if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_4)
+			const auto expressionType = GetExpressionType(m_baseColorExpression);
+			if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_3)
 			{
 				m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
 			}
@@ -565,25 +776,69 @@ namespace mmo
 			{
 				if (expressionType == ExpressionType::Float_2)
 				{
-					m_pixelShaderStream << "\tbaseColor = float4(expr_" << m_baseColorExpression << ", 1.0, 1.0);\n\n";
+					m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_baseColorExpression << ", 1.0);\n\n";
 				}
-				else if (expressionType == ExpressionType::Float_3)
+				else if (expressionType == ExpressionType::Float_4)
 				{
-					m_pixelShaderStream << "\tbaseColor = float4(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+					m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ".rgb;\n\n";
 				}
 			}
+		}
+
+		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+		
+		m_pixelShaderStream
+			<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
+
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "\tfloat3 F0 = 0.04;\n"
+				<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
+
+			m_pixelShaderStream
+				<< "\tfloat3 L = normalize(-float3(1.0, -0.5, 1.0));\n"	// LightDir
+				<< "\tfloat3 H = normalize(V + L);\n"				
+				<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
+			
+			m_pixelShaderStream
+				<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
+				<< "\tfloat G   = GeometrySmith(N, V, L, roughness);\n"
+				<< "\tfloat3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);\n";
+			
+			m_pixelShaderStream
+				<< "\tfloat3 kS = F;\n"
+				<< "\tfloat3 kD = float3(1.0, 1.0, 1.0) - kS;\n"
+				<< "\tkD *= 1.0 - metallic;\n";
+			
+			m_pixelShaderStream
+				<< "\tfloat3 numerator    = NDF * G * F;\n"
+				<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
+				<< "\tfloat3 specular     = numerator / denominator;\n";
+
+			m_pixelShaderStream
+				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+				<< "\tfloat3 Lo = (kD * baseColor / PI + specular) * radiance * NdotL;\n";
+
+			m_pixelShaderStream
+				<< "\tfloat3 ambient = float3(0.03, 0.03, 0.03) * baseColor * ao;\n"
+				<< "\tfloat3 color   = ambient + Lo;\n";
+
+			m_pixelShaderStream
+				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
+				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
 		}
 		
 		// Combining it
 		if (m_lit)
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = (ambient + float4(saturate(input.color * lightIntensity).xyz, 1.0)) * baseColor;\n";
+				<< "\toutputColor = float4(color, 1.0);\n";
 		}
 		else
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = saturate(input.color * baseColor);\n";
+				<< "\toutputColor = input.color * baseColor;\n";
 		}
 
 		// End of main function

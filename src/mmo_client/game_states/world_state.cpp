@@ -186,7 +186,7 @@ namespace mmo
 		m_groundEntity = m_scene.CreateEntity("Ground", "Models/Floor/Floor.hmsh");
 		m_groundNode = &m_scene.CreateSceneNode("Ground");
 		m_groundNode->AttachObject(*m_groundEntity);
-		m_groundNode->SetScale(Vector3::UnitScale * 100.0f);
+		m_groundNode->SetScale(Vector3::UnitScale * 10.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_groundNode);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene);

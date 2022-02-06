@@ -33,6 +33,11 @@ namespace mmo
 		Float_4
 	};
 
+	/// @brief Gets the amount of components for a given expression type. For example, Float4 has 4 components.
+	/// @param type The expression type.
+	/// @return The amount of components for a given expression type.
+	uint32 GetExpressionTypeComponentCount(ExpressionType type);
+
 	/// @brief Typedef for a material expression index.
 	using ExpressionIndex = int32;
 
@@ -86,7 +91,27 @@ namespace mmo
 		/// @brief Sets the index of the material's base color expression or IndexNone to not use a custom base color
 		///	       expression at all.
 		/// @param expression Index of the base color expression to use or IndexNone to not use a base color expression at all.
-		virtual void SetBaseColorExpression(ExpressionIndex expression) = 0;
+		virtual void SetBaseColorExpression(ExpressionIndex expression);
+		
+		/// @brief Sets the index of the material's metallic expression or IndexNone to not use a custom metallic
+		///	       expression at all.
+		/// @param expression Index of the metallic expression to use or IndexNone to not use a metallic expression at all.
+		virtual void SetMetallicExpression(ExpressionIndex expression);
+
+		/// @brief Sets the index of the material's roughness expression or IndexNone to not use a custom base color
+		///	       expression at all.
+		/// @param expression Index of the roughness expression to use or IndexNone to not use a roughness expression at all.
+		virtual void SetRoughnessExpression(ExpressionIndex expression);
+
+		/// @brief Sets the index of the material's normal expression or IndexNone to not use a custom normal
+		///	       expression at all.
+		/// @param expression Index of the normal expression to use or IndexNone to not use a normal expression at all.
+		virtual void SetNormalExpression(ExpressionIndex expression);
+
+		/// @brief Sets the index of the material's ambient occlusion expression or IndexNone to not use a custom ambient occlusion
+		///	       expression at all.
+		/// @param expression Index of the ambient occlusion expression to use or IndexNone to not use a ambient occlusion expression at all.
+		virtual void SetAmbientOcclusionExpression(ExpressionIndex expression);
 
 		/// @brief Adds a texture coordinate expression.
 		/// @param coordinateIndex The texture coordinate index used.
@@ -96,8 +121,9 @@ namespace mmo
 		/// @brief Adds a texture sample expression.
 		/// @param texture The texture file name to be sampled.
 		/// @param coordinates The texture coordinate expression to use for the sample.
+		/// @param srgb Whether the image uses srgb.
 		/// @return Index of the texture sample expression or IndexNone in case of an error.
-		virtual ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates) = 0;
+		virtual ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) = 0;
 
 		/// @brief Adds a multiply expression.
 		/// @param first The first expression for the multiply (left side).
@@ -110,6 +136,12 @@ namespace mmo
 		/// @param second The second expression of the addition (right side).
 		/// @return Index of the expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddAddition(ExpressionIndex first, ExpressionIndex second) = 0;
+		
+		/// @brief Adds an subtract expression.
+		/// @param first The first expression of the addition (left side).
+		/// @param second The second expression of the addition (right side).
+		/// @return Index of the expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddSubtract(ExpressionIndex first, ExpressionIndex second) = 0;
 		
 		/// @brief Adds a dot expression.
 		/// @param first The first expression for the multiply (left side).
@@ -174,6 +206,21 @@ namespace mmo
 		/// @return Index of the abs expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddAbs(ExpressionIndex input) = 0;
 
+		/// @brief Adds a normalize expression.
+		/// @param input Input expression whose value will be normalized.
+		/// @return Index of the normalize expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddNormalize(ExpressionIndex input) = 0;
+		
+		/// @brief Adds a vertex color expression.
+		/// @return Index of the vertex color expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddVertexColor() = 0;
+
+		/// @brief Adds an append expression.
+		/// @param first Index of first expression.
+		/// @param second Index of second expression.
+		/// @return Index of the append expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddAppend(ExpressionIndex first, ExpressionIndex second) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
 
@@ -195,7 +242,12 @@ namespace mmo
 		std::map<String, String> m_globalFunctions;
 		std::vector<String> m_expressions;
 		std::vector<ExpressionType> m_expressionTypes;
-		int32 m_baseColorExpression { IndexNone };
+
+		ExpressionIndex m_baseColorExpression { IndexNone };			// Float3
+		ExpressionIndex m_normalExpression { IndexNone };				// Float3 (Tangent Space)
+		ExpressionIndex m_roughnessExpression { IndexNone };			// Float1 (0-1)
+		ExpressionIndex m_ambientOcclusionExpression { IndexNone };	// Float3
+		ExpressionIndex m_metallicExpression { IndexNone };			// Float1 (0-1)
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
