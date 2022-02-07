@@ -76,6 +76,9 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddAppend
 		ExpressionIndex AddAppend(ExpressionIndex first, ExpressionIndex second) override;
 
+		/// @copydoc MaterialCompiler::AddTransform
+		ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode() override;

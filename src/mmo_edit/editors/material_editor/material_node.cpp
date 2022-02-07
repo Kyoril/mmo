@@ -475,7 +475,7 @@ namespace mmo
 		return {};
 	}
 
-	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		compiler.SetLit(m_lit);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
@@ -483,32 +483,32 @@ namespace mmo
 
 		if (m_baseColor.IsLinked())
 		{
-			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler);
+			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler, m_baseColor.GetLink());
 			compiler.SetBaseColorExpression(baseColorExpression);
 		}
 		
 		if (m_normal.IsLinked())
 		{
-			const ExpressionIndex normalExpression = m_normal.GetLink()->GetNode()->Compile(compiler);
+			const ExpressionIndex normalExpression = m_normal.GetLink()->GetNode()->Compile(compiler, m_normal.GetLink());
 			compiler.SetNormalExpression(normalExpression);
 		}
 
 		if (m_roughness.IsLinked())
 		{
-			const ExpressionIndex roughnessExpression = m_roughness.GetLink()->GetNode()->Compile(compiler);
+			const ExpressionIndex roughnessExpression = m_roughness.GetLink()->GetNode()->Compile(compiler, m_roughness.GetLink());
 			compiler.SetRoughnessExpression(roughnessExpression);
 		}
 
 		if (m_metallic.IsLinked())
 		{
-			const ExpressionIndex metallicExpression = m_metallic.GetLink()->GetNode()->Compile(compiler);
+			const ExpressionIndex metallicExpression = m_metallic.GetLink()->GetNode()->Compile(compiler, m_metallic.GetLink());
 			compiler.SetMetallicExpression(metallicExpression);
 		}
 
 		return IndexNone;
 	}
 
-	ExpressionIndex ConstFloatNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex ConstFloatNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -518,7 +518,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex ConstVectorNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex ConstVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -534,14 +534,14 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex AddNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex AddNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
 			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -551,7 +551,7 @@ namespace mmo
 			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -564,14 +564,14 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex MultiplyNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex MultiplyNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
 			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -581,7 +581,7 @@ namespace mmo
 			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -594,7 +594,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex MaskNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex MaskNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -605,7 +605,7 @@ namespace mmo
 				return IndexNone;
 			}
 
-			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
 			
 			m_compiledExpressionId = compiler.AddMask(inputExpression, m_channels[0], m_channels[1], m_channels[2], m_channels[3]);
 		}
@@ -613,7 +613,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex DotNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex DotNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -631,8 +631,8 @@ namespace mmo
 				return IndexNone;
 			}
 			
-			firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
-			secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+			firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
+			secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			
 			m_compiledExpressionId = compiler.AddDot(firstExpression, secondExpression);
 		}
@@ -640,7 +640,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex OneMinusNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex OneMinusNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -651,7 +651,7 @@ namespace mmo
 				return IndexNone;
 			}
 			
-			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
 			
 			m_compiledExpressionId = compiler.AddOneMinus(inputExpression);
 		}
@@ -659,7 +659,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex ClampNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex ClampNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -670,12 +670,12 @@ namespace mmo
 				return IndexNone;
 			}
 			
-			valueExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			valueExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
 
 			ExpressionIndex minExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				minExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				minExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -685,7 +685,7 @@ namespace mmo
 			ExpressionIndex maxExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				maxExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				maxExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -698,7 +698,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex PowerNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex PowerNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -709,12 +709,12 @@ namespace mmo
 				return IndexNone;
 			}
 
-			baseExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+			baseExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			
 			ExpressionIndex exponentExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				exponentExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				exponentExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -727,14 +727,14 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex LerpNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex LerpNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
 			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -744,7 +744,7 @@ namespace mmo
 			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -754,7 +754,7 @@ namespace mmo
 			ExpressionIndex alphaExpression = IndexNone;
 			if (m_input3.IsLinked())
 			{
-				alphaExpression = m_input3.GetLink()->GetNode()->Compile(compiler);
+				alphaExpression = m_input3.GetLink()->GetNode()->Compile(compiler, m_input3.GetLink());
 			}
 			else
 			{
@@ -767,7 +767,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex TextureCoordNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex TextureCoordNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		compiler.NotifyTextureCoordinateIndex(m_uvCoordIndex);
 
@@ -779,7 +779,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex WorldPositionNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex WorldPositionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -789,7 +789,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex CameraVectorNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex CameraVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -799,7 +799,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex VertexNormalNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex VertexNormalNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -809,7 +809,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex VertexColorNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex VertexColorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -819,7 +819,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex AbsNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex AbsNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -830,21 +830,21 @@ namespace mmo
 				return IndexNone;
 			}
 
-			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
 			m_compiledExpressionId = compiler.AddAbs(inputExpression);
 		}
 
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex DivideNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex DivideNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
 			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -854,7 +854,7 @@ namespace mmo
 			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -867,14 +867,14 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex SubtractNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex SubtractNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
 			ExpressionIndex firstExpression = IndexNone;
 			if (m_input1.IsLinked())
 			{
-				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler);
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
 			}
 			else
 			{
@@ -884,7 +884,7 @@ namespace mmo
 			ExpressionIndex secondExpression = IndexNone;
 			if (m_input2.IsLinked())
 			{
-				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler);
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
 			}
 			else
 			{
@@ -897,7 +897,23 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex NormalizeNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex WorldToTangentNormalNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (m_input.IsLinked())
+			{
+				inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+			}
+			
+			m_compiledExpressionId = compiler.AddTransform(inputExpression, Space::World, Space::Tangent);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex NormalizeNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -908,7 +924,7 @@ namespace mmo
 				return IndexNone;
 			}
 			
-			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler);
+			inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
 
 			m_compiledExpressionId = compiler.AddNormalize(inputExpression);
 		}
@@ -916,7 +932,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex AppendNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex AppendNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -934,8 +950,8 @@ namespace mmo
 				return IndexNone;
 			}
 
-			inputAExpression = m_inputA.GetLink()->GetNode()->Compile(compiler);
-			inputBExpression = m_inputB.GetLink()->GetNode()->Compile(compiler);
+			inputAExpression = m_inputA.GetLink()->GetNode()->Compile(compiler, m_inputA.GetLink());
+			inputBExpression = m_inputB.GetLink()->GetNode()->Compile(compiler, m_inputB.GetLink());
 
 			m_compiledExpressionId = compiler.AddAppend(inputAExpression, inputBExpression);
 		}
@@ -943,7 +959,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	ExpressionIndex TextureNode::Compile(MaterialCompiler& compiler)
+	ExpressionIndex TextureNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -951,10 +967,34 @@ namespace mmo
 
 			if (m_uvs.IsLinked())
 			{
-				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler);
+				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler, m_uvs.GetLink());
 			}
 
 			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false);
+		}
+
+		if (outputPin && outputPin != &m_rgba)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
 		}
 
 		return m_compiledExpressionId;

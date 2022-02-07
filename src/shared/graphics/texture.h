@@ -16,6 +16,19 @@
 
 namespace mmo
 {
+	enum PixelFormat : uint8
+	{
+		R8G8B8A8,
+		B8G8R8A8,
+
+		R16G16B16A16,
+		R32G32B32A32,
+
+		DXT1,
+		DXT3,
+		DXT5,
+	};
+
 	/// Enumerates possible face cull modes.
 	enum class TextureAddressMode
 	{

@@ -384,7 +384,7 @@ namespace mmo
 	ExpressionIndex MaterialCompilerD3D11::AddVertexNormal()
 	{
 		std::ostringstream outputStream;
-		outputStream << "input.normal";
+		outputStream << "normalize(input.normal)";
 		outputStream.flush();
 		
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
@@ -476,7 +476,7 @@ namespace mmo
 		}
 		
 		const ExpressionType sourceType = GetExpressionType(first);
-		const ExpressionType targetType = GetExpressionType(first);
+		const ExpressionType targetType = GetExpressionType(second);
 
 		const uint32 sourceComponentCount = GetExpressionTypeComponentCount(sourceType);
 		const uint32 targetComponentCount = GetExpressionTypeComponentCount(targetType);
@@ -504,6 +504,46 @@ namespace mmo
 
 		std::ostringstream outputStream;
 		outputStream << "float" << totalComponentCount << "(expr_" << first << ", expr_" << second << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), outputType);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddTransform(const ExpressionIndex input, Space sourceSpace, Space targetSpace)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter of transform");
+			return IndexNone;
+		}
+
+		const auto type = GetExpressionType(input);
+		if (GetExpressionTypeComponentCount(type) < 3)
+		{
+			ELOG("Input of transform needs to be a vector!")
+			return IndexNone;
+		}
+
+		auto outputType = ExpressionType::Float_3;
+
+		std::ostringstream outputStream;
+		if (sourceSpace == Space::World)
+		{
+			if (targetSpace == Space::Tangent)
+			{
+				outputStream << "mul(expr_" << input << ", TBN)";
+			}
+			else
+			{
+				WLOG("Transform between given two spaces not yet supported!");
+				return IndexNone;
+			}
+		}
+		else
+		{
+			WLOG("Transform between given two spaces not yet supported!");
+			return IndexNone;
+		}
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), outputType);
@@ -712,12 +752,16 @@ namespace mmo
 			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 
 		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
+		m_pixelShaderStream
+			<< "\tfloat3 B = normalize(input.binormal);\n"
+			<< "\tfloat3 T = normalize(input.tangent);\n"
+			<< "\tfloat3x3 TBN = float3x3(T, B, normalize(input.normal));\n";
 
 		for (const auto& code : m_expressions)
 		{
 			m_pixelShaderStream << "\t" << code;
 		}
-
+		
 		if (m_lit)
 		{
 			// Normal
@@ -734,9 +778,6 @@ namespace mmo
 				}
 				
 				m_pixelShaderStream
-					<< "\tfloat3 B = normalize(input.binormal);\n"
-					<< "\tfloat3 T = normalize(input.tangent);\n"
-					<< "\tfloat3x3 TBN = float3x3(T, B, normalize(input.normal));\n"
 					<< "\tN = normalize(mul(N, TBN));\n";
 			}
 			else

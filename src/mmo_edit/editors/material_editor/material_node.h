@@ -424,7 +424,7 @@ namespace mmo
 
 		[[nodiscard]] std::optional<uint32> GetPinIndex(const Pin& pin);
 
-		virtual ExpressionIndex Compile(MaterialCompiler& compiler) = 0;
+		virtual ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) = 0;
 
 		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
@@ -452,7 +452,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 		
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -512,7 +512,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -544,7 +544,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -580,7 +580,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -614,7 +614,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -648,7 +648,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -684,7 +684,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    MaterialPin m_input1 = { this, "A" };
@@ -710,7 +710,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    MaterialPin m_input = { this };
@@ -735,7 +735,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -769,7 +769,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -803,7 +803,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -839,7 +839,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -872,7 +872,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    /// @brief The uv output pin.
@@ -896,7 +896,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    /// @brief The uv output pin.
@@ -920,7 +920,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    /// @brief The uv output pin.
@@ -944,7 +944,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return TextureCoordNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    /// @brief The uv output pin.
@@ -969,7 +969,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    MaterialPin m_input = { this };
@@ -995,7 +995,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -1029,7 +1029,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
@@ -1044,6 +1044,32 @@ namespace mmo
 
 		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
 	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which adds an expression subtraction expression.
+	class WorldToTangentNormalNode final : public Node
+	{
+	public:
+	    MAT_NODE(WorldToTangentNormalNode, "World Space to Tangent Space Normal")
+
+	    WorldToTangentNormalNode(MaterialGraph& material)
+			: Node(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+	    MaterialPin m_input = { this };
+	    MaterialPin m_output = { this };
+		
+	    Pin* m_inputPins[1] = { &m_input };
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 	
@@ -1063,7 +1089,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    MaterialPin m_input = { this };
@@ -1090,7 +1116,7 @@ namespace mmo
 		
 		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 		
 	private:
 	    MaterialPin m_inputA = { this, "A" };
@@ -1123,7 +1149,7 @@ namespace mmo
 		
 		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
 
-		ExpressionIndex Compile(MaterialCompiler& compiler) override;
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 

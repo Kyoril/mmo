@@ -33,6 +33,15 @@ namespace mmo
 		Float_4
 	};
 
+	enum class Space : uint8
+	{
+		Local,
+		World,
+		View,
+		Screen,
+		Tangent
+	};
+
 	/// @brief Gets the amount of components for a given expression type. For example, Float4 has 4 components.
 	/// @param type The expression type.
 	/// @return The amount of components for a given expression type.
@@ -220,6 +229,13 @@ namespace mmo
 		/// @param second Index of second expression.
 		/// @return Index of the append expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddAppend(ExpressionIndex first, ExpressionIndex second) = 0;
+
+		/// @brief Adds a transform expression.
+		/// @param input The input expression whose value should be transformed.
+		/// @param sourceSpace The source space.
+		/// @param targetSpace The target space.
+		/// @return Index of the transform expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) = 0;
 
 	public:
 		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
