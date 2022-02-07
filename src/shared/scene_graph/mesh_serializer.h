@@ -6,8 +6,6 @@
 #include "base/typedefs.h"
 #include "math/vector3.h"
 
-#include "mesh/magic.h"
-
 #include <vector>
 #include <span>
 
@@ -26,7 +24,8 @@ namespace mmo
 		{
 			Latest = -1,
 
-			Version_0_1 = 0x0100
+			Version_0_1 = 0x0100,
+			Version_0_2 = 0x0200
 		};	
 	}
 
@@ -154,7 +153,7 @@ namespace mmo
 	class MeshSerializer
 	{
 	public:
-		void ExportMesh(const MeshEntry& mesh, io::Writer& writer, mesh::VersionId version = mesh::Latest);
+		void ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version = mesh_version::Latest);
 	};
 	
 	/// @brief Implementation of the ChunkReader to read chunked mesh files.
@@ -182,7 +181,7 @@ namespace mmo
 		const MeshEntry& GetMeshEntry() const noexcept { return m_entry; }
 
 	private:
-		mesh::VersionId m_version;
+		MeshVersion m_version;
 		MeshEntry m_entry;
 		Mesh& m_mesh;
 	};

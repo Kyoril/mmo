@@ -8,8 +8,6 @@
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
-#include "mesh_v1_0/header.h"
-#include "mesh_v1_0/header_save.h"
 
 
 #ifdef IOS_REF

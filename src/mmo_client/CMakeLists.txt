@@ -67,8 +67,6 @@ target_link_libraries(mmo_client
 	frame_ui
 	expat
 	game
-	mesh
-	mesh_v1_0
 	scene_graph)
 	
 target_link_libraries(mmo_client graphics_null)

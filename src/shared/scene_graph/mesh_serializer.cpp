@@ -6,13 +6,11 @@
 #include "mesh.h"
 
 #include "binary_io/writer.h"
-#include "mesh/pre_header.h"
 
 #include "base/chunk_writer.h"
 #include "base/vector.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
-#include "mesh_v1_0/header.h"
 
 namespace mmo
 {
@@ -21,11 +19,11 @@ namespace mmo
 	static const ChunkMagic MeshIndexChunk= { {'I', 'N', 'D', 'X'} };
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
 	
-	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, mesh::VersionId version)
+	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version)
 	{
-		if (version == mesh::Latest)
+		if (version == mesh_version::Latest)
 		{
-			version = mesh::Version_2_0;
+			version = mesh_version::Version_0_2;
 		}
 		
 		// Write the vertex chunk data
@@ -122,21 +120,21 @@ namespace mmo
 		uint32 version;
 		reader >> io::read<uint32>(version);
 
-		m_version = static_cast<mesh::VersionId>(version);
-		if (version < mesh::Version_2_0)
+		m_version = static_cast<MeshVersion>(version);
+		if (version < mesh_version::Version_0_2)
 		{
 			WLOG("Mesh is using an old file format, please consider upgrading it!");
 		}
 
 		if (reader)
 		{
-			if (version >= mesh::Version_1_0)
+			if (version >= mesh_version::Version_0_1)
 			{
 				AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexChunk);
 				AddChunkHandler(*MeshIndexChunk, true, *this, &MeshDeserializer::ReadIndexChunk);
 				AddChunkHandler(*MeshSubMeshChunk, true, *this, &MeshDeserializer::ReadSubMeshChunk);
 
-				if (version >= mesh::Version_2_0)
+				if (version >= mesh_version::Version_0_2)
 				{
 					AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexV2Chunk);
 				}
@@ -378,7 +376,7 @@ namespace mmo
 
 	void MeshDeserializer::CreateHardwareBuffers()
 	{
-		if (m_version < mesh::Version_2_0 || (!m_entry.vertices.empty() && m_entry.vertices[0].binormal.IsNearlyEqual(Vector3::Zero)))
+		if (m_version < mesh_version::Version_0_2 || (!m_entry.vertices.empty() && m_entry.vertices[0].binormal.IsNearlyEqual(Vector3::Zero)))
 		{
 			CalculateBinormalsAndTangents();
 		}
