@@ -236,7 +236,7 @@ namespace mmo
 			if (length <= 0.0f) length = 0.0001f;
 			//ASSERT(length > 0.0f);
 
-			Vector3 v = *this;
+			const Vector3 v = *this;
 			return v / length;
 		}
 

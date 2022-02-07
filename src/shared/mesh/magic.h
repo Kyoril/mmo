@@ -18,7 +18,9 @@ namespace mmo
 		{
 			Latest,
 
-		    Version_1_0 = 0x100
+		    Version_1_0 = 0x100,
+			
+		    Version_2_0 = 0x200
 		};
 	}
 }

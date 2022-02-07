@@ -51,6 +51,8 @@ namespace mmo
 		/// @return true if deserialization has been valid, false otherwise.
 		virtual bool IsValid() const noexcept { return m_requiredChunkHandlers.empty(); }
 
+		virtual bool OnReadFinished() noexcept { return true; }
+
 	public:
 		template<typename TInstance, typename TClass, typename... TArgs>
 		void AddChunkHandler(const uint32 chunkHeader, const bool required, TInstance& instance, bool(TClass::*callback)(TArgs... args))

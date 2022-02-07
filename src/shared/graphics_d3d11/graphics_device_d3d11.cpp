@@ -167,6 +167,7 @@ namespace mmo
 		#include "shaders/VS_PosColor.h"
 		#include "shaders/VS_PosColorNormal.h"
 		#include "shaders/VS_PosColorNormalTex.h"
+		#include "shaders/VS_PosColorNormalBinormalTangentTex.h"
 		#include "shaders/VS_PosColorTex.h"
 
 		// Setup vertex shaders
@@ -174,12 +175,14 @@ namespace mmo
 		VertexShaders[VertexFormat::PosColor] = CreateShader(ShaderType::VertexShader, g_VS_PosColor, ARRAYSIZE(g_VS_PosColor));
 		VertexShaders[VertexFormat::PosColorNormal] = CreateShader(ShaderType::VertexShader, g_VS_PosColorNormal, ARRAYSIZE(g_VS_PosColorNormal));
 		VertexShaders[VertexFormat::PosColorNormalTex1] = CreateShader(ShaderType::VertexShader, g_VS_PosColorNormalTex, ARRAYSIZE(g_VS_PosColorNormalTex));
+		VertexShaders[VertexFormat::PosColorNormalBinormalTangentTex1] = CreateShader(ShaderType::VertexShader, g_VS_PosColorNormalBinormalTangentTex, ARRAYSIZE(g_VS_PosColorNormalBinormalTangentTex));
 		VertexShaders[VertexFormat::PosColorTex1] = CreateShader(ShaderType::VertexShader, g_VS_PosColorTex, ARRAYSIZE(g_VS_PosColorTex));
 
 		#include "shaders/PS_Pos.h"
 		#include "shaders/PS_PosColor.h"
 		#include "shaders/PS_PosColorNormal.h"
 		#include "shaders/PS_PosColorNormalTex.h"
+		#include "shaders/PS_PosColorNormalBinormalTangentTex.h"
 		#include "shaders/PS_PosColorTex.h"
 
 		// Setup pixel shaders
@@ -187,6 +190,7 @@ namespace mmo
 		PixelShaders[VertexFormat::PosColor] = CreateShader(ShaderType::PixelShader, g_PS_PosColor, ARRAYSIZE(g_PS_PosColor));
 		PixelShaders[VertexFormat::PosColorNormal] = CreateShader(ShaderType::PixelShader, g_PS_PosColorNormal, ARRAYSIZE(g_PS_PosColorNormal));
 		PixelShaders[VertexFormat::PosColorNormalTex1] = CreateShader(ShaderType::PixelShader, g_PS_PosColorNormalTex, ARRAYSIZE(g_PS_PosColorNormalTex));
+		PixelShaders[VertexFormat::PosColorNormalBinormalTangentTex1] = CreateShader(ShaderType::PixelShader, g_PS_PosColorNormalBinormalTangentTex, ARRAYSIZE(g_PS_PosColorNormalBinormalTangentTex));
 		PixelShaders[VertexFormat::PosColorTex1] = CreateShader(ShaderType::PixelShader, g_PS_PosColorTex, ARRAYSIZE(g_PS_PosColorTex));
 
 		ComPtr<ID3D11InputLayout> InputLayout;
@@ -224,6 +228,18 @@ namespace mmo
 		};
 		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColNormTexElements, ARRAYSIZE(PosColNormTexElements), g_VS_PosColorNormalTex, ARRAYSIZE(g_VS_PosColorNormalTex), &InputLayout)));
 		InputLayouts[VertexFormat::PosColorNormalTex1] = InputLayout;
+		
+		// EGxVertexFormat::PosColorNormalBinormalTangentTex1
+		const D3D11_INPUT_ELEMENT_DESC PosColNormBinormalTangentTexElements[] = {
+			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 40, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 52, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		};
+		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColNormBinormalTangentTexElements, ARRAYSIZE(PosColNormBinormalTangentTexElements), g_VS_PosColorNormalBinormalTangentTex, ARRAYSIZE(g_VS_PosColorNormalBinormalTangentTex), &InputLayout)));
+		InputLayouts[VertexFormat::PosColorNormalBinormalTangentTex1] = InputLayout;
 
 		// EGxVertexFormat::PosColorTex1
 		const D3D11_INPUT_ELEMENT_DESC PosColTexElements[] = {

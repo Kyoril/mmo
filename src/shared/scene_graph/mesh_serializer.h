@@ -33,44 +33,121 @@ namespace mmo
 	typedef mesh_version::Type MeshVersion;
 	
 	/// Represents a single vertex of a mesh.
-	struct Vertex
+	struct Vertex final
 	{
 		/// Position vector
-		Vector3 position;
+		Vector3 position{};
 
 		/// Normal vector
-		Vector3 normal;
+		Vector3 normal{};
+		
+		/// Binormal vector
+		Vector3 binormal{};
+
+		/// Tangent vector
+		Vector3 tangent{};
 
 		/// Texture coordinates
-		Vector3 texCoord;
+		Vector3 texCoord{};
 
 		/// Vertex color
 		uint32 color { 0xffffffff };
+
+		Vertex() = default;
+		~Vertex() = default;
+
+		Vertex(const Vertex& other)
+		{
+			position = other.position;
+			normal = other.normal;
+			binormal = other.binormal;
+			tangent = other.tangent;
+			texCoord = other.texCoord;
+			color = other.color;
+		}
+
+		Vertex& operator=(const Vertex& other)
+		{
+			position = other.position;
+			normal = other.normal;
+			binormal = other.binormal;
+			tangent = other.tangent;
+			texCoord = other.texCoord;
+			color = other.color;
+			return *this;
+		}
 	};
 	
-	struct SubMeshEntry
+	struct SubMeshEntry final
 	{
 		String material { "Default" };
 		uint32 indexOffset { 0 };
 		uint32 triangleCount { 0 };
+
+		SubMeshEntry() = default;
+		~SubMeshEntry() = default;
+
+		SubMeshEntry(const SubMeshEntry& other)
+		{
+			material = other.material;
+			indexOffset = other.indexOffset;
+			triangleCount = other.triangleCount;
+		}
+
+		SubMeshEntry& operator=(const SubMeshEntry& other)
+		{
+			material = other.material;
+			indexOffset = other.indexOffset;
+			triangleCount = other.triangleCount;
+			return *this;
+		}
 	};
 
 	/// Contains mesh data.
-	struct MeshEntry
+	struct MeshEntry final
 	{
 		/// Name of the mesh.
-		std::string name;
+		std::string name{};
 
 		/// Vertex data.
-		std::vector<Vertex> vertices;
+		std::vector<Vertex> vertices{};
 
 		/// Index data.
-		std::vector<uint32> indices;
+		std::vector<uint32> indices{};
 
 		/// Max index to determine whether we can use 16 bit index buffers.
 		uint32 maxIndex { 0 };
 
-		std::vector<SubMeshEntry> subMeshes;
+		std::vector<SubMeshEntry> subMeshes{};
+
+		MeshEntry() = default;
+		~MeshEntry() = default;
+
+		MeshEntry(const MeshEntry& other)
+		{
+			name = other.name;
+			maxIndex = other.maxIndex;
+
+			std::copy(other.vertices.begin(), other.vertices.end(), std::back_inserter(vertices));
+			std::copy(other.indices.begin(), other.indices.end(), std::back_inserter(indices));
+			std::copy(other.subMeshes.begin(), other.subMeshes.end(), std::back_inserter(subMeshes));
+		}
+
+		MeshEntry& operator=(const MeshEntry& other)
+		{
+			vertices.clear();
+			indices.clear();
+			subMeshes.clear();
+
+			name = other.name;
+			maxIndex = other.maxIndex;
+
+			std::copy(other.vertices.begin(), other.vertices.end(), std::back_inserter(vertices));
+			std::copy(other.indices.begin(), other.indices.end(), std::back_inserter(indices));
+			std::copy(other.subMeshes.begin(), other.subMeshes.end(), std::back_inserter(subMeshes));
+
+			return *this;
+		}
 	};
 
 
@@ -91,13 +168,21 @@ namespace mmo
 	protected:
 		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadVertexChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadVertexV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadIndexChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadSubMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
-		
+
+	protected:
+		void CalculateBinormalsAndTangents();
+		void CreateHardwareBuffers();
+
+		bool OnReadFinished() noexcept override;
+
 	public:
 		const MeshEntry& GetMeshEntry() const noexcept { return m_entry; }
 
 	private:
+		mesh::VersionId m_version;
 		MeshEntry m_entry;
 		Mesh& m_mesh;
 	};

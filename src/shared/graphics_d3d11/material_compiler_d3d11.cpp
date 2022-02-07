@@ -518,8 +518,12 @@ namespace mmo
 			<< "struct VertexIn\n"
 			<< "{\n"
 			<< "\tfloat4 pos : SV_POSITION;\n"
-			<< "\tfloat4 color : COLOR;\n"
-			<< "\tfloat3 normal : NORMAL;\n";
+			<< "\tfloat4 color : COLOR;\n";
+		
+		m_vertexShaderStream
+			<< "\tfloat3 normal : NORMAL;\n"
+			<< "\tfloat3 binormal : BINORMAL;\n"
+			<< "\tfloat3 tangent : TANGENT;\n";
 
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
@@ -535,8 +539,15 @@ namespace mmo
 			<< "struct VertexOut\n"
 			<< "{\n"
 			<< "\tfloat4 pos : SV_POSITION;\n"
-			<< "\tfloat4 color : COLOR;\n"
-			<< "\tfloat3 normal : NORMAL;\n";
+			<< "\tfloat4 color : COLOR;\n";
+
+		if (m_lit)
+		{
+			m_vertexShaderStream
+				<< "\tfloat3 normal : NORMAL;\n"
+				<< "\tfloat3 binormal : BINORMAL;\n"
+				<< "\tfloat3 tangent : TANGENT;\n";
+		}
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
@@ -572,19 +583,23 @@ namespace mmo
 			<< "\toutput.pos = mul(input.pos, matWorld);\n"
 			<< "\toutput.worldPos = output.pos.xyz;\n"
 			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
-			<< "\toutput.pos = mul(output.pos, matView);\n"
+			<< "\toutput.pos = mul(float4(output.worldPos, 1.0), matView);\n"
 			<< "\toutput.pos = mul(output.pos, matProj);\n"
 			<< "\toutput.color = input.color;\n";
-		
+
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			m_vertexShaderStream
 				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
 		}
 
-		m_vertexShaderStream
-			<< "\toutput.normal = mul(input.normal, (float3x3)matWorld);\n"
-			<< "\toutput.normal = normalize(output.normal);\n";
+		if (m_lit)
+		{
+			m_vertexShaderStream
+				<< "\toutput.binormal = normalize(mul(float4(input.binormal, 0.0), matWorld).rgb);\n"
+				<< "\toutput.tangent = normalize(mul(float4(input.tangent, 0.0), matWorld).rgb);\n"
+				<< "\toutput.normal = normalize(mul(input.normal, (float3x3)matWorld));\n";
+		}
 
 		// Main procedure end
 		m_vertexShaderStream
@@ -607,9 +622,16 @@ namespace mmo
 		m_pixelShaderStream
 			<< "struct VertexOut\n"
 			<< "{\n"
-			<< "\tfloat4 pos : SV_POSITION0;\n"
-			<< "\tfloat4 color : COLOR;\n"
-			<< "\tfloat3 normal : NORMAL;\n";
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n";
+
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "\tfloat3 normal : NORMAL;\n"
+				<< "\tfloat3 binormal : BINORMAL;\n"
+				<< "\tfloat3 tangent : TANGENT;\n";
+		}
 		
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
@@ -628,65 +650,52 @@ namespace mmo
 			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
 		}
 
-		// tangent normal to world space normal
-		m_pixelShaderStream
-			<< "float3 getNormalFromMap(float3 WorldPos, float2 TexCoords, float3 Normal, float3 inTangentNormal)\n"
-			<< "{\n"
-			<< "\tfloat3 tangentNormal = inTangentNormal * 2.0 - 1.0;\n"
-			<< "\tfloat3 Q1  = ddx(WorldPos);\n"
-			<< "\tfloat3 Q2  = ddy(WorldPos);\n"
-			<< "\tfloat2 st1 = ddx(TexCoords);\n"
-			<< "\tfloat2 st2 = ddy(TexCoords);\n\n"
-			<< "\tfloat3 N   = normalize(Normal);\n"
-			<< "\tfloat3 T  = normalize(Q1*st2.y - Q2*st1.y);\n"
-			<< "\tfloat3 B  = -normalize(cross(N, T));\n"
-			<< "\tfloat3x3 TBN = float3x3(T, B, N);\n\n"
-			<< "\treturn normalize(mul(tangentNormal, TBN));\n"
-			<< "}\n\n";
+		if (m_lit)
+		{
+			// fresnelSchlick
+			m_pixelShaderStream
+				<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
+				<< "{\n"
+				<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
+				<< "}\n\n";
+
+			// DistributionGGX
+			m_pixelShaderStream
+				<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
+				<< "{\n"
+				<< "\tfloat a      = roughness*roughness;\n"
+				<< "\tfloat a2     = a*a;\n"
+				<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
+				<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
+				<< "\tfloat num   = a2;\n"
+				<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+				<< "\tdenom = PI * denom * denom;\n"
+				<< "\treturn num / denom;\n"
+				<< "}\n\n";
+
+			// GeometrySchlickGGX
+			m_pixelShaderStream
+				<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
+				<< "{\n"
+				<< "\tfloat r = (roughness + 1.0);\n"
+				<< "\tfloat k = (r*r) / 8.0;\n"
+				<< "\tfloat num   = NdotV;\n"
+				<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
+				<< "\treturn num / denom;\n"
+				<< "}\n\n";
+
+			// GeometrySmith
+			m_pixelShaderStream
+				<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
+				<< "{\n"
+				<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
+				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+				<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
+				<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
+				<< "\treturn ggx1 * ggx2;\n"
+				<< "}\n\n";
+		}
 		
-		// fresnelSchlick
-		m_pixelShaderStream
-			<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
-			<< "{\n"
-			<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
-			<< "}\n\n";
-
-		// DistributionGGX
-		m_pixelShaderStream
-			<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
-			<< "{\n"
-			<< "\tfloat a      = roughness*roughness;\n"
-			<< "\tfloat a2     = a*a;\n"
-			<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
-			<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
-			<< "\tfloat num   = a2;\n"
-			<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
-			<< "\tdenom = PI * denom * denom;\n"
-			<< "\treturn num / denom;\n"
-			<< "}\n\n";
-
-		// GeometrySchlickGGX
-		m_pixelShaderStream
-			<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
-			<< "{\n"
-			<< "\tfloat r = (roughness + 1.0);\n"
-			<< "\tfloat k = (r*r) / 8.0;\n"
-			<< "\tfloat num   = NdotV;\n"
-			<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
-			<< "\treturn num / denom;\n"
-			<< "}\n\n";
-
-		// GeometrySmith
-		m_pixelShaderStream
-			<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
-			<< "{\n"
-			<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
-			<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-			<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
-			<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
-			<< "\treturn ggx1 * ggx2;\n"
-			<< "}\n\n";
-
 		for (const auto& [name, code] : m_globalFunctions)
 		{
 			m_pixelShaderStream
@@ -709,60 +718,69 @@ namespace mmo
 			m_pixelShaderStream << "\t" << code;
 		}
 
-		// Normal
-		if (m_normalExpression != IndexNone)
+		if (m_lit)
 		{
-			const auto expression = GetExpressionType(m_normalExpression);
-			if (expression == ExpressionType::Float_4)
+			// Normal
+			if (m_normalExpression != IndexNone)
 			{
-				m_pixelShaderStream << "\tfloat3 N = getNormalFromMap(input.worldPos, input.uv0, normalize(input.normal), expr_" << m_normalExpression << ".rgb);\n\n";
+				const auto expression = GetExpressionType(m_normalExpression);
+				if (expression == ExpressionType::Float_4)
+				{
+					m_pixelShaderStream << "\tfloat3 N = expr_" << m_normalExpression << ".rgb * 2.0 - 1.0;\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat3 N = expr_" << m_normalExpression << " * 2.0 - 1.0;\n\n";
+				}
+				
+				m_pixelShaderStream
+					<< "\tfloat3 B = normalize(input.binormal);\n"
+					<< "\tfloat3 T = normalize(input.tangent);\n"
+					<< "\tfloat3x3 TBN = float3x3(T, B, normalize(input.normal));\n"
+					<< "\tN = normalize(mul(N, TBN));\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat3 N = getNormalFromMap(input.worldPos, input.uv0, normalize(input.normal), float3(expr_" << m_normalExpression << "));\n\n";
+				m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
 			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
+			
+			// Roughness
+			if (m_roughnessExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_roughnessExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ";\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ".r;\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
+			}
+			
+			// Metallic
+			if (m_metallicExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_metallicExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ";\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ".r;\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
+			}
 		}
 
-		// Roughness
-		if (m_roughnessExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_roughnessExpression);
-			if (expression == ExpressionType::Float_1)
-			{
-				m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ";\n\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ".r;\n\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
-		}
-		
-		// Metallic
-		if (m_metallicExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_metallicExpression);
-			if (expression == ExpressionType::Float_1)
-			{
-				m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ";\n\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ".r;\n\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat metallic = 1.0;\n\n";
-		}
-		
 		// BaseColor base
 		m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
 		if (m_baseColorExpression != IndexNone)
@@ -786,7 +804,6 @@ namespace mmo
 		}
 
 		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
-		
 		m_pixelShaderStream
 			<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
 
@@ -820,9 +837,17 @@ namespace mmo
 				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
 				<< "\tfloat3 Lo = (kD * baseColor / PI + specular) * radiance * NdotL;\n";
 
+
 			m_pixelShaderStream
-				<< "\tfloat3 ambient = float3(0.03, 0.03, 0.03) * baseColor * ao;\n"
-				<< "\tfloat3 color   = ambient + Lo;\n";
+				<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
+				<< "\tkD = float3(1.0, 1.0, 1.0) - kS;\n"
+				<< "\tkD *= 1.0 - metallic;\n"
+				<< "\tfloat3 irradiance = float3(0.0, 0.29, 0.58);\n"
+				<< "\tfloat3 diffuse = irradiance * baseColor;\n"
+				<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
+
+			m_pixelShaderStream
+				<< "\tfloat3 color = ambient + Lo;\n";
 
 			m_pixelShaderStream
 				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
@@ -838,7 +863,7 @@ namespace mmo
 		else
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = input.color * baseColor;\n";
+				<< "\toutputColor = float4(baseColor, 1.0);\n";
 		}
 
 		// End of main function

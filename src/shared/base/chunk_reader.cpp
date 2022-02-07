@@ -61,6 +61,11 @@ namespace mmo
 			}
 		}
 
+		if (!OnReadFinished())
+		{
+			return false;
+		}
+
 		return IsValid();
 	}
 }

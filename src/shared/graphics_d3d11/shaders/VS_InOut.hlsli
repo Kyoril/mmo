@@ -9,6 +9,12 @@ struct VertexIn
 #ifdef WITH_NORMAL
 	float3 normal : NORMAL;
 #endif
+#ifdef WITH_BINORMAL
+	float3 binormal : BINORMAL;
+#endif
+#ifdef WITH_TANGENT
+	float3 tangent : TANGENT;
+#endif
 #ifdef WITH_TEX
 	float2 uv0 : TEXCOORD0;
 #if WITH_TEX > 1
@@ -34,6 +40,12 @@ struct VertexOut
 #endif
 #ifdef WITH_NORMAL
 	float3 normal : NORMAL;
+#endif
+#ifdef WITH_BINORMAL
+	float3 binormal : BINORMAL;
+#endif
+#ifdef WITH_TANGENT
+	float3 tangent : TANGENT;
 #endif
 #ifdef WITH_TEX
 	float2 uv0 : TEXCOORD0;

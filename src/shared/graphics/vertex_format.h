@@ -20,6 +20,9 @@ namespace mmo
 		PosColorNormal,
 		/// Position + color + normal + 1 texture
 		PosColorNormalTex1,
+		
+		/// Position + color + normal + binormal + tangent + 1 texture
+		PosColorNormalBinormalTangentTex1,
 
 		/// Counter
 		Last,
@@ -56,6 +59,16 @@ namespace mmo
 		Vector3 pos;
 		uint32 color;
 		Vector3 normal;
+		float uv[2];
+	};
+	
+	struct POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX
+	{
+		Vector3 pos;
+		uint32 color;
+		Vector3 normal;
+		Vector3 binormal;
+		Vector3 tangent;
 		float uv[2];
 	};
 }

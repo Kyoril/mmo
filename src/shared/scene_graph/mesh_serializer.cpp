@@ -9,6 +9,7 @@
 #include "mesh/pre_header.h"
 
 #include "base/chunk_writer.h"
+#include "base/vector.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "mesh_v1_0/header.h"
@@ -24,18 +25,18 @@ namespace mmo
 	{
 		if (version == mesh::Latest)
 		{
-			version = mesh::Version_1_0;
+			version = mesh::Version_2_0;
 		}
 		
 		// Write the vertex chunk data
-		ChunkWriter meshChunk{ mesh::v1_0::MeshChunkMagic, writer };
+		ChunkWriter meshChunk{ MeshChunkMagic, writer };
 		{
 			writer << io::write<uint32>(version);
 		}
 		meshChunk.Finish();
 		
 		// Write the vertex chunk data
-		ChunkWriter vertexChunkWriter{ mesh::v1_0::MeshVertexChunk, writer };
+		ChunkWriter vertexChunkWriter{ MeshVertexChunk, writer };
 		{
 			writer << io::write<uint32>(mesh.vertices.size());
 			for (size_t i = 0; i < mesh.vertices.size(); ++i)
@@ -54,12 +55,20 @@ namespace mmo
 					<< io::write<float>(mesh.vertices[i].normal.x)
 					<< io::write<float>(mesh.vertices[i].normal.y)
 					<< io::write<float>(mesh.vertices[i].normal.z);
+				writer
+					<< io::write<float>(mesh.vertices[i].binormal.x)
+					<< io::write<float>(mesh.vertices[i].binormal.y)
+					<< io::write<float>(mesh.vertices[i].binormal.z);
+				writer
+					<< io::write<float>(mesh.vertices[i].tangent.x)
+					<< io::write<float>(mesh.vertices[i].tangent.y)
+					<< io::write<float>(mesh.vertices[i].tangent.z);
 			}
 		}
 		vertexChunkWriter.Finish();
 
 		// Write the index chunk data
-		ChunkWriter indexChunkWriter{ mesh::v1_0::MeshIndexChunk, writer };
+		ChunkWriter indexChunkWriter{ MeshIndexChunk, writer };
 		{
 			const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
 			
@@ -84,7 +93,7 @@ namespace mmo
 		// Write submesh chunks
 		for(const auto& submesh : mesh.subMeshes)
 		{
-			ChunkWriter submeshChunkWriter{ mesh::v1_0::MeshSubMeshChunk, writer };
+			ChunkWriter submeshChunkWriter{ MeshSubMeshChunk, writer };
 			{
 				// Material name
 				writer
@@ -112,14 +121,25 @@ namespace mmo
 	{
 		uint32 version;
 		reader >> io::read<uint32>(version);
-		
+
+		m_version = static_cast<mesh::VersionId>(version);
+		if (version < mesh::Version_2_0)
+		{
+			WLOG("Mesh is using an old file format, please consider upgrading it!");
+		}
+
 		if (reader)
 		{
-			if (version == mesh_version::Version_0_1)
+			if (version >= mesh::Version_1_0)
 			{
 				AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexChunk);
 				AddChunkHandler(*MeshIndexChunk, true, *this, &MeshDeserializer::ReadIndexChunk);
 				AddChunkHandler(*MeshSubMeshChunk, true, *this, &MeshDeserializer::ReadSubMeshChunk);
+
+				if (version >= mesh::Version_2_0)
+				{
+					AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexV2Chunk);
+				}
 			}
 			else
 			{
@@ -138,26 +158,23 @@ namespace mmo
 		
 		m_entry.vertices.clear();
 		m_entry.vertices.reserve(vertexCount);
-
-		// Read vertex data
-		std::vector<POS_COL_NORMAL_TEX_VERTEX> vertices;
-		vertices.resize(vertexCount);
-		
+				
 		AABB boundingBox;
 
 		auto min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 		auto max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
 
 		// Iterate through vertices
-		for (POS_COL_NORMAL_TEX_VERTEX& v : vertices)
+		for (size_t i = 0; i < vertexCount; ++i)
 		{
+			Vertex v{};
 			reader
-				>> io::read<float>(v.pos[0])
-				>> io::read<float>(v.pos[1])
-				>> io::read<float>(v.pos[2]);
+				>> io::read<float>(v.position[0])
+				>> io::read<float>(v.position[1])
+				>> io::read<float>(v.position[2]);
 
-			min = TakeMinimum(v.pos, min);
-			max = TakeMaximum(v.pos, max);
+			min = TakeMinimum(v.position, min);
+			max = TakeMaximum(v.position, max);
 
 			// Color
 			reader
@@ -165,8 +182,60 @@ namespace mmo
 
 			// Uvw
 			reader
-				>> io::read<float>(v.uv[0])
-				>> io::read<float>(v.uv[1])
+				>> io::read<float>(v.texCoord[0])
+				>> io::read<float>(v.texCoord[1])
+				>> io::skip<float>();
+
+			// Normal
+			reader
+				>> io::read<float>(v.normal[0])
+				>> io::read<float>(v.normal[1])
+				>> io::read<float>(v.normal[2]);
+						
+			m_entry.vertices.emplace_back(std::move(v));
+		}
+
+		const AABB box { min, max };
+		boundingBox.Combine(box);
+
+		m_mesh.SetBounds(boundingBox);
+		
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadVertexV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint32 vertexCount;
+		reader >> io::read<uint32>(vertexCount);
+		
+		m_entry.vertices.clear();
+		m_entry.vertices.reserve(vertexCount);
+		
+		AABB boundingBox;
+
+		auto min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+		auto max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
+
+		// Iterate through vertices
+		for (size_t i = 0; i < vertexCount; ++i)
+		{
+			Vertex v {};
+			reader
+				>> io::read<float>(v.position[0])
+				>> io::read<float>(v.position[1])
+				>> io::read<float>(v.position[2]);
+
+			min = TakeMinimum(v.position, min);
+			max = TakeMaximum(v.position, max);
+
+			// Color
+			reader
+				>> io::read<uint32>(v.color);
+
+			// Uvw
+			reader
+				>> io::read<float>(v.texCoord[0])
+				>> io::read<float>(v.texCoord[1])
 				>> io::skip<float>();
 
 			// Normal
@@ -175,16 +244,25 @@ namespace mmo
 				>> io::read<float>(v.normal[1])
 				>> io::read<float>(v.normal[2]);
 			
-            m_entry.vertices.emplace_back(Vertex{v.pos, v.normal, Vector3( v.uv[0], v.uv[1], 0.0f ), v.color});
+			// Binormal
+			reader
+				>> io::read<float>(v.binormal[0])
+				>> io::read<float>(v.binormal[1])
+				>> io::read<float>(v.binormal[2]);
+			
+			// Tangent
+			reader
+				>> io::read<float>(v.tangent[0])
+				>> io::read<float>(v.tangent[1])
+				>> io::read<float>(v.tangent[2]);
+			
+			m_entry.vertices.emplace_back(std::move(v));
 		}
 
 		const AABB box { min, max };
 		boundingBox.Combine(box);
 
 		m_mesh.SetBounds(boundingBox);
-
-		// Create vertex buffer
-		m_mesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertexCount, sizeof(POS_COL_NORMAL_TEX_VERTEX), false, &vertices[0]);
 		
 		return reader;
 	}
@@ -214,8 +292,6 @@ namespace mmo
 				m_entry.indices.emplace_back(index);
 				m_entry.maxIndex = std::max<uint32>(m_entry.maxIndex, index);
 			}
-
-			m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_16, &indices[0]);
 		}
 		else
 		{
@@ -229,9 +305,8 @@ namespace mmo
 				m_entry.maxIndex = std::max(m_entry.maxIndex, index);
 			}
 
-			m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_32, &indices[0]);
 		}
-				
+		
 		return reader;
 	}
 
@@ -250,8 +325,87 @@ namespace mmo
 		subMesh.m_indexStart = indexStart;
 		subMesh.m_indexEnd = indexEnd;
 
-        m_entry.subMeshes.emplace_back(SubMeshEntry{std::move(materialName), indexStart, (indexEnd - indexStart) / 3});
+		SubMeshEntry entry{};
+		entry.material = materialName;
+		entry.indexOffset = indexStart;
+		entry.triangleCount = (indexEnd - indexStart) / 3;
+        m_entry.subMeshes.push_back(entry);
 		
 		return reader;
+	}
+
+	void MeshDeserializer::CalculateBinormalsAndTangents()
+	{
+		// Iterate over each triangle...
+		for (int i = 0; i < m_entry.indices.size(); i += 3)
+		{
+			// Get the vertices for that triangle
+			auto& v1 = m_entry.vertices[m_entry.indices[i+0]];
+			auto& v2 = m_entry.vertices[m_entry.indices[i+1]];
+			auto& v3 = m_entry.vertices[m_entry.indices[i+2]];
+			
+			// Calculate the two vectors for this face.
+			const Vector3 edge1 = v2.position - v1.position;
+			const Vector3 edge2 = v3.position - v1.position;
+			const Vector3 deltaUV1 = v2.texCoord - v1.texCoord;
+			const Vector3 deltaUV2 = v3.texCoord - v1.texCoord;
+
+			// Calculate the denominator of the tangent/binormal equation.
+			const float denominator = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+			
+			// Calculate the cross products and multiply by the coefficient to get the tangent and binormal.
+			const auto tangent = Vector3(
+				(deltaUV2.y * edge1.x - deltaUV1.y * edge2.x) * denominator,
+				(deltaUV2.y * edge1.y - deltaUV1.y * edge2.y) * denominator,
+				(deltaUV2.y * edge1.z - deltaUV1.y * edge2.z) * denominator
+			).NormalizedCopy();
+
+			const auto binormal = Vector3(
+				(-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x) * denominator,
+				(-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y) * denominator,
+				(-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z) * denominator
+			).NormalizedCopy();
+
+			v1.binormal = binormal;
+			v2.binormal = binormal;
+			v3.binormal = binormal;
+
+			v1.tangent = tangent;
+			v2.tangent = tangent;
+			v3.tangent = tangent;
+		}
+	}
+
+	void MeshDeserializer::CreateHardwareBuffers()
+	{
+		if (m_version < mesh::Version_2_0 || (!m_entry.vertices.empty() && m_entry.vertices[0].binormal.IsNearlyEqual(Vector3::Zero)))
+		{
+			CalculateBinormalsAndTangents();
+		}
+
+		std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
+		vertices.resize(m_entry.vertices.size());
+
+		for (size_t i = 0; i < vertices.size(); ++i)
+		{
+			const auto& v = m_entry.vertices[i];
+			vertices[i].pos = v.position;
+			vertices[i].color = v.color;
+			vertices[i].normal = v.normal;
+			vertices[i].binormal = v.binormal;
+			vertices[i].tangent = v.tangent;
+			vertices[i].uv[0] = v.texCoord.x;
+			vertices[i].uv[1] = v.texCoord.y;
+		}
+		
+		m_mesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX), false, &vertices[0]);
+		m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, &m_entry.indices[0]);
+	}
+
+	bool MeshDeserializer::OnReadFinished() noexcept
+	{
+		CreateHardwareBuffers();
+
+		return true;
 	}
 }

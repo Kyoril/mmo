@@ -67,7 +67,7 @@ namespace mmo
 		op.indexBuffer = m_indexBuffer.get();
 		op.useIndexes = m_indexBuffer != nullptr;
 		op.topology = TopologyType::TriangleList;
-		op.vertexFormat = VertexFormat::PosColorNormalTex1;
+		op.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
 		op.startIndex = m_indexStart;
 		op.endIndex = m_indexEnd;
 	}

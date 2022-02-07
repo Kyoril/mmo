@@ -325,7 +325,7 @@ namespace mmo
 		{
 			DLOG("Vertex attributes by control points");
 
-			entry.vertices.resize(geometry.positions.size(), Vertex { Vector3::Zero, Vector3::UnitZ, Vector3::Zero, Color::White});
+			entry.vertices.resize(geometry.positions.size(), Vertex{});
 			entry.indices.resize(geometry.polygonIndices.size(), 0);
 
 			for (size_t i = 0; i < geometry.positions.size(); ++i)
@@ -357,7 +357,7 @@ namespace mmo
 		{
 			DLOG("Vertex attributes by polygon vertex");
 
-			entry.vertices.resize(geometry.uvSets[0].uvs.size(), Vertex { Vector3::Zero, Vector3::UnitZ, Vector3::Zero, Color::White});
+			entry.vertices.resize(geometry.uvSets[0].uvs.size(), Vertex{});
 			entry.indices.resize(geometry.polygonIndices.size(), 0);
 
 			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
@@ -565,13 +565,13 @@ namespace mmo
 			else
 			{
 				WLOG("Mesh material not assigned by polygon!");
-				entry.subMeshes.emplace_back(SubMeshEntry { "Default", 0, 0 });
+				entry.subMeshes.push_back(SubMeshEntry{});
 			}
 		}
 		else
 		{
 			WLOG("Mesh has no material assigned to it");
-			entry.subMeshes.emplace_back(SubMeshEntry { "Default", 0, 0 });
+			entry.subMeshes.push_back(SubMeshEntry{});
 		}
 
 		// Setup vertices and indices
