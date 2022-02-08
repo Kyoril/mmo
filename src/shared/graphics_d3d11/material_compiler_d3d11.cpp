@@ -384,7 +384,7 @@ namespace mmo
 	ExpressionIndex MaterialCompilerD3D11::AddVertexNormal()
 	{
 		std::ostringstream outputStream;
-		outputStream << "normalize(input.normal)";
+		outputStream << "N";
 		outputStream.flush();
 		
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
@@ -636,8 +636,8 @@ namespace mmo
 		if (m_lit)
 		{
 			m_vertexShaderStream
-				<< "\toutput.binormal = normalize(mul(float4(input.binormal, 0.0), matWorld).rgb);\n"
-				<< "\toutput.tangent = normalize(mul(float4(input.tangent, 0.0), matWorld).rgb);\n"
+				<< "\toutput.binormal = normalize(mul(input.binormal, (float3x3)matWorld));\n"
+				<< "\toutput.tangent = normalize(mul(input.tangent, (float3x3)matWorld));\n"
 				<< "\toutput.normal = normalize(mul(input.normal, (float3x3)matWorld));\n";
 		}
 
@@ -751,11 +751,20 @@ namespace mmo
 			<< "{\n"
 			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 
+		if (m_lit)
+		{
+			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
+		}
+
 		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
-		m_pixelShaderStream
-			<< "\tfloat3 B = normalize(input.binormal);\n"
-			<< "\tfloat3 T = normalize(input.tangent);\n"
-			<< "\tfloat3x3 TBN = float3x3(T, B, normalize(input.normal));\n";
+		
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "\tfloat3 B = normalize(input.binormal);\n"
+				<< "\tfloat3 T = normalize(input.tangent);\n"
+				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
+		}
 
 		for (const auto& code : m_expressions)
 		{
@@ -770,19 +779,15 @@ namespace mmo
 				const auto expression = GetExpressionType(m_normalExpression);
 				if (expression == ExpressionType::Float_4)
 				{
-					m_pixelShaderStream << "\tfloat3 N = expr_" << m_normalExpression << ".rgb * 2.0 - 1.0;\n\n";
+					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ".rgb * 2.0 - 1.0;\n\n";
 				}
 				else
 				{
-					m_pixelShaderStream << "\tfloat3 N = expr_" << m_normalExpression << " * 2.0 - 1.0;\n\n";
+					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << " * 2.0 - 1.0;\n\n";
 				}
 				
 				m_pixelShaderStream
 					<< "\tN = normalize(mul(N, TBN));\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
 			}
 			
 			// Roughness

@@ -58,6 +58,7 @@ namespace mmo
 		if (m_entity)
 		{
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
+			m_cameraAnchor->SetPosition(m_entity->GetBoundingBox().GetCenter());
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
 		}
 
