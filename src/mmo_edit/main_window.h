@@ -113,5 +113,6 @@ namespace mmo
 		Path m_selectedPath;
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
+		ImFont* m_defaultFont { nullptr };
 	};
 }

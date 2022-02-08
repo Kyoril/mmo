@@ -188,6 +188,8 @@ namespace mmo
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
+		if (m_defaultFont) ImGui::PushFont(m_defaultFont);
+
 		// We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
 		// because it would be confusing to have two docking targets within each others.
 		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -247,6 +249,8 @@ namespace mmo
 			}
 		}
 		ImGui::End();
+
+		if (m_defaultFont) ImGui::PopFont();
 
 		// Rendering
 		ImGui::Render();
@@ -476,6 +480,10 @@ namespace mmo
 		// Setup Dear ImGui style
 		ImGui::StyleColorsDark();
 
+		// Init
+		const auto fontPath = Path(m_config.assetRegistryPath) / "Editor" / "Roboto-Regular.ttf";
+		m_defaultFont = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), 16, nullptr, io.Fonts->GetGlyphRangesDefault());
+		
 		// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 		ImGuiStyle& style = ImGui::GetStyle();
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -495,6 +503,7 @@ namespace mmo
 
 		// Load fonts
 		io.Fonts->AddFontDefault();
+		io.Fonts->Build();
 
 		// Dockspace flags
 		m_dockSpaceFlags = ImGuiDockNodeFlags_None;

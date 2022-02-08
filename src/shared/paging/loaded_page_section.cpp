@@ -3,6 +3,8 @@
 #include "page_neighborhood.h"
 #include "page_pov_partitioner.h"
 
+#include <vector>
+
 namespace mmo
 {
 	LoadedPageSection::LoadedPageSection(const PagePosition center, const std::size_t range, IPageLoaderListener &sectionListener)
