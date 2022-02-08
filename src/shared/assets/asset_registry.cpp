@@ -25,6 +25,8 @@ namespace mmo
 	/// The filesystem archive pointing to the base path.
 	static std::shared_ptr<FileSystemArchive> s_filesystemArchive;
 
+	std::mutex AssetRegistry::s_fileLock{};
+
 
 	void AssetRegistry::Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives)
 	{
@@ -106,6 +108,8 @@ namespace mmo
 
 	std::unique_ptr<std::istream> AssetRegistry::OpenFile(const std::string & filename)
 	{
+		std::unique_lock lock { s_fileLock };
+
 		// Try to find the requested file
 		const auto it = s_files.find(filename);
 		if (it == s_files.end())
@@ -119,6 +123,8 @@ namespace mmo
 
 	bool AssetRegistry::HasFile(const std::string& filename)
 	{
+		std::unique_lock lock { s_fileLock };
+
 		// Try to find the requested file
 		const auto it = s_files.find(filename);
 		return it != s_files.end();
@@ -126,6 +132,8 @@ namespace mmo
 
 	std::unique_ptr<std::ostream> AssetRegistry::CreateNewFile(const std::string& filename)
 	{
+		std::unique_lock lock { s_fileLock };
+
 		ASSERT(s_filesystemArchive != nullptr);
 
 		std::string converted = filename;
@@ -152,6 +160,7 @@ namespace mmo
 
 	std::vector<std::string> AssetRegistry::ListFiles()
 	{
+		std::unique_lock lock { s_fileLock };
 		std::vector<std::string> result;
 
 		for (const auto& file : s_files)

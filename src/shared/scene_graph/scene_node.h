@@ -56,6 +56,7 @@ namespace mmo
 		void NotifyRootNode() noexcept { m_isInSceneGraph = true; }
 		void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
 		void RemoveFromParent() const;
+		void SetVisible(bool visible, bool cascade = true);
 
 	public:
 		/// Called when the node transformation has been updated.
@@ -181,8 +182,11 @@ namespace mmo
         void RequestUpdate(SceneNode& child, bool forceParentUpdate = false);
 
 		void CancelUpdate(SceneNode& child);
+
+		SceneNode* CreateChildSceneNode();
 		
 	protected:
+		Scene& m_scene;
 		/// @brief Name of this node.
 		String m_name;
 		/// @brief The parent node.

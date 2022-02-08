@@ -45,8 +45,25 @@ namespace mmo
 		}
 	}
 
+	void SceneNode::SetVisible(const bool visible, const bool cascade)
+	{
+		for (const auto& [name, object] : m_objectsByName)
+		{
+			object->SetVisible(visible);
+		}
+
+		if (cascade)
+		{
+			for (auto& [name, node] : m_children)
+			{
+				node->SetVisible(visible, true);
+			}
+		}
+	}
+
 	SceneNode::SceneNode(Scene& scene)
-		: m_parent(nullptr)
+		: m_scene(scene)
+		, m_parent(nullptr)
 		, m_needParentUpdate(false)
 		, m_parentNotified(false)
 		, m_orientation(Quaternion::Identity)
@@ -62,7 +79,8 @@ namespace mmo
 	}
 
 	SceneNode::SceneNode(Scene& scene, String name)
-		: m_name(std::move(name))
+		: m_scene(scene)
+		, m_name(std::move(name))
 		, m_parent(nullptr)
 		, m_needParentUpdate(false)
 		, m_parentNotified(false)
@@ -463,6 +481,14 @@ namespace mmo
 			m_parent->CancelUpdate(*this);
 			m_parentNotified = false;
 		}
+	}
+
+	SceneNode* SceneNode::CreateChildSceneNode()
+	{
+		auto& node = m_scene.CreateSceneNode();
+		AddChild(node);
+
+		return &node;
 	}
 
 	void SceneNode::UpdateFromParent()

@@ -49,14 +49,14 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text(MaterialExtension.c_str());
 			
-			ImGui::TableSetColumnIndex(1);
 			if (ImGui::Button("Create"))
 			{
 				CreateNewMaterial();
 				ImGui::CloseCurrentPopup();
 			}
 			
-			ImGui::TableSetColumnIndex(2);
+			ImGui::SameLine();
+
 			if (ImGui::Button("Cancel"))
 			{
 				ImGui::CloseCurrentPopup();

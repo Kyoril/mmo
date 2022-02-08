@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <istream>
+#include <mutex>
 #include <ostream>
 #include <vector>
 
@@ -41,5 +42,8 @@ namespace mmo
 
 		/// Returns a list of file names in the asset registry.
 		static std::vector<std::string> ListFiles();
+
+	private:
+		static std::mutex s_fileLock;
 	};
 }

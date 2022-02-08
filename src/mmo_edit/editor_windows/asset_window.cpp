@@ -202,9 +202,23 @@ namespace mmo
 								{
 									m_host.OpenAsset(entry.fullPath);
 								}
+
+								ImGuiDragDropFlags src_flags = 0;
+							    src_flags |= ImGuiDragDropFlags_SourceNoDisableHover;     // Keep the source displayed as hovered
+							    src_flags |= ImGuiDragDropFlags_SourceNoHoldToOpenOthers; // Because our dragging is local, we disable the feature of opening foreign treenodes/tabs while dragging
+							    //src_flags |= ImGuiDragDropFlags_SourceNoPreviewTooltip; // Hide the tooltip
+							    if (ImGui::BeginDragDropSource(src_flags))
+							    {
+							        if (!(src_flags & ImGuiDragDropFlags_SourceNoPreviewTooltip))
+							            ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0));
+
+							        ImGui::SetDragDropPayload(Path(entry.fullPath).extension().string().c_str(), &entry.fullPath, sizeof(entry.fullPath));
+							        ImGui::EndDragDropSource();
+							    }
+								
 								ImGui::TextWrapped(name.c_str());
 							}
-
+							
 							ImGui::PopID();
 
 							ImGui::NextColumn();

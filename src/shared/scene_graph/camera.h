@@ -33,7 +33,11 @@ namespace mmo
 		[[nodiscard]] float GetNearClipDistance() const noexcept { return m_nearDist; }
 
 		[[nodiscard]] float GetFarClipDistance() const noexcept { return m_farDist; }
-		
+
+		[[nodiscard]] float GetAspectRatio() const noexcept { return m_aspect; }
+
+		void SetOrientation(const Quaternion& quaternion);
+
 	protected:
 		void UpdateFrustum() const;
 

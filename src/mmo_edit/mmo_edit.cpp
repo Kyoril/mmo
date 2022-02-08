@@ -18,6 +18,8 @@
 #include "editors/model_editor/model_editor.h"
 #include "editors/material_editor/material_editor.h"
 #include "editors/texture_editor/texture_editor.h"
+#include "editors/world_editor/world_editor.h"
+#include "editors/world_editor/world_editor.h"
 
 #ifdef _DEBUG
 #	include "log/default_log_levels.h"
@@ -68,6 +70,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow));
 
 	// Run the message loop
 	MSG msg = { nullptr };

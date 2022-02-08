@@ -32,6 +32,11 @@ namespace mmo
 		return m_viewMatrix;
 	}
 
+	void Camera::SetOrientation(const Quaternion& quaternion)
+	{
+		m_viewInvalid = true;
+	}
+
 	void Camera::UpdateFrustum() const
 	{
 		if (!IsFrustumOutOfDate())
