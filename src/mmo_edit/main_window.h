@@ -2,12 +2,10 @@
 
 #pragma once
 
-#include "worlds_window.h"
 #include "editor_windows/editor_window_base.h"
 #include "import/fbx_import.h"
 #include "editor_host.h"
 
-#include "data/project.h"
 #include "base/non_copyable.h"
 
 #ifdef _WIN32
@@ -16,9 +14,12 @@
 
 #include <string>
 
+#include "imgui_node_editor_internal.inl"
 #include "editors/editor_base.h"
 #include "import/import_base.h"
 
+
+struct ImGuiContext;
 
 namespace mmo
 {
@@ -49,9 +50,7 @@ namespace mmo
 
 		/// Initialize ImGui.
 		void InitImGui();
-
-		void RenderSimpleNodeEditor();
-
+		
 		/// Render ImGui.
 		void RenderImGui();
 
@@ -107,9 +106,6 @@ namespace mmo
 		ImGuiContext* m_imguiContext;
 		FbxImport m_importer;
 		bool m_fileLoaded;
-		bool m_projectLoaded;
-		Project m_project;
-		WorldsWindow m_worldsWindow;
 		std::string m_modelName;
 		std::vector<std::unique_ptr<EditorWindowBase>> m_editorWindows;
 		std::vector<std::unique_ptr<ImportBase>> m_imports;

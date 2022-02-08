@@ -1,9 +1,6 @@
 [submodule "deps/asio"]
 	path = deps/asio
 	url = https://github.com/chriskohlhoff/asio
-[submodule "deps/protobuf"]
-	path = deps/protobuf
-	url = https://github.com/protocolbuffers/protobuf
 [submodule "deps/imgui"]
 	path = deps/imgui
 	url = https://github.com/ocornut/imgui

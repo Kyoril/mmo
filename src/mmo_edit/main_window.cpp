@@ -33,7 +33,6 @@ namespace mmo
 		, m_windowHandle(nullptr)
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
-		, m_worldsWindow(m_project)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -63,12 +62,6 @@ namespace mmo
 
 		// Log success
 		ILOG("MMO Edit initialized");
-
-		// Try to load project
-		if (!m_project.Load(m_config.projectPath))
-		{
-			ELOG("Unable to load project!");
-		}
 	}
 
 	MainWindow::~MainWindow()
@@ -156,16 +149,6 @@ namespace mmo
 			// File menu
 			if (ImGui::BeginMenu("File"))
 			{
-				if (ImGui::MenuItem("Save Project", nullptr, nullptr, m_projectLoaded))
-				{
-					if (!m_project.Save(m_config.projectPath))
-					{
-						ELOG("Failed to save project");
-					}
-				}
-				
-				ImGui::Separator();
-					
 				if (ImGui::MenuItem("Exit", nullptr))
 				{
 					// Terminate the application
@@ -191,8 +174,6 @@ namespace mmo
 					ImGui::Separator();	
 				}
 				
-				m_worldsWindow.DrawViewMenuItem();
-
 				ImGui::EndMenu();
 			}
 
@@ -249,10 +230,7 @@ namespace mmo
 			{
 				editor->Draw();
 			}
-
-			// Render log window
-			m_worldsWindow.Draw();
-
+			
 			const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
 			std::erase_if(m_uninitializedEditorInstances, [dockSpaceId](const String& name)
 			{
@@ -519,18 +497,11 @@ namespace mmo
 		io.Fonts->AddFontDefault();
 
 		// Dockspace flags
-		m_dockSpaceFlags = ImGuiDockNodeFlags_None;//ImGuiDockNodeFlags_AutoHideTabBar;
+		m_dockSpaceFlags = ImGuiDockNodeFlags_None;
 
 		ApplyDefaultStyle();
-		
-		//SetTimer(m_windowHandle, 0, 5, [] (HWND hwnd, UINT uint, UINT_PTR uintPtr, DWORD dword) { InvalidateRect(hwnd, nullptr, FALSE); });
 	}
-
-	void MainWindow::RenderSimpleNodeEditor()
-	{
-		
-	}
-
+	
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		// Handle window messages for ImGui like mouse and key inputs

@@ -61,8 +61,6 @@ target_link_libraries(mmo_edit
 	hpak_v1_0 
 	tex_v1_0 
 	assets
-	data
-	libprotobuf
 	scene_graph
 	frame_ui)
 	

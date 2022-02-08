@@ -79,19 +79,7 @@ endif()
 
 
 # ===============================================================================
-# Protobuffer
-# ===============================================================================
-
-option(protobuf_BUILD_TESTS OFF)
-option(protobuf_BUILD_EXAMPLES OFF)
-option(protobuf_MSVC_STATIC_RUNTIME OFF)
-option(protobuf_WITH_ZLIB OFF)
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/protobuf/src/")
-
-
-
-# ===============================================================================
-# Protobuffer
+# IMGUI
 # ===============================================================================
 
 # If we want to build the editor, we need imgui for now

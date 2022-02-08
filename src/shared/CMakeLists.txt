@@ -33,6 +33,5 @@ add_subdirectory(tex)
 add_subdirectory(tex_v1_0)
 add_subdirectory(assets)
 add_subdirectory(xml_handler)
-add_subdirectory(data)
 add_subdirectory(game)
 
