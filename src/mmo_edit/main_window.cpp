@@ -549,7 +549,37 @@ namespace mmo
 		// so that we can get the instance everywhere from the window handle.
 		if (msg == WM_NCCREATE)
 		{
-			auto createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
+			struct CreateParams
+			{
+				BOOL bEnableNonClientDpiScaling;
+				BOOL bChildWindowDpiIsolation;
+			};
+
+			// Enable per-monitor DPI scaling for caption, menu, and top-level
+			// scroll bars.
+			//
+			// Non-client area (scroll bars, caption bar, etc.) does not DPI scale
+			// automatically on Windows 8.1. In Windows 10 (1607) support was added
+			// for this via a call to EnableNonClientDpiScaling. Windows 10 (1703)
+			// supports this automatically when the DPI_AWARENESS_CONTEXT is
+			// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2.
+			//
+			// Here we are detecting if a BOOL was set to enable non-client DPI scaling
+			// via the call to CreateWindow that resulted in this window. Doing this
+			// detection is only necessary in the context of this sample.
+			const auto createStruct = reinterpret_cast<const CREATESTRUCT*>(lparam);
+			const auto createParams = static_cast<const CreateParams*>(createStruct->lpCreateParams);
+			if (createParams->bEnableNonClientDpiScaling)
+			{
+				EnableNonClientDpiScaling(wnd);
+			}
+
+			// Store a flag on the window to note that it'll run its child in a different awareness
+			if (createParams->bChildWindowDpiIsolation)
+			{
+				SetProp(wnd, TEXT("PROP_ISOLATION"), reinterpret_cast<HANDLE>(TRUE));
+			}
+			
 			SetWindowLongPtr(wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
 		}
 		else
@@ -567,7 +597,7 @@ namespace mmo
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
 
-	LRESULT MainWindow::MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
+	LRESULT MainWindow::MsgProc(const HWND wnd, const UINT msg, const WPARAM wparam, const LPARAM lparam)
 	{
 		switch (msg)
 		{
@@ -577,6 +607,18 @@ namespace mmo
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			return 0;
+		case WM_DPICHANGED:
+		{
+			const auto newWindowRect = reinterpret_cast<RECT*>(lparam);
+			SetWindowPos(wnd,
+				nullptr,
+				newWindowRect->left,
+				newWindowRect->top,
+				newWindowRect->right - newWindowRect->left,
+				newWindowRect->bottom - newWindowRect->top,
+				SWP_NOZORDER | SWP_NOACTIVATE);
+			break;
+		}
 		case WM_PAINT:
 			if (s_initialized)
 			{
