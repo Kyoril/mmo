@@ -34,8 +34,12 @@ namespace mmo
 	}
 }
 
+#ifdef _WIN32
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+#else
+int main(int argc, char* arg[])
+#endif
 {
 	// Setup log to print each log entry to the debug output on windows
 #ifdef _DEBUG
@@ -72,6 +76,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow));
 
+#ifdef _WIN32
 	// Run the message loop
 	MSG msg = { nullptr };
 	while (GetMessage(&msg, nullptr, 0, 0))
@@ -79,6 +84,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
+#endif
 
 	// Successfully terminated the editor
 	return 0;

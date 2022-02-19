@@ -129,6 +129,7 @@ find_library(FBXSDK_LIBRARY ${_fbxsdk_libname_release}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_release}")
   
+if (WIN32)
 find_library(FBXSDK_LIBXML_LIBRARY ${_fbxsdk_libxmlname_release}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_release}")
@@ -149,10 +150,16 @@ find_library(FBXSDK_ZLIB_DEBUG ${_fbxsdk_libzname_debug}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_debug}")
   
-set(FBXSDK_LIBRARIES 
-	debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY} 
-	debug ${FBXSDK_LIBXML_DEBUG} optimized ${FBXSDK_LIBXML_LIBRARY}
-	debug ${FBXSDK_ZLIB_DEBUG} optimized ${FBXSDK_ZLIB_LIBRARY})
+set(FBXSDK_LIBRARIES
+    debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY}
+    debug ${FBXSDK_LIBXML_DEBUG} optimized ${FBXSDK_LIBXML_LIBRARY}
+    debug ${FBXSDK_ZLIB_DEBUG} optimized ${FBXSDK_ZLIB_LIBRARY})
+
+else()
+
+set(FBXSDK_LIBRARIES
+    debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY})
+endif()
 
 if (FBXSDK_INCLUDE_DIR AND FBXSDK_LIBRARY AND FBXSDK_LIBRARY_DEBUG)
   set(FBXSDK_FOUND YES)

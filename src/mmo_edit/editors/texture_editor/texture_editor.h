@@ -6,7 +6,7 @@
 
 namespace mmo
 {
-	class TextureEditor final : public EditorBase
+	class TextureEditor : public EditorBase
 	{
 	public:
 		TextureEditor() = default;

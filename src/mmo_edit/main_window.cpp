@@ -30,7 +30,9 @@ namespace mmo
 	
 	MainWindow::MainWindow(Configuration& config)
 		: m_config(config)
+#if _WIN32
 		, m_windowHandle(nullptr)
+#endif
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
 	{
@@ -39,10 +41,13 @@ namespace mmo
 
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
-		desc.customWindowHandle = m_windowHandle;
 		desc.vsync = false;
+#if _WIN32
+        desc.customWindowHandle = m_windowHandle;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
-
+#else
+        auto& device = GraphicsDevice::CreateNull(desc);
+#endif
 		// Initialize imgui
 		InitImGui();
 
@@ -78,6 +83,7 @@ namespace mmo
 
 	void MainWindow::EnsureWindowClassCreated()
 	{
+#ifdef _WIN32
 		static bool s_windowClassCreated = false;
 		if (!s_windowClassCreated)
 		{
@@ -94,10 +100,12 @@ namespace mmo
 
 			s_windowClassCreated = true;
 		}
+#endif
 	}
 
 	void MainWindow::CreateWindowHandle()
 	{
+#ifdef _WIN32
 		EnsureWindowClassCreated();
 
 		if (m_windowHandle != nullptr)
@@ -120,6 +128,7 @@ namespace mmo
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
+#endif
 	}
 
 	void MainWindow::HandleEditorWindow(EditorWindowBase& window)
@@ -151,8 +160,10 @@ namespace mmo
 			{
 				if (ImGui::MenuItem("Exit", nullptr))
 				{
+#ifdef _WIN32
 					// Terminate the application
 					PostQuitMessage(0);
+#endif
 				}
 
 				ImGui::EndMenu();
@@ -183,9 +194,14 @@ namespace mmo
 
 	void MainWindow::RenderImGui()
 	{
+#ifdef _WIN32
 		// Start the Dear ImGui frame
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
+#else
+        
+#endif
+        
 		ImGui::NewFrame();
 
 		if (m_defaultFont) ImGui::PushFont(m_defaultFont);
@@ -254,8 +270,10 @@ namespace mmo
 
 		// Rendering
 		ImGui::Render();
+#ifdef _WIN32
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
+#endif
+        
 		// Update and Render additional Platform Windows
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
@@ -311,10 +329,14 @@ namespace mmo
 	{
 		ASSERT(m_imguiContext);
 
+#ifdef _WIN32
 		// Shutdown d3d11 and win32 implementation of imgui
 		ImGui_ImplDX11_Shutdown();
 		ImGui_ImplWin32_Shutdown();
-
+#else
+        // TODO: Glfw
+#endif
+        
 		// And destroy the context
 		ImGui::DestroyContext(m_imguiContext);
 	}
@@ -492,6 +514,7 @@ namespace mmo
 			style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 		}
 
+#ifdef _WIN32
 		// Setup Platform/Renderer bindings
 		ImGui_ImplWin32_Init(m_windowHandle);
 
@@ -500,7 +523,10 @@ namespace mmo
 		ID3D11Device& device = d3d11Dev;
 		ID3D11DeviceContext& immContext = d3d11Dev;
 		ImGui_ImplDX11_Init(&device, &immContext);
-
+#else
+        
+#endif
+        
 		// Load fonts
 		io.Fonts->AddFontDefault();
 		io.Fonts->Build();
@@ -511,6 +537,7 @@ namespace mmo
 		ApplyDefaultStyle();
 	}
 	
+#ifdef _WIN32
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		// Handle window messages for ImGui like mouse and key inputs
@@ -618,6 +645,7 @@ namespace mmo
 
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
+#endif
 
 	bool MainWindow::OpenAsset(const Path& assetPath)
 	{

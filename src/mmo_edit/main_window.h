@@ -78,13 +78,15 @@ namespace mmo
 		void AddEditor(std::unique_ptr<EditorBase> editor);
 		
 	private:
+#ifdef _WIN32
 		/// Static window message callback procedure. Simply tries to route the message to the
 		/// window instance.
 		static LRESULT CALLBACK WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 		/// Instanced window callback procedure.
 		LRESULT CALLBACK MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam);
-
+#endif
+        
 	public:
 		void SetCurrentPath(const Path& selectedPath) override { m_selectedPath = selectedPath; }
 
@@ -100,7 +102,10 @@ namespace mmo
 
 	private:
 		Configuration& m_config;
+#ifdef _WIN32
 		HWND m_windowHandle;
+#endif
+        
 		ImGuiDockNodeFlags m_dockSpaceFlags;
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
