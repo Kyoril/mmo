@@ -20,10 +20,10 @@ else()
 endif()
 
 if (NOT DEFINED FBXSDK_VERSION)
-  set(FBXSDK_VERSION "2020.0.1")
+  set(FBXSDK_VERSION "2020.2")
 endif()
 
-set(_fbxsdk_vstudio_version "vs2017")
+set(_fbxsdk_vstudio_version "vs2019")
 message(STATUS "Looking for FBX SDK version: ${FBXSDK_VERSION}")
 
 if (NOT DEFINED FBXSDK_SDKS)
@@ -36,8 +36,8 @@ set(FBXSDK_LINUX_ROOT   "${FBXSDK_SDKS_ABS}/Linux/${FBXSDK_VERSION}")
 set(FBXSDK_WINDOWS_ROOT "${FBXSDK_SDKS_ABS}/Windows/${FBXSDK_VERSION}")
 
 if (APPLE)
-	set(_fbxsdk_download_file "MacOSX")
-	set(_fbxsdk_download_sha1 "e1539f2cd5596918f9d7731fab0a92ed5d98b7d0")
+	set(_fbxsdk_download_file "Darwin")
+	set(_fbxsdk_download_sha1 "a993d3bb5de25f0391b0957a6ded59222c6d38a1")
 	set(_fbxsdk_root "${FBXSDK_APPLE_ROOT}")
 	set(_fbxsdk_libdir_debug "lib/clang/debug")
 	set(_fbxsdk_libdir_release "lib/clang/release")
@@ -45,7 +45,7 @@ if (APPLE)
 	set(_fbxsdk_libname_release "libfbxsdk.a")
 elseif (WIN32)
 	set(_fbxsdk_download_file "Windows")
-	set(_fbxsdk_download_sha1 "e1539f2cd5596918f9d7731fab0a92ed5d98b7d0")
+	set(_fbxsdk_download_sha1 "bffd44e96935513253a3065b00617c87c9f4ba76")
 	set(_fbxsdk_root "${FBXSDK_WINDOWS_ROOT}")
 	if (ARCH_32)
 		set(_fbxsdk_libdir_debug "lib/${_fbxsdk_vstudio_version}/x86/debug")
@@ -80,7 +80,7 @@ endif()
 
 # Download file's if not existing
 
-# First, check if the Windows folder exists
+# First, check if the folder exists
 if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/${_fbxsdk_download_file}")
 	# Doesn't exist, check if the zip file exists
 	if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/${_fbxsdk_download_file}.tar.gz")
@@ -104,7 +104,7 @@ if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/${_fbxsdk_download_file}")
 	message(STATUS "Extracting fbx sdk...")
 	
 	# this is OS-agnostic
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar -xf "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/Windows.tar.gz" WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx RESULT_VARIABLE rv)
+	execute_process(COMMAND ${CMAKE_COMMAND} -E tar -xf "${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx/${_fbxsdk_download_file}.tar.gz" WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/fbx RESULT_VARIABLE rv)
 	
 	# Log error if there is any
 	if(NOT rv EQUAL 0)
@@ -129,6 +129,7 @@ find_library(FBXSDK_LIBRARY ${_fbxsdk_libname_release}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_release}")
   
+if (WIN32)
 find_library(FBXSDK_LIBXML_LIBRARY ${_fbxsdk_libxmlname_release}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_release}")
@@ -149,10 +150,16 @@ find_library(FBXSDK_ZLIB_DEBUG ${_fbxsdk_libzname_debug}
   NO_CMAKE_FIND_ROOT_PATH
   PATHS "${FBXSDK_ROOT}/${_fbxsdk_libdir_debug}")
   
-set(FBXSDK_LIBRARIES 
-	debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY} 
-	debug ${FBXSDK_LIBXML_DEBUG} optimized ${FBXSDK_LIBXML_LIBRARY}
-	debug ${FBXSDK_ZLIB_DEBUG} optimized ${FBXSDK_ZLIB_LIBRARY})
+set(FBXSDK_LIBRARIES
+    debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY}
+    debug ${FBXSDK_LIBXML_DEBUG} optimized ${FBXSDK_LIBXML_LIBRARY}
+    debug ${FBXSDK_ZLIB_DEBUG} optimized ${FBXSDK_ZLIB_LIBRARY})
+
+else()
+
+set(FBXSDK_LIBRARIES
+    debug ${FBXSDK_LIBRARY_DEBUG} optimized ${FBXSDK_LIBRARY})
+endif()
 
 if (FBXSDK_INCLUDE_DIR AND FBXSDK_LIBRARY AND FBXSDK_LIBRARY_DEBUG)
   set(FBXSDK_FOUND YES)

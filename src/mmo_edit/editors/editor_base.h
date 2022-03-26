@@ -8,6 +8,7 @@
 #include "base/signal.h"
 #include "base/typedefs.h"
 
+#include <vector>
 #include <memory>
 
 namespace mmo

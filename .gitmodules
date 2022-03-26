@@ -11,3 +11,6 @@
 [submodule "data/editor"]
 	path = data/editor
 	url = https://github.com/Kyoril/mmo-editor-data
+[submodule "deps/glfw"]
+	path = deps/glfw
+	url = https://github.com/glfw/glfw

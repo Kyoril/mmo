@@ -30,7 +30,9 @@ namespace mmo
 	
 	MainWindow::MainWindow(Configuration& config)
 		: m_config(config)
+#if _WIN32
 		, m_windowHandle(nullptr)
+#endif
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
 	{
@@ -39,10 +41,13 @@ namespace mmo
 
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
-		desc.customWindowHandle = m_windowHandle;
 		desc.vsync = false;
+#if _WIN32
+        desc.customWindowHandle = m_windowHandle;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
-
+#else
+        auto& device = GraphicsDevice::CreateNull(desc);
+#endif
 		// Initialize imgui
 		InitImGui();
 
@@ -78,6 +83,7 @@ namespace mmo
 
 	void MainWindow::EnsureWindowClassCreated()
 	{
+#ifdef _WIN32
 		static bool s_windowClassCreated = false;
 		if (!s_windowClassCreated)
 		{
@@ -94,10 +100,12 @@ namespace mmo
 
 			s_windowClassCreated = true;
 		}
+#endif
 	}
 
 	void MainWindow::CreateWindowHandle()
 	{
+#ifdef _WIN32
 		EnsureWindowClassCreated();
 
 		if (m_windowHandle != nullptr)
@@ -120,6 +128,7 @@ namespace mmo
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
+#endif
 	}
 
 	void MainWindow::HandleEditorWindow(EditorWindowBase& window)
@@ -151,8 +160,10 @@ namespace mmo
 			{
 				if (ImGui::MenuItem("Exit", nullptr))
 				{
+#ifdef _WIN32
 					// Terminate the application
 					PostQuitMessage(0);
+#endif
 				}
 
 				ImGui::EndMenu();
@@ -183,9 +194,14 @@ namespace mmo
 
 	void MainWindow::RenderImGui()
 	{
+#ifdef _WIN32
 		// Start the Dear ImGui frame
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
+#else
+        
+#endif
+        
 		ImGui::NewFrame();
 
 		if (m_defaultFont) ImGui::PushFont(m_defaultFont);
@@ -254,8 +270,10 @@ namespace mmo
 
 		// Rendering
 		ImGui::Render();
+#ifdef _WIN32
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
+#endif
+        
 		// Update and Render additional Platform Windows
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
@@ -311,10 +329,14 @@ namespace mmo
 	{
 		ASSERT(m_imguiContext);
 
+#ifdef _WIN32
 		// Shutdown d3d11 and win32 implementation of imgui
 		ImGui_ImplDX11_Shutdown();
 		ImGui_ImplWin32_Shutdown();
-
+#else
+        // TODO: Glfw
+#endif
+        
 		// And destroy the context
 		ImGui::DestroyContext(m_imguiContext);
 	}
@@ -492,6 +514,7 @@ namespace mmo
 			style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 		}
 
+#ifdef _WIN32
 		// Setup Platform/Renderer bindings
 		ImGui_ImplWin32_Init(m_windowHandle);
 
@@ -500,7 +523,10 @@ namespace mmo
 		ID3D11Device& device = d3d11Dev;
 		ID3D11DeviceContext& immContext = d3d11Dev;
 		ImGui_ImplDX11_Init(&device, &immContext);
-
+#else
+        
+#endif
+        
 		// Load fonts
 		io.Fonts->AddFontDefault();
 		io.Fonts->Build();
@@ -511,6 +537,7 @@ namespace mmo
 		ApplyDefaultStyle();
 	}
 	
+#ifdef _WIN32
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		// Handle window messages for ImGui like mouse and key inputs
@@ -522,7 +549,37 @@ namespace mmo
 		// so that we can get the instance everywhere from the window handle.
 		if (msg == WM_NCCREATE)
 		{
-			auto createStruct = reinterpret_cast<LPCREATESTRUCT>(lparam);
+			struct CreateParams
+			{
+				BOOL bEnableNonClientDpiScaling;
+				BOOL bChildWindowDpiIsolation;
+			};
+
+			// Enable per-monitor DPI scaling for caption, menu, and top-level
+			// scroll bars.
+			//
+			// Non-client area (scroll bars, caption bar, etc.) does not DPI scale
+			// automatically on Windows 8.1. In Windows 10 (1607) support was added
+			// for this via a call to EnableNonClientDpiScaling. Windows 10 (1703)
+			// supports this automatically when the DPI_AWARENESS_CONTEXT is
+			// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2.
+			//
+			// Here we are detecting if a BOOL was set to enable non-client DPI scaling
+			// via the call to CreateWindow that resulted in this window. Doing this
+			// detection is only necessary in the context of this sample.
+			const auto createStruct = reinterpret_cast<const CREATESTRUCT*>(lparam);
+			const auto createParams = static_cast<const CreateParams*>(createStruct->lpCreateParams);
+			if (createParams->bEnableNonClientDpiScaling)
+			{
+				EnableNonClientDpiScaling(wnd);
+			}
+
+			// Store a flag on the window to note that it'll run its child in a different awareness
+			if (createParams->bChildWindowDpiIsolation)
+			{
+				SetProp(wnd, TEXT("PROP_ISOLATION"), reinterpret_cast<HANDLE>(TRUE));
+			}
+			
 			SetWindowLongPtr(wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
 		}
 		else
@@ -540,7 +597,7 @@ namespace mmo
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
 
-	LRESULT MainWindow::MsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
+	LRESULT MainWindow::MsgProc(const HWND wnd, const UINT msg, const WPARAM wparam, const LPARAM lparam)
 	{
 		switch (msg)
 		{
@@ -550,6 +607,18 @@ namespace mmo
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			return 0;
+		case WM_DPICHANGED:
+		{
+			const auto newWindowRect = reinterpret_cast<RECT*>(lparam);
+			SetWindowPos(wnd,
+				nullptr,
+				newWindowRect->left,
+				newWindowRect->top,
+				newWindowRect->right - newWindowRect->left,
+				newWindowRect->bottom - newWindowRect->top,
+				SWP_NOZORDER | SWP_NOACTIVATE);
+			break;
+		}
 		case WM_PAINT:
 			if (s_initialized)
 			{
@@ -618,6 +687,7 @@ namespace mmo
 
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
+#endif
 
 	bool MainWindow::OpenAsset(const Path& assetPath)
 	{

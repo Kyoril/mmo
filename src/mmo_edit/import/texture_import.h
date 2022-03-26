@@ -4,6 +4,8 @@
 
 #include "import_base.h"
 
+#include <vector>
+
 namespace mmo
 {
 	class AssetRegistry;

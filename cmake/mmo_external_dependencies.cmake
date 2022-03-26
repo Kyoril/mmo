@@ -89,3 +89,10 @@ if (MMO_BUILD_EDITOR)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui-node-editor)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui-node-editor/examples)
 endif()
+
+
+# ===============================================================================
+# GLFW
+# ===============================================================================
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/glfw/include)
