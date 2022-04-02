@@ -467,6 +467,7 @@ namespace mmo
 			OnWorldJoinFailed(game::player_login_response::NoWorldServer);
 
 			EnableEnterWorldPacket(true);
+			return;
 		}
 
 		// Send join request

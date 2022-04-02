@@ -390,7 +390,8 @@ namespace mmo
 		// TODO: What if we already have a waiting callback? Right now we just discard the old one
 		if (callback)
 		{
-			m_joinCallbacks[characterData.characterId] = std::move(callback);	
+			std::scoped_lock lock { m_joinCallbackMutex };
+			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));	
 		}
 		
 		GetConnection().sendSinglePacket([characterData](auth::OutgoingPacket& outPacket)
