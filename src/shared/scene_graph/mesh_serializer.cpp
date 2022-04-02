@@ -213,6 +213,8 @@ namespace mmo
 
 		auto min = Vector3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 		auto max = Vector3(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
+		
+		float tmp = 0.0f;
 
 		// Iterate through vertices
 		for (size_t i = 0; i < vertexCount; ++i)
@@ -234,7 +236,7 @@ namespace mmo
 			reader
 				>> io::read<float>(v.texCoord[0])
 				>> io::read<float>(v.texCoord[1])
-				>> io::skip<float>();
+				>> io::read<float>(tmp);
 
 			// Normal
 			reader
@@ -256,7 +258,7 @@ namespace mmo
 			
 			m_entry.vertices.emplace_back(std::move(v));
 		}
-
+		
 		const AABB box { min, max };
 		boundingBox.Combine(box);
 
@@ -403,7 +405,7 @@ namespace mmo
 	bool MeshDeserializer::OnReadFinished() noexcept
 	{
 		CreateHardwareBuffers();
-
+		
 		return true;
 	}
 }

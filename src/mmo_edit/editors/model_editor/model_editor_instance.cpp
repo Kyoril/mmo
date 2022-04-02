@@ -35,7 +35,7 @@ namespace mmo
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
-
+			
 		m_mesh = std::make_shared<Mesh>();
 		MeshDeserializer deserializer { *m_mesh };
 
@@ -53,7 +53,6 @@ namespace mmo
 		{
 			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
 		}
-		
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
 		{
@@ -61,7 +60,7 @@ namespace mmo
 			m_cameraAnchor->SetPosition(m_entity->GetBoundingBox().GetCenter());
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
 		}
-
+		
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
 	}
 
