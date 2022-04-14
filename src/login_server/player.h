@@ -116,16 +116,16 @@ namespace mmo
 
 		/// Handles an incoming packet with packet id LogonChallenge.
 		/// @param packet The packet data.
-		PacketParseResult handleLogonChallenge(auth::IncomingPacket &packet);
+		PacketParseResult HandleLogonChallenge(auth::IncomingPacket &packet);
 		/// Handles an incoming packet with packet id LogonProof.
 		/// @param packet The packet data.
-		PacketParseResult handleLogonProof(auth::IncomingPacket &packet);
+		PacketParseResult HandleLogonProof(auth::IncomingPacket &packet);
 		/// Handles an incoming packet with packet id LogonChallenge.
 		/// @param packet The packet data.
-		PacketParseResult handleReconnectChallenge(auth::IncomingPacket &packet);
+		PacketParseResult HandleReconnectChallenge(auth::IncomingPacket &packet);
 		/// Handles an incoming packet with packet id LogonProof.
 		/// @param packet The packet data.
-		PacketParseResult handleReconnectProof(auth::IncomingPacket &packet);
+		PacketParseResult HandleReconnectProof(auth::IncomingPacket &packet);
 		/// Handles an incoming packet with packet id RealmList.
 		/// @param packet The packet data.
 		PacketParseResult OnRealmList(auth::IncomingPacket &packet);

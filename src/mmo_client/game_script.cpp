@@ -30,7 +30,7 @@ namespace mmo
 			Console::ExecuteCommand(cmdLine);
 		}
 		
-		const mmo::RealmData* Script_GetRealmData(LoginConnector& connector, int32 index)
+		const mmo::RealmData* Script_GetRealmData(const LoginConnector& connector, const int32 index)
 		{
 			const auto& realms = connector.GetRealms();
 			if (index < 0 || index >= realms.size())

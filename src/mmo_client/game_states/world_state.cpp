@@ -192,6 +192,7 @@ namespace mmo
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
+		m_worldGrid->SetVisible(false);
 
 		// Debug axis object
 		m_debugAxis = std::make_unique<AxisDisplay>(m_scene, "WorldDebugAxis");

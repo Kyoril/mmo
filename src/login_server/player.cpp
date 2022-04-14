@@ -8,11 +8,9 @@
 
 #include "base/constants.h"
 #include "base/sha1.h"
-#include "base/clock.h"
 #include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
-#include <iomanip>
 #include <functional>
 
 namespace mmo
@@ -32,8 +30,8 @@ namespace mmo
 		m_connection->setListener(*this);
 
 		// Listen for connect packets
-		RegisterPacketHandler(auth::client_login_packet::LogonChallenge, *this, &Player::handleLogonChallenge);
-		RegisterPacketHandler(auth::client_login_packet::ReconnectChallenge, *this, &Player::handleLogonChallenge);
+		RegisterPacketHandler(auth::client_login_packet::LogonChallenge, *this, &Player::HandleLogonChallenge);
+		RegisterPacketHandler(auth::client_login_packet::ReconnectChallenge, *this, &Player::HandleLogonChallenge);
 	}
 
 	void Player::destroy()
@@ -68,10 +66,10 @@ namespace mmo
 			std::scoped_lock lock{ m_packetHandlerMutex };
 
 			// Check for packet handlers
-			auto handlerIt = m_packetHandlers.find(packetId);
+			const auto handlerIt = m_packetHandlers.find(packetId);
 			if (handlerIt == m_packetHandlers.end())
 			{
-				WLOG("Packet 0x" << std::hex << (uint16)packetId << " is either unhandled or simply currently not handled");
+				WLOG("Packet 0x" << std::hex << static_cast<uint16>(packetId) << " is either unhandled or simply currently not handled");
 				return PacketParseResult::Disconnect;
 			}
 
@@ -158,7 +156,7 @@ namespace mmo
 		}
 	}
 
-	void Player::ClearPacketHandler(uint8 opCode)
+	void Player::ClearPacketHandler(const uint8 opCode)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
 
@@ -169,7 +167,7 @@ namespace mmo
 		}
 	}
 
-	PacketParseResult Player::handleLogonChallenge(auth::IncomingPacket & packet)
+	PacketParseResult Player::HandleLogonChallenge(auth::IncomingPacket & packet)
 	{
 		// No longer handle these packets!
 		ClearPacketHandler(auth::client_login_packet::LogonChallenge);
@@ -217,7 +215,7 @@ namespace mmo
 					strongThis->m_unk3.setRand(16 * 8);
 
 					// Allow handling the logon proof packet now
-					strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::handleLogonProof);
+					strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::HandleLogonProof);
 				}
 				else
 				{
@@ -258,7 +256,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::handleLogonProof(auth::IncomingPacket & packet)
+	PacketParseResult Player::HandleLogonProof(auth::IncomingPacket & packet)
 	{
 		// No longer handle proof packet
 		ClearPacketHandler(auth::client_login_packet::LogonProof);
@@ -348,15 +346,15 @@ namespace mmo
 			// verification as well.
 			m_m2 = Sha1_BigNumbers({ A, M1, K});
 
-			// Store the caluclated session key value internally for later use, also store it in the 
+			// Store the calculated session key value internally for later use, also store it in the 
 			// database maybe.
 			m_sessionKey = K;
 
 			// Handler method
 			std::weak_ptr<Player> weakThis{ shared_from_this() };
-			auto handler = [weakThis](bool success)
+			auto handler = [weakThis](const bool success)
 			{
-				if (auto strongThis = weakThis.lock())
+				if (const auto strongThis = weakThis.lock())
 				{
 					if (success)
 					{
@@ -399,7 +397,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::handleReconnectChallenge(auth::IncomingPacket & packet)
+	PacketParseResult Player::HandleReconnectChallenge(auth::IncomingPacket & packet)
 	{
 		// No longer handle proof packet
 		ClearPacketHandler(auth::client_login_packet::LogonChallenge);
@@ -408,12 +406,12 @@ namespace mmo
 		// TODO: Handle this packet properly
 
 		// Handle reconnect proof packet now
-		RegisterPacketHandler(auth::client_login_packet::ReconnectProof, *this, &Player::handleLogonProof);
+		RegisterPacketHandler(auth::client_login_packet::ReconnectProof, *this, &Player::HandleLogonProof);
 
 		return PacketParseResult::Disconnect;
 	}
 
-	PacketParseResult Player::handleReconnectProof(auth::IncomingPacket & packet)
+	PacketParseResult Player::HandleReconnectProof(auth::IncomingPacket & packet)
 	{
 		// TODO: Handle this packet properly
 

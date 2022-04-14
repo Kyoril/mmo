@@ -74,7 +74,7 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::OnMouseDown(MouseButton button, int32 x, int32 y)
+	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_lastMousePosition = Point(x, y);
 
@@ -88,7 +88,7 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::OnMouseUp(MouseButton button, int32 x, int32 y)
+	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_lastMousePosition = Point(x, y);
 
@@ -102,7 +102,7 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::OnMouseMove(int32 x, int32 y)
+	void PlayerController::OnMouseMove(const int32 x, const int32 y)
 	{
 		if (!m_controlledObject)
 		{
@@ -131,14 +131,14 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::OnMouseWheel(int32 delta)
+	void PlayerController::OnMouseWheel(const int32 delta)
 	{
 		ASSERT(m_cameraNode);
 
 		m_cameraNode->Translate(Vector3::UnitZ * static_cast<float>(delta), TransformSpace::Local);
 	}
 
-	void PlayerController::OnKeyDown(int32 key)
+	void PlayerController::OnKeyDown(const int32 key)
 	{
 		switch(key)
 		{
@@ -170,7 +170,7 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::OnKeyUp(int32 key)
+	void PlayerController::OnKeyUp(const int32 key)
 	{
 		switch(key)
 		{
