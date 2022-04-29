@@ -22,7 +22,7 @@ namespace mmo
 		/// Whether the console variable has been modified since it has been registered.
 		CVF_Modified		= 2,
 	};
-
+	
 	/// Class that represents a console variable. This class stores the values as string values but also keeps a 
 	/// a int32 and float parse value cached for faster access so we avoid using std::atoi every time we try
 	/// to get an int32 value for example.
@@ -72,21 +72,25 @@ namespace mmo
 		{
 			return (m_flags & flags) != 0;
 		}
+
 		/// @brief Sets a given flag.
 		void SetFlag(ConsoleVarFlags flags)
 		{
 			m_flags |= flags;
 		}
+
 		/// @brief Clears all flags.
 		void ClearFlags()
 		{
 			m_flags = CVF_None;
 		}
+
 		/// @brief Removes the given flag or flags.
 		void RemoveFlag(ConsoleVarFlags flags)
 		{
 			m_flags &= ~flags;
 		}
+
 		/// @brief Determines whether the value of this console variable has been modified.
 		/// @remarks Note that this also returns true, if the value matches the default 
 		/// value but has been set using the Set method instead of the Reset method.
@@ -94,21 +98,25 @@ namespace mmo
 		{
 			return HasFlag(CVF_Modified);
 		}
+
 		/// @brief Whether this console variable is valid to use.
 		[[nodiscard]] bool IsValid() const
 		{
 			return !HasFlag(CVF_Unregistered);
 		}
+
 		/// @brief Gets the name of this console variable.
 		[[nodiscard]] const std::string& GetName() const 
 		{
 			return m_name;
 		}
+
 		/// @brief Gets a descriptive string.
 		[[nodiscard]] const std::string& GetDescription() const
 		{
 			return m_description;
 		}
+
 		/// @brief Gets the default value of this variable.
 		[[nodiscard]] const std::string& GetDefaultValue() const
 		{
@@ -138,6 +146,7 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
+
 		/// @brief Sets the current value as int32 value. Also sets the CVF_Modified flag.
 		void Set(int32 value)
 		{
@@ -150,6 +159,7 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
+
 		/// @brief Sets the current value as float value. Also sets the CVF_Modified flag.
 		void Set(float value)
 		{
@@ -162,10 +172,12 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
+
 		void Set(bool value)
 		{
 			Set(value ? 1 : 0);
 		}
+
 		/// @brief Resets the current value to use the default value. Also removes the CVF_Modified flag.
 		void Reset()
 		{
@@ -176,21 +188,25 @@ namespace mmo
 
 			NotifyChanged(oldValue);
 		}
+
 		/// @brief Gets the current string value.
 		[[nodiscard]] const std::string& GetStringValue() const
 		{
 			return m_stringValue;
 		}
+
 		/// Gets the current int32 value.
 		[[nodiscard]] int32 GetIntValue() const
 		{
 			return m_intValue;
 		}
+
 		/// Gets the current float value.
 		[[nodiscard]] float GetFloatValue() const
 		{
 			return m_floatValue;
 		}
+
 		/// Gets the current bool value.
 		[[nodiscard]] bool GetBoolValue() const
 		{
@@ -225,14 +241,17 @@ namespace mmo
 		/// Initializes the console variable manager class by registering some console
 		/// commands that can be used with console variables, like setting a variable.
 		static void Initialize();
+
 		/// Counter-part of the Initialize method.
 		static void Destroy();
 
 	public:
 		/// Registers a new console variable.
 		static ConsoleVar* RegisterConsoleVar(const std::string& name, const std::string& description, std::string defaultValue = "");
+
 		/// Remove a registered console variable.
 		static bool UnregisterConsoleVar(const std::string& name);
+
 		/// Finds a registered console variable if it exists.
 		static ConsoleVar* FindConsoleVar(const std::string& name, bool allowUnregistered = false);
 	};

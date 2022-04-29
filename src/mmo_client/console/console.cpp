@@ -78,7 +78,7 @@ namespace mmo
 	{
 		ConsoleVar* s_dataPathCVar = nullptr;
 	}
-	
+
 
 	// Graphics CVar stuff
 	namespace
@@ -180,6 +180,11 @@ namespace mmo
 	}
 
 	
+	void ConsoleCommand_Clear(const std::string& cmd, const std::string& args)
+	{
+		s_consoleLog.clear();
+	}
+	
 	// Console implementation
 
 	void Console::Initialize(const std::filesystem::path& configFile)
@@ -189,6 +194,7 @@ namespace mmo
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
+		RegisterCommand("clear", ConsoleCommand_Clear, ConsoleCommandCategory::Default, "Clears the console text.");
 		
 		ConsoleVarMgr::Initialize();
 		
@@ -355,8 +361,10 @@ namespace mmo
 		
 		ConsoleVarMgr::Destroy();
 		
+		UnregisterCommand("clear");
 		UnregisterCommand("run");
 		UnregisterCommand("ver");
+		UnregisterCommand("quit");
 	}
 
 	inline void Console::RegisterCommand(const std::string & command, ConsoleCommandHandler handler, ConsoleCommandCategory category, const std::string & help)
@@ -432,6 +440,23 @@ namespace mmo
 		if (!s_consoleVisible)
 		{
 			return true;
+		}
+
+		// Escape key handler
+		if (key == 0x1B)
+		{
+			if (s_consoleInput.empty())
+			{
+				s_consoleVisible = false;
+			}
+			else
+			{
+				s_consoleInput.resize(0);
+				s_consoleTextDirty = true;
+			}
+			
+			abort_emission();
+			return false;
 		}
 		
 		if (key == 0x0D && !s_consoleInput.empty())
@@ -511,7 +536,7 @@ namespace mmo
 	{
 		if (s_consoleVisible)
 		{
-			if (codepoint == 0xf6 || codepoint == 0xC0 || codepoint == 0xDC || codepoint == 0x0D || codepoint == 0x8 || codepoint == 0x26 || codepoint == 0x28)
+			if (codepoint == 0xf6 || codepoint == 0xC0 || codepoint == 0xDC || codepoint == 0x0D || codepoint == 0x8 || codepoint == 0x26 || codepoint == 0x28 || codepoint == 0x1B)
 				return false;
 
 			s_consoleInput.push_back(static_cast<char>(codepoint & 0xff));
