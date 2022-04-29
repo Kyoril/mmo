@@ -80,6 +80,14 @@ namespace mmo
 		
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		tile.GetWatchers().add(this);
+		
+		ForEachTileInSight(
+			m_worldInstance->GetGrid(),
+			tile.GetPosition(),
+			[this](VisibilityTile &tile)
+		{
+			SpawnTileObjects(tile);
+		});
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
@@ -118,15 +126,26 @@ namespace mmo
 			oldTile.GetPosition(),
 			[this](VisibilityTile &tile)
 		{
-			for (auto *obj : tile.GetGameObjects())
-			{
-				ASSERT(obj);
-				
-				std::vector<std::vector<char>> createBlock;
-				CreateUpdateBlocks(*obj, createBlock);
-
-				// TODO: Send spawn packets
-			}
+			SpawnTileObjects(tile);
 		});
+	}
+
+	void Player::SpawnTileObjects(VisibilityTile& tile)
+	{
+		std::vector<GameObjectS*> objects;
+		objects.reserve(tile.GetGameObjects().size());
+
+		for (auto *obj : tile.GetGameObjects())
+		{
+			ASSERT(obj);
+			objects.push_back(obj);
+		}
+
+		if (objects.empty())
+		{
+			return;
+		}
+
+		NotifyObjectsSpawned(objects);
 	}
 }

@@ -53,7 +53,7 @@ namespace mmo
 		tile.GetGameObjects().add(&added);
 		
 		added.spawned(*this);
-
+		
 		ForEachTileInSight(
 		    *m_visibilityGrid,
 		    tile.GetPosition(),

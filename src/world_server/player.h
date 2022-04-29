@@ -59,6 +59,8 @@ namespace mmo
 
 		void OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile);
 
+		void SpawnTileObjects(VisibilityTile& tile);
+
 	public:
 		/// @brief Gets the character guid.
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
