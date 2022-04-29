@@ -143,10 +143,10 @@ namespace mmo
 		switch(key)
 		{
 		case 0x57:
-			m_movementVector.z = -1.0f;
+			m_movementVector.z = 1.0f;
 			return;
 		case 0x53:
-			m_movementVector.z = 1.0f;
+			m_movementVector.z = -1.0f;
 			return;
 		case 0x41:
 			if (m_rightButtonDown)
@@ -216,7 +216,8 @@ namespace mmo
 		// the anchor node which results in the camera orbiting around the player entity.
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
-		m_cameraAnchorNode->SetPosition(Vector3::UnitY * 0.5f);
+		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
+		m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
 	}
 
 	void PlayerController::ResetControls()
