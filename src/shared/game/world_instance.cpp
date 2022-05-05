@@ -72,6 +72,7 @@ namespace mmo
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
 		if (it == m_objectsByGuid.end())
 		{
+			ELOG("Could not find object!");
 			return;
 		}
 		
@@ -85,6 +86,7 @@ namespace mmo
 		auto *tile = m_visibilityGrid->GetTile(gridIndex);
 		if (!tile)
 		{
+			ELOG("Could not find tile!");
 			return;
 		}
 
@@ -104,7 +106,6 @@ namespace mmo
 				subscriber->NotifyObjectsDespawned(objects);
 			}
 		});
-		
 	}
 
 	void WorldInstance::AddObjectUpdate(GameObjectS& object)

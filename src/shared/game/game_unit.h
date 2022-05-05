@@ -17,8 +17,5 @@ namespace mmo
 		}
 
 		virtual ~GameUnit() override = default;
-
-	public:
-
-	};
+			};
 }

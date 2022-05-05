@@ -35,6 +35,19 @@ namespace mmo
 				DeleteChar = 0x03,
 				/// Enters the world with a selected character.
 				EnterWorld = 0x04,
+
+				// Movement Codes
+				MoveStartForward = 0x05,
+				MoveStartBackward = 0x06,
+				MoveStop = 0x07,
+				MoveStartStrafeLeft = 0x08,
+				MoveStartStrafeRight = 0x09,
+				MoveStopStrafe = 0x0A,
+				MoveStartTurnLeft = 0x0B,
+				MoveStartTurnRight = 0x0C,
+				MoveStopTurn = 0x0D,
+				MoveHeartBeat = 0x0E,
+				MoveSetFacing = 0x0F,
 				
 				/// Counter constant
 				Count_,
@@ -67,7 +80,32 @@ namespace mmo
 				CompressedUpdateObject,
 				/// [PROXY] Destroy game objects.
 				DestroyObjects,
+
+				// Movement Codes
 				
+				/// [PROXY]
+				MoveStartForward,
+				/// [PROXY]
+				MoveStartBackward,
+				/// [PROXY]
+				MoveStop,
+				/// [PROXY]
+				MoveStartStrafeLeft,
+				/// [PROXY]
+				MoveStartStrafeRight,
+				/// [PROXY]
+				MoveStopStrafe,
+				/// [PROXY]
+				MoveStartTurnLeft,
+				/// [PROXY]
+				MoveStartTurnRight,
+				/// [PROXY]
+				MoveStopTurn,
+				/// [PROXY]
+				MoveHeartBeat,
+				/// [PROXY]
+				MoveSetFacing,
+
 				/// Counter constant
 				Count_,
 			};

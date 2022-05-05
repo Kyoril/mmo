@@ -362,13 +362,13 @@ namespace mmo
 			// TODO: switch typeId
 
 			// Create game object from deserialization
-			auto object = std::make_shared<GameObjectC>(m_scene);
+			auto object = std::make_shared<GameUnitC>(m_scene);
 			object->Deserialize(packet);
 
 			// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 			if (m_gameObjectsById.empty())
 			{
-				m_playerController->SetControlledObject(object);
+				m_playerController->SetControlledUnit(object);
 			}
 
 			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
@@ -379,7 +379,7 @@ namespace mmo
 		
 		return result;
 	}
-
+	
 	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket& packet)
 	{
 		TODO("Implement");
@@ -402,11 +402,11 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 			
-			if (m_playerController->GetControlledObject() &&
-				m_playerController->GetControlledObject()->GetGuid() == id)
+			if (m_playerController->GetControlledUnit() &&
+				m_playerController->GetControlledUnit()->GetGuid() == id)
 			{
 				ELOG("Despawn of player controlled object!");
-				m_playerController->SetControlledObject(nullptr);
+				m_playerController->SetControlledUnit(nullptr);
 			}
 			
 			DLOG("Despawning object " << log_hex_digit(id));

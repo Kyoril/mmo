@@ -21,7 +21,6 @@ namespace mmo
 	{
 		if (m_worldInstance && m_character)
 		{
-			
 			VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 			tile.GetWatchers().optionalRemove(this);
 			m_worldInstance->RemoveGameObject(*m_character);

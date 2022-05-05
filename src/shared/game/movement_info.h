@@ -6,91 +6,98 @@
 
 namespace mmo
 {
-	/// @brief Enumerates movement flags.
-	enum MovementFlags
+	namespace MovementFlags
 	{
-		/// @brief No movement flags at all.
-		None = 0,
+		/// @brief Enumerates movement flags.
+		enum Type
+		{
+			/// @brief No movement flags at all.
+			None = 0,
 
 
-		/// @brief Unit is moving forward.
-		Forward = 1 << 0,
+			/// @brief Unit is moving forward.
+			Forward = 1 << 0,
 
-		/// @brief Unit is moving backward.
-		Backward = 1 << 1,
+			/// @brief Unit is moving backward.
+			Backward = 1 << 1,
 
-		/// @brief Unit is moving strafe left.
-		StrafeLeft = 1 << 2,
+			/// @brief Unit is moving strafe left.
+			StrafeLeft = 1 << 2,
 
-		/// @brief Unit is moving strafe right.
-		StrafeRight = 1 << 3,
+			/// @brief Unit is moving strafe right.
+			StrafeRight = 1 << 3,
 
-		/// @brief Unit is turning left.
-		TurnLeft = 1 << 4,
+			/// @brief Unit is turning left.
+			TurnLeft = 1 << 4,
 
-		/// @brief Unit is turning right.
-		TurnRight = 1 << 5,
-
-
-		/// @brief Unit is pitching up.
-		PitchUp = 1 << 6,
-
-		/// @brief Unit is pitching down.
-		PitchDown = 1 << 7,
+			/// @brief Unit is turning right.
+			TurnRight = 1 << 5,
 
 
-		/// @brief Unit has walk mode enabled.
-		WalkMode = 1 << 8,
+			/// @brief Unit is pitching up.
+			PitchUp = 1 << 6,
 
-		/// @brief Unit is on a transport object.
-		OnTransport = 1 << 9,
-
-
-		/// @brief Unit is rooted and can't move.
-		Rooted = 1 << 10,
+			/// @brief Unit is pitching down.
+			PitchDown = 1 << 7,
 
 
-		/// @brief Unit is jumping, which means the unit is still moving upwards.
-		Falling = 1 << 11,
+			/// @brief Unit has walk mode enabled.
+			WalkMode = 1 << 8,
+			
+
+			/// @brief Unit is rooted and can't move.
+			Rooted = 1 << 10,
 
 
-		/// @brief A root is pending for the unit.
-		PendingRoot = 1 << 12,
-
-		/// @brief Unit is swimming.
-		Swimming = 1 << 13,
-
-		/// @brief Unit is moving straight upwards.
-		Ascending = 1 << 14,
-
-		/// @brief Unit is moving straight downwards.
-		Descending = 1 << 15,
+			/// @brief Unit is jumping, which means the unit is still moving upwards.
+			Falling = 1 << 11,
 
 
-		/// @brief The unit is able to walk on liquids.
-		WaterWalking = 1 << 16,
+			/// @brief A root is pending for the unit.
+			PendingRoot = 1 << 12,
 
-		/// @brief The unit is falling slowly.
-		SlowFall = 1 << 17,
+			/// @brief Unit is swimming.
+			Swimming = 1 << 13,
 
-		/// @brief The unit is levitating in the air.
-		Levitating = 1 << 18,
+			/// @brief Unit is moving straight upwards.
+			Ascending = 1 << 14,
 
-		/// @brief The unit is able to fly.
-		CanFly = 1 << 19,
-
-		/// @brief The unit is currently flying.
-		Flying = 1 << 20,
+			/// @brief Unit is moving straight downwards.
+			Descending = 1 << 15,
 
 
-		/// @brief Combined list of flags which imply that the character's position is changing.
-		Moving =
-			Forward | Backward | StrafeLeft | StrafeRight | Falling | Ascending | Descending | PitchUp | PitchDown,
+			/// @brief The unit is able to walk on liquids.
+			WaterWalking = 1 << 16,
 
-		/// @brief Combind list of flags which imply that the character's facing property is changing.
-		Turning =
-			TurnLeft | TurnRight,
-	};
+			/// @brief The unit is falling slowly.
+			SlowFall = 1 << 17,
+
+			/// @brief The unit is levitating in the air.
+			Levitating = 1 << 18,
+
+			/// @brief The unit is able to fly.
+			CanFly = 1 << 19,
+
+			/// @brief The unit is currently flying.
+			Flying = 1 << 20,
+
+
+			/// @brief Combined list of flags which imply that the character's position is changing.
+			Moving =
+				Forward | Backward,
+
+			Strafing =
+				StrafeLeft | StrafeRight,
+
+			/// @brief Combined list of flags which imply that the character's facing property is changing.
+			Turning =
+				TurnLeft | TurnRight,
+
+			Pitching = 
+				PitchUp | PitchDown,
+		};
+	}
+	
 
 	/// @brief Class which contains a snapshot of a units movement info.
 	class MovementInfo final
@@ -126,17 +133,14 @@ namespace mmo
 		/// @brief The units horizontal jump speed in units per seconds.
 		float jumpXZSpeed { 0.0f };
 
-		/// @brief Guid of a transport game object that is moving the unit.
-		ObjectGuid transportGuid;
+	public:
+		bool IsMoving() const noexcept { return (movementFlags & MovementFlags::Moving) != 0; }
 
-		/// @brief Position of the unit relative to the transport object's world location.
-		Vector3 positionOnTransportObject;
+		bool IsStrafing() const noexcept { return (movementFlags & MovementFlags::Strafing) != 0; }
 
-		/// @brief Facing of the unit relative to the transport object's facing.
-		Radian facingOnTransportObject;
+		bool IsTurning() const noexcept { return (movementFlags & MovementFlags::Turning) != 0; }
 
-		/// @brief Client transport object timestamp.
-		GameTime transportTimestamp;
+		bool IsPitching() const noexcept { return (movementFlags & MovementFlags::Pitching) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)
@@ -146,16 +150,7 @@ namespace mmo
 			<< io::write<uint64>(info.timestamp)
 			<< info.position
 			<< info.facing;
-
-		if (info.movementFlags & MovementFlags::OnTransport)
-		{
-			writer
-				<< io::write<uint64>(info.transportGuid)
-				<< info.positionOnTransportObject
-				<< info.facingOnTransportObject
-				<< io::write<uint64>(info.transportTimestamp);
-		}
-
+		
 		if (info.movementFlags & (MovementFlags::Swimming | MovementFlags::Flying))
 		{
 			writer << info.pitch;
@@ -182,15 +177,6 @@ namespace mmo
 			>> io::read<uint64>(info.timestamp)
 			>> info.position
 			>> info.facing;
-
-		if (info.movementFlags & MovementFlags::OnTransport)
-		{
-			reader
-				>> io::read<uint64>(info.transportGuid)
-				>> info.positionOnTransportObject
-				>> info.facingOnTransportObject
-				>> io::read<uint64>(info.transportTimestamp);
-		}
 
 		if (info.movementFlags & (MovementFlags::Swimming | MovementFlags::Flying))
 		{

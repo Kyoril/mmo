@@ -4,6 +4,7 @@
 
 #include "event_loop.h"
 #include "console/console_var.h"
+#include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -28,7 +29,7 @@ namespace mmo
 
 	PlayerController::~PlayerController()
 	{
-		m_controlledObject.reset();
+		m_controlledUnit.reset();
 
 		if (m_defaultCamera)
 		{
@@ -46,18 +47,161 @@ namespace mmo
 		}
 	}
 
-	void PlayerController::Update(float deltaSeconds)
+	void PlayerController::MovePlayer()
 	{
-		if (!m_controlledObject)
+		int movementDirection = (m_controlFlags & ControlFlags::Autorun) != 0;
+		if (m_controlFlags & ControlFlags::MoveForwardKey)
 		{
+			++movementDirection;
+		}
+		if (m_controlFlags & ControlFlags::MoveBackwardKey)
+		{
+			--movementDirection;
+		}
+
+		if (movementDirection != 0)
+		{
+			if (movementDirection <= 0)
+			{
+				if (m_controlFlags & ControlFlags::MoveSent)
+				{
+					return;
+				}
+
+				// Move backward
+				DLOG("Move backward");
+			}
+			else
+			{
+				if (m_controlFlags & ControlFlags::MoveSent)
+				{
+					return;
+				}
+
+				// Move backward
+				DLOG("Move forward");
+			}
+
+			m_controlFlags |= ControlFlags::MoveSent;
 			return;
 		}
 
+		if((m_controlFlags & ControlFlags::MoveSent) != 0)
+		{
+			DLOG("Stop move");
+			m_controlFlags &= ~ControlFlags::MoveSent;
+		}
+	}
+
+	void PlayerController::StrafePlayer()
+	{
+		int direction = (m_controlFlags & ControlFlags::StrafeLeftKey) != 0;
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && (m_controlFlags & ControlFlags::TurnLeftKey) != 0)
+		{
+			++direction;
+		}
+
+		if ((m_controlFlags & ControlFlags::StrafeRightKey) != 0)
+		{
+			--direction;
+		}
+
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && (m_controlFlags & ControlFlags::TurnRightKey) != 0)
+		{
+			--direction;
+		}
+
+		if (direction != 0)
+		{
+			if (direction <= 0)
+			{
+				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
+				{
+					return;
+				}
+
+				DLOG("Strafe right");
+			}
+			else
+			{
+				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
+				{
+					return;
+				}
+
+				DLOG("Strafe left");
+			}
+
+			m_controlFlags |= ControlFlags::StrafeSent;
+			return;
+		}
+
+		if (m_controlFlags & ControlFlags::StrafeSent)
+		{
+			DLOG("Stop strafe");
+			m_controlFlags &= ~ControlFlags::StrafeSent;
+		}
+	}
+
+	void PlayerController::TurnPlayer()
+	{
+		if ((m_controlFlags & ControlFlags::TurnPlayer) == 0)
+		{
+			int direction = (m_controlFlags & ControlFlags::TurnLeftKey);
+			if ((m_controlFlags & ControlFlags::TurnRightKey))
+			{
+				--direction;
+			}
+
+			if (direction != 0)
+			{
+				if (direction <= 0)
+				{
+					if ((m_controlFlags & ControlFlags::TurnSent))
+					{
+						return;
+					}
+
+					DLOG("Turn right");
+				}
+				else
+				{
+					if ((m_controlFlags & ControlFlags::TurnSent))
+					{
+						return;
+					}
+
+					DLOG("Turn left");
+				}
+
+				m_controlFlags |= ControlFlags::TurnSent;
+				return;
+			}
+
+			if (m_controlFlags & ControlFlags::TurnSent)
+			{
+				DLOG("Stop turn");
+				m_controlFlags &= ~ControlFlags::TurnSent;
+			}
+		}
+	}
+
+	void PlayerController::Update(const float deltaSeconds)
+	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+		
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
 
-		auto* playerNode = m_controlledObject->GetSceneNode();
+		auto* playerNode = m_controlledUnit->GetSceneNode();
+
+		MovePlayer();
+		StrafePlayer();
+		TurnPlayer();
 
 		if (m_rightButtonDown)
 		{
@@ -80,31 +224,31 @@ namespace mmo
 
 		if (button == MouseButton_Left)
 		{
-			m_leftButtonDown = true;
+			m_controlFlags |= ControlFlags::TurnCamera;
 		}
 		else if (button == MouseButton_Right)
 		{
-			m_rightButtonDown = true;
+			m_controlFlags |= ControlFlags::TurnPlayer;
 		}
 	}
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_lastMousePosition = Point(x, y);
-
+		
 		if (button == MouseButton_Left)
 		{
-			m_leftButtonDown = false;
+			m_controlFlags &= ~ControlFlags::TurnCamera;
 		}
 		else if (button == MouseButton_Right)
 		{
-			m_rightButtonDown = false;
+			m_controlFlags &= ~ControlFlags::TurnPlayer;
 		}
 	}
 
 	void PlayerController::OnMouseMove(const int32 x, const int32 y)
 	{
-		if (!m_controlledObject)
+		if (!m_controlledUnit)
 		{
 			return;
 		}
@@ -118,7 +262,7 @@ namespace mmo
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
 
-		SceneNode* yawNode = m_leftButtonDown ? m_cameraAnchorNode : m_controlledObject->GetSceneNode();
+		SceneNode* yawNode = m_leftButtonDown ? m_cameraAnchorNode : m_controlledUnit->GetSceneNode();
 		if (delta.x != 0.0f)
 		{
 			yawNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
@@ -143,30 +287,23 @@ namespace mmo
 		switch(key)
 		{
 		case 0x57:
-			m_movementVector.z = 1.0f;
+			m_controlFlags |= ControlFlags::MoveForwardKey;
 			return;
 		case 0x53:
-			m_movementVector.z = -1.0f;
+			m_controlFlags |= ControlFlags::MoveBackwardKey;
 			return;
 		case 0x41:
-			if (m_rightButtonDown)
-			{
-				m_movementVector.x = -1.0f;
-			}
-			else
-			{
-				m_rotation = Degree(180.0f);	
-			}
-			return;
+			m_controlFlags |= ControlFlags::TurnLeftKey;
+			break;
 		case 0x44:
-			if (m_rightButtonDown)
-			{
-				m_movementVector.x = 1.0f;
-			}
-			else
-			{
-				m_rotation = Degree(-180.0f);	
-			}
+			m_controlFlags |= ControlFlags::TurnRightKey;
+			break;
+		case 81:
+			m_controlFlags |= ControlFlags::StrafeLeftKey;
+			break;
+		case 69:
+			m_controlFlags |= ControlFlags::StrafeRightKey;
+			break;
 		}
 	}
 
@@ -175,29 +312,36 @@ namespace mmo
 		switch(key)
 		{
 		case 0x57:
+			m_controlFlags &= ~ControlFlags::MoveForwardKey;
+			break;
 		case 0x53:
-			m_movementVector.z = 0.0f;
-			return;
+			m_controlFlags &= ~ControlFlags::MoveBackwardKey;
+			break;
 		case 0x41:
+			m_controlFlags &= ~ControlFlags::TurnLeftKey;
+			break;
 		case 0x44:
-			if (m_rightButtonDown)
-			{
-				m_movementVector.x = 0.0f;
-			}
-			m_rotation = Degree(0.0f);
+			m_controlFlags &= ~ControlFlags::TurnRightKey;
+			break;
+		case 81:
+			m_controlFlags &= ~ControlFlags::StrafeLeftKey;
+			break;
+		case 69:
+			m_controlFlags &= ~ControlFlags::StrafeRightKey;
+			break;
 		}
 	}
 	
-	void PlayerController::SetControlledObject(const std::shared_ptr<GameObjectC>& controlledObject)
+	void PlayerController::SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit)
 	{
 		m_cameraAnchorNode->RemoveFromParent();
 
-		m_controlledObject = controlledObject;
+		m_controlledUnit = controlledUnit;
 
-		if (m_controlledObject)
+		if (m_controlledUnit)
 		{
-			ASSERT(m_controlledObject->GetSceneNode());
-			m_controlledObject->GetSceneNode()->AddChild(*m_cameraAnchorNode);
+			ASSERT(m_controlledUnit->GetSceneNode());
+			m_controlledUnit->GetSceneNode()->AddChild(*m_cameraAnchorNode);
 		}
 	}
 
