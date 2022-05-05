@@ -16,6 +16,8 @@
 #include <functional>
 #include <cassert>
 
+#include "log/default_log_levels.h"
+
 namespace mmo
 {
 	/// Enumerates possible packet parse results.
@@ -298,7 +300,7 @@ namespace mmo
 				return;
 
 			m_isReceiving = true;
-
+			
 			m_socket->async_read_some(
 			    asio::buffer(m_receiving.data(), m_receiving.size()),
 			    std::bind(&Connection<P, Socket>::received, this->shared_from_this(), std::placeholders::_2));
@@ -307,7 +309,7 @@ namespace mmo
 		void received(std::size_t size)
 		{
 			m_isReceiving = false;
-
+			
 			assert(size <= m_receiving.size());
 			if (size == 0)
 			{
@@ -352,6 +354,7 @@ namespace mmo
 
 				typename Protocol::IncomingPacket packet;
 				const ReceiveState state = packet.Start(packet, source);
+				const auto id = packet.GetId();
 
 				switch (state)
 				{

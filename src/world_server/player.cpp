@@ -29,7 +29,6 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(std::vector<GameObjectS*>& objects) const
 	{
-		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::UpdateObject);
@@ -77,9 +76,14 @@ namespace mmo
 	{
 		m_worldInstance = &instance;
 		
+		// Self spawn
+		std::vector object(1, m_character.get());
+		NotifyObjectsSpawned( object);
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		tile.GetWatchers().add(this);
 		
+		// Spawn tile objects
 		ForEachTileInSight(
 			m_worldInstance->GetGrid(),
 			tile.GetPosition(),
@@ -137,6 +141,11 @@ namespace mmo
 		for (auto *obj : tile.GetGameObjects())
 		{
 			ASSERT(obj);
+			if (obj->GetGuid() == GetCharacterGuid())
+			{
+				continue;
+			}
+				
 			objects.push_back(obj);
 		}
 

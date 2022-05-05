@@ -3,6 +3,8 @@
 #include "auth_incoming_packet.h"
 #include <limits>
 
+#include "base/macros.h"
+
 namespace mmo
 {
 	namespace auth
@@ -28,8 +30,10 @@ namespace mmo
 				}
 
 				const char *const body = source.getPosition();
-				source.skip(size);
-				packet.m_body = io::MemorySource(body, body + size);
+				const auto skipped = source.skip(packet.m_size);
+				ASSERT(skipped == packet.m_size);
+				
+				packet.m_body = io::MemorySource(body, body + packet.m_size);
 				packet.setSource(&packet.m_body);
 				return receive_state::Complete;
 			}

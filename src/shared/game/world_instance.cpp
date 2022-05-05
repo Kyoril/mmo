@@ -51,7 +51,6 @@ namespace mmo
 		
 		auto &tile = m_visibilityGrid->RequireTile(gridIndex);
 		tile.GetGameObjects().add(&added);
-		
 		added.spawned(*this);
 		
 		ForEachTileInSight(
@@ -62,7 +61,13 @@ namespace mmo
 		    std::vector objects { &added };
 		    for (const auto *subscriber : tile.GetWatchers())
 			{
-				subscriber->NotifyObjectsSpawned(objects);
+				if (subscriber->GetGameObject().GetGuid() == added.GetGuid())
+				{
+					continue;
+				}
+
+				DLOG("Notifying subscriber " << log_hex_digit(subscriber->GetGameObject().GetGuid()) << " about spawn of character " << log_hex_digit(added.GetGuid()));
+		    	subscriber->NotifyObjectsSpawned(objects);
 			}
 		});
 	}
