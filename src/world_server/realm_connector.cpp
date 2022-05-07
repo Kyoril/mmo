@@ -455,7 +455,7 @@ namespace mmo
 
 		uint16 opCode;
 		uint32 packetSize;
-		if (!(packet >> io::read<uint16>(opCode) >> io::read<uint16>(packetSize)))
+		if (!(packet >> io::read<uint16>(opCode) >> io::read<uint32>(packetSize)))
 		{
 			return PacketParseResult::Disconnect;
 		}

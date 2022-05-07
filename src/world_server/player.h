@@ -68,6 +68,9 @@ namespace mmo
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
 
 	private:
+		void HandleMovementPacket(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	private:
 		RealmConnector& m_connector;
 		std::shared_ptr<GameObjectS> m_character;
 		WorldInstance* m_worldInstance { nullptr };

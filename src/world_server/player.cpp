@@ -2,6 +2,7 @@
 
 #include "player.h"
 
+#include "base/utilities.h"
 #include "game/each_tile_in_region.h"
 #include "game/each_tile_in_sight.h"
 #include "game/visibility_tile.h"
@@ -63,7 +64,11 @@ namespace mmo
 
 	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)
 	{
+		io::MemorySource source(reinterpret_cast<char*>(buffer.data()), reinterpret_cast<char*>(buffer.data() + buffer.size()));
+		io::Reader reader(source);
 
+		// TODO: Enum packet opcode
+		HandleMovementPacket(opCode, buffer.size(), reader);
 	}
 
 	TileIndex2D Player::GetTileIndex() const
@@ -160,5 +165,18 @@ namespace mmo
 		}
 
 		NotifyObjectsSpawned(objects);
+	}
+
+	void Player::HandleMovementPacket(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 characterGuid;
+		MovementInfo info;
+		if (!(contentReader >> io::read<uint64>(characterGuid) >> info))
+		{
+			ELOG("Failed to read movement packet")
+			return;
+		}
+
+		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
 	}
 }
