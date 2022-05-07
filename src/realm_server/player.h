@@ -80,6 +80,8 @@ namespace mmo
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
 
+		void EnableProxyPackets(bool enable);
+
 		void JoinWorld() const;
 
 		void OnWorldJoined(const InstanceId instanceId);
@@ -143,8 +145,10 @@ namespace mmo
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()
 		void connectionLost() override;
+
 		/// @copydoc mmo::auth::IConnectionListener::connectionMalformedPacket()
 		void connectionMalformedPacket() override;
+
 		/// @copydoc mmo::auth::IConnectionListener::connectionPacketReceived()
 		PacketParseResult connectionPacketReceived(game::IncomingPacket &packet) override;
 
@@ -154,5 +158,6 @@ namespace mmo
 		PacketParseResult OnEnterWorld(game::IncomingPacket& packet);
 		PacketParseResult OnCreateChar(game::IncomingPacket& packet);
 		PacketParseResult OnDeleteChar(game::IncomingPacket& packet);
+		PacketParseResult OnProxyPacket(game::IncomingPacket& packet);
 	};
 }

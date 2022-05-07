@@ -319,6 +319,34 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnProxyPacket(game::IncomingPacket& packet)
+	{
+		const auto strongWorld = m_world.lock();
+		if (!strongWorld)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto characterId = m_characterData->characterId;
+		strongWorld->GetConnection().sendSinglePacket([characterId, &packet](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::realm_world_packet::ProxyPacket);
+			outPacket
+				<< io::write<uint64>(characterId)
+				<< io::write<uint16>(packet.GetId())
+				<< io::write<uint32>(packet.GetSize());
+
+			std::vector<uint8> buffer;
+			buffer.resize(packet.GetSize());
+			packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
+			outPacket << io::write_range(buffer);
+
+			outPacket.Finish();
+		});
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -396,6 +424,38 @@ namespace mmo
 		}
 	}
 
+	void Player::EnableProxyPackets(const bool enable)
+	{
+		if (enable)
+		{
+			RegisterPacketHandler(game::client_realm_packet::MoveStartForward, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStartBackward, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStop, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeLeft, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeRight, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStopStrafe, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnLeft, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnRight, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
+			RegisterPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
+		}
+		else
+		{
+			ClearPacketHandler(game::client_realm_packet::MoveStartForward);
+			ClearPacketHandler(game::client_realm_packet::MoveStartBackward);
+			ClearPacketHandler(game::client_realm_packet::MoveStop);
+			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeLeft);
+			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeRight);
+			ClearPacketHandler(game::client_realm_packet::MoveStopStrafe);
+			ClearPacketHandler(game::client_realm_packet::MoveStartTurnLeft);
+			ClearPacketHandler(game::client_realm_packet::MoveStartTurnRight);
+			ClearPacketHandler(game::client_realm_packet::MoveStopTurn);
+			ClearPacketHandler(game::client_realm_packet::MoveHeartBeat);
+			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
+		}
+	}
+
 	void Player::JoinWorld() const
 	{
 		const auto strongWorld = m_world.lock();
@@ -413,6 +473,8 @@ namespace mmo
 	void Player::OnWorldJoined(const InstanceId instanceId)
 	{
 		DLOG("World join succeeded on instance id " << instanceId);
+
+		EnableProxyPackets(true);
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
@@ -494,6 +556,8 @@ namespace mmo
 
 	void Player::OnWorldDestroyed(World& world)
 	{
+		EnableProxyPackets(false);
+
 		m_world.reset();
 		NotifyWorldNodeChanged(nullptr);
 
@@ -507,6 +571,7 @@ namespace mmo
 		if (worldNode)
 		{
 			m_worldDestroyed = worldNode->destroyed.connect(this, &Player::OnWorldDestroyed);
+			EnableProxyPackets(true);
 		}
 	}
 

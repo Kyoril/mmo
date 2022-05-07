@@ -340,6 +340,7 @@ namespace mmo
 				ILOG("Successfully authenticated at the realm server! Players should now be ready to play on this world node!");
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterJoin, *this, &RealmConnector::OnPlayerCharacterJoin);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterLeave, *this, &RealmConnector::OnPlayerCharacterLeave);
+				RegisterPacketHandler(auth::realm_world_packet::ProxyPacket, *this, &RealmConnector::OnProxyPacket);
 				
 				PropagateHostedMapIds();
 			}
@@ -434,6 +435,41 @@ namespace mmo
 
 		m_playerManager.RemovePlayer(player);
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnProxyPacket(auth::IncomingPacket& packet)
+	{
+		ObjectId characterId;
+		if (!(packet >> io::read<uint64>(characterId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Received proxy packet for unknown player character");
+			return PacketParseResult::Pass;
+		}
+
+		uint16 opCode;
+		uint32 packetSize;
+		if (!(packet >> io::read<uint16>(opCode) >> io::read<uint16>(packetSize)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		
+		DLOG("[PROXY] Received proxy packet " << log_hex_digit(opCode) << " from player " << log_hex_digit(characterId));
+		std::vector<uint8> buffer;
+		buffer.resize(packetSize);
+		packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
+		if (!packet)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		player->HandleProxyPacket(static_cast<game::client_realm_packet::Type>(opCode), buffer);
 		return PacketParseResult::Pass;
 	}
 

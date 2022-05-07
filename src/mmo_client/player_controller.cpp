@@ -3,6 +3,8 @@
 #include "player_controller.h"
 
 #include "event_loop.h"
+#include "vector_sink.h"
+#include "net/realm_connector.h"
 #include "console/console_var.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
@@ -15,8 +17,9 @@ namespace mmo
 	static ConsoleVar* s_mouseSensitivityCVar = nullptr;
 	static ConsoleVar* s_invertVMouseCVar = nullptr;
 
-	PlayerController::PlayerController(Scene& scene)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector)
 		: m_scene(scene)
+		, m_connector(connector)
 	{
 		if (!s_mouseSensitivityCVar)
 		{
@@ -50,6 +53,7 @@ namespace mmo
 	void PlayerController::MovePlayer()
 	{
 		int movementDirection = (m_controlFlags & ControlFlags::Autorun) != 0;
+
 		if (m_controlFlags & ControlFlags::MoveForwardKey)
 		{
 			++movementDirection;
@@ -61,34 +65,25 @@ namespace mmo
 
 		if (movementDirection != 0)
 		{
-			if (movementDirection <= 0)
+			if (m_controlFlags & ControlFlags::MoveSent)
 			{
-				if (m_controlFlags & ControlFlags::MoveSent)
-				{
-					return;
-				}
-
-				// Move backward
-				DLOG("Move backward");
-			}
-			else
-			{
-				if (m_controlFlags & ControlFlags::MoveSent)
-				{
-					return;
-				}
-
-				// Move backward
-				DLOG("Move forward");
+				return;
 			}
 
+			const bool forward = movementDirection > 0;
+			m_controlledUnit->StartMove(forward);
+			SendMovementUpdate(forward ? game::client_realm_packet::MoveStartForward : game::client_realm_packet::MoveStartBackward);
+			StartHeartbeatTimer();
+			
 			m_controlFlags |= ControlFlags::MoveSent;
 			return;
 		}
 
 		if((m_controlFlags & ControlFlags::MoveSent) != 0)
 		{
-			DLOG("Stop move");
+			m_controlledUnit->StopMove();
+			SendMovementUpdate(game::client_realm_packet::MoveStop);
+			StopHeartbeatTimer();
 			m_controlFlags &= ~ControlFlags::MoveSent;
 		}
 	}
@@ -119,7 +114,7 @@ namespace mmo
 				{
 					return;
 				}
-
+				
 				DLOG("Strafe right");
 			}
 			else
@@ -155,34 +150,114 @@ namespace mmo
 
 			if (direction != 0)
 			{
-				if (direction <= 0)
+				if ((m_controlFlags & ControlFlags::TurnSent))
 				{
-					if ((m_controlFlags & ControlFlags::TurnSent))
-					{
-						return;
-					}
-
-					DLOG("Turn right");
+					return;
 				}
-				else
-				{
-					if ((m_controlFlags & ControlFlags::TurnSent))
-					{
-						return;
-					}
-
-					DLOG("Turn left");
-				}
-
+				
+				const bool left = direction > 0;
+				m_controlledUnit->StartTurn(left);
+				SendMovementUpdate(left ? game::client_realm_packet::MoveStartTurnLeft : game::client_realm_packet::MoveStartTurnRight);
 				m_controlFlags |= ControlFlags::TurnSent;
 				return;
 			}
 
 			if (m_controlFlags & ControlFlags::TurnSent)
 			{
-				DLOG("Stop turn");
+				m_controlledUnit->StopTurn();
+				SendMovementUpdate(game::client_realm_packet::MoveStopTurn);
 				m_controlFlags &= ~ControlFlags::TurnSent;
 			}
+		}
+	}
+
+	void PlayerController::ApplyLocalMovement(const float deltaSeconds) const
+	{
+		auto* playerNode = m_controlledUnit->GetSceneNode();
+
+		const auto& movementInfo = m_controlledUnit->GetMovementInfo();
+
+		if (movementInfo.IsTurning())
+		{
+			if (movementInfo.movementFlags & MovementFlags::TurnLeft)
+			{
+				playerNode->Yaw(Degree(180) * deltaSeconds, TransformSpace::World);
+			}
+			else if (movementInfo.movementFlags & MovementFlags::TurnRight)
+			{
+				playerNode->Yaw(Degree(-180) * deltaSeconds, TransformSpace::World);
+			}
+		}
+
+		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
+		{
+			Vector3 movementVector;
+
+			if (movementInfo.movementFlags & MovementFlags::Forward)
+			{
+				movementVector.z += 1.0f;
+			}
+			if(movementInfo.movementFlags & MovementFlags::Backward)
+			{
+				movementVector.z -= 1.0f;
+			}
+			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
+			{
+				movementVector.x -= 1.0f;
+			}
+			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
+			{
+				movementVector.x += 1.0f;
+			}
+
+			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
+		}
+	}
+
+	void PlayerController::SendMovementUpdate(const uint16 opCode) const
+	{
+		// Build the movement data
+		MovementInfo info;
+		info.timestamp = GetAsyncTimeMs();
+		info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
+		info.facing = m_controlledUnit->GetSceneNode()->GetDerivedOrientation().GetYaw();
+		info.pitch = Radian(0);
+		info.fallTime = 0; // TODO
+		info.jumpCosAngle = 0.0f; // TODO
+		info.jumpSinAngle = 0.0f; // TODO
+		info.jumpVelocity = 0.0f; // TODO
+		info.jumpXZSpeed = 0.0f; // TODO
+		info.movementFlags = m_controlledUnit->GetMovementInfo().movementFlags;
+		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, info);
+	}
+
+	void PlayerController::StartHeartbeatTimer()
+	{
+		if (m_lastHeartbeat != 0)
+		{
+			return;
+		}
+
+		m_lastHeartbeat = GetAsyncTimeMs();
+	}
+
+	void PlayerController::StopHeartbeatTimer()
+	{
+		m_lastHeartbeat = 0;
+	}
+
+	void PlayerController::UpdateHeartbeat()
+	{
+		if (m_lastHeartbeat == 0)
+		{
+			return;
+		}
+
+		const auto now = GetAsyncTimeMs();
+		if (now - m_lastHeartbeat >= 500)
+		{
+			SendMovementUpdate(game::client_realm_packet::MoveHeartBeat);
+			m_lastHeartbeat = now;
 		}
 	}
 
@@ -197,25 +272,13 @@ namespace mmo
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
 
-		auto* playerNode = m_controlledUnit->GetSceneNode();
-
 		MovePlayer();
 		StrafePlayer();
+
 		TurnPlayer();
-
-		if (m_rightButtonDown)
-		{
-			playerNode->SetOrientation(Quaternion(m_cameraNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
-			m_cameraAnchorNode->SetOrientation(Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));	
-		}
-
-		playerNode->Yaw(m_rotation * deltaSeconds, TransformSpace::World);
-
-		// TODO: 7.0f = player movement speed
-		if (m_movementVector.GetSquaredLength() != 0.0f)
-		{
-			playerNode->Translate(m_movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
-		}
+		
+		ApplyLocalMovement(deltaSeconds);
+		UpdateHeartbeat();
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -369,8 +432,7 @@ namespace mmo
 		m_lastMousePosition = Point::Zero;
 		m_leftButtonDown = false;
 		m_rightButtonDown = false;
-		m_movementVector = Vector3::Zero;
-		m_rotation = Radian(0.0f);
+		m_controlFlags = ControlFlags::None;
 
 		ASSERT(m_cameraNode);
 		ASSERT(m_cameraAnchorNode);

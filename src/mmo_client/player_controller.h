@@ -5,12 +5,14 @@
 #include "frame_ui/mouse_event_args.h"
 #include "game/game_unit_c.h"
 #include "game/movement.h"
+#include "game_protocol/game_protocol.h"
 
 namespace mmo
 {
 	class Scene;
 	class SceneNode;
 	class Camera;
+	class RealmConnector;
 
 	namespace ControlFlags
 	{
@@ -44,7 +46,7 @@ namespace mmo
 	class PlayerController final
 	{
 	public:
-		PlayerController(Scene& scene);
+		PlayerController(Scene& scene, RealmConnector& connector);
 
 		~PlayerController();
 
@@ -79,20 +81,25 @@ namespace mmo
 		void MovePlayer();
 		void StrafePlayer();
 		void TurnPlayer();
+		void ApplyLocalMovement(float deltaSeconds) const;
+		
+		void SendMovementUpdate(uint16 opCode) const;
+
+		void StartHeartbeatTimer();
+		void StopHeartbeatTimer();
+		void UpdateHeartbeat();
 
 	private:
 		Scene& m_scene;
+		RealmConnector& m_connector;
 		Camera* m_defaultCamera { nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
-		Vector3 m_movementVector;
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Point m_lastMousePosition {};
-		Radian m_rotation;
-		Movement m_movement;
-		GameTime m_lastMoveTimestamp;
+		GameTime m_lastHeartbeat { 0 };
 		uint32 m_controlFlags { ControlFlags::None };
 	};
 }

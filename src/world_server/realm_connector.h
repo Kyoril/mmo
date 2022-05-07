@@ -85,6 +85,11 @@ namespace mmo
 		///	@returns Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnPlayerCharacterLeave(auth::IncomingPacket& packet);
 
+		/// @brief Handles a proxy packet forwarded directly from the game client.
+		/// @param packet The packet that has been forwarded.
+		/// @return Enum value which decides whether to continue the connection or destroy it.
+		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
+
 		/// Resets this instance to an unauthenticated state.
 		void Reset();
 

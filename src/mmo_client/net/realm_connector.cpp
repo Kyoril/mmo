@@ -2,6 +2,7 @@
 
 #include "realm_connector.h"
 #include "version.h"
+#include "game/movement_info.h"
 
 #include "base/constants.h"
 #include "base/random.h"
@@ -243,6 +244,16 @@ namespace mmo
 		sendSinglePacket([guid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::DeleteChar);
 			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info)
+	{
+		sendSinglePacket([characterId, opCode, &info](game::OutgoingPacket& packet) {
+			packet.Start(opCode);
+			packet << io::write<uint64>(characterId);
+			packet << info;
 			packet.Finish();
 			});
 	}

@@ -61,6 +61,11 @@ namespace mmo
 		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer);
 	}
 
+	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)
+	{
+
+	}
+
 	TileIndex2D Player::GetTileIndex() const
 	{
 		ASSERT(m_worldInstance);

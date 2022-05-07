@@ -48,7 +48,9 @@ namespace mmo
 
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) override;
-		
+
+		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
+
 	public:
 		TileIndex2D GetTileIndex() const;
 

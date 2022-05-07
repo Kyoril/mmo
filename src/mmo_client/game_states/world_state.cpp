@@ -188,7 +188,7 @@ namespace mmo
 		m_groundNode->AttachObject(*m_groundEntity);
 		m_scene.GetRootSceneNode().AddChild(*m_groundNode);
 
-		m_playerController = std::make_unique<PlayerController>(m_scene);
+		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");

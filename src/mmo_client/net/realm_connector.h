@@ -14,6 +14,8 @@
 
 namespace mmo
 {
+	class MovementInfo;
+
 	/// This class manages the connection to the current realm server if there is any.
 	class RealmConnector final
 		: public game::Connector
@@ -95,6 +97,8 @@ namespace mmo
 
 		/// Gets the realm name.
 		const std::string& GetRealmName() const { return m_realmName; }
+
+		void SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

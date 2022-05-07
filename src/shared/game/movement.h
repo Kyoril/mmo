@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <list>
+
 #include "base/clock.h"
 #include "math/vector3.h"
 
@@ -46,15 +48,39 @@ namespace mmo
 	public:
 		void AddMovementEvent(MovementEvent&& movementEvent)
 		{
-			m_movementEvents.emplace(std::move(movementEvent));
+			// Insert event into m_movementEvents sorted by movementEvent.timestamp
+			for (auto it = m_movementEvents.begin(); it != m_movementEvents.end(); ++it)
+			{
+				if (it->timestamp < movementEvent.timestamp)
+				{
+					continue;
+				}
+
+				m_movementEvents.insert(it, std::move(movementEvent));
+				return;
+			}
+
+			m_movementEvents.emplace_back(std::move(movementEvent));
 		}
 
 		void AddMovementEvent(const MovementEvent& movementEvent)
 		{
-			m_movementEvents.push(movementEvent);
-		}
+			// Insert event into m_movementEvents sorted by movementEvent.timestamp
+			for (auto it = m_movementEvents.begin(); it != m_movementEvents.end(); ++it)
+			{
+				if (it->timestamp < movementEvent.timestamp)
+				{
+					continue;
+				}
 
+				m_movementEvents.insert(it, movementEvent);
+				return;
+			}
+
+			m_movementEvents.push_back(movementEvent);
+		}
+		
 	protected:
-		std::queue<MovementEvent> m_movementEvents;
+		std::list<MovementEvent> m_movementEvents;
 	};
 }
