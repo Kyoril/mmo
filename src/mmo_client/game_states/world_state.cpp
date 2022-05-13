@@ -440,8 +440,20 @@ namespace mmo
 		{
 			return PacketParseResult::Disconnect;
 		}
+		
+		const auto objectIt = m_gameObjectsById.find(characterGuid);
+		if (objectIt == m_gameObjectsById.end())
+		{
+			WLOG("Received movement packet for unknown unit " << log_hex_digit(characterGuid));
+			return PacketParseResult::Pass;
+		}
 
-		// TODO: Apply movement to local character
+		auto unitPtr = std::static_pointer_cast<GameUnitC>(objectIt->second);
+		ASSERT(unitPtr);
+
+		// Instantly apply movement data for now
+		unitPtr->GetSceneNode()->SetDerivedPosition(movementInfo.position);
+		unitPtr->GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
 
 		return PacketParseResult::Pass;
 	}
