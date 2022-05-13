@@ -112,6 +112,8 @@ namespace mmo
 
 		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
 
+		PacketParseResult OnMovement(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;

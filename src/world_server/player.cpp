@@ -10,7 +10,7 @@
 
 namespace mmo
 {
-	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameObjectS> characterObject)
+	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject)
 		: m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 	{
@@ -87,7 +87,7 @@ namespace mmo
 		m_worldInstance = &instance;
 		
 		// Self spawn
-		std::vector object(1, m_character.get());
+		std::vector object(1, (GameObjectS*)m_character.get());
 		NotifyObjectsSpawned( object);
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -178,5 +178,48 @@ namespace mmo
 		}
 
 		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
+		
+		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+
+		// Translate client-side movement op codes into server side movement op codes for the receiving clients
+		switch(opCode)
+		{
+		case game::client_realm_packet::MoveStartForward: opCode = game::realm_client_packet::MoveStartForward; break;
+		case game::client_realm_packet::MoveStartBackward: opCode = game::realm_client_packet::MoveStartBackward; break;
+		case game::client_realm_packet::MoveStop: opCode = game::realm_client_packet::MoveStop; break;
+		case game::client_realm_packet::MoveStartStrafeLeft: opCode = game::realm_client_packet::MoveStartStrafeLeft; break;
+		case game::client_realm_packet::MoveStartStrafeRight: opCode = game::realm_client_packet::MoveStartStrafeRight; break;
+		case game::client_realm_packet::MoveStopStrafe: opCode = game::realm_client_packet::MoveStopStrafe; break;
+		case game::client_realm_packet::MoveStartTurnLeft: opCode = game::realm_client_packet::MoveStartTurnLeft; break;
+		case game::client_realm_packet::MoveStartTurnRight: opCode = game::realm_client_packet::MoveStartTurnRight; break;
+		case game::client_realm_packet::MoveStopTurn: opCode = game::realm_client_packet::MoveStopTurn; break;
+		case game::client_realm_packet::MoveHeartBeat: opCode = game::realm_client_packet::MoveHeartBeat; break;
+		case game::client_realm_packet::MoveSetFacing: opCode = game::realm_client_packet::MoveSetFacing; break;
+		default:
+			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
+		}
+
+		std::vector<char> buffer;
+		io::VectorSink sink { buffer };
+		game::OutgoingPacket movementPacket { sink };
+		movementPacket.Start(opCode);
+		movementPacket << io::write<uint64>(characterGuid) << info;
+		movementPacket.Finish();
+
+		ForEachTileInSight(
+			m_worldInstance->GetGrid(),
+			tile.GetPosition(),
+			[characterGuid, &buffer, &movementPacket](VisibilityTile &tile)
+		{
+			for (const auto& watcher : tile.GetWatchers())
+			{
+				if (watcher->GetGameUnit().GetGuid() == characterGuid)
+				{
+					continue;
+				}
+
+				watcher->SendPacket(movementPacket, buffer);
+			}
+		});
 	}
 }

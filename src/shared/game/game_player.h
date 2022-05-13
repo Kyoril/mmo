@@ -1,15 +1,15 @@
 #pragma once
 
-#include "game_unit.h"
+#include "game_unit_s.h"
 
 namespace mmo
 {
 	/// @brief Represents a playable character in the game world.
-	class GamePlayer final : public GameUnit
+	class GamePlayer final : public GameUnitS
 	{
 	public:
 		GamePlayer(const ObjectGuid guid)
-			: GameUnit(guid)
+			: GameUnitS(guid)
 		{
 		}
 

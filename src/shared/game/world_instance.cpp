@@ -61,12 +61,12 @@ namespace mmo
 		    std::vector objects { &added };
 		    for (const auto *subscriber : tile.GetWatchers())
 			{
-				if (subscriber->GetGameObject().GetGuid() == added.GetGuid())
+				if (subscriber->GetGameUnit().GetGuid() == added.GetGuid())
 				{
 					continue;
 				}
 
-				DLOG("Notifying subscriber " << log_hex_digit(subscriber->GetGameObject().GetGuid()) << " about spawn of character " << log_hex_digit(added.GetGuid()));
+				DLOG("Notifying subscriber " << log_hex_digit(subscriber->GetGameUnit().GetGuid()) << " about spawn of character " << log_hex_digit(added.GetGuid()));
 		    	subscriber->NotifyObjectsSpawned(objects);
 			}
 		});

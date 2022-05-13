@@ -399,7 +399,7 @@ namespace mmo
 		characterData.instanceId = instance->GetId();
 
 		// Create the character object
-		auto characterObject = m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player);
+		auto characterObject = std::static_pointer_cast<GameUnitS>(m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player));
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(*this, characterObject);

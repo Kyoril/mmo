@@ -5,6 +5,7 @@
 #include "realm_connector.h"
 #include "vector_sink.h"
 #include "game/game_object_s.h"
+#include "game/game_unit_s.h"
 #include "game/tile_index.h"
 #include "game/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
@@ -16,7 +17,7 @@ namespace mmo
 	class Player final : public TileSubscriber
 	{
 	public:
-		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GameObjectS> characterObject);
+		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject);
 		~Player() override;
 
 	public:
@@ -37,8 +38,8 @@ namespace mmo
 		}
 
 	public:
-		/// @copydoc TileSubscriber::GetGameObject
-		const GameObjectS& GetGameObject() const override { return *m_character; }
+		/// @copydoc TileSubscriber::GetGameUnit
+		const GameUnitS& GetGameUnit() const override { return *m_character; }
 
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
 		void NotifyObjectsSpawned(std::vector<GameObjectS*>& object) const override;
@@ -72,7 +73,7 @@ namespace mmo
 
 	private:
 		RealmConnector& m_connector;
-		std::shared_ptr<GameObjectS> m_character;
+		std::shared_ptr<GameUnitS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 	};
 

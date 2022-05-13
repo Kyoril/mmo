@@ -245,6 +245,18 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &WorldState::OnUpdateObject);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
+		
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -417,6 +429,20 @@ namespace mmo
 			}
 		}
 		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMovement(game::IncomingPacket& packet)
+	{
+		uint64 characterGuid;
+		MovementInfo movementInfo;
+		if (!(packet >> io::read<uint64>(characterGuid) >> movementInfo))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: Apply movement to local character
+
 		return PacketParseResult::Pass;
 	}
 }

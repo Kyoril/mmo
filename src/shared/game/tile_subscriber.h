@@ -3,6 +3,7 @@
 #pragma once
 
 #include "game_protocol/game_protocol.h"
+#include "game_unit_s.h"
 
 namespace mmo
 {
@@ -12,7 +13,7 @@ namespace mmo
 		virtual ~TileSubscriber() = default;
 
 	public:
-		virtual const GameObjectS& GetGameObject() const = 0;
+		virtual const GameUnitS& GetGameUnit() const = 0;
 
 		virtual void NotifyObjectsSpawned(std::vector<GameObjectS*>& objects) const = 0;
 

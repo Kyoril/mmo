@@ -7,15 +7,17 @@
 namespace mmo
 {
 	/// @brief Represents a living object (unit) in the game world.
-	class GameUnit : public GameObjectS
+	class GameUnitS : public GameObjectS
 	{
 	public:
 
-		GameUnit(const ObjectGuid guid)
+		GameUnitS(const ObjectGuid guid)
 			: GameObjectS(guid)
 		{
 		}
 
-		virtual ~GameUnit() override = default;
-			};
+		virtual ~GameUnitS() override = default;
+
+	public:
+	};
 }

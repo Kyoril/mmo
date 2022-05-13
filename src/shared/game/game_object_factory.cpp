@@ -1,7 +1,7 @@
 
 #include "game_object_factory.h"
 #include "game_player.h"
-#include "game_unit.h"
+#include "game_unit_s.h"
 
 namespace mmo
 {
@@ -12,7 +12,7 @@ namespace mmo
 		case ObjectTypeId::Object:
 			return std::make_unique<GameObjectS>(guid);
 		case ObjectTypeId::Unit:
-			return std::make_unique<GameUnit>(guid);
+			return std::make_unique<GameUnitS>(guid);
 		case ObjectTypeId::Player:
 			return std::make_unique<GamePlayer>(guid);
 		default:
