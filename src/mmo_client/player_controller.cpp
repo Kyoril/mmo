@@ -316,16 +316,16 @@ namespace mmo
 			return;
 		}
 
-		if (!m_leftButtonDown && !m_rightButtonDown)
+		if ((m_controlFlags & ControlFlags::TurnCamera) == 0)
 		{
 			return;
 		}
-
+		
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
 
-		SceneNode* yawNode = m_leftButtonDown ? m_cameraAnchorNode : m_controlledUnit->GetSceneNode();
+		SceneNode* yawNode = m_cameraAnchorNode;
 		if (delta.x != 0.0f)
 		{
 			yawNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
