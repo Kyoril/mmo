@@ -96,3 +96,11 @@ endif()
 # ===============================================================================
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/glfw/include)
+
+
+# METAL
+if (APPLE)
+    if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/deps/metal-cpp)
+    endif()
+endif()
