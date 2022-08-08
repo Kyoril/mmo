@@ -74,6 +74,10 @@ if (WIN32)
 	target_link_libraries(mmo_client graphics_d3d11)
 endif()
 
+if(APPLE)
+    target_link_libraries(mmo_client graphics_metal)
+endif()
+
 IF(APPLE)
     # Make sure we can find the 'ibtool' program. If we can NOT find it we
     # skip generation of this project

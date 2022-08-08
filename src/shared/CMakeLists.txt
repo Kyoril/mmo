@@ -15,6 +15,8 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	add_subdirectory(graphics_null)
 	if (WIN32)
 		add_subdirectory(graphics_d3d11)
+	elseif(APPLE)
+		add_subdirectory(graphics_metal)
 	endif()
 	
 	add_subdirectory(frame_ui)

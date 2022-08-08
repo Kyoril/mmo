@@ -226,16 +226,28 @@ namespace mmo
 		const GraphicsApi defaultApi =
 #if PLATFORM_WINDOWS
 			GraphicsApi::D3D11;
+#elif PLATFORM_APPLE
+            GraphicsApi::Metal;
 #else
 			GraphicsApi::Null;
 #endif
 		
 		auto api = defaultApi;
+#if PLATFORM_WINDOWS
 		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "d3d11") == 0)
 		{
 			api = GraphicsApi::D3D11;
 		}
-		else if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "gl") == 0)
+#endif
+        
+#if PLATFORM_APPLE
+        if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "metal") == 0)
+        {
+            api = GraphicsApi::Metal;
+        }
+#endif
+        
+		if (_stricmp(s_gxApiCVar->GetStringValue().c_str(), "gl") == 0)
 		{
 			api = GraphicsApi::OpenGL;
 		}
@@ -251,6 +263,11 @@ namespace mmo
 		case GraphicsApi::D3D11:
 			GraphicsDevice::CreateD3D11(desc);
 			break;
+#endif
+#if PLATFORM_APPLE
+        case GraphicsApi::Metal:
+            GraphicsDevice::CreateMetal(desc);
+            break;
 #endif
         case GraphicsApi::Null:
             GraphicsDevice::CreateNull(desc);

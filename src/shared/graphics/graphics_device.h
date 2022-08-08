@@ -30,6 +30,9 @@ namespace mmo
 		/// OpenGL. Should work on all platforms.
 		OpenGL,
 		
+        /// Metal API for MacOS.
+        Metal,
+        
 		/// Null. Should work on every platform but not render anything at all.
 		Null,
 
@@ -134,6 +137,10 @@ namespace mmo
 #ifdef _WIN32
 		/// Creates a new d3d11 graphics device object and makes it the current one.
 		static GraphicsDevice& CreateD3D11(const GraphicsDeviceDesc& desc);
+#endif
+        
+#ifdef __APPLE__
+        static GraphicsDevice& CreateMetal(const GraphicsDeviceDesc& desc);
 #endif
 
 		/// Gets the current graphics device object. Will throw an exception if there
