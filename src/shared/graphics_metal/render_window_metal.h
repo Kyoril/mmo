@@ -5,6 +5,8 @@
 #include "graphics/render_window.h"
 #include "render_target_metal.h"
 
+#import <Cocoa/Cocoa.h>
+
 namespace mmo
 {
 	class GraphicsDeviceMetal;
@@ -29,5 +31,8 @@ namespace mmo
 		// ~Begin RenderWindow
 		virtual void SetTitle(const std::string& title) final override;
 		// ~End RenderWindow
+        
+    private:
+        NSWindow* m_window;
 	};
 }

@@ -7,6 +7,8 @@
 
 #include "log/default_log_levels.h"
 
+#import <AppKit/AppKit.h>
+
 
 namespace mmo
 {
@@ -14,6 +16,15 @@ namespace mmo
 		: RenderWindow(std::move(name), width, height)
 		, RenderTargetMetal(device)
 	{
+        m_window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0f, 0.0f, width, height) styleMask:(NSWindowStyleMaskClosable | NSWindowStyleMaskTitled | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable) backing:NSBackingStoreBuffered defer:NO];
+        
+        [m_window center];
+        [m_window makeKeyAndOrderFront:nil];
+        
+        if (fullScreen)
+        {
+            [m_window toggleFullScreen:nil];
+        }
 	}
 
 	void RenderWindowMetal::Activate()
@@ -42,6 +53,6 @@ namespace mmo
 
 	void RenderWindowMetal::SetTitle(const std::string & title)
 	{
-
+        m_window.title = [NSString stringWithUTF8String:title.c_str()];
 	}
 }

@@ -311,10 +311,6 @@ namespace mmo
 			>> io::read<float>(b.z);
 	}
 
-#ifdef MIN
-#	error "MIN is defined when math/vector3.h is included! This is most likely because NOMINMAX wasn't defined before including Windows.h!"
-#endif
-
 	inline Vector3 TakeMinimum(const Vector3& a, const Vector3& b) 
 	{
 		return Vector3(
@@ -323,10 +319,6 @@ namespace mmo
 			std::min(a.z, b.z)
 		);
 	}
-
-#ifdef MAX
-#	error "MAX is defined when math/vector3.h is included! This is most likely because NOMINMAX wasn't defined before including Windows.h!"
-#endif
 
 	inline Vector3 TakeMaximum(const Vector3& a, const Vector3& b) 
 	{
