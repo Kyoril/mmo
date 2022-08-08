@@ -163,6 +163,8 @@ namespace mmo
 	{
 #ifdef _WIN32
 		PostQuitMessage(exitCode);
+#elif __APPLE__
+        // TODO
 #else
 		ASSERT(!"TODO: Implement event loop termination on operating system!");
 #endif

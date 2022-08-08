@@ -7,8 +7,44 @@
 
 #include "log/default_log_levels.h"
 
-#import <AppKit/AppKit.h>
+@interface RenderWindowDelegate : NSObject
+@end
 
+@implementation RenderWindowDelegate
+{
+    mmo::RenderWindowMetal* m_cppWindow;
+}
+
+- (id)init:(mmo::RenderWindowMetal*)window
+{
+    
+    if (self = [super init])
+    {
+        m_cppWindow = window;
+    }
+    
+    return self;
+}
+
+- (void)dealloc
+{
+    [super dealloc];
+}
+
+- (void)notifyWindowDeleted
+{
+    m_cppWindow = nullptr;
+}
+
+- (void)windowWillClose:(NSWindow*)window
+{
+    if (m_cppWindow)
+    {
+        m_cppWindow->NotifyClosed();
+    }
+}
+
+@end
 
 namespace mmo
 {
@@ -18,14 +54,32 @@ namespace mmo
 	{
         m_window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0f, 0.0f, width, height) styleMask:(NSWindowStyleMaskClosable | NSWindowStyleMaskTitled | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable) backing:NSBackingStoreBuffered defer:NO];
         
+        m_delegate = [[RenderWindowDelegate alloc] init:this];
+        m_window.delegate = m_delegate;
+        
         [m_window center];
         [m_window makeKeyAndOrderFront:nil];
-        
-        if (fullScreen)
-        {
-            [m_window toggleFullScreen:nil];
-        }
 	}
+
+    RenderWindowMetal::~RenderWindowMetal()
+    {
+        DestroyNativeWindow();
+    }
+
+    void RenderWindowMetal::NotifyClosed()
+    {
+        Closed();
+    }
+
+    void RenderWindowMetal::DestroyNativeWindow()
+    {
+        if (m_delegate)
+        {
+            [m_delegate notifyWindowDeleted];
+            [m_delegate release];
+            m_delegate = nil;
+        }
+    }
 
 	void RenderWindowMetal::Activate()
 	{

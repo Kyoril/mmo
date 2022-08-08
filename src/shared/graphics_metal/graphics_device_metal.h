@@ -5,6 +5,8 @@
 #include "graphics/graphics_device.h"
 #include "base/typedefs.h"
 
+#include "Metal/Metal.hpp"
+
 namespace mmo
 {
 	/// This is the null implementation of the graphics device class.
@@ -84,5 +86,8 @@ namespace mmo
 
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
 		// ~ End GraphicsDevice
+        
+    private:
+        MTL::Device* m_device;
 	};
 }

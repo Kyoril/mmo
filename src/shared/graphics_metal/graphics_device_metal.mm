@@ -79,6 +79,9 @@ namespace mmo
 
 	void GraphicsDeviceMetal::Create(const GraphicsDeviceDesc& desc)
 	{
+        m_device = MTL::CreateSystemDefaultDevice();
+        assert(m_device);
+        
 		// Create the device
 		GraphicsDevice::Create(desc);
 		

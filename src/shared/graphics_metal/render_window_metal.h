@@ -5,7 +5,9 @@
 #include "graphics/render_window.h"
 #include "render_target_metal.h"
 
-#import <Cocoa/Cocoa.h>
+#ifdef __OBJC__
+#   import <Cocoa/Cocoa.h>
+#endif
 
 namespace mmo
 {
@@ -19,7 +21,8 @@ namespace mmo
 	{
 	public:
         RenderWindowMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height, bool fullScreen);
-
+        ~RenderWindowMetal();
+        
 	public:
 		// ~Begin RenderTarget
 		virtual void Activate() final override;
@@ -32,7 +35,16 @@ namespace mmo
 		virtual void SetTitle(const std::string& title) final override;
 		// ~End RenderWindow
         
+    public:
+        void NotifyClosed();
+        
     private:
+        void DestroyNativeWindow();
+        
+    private:
+#ifdef __OBJC__
         NSWindow* m_window;
+        id m_delegate;
+#endif
 	};
 }

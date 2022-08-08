@@ -5,8 +5,9 @@ cmake_minimum_required(VERSION 3.16)
 IF(APPLE)
     INCLUDE_DIRECTORIES ( /System/Library/Frameworks )
     FIND_LIBRARY(COCOA_LIBRARY Cocoa)
+    FIND_LIBRARY(METAL_LIBRARY Metal)
     MARK_AS_ADVANCED (COCOA_LIBRARY)
-    SET(EXTRA_LIBS ${COCOA_LIBRARY})
+    SET(EXTRA_LIBS ${COCOA_LIBRARY} ${METAL_LIBRARY})
     
     # these are the OS X Interface Builder Files
     SET (Client_XIBS
