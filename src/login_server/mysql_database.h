@@ -22,6 +22,7 @@ namespace mmo
 		std::optional<RealmAuthData> getRealmAuthData(std::string name) override;
 		std::optional<std::pair<uint64, std::string>> getAccountSessionKey(std::string accountName) override;
 		void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) override;
+		void playerLoginFailed(uint64 accountId, const std::string& ip) override;
 		void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) override;
 
 	private:

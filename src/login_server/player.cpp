@@ -385,14 +385,23 @@ namespace mmo
 			// Stop here since we wait for the database callback
 			return PacketParseResult::Pass;
 		}
-		else
-		{
-			// Log error
-			WLOG("Invalid password for account " << m_accountName);
-		}
 
-		// Send proof result
-		SendAuthProof(proofResult);
+		// Log error
+		WLOG("Invalid password for account " << m_accountName);
+		
+		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		const auto loginFailedDbHandler = [weakThis, proofResult](const bool)
+			{
+				if (const auto strongThis = weakThis.lock())
+				{
+					strongThis->SendAuthProof(proofResult);
+				}
+			};
+
+		// Store session key in account database
+		m_database.asyncRequest<void>(
+			std::bind(&IDatabase::playerLoginFailed, std::placeholders::_1, m_accountId, std::cref(m_address)),
+			std::move(loginFailedDbHandler));
 
 		return PacketParseResult::Pass;
 	}

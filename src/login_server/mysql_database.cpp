@@ -104,8 +104,10 @@ namespace mmo
 		return {};
 	}
 
-	void MySQLDatabase::playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip)
+	void MySQLDatabase::playerLogin(const uint64 accountId, const std::string& sessionKey, const std::string& ip)
 	{
+		mysql::Transaction transaction(m_connection);
+
 		if (!m_connection.Execute("UPDATE account SET k = '"
 			+ m_connection.EscapeString(sessionKey)
 			+ "', last_login = NOW(), last_ip = '"
@@ -115,9 +117,28 @@ namespace mmo
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update account database on login");
 		}
+
+		if (!m_connection.Execute("INSERT INTO account_login (account_id, timestamp, ip_address, succeeded) VALUES (" + 
+			std::to_string(accountId) + ", NOW(), '" + ip + "', 1)"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not insert login attempt");
+		}
+
+		transaction.Commit();
 	}
 
-	void MySQLDatabase::realmLogin(uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
+	void MySQLDatabase::playerLoginFailed(const uint64 accountId, const std::string& ip)
+	{
+		if (!m_connection.Execute("INSERT INTO account_login (account_id, timestamp, ip_address, succeeded) VALUES (" + 
+			std::to_string(accountId) + ", NOW(), '" + ip + "', 0)"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not insert login attempt");
+		}
+	}
+
+	void MySQLDatabase::realmLogin(const uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
 	{
 		if (!m_connection.Execute("UPDATE realm SET k = '"
 			+ m_connection.EscapeString(sessionKey)

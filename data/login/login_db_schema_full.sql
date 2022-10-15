@@ -45,6 +45,18 @@ CREATE TABLE `account_info` (
   CONSTRAINT `account_info_ibfk_1` FOREIGN KEY (`account`) REFERENCES `account` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
+/*Table structure for table `account_login` */
+
+DROP TABLE IF EXISTS `account_login`;
+
+CREATE TABLE `account_login` (
+  `account_id` bigint unsigned NOT NULL,
+  `timestamp` datetime NOT NULL,
+  `ip_address` varchar(48) COLLATE latin1_german1_ci NOT NULL,
+  `succeeded` tinyint unsigned DEFAULT NULL,
+  KEY `account_id` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+
 /*Table structure for table `realm` */
 
 DROP TABLE IF EXISTS `realm`;
