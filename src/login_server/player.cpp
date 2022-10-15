@@ -390,7 +390,7 @@ namespace mmo
 		WLOG("Invalid password for account " << m_accountName);
 		
 		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		const auto loginFailedDbHandler = [weakThis, proofResult](const bool)
+		auto loginFailedDbHandler = [weakThis, proofResult](const bool)
 			{
 				if (const auto strongThis = weakThis.lock())
 				{
@@ -400,7 +400,7 @@ namespace mmo
 
 		// Store session key in account database
 		m_database.asyncRequest<void>(
-			std::bind(&IDatabase::playerLoginFailed, std::placeholders::_1, m_accountId, std::cref(m_address)),
+			[this, address = std::cref(m_address)](auto&& database) { database->playerLoginFailed(m_accountId, address); },
 			std::move(loginFailedDbHandler));
 
 		return PacketParseResult::Pass;
