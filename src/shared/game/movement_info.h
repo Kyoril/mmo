@@ -84,7 +84,7 @@ namespace mmo
 
 			/// @brief Combined list of flags which imply that the character's position is changing.
 			Moving =
-				Forward | Backward,
+				Forward | Backward | Ascending | Descending | Falling,
 
 			Strafing =
 				StrafeLeft | StrafeRight,

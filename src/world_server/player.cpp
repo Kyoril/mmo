@@ -177,8 +177,12 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
-		
+		if (characterGuid != m_character->GetGuid())
+		{
+			ELOG("User is trying to move a different character than himself")
+			return;
+		}
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 
 		// Translate client-side movement op codes into server side movement op codes for the receiving clients
@@ -198,6 +202,43 @@ namespace mmo
 		default:
 			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
 		}
+		
+		if (!m_character->GetMovementInfo().IsMoving())
+		{
+			if (info.position != m_character->GetPosition())
+			{
+				ELOG("User position changed on client while it should not be able to do so based on server info")
+				return;
+			}
+		}
+
+		if (opCode == game::realm_client_packet::MoveStartForward)
+		{
+			if (m_character->GetMovementInfo().movementFlags & MovementFlags::Forward)
+			{
+				ELOG("User starts moving forward but was already moving forward")
+				return;
+			}
+		}
+		else if (opCode == game::realm_client_packet::MoveStartBackward)
+		{
+			if (m_character->GetMovementInfo().movementFlags & MovementFlags::Backward)
+			{
+				ELOG("User starts moving backward but was already moving backward")
+				return;
+			}
+		}
+		else if (opCode == game::realm_client_packet::MoveStop)
+		{
+			if ((m_character->GetMovementInfo().movementFlags & MovementFlags::Moving) == 0)
+			{
+				ELOG("User stops movement but was not moving")
+				return;
+			}
+		}
+
+		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
+		m_character->ApplyMovementInfo(info);
 
 		std::vector<char> buffer;
 		io::VectorSink sink { buffer };

@@ -26,6 +26,20 @@ namespace mmo
 		return ObjectTypeId::Object;
 	}
 
+	Vector3 GameObjectS::GetPredictedPosition()
+	{
+		Vector3 position = m_movementInfo.position;
+
+		// TODO: Predict position based on movement flags
+
+		return position;
+	}
+
+	void GameObjectS::ApplyMovementInfo(const MovementInfo& info)
+	{
+		m_movementInfo = info;
+	}
+
 	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		writer

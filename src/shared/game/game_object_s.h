@@ -90,20 +90,22 @@ namespace mmo
 		uint64 GetGuid() const { return m_fields.GetFieldValue<uint64>(object_fields::Guid); }
 
 		/// Gets the position of this object.
-		const Vector3& GetPosition() const noexcept { return m_position; }
+		const Vector3& GetPosition() const noexcept { return m_movementInfo.position; }
 
 		/// Gets the facing of this object.
-		const Angle& GetFacing() const noexcept { return m_facing; }
-
+		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
+		
 		/// @brief Gets the movement info.
 		[[nodiscard]] MovementInfo GetMovementInfo() { return m_movementInfo; }
+
+		Vector3 GetPredictedPosition();
+
+		void ApplyMovementInfo(const MovementInfo& info);
 
 		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const;
 
 	protected:
 		ObjectFieldMap m_fields;
-		Vector3 m_position;
-		Angle m_facing;
 		MovementInfo m_movementInfo;
 	};
 	
