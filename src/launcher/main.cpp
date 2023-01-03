@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 namespace
 {
 	const std::string UpdateSourceUrl =
-	    "http://patch.mmo-dev.net/update"
+	    "http://patch.mmo-dev.net"
 	    ;
 	
 	bool isSelfUpdateEnabled = true;
