@@ -37,4 +37,5 @@ add_subdirectory(assets)
 add_subdirectory(xml_handler)
 add_subdirectory(game)
 add_subdirectory(paging)
+add_subdirectory(web_services)
 

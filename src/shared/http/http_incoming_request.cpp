@@ -111,7 +111,7 @@ namespace mmo
 				}
 			}
 
-			ReceiveState IncomingRequest::start(IncomingRequest &packet, io::MemorySource &source)
+			ReceiveState IncomingRequest::Start(IncomingRequest &packet, io::MemorySource &source)
 			{
 				const char *const begin = source.getBegin();
 				const char *const end = source.getEnd();

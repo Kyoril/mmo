@@ -30,6 +30,9 @@ namespace mmo
 
 				typedef std::map<String, String> Headers;
 				typedef std::map<String, String> Arguments;
+					
+				[[nodiscard]] uint8 GetId() const { return 0; }
+				[[nodiscard]] uint32 GetSize() const { return 0; }
 
 				IncomingRequest();
 				Type getType() const;
@@ -39,7 +42,7 @@ namespace mmo
 				const Headers &getHeaders() const;
 				const Arguments &getPathArguments() const { return m_pathArguments; }
 
-				static ReceiveState start(IncomingRequest &packet, io::MemorySource &source);
+				static ReceiveState Start(IncomingRequest &packet, io::MemorySource &source);
 
 			private:
 
