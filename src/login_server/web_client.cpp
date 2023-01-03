@@ -48,7 +48,7 @@ namespace mmo
 					const GameTime startTime = static_cast<WebService &>(getService()).getStartTime();
 
 					std::ostringstream message;
-					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetCurrentTime() - startTime) << "}";
+					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
 					SendJsonResponse(response, message.str());
 				}
 				else
