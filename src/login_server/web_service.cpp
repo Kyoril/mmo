@@ -1,7 +1,6 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "web_service.h"
-#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -15,7 +14,7 @@ namespace mmo
 		: web::WebService(service, port)
 		, m_playerManager(playerManager)
 		, m_database(database)
-		, m_startTime(GetCurrentTime())
+		, m_startTime(GetAsyncTimeMs())
 		, m_password(std::move(password))
 	{
 	}
