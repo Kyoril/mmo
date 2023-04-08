@@ -63,8 +63,7 @@ namespace mmo
 
 			intrusive_ptr<link_element> next;
 			intrusive_ptr<link_element> prev;
-
-			std::aligned_storage_t<sizeof(T), std::alignment_of<T>::value> buffer;
+			alignas(T) std::byte buffer[sizeof(T)];
 		};
 
 		intrusive_ptr<link_element> head;

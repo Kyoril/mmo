@@ -32,7 +32,7 @@ namespace luabind {
 			// Unfortunately the converters currently doesn't have access to
 			// the actual type being converted when this is instantiated, so
 			// we have to guess a max size.
-			std::aligned_storage<128> data;
+			alignas(alignof(std::max_align_t)) std::byte data[128];
 			destruction_function destructor;
 		};
 

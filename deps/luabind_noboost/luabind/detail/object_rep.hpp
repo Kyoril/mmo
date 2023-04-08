@@ -96,7 +96,7 @@ namespace luabind {
 			void operator=(object_rep const&) = delete;
 
 			instance_holder* m_instance;
-			std::aligned_storage<32>::type m_instance_buffer;
+			alignas(uint32_t) std::byte m_instance_buffer[sizeof(uint32_t)];
 			class_rep* m_classrep; // the class information about this object's type
 			detail::lua_reference m_dependency_ref; // reference to lua table holding dependency references
 		};

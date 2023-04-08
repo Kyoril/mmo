@@ -259,6 +259,6 @@ namespace mmo
 		}
 
 		bool initialized = false;
-		std::aligned_storage_t<sizeof(value_type), std::alignment_of<value_type>::value> buffer;
+		alignas(value_type) std::byte buffer[sizeof(value_type)];
 	};
 }
