@@ -1,0 +1,97 @@
+syntax = "proto2";
+package mmo.proto;
+
+message QuestItemReward {
+	required uint32 itemid = 1;
+	optional uint32 count = 2 [default = 1];
+}
+
+message QuestRepReward {
+	// Faction, not faction template this time
+	required uint32 factionid = 1;
+	required int32 value = 2;
+}
+
+message QuestRequirement {
+	// If > 0, player needs COUNT items of this id
+	optional uint32 itemid = 1;
+	optional uint32 itemcount = 2;
+	// Value used for quest item drops which do not appear in the quest log itself
+	optional uint32 sourceid = 3;
+	optional uint32 sourcecount = 4;
+	// If not 0, player needs to kill COUNT creatures of this id.
+	optional uint32 creatureid = 5;
+	optional uint32 creaturecount = 6;
+	// If not 0, player needs to cast a spell COUNT times on these objects.
+	optional uint32 objectid = 7;
+	optional uint32 objectcount = 8;
+	// If not 0, player needs to cast a spell on objects/creatures referenced before (not kill creatures).
+	optional uint32 spellcast = 9;
+	// An optional text which is displayed for advanced objectives like "Discover the cave"
+	optional string text = 10;
+	// Localization
+	repeated string text_loc = 11;
+}
+
+message QuestEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	repeated string name_loc = 44;
+	optional uint32 method = 3 [default = 2];
+	optional uint32 minlevel = 4 [default = 1];
+	optional int32 questlevel = 5;
+	optional string detailstext = 6;
+	repeated string detailstext_loc = 45;
+	optional string objectivestext = 7;
+	repeated string objectivestext_loc = 46;
+	optional string offerrewardtext = 8;
+	repeated string offerrewardtext_loc = 47;
+	optional string requestitemstext = 9;
+	repeated string requestitemstext_loc = 48;
+	optional string endtext = 10;
+	repeated string endtext_loc = 49;
+	// Only one of these can be chosen. Limited to 6 items by client
+	repeated QuestItemReward rewarditemschoice = 11;
+	// All of these items will be rewarded. Limited to 4 items by client.
+	repeated QuestItemReward rewarditems = 12;
+	optional uint32 rewardhonorkills = 13;
+	optional uint32 rewardmoney = 14;
+	optional uint32 rewardmoneymaxlevel = 15;
+	optional uint32 rewardspell = 16;
+	optional uint32 rewardspellcast = 17;
+	optional uint32 rewardmailtemplate = 18;
+	optional uint32 rewardmaildelaysecs = 19;
+	// Limited to 5 entries by client.
+	repeated QuestRepReward rewardreputations = 20;
+	// Limited to 4 entries by client.
+	repeated QuestRequirement requirements = 21;
+	optional int32 prevquestid = 22;
+	optional int32 nextquestid = 23;
+	optional int32 exclusivegroup = 24;
+	optional int32 nextchainquestid = 25;
+	optional uint32 flags = 26;
+	optional uint32 extraflags = 27;
+	optional uint32 type = 28;
+	optional int32 zone = 29;
+	optional uint32 suggestedplayers = 30;
+	optional uint32 timelimit = 31;
+	optional uint32 srcitemid = 32;
+	optional uint32 srcitemcount = 33 [default = 1];
+	optional uint32 srcspell = 34;
+	optional uint32 rewtitleid = 35;
+	optional uint32 pointmapid = 36;
+	optional float pointx = 37;
+	optional float pointy = 38;
+	optional uint32 pointopt = 39;
+	optional uint32 requiredraces = 40;
+	optional uint32 requiredclasses = 41;
+	optional uint32 requiredskill = 42;
+	optional uint32 requiredskillval = 43;
+	repeated uint32 starttriggers = 50;
+	repeated uint32 failtriggers = 51;
+	repeated uint32 rewardtriggers = 52;
+}
+
+message Quests {
+	repeated QuestEntry entry = 1;
+}

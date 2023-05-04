@@ -1,0 +1,22 @@
+syntax = "proto2";
+package mmo.proto;
+
+message LootDefinition {
+	required uint32 item = 1;
+	optional uint32 mincount = 2 [default = 1];
+	optional uint32 maxcount = 3 [default = 1];
+	required float dropchance = 4;
+	optional bool isactive = 5 [default = true];
+	optional uint32 conditiontype = 6;
+	optional uint32 conditionvala = 7;
+	optional uint32 conditionvalb = 8;
+}
+
+message LootGroup {
+	repeated LootDefinition definitions = 1;
+}
+
+message LootEntry {
+	required uint32 id = 1;
+	repeated LootGroup groups = 2;
+}

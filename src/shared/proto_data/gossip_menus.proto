@@ -1,0 +1,21 @@
+syntax = "proto2";
+package mmo.proto;
+
+message NpcTextEntry {
+	required uint32 id = 1;
+	repeated string text_loc = 2;
+}
+
+message NpcTexts {
+	repeated NpcTextEntry entry = 1;
+}
+
+message GossipMenuEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required uint32 text_id = 3;
+}
+
+message GossipMenus {
+	repeated GossipMenuEntry entry = 1;
+}

@@ -1,0 +1,50 @@
+syntax = "proto2";
+package mmo.proto;
+
+message CombatRatingEntry {
+    required uint32 id = 1;
+    optional float ratingsPerLevel = 2;
+}
+
+message CombatRatings {
+    repeated CombatRatingEntry entry = 1;
+}
+
+message MeleeCritChanceEntry {
+    required uint32 id = 1;
+    optional float chancePerLevel = 2;
+	optional float baseChancePerLevel = 3;
+}
+
+message MeleeCritChance {
+    repeated MeleeCritChanceEntry entry = 1;
+}
+
+message SpellCritChanceEntry {
+	required uint32 id = 1;
+	optional float chancePerLevel = 2;
+	optional float baseChancePerLevel = 3;
+}
+
+message SpellCritChance {
+	repeated SpellCritChanceEntry entry = 1;
+}
+
+message DodgeChanceEntry {
+	required uint32 id = 1;
+	optional float baseDodge = 2;
+	optional float critToDodge = 3;
+}
+
+message DodgeChance {
+	repeated DodgeChanceEntry entry = 1;
+}
+
+message ResistancePercentageEntry {
+	required uint32 id = 1;
+    repeated float percentages = 2;
+}
+
+message ResistancePercentage {
+	repeated ResistancePercentageEntry entry = 1;
+}

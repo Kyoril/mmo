@@ -1,0 +1,17 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ZoneEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 parentzone = 3;
+	optional uint32 map = 4;
+	optional uint32 explore = 5;
+	optional uint32 flags = 6;
+	optional uint32 team = 7;
+	optional int32 level = 8;
+}
+
+message Zones {
+	repeated ZoneEntry entry = 1;
+}

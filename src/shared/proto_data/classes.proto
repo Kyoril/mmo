@@ -1,0 +1,29 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ClassBaseValues {
+	required uint32 health = 1;
+	required uint32 mana = 2;
+}
+
+message ClassEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required string internalName = 3;
+	enum PowerType {
+		HEALTH = -2;
+		MANA = 0;
+		RAGE = 1;
+		FOCUS = 2;
+		ENERGY = 3;
+		HAPPINESS = 4;
+	}
+	required PowerType powertype = 4;
+	required uint32 spellfamily = 5;
+	optional uint32 flags = 6;
+	repeated ClassBaseValues levelbasevalues = 7;
+}
+
+message Classes {
+	repeated ClassEntry entry = 1;
+}

@@ -1,0 +1,17 @@
+syntax = "proto2";
+package mmo.proto;
+
+message VariableEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	oneof data {
+		int32 intvalue = 3;
+		int64 longvalue = 4;
+		float floatvalue = 5;
+		string stringvalue = 6;
+	}
+}
+
+message Variables {
+	repeated VariableEntry entry = 1;
+}

@@ -1,0 +1,14 @@
+syntax = "proto2";
+package mmo.proto;
+
+message SkillEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required int32 category = 3;
+	required uint32 cost = 4;
+	repeated uint32 spells = 5;
+}
+
+message Skills {
+	repeated SkillEntry entry = 1;
+}

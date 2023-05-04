@@ -1,0 +1,8 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "loot_entry.proto";
+
+message UnitLoot {
+	repeated LootEntry entry = 1;
+}

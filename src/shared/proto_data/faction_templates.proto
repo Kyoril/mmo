@@ -1,0 +1,17 @@
+syntax = "proto2";
+package mmo.proto;
+
+message FactionTemplateEntry {
+	required uint32 id = 1;
+	required uint32 flags = 2;
+	optional uint32 selfmask = 3;
+	optional uint32 friendmask = 4;
+	optional uint32 enemymask = 5;
+	required uint32 faction = 6;
+	repeated uint32 friends = 7;
+	repeated uint32 enemies = 8;
+}
+
+message FactionTemplates {
+	repeated FactionTemplateEntry entry = 1;
+}

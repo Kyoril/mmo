@@ -1,0 +1,105 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ItemStats {
+	required uint32 type = 1;
+	required int32 value = 2;
+}
+
+message ItemDamage {
+	required float mindmg = 1;
+	required float maxdmg = 2;
+	required uint32 type = 3;
+}
+
+message ItemSpell {
+	required uint32 spell = 1;
+	optional uint32 trigger = 2;
+	optional uint32 charges = 3;
+	optional float procrate = 4;
+	optional int32 cooldown = 5;
+	optional int32 category = 6;
+	optional int32 categorycooldown = 7;
+}
+
+message ItemSocket {
+	required int32 color = 1;
+	required int32 content = 2;
+}
+
+message ItemEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional string description = 3;
+	repeated string name_loc = 66;
+	repeated string description_loc = 67;
+	optional uint32 itemclass = 4;
+	optional uint32 subclass = 5;
+	optional uint32 displayid = 6;
+	optional uint32 quality = 7;
+	optional uint32 flags = 8;
+	optional uint32 buycount = 9;
+	optional uint32 buyprice = 10;
+	optional uint32 sellprice = 11;
+	optional uint32 inventorytype = 12;
+	optional sint32 allowedclasses = 13 [default = -1];
+	optional sint32 allowedraces = 14 [default = -1];
+	optional uint32 itemlevel = 15;
+	optional uint32 requiredlevel = 16;
+	optional uint32 requiredskill = 17;
+	optional uint32 requiredskillrank = 18;
+	optional uint32 requiredspell = 19;
+	optional uint32 requiredhonorrank = 20;
+	optional uint32 requiredcityrank = 21;
+	optional uint32 requiredrep = 22;
+	optional uint32 requiredreprank = 23;
+	optional uint32 maxcount = 24;
+	optional uint32 maxstack = 25;
+	optional uint32 containerslots = 26;
+	repeated ItemStats stats = 27;
+	repeated ItemDamage damage = 28;
+	optional uint32 armor = 29;
+	optional uint32 holyres= 30;
+	optional uint32 fireres = 31;
+	optional uint32 natureres = 32;
+	optional uint32 frostres = 33;
+	optional uint32 shadowres = 34;
+	optional uint32 arcaneres = 35;
+	optional uint32 delay = 36;
+	optional uint32 ammotype = 37;
+	repeated ItemSpell spells = 38;
+	optional uint32 bonding = 39;
+	optional uint32 lockid = 40;
+	optional uint32 sheath = 41;
+	optional uint32 randomproperty = 42;
+	optional uint32 randomsuffix = 43;
+	optional uint32 block = 44;
+	optional uint32 itemset = 45;
+	optional uint32 durability = 46;
+	optional uint32 area = 47;
+	optional int32 map = 48;
+	optional int32 bagfamily = 49;
+	optional int32 material = 50;
+	optional int32 totemcategory = 51;
+	repeated ItemSocket sockets = 52;
+	optional uint32 socketbonus = 53;
+	optional uint32 gemproperties = 54;
+	optional uint32 disenchantskillval = 55;
+	optional uint32 disenchantid = 56;
+	optional uint32 foodtype = 57;
+	optional uint32 minlootgold = 58;
+	optional uint32 maxlootgold = 59;
+	optional uint32 duration = 60;
+	optional uint32 extraflags = 61;
+	optional uint32 lootentry = 62;
+	// If greater than 0, this item starts a quest
+	optional uint32 questentry = 63;
+	// Percentage of default ranged range (100.0 = 30 yards).
+	optional float rangedrange = 64;
+	// Item skill type (weapons or armor)
+	optional uint32 skill = 65;
+}
+
+message Items {
+	repeated ItemEntry entry = 1;
+}

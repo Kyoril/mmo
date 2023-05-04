@@ -1,0 +1,82 @@
+syntax = "proto2";
+package mmo.proto;
+
+message UnitSpellEntry {
+	required uint32 spellid = 1;
+	optional uint32 priority = 2 [default = 100];
+	optional uint32 mininitialcooldown = 3;
+	optional uint32 maxinitialcooldown = 4;
+	optional int32 mincooldown = 5 [default = -1];
+	optional int32 maxcooldown = 6 [default = -1];
+	optional uint32 target = 7;
+	optional bool repeated = 8;
+	optional float minrange = 9 [default = 0.0];
+	optional float maxrange = 10 [default = 0.0];
+	optional uint32 probability = 11 [default = 100];
+}
+
+message UnitEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional string subname = 3;
+	repeated string name_loc = 57;
+	repeated string subname_loc = 58;
+	required uint32 minlevel = 4;
+	required uint32 maxlevel = 5;
+	required uint32 alliancefaction = 6;
+	required uint32 hordefaction = 7;
+	required uint32 maleModel = 8;
+	required uint32 femaleModel = 9;
+	optional float scale = 10 [default = 1.0];
+	required uint32 type = 11;
+	required uint32 family = 12;
+	optional bool regeneratehealth = 13 [default = true];
+	optional uint32 npcflags = 14;
+	optional uint32 unitflags = 15;
+	optional uint32 dynamicflags = 16;
+	optional uint32 extraflags = 17;
+	optional uint32 creaturetypeflags = 18;
+	optional float walkspeed = 19 [default = 1.0];
+	optional float runspeed = 20 [default = 1.0];
+	optional uint32 unitclass = 21;
+	optional uint32 rank = 22;
+	optional uint32 minlevelhealth = 23 [default = 1];
+	optional uint32 maxlevelhealth = 24 [default = 1];
+	optional uint32 minlevelmana = 25;
+	optional uint32 maxlevelmana = 26;
+	optional float minmeleedmg = 27 [default = 1.0];
+	optional float maxmeleedmg = 28 [default = 1.0];
+	optional float minrangeddmg = 29 [default = 1.0];
+	optional float maxrangeddmg = 30 [default = 1.0];
+	optional uint32 armor = 31;
+	repeated uint32 resistances = 32;
+	optional uint32 meleeattacktime = 33 [default = 2000];
+	optional uint32 rangedattacktime = 34 [default = 2000];
+	optional uint32 damageschool = 35;
+	optional uint32 minlootgold = 36;
+	optional uint32 maxlootgold = 37;
+	optional uint32 minlevelxp = 38;
+	optional uint32 maxlevelxp = 39;
+	repeated uint32 triggers = 40;
+	optional uint32 mainhandweapon = 41;
+	optional uint32 offhandweapon = 42;
+	optional uint32 rangedweapon = 43;
+	optional uint32 attackpower = 44;
+	optional uint32 rangedattackpower = 45;
+	optional uint32 unitlootentry = 46;
+	optional uint32 vendorentry = 47;
+	optional uint32 trainerentry = 48;
+	repeated UnitSpellEntry creaturespells = 49;
+	repeated uint32 quests = 50;
+	repeated uint32 end_quests = 51;
+	optional uint32 mechanicimmunity = 52;
+	optional uint32 schoolimmunity = 53;
+	optional uint32 skinninglootentry = 54;
+	repeated uint32 variables = 55;
+	optional uint32 killcredit = 56;
+	optional uint32 gossip_menu = 59;
+}
+
+message Units {
+	repeated UnitEntry entry = 1;
+}

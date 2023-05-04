@@ -1,0 +1,27 @@
+syntax = "proto2";
+package mmo.proto;
+
+message AreaTriggerEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required uint32 map = 3;
+	required float x = 4;
+	required float y = 5;
+	required float z = 6;
+	optional float radius = 7;
+	optional float box_x = 8;
+	optional float box_y = 9;
+	optional float box_z = 10;
+	optional float box_o = 11;
+	required uint32 targetmap = 12;
+	required float target_x = 13;
+	required float target_y = 14;
+	required float target_z = 15;
+	required float target_o = 16;
+	optional uint32 questid = 17;
+	optional bool tavern = 18;
+}
+
+message AreaTriggers {
+	repeated AreaTriggerEntry entry = 1;
+}

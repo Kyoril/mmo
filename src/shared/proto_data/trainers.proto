@@ -1,0 +1,28 @@
+syntax = "proto2";
+package mmo.proto;
+
+message TrainerSpellEntry {
+	required uint32 spell = 1;
+	required uint32 spellcost = 2;
+	optional uint32 reqskill = 3;
+	optional uint32 reqskillval = 4;
+	optional uint32 reqlevel = 5 [default = 1];
+}
+
+message TrainerEntry {
+	required uint32 id = 1;
+	enum TrainerType {
+		CLASS_TRAINER = 0;
+		MOUNT_TRAINER = 1;
+		SKILL_TRAINER = 2;
+		PET_TRAINER = 3;
+	};
+	optional TrainerType type = 2 [default = CLASS_TRAINER];
+	optional uint32 classid = 3;
+	optional string title = 4;
+	repeated TrainerSpellEntry spells = 5;
+}
+
+message Trainers {
+	repeated TrainerEntry entry = 1;
+}

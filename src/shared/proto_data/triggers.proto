@@ -1,0 +1,87 @@
+syntax = "proto2";
+package mmo.proto;
+
+message TriggerCategoryEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 parent = 3 [default = 0];
+}
+
+message TriggerCategories {
+	repeated TriggerCategoryEntry entry = 1;
+}
+
+
+enum TriggerComparisonOperator {
+	Equal = 0;
+	NotEqual = 1;
+	Greater = 2;
+	GreaterEqual = 3;
+	Less = 4;
+	LessEqual = 5;
+}
+
+enum TriggerFunction {
+	Phase = 0;
+	Health = 1;
+	HealthPct = 2;
+	Mana = 3;
+	ManaPct = 4;
+	IsInCombat = 5;
+}
+
+enum TriggerConditionType {
+	BoolComparison = 0;
+	IntegerComparison = 1;
+	FloatComparison = 2;
+	StringComparison = 3;
+	AndCondition = 4;
+	OrCondition = 5;
+}
+
+message TriggerCondition {
+	required TriggerComparisonOperator operator = 1;
+
+	oneof leftvalue {
+		int64 leftlong = 2;
+		float leftfloat = 3;
+		string leftstring = 4;
+		TriggerFunction leftfunction = 5;
+		TriggerCondition leftcondition = 6;
+	}
+
+	oneof rightvalue {
+		int64 rightlong = 7;
+		float rightfloat = 8;
+		string rightstring = 9;
+		TriggerFunction rightfunction = 10;
+		TriggerCondition rightcondition = 11;
+	}
+}
+
+message TriggerAction {
+	optional uint32 action = 1;
+	optional uint32 target = 2;
+	optional string targetname = 3;
+	repeated string texts = 4;
+	repeated int32 data = 5;
+}
+
+message TriggerEvent {
+	required uint32 type = 1;
+	repeated uint32 data = 2;
+}
+
+message TriggerEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 flags = 3;
+	optional uint32 categoryid = 4;
+	repeated TriggerAction actions = 5;
+	repeated TriggerEvent newevents = 6;
+	optional uint32 probability = 7 [default = 100];
+}
+
+message Triggers {
+	repeated TriggerEntry entry = 1;
+}

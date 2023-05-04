@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto;
+
+message SpellCategoryEntry {
+	required uint32 id = 1;
+	repeated uint32 spells = 2;
+}
+
+message SpellCategories {
+	repeated SpellCategoryEntry entry = 1;
+}

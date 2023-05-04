@@ -1,0 +1,19 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ItemSetSpell {
+	required uint32 spell = 1;
+	required uint32 itemcount = 2;
+}
+
+message ItemSetEntry {
+	required uint32 id = 1;
+	required bytes name = 2;
+	repeated ItemSetSpell spells = 3;
+	optional uint32 skill = 4;
+	optional uint32 skillval = 5;
+}
+
+message ItemSets {
+	repeated ItemSetEntry entry = 1;
+}

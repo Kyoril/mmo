@@ -1,0 +1,28 @@
+syntax = "proto2";
+package mmo.proto;
+
+message LevelStats {
+	optional uint32 stat1 = 1;
+	optional uint32 stat2 = 2;
+	optional uint32 stat3 = 3;
+	optional uint32 stat4 = 4;
+	optional uint32 stat5 = 5;
+	optional float regenhp = 6;
+	optional float regenmp = 7;
+}
+
+message ClassLevelStats {
+	map<uint32, LevelStats> stats = 1;
+}
+
+message LevelEntry {
+	required uint32 id = 1;
+	required uint32 nextlevelxp = 2;
+	required uint32 explorationbasexp = 3;
+	// [race-id][class-id].stat1 etc.
+	map<uint32, ClassLevelStats> stats = 4;
+}
+
+message Levels {
+	repeated LevelEntry entry = 1;
+}

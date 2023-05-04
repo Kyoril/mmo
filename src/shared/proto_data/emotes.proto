@@ -1,0 +1,12 @@
+syntax = "proto2";
+package mmo.proto;
+
+message EmoteEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required uint32 textid = 3;
+}
+
+message Emotes {
+	repeated EmoteEntry entry = 1;
+}
