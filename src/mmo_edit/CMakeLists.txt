@@ -98,7 +98,8 @@ target_link_libraries(mmo_edit
 	assets
 	scene_graph
 	frame_ui
-	paging)
+	paging
+	proto_data)
 	
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)
