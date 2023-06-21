@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
+#include "base/filesystem.h"
 
 namespace mmo
 {
