@@ -7,6 +7,7 @@
 
 # include <luabind/config.hpp>
 # include <type_traits>
+#include <cstddef>
 
 namespace luabind {
 	namespace detail {

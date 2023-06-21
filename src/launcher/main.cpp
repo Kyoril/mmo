@@ -542,6 +542,17 @@ namespace mmo
 	}
 }
 
+void ResizeLogoImage(HWND hDlg)
+{
+	RECT cr;
+	GetClientRect(hDlg, &cr);
+
+	const UINT w = cr.right - cr.left;
+	const UINT h = static_cast<UINT>(static_cast<float>(w) / 3.35046728f);
+
+	SetWindowPos(GetDlgItem(dialogHandle, IDC_IMAGE), NULL, 0, 0, w, h, SWP_NOZORDER);
+}
+
 INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
@@ -551,7 +562,16 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 			dialogHandle = hDlg;
 			SendMessage(GetDlgItem(dialogHandle, IDC_PROGRESS_BAR), PBM_SETRANGE, 0, MAKELPARAM(0, 100));
 
-			updatingThread = std::thread(mmo::performUpdateThread);
+			updatingThread = std::thread(mmo::performUpdateThread); 
+			
+			ResizeLogoImage(hDlg);
+			return TRUE;
+		}
+
+	case WM_DPICHANGED:
+		{
+		OutputDebugString(TEXT("Changed DPI!\n"));
+			ResizeLogoImage(hDlg);
 			return TRUE;
 		}
 
