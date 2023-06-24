@@ -41,7 +41,10 @@
 {
     if (m_cppWindow)
     {
-        m_cppWindow->NotifyClosed();
+        auto* ptr = m_cppWindow;
+        m_cppWindow = nullptr;
+        
+        ptr->NotifyClosed();
     }
 }
 
@@ -90,6 +93,11 @@ namespace mmo
 
     void RenderWindowMetal::NotifyClosed()
     {
+        if (!m_window)
+        {
+            return;
+        }
+        
         Closed();
     }
 
