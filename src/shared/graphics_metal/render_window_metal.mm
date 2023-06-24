@@ -7,6 +7,8 @@
 
 #include "log/default_log_levels.h"
 
+#import <Cocoa/Cocoa.h>
+
 @interface RenderWindowDelegate : NSObject
 @end
 
@@ -17,7 +19,6 @@
 
 - (id)init:(mmo::RenderWindowMetal*)window
 {
-    
     if (self = [super init])
     {
         m_cppWindow = window;
@@ -52,18 +53,39 @@ namespace mmo
 		: RenderWindow(std::move(name), width, height)
 		, RenderTargetMetal(device)
 	{
-        m_window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0f, 0.0f, width, height) styleMask:(NSWindowStyleMaskClosable | NSWindowStyleMaskTitled | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable) backing:NSBackingStoreBuffered defer:NO];
+        CGRect contentRect = { 0.0, 0.0, static_cast<double>(width), static_cast<double>(height) };
+        
+        m_window = NS::Window::alloc()->init(contentRect, NS::WindowStyleMaskClosable | NS::WindowStyleMaskTitled | NS::WindowStyleMaskMiniaturizable | NS::WindowStyleMaskResizable, NS::BackingStoreBuffered, false);
         
         m_delegate = [[RenderWindowDelegate alloc] init:this];
-        m_window.delegate = m_delegate;
+        m_window->setDelegate(m_delegate);
         
-        [m_window center];
-        [m_window makeKeyAndOrderFront:nil];
+        m_mtkView = MTK::View::alloc()->init(contentRect, m_device.GetDevice());
+        m_mtkView->setColorPixelFormat( MTL::PixelFormat::PixelFormatBGRA8Unorm_sRGB );
+        m_mtkView->setClearColor( MTL::ClearColor::Make(0.0, 0.0, 0.0, 1.0 ) );
+        m_mtkView->setDelegate(this);
+        
+        m_window->setContentView(m_mtkView);
+        m_window->makeKeyAndOrderFront(nullptr);
 	}
 
     RenderWindowMetal::~RenderWindowMetal()
     {
         DestroyNativeWindow();
+    }
+
+    void RenderWindowMetal::drawInMTKView( MTK::View* pView )
+    {
+        NS::AutoreleasePool* pPool = NS::AutoreleasePool::alloc()->init();
+
+        MTL::CommandBuffer* pCmd = m_device.GetCommandQueue()->commandBuffer();
+        MTL::RenderPassDescriptor* pRpd = pView->currentRenderPassDescriptor();
+        MTL::RenderCommandEncoder* pEnc = pCmd->renderCommandEncoder( pRpd );
+        pEnc->endEncoding();
+        pCmd->presentDrawable( pView->currentDrawable() );
+        pCmd->commit();
+
+        pPool->release();
     }
 
     void RenderWindowMetal::NotifyClosed()
@@ -73,11 +95,16 @@ namespace mmo
 
     void RenderWindowMetal::DestroyNativeWindow()
     {
-        if (m_delegate)
+        if (m_mtkView)
         {
-            [m_delegate notifyWindowDeleted];
-            [m_delegate release];
-            m_delegate = nil;
+            m_mtkView->release();
+            m_mtkView = nullptr;
+        }
+        
+        if (m_window)
+        {
+            m_window->release();
+            m_window = nullptr;
         }
     }
 
@@ -92,6 +119,7 @@ namespace mmo
 	void RenderWindowMetal::Clear(ClearFlags flags)
 	{
 		RenderTargetMetal::Clear(flags);
+        
 	}
 
 	void RenderWindowMetal::Resize(uint16 width, uint16 height)
@@ -103,10 +131,11 @@ namespace mmo
 
 	void RenderWindowMetal::Update()
 	{
+        m_mtkView->draw();
 	}
 
 	void RenderWindowMetal::SetTitle(const std::string & title)
 	{
-        m_window.title = [NSString stringWithUTF8String:title.c_str()];
+        m_window->setTitle(NS::String::string(title.c_str(), NS::UTF8StringEncoding));
 	}
 }

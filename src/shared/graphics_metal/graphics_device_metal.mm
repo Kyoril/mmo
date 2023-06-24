@@ -82,6 +82,8 @@ namespace mmo
         m_device = MTL::CreateSystemDefaultDevice();
         assert(m_device);
         
+        m_commandQueue  = m_device->newCommandQueue();
+        
 		// Create the device
 		GraphicsDevice::Create(desc);
 		

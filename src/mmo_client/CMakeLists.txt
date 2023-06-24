@@ -22,6 +22,11 @@ file(GLOB netSrcFiles "net/*.cpp" "net/*.h")
 file(GLOB uiSrcFiles "ui/*.cpp" "ui/*.h")
 file(GLOB gsSrcFiles "game_states/*.cpp" "game_states/*.h")
 
+if (WIN32)
+	file(GLOB winSources "win/*.cpp" "win/*.h")
+	source_group(src\\win FILES ${winSources})
+endif()
+
 if (APPLE)
 	file(GLOB osxSources "macos/*.mm" "macos/*.h" "macos/*.m" "macos/*.cpp")
 	source_group(src\\macos FILES ${osxSources})
@@ -35,7 +40,7 @@ source_group(src\\game_states FILES ${gsSrcFiles})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles} ${gsSrcFiles} ${osxSources})
+add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles} ${gsSrcFiles} ${osxSources} ${winSources})
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_client PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

@@ -87,7 +87,12 @@ namespace mmo
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
 		// ~ End GraphicsDevice
         
+    public:
+        MTL::Device* GetDevice() { return m_device; }
+        MTL::CommandQueue* GetCommandQueue() { return m_commandQueue; }
+        
     private:
         MTL::Device* m_device;
+        MTL::CommandQueue* m_commandQueue;
 	};
 }

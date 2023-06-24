@@ -5,9 +5,9 @@
 #include "graphics/render_window.h"
 #include "render_target_metal.h"
 
-#ifdef __OBJC__
-#   import <Cocoa/Cocoa.h>
-#endif
+#include "Metal/Metal.hpp"
+#include "AppKit/AppKit.hpp"
+#include "MetalKit/MetalKit.hpp"
 
 namespace mmo
 {
@@ -18,10 +18,13 @@ namespace mmo
 	class RenderWindowMetal final
 		: public RenderWindow
 		, public RenderTargetMetal
+        , public MTK::ViewDelegate
 	{
 	public:
         RenderWindowMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height, bool fullScreen);
         ~RenderWindowMetal();
+        
+        virtual void drawInMTKView( MTK::View* pView ) override;
         
 	public:
 		// ~Begin RenderTarget
@@ -42,9 +45,8 @@ namespace mmo
         void DestroyNativeWindow();
         
     private:
-#ifdef __OBJC__
-        NSWindow* m_window;
+        NS::Window* m_window;
+        MTK::View* m_mtkView;
         id m_delegate;
-#endif
 	};
 }
