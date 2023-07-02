@@ -165,6 +165,11 @@ namespace mmo
 			return m_isConnected;
 		}
 
+		uint64 Connection::GetLastInsertId() const
+		{
+			return m_mySQL.get()->insert_id;
+		}
+
 
 		Transaction::Transaction(Connection &connection)
 			: m_connection(connection)

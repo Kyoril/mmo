@@ -23,6 +23,7 @@ namespace mmo
 					Unauthorized,
 					Forbidden,
 					NotFound,
+					Conflict,
 
 					InternalServerError,
 					ServiceUnavailable,

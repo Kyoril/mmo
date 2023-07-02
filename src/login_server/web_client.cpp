@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "web_client.h"
+
+#include "database.h"
 #include "web_service.h"
 #include "base/clock.h"
 #include "http/http_incoming_request.h"
@@ -20,6 +22,7 @@ namespace mmo
 
 	WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
 		: web::WebClient(webService, connection)
+		, m_service(webService)
 	{
 	}
 
@@ -62,62 +65,18 @@ namespace mmo
 			}
 			case net::http::IncomingRequest::Post:
 			{
-				std::vector<String> arguments;
-				std::istringstream stream(request.getPostData());
-				std::string argument;
-				while(std::getline(stream, argument, '&'))
-				{
-					arguments.emplace_back(std::move(argument));
-				}
-
 				// Parse arguments
 				if (url == "/shutdown")
 				{
-					ILOG("Shutting down..");
-					response.finish();
-
-					auto &ioService = getService().getIOService();
-					ioService.stop();
+					handleShutdown(request, response);
 				}
-				else if (url == "/ban-account")
+				else if (url == "/create-account")
 				{
-					// Handle required data
-					uint32 accountId = 0;
-
-					for (auto &arg : arguments)
-					{
-						auto delimiterPos = arg.find('=');
-						String argName = arg.substr(0, delimiterPos);
-						String argValue = arg.substr(delimiterPos + 1);
-
-						if (argName == "id")
-						{
-							accountId = atoi(argValue.c_str());
-						}
-					}
-
-					if (accountId == 0)
-					{
-						response.setStatus(net::http::OutgoingAnswer::BadRequest);
-						SendJsonResponse(response, "{\"status\":\"MISSING_ACCOUNT_DATA\"}");
-						break;
-					}
-
-					auto &playerMgr = static_cast<WebService &>(this->getService()).getPlayerManager();
-					auto *player = playerMgr.getPlayerByAccountID(accountId);
-					if (player)
-					{
-						// Account is currently logged in, so disconnect him
-						playerMgr.playerDisconnected(*player);
-						break;
-					}
-
-					// Check if account exists
-					auto &database = static_cast<WebService &>(this->getService()).getDatabase();
-					// TODO
-
-					// Succeeded
-					SendJsonResponse(response, "");
+					handleCreateAccount(request, response);
+				}
+				else if (url == "/create-realm")
+				{
+					handleCreateRealm(request, response);
 				}
 				else
 				{
@@ -130,5 +89,153 @@ namespace mmo
 				break;
 			}
 		}
+	}
+
+	void WebClient::handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		ILOG("Shutting down..");
+		response.finish();
+
+		auto& ioService = getService().getIOService();
+		ioService.stop();
+	}
+
+	std::pair<BigNumber, BigNumber> calculateSV(String& id, String& password)
+	{
+		std::transform(id.begin(), id.end(), id.begin(), ::toupper);
+		std::transform(password.begin(), password.end(), password.begin(), ::toupper);
+
+		// Calculate auth hash
+		const std::string authString = id + ":" + password;
+		const SHA1Hash authHash = sha1(authString.c_str(), authString.size());
+
+		BigNumber s;
+		s.setRand(32 * 8);
+
+		HashGeneratorSha1 gen;
+
+		// Calculate x
+		BigNumber x;
+		gen.update((const char*)s.asByteArray().data(), s.getNumBytes());
+		gen.update((const char*)authHash.data(), authHash.size());
+		const SHA1Hash x_hash = gen.finalize();
+		x.setBinary(x_hash.data(), x_hash.size());
+
+		// Calculate v
+		BigNumber v = constants::srp::g.modExp(x, constants::srp::N);
+		return std::make_pair(s, v);
+	}
+
+	void WebClient::handleCreateAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountIdIt = arguments.find("id");
+		const auto accountPassIt = arguments.find("password");
+
+		if (accountIdIt == arguments.end())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'id'\"}");
+			return;
+		}
+
+		if (accountPassIt == arguments.end())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'password'\"}");
+			return;
+		}
+
+		// Generate salt and verifier data
+		String id = accountIdIt->second;
+		String password = accountPassIt->second;
+		const auto [s, v] = calculateSV(id, password);
+		
+		// Execute
+		const auto result = m_service.getDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
+		if (result)
+		{
+			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
+			{
+				response.setStatus(net::http::OutgoingAnswer::Conflict);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_NAME_ALREADY_IN_USE\", \"message\":\"Account name already in use\"}");
+				return;
+			}
+
+			if(*result == AccountCreationResult::Success)
+			{
+				SendJsonResponse(response, "");
+				return;
+			}
+		}
+
+		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+	}
+
+	void WebClient::handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountIdIt = arguments.find("id");
+		const auto accountPassIt = arguments.find("password");
+		const auto addressIt = arguments.find("address");
+		const auto portIt = arguments.find("port");
+
+		if (accountIdIt == arguments.end() || accountIdIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'id'\"}");
+			return;
+		}
+
+		if (accountPassIt == arguments.end() || accountPassIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'password'\"}");
+			return;
+		}
+
+		if (addressIt == arguments.end() || addressIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'address'\"}");
+			return;
+		}
+
+		if (portIt == arguments.end() || portIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'port'\"}");
+			return;
+		}
+
+		const String address = addressIt->second;
+		const auto port = static_cast<uint16>(std::atoi(portIt->second.c_str()));
+
+		// Generate salt and verifier data
+		String id = accountIdIt->second;
+		String password = accountPassIt->second;
+		const auto [s, v] = calculateSV(id, password);
+
+		// Execute
+		const auto result = m_service.getDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
+		if (result)
+		{
+			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
+			{
+				response.setStatus(net::http::OutgoingAnswer::Conflict);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_NAME_ALREADY_IN_USE\", \"message\":\"Realm name already in use\"}");
+				return;
+			}
+
+			if (*result == RealmCreationResult::Success)
+			{
+				SendJsonResponse(response, "");
+				return;
+			}
+		}
+
+		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
 	}
 }

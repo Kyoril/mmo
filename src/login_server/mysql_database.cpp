@@ -152,7 +152,53 @@ namespace mmo
 			throw mysql::Exception("Could not update realm database on login");
 		}
 	}
-	
+
+	std::optional<AccountCreationResult> MySQLDatabase::accountCreate(const std::string& id, const std::string& s,
+		const std::string& v)
+	{
+		if (!m_connection.Execute("INSERT INTO account (username, s, v) VALUES ('"
+			+ m_connection.EscapeString(id) + "', '" 
+			+ m_connection.EscapeString(s) + "', '" 
+			+ m_connection.EscapeString(v) + "')"))
+		{
+			PrintDatabaseError();
+
+			const auto errorCode = m_connection.GetErrorCode();
+			if (errorCode == 1062)
+			{
+				return AccountCreationResult::AccountNameAlreadyInUse;
+			}
+
+			throw mysql::Exception("Could not insert account");
+		}
+
+		return AccountCreationResult::Success;
+	}
+
+	std::optional<RealmCreationResult> MySQLDatabase::realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v)
+	{
+		if (!m_connection.Execute("INSERT INTO realm (name, address, port, s, v) VALUES ('"
+			+ m_connection.EscapeString(name) + "', '" 
+			+ m_connection.EscapeString(address) + "', '" 
+			+ std::to_string(port) + "', '" 
+			+ m_connection.EscapeString(s) + "', '" 
+			+ m_connection.EscapeString(v) 
+			+ "')"))
+		{
+			PrintDatabaseError();
+
+			const auto errorCode = m_connection.GetErrorCode();
+			if (errorCode == 1062)
+			{
+				return RealmCreationResult::RealmNameAlreadyInUse;
+			}
+
+			throw mysql::Exception("Could not insert realm");
+		}
+
+		return RealmCreationResult::Success;
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Login database error: " << m_connection.GetErrorMessage());

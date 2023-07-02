@@ -41,6 +41,7 @@ namespace mmo
 				const String &getPostData() const;
 				const Headers &getHeaders() const;
 				const Arguments &getPathArguments() const { return m_pathArguments; }
+				const Arguments& getPostFormArguments() const { return m_postFormArguments; }
 
 				static ReceiveState Start(IncomingRequest &packet, io::MemorySource &source);
 
@@ -52,6 +53,7 @@ namespace mmo
 				String m_postData;
 				Headers m_headers;
 				Arguments m_pathArguments;
+				Arguments m_postFormArguments;
 			};
 
 

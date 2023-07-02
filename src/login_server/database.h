@@ -13,6 +13,22 @@
 
 namespace mmo
 {
+	enum class AccountCreationResult : uint8
+	{
+		Success,
+
+		AccountNameAlreadyInUse,
+		InternalServerError
+	};
+
+	enum class RealmCreationResult : uint8
+	{
+		Success,
+
+		RealmNameAlreadyInUse,
+		InternalServerError
+	};
+
 	/// Contains account data in a structure.
 	struct AccountData
 	{
@@ -78,6 +94,10 @@ namespace mmo
 		/// @param ip 
 		/// @param build 
 		virtual void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
+
+		virtual std::optional<AccountCreationResult> accountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
+
+		virtual std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
 	};
 
 

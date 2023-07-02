@@ -264,6 +264,24 @@ namespace mmo
 				parseThing(pos, end, packet.m_postData);
 				source.skip(pos - begin);
 
+				packet.m_postFormArguments.clear();
+
+				std::istringstream stream(packet.m_postData);
+				std::string arg;
+				while (std::getline(stream, arg, '&'))
+				{
+					auto delimiterPos = arg.find('=');
+					if (delimiterPos == arg.npos)
+					{
+						packet.m_postFormArguments.clear();
+						break;
+					}
+
+					String argName = arg.substr(0, delimiterPos);
+					String argValue = arg.substr(delimiterPos + 1);
+					packet.m_postFormArguments[argName] = argValue;
+				}
+
 				return receive_state::Complete;
 			}
 

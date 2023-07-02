@@ -6,6 +6,8 @@
 
 namespace mmo
 {
+	class AsyncDatabase;
+	struct IDatabase;
 	class WebService;
 
 	class WebClient 
@@ -24,5 +26,12 @@ namespace mmo
 
 	private:
 
+		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleCreateAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
+	private:
+		WebService& m_service;
+		
 	};
 }

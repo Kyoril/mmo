@@ -56,6 +56,7 @@ namespace mmo
 			String EscapeString(const String &str);
 			MYSQL *GetHandle();
 			bool IsConnected() const;
+			uint64 GetLastInsertId() const;
 
 		private:
 
