@@ -3,7 +3,7 @@ bin/
 lib/
 
 # Also ignore build directories used on windows and unix-platforms
-win/
+/win/
 build/
 
 # Ignore fbx files
