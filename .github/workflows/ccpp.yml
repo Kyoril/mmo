@@ -1,6 +1,9 @@
 name: Linux Servers
 
-on: [push]
+on:
+  push:
+    branches:
+      - develop
 
 jobs:
   build:
