@@ -15,7 +15,7 @@ FROM ubuntu:22.04
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libmariadb3 libssl3 libuuid1
+RUN apt-get update && apt-get install -y libmysqlclient-dev libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
 COPY --from=builder /app/bin/realm_server /app/realm_server
