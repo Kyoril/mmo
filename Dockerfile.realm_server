@@ -1,0 +1,30 @@
+FROM ubuntu:22.04 as builder
+
+WORKDIR /app
+COPY . /app
+
+RUN apt-get update && apt-get install -y g++ cmake git zlib1g-dev libssl-dev libmysqlclient-dev uuid-dev
+
+RUN mkdir -p build && \
+	cd build && \
+	cmake /app && \
+	make realm_server
+
+
+FROM ubuntu:22.04
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libmariadb3 libssl3 libuuid1
+
+RUN mkdir -p /app/config
+COPY --from=builder /app/bin/realm_server /app/realm_server
+COPY --from=builder /app/docker/realm_server/run_server.sh /app/run_server.sh
+
+# Copy binary from builder stage
+RUN chmod +x /app/run_server.sh
+
+EXPOSE 8092 8130 6280
+
+# Run login_server when the container launches
+CMD ["/app/run_server.sh"]

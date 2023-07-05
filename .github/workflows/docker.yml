@@ -1,0 +1,43 @@
+name: Publish Docker Images
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  IMAGE_NAME_LOGIN_SERVER: mmo_login_server
+  IMAGE_NAME_REALM_SERVER: mmo_realm_server
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+jobs:
+  push_to_registry:
+    name: Build and push Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v3
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ env.DOCKER_USERNAME }}
+        password: ${{ env.DOCKER_PASSWORD }}
+  
+    - name: Build and push login_server image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./src/login_server/Dockerfile
+        push: true
+        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_LOGIN_SERVER }}:latest
+
+    - name: Build and push realm_server image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./src/realm_server/Dockerfile
+        push: true
+        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_REALM_SERVER }}:latest

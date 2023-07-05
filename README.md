@@ -63,15 +63,3 @@ Building on linux is similar to building on windows, except that you won't use a
 * cd build
 * cmake ../
 * make -jX    (where X is the number of cpu cores to use when building to speed things up)
-
-# How to build using Docker Compose?
-
-TODO: finish
-
-Bootstrapping: `docker-compose --file=docker-compose.init.yml build`
-
-Once bootstrapped: `docker-compose up --build`
-
-Force container recreation: `docker-compose up --force-recreate`
-
-Remove dangling images: `docker image prune --filter="dangling=true"`

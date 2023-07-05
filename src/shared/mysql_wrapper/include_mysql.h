@@ -11,7 +11,7 @@
 #	include <mysql/mysql.h>
 #endif
 
-#if MYSQL_VERSION_ID >= 80000
+#if MYSQL_VERSION_ID >= 80000 && !defined(LIBMARIADB)
 // https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-1.html
 // 
 // Incompatible Change: The my_bool type is no longer used in MySQL source code. 
