@@ -8,6 +8,7 @@ on:
 env:
   IMAGE_NAME_LOGIN_SERVER: mmo_login_server
   IMAGE_NAME_REALM_SERVER: mmo_realm_server
+  IMAGE_NAME_WORLD_SERVER: mmo_world_server
   DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
   DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
@@ -43,3 +44,12 @@ jobs:
         file: ./Dockerfile.realm_server
         push: true
         tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_REALM_SERVER }}:latest
+
+    - name: Build and push world_server image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./Dockerfile.world_server
+        push: true
+        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_WORLD_SERVER }}:latest
+  

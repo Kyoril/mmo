@@ -18,7 +18,7 @@ realmConfig =
 	loginServerAddress = "${LOGIN_HOST_NAME}"
 	loginServerPort = 6279
 	realmName = "${LOGIN_REALM_NAME}"
-	realmPasswordHash = "${LOGIN_REALM_PASSWORD_HASH0}"
+	realmPasswordHash = "${LOGIN_REALM_PASSWORD_HASH}"
 )
 
 webServer = 
@@ -44,7 +44,7 @@ worldManager =
 log = 
 (
 	active = 1
-	fileName = "logs/realm_server"
+	fileName = "logs/logs"
 	buffering = 0
 )
 EOF
