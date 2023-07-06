@@ -190,6 +190,27 @@ namespace mmo
 		return {};
 	}
 
+	std::optional<WorldCreationResult> MySQLDatabase::CreateWorkd(const String& name, const String& s, const String& v)
+	{
+		if (!m_connection.Execute("INSERT INTO world (name, s, v) VALUES ('"
+			+ m_connection.EscapeString(name) + "', '"
+			+ m_connection.EscapeString(s) + "', '"
+			+ m_connection.EscapeString(v) + "')"))
+		{
+			PrintDatabaseError();
+
+			const auto errorCode = m_connection.GetErrorCode();
+			if (errorCode == 1062)
+			{
+				return WorldCreationResult::WorldNameAlreadyInUse;
+			}
+
+			throw mysql::Exception("Could not create world");
+		}
+
+		return WorldCreationResult::Success;
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorMessage());

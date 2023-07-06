@@ -9,6 +9,7 @@
 #include "mysql_database.h"
 #include "configuration.h"
 #include "version.h"
+#include "web_service.h"
 
 #include "asio.hpp"
 
@@ -252,8 +253,13 @@ namespace mmo
 		// Create the web service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// TODO
-
+		auto webService = std::make_unique<WebService>(
+			ioService,
+			config.webPort,
+			config.webPassword,
+			playerManager,
+			*database
+		);
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
