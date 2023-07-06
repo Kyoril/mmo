@@ -37,6 +37,9 @@ namespace mmo
 		/// @copydoc IDatabase::CharacterEnterWorld
 		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) override;
 
+		/// @copydoc IDatabase::CreateWorkd
+		std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) override;
+
 	private:
 		void PrintDatabaseError();
 

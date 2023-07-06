@@ -33,7 +33,15 @@ namespace mmo
 		/// Password verifier.
 		std::string v;
 	};
-	
+
+	enum class WorldCreationResult : uint8
+	{
+		Success,
+
+		WorldNameAlreadyInUse,
+		InternalServerError
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -75,6 +83,8 @@ namespace mmo
 		///	@param accountId Id of the player account to prevent players from logging in with another account's character.
 		///	@returns Character data of the character, if the character exists.
 		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) = 0;
+		
+		virtual std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) = 0;
 	};
 
 
