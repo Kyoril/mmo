@@ -19,6 +19,8 @@ jobs:
     steps:
     - name: Check out the repo
       uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
 
     - name: Login to DockerHub
       uses: docker/login-action@v1
@@ -30,7 +32,7 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         context: .
-        file: ./src/login_server/Dockerfile
+        file: ./Dockerfile.login_server
         push: true
         tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_LOGIN_SERVER }}:latest
 
@@ -38,6 +40,6 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         context: .
-        file: ./src/realm_server/Dockerfile
+        file: ./Dockerfile.realm_server
         push: true
         tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_REALM_SERVER }}:latest
