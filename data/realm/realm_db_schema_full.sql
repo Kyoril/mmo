@@ -26,6 +26,7 @@ CREATE TABLE `characters` (
   `class` int DEFAULT NULL,
   `level` tinyint unsigned NOT NULL DEFAULT '1',
   `map` int unsigned NOT NULL,
+  `instance` varchar(64) DEFAULT NULL,
   `zone` int DEFAULT NULL,
   `x` float NOT NULL,
   `y` float NOT NULL,
