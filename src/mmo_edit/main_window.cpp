@@ -45,7 +45,7 @@ namespace mmo
 
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
-		desc.vsync = false;
+		desc.vsync = true;
 #if _WIN32
         desc.customWindowHandle = m_windowHandle;
 		auto& device = GraphicsDevice::CreateD3D11(desc);

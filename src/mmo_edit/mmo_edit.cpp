@@ -24,9 +24,9 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor.h"
+#include "log/default_log_levels.h"
 
 #ifdef _DEBUG
-#	include "log/default_log_levels.h"
 #	include <mutex>
 #endif
 
