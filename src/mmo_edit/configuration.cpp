@@ -19,6 +19,11 @@ namespace mmo
 	Configuration::Configuration()
 		: assetRegistryPath("")
 		, projectPath("")
+		, mysqlHost("127.0.0.1")
+		, mysqlPort(mmo::constants::DefaultMySQLPort)
+		, mysqlUser("mmo")
+		, mysqlPassword("")
+		, mysqlDatabase("mmo_editor")
 	{
 	}
 
@@ -74,6 +79,15 @@ namespace mmo
 				assetRegistryPath = dataTable->getString("assetRegistryPath", assetRegistryPath);
 				projectPath = dataTable->getString("projectPath", projectPath);
 			}
+
+			if (const Table* const mysqlDatabaseTable = global.getTable("mysqlDatabase"))
+			{
+				mysqlPort = mysqlDatabaseTable->getInteger("port", mysqlPort);
+				mysqlHost = mysqlDatabaseTable->getString("host", mysqlHost);
+				mysqlUser = mysqlDatabaseTable->getString("user", mysqlUser);
+				mysqlPassword = mysqlDatabaseTable->getString("password", mysqlPassword);
+				mysqlDatabase = mysqlDatabaseTable->getString("database", mysqlDatabase);
+			}
 		}
 		catch (const sff::read::ParseException<Iterator>& e)
 		{
@@ -119,7 +133,19 @@ namespace mmo
 			dataTable.addKey("projectPath", projectPath);
 			dataTable.Finish();
 		}
-		
+
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> mysqlDatabaseTable(global, "mysqlDatabase", sff::write::MultiLine);
+			mysqlDatabaseTable.addKey("port", mysqlPort);
+			mysqlDatabaseTable.addKey("host", mysqlHost);
+			mysqlDatabaseTable.addKey("user", mysqlUser);
+			mysqlDatabaseTable.addKey("password", mysqlPassword);
+			mysqlDatabaseTable.addKey("database", mysqlDatabase);
+			mysqlDatabaseTable.Finish();
+		}
+
 		return true;
 	}
 }

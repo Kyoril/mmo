@@ -10,6 +10,7 @@
 #include "base/utilities.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
+#include "database.h"
 
 #ifdef _WIN32
 #	include <windowsx.h>
@@ -27,14 +28,17 @@ namespace mmo
 {
 	static const char* s_mainWindowClassName = "MainWindow";
 	static bool s_initialized = false;
+
+	static bool s_showCreatureEditor = false;
 	
-	MainWindow::MainWindow(Configuration& config)
+	MainWindow::MainWindow(Configuration& config, AsyncDatabase& database)
 		: m_config(config)
 #if _WIN32
 		, m_windowHandle(nullptr)
 #endif
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
+		, m_database(database)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -60,6 +64,12 @@ namespace mmo
 		else
 		{
 			WLOG("Unable to initialize asset registry: No asset registry path provided!");
+		}
+
+		// Initialize entity headers
+		for (int type = 0; type < static_cast<int>(EntityType::Count_); ++type)
+		{
+			m_entityHeaders[static_cast<EntityType>(type)] = std::vector<EntityHeader>();
 		}
 		
 		// Setup the viewport render texture
@@ -191,8 +201,37 @@ namespace mmo
 			ImGui::EndMenuBar();
 		}
 	}
+	
+	void MainWindow::ShowCreatureEditor()
+	{
+		static int currentItem = -1;
 
-	void MainWindow::HandleToolBar() const
+		if (!s_showCreatureEditor) return;
+
+		if (ImGui::Begin("Creatures", &s_showCreatureEditor))
+		{
+			ImGui::Columns(2, nullptr, true);
+			ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
+			
+			ImGui::BeginChild("creatureListScrolling", ImVec2(350, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::ListBox("##creatureList", &currentItem, [](void* data, int idx, const char** out_text)
+				{
+					if (out_text) *out_text = (*static_cast<std::vector<EntityHeader>*>(data))[idx].name.c_str();
+					return true;
+				}, &m_entityHeaders[EntityType::Creature], m_entityHeaders[EntityType::Creature].size());
+			ImGui::EndChild();
+
+			ImGui::NextColumn();
+			
+			ImGui::BeginChild("creatureDetails", ImVec2(0, 0));
+
+			ImGui::EndChild();
+
+			ImGui::End();
+		}
+	}
+
+	void MainWindow::HandleToolBar()
 	{
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetCurrentWindow()->MenuBarHeight()));
@@ -208,18 +247,55 @@ namespace mmo
 			| ImGuiWindowFlags_NoSavedSettings
 			;
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg,  ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
 		ImGui::Begin("TOOLBAR", nullptr, window_flags);
 		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
 
-		ImGui::Button("Creatures", ImVec2(0, 37));
+		auto entityLoadHandler = [this](const std::optional<std::vector<EntityHeader>>& result, EntityType type)
+		{
+			if (!result)
+			{
+				ELOG("Failed to load entity list");
+				return;
+			}
+
+			m_entityHeaders[type].clear();
+			std::ranges::copy(*result, std::back_inserter(m_entityHeaders[type]));
+		};
+
+		if (ImGui::Button("Creatures", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+			{
+				return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Creature);
+			}, &IDatabase::GetEntityList, EntityType::Creature);
+			s_showCreatureEditor = true;
+		}
 		ImGui::SameLine();
-		ImGui::Button("Spells", ImVec2(0, 37));
+		if (ImGui::Button("Spells", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Spell);
+				}, &IDatabase::GetEntityList, EntityType::Spell);
+		}
 		ImGui::SameLine();
-		ImGui::Button("Items", ImVec2(0, 37));
+		if (ImGui::Button("Items", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Item);
+				}, &IDatabase::GetEntityList, EntityType::Item);
+		}
 		ImGui::SameLine();
-		ImGui::Button("Quests", ImVec2(0, 37));
+		if (ImGui::Button("Quests", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Quest);
+				}, &IDatabase::GetEntityList, EntityType::Quest);
+		}
 		ImGui::End();
 	}
 
@@ -267,6 +343,8 @@ namespace mmo
 			HandleMainMenu();
 
 			HandleToolBar();
+
+			ShowCreatureEditor();
 
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
