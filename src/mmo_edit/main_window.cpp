@@ -192,6 +192,37 @@ namespace mmo
 		}
 	}
 
+	void MainWindow::HandleToolBar() const
+	{
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetCurrentWindow()->MenuBarHeight()));
+		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 50));
+		ImGui::SetNextWindowViewport(viewport->ID);
+
+		ImGuiWindowFlags window_flags = 0
+			| ImGuiWindowFlags_NoDocking
+			| ImGuiWindowFlags_NoTitleBar
+			| ImGuiWindowFlags_NoResize
+			| ImGuiWindowFlags_NoMove
+			| ImGuiWindowFlags_NoScrollbar
+			| ImGuiWindowFlags_NoSavedSettings
+			;
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg,  ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+		ImGui::Begin("TOOLBAR", nullptr, window_flags);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+
+		ImGui::Button("Creatures", ImVec2(0, 37));
+		ImGui::SameLine();
+		ImGui::Button("Spells", ImVec2(0, 37));
+		ImGui::SameLine();
+		ImGui::Button("Items", ImVec2(0, 37));
+		ImGui::SameLine();
+		ImGui::Button("Quests", ImVec2(0, 37));
+		ImGui::End();
+	}
+
 	void MainWindow::RenderImGui()
 	{
 #ifdef _WIN32
@@ -208,26 +239,24 @@ namespace mmo
 
 		// We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
 		// because it would be confusing to have two docking targets within each others.
-		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking
+			| ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+			| ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
 		// Get the viewport and make the dockspace window fullscreen
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->WorkPos);
-		ImGui::SetNextWindowSize(viewport->WorkSize);
+		ImGui::SetNextWindowSize(viewport->WorkSize + ImVec2(0, 50));
 		ImGui::SetNextWindowViewport(viewport->ID);
-
-		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
 		// When using ImGuiDockNodeFlags_PassthruCentralNode, DockSpace() will render our background
 		// and handle the pass-thru hole, so we ask Begin() to not render a background.
-		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
-			window_flags |= ImGuiWindowFlags_NoBackground;
+		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode) window_flags |= ImGuiWindowFlags_NoBackground;
 
 		// Begin the dockspace window with disabled padding
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 50.0f));
 		ImGui::Begin("DockSpace", nullptr, window_flags);
 		ImGui::PopStyleVar(3);
 		{
@@ -236,7 +265,9 @@ namespace mmo
 			
 			// The main menu
 			HandleMainMenu();
-			
+
+			HandleToolBar();
+
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
 			{

@@ -47,6 +47,7 @@ namespace mmo
 		void HandleEditorWindow(EditorWindowBase& window);
 
 		void HandleMainMenu();
+		void HandleToolBar() const;
 
 		/// Initialize ImGui.
 		void InitImGui();
