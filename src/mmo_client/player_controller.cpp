@@ -367,7 +367,7 @@ namespace mmo
 		ASSERT(m_cameraNode);
 
 		const float currentZoom = m_cameraNode->GetPosition().z;
-		s_cameraZoomCVar->Set(currentZoom + static_cast<float>(delta));
+		s_cameraZoomCVar->Set(currentZoom - static_cast<float>(delta));
 	}
 
 	void PlayerController::OnKeyDown(const int32 key)

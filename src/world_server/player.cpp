@@ -237,7 +237,6 @@ namespace mmo
 			}
 		}
 
-		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
 		m_character->ApplyMovementInfo(info);
 
 		std::vector<char> buffer;

@@ -536,8 +536,6 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 		
-		DLOG("[PROXY]\tTo " << log_hex_digit(characterGuid) << ":\tID " << log_hex_digit(packetId) << " - " << packetSize << " bytes");
-		
 		auto* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
 		if (!player)
 		{
