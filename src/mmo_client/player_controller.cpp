@@ -16,6 +16,8 @@ namespace mmo
 	// Console variables for gameplay
 	static ConsoleVar* s_mouseSensitivityCVar = nullptr;
 	static ConsoleVar* s_invertVMouseCVar = nullptr;
+	static ConsoleVar* s_maxCameraZoomCVar = nullptr;
+	static ConsoleVar* s_cameraZoomCVar = nullptr;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector)
 		: m_scene(scene)
@@ -25,6 +27,18 @@ namespace mmo
 		{
 			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
 			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "true");
+
+			s_maxCameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("MaxCameraZoom", "Gets or sets the maximum camera zoom value.", "8");
+			s_maxCameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
+			{
+				NotifyCameraZoomChanged();
+			};
+
+			s_cameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("CameraZoom", "Gets or sets the current camera zoom value.", "8");
+			s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
+			{
+				NotifyCameraZoomChanged();
+			};
 		}
 
 		SetupCamera();
@@ -261,6 +275,16 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::NotifyCameraZoomChanged()
+	{
+		ASSERT(s_maxCameraZoomCVar);
+		ASSERT(s_cameraZoomCVar);
+
+		const float maxZoom = Clamp<float>(s_maxCameraZoomCVar->GetFloatValue(), 2.0f, 15.0f);
+		const float newZoom = Clamp<float>(s_cameraZoomCVar->GetFloatValue(), 0.0f, maxZoom);
+		m_cameraNode->SetPosition(m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom));
+	}
+
 	void PlayerController::Update(const float deltaSeconds)
 	{
 		if (!m_controlledUnit)
@@ -342,7 +366,8 @@ namespace mmo
 	{
 		ASSERT(m_cameraNode);
 
-		m_cameraNode->Translate(Vector3::UnitZ * static_cast<float>(delta), TransformSpace::Local);
+		const float currentZoom = m_cameraNode->GetPosition().z;
+		s_cameraZoomCVar->Set(currentZoom + static_cast<float>(delta));
 	}
 
 	void PlayerController::OnKeyDown(const int32 key)
@@ -425,6 +450,8 @@ namespace mmo
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
 		m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+
+		NotifyCameraZoomChanged();
 	}
 
 	void PlayerController::ResetControls()
@@ -438,5 +465,7 @@ namespace mmo
 		ASSERT(m_cameraAnchorNode);
 		m_cameraNode->SetPosition(Vector3::UnitZ * 3.0f);
 		m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
+
+		NotifyCameraZoomChanged();
 	}
 }
