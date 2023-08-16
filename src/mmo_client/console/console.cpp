@@ -350,6 +350,7 @@ namespace mmo
 		{
 			EventLoop::KeyDown.connect(&Console::KeyDown, true),
 			EventLoop::KeyChar.connect(&Console::KeyChar, true),
+			EventLoop::KeyUp.connect(&Console::KeyUp, true),
 		};
 	}
 	
@@ -440,6 +441,16 @@ namespace mmo
 		}
 	}
 
+	bool Console::KeyUp(const int32 key)
+	{
+		if (s_consoleVisible)
+		{
+			abort_emission();
+		}
+
+		return !s_consoleVisible;
+	}
+
 	bool Console::KeyDown(const int32 key)
 	{
 		// Console key will toggle the console visibility
@@ -497,7 +508,7 @@ namespace mmo
 			s_commandHistoryIndex = std::max(0, s_commandHistoryIndex - 1);
 			if (s_commandHistoryIndex >= s_commandHistory.size())
 			{
-				return true;
+				return false;
 			}
 
 			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
@@ -510,7 +521,7 @@ namespace mmo
 			s_commandHistoryIndex = std::min<int>(s_commandHistoryIndex + 1, s_commandHistory.size());
 			if (s_commandHistoryIndex >= s_commandHistory.size())
 			{
-				return true;
+				return false;
 			}
 
 			s_consoleInput = s_commandHistory[s_commandHistoryIndex];
@@ -546,20 +557,21 @@ namespace mmo
 			abort_emission();
 		}
 
-		return true;
+		abort_emission();
+		return false;
 	}
 
 	bool Console::KeyChar(uint16 codepoint)
 	{
 		if (s_consoleVisible)
 		{
+			abort_emission();
+
 			if (codepoint == 0xf6 || codepoint == 0xC0 || codepoint == 0xDC || codepoint == 0x0D || codepoint == 0x8 || codepoint == 0x26 || codepoint == 0x28 || codepoint == 0x1B)
 				return false;
 
 			s_consoleInput.push_back(static_cast<char>(codepoint & 0xff));
 			s_consoleTextDirty = true;
-
-			abort_emission();
 
 			return false;
 		}

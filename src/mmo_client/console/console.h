@@ -75,6 +75,8 @@ namespace mmo
 		/// Executed when a key has been pressed. Repeated.
 		static bool KeyDown(int32 key);
 
+		static bool KeyUp(int32 key);
+
 		/// Executed when a key character has been fired.
 		static bool KeyChar(uint16 codepoint);
 
