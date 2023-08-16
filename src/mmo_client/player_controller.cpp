@@ -340,11 +340,10 @@ namespace mmo
 			return;
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnCamera) == 0)
+		if ((m_controlFlags & (ControlFlags::TurnPlayer | ControlFlags::TurnCamera)) == 0)
 		{
 			return;
 		}
-		
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
@@ -359,6 +358,19 @@ namespace mmo
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
 			m_cameraAnchorNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
+		}
+		
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		{
+			if (fabsf(delta.x) >= FLT_EPSILON)
+			{
+				m_controlledUnit->GetSceneNode()->SetDerivedOrientation(
+					Quaternion(m_cameraAnchorNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
+				m_cameraAnchorNode->SetOrientation(
+					Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+				
+				SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+			}
 		}
 	}
 
