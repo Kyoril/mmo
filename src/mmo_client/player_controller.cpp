@@ -11,6 +11,8 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 
+#include "platform.h"
+
 namespace mmo
 {
 	// Console variables for gameplay
@@ -317,6 +319,11 @@ namespace mmo
 		{
 			m_controlFlags |= ControlFlags::TurnPlayer;
 		}
+
+		if (button == MouseButton_Left || button == MouseButton_Right)
+		{
+			Platform::CaptureMouse();
+		}
 	}
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
@@ -330,6 +337,12 @@ namespace mmo
 		else if (button == MouseButton_Right)
 		{
 			m_controlFlags &= ~ControlFlags::TurnPlayer;
+		}
+
+		if (button == MouseButton_Left || button == MouseButton_Right && 
+			(m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
+		{
+			Platform::ReleaseMouseCapture();
 		}
 	}
 

@@ -174,7 +174,7 @@ namespace mmo
 
 		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key) {
 			FrameManager::Get().NotifyKeyDown(key);
-			return false;
+			return true;
 		});
 		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint) {
 			FrameManager::Get().NotifyKeyChar(codepoint);
