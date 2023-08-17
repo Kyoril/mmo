@@ -147,7 +147,7 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		// Create worker threads to process networking asynchronously (may be 0 as well)
-		const auto maxNetworkThreads = 1u;
+		const auto maxNetworkThreads = 0u;
 		ILOG("Running with " << maxNetworkThreads + 1 << " network threads");
 
 		// Eventually generate worker threads

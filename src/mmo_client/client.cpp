@@ -54,7 +54,6 @@ namespace mmo
 	// The io service used for networking
 	static std::unique_ptr<asio::io_service> s_networkIO;
 	static std::unique_ptr<asio::io_service::work> s_networkWork;
-	static std::thread s_networkThread;
 	static std::shared_ptr<LoginConnector> s_loginConnector;
 	static std::shared_ptr<RealmConnector> s_realmConnector;
 
@@ -63,7 +62,7 @@ namespace mmo
 	void NetWorkProc()
 	{
 		// Run the network thread
-		s_networkIO->run();
+		s_networkIO->poll_one();
 	}
 
 	/// Initializes the login connector and starts one or multiple network
@@ -79,9 +78,6 @@ namespace mmo
 		// Create the login connector instance
 		s_loginConnector = std::make_shared<LoginConnector>(*s_networkIO);
 		s_realmConnector = std::make_shared<RealmConnector>(*s_networkIO);
-
-		// Start a network thread
-		s_networkThread = std::thread(NetWorkProc);
 	}
 
 	/// Destroy the login connector, cuts all opened connections and waits
@@ -109,7 +105,6 @@ namespace mmo
 		s_networkIO->stop();
 
 		// Wait for the network thread to stop running
-		s_networkThread.join();
 		s_networkIO->reset();
 
 		s_realmConnector.reset();
@@ -249,6 +244,7 @@ namespace mmo
 		// Run service
 		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime&)
 		{
+			NetWorkProc();
 			s_timerService.run_one();
 		});
 
