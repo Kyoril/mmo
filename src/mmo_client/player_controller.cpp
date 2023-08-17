@@ -158,7 +158,7 @@ namespace mmo
 	{
 		if ((m_controlFlags & ControlFlags::TurnPlayer) == 0)
 		{
-			int direction = (m_controlFlags & ControlFlags::TurnLeftKey);
+			int direction = ((m_controlFlags & ControlFlags::TurnLeftKey) != 0);
 			if ((m_controlFlags & ControlFlags::TurnRightKey))
 			{
 				--direction;
@@ -175,10 +175,8 @@ namespace mmo
 				m_controlledUnit->StartTurn(left);
 				SendMovementUpdate(left ? game::client_realm_packet::MoveStartTurnLeft : game::client_realm_packet::MoveStartTurnRight);
 				m_controlFlags |= ControlFlags::TurnSent;
-				return;
 			}
-
-			if (m_controlFlags & ControlFlags::TurnSent)
+			else if (m_controlFlags & ControlFlags::TurnSent)
 			{
 				m_controlledUnit->StopTurn();
 				SendMovementUpdate(game::client_realm_packet::MoveStopTurn);
