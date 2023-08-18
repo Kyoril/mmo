@@ -342,7 +342,7 @@ namespace mmo
 			return;
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnCamera) == 0)
+		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
 			return;
 		}
@@ -360,7 +360,19 @@ namespace mmo
 		if (delta.y != 0.0f)
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
-			m_cameraAnchorNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
+
+			const Radian deltaPitch = Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue());
+			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
+
+			const Radian pitch = m_cameraAnchorNode->GetOrientation().GetPitch();
+			if (pitch < Degree(-60))
+			{
+				m_cameraAnchorNode->Pitch(pitch - Degree(-60), TransformSpace::Local);
+			}
+			if (pitch > Degree(60))
+			{
+				m_cameraAnchorNode->Pitch(pitch - Degree(60), TransformSpace::Local);
+			}
 		}
 	}
 
