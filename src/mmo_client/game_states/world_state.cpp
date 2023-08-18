@@ -75,7 +75,7 @@ namespace mmo
 		m_realmConnector.EnterWorld(s_selectedCharacter);
 
 		// Register drawing of the game ui
-		m_paintLayer = Screen::AddLayer(std::bind(&WorldState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
+		m_paintLayer = Screen::AddLayer([this] { OnPaint(); }, 1.0f, ScreenLayerFlags::IdentityTransform);
 
 		m_inputConnections += {
 			EventLoop::MouseDown.connect(this, &WorldState::OnMouseDown),
