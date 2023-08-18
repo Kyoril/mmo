@@ -200,19 +200,19 @@ namespace mmo
 
 			if (movementInfo.movementFlags & MovementFlags::Forward)
 			{
-				movementVector.z += 1.0f;
+				movementVector.z -= 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::Backward)
 			{
-				movementVector.z -= 1.0f;
+				movementVector.z += 1.0f;
 			}
 			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
 			{
-				movementVector.x += 1.0f;
+				movementVector.x -= 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
 			{
-				movementVector.x -= 1.0f;
+				movementVector.x += 1.0f;
 			}
 
 			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
@@ -463,7 +463,6 @@ namespace mmo
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
-		m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
 
 		NotifyCameraZoomChanged();
 	}
