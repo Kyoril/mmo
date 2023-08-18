@@ -367,6 +367,7 @@ namespace mmo
 		CharacterData characterData;
 		if (!(packet >> characterData))
 		{
+			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
 			return PacketParseResult::Disconnect;
 		}
 		
@@ -424,6 +425,7 @@ namespace mmo
 		ObjectGuid characterGuid;
 		if (!(packet >> io::read_packed_guid(characterGuid)))
 		{
+			ELOG("Failed to read PLAYER_CHARACTER_LEAVE packet");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -443,6 +445,7 @@ namespace mmo
 		ObjectId characterId;
 		if (!(packet >> io::read<uint64>(characterId)))
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -457,15 +460,16 @@ namespace mmo
 		uint32 packetSize;
 		if (!(packet >> io::read<uint16>(opCode) >> io::read<uint32>(packetSize)))
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 		
-		DLOG("[PROXY] Received proxy packet " << log_hex_digit(opCode) << " from player " << log_hex_digit(characterId));
 		std::vector<uint8> buffer;
 		buffer.resize(packetSize);
 		packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
 		if (!packet)
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 

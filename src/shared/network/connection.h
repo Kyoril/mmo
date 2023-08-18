@@ -313,6 +313,7 @@ namespace mmo
 			assert(size <= m_receiving.size());
 			if (size == 0)
 			{
+				WLOG("Disconnected - no data received");
 				disconnected();
 				return;
 			}
@@ -336,6 +337,7 @@ namespace mmo
 			{
 				if (m_isClosedOnParsing)
 				{
+					WLOG("Disconnected - close on parsing");
 					m_isClosedOnParsing = false;
 					disconnected();
 
@@ -371,9 +373,11 @@ namespace mmo
 								break;
 							case PacketParseResult::Block:
 								nextPacket = false;
+								WLOG("Block request by packet handler");
 								break;
 							case PacketParseResult::Disconnect:
 								m_isClosedOnParsing = true;
+								WLOG("Disconnect request by packet handler");
 								break;
 							}
 						}
@@ -381,6 +385,7 @@ namespace mmo
 						parsedUntil += static_cast<std::size_t>(source.getPosition() - source.getBegin());
 						break;
 					case receive_state::Malformed:
+						WLOG("Disconnected - malformed packet");
 						if (m_listener)
 						{
 							m_listener->connectionMalformedPacket();
