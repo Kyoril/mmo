@@ -124,24 +124,15 @@ namespace mmo
 
 		if (direction != 0)
 		{
-			if (direction <= 0)
+			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
 			{
-				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
-				{
-					return;
-				}
-				
-				DLOG("Strafe right");
+				return;
 			}
-			else
-			{
-				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
-				{
-					return;
-				}
 
-				DLOG("Strafe left");
-			}
+			const bool left = direction > 0;
+			m_controlledUnit->StartStrafe(left);
+			SendMovementUpdate(left ? game::client_realm_packet::MoveStartStrafeLeft : game::client_realm_packet::MoveStartStrafeRight);
+			StartHeartbeatTimer();
 
 			m_controlFlags |= ControlFlags::StrafeSent;
 			return;
@@ -149,7 +140,7 @@ namespace mmo
 
 		if (m_controlFlags & ControlFlags::StrafeSent)
 		{
-			DLOG("Stop strafe");
+			m_controlledUnit->StopStrafe();
 			m_controlFlags &= ~ControlFlags::StrafeSent;
 		}
 	}
@@ -217,11 +208,11 @@ namespace mmo
 			}
 			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
 			{
-				movementVector.x -= 1.0f;
+				movementVector.x += 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
 			{
-				movementVector.x += 1.0f;
+				movementVector.x -= 1.0f;
 			}
 
 			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);

@@ -17,8 +17,12 @@ namespace mmo
 
 	public:
 		void StartMove(bool forward);
+		
+		void StartStrafe(bool left);
 
 		void StopMove();
+
+		void StopStrafe();
 
 		void StartTurn(bool left);
 

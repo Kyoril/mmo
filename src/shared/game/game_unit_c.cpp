@@ -17,9 +17,28 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::StartStrafe(bool left)
+	{
+		if (left)
+		{
+			m_movementInfo.movementFlags |= MovementFlags::StrafeLeft;
+			m_movementInfo.movementFlags &= ~MovementFlags::StrafeRight;
+		}
+		else
+		{
+			m_movementInfo.movementFlags |= MovementFlags::StrafeRight;
+			m_movementInfo.movementFlags &= ~MovementFlags::StrafeLeft;
+		}
+	}
+
 	void GameUnitC::StopMove()
 	{
 		m_movementInfo.movementFlags &= ~MovementFlags::Moving;
+	}
+
+	void GameUnitC::StopStrafe()
+	{
+		m_movementInfo.movementFlags &= ~MovementFlags::Strafing;
 	}
 
 	void GameUnitC::StartTurn(const bool left)
