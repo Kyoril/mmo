@@ -200,19 +200,19 @@ namespace mmo
 
 			if (movementInfo.movementFlags & MovementFlags::Forward)
 			{
-				movementVector.z += 1.0f;
+				movementVector.z -= 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::Backward)
 			{
-				movementVector.z -= 1.0f;
+				movementVector.z += 1.0f;
 			}
 			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
 			{
-				movementVector.x += 1.0f;
+				movementVector.x -= 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
 			{
-				movementVector.x -= 1.0f;
+				movementVector.x += 1.0f;
 			}
 
 			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
@@ -274,6 +274,22 @@ namespace mmo
 		const float maxZoom = Clamp<float>(s_maxCameraZoomCVar->GetFloatValue(), 2.0f, 15.0f);
 		const float newZoom = Clamp<float>(s_cameraZoomCVar->GetFloatValue(), 0.0f, maxZoom);
 		m_cameraNode->SetPosition(m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom));
+	}
+
+	void PlayerController::ClampCameraPitch()
+	{
+		const float clampDegree = 60.0f;
+
+		// Ensure the camera pitch is clamped
+		const Radian pitch = m_cameraAnchorNode->GetOrientation().GetPitch();
+		if (pitch < Degree(-clampDegree))
+		{
+			m_cameraAnchorNode->Pitch(Degree(-clampDegree) - pitch, TransformSpace::Local);
+		}
+		if (pitch > Degree(clampDegree))
+		{
+			m_cameraAnchorNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
+		}
 	}
 
 	void PlayerController::Update(const float deltaSeconds)
@@ -364,15 +380,18 @@ namespace mmo
 			const Radian deltaPitch = Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue());
 			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
 
-			const Radian pitch = m_cameraAnchorNode->GetOrientation().GetPitch();
-			if (pitch < Degree(-60))
-			{
-				m_cameraAnchorNode->Pitch(pitch - Degree(-60), TransformSpace::Local);
-			}
-			if (pitch > Degree(60))
-			{
-				m_cameraAnchorNode->Pitch(pitch - Degree(60), TransformSpace::Local);
-			}
+			ClampCameraPitch();
+		}
+
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		{
+			const Radian facing = m_cameraAnchorNode->GetDerivedOrientation().GetYaw();
+			m_controlledUnit->GetSceneNode()->SetDerivedOrientation(Quaternion(facing, Vector3::UnitY));
+			m_cameraAnchorNode->SetOrientation(
+				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+
+			m_controlledUnit->SetFacing(facing);
+			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
 		}
 	}
 
@@ -463,7 +482,7 @@ namespace mmo
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
-		m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+		//m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
 
 		NotifyCameraZoomChanged();
 	}

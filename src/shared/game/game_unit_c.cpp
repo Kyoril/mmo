@@ -62,5 +62,6 @@ namespace mmo
 
 	void GameUnitC::SetFacing(const Radian& facing)
 	{
+		m_movementInfo.facing = facing;
 	}
 }

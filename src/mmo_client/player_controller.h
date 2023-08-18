@@ -90,6 +90,7 @@ namespace mmo
 		void UpdateHeartbeat();
 		
 		void NotifyCameraZoomChanged();
+		void ClampCameraPitch();
 
 	private:
 		Scene& m_scene;
