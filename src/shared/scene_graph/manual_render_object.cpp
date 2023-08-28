@@ -32,8 +32,9 @@ namespace mmo
 		return 0.0f;
 	}
 	
-	ManualRenderObject::ManualRenderObject(GraphicsDevice& device)
+	ManualRenderObject::ManualRenderObject(GraphicsDevice& device, const String& name)
 		: m_device(device)
+		, MovableObject(name)
 	{
 	}
 

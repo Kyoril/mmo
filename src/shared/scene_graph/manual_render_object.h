@@ -265,7 +265,7 @@ namespace mmo
 	public:
 		/// Creates a new instance of the ManualRenderObject class and initializes it.
 		///	@param device The graphics device object to use for gpu resource creation and rendering.
-		explicit ManualRenderObject(GraphicsDevice& device);
+		explicit ManualRenderObject(GraphicsDevice& device, const String& name);
 
 	public:
 		/// Adds a new render operation to the object which draws a line list.

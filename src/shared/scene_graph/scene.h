@@ -155,8 +155,8 @@ namespace mmo
 		/// Distance along the ray
 		float distance;
 
-		/// The movable, or NULL if this is not a movable result
-		MovableObject& movable;
+		/// The movable
+		MovableObject* movable;
 
 		/// Comparison operator for sorting
 		bool operator < (const RaySceneQueryResultEntry& rhs) const

@@ -66,6 +66,12 @@ namespace mmo
 		
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
 
+		m_debugRay = m_scene.CreateManualRenderObject("__DebugRay__");
+		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
+
+		m_scene.GetRootSceneNode().AttachObject(*m_debugRay);
+		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
+
 		PagePosition worldSize(64, 64);
 			m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
 				worldSize,
@@ -239,7 +245,18 @@ namespace mmo
 
 				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
 				{
-					m_raySceneQuery->SetRay(Ray(m_camera->GetDerivedPosition(), m_camera->GetDerivedOrientation() * Vector3::NegativeUnitZ, 1000.0f));
+					const auto mousePos = ImGui::GetMousePos();
+					const auto contentRectMin = ImGui::GetWindowPos();
+
+					const Ray ray = m_camera->GetCameraToViewportRay(
+						(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x, 
+						(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y, 
+						10000.0f);
+					m_raySceneQuery->SetRay(ray);
+
+					// Update debug ray visualization
+					UpdateDebugRay(ray);
+
 					m_raySceneQuery->ClearResult();
 					m_raySceneQuery->Execute();
 
@@ -248,12 +265,12 @@ namespace mmo
 						// TODO: Objects were hit, but only their bounding boxes. Iterate through hit results and maybe do a per-triangle collision check
 						for (const auto& hitResult : m_raySceneQuery->GetLastResult())
 						{
-							DLOG("Hit object: " << hitResult.movable.GetName());
+							UpdateDebugAABB(hitResult.movable->GetWorldBoundingBox());
 						}
 					}
 					else
 					{
-						DLOG("No object was hit");
+						m_debugBoundingBox->Clear();
 					}
 				}
 			}
@@ -345,6 +362,33 @@ namespace mmo
 
 	void WorldEditorInstance::Save()
 	{
+	}
+
+	void WorldEditorInstance::UpdateDebugRay(const Ray& ray)
+	{
+		m_debugRay->Clear();
+
+		auto lineListOp = m_debugRay->AddLineListOperation();
+		auto& line = lineListOp->AddLine(ray.origin, ray.destination);
+		line.SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+
+	}
+
+	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
+	{
+		m_debugBoundingBox->Clear();
+
+		auto lineListOp = m_debugBoundingBox->AddLineListOperation();
+
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.max.x, aabb.min.y, aabb.min.z));
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.max.y, aabb.min.z));
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.min.y, aabb.max.z));
+
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.min.y, aabb.max.z));
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.max.y, aabb.min.z));
+
+		// TODO: Missing lines (6)
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)

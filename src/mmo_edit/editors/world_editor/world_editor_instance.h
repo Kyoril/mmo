@@ -48,6 +48,10 @@ namespace mmo
 	private:
 		void Save();
 
+		void UpdateDebugRay(const Ray& ray);
+
+		void UpdateDebugAABB(const AABB& aabb);
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
@@ -80,6 +84,9 @@ namespace mmo
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		std::unique_ptr<RaySceneQuery> m_raySceneQuery;
+
+		ManualRenderObject* m_debugRay;
+		ManualRenderObject* m_debugBoundingBox;
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };

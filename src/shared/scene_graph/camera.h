@@ -9,6 +9,7 @@
 #include "math/matrix4.h"
 #include "math/quaternion.h"
 #include "math/radian.h"
+#include "math/ray.h"
 
 namespace mmo
 {
@@ -37,6 +38,8 @@ namespace mmo
 		[[nodiscard]] float GetAspectRatio() const noexcept { return m_aspect; }
 
 		void SetOrientation(const Quaternion& quaternion);
+
+		Ray GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const;
 
 	protected:
 		void UpdateFrustum() const;

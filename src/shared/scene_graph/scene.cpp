@@ -311,7 +311,7 @@ namespace mmo
 		auto [iterator, created] = 
 			m_manualRenderObjects.emplace(
 				name, 
-				std::make_unique<ManualRenderObject>(GraphicsDevice::Get()));
+				std::make_unique<ManualRenderObject>(GraphicsDevice::Get(), name));
 		
 		return iterator->second.get();
 	}
@@ -436,9 +436,7 @@ namespace mmo
 
 		for (const auto& entity : m_scene.GetAllEntities())
 		{
-			if (!entity->IsInScene()) continue;
-
-			const auto hitResult = m_ray.intersectsAABB(entity->GetBoundingBox());
+			const auto hitResult = m_ray.intersectsAABB(entity->GetWorldBoundingBox(true));
 			if (!hitResult.first)
 			{
 				continue;
@@ -453,8 +451,30 @@ namespace mmo
 
 	bool RaySceneQuery::QueryResult(MovableObject& obj, float distance)
 	{
+		RaySceneQueryResultEntry result;
+		result.movable = &obj;
+		result.distance = distance;
+		
+		const bool response = m_maxResults == 0 || m_result.size() + 1 < m_maxResults;
 
-		return false;
+		if (m_sortByDistance)
+		{
+			auto it = m_result.begin();
+
+			while (it != m_result.end())
+			{
+				if (it->distance > distance)
+				{
+					m_result.insert(it, std::move(result));
+					return response;
+				}
+
+				it++;
+			}
+		}
+
+		m_result.emplace_back(std::move(result));
+		return response;
 	}
 
 	AABBSceneQuery::AABBSceneQuery(Scene& scene)
