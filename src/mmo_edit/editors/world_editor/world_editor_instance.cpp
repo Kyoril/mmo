@@ -63,6 +63,8 @@ namespace mmo
 
 		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
+		
+		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
 
 		PagePosition worldSize(64, 64);
 			m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
@@ -234,15 +236,33 @@ namespace mmo
 
 				m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
 				m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
+				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+				{
+					m_raySceneQuery->SetRay(Ray(m_camera->GetDerivedPosition(), m_camera->GetDerivedOrientation() * Vector3::NegativeUnitZ, 1000.0f));
+					m_raySceneQuery->ClearResult();
+					m_raySceneQuery->Execute();
+
+					if (!m_raySceneQuery->GetLastResult().empty())
+					{
+						// TODO: Objects were hit, but only their bounding boxes. Iterate through hit results and maybe do a per-triangle collision check
+						for (const auto& hitResult : m_raySceneQuery->GetLastResult())
+						{
+							DLOG("Hit object: " << hitResult.movable.GetName());
+						}
+					}
+					else
+					{
+						DLOG("No object was hit");
+					}
+				}
 			}
-			
+
 			if (ImGui::BeginDragDropTarget())
 		    {
 				// We only accept mesh file drops
 		        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 		        {
-					DLOG("Accepting mesh asset");
-
 					const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 					auto* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
 					auto& node = m_scene.CreateSceneNode(uniqueId);

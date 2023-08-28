@@ -79,6 +79,7 @@ namespace mmo
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
+		std::unique_ptr<RaySceneQuery> m_raySceneQuery;
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };

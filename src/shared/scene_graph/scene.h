@@ -2,9 +2,6 @@
 
 #pragma once
 
-#include <map>
-#include <memory>
-
 #include "queued_renderable_visitor.h"
 #include "render_queue.h"
 #include "base/non_copyable.h"
@@ -14,7 +11,13 @@
 #include "entity.h"
 #include "light.h"
 #include "manual_render_object.h"
+#include "movable_object.h"
 #include "scene_node.h"
+#include "math/ray.h"
+
+#include <map>
+#include <memory>
+#include <vector>
 
 
 namespace mmo
@@ -34,6 +37,185 @@ namespace mmo
 		Scene* targetScene { nullptr };
 		/// Scissoring if requested?
 		bool scissoring { false };
+	};
+
+	/// Base class of a scene query.
+	class SceneQuery
+	{
+	protected:
+		Scene& m_scene;
+
+	public:
+		explicit SceneQuery(Scene& scene);
+		virtual ~SceneQuery() = default;
+	};
+
+	typedef std::vector<MovableObject*> SceneQueryResult;
+
+	/// Listener interface for scene queries.
+	class SceneQueryListener
+	{
+	public:
+		virtual ~SceneQueryListener() = default;
+
+	public:
+		/// @brief Called whenever a movable object has been found by a scene query.
+		/// @param object Reference to the movable object which has been hit by a query.
+		/// @returns false to stop the query, true to continue.
+		virtual bool QueryResult(MovableObject& object) = 0;
+	};
+
+	/// Abstract base class for region based scene queries.
+	class RegionSceneQuery : public SceneQuery, public SceneQueryListener
+	{
+	private:
+		SceneQueryResult m_lastResult;
+
+	public:
+		explicit RegionSceneQuery(Scene& scene);
+		virtual ~RegionSceneQuery() = default;
+
+	public:
+		/// @brief Executes the scene query with itself as a listener.
+		virtual const SceneQueryResult& Execute();
+
+		/// @brief Executes the scene query with a specific listener.
+		/// @param listener The listener to call on hit results.
+		virtual void Execute(SceneQueryListener& listener) = 0;
+
+		/// Gets the last result of the query if it has been executed without an external listener.
+		const SceneQueryResult& GetLastResult() const { return m_lastResult; }
+
+		/// Clears the last query results.
+		void ClearResult() { m_lastResult.clear(); }
+
+	public:
+		/// @copydoc SceneQueryListener::QueryResult
+		bool QueryResult(MovableObject& first) override;
+	};
+
+	/// @brief Specialized scene query to perform axis aligned bounding box based queries.
+	class AABBSceneQuery : public RegionSceneQuery
+	{
+	protected:
+		AABB m_aabb;
+
+	public:
+		explicit AABBSceneQuery(Scene& scene);
+		virtual ~AABBSceneQuery() = default;
+
+	public:
+		/// @brief Sets the bounding box to use when executing the scene query.
+		void SetBox(const AABB& box) { m_aabb = box; }
+
+		/// @brief Gets the axis aligned bounding box used by the query. 
+		const AABB& GetBox() const { return m_aabb; }
+
+		/// @copydoc RegionSceneQuery::Execute
+		virtual void Execute(SceneQueryListener& listener) override;
+	};
+
+	/// @brief Specialized scene query to perform sphere based queries.
+	class SphereSceneQuery : public RegionSceneQuery
+	{
+	protected:
+		Sphere m_sphere;
+
+	public:
+		explicit SphereSceneQuery(Scene& scene);
+		virtual ~SphereSceneQuery() = default;
+
+	public:
+		/// @brief Sets the sphere to be used by the query.
+		void SetSphere(const Sphere& sphere) { m_sphere = sphere; }
+
+		/// @brief Gets the sphere used by the query.
+		const Sphere& GetSphere() const { return m_sphere; }
+
+		/// @copydoc RegionSceneQuery::Execute
+		virtual void Execute(SceneQueryListener& listener) override;
+	};
+
+	/// @brief Special listener for ray scene queries which not only provides the object but also the distance to the origin of the ray.
+	class RaySceneQueryListener
+	{
+	public:
+		virtual ~RaySceneQueryListener() = default;
+
+	public:
+		/// @brief Callback for when a movable object was hit by the raycast.
+		/// @param obj The object that was hit.
+		/// @param distance The distance to the origin of the ray.
+		virtual bool QueryResult(MovableObject& obj, float distance) = 0;
+	};
+
+	/// @brief Result of a ray scene query.
+	struct RaySceneQueryResultEntry
+	{
+		/// Distance along the ray
+		float distance;
+
+		/// The movable, or NULL if this is not a movable result
+		MovableObject& movable;
+
+		/// Comparison operator for sorting
+		bool operator < (const RaySceneQueryResultEntry& rhs) const
+		{
+			return this->distance < rhs.distance;
+		}
+	};
+
+	typedef std::vector<RaySceneQueryResultEntry> RaySceneQueryResult;
+
+	/// @brief Specialized scene query to perform ray-cast based queries.
+	class RaySceneQuery : public SceneQuery, public RaySceneQueryListener
+	{
+	protected:
+		Ray m_ray;
+
+	private:
+		bool m_sortByDistance = false;
+		uint16_t m_maxResults = 0;
+		RaySceneQueryResult m_result;
+
+	public:
+		explicit RaySceneQuery(Scene& scene);
+		virtual ~RaySceneQuery() = default;
+
+	public:
+		/// @brief Sets the ray to be used by the query.
+		virtual void SetRay(const Ray& ray) { m_ray = ray; }
+
+		/// @brief Gets the ray to be used by the query.
+		virtual const Ray& GetRay() const { return m_ray; }
+
+		/// @brief Sets whether to sort the results based on their distance.
+		/// @param sort true to sort objects by their distance (closest ones come first).
+		/// @param maxResults Maximum number of results to be returned. If set to 0, all results will be returned.
+		virtual void SetSortByDistance(bool sort, uint16_t maxResults = 0) { m_sortByDistance = sort; m_maxResults = maxResults; }
+
+		/// @breif Gets whether to sort results by their distance.
+		virtual bool GetSortByDistance() const { return m_sortByDistance; }
+
+		/// @brief Gets the maximum amount of results to be returned. 0 if all results should be returned.
+		virtual uint16_t GetMaxResults() const { return m_maxResults; }
+
+		/// @brief Executes the query with itself as hit result listener.
+		virtual const RaySceneQueryResult& Execute();
+
+		/// @brief Executes the query with a specific listener.
+		/// @param listener The listener to use for reporting hit results.
+		virtual void Execute(RaySceneQueryListener& listener);
+
+		/// @brief Gets the result of the last query execution without an external listener.
+		const RaySceneQueryResult& GetLastResult() const { return m_result; }
+
+		/// @brief Clears the result from the last execution without an external listener.
+		void ClearResult() { m_result.clear(); }
+
+	public:
+		/// @copydoc RaySceneQueryListener::QueryResult
+		bool QueryResult(MovableObject& obj, float distance) override;
 	};
 
 	/// This class contains all objects of a scene that can be rendered.
@@ -93,6 +275,14 @@ namespace mmo
 		Entity* CreateEntity(const String& entityName, const MeshPtr& mesh);
 		
 		RenderQueue& GetRenderQueue();
+
+		std::vector<Entity*> GetAllEntities() const;
+
+		std::unique_ptr<AABBSceneQuery> CreateAABBQuery(const AABB& box);
+
+		std::unique_ptr<SphereSceneQuery> CreateSphereQuery(const Sphere& sphere);
+
+		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
