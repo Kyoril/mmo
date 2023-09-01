@@ -201,6 +201,13 @@ namespace mmo
 		{
 			return x * other.x + y * other.y + z * other.z;
 		}
+
+
+		inline float AbsDot(const Vector3& vec) const
+		{
+			return fabs(x * vec.x) + fabs(y * vec.y) + fabs(z * vec.z);
+		}
+
 		/// Calculates the cross product of this vector and another one.
 		inline Vector3 Cross(Vector3 const& other) const
 		{
@@ -327,5 +334,18 @@ namespace mmo
 			std::max(a.y, b.y),
 			std::max(a.z, b.z)
 		);
+	}
+
+	inline Vector3 CalculateBasicFaceNormal(const Vector3& v1, const Vector3& v2, const Vector3& v3)
+	{
+		Vector3 normal = (v2 - v1).Cross(v3 - v1);
+		normal.Normalize();
+		return normal;
+	}
+
+	inline Vector3 CalculateBasicFaceNormalWithoutNormalize(
+		const Vector3& v1, const Vector3& v2, const Vector3& v3)
+	{
+		return (v2 - v1).Cross(v3 - v1);
 	}
 }
