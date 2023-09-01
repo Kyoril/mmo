@@ -161,8 +161,8 @@ namespace mmo
 		bool m_sleep{false};
 		Vector3 m_camDir{};
 		bool m_visible{true};
-		scoped_connection m_objectMovedCon;
-		scoped_connection m_onSelectionChanged;
+		scoped_connection m_objectMovedCon{};
+		scoped_connection m_onSelectionChanged{};
 
 		// Translation-Mode variables
 		ManualRenderObject *m_axisLines{nullptr};
@@ -175,7 +175,7 @@ namespace mmo
 		SceneNode *m_xzPlaneNode{nullptr};
 		SceneNode *m_xyPlaneNode{nullptr};
 		SceneNode *m_yzPlaneNode{nullptr};
-		MeshPtr m_translateAxisPlanes;
+		MeshPtr m_translateAxisPlanes{nullptr};
 
 		// Rotation-Mode variables
 		SceneNode *m_zRotNode{nullptr};
@@ -186,8 +186,8 @@ namespace mmo
 		Entity *m_zCircle{nullptr};
 		Entity *m_fullCircleEntity{nullptr};
 		SceneNode *m_rotationCenter{nullptr};
-		MeshPtr m_circleMesh;
-		MeshPtr m_fullCircleMesh;
+		MeshPtr m_circleMesh{ nullptr };
+		MeshPtr m_fullCircleMesh{ nullptr };
 
 		// Scale-Mode variables
 		ManualRenderObject *m_scaleAxisLines{nullptr};
@@ -195,7 +195,7 @@ namespace mmo
 		SceneNode *m_scaleXYPlaneNode{nullptr};
 		SceneNode *m_scaleYZPlaneNode{nullptr};
 		SceneNode *m_scaleContentPlaneNode{nullptr};
-		MeshPtr m_scaleAxisPlanes;
-		MeshPtr m_scaleCenterPlanes;
+		MeshPtr m_scaleAxisPlanes{ nullptr };
+		MeshPtr m_scaleCenterPlanes{ nullptr };
 	};
 }
