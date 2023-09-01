@@ -158,14 +158,58 @@ namespace mmo
 
 	void TransformWidget::SetVisibility()
 	{
+		if (!m_visible)
+		{
+			m_translationNode->SetVisible(false);
+			m_rotationNode->SetVisible(false);
+			m_scaleNode->SetVisible(false);
+			return;
+		}
+
+		if (!m_selection.IsEmpty())
+		{
+			switch (m_mode)
+			{
+			case TransformMode::Translate:
+				m_translationNode->SetVisible(true);
+				m_xyPlaneNode->SetVisible(false);
+				m_xzPlaneNode->SetVisible(false);
+				m_yzPlaneNode->SetVisible(false);
+				m_rotationNode->SetVisible(false);
+				m_scaleNode->SetVisible(false);
+				break;
+
+			case TransformMode::Rotate:
+				m_translationNode->SetVisible(false);
+				m_rotationNode->SetVisible(true);
+				m_scaleNode->SetVisible(false);
+				break;
+
+			case TransformMode::Scale:
+				m_scaleNode->SetVisible(true);
+				m_scaleXYPlaneNode->SetVisible(false);
+				m_scaleXZPlaneNode->SetVisible(false);
+				m_scaleYZPlaneNode->SetVisible(false);
+				m_translationNode->SetVisible(false);
+				m_rotationNode->SetVisible(false);
+				break;
+			}
+		}
 	}
 
 	void TransformWidget::ApplyTranslation(const Vector3& dir)
 	{
+		m_translation += dir;
+
+		for (auto& selected : m_selection.GetSelectedObjects())
+		{
+			selected->Translate(dir);
+		}
 	}
 
 	void TransformWidget::FinishTranslation()
 	{
+		m_translation = Vector3::Zero;
 	}
 
 	void TransformWidget::ApplyRotation(const Quaternion& rotation)
@@ -174,14 +218,45 @@ namespace mmo
 
 	void TransformWidget::FinishRotation()
 	{
+		if (m_rotationCenter == nullptr)
+		{
+			m_rotation = Quaternion::Identity;
+		}
+		else
+		{
+			for (auto& obj : m_selection.GetSelectedObjects())
+			{
+				/*obj.Position = obj.SceneNode._getDerivedPosition();
+				obj.Orientation = obj.SceneNode._getDerivedOrientation();
+				m_rotationCenter->removeChild(obj.SceneNode);
+				m_sceneMgr.getRootSceneNode()->addChild(obj.SceneNode);*/
+			}
+
+			// Remove rotation center node
+			m_scene.DestroySceneNode(*m_rotationCenter);
+			m_rotationCenter = nullptr;
+		}
+
+		if (m_isLocal && !m_selection.IsEmpty())
+		{
+			const auto rot = m_selection.GetSelectedObjects().back()->GetOrientation();
+			m_widgetNode->SetOrientation(rot);
+		}
 	}
 
 	void TransformWidget::ApplyScale(const Vector3& dir)
 	{
+		for (auto& selected : m_selection.GetSelectedObjects())
+		{
+			selected->Scale(Vector3(dir.x, dir.y, dir.z));
+		}
+
+		m_scaleNode->Scale(dir);
 	}
 
 	void TransformWidget::FinishScale()
 	{
+		m_scaleNode->SetScale(Vector3(1.0f, 1.0f, 1.0f));
 	}
 
 	void TransformWidget::OnSelectionChanged()
