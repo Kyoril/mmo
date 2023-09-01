@@ -50,10 +50,38 @@ namespace mmo
 		SetupScale();
 
 		m_widgetNode->SetVisible(false);
+
+		// Watch for selection changes
+		m_onSelectionChanged = m_selection.changed.connect(this, &TransformWidget::OnSelectionChanged);
 	}
 
 	TransformWidget::~TransformWidget()
 	{
+		if (m_rotationCenter)
+		{
+			m_scene.DestroySceneNode(*m_rotationCenter);
+			m_rotationCenter = nullptr;
+		}
+
+		if (m_widgetNode)
+		{
+			m_widgetNode->RemoveAllChildren();
+		}
+
+		m_scene.DestroyManualRenderObject(*m_axisLines);
+		if (m_xArrow) m_scene.DestroyEntity(*m_xArrow);
+		if (m_yArrow) m_scene.DestroyEntity(*m_yArrow);
+		if (m_zArrow) m_scene.DestroyEntity(*m_zArrow);
+		if (m_xCircle) m_scene.DestroyEntity(*m_xCircle);
+		if (m_yCircle) m_scene.DestroyEntity(*m_yCircle);
+		if (m_zCircle) m_scene.DestroyEntity(*m_zCircle);
+		if (m_fullCircleEntity) m_scene.DestroyEntity(*m_fullCircleEntity);
+		m_scene.DestroyCamera(*m_dummyCamera);
+		if (m_widgetNode)
+		{
+			m_scene.DestroySceneNode(*m_widgetNode);
+			m_widgetNode = nullptr;
+		}
 	}
 
 	void TransformWidget::Update(Camera* camera)
@@ -123,13 +151,155 @@ namespace mmo
 				m_scaleNode->SetScale(scale);
 			} break;
 		}
-				
+		
+		// Don't update the looks of the widget if nothing is selected or the user is flying around
+		if (!m_selection.IsEmpty())
+		{
+			switch (m_mode)
+			{
+			case TransformMode::Translate:
+			{
+				UpdateTranslation();
+				break;
+			}
+
+			case TransformMode::Rotate:
+			{
+				UpdateRotation();
+				break;
+			}
+
+			case TransformMode::Scale:
+			{
+				UpdateScale();
+				break;
+			}
+			}
+		}
+
+		// Update dummy camera
+		m_dummyCamera->SetOrientation(m_camera.GetDerivedOrientation());
+		m_dummyCamera->SetAspectRatio(m_camera.GetAspectRatio());
 		m_relativeWidgetPos = m_widgetNode->GetPosition() - m_camera.GetDerivedPosition();
 	}
 
 	void TransformWidget::SetupTranslation()
 	{
+		// Setup axis lines
+		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
+		m_axisLines->SetRenderQueueGroup(Overlay);
 
+		const Vector3 xTipPos(CenterOffset + LineLength, 0.0f, 0.0f);
+		const Vector3 yTipPos(0.0f, CenterOffset + LineLength, 0.0f);
+		const Vector3 zTipPos(0.0f, 0.0f, CenterOffset + LineLength);
+
+		// X Axis
+		{
+			auto lineOp = m_axisLines->AddLineListOperation();
+			lineOp->AddLine(Vector3(CenterOffset, 0.0f, 0.0f), xTipPos).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+		}
+
+		// Y Axis
+		{
+			auto lineOp = m_axisLines->AddLineListOperation();
+			lineOp->AddLine(Vector3(0.0f, CenterOffset, 0.0f), yTipPos).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
+		}
+
+		// Z Axis
+		{
+			auto lineOp = m_axisLines->AddLineListOperation();
+			lineOp->AddLine(Vector3(0.0f, 0.0f, CenterOffset), zTipPos).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
+		}
+
+		// Create translation node
+		m_translationNode = m_widgetNode->CreateChildSceneNode();
+		m_translationNode->AttachObject(*m_axisLines);
+
+		// Setup arrows
+		m_xArrowNode = m_translationNode->CreateChildSceneNode();
+		m_xArrowNode->SetPosition(xTipPos);
+		m_yArrowNode = m_translationNode->CreateChildSceneNode();
+		m_yArrowNode->SetPosition(yTipPos);
+		m_zArrowNode = m_translationNode->CreateChildSceneNode();
+		m_zArrowNode->SetPosition(zTipPos);
+
+		// X Arrow
+		/*m_xArrow = m_sceneMgr.createEntity(ArrowMeshName);
+		m_xArrow->setMaterialName("Editor/AxisX");
+		m_xArrowNode->attachObject(m_xArrow);
+		m_xArrowNode->yaw(Degree(90.0f));*/
+
+		// Y Arrow
+		/*m_yArrow = m_sceneMgr.createEntity(ArrowMeshName);
+		m_yArrow->setMaterialName("Editor/AxisY");
+		m_yArrowNode->attachObject(m_yArrow);
+		m_yArrowNode->pitch(Degree(-90.0f));*/
+
+		// Z Arrow
+		/*m_zArrow = m_sceneMgr.createEntity(ArrowMeshName);
+		m_zArrow->setMaterialName("Editor/AxisZ");
+		m_zArrowNode->attachObject(m_zArrow);*/
+
+		// Setup axis
+		/*if (!Ogre::MeshManager::getSingleton().resourceExists(AxisPlaneName))
+		{
+			Ogre::ManualObject* planeObj = m_sceneMgr.createManualObject();
+			const Ogre::ColourValue planeColour(1.0f, 1.0f, 0.0f, 0.3f);
+			planeObj->begin("Editor/AxisPlane", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
+			planeObj->position(SquareLength, 0.0f, 0.0f);
+			planeObj->colour(planeColour);
+			planeObj->position(0.0f, 0.0f, 0.0f);
+			planeObj->colour(planeColour);
+			planeObj->position(SquareLength, 0.0f, SquareLength);
+			planeObj->colour(planeColour);
+			planeObj->position(0.0f, 0.0f, SquareLength);
+			planeObj->colour(planeColour);
+			planeObj->end();
+
+			m_translateAxisPlanes = planeObj->convertToMesh(AxisPlaneName);
+			m_sceneMgr.destroyManualObject(planeObj);
+		}
+		else
+		{
+			m_translateAxisPlanes = Ogre::MeshManager::getSingleton().getByName(AxisPlaneName);
+		}*/
+
+		// Create on node for each plane and rotate
+		m_xzPlaneNode = m_translationNode->CreateChildSceneNode();
+		m_xyPlaneNode = m_translationNode->CreateChildSceneNode();
+		m_xyPlaneNode->Pitch(Degree(-90.0f), TransformSpace::Local);
+		m_yzPlaneNode = m_translationNode->CreateChildSceneNode();
+		m_yzPlaneNode->Roll(Degree(90.0f), TransformSpace::Local);
+
+		/*
+		Ogre::Entity* plane1 = m_sceneMgr.createEntity(AxisPlaneName);
+		plane1->setQueryFlags(0);
+		plane1->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
+		plane1->setCastShadows(false);
+		Ogre::Entity* plane2 = m_sceneMgr.createEntity(AxisPlaneName);
+		plane2->setQueryFlags(0);
+		plane2->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
+		plane2->setCastShadows(false);
+		Ogre::Entity* plane3 = m_sceneMgr.createEntity(AxisPlaneName);
+		plane3->setQueryFlags(0);
+		plane3->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
+		plane3->setCastShadows(false);
+
+		m_xzPlaneNode->attachObject(plane1);
+		m_xyPlaneNode->attachObject(plane2);
+		m_yzPlaneNode->attachObject(plane3);
+		*/
+
+		// Hide them initially
+		m_xzPlaneNode->SetVisible(false);
+		m_xyPlaneNode->SetVisible(false);
+		m_yzPlaneNode->SetVisible(false);
 	}
 
 	void TransformWidget::SetupRotation()
@@ -161,8 +331,8 @@ namespace mmo
 		if (!m_visible)
 		{
 			m_translationNode->SetVisible(false);
-			m_rotationNode->SetVisible(false);
-			m_scaleNode->SetVisible(false);
+			//m_rotationNode->SetVisible(false);
+			//m_scaleNode->SetVisible(false);
 			return;
 		}
 
@@ -175,23 +345,23 @@ namespace mmo
 				m_xyPlaneNode->SetVisible(false);
 				m_xzPlaneNode->SetVisible(false);
 				m_yzPlaneNode->SetVisible(false);
-				m_rotationNode->SetVisible(false);
-				m_scaleNode->SetVisible(false);
+				//m_rotationNode->SetVisible(false);
+				//m_scaleNode->SetVisible(false);
 				break;
 
 			case TransformMode::Rotate:
 				m_translationNode->SetVisible(false);
-				m_rotationNode->SetVisible(true);
-				m_scaleNode->SetVisible(false);
+				//m_rotationNode->SetVisible(true);
+				//m_scaleNode->SetVisible(false);
 				break;
 
 			case TransformMode::Scale:
-				m_scaleNode->SetVisible(true);
-				m_scaleXYPlaneNode->SetVisible(false);
-				m_scaleXZPlaneNode->SetVisible(false);
-				m_scaleYZPlaneNode->SetVisible(false);
+				//m_scaleNode->SetVisible(true);
+				//m_scaleXYPlaneNode->SetVisible(false);
+				//m_scaleXZPlaneNode->SetVisible(false);
+				//m_scaleYZPlaneNode->SetVisible(false);
 				m_translationNode->SetVisible(false);
-				m_rotationNode->SetVisible(false);
+				//m_rotationNode->SetVisible(false);
 				break;
 			}
 		}

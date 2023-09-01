@@ -316,6 +316,15 @@ namespace mmo
 		return iterator->second.get();
 	}
 
+	void Scene::DestroyManualRenderObject(const ManualRenderObject& object)
+	{
+		auto it = m_manualRenderObjects.find(object.GetName());
+		if (it != m_manualRenderObjects.end())
+		{
+			m_manualRenderObjects.erase(it);
+		}
+	}
+
 	SceneNode& Scene::GetRootSceneNode() 
 	{
 		if (!m_rootNode)

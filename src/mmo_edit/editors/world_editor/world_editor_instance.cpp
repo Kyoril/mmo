@@ -14,6 +14,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
+#include "selected_entity.h"
 
 namespace mmo
 {
@@ -65,11 +66,8 @@ namespace mmo
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 		
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
-
-		m_debugRay = m_scene.CreateManualRenderObject("__DebugRay__");
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
 
-		m_scene.GetRootSceneNode().AttachObject(*m_debugRay);
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
 		PagePosition worldSize(64, 64);
@@ -79,6 +77,9 @@ namespace mmo
 				pos,
 				*m_pageLoader
 				);
+
+		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
+		m_transformWidget->SetTransformMode(TransformMode::Translate);
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -164,6 +165,7 @@ namespace mmo
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 		
 		m_scene.Render(*m_camera);
+		m_transformWidget->Update(m_camera);
 		
 		m_viewportRT->Update();
 	}
@@ -254,17 +256,17 @@ namespace mmo
 						10000.0f);
 					m_raySceneQuery->SetRay(ray);
 
-					// Update debug ray visualization
-					UpdateDebugRay(ray);
-
 					m_raySceneQuery->ClearResult();
 					m_raySceneQuery->Execute();
+
+					m_selection.Clear();
 
 					if (!m_raySceneQuery->GetLastResult().empty())
 					{
 						// TODO: Objects were hit, but only their bounding boxes. Iterate through hit results and maybe do a per-triangle collision check
 						for (const auto& hitResult : m_raySceneQuery->GetLastResult())
 						{
+							m_selection.AddSelectable(std::make_unique<SelectedEntity>(*(Entity*)hitResult.movable));
 							UpdateDebugAABB(hitResult.movable->GetWorldBoundingBox());
 						}
 					}
@@ -362,16 +364,6 @@ namespace mmo
 
 	void WorldEditorInstance::Save()
 	{
-	}
-
-	void WorldEditorInstance::UpdateDebugRay(const Ray& ray)
-	{
-		m_debugRay->Clear();
-
-		auto lineListOp = m_debugRay->AddLineListOperation();
-		auto& line = lineListOp->AddLine(ray.origin, ray.destination);
-		line.SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
-
 	}
 
 	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)

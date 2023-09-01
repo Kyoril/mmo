@@ -294,6 +294,8 @@ namespace mmo
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 
+		void DestroyManualRenderObject(const ManualRenderObject& object);
+
 		[[nodiscard]] float GetShadowFarDistance() const noexcept { return m_defaultShadowFarDist; }
 
 		[[nodiscard]] float GetShadowFarDistanceSquared() const noexcept { return m_defaultShadowFarDist * m_defaultShadowFarDist; }
