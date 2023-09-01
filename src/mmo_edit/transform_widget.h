@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "base/vector.h"
 #include "scene_graph/mesh.h"
+#include "math/plane.h"
 
 namespace mmo
 {
@@ -40,6 +41,8 @@ namespace mmo
 			All = X | Y | Z
 		};
 	}
+
+	typedef axis_id::Type AxisId;
 
 	class TransformWidget final : public NonCopyable
 	{
@@ -98,6 +101,10 @@ namespace mmo
 		void OnScaleChanged(const Selectable& object);
 
 		void CancelTransform();
+
+		Plane GetTranslatePlane(AxisId axis);
+
+		Plane GetScalePlane(AxisId axis);
 
 	private:
 		// Common

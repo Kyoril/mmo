@@ -239,4 +239,98 @@ namespace mmo
 	void TransformWidget::CancelTransform()
 	{
 	}
+
+	Plane TransformWidget::GetTranslatePlane(AxisId axis)
+	{
+		if (axis == (axis_id::X | axis_id::Z))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
+		}
+		
+		if (axis == (axis_id::X | axis_id::Y))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
+		}
+		
+		if (axis == (axis_id::Y | axis_id::Z))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
+		}
+
+		Vector3 camDir = -m_relativeWidgetPos;
+		camDir = m_widgetNode->GetOrientation().Inverse() * camDir;
+
+		switch (axis)
+		{
+		case axis_id::X:
+		{
+			camDir.x = 0.0f;
+			break;
+		}
+
+		case axis_id::Y:
+		{
+			camDir.y = 0.0f;
+			break;
+		}
+
+		case axis_id::Z:
+		{
+			camDir.z = 0.0f;
+			break;
+		}
+		}
+
+		camDir = m_widgetNode->GetOrientation() * camDir;
+		camDir.Normalize();
+
+		return Plane(camDir, m_relativeWidgetPos);
+	}
+
+	Plane TransformWidget::GetScalePlane(AxisId axis)
+	{
+		if (axis == (axis_id::X | axis_id::Z))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
+		}
+		
+		if (axis == (axis_id::X | axis_id::Y))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
+		}
+		
+		if (axis == (axis_id::Y | axis_id::Z))
+		{
+			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
+		}
+
+		Vector3 camDir = -m_relativeWidgetPos;
+		camDir = m_widgetNode->GetOrientation().Inverse() * camDir;
+
+		switch (axis)
+		{
+		case axis_id::X:
+		{
+			camDir.x = 0.0f;
+			break;
+		}
+
+		case axis_id::Y:
+		{
+			camDir.y = 0.0f;
+			break;
+		}
+
+		case axis_id::Z:
+		{
+			camDir.z = 0.0f;
+			break;
+		}
+		}
+
+		camDir = m_widgetNode->GetOrientation() * camDir;
+		camDir.Normalize();
+
+		return Plane(camDir, m_relativeWidgetPos);
+	}
 }
