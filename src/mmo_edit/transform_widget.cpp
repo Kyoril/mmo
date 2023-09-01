@@ -4,6 +4,8 @@
 #include "frame_ui/color.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"
+#include "selectable.h"
+#include "selection.h"
 
 namespace mmo
 {
@@ -184,17 +186,53 @@ namespace mmo
 
 	void TransformWidget::OnSelectionChanged()
 	{
+		if (!m_selection.IsEmpty())
+		{
+			// Connect
+			m_objectMovedCon = m_selection.GetSelectedObjects().back()->positionChanged.connect(this, &TransformWidget::OnPositionChanged);
+
+			// Get position
+			const auto& pos = m_selection.GetSelectedObjects().back()->GetPosition();
+			m_widgetNode->SetPosition(pos);
+			m_relativeWidgetPos = m_widgetNode->GetPosition() - m_camera.GetDerivedPosition();
+
+			if (m_isLocal)
+			{
+				const auto rot = m_selection.GetSelectedObjects().back()->GetOrientation();
+				m_widgetNode->SetOrientation(rot);
+			}
+			else
+			{
+				m_widgetNode->SetOrientation(Quaternion::Identity);
+			}
+
+			SetVisibility();
+		}
+		else
+		{
+			if (m_objectMovedCon.connected())
+			{
+				m_objectMovedCon.disconnect();
+			}
+
+			m_widgetNode->SetVisible(false);
+			m_selectedAxis = axis_id::None;
+		}
 	}
 
-	void TransformWidget::OnPositionChanged(const Selected& object)
+	void TransformWidget::OnPositionChanged(const Selectable& object)
+	{
+		const auto& pos = object.GetPosition();
+
+		m_widgetNode->SetPosition(pos);
+		m_relativeWidgetPos = pos - m_camera.GetDerivedPosition();
+	}
+
+	void TransformWidget::OnRotationChanged(const Selectable& object)
 	{
 	}
 
-	void TransformWidget::OnRotationChanged(const Selected& object)
-	{
-	}
-
-	void TransformWidget::OnScaleChanged(const Selected& object)
+	void TransformWidget::OnScaleChanged(const Selectable& object)
 	{
 	}
 

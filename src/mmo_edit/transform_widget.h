@@ -14,7 +14,7 @@ namespace mmo
 	class Camera;
 	class Scene;
 	class Selection;
-	class Selected;
+	class Selectable;
 
 	enum class TransformMode
 	{
@@ -91,11 +91,11 @@ namespace mmo
 
 		void OnSelectionChanged();
 
-		void OnPositionChanged(const Selected& object);
+		void OnPositionChanged(const Selectable& object);
 
-		void OnRotationChanged(const Selected& object);
+		void OnRotationChanged(const Selectable& object);
 
-		void OnScaleChanged(const Selected& object);
+		void OnScaleChanged(const Selectable& object);
 
 		void CancelTransform();
 
@@ -155,6 +155,7 @@ namespace mmo
 		Vector3 m_camDir{};
 		bool m_visible{true};
 		scoped_connection m_objectMovedCon;
+		scoped_connection m_onSelectionChanged;
 
 		// Translation-Mode variables
 		ManualRenderObject *m_axisLines{nullptr};
