@@ -37,5 +37,6 @@ namespace mmo
 
 		// TODO: Redesign the way of showing this context menu. Make it less "show" and more "get what to show and build the menu somewhere else where it's needed"
 		virtual void ShowAssetCreationContextMenu() = 0;
+		virtual void ShowAssetActionContextMenu(const String& asset) = 0;
 	};
 }

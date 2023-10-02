@@ -29,6 +29,8 @@ namespace mmo
 		/// @brief Adds creation items to a context menu.
 		void AddCreationContextMenuItems() override;
 
+		void AddAssetActions(const String& asset) override;
+
 	protected:
 		/// @copydoc EditorBase::DrawImpl
 		void DrawImpl() override;

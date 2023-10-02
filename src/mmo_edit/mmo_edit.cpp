@@ -23,7 +23,7 @@
 #include "editors/material_editor/material_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
-#include "editors/world_editor/world_editor.h"
+#include "editors/texture_editor/texture_editor.h"
 #include "log/default_log_levels.h"
 
 #ifdef _DEBUG
@@ -102,6 +102,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
 
+	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow));

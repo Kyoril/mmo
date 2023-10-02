@@ -847,4 +847,25 @@ namespace mmo
 			editor->AddCreationContextMenuItems();
 		}
 	}
+
+	void MainWindow::ShowAssetActionContextMenu(const String& asset)
+	{
+		bool hasActions = false;
+
+		for (const auto& editor : m_editors)
+		{
+			if (!editor->CanLoadAsset(std::filesystem::path(asset).extension().string()))
+			{
+				continue;
+			}
+
+			if (!hasActions)
+			{
+				ImGui::Separator();
+				hasActions = true;
+			}
+
+			editor->AddAssetActions(asset);
+		}
+	}
 }

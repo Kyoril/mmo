@@ -165,6 +165,9 @@ namespace mmo
 
 		// Create shader resource view
 		VERIFY(SUCCEEDED(dev.CreateShaderResourceView(m_texture.Get(), &srvd, &m_shaderView)));
+
+		ID3D11DeviceContext& context = m_device;
+		context.GenerateMips(m_shaderView.Get());
 	}
 
 	void TextureD3D11::Bind(ShaderType shader, uint32 slot)
