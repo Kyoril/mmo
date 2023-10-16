@@ -197,6 +197,18 @@ namespace mmo
 			return VertexFormat::PosColor;
 		}
 
+		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.CaptureState();
+			graphicsDevice.SetDepthEnabled(m_depthEnabled);
+			return true;
+		}
+
+		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.RestoreState();
+		}
+
 	public:
 		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
@@ -249,11 +261,14 @@ namespace mmo
 
 		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
 
+		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
+
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
 		AABB m_boundingBox;
 		std::shared_ptr<Material> m_material; // TODO
+		bool m_depthEnabled = true;
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess
@@ -273,16 +288,6 @@ namespace mmo
 
 		/// Removes all operations.
 		void Clear() noexcept;
-
-	public:
-		/// @brief Sets the render queue group id, which controls when exactly this object will be rendered.
-		/// @param renderQueueGroupId The render queue group id of this object.
-		void SetRenderQueueGroupId(uint8 renderQueueGroupId);
-
-		/// @brief Sets the priority of this object in it's render queue group.
-		///	       The higher the priority, the earlier it will be rendered.
-		/// @param priority The priority of this object in the render queue group.
-		void SetRenderQueueGroupPriority(uint16 priority);
 
 	public:
 		/// @copydoc MovableObject::GetMovableType
@@ -308,7 +313,5 @@ namespace mmo
 		std::vector<std::unique_ptr<ManualRenderOperation>> m_operations;
 		AABB m_worldAABB;
 		float m_boundingRadius { 0.0f };
-		uint8 m_renderQueueGroupId { Main };
-		uint16 m_renderQueueGroupPriority { 0 };
 	};
 }

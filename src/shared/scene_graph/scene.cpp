@@ -290,8 +290,10 @@ namespace mmo
 		{
 			
 		}
-		
+
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		renderable.PreRender(*this, gx);
 
 		if (op.useIndexes)
 		{
@@ -301,6 +303,8 @@ namespace mmo
 		{
 			gx.Draw(op.endIndex == 0 ? op.vertexBuffer->GetVertexCount() - op.startIndex : op.endIndex - op.startIndex, op.startIndex);
 		}
+
+		renderable.PostRender(*this, gx);
 	}
 
 	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)

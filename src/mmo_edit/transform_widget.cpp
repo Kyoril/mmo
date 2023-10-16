@@ -53,6 +53,9 @@ namespace mmo
 
 		// Watch for selection changes
 		m_onSelectionChanged = m_selection.changed.connect(this, &TransformWidget::OnSelectionChanged);
+
+		// Setup material
+
 	}
 
 	TransformWidget::~TransformWidget()
@@ -187,7 +190,7 @@ namespace mmo
 	{
 		// Setup axis lines
 		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
-		m_axisLines->SetRenderQueueGroup(Overlay);
+		m_axisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
 
 		const Vector3 xTipPos(CenterOffset + LineLength, 0.0f, 0.0f);
 		const Vector3 yTipPos(0.0f, CenterOffset + LineLength, 0.0f);
@@ -195,26 +198,29 @@ namespace mmo
 
 		// X Axis
 		{
-			auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation();
 			lineOp->AddLine(Vector3(CenterOffset, 0.0f, 0.0f), xTipPos).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			lineOp->SetDepthEnabled(false);
 		}
 
 		// Y Axis
 		{
-			auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation();
 			lineOp->AddLine(Vector3(0.0f, CenterOffset, 0.0f), yTipPos).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
 			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
 			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
+			lineOp->SetDepthEnabled(false);
 		}
 
 		// Z Axis
 		{
-			auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation();
 			lineOp->AddLine(Vector3(0.0f, 0.0f, CenterOffset), zTipPos).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
 			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
 			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
+			lineOp->SetDepthEnabled(false);
 		}
 
 		// Create translation node

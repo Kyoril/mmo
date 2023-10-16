@@ -56,16 +56,6 @@ namespace mmo
 		m_boundingRadius = 0.0f;
 	}
 
-	void ManualRenderObject::SetRenderQueueGroupId(const uint8 renderQueueGroupId)
-	{
-		m_renderQueueGroupId = renderQueueGroupId;
-	}
-
-	void ManualRenderObject::SetRenderQueueGroupPriority(const uint16 priority)
-	{
-		m_renderQueueGroupPriority = priority;
-	}
-
 	const String& ManualRenderObject::GetMovableType() const
 	{
 		static String ManualRenderObjectType = "ManualRenderObject";
@@ -84,7 +74,7 @@ namespace mmo
 	{
 		for(auto& operation : m_operations)
 		{
-			queue.AddRenderable(*operation, m_renderQueueGroupId, m_renderQueueGroupPriority);
+			queue.AddRenderable(*operation, m_renderQueueId, m_renderQueuePriority);
 		}
 	}
 
