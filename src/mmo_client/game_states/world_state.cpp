@@ -20,6 +20,8 @@
 
 #include <zstr/zstr.hpp>
 
+#include "game/chat_type.h"
+
 namespace mmo
 {
 	const std::string WorldState::Name = "world";
@@ -32,6 +34,7 @@ namespace mmo
 		static const char* s_toggleAxis = "ToggleAxis";
 		static const char* s_toggleGrid = "ToggleGrid";
 		static const char* s_toggleWire = "ToggleWire";
+		static const char* s_sendChatMessage = "SendChatMessage";
 	}
 	
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
@@ -257,6 +260,8 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
+
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -264,6 +269,20 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::DestroyObjects);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartForward);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartBackward);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStop);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartStrafeLeft);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartStrafeRight);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStopStrafe);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartTurnLeft);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartTurnRight);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStopTurn);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveHeartBeat);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetFacing);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -296,6 +315,18 @@ namespace mmo
 		{
 			ToggleWireframe();
 		}, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
+
+		Console::RegisterCommand(command_names::s_sendChatMessage, [this](const std::string& command, const std::string& args)
+		{
+			m_realmConnector.sendSinglePacket([this, &args](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ChatMessage);
+				packet
+					<< io::write<uint8>(ChatType::Say)
+					<< io::write_range(args) << io::write<uint8>(0);
+				packet.Finish();
+			});
+		}, ConsoleCommandCategory::Debug, "Sends an ingame chat message.");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -303,7 +334,8 @@ namespace mmo
 		const String commandsToRemove[] = {
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
-			command_names::s_toggleWire
+			command_names::s_toggleWire,
+			command_names::s_sendChatMessage
 		};
 
 		for (const auto& command : commandsToRemove)
@@ -454,6 +486,37 @@ namespace mmo
 		// Instantly apply movement data for now
 		unitPtr->GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		unitPtr->GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChatMessage(game::IncomingPacket& packet)
+	{
+		uint64 characterGuid;
+		ChatType type;
+		String message;
+		uint8 flags;
+		if (!(packet 
+			>> io::read_packed_guid(characterGuid)
+			>> io::read<uint8>(type)
+			>> io::read_limited_string<512>(message)
+			>> io::read<uint8>(flags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		switch(type)
+		{
+		case ChatType::Say:
+			DLOG("[" << log_hex_digit(characterGuid) << "] says: " << message);
+			break;
+		case ChatType::Yell:
+			DLOG("[" << log_hex_digit(characterGuid) << "] yells: " << message);
+			break;
+		case ChatType::Emote:
+			DLOG("[" << log_hex_digit(characterGuid) << "] " << message);
+			break;
+		}
 
 		return PacketParseResult::Pass;
 	}

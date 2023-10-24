@@ -74,20 +74,19 @@ namespace mmo
 	void Player::LocalChatMessage(ChatType type, const std::string& message)
 	{
 		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-		tile.GetWatchers().add(this);
 
 		auto position = m_character->GetPosition();
 		float chatDistance = 0.0f;
 		switch (type)
 		{
 		case ChatType::Say:
-			chatDistance = 100.0f;
+			chatDistance = 25.0f;
 			break;
 		case ChatType::Yell:
-			chatDistance = 250.0f;
+			chatDistance = 300.0f;
 			break;
 		case ChatType::Emote:
-			chatDistance = 250.0f;
+			chatDistance = 50.0f;
 			break;
 		default: 
 			return;
@@ -98,7 +97,7 @@ namespace mmo
 
 		std::vector<char> buffer;
 		io::VectorSink sink{ buffer };
-		game::OutgoingPacket outPacket(sink, true);
+		game::OutgoingPacket outPacket(sink);
 		outPacket.Start(game::realm_client_packet::ChatMessage);
 		outPacket
 			<< io::write_packed_guid(m_character->GetGuid())

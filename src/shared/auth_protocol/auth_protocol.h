@@ -144,10 +144,7 @@ namespace mmo
 				PlayerCharacterLeft = 0x07,
 				
 				/// A packet which will be forwarded to the game client.
-				ProxyPacket = 0x08,
-
-
-				LocalChatMessage = 0x09,
+				ProxyPacket = 0x08
 			};
 		}
 

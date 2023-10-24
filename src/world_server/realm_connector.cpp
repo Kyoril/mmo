@@ -342,6 +342,7 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterJoin, *this, &RealmConnector::OnPlayerCharacterJoin);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterLeave, *this, &RealmConnector::OnPlayerCharacterLeave);
 				RegisterPacketHandler(auth::realm_world_packet::ProxyPacket, *this, &RealmConnector::OnProxyPacket);
+				RegisterPacketHandler(auth::realm_world_packet::LocalChatMessage, *this, &RealmConnector::OnLocalChatMessage);
 				
 				PropagateHostedMapIds();
 			}

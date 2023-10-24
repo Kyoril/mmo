@@ -356,11 +356,9 @@ namespace mmo
 
 		uint8 chatType;
 		std::string message;
-		uint8 flags;
 		if (!(packet
 			>> io::read<uint8>(chatType)
-			>> io::read_limited_string<512>(message)
-			>> io::read<uint8>(flags)))
+			>> io::read_limited_string<512>(message)))
 		{
 			return PacketParseResult::Disconnect;
 		}
