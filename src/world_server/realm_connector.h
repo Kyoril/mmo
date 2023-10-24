@@ -90,6 +90,8 @@ namespace mmo
 		/// @return Enum value which decides whether to continue the connection or destroy it.
 		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
 
+		PacketParseResult OnLocalChatMessage(auth::IncomingPacket& packet);
+
 		/// Resets this instance to an unauthenticated state.
 		void Reset();
 

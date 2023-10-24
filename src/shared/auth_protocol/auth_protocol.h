@@ -113,6 +113,8 @@ namespace mmo
 				
 				/// A packet which will be forwarded to the game client.
 				ProxyPacket = 0x04,
+
+				LocalChatMessage = 0x05,
 			};
 		}
 
@@ -143,6 +145,9 @@ namespace mmo
 				
 				/// A packet which will be forwarded to the game client.
 				ProxyPacket = 0x08,
+
+
+				LocalChatMessage = 0x09,
 			};
 		}
 

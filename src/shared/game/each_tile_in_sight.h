@@ -17,10 +17,10 @@ namespace mmo
 	{
 		for (T t = tilesBegin; t != tilesEnd; ++t)
 		{
-			auto &tile = *t;
-			onTile(tile);
+			VisibilityTile* tile = *t;
+			onTile(*tile);
 
-			for (auto *const subscriber : tile.GetWatchers())
+			for (auto* subscriber : tile->GetWatchers())
 			{
 				onSubscriber(*subscriber);
 			}
@@ -39,7 +39,7 @@ namespace mmo
 			for (TileIndex x = center.x() - constants::PlayerZoneSight;
 			        x <= static_cast<TileIndex>(center.x() + constants::PlayerZoneSight); ++x)
 			{
-				auto *const tile = grid.GetTile(TileIndex2D(x, y));
+				auto * tile = grid.GetTile(TileIndex2D(x, y));
 
 				if (tile)
 				{
@@ -70,7 +70,7 @@ namespace mmo
 	    const TileIndex2D &center,
 	    const OnSubscriber &onSubscriber)
 	{
-		const auto tiles = GetTilesInSight(grid, center);
+		auto tiles = GetTilesInSight(grid, center);
 		ForEachSubscriber(
 		    tiles.begin(),
 			tiles.end(),
@@ -101,7 +101,7 @@ namespace mmo
 			for (TileIndex x = center.x() - constants::PlayerZoneSight;
 			        x <= static_cast<TileIndex>(center.x() + constants::PlayerZoneSight); ++x)
 			{
-				auto *const tile = grid.GetTile(TileIndex2D(x, y));
+				auto * tile = grid.GetTile(TileIndex2D(x, y));
 
 				if (tile && !IsInSight(excluded, tile->GetPosition()))
 				{

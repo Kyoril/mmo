@@ -61,7 +61,7 @@ namespace mmo
 
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
-		bool IsAuthentificated() const { return !m_sessionKey.isZero(); }
+		bool IsAuthenticated() const { return !m_sessionKey.isZero(); }
 
 		/// Gets the account name the player is logged in with.
 		const std::string &GetAccountName() const { return m_accountName; }
@@ -93,6 +93,7 @@ namespace mmo
 		void OnWorldDestroyed(World& world);
 
 		void NotifyWorldNodeChanged(World* worldNode);
+
 
 	public:
 		/// Registers a packet handler.
@@ -159,5 +160,6 @@ namespace mmo
 		PacketParseResult OnCreateChar(game::IncomingPacket& packet);
 		PacketParseResult OnDeleteChar(game::IncomingPacket& packet);
 		PacketParseResult OnProxyPacket(game::IncomingPacket& packet);
+		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 	};
 }

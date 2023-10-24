@@ -18,6 +18,7 @@
 
 #include "base/signal.h"
 #include "game/character_data.h"
+#include "game/chat_type.h"
 
 
 namespace mmo
@@ -90,7 +91,10 @@ namespace mmo
 
 		/// Determines whether this world node is authenticated.
 		bool IsAuthenticated() const { return !m_sessionKey.isZero(); }
-		
+
+		/// Sends a local chat message to the world on behalf of a player.
+		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
+
 	private:
 		WorldManager &m_manager;
 		PlayerManager& m_playerManager;

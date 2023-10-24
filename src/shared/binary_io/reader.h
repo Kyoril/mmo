@@ -463,7 +463,53 @@ namespace io
 	{
 		return detail::ReadString(value);
 	}
-	
+
+	namespace detail
+	{
+		struct ReadLimitedString
+		{
+			std::string& value;
+			std::size_t maxLength;
+
+			ReadLimitedString(std::string& value, const std::size_t maxLength)
+				: value(value)
+				, maxLength(maxLength)
+			{
+				value.clear();
+				value.reserve(maxLength);
+			}
+		};
+
+		inline Reader& operator >> (Reader& r, const ReadLimitedString& surr)
+		{
+			char c = 0x00;
+			do
+			{
+				if (surr.value.length() >= surr.maxLength)
+				{
+					break;
+				}
+
+				if (!(r >> c))
+				{
+					return r;
+				}
+				if (c != 0)
+				{
+					surr.value.push_back(c);
+				}
+			} while (c != 0);
+
+			return r;
+		}
+	}
+
+	template <std::size_t L = 32>
+	inline detail::ReadLimitedString read_limited_string(std::string& value, const std::size_t maxLength = L)
+	{
+		return detail::ReadLimitedString(value, maxLength);
+	}
+
 	namespace detail
 	{
 		struct ReadablePackedGuid

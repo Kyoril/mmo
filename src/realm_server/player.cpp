@@ -16,6 +16,9 @@
 
 #include <functional>
 
+#include "base/utilities.h"
+#include "game/chat_type.h"
+
 
 namespace mmo
 {
@@ -278,7 +281,7 @@ namespace mmo
 
 	PacketParseResult Player::OnDeleteChar(game::IncomingPacket& packet)
 	{
-		ASSERT(IsAuthentificated());
+		ASSERT(IsAuthenticated());
 		
 		uint64 charGuid = 0;
 		if (!(packet >> io::read<uint64>(charGuid)))
@@ -343,6 +346,58 @@ namespace mmo
 
 			outPacket.Finish();
 		});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnChatMessage(game::IncomingPacket& packet)
+	{
+		ASSERT(HasCharacterGuid());
+
+		uint8 chatType;
+		std::string message;
+		uint8 flags;
+		if (!(packet
+			>> io::read<uint8>(chatType)
+			>> io::read_limited_string<512>(message)
+			>> io::read<uint8>(flags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Switch chat type
+		switch (static_cast<ChatType>(chatType))
+		{
+		case ChatType::Say:
+		case ChatType::Yell:
+		case ChatType::Emote:
+			// Forward chat command to world node
+			if (const auto strongWorld = m_world.lock())
+			{
+				strongWorld->LocalChatMessage(GetCharacterGuid(), static_cast<ChatType>(chatType), message);
+			}
+			break;
+
+		case ChatType::Group:
+			WLOG("Group chat is not implemented yet!");
+			break;
+
+		case ChatType::Guild:
+			WLOG("Guild chat is not implemented yet!")
+				break;
+
+		case ChatType::Raid:
+			WLOG("Raid chat is not implemented yet!");
+			break;
+
+		case ChatType::Channel:
+			WLOG("Chat channels are not implemented yet!");
+			break;
+
+		default:
+			ELOG("Unsupported chat type received from player: " << log_hex_digit(chatType));
+			return PacketParseResult::Disconnect;
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -439,6 +494,9 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
 			RegisterPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
 			RegisterPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
+
+
+			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 		}
 		else
 		{
@@ -453,6 +511,8 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::MoveStopTurn);
 			ClearPacketHandler(game::client_realm_packet::MoveHeartBeat);
 			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
+
+			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 		}
 	}
 

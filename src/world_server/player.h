@@ -4,6 +4,7 @@
 
 #include "realm_connector.h"
 #include "vector_sink.h"
+#include "game/chat_type.h"
 #include "game/game_object_s.h"
 #include "game/game_unit_s.h"
 #include "game/tile_index.h"
@@ -51,6 +52,8 @@ namespace mmo
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) override;
 
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
+
+		void LocalChatMessage(ChatType type, const std::string& message);
 
 	public:
 		TileIndex2D GetTileIndex() const;
