@@ -13,6 +13,7 @@
 #include "base/constants.h"
 #include "base/timer_queue.h"
 #include "game/character_data.h"
+#include "game/chat_type.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
@@ -341,6 +342,7 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterJoin, *this, &RealmConnector::OnPlayerCharacterJoin);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterLeave, *this, &RealmConnector::OnPlayerCharacterLeave);
 				RegisterPacketHandler(auth::realm_world_packet::ProxyPacket, *this, &RealmConnector::OnProxyPacket);
+				RegisterPacketHandler(auth::realm_world_packet::LocalChatMessage, *this, &RealmConnector::OnLocalChatMessage);
 				
 				PropagateHostedMapIds();
 			}
@@ -367,6 +369,7 @@ namespace mmo
 		CharacterData characterData;
 		if (!(packet >> characterData))
 		{
+			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
 			return PacketParseResult::Disconnect;
 		}
 		
@@ -424,6 +427,7 @@ namespace mmo
 		ObjectGuid characterGuid;
 		if (!(packet >> io::read_packed_guid(characterGuid)))
 		{
+			ELOG("Failed to read PLAYER_CHARACTER_LEAVE packet");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -443,6 +447,7 @@ namespace mmo
 		ObjectId characterId;
 		if (!(packet >> io::read<uint64>(characterId)))
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -457,19 +462,59 @@ namespace mmo
 		uint32 packetSize;
 		if (!(packet >> io::read<uint16>(opCode) >> io::read<uint32>(packetSize)))
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 		
-		DLOG("[PROXY] Received proxy packet " << log_hex_digit(opCode) << " from player " << log_hex_digit(characterId));
 		std::vector<uint8> buffer;
 		buffer.resize(packetSize);
 		packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
 		if (!packet)
 		{
+			ELOG("Failed to read PROXY_PACKET packet");
 			return PacketParseResult::Disconnect;
 		}
 
 		player->HandleProxyPacket(static_cast<game::client_realm_packet::Type>(opCode), buffer);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnLocalChatMessage(auth::IncomingPacket& packet)
+	{
+		ObjectId playerGuid;
+		ChatType chatType;
+		String message;
+
+		if (!(packet 
+			>> io::read_packed_guid(playerGuid) 
+			>> io::read<uint8>(chatType)
+			>> io::read_container<uint16>(message)))
+		{
+			ELOG("Failed to read LOCAL_CHAT packet")
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(playerGuid);
+		if (!player)
+		{
+			WLOG("Received local chat message packet for unknown player character " << log_hex_digit(playerGuid));
+			return PacketParseResult::Pass;
+		}
+
+		DLOG("Received local chat message from player " << log_hex_digit(playerGuid));
+
+		switch(chatType)
+		{
+		case ChatType::Say:
+		case ChatType::Yell:
+		case ChatType::Emote:
+			player->LocalChatMessage(chatType, message);
+			break;
+		default:
+			ELOG("Unsupported chat type received: " << log_hex_digit(static_cast<uint16>(chatType)));
+			return PacketParseResult::Pass;
+		}
+
 		return PacketParseResult::Pass;
 	}
 

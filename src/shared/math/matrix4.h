@@ -29,6 +29,10 @@ namespace mmo
 		/// Default constructor.
 		Matrix4()
 		{
+			for (size_t i = 0; i < 16; ++i)
+			{
+				_m[i] = 0.0f;
+			}
 		}
 
 		Matrix4(

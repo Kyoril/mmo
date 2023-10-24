@@ -10,6 +10,7 @@
 #include "base/utilities.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
+#include "database.h"
 
 #ifdef _WIN32
 #	include <windowsx.h>
@@ -27,21 +28,24 @@ namespace mmo
 {
 	static const char* s_mainWindowClassName = "MainWindow";
 	static bool s_initialized = false;
+
+	static bool s_showCreatureEditor = false;
 	
-	MainWindow::MainWindow(Configuration& config)
+	MainWindow::MainWindow(Configuration& config, AsyncDatabase& database)
 		: m_config(config)
 #if _WIN32
 		, m_windowHandle(nullptr)
 #endif
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
+		, m_database(database)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
 
 		// Initialize the graphics device
 		GraphicsDeviceDesc desc;
-		desc.vsync = false;
+		desc.vsync = true;
 #if _WIN32
         desc.customWindowHandle = m_windowHandle;
 		auto& device = GraphicsDevice::CreateD3D11(desc);
@@ -60,6 +64,12 @@ namespace mmo
 		else
 		{
 			WLOG("Unable to initialize asset registry: No asset registry path provided!");
+		}
+
+		// Initialize entity headers
+		for (int type = 0; type < static_cast<int>(EntityType::Count_); ++type)
+		{
+			m_entityHeaders[static_cast<EntityType>(type)] = std::vector<EntityHeader>();
 		}
 		
 		// Setup the viewport render texture
@@ -191,6 +201,103 @@ namespace mmo
 			ImGui::EndMenuBar();
 		}
 	}
+	
+	void MainWindow::ShowCreatureEditor()
+	{
+		static int currentItem = -1;
+
+		if (!s_showCreatureEditor) return;
+
+		if (ImGui::Begin("Creatures", &s_showCreatureEditor))
+		{
+			ImGui::Columns(2, nullptr, true);
+			ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
+			
+			ImGui::BeginChild("creatureListScrolling", ImVec2(350, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::ListBox("##creatureList", &currentItem, [](void* data, int idx, const char** out_text)
+				{
+					if (out_text) *out_text = (*static_cast<std::vector<EntityHeader>*>(data))[idx].name.c_str();
+					return true;
+				}, &m_entityHeaders[EntityType::Creature], m_entityHeaders[EntityType::Creature].size());
+			ImGui::EndChild();
+
+			ImGui::NextColumn();
+			
+			ImGui::BeginChild("creatureDetails", ImVec2(0, 0));
+
+			ImGui::EndChild();
+
+			ImGui::End();
+		}
+	}
+
+	void MainWindow::HandleToolBar()
+	{
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetCurrentWindow()->MenuBarHeight()));
+		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 50));
+		ImGui::SetNextWindowViewport(viewport->ID);
+
+		ImGuiWindowFlags window_flags = 0
+			| ImGuiWindowFlags_NoDocking
+			| ImGuiWindowFlags_NoTitleBar
+			| ImGuiWindowFlags_NoResize
+			| ImGuiWindowFlags_NoMove
+			| ImGuiWindowFlags_NoScrollbar
+			| ImGuiWindowFlags_NoSavedSettings
+			;
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+		ImGui::Begin("TOOLBAR", nullptr, window_flags);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+
+		auto entityLoadHandler = [this](const std::optional<std::vector<EntityHeader>>& result, EntityType type)
+		{
+			if (!result)
+			{
+				ELOG("Failed to load entity list");
+				return;
+			}
+
+			m_entityHeaders[type].clear();
+			std::ranges::copy(*result, std::back_inserter(m_entityHeaders[type]));
+		};
+
+		if (ImGui::Button("Creatures", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+			{
+				return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Creature);
+			}, &IDatabase::GetEntityList, EntityType::Creature);
+			s_showCreatureEditor = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Spells", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Spell);
+				}, &IDatabase::GetEntityList, EntityType::Spell);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Items", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Item);
+				}, &IDatabase::GetEntityList, EntityType::Item);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Quests", ImVec2(0, 37)))
+		{
+			m_database.asyncRequest([entityLoadHandler](auto&& args)
+				{
+					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Quest);
+				}, &IDatabase::GetEntityList, EntityType::Quest);
+		}
+		ImGui::End();
+	}
 
 	void MainWindow::RenderImGui()
 	{
@@ -208,26 +315,24 @@ namespace mmo
 
 		// We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
 		// because it would be confusing to have two docking targets within each others.
-		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking
+			| ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+			| ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
 		// Get the viewport and make the dockspace window fullscreen
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->WorkPos);
-		ImGui::SetNextWindowSize(viewport->WorkSize);
+		ImGui::SetNextWindowSize(viewport->WorkSize + ImVec2(0, 50));
 		ImGui::SetNextWindowViewport(viewport->ID);
-
-		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
 		// When using ImGuiDockNodeFlags_PassthruCentralNode, DockSpace() will render our background
 		// and handle the pass-thru hole, so we ask Begin() to not render a background.
-		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
-			window_flags |= ImGuiWindowFlags_NoBackground;
+		if (m_dockSpaceFlags & ImGuiDockNodeFlags_PassthruCentralNode) window_flags |= ImGuiWindowFlags_NoBackground;
 
 		// Begin the dockspace window with disabled padding
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 50.0f));
 		ImGui::Begin("DockSpace", nullptr, window_flags);
 		ImGui::PopStyleVar(3);
 		{
@@ -236,7 +341,11 @@ namespace mmo
 			
 			// The main menu
 			HandleMainMenu();
-			
+
+			HandleToolBar();
+
+			ShowCreatureEditor();
+
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
 			{
@@ -736,6 +845,27 @@ namespace mmo
 			}
 
 			editor->AddCreationContextMenuItems();
+		}
+	}
+
+	void MainWindow::ShowAssetActionContextMenu(const String& asset)
+	{
+		bool hasActions = false;
+
+		for (const auto& editor : m_editors)
+		{
+			if (!editor->CanLoadAsset(std::filesystem::path(asset).extension().string()))
+			{
+				continue;
+			}
+
+			if (!hasActions)
+			{
+				ImGui::Separator();
+				hasActions = true;
+			}
+
+			editor->AddAssetActions(asset);
 		}
 	}
 }

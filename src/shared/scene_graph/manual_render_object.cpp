@@ -2,6 +2,7 @@
 
 #include "manual_render_object.h"
 
+#include "mesh_manager.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/render_queue.h"
 
@@ -31,15 +32,44 @@ namespace mmo
 		// TODO
 		return 0.0f;
 	}
-	
-	ManualRenderObject::ManualRenderObject(GraphicsDevice& device)
+
+	void ManualLineListOperation::ConvertToSubmesh(SubMesh& subMesh)
+	{
+		subMesh.m_useSharedVertices = false;
+		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
+		subMesh.m_indexBuffer = std::move(m_indexBuffer);
+		subMesh.m_indexStart = 0;
+		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+	}
+
+	void ManualTriangleListOperation::ConvertToSubmesh(SubMesh& subMesh)
+	{
+		subMesh.m_useSharedVertices = false;
+		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
+		subMesh.m_indexBuffer = std::move(m_indexBuffer);
+		subMesh.m_indexStart = 0;
+		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+	}
+
+	ManualRenderObject::ManualRenderObject(GraphicsDevice& device, const String& name)
 		: m_device(device)
+		, MovableObject(name)
 	{
 	}
 
 	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation()
 	{
 		auto operation = std::make_unique<ManualLineListOperation>(m_device, *this);
+		const auto result = operation.get();
+
+		m_operations.emplace_back(std::move(operation));
+
+		return *result;
+	}
+
+	ManualRenderOperationRef<ManualTriangleListOperation> ManualRenderObject::AddTriangleListOperation()
+	{
+		auto operation = std::make_unique<ManualTriangleListOperation>(m_device, *this);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
@@ -55,14 +85,22 @@ namespace mmo
 		m_boundingRadius = 0.0f;
 	}
 
-	void ManualRenderObject::SetRenderQueueGroupId(const uint8 renderQueueGroupId)
+	MeshPtr ManualRenderObject::ConvertToMesh(const String& meshName) const
 	{
-		m_renderQueueGroupId = renderQueueGroupId;
-	}
+		assert(!m_operations.empty() && "Can not convert empty render object into a mesh!");
 
-	void ManualRenderObject::SetRenderQueueGroupPriority(const uint16 priority)
-	{
-		m_renderQueueGroupPriority = priority;
+		MeshManager& meshMgr = MeshManager::Get();
+		MeshPtr m = meshMgr.CreateManual(meshName);
+
+		for (const auto& operation : m_operations)
+		{
+			SubMesh& subMesh = m->CreateSubMesh();
+			operation->ConvertToSubmesh(subMesh);
+		}
+
+		m->SetBounds(m_worldAABB);
+
+		return m;
 	}
 
 	const String& ManualRenderObject::GetMovableType() const
@@ -83,7 +121,7 @@ namespace mmo
 	{
 		for(auto& operation : m_operations)
 		{
-			queue.AddRenderable(*operation, m_renderQueueGroupId, m_renderQueueGroupPriority);
+			queue.AddRenderable(*operation, m_renderQueueId, m_renderQueuePriority);
 		}
 	}
 

@@ -9,10 +9,17 @@ namespace mmo
 	class TextureEditor : public EditorBase
 	{
 	public:
-		TextureEditor() = default;
+		TextureEditor(EditorHost& host);
 		~TextureEditor() override;
 
 	public:
+		virtual void AddAssetActions(const String& asset) override;
+
+	public:
 		[[nodiscard]] bool CanLoadAsset(const String& extension) const override;
+
+	protected:
+		std::shared_ptr<EditorInstance> OpenAssetImpl(const Path& asset) override;
+		void CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance) override;
 	};
 }

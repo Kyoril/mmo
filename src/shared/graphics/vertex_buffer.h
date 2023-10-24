@@ -25,6 +25,7 @@ namespace mmo
 		[[nodiscard]] uint32 GetVertexCount() const { return m_vertexCount; }
 		[[nodiscard]] uint32 GetVertexSize() const { return m_vertexSize; }
 		[[nodiscard]] bool IsDynamic() const { return m_dynamic; }
+		virtual std::unique_ptr<VertexBuffer> Clone() = 0;
 
 	protected:
 		uint32 m_vertexCount;

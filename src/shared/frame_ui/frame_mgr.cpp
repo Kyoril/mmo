@@ -506,11 +506,14 @@ namespace mmo
 
 	void FrameManager::SetTopFrame(const FramePtr& topFrame)
 	{
+		m_inputCapture.reset();
+
 		m_topFrame = topFrame;
 	}
 
 	void FrameManager::ResetTopFrame()
 	{
+		m_inputCapture.reset();
 		m_mouseDownFrames.clear();
 		m_framesByName.clear();
 		

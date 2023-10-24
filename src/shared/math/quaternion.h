@@ -48,6 +48,7 @@ namespace mmo
 		}
 
 		Quaternion(float* arr)
+			: w(0), x(0), y(0), z(0)
 		{
 			std::memcpy(&w, arr, sizeof(float) * 4);
 		}

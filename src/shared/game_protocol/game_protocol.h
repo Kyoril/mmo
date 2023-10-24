@@ -48,7 +48,11 @@ namespace mmo
 				MoveStopTurn = 0x0D,
 				MoveHeartBeat = 0x0E,
 				MoveSetFacing = 0x0F,
-				
+
+				NameQuery = 0x10,
+
+				ChatMessage = 0x11,
+
 				/// Counter constant
 				Count_,
 			};
@@ -105,6 +109,10 @@ namespace mmo
 				MoveHeartBeat,
 				/// [PROXY]
 				MoveSetFacing,
+
+				PlayerName,
+
+				ChatMessage,
 
 				/// Counter constant
 				Count_,

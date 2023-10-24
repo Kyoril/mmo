@@ -88,6 +88,9 @@ namespace mmo
 		void StartHeartbeatTimer();
 		void StopHeartbeatTimer();
 		void UpdateHeartbeat();
+		
+		void NotifyCameraZoomChanged();
+		void ClampCameraPitch();
 
 	private:
 		Scene& m_scene;

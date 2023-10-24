@@ -49,6 +49,8 @@ namespace mmo
 		/// @brief Adds creation items to a context menu.
 		virtual void AddCreationContextMenuItems() { };
 
+		virtual void AddAssetActions(const String& asset) { };
+
 	public:
 		/// @brief Gets the editor host.
 		[[nodiscard]] EditorHost& GetHost() const noexcept { return m_host; }

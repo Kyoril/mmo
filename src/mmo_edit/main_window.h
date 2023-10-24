@@ -14,6 +14,7 @@
 
 #include <string>
 
+#include "database.h"
 #include "imgui_node_editor_internal.inl"
 #include "editors/editor_base.h"
 #include "import/import_base.h"
@@ -23,6 +24,7 @@ struct ImGuiContext;
 
 namespace mmo
 {
+	class AsyncDatabase;
 	class Configuration;
 	
 	
@@ -32,7 +34,7 @@ namespace mmo
 		, public EditorHost
 	{
 	public:
-		explicit MainWindow(Configuration& config);
+		explicit MainWindow(Configuration& config, AsyncDatabase& database);
 		~MainWindow();
 
 	private:
@@ -47,6 +49,8 @@ namespace mmo
 		void HandleEditorWindow(EditorWindowBase& window);
 
 		void HandleMainMenu();
+		void ShowCreatureEditor();
+		void HandleToolBar();
 
 		/// Initialize ImGui.
 		void InitImGui();
@@ -100,6 +104,8 @@ namespace mmo
 
 		void ShowAssetCreationContextMenu() override;
 
+		void ShowAssetActionContextMenu(const String& asset) override;
+
 	private:
 		Configuration& m_config;
 #ifdef _WIN32
@@ -119,5 +125,8 @@ namespace mmo
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
 		ImFont* m_defaultFont { nullptr };
+		AsyncDatabase& m_database;
+
+		std::map<EntityType, std::vector<EntityHeader>> m_entityHeaders;
 	};
 }

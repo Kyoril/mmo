@@ -5,16 +5,18 @@
 #include "base/typedefs.h"
 #include "base/vector.h"
 #include "scene_graph/mesh.h"
+#include "math/plane.h"
 
 namespace mmo
 {
+	struct Ray;
 	class Entity;
 	class SceneNode;
 	class ManualRenderObject;
 	class Camera;
 	class Scene;
 	class Selection;
-	class Selected;
+	class Selectable;
 
 	enum class TransformMode
 	{
@@ -41,6 +43,8 @@ namespace mmo
 		};
 	}
 
+	typedef axis_id::Type AxisId;
+
 	class TransformWidget final : public NonCopyable
 	{
 	public:
@@ -59,6 +63,8 @@ namespace mmo
 		void SetTransformMode(const TransformMode mode) { m_mode = mode; SetVisibility(); }
 
 		void SetVisible(const bool visible) { m_visible = visible; SetVisibility(); }
+
+		void OnMouseMoved(const float x, const float y);
 
 	private:
 		void SetupTranslation();
@@ -91,13 +97,21 @@ namespace mmo
 
 		void OnSelectionChanged();
 
-		void OnPositionChanged(const Selected& object);
+		void OnPositionChanged(const Selectable& object);
 
-		void OnRotationChanged(const Selected& object);
+		void OnRotationChanged(const Selectable& object);
 
-		void OnScaleChanged(const Selected& object);
+		void OnScaleChanged(const Selectable& object);
 
 		void CancelTransform();
+
+		Plane GetTranslatePlane(AxisId axis);
+
+		Plane GetScalePlane(AxisId axis);
+
+		void CreatePlaneMesh();
+
+		void TranslationMouseMoved(Ray& ray, const float x, const float y);
 
 	private:
 		// Common
@@ -154,7 +168,8 @@ namespace mmo
 		bool m_sleep{false};
 		Vector3 m_camDir{};
 		bool m_visible{true};
-		scoped_connection m_objectMovedCon;
+		scoped_connection m_objectMovedCon{};
+		scoped_connection m_onSelectionChanged{};
 
 		// Translation-Mode variables
 		ManualRenderObject *m_axisLines{nullptr};
@@ -167,7 +182,7 @@ namespace mmo
 		SceneNode *m_xzPlaneNode{nullptr};
 		SceneNode *m_xyPlaneNode{nullptr};
 		SceneNode *m_yzPlaneNode{nullptr};
-		MeshPtr m_translateAxisPlanes;
+		MeshPtr m_translateAxisPlanes{nullptr};
 
 		// Rotation-Mode variables
 		SceneNode *m_zRotNode{nullptr};
@@ -178,8 +193,8 @@ namespace mmo
 		Entity *m_zCircle{nullptr};
 		Entity *m_fullCircleEntity{nullptr};
 		SceneNode *m_rotationCenter{nullptr};
-		MeshPtr m_circleMesh;
-		MeshPtr m_fullCircleMesh;
+		MeshPtr m_circleMesh{ nullptr };
+		MeshPtr m_fullCircleMesh{ nullptr };
 
 		// Scale-Mode variables
 		ManualRenderObject *m_scaleAxisLines{nullptr};
@@ -187,7 +202,7 @@ namespace mmo
 		SceneNode *m_scaleXYPlaneNode{nullptr};
 		SceneNode *m_scaleYZPlaneNode{nullptr};
 		SceneNode *m_scaleContentPlaneNode{nullptr};
-		MeshPtr m_scaleAxisPlanes;
-		MeshPtr m_scaleCenterPlanes;
+		MeshPtr m_scaleAxisPlanes{ nullptr };
+		MeshPtr m_scaleCenterPlanes{ nullptr };
 	};
 }

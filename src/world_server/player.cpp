@@ -71,6 +71,59 @@ namespace mmo
 		HandleMovementPacket(opCode, buffer.size(), reader);
 	}
 
+	void Player::LocalChatMessage(ChatType type, const std::string& message)
+	{
+		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+
+		auto position = m_character->GetPosition();
+		float chatDistance = 0.0f;
+		switch (type)
+		{
+		case ChatType::Say:
+			chatDistance = 25.0f;
+			break;
+		case ChatType::Yell:
+			chatDistance = 300.0f;
+			break;
+		case ChatType::Emote:
+			chatDistance = 50.0f;
+			break;
+		default: 
+			return;
+		}
+
+		// TODO: Flags
+		constexpr uint8 flags = 0;
+
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		game::OutgoingPacket outPacket(sink);
+		outPacket.Start(game::realm_client_packet::ChatMessage);
+		outPacket
+			<< io::write_packed_guid(m_character->GetGuid())
+			<< io::write<uint8>(type)
+			<< io::write_range(message)
+			<< io::write<uint8>(0)
+			<< io::write<uint8>(flags);
+		outPacket.Finish();
+
+		// Spawn tile objects
+		ForEachSubscriberInSight(
+			m_worldInstance->GetGrid(),
+			tile.GetPosition(),
+			[&position, chatDistance, &outPacket, &buffer](TileSubscriber& subscriber)
+			{
+				auto& unit = subscriber.GetGameUnit();
+				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
+				if (distanceSquared > chatDistance * chatDistance)
+				{
+					return;
+				}
+
+				subscriber.SendPacket(outPacket, buffer);
+			});
+	}
+
 	TileIndex2D Player::GetTileIndex() const
 	{
 		ASSERT(m_worldInstance);
@@ -237,7 +290,6 @@ namespace mmo
 			}
 		}
 
-		DLOG("Character moved to location " << info.position << " (facing " << info.facing.GetValueDegrees() << " degrees) with movement flags " << log_hex_digit(info.movementFlags));
 		m_character->ApplyMovementInfo(info);
 
 		std::vector<char> buffer;

@@ -61,7 +61,7 @@ namespace mmo
 			m_players.end(),
 			[&accountName](const std::shared_ptr<Player> &p)
 		{
-			return (p->IsAuthentificated() &&
+			return (p->IsAuthenticated() &&
 				accountName == p->GetAccountName());
 		});
 

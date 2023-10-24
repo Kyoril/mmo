@@ -23,6 +23,20 @@ namespace mmo
 		/// @brief Path to the editor project.
 		String projectPath;
 
+		/// @brief 
+		String mysqlHost;
+
+		/// @brief 
+		uint16 mysqlPort;
+
+		/// @brief 
+		String mysqlUser;
+
+		/// @brief 
+		String mysqlPassword;
+
+		/// @brief 
+		String mysqlDatabase;
 
 	public:
 		/**

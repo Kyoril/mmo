@@ -456,9 +456,21 @@ namespace mmo
 		// Instance creation might fail, in which case we also want to be notified about failure and
 		// the reason of failure!
 
-		
 	}
-	
+
+	void World::LocalChatMessage(const uint64 playerGuid, const ChatType chatType, const std::string& message) const
+	{
+		GetConnection().sendSinglePacket([playerGuid, chatType, &message](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::LocalChatMessage);
+				outPacket
+					<< io::write_packed_guid(playerGuid)
+					<< io::write<uint8>(chatType)
+					<< io::write_dynamic_range<uint16>(message);
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;
@@ -535,8 +547,6 @@ namespace mmo
 		{
 			return PacketParseResult::Disconnect;
 		}
-		
-		DLOG("[PROXY]\tTo " << log_hex_digit(characterGuid) << ":\tID " << log_hex_digit(packetId) << " - " << packetSize << " bytes");
 		
 		auto* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
 		if (!player)

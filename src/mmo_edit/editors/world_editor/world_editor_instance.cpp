@@ -14,6 +14,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
+#include "selected_entity.h"
 
 namespace mmo
 {
@@ -63,6 +64,11 @@ namespace mmo
 
 		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
+		
+		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
+		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
+
+		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
 		PagePosition worldSize(64, 64);
 			m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
@@ -71,6 +77,9 @@ namespace mmo
 				pos,
 				*m_pageLoader
 				);
+
+		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
+		m_transformWidget->SetTransformMode(TransformMode::Translate);
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -156,6 +165,7 @@ namespace mmo
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 		
 		m_scene.Render(*m_camera);
+		m_transformWidget->Update(m_camera);
 		
 		m_viewportRT->Update();
 	}
@@ -234,15 +244,49 @@ namespace mmo
 
 				m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
 				m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
+				const auto mousePos = ImGui::GetMousePos();
+				const auto contentRectMin = ImGui::GetWindowPos();
+
+				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+				{
+					const Ray ray = m_camera->GetCameraToViewportRay(
+						(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x, 
+						(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y, 
+						10000.0f);
+					m_raySceneQuery->SetRay(ray);
+
+					m_raySceneQuery->ClearResult();
+					m_raySceneQuery->Execute();
+
+					m_selection.Clear();
+
+					if (!m_raySceneQuery->GetLastResult().empty())
+					{
+						// TODO: Objects were hit, but only their bounding boxes. Iterate through hit results and maybe do a per-triangle collision check
+						for (const auto& hitResult : m_raySceneQuery->GetLastResult())
+						{
+							m_selection.AddSelectable(std::make_unique<SelectedEntity>(*(Entity*)hitResult.movable));
+							UpdateDebugAABB(hitResult.movable->GetWorldBoundingBox());
+						}
+					}
+					else
+					{
+						m_debugBoundingBox->Clear();
+					}
+				}
+
+				m_transformWidget->OnMouseMoved(
+					(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y);
+
 			}
-			
+
 			if (ImGui::BeginDragDropTarget())
 		    {
 				// We only accept mesh file drops
 		        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 		        {
-					DLOG("Accepting mesh asset");
-
 					const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 					auto* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
 					auto& node = m_scene.CreateSceneNode(uniqueId);
@@ -325,6 +369,23 @@ namespace mmo
 
 	void WorldEditorInstance::Save()
 	{
+	}
+
+	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
+	{
+		m_debugBoundingBox->Clear();
+
+		auto lineListOp = m_debugBoundingBox->AddLineListOperation();
+
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.max.x, aabb.min.y, aabb.min.z));
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.max.y, aabb.min.z));
+		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.min.y, aabb.max.z));
+
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.min.y, aabb.max.z));
+		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.max.y, aabb.min.z));
+
+		// TODO: Missing lines (6)
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)

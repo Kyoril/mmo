@@ -19,6 +19,8 @@
 #include "scene_graph/axis_display.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
+#include "transform_widget.h"
+#include "selection.h"
 
 namespace mmo
 {
@@ -47,6 +49,8 @@ namespace mmo
 
 	private:
 		void Save();
+
+		void UpdateDebugAABB(const AABB& aabb);
 
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
@@ -79,6 +83,12 @@ namespace mmo
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
+		std::unique_ptr<RaySceneQuery> m_raySceneQuery;
+			
+		Selection m_selection;
+		std::unique_ptr<TransformWidget> m_transformWidget;
+
+		ManualRenderObject* m_debugBoundingBox;
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };

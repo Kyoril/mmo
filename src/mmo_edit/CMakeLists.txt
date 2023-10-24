@@ -99,7 +99,9 @@ target_link_libraries(mmo_edit
 	scene_graph
 	frame_ui
 	paging
-	proto_data)
+	proto_data
+	sql_wrapper
+	mysql_wrapper)
 	
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)

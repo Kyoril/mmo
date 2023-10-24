@@ -11,11 +11,15 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 
+#include "platform.h"
+
 namespace mmo
 {
 	// Console variables for gameplay
 	static ConsoleVar* s_mouseSensitivityCVar = nullptr;
 	static ConsoleVar* s_invertVMouseCVar = nullptr;
+	static ConsoleVar* s_maxCameraZoomCVar = nullptr;
+	static ConsoleVar* s_cameraZoomCVar = nullptr;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector)
 		: m_scene(scene)
@@ -25,6 +29,18 @@ namespace mmo
 		{
 			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
 			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "true");
+
+			s_maxCameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("MaxCameraZoom", "Gets or sets the maximum camera zoom value.", "8");
+			s_maxCameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
+			{
+				NotifyCameraZoomChanged();
+			};
+
+			s_cameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("CameraZoom", "Gets or sets the current camera zoom value.", "8");
+			s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
+			{
+				NotifyCameraZoomChanged();
+			};
 		}
 
 		SetupCamera();
@@ -108,24 +124,15 @@ namespace mmo
 
 		if (direction != 0)
 		{
-			if (direction <= 0)
+			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
 			{
-				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
-				{
-					return;
-				}
-				
-				DLOG("Strafe right");
+				return;
 			}
-			else
-			{
-				if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
-				{
-					return;
-				}
 
-				DLOG("Strafe left");
-			}
+			const bool left = direction > 0;
+			m_controlledUnit->StartStrafe(left);
+			SendMovementUpdate(left ? game::client_realm_packet::MoveStartStrafeLeft : game::client_realm_packet::MoveStartStrafeRight);
+			StartHeartbeatTimer();
 
 			m_controlFlags |= ControlFlags::StrafeSent;
 			return;
@@ -133,7 +140,7 @@ namespace mmo
 
 		if (m_controlFlags & ControlFlags::StrafeSent)
 		{
-			DLOG("Stop strafe");
+			m_controlledUnit->StopStrafe();
 			m_controlFlags &= ~ControlFlags::StrafeSent;
 		}
 	}
@@ -142,7 +149,7 @@ namespace mmo
 	{
 		if ((m_controlFlags & ControlFlags::TurnPlayer) == 0)
 		{
-			int direction = (m_controlFlags & ControlFlags::TurnLeftKey);
+			int direction = ((m_controlFlags & ControlFlags::TurnLeftKey) != 0);
 			if ((m_controlFlags & ControlFlags::TurnRightKey))
 			{
 				--direction;
@@ -159,10 +166,8 @@ namespace mmo
 				m_controlledUnit->StartTurn(left);
 				SendMovementUpdate(left ? game::client_realm_packet::MoveStartTurnLeft : game::client_realm_packet::MoveStartTurnRight);
 				m_controlFlags |= ControlFlags::TurnSent;
-				return;
 			}
-
-			if (m_controlFlags & ControlFlags::TurnSent)
+			else if (m_controlFlags & ControlFlags::TurnSent)
 			{
 				m_controlledUnit->StopTurn();
 				SendMovementUpdate(game::client_realm_packet::MoveStopTurn);
@@ -195,11 +200,11 @@ namespace mmo
 
 			if (movementInfo.movementFlags & MovementFlags::Forward)
 			{
-				movementVector.z += 1.0f;
+				movementVector.z -= 1.0f;
 			}
 			if(movementInfo.movementFlags & MovementFlags::Backward)
 			{
-				movementVector.z -= 1.0f;
+				movementVector.z += 1.0f;
 			}
 			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
 			{
@@ -261,6 +266,32 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::NotifyCameraZoomChanged()
+	{
+		ASSERT(s_maxCameraZoomCVar);
+		ASSERT(s_cameraZoomCVar);
+
+		const float maxZoom = Clamp<float>(s_maxCameraZoomCVar->GetFloatValue(), 2.0f, 15.0f);
+		const float newZoom = Clamp<float>(s_cameraZoomCVar->GetFloatValue(), 0.0f, maxZoom);
+		m_cameraNode->SetPosition(m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom));
+	}
+
+	void PlayerController::ClampCameraPitch()
+	{
+		const float clampDegree = 60.0f;
+
+		// Ensure the camera pitch is clamped
+		const Radian pitch = m_cameraAnchorNode->GetOrientation().GetPitch();
+		if (pitch < Degree(-clampDegree))
+		{
+			m_cameraAnchorNode->Pitch(Degree(-clampDegree) - pitch, TransformSpace::Local);
+		}
+		if (pitch > Degree(clampDegree))
+		{
+			m_cameraAnchorNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
+		}
+	}
+
 	void PlayerController::Update(const float deltaSeconds)
 	{
 		if (!m_controlledUnit)
@@ -293,6 +324,11 @@ namespace mmo
 		{
 			m_controlFlags |= ControlFlags::TurnPlayer;
 		}
+
+		if (button == MouseButton_Left || button == MouseButton_Right)
+		{
+			Platform::CaptureMouse();
+		}
 	}
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
@@ -307,6 +343,12 @@ namespace mmo
 		{
 			m_controlFlags &= ~ControlFlags::TurnPlayer;
 		}
+
+		if (button == MouseButton_Left || button == MouseButton_Right && 
+			(m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
+		{
+			Platform::ReleaseMouseCapture();
+		}
 	}
 
 	void PlayerController::OnMouseMove(const int32 x, const int32 y)
@@ -316,11 +358,10 @@ namespace mmo
 			return;
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnCamera) == 0)
+		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
 			return;
 		}
-		
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
@@ -334,7 +375,35 @@ namespace mmo
 		if (delta.y != 0.0f)
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
-			m_cameraAnchorNode->Pitch(Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue()), TransformSpace::Local);
+
+			const Radian deltaPitch = Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue());
+			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
+
+			ClampCameraPitch();
+		}
+
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		{
+			const Radian facing = m_cameraAnchorNode->GetDerivedOrientation().GetYaw();
+			m_controlledUnit->GetSceneNode()->SetDerivedOrientation(Quaternion(facing, Vector3::UnitY));
+			m_cameraAnchorNode->SetOrientation(
+				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+
+			m_controlledUnit->SetFacing(facing);
+			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+		}
+		
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		{
+			if (fabsf(delta.x) >= FLT_EPSILON)
+			{
+				m_controlledUnit->GetSceneNode()->SetDerivedOrientation(
+					Quaternion(m_cameraAnchorNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
+				m_cameraAnchorNode->SetOrientation(
+					Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+				
+				SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+			}
 		}
 	}
 
@@ -342,7 +411,8 @@ namespace mmo
 	{
 		ASSERT(m_cameraNode);
 
-		m_cameraNode->Translate(Vector3::UnitZ * static_cast<float>(delta), TransformSpace::Local);
+		const float currentZoom = m_cameraNode->GetPosition().z;
+		s_cameraZoomCVar->Set(currentZoom - static_cast<float>(delta));
 	}
 
 	void PlayerController::OnKeyDown(const int32 key)
@@ -424,7 +494,9 @@ namespace mmo
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
-		m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+		//m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+
+		NotifyCameraZoomChanged();
 	}
 
 	void PlayerController::ResetControls()
@@ -438,5 +510,7 @@ namespace mmo
 		ASSERT(m_cameraAnchorNode);
 		m_cameraNode->SetPosition(Vector3::UnitZ * 3.0f);
 		m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
+
+		NotifyCameraZoomChanged();
 	}
 }

@@ -14,7 +14,7 @@ namespace mmo
 		, m_sceneNode(&m_scene.CreateSceneNode(name))
 		, m_renderObject(m_scene.CreateManualRenderObject(name))
 	{
-		m_renderObject->SetRenderQueueGroupId(Background);
+		m_renderObject->SetRenderQueueGroup(Background);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);
 		m_sceneNode->AttachObject(*m_renderObject);

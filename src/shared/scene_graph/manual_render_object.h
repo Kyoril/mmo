@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "mesh.h"
 #include "base/non_copyable.h"
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
@@ -67,6 +68,7 @@ namespace mmo
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
 	protected:
 		GraphicsDevice& m_device;
@@ -197,6 +199,18 @@ namespace mmo
 			return VertexFormat::PosColor;
 		}
 
+		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.CaptureState();
+			graphicsDevice.SetDepthEnabled(m_depthEnabled);
+			return true;
+		}
+
+		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.RestoreState();
+		}
+
 	public:
 		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
@@ -237,6 +251,8 @@ namespace mmo
 			ManualRenderOperation::Finish();
 		}
 
+		void ConvertToSubmesh(SubMesh& subMesh) override;
+
 	public:
 		/// Adds a new line to the operation. The line will have a default color of white.
 		Line& AddLine(const Vector3& start, const Vector3& end)
@@ -249,11 +265,156 @@ namespace mmo
 
 		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
 
+		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
+
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
 		AABB m_boundingBox;
 		std::shared_ptr<Material> m_material; // TODO
+		bool m_depthEnabled = true;
+	};
+
+	/// A special operation which renders a list of triangles for a ManualRenderObject.
+	class ManualTriangleListOperation final : public ManualRenderOperation
+	{
+	public:
+		/// Contains data for a single line in a line list operation.
+		class Triangle final
+		{
+		public:
+			/// Creates a new instance of the Line class and initializes it. The color of the line will
+			///	be set to opaque white by default.
+			///	@param v1 First vector of the triangle.
+			///	@param v2 Second vector of the triangle.
+			///	@param v3 Third vector of the triangle.
+			Triangle(const Vector3& v1, const Vector3& v2, const Vector3& v3) noexcept
+				: m_points{ v1, v2, v3 }
+				, m_colors{ 0xffffffff, 0xffffffff, 0xffffffff }
+			{
+			}
+
+		public:
+			/// Sets the color for the entire line.
+			///	@param color The new color value as argb value.
+			void SetColor(const uint32 color) noexcept
+			{
+				m_colors[0] = m_colors[1] = m_colors[2] = color;
+			}
+
+			/// Sets the color for the start point of the line.
+			///	@param index Index of the vertex to set the color for.
+			///	@param color The new color value as argb value.
+			void SetStartColor(const uint8_t index, const uint32 color) noexcept
+			{
+				assert(index < 3 && "Index out of range!");
+				m_colors[index] = color;
+			}
+
+			/// Gets the start position of the line.
+			[[nodiscard]] const Vector3& GetPosition(const uint8_t index) const { assert(index < 3); return m_points[index]; }
+
+			/// Gets the start color of the line.
+			[[nodiscard]] uint32 GetColor(const uint8_t index) const { assert(index < 3); return m_colors[index]; }
+
+		private:
+			Vector3 m_points[3];
+			uint32 m_colors[3];
+		};
+
+	public:
+		/// Creates a new instance of the LineListOperation and initializes it.
+		/// @param device The graphics device used to create gpu resources.
+		///	@param parent The parent object where this operation belongs to.
+		explicit ManualTriangleListOperation(GraphicsDevice& device, ManualRenderObject& parent)
+			: ManualRenderOperation(device, parent)
+		{
+		}
+
+	protected:
+		/// @copydoc ManualRenderOperation::GetTopologyType
+		[[nodiscard]] TopologyType GetTopologyType() const noexcept override
+		{
+			return TopologyType::TriangleList;
+		}
+
+		/// @copydoc ManualRenderOperation::GetFormat
+		[[nodiscard]] VertexFormat GetFormat() const noexcept override
+		{
+			return VertexFormat::PosColor;
+		}
+
+		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.CaptureState();
+			graphicsDevice.SetDepthEnabled(m_depthEnabled);
+			return true;
+		}
+
+		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
+		{
+			graphicsDevice.RestoreState();
+		}
+
+	public:
+		/// @copydoc ManualRenderOperation::Finish
+		void Finish() override
+		{
+			ASSERT(!m_triangles.empty() && "At least one triangle has to be added!");
+
+			std::vector<POS_COL_VERTEX> vertices;
+			vertices.reserve(m_triangles.size() * 2);
+
+			bool firstVertex = true;
+
+			for (auto& triangle : m_triangles)
+			{
+				for (uint8_t i = 0; i < 3; ++i)
+				{
+					const POS_COL_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i) };
+					vertices.emplace_back(v1);
+
+					if (firstVertex)
+					{
+						m_boundingBox.min = triangle.GetPosition(i);
+						m_boundingBox.max = triangle.GetPosition(i);
+						firstVertex = false;
+					}
+					else
+					{
+						m_boundingBox.min = TakeMinimum(m_boundingBox.min, triangle.GetPosition(i));
+						m_boundingBox.max = TakeMaximum(m_boundingBox.max, triangle.GetPosition(i));
+					}
+				}
+
+			}
+
+			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
+
+			ManualRenderOperation::Finish();
+		}
+
+	public:
+		/// Adds a new line to the operation. The line will have a default color of white.
+		Triangle& AddTriangle(const Vector3& v1, const Vector3& v2, const Vector3& v3)
+		{
+			m_triangles.emplace_back(v1, v2, v3);
+			return m_triangles.back();
+		}
+
+		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
+
+		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
+
+		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
+		void ConvertToSubmesh(SubMesh& subMesh) override;
+
+	private:
+		/// A list of triangles to render.
+		std::vector<Triangle> m_triangles;
+		AABB m_boundingBox;
+		std::shared_ptr<Material> m_material; // TODO
+		bool m_depthEnabled = true;
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess
@@ -265,24 +426,19 @@ namespace mmo
 	public:
 		/// Creates a new instance of the ManualRenderObject class and initializes it.
 		///	@param device The graphics device object to use for gpu resource creation and rendering.
-		explicit ManualRenderObject(GraphicsDevice& device);
+		explicit ManualRenderObject(GraphicsDevice& device, const String& name);
 
 	public:
 		/// Adds a new render operation to the object which draws a line list.
 		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation();
 
+		/// Adds a new render operation to the object which draws a triangle list.
+		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation();
+
 		/// Removes all operations.
 		void Clear() noexcept;
 
-	public:
-		/// @brief Sets the render queue group id, which controls when exactly this object will be rendered.
-		/// @param renderQueueGroupId The render queue group id of this object.
-		void SetRenderQueueGroupId(uint8 renderQueueGroupId);
-
-		/// @brief Sets the priority of this object in it's render queue group.
-		///	       The higher the priority, the earlier it will be rendered.
-		/// @param priority The priority of this object in the render queue group.
-		void SetRenderQueueGroupPriority(uint16 priority);
+		MeshPtr ConvertToMesh(const String& meshName) const;
 
 	public:
 		/// @copydoc MovableObject::GetMovableType
@@ -308,7 +464,5 @@ namespace mmo
 		std::vector<std::unique_ptr<ManualRenderOperation>> m_operations;
 		AABB m_worldAABB;
 		float m_boundingRadius { 0.0f };
-		uint8 m_renderQueueGroupId { Main };
-		uint16 m_renderQueueGroupPriority { 0 };
 	};
 }

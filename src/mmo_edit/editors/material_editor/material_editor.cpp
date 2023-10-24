@@ -33,6 +33,10 @@ namespace mmo
 		}
 	}
 
+	void MaterialEditor::AddAssetActions(const String& asset)
+	{
+	}
+
 	void MaterialEditor::DrawImpl()
 	{
 		if (m_showMaterialNameDialog)

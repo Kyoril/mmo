@@ -185,6 +185,7 @@ namespace mmo
 									m_selectedEntry = &entry;
 									m_host.SetCurrentPath(entry.fullPath);
 								}
+								
 								ImGui::TextWrapped(name.c_str());
 							}
 							else
@@ -201,6 +202,13 @@ namespace mmo
 								if (ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
 								{
 									m_host.OpenAsset(entry.fullPath);
+								}
+
+								if (ImGui::BeginPopupContextItem(entry.fullPath.c_str(), ImGuiPopupFlags_MouseButtonRight))
+								{
+									m_host.ShowAssetCreationContextMenu();
+									m_host.ShowAssetActionContextMenu(entry.fullPath);
+									ImGui::EndPopup();
 								}
 
 								ImGuiDragDropFlags src_flags = 0;
@@ -225,11 +233,10 @@ namespace mmo
 						}
 					}
 				}
-				
-				if (ImGui::BeginPopupContextWindow("AssetContextMenu", ImGuiPopupFlags_MouseButtonRight))
+
+				if (ImGui::BeginPopupContextWindow("AssetContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup))
 			    {
 					m_host.ShowAssetCreationContextMenu();
-
 			        ImGui::EndPopup();
 			    }
 			}

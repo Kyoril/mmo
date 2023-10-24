@@ -37,6 +37,28 @@ namespace mmo
 		m_viewInvalid = true;
 	}
 
+	Ray Camera::GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const
+	{
+		const Matrix4 inverseVP = (GetProjectionMatrix() * GetViewMatrix()).Inverse();
+
+		const float nx = (2.0f * viewportX) - 1.0f;
+		const float ny = 1.0f - (2.0f * viewportY);
+
+		const Vector3 nearPoint(nx, ny, -1.f);
+		const Vector3 midPoint(nx, ny, 0.0f);
+
+		// Get ray origin and ray target on near plane in world space
+		Vector3 rayOrigin, rayTarget;
+
+		rayOrigin = inverseVP * nearPoint;
+		rayTarget = inverseVP * midPoint;
+
+		Vector3 rayDirection = rayTarget - rayOrigin;
+		rayDirection.Normalize();
+
+		return Ray(rayOrigin, rayDirection, maxDistance);
+	}
+
 	void Camera::UpdateFrustum() const
 	{
 		if (!IsFrustumOutOfDate())
@@ -48,7 +70,7 @@ namespace mmo
 		CalcProjectionParameters(left, right, bottom, top);
 
 		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(m_fovY, m_aspect, m_nearDist, m_farDist);
-		m_viewMatrix = MakeViewMatrix(GetParentSceneNode()->GetDerivedPosition(), GetParentSceneNode()->GetDerivedOrientation());
+		m_viewMatrix = MakeViewMatrix(GetDerivedPosition(), GetDerivedOrientation());
 		
 		m_viewInvalid = false;
 	}

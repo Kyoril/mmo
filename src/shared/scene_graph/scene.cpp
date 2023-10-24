@@ -290,8 +290,10 @@ namespace mmo
 		{
 			
 		}
-		
+
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		renderable.PreRender(*this, gx);
 
 		if (op.useIndexes)
 		{
@@ -301,6 +303,8 @@ namespace mmo
 		{
 			gx.Draw(op.endIndex == 0 ? op.vertexBuffer->GetVertexCount() - op.startIndex : op.endIndex - op.startIndex, op.startIndex);
 		}
+
+		renderable.PostRender(*this, gx);
 	}
 
 	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)
@@ -311,9 +315,18 @@ namespace mmo
 		auto [iterator, created] = 
 			m_manualRenderObjects.emplace(
 				name, 
-				std::make_unique<ManualRenderObject>(GraphicsDevice::Get()));
+				std::make_unique<ManualRenderObject>(GraphicsDevice::Get(), name));
 		
 		return iterator->second.get();
+	}
+
+	void Scene::DestroyManualRenderObject(const ManualRenderObject& object)
+	{
+		auto it = m_manualRenderObjects.find(object.GetName());
+		if (it != m_manualRenderObjects.end())
+		{
+			m_manualRenderObjects.erase(it);
+		}
 	}
 
 	SceneNode& Scene::GetRootSceneNode() 
@@ -378,5 +391,145 @@ namespace mmo
 
 		ASSERT(m_renderQueue);
 		return *m_renderQueue;
+	}
+
+	std::vector<Entity*> Scene::GetAllEntities() const
+	{
+		// TODO: this is bad performance-wise but should serve for now
+		std::vector<Entity*> result;
+		result.reserve(m_entities.size());
+
+		for (const auto& pair : m_entities)
+		{
+			result.push_back(pair.second.get());
+		}
+
+		return result;
+	}
+
+	std::unique_ptr<AABBSceneQuery> Scene::CreateAABBQuery(const AABB& box)
+	{
+		auto query = std::make_unique<AABBSceneQuery>(*this);
+		query->SetBox(box);
+
+		return std::move(query);
+	}
+
+	std::unique_ptr<SphereSceneQuery> Scene::CreateSphereQuery(const Sphere& sphere)
+	{
+		auto query = std::make_unique<SphereSceneQuery>(*this);
+		query->SetSphere(sphere);
+
+		return std::move(query);
+	}
+
+	std::unique_ptr<RaySceneQuery> Scene::CreateRayQuery(const Ray& ray)
+	{
+		auto query = std::make_unique<RaySceneQuery>(*this);
+		query->SetRay(ray);
+
+		return std::move(query);
+	}
+
+	RaySceneQuery::RaySceneQuery(Scene& scene)
+		: SceneQuery(scene)
+	{
+	}
+
+	const RaySceneQueryResult& RaySceneQuery::Execute()
+	{
+		Execute(*this);
+
+		return m_result;
+	}
+
+	void RaySceneQuery::Execute(RaySceneQueryListener& listener)
+	{
+		// TODO: Instead of iterating over ALL objects in the scene, be smarter (for example octree)
+
+		for (const auto& entity : m_scene.GetAllEntities())
+		{
+			const auto hitResult = m_ray.IntersectsAABB(entity->GetWorldBoundingBox(true));
+			if (!hitResult.first)
+			{
+				continue;
+			}
+
+			if (!listener.QueryResult(*entity, hitResult.second))
+			{
+				return;
+			}
+		}
+	}
+
+	bool RaySceneQuery::QueryResult(MovableObject& obj, float distance)
+	{
+		RaySceneQueryResultEntry result;
+		result.movable = &obj;
+		result.distance = distance;
+		
+		const bool response = m_maxResults == 0 || m_result.size() + 1 < m_maxResults;
+
+		if (m_sortByDistance)
+		{
+			auto it = m_result.begin();
+
+			while (it != m_result.end())
+			{
+				if (it->distance > distance)
+				{
+					m_result.insert(it, std::move(result));
+					return response;
+				}
+
+				it++;
+			}
+		}
+
+		m_result.emplace_back(std::move(result));
+		return response;
+	}
+
+	AABBSceneQuery::AABBSceneQuery(Scene& scene)
+		: RegionSceneQuery(scene)
+	{
+	}
+
+	void AABBSceneQuery::Execute(SceneQueryListener& listener)
+	{
+		// TODO
+	}
+
+	RegionSceneQuery::RegionSceneQuery(Scene& scene)
+		: SceneQuery(scene)
+	{
+	}
+
+	const SceneQueryResult& RegionSceneQuery::Execute()
+	{
+		Execute(*this);
+
+		return m_lastResult;
+	}
+
+	bool RegionSceneQuery::QueryResult(MovableObject& first)
+	{
+		m_lastResult.push_back(&first);
+		return true;
+	}
+
+	SceneQuery::SceneQuery(Scene& scene)
+		: m_scene(scene)
+	{
+	}
+
+	SphereSceneQuery::SphereSceneQuery(Scene& scene)
+		: RegionSceneQuery(scene)
+	{
+	}
+
+	void SphereSceneQuery::Execute(SceneQueryListener& listener)
+	{
+		// TODO
 	}
 }

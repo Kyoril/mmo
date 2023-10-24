@@ -94,11 +94,13 @@ namespace mmo
 
 			luabind::scope(
 				luabind::class_<LoginConnector>("LoginConnector")
-					.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())),
+					.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
+					.def("IsConnected", &LoginConnector::IsConnected)),
 
 			luabind::scope(
 				luabind::class_<RealmConnector>("RealmConnector")
 	               .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
+					.def("IsConnected", &RealmConnector::IsConnected)
 	               .def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
 	               .def("GetRealmName", &RealmConnector::GetRealmName)
 	               .def("CreateCharacter", &RealmConnector::CreateCharacter)
