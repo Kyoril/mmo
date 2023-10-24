@@ -19,6 +19,7 @@ namespace mmo
 		virtual void* Map() override;
 		virtual void Unmap() override;
 		virtual void Set() override;
+		std::unique_ptr<VertexBuffer> Clone() override;
 		//~End CGxBufferBase
 		
 	private:

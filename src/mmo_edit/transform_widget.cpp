@@ -6,6 +6,7 @@
 #include "scene_graph/camera.h"
 #include "selectable.h"
 #include "selection.h"
+#include "scene_graph/material_manager.h"
 
 namespace mmo
 {
@@ -39,6 +40,8 @@ namespace mmo
 		// Create and setup dummy cam
 		m_dummyCamera = m_scene.CreateCamera("DummyCam-" + m_widgetNode->GetName());
 		m_dummyCamera->SetAspectRatio(camera.GetAspectRatio());
+
+		CreatePlaneMesh();
 
 		// Translation-Mode initialization
 		SetupTranslation();
@@ -186,6 +189,38 @@ namespace mmo
 		m_relativeWidgetPos = m_widgetNode->GetPosition() - m_camera.GetDerivedPosition();
 	}
 
+	void TransformWidget::OnMouseMoved(const float x, const float y)
+	{
+		if (!m_selection.IsEmpty() &&
+			!m_sleep &&
+			m_visible)
+		{
+			if (m_copyMode && m_active)
+			{
+				m_copyMode = false;
+				//ProjectManager.CopySelectedObjects();
+			}
+
+			Ray ray = m_camera.GetCameraToViewportRay(
+				x,
+				y,
+				10000.0f);
+
+			switch (m_mode)
+			{
+			case TransformMode::Translate:
+				TranslationMouseMoved(ray, x, y);
+				break;
+			case TransformMode::Rotate:
+				//RotationMouseMoved(ray, x, y);
+				break;
+			case TransformMode::Scale:
+				//ScaleMouseMoved(ray, x, y);
+				break;
+			}
+		}
+	}
+
 	void TransformWidget::SetupTranslation()
 	{
 		// Setup axis lines
@@ -223,6 +258,27 @@ namespace mmo
 			lineOp->SetDepthEnabled(false);
 		}
 
+		// TODO: This is hacky AF
+#define BYTE uint8
+#include "../graphics_d3d11/shaders/VS_PosColor.h"
+#include "../graphics_d3d11/shaders/PS_PosColor.h"
+
+		MaterialPtr material = MaterialManager::Get().CreateManual("TranslationAxisPlanes");
+		material->SetTwoSided(true);
+		material->SetCastShadows(false);
+		material->SetDepthTestEnabled(false);
+		material->SetDepthWriteEnabled(false);
+		material->SetType(MaterialType::Translucent);
+
+		// Create std::span<uint8> from const uint8 array g_VS_PosColor
+		std::span vsCode((uint8*)(g_VS_PosColor), sizeof(g_VS_PosColor));
+		material->SetVertexShaderCode(vsCode);
+
+		std::span psCode((uint8*)(g_PS_PosColor), sizeof(g_PS_PosColor));
+		material->SetPixelShaderCode(psCode);
+		material->Update();
+#undef BYTE
+
 		// Create translation node
 		m_translationNode = m_widgetNode->CreateChildSceneNode();
 		m_translationNode->AttachObject(*m_axisLines);
@@ -253,28 +309,6 @@ namespace mmo
 		m_zArrowNode->attachObject(m_zArrow);*/
 
 		// Setup axis
-		/*if (!Ogre::MeshManager::getSingleton().resourceExists(AxisPlaneName))
-		{
-			Ogre::ManualObject* planeObj = m_sceneMgr.createManualObject();
-			const Ogre::ColourValue planeColour(1.0f, 1.0f, 0.0f, 0.3f);
-			planeObj->begin("Editor/AxisPlane", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
-			planeObj->position(SquareLength, 0.0f, 0.0f);
-			planeObj->colour(planeColour);
-			planeObj->position(0.0f, 0.0f, 0.0f);
-			planeObj->colour(planeColour);
-			planeObj->position(SquareLength, 0.0f, SquareLength);
-			planeObj->colour(planeColour);
-			planeObj->position(0.0f, 0.0f, SquareLength);
-			planeObj->colour(planeColour);
-			planeObj->end();
-
-			m_translateAxisPlanes = planeObj->convertToMesh(AxisPlaneName);
-			m_sceneMgr.destroyManualObject(planeObj);
-		}
-		else
-		{
-			m_translateAxisPlanes = Ogre::MeshManager::getSingleton().getByName(AxisPlaneName);
-		}*/
 
 		// Create on node for each plane and rotate
 		m_xzPlaneNode = m_translationNode->CreateChildSceneNode();
@@ -283,24 +317,21 @@ namespace mmo
 		m_yzPlaneNode = m_translationNode->CreateChildSceneNode();
 		m_yzPlaneNode->Roll(Degree(90.0f), TransformSpace::Local);
 
-		/*
-		Ogre::Entity* plane1 = m_sceneMgr.createEntity(AxisPlaneName);
-		plane1->setQueryFlags(0);
-		plane1->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
-		plane1->setCastShadows(false);
-		Ogre::Entity* plane2 = m_sceneMgr.createEntity(AxisPlaneName);
-		plane2->setQueryFlags(0);
-		plane2->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
-		plane2->setCastShadows(false);
-		Ogre::Entity* plane3 = m_sceneMgr.createEntity(AxisPlaneName);
-		plane3->setQueryFlags(0);
-		plane3->setRenderQueueGroup(Ogre::RENDER_QUEUE_OVERLAY - 1);
-		plane3->setCastShadows(false);
+		Entity* plane1 = m_scene.CreateEntity("AxisPlane1", m_translateAxisPlanes);
+		plane1->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		plane1->SetMaterial(material);
 
-		m_xzPlaneNode->attachObject(plane1);
-		m_xyPlaneNode->attachObject(plane2);
-		m_yzPlaneNode->attachObject(plane3);
-		*/
+		Entity* plane2 = m_scene.CreateEntity("AxisPlane2", m_translateAxisPlanes);
+		plane2->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		plane2->SetMaterial(material);
+
+		Entity* plane3 = m_scene.CreateEntity("AxisPlane3", m_translateAxisPlanes);
+		plane3->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		plane3->SetMaterial(material);
+
+		m_xzPlaneNode->AttachObject(*plane1);
+		m_xyPlaneNode->AttachObject(*plane2);
+		m_yzPlaneNode->AttachObject(*plane3);
 
 		// Hide them initially
 		m_xzPlaneNode->SetVisible(false);
@@ -318,6 +349,35 @@ namespace mmo
 
 	void TransformWidget::UpdateTranslation()
 	{
+		// Display xz-Plane
+		if ((m_selectedAxis & axis_id::X) && (m_selectedAxis & axis_id::Z))
+		{
+			m_xzPlaneNode->SetVisible(true);
+		}
+		else
+		{
+			m_xzPlaneNode->SetVisible(false);
+		}
+
+		// Display xy-Plane
+		if ((m_selectedAxis & axis_id::X) && (m_selectedAxis & axis_id::Y))
+		{
+			m_xyPlaneNode->SetVisible(true);
+		}
+		else
+		{
+			m_xyPlaneNode->SetVisible(false);
+		}
+
+		// Display yz-Plane
+		if ((m_selectedAxis & axis_id::Y) && (m_selectedAxis & axis_id::Z))
+		{
+			m_yzPlaneNode->SetVisible(true);
+		}
+		else
+		{
+			m_yzPlaneNode->SetVisible(false);
+		}
 	}
 
 	void TransformWidget::UpdateRotation()
@@ -583,5 +643,135 @@ namespace mmo
 		camDir.Normalize();
 
 		return Plane(camDir, m_relativeWidgetPos);
+	}
+
+	void TransformWidget::CreatePlaneMesh()
+	{
+		ManualRenderObject* planeObject = m_scene.CreateManualRenderObject("__AxisPlane__");
+		planeObject->SetRenderQueueGroupAndPriority(Overlay, 1000);
+
+		{
+			const auto triangleOp = planeObject->AddTriangleListOperation();
+			triangleOp->AddTriangle(Vector3(SquareLength, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength))
+			          .SetColor(Color(1.0f, 1.0f, 0.0f, 0.6f));
+			triangleOp->AddTriangle(Vector3(SquareLength, 0.0f, SquareLength), Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, 0.0f, 0.0f))
+				.SetColor(Color(1.0f, 1.0f, 0.0f, 0.6f));
+		}
+
+		m_translateAxisPlanes = planeObject->ConvertToMesh("AxisPlane");
+		m_scene.DestroyManualRenderObject(*planeObject);
+	}
+
+	void TransformWidget::TranslationMouseMoved(Ray& ray, const float x, const float y)
+	{
+		if (!m_active)
+		{
+			m_selectedAxis = axis_id::None;
+
+			// Check for intersection between mouse and translation widget
+			auto res = ray.Intersects(GetTranslatePlane(AxisId(axis_id::X | axis_id::Z)));
+			if (res.first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetScale().x && dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetScale().x)
+				{
+					m_selectedAxis = AxisId(axis_id::X | axis_id::Z);
+					return;
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(AxisId(axis_id::X | axis_id::Y)))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetScale().x)
+				{
+					m_selectedAxis = AxisId(axis_id::X | axis_id::Y);
+					return;
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(AxisId(axis_id::Y | axis_id::Z)))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetScale().x)
+				{
+					m_selectedAxis = AxisId(axis_id::Y | axis_id::Z);
+					return;
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(axis_id::X))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.x > (CenterOffset * m_widgetNode->GetScale().x) && dir.x <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				{
+					Vector3 projection = Vector3::UnitX * dir.Dot(Vector3::UnitX);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::X;
+						return;
+					}
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Y))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.y > (CenterOffset * m_widgetNode->GetScale().x) && dir.y <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				{
+					Vector3 projection = Vector3::UnitY * dir.Dot(Vector3::UnitY);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::Y;
+						return;
+					}
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Z))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.z > (CenterOffset * m_widgetNode->GetScale().x) && dir.z <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				{
+					Vector3 projection = Vector3::UnitZ * dir.Dot(Vector3::UnitZ);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::Z;
+						return;
+					}
+				}
+			}
+		}
+		else
+		{
+			// Translate
+			if (!m_selection.IsEmpty())
+			{
+				Vector3 distance(0.0f, 0.0f, 0.0f);
+
+				Vector3 direction(
+					((m_selectedAxis & axis_id::X) ? 1.0f : 0.0f),
+					((m_selectedAxis & axis_id::Y) ? 1.0f : 0.0f),
+					((m_selectedAxis & axis_id::Z) ? 1.0f : 0.0f));
+
+				Plane plane = GetTranslatePlane(m_selectedAxis);
+				auto res = ray.Intersects(plane);
+				if (res.first)
+				{
+					Vector3 intersection = ray.GetPoint(res.second);
+					distance = intersection - m_lastIntersection;
+					distance = m_widgetNode->GetOrientation().Inverse() * distance;
+					distance *= direction;
+					distance = m_widgetNode->GetOrientation() * distance;
+					m_lastIntersection = intersection;
+				}
+
+				ApplyTranslation(distance);
+			}
+		}
 	}
 }

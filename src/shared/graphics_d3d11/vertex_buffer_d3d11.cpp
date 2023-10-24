@@ -55,4 +55,21 @@ namespace mmo
 		ID3D11DeviceContext& Context = Device;
 		Context.IASetVertexBuffers(0, ARRAYSIZE(Buffers), Buffers, &Stride, &Offset);
 	}
+
+	std::unique_ptr<VertexBuffer> VertexBufferD3D11::Clone()
+	{
+		auto buffer = std::make_unique<VertexBufferD3D11>(Device, m_vertexCount, m_vertexSize, m_dynamic);
+
+		ID3D11DeviceContext& Context = Device;
+		D3D11_MAPPED_SUBRESOURCE Sub;
+		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, D3D11_MAP_READ, 0, &Sub)));
+
+		void* newBufferData = buffer->Map();
+		memcpy(newBufferData, Sub.pData, m_vertexSize * m_vertexCount);
+		buffer->Unmap();
+
+		Context.Unmap(Buffer.Get(), 0);
+
+		return std::move(buffer);
+	}
 }

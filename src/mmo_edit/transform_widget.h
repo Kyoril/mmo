@@ -9,6 +9,7 @@
 
 namespace mmo
 {
+	struct Ray;
 	class Entity;
 	class SceneNode;
 	class ManualRenderObject;
@@ -63,6 +64,8 @@ namespace mmo
 
 		void SetVisible(const bool visible) { m_visible = visible; SetVisibility(); }
 
+		void OnMouseMoved(const float x, const float y);
+
 	private:
 		void SetupTranslation();
 
@@ -105,6 +108,10 @@ namespace mmo
 		Plane GetTranslatePlane(AxisId axis);
 
 		Plane GetScalePlane(AxisId axis);
+
+		void CreatePlaneMesh();
+
+		void TranslationMouseMoved(Ray& ray, const float x, const float y);
 
 	private:
 		// Common

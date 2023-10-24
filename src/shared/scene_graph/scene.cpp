@@ -449,7 +449,7 @@ namespace mmo
 
 		for (const auto& entity : m_scene.GetAllEntities())
 		{
-			const auto hitResult = m_ray.intersectsAABB(entity->GetWorldBoundingBox(true));
+			const auto hitResult = m_ray.IntersectsAABB(entity->GetWorldBoundingBox(true));
 			if (!hitResult.first)
 			{
 				continue;

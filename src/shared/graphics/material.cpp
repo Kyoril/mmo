@@ -131,6 +131,15 @@ namespace mmo
 
 		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 		device.SetDepthWriteEnabled(m_depthWrite);
+
+		if (m_type == MaterialType::Translucent)
+		{
+			device.SetBlendMode(BlendMode::Alpha);
+		}
+		else
+		{
+			device.SetBlendMode(BlendMode::Opaque);
+		}
 	}
 
 	void Material::BindShaders(GraphicsDevice& device)

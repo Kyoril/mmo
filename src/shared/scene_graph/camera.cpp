@@ -70,7 +70,7 @@ namespace mmo
 		CalcProjectionParameters(left, right, bottom, top);
 
 		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(m_fovY, m_aspect, m_nearDist, m_farDist);
-		m_viewMatrix = MakeViewMatrix(GetParentSceneNode()->GetDerivedPosition(), GetParentSceneNode()->GetDerivedOrientation());
+		m_viewMatrix = MakeViewMatrix(GetDerivedPosition(), GetDerivedOrientation());
 		
 		m_viewInvalid = false;
 	}

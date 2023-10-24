@@ -245,11 +245,11 @@ namespace mmo
 				m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
 				m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
+				const auto mousePos = ImGui::GetMousePos();
+				const auto contentRectMin = ImGui::GetWindowPos();
+
 				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
 				{
-					const auto mousePos = ImGui::GetMousePos();
-					const auto contentRectMin = ImGui::GetWindowPos();
-
 					const Ray ray = m_camera->GetCameraToViewportRay(
 						(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x, 
 						(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y, 
@@ -275,6 +275,11 @@ namespace mmo
 						m_debugBoundingBox->Clear();
 					}
 				}
+
+				m_transformWidget->OnMouseMoved(
+					(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y);
+
 			}
 
 			if (ImGui::BeginDragDropTarget())

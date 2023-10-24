@@ -2,6 +2,7 @@
 
 #include "vector3.h"
 #include "aabb.h"
+#include "plane.h"
 #include "base/macros.h"
 
 #include <utility>
@@ -68,6 +69,11 @@ namespace mmo
 			return GetVector().GetLength();
 		}
 
+		Vector3 GetPoint(const float t) const
+		{
+			return Vector3(origin + (direction * t));
+		}
+
 		/// @brief Checks whether this ray intersects with a triangle.
 		/// @param a The first vertex of the triangle.
 		/// @param b The second vertex of the triangle.
@@ -120,7 +126,7 @@ namespace mmo
 		/// @param box The bounding box to check.
 		/// @returns First paramater is true if ray cast intersects. Second parameter returns the
 		///          hit distance, which can be used to calculate the hit point (if first parameter is true).
-		std::pair<bool, float> intersectsAABB(const AABB& box) const
+		std::pair<bool, float> IntersectsAABB(const AABB& box) const
 		{
 			const Vector3 invDir{
 				1.0f / direction.x,
@@ -151,6 +157,22 @@ namespace mmo
 			}
 
 			return std::make_pair(true, tmin / GetLength());
+		}
+
+		std::pair<bool, float> Intersects(const Plane& p) const
+		{
+			const float denom = p.normal.Dot(direction);
+			if (::fabsf(denom) < std::numeric_limits<float>::epsilon())
+			{
+				// Parallel
+				return std::make_pair<bool, float>(false, 0.0f);
+			}
+			else
+			{
+				const float nom = p.normal.Dot(origin) + p.d;
+				const float t = -(nom / denom);
+				return std::make_pair<bool, float>(t >= 0, static_cast<float>(t));
+			}
 		}
 	};
 }
