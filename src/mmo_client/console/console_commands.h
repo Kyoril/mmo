@@ -33,6 +33,9 @@ namespace mmo
 		/// Saves all console variables into a config file.
 		void ConsoleCommand_SaveConfig(const std::string& cmd, const std::string& args);
 
+		/// @brief Lists all available commands in the console.
+		void ConsoleCommand_List(const std::string& cmd, const std::string& args);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		// TODO: Add console commands in here which are only available to developers
 #endif
