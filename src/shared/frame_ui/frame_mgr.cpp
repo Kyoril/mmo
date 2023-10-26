@@ -506,17 +506,30 @@ namespace mmo
 
 	void FrameManager::SetTopFrame(const FramePtr& topFrame)
 	{
-		m_inputCapture.reset();
+		if (topFrame == m_topFrame)
+		{
+			return;
+		}
 
+		ResetTopFrame();
 		m_topFrame = topFrame;
+
+		if (m_topFrame)
+		{
+			m_framesByName[m_topFrame->GetName()] = m_topFrame;
+		}
 	}
 
 	void FrameManager::ResetTopFrame()
 	{
-		m_inputCapture.reset();
+		m_eventFrames.clear();
+		m_fontMaps.clear();
+		m_hoverFrame = nullptr;
+		m_inputCapture = nullptr;
 		m_mouseDownFrames.clear();
 		m_framesByName.clear();
-		
+		m_inputCapture.reset();
+
 		m_topFrame.reset();
 	}
 
