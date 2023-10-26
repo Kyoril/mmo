@@ -6,7 +6,7 @@
 #include "world_instance.h"
 #include "game/game.h"
 
-#include "asio/high_resolution_timer.hpp"
+#include "asio.hpp"
 
 #include <memory>
 #include <vector>
