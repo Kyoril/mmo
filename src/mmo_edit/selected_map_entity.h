@@ -4,13 +4,14 @@
 
 namespace mmo
 {
-	class Entity;
+	class MapEntity;
 
-	class SelectedEntity : public Selectable
+	class SelectedMapEntity : public Selectable
 	{
 	public:
-		SelectedEntity(Entity& entity);
+		SelectedMapEntity(MapEntity& entity);
 
+	public:
 		// Inherited via Selectable
 		virtual void Translate(const Vector3& delta) override;
 		virtual void Rotate(const Quaternion& delta) override;
@@ -22,6 +23,6 @@ namespace mmo
 		virtual Vector3 GetScale() const override;
 
 	private:
-		Entity& m_entity;
+		MapEntity& m_entity;
 	};
 }

@@ -29,14 +29,46 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
+	/// @brief Represents a single entity on the map.
+	class MapEntity final
+	{
+	public:
+		typedef signal<void(const MapEntity&)> TransformChangedSignal;
+		TransformChangedSignal transformChanged;
+
+	public:
+		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity)
+			: m_scene(scene)
+			, m_sceneNode(sceneNode)
+			, m_entity(entity)
+		{
+		}
+
+		virtual ~MapEntity()
+		{
+			m_scene.DestroyEntity(m_entity);
+			m_scene.DestroySceneNode(m_sceneNode);
+		}
+
+	public:
+		SceneNode& GetSceneNode() const
+		{
+			return m_sceneNode;
+		}
+
+	private:
+		Scene& m_scene;
+		SceneNode& m_sceneNode;
+		Entity& m_entity;
+	};
+
+	struct WorldPage
+	{
+
+	};
+
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener
 	{
-		/// @brief Represents a single entity on the map.
-		struct MapEntity
-		{
-			SceneNode* sceneNode { nullptr };
-			Entity* entity { nullptr };
-		};
 
 	public:
 		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
@@ -103,5 +135,7 @@ namespace mmo
 		std::vector<MapEntity> m_mapEntities;
 		MapEntity* m_selectedMapEntity{ nullptr };
 		ImVec2 m_lastContentRectMin{};
+
+		std::map<uint16, WorldPage> m_pages;
 	};
 }

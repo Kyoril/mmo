@@ -14,7 +14,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
-#include "selected_entity.h"
+#include "selected_map_entity.h"
 
 namespace mmo
 {
@@ -93,6 +93,7 @@ namespace mmo
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
 
+		m_mapEntities.clear();
 		m_worldGrid.reset();
 		m_axisDisplay.reset();
 		m_scene.Clear();
@@ -281,7 +282,7 @@ namespace mmo
 					node.AttachObject(*entity);
 					m_scene.GetRootSceneNode().AddChild(node);
 
-					m_mapEntities.emplace_back(MapEntity{ &node, entity });
+					m_mapEntities.emplace_back(m_scene, node, *entity);
 					entity->SetUserObject(&m_mapEntities.back());
 		        }
 		        ImGui::EndDragDropTarget();
@@ -359,16 +360,21 @@ namespace mmo
 			m_raySceneQuery->Execute();
 
 			m_selection.Clear();
+			m_debugBoundingBox->Clear();
 
 			const auto& hitResult = m_raySceneQuery->GetLastResult();
 			if (!hitResult.empty())
 			{
-				m_selection.AddSelectable(std::make_unique<SelectedEntity>(*(Entity*)hitResult[0].movable));
-				UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-			}
-			else
-			{
-				m_debugBoundingBox->Clear();
+				Entity* entity = (Entity*)hitResult[0].movable;
+				if (entity)
+				{
+					MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
+					if (mapEntity)
+					{
+						m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity));
+						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+					}
+				}
 			}
 		}
 	}
@@ -437,6 +443,8 @@ namespace mmo
 	{
 		const auto &mainPage = page.GetMainPage();
 		const auto &pos = mainPage.GetPosition();
+
+
 
 		if (isAvailable)
 		{
