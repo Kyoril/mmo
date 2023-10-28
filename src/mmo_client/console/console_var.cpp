@@ -137,6 +137,11 @@ namespace mmo
 
 			ILOG("Successfully saved config file!");
 		}
+
+		void ConsoleCommand_List(const std::string& cmd, const std::string& args)
+		{
+			Console::ListCommands();
+		}
 	}
 
 
