@@ -83,8 +83,8 @@ namespace mmo
 		float m_nearDist { 0.01f };
 		float m_aspect;
 		float m_orthoHeight;
-		mutable Quaternion m_lastParentOrientation;
-		mutable Vector3 m_lastParentPosition;
+		mutable Quaternion m_lastParentOrientation = Quaternion::Identity;
+		mutable Vector3 m_lastParentPosition = Vector3::Zero;
 		mutable Matrix4 m_projMatrix;
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;

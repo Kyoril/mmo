@@ -116,7 +116,17 @@ namespace mmo
 			}
 			m_cameraVelocity = Vector3::Zero;
 		}
-		
+
+		if (ImGui::IsKeyPressed(ImGuiKey_Z))
+		{
+			if (!m_selection.IsEmpty())
+			{
+				m_selection.GetSelectedObjects().back()->Translate(
+					-m_selection.GetSelectedObjects().back()->GetPosition());
+			}
+			m_cameraVelocity = Vector3::Zero;
+		}
+
 		if (m_leftButtonPressed || m_rightButtonPressed)
 		{
 			Vector3 direction = Vector3::Zero;
@@ -334,6 +344,7 @@ namespace mmo
 		}
 
 		const auto mousePos = ImGui::GetMousePos();
+
 		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
 		if (!widgetWasActive && button == 0)

@@ -34,6 +34,8 @@ namespace mmo
 
 	void Camera::SetOrientation(const Quaternion& quaternion)
 	{
+		m_lastParentOrientation = quaternion;
+		m_lastParentOrientation.Normalize();
 		m_viewInvalid = true;
 	}
 

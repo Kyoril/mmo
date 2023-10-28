@@ -194,7 +194,7 @@ namespace mmo
 				//ProjectManager.CopySelectedObjects();
 			}
 
-			Ray ray = m_camera.GetCameraToViewportRay(
+			Ray ray = m_dummyCamera->GetCameraToViewportRay(
 				x,
 				y,
 				10000.0f);
@@ -229,7 +229,7 @@ namespace mmo
 					m_translation = Vector3::Zero;
 
 					Plane plane = GetTranslatePlane(m_selectedAxis);
-					Ray ray = m_camera.GetCameraToViewportRay(
+					Ray ray = m_dummyCamera->GetCameraToViewportRay(
 						x,
 						y,
 						10000.0f);
@@ -731,7 +731,10 @@ namespace mmo
 			const auto triangleOp = planeObject->AddTriangleListOperation();
 			triangleOp->AddTriangle(Vector3(SquareLength, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength))
 			          .SetColor(Color(1.0f, 1.0f, 0.0f, 0.6f));
-			triangleOp->AddTriangle(Vector3(SquareLength, 0.0f, SquareLength), Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, 0.0f, 0.0f))
+			triangleOp->AddTriangle(
+				Vector3(0.0f, 0.0f, 0.0f),
+				Vector3(0.0f, 0.0f, SquareLength), 
+				Vector3(SquareLength, 0.0f, SquareLength))
 				.SetColor(Color(1.0f, 1.0f, 0.0f, 0.6f));
 		}
 
@@ -751,7 +754,7 @@ namespace mmo
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
-				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetScale().x && dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetScale().x)
+				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetDerivedScale().x && dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetDerivedScale().x)
 				{
 					m_selectedAxis = AxisId(axis_id::X | axis_id::Z);
 					return;
@@ -762,7 +765,7 @@ namespace mmo
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
-				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetScale().x)
+				if (dir.x > 0 && dir.x <= SquareLength * m_widgetNode->GetDerivedScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetDerivedScale().x)
 				{
 					m_selectedAxis = AxisId(axis_id::X | axis_id::Y);
 					return;
@@ -773,7 +776,7 @@ namespace mmo
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
-				if (dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetScale().x)
+				if (dir.z > 0 && dir.z <= SquareLength * m_widgetNode->GetDerivedScale().x && dir.y > 0 && dir.y <= SquareLength * m_widgetNode->GetDerivedScale().x)
 				{
 					m_selectedAxis = AxisId(axis_id::Y | axis_id::Z);
 					return;
@@ -785,11 +788,11 @@ namespace mmo
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
 								
-				if (dir.x > (CenterOffset * m_widgetNode->GetScale().x) && dir.x <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				if (dir.x > (CenterOffset * m_widgetNode->GetDerivedScale().x) && dir.x <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetDerivedScale().x)
 				{
 					Vector3 projection = Vector3::UnitX * dir.Dot(Vector3::UnitX);
 					Vector3 difference = dir - projection;
-					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetDerivedScale().x)
 					{
 						m_selectedAxis = axis_id::X;
 						return;
@@ -800,11 +803,11 @@ namespace mmo
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
-				if (dir.y > (CenterOffset * m_widgetNode->GetScale().x) && dir.y <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				if (dir.y > (CenterOffset * m_widgetNode->GetDerivedScale().x) && dir.y <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetDerivedScale().x)
 				{
 					Vector3 projection = Vector3::UnitY * dir.Dot(Vector3::UnitY);
 					Vector3 difference = dir - projection;
-					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetDerivedScale().x)
 					{
 						m_selectedAxis = axis_id::Y;
 						return;
@@ -815,11 +818,11 @@ namespace mmo
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
-				if (dir.z > (CenterOffset * m_widgetNode->GetScale().x) && dir.z <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
+				if (dir.z > (CenterOffset * m_widgetNode->GetDerivedScale().x) && dir.z <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetDerivedScale().x)
 				{
 					Vector3 projection = Vector3::UnitZ * dir.Dot(Vector3::UnitZ);
 					Vector3 difference = dir - projection;
-					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetDerivedScale().x)
 					{
 						m_selectedAxis = axis_id::Z;
 						return;
