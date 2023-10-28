@@ -56,7 +56,7 @@ namespace mmo
 		~TransformWidget() override;
 
 	public:
-		void Update(Camera* camera);
+		void Update(const Camera* camera);
 
 		[[nodiscard]] const bool IsActive() const noexcept { return m_active; }
 
@@ -66,7 +66,13 @@ namespace mmo
 
 		void OnMouseMoved(const float x, const float y);
 
+		void OnMousePressed(uint32 buttons, float x, float y);
+
+		void OnMouseReleased(uint32 buttons, float x, float y);
+
 	private:
+		void UpdateTanslationAxisLines();
+
 		void SetupTranslation();
 
 		void SetupRotation();

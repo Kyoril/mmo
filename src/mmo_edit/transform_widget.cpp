@@ -1,11 +1,15 @@
 
 #include "transform_widget.h"
 
+#include <imgui.h>
+
 #include "frame_ui/color.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"
 #include "selectable.h"
 #include "selection.h"
+#include "frame_ui/mouse_event_args.h"
+#include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 
 namespace mmo
@@ -56,9 +60,6 @@ namespace mmo
 
 		// Watch for selection changes
 		m_onSelectionChanged = m_selection.changed.connect(this, &TransformWidget::OnSelectionChanged);
-
-		// Setup material
-
 	}
 
 	TransformWidget::~TransformWidget()
@@ -90,7 +91,7 @@ namespace mmo
 		}
 	}
 
-	void TransformWidget::Update(Camera* camera)
+	void TransformWidget::Update(const Camera* camera)
 	{
 		if (!m_active)
 		{
@@ -164,22 +165,14 @@ namespace mmo
 			switch (m_mode)
 			{
 			case TransformMode::Translate:
-			{
 				UpdateTranslation();
 				break;
-			}
-
 			case TransformMode::Rotate:
-			{
 				UpdateRotation();
 				break;
-			}
-
 			case TransformMode::Scale:
-			{
 				UpdateScale();
 				break;
-			}
 			}
 		}
 
@@ -221,42 +214,123 @@ namespace mmo
 		}
 	}
 
-	void TransformWidget::SetupTranslation()
+	void TransformWidget::OnMousePressed(uint32 buttons, float x, float y)
 	{
-		// Setup axis lines
-		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
-		m_axisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		if (buttons == 0)
+		{
+			if (m_selectedAxis != axis_id::None && !m_sleep && m_visible)
+			{
+				m_active = true;
 
+				switch (m_mode)
+				{
+				case TransformMode::Translate:
+				{
+					m_translation = Vector3::Zero;
+
+					Plane plane = GetTranslatePlane(m_selectedAxis);
+					Ray ray = m_camera.GetCameraToViewportRay(
+						x,
+						y,
+						10000.0f);
+
+					auto result = ray.Intersects(plane);
+					if (result.first)
+					{
+						m_lastIntersection = ray.GetPoint(result.second);
+					}
+
+					break;
+				}
+
+				case TransformMode::Rotate:
+					m_rotation = Quaternion::Identity;
+					break;
+
+				case TransformMode::Scale:
+					//TODO
+					break;
+				}
+			}
+		}
+	}
+
+	void TransformWidget::OnMouseReleased(uint32 buttons, float x, float y)
+	{
+		if (buttons == 0)
+		{
+			m_active = false;
+
+			switch (m_mode)
+			{
+			case TransformMode::Translate:
+				FinishTranslation();
+				break;
+
+			case TransformMode::Rotate:
+				FinishRotation();
+				break;
+
+			case TransformMode::Scale:
+				FinishScale();
+				break;
+			}
+		}
+	}
+
+	void TransformWidget::UpdateTanslationAxisLines()
+	{
 		const Vector3 xTipPos(CenterOffset + LineLength, 0.0f, 0.0f);
 		const Vector3 yTipPos(0.0f, CenterOffset + LineLength, 0.0f);
 		const Vector3 zTipPos(0.0f, 0.0f, CenterOffset + LineLength);
 
+		m_axisLines->Clear();
+
 		// X Axis
 		{
+			const Color color = (m_selectedAxis & axis_id::X) == 0 ? Color(1.0f, 0.0f, 0.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
+
 			const auto lineOp = m_axisLines->AddLineListOperation();
-			lineOp->AddLine(Vector3(CenterOffset, 0.0f, 0.0f), xTipPos).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
-			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
-			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(CenterOffset, 0.0f, 0.0f), xTipPos).SetColor(color);
+			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(color);
+			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(color);
 			lineOp->SetDepthEnabled(false);
 		}
 
 		// Y Axis
 		{
+			const Color color = (m_selectedAxis & axis_id::Y) == 0 ? Color(0.0f, 1.0f, 0.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
+
 			const auto lineOp = m_axisLines->AddLineListOperation();
-			lineOp->AddLine(Vector3(0.0f, CenterOffset, 0.0f), yTipPos).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
-			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
-			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 1.0f, 0.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, CenterOffset, 0.0f), yTipPos).SetColor(color);
+			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(color);
+			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(0.0f, SquareLength, SquareLength)).SetColor(color);
 			lineOp->SetDepthEnabled(false);
 		}
 
 		// Z Axis
 		{
+			const Color color = (m_selectedAxis & axis_id::Z) == 0 ? Color(0.0f, 0.0f, 1.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
+
 			const auto lineOp = m_axisLines->AddLineListOperation();
-			lineOp->AddLine(Vector3(0.0f, 0.0f, CenterOffset), zTipPos).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
-			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, SquareLength, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
-			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(Color(0.0f, 0.0f, 1.0f, 1.0f));
+			lineOp->AddLine(Vector3(0.0f, 0.0f, CenterOffset), zTipPos).SetColor(color);
+			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, SquareLength, SquareLength)).SetColor(color);
+			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(color);
 			lineOp->SetDepthEnabled(false);
 		}
+	}
+
+	void TransformWidget::SetupTranslation()
+	{
+		const Vector3 xTipPos(CenterOffset + LineLength, 0.0f, 0.0f);
+		const Vector3 yTipPos(0.0f, CenterOffset + LineLength, 0.0f);
+		const Vector3 zTipPos(0.0f, 0.0f, CenterOffset + LineLength);
+
+		// Setup axis lines
+		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
+		m_axisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
+
+		UpdateTanslationAxisLines();
 
 		// TODO: This is hacky AF
 #define BYTE uint8
@@ -349,6 +423,9 @@ namespace mmo
 
 	void TransformWidget::UpdateTranslation()
 	{
+		// Set x-axis color
+		UpdateTanslationAxisLines();
+
 		// Display xz-Plane
 		if ((m_selectedAxis & axis_id::X) && (m_selectedAxis & axis_id::Z))
 		{
@@ -555,20 +632,20 @@ namespace mmo
 	{
 		if (axis == (axis_id::X | axis_id::Z))
 		{
-			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
+			return Plane{ m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos };
 		}
 		
 		if (axis == (axis_id::X | axis_id::Y))
 		{
-			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
+			return Plane{ m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos };
 		}
 		
 		if (axis == (axis_id::Y | axis_id::Z))
 		{
-			return Plane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
+			return Plane{ m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos };
 		}
 
-		Vector3 camDir = -m_relativeWidgetPos;
+		Vector3 camDir = (-m_relativeWidgetPos).NormalizedCopy();
 		camDir = m_widgetNode->GetOrientation().Inverse() * camDir;
 
 		switch (axis)
@@ -595,7 +672,7 @@ namespace mmo
 		camDir = m_widgetNode->GetOrientation() * camDir;
 		camDir.Normalize();
 
-		return Plane(camDir, m_relativeWidgetPos);
+		return Plane{ camDir, m_relativeWidgetPos };
 	}
 
 	Plane TransformWidget::GetScalePlane(AxisId axis)
@@ -680,6 +757,7 @@ namespace mmo
 					return;
 				}
 			}
+
 			if ((res = ray.Intersects(GetTranslatePlane(AxisId(axis_id::X | axis_id::Y)))).first)
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
@@ -690,6 +768,7 @@ namespace mmo
 					return;
 				}
 			}
+
 			if ((res = ray.Intersects(GetTranslatePlane(AxisId(axis_id::Y | axis_id::Z)))).first)
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
@@ -700,10 +779,12 @@ namespace mmo
 					return;
 				}
 			}
+
 			if ((res = ray.Intersects(GetTranslatePlane(axis_id::X))).first)
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+								
 				if (dir.x > (CenterOffset * m_widgetNode->GetScale().x) && dir.x <= (CenterOffset + LineLength + TipLength) * m_widgetNode->GetScale().x)
 				{
 					Vector3 projection = Vector3::UnitX * dir.Dot(Vector3::UnitX);

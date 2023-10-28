@@ -43,20 +43,27 @@ namespace mmo
 
 		void SetMaterial(const std::shared_ptr<Material>& material);
 
+		void SetUserObject(void* userObject) { m_userObject = userObject; }
+
+		template<typename T>
+		T* GetUserObject() const { return static_cast<T*>(m_userObject); }
+
 	protected:
-		MeshPtr m_mesh;
+		MeshPtr m_mesh{nullptr};
 
 		typedef std::vector<std::unique_ptr<SubEntity>> SubEntities;
-		SubEntities m_subEntities;
+		SubEntities m_subEntities{};
 
 		bool m_initialized { false };
 
-		Matrix4 m_lastParentTransform;
+		Matrix4 m_lastParentTransform{};
 
 		typedef std::map<String, MovableObject*> ChildObjects;
-		ChildObjects m_childObjects;
+		ChildObjects m_childObjects{};
 
-		mutable AABB m_fullBoundingBox;
+		mutable AABB m_fullBoundingBox {};
+
+		void* m_userObject{ nullptr };
 		
 	protected:
 		void BuildSubEntityList(const MeshPtr& mesh, SubEntities& subEntities);
@@ -64,6 +71,7 @@ namespace mmo
 		void Initialize();
 
 		void Deinitialize();
+
 	public:
 
 		[[nodiscard]] const String& GetMovableType() const override;

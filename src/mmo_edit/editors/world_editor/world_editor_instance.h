@@ -31,6 +31,13 @@ namespace mmo
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener
 	{
+		/// @brief Represents a single entity on the map.
+		struct MapEntity
+		{
+			SceneNode* sceneNode { nullptr };
+			Entity* entity { nullptr };
+		};
+
 	public:
 		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
 		~WorldEditorInstance() override;
@@ -92,5 +99,9 @@ namespace mmo
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
+
+		std::vector<MapEntity> m_mapEntities;
+		MapEntity* m_selectedMapEntity{ nullptr };
+		ImVec2 m_lastContentRectMin{};
 	};
 }

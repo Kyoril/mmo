@@ -71,7 +71,7 @@ namespace mmo
 
 		Vector3 GetPoint(const float t) const
 		{
-			return Vector3(origin + (direction * t));
+			return Vector3(origin + direction * t);
 		}
 
 		/// @brief Checks whether this ray intersects with a triangle.
@@ -167,12 +167,10 @@ namespace mmo
 				// Parallel
 				return std::make_pair<bool, float>(false, 0.0f);
 			}
-			else
-			{
-				const float nom = p.normal.Dot(origin) + p.d;
-				const float t = -(nom / denom);
-				return std::make_pair<bool, float>(t >= 0, static_cast<float>(t));
-			}
+
+			const float nom = -p.normal.Dot(origin) - p.d;
+			const float t = nom / denom;
+			return std::make_pair<bool, float>(t >= 0, static_cast<float>(t));
 		}
 	};
 }

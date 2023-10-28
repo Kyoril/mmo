@@ -80,6 +80,9 @@ namespace mmo
 
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
+
+		// TODO: Load map file
+
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -103,7 +106,14 @@ namespace mmo
 	
 		if (ImGui::IsKeyPressed(ImGuiKey_F))
 		{
-			m_cameraAnchor->SetPosition(Vector3::Zero);
+			if (m_selection.IsEmpty())
+			{
+				m_cameraAnchor->SetPosition(Vector3::Zero);
+			}
+			else
+			{
+				m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
+			}
 			m_cameraVelocity = Vector3::Zero;
 		}
 		
@@ -247,39 +257,7 @@ namespace mmo
 
 				const auto mousePos = ImGui::GetMousePos();
 				const auto contentRectMin = ImGui::GetWindowPos();
-
-				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-				{
-					const Ray ray = m_camera->GetCameraToViewportRay(
-						(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x, 
-						(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y, 
-						10000.0f);
-					m_raySceneQuery->SetRay(ray);
-
-					m_raySceneQuery->ClearResult();
-					m_raySceneQuery->Execute();
-
-					m_selection.Clear();
-
-					if (!m_raySceneQuery->GetLastResult().empty())
-					{
-						// TODO: Objects were hit, but only their bounding boxes. Iterate through hit results and maybe do a per-triangle collision check
-						for (const auto& hitResult : m_raySceneQuery->GetLastResult())
-						{
-							m_selection.AddSelectable(std::make_unique<SelectedEntity>(*(Entity*)hitResult.movable));
-							UpdateDebugAABB(hitResult.movable->GetWorldBoundingBox());
-						}
-					}
-					else
-					{
-						m_debugBoundingBox->Clear();
-					}
-				}
-
-				m_transformWidget->OnMouseMoved(
-					(mousePos.x - contentRectMin.x) / m_lastAvailViewportSize.x,
-					(mousePos.y - contentRectMin.y) / m_lastAvailViewportSize.y);
-
+				m_lastContentRectMin = contentRectMin;
 			}
 
 			if (ImGui::BeginDragDropTarget())
@@ -288,11 +266,13 @@ namespace mmo
 		        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 		        {
 					const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
-					auto* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
+					Entity* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
 					auto& node = m_scene.CreateSceneNode(uniqueId);
 					node.AttachObject(*entity);
-					
 					m_scene.GetRootSceneNode().AddChild(node);
+
+					m_mapEntities.emplace_back(MapEntity{ &node, entity });
+					entity->SetUserObject(&m_mapEntities.back());
 		        }
 		        ImGui::EndDragDropTarget();
 		    }
@@ -335,10 +315,15 @@ namespace mmo
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+
+		const auto mousePos = ImGui::GetMousePos();
+		m_transformWidget->OnMousePressed(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 	}
 
 	void WorldEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
+		const bool widgetWasActive = m_transformWidget->IsActive();
+
 		if (button == 0)
 		{
 			m_leftButtonPressed = false;
@@ -347,28 +332,68 @@ namespace mmo
 		{
 			m_rightButtonPressed = false;
 		}
+
+		const auto mousePos = ImGui::GetMousePos();
+		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+		if (!widgetWasActive && button == 0)
+		{
+			const Ray ray = m_camera->GetCameraToViewportRay(
+				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+				10000.0f);
+			m_raySceneQuery->SetRay(ray);
+			m_raySceneQuery->SetSortByDistance(true);
+			m_raySceneQuery->ClearResult();
+			m_raySceneQuery->Execute();
+
+			m_selection.Clear();
+
+			const auto& hitResult = m_raySceneQuery->GetLastResult();
+			if (!hitResult.empty())
+			{
+				m_selection.AddSelectable(std::make_unique<SelectedEntity>(*(Entity*)hitResult[0].movable));
+				UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+			}
+			else
+			{
+				m_debugBoundingBox->Clear();
+			}
+		}
 	}
 
 	void WorldEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
 	{
-		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
-
-		// Calculate mouse move delta
-		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
-		const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
-
-		if (m_leftButtonPressed || m_rightButtonPressed)
+		if (!m_transformWidget->IsActive())
 		{
-			m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
-			m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
+			const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
+
+			// Calculate mouse move delta
+			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
+			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
+
+			if (m_leftButtonPressed || m_rightButtonPressed)
+			{
+				m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
+				m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
+			}
+
+			m_lastMouseX = x;
+			m_lastMouseY = y;
 		}
 
-		m_lastMouseX = x;
-		m_lastMouseY = y;
+		const auto mousePos = ImGui::GetMousePos();
+		m_transformWidget->OnMouseMoved(
+			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 	}
 
 	void WorldEditorInstance::Save()
 	{
+		// Save all map entity names
+
+		// Save all tiles
+
 	}
 
 	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
