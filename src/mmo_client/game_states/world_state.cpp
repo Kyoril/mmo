@@ -186,11 +186,6 @@ namespace mmo
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
-		m_groundEntity = m_scene.CreateEntity("Ground", "Models/Floor/Floor.hmsh");
-		m_groundNode = &m_scene.CreateSceneNode("Ground");
-		m_groundNode->AttachObject(*m_groundEntity);
-		m_scene.GetRootSceneNode().AddChild(*m_groundNode);
-
 		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
@@ -208,39 +203,6 @@ namespace mmo
 		m_sunLight->SetPowerScale(1.0f);
 		m_sunLight->SetColor(Color::White);
 		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
-		
-		m_archEntity = m_scene.CreateEntity("FortressArch01", "Models/Fortress_Arch_01/Fortress_Arch_01.hmsh");
-		m_towerLeftEntity = m_scene.CreateEntity("FortressTowerLeft01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
-		m_towerRightEntity = m_scene.CreateEntity("FortressTowerRight01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
-
-		m_archNode = &m_scene.CreateSceneNode("FortressArch01");
-		m_scene.GetRootSceneNode().AddChild(*m_archNode);
-		m_archNode->SetPosition({1.1f, 0.0f, -0.1f });
-		m_archNode->AttachObject(*m_archEntity);
-		
-		m_towerLeftNode = &m_scene.CreateSceneNode("FortressTowerLeft01");
-		m_scene.GetRootSceneNode().AddChild(*m_towerLeftNode);
-		m_towerLeftNode->SetPosition({-7.45f, -0.05f, -0.2f });
-		m_towerLeftNode->AttachObject(*m_towerLeftEntity);
-
-		m_towerRightNode = &m_scene.CreateSceneNode("FortressTowerRight01");
-		m_scene.GetRootSceneNode().AddChild(*m_towerRightNode);
-		m_towerRightNode->SetPosition({9.55f, -0.05f, -0.2f });
-		m_towerRightNode->AttachObject(*m_towerRightEntity);
-		
-		auto* centrailStairEntity = m_scene.CreateEntity("CentralStairs", "Models/Central_Stairs.hmsh");
-		auto& centralStairNode = m_scene.CreateSceneNode("CentralStairs");
-		m_scene.GetRootSceneNode().AddChild(centralStairNode);
-		centralStairNode.SetOrientation(Quaternion(Degree(-180), Vector3::UnitY));
-		centralStairNode.SetPosition({-0.45f, -0.10f, 2.75f + 50.0f });
-		centralStairNode.AttachObject(*centrailStairEntity);
-
-		auto* flowerBedEntity = m_scene.CreateEntity("Stone_Flower_Bed_01", "Models/Stone_Flower_Bed_01.hmsh");
-		auto& flowerBedNode = m_scene.CreateSceneNode("Stone_Flower_Bed_01");
-		m_scene.GetRootSceneNode().AddChild(flowerBedNode);
-		flowerBedNode.SetOrientation(Quaternion(Degree(-180), Vector3::UnitY));
-		flowerBedNode.SetPosition({-0.60f, -0.15f, 1.93f + 50.0f });
-		flowerBedNode.AttachObject(*flowerBedEntity);
 	}
 
 	void WorldState::SetupPacketHandler()

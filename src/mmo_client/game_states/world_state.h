@@ -127,14 +127,6 @@ namespace mmo
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
 
-		SceneNode* m_archNode { nullptr };
-		SceneNode* m_towerLeftNode { nullptr };
-		SceneNode* m_towerRightNode { nullptr };
-		Entity* m_archEntity { nullptr };
-		Entity* m_towerLeftEntity { nullptr };
-		Entity* m_towerRightEntity { nullptr };
-		SceneNode* m_groundNode { nullptr };
-		Entity* m_groundEntity { nullptr };
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
