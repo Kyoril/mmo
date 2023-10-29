@@ -28,6 +28,19 @@ namespace mmo
 
 	extern CharacterView s_selectedCharacter;
 
+	constexpr uint32 versionHeader = 'MVER';
+	constexpr uint32 meshHeader = 'MESH';
+	constexpr uint32 entityHeader = 'MENT';
+
+	struct MapEntityChunkContent
+	{
+		uint32 uniqueId;
+		uint32 meshNameIndex;
+		Vector3 position;
+		Quaternion rotation;
+		Vector3 scale;
+	};
+
 	// Console command names
 	namespace command_names
 	{
@@ -93,6 +106,8 @@ namespace mmo
 		RegisterGameplayCommands();
 
 		SetupPacketHandler();
+
+		LoadMap("Worlds/Development/Development.hwld");
 	}
 
 	void WorldState::OnLeave()
@@ -481,5 +496,140 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	bool WorldState::LoadMap(const String& assetPath)
+	{
+
+		// TODO: Load map file
+		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath);
+		if (!streamPtr)
+		{
+			ELOG("Failed to load world file '" << assetPath << "'");
+			return false;
+		}
+
+		io::StreamSource source{ *streamPtr };
+		io::Reader reader{ source };
+
+		// Read mver chunk
+		uint32 chunkHeader, chunkSize;
+		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return false;
+		}
+
+		if (chunkHeader != versionHeader)
+		{
+			ELOG("Failed to read world file: Expected version header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+			return false;
+		}
+		if (chunkSize != sizeof(uint32))
+		{
+			ELOG("Failed to read world file: Invalid version header chunk size");
+			return false;
+		}
+
+		uint32 version;
+		if (!(reader >> io::read<uint32>(version)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return false;
+		}
+
+		if (version != 0x0001)
+		{
+			ELOG("Failed to read world file: Unsupported version '" << log_hex_digit(version) << "'");
+			return false;
+		}
+
+		// Read mesh name chunk
+		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return false;
+		}
+		if (chunkHeader != meshHeader)
+		{
+			ELOG("Failed to read world file: Expected mesh header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+			return false;
+		}
+
+		if (chunkSize <= 0)
+		{
+			return false;
+		}
+
+		const size_t contentStart = source.position();
+		std::vector<String> meshNames;
+		while (source.position() - contentStart < chunkSize)
+		{
+			String meshName;
+			if (!(reader >> io::read_string(meshName)))
+			{
+				ELOG("Failed to read world file: Unexpected end of file");
+				return false;
+			}
+
+			meshNames.emplace_back(std::move(meshName));
+			DLOG("\tMesh name: " << meshNames.back());
+		}
+
+		// Read entities
+		while (reader)
+		{
+			if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+			{
+				break;
+			}
+
+			if (chunkHeader != entityHeader)
+			{
+				ELOG("Failed to read world file: Expected entity header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+				return false;
+			}
+
+			if (chunkSize != sizeof(MapEntityChunkContent))
+			{
+				ELOG("Failed to read world file: Invalid entity header chunk size: Expected '" << sizeof(MapEntityChunkContent) << "' but got '" << chunkSize << "'");
+				return false;
+			}
+
+			MapEntityChunkContent content;
+			reader.readPOD(content);
+			if (!reader)
+			{
+				ELOG("Failed to read world file: Unexpected end of file");
+				return false;
+			}
+
+			if (content.meshNameIndex >= meshNames.size())
+			{
+				ELOG("Failed to read world file: Invalid mesh name index");
+				return false;
+			}
+
+			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+		}
+
+		ILOG("Successfully read world file!");
+
+		return true;
+	}
+
+	void WorldState::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	{
+		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
+		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
+		if (entity)
+		{
+			auto& node = m_scene.CreateSceneNode(uniqueId);
+			m_scene.GetRootSceneNode().AddChild(node);
+			node.AttachObject(*entity);
+			node.SetPosition(position);
+			node.SetOrientation(orientation);
+			node.SetScale(scale);
+		}
 	}
 }

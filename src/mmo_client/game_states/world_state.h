@@ -15,6 +15,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 
+#include "base/id_generator.h"
 
 namespace mmo
 {
@@ -65,7 +66,7 @@ namespace mmo
 
 		bool OnMouseWheel(int32 delta);
 		
-		bool OnKeyDown(int32 key);
+		bool OnKeyDown(int32 key);	
 		
 		bool OnKeyUp(int32 key);
 
@@ -117,6 +118,12 @@ namespace mmo
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 
 	private:
+
+		bool LoadMap(const String& assetPath);
+
+		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
+	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
@@ -126,6 +133,7 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
+		IdGenerator<uint64> m_objectIdGenerator{ 1 };
 
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };

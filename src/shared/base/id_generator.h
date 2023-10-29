@@ -3,6 +3,7 @@
 #pragma once
 
 #include "non_copyable.h"
+#include <memory>
 
 namespace mmo
 {
