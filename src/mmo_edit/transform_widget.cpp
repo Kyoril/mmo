@@ -278,6 +278,12 @@ namespace mmo
 		}
 	}
 
+	void TransformWidget::SetSnapToGrid(bool snap, float gridSize)
+	{
+		m_snap = snap;
+		m_step = gridSize;
+	}
+
 	void TransformWidget::UpdateTanslationAxisLines()
 	{
 		const Vector3 xTipPos(CenterOffset + LineLength, 0.0f, 0.0f);
@@ -514,15 +520,36 @@ namespace mmo
 	{
 		m_translation += dir;
 
-		for (auto& selected : m_selection.GetSelectedObjects())
+		if (m_snap)
 		{
-			selected->Translate(dir);
+			const Vector3 previousSnappedDir = m_snappedTranslation;
+			m_snappedTranslation = Vector3(
+				std::round(m_translation.x / m_step) * m_step,
+				std::round(m_translation.y / m_step) * m_step,
+				std::round(m_translation.z / m_step) * m_step);
+
+			if (!m_snappedTranslation.IsNearlyEqual(previousSnappedDir))
+			{
+				const Vector3 diff = m_snappedTranslation - previousSnappedDir;
+				for (auto& selected : m_selection.GetSelectedObjects())
+				{
+					selected->Translate(diff);
+				}
+			}
+		}
+		else
+		{
+			for (auto& selected : m_selection.GetSelectedObjects())
+			{
+				selected->Translate(dir);
+			}
 		}
 	}
 
 	void TransformWidget::FinishTranslation()
 	{
 		m_translation = Vector3::Zero;
+		m_snappedTranslation = Vector3::Zero;
 	}
 
 	void TransformWidget::ApplyRotation(const Quaternion& rotation)

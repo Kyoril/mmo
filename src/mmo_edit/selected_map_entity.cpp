@@ -52,4 +52,22 @@ namespace mmo
     {
         return m_entity.GetSceneNode().GetDerivedScale();
     }
+
+    void SelectedMapEntity::SetPosition(const Vector3& position) const
+    {
+        m_entity.GetSceneNode().SetPosition(position);
+		positionChanged(*this);
+    }
+
+    void SelectedMapEntity::SetOrientation(const Quaternion& orientation) const
+    {
+        m_entity.GetSceneNode().SetOrientation(orientation);
+        rotationChanged(*this);
+    }
+
+    void SelectedMapEntity::SetScale(const Vector3& scale) const
+    {
+		m_entity.GetSceneNode().SetScale(scale);
+		scaleChanged(*this);
+    }
 }

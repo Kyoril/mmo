@@ -114,6 +114,11 @@ namespace mmo
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
 		Vector3 m_cameraVelocity{};
+		bool m_hovering{ false };
+
+		bool m_gridSnap { true };
+		float m_gridSizes[7] = { 0.1f, 0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 4.0f };
+		int m_currentGridSizeIndex { 3 };
 		
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
@@ -132,7 +137,7 @@ namespace mmo
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
 
-		std::vector<MapEntity> m_mapEntities;
+		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
 		MapEntity* m_selectedMapEntity{ nullptr };
 		ImVec2 m_lastContentRectMin{};
 

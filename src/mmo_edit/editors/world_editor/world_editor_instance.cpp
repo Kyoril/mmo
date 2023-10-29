@@ -218,6 +218,36 @@ namespace mmo
 			{
 				Save();
 			}
+
+			ImGui::Separator();
+
+			if (!m_selection.IsEmpty())
+			{
+				// Transform rotation into human readable format
+				Radian x, y, z;
+				Matrix3 rot;
+				m_selection.GetSelectedObjects().back()->GetOrientation().ToRotationMatrix(rot);
+				rot.ToEulerAnglesXYZ(x, y, z);
+				float angles[3] = { x.GetValueDegrees(), y.GetValueDegrees(), z.GetValueDegrees() };
+
+				Vector3 position = m_selection.GetSelectedObjects().back()->GetPosition();
+				Vector3 scale = m_selection.GetSelectedObjects().back()->GetScale();
+
+				if (ImGui::InputFloat3("Position", position.Ptr()))
+				{
+					m_selection.GetSelectedObjects().back()->SetPosition(position);
+				}
+				if (ImGui::InputFloat3("Rotation", angles))
+				{
+					rot.FromEulerAnglesXYZ(Degree(angles[0]), Degree(angles[1]), Degree(angles[2]));
+					const Quaternion quat{ rot };
+					m_selection.GetSelectedObjects().back()->SetOrientation(quat);
+				}
+				if (ImGui::InputFloat3("Scale", scale.Ptr()))
+				{
+					m_selection.GetSelectedObjects().back()->SetScale(scale);
+				}
+			}
 		}
 		ImGui::End();
 		
@@ -259,7 +289,8 @@ namespace mmo
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
 
-			if (ImGui::IsItemHovered())
+			m_hovering = ImGui::IsItemHovered();
+			if (m_hovering)
 			{
 				m_cameraSpeed = std::max(std::min(m_cameraSpeed + ImGui::GetIO().MouseWheel * 5.0f, 200.0f), 1.0f);
 
@@ -276,14 +307,47 @@ namespace mmo
 				// We only accept mesh file drops
 		        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 		        {
+					Vector3 position = Vector3::Zero;
+
+					const ImVec2 mousePos = ImGui::GetMousePos();
+					const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
+					const Ray ray = m_camera->GetCameraToViewportRay(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+												(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+												10000.0f);
+					const auto hit = ray.Intersects(plane);
+					if (hit.first)
+					{
+						position = ray.GetPoint(hit.second);
+					}
+					else
+					{
+						position = ray.GetPoint(10.0f);
+					}
+
+					// Snap to grid?
+					if (m_gridSnap)
+					{
+						const float gridSize = m_gridSizes[m_currentGridSizeIndex];
+
+						// Snap position to grid size
+						position.x = std::round(position.x / gridSize) * gridSize;
+						position.y = std::round(position.y / gridSize) * gridSize;
+						position.z = std::round(position.z / gridSize) * gridSize;
+					}
+
 					const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 					Entity* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
-					auto& node = m_scene.CreateSceneNode(uniqueId);
-					node.AttachObject(*entity);
-					m_scene.GetRootSceneNode().AddChild(node);
+					if (entity)
+					{
+						auto& node = m_scene.CreateSceneNode(uniqueId);
+						m_scene.GetRootSceneNode().AddChild(node);
+						node.AttachObject(*entity);
+						node.SetPosition(position);
 
-					m_mapEntities.emplace_back(m_scene, node, *entity);
-					entity->SetUserObject(&m_mapEntities.back());
+						m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+						entity->SetUserObject(m_mapEntities.back().get());
+					}
 		        }
 		        ImGui::EndDragDropTarget();
 		    }
@@ -292,6 +356,34 @@ namespace mmo
 			ImGui::SetCursorPos(ImVec2(16, 16));
 			
 			ImGui::Button("Toggle Grid");
+			ImGui::SameLine();
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+			ImGui::SameLine();
+
+			if (ImGui::Checkbox("Snap", &m_gridSnap))
+			{
+				m_transformWidget->SetSnapToGrid(m_gridSnap, m_gridSizes[m_currentGridSizeIndex]);
+			}
+			ImGui::SameLine();
+
+			static const char* gridSizes[] = { "0.1", "0.25", "0.5", "1.0", "1.5", "2.0", "4.0" };
+			if (ImGui::BeginCombo("##gridSizes", nullptr, ImGuiComboFlags_NoPreview))
+			{
+				for (int i = 0; i < 7; ++i)
+				{
+					const bool isSelected = i == m_currentGridSizeIndex;
+					if (ImGui::Selectable(gridSizes[i], isSelected))
+					{
+						m_currentGridSizeIndex = i;
+						m_transformWidget->SetSnapToGrid(m_gridSnap, m_gridSizes[m_currentGridSizeIndex]);
+					}
+					if (isSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
 		}
 		ImGui::End();
 		
@@ -327,8 +419,11 @@ namespace mmo
 		m_lastMouseX = x;
 		m_lastMouseY = y;
 
-		const auto mousePos = ImGui::GetMousePos();
-		m_transformWidget->OnMousePressed(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+		if (m_hovering)
+		{
+			const auto mousePos = ImGui::GetMousePos();
+			m_transformWidget->OnMousePressed(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+		}
 	}
 
 	void WorldEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
@@ -345,10 +440,9 @@ namespace mmo
 		}
 
 		const auto mousePos = ImGui::GetMousePos();
-
 		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
-		if (!widgetWasActive && button == 0)
+		if (!widgetWasActive && button == 0 && m_hovering)
 		{
 			const Ray ray = m_camera->GetCameraToViewportRay(
 				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
