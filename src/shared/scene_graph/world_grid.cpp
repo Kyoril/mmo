@@ -47,7 +47,13 @@ namespace mmo
 
 		m_sceneNode->SetPosition(newPosition);
 	}
-	
+
+	void WorldGrid::SetQueryFlags(const uint32 mask) const
+	{
+		ASSERT(m_renderObject);
+		m_renderObject->SetQueryFlags(mask);
+	}
+
 	void WorldGrid::SetupGrid() const
 	{
 		m_renderObject->Clear();

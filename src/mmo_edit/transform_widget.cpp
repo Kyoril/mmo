@@ -335,6 +335,7 @@ namespace mmo
 		// Setup axis lines
 		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
 		m_axisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		m_axisLines->SetQueryFlags(0);
 
 		UpdateTanslationAxisLines();
 
@@ -400,14 +401,17 @@ namespace mmo
 		Entity* plane1 = m_scene.CreateEntity("AxisPlane1", m_translateAxisPlanes);
 		plane1->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane1->SetMaterial(material);
+		plane1->SetQueryFlags(0);
 
 		Entity* plane2 = m_scene.CreateEntity("AxisPlane2", m_translateAxisPlanes);
 		plane2->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane2->SetMaterial(material);
+		plane2->SetQueryFlags(0);
 
 		Entity* plane3 = m_scene.CreateEntity("AxisPlane3", m_translateAxisPlanes);
 		plane3->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane3->SetMaterial(material);
+		plane3->SetQueryFlags(0);
 
 		m_xzPlaneNode->AttachObject(*plane1);
 		m_xyPlaneNode->AttachObject(*plane2);

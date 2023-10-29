@@ -449,6 +449,18 @@ namespace mmo
 
 		for (const auto& entity : m_scene.GetAllEntities())
 		{
+			// Filtered due to type flags
+			if ((entity->GetTypeFlags() & m_queryTypeMask) == 0)
+			{
+				continue;
+			}
+
+			// Filtered due to query flags
+			if ((entity->GetQueryFlags() & m_queryMask) == 0)
+			{
+				continue;
+			}
+
 			const auto hitResult = m_ray.IntersectsAABB(entity->GetWorldBoundingBox(true));
 			if (!hitResult.first)
 			{

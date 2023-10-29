@@ -18,6 +18,15 @@
 
 namespace mmo
 {
+	/// @brief Default value. Object will not be hit by any scene query.
+	static constexpr uint32 SceneQueryFlags_None = 0;
+
+	/// @brief Used for map entities.
+	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
+
+	/// @brief Used to get all known objects.
+	static constexpr uint32 SceneQueryFlags_All = 0xffffffff;
+
 	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
@@ -34,8 +43,7 @@ namespace mmo
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
-		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
-			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
+		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &WorldEditorInstance::Render);
 
@@ -66,6 +74,7 @@ namespace mmo
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 		
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
+		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
 
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
@@ -95,7 +104,6 @@ namespace mmo
 
 		m_mapEntities.clear();
 		m_worldGrid.reset();
-		m_axisDisplay.reset();
 		m_scene.Clear();
 	}
 
@@ -340,6 +348,8 @@ namespace mmo
 					Entity* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
 					if (entity)
 					{
+						entity->SetQueryFlags(SceneQueryFlags_Entity);
+
 						auto& node = m_scene.CreateSceneNode(uniqueId);
 						m_scene.GetRootSceneNode().AddChild(node);
 						node.AttachObject(*entity);
@@ -444,32 +454,9 @@ namespace mmo
 
 		if (!widgetWasActive && button == 0 && m_hovering)
 		{
-			const Ray ray = m_camera->GetCameraToViewportRay(
+			PerformEntitySelectionRaycast(
 				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-				10000.0f);
-			m_raySceneQuery->SetRay(ray);
-			m_raySceneQuery->SetSortByDistance(true);
-			m_raySceneQuery->ClearResult();
-			m_raySceneQuery->Execute();
-
-			m_selection.Clear();
-			m_debugBoundingBox->Clear();
-
-			const auto& hitResult = m_raySceneQuery->GetLastResult();
-			if (!hitResult.empty())
-			{
-				Entity* entity = (Entity*)hitResult[0].movable;
-				if (entity)
-				{
-					MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
-					if (mapEntity)
-					{
-						m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity));
-						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-					}
-				}
-			}
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 		}
 	}
 
@@ -531,6 +518,34 @@ namespace mmo
 		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
 
 		// TODO: Missing lines (6)
+	}
+
+	void WorldEditorInstance::PerformEntitySelectionRaycast(const float viewportX, const float viewportY)
+	{
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+		m_raySceneQuery->SetRay(ray);
+		m_raySceneQuery->SetSortByDistance(true);
+		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
+		m_raySceneQuery->ClearResult();
+		m_raySceneQuery->Execute();
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		const auto& hitResult = m_raySceneQuery->GetLastResult();
+		if (!hitResult.empty())
+		{
+			Entity* entity = (Entity*)hitResult[0].movable;
+			if (entity)
+			{
+				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
+				if (mapEntity)
+				{
+					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity));
+					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+				}
+			}
+		}
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)

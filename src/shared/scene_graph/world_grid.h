@@ -68,6 +68,8 @@ namespace mmo
 		/// @brief Determines whether the world grid is visible on the screen.
 		[[nodiscard]] bool IsVisible() const { ASSERT(m_renderObject); return m_renderObject->IsVisible(); }
 
+		void SetQueryFlags(uint32 mask) const;
+
 	private:
 		/// @brief Setup the render object for rendering the world grid.
 		void SetupGrid() const;

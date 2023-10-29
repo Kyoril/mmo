@@ -91,6 +91,8 @@ namespace mmo
 
 		void UpdateDebugAABB(const AABB& aabb);
 
+		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
@@ -105,7 +107,6 @@ namespace mmo
 		SceneNode* m_cameraNode { nullptr };
 		Entity* m_entity { nullptr };
 		Camera* m_camera { nullptr };
-		std::unique_ptr<AxisDisplay> m_axisDisplay;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
