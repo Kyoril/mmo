@@ -15,6 +15,7 @@
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
+#include "stream_sink.h"
 
 namespace mmo
 {
@@ -26,6 +27,19 @@ namespace mmo
 
 	/// @brief Used to get all known objects.
 	static constexpr uint32 SceneQueryFlags_All = 0xffffffff;
+
+	constexpr uint32 versionHeader = 'MVER';
+	constexpr uint32 meshHeader = 'MESH';
+	constexpr uint32 entityHeader = 'MENT';
+
+	struct MapEntityChunkContent
+	{
+		uint32 uniqueId;
+		uint32 meshNameIndex;
+		Vector3 position;
+		Quaternion rotation;
+		Vector3 scale;
+	};
 
 	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
@@ -80,18 +94,129 @@ namespace mmo
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
 		PagePosition worldSize(64, 64);
-			m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
-				worldSize,
-				2,
-				pos,
-				*m_pageLoader
-				);
+		m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
+			worldSize,
+			2,
+			pos,
+			*m_pageLoader
+			);
 
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
 
 		// TODO: Load map file
+		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
+		if (!streamPtr)
+		{
+			ELOG("Failed to load world file '" << GetAssetPath() << "'");
+			return;
+		}
 
+		io::StreamSource source{ *streamPtr };
+		io::Reader reader{ source };
+
+		// Read mver chunk
+		uint32 chunkHeader, chunkSize;
+		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return;
+		}
+
+		if (chunkHeader != versionHeader)
+		{
+			ELOG("Failed to read world file: Expected version header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+			return;
+		}
+		if (chunkSize != sizeof(uint32))
+		{
+			ELOG("Failed to read world file: Invalid version header chunk size");
+			return;
+		}
+
+		uint32 version;
+		if (!(reader >> io::read<uint32>(version)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return;
+		}
+
+		if (version != 0x0001)
+		{
+			ELOG("Failed to read world file: Unsupported version '" << log_hex_digit(version) << "'");
+			return;
+		}
+
+		// Read mesh name chunk
+		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return;
+		}
+		if (chunkHeader != meshHeader)
+		{
+			ELOG("Failed to read world file: Expected mesh header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+			return;
+		}
+
+		if (chunkSize <= 0)
+		{
+			return;
+		}
+
+		const size_t contentStart = source.position();
+		std::vector<String> meshNames;
+		while(source.position() - contentStart < chunkSize)
+		{
+			String meshName;
+			if (!(reader >> io::read_string(meshName)))
+			{
+				ELOG("Failed to read world file: Unexpected end of file");
+				return;
+			}
+
+			meshNames.emplace_back(std::move(meshName));
+			DLOG("\tMesh name: " << meshNames.back());
+		}
+
+		// Read entities
+		while(reader)
+		{
+			if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+			{
+				break;
+			}
+
+			if (chunkHeader != entityHeader)
+			{
+				ELOG("Failed to read world file: Expected entity header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
+				return;
+			}
+
+			if (chunkSize != sizeof(MapEntityChunkContent))
+			{
+				ELOG("Failed to read world file: Invalid entity header chunk size: Expected '" << sizeof(MapEntityChunkContent) << "' but got '" << chunkSize << "'");
+				return;
+			}
+
+			MapEntityChunkContent content;
+			reader.readPOD(content);
+			if (!reader)
+			{
+				ELOG("Failed to read world file: Unexpected end of file");
+				return;
+			}
+
+			if (content.meshNameIndex >= meshNames.size())
+			{
+				ELOG("Failed to read world file: Invalid mesh name index");
+				return;
+			}
+
+			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+		}
+
+		ILOG("Successfully read world file!");
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -344,20 +469,7 @@ namespace mmo
 						position.z = std::round(position.z / gridSize) * gridSize;
 					}
 
-					const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
-					Entity* entity = m_scene.CreateEntity(uniqueId, *static_cast<String*>(payload->Data));
-					if (entity)
-					{
-						entity->SetQueryFlags(SceneQueryFlags_Entity);
-
-						auto& node = m_scene.CreateSceneNode(uniqueId);
-						m_scene.GetRootSceneNode().AddChild(node);
-						node.AttachObject(*entity);
-						node.SetPosition(position);
-
-						m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
-						entity->SetUserObject(m_mapEntities.back().get());
-					}
+					CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
 		        }
 		        ImGui::EndDragDropTarget();
 		    }
@@ -488,10 +600,73 @@ namespace mmo
 
 	void WorldEditorInstance::Save()
 	{
-		// Save all map entity names
+		// Build mesh name index map
+		std::map<String, uint32> entityNames;
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			const auto meshName = String(mapEntity->GetEntity().GetMesh()->GetName());
+			if (entityNames.contains(meshName))
+			{
+				continue;
+			}
 
-		// Save all tiles
+			entityNames.emplace(meshName, entityNames.size());
+		}
 
+		// Open file for writing
+		std::unique_ptr<std::ostream> streamPtr = AssetRegistry::CreateNewFile(GetAssetPath().string());
+		if (!streamPtr)
+		{
+			ELOG("Failed to save file '" << GetAssetPath() << "': Unable to open file for writing!");
+			return;
+		}
+
+		io::StreamSink sink{ *streamPtr };
+		io::Writer writer{ sink };
+
+		// Start writing file
+		writer
+			<< io::write<uint32>(versionHeader)
+			<< io::write<uint32>(sizeof(uint32))
+			<< io::write<uint32>(0x0001);
+
+		uint32 meshSize = 0;
+		std::vector<const String*> sortedNames(entityNames.size());
+		for (auto& name : entityNames)
+		{
+			sortedNames[name.second] = &name.first;
+			meshSize += name.first.size() + 1;
+		}
+
+		// Write mesh names
+		writer
+			<< io::write<uint32>(meshHeader)
+			<< io::write<uint32>(meshSize);
+		for (const auto& name : sortedNames)
+		{
+			writer << io::write_range(*name) << io::write<uint8>(0);
+		}
+
+		// Write entities
+		for (const auto& ent : m_mapEntities)
+		{
+			writer
+				<< io::write<uint32>(entityHeader)
+				<< io::write<uint32>(sizeof(MapEntityChunkContent));
+
+			MapEntityChunkContent content;
+			content.meshNameIndex = entityNames[String(ent->GetEntity().GetMesh()->GetName())];
+			content.position = ent->GetSceneNode().GetDerivedPosition();
+			content.rotation = ent->GetSceneNode().GetDerivedOrientation();
+			content.scale = ent->GetSceneNode().GetDerivedScale();
+			content.uniqueId = 0;	// TODO: Unique ID
+			writer.WritePOD(content);
+		}
+		
+		// TODO
+		sink.Flush();
+
+		ILOG("Successfully saved world file " << GetAssetPath());
 	}
 
 	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
@@ -548,12 +723,31 @@ namespace mmo
 		}
 	}
 
+	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position,
+		const Quaternion& orientation, const Vector3& scale)
+	{
+		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
+		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
+		if (entity)
+		{
+			entity->SetQueryFlags(SceneQueryFlags_Entity);
+
+			auto& node = m_scene.CreateSceneNode(uniqueId);
+			m_scene.GetRootSceneNode().AddChild(node);
+			node.AttachObject(*entity);
+			node.SetPosition(position);
+			node.SetOrientation(orientation);
+			node.SetScale(scale);
+
+			m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+			entity->SetUserObject(m_mapEntities.back().get());
+		}
+	}
+
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
 	{
 		const auto &mainPage = page.GetMainPage();
 		const auto &pos = mainPage.GetPosition();
-
-
 
 		if (isAvailable)
 		{

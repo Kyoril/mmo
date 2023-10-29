@@ -25,7 +25,10 @@ namespace mmo
 		typedef std::map<std::string, uint16> SubMeshNameMap;
 
 	public:
-		Mesh() = default;
+        explicit Mesh(String name)
+			: m_name(std::move(name))
+		{
+		}
 
 	public: 
 		SubMesh& CreateSubMesh();
@@ -58,6 +61,8 @@ namespace mmo
 
 		float GetBoundRadius() const noexcept { return m_boundRadius; }
 
+        [[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+
 	public:
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
@@ -68,6 +73,7 @@ namespace mmo
 		AABB m_aabb;
 		float m_boundRadius { 0.0f };
 		String m_skeletonName;
+		String m_name;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

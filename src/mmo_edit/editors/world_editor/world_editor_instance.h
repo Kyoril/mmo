@@ -56,6 +56,11 @@ namespace mmo
 			return m_sceneNode;
 		}
 
+		Entity& GetEntity() const
+		{
+			return m_entity;
+		}
+
 	private:
 		Scene& m_scene;
 		SceneNode& m_sceneNode;
@@ -92,6 +97,8 @@ namespace mmo
 		void UpdateDebugAABB(const AABB& aabb);
 
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
+
+		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
