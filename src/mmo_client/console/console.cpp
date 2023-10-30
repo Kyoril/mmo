@@ -219,6 +219,7 @@ namespace mmo
 				"Fonts.hpak",
 				"Models.hpak",
 				"Textures.hpak",
+				"Worlds.hpak",
 				localeArchive,
 				localeArchive + ".hpak"
 			});
