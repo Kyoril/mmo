@@ -8,6 +8,7 @@
 #include "imagery_section.h"
 #include "image_component.h"
 #include "border_component.h"
+#include "button.h"
 #include "text_component.h"
 
 #include "xml_handler/xml_attributes.h"
@@ -52,6 +53,11 @@ namespace mmo
 	static const std::string ScriptFileAttribute("file");
 	static const std::string EventsElement("Events");
 
+	static const std::string ScriptsElement("Scripts");
+	static const std::string OnClickElement("OnClick");
+	static const std::string OnLoadElement("OnLoad");
+	static const std::string OnUpdateElement("OnUpdate");
+
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
 	static const std::string PropertyValueAttribute("value");
@@ -83,7 +89,10 @@ namespace mmo
 	static const std::string BorderComponentBottomSizeAttribute("bottomSize");
 
 
-	void LayoutXmlLoader::SetFilename(std::string filename)
+	void LoadUIFile(const std::string& filename);
+
+
+	void mmo::LayoutXmlLoader::SetFilename(std::string filename)
 	{
 		m_filename = std::move(filename);
 	}
@@ -92,10 +101,17 @@ namespace mmo
 	{
 		for (const auto& file : m_scriptsToLoad)
 		{
-			FrameManager::Get().LoadUIFile(file);
+			LoadUIFile(file);
 		}
 
 		m_scriptsToLoad.clear();
+
+		for(auto& func : m_scriptFunctions)
+		{
+			func();
+		}
+
+		m_scriptFunctions.clear();
 	}
 
 	void LayoutXmlLoader::ElementStart(const std::string & element, const XmlAttributes & attributes)
@@ -197,6 +213,22 @@ namespace mmo
 			{
 				ElementPropertyValueStart(attributes);
 			}
+			else if (element == ScriptsElement)
+			{
+				ElementScriptsStart(attributes);
+			}
+			else if (element == OnClickElement)
+			{
+				ElementOnClickStart(attributes);
+			}
+			else if (element == OnLoadElement)
+			{
+				ElementOnLoadStart(attributes);
+			}
+			else if (element == OnUpdateElement)
+			{
+				ElementOnUpdateStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -204,7 +236,6 @@ namespace mmo
 				WLOG("Unknown element found while parsing the ui-layout file: '" << element << "'");
 			}
 		}
-		
 	}
 
 	void LayoutXmlLoader::ElementEnd(const std::string & element) 
@@ -301,6 +332,22 @@ namespace mmo
 			{
 				ElementPropertyValueEnd();
 			}
+			else if (element == ScriptsElement)
+			{
+				ElementScriptsEnd();
+			}
+			else if (element == OnClickElement)
+			{
+				ElementOnClickEnd();
+			}
+			else if (element == OnLoadElement)
+			{
+				ElementOnLoadEnd();
+			}
+			else if (element == OnUpdateElement)
+			{
+				ElementOnUpdateEnd();
+			}
 		}
 	}
 
@@ -316,7 +363,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementFrameStart(const XmlAttributes & attributes)
 	{
-		if (m_hasAreaTag)
+		if (m_hasAreaTag || m_scriptTag)
 		{
 			throw std::runtime_error("Unexpected Frame element!");
 		}
@@ -432,7 +479,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementSizeStart(const XmlAttributes & attributes)
 	{
-		if (m_hasSizeTag || m_hasPositionTag || !m_hasAreaTag)
+		if (m_hasSizeTag || m_hasPositionTag || !m_hasAreaTag || m_scriptTag)
 		{
 			throw std::runtime_error("Unexpected Size element!");
 		}
@@ -447,9 +494,10 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementPositionStart(const XmlAttributes & attributes)
 	{
-		if (m_hasPositionTag || m_hasSizeTag || !m_hasAreaTag)
+		if (m_hasPositionTag || m_hasSizeTag || !m_hasAreaTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected Position element!");
+			ELOG("Unexpected Position element!");
+			return;
 		}
 
 		m_hasPositionTag = true;
@@ -462,9 +510,10 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementAbsDimensionStart(const XmlAttributes & attributes)
 	{
-		if (!m_hasSizeTag && !m_hasPositionTag)
+		if (!m_hasSizeTag && !m_hasPositionTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected AbsDimension element!");
+			ELOG("Unexpected AbsDimension element!");
+			return;
 		}
 
 		// Load attributes
@@ -492,9 +541,10 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementAnchorStart(const XmlAttributes & attributes)
 	{
-		if (!m_hasAreaTag)
+		if (!m_hasAreaTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected Anchor element!");
+			ELOG("Unexpected Anchor element!");
+			return;
 		}
 
 		// Ensure we have a frame on the stack
@@ -539,6 +589,12 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementScriptStart(const XmlAttributes & attributes)
 	{
+		if (m_scriptTag)
+		{
+			ELOG("Unexpected " << ScriptElement << " tag");
+			return;
+		}
+
 		const std::string file(attributes.GetValueAsString(ScriptFileAttribute));
 		if (file.empty())
 		{
@@ -555,7 +611,8 @@ namespace mmo
 		// the current design where only one instance of the xml loader is present).
 		if (!f.has_extension() || _stricmp(f.extension().generic_string().c_str(), ".lua") != 0)
 		{
-			throw std::runtime_error("Script file names have to have the *.lua extension!");
+			ELOG("Script file names have to have the *.lua extension!");
+			return;
 		}
 
 		// Add the file to the list of files to load later.
@@ -569,7 +626,7 @@ namespace mmo
 	void LayoutXmlLoader::ElementVisualStart(const XmlAttributes & attributes)
 	{
 		// Style has to be a top-level element
-		if (m_frames.empty() || m_hasAreaTag || m_hasSizeTag || m_hasVisualTag)
+		if (m_frames.empty() || m_hasAreaTag || m_hasSizeTag || m_hasVisualTag || m_scriptTag)
 		{
 			throw std::runtime_error("Unexpected Visual element!");
 		}
@@ -585,7 +642,7 @@ namespace mmo
 	void LayoutXmlLoader::ElementImagerySectionStart(const XmlAttributes & attributes)
 	{
 		// Ensure that the element may appear at this location
-		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr)
+		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr || m_scriptTag)
 		{
 			throw std::runtime_error("Unexpected ImagerySection element!");
 		}
@@ -617,7 +674,7 @@ namespace mmo
 	void LayoutXmlLoader::ElementImageryStart(const XmlAttributes & attributes)
 	{
 		// Ensure that the element may appear at this location
-		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr)
+		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr || m_scriptTag)
 		{
 			throw std::runtime_error("Unexpected StateImagery element!");
 		}
@@ -647,7 +704,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementLayerStart(const XmlAttributes & attributes)
 	{
-		if (m_layer != nullptr || m_stateImagery == nullptr)
+		if (m_layer != nullptr || m_stateImagery == nullptr || m_scriptTag)
 		{
 			ELOG("Unexpected " << LayerElement << " element!");
 			return;
@@ -666,7 +723,7 @@ namespace mmo
 	void LayoutXmlLoader::ElementSectionStart(const XmlAttributes & attributes)
 	{
 		// Ensure that the element may appear at this location
-		if (m_layer == nullptr)
+		if (m_layer == nullptr || m_scriptTag)
 		{
 			ELOG("Unexpected " << SectionElement << " element!");
 			return;
@@ -699,7 +756,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementTextComponentStart(const XmlAttributes & attributes)
 	{
-		if (m_component != nullptr || m_section == nullptr)
+		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
 			ELOG("Unexpected " << TextComponentElement << " element!");
 			return;
@@ -736,7 +793,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementImageComponentStart(const XmlAttributes & attributes)
 	{
-		if (m_component != nullptr || m_section == nullptr)
+		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
 			ELOG("Unexpected " << ImageComponentElement << " element!");
 			return;
@@ -779,7 +836,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementBorderComponentStart(const XmlAttributes & attributes)
 	{
-		if (m_component != nullptr || m_section == nullptr)
+		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
 			ELOG("Unexpected " << BorderComponentElement << " element!");
 			return;
@@ -818,7 +875,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementPropertyStart(const XmlAttributes & attributes)
 	{
-		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
+		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
 		{
 			ELOG("Unexpected " << PropertyElement << " element!");
 			return;
@@ -855,7 +912,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementEventsStart(const XmlAttributes & attributes)
 	{
-		if (m_hasEventsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag)
+		if (m_hasEventsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
 		{
 			ELOG("Unexpected " << EventsElement << " element!");
 			return;
@@ -871,7 +928,7 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementInsetStart(const XmlAttributes & attributes)
 	{
-		if (!m_hasAreaTag || !m_component)
+		if (!m_hasAreaTag || !m_component || m_scriptTag)
 		{
 			ELOG("Unexpected " + InsetElement + " element!");
 			return;
@@ -951,6 +1008,90 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementPropertyValueEnd()
 	{
+
+	}
+
+	void LayoutXmlLoader::ElementScriptsStart(const XmlAttributes& attributes)
+	{
+		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
+		{
+			ELOG("Unexpected " << ScriptsElement << " element!");
+			return;
+		}
+
+		m_scriptTag = true;
+	}
+
+	void LayoutXmlLoader::ElementScriptsEnd()
+	{
+		m_scriptTag = false;
+	}
+
+	void LayoutXmlLoader::ElementOnClickStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnClickElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnClickEnd()
+	{
+		FramePtr frame = m_frames.top();
+		if (std::shared_ptr<Button> buttonPtr = std::dynamic_pointer_cast<Button>(frame))
+		{
+			String script = m_text;
+			m_scriptFunctions.push_back([buttonPtr, script]()
+			{
+				const luabind::object onClick = FrameManager::Get().CompileFunction(buttonPtr->GetName() + ":OnClick", script);
+				buttonPtr->SetLuaClickedHandler(onClick);
+			});
+		}
+		else
+		{
+			ELOG("OnClick element found in frame '" << frame->GetName() << "' which is not a button!");
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnLoadStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnLoadElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnLoadEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+		{
+			const luabind::object onUpdate = FrameManager::Get().CompileFunction(frame->GetName() + ":OnLoad", script);
+			frame->SetOnLoad(onUpdate);
+		});
+	}
+
+	void LayoutXmlLoader::ElementOnUpdateStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnUpdateElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnUpdateEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+		{
+			const luabind::object onUpdate = FrameManager::Get().CompileFunction(frame->GetName() + ":OnUpdate", script);
+			frame->SetOnUpdate(onUpdate);
+		});
 
 	}
 }

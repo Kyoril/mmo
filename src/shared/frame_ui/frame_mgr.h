@@ -70,6 +70,8 @@ namespace mmo
 		/// Removes a registered frame renderer factory.
 		void RemoveFrameRenderer(const std::string& name);
 
+		luabind::object CompileFunction(const std::string& name, const std::string& function);
+
 		/// Creates a frame renderer instance by name.
 		std::unique_ptr<FrameRenderer> CreateRenderer(const std::string& name);
 		

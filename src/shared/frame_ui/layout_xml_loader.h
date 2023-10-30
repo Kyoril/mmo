@@ -77,9 +77,21 @@ namespace mmo
 		void ElementPropertyValueStart(const XmlAttributes& attributes);
 		void ElementPropertyValueEnd();
 
+		void ElementScriptsStart(const XmlAttributes& attributes);
+		void ElementScriptsEnd();
+		void ElementOnClickStart(const XmlAttributes& attributes);
+		void ElementOnClickEnd();
+		void ElementOnLoadStart(const XmlAttributes& attributes);
+		void ElementOnLoadEnd();
+		void ElementOnUpdateStart(const XmlAttributes& attributes);
+		void ElementOnUpdateEnd();
+
 	private:
 		/// Stack of added frames.
 		std::stack<FramePtr> m_frames;
+
+		std::vector<std::function<void()>> m_scriptFunctions;
+
 		/// Whether an area tag has been opened.
 		bool m_hasAreaTag = false;
 		
@@ -88,6 +100,8 @@ namespace mmo
 		bool m_hasPositionTag = false;
 
 		bool m_hasVisualTag = false;
+
+		bool m_scriptTag = false;
 
 		std::unique_ptr<ImagerySection> m_section;
 		std::unique_ptr<StateImagery> m_stateImagery;
@@ -102,6 +116,7 @@ namespace mmo
 		FrameEvent* m_frameEvent = nullptr;
 
 		std::string m_filename;
+
 		/// Stores the file names of script file to load after the layout file has been processed.
 		std::vector<std::string> m_scriptsToLoad;
 

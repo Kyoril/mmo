@@ -102,8 +102,10 @@ namespace mmo
 	public:
 		/// Register a lua function as an event handler.
 		void RegisterEvent(const std::string& name, const luabind::object& fn);
+
 		/// Removes a registered event function for a given event name.
 		void UnregisterEvent(const std::string& name);
+
 		/// 
 		template<typename ...Args>
 		bool TriggerEvent(const std::string& name, Args&&... args)
@@ -122,6 +124,12 @@ namespace mmo
 			}
 			return true;
 		}
+
+		void SetOnLoad(const luabind::object& fn);
+
+		void SetOnUpdate(const luabind::object& fn);
+
+		void OnLoad();
 
 	public:
 		/// Adds a new state imagery.
@@ -377,9 +385,15 @@ namespace mmo
 		/// Sets the font of this frame.
 		FontPtr m_font;
 		/// User data used by lua.
-		luabind::object m_userData;
+		luabind::object m_userData{};
+
+		luabind::object m_onLoad{};
+
+		luabind::object m_onUpdate{};
 
 		uint32 m_flags = 0;
+
+		bool m_loaded = false;
 
 	protected:
 		scoped_connection_container m_propConnections;

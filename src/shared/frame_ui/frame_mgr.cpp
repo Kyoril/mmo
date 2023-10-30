@@ -410,6 +410,7 @@ namespace mmo
 
 		// Load UI file
 		mmo::LoadUIFile(filename);
+		m_topFrame->OnLoad();
 	}
 
 	void FrameManager::RegisterFrameRenderer(const std::string& name, RendererFactory factory)
@@ -425,6 +426,28 @@ namespace mmo
 		{
 			m_rendererFactories.erase(it);
 		}
+	}
+
+	luabind::object FrameManager::CompileFunction(const std::string& name, const std::string& function)
+	{
+		if (luaL_loadbuffer(m_luaState, function.c_str(), function.size(), name.c_str()))
+		{
+			const String compileError = lua_tostring(m_luaState, -1);
+			lua_pop(m_luaState, 1);
+			ELOG("Error compiling function " << name << ": " << compileError);
+			return {};
+		}
+
+		if (lua_pcall(m_luaState, 0, LUA_MULTRET, 0) == 0)
+		{
+			luabind::object result = luabind::object(luabind::from_stack(m_luaState, -1));
+			return result;
+		}
+
+		const String executeError = lua_tostring(m_luaState, -1);
+		lua_pop(m_luaState, 1);
+		ELOG("Error compiling function " << name << ": " << executeError);
+		return {};
 	}
 
 	std::unique_ptr<FrameRenderer> FrameManager::CreateRenderer(const std::string & name)
