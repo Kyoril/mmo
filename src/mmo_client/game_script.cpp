@@ -7,6 +7,7 @@
 #include "game_states/game_state_mgr.h"
 #include "game_states/world_state.h"
 #include "game_states/login_state.h"
+#include "console/console_var.h"
 
 #include <string>
 #include <functional>
@@ -40,6 +41,17 @@ namespace mmo
 			}
 
 			return &realms[index];
+		}
+
+		const char* Script_GetConsoleVar(const std::string& name)
+		{
+			ConsoleVar* cvar = ConsoleVarMgr::FindConsoleVar(name);
+			if (!cvar)
+			{
+				return nullptr;
+			}
+
+			return cvar->GetStringValue().c_str();
 		}
 
 		void Script_EnterWorld(const CharacterView& characterView)
@@ -110,7 +122,9 @@ namespace mmo
 				luabind::class_<LoginState>("LoginState")
 					.def("EnterWorld", &LoginState::EnterWorld)),
 
+
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
+			luabind::def("GetCVar", &Script_GetConsoleVar),
 			luabind::def("EnterWorld", &Script_EnterWorld),
 			luabind::def("print", &Script_Print)
 		];

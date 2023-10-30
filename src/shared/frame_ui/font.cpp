@@ -603,4 +603,58 @@ namespace mmo
 			}
 		}
 	}
+
+	int Font::DrawText(const std::string& text, const Rect& area, GeometryBuffer* buffer, float scale, argb_t color)
+	{
+		int lineCount = 1;
+		
+		const float height = GetHeight(scale);
+		const float baseline = GetBaseline(scale);
+		const Point position = area.GetPosition();
+
+		float baseY = position.y + baseline;
+		Point glyphPos(position);
+
+		for (size_t c = 0; c < text.length(); ++c)
+		{
+			if (baseY > area.bottom) return lineCount;
+
+			size_t iterations = 1;
+
+			char g = text[c];
+			if (g == '\t')
+			{
+				g = ' ';
+				iterations = 4;
+			}
+
+			const FontGlyph* glyph = nullptr;
+			if ((glyph = GetGlyphData(g)))
+			{
+				const FontImage* const image = glyph->GetImage();
+				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
+
+				if (buffer) image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
+
+				for (size_t i = 0; i < iterations; ++i)
+				{
+					glyphPos.x += glyph->GetAdvance(scale);
+				}
+
+				if (glyphPos.x >= area.right)
+				{
+					glyphPos.x = position.x;
+					baseY += height;
+					++lineCount;
+				}
+			}
+		}
+
+		return lineCount;
+	}
+
+	int Font::GetLineCount(const std::string& text, const Rect& area, float scale)
+	{
+		return DrawText(text, area, nullptr, scale, 0);
+	}
 }

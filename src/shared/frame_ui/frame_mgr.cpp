@@ -22,6 +22,7 @@
 #include "lua/lua.hpp"
 
 #include "luabind_noboost/luabind/luabind.hpp"
+#include "scrolling_message_frame.h"
 
 
 namespace mmo
@@ -364,10 +365,21 @@ namespace mmo
 	               .def("GetWidth", &Frame::GetWidth)
 	               .def("GetHeight", &Frame::GetHeight)
 	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
-			
+
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
-					.def("SetClickedHandler", &Button::SetLuaClickedHandler))
+					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
+
+			luabind::scope(
+				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
+					.def("AddMessage", &ScrollingMessageFrame::AddMessage)
+					.def("Clear", &ScrollingMessageFrame::Clear)
+					.def("ScrollUp", &ScrollingMessageFrame::ScrollUp)
+					.def("ScrollDown", &ScrollingMessageFrame::ScrollDown)
+					.def("IsAtTop", &ScrollingMessageFrame::IsAtTop)
+					.def("IsAtBottom", &ScrollingMessageFrame::IsAtBottom)
+					.def("ScrollToTop", &ScrollingMessageFrame::ScrollToTop)
+					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom))
 		];
 	
 		// Register default frame renderer factory methods
@@ -377,6 +389,7 @@ namespace mmo
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
+		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
 
 		// Load localization
 		if (!s_frameMgr->m_localization.LoadFromFile())
