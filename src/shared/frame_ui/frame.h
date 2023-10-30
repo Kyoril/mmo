@@ -116,7 +116,7 @@ namespace mmo
 
 			try
 			{
-				it->second(args...);
+				it->second(std::forward<Args>(args)...);
 			}
 			catch (const luabind::error& e)
 			{

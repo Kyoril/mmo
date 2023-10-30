@@ -486,6 +486,8 @@ namespace mmo
 			break;
 		}
 
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", characterGuid, message);
+
 		return PacketParseResult::Pass;
 	}
 
