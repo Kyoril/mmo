@@ -16,6 +16,7 @@
 #include "scene_graph/world_grid.h"
 
 #include "base/id_generator.h"
+#include "world_deserializer.h"
 
 namespace mmo
 {
@@ -138,5 +139,8 @@ namespace mmo
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
+
+		SceneNode* m_worldRootNode;
+		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 	};
 }

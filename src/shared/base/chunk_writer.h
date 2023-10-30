@@ -20,6 +20,11 @@ namespace mmo
 	{
 		return *reinterpret_cast<const uint32*>(&magic[0]);
 	}
+
+	inline ChunkMagic MakeChunkMagic(const uint32 value)
+	{
+		return *reinterpret_cast<const ChunkMagic*>(&value);
+	}
 	
 	// The chunk writer
 	class ChunkWriter final
