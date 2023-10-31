@@ -51,6 +51,7 @@ namespace mmo
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 		virtual void OnKeyDown(Key key) override;
 		virtual void OnKeyChar(uint16 codepoint) override;
+		virtual void OnKeyUp(Key key) override;
 		virtual void OnInputCaptured() override;
 		virtual void OnInputReleased() override;
 

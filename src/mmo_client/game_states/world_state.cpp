@@ -157,6 +157,12 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// Enter
+		if (key == 13)
+		{
+			FrameManager::Get().TriggerLuaEvent("OPEN_CHAT");
+		}
+
 		m_playerController->OnKeyUp(key);
 		return true;
 	}

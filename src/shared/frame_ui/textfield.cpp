@@ -223,6 +223,8 @@ namespace mmo
 
 	void TextField::OnKeyDown(Key key)
 	{
+		abort_emission();
+
 		if (!AcceptsTab() && key == 0x09)		// VK_TAB
 		{
 			return;
@@ -263,6 +265,8 @@ namespace mmo
 
 	void TextField::OnKeyChar(uint16 codepoint)
 	{
+		abort_emission();
+
 		if (!AcceptsTab() && codepoint == 0x09)		// VK_TAB
 		{
 			return;
@@ -291,6 +295,13 @@ namespace mmo
 
 		m_needsLayout = true;
 		m_needsRedraw = true;
+	}
+
+	void TextField::OnKeyUp(Key key)
+	{
+		Frame::OnKeyUp(key);
+
+		abort_emission();
 	}
 
 	void TextField::OnInputCaptured()
