@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 
+#include "progress_bar.h"
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
 
@@ -372,6 +373,11 @@ namespace mmo
 					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
 
 			luabind::scope(
+				luabind::class_<ProgressBar, Frame>("ProgressBar")
+					.def("SetProgress", &ProgressBar::SetProgress)
+					.def("GetProgress", &ProgressBar::GetProgress)),
+
+			luabind::scope(
 				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
 					.def("AddMessage", &ScrollingMessageFrame::AddMessage)
 					.def("Clear", &ScrollingMessageFrame::Clear)
@@ -390,6 +396,7 @@ namespace mmo
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
+		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
 
 		// Load localization
