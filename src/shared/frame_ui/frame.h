@@ -253,6 +253,8 @@ namespace mmo
 		/// Calculates the intrinsic frame size.
 		Size GetIntrinsicSize();
 
+		void SetProperty(const std::string& name, const std::string& value);
+
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }

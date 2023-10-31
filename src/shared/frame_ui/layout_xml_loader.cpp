@@ -575,7 +575,7 @@ namespace mmo
 			relativeTo = FrameManager::Get().Find(relativeToAttr);
 			if (relativeTo == nullptr)
 			{
-				throw std::runtime_error("Anchor specified relative target frame '" + relativeToAttr + "' which doesn't exist!");
+				ELOG("Anchor specified relative target frame '" + relativeToAttr + "' which doesn't exist!");
 			}
 		}
 
@@ -628,7 +628,8 @@ namespace mmo
 		// Style has to be a top-level element
 		if (m_frames.empty() || m_hasAreaTag || m_hasSizeTag || m_hasVisualTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected Visual element!");
+			ELOG("Unexpected Visual element!");
+			return;
 		}
 
 		m_hasVisualTag = true;
@@ -644,20 +645,23 @@ namespace mmo
 		// Ensure that the element may appear at this location
 		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected ImagerySection element!");
+			ELOG("Unexpected ImagerySection element!");
+			return;
 		}
 
 		// Parse attributes
 		const std::string name(attributes.GetValueAsString(ImagerySectionNameAttribute));
 		if (name.empty())
 		{
-			throw std::runtime_error("ImagerySection element has to have a valid name!");
+			ELOG("ImagerySection element has to have a valid name!");
+			return;
 		}
 
 		// Ensure that such a section doesn't already exist
 		if (m_frames.top()->GetImagerySectionByName(name) != nullptr)
 		{
-			throw std::runtime_error("ImagerySection with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+			ELOG("ImagerySection with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+			return;
 		}
 
 		// Add new imagery section

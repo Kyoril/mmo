@@ -554,6 +554,15 @@ namespace mmo
 		return intrinsicSize;
 	}
 
+	void Frame::SetProperty(const std::string& name, const std::string& value)
+	{
+		Property* prop = GetProperty(name);
+		if (prop)
+		{
+			prop->Set(value);
+		}
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do
