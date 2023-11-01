@@ -73,7 +73,9 @@ target_link_libraries(mmo_client
 	frame_ui
 	expat
 	game
-	scene_graph)
+	scene_graph
+    lua
+    luabind)
 	
 target_link_libraries(mmo_client graphics_null)
 if (WIN32)

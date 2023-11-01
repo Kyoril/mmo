@@ -315,6 +315,8 @@ namespace mmo
 		}
 	}
 
+
+
 	void FrameManager::Initialize(lua_State* luaState)
 	{
 		ASSERT(!s_frameMgr);
@@ -328,6 +330,7 @@ namespace mmo
 		luabind::module(luaState)
 		[
 			luabind::def("Localize", &LuaLocalize),
+				luabind::def("getglobal", &FrameManager::GetGlobal),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
@@ -407,6 +410,8 @@ namespace mmo
 		{
 			ELOG("Failed to load localization data!");
 		}
+
+		s_frameMgr->m_localization.AddToLuaScript(s_frameMgr->m_luaState);
 	}
 
 	void FrameManager::Destroy()
@@ -765,6 +770,11 @@ namespace mmo
 				frameIt++;
 			}
 		}
+	}
+
+	luabind::object FrameManager::GetGlobal(const std::string& name)
+	{
+		return luabind::globals(FrameManager::Get().m_luaState)[name];
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

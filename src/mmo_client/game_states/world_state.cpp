@@ -387,9 +387,9 @@ namespace mmo
 			if (m_gameObjectsById.empty())
 			{
 				m_playerController->SetControlledUnit(object);
+				FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 			}
 
-			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
 			m_gameObjectsById[object->GetGuid()] = std::move(object);
 			
 			result = PacketParseResult::Pass;

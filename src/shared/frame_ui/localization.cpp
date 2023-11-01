@@ -7,6 +7,8 @@
 #include "simple_file_format/sff_load_file.h"
 #include "log/default_log_levels.h"
 
+#include "luabind/luabind.hpp"
+
 
 namespace mmo
 {
@@ -77,5 +79,15 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	void Localization::AddToLuaScript(lua_State* state)
+	{
+		luabind::object globals = luabind::globals(state);
+
+		for (auto& kv : m_translationsById)
+		{
+			globals[kv.first] = kv.second;
+		}
 	}
 }

@@ -15,8 +15,10 @@
 #include <map>
 #include <memory>
 
-
-struct lua_State;
+extern "C"
+{
+	struct lua_State;
+}
 
 
 namespace mmo
@@ -161,6 +163,8 @@ namespace mmo
 		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
 
 		void FrameUnregisterEvent(FramePtr frame, const std::string& eventName);
+
+		static luabind::object GetGlobal(const std::string& name);
 
 	public:
 		/// Registers a new factory for a certain frame type.
