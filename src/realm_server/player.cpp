@@ -400,6 +400,45 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnNameQuery(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received CMSG_NAME_QUERY for unit " << log_hex_digit(guid) << "...");
+
+		const Player* player = m_manager.GetPlayerByCharacterGuid(guid);
+		if (player != nullptr)
+		{
+			String name = player->GetCharacterName();
+			m_connection->sendSinglePacket([guid, &name](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::NameQueryResult);
+					packet
+						<< io::write_packed_guid(guid)
+						<< io::write<uint8>(true)
+						<< io::write_range(name) << io::write<uint8>(0);
+					packet.Finish();
+				});
+		}
+		else
+		{
+			m_connection->sendSinglePacket([guid](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::NameQueryResult);
+					packet
+						<< io::write_packed_guid(guid)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -495,6 +534,7 @@ namespace mmo
 
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
+			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
 		}
 		else
 		{
@@ -511,6 +551,7 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
 
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
+			ClearPacketHandler(game::client_realm_packet::NameQuery);
 		}
 	}
 

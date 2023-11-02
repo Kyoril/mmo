@@ -3,6 +3,7 @@
 #pragma once
 
 #include "connection.h"
+#include "db_cache.h"
 #include "player_controller.h"
 #include "screen.h"
 #include "game_states/game_state.h"
@@ -118,11 +119,15 @@ namespace mmo
 
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 
+		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+
 	private:
 
 		bool LoadMap(const String& assetPath);
 
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
+		void OnChatNameQueryCallback(uint64 guid, const String& name);
 
 	private:
 		RealmConnector& m_realmConnector;
@@ -142,5 +147,7 @@ namespace mmo
 
 		SceneNode* m_worldRootNode;
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
+
+		DBCache<String, game::client_realm_packet::NameQuery> m_unitNameCache;
 	};
 }

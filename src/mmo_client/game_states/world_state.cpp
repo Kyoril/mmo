@@ -42,6 +42,7 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
+		, m_unitNameCache(m_realmConnector)
 	{
 	}
 
@@ -237,6 +238,7 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -258,6 +260,7 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetFacing);
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -492,21 +495,34 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		switch(type)
+		m_unitNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
 		{
-		case ChatType::Say:
-			DLOG("[" << log_hex_digit(characterGuid) << "] says: " << message);
-			break;
-		case ChatType::Yell:
-			DLOG("[" << log_hex_digit(characterGuid) << "] yells: " << message);
-			break;
-		case ChatType::Emote:
-			DLOG("[" << log_hex_digit(characterGuid) << "] " << message);
-			break;
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, message);
+		});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnNameQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		bool succeeded;
+		String name;
+		if (!(packet
+			>> io::read_packed_guid(guid)
+			>> io::read<uint8>(succeeded)
+			>> io::read_string(name)))
+		{
+			return PacketParseResult::Disconnect;
 		}
 
-		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", characterGuid, message);
+		if (!succeeded)
+		{
+			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
+			return PacketParseResult::Pass;
+		}
 
+		m_unitNameCache.NotifyObjectResponse(guid, std::move(name));
 		return PacketParseResult::Pass;
 	}
 
@@ -549,5 +565,10 @@ namespace mmo
 			node.SetOrientation(orientation);
 			node.SetScale(scale);
 		}
+	}
+
+	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
+	{
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, "Hello World!");
 	}
 }

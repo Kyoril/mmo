@@ -110,7 +110,7 @@ namespace mmo
 				/// [PROXY]
 				MoveSetFacing,
 
-				PlayerName,
+				NameQueryResult,
 
 				ChatMessage,
 
