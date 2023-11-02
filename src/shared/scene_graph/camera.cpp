@@ -77,6 +77,60 @@ namespace mmo
 		m_viewInvalid = false;
 	}
 
+	void Camera::UpdateFrustumPlanes() const
+	{
+		UpdateView();
+		UpdateFrustum();
+
+		if (m_recalcFrustumPlanes)
+		{
+			UpdateFrustumPlanesImpl();
+		}
+	}
+
+	void Camera::UpdateFrustumPlanesImpl() const
+	{
+		Matrix4 combo = m_projMatrix * m_viewMatrix;
+
+		m_frustumPlanes[FrustumPlaneLeft].normal.x = combo[3][0] + combo[0][0];
+		m_frustumPlanes[FrustumPlaneLeft].normal.y = combo[3][1] + combo[0][1];
+		m_frustumPlanes[FrustumPlaneLeft].normal.z = combo[3][2] + combo[0][2];
+		m_frustumPlanes[FrustumPlaneLeft].d = combo[3][3] + combo[0][3];
+
+		m_frustumPlanes[FrustumPlaneRight].normal.x = combo[3][0] - combo[0][0];
+		m_frustumPlanes[FrustumPlaneRight].normal.y = combo[3][1] - combo[0][1];
+		m_frustumPlanes[FrustumPlaneRight].normal.z = combo[3][2] - combo[0][2];
+		m_frustumPlanes[FrustumPlaneRight].d = combo[3][3] - combo[0][3];
+
+		m_frustumPlanes[FrustumPlaneTop].normal.x = combo[3][0] - combo[1][0];
+		m_frustumPlanes[FrustumPlaneTop].normal.y = combo[3][1] - combo[1][1];
+		m_frustumPlanes[FrustumPlaneTop].normal.z = combo[3][2] - combo[1][2];
+		m_frustumPlanes[FrustumPlaneTop].d = combo[3][3] - combo[1][3];
+
+		m_frustumPlanes[FrustumPlaneBottom].normal.x = combo[3][0] + combo[1][0];
+		m_frustumPlanes[FrustumPlaneBottom].normal.y = combo[3][1] + combo[1][1];
+		m_frustumPlanes[FrustumPlaneBottom].normal.z = combo[3][2] + combo[1][2];
+		m_frustumPlanes[FrustumPlaneBottom].d = combo[3][3] + combo[1][3];
+
+		m_frustumPlanes[FrustumPlaneNear].normal.x = combo[3][0] + combo[2][0];
+		m_frustumPlanes[FrustumPlaneNear].normal.y = combo[3][1] + combo[2][1];
+		m_frustumPlanes[FrustumPlaneNear].normal.z = combo[3][2] + combo[2][2];
+		m_frustumPlanes[FrustumPlaneNear].d = combo[3][3] + combo[2][3];
+
+		m_frustumPlanes[FrustumPlaneFar].normal.x = combo[3][0] - combo[2][0];
+		m_frustumPlanes[FrustumPlaneFar].normal.y = combo[3][1] - combo[2][1];
+		m_frustumPlanes[FrustumPlaneFar].normal.z = combo[3][2] - combo[2][2];
+		m_frustumPlanes[FrustumPlaneFar].d = combo[3][3] - combo[2][3];
+
+		for (auto& p : m_frustumPlanes)
+		{
+			const float length = p.normal.Normalize();
+			p.d /= length;
+		}
+
+		m_recalcFrustumPlanes = false;
+	}
+
 	void Camera::UpdateView() const
 	{
 		if (!IsViewOutOfDate())
@@ -132,6 +186,25 @@ namespace mmo
 
 	void Camera::CalcProjectionParameters(float& left, float& right, float& bottom, float& top) const
 	{
+		const Radian thetaY(m_fovY * 0.5f);
+		const float tanThetaY = ::tanf(thetaY.GetValueRadians());
+		const float tanThetaX = tanThetaY * m_aspect;
+
+		const float nearFocal = m_nearDist;
+		const float nearOffsetX = 0.0f * nearFocal;
+		const float nearOffsetY = 0.0f * nearFocal;
+		const float half_w = tanThetaX * m_nearDist;
+		const float half_h = tanThetaY * m_nearDist;
+
+		m_left = -half_w + nearOffsetX;
+		m_top = +half_h + nearOffsetY;
+		m_right = +half_w + nearOffsetX;
+		m_bottom = -half_h + nearOffsetY;
+
+		left = m_left;
+		right = m_right;
+		bottom = m_bottom;
+		top = m_top;
 	}
 
 	const String& Camera::GetMovableType() const
@@ -183,9 +256,55 @@ namespace mmo
 		return m_lastParentPosition;
 	}
 
-	bool Camera::IsVisible(const Sphere& bound) const
+	bool Camera::IsVisible(const Sphere& sphere) const
 	{
-		UpdateFrustum();
+		UpdateFrustumPlanes();
+
+		// For each plane, see if sphere is on negative side
+		// If so, object is not visible
+		for (int plane = 0; plane < 6; ++plane)
+		{
+			// Skip far plane if infinite view frustum
+			if (plane == FrustumPlaneFar && m_farDist == 0)
+				continue;
+
+			// If the distance from sphere center to plane is negative, and 'more negative' 
+			// than the radius of the sphere, sphere is outside frustum
+			if (m_frustumPlanes[plane].GetDistance(sphere.GetCenter()) < -sphere.GetRadius())
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool Camera::IsVisible(const AABB& bound) const
+	{
+		// Null boxes always invisible
+		if (bound.IsNull()) return false;
+
+		// Make any pending updates to the calculated frustum planes
+		UpdateFrustumPlanes();
+
+		const Vector3 center = bound.GetCenter();
+		const Vector3 halfSize = bound.GetExtents();
+
+		// For each plane, see if all points are on the negative side
+		// If so, object is not visible
+		for (int plane = 0; plane < 6; ++plane)
+		{
+			// Skip far plane if infinite view frustum
+			if (plane == FrustumPlaneFar && m_farDist == 0)
+				continue;
+
+			Plane::Side side = m_frustumPlanes[plane].GetSide(center, halfSize);
+			if (side == Plane::NegativeSide)
+			{
+				return false;
+			}
+
+		}
 
 		return true;
 	}

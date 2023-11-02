@@ -16,6 +16,13 @@ namespace mmo
 	class Scene;
 	class Sphere;
 
+	constexpr uint8 FrustumPlaneNear = 0;
+	constexpr uint8 FrustumPlaneFar = 1;
+	constexpr uint8 FrustumPlaneLeft = 2;
+	constexpr uint8 FrustumPlaneRight = 3;
+	constexpr uint8 FrustumPlaneTop = 4;
+	constexpr uint8 FrustumPlaneBottom = 5;
+
 	/// This class represents a camera inside of a scene. A camera is a special type
 	/// of movable object, which allows to collect all renderable objects inside of it's
 	/// view frustum.
@@ -41,8 +48,14 @@ namespace mmo
 
 		Ray GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const;
 
+		void InvalidateView() { m_recalcView = true; }
+
 	protected:
 		void UpdateFrustum() const;
+
+		void UpdateFrustumPlanes() const;
+
+		virtual void UpdateFrustumPlanesImpl() const;
 
 		const Quaternion& GetOrientationForViewUpdate() const { return m_lastParentOrientation; }
 
@@ -74,6 +87,8 @@ namespace mmo
 
 		bool IsVisible(const Sphere& bound) const;
 
+		bool IsVisible(const AABB& bound) const;
+
 	public:
 		void PopulateRenderQueue(RenderQueue& queue) override {}
 
@@ -89,11 +104,12 @@ namespace mmo
 		mutable Matrix4 m_viewMatrix;
 		mutable bool m_viewInvalid;
 		mutable bool m_recalcView { true };
-		float m_left, m_right, m_top, m_bottom;
+		mutable float m_left, m_right, m_top, m_bottom;
 		FillMode m_fillMode { FillMode::Solid };
 		mutable bool m_recalcFrustum { true };
 		mutable bool m_recalcFrustumPlanes { true };
 		mutable bool m_recalcWorldSpaceCorners { true };
 		bool m_obliqueDepthProjection { false };
+		mutable Plane m_frustumPlanes[6];
 	};
 }

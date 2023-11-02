@@ -298,7 +298,7 @@ namespace mmo
 		virtual void OnKeyChar(uint16 codepoint) {}
 
 		/// 
-		virtual void OnKeyUp(Key key) {}
+		virtual void OnKeyUp(Key key);
 
 	public:
 		virtual Rect GetRelativeFrameRect();
@@ -312,6 +312,9 @@ namespace mmo
 		inline void RemoveFlags(uint32 flags) noexcept { m_flags &= ~flags; }
 		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
+		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
+		void SetOnEnterPressed(const luabind::object& func) { m_onEnterPressed = func; }
+
 	protected:
 		virtual void DrawSelf();
 
@@ -324,6 +327,9 @@ namespace mmo
 		Rect GetParentRect();
 		/// Executed when the text was changed.
 		virtual void OnTextChanged();
+
+		void OnTabPressed();
+		void OnEnterPressed();
 
 	private:
 		/// Executed when the clippedByParent property was changed.
@@ -396,6 +402,10 @@ namespace mmo
 		uint32 m_flags = 0;
 
 		bool m_loaded = false;
+
+		luabind::object m_onEnterPressed;
+
+		luabind::object m_onTabPressed;
 
 	protected:
 		scoped_connection_container m_propConnections;

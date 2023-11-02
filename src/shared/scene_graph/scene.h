@@ -320,6 +320,17 @@ namespace mmo
 
 		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; }
 
+		/// @brief Freezes or unfreezes the rendering to debug culling. If frozen, the render queue will not be updated any
+		///        more, which will allow to view the scene of the frozen camera perspective with a new camera transformation
+		///        to debug which objects were rendered during the frozen frame.
+		///        If rendering was already frozen when trying to refreeze, nothing will happen (as the previous frozen frame will
+		///		   still be used for rendering).
+		/// @param freeze true to freeze rendering, false to unfreeze.
+		void FreezeRendering(const bool freeze) { m_frozen = freeze; }
+
+		/// @brief Determines whether rendering is currently frozen.
+		bool IsRenderingFrozen() const { return m_frozen; }
+
 	private:
 		void RenderVisibleObjects();
 		
@@ -388,5 +399,7 @@ namespace mmo
 		float m_defaultShadowFarDist { 0.0f };
 
 		std::shared_ptr<Material> m_defaultMaterial;
+
+		bool m_frozen{ false };
 	};
 }

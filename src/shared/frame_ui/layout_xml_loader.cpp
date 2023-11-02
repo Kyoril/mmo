@@ -14,6 +14,7 @@
 #include "xml_handler/xml_attributes.h"
 #include "log/default_log_levels.h"
 #include "base/filesystem.h"
+#include "textfield.h"
 
 
 
@@ -57,6 +58,8 @@ namespace mmo
 	static const std::string OnClickElement("OnClick");
 	static const std::string OnLoadElement("OnLoad");
 	static const std::string OnUpdateElement("OnUpdate");
+	static const std::string OnTabPressedElement("OnTabPressed");
+	static const std::string OnEnterPressedElement("OnEnterPressed");
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
@@ -229,6 +232,14 @@ namespace mmo
 			{
 				ElementOnUpdateStart(attributes);
 			}
+			else if (element == OnTabPressedElement)
+			{
+				ElementOnTabPressedStart(attributes);
+			}
+			else if (element == OnEnterPressedElement)
+			{
+				ElementOnEnterPressedStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -347,6 +358,14 @@ namespace mmo
 			else if (element == OnUpdateElement)
 			{
 				ElementOnUpdateEnd();
+			}
+			else if (element == OnTabPressedElement)
+			{
+				ElementOnTabPressedEnd();
+			}
+			else if (element == OnEnterPressedElement)
+			{
+				ElementOnEnterPressedEnd();
 			}
 		}
 	}
@@ -1097,5 +1116,45 @@ namespace mmo
 			frame->SetOnUpdate(onUpdate);
 		});
 
+	}
+
+	void LayoutXmlLoader::ElementOnTabPressedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnTabPressedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnTabPressedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onTabPressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnTabPressed", script);
+				frame->SetOnTabPressed(onTabPressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnEnterPressedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnEnterPressedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnEnterPressedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onEnterPressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEnterPressed", script);
+				frame->SetOnEnterPressed(onEnterPressed);
+			});
 	}
 }

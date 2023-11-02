@@ -92,7 +92,7 @@ namespace mmo
 
 		void OnEnterWorldFailed(game::player_login_response::Type error);
 
-		void RegisterGameplayCommands() const;
+		void RegisterGameplayCommands();
 
 		void RemoveGameplayCommands();
 

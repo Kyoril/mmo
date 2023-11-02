@@ -85,6 +85,10 @@ namespace mmo
 		void ElementOnLoadEnd();
 		void ElementOnUpdateStart(const XmlAttributes& attributes);
 		void ElementOnUpdateEnd();
+		void ElementOnTabPressedStart(const XmlAttributes& attributes);
+		void ElementOnTabPressedEnd();
+		void ElementOnEnterPressedStart(const XmlAttributes& attributes);
+		void ElementOnEnterPressedEnd();
 
 	private:
 		/// Stack of added frames.

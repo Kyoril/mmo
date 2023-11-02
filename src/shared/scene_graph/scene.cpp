@@ -134,13 +134,17 @@ namespace mmo
 		m_renderableVisitor.scissoring = false;
 
 		UpdateSceneGraph();
-		PrepareRenderQueue();
 
-		const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
-		ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
-		visibleObjectsIt->second.Reset();
-		FindVisibleObjects(camera, visibleObjectsIt->second);
+		if (!m_frozen)
+		{
+			PrepareRenderQueue();
 
+			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
+			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
+			visibleObjectsIt->second.Reset();
+			FindVisibleObjects(camera, visibleObjectsIt->second);
+		}
+		
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
 

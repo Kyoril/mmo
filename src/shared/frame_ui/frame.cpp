@@ -675,6 +675,39 @@ namespace mmo
 		m_needsRedraw = true;
 	}
 
+	void Frame::OnKeyUp(Key key)
+	{
+		// Tab
+		if (key == 9)
+		{
+			OnTabPressed();
+		}
+		// Enter
+		else if (key == 13)
+		{
+			OnEnterPressed();
+		}
+
+	}
+
+	void Frame::OnTabPressed()
+	{
+		if (m_onTabPressed.is_valid())
+		{
+			m_onTabPressed(this);
+			abort_emission();
+		}
+	}
+
+	void Frame::OnEnterPressed()
+	{
+		if (m_onEnterPressed.is_valid())
+		{
+			m_onEnterPressed(this);
+			abort_emission();
+		}
+	}
+
 	Rect Frame::GetRelativeFrameRect()
 	{
 		// Use the internal size property as the default value

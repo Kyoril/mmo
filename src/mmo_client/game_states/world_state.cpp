@@ -36,6 +36,7 @@ namespace mmo
 		static const char* s_toggleGrid = "ToggleGrid";
 		static const char* s_toggleWire = "ToggleWire";
 		static const char* s_sendChatMessage = "SendChatMessage";
+		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
 	
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
@@ -273,7 +274,7 @@ namespace mmo
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
-	void WorldState::RegisterGameplayCommands() const
+	void WorldState::RegisterGameplayCommands()
 	{
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
@@ -301,6 +302,17 @@ namespace mmo
 				packet.Finish();
 			});
 		}, ConsoleCommandCategory::Debug, "Sends an ingame chat message.");
+
+		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string&, const std::string&)
+			{
+				// Ensure that the frustum planes are recalculated to immediately see the effect
+				m_playerController->GetCamera().InvalidateView();
+
+				// Toggle culling freeze and log current culling state
+				m_scene.FreezeRendering(!m_scene.IsRenderingFrozen());
+				ILOG(m_scene.IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
+			}, ConsoleCommandCategory::Debug, "Toggles culling.");
+
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -309,7 +321,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
-			command_names::s_sendChatMessage
+			command_names::s_sendChatMessage,
+			command_names::s_freezeCulling
 		};
 
 		for (const auto& command : commandsToRemove)

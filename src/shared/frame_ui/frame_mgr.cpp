@@ -704,7 +704,8 @@ namespace mmo
 			return;
 		}
 
-		// TODO: Forward the event
+		// Forward the event
+		m_inputCapture->OnKeyUp(key);
 	}
 
 	void FrameManager::NotifyScreenSizeChanged(float width, float height)

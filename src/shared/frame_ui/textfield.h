@@ -19,20 +19,28 @@ namespace mmo
 
 	public:
 		virtual void Copy(Frame& other) override;
+
 		/// Determines whether the text that is rendered is masked.
 		inline bool IsTextMasked() const { return m_masked; }
+
 		/// Gets the code point to use when rendering the text masked.
 		inline std::string::value_type GetMaskCodePoint() const { return m_maskCodePoint; }
+
 		/// Sets whether the text should be masked.
 		void SetTextMasked(bool value);
+
 		/// Sets whether the text field accepts tabs as text input.
 		void SetAcceptsTab(bool value) { m_acceptsTab = value; }
+
 		/// Determines whether the text field accepts tabs as text input.
 		bool AcceptsTab() const noexcept { return m_acceptsTab; }
+
 		/// Sets the mask code point to use when rendering the text masked.
 		void SetMaskCodePoint(std::string::value_type value);
+
 		/// 
 		virtual const std::string& GetVisualText() const override;
+
 		/// Tries to find the cursor position based on the given local coordinate.
 		int32 GetCursorAt(const Point& position);
 
@@ -46,6 +54,7 @@ namespace mmo
 		void SetDisabledTextColor(const Color& value) noexcept;
 		inline Rect GetTextAreaOffsets() const noexcept { return m_textAreaOffset; }
 		float GetCursorOffset() const;
+
 
 	public:
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
