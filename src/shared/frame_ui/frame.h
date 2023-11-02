@@ -102,8 +102,10 @@ namespace mmo
 	public:
 		/// Register a lua function as an event handler.
 		void RegisterEvent(const std::string& name, const luabind::object& fn);
+
 		/// Removes a registered event function for a given event name.
 		void UnregisterEvent(const std::string& name);
+
 		/// 
 		template<typename ...Args>
 		bool TriggerEvent(const std::string& name, Args&&... args)
@@ -114,7 +116,7 @@ namespace mmo
 
 			try
 			{
-				it->second(args...);
+				it->second(std::forward<Args>(args)...);
 			}
 			catch (const luabind::error& e)
 			{
@@ -122,6 +124,12 @@ namespace mmo
 			}
 			return true;
 		}
+
+		void SetOnLoad(const luabind::object& fn);
+
+		void SetOnUpdate(const luabind::object& fn);
+
+		void OnLoad();
 
 	public:
 		/// Adds a new state imagery.
@@ -245,6 +253,8 @@ namespace mmo
 		/// Calculates the intrinsic frame size.
 		Size GetIntrinsicSize();
 
+		void SetProperty(const std::string& name, const std::string& value);
+
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }
@@ -288,7 +298,7 @@ namespace mmo
 		virtual void OnKeyChar(uint16 codepoint) {}
 
 		/// 
-		virtual void OnKeyUp(Key key) {}
+		virtual void OnKeyUp(Key key);
 
 	public:
 		virtual Rect GetRelativeFrameRect();
@@ -302,6 +312,9 @@ namespace mmo
 		inline void RemoveFlags(uint32 flags) noexcept { m_flags &= ~flags; }
 		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
+		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
+		void SetOnEnterPressed(const luabind::object& func) { m_onEnterPressed = func; }
+
 	protected:
 		virtual void DrawSelf();
 
@@ -314,6 +327,9 @@ namespace mmo
 		Rect GetParentRect();
 		/// Executed when the text was changed.
 		virtual void OnTextChanged();
+
+		void OnTabPressed();
+		void OnEnterPressed();
 
 	private:
 		/// Executed when the clippedByParent property was changed.
@@ -377,9 +393,19 @@ namespace mmo
 		/// Sets the font of this frame.
 		FontPtr m_font;
 		/// User data used by lua.
-		luabind::object m_userData;
+		luabind::object m_userData{};
+
+		luabind::object m_onLoad{};
+
+		luabind::object m_onUpdate{};
 
 		uint32 m_flags = 0;
+
+		bool m_loaded = false;
+
+		luabind::object m_onEnterPressed;
+
+		luabind::object m_onTabPressed;
 
 	protected:
 		scoped_connection_container m_propConnections;

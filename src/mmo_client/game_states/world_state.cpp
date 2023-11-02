@@ -20,6 +20,7 @@
 
 #include <zstr/zstr.hpp>
 
+#include "world_deserializer.h"
 #include "game/chat_type.h"
 
 namespace mmo
@@ -35,11 +36,13 @@ namespace mmo
 		static const char* s_toggleGrid = "ToggleGrid";
 		static const char* s_toggleWire = "ToggleWire";
 		static const char* s_sendChatMessage = "SendChatMessage";
+		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
 	
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
+		, m_unitNameCache(m_realmConnector)
 	{
 	}
 
@@ -93,10 +96,15 @@ namespace mmo
 		RegisterGameplayCommands();
 
 		SetupPacketHandler();
+
+		m_worldRootNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+		LoadMap("Worlds/Development/Development.hwld");
 	}
 
 	void WorldState::OnLeave()
 	{
+		m_worldInstance.reset();
+
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
@@ -151,6 +159,12 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// Enter
+		if (key == 13)
+		{
+			FrameManager::Get().TriggerLuaEvent("OPEN_CHAT");
+		}
+
 		m_playerController->OnKeyUp(key);
 		return true;
 	}
@@ -186,11 +200,6 @@ namespace mmo
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
-		m_groundEntity = m_scene.CreateEntity("Ground", "Models/Floor/Floor.hmsh");
-		m_groundNode = &m_scene.CreateSceneNode("Ground");
-		m_groundNode->AttachObject(*m_groundEntity);
-		m_scene.GetRootSceneNode().AddChild(*m_groundNode);
-
 		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector);
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
@@ -208,39 +217,6 @@ namespace mmo
 		m_sunLight->SetPowerScale(1.0f);
 		m_sunLight->SetColor(Color::White);
 		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
-		
-		m_archEntity = m_scene.CreateEntity("FortressArch01", "Models/Fortress_Arch_01/Fortress_Arch_01.hmsh");
-		m_towerLeftEntity = m_scene.CreateEntity("FortressTowerLeft01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
-		m_towerRightEntity = m_scene.CreateEntity("FortressTowerRight01", "Models/Fortress_Tower_01/Fortress_Tower_01.hmsh");
-
-		m_archNode = &m_scene.CreateSceneNode("FortressArch01");
-		m_scene.GetRootSceneNode().AddChild(*m_archNode);
-		m_archNode->SetPosition({1.1f, 0.0f, -0.1f });
-		m_archNode->AttachObject(*m_archEntity);
-		
-		m_towerLeftNode = &m_scene.CreateSceneNode("FortressTowerLeft01");
-		m_scene.GetRootSceneNode().AddChild(*m_towerLeftNode);
-		m_towerLeftNode->SetPosition({-7.45f, -0.05f, -0.2f });
-		m_towerLeftNode->AttachObject(*m_towerLeftEntity);
-
-		m_towerRightNode = &m_scene.CreateSceneNode("FortressTowerRight01");
-		m_scene.GetRootSceneNode().AddChild(*m_towerRightNode);
-		m_towerRightNode->SetPosition({9.55f, -0.05f, -0.2f });
-		m_towerRightNode->AttachObject(*m_towerRightEntity);
-		
-		auto* centrailStairEntity = m_scene.CreateEntity("CentralStairs", "Models/Central_Stairs.hmsh");
-		auto& centralStairNode = m_scene.CreateSceneNode("CentralStairs");
-		m_scene.GetRootSceneNode().AddChild(centralStairNode);
-		centralStairNode.SetOrientation(Quaternion(Degree(-180), Vector3::UnitY));
-		centralStairNode.SetPosition({-0.45f, -0.10f, 2.75f + 50.0f });
-		centralStairNode.AttachObject(*centrailStairEntity);
-
-		auto* flowerBedEntity = m_scene.CreateEntity("Stone_Flower_Bed_01", "Models/Stone_Flower_Bed_01.hmsh");
-		auto& flowerBedNode = m_scene.CreateSceneNode("Stone_Flower_Bed_01");
-		m_scene.GetRootSceneNode().AddChild(flowerBedNode);
-		flowerBedNode.SetOrientation(Quaternion(Degree(-180), Vector3::UnitY));
-		flowerBedNode.SetPosition({-0.60f, -0.15f, 1.93f + 50.0f });
-		flowerBedNode.AttachObject(*flowerBedEntity);
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -262,6 +238,7 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -283,6 +260,7 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetFacing);
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -299,7 +277,7 @@ namespace mmo
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
-	void WorldState::RegisterGameplayCommands() const
+	void WorldState::RegisterGameplayCommands()
 	{
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
@@ -327,6 +305,17 @@ namespace mmo
 				packet.Finish();
 			});
 		}, ConsoleCommandCategory::Debug, "Sends an ingame chat message.");
+
+		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string&, const std::string&)
+			{
+				// Ensure that the frustum planes are recalculated to immediately see the effect
+				m_playerController->GetCamera().InvalidateView();
+
+				// Toggle culling freeze and log current culling state
+				m_scene.FreezeRendering(!m_scene.IsRenderingFrozen());
+				ILOG(m_scene.IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
+			}, ConsoleCommandCategory::Debug, "Toggles culling.");
+
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -335,7 +324,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
-			command_names::s_sendChatMessage
+			command_names::s_sendChatMessage,
+			command_names::s_freezeCulling
 		};
 
 		for (const auto& command : commandsToRemove)
@@ -413,9 +403,9 @@ namespace mmo
 			if (m_gameObjectsById.empty())
 			{
 				m_playerController->SetControlledUnit(object);
+				FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 			}
 
-			DLOG("Spawning object guid " << log_hex_digit(object->GetGuid()));
 			m_gameObjectsById[object->GetGuid()] = std::move(object);
 			
 			result = PacketParseResult::Pass;
@@ -505,19 +495,80 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		switch(type)
+		m_unitNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
 		{
-		case ChatType::Say:
-			DLOG("[" << log_hex_digit(characterGuid) << "] says: " << message);
-			break;
-		case ChatType::Yell:
-			DLOG("[" << log_hex_digit(characterGuid) << "] yells: " << message);
-			break;
-		case ChatType::Emote:
-			DLOG("[" << log_hex_digit(characterGuid) << "] " << message);
-			break;
-		}
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, message);
+		});
 
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnNameQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		bool succeeded;
+		String name;
+		if (!(packet
+			>> io::read_packed_guid(guid)
+			>> io::read<uint8>(succeeded)
+			>> io::read_string(name)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!succeeded)
+		{
+			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
+			return PacketParseResult::Pass;
+		}
+
+		m_unitNameCache.NotifyObjectResponse(guid, std::move(name));
+		return PacketParseResult::Pass;
+	}
+
+	bool WorldState::LoadMap(const String& assetPath)
+	{
+		m_worldInstance.reset();
+		m_worldInstance = std::make_unique<ClientWorldInstance>(m_scene, *m_worldRootNode);
+
+		// TODO: Load map file
+		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath);
+		if (!streamPtr)
+		{
+			ELOG("Failed to load world file '" << assetPath << "'");
+			return false;
+		}
+
+		io::StreamSource source{ *streamPtr };
+		io::Reader reader{ source };
+
+		ClientWorldInstanceDeserializer deserializer{ *m_worldInstance };
+		if (!deserializer.Read(reader))
+		{
+			ELOG("Failed to read world '" << assetPath << "'!");
+			return false;
+		}
+
+		return true;
+	}
+
+	void WorldState::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	{
+		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
+		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
+		if (entity)
+		{
+			auto& node = m_scene.CreateSceneNode(uniqueId);
+			m_scene.GetRootSceneNode().AddChild(node);
+			node.AttachObject(*entity);
+			node.SetPosition(position);
+			node.SetOrientation(orientation);
+			node.SetScale(scale);
+		}
+	}
+
+	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
+	{
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, "Hello World!");
 	}
 }

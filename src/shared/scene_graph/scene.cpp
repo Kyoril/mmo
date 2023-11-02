@@ -134,13 +134,17 @@ namespace mmo
 		m_renderableVisitor.scissoring = false;
 
 		UpdateSceneGraph();
-		PrepareRenderQueue();
 
-		const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
-		ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
-		visibleObjectsIt->second.Reset();
-		FindVisibleObjects(camera, visibleObjectsIt->second);
+		if (!m_frozen)
+		{
+			PrepareRenderQueue();
 
+			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
+			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
+			visibleObjectsIt->second.Reset();
+			FindVisibleObjects(camera, visibleObjectsIt->second);
+		}
+		
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
 
@@ -449,6 +453,18 @@ namespace mmo
 
 		for (const auto& entity : m_scene.GetAllEntities())
 		{
+			// Filtered due to type flags
+			if ((entity->GetTypeFlags() & m_queryTypeMask) == 0)
+			{
+				continue;
+			}
+
+			// Filtered due to query flags
+			if ((entity->GetQueryFlags() & m_queryMask) == 0)
+			{
+				continue;
+			}
+
 			const auto hitResult = m_ray.IntersectsAABB(entity->GetWorldBoundingBox(true));
 			if (!hitResult.first)
 			{

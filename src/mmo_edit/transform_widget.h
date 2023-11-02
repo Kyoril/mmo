@@ -56,7 +56,7 @@ namespace mmo
 		~TransformWidget() override;
 
 	public:
-		void Update(Camera* camera);
+		void Update(const Camera* camera);
 
 		[[nodiscard]] const bool IsActive() const noexcept { return m_active; }
 
@@ -66,7 +66,15 @@ namespace mmo
 
 		void OnMouseMoved(const float x, const float y);
 
+		void OnMousePressed(uint32 buttons, float x, float y);
+
+		void OnMouseReleased(uint32 buttons, float x, float y);
+
+		void SetSnapToGrid(bool snap, float gridSize);
+
 	private:
+		void UpdateTanslationAxisLines();
+
 		void SetupTranslation();
 
 		void SetupRotation();
@@ -144,6 +152,7 @@ namespace mmo
 	private:
 		TransformMode m_mode { TransformMode::Translate };
 		bool m_isLocal { true };
+		bool m_snap{ true };
 		float m_step { 1.0f };
 		axis_id::Type m_selectedAxis { axis_id::None };
 		Selection &m_selection;

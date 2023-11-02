@@ -39,6 +39,12 @@ namespace mmo
 		/// Deselects the selected object.
 		virtual void Deselect() = 0;
 
+		virtual void SetPosition(const Vector3& position) const = 0;
+
+		virtual void SetOrientation(const Quaternion& orientation) const = 0;
+
+		virtual void SetScale(const Vector3& scale) const = 0;
+
 		/// Returns the position of the selected object.
 		/// @returns Position of the selected object in world coordinates.
 		virtual Vector3 GetPosition() const = 0;

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "connection.h"
+#include "db_cache.h"
 #include "player_controller.h"
 #include "screen.h"
 #include "game_states/game_state.h"
@@ -15,6 +16,8 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 
+#include "base/id_generator.h"
+#include "world_deserializer.h"
 
 namespace mmo
 {
@@ -65,7 +68,7 @@ namespace mmo
 
 		bool OnMouseWheel(int32 delta);
 		
-		bool OnKeyDown(int32 key);
+		bool OnKeyDown(int32 key);	
 		
 		bool OnKeyUp(int32 key);
 
@@ -90,7 +93,7 @@ namespace mmo
 
 		void OnEnterWorldFailed(game::player_login_response::Type error);
 
-		void RegisterGameplayCommands() const;
+		void RegisterGameplayCommands();
 
 		void RemoveGameplayCommands();
 
@@ -116,6 +119,16 @@ namespace mmo
 
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 
+		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+
+	private:
+
+		bool LoadMap(const String& assetPath);
+
+		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
+		void OnChatNameQueryCallback(uint64 guid, const String& name);
+
 	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
@@ -126,17 +139,15 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
+		IdGenerator<uint64> m_objectIdGenerator{ 1 };
 
-		SceneNode* m_archNode { nullptr };
-		SceneNode* m_towerLeftNode { nullptr };
-		SceneNode* m_towerRightNode { nullptr };
-		Entity* m_archEntity { nullptr };
-		Entity* m_towerLeftEntity { nullptr };
-		Entity* m_towerRightEntity { nullptr };
-		SceneNode* m_groundNode { nullptr };
-		Entity* m_groundEntity { nullptr };
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
+
+		SceneNode* m_worldRootNode;
+		std::unique_ptr<ClientWorldInstance> m_worldInstance;
+
+		DBCache<String, game::client_realm_packet::NameQuery> m_unitNameCache;
 	};
 }

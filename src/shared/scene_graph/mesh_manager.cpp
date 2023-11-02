@@ -41,7 +41,7 @@ namespace mmo
 		io::Reader reader{ source };
 		
 		// Create the resulting mesh
-		auto mesh = std::make_shared<Mesh>();
+		auto mesh = std::make_shared<Mesh>(filename);
 
 		MeshDeserializer deserializer { *mesh };
 		if (!deserializer.Read(reader))
@@ -62,7 +62,7 @@ namespace mmo
 		const auto it = m_meshes.find(name);
 		ASSERT(it == m_meshes.end());
 
-		auto mesh = std::make_shared<Mesh>();
+		auto mesh = std::make_shared<Mesh>(name);
 		m_meshes[name] = mesh;
 
 		return mesh;

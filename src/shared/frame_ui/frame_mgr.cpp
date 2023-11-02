@@ -18,10 +18,12 @@
 #include <string>
 #include <utility>
 
+#include "progress_bar.h"
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
 
 #include "luabind_noboost/luabind/luabind.hpp"
+#include "scrolling_message_frame.h"
 
 
 namespace mmo
@@ -313,6 +315,8 @@ namespace mmo
 		}
 	}
 
+
+
 	void FrameManager::Initialize(lua_State* luaState)
 	{
 		ASSERT(!s_frameMgr);
@@ -326,6 +330,7 @@ namespace mmo
 		luabind::module(luaState)
 		[
 			luabind::def("Localize", &LuaLocalize),
+				luabind::def("getglobal", &FrameManager::GetGlobal),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
@@ -363,11 +368,31 @@ namespace mmo
 	               .def("SetHeight", &Frame::SetHeight)
 	               .def("GetWidth", &Frame::GetWidth)
 	               .def("GetHeight", &Frame::GetHeight)
+	               .def("CaptureInput", &Frame::CaptureInput)
+	               .def("HasInputCaptured", &Frame::HasInputCaptured)
+					.def("ReleaseInput", &Frame::ReleaseInput)
+				   .def("SetProperty", &Frame::SetProperty)
 	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
-			
+
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
-					.def("SetClickedHandler", &Button::SetLuaClickedHandler))
+					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
+
+			luabind::scope(
+				luabind::class_<ProgressBar, Frame>("ProgressBar")
+					.def("SetProgress", &ProgressBar::SetProgress)
+					.def("GetProgress", &ProgressBar::GetProgress)),
+
+			luabind::scope(
+				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
+					.def("AddMessage", &ScrollingMessageFrame::AddMessage)
+					.def("Clear", &ScrollingMessageFrame::Clear)
+					.def("ScrollUp", &ScrollingMessageFrame::ScrollUp)
+					.def("ScrollDown", &ScrollingMessageFrame::ScrollDown)
+					.def("IsAtTop", &ScrollingMessageFrame::IsAtTop)
+					.def("IsAtBottom", &ScrollingMessageFrame::IsAtBottom)
+					.def("ScrollToTop", &ScrollingMessageFrame::ScrollToTop)
+					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom))
 		];
 	
 		// Register default frame renderer factory methods
@@ -377,12 +402,16 @@ namespace mmo
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
+		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
+		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
 
 		// Load localization
 		if (!s_frameMgr->m_localization.LoadFromFile())
 		{
 			ELOG("Failed to load localization data!");
 		}
+
+		s_frameMgr->m_localization.AddToLuaScript(s_frameMgr->m_luaState);
 	}
 
 	void FrameManager::Destroy()
@@ -397,6 +426,7 @@ namespace mmo
 
 		// Load UI file
 		mmo::LoadUIFile(filename);
+		m_topFrame->OnLoad();
 	}
 
 	void FrameManager::RegisterFrameRenderer(const std::string& name, RendererFactory factory)
@@ -412,6 +442,28 @@ namespace mmo
 		{
 			m_rendererFactories.erase(it);
 		}
+	}
+
+	luabind::object FrameManager::CompileFunction(const std::string& name, const std::string& function)
+	{
+		if (luaL_loadbuffer(m_luaState, function.c_str(), function.size(), name.c_str()))
+		{
+			const String compileError = lua_tostring(m_luaState, -1);
+			lua_pop(m_luaState, 1);
+			ELOG("Error compiling function " << name << ": " << compileError);
+			return {};
+		}
+
+		if (lua_pcall(m_luaState, 0, LUA_MULTRET, 0) == 0)
+		{
+			luabind::object result = luabind::object(luabind::from_stack(m_luaState, -1));
+			return result;
+		}
+
+		const String executeError = lua_tostring(m_luaState, -1);
+		lua_pop(m_luaState, 1);
+		ELOG("Error compiling function " << name << ": " << executeError);
+		return {};
 	}
 
 	std::unique_ptr<FrameRenderer> FrameManager::CreateRenderer(const std::string & name)
@@ -506,17 +558,30 @@ namespace mmo
 
 	void FrameManager::SetTopFrame(const FramePtr& topFrame)
 	{
-		m_inputCapture.reset();
+		if (topFrame == m_topFrame)
+		{
+			return;
+		}
 
+		ResetTopFrame();
 		m_topFrame = topFrame;
+
+		if (m_topFrame)
+		{
+			m_framesByName[m_topFrame->GetName()] = m_topFrame;
+		}
 	}
 
 	void FrameManager::ResetTopFrame()
 	{
-		m_inputCapture.reset();
+		m_eventFrames.clear();
+		m_fontMaps.clear();
+		m_hoverFrame = nullptr;
+		m_inputCapture = nullptr;
 		m_mouseDownFrames.clear();
 		m_framesByName.clear();
-		
+		m_inputCapture.reset();
+
 		m_topFrame.reset();
 	}
 
@@ -639,7 +704,8 @@ namespace mmo
 			return;
 		}
 
-		// TODO: Forward the event
+		// Forward the event
+		m_inputCapture->OnKeyUp(key);
 	}
 
 	void FrameManager::NotifyScreenSizeChanged(float width, float height)
@@ -705,6 +771,11 @@ namespace mmo
 				frameIt++;
 			}
 		}
+	}
+
+	luabind::object FrameManager::GetGlobal(const std::string& name)
+	{
+		return luabind::globals(FrameManager::Get().m_luaState)[name];
 	}
 
 	void FrameManager::RegisterFrameFactory(const std::string & elementName, FrameFactory factory)

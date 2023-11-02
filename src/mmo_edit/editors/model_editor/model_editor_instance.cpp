@@ -36,7 +36,7 @@ namespace mmo
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 			
-		m_mesh = std::make_shared<Mesh>();
+		m_mesh = std::make_shared<Mesh>("");
 		MeshDeserializer deserializer { *m_mesh };
 
 		const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string());

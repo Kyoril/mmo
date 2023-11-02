@@ -57,6 +57,8 @@ namespace mmo
 		/// Destroys the console system.
 		static void Destroy();
 
+		static void ListCommands();
+
 	public:
 		/// Registers a new console command.
 		static void RegisterCommand(

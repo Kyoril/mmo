@@ -29,8 +29,52 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
+	/// @brief Represents a single entity on the map.
+	class MapEntity final
+	{
+	public:
+		typedef signal<void(const MapEntity&)> TransformChangedSignal;
+		TransformChangedSignal transformChanged;
+
+	public:
+		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity)
+			: m_scene(scene)
+			, m_sceneNode(sceneNode)
+			, m_entity(entity)
+		{
+		}
+
+		virtual ~MapEntity()
+		{
+			m_scene.DestroyEntity(m_entity);
+			m_scene.DestroySceneNode(m_sceneNode);
+		}
+
+	public:
+		SceneNode& GetSceneNode() const
+		{
+			return m_sceneNode;
+		}
+
+		Entity& GetEntity() const
+		{
+			return m_entity;
+		}
+
+	private:
+		Scene& m_scene;
+		SceneNode& m_sceneNode;
+		Entity& m_entity;
+	};
+
+	struct WorldPage
+	{
+
+	};
+
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener
 	{
+
 	public:
 		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
 		~WorldEditorInstance() override;
@@ -52,6 +96,10 @@ namespace mmo
 
 		void UpdateDebugAABB(const AABB& aabb);
 
+		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
+
+		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
@@ -66,7 +114,6 @@ namespace mmo
 		SceneNode* m_cameraNode { nullptr };
 		Entity* m_entity { nullptr };
 		Camera* m_camera { nullptr };
-		std::unique_ptr<AxisDisplay> m_axisDisplay;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
@@ -75,6 +122,11 @@ namespace mmo
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
 		Vector3 m_cameraVelocity{};
+		bool m_hovering{ false };
+
+		bool m_gridSnap { true };
+		float m_gridSizes[7] = { 0.1f, 0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 4.0f };
+		int m_currentGridSizeIndex { 3 };
 		
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
@@ -92,5 +144,11 @@ namespace mmo
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
+
+		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
+		MapEntity* m_selectedMapEntity{ nullptr };
+		ImVec2 m_lastContentRectMin{};
+
+		std::map<uint16, WorldPage> m_pages;
 	};
 }

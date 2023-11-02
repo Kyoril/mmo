@@ -2,8 +2,10 @@
 
 #include "base/typedefs.h"
 
+#include <functional>
 #include <unordered_map>
 #include <optional>
+#include <vector>
 
 #include "net/realm_connector.h"
 
@@ -11,39 +13,63 @@ namespace mmo
 {
 	class RealmConnector;
 
-	template<typename T>
+	template<typename T, game::client_realm_packet::Type RequestOpCode>
 	class DBCache
 	{
 	public:
-		DBCache(const RealmConnector& realmConnector)
+		typedef std::function<void(uint64 guid, const T&)> QueryCallback;
+
+	public:
+		DBCache(RealmConnector& realmConnector)
 			: m_realmConnector(realmConnector)
 		{
 		}
 
 	public:
-		template<typename TCallback>
-		std::optional<const T&> Get(uint64 guid, TCallback callback) const
+		void Get(uint64 guid, QueryCallback&& callback)
 		{
 			auto it = m_cache.find(guid);
 			if (it != m_cache.end())
 			{
-				return it->second;
+				callback(guid, it->second);
+				return;
 			}
 
-			// Send request to realm server asking for entry
-			m_realmConnector.sendSinglePacket([guid](const game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::NameQuery);
-					packet
-						<< io::write_packed_guid(guid);
-					packet.Finish();
-				});
+			// Enqueue pending request callback
+			const auto requestIt = m_pendingRequests.find(guid);
+			if (requestIt == m_pendingRequests.end())
+			{
+				// Send request to server asking for entry
+				m_realmConnector.sendSinglePacket([guid](game::OutgoingPacket& packet)
+					{
+						packet.Start(RequestOpCode);
+						packet
+							<< io::write_packed_guid(guid);
+						packet.Finish();
+					});
+			}
 
-			return {};
+			m_pendingRequests.insert(std::pair{ guid, callback });
+
+		}
+
+		void NotifyObjectResponse(uint64 guid, T&& object)
+		{
+			m_cache[guid] = std::move(object);
+			const T& objectRef = m_cache[guid];
+
+			auto range = m_pendingRequests.equal_range(guid);
+			for (auto i = range.first; i != range.second; ++i)
+			{
+				i->second(guid, objectRef);
+			}
+
+			m_pendingRequests.erase(range.first, range.second);
 		}
 
 	private:
 		RealmConnector& m_realmConnector;
 		std::unordered_map<uint64, T> m_cache;
+		std::unordered_multimap<uint64, QueryCallback> m_pendingRequests;
 	};
 }

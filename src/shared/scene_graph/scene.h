@@ -44,10 +44,28 @@ namespace mmo
 	{
 	protected:
 		Scene& m_scene;
+		uint32 m_queryMask{ 0xffffffff };
+		uint32 m_queryTypeMask{ 0xffffffff };
 
 	public:
 		explicit SceneQuery(Scene& scene);
 		virtual ~SceneQuery() = default;
+
+		/// @brief Filters which movable objects will be returned by the query.
+		///	A movable object will only be returned if a bitwise AND operation between
+		///	this mask and the movable objects query mask returns a non-zero value.
+		///	By default, this mask is set to 0xffffffff, which means that all movable
+		///	objects will be returned.
+		virtual void SetQueryMask(const uint32 mask) { m_queryMask = mask; }
+
+		/// @brief Gets the query mask used by the query.
+		virtual uint32 GetQueryMask() const { return m_queryMask; }
+
+		/// @brief Filters which types of movable objects will be returned by the query.
+		virtual void SetQueryTypeMask(const uint32 mask) { m_queryTypeMask = mask; }
+
+		/// @brief Gets the query type mask.
+		virtual uint32 GetQueryTypeMask() const { return m_queryTypeMask; }
 	};
 
 	typedef std::vector<MovableObject*> SceneQueryResult;
@@ -302,6 +320,17 @@ namespace mmo
 
 		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; }
 
+		/// @brief Freezes or unfreezes the rendering to debug culling. If frozen, the render queue will not be updated any
+		///        more, which will allow to view the scene of the frozen camera perspective with a new camera transformation
+		///        to debug which objects were rendered during the frozen frame.
+		///        If rendering was already frozen when trying to refreeze, nothing will happen (as the previous frozen frame will
+		///		   still be used for rendering).
+		/// @param freeze true to freeze rendering, false to unfreeze.
+		void FreezeRendering(const bool freeze) { m_frozen = freeze; }
+
+		/// @brief Determines whether rendering is currently frozen.
+		bool IsRenderingFrozen() const { return m_frozen; }
+
 	private:
 		void RenderVisibleObjects();
 		
@@ -370,5 +399,7 @@ namespace mmo
 		float m_defaultShadowFarDist { 0.0f };
 
 		std::shared_ptr<Material> m_defaultMaterial;
+
+		bool m_frozen{ false };
 	};
 }

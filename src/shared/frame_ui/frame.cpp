@@ -44,6 +44,8 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
+		other.m_onLoad = m_onLoad;
+		other.m_onUpdate = m_onUpdate;
 		
 		// Set all properties
 		for (const auto& pair : m_propertiesByName)
@@ -177,6 +179,41 @@ namespace mmo
 		}
 
 		FrameManager::Get().FrameUnregisterEvent(shared_from_this(), name);
+	}
+
+	void Frame::SetOnLoad(const luabind::object& fn)
+	{
+		m_onLoad = fn;
+	}
+
+	void Frame::SetOnUpdate(const luabind::object& fn)
+	{
+		m_onUpdate = fn;
+	}
+
+	void Frame::OnLoad()
+	{
+		if (!m_loaded)
+		{
+			m_loaded = true;
+
+			if (m_onLoad.is_valid())
+			{
+				try
+				{
+					m_onLoad(this);
+				}
+				catch (const luabind::error& e)
+				{
+					ELOG("Error calling " << GetName() << ":OnLoad: " << e.what());
+				}
+			}
+		}
+
+		for (const auto& child : m_children)
+		{
+			child->OnLoad();
+		}
 	}
 
 	void Frame::AddImagerySection(ImagerySection& section)
@@ -517,6 +554,15 @@ namespace mmo
 		return intrinsicSize;
 	}
 
+	void Frame::SetProperty(const std::string& name, const std::string& value)
+	{
+		Property* prop = GetProperty(name);
+		if (prop)
+		{
+			prop->Set(value);
+		}
+	}
+
 	void Frame::Render()
 	{
 		// If this frame is hidden, we don't have anything to do
@@ -568,10 +614,27 @@ namespace mmo
 
 	void Frame::Update(float elapsed)
 	{
+		if (!m_visible)
+		{
+			return;
+		}
+
 		// Try to call the renderer's update method if we have a valid renderer
 		if (m_renderer != nullptr)
 		{
 			m_renderer->Update(elapsed);
+		}
+
+		if (m_onUpdate.is_valid())
+		{
+			try
+			{
+				m_onUpdate(this, elapsed);
+			}
+			catch(const luabind::error& e)
+			{
+				ELOG("Error calling OnUpdate: " << e.what());
+			}
 		}
 
 		// Update child frames
@@ -595,6 +658,11 @@ namespace mmo
 
 		// Register ourself as parent frame
 		frame->m_parent = this;
+
+		if (frame->m_onLoad.is_valid())
+		{
+			frame->m_onLoad(frame.get());
+		}
 	}
 
 	void Frame::RemoveAllChildren()
@@ -605,6 +673,39 @@ namespace mmo
 		// Invalidate
 		m_needsLayout = true;
 		m_needsRedraw = true;
+	}
+
+	void Frame::OnKeyUp(Key key)
+	{
+		// Tab
+		if (key == 9)
+		{
+			OnTabPressed();
+		}
+		// Enter
+		else if (key == 13)
+		{
+			OnEnterPressed();
+		}
+
+	}
+
+	void Frame::OnTabPressed()
+	{
+		if (m_onTabPressed.is_valid())
+		{
+			m_onTabPressed(this);
+			abort_emission();
+		}
+	}
+
+	void Frame::OnEnterPressed()
+	{
+		if (m_onEnterPressed.is_valid())
+		{
+			m_onEnterPressed(this);
+			abort_emission();
+		}
 	}
 
 	Rect Frame::GetRelativeFrameRect()

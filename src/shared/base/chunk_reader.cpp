@@ -39,6 +39,8 @@ namespace mmo
 					WLOG("Unhandled chunk found: " << log_hex_digit(chunkHeader));
 					return false;
 				}
+
+				reader.getSource()->seek(expectedChunkEnd);
 			}
 			else if (!chunkIt->second(reader, chunkHeader, chunkSize))
 			{
@@ -51,9 +53,17 @@ namespace mmo
 			if (reader.getSource()->position() != expectedChunkEnd)
 			{
 #if _DEBUG
+				if (reader.getSource()->position() < expectedChunkEnd)
+				{
+					WLOG("Chunk handler did not read the full chunk! Chunk position: "
+						<< reader.getSource()->position() << ", expected position: " << expectedChunkEnd);
+				}
+				else
+				{
+					WLOG("Chunk handler did not read too much data! Chunk position: "
+						<< reader.getSource()->position() << ", expected position: " << expectedChunkEnd);
+				}
 				// Output a warning in debug builds
-				WLOG("Chunk handler did not read the full chunk or read too much data! Chunk position: " 
-					<< reader.getSource()->position() << ", expected position: " << expectedChunkEnd);
 #endif
 
 				// Fix the state

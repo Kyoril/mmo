@@ -66,6 +66,8 @@ namespace mmo
 		/// Gets the account name the player is logged in with.
 		const std::string &GetAccountName() const { return m_accountName; }
 
+		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
@@ -93,7 +95,6 @@ namespace mmo
 		void OnWorldDestroyed(World& world);
 
 		void NotifyWorldNodeChanged(World* worldNode);
-
 
 	public:
 		/// Registers a packet handler.
@@ -161,5 +162,6 @@ namespace mmo
 		PacketParseResult OnDeleteChar(game::IncomingPacket& packet);
 		PacketParseResult OnProxyPacket(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnNameQuery(game::IncomingPacket& packet);
 	};
 }

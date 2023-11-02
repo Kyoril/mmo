@@ -15,8 +15,10 @@
 #include <map>
 #include <memory>
 
-
-struct lua_State;
+extern "C"
+{
+	struct lua_State;
+}
 
 
 namespace mmo
@@ -69,6 +71,8 @@ namespace mmo
 
 		/// Removes a registered frame renderer factory.
 		void RemoveFrameRenderer(const std::string& name);
+
+		luabind::object CompileFunction(const std::string& name, const std::string& function);
 
 		/// Creates a frame renderer instance by name.
 		std::unique_ptr<FrameRenderer> CreateRenderer(const std::string& name);
@@ -159,6 +163,8 @@ namespace mmo
 		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
 
 		void FrameUnregisterEvent(FramePtr frame, const std::string& eventName);
+
+		static luabind::object GetGlobal(const std::string& name);
 
 	public:
 		/// Registers a new factory for a certain frame type.

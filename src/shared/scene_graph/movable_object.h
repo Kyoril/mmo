@@ -43,8 +43,8 @@ namespace mmo
 		bool m_renderQueueIdSet { false };
 		uint16 m_renderQueuePriority { 100 };
 		bool m_renderQueuePrioritySet { false };
-		uint32 m_queryFlags;
-		uint32 m_visibilityFlags;
+		uint32 m_queryFlags { 0xffffffff };
+		uint32 m_visibilityFlags { 0xffffffff };
 		mutable AABB m_worldAABB;
 		mutable Sphere m_worldBoundingSphere;
 		bool m_renderingDisabled;
@@ -126,6 +126,10 @@ namespace mmo
 		virtual void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables = false) = 0;
 
 		uint32 GetTypeFlags() const;
+
+		uint32 GetQueryFlags() const { return m_queryFlags; }
+
+		void SetQueryFlags(const uint32 mask) { m_queryFlags = mask; }
 		
 		virtual void SetDebugDisplayEnabled(const bool enabled) noexcept { m_debugDisplay = enabled; }
 

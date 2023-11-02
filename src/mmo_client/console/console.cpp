@@ -79,7 +79,6 @@ namespace mmo
 		ConsoleVar* s_dataPathCVar = nullptr;
 	}
 
-
 	// Graphics CVar stuff
 	namespace
 	{
@@ -194,6 +193,7 @@ namespace mmo
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
+		RegisterCommand("list", console_commands::ConsoleCommand_List, ConsoleCommandCategory::Default, "Shows all available console commands.");
 		RegisterCommand("clear", ConsoleCommand_Clear, ConsoleCommandCategory::Default, "Clears the console text.");
 		
 		ConsoleVarMgr::Initialize();
@@ -219,6 +219,7 @@ namespace mmo
 				"Fonts.hpak",
 				"Models.hpak",
 				"Textures.hpak",
+				"Worlds.hpak",
 				localeArchive,
 				localeArchive + ".hpak"
 			});
@@ -383,6 +384,25 @@ namespace mmo
 		UnregisterCommand("run");
 		UnregisterCommand("ver");
 		UnregisterCommand("quit");
+	}
+
+	void Console::ListCommands()
+	{
+		ILOG("Console commands available:");
+
+		bool first = true;
+		std::ostringstream streamCommands;
+		for (const auto& kvp : s_consoleCommands)
+		{
+			if (!first)
+			{
+				streamCommands << ", ";
+			}
+			streamCommands << kvp.first;
+			first = false;
+		}
+
+		ILOG(streamCommands.str());
 	}
 
 	inline void Console::RegisterCommand(const std::string & command, ConsoleCommandHandler handler, ConsoleCommandCategory category, const std::string & help)

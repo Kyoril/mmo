@@ -25,4 +25,9 @@ namespace mmo
 	void VertexBufferMetal::Set()
 	{
 	}
+
+    std::unique_ptr<VertexBuffer> VertexBufferMetal::Clone()
+    {
+        return nullptr;
+    }
 }
