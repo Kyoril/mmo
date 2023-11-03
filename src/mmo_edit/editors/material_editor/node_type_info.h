@@ -5,11 +5,11 @@
 namespace mmo
 {
 	class MaterialGraph;
-	class Node;
+	class GraphNode;
 
 	struct NodeTypeInfo
 	{
-	    using Factory = Node*(*)(MaterialGraph& material);
+	    using Factory = GraphNode*(*)(MaterialGraph& material);
 
 	    uint32 id;
 	    std::string_view name;

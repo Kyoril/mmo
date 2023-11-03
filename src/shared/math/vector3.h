@@ -189,11 +189,15 @@ namespace mmo
 		}
 		
 		// Dot product
-		inline float operator*(Vector3 const& b)
+		inline Vector3 operator*(Vector3 const& b)
 		{
-			return Dot(b);
+			return {
+				x * b.x,
+				y * b.y,
+				z * b.z
+			};
 		}
-	
+			
 	public:
 
 		/// Caluclates the dot product of this vector and another one.

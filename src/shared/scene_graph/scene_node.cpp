@@ -8,17 +8,6 @@
 
 namespace mmo
 {
-	void SceneNode::RemoveAllChildren()
-	{
-		for (const auto& child : m_children)
-		{
-			child.second->SetParent(nullptr);
-		}
-
-		m_children.clear();
-		m_childrenToUpdate.clear();
-	}
-
 	void SceneNode::FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren)
 	{
 		// TODO: Check if this object is visible itself
@@ -32,9 +21,26 @@ namespace mmo
 		{
 			for (const auto& [name, child] : m_children)
 			{
-				child->FindVisibleObjects(camera, renderQueue, visibleObjectBounds, includeChildren);
+				static_cast<SceneNode*>(child)->FindVisibleObjects(camera, renderQueue, visibleObjectBounds, includeChildren);
 			}
 		}
+	}
+
+	void SceneNode::AutoTrack()
+	{
+		// NB assumes that all scene nodes have been updated
+		if (!m_autoTrackTarget)
+		{
+			return;
+		}
+
+		LookAt(m_autoTrackTarget->GetDerivedPosition() + m_autoTrackOffset, TransformSpace::World, m_autoTrackLocalDirection);
+		Update(true, true);
+	}
+
+	SceneNode* SceneNode::GetParentSceneNode() const
+	{
+		return dynamic_cast<SceneNode*>(GetParent());
 	}
 
 	void SceneNode::RemoveFromParent() const
@@ -56,326 +62,101 @@ namespace mmo
 		{
 			for (auto& [name, node] : m_children)
 			{
-				node->SetVisible(visible, true);
+				auto* sceneNode = dynamic_cast<SceneNode*>(node);
+				ASSERT(sceneNode);
+				sceneNode->SetVisible(visible, true);
+			}
+		}
+	}
+
+	void SceneNode::ToggleVisibility(bool cascade)
+	{
+		for (const auto& [name, object] : m_objectsByName)
+		{
+			object->SetVisible(!object->IsVisible());
+		}
+
+		if (cascade)
+		{
+			for (auto& [name, node] : m_children)
+			{
+				auto* sceneNode = dynamic_cast<SceneNode*>(node);
+				ASSERT(sceneNode);
+				sceneNode->ToggleVisibility(cascade);
 			}
 		}
 	}
 
 	SceneNode::SceneNode(Scene& scene)
-		: m_scene(scene)
-		, m_parent(nullptr)
-		, m_needParentUpdate(false)
-		, m_parentNotified(false)
-		, m_orientation(Quaternion::Identity)
-		, m_derivedOrientation(Quaternion::Identity)
-		, m_inheritOrientation(true)
-		, m_scale(Vector3::UnitScale)
-		, m_derivedScale(Vector3::UnitScale)
-		, m_inheritScale(true)
-		, m_cachedTransformInvalid(true)
+		: Node()
+		, m_scene(scene)
 	{
-		static uint32 index = 0;
-		m_name = "SceneNode_" + std::to_string(index++);
 	}
 
-	SceneNode::SceneNode(Scene& scene, String name)
-		: m_scene(scene)
-		, m_name(std::move(name))
-		, m_parent(nullptr)
-		, m_needParentUpdate(false)
-		, m_parentNotified(false)
-		, m_orientation(Quaternion::Identity)
-		, m_derivedOrientation(Quaternion::Identity)
-		, m_inheritOrientation(true)
-		, m_scale(Vector3::UnitScale)
-		, m_derivedScale(Vector3::UnitScale)
-		, m_inheritScale(true)
-		, m_cachedTransformInvalid(true)
+	SceneNode::SceneNode(Scene& scene, const String& name)
+		: Node(name)
+		, m_scene(scene)
 	{
 	}
 
 	SceneNode::~SceneNode()
 	{
-		RemoveAllChildren();
-
-		if (m_parent)
-		{
-			m_parent->RemoveChild(m_name);
-			m_parent = nullptr;
-		}
-	}
-
-	void SceneNode::SetParent(SceneNode* parent)
-	{
-		const bool different = parent != m_parent;
-		
-		m_parent = parent;
-		m_parentNotified = false;
-		NeedUpdate();
-
-		if (!different)
-		{
-			return;
-		}
-
-		if (m_parent)
-		{
-			nodeAttached(*this);
-		}
-		else
-		{
-			nodeDetached(*this);
-		}
-	}
-
-	const Quaternion& SceneNode::GetDerivedOrientation()
-	{
-		if (m_needParentUpdate)
-		{
-			UpdateFromParent();
-		}
-		
-		return m_derivedOrientation;
-	}
-
-	void SceneNode::SetOrientation(const Quaternion& orientation)
-	{
-		m_orientation = orientation;
-		m_orientation.Normalize();
-
-		NeedUpdate();
-	}
-
-	void SceneNode::SetDerivedOrientation(const Quaternion& orientation)
-	{
-        if(m_parent)
-        {
-			SetOrientation( m_parent->ConvertWorldToLocalOrientation(orientation));   
-        }
-	}
-
-	void SceneNode::Roll(const Radian& angle, TransformSpace relativeTo)
-	{
-		Rotate(Vector3::UnitZ, angle, relativeTo);
-	}
-
-	void SceneNode::Pitch(const Radian& angle, TransformSpace relativeTo)
-	{
-		Rotate(Vector3::UnitX, angle, relativeTo);
-	}
-
-	void SceneNode::Yaw(const Radian& angle, TransformSpace relativeTo)
-	{
-		Rotate(Vector3::UnitY, angle, relativeTo);
-	}
-
-	void SceneNode::Rotate(const Vector3& axis, const Radian& angle, TransformSpace relativeTo)
-	{
-		Quaternion q;
-		q.FromAngleAxis(angle, axis);
-		Rotate(q, relativeTo);
-	}
-
-	void SceneNode::Rotate(const Quaternion& delta, TransformSpace relativeTo)
-	{
-		Quaternion norm = delta;
-		norm.Normalize();
-
-		switch(relativeTo)
-		{
-		case TransformSpace::Parent:
-			m_orientation = norm * m_orientation;
-			break;
-		case TransformSpace::World:
-			m_orientation = m_orientation * GetDerivedOrientation().Inverse() * norm * GetDerivedOrientation();
-			break;
-		case TransformSpace::Local:
-			m_orientation = m_orientation * norm;
-			break;
-		}
-
-		NeedUpdate();
-	}
-
-	const Vector3& SceneNode::GetDerivedScale()
-	{
-		if (m_needParentUpdate)
-		{
-			UpdateFromParent();
-		}
-		
-		return m_derivedScale;
-	}
-
-	void SceneNode::SetScale(const Vector3& scale)
-	{
-		m_scale = scale;
-        NeedUpdate();
-	}
-
-	void SceneNode::Scale(const Vector3& scaleOnAxis)
-	{
-        m_scale = scaleOnAxis * m_scale;
-        NeedUpdate();
-	}
-
-	const Vector3& SceneNode::GetDerivedPosition()
-	{
-		if (m_needParentUpdate)
-		{
-			UpdateFromParent();
-		}
-		
-		return m_derivedPosition;
-	}
-
-	void SceneNode::SetPosition(const Vector3& position)
-	{
-		m_position = position;
-        NeedUpdate();
-	}
-
-	void SceneNode::SetDerivedPosition(const Vector3& position)
-	{
-		if (m_parent)
-		{
-			SetPosition(m_parent->ConvertWorldToLocalPosition(position));
-		}
-	}
-
-	Vector3 SceneNode::ConvertWorldToLocalPosition(const Vector3& worldPos)
-	{
-		if (m_needParentUpdate)
-        {
-            UpdateFromParent();
-        }
-		
-		return m_derivedOrientation.Inverse() * (worldPos - m_derivedPosition) / m_derivedScale;
-	}
-
-	Vector3 SceneNode::ConvertLocalToWorldPosition(const Vector3& localPos)
-	{
-		if (m_needParentUpdate)
-        {
-            UpdateFromParent();
-        }
-		
-		return m_derivedOrientation * (localPos * m_derivedScale) + m_derivedPosition;
-	}
-
-	Quaternion SceneNode::ConvertWorldToLocalOrientation(const Quaternion& worldOrientation)
-	{
-		if (m_needParentUpdate)
-        {
-            UpdateFromParent();
-        }
-		
-		return m_derivedOrientation.Inverse() * worldOrientation;
-	}
-
-	Quaternion SceneNode::ConvertLocalToWorldOrientation(const Quaternion& localOrientation)
-	{
-		if (m_needParentUpdate)
-        {
-            UpdateFromParent();
-        }
-		
-		return m_derivedOrientation * localOrientation;
-	}
-
-	void SceneNode::SetInheritOrientation(bool inherit)
-	{
-        m_inheritOrientation = inherit;
-        NeedUpdate();
-	}
-
-	void SceneNode::SetInheritScale(bool inherit)
-	{
-        m_inheritScale = inherit;
-        NeedUpdate();
-	}
-
-	void SceneNode::Translate(const Vector3& delta, TransformSpace relativeTo)
-	{
-		switch(relativeTo)
-		{
-		case TransformSpace::Local:
-			m_position += m_orientation * delta;
-			break;
-		case TransformSpace::World:
-			if (m_parent)
-			{
-				m_position += m_parent->GetDerivedOrientation().Inverse() * delta / m_parent->GetDerivedScale();
-			}
-			else
-			{
-				m_position += delta;
-			}
-			break;
-		case TransformSpace::Parent:
-			m_position += delta;
-			break;
-		}
-
-		NeedUpdate();
-	}
-
-	void SceneNode::AddChild(SceneNode& child)
-	{
-		ASSERT(!child.m_parent);
-
-		m_children.emplace(ChildNodeMap::value_type(child.GetName(), &child));
-		child.SetParent(this);
-	}
-
-	SceneNode* SceneNode::RemoveChild(const String& name)
-	{
-		const auto it = m_children.find(name);
-		if (it == m_children.end())
-		{
-			return nullptr;
-		}
-
-		SceneNode* child = it->second;
-
-		CancelUpdate(*child);
-
-		m_children.erase(it);
-		child->SetParent(nullptr);
-		return child;
+		DetachAllObjects();
 	}
 
 	void SceneNode::Update(const bool updateChildren, const bool parentHasChanged)
 	{
-		m_parentNotified = false;
-
-		if (m_needParentUpdate || parentHasChanged)
-		{
-			UpdateFromParent();
-		}
-
-		if (updateChildren)
-		{
-			if (m_needChildUpdates || parentHasChanged)
-			{
-				for(const auto& [name, child] : m_children)
-				{
-					child->Update(true, true);
-				}
-			}
-			else
-			{
-				for (auto& child : m_childrenToUpdate)
-				{
-					child->Update(true, false);
-				}
-			}
-
-			m_childrenToUpdate.clear();
-			m_needChildUpdates = false;
-		}
-
+		Node::Update(updateChildren, parentHasChanged);
 		UpdateBounds();
+	}
+
+	void SceneNode::UpdateFromParentImpl() const
+	{
+		Node::UpdateFromParentImpl();
+
+		for (const auto& [name, obj] : m_objectsByName)
+		{
+			obj->NotifyMoved();
+		}
+	}
+
+	Node* SceneNode::CreateChildImpl()
+	{
+		return &m_scene.CreateSceneNode();
+	}
+
+	Node* SceneNode::CreateChildImpl(const String& name)
+	{
+		return &m_scene.CreateSceneNode(name);
+	}
+
+	void SceneNode::SetParent(Node* parent)
+	{
+		Node::SetParent(parent);
+
+		if (parent)
+		{
+			const auto* sceneParent = dynamic_cast<SceneNode*>(parent);
+			SetInSceneGraph(sceneParent->IsInSceneGraph());
+		}
+		else
+		{
+			SetInSceneGraph(false);
+		}
+	}
+
+	void SceneNode::SetInSceneGraph(bool inSceneGraph)
+	{
+		if (inSceneGraph != m_isInSceneGraph)
+		{
+			m_isInSceneGraph = inSceneGraph;
+
+			for (const auto& [name, child] : m_children)
+			{
+				auto* sceneChild = dynamic_cast<SceneNode*>(child);
+				sceneChild->SetInSceneGraph(inSceneGraph);
+			}
+		}
 	}
 
 	void SceneNode::UpdateBounds()
@@ -392,22 +173,8 @@ namespace mmo
 		for (const auto& childIt : m_children)
 		{
 			// We expect the child node to already be up to date here, so use it's bound as is
-			m_worldAABB.Combine(childIt.second->m_worldAABB);
+			m_worldAABB.Combine(static_cast<SceneNode*>(childIt.second)->m_worldAABB);
 		}
-	}
-
-	const Matrix4& SceneNode::GetFullTransform()
-	{
-		if (m_cachedTransformInvalid)
-		{
-			m_cachedTransform.MakeTransform(
-				GetDerivedPosition(),
-				GetDerivedScale(),
-				GetDerivedOrientation());
-			m_cachedTransformInvalid = false;
-		}
-
-		return m_cachedTransform;
 	}
 
 	void SceneNode::AttachObject(MovableObject& obj)
@@ -425,6 +192,29 @@ namespace mmo
         NeedUpdate();
 	}
 
+	MovableObject* SceneNode::GetAttachedObject(uint32 index) const
+	{
+		if (index < m_objectsByName.size())
+		{
+			auto it = m_objectsByName.begin();
+			std::advance(it, index);
+			return it->second;
+		}
+
+		return nullptr;
+	}
+
+	MovableObject* SceneNode::GetAttachedObject(const String& name) const
+	{
+		const auto it = m_objectsByName.find(name);
+		if (it != m_objectsByName.end())
+		{
+			return it->second;
+		}
+
+		return nullptr;
+	}
+
 	void SceneNode::DetachObject(MovableObject& object)
 	{
 		std::erase_if(m_objectsByName, [&object](const auto& item)
@@ -438,101 +228,176 @@ namespace mmo
         NeedUpdate();
 	}
 
-	void SceneNode::NeedUpdate(bool forceParentUpdate)
+	MovableObject* SceneNode::DetachObject(const String& name)
 	{
-		m_needParentUpdate = true;
-		m_needChildUpdates = true;
-        m_cachedTransformInvalid = true;
-
-        // Make sure we're not root and parent hasn't been notified before
-        if (m_parent && (!m_parentNotified || forceParentUpdate))
-        {
-            m_parent->RequestUpdate(*this, forceParentUpdate);
-			m_parentNotified = true;
-        }
-		
-        m_childrenToUpdate.clear();
-	}
-
-	void SceneNode::RequestUpdate(SceneNode& child, bool forceParentUpdate)
-	{
-		// If we're already going to update everything this doesn't matter
-        if (m_needChildUpdates)
-        {
-            return;
-        }
-
-        m_childrenToUpdate.insert(&child);
-
-        // Request selective update of me, if we didn't do it before
-        if (m_parent && (!m_parentNotified || forceParentUpdate))
+		const auto it = m_objectsByName.find(name);
+		if (it != m_objectsByName.end())
 		{
-            m_parent->RequestUpdate(*this, forceParentUpdate);
-			m_parentNotified = true;
+			MovableObject* obj = it->second;
+			m_objectsByName.erase(it);
+			obj->NotifyAttachmentChanged(nullptr);
+			NeedUpdate();
+			return obj;
 		}
+
+		return nullptr;
 	}
 
-	void SceneNode::CancelUpdate(SceneNode& child)
+	void SceneNode::DetachAllObjects()
 	{
-		m_childrenToUpdate.erase(&child);
-
-		if (m_childrenToUpdate.empty() && m_parent && !m_needChildUpdates)
+		for (const auto& [name, object] : m_objectsByName)
 		{
-			m_parent->CancelUpdate(*this);
-			m_parentNotified = false;
+			object->NotifyAttachmentChanged(nullptr);
 		}
+
+		m_objectsByName.clear();
+		NeedUpdate();
 	}
 
-	SceneNode* SceneNode::CreateChildSceneNode()
+	SceneNode* SceneNode::CreateChildSceneNode(const Vector3& translate, const Quaternion& rotate)
 	{
-		auto& node = m_scene.CreateSceneNode();
-		AddChild(node);
-
-		return &node;
+		return dynamic_cast<SceneNode*>(CreateChild(translate, rotate));
 	}
 
-	void SceneNode::UpdateFromParent()
+	SceneNode* SceneNode::CreateChildSceneNode(const String& name, const Vector3& translate, const Quaternion& rotate)
 	{
-		if (m_parent)
+		return dynamic_cast<SceneNode*>(CreateChild(name, translate, rotate));
+	}
+
+	void SceneNode::SetFixedYawAxis(const bool useFixed, const Vector3& fixedAxis)
+	{
+		m_yawFixed = useFixed;
+		m_yawFixedAxis = fixedAxis;
+	}
+
+	void SceneNode::Yaw(const Radian& angle, TransformSpace relativeTo)
+	{
+		if (m_yawFixed)
 		{
-			const Quaternion& parentOrientation = m_parent->GetDerivedOrientation();
-			if (m_inheritOrientation)
-			{
-				m_derivedOrientation = parentOrientation * m_orientation;
-			}
-			else
-			{
-				m_derivedOrientation = m_orientation;
-			}
-
-			const Vector3& parentScale = m_parent->GetDerivedScale();
-			if (m_inheritScale)
-			{
-				m_derivedScale = parentScale * m_scale;
-			}
-			else
-			{
-				m_derivedScale = m_scale;
-			}
-
-			// Our absolute position depends on the parent's orientation and scale
-			m_derivedPosition = parentOrientation * (parentScale * m_position);
-			m_derivedPosition += m_parent->GetDerivedPosition();
+			Rotate(m_yawFixedAxis, angle, relativeTo);
 		}
 		else
 		{
-			m_derivedOrientation = m_orientation;
-			m_derivedPosition = m_position;
-			m_derivedScale = m_scale;
+			Rotate(Vector3::UnitY, angle, relativeTo);
+		}
+	}
+
+	void SceneNode::SetDirection(const Vector3& vec, TransformSpace relativeTo, const Vector3& localDirectionVector)
+	{
+		// Do nothing if given a zero vector
+		if (vec == Vector3::Zero) return;
+
+		// The direction we want the local direction point to
+		Vector3 targetDir = vec.NormalizedCopy();
+
+		// Transform target direction to world space
+		switch (relativeTo)
+		{
+		case TransformSpace::Parent:
+			if (m_inheritOrientation)
+			{
+				if (m_parent)
+				{
+					targetDir = m_parent->GetDerivedOrientation() * targetDir;
+				}
+			}
+			break;
+		case TransformSpace::Local:
+			targetDir = GetDerivedOrientation() * targetDir;
+			break;
+		case TransformSpace::World:
+			// default orientation
+			break;
 		}
 
-		// Matrix is now invalid, but derived values are valid
-		m_cachedTransformInvalid = true;
-		m_needParentUpdate = false;
+		// Calculate target orientation relative to world space
+		Quaternion targetOrientation;
+		if (m_yawFixed)
+		{
+			// Calculate the quaternion for rotate local Z to target direction
+			Vector3 xVec = m_yawFixedAxis.Cross(targetDir);
+			xVec.Normalize();
+			Vector3 yVec = targetDir.Cross(xVec);
+			yVec.Normalize();
+			const auto unitZToTarget = Quaternion(xVec, yVec, targetDir);
 
-		// Update bound
+			if (localDirectionVector == Vector3::NegativeUnitZ)
+			{
+				// Special case for avoid calculate 180 degree turn
+				targetOrientation = Quaternion(-unitZToTarget.y, -unitZToTarget.z, unitZToTarget.w, unitZToTarget.x);
+			}
+			else
+			{
+				// Calculate the quaternion for rotate local direction to target direction
+				const Quaternion localToUnitZ = localDirectionVector.GetRotationTo(Vector3::UnitZ);
+				targetOrientation = unitZToTarget * localToUnitZ;
+			}
+		}
+		else
+		{
+			const Quaternion& currentOrient = GetDerivedOrientation();
 
+			// Get current local direction relative to world space
+			const Vector3 currentDir = currentOrient * localDirectionVector;
+			if ((currentDir + targetDir).GetSquaredLength() < 0.00005f)
+			{
+				// Oops, a 180 degree turn (infinite possible rotation axes)
+				// Default to yaw i.e. use current UP
+				targetOrientation =
+					Quaternion(-currentOrient.y, -currentOrient.z, currentOrient.w, currentOrient.x);
+			}
+			else
+			{
+				// Derive shortest arc to new direction
+				const Quaternion rotQuat = currentDir.GetRotationTo(targetDir);
+				targetOrientation = rotQuat * currentOrient;
+			}
+		}
 
-		updated(*this);
+		// Set target orientation, transformed to parent space
+		if (m_parent && m_inheritOrientation)
+		{
+			SetOrientation(m_parent->GetDerivedOrientation().UnitInverse() * targetOrientation);
+		}
+		else
+		{
+			SetOrientation(targetOrientation);
+		}
+	}
+
+	void SceneNode::LookAt(const Vector3& targetPoint, TransformSpace relativeTo, const Vector3& localDirectionVector)
+	{
+		Vector3 origin;
+		switch (relativeTo)
+		{
+		case TransformSpace::World:
+			origin = GetDerivedPosition();
+			break;
+		case TransformSpace::Parent:
+			origin = m_position;
+			break;
+		case TransformSpace::Local:
+			origin = Vector3::Zero;
+			break;
+		}
+
+		SetDirection(targetPoint - origin, relativeTo, localDirectionVector);
+	}
+
+	void SceneNode::SetAutoTracking(bool enabled, SceneNode* const target, const Vector3& localDirectionVector,
+		const Vector3& offset)
+	{
+		if (enabled)
+		{
+			m_autoTrackTarget = target;
+			m_autoTrackOffset = offset;
+			m_autoTrackLocalDirection = localDirectionVector;
+		}
+		else
+		{
+			m_autoTrackTarget = nullptr;
+		}
+
+		// TODO: Subscribe to scene's auto tracking list so this node gets automatically updated it's auto tracking target
 	}
 }
