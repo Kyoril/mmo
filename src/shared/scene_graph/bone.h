@@ -40,9 +40,9 @@ namespace mmo
 		void NeedUpdate(bool forceParentUpdate = false) override;
 
 	protected:
-		Node* CreateChildImpl();
+		Node* CreateChildImpl() override;
 
-		Node* CreateChildImpl(const String& name);
+		Node* CreateChildImpl(const String& name) override;
 
 
     protected:
