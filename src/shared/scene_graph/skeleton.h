@@ -47,6 +47,8 @@ namespace mmo
 		virtual bool HasAnimation(const String& name) const;
 
 		virtual void RemoveAnimation(const String& name);
+
+		virtual void GetBoneMatrices(Matrix4* matrices);
 	};
 
 

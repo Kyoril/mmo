@@ -1,5 +1,7 @@
 #include "bone.h"
 
+#include "skeleton.h"
+
 namespace mmo
 {
     Bone::Bone(unsigned short handle, Skeleton& creator)
@@ -20,25 +22,21 @@ namespace mmo
 
     Bone* Bone::CreateChild(unsigned short handle, const Vector3& inTranslate, const Quaternion& inRotate)
     {
-        /*Bone* retBone = m_creator.CreateBone(handle);
+        Bone* retBone = m_creator.CreateBone(handle);
         retBone->Translate(inTranslate);
         retBone->Rotate(inRotate);
-        AddChild(retBone);
-        return retBone;*/
-
-        return nullptr;
+        AddChild(*retBone);
+        return retBone;
     }
 
     Node* Bone::CreateChildImpl(void)
     {
-        //return m_creator.CreateBone();
-        return nullptr;
+        return m_creator.CreateBone();
     }
 
     Node* Bone::CreateChildImpl(const String& name)
     {
-        //return m_creator.CreateBone(name);
-        return nullptr;
+        return m_creator.CreateBone(name);
     }
 
     void Bone::SetBindingPose(void)
@@ -59,7 +57,7 @@ namespace mmo
     void Bone::SetManuallyControlled(bool manuallyControlled)
     {
         m_manuallyControlled = manuallyControlled;
-        //m_creator->NotifyManualBoneStateChange(*this);
+        //m_creator.NotifyManualBoneStateChange(*this);
     }
 
     bool Bone::IsManuallyControlled() const
@@ -74,14 +72,14 @@ namespace mmo
         Vector3 locScale = GetDerivedScale() * m_bindDerivedInverseScale;
 
         // Combine orientation with binding pose inverse orientation
-        Quaternion locRotate = GetDerivedOrientation() * m_bindDerivedInverseOrientation;
+        const Quaternion locRotate = GetDerivedOrientation() * m_bindDerivedInverseOrientation;
 
         // Combine position with binding pose inverse position,
         // Note that translation is relative to scale & rotation,
         // so first reverse transform original derived position to
         // binding pose bone space, and then transform to current
         // derived bone space.
-        Vector3 locTranslate = GetDerivedPosition() + locRotate * (locScale * m_bindDerivedInversePosition);
+        const Vector3 locTranslate = GetDerivedPosition() + locRotate * (locScale * m_bindDerivedInversePosition);
 
         m.MakeTransform(locTranslate, locScale, locRotate);
     }

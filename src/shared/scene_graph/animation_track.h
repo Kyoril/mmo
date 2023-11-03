@@ -47,6 +47,7 @@ namespace mmo
 	{
 	public:
 
+		virtual void KeyFrameDataChanged() const {}
 	};
 
 	enum class VertexAnimationType : uint8
