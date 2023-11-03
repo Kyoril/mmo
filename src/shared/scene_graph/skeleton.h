@@ -28,7 +28,7 @@ namespace mmo
 
 	public:
 		Skeleton(const String& name);
-		virtual ~Skeleton();
+		virtual ~Skeleton() = default;
 
 	public:
 

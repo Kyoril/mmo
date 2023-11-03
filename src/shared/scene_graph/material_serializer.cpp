@@ -9,12 +9,12 @@
 
 namespace mmo
 {
-	static const ChunkMagic MaterialChunkMagic = { {'H', 'M', 'A', 'T'} };
-	static const ChunkMagic MaterialNameChunk = { {'N', 'A', 'M', 'E'} };
-	static const ChunkMagic MaterialAttributeChunk = { {'A', 'T', 'T', 'R'} };
-	static const ChunkMagic MaterialVertexShaderChunk = { {'V', 'R', 'T', 'X'} };
-	static const ChunkMagic MaterialPixelShaderChunk = { {'P', 'I', 'X', 'L'} };
-	static const ChunkMagic MaterialTextureChunk = { {'T', 'E', 'X', 'T'} };
+	static const ChunkMagic MaterialChunkMagic = MakeChunkMagic('TAMH');
+	static const ChunkMagic MaterialNameChunk = MakeChunkMagic('EMAN');
+	static const ChunkMagic MaterialAttributeChunk = MakeChunkMagic('RTTA');
+	static const ChunkMagic MaterialVertexShaderChunk = MakeChunkMagic('XTRV');
+	static const ChunkMagic MaterialPixelShaderChunk = MakeChunkMagic('LXIP');
+	static const ChunkMagic MaterialTextureChunk = MakeChunkMagic('TXET');
 	
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)

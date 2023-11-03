@@ -5,6 +5,9 @@
 
 #include <memory>
 
+#include "skeleton_mgr.h"
+#include "log/default_log_levels.h"
+
 
 namespace mmo
 {
@@ -101,5 +104,45 @@ namespace mmo
 		{
 			subMesh->Render();
 		}
+	}
+
+	void Mesh::SetSkeletonName(const String& skeletonName)
+	{
+		if (m_skeletonName == skeletonName)
+		{
+			return;
+		}
+
+		m_skeletonName = skeletonName;
+		if (m_skeletonName.empty())
+		{
+			m_skeleton.reset();
+		}
+		else
+		{
+			m_skeleton = SkeletonMgr::Get().Load(m_skeletonName);
+			if (!m_skeleton)
+			{
+				WLOG("Failed to load skeleton '" << m_skeletonName << "' for mesh '" << m_name << "' - mesh will not be animated!");
+			}
+		}
+	}
+
+	void Mesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
+	{
+		m_boneAssignments.insert(VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign));
+		m_boneAssignmentsOutOfDate = true;
+	}
+
+	void Mesh::ClearBoneAssignments()
+	{
+		m_boneAssignments.clear();
+		m_boneAssignmentsOutOfDate = true;
+	}
+
+	void Mesh::NotifySkeleton(SkeletonPtr& skeleton)
+	{
+		m_skeleton = skeleton;
+		m_skeletonName = skeleton ? skeleton->GetName() : "";
 	}
 }

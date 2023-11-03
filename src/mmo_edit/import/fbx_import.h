@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <stack>
+
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
@@ -29,6 +31,12 @@ namespace mmo
 		std::vector<Vector3> normals;
 		std::vector<uint32> colors;
 		std::vector<int32> polygonIndices;
+	};
+
+	struct Joint
+	{
+		Joint* parent = nullptr;
+		String name;
 	};
 
 	/// This class can be used to extract relevant informations out of an fbx file.
@@ -98,5 +106,7 @@ namespace mmo
 		std::vector<MeshEntry> m_meshEntries;
 		FbxManager* m_sdkManager = nullptr;
 		FbxScene* m_scene = nullptr;
+		std::vector<Joint> m_joints;
+		std::stack<Joint*> m_jointStack;
 	};
 }

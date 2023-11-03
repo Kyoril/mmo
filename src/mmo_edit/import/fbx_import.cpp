@@ -107,7 +107,7 @@ namespace mmo
 			//IOS_REF.SetBoolProp(IMP_FBX_LINK, true);
 			IOS_REF.SetBoolProp(IMP_FBX_SHAPE, true);
 			IOS_REF.SetBoolProp(IMP_FBX_GOBO, true);
-			//IOS_REF.SetBoolProp(IMP_FBX_ANIMATION, true);
+			IOS_REF.SetBoolProp(IMP_FBX_ANIMATION, true);
 			IOS_REF.SetBoolProp(IMP_FBX_GLOBAL_SETTINGS, true);
 		}
 		
@@ -232,19 +232,43 @@ namespace mmo
 	
 	void FbxImport::TraverseScene(FbxNode & node)
 	{
+		bool isJoint = false;
+
 		const auto* attribute = node.GetNodeAttribute();
 		if (attribute)
 		{
-			if (attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
+			if (attribute->GetAttributeType())
 			{
-				auto* mesh = node.GetMesh();
-				if (!mesh)
+				if (attribute->GetAttributeType() == FbxNodeAttribute::eSkeleton)
 				{
-					WLOG("Found mesh node without mesh, skipping node " << node.GetName());
+					Joint joint;
+					joint.name = node.GetName();
+					joint.parent = m_jointStack.empty() ? nullptr : m_jointStack.top();
+					m_joints.push_back(joint);
+
+					std::ostringstream strm;
+					strm << "JOINT:";
+					for (int i = 0; i < m_jointStack.size(); ++i)
+					{
+						strm << "\t";
+					}
+					strm << joint.name;
+					DLOG(strm.str());
+
+					m_jointStack.push(&m_joints.back());
+					isJoint = true;
 				}
-				else if (!LoadMesh(node, *mesh))
+				else if (attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
 				{
-					WLOG("Failed to load mesh node " << node.GetName() << ", skipping");
+					auto* mesh = node.GetMesh();
+					if (!mesh)
+					{
+						WLOG("Found mesh node without mesh, skipping node " << node.GetName());
+					}
+					else if (!LoadMesh(node, *mesh))
+					{
+						WLOG("Failed to load mesh node " << node.GetName() << ", skipping");
+					}
 				}
 			}
 		}
@@ -255,6 +279,8 @@ namespace mmo
 		{
 			TraverseScene(*node.GetChild(i));
 		}
+
+		if (isJoint) m_jointStack.pop();
 	}
 
 	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath) const
@@ -511,7 +537,6 @@ namespace mmo
 		}
 
 		// Load colors
-		
 
 		// Load normals
 		LoadMeshNormals(node, mesh, geometry);
@@ -588,7 +613,7 @@ namespace mmo
         for(int32 i = 0; i < mesh.GetElementUVCount(); ++i )
         {
             const FbxGeometryElementUV* element = mesh.GetElementUV(i);
-			if (element->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
+			if (element->GetMappingMode() == FbxGeometryElement::eByPolygonVertex || element->GetMappingMode() == FbxGeometryElement::eByControlPoint)
 			{
 				++numUvSets;
 			}

@@ -18,6 +18,8 @@ namespace mmo
 	static const ChunkMagic MeshVertexChunk= { {'V', 'E', 'R', 'T'} };
 	static const ChunkMagic MeshIndexChunk= { {'I', 'N', 'D', 'X'} };
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
+	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
+	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	
 	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version)
 	{
@@ -88,6 +90,28 @@ namespace mmo
 		}
 		indexChunkWriter.Finish();
 
+		if (!mesh.skeletonName.empty())
+		{
+			ChunkWriter skeletonChunKWriter{ MeshSkeletonChunk, writer };
+			{
+				writer
+					<< io::write_dynamic_range<uint16>(mesh.skeletonName);
+			}
+			skeletonChunKWriter.Finish();
+		}
+
+		for (const auto& boneAssignment : mesh.boneAssignments)
+		{
+			ChunkWriter boneAssignmentChunk{ MeshBoneChunk, writer };
+			{
+				writer
+					<< io::write<uint32>(boneAssignment.vertexIndex)
+					<< io::write<uint16>(boneAssignment.boneIndex)
+					<< io::write<float>(boneAssignment.weight);
+			}
+			boneAssignmentChunk.Finish();
+		}
+
 		// Write submesh chunks
 		for(const auto& submesh : mesh.subMeshes)
 		{
@@ -104,7 +128,6 @@ namespace mmo
 			}
 			submeshChunkWriter.Finish();
 		}
-		
 	}
 
 	MeshDeserializer::MeshDeserializer(Mesh& mesh)
@@ -133,6 +156,8 @@ namespace mmo
 				AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexChunk);
 				AddChunkHandler(*MeshIndexChunk, true, *this, &MeshDeserializer::ReadIndexChunk);
 				AddChunkHandler(*MeshSubMeshChunk, true, *this, &MeshDeserializer::ReadSubMeshChunk);
+				AddChunkHandler(*MeshSkeletonChunk, false, *this, &MeshDeserializer::ReadSkeletonChunk);
+				AddChunkHandler(*MeshBoneChunk, false, *this, &MeshDeserializer::ReadBoneChunk);
 
 				if (version >= mesh_version::Version_0_2)
 				{
@@ -331,6 +356,32 @@ namespace mmo
 		entry.triangleCount = (indexEnd - indexStart) / 3;
         m_entry.subMeshes.push_back(entry);
 		
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		String skeletonName;
+		reader >> io::read_container<uint16>(skeletonName);
+		if (reader)
+		{
+			m_mesh.SetSkeletonName(skeletonName);
+		}
+
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		VertexBoneAssignment assign;
+		if (reader
+			>> io::read<uint32>(assign.vertexIndex)
+			>> io::read<uint16>(assign.boneIndex)
+			>> io::read<float>(assign.weight))
+		{
+			m_mesh.AddBoneAssignment(assign);
+		}
+
 		return reader;
 	}
 
