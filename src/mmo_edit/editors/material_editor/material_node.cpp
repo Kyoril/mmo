@@ -19,7 +19,7 @@ namespace mmo
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 
-	Pin::Pin(Node* node, const PinType type, const std::string_view name)
+	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
         , m_node(node)
         , m_type(type)
@@ -281,13 +281,13 @@ namespace mmo
 		return reader;
 	}
 
-	Node::Node(MaterialGraph& graph)
+	GraphNode::GraphNode(MaterialGraph& graph)
 		: m_id(graph.MakeNodeId(this))
 		, m_material(&graph)
 	{
 	}
 
-	io::Writer& Node::Serialize(io::Writer& writer)
+	io::Writer& GraphNode::Serialize(io::Writer& writer)
 	{
 		writer
 			<< io::write<uint32>(m_id);
@@ -345,7 +345,7 @@ namespace mmo
 		return writer;
 	}
 
-	io::Reader& Node::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
+	io::Reader& GraphNode::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		uint8 numInputPins, numOutputPins, numProperties;
 		float positionX, positionY, sizeX, sizeY;
@@ -418,7 +418,7 @@ namespace mmo
 		return reader;
 	}
 
-	std::unique_ptr<Pin> Node::CreatePin(const PinType pinType, std::string_view name)
+	std::unique_ptr<Pin> GraphNode::CreatePin(const PinType pinType, std::string_view name)
 	{
         switch (pinType)
 	    {
@@ -428,12 +428,12 @@ namespace mmo
 	    return nullptr;
 	}
 
-	std::string_view Node::GetName() const
+	std::string_view GraphNode::GetName() const
 	{
 		return GetTypeInfo().displayName;
 	}
 
-	LinkQueryResult Node::AcceptLink(const Pin& receiver, const Pin& provider) const
+	LinkQueryResult GraphNode::AcceptLink(const Pin& receiver, const Pin& provider) const
 	{
         if (receiver.GetNode() == provider.GetNode())
 	        return { false, "Pins of same node cannot be connected"};
@@ -450,7 +450,7 @@ namespace mmo
 	    return {true};
 	}
 
-	std::optional<uint32> Node::GetPinIndex(const Pin& pin)
+	std::optional<uint32> GraphNode::GetPinIndex(const Pin& pin)
 	{
 		uint32 index = 0;
 

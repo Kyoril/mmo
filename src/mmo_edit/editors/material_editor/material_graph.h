@@ -99,16 +99,16 @@ namespace mmo
 	    /// @brief Creates a new node by it's node type id.
 	    /// @param nodeTypeId The type id of the node to create.
 	    /// @return The new node or nullptr if the node could not be created.
-	    Node* CreateNode(uint32 nodeTypeId);
+		GraphNode* CreateNode(uint32 nodeTypeId);
 
 	    /// @brief Creates a new node by it's type name.
 	    /// @param nodeTypeName The node's type name.
 	    /// @return The new node or nullptr if the node could not be created.
-	    Node* CreateNode(std::string_view nodeTypeName);
+		GraphNode* CreateNode(std::string_view nodeTypeName);
 
 	    /// @brief Deletes the given node, freeing memory in advance and cutting all links.
 	    /// @param node The node to delete.
-	    void DeleteNode(const Node* node);
+	    void DeleteNode(const GraphNode* node);
 
 	    /// @brief Removes a pin from the list of available pins in the material.
 	    /// @param pin The pin to remove.
@@ -119,11 +119,11 @@ namespace mmo
 
 	    /// @brief Gets a view on the nodes.
 	    /// @return The nodes as view.
-	    std::span<Node*> GetNodes() { return m_nodes; }
+	    std::span<GraphNode*> GetNodes() { return m_nodes; }
 
 	    /// @brief Gets a view on the current nodes.
 	    /// @return The nodes as view.
-	    [[nodiscard]] std::span<const Node* const> GetNodes() const;
+	    [[nodiscard]] std::span<const GraphNode* const> GetNodes() const;
 
 	    /// @brief Gets a view on the pins.
 	    /// @return The pins as view.
@@ -136,12 +136,12 @@ namespace mmo
 		/// @brief Finds a node by it's id.
 		/// @param nodeId The id of the node to look for.
 		/// @return nullptr if the node could not be found, otherwise a pointer to the node.
-		Node* FindNode(uint32 nodeId);
+		GraphNode* FindNode(uint32 nodeId);
 		
 		/// @brief Finds a node by it's id.
 		/// @param nodeId The id of the node to look for.
 		/// @return nullptr if the node could not be found, otherwise a pointer to the node.
-	    [[nodiscard]] const Node* FindNode(uint32 nodeId) const;
+	    [[nodiscard]] const GraphNode* FindNode(uint32 nodeId) const;
 
 		/// @brief Finds a pin by it's id.
 		/// @param pinId The id of the pin to look for.
@@ -159,7 +159,7 @@ namespace mmo
 		/// @brief Creates a new node id.
 		/// @param node The node who is asking for a new id.
 		/// @return A new unique node id to use.
-		uint32 MakeNodeId(Node* node);
+		uint32 MakeNodeId(GraphNode* node);
 
 	    /// @brief Creates a new pin id.
 	    /// @param pin The pin who is asking for a new id.
@@ -184,9 +184,9 @@ namespace mmo
     private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
-	    std::vector<Node*> m_nodes;
+	    std::vector<GraphNode*> m_nodes;
 	    std::vector<Pin*> m_pins;
-		Node* m_rootNode { nullptr };
+		GraphNode* m_rootNode { nullptr };
 	};
 
 }

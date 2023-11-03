@@ -37,7 +37,7 @@ namespace mmo
 	    Material,
 	};
 	
-	class Node;
+	class GraphNode;
 
 	class PinValue
 	{
@@ -79,13 +79,13 @@ namespace mmo
 	{
 	protected:
 	    uint32 m_id = 0;
-	    Node* m_node = nullptr;
+		GraphNode* m_node = nullptr;
 		PinType m_type = PinType::Material;
 	    std::string_view m_name;
 		mutable const Pin* m_link = nullptr;
 
 	public:
-	    Pin(Node* node, PinType type, std::string_view name = "");
+	    Pin(GraphNode* node, PinType type, std::string_view name = "");
 		virtual ~Pin();
 
 	public:
@@ -118,7 +118,7 @@ namespace mmo
 		
 		[[nodiscard]] bool IsOutput() const;
 		
-		[[nodiscard]] Node* GetNode() const { return m_node; }
+		[[nodiscard]] GraphNode* GetNode() const { return m_node; }
 
 		[[nodiscard]] uint32 GetId() const { return m_id; }
 
@@ -134,11 +134,11 @@ namespace mmo
 			: MaterialPin(nullptr)
 	    {
 	    }
-	    MaterialPin(Node* node)
+	    MaterialPin(GraphNode* node)
 			: Pin(node, PinType::Material)
 	    {
 	    }
-	    MaterialPin(Node* node, std::string_view name)
+	    MaterialPin(GraphNode* node, std::string_view name)
 			: Pin(node, PinType::Material, name)
 	    {
 	    }

@@ -157,7 +157,7 @@ namespace mmo
 	    return *this;
 	}
 
-	Node* MaterialGraph::CreateNode(const uint32 nodeTypeId)
+	GraphNode* MaterialGraph::CreateNode(const uint32 nodeTypeId)
 	{
 	    if (!m_nodeRegistry)
 	    {
@@ -174,7 +174,7 @@ namespace mmo
 	    return node;
 	}
 
-	Node* MaterialGraph::CreateNode(const std::string_view nodeTypeName)
+	GraphNode* MaterialGraph::CreateNode(const std::string_view nodeTypeName)
 	{
 		if (!m_nodeRegistry)
 		{
@@ -191,7 +191,7 @@ namespace mmo
 	    return node;
 	}
 
-	void MaterialGraph::DeleteNode(const Node* node)
+	void MaterialGraph::DeleteNode(const GraphNode* node)
 	{
 		const auto nodeIt = std::find(m_nodes.begin(), m_nodes.end(), node);
 	    if (nodeIt == m_nodes.end())
@@ -233,10 +233,10 @@ namespace mmo
 		}
 	}
 
-	std::span<const Node* const> MaterialGraph::GetNodes() const
+	std::span<const GraphNode* const> MaterialGraph::GetNodes() const
 	{
-		const Node* const* begin = m_nodes.data();
-	    const Node* const* end   = m_nodes.data() + m_nodes.size();
+		const GraphNode* const* begin = m_nodes.data();
+	    const GraphNode* const* end   = m_nodes.data() + m_nodes.size();
 	    return {begin, end};
 	}
 
@@ -247,12 +247,12 @@ namespace mmo
 	    return {begin, end};
 	}
 
-	Node* MaterialGraph::FindNode(const uint32 nodeId)
+	GraphNode* MaterialGraph::FindNode(const uint32 nodeId)
 	{
-		return const_cast<Node*>(const_cast<const MaterialGraph*>(this)->FindNode(nodeId));
+		return const_cast<GraphNode*>(const_cast<const MaterialGraph*>(this)->FindNode(nodeId));
 	}
 
-	const Node* MaterialGraph::FindNode(const uint32 nodeId) const
+	const GraphNode* MaterialGraph::FindNode(const uint32 nodeId) const
 	{
 	    for (auto& node : m_nodes)
 	    {
@@ -283,7 +283,7 @@ namespace mmo
 	    return nullptr;
 	}
 
-	uint32 MaterialGraph::MakeNodeId(Node* node)
+	uint32 MaterialGraph::MakeNodeId(GraphNode* node)
 	{
 		return m_idGenerator.GenerateId();
 	}
