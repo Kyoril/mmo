@@ -2,6 +2,12 @@
 
 #include "fbx_import.h"
 
+#include <fstream>
+
+#include "assimp/LogStream.hpp"
+#include "assimp/Logger.hpp"
+#include "assimp/DefaultLogger.hpp"
+
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
@@ -17,14 +23,22 @@
 
 namespace mmo
 {
+	void FbxImport::CustomAssimpLogStream::write(const char* message)
+	{
+		ILOG("[ASSIMP] " << message);
+	}
+
 	FbxImport::FbxImport()
 	{
-		InitializeSdkObjects();
+		m_customLogStream = std::make_unique<CustomAssimpLogStream>();
+
+		const unsigned int severity = Assimp::Logger::Info | Assimp::Logger::Err | Assimp::Logger::Warn;
+		Assimp::DefaultLogger::get()->attachStream(m_customLogStream.get(), severity);
 	}
 
 	FbxImport::~FbxImport()
 	{
-		DestroySdkObjects();
+		Assimp::DefaultLogger::get()->detachStream(m_customLogStream.get());
 	}
 
 	bool FbxImport::LoadScene(const String& filename)
@@ -32,255 +46,45 @@ namespace mmo
 		// Remove existing mesh entries
 		m_meshEntries.clear();
 
-		// Clear scene
-		m_scene->Clear();
+		Assimp::Importer importer;
 
-		int lFileMajor, lFileMinor, lFileRevision;
-		int lSDKMajor, lSDKMinor, lSDKRevision;
-		int i, lAnimStackCount;
-		bool lStatus;
+		const aiScene* scene = importer.ReadFile(filename.c_str(),
+			aiProcess_CalcTangentSpace |
+			aiProcess_Triangulate |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_SortByPType |
+			aiProcess_MakeLeftHanded |
+			aiProcess_FlipUVs | 
+			aiProcess_LimitBoneWeights | 
+			aiProcess_GenNormals |
+			aiProcess_FlipWindingOrder);
 
-		// Get the file version number generate by the FBX SDK.
-		FbxManager::GetFileFormatVersion(lSDKMajor, lSDKMinor, lSDKRevision);
-
-		// Create an importer.
-		FbxImporter* lImporter = FbxImporter::Create(m_sdkManager, "");
-
-		// Initialize the importer by providing a filename.
-		const bool lImportStatus = lImporter->Initialize(filename.c_str(), -1, m_sdkManager->GetIOSettings());
-		lImporter->GetFileVersion(lFileMajor, lFileMinor, lFileRevision);
-
-		if (!lImportStatus)
+		if (!scene)
 		{
-			FbxString error = lImporter->GetStatus().GetErrorString();
-			ELOG("Call to FbxImporter::Initialize() failed.");
-			ELOG("Error returned: " << error.Buffer());
-
-			if (lImporter->GetStatus().GetCode() == FbxStatus::eInvalidFileVersion)
-			{
-				ELOG("FBX file format version for this FBX SDK is " << lSDKMajor << "." << lSDKMinor << "." << lSDKRevision);
-				ELOG("FBX file format version for file '" << filename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
-			}
-
+			ELOG("Failed to open FBX file: " << importer.GetErrorString());
 			return false;
 		}
 
-		ILOG("FBX file format version for this FBX SDK is " << lSDKMajor << "." << lSDKMinor << "." << lSDKRevision);
+		TraverseScene(*scene->mRootNode, *scene);
 
-		if (lImporter->IsFBX())
+		return true;
+	}
+
+	void FbxImport::TraverseScene(const aiNode& node, const aiScene& scene)
+	{
+		for (uint32 i = 0; i < node.mNumMeshes; ++i)
 		{
-			ILOG("FBX file format version for file '" << filename << "' is " << lFileMajor << "." << lFileMinor << "." << lFileRevision);
-
-			// From this point, it is possible to access animation stack information without
-			// the expense of loading the entire file.
-
-			ILOG("Animation Stack Information");
-
-			lAnimStackCount = lImporter->GetAnimStackCount();
-
-			ILOG("    Number of Animation Stacks: " << lAnimStackCount);
-			ILOG("    Current Animation Stack: \"" << lImporter->GetActiveAnimStackName().Buffer() << "\"");
-			ILOG("");
-
-			for (i = 0; i < lAnimStackCount; i++)
+			const aiMesh* mesh = scene.mMeshes[node.mMeshes[i]];
+			if (!LoadMesh(scene, node, *mesh))
 			{
-				FbxTakeInfo* lTakeInfo = lImporter->GetTakeInfo(i);
-
-				ILOG("    Animation Stack " << i);
-				ILOG("         Name: \"" << lTakeInfo->mName.Buffer() << "\"");
-				ILOG("         Description: \"" << lTakeInfo->mDescription.Buffer() << "\"");
-
-				// Change the value of the import name if the animation stack should be imported 
-				// under a different name.
-				ILOG("         Import Name: \"" << lTakeInfo->mImportName.Buffer() << "\"");
-
-				// Set the value of the import state to false if the animation stack should be not
-				// be imported. 
-				ILOG("         Import State: " << (lTakeInfo->mSelect ? "true" : "false"));
-				ILOG("");
-			}
-
-			// Set the import states. By default, the import states are always set to 
-			// true. The code below shows how to change these states.
-			IOS_REF.SetBoolProp(IMP_FBX_MATERIAL, true);
-			//IOS_REF.SetBoolProp(IMP_FBX_TEXTURE, true);
-			//IOS_REF.SetBoolProp(IMP_FBX_LINK, true);
-			IOS_REF.SetBoolProp(IMP_FBX_SHAPE, true);
-			IOS_REF.SetBoolProp(IMP_FBX_GOBO, true);
-			IOS_REF.SetBoolProp(IMP_FBX_ANIMATION, true);
-			IOS_REF.SetBoolProp(IMP_FBX_GLOBAL_SETTINGS, true);
-		}
-		
-		// Import the scene.
-		lStatus = lImporter->Import(m_scene);
-
-		if (lStatus == false && lImporter->GetStatus().GetCode() == FbxStatus::ePasswordError)
-		{
-			ELOG("FBX file is protected by a password, won't import file!");
-		}
-
-		// Destroy the importer.
-		lImporter->Destroy();
-		
-		// Create a converter
-		FbxGeometryConverter converter(m_sdkManager);
-		if (!converter.Triangulate(m_scene, true))
-		{
-			ELOG("Failed to triangulate mesh");
-		}
-		
-		// Find root node
-		FbxNode* rootNode = m_scene->GetRootNode();
-		if (rootNode == nullptr)
-		{
-			ELOG("Fbx file has no root node!");
-		}
-		else
-		{
-			// Traverse through all nodes
-			TraverseScene(*rootNode);	
-		}
-
-		return lStatus;
-	}
-
-	void FbxImport::InitializeSdkObjects()
-	{
-		// The first thing to do is to create the FBX Manager which is the object allocator for almost all the classes in the SDK
-		m_sdkManager = FbxManager::Create();
-		ASSERT(m_sdkManager);
-
-		ILOG("Autodesk FBX SDK version " << m_sdkManager->GetVersion());
-
-		// Create an IOSettings object. This object holds all import/export settings.
-		FbxIOSettings* ios = FbxIOSettings::Create(m_sdkManager, IOSROOT);
-		m_sdkManager->SetIOSettings(ios);
-
-		//Create an FBX scene. This object holds most objects imported/exported from/to files.
-		m_scene = FbxScene::Create(m_sdkManager, "My Scene");
-		if (!m_scene)
-		{
-			ELOG("Error: Unable to create FBX scene!");
-		}
-	}
-
-	void FbxImport::DestroySdkObjects()
-	{
-		//Delete the FBX Manager. All the objects that have been allocated using the FBX Manager and that haven't been explicitly destroyed are also automatically destroyed.
-		if (m_sdkManager) 
-		{
-			m_sdkManager->Destroy();
-		}
-	}
-	
-    FbxColor GetFBXColor(FbxMesh *pMesh, const int polyIndex, const int polyPointIndex)
-    {
-        int lControlPointIndex = pMesh->GetPolygonVertex(polyIndex, polyPointIndex);
-        int vertexId = polyIndex * 3 + polyPointIndex;
-
-        FbxColor color;
-        for (int l = 0; l < pMesh->GetElementVertexColorCount(); l++)
-        {
-            FbxGeometryElementVertexColor* leVtxc = pMesh->GetElementVertexColor( l);
-
-            switch (leVtxc->GetMappingMode())
-            {
-            case FbxGeometryElement::eByControlPoint:
-                switch (leVtxc->GetReferenceMode())
-                {
-                case FbxGeometryElement::eDirect:
-                    color = leVtxc->GetDirectArray().GetAt(lControlPointIndex);
-                    break;
-                case FbxGeometryElement::eIndexToDirect:
-                    {
-	                    const int id = leVtxc->GetIndexArray().GetAt(lControlPointIndex);
-                        color = leVtxc->GetDirectArray().GetAt(id);
-                    }
-                    break;
-                default:
-                    break; // other reference modes not shown here!
-                }
-                break;
-
-            case FbxGeometryElement::eByPolygonVertex:
-                {
-                    switch (leVtxc->GetReferenceMode())
-                    {
-                    case FbxGeometryElement::eDirect:
-                        color = leVtxc->GetDirectArray().GetAt(vertexId);
-                        break;
-                    case FbxGeometryElement::eIndexToDirect:
-                        {
-	                        const int id = leVtxc->GetIndexArray().GetAt(vertexId);
-                            color = leVtxc->GetDirectArray().GetAt(id);
-                        }
-                        break;
-                    default:
-                        break; // other reference modes not shown here!
-                    }
-                }
-                break;
-
-            case FbxGeometryElement::eByPolygon: // doesn't make much sense for UVs
-            case FbxGeometryElement::eAllSame:   // doesn't make much sense for UVs
-            case FbxGeometryElement::eNone:       // doesn't make much sense for UVs
-                break;
-            }
-        }
-        return color;
-    }
-	
-	void FbxImport::TraverseScene(FbxNode & node)
-	{
-		bool isJoint = false;
-
-		const auto* attribute = node.GetNodeAttribute();
-		if (attribute)
-		{
-			if (attribute->GetAttributeType())
-			{
-				if (attribute->GetAttributeType() == FbxNodeAttribute::eSkeleton)
-				{
-					Joint joint;
-					joint.name = node.GetName();
-					joint.parent = m_jointStack.empty() ? nullptr : m_jointStack.top();
-					m_joints.push_back(joint);
-
-					std::ostringstream strm;
-					strm << "JOINT:";
-					for (int i = 0; i < m_jointStack.size(); ++i)
-					{
-						strm << "\t";
-					}
-					strm << joint.name;
-					DLOG(strm.str());
-
-					m_jointStack.push(&m_joints.back());
-					isJoint = true;
-				}
-				else if (attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
-				{
-					auto* mesh = node.GetMesh();
-					if (!mesh)
-					{
-						WLOG("Found mesh node without mesh, skipping node " << node.GetName());
-					}
-					else if (!LoadMesh(node, *mesh))
-					{
-						WLOG("Failed to load mesh node " << node.GetName() << ", skipping");
-					}
-				}
+				ELOG("Failed to load mesh!");
 			}
 		}
 
-		// Recursively traverse child nodes
-		const int childCount = node.GetChildCount();
-		for (int i = 0; i < childCount; ++i)
+		for (uint32 i = 0; i < node.mNumChildren; ++i)
 		{
-			TraverseScene(*node.GetChild(i));
+			TraverseScene(*node.mChildren[i], scene);
 		}
-
-		if (isJoint) m_jointStack.pop();
 	}
 
 	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath) const
@@ -305,342 +109,129 @@ namespace mmo
 		return true;
 	}
 
-	bool FbxImport::LoadMeshPolygons(FbxMesh& mesh, MeshGeometry& geometry)
+	bool FbxImport::LoadMesh(const aiScene& scene, const aiNode& node, const aiMesh& mesh)
 	{
-		const auto* polygonVertices = mesh.GetPolygonVertices();
-		if (!polygonVertices)
+		ILOG("Processing mesh node " << node.mName.C_Str() << "...");
+
+		if (!mesh.HasTangentsAndBitangents())
 		{
-			ELOG("Unable to get polygon vertices");
-			return false;
+			WLOG("Mesh is missing tangent info");
 		}
 
-		const auto polyCount = mesh.GetPolygonCount();
-		for (size_t polygon = 0; polygon < polyCount; ++polygon)
+		Matrix4 transformation = Matrix4(
+			&node.mTransformation.a1
+		);
+
+		aiNode* parent = node.mParent;
+		while (parent)
 		{
-			const auto polygonSize = mesh.GetPolygonSize(polygon);
-			if (polygonSize != 3)
-			{
-				ELOG("Detected non-triangle polygon");
-				return false;
-			}
-
-			for (size_t polygonVertex = 0; polygonVertex < polygonSize; ++polygonVertex)
-			{
-				const auto polygonVertexId = mesh.GetPolygonVertex(polygon, polygonVertex);
-				if (polygonVertexId < 0)
-				{
-					ELOG("Detected polygon with invalid vertex id");
-					return false;
-				}
-
-				geometry.polygonIndices.emplace_back(polygonVertexId);
-			}
+			transformation = transformation * &parent->mTransformation.a1;
+			parent = parent->mParent;
 		}
 
-		return true;
-	}
-
-	void FbxImport::GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry)
-	{
-		const bool allUvsByControlPoints = geometry.uvSets[0].uvs.size() == geometry.positions.size();
-		const bool allNormalsByControlPoints = geometry.normals.size() == geometry.positions.size();
-		const bool allAttributesByControlPoints = allUvsByControlPoints && allNormalsByControlPoints;
-		if (allAttributesByControlPoints)
-		{
-			DLOG("Vertex attributes by control points");
-
-			entry.vertices.resize(geometry.positions.size(), Vertex{});
-			entry.indices.resize(geometry.polygonIndices.size(), 0);
-
-			for (size_t i = 0; i < geometry.positions.size(); ++i)
-			{
-				entry.vertices[i].position = geometry.positions[i];
-			}
-			
-			for (size_t i = 0; i < geometry.uvSets[0].uvs.size(); ++i)
-			{
-				entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
-			}
-
-			for (size_t i = 0; i < geometry.normals.size(); ++i)
-			{
-				entry.vertices[i].normal = geometry.normals[i];
-				entry.vertices[i].normal.Normalize();
-			}
-
-			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
-			{
-				entry.indices[i] = geometry.polygonIndices[i];
-				if (entry.indices[i] > entry.maxIndex)
-				{
-					entry.maxIndex = entry.indices[i];
-				}
-			}
-		}
-		else
-		{
-			DLOG("Vertex attributes by polygon vertex");
-
-			entry.vertices.resize(geometry.uvSets[0].uvs.size(), Vertex{});
-			entry.indices.resize(geometry.polygonIndices.size(), 0);
-
-			for (size_t i = 0; i < geometry.polygonIndices.size(); ++i)
-			{
-				entry.vertices[i].position = geometry.positions[geometry.polygonIndices[i]];
-
-				if (allNormalsByControlPoints)
-				{
-					entry.vertices[i].normal = geometry.normals[geometry.polygonIndices[i]];	
-				}
-				else
-				{
-					entry.vertices[i].normal = geometry.normals[i];
-				}
-
-				entry.vertices[i].normal.Normalize();
-				
-				if (allUvsByControlPoints)
-				{
-					entry.vertices[i].texCoord = geometry.uvSets[0].uvs[geometry.polygonIndices[i]];
-				}
-				else
-				{
-					entry.vertices[i].texCoord = geometry.uvSets[0].uvs[i];
-				}
-				
-				entry.vertices[i].color = 0xffffffff;
-				
-				entry.indices[i] = i;
-
-				if (entry.indices[i] > entry.maxIndex)
-				{
-					entry.maxIndex = entry.indices[i];
-				}
-			}
-		}
-	}
-
-	void FbxImport::LoadMeshUvs(FbxMesh& mesh, MeshGeometry& geometry)
-	{
-		FbxStringList uvNames;
-		mesh.GetUVSetNames(uvNames);
-
-		const char* uvName = nullptr;
-		if (uvNames.GetCount())
-		{
-			uvName = uvNames[0];
-		}
-
-		FbxGeometryElementUV* uv = mesh.GetElementUV(0);
-		const auto mappingMode = uv->GetMappingMode();
-		if (mappingMode == FbxLayerElement::eByControlPoint)
-		{
-			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
-			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
-			{
-				int lUvIndex = lIndex;
-				if (uv->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
-				{
-					lUvIndex = uv->GetIndexArray().GetAt(lIndex);
-				}
-				auto lCurrentUv = uv->GetDirectArray().GetAt(lUvIndex);
-				geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUv[0], 1.0f - lCurrentUv[1], 0.0f));
-			}
-		}
-		else
-		{
-			const int polygonCount = mesh.GetPolygonCount();
-			for (int polygonIndex = 0; polygonIndex < polygonCount; ++polygonIndex)
-			{
-				for (int vertexIndex = 0; vertexIndex < 3; ++vertexIndex)
-				{
-					bool lUnmappedUV;
-					FbxVector2 lCurrentUV;
-					mesh.GetPolygonVertexUV(polygonIndex, vertexIndex, uvName, lCurrentUV, lUnmappedUV);
-					geometry.uvSets[0].uvs.emplace_back(Vector3(lCurrentUV[0], 1.0f - lCurrentUV[1], 0.0f));
-				}
-			}
-		}
-	}
-
-	void FbxImport::LoadMeshNormals(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry)
-	{
-		const auto transform = node.EvaluateGlobalTransform().Inverse().Transpose();
-
-		auto* normalElem = mesh.GetElementNormal(0);
-		const auto mappingMode = normalElem->GetMappingMode();
-		if (mappingMode == FbxLayerElement::eByControlPoint)
-		{
-			const auto lPolygonVertexCount = mesh.GetControlPointsCount();
-			for (int lIndex = 0; lIndex < lPolygonVertexCount; ++lIndex)
-			{
-				int lNormalIndex = lIndex;
-				if (normalElem->GetReferenceMode() == FbxLayerElement::eIndexToDirect)
-				{
-					lNormalIndex = normalElem->GetIndexArray().GetAt(lIndex);
-				}
-
-				const auto lCurrentNormal = transform.MultT(normalElem->GetDirectArray().GetAt(lNormalIndex));
-				geometry.normals.emplace_back(Vector3(lCurrentNormal[0], lCurrentNormal[1], lCurrentNormal[2]));
-			}
-		}
-		else if (mappingMode != FbxLayerElement::eNone)
-		{
-			const int polygonCount = mesh.GetPolygonCount();
-			for (int polygonIndex = 0; polygonIndex < polygonCount; ++polygonIndex)
-			{
-				for (int vertexIndex = 0; vertexIndex < 3; ++vertexIndex)
-				{
-					FbxVector4 lCurrentNormal;
-					mesh.GetPolygonVertexNormal(polygonIndex, vertexIndex, lCurrentNormal);
-					
-					lCurrentNormal = transform.MultT(lCurrentNormal);
-					geometry.normals.emplace_back(Vector3(lCurrentNormal[0], lCurrentNormal[1], lCurrentNormal[2]));
-				}
-			}
-		}
-	}
-
-	bool FbxImport::LoadMesh(FbxNode& node, FbxMesh& mesh)
-	{
-        if(mesh.GetLayer(0)->GetNormals() == nullptr)
-        {
-            ILOG("Mesh is missing normal information, recalculating normals using FBX SDK...");
-            mesh.InitNormals();
-            mesh.GenerateNormals(true, true, true);
-        }
-		
-		if(mesh.CheckIfVertexNormalsCCW())
-        {
-            WLOG("Counter clockwise normals detected.");
-        }
-
-		ILOG("Processing mesh node " << node.GetName() << "...");
-		
 		// Create a new mesh entry
-		MeshEntry entry {};
-		entry.name = node.GetName();
-		entry.maxIndex = 0;
-
-		MeshGeometry geometry{};
-
-		// Determine number of uv sets for mesh and reserve uv set memory
-		if (!InitializeUvSets(mesh, geometry))
+		if (m_meshEntries.empty())
 		{
-			return false;
+			MeshEntry entry;
+			entry.name = node.mName.C_Str();
+			entry.maxIndex = 0;
+
+			DLOG("Mesh has " << scene.mNumMaterials << " submeshes");
+			m_meshEntries.push_back(entry);
 		}
 
-		// Load positions (node is required to transform the vertex positions accordingly. A mesh can be assigned to multiple nodes!)
-		if (!LoadMeshVertexPositions(node, mesh, geometry))
+		MeshEntry& entry = m_meshEntries.front();
+		uint32 indexOffset = entry.indices.size();
+
+		// Build vertex data
+		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumVertices << " vertices");
+		const uint32 startVertex = entry.vertices.empty() ? 0 : entry.vertices.size() - 1;
+		const uint32 endVertex = startVertex + mesh.mNumVertices;
+		for (uint32 i = startVertex; i < endVertex; ++i)
 		{
-			return false;
-		}
+			const uint32 j = i - startVertex;
 
-		// Load colors
+			entry.vertices.emplace_back();
 
-		// Load normals
-		LoadMeshNormals(node, mesh, geometry);
-
-		// Load UVs
-		LoadMeshUvs(mesh, geometry);
-
-		// Load polygon indices
-        if (!LoadMeshPolygons(mesh, geometry))
-        {
-	        return false;
-        }
-		
-		FbxLayerElementArrayTemplate<int>* lMaterialIndice = nullptr;
-		FbxGeometryElement::EMappingMode lMaterialMappingMode = FbxGeometryElement::eNone;
-		if (mesh.GetElementMaterial())
-		{
-			lMaterialIndice = &mesh.GetElementMaterial()->GetIndexArray();
-			lMaterialMappingMode = mesh.GetElementMaterial()->GetMappingMode();
-			if (lMaterialIndice && lMaterialMappingMode == FbxGeometryElement::eByPolygon)
+			if (mesh.HasPositions())
 			{
-				const int lPolygonCount = mesh.GetPolygonCount();
-				FBX_ASSERT(lMaterialIndice->GetCount() == lPolygonCount);
-
-				if (lMaterialIndice->GetCount() == lPolygonCount)
-				{
-					// Count the faces of each material
-					for (int lPolygonIndex = 0; lPolygonIndex < lPolygonCount; ++lPolygonIndex)
-					{
-						const int lMaterialIndex = lMaterialIndice->GetAt(lPolygonIndex);
-						if (entry.subMeshes.size() < lMaterialIndex + 1)
-						{
-							entry.subMeshes.resize(lMaterialIndex + 1);
-						}
-						entry.subMeshes[lMaterialIndex].triangleCount++;
-					}
-					
-					// Record the offset (how many vertex)
-					const int lMaterialCount = entry.subMeshes.size();
-					int lOffset = 0;
-					for (int lIndex = 0; lIndex < lMaterialCount; ++lIndex)
-					{
-						entry.subMeshes[lIndex].indexOffset = lOffset;
-						lOffset += entry.subMeshes[lIndex].triangleCount * 3;
-					}
-					FBX_ASSERT(lOffset == lPolygonCount * 3);
-				}
+				entry.vertices[i].position = transformation * Vector3(
+					mesh.mVertices[j].x, mesh.mVertices[j].y, mesh.mVertices[j].z);
 			}
 			else
 			{
-				WLOG("Mesh material not assigned by polygon!");
-				entry.subMeshes.push_back(SubMeshEntry{});
+				entry.vertices[i].position = Vector3::Zero;
 			}
-		}
-		else
-		{
-			WLOG("Mesh has no material assigned to it");
-			entry.subMeshes.push_back(SubMeshEntry{});
-		}
-
-		// Setup vertices and indices
-		GenerateMeshEntry(entry, geometry);
-
-		// Save mesh entry
-		m_meshEntries.emplace_back(std::move(entry));
-
-		return true;
-	}
-
-	bool FbxImport::InitializeUvSets(FbxMesh& mesh, MeshGeometry& geometry)
-	{
-		int32 numUvSets = 0;
-
-        for(int32 i = 0; i < mesh.GetElementUVCount(); ++i )
-        {
-            const FbxGeometryElementUV* element = mesh.GetElementUV(i);
-			if (element->GetMappingMode() == FbxGeometryElement::eByPolygonVertex || element->GetMappingMode() == FbxGeometryElement::eByControlPoint)
+			
+			entry.vertices[i].color = 0xFFFFFFFF;
+			if (mesh.mColors[0])
 			{
-				++numUvSets;
+				entry.vertices[i].color =
+					Color(mesh.mColors[0][j].r, mesh.mColors[0][j].g, mesh.mColors[0][j].b, mesh.mColors[0][j].a);
 			}
-        }
 
-		ILOG("\tNumber of UV Sets: " << numUvSets);
-		geometry.uvSets.resize(numUvSets);
-		
-		return true;
-	}
+			if (mesh.HasNormals())
+			{
+				entry.vertices[i].normal = (transformation * Vector3(
+					mesh.mNormals[j].x, mesh.mNormals[j].y, mesh.mNormals[j].z)).NormalizedCopy();
+			}
+			else
+			{
+				entry.vertices[i].normal = Vector3::UnitY;
+			}
 
-	bool FbxImport::LoadMeshVertexPositions(FbxNode& node, const FbxMesh& mesh, MeshGeometry& geometry)
-	{
-		// Global transform used to transform vertices into the expected orientation
-		const auto& transform = node.EvaluateGlobalTransform();
+			if (mesh.HasTangentsAndBitangents())
+			{
+				entry.vertices[i].tangent = (transformation * Vector3(
+					mesh.mTangents[j].x, mesh.mTangents[j].y, mesh.mTangents[j].z)).NormalizedCopy();
 
-		const auto* vertices = mesh.GetControlPoints();
-		const auto vertexCount = mesh.GetControlPointsCount();
+				entry.vertices[i].binormal = (transformation * Vector3(
+					mesh.mBitangents[j].x, mesh.mBitangents[j].y, mesh.mBitangents[j].z)).NormalizedCopy();
+			}
+			else
+			{
+				entry.vertices[i].tangent = Vector3::UnitX;
+				entry.vertices[i].binormal = Vector3::UnitZ;
+			}
+			
+			if (mesh.mTextureCoords[0])
+			{
+				entry.vertices[i].texCoord = Vector3(
+					mesh.mTextureCoords[0][j].x, mesh.mTextureCoords[0][j].y, mesh.mTextureCoords[0][j].z);
+			}
+			else
+			{
+				entry.vertices[i].texCoord = Vector3::Zero;
+			}
+		}
 
-		ILOG("\tPosition count: " << vertexCount);
-		geometry.positions.resize(vertexCount, Vector3::Zero);
-
-		// Load positions
-		for (size_t i = 0; i < vertexCount; ++i)
+		// Build index data
+		uint32 indexCount = 0;
+		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumFaces << " faces");
+		for (uint32 i = 0; i < mesh.mNumFaces; ++i)
 		{
-			const auto transformedPosition = transform.MultT(vertices[i]);
-			geometry.positions[i] = Vector3(transformedPosition[0], transformedPosition[1], transformedPosition[2]);
+			aiFace face = mesh.mFaces[i];
+
+			for (uint32 j = 0; j < face.mNumIndices; ++j)
+			{
+				entry.indices.push_back(face.mIndices[j] + indexOffset);
+				entry.maxIndex = std::max(entry.maxIndex, entry.indices.back());
+				indexCount++;
+			}
+		}
+
+		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << indexCount << " indices");
+
+		SubMeshEntry submesh{};
+		aiMaterial* material = scene.mMaterials[mesh.mMaterialIndex];
+		submesh.material = material->GetName().C_Str();
+		submesh.triangleCount = indexCount / 3;
+		submesh.indexOffset = indexOffset;
+		entry.subMeshes.push_back(submesh);
+
+		if (mesh.mNumBones > 0)
+		{
+			DLOG("Detected skeletal mesh with " << mesh.mNumBones << " bones");
 		}
 
 		return true;

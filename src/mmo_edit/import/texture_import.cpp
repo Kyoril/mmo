@@ -74,7 +74,7 @@ namespace mmo
 		numChannels = n;
 
 		rawData.reserve(width * height * 4);
-		std::copy(data, data + width * height * 4, std::back_inserter(rawData));
+		std::copy_n(data, width * height * 4, std::back_inserter(rawData));
 
 		stbi_image_free(data);
 		return true;
@@ -125,10 +125,13 @@ namespace mmo
 			{
 			case mmo::ImageFormat::RGBX:
 			case mmo::ImageFormat::RGBA:
+				DLOG("Output format: RGBA");
 				return mmo::tex::v1_0::RGBA;
 			case mmo::ImageFormat::DXT1:
+				DLOG("Output format: DXT1");
 				return mmo::tex::v1_0::DXT1;
 			case mmo::ImageFormat::DXT5:
+				DLOG("Output format: DXT5");
 				return mmo::tex::v1_0::DXT5;
 			}
 		}
@@ -140,9 +143,11 @@ namespace mmo
 			{
 			case mmo::ImageFormat::RGBA:
 			case mmo::ImageFormat::DXT5:
+				DLOG("Output format: DXT5");
 				return mmo::tex::v1_0::DXT5;
 			case mmo::ImageFormat::RGBX:
 			case mmo::ImageFormat::DXT1:
+				DLOG("Output format: DXT1");
 				return mmo::tex::v1_0::DXT1;
 			}
 		}
@@ -234,7 +239,7 @@ namespace mmo
 
 			// Apply compression
 			ILOG("Original size: " << data.data.size());
-			rygCompress(&buffer[0], &data.data[0], data.width, data.height, useDxt5);
+			rygCompress(buffer.data(), data.data.data(), data.width, data.height, useDxt5);
 			ILOG("Compressed size: " << buffer.size());
 
 			header.mipmapLengths[0] = static_cast<uint32>(buffer.size());

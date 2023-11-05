@@ -57,15 +57,17 @@ namespace mmo
 		{
 			ASSERT(m_parent.m_vertexBuffer);
 			op.vertexBuffer = m_parent.m_vertexBuffer.get();
+			op.indexBuffer = m_parent.m_indexBuffer.get();
+			op.useIndexes = m_parent.m_indexBuffer != nullptr;
 		}
 		else
 		{
 			ASSERT(m_vertexBuffer);
 			op.vertexBuffer = m_vertexBuffer.get();
+			op.indexBuffer = m_indexBuffer.get();
+			op.useIndexes = m_indexBuffer != nullptr;
 		}
 
-		op.indexBuffer = m_indexBuffer.get();
-		op.useIndexes = m_indexBuffer != nullptr;
 		op.topology = TopologyType::TriangleList;
 		op.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
 		op.startIndex = m_indexStart;

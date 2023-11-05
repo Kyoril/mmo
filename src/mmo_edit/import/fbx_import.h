@@ -9,7 +9,10 @@
 
 #include "math/vector3.h"
 
-#include "fbxsdk.h"
+#include <assimp/Importer.hpp>      // C++ importer interface
+#include <assimp/scene.h>           // Output data structure
+#include <assimp/postprocess.h>     // Post processing flags
+#include <assimp/LogStream.hpp>
 
 #include <string>
 #include <vector>
@@ -37,6 +40,7 @@ namespace mmo
 	{
 		Joint* parent = nullptr;
 		String name;
+		Matrix4 transform;
 	};
 
 	/// This class can be used to extract relevant informations out of an fbx file.
@@ -44,6 +48,13 @@ namespace mmo
 		: public ImportBase
 		, public NonCopyable
 	{
+
+		class CustomAssimpLogStream : public Assimp::LogStream
+		{
+		public:
+			void write(const char* message) override;
+		};
+
 	public:
 		/// @brief Creates a new instance of the FbxImport class and initializes it.
 		explicit FbxImport();
@@ -57,17 +68,11 @@ namespace mmo
 		/// @return true on success, false otherwise.
 		bool LoadScene(const String& filename);
 
-		/// @brief Initializes the fbx sdk objects to work with the sdk.
-		void InitializeSdkObjects();
-
-		/// @brief Cleanup. Should be called after InitializeSdkObjects.
-		void DestroySdkObjects();
-
 		/// @brief Traverses an FbxNode object and all of it's child objects, loading all relevant
 		///	       data like geometry and converts them if supported.
 		/// @remark This is recursive method.
 		/// @param node The node to start traversing from.
-		void TraverseScene(FbxNode& node);
+		void TraverseScene(const aiNode& node, const aiScene& scene);
 
 		/// @brief Saves the loaded mesh geometry data into the engine's custom mesh file format.
 		/// @param filename The file name of the new mesh file without extension and path.
@@ -79,21 +84,7 @@ namespace mmo
 		/// @param node The node.
 		/// @param mesh The mesh.
 		/// @return true on success, false on error.
-		bool LoadMesh(FbxNode& node, FbxMesh& mesh);
-
-	private:
-		bool InitializeUvSets(FbxMesh& mesh, MeshGeometry& geometry);
-
-		bool LoadMeshVertexPositions(FbxNode& node, const FbxMesh& mesh, MeshGeometry& geometry);
-		
-		bool LoadMeshPolygons(FbxMesh& mesh, MeshGeometry& geometry);
-
-		void GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry);
-
-		void LoadMeshUvs(FbxMesh& mesh, MeshGeometry& geometry);
-
-		void LoadMeshNormals(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry);
-
+		bool LoadMesh(const aiScene& scene, const aiNode& node, const aiMesh& mesh);
 
 	public:
 		/// @copydoc ImportBase::ImportFromFile
@@ -104,9 +95,8 @@ namespace mmo
 
 	private:
 		std::vector<MeshEntry> m_meshEntries;
-		FbxManager* m_sdkManager = nullptr;
-		FbxScene* m_scene = nullptr;
 		std::vector<Joint> m_joints;
 		std::stack<Joint*> m_jointStack;
+		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
 	};
 }
