@@ -28,12 +28,20 @@ namespace mmo
 			throw std::runtime_error("Invalid or missing texture data");
 		}
 
-		// Read first mipmap level into memory
-		std::vector<uint8> mipData;
-		mipData.resize(m_header.mipmapLengths[0], 0);
-		stream->seekg(m_header.mipmapOffsets[0], std::ios::beg);
-		stream->read(reinterpret_cast<char*>(mipData.data()), m_header.mipmapLengths[0]);
+		// Read mipmap into memory
+		std::vector mipData(m_header.mipmapLengths.size(), std::vector<uint8>());
+		for (uint32 i = 0; i < m_header.mipmapLengths.size(); ++i)
+		{
+			if (m_header.mipmapLengths[i] == 0)
+			{
+				break;
+			}
 
+			mipData[i].resize(m_header.mipmapLengths[i], 0);
+			stream->seekg(m_header.mipmapOffsets[i], std::ios::beg);
+			stream->read(reinterpret_cast<char*>(mipData[i].data()), m_header.mipmapLengths[i]);
+		}
+		
 		// Obtain ID3D11Device object by casting
 		ID3D11Device& dev = m_device;
 
@@ -62,31 +70,56 @@ namespace mmo
 
 		td.Height = m_header.height;
 		td.Width = m_header.width;
+
+		// Determine number of mip levels
 		td.MipLevels = 1;
 		td.SampleDesc.Count = 1;
+		td.SampleDesc.Quality = 0;
 		td.Usage = D3D11_USAGE_IMMUTABLE;
 
+		uint32 actualMipLevelCount = 0;
+
 		// Prepare usage data
-		D3D11_SUBRESOURCE_DATA data;
+		D3D11_SUBRESOURCE_DATA data[16];
 		ZeroMemory(&data, sizeof(data));
-		data.pSysMem = &mipData[0];
-		switch (m_header.format)
+		for (uint32 mipLevel = 0; mipLevel < 16; ++mipLevel)
 		{
-		case tex::v1_0::DXT1:
-			data.SysMemPitch = 16 * (m_header.width / 8);
-			data.SysMemSlicePitch = data.SysMemPitch * (m_header.height / 8);
-			break;
-		case tex::v1_0::DXT5:
-			data.SysMemPitch = 16 * (m_header.width / 4);
-			data.SysMemSlicePitch = data.SysMemPitch * (m_header.height / 4);
-			break;
-		default:
-			data.SysMemPitch = sizeof(uint32) * m_header.width;
-			break;
+			// Calculate size of mip level
+			const int32 width = m_header.width >> mipLevel;
+			const int32 height = m_header.height >> mipLevel;
+			if (width <= 1 || height <= 1 || mipData[mipLevel].size() == 0)
+			{
+				break;
+			}
+
+			data[mipLevel].pSysMem = mipData[mipLevel].data();
+			switch (m_header.format)
+			{
+			case tex::v1_0::DXT1:
+				data[mipLevel].SysMemPitch = 16 * (width / 8);
+				data[mipLevel].SysMemSlicePitch = data[mipLevel].SysMemPitch * (height / 8);
+				break;
+			case tex::v1_0::DXT5:
+				data[mipLevel].SysMemPitch = 16 * (width / 4);
+				data[mipLevel].SysMemSlicePitch = data[mipLevel].SysMemPitch * (height / 4);
+				break;
+			default:
+				data[mipLevel].SysMemPitch = sizeof(uint32) * width;
+				break;
+			}
+
+			if (data[mipLevel].SysMemPitch == 0)
+			{
+				break;
+			}
+
+			actualMipLevelCount++;
 		}
 
+		td.MipLevels = actualMipLevelCount;
+
 		// Create texture object
-		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, &data, &m_texture)));
+		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, data, &m_texture)));
 
 		CreateShaderResourceView();
 	}

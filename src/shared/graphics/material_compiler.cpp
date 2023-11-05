@@ -24,7 +24,7 @@ namespace mmo
 	{
 		if (m_lit)
 		{
-			material.SetType(MaterialType::Opaque);
+			material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
 		}
 		else
 		{
@@ -112,5 +112,10 @@ namespace mmo
 	void MaterialCompiler::SetAmbientOcclusionExpression(ExpressionIndex expression)
 	{
 		m_ambientOcclusionExpression = expression;
+	}
+
+	void MaterialCompiler::SetOpacityExpression(ExpressionIndex expression)
+	{
+		m_opacityExpression = expression;
 	}
 }

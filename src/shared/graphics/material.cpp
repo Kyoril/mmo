@@ -49,7 +49,8 @@ namespace mmo
 				auto texture = TextureManager::Get().CreateOrRetrieve(textureFile);
 				if (!texture)
 				{
-					ELOG("Unable to load texture " << textureFile);
+					ELOG("Unable to load texture " << textureFile << " (referenced by Material '" << m_name << "')");
+					texture = TextureManager::Get().CreateOrRetrieve("Textures/Engine/DefaultGrid/T_Default_Material_Grid_M.htex");
 				}
 
 				// Still add nullptr - texture won't be rendered
@@ -132,7 +133,7 @@ namespace mmo
 		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 		device.SetDepthWriteEnabled(m_depthWrite);
 
-		if (m_type == MaterialType::Translucent)
+		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}

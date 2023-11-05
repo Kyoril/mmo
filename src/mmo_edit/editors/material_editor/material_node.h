@@ -472,6 +472,7 @@ namespace mmo
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
 		bool m_lit { true };
+		bool m_translucent { false };
 		
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
@@ -479,9 +480,10 @@ namespace mmo
 		BoolProperty m_castShadowProp { "Casts Shadows", m_receivesShadows };
 		BoolProperty m_depthTestProp { "Depth Test", m_depthTest };
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
+		BoolProperty m_translucentProperty { "Translucent", m_translucent };
 
-		PropertyBase* m_properties[6] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp };
+		PropertyBase* m_properties[7] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
 	    MaterialPin m_metallic = { this, "Metallic" };

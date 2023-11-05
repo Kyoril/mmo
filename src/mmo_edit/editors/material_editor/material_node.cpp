@@ -478,9 +478,10 @@ namespace mmo
 	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		compiler.SetLit(m_lit);
+		compiler.SetTranslucent(m_translucent);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
-
+		
 		if (m_baseColor.IsLinked())
 		{
 			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler, m_baseColor.GetLink());
@@ -503,6 +504,12 @@ namespace mmo
 		{
 			const ExpressionIndex metallicExpression = m_metallic.GetLink()->GetNode()->Compile(compiler, m_metallic.GetLink());
 			compiler.SetMetallicExpression(metallicExpression);
+		}
+
+		if (m_opacity.IsLinked())
+		{
+			const ExpressionIndex opacityExpression = m_opacity.GetLink()->GetNode()->Compile(compiler, m_opacity.GetLink());
+			compiler.SetOpacityExpression(opacityExpression);
 		}
 
 		return IndexNone;

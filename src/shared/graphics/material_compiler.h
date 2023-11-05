@@ -122,6 +122,11 @@ namespace mmo
 		/// @param expression Index of the ambient occlusion expression to use or IndexNone to not use a ambient occlusion expression at all.
 		virtual void SetAmbientOcclusionExpression(ExpressionIndex expression);
 
+		/// @brief Sets the index of the material's opacity expression or IndexNone to not use a custom opacity
+		///	       expression at all.
+		/// @param expression Index of the opacity expression to use or IndexNone to not use a opacity expression at all.
+		virtual void SetOpacityExpression(ExpressionIndex expression);
+
 		/// @brief Adds a texture coordinate expression.
 		/// @param coordinateIndex The texture coordinate index used.
 		/// @return Index of the new texture coordinate expression or IndexNone in case of an error.
@@ -244,6 +249,8 @@ namespace mmo
 
 		void SetLit(const bool enable) noexcept { m_lit = enable; }
 
+		void SetTranslucent(const bool enable) noexcept { m_translucent = enable; }
+
 	protected:
 		/// @brief Called to generate the vertex shader code.
 		virtual void GenerateVertexShaderCode() = 0;
@@ -264,6 +271,7 @@ namespace mmo
 		ExpressionIndex m_roughnessExpression { IndexNone };			// Float1 (0-1)
 		ExpressionIndex m_ambientOcclusionExpression { IndexNone };	// Float3
 		ExpressionIndex m_metallicExpression { IndexNone };			// Float1 (0-1)
+		ExpressionIndex m_opacityExpression{ IndexNone };			// Float1 (0-1)
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
@@ -274,6 +282,7 @@ namespace mmo
 		bool m_lit { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
+		bool m_translucent{ false };
 
 	};
 }

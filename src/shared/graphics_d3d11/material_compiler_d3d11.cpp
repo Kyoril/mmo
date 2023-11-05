@@ -825,6 +825,24 @@ namespace mmo
 			{
 				m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
 			}
+
+			// Opacity
+			if (m_opacityExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_opacityExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat opacity = expr_" << m_opacityExpression << ";\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat metallic = expr_" << m_opacityExpression << ".r;\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
+			}
 		}
 
 		// BaseColor base
@@ -899,17 +917,21 @@ namespace mmo
 				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
 				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
 		}
-		
+
+
+		m_pixelShaderStream
+			<< "\tclip( opacity < 0.01f ? -1:1 );\n";
+
 		// Combining it
 		if (m_lit)
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = float4(color, 1.0);\n";
+				<< "\toutputColor = float4(color, opacity);\n";
 		}
 		else
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = float4(baseColor, 1.0);\n";
+				<< "\toutputColor = float4(baseColor, opacity);\n";
 		}
 
 		// End of main function

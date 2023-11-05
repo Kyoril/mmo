@@ -19,6 +19,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/stb_image.h"
 
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image/stb_image_resize2.h"
+
 namespace mmo
 {
 	TextureImport::TextureImport()
@@ -219,39 +222,71 @@ namespace mmo
 		// Generate a sink to save the header
 		v1_0::HeaderSaver saver{ sink, header };
 
-		// After the header, now write the pixel data
-		size_t contentPos = sink.Position();
-		header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
-		
-		std::vector<uint8> buffer;
-
-		// Apply compression
-		if (applyCompression)
+		for (uint32 i = 0; (i < mipCount && i < 16) || i == 0; ++i)
 		{
-			// Determine if dxt5 is used
-			const bool useDxt5 = header.format == v1_0::DXT5;
+			// After the header, now write the pixel data
+			size_t contentPos = sink.Position();
+			header.mipmapOffsets[i] = static_cast<uint32>(sink.Position());
 
-			// Calculate compressed buffer size
-			const size_t compressedSize = useDxt5 ? data.data.size() / 4 : data.data.size() / 8;
+			std::vector<uint8> resizedData;
+			std::vector<uint8>* dataPtr = &data.data;
+			uint16 dataWidth = data.width;
+			uint16 dataHeight = data.height;
+			if (i > 0)
+			{
+				// Resize the image
+				const uint32 newWidth = std::max(1u, static_cast<uint32>(header.width) >> i);
+				const uint32 newHeight = std::max(1u, static_cast<uint32>(header.height) >> i);
+				if (newWidth <= 16 && newHeight <= 16)
+				{
+					break;
+				}
 
-			// Allocate buffer for compression
-			buffer.resize(compressedSize);
+				ILOG("Generating mip #" << i << " with size " << newWidth << "x" << newHeight);
+
+				const stbir_pixel_layout pixelLayout = data.format == ImageFormat::RGBX ? STBIR_RGB : STBIR_RGBA;
+				const uint32 numChannels = data.format == ImageFormat::RGBX ? 3 : 4;
+
+				// Resize the image
+				resizedData.resize(newWidth * newHeight * numChannels);
+				stbir_resize_uint8_srgb(data.data.data(), header.width, header.height, 
+					0, resizedData.data(), newWidth, newHeight, 0, pixelLayout);
+
+				dataPtr = &resizedData;
+				dataWidth = newWidth;
+				dataHeight = newHeight;
+			}
+
+			std::vector<uint8> buffer;
 
 			// Apply compression
-			ILOG("Original size: " << data.data.size());
-			rygCompress(buffer.data(), data.data.data(), data.width, data.height, useDxt5);
-			ILOG("Compressed size: " << buffer.size());
+			if (applyCompression)
+			{
+				// Determine if dxt5 is used
+				const bool useDxt5 = header.format == v1_0::DXT5;
 
-			header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
-			sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
-		}
-		else
-		{
-			ILOG("Data size: " << data.data.size());
-			header.mipmapLengths[0] = static_cast<uint32>(data.data.size());
-			sink.Write(reinterpret_cast<const char*>(data.data.data()), data.data.size());
-		}
+				// Calculate compressed buffer size
+				const size_t compressedSize = useDxt5 ? dataPtr->size() / 4 : dataPtr->size() / 8;
 
+				// Allocate buffer for compression
+				buffer.resize(compressedSize);
+
+				// Apply compression
+				ILOG("Original size: " << dataPtr->size());
+				rygCompress(buffer.data(), dataPtr->data(), dataWidth, dataHeight, useDxt5);
+				ILOG("Compressed size: " << buffer.size());
+
+				header.mipmapLengths[i] = static_cast<uint32>(buffer.size());
+				sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+			}
+			else
+			{
+				ILOG("Data size: " << dataPtr->size());
+				header.mipmapLengths[i] = static_cast<uint32>(dataPtr->size());
+				sink.Write(reinterpret_cast<const char*>(dataPtr->data()), dataPtr->size());
+			}
+		}
+		
 		// TODO: Generate mip maps and serialize them as well
 
 		// Finish the header with adjusted data
