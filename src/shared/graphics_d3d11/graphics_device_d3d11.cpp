@@ -522,6 +522,10 @@ namespace mmo
 		// Clear the state
 		m_immContext->ClearState();
 
+		m_vertexFormat = VertexFormat::Last;
+		m_blendMode = BlendMode::Opaque;
+		m_topologyType = TopologyType::TriangleList;
+
 		// Update the constant buffer
 		if (m_matrixDirty)
 		{

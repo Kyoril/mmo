@@ -22,7 +22,8 @@ namespace mmo
 			Latest = -1,
 
 			Version_0_1 = 0x0100,
-			Version_0_2 = 0x0200
+			Version_0_2 = 0x0200,
+			Version_0_3 = 0x0300,
 		};	
 	}
 
@@ -71,6 +72,8 @@ namespace mmo
 		bool ReadMaterialAttributeV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		
 		bool ReadMaterialVertexShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialVertexShaderChunkV03(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialPixelShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 

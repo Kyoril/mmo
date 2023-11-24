@@ -448,7 +448,7 @@ namespace mmo
 			vertices[i].uv[0] = v.texCoord.x;
 			vertices[i].uv[1] = v.texCoord.y;
 		}
-		
+
 		m_mesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX), false, &vertices[0]);
 		m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, &m_entry.indices[0]);
 	}

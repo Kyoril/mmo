@@ -89,7 +89,7 @@ namespace mmo
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
-		void GenerateVertexShaderCode() override;
+		void GenerateVertexShaderCode(VertexShaderType type) override;
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
 		void GeneratePixelShaderCode() override;

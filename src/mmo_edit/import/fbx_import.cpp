@@ -141,11 +141,12 @@ namespace mmo
 		}
 
 		MeshEntry& entry = m_meshEntries.front();
-		uint32 indexOffset = entry.indices.size();
+		uint32 indexOffset = entry.vertices.size();
+		uint32 submeshIndexStart = entry.indices.size();
 
 		// Build vertex data
 		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumVertices << " vertices");
-		const uint32 startVertex = entry.vertices.empty() ? 0 : entry.vertices.size() - 1;
+		const uint32 startVertex = entry.vertices.size();
 		const uint32 endVertex = startVertex + mesh.mNumVertices;
 		for (uint32 i = startVertex; i < endVertex; ++i)
 		{
@@ -214,6 +215,8 @@ namespace mmo
 
 			for (uint32 j = 0; j < face.mNumIndices; ++j)
 			{
+				DLOG("\tINDEX: " << face.mIndices[j] << " ( + " << indexOffset << ")");
+
 				entry.indices.push_back(face.mIndices[j] + indexOffset);
 				entry.maxIndex = std::max(entry.maxIndex, entry.indices.back());
 				indexCount++;
@@ -226,7 +229,7 @@ namespace mmo
 		aiMaterial* material = scene.mMaterials[mesh.mMaterialIndex];
 		submesh.material = material->GetName().C_Str();
 		submesh.triangleCount = indexCount / 3;
-		submesh.indexOffset = indexOffset;
+		submesh.indexOffset = submeshIndexStart;
 		entry.subMeshes.push_back(submesh);
 
 		if (mesh.mNumBones > 0)

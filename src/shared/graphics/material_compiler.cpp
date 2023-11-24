@@ -34,24 +34,31 @@ namespace mmo
 		material.SetDepthWriteEnabled(m_depthWrite);
 		material.SetDepthTestEnabled(m_depthTest);
 
-		GenerateVertexShaderCode();
-		GeneratePixelShaderCode();
-
-		ShaderCompileInput vertexInput;
-		vertexInput.shaderCode = m_vertexShaderCode;
-		vertexInput.shaderType = ShaderType::VertexShader;
-		ShaderCompileResult vertexOutput;
-		shaderCompiler.Compile(vertexInput, vertexOutput);
-
-		if (!vertexOutput.succeeded)
+		for (uint32 i = 0; i < 4; ++i)
 		{
-			ELOG("Error compiling vertex shader: " << vertexOutput.errorMessage);
-		}
-		else
-		{
-			DLOG("Successfully compiled vertex shader. Size: " << vertexOutput.code.data.size());
+			m_vertexShaderCode.clear();
+			GenerateVertexShaderCode(static_cast<VertexShaderType>(i));
+
+			ShaderCompileInput vertexInput;
+			vertexInput.shaderCode = m_vertexShaderCode;
+			vertexInput.shaderType = ShaderType::VertexShader;
+			ShaderCompileResult vertexOutput;
+			shaderCompiler.Compile(vertexInput, vertexOutput);
+
+			if (!vertexOutput.succeeded)
+			{
+				ELOG("Error compiling vertex shader: " << vertexOutput.errorMessage);
+			}
+			else
+			{
+				DLOG("Successfully compiled vertex shader. Size: " << vertexOutput.code.data.size());
+			}
+
+			material.SetVertexShaderCode(static_cast<VertexShaderType>(i), { vertexOutput.code.data });
 		}
 		
+		GeneratePixelShaderCode();
+
 		ShaderCompileInput pixelInput;
 		pixelInput.shaderCode = m_pixelShaderCode;
 		pixelInput.shaderType = ShaderType::PixelShader;
@@ -75,7 +82,6 @@ namespace mmo
 		}
 
 		// Add shader code to the material
-		material.SetVertexShaderCode({vertexOutput.code.data });
 		material.SetPixelShaderCode({pixelOutput.code.data });
 	}
 	

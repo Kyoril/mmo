@@ -17,7 +17,7 @@ namespace mmo
 	class MaterialCompiler;
 
 	/// @brief Enumerates possible material types.
-	enum class MaterialType
+	enum class MaterialType : uint8_t
 	{
 		/// @brief The material is completely opaque and lit.
 		Opaque,
@@ -30,6 +30,21 @@ namespace mmo
 
 		/// @brief The material is lit and translucent (support for non-binary alpha channel).
 		Translucent,
+	};
+
+	enum class VertexShaderType : uint8_t
+	{
+		/// @brief Default vertex shader (no skinning).
+		Default,
+
+		/// @brief Skinning profile with low amount of bones (32).
+		SkinnedLow,
+
+		/// @brief Skinning profile with medium amount of bones (64).
+		SkinnedMedium,
+
+		/// @brief Skinning profile with high amount of bones (128)
+		SkinnedHigh
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -87,11 +102,11 @@ namespace mmo
 
 		void AddTexture(std::string_view texture);
 
-		void SetVertexShaderCode(std::span<uint8> code) noexcept;
+		void SetVertexShaderCode(VertexShaderType shaderType, std::span<uint8> code) noexcept;
 
 		void SetPixelShaderCode(std::span<uint8> code) noexcept;
 
-        [[nodiscard]] std::span<uint8 const> GetVertexShaderCode() const noexcept { return { m_vertexShaderCode}; }
+        [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const noexcept { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
 		
 		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode() const noexcept { return { m_pixelShaderCode }; }
 
@@ -127,12 +142,12 @@ namespace mmo
 		bool m_castShadow { true };
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
-		ShaderPtr m_vertexShader;
+		ShaderPtr m_vertexShader[4];
 		ShaderPtr m_pixelShader;
 		std::vector<String> m_textureFiles;
 		std::vector<TexturePtr> m_textures;
 		bool m_texturesChanged { true };
-		std::vector<uint8> m_vertexShaderCode;
+		std::vector<uint8> m_vertexShaderCode[4];
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode;
 		bool m_pixelShaderChanged { true };

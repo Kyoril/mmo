@@ -166,6 +166,7 @@ namespace mmo
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		std::map<VertexFormat, ShaderPtr> VertexShaders;
 		std::map<VertexFormat, ShaderPtr> PixelShaders;
+		VertexFormat m_vertexFormat;
 		/// The best supported feature level.
 		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_9_1;
 		/// Whether the device supports GSync displays.

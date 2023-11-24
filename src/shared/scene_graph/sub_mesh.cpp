@@ -31,23 +31,32 @@ namespace mmo
 			ASSERT(m_parent.m_vertexBuffer);
 			m_parent.m_vertexBuffer->Set();
 			vertexCount = m_parent.m_vertexBuffer->GetVertexCount();
+
+			if (m_parent.m_indexBuffer)
+			{
+				m_parent.m_indexBuffer->Set();
+				GraphicsDevice::Get().DrawIndexed();
+			}
+			else
+			{
+				GraphicsDevice::Get().Draw(vertexCount, 0);
+			}
 		}
 		else
 		{
 			ASSERT(m_vertexBuffer);
 			m_vertexBuffer->Set();
 			vertexCount = m_vertexBuffer->GetVertexCount();
-		}
 
-		// Render
-		if (m_indexBuffer)
-		{
-			m_indexBuffer->Set();
-			GraphicsDevice::Get().DrawIndexed();
-		}
-		else
-		{
-			GraphicsDevice::Get().Draw(vertexCount, 0);
+			if (m_indexBuffer)
+			{
+				m_indexBuffer->Set();
+				GraphicsDevice::Get().DrawIndexed();
+			}
+			else
+			{
+				GraphicsDevice::Get().Draw(vertexCount, 0);
+			}
 		}
 	}
 

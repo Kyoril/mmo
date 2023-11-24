@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 
+#include "material.h"
 #include "base/typedefs.h"
 
 namespace mmo
@@ -253,7 +254,7 @@ namespace mmo
 
 	protected:
 		/// @brief Called to generate the vertex shader code.
-		virtual void GenerateVertexShaderCode() = 0;
+		virtual void GenerateVertexShaderCode(VertexShaderType type) = 0;
 
 		/// @brief Called to generate the pixel shader code.
 		virtual void GeneratePixelShaderCode() = 0;
@@ -276,7 +277,7 @@ namespace mmo
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
 		String m_pixelShaderCode;
-		std::ostringstream m_vertexShaderStream;
+		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 
 		bool m_lit { true };

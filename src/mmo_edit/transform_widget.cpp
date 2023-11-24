@@ -353,7 +353,7 @@ namespace mmo
 
 		// Create std::span<uint8> from const uint8 array g_VS_PosColor
 		std::span vsCode((uint8*)(g_VS_PosColor), sizeof(g_VS_PosColor));
-		material->SetVertexShaderCode(vsCode);
+		material->SetVertexShaderCode(VertexShaderType::Default, vsCode);
 
 		std::span psCode((uint8*)(g_PS_PosColor), sizeof(g_PS_PosColor));
 		material->SetPixelShaderCode(psCode);
@@ -363,6 +363,8 @@ namespace mmo
 		// Create translation node
 		m_translationNode = m_widgetNode->CreateChildSceneNode();
 		m_translationNode->AttachObject(*m_axisLines);
+
+		MaterialPtr planeMaterial = MaterialManager::Get().Load("Editor/SelectionHighlight.hmat");
 
 		// Setup arrows
 		m_xArrowNode = m_translationNode->CreateChildSceneNode();
@@ -400,17 +402,17 @@ namespace mmo
 
 		Entity* plane1 = m_scene.CreateEntity("AxisPlane1", m_translateAxisPlanes);
 		plane1->SetRenderQueueGroupAndPriority(Overlay, 1000);
-		plane1->SetMaterial(material);
+		plane1->SetMaterial(planeMaterial);
 		plane1->SetQueryFlags(0);
 
 		Entity* plane2 = m_scene.CreateEntity("AxisPlane2", m_translateAxisPlanes);
 		plane2->SetRenderQueueGroupAndPriority(Overlay, 1000);
-		plane2->SetMaterial(material);
+		plane2->SetMaterial(planeMaterial);
 		plane2->SetQueryFlags(0);
 
 		Entity* plane3 = m_scene.CreateEntity("AxisPlane3", m_translateAxisPlanes);
 		plane3->SetRenderQueueGroupAndPriority(Overlay, 1000);
-		plane3->SetMaterial(material);
+		plane3->SetMaterial(planeMaterial);
 		plane3->SetQueryFlags(0);
 
 		m_xzPlaneNode->AttachObject(*plane1);
