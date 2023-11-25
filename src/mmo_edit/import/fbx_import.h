@@ -74,6 +74,8 @@ namespace mmo
 		/// @param node The node to start traversing from.
 		void TraverseScene(const aiNode& node, const aiScene& scene);
 
+		bool SaveSkeletonFile(const String& filename, const Path& assetPath) const;
+
 		/// @brief Saves the loaded mesh geometry data into the engine's custom mesh file format.
 		/// @param filename The file name of the new mesh file without extension and path.
 		/// @param assetPath The asset path, relative to the game content root folder, where the file will be located.
@@ -96,7 +98,6 @@ namespace mmo
 	private:
 		std::vector<MeshEntry> m_meshEntries;
 		std::vector<Joint> m_joints;
-		std::stack<Joint*> m_jointStack;
 		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
 	};
 }

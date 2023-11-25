@@ -87,6 +87,27 @@ namespace mmo
 		}
 	}
 
+	bool FbxImport::SaveSkeletonFile(const String& filename, const Path& assetPath) const
+	{
+		const std::filesystem::path p = (assetPath / filename).string() + ".skel";
+
+		// Create the file name
+		const auto filePtr = AssetRegistry::CreateNewFile(p.string());
+		if (filePtr == nullptr)
+		{
+			ELOG("Unable to create mesh file " << p);
+			return false;
+		}
+
+		// Create a mesh header saver
+		io::StreamSink sink{ *filePtr };
+		io::Writer writer{ sink };
+
+		// TODO: Skeleton serializer
+
+		return true;
+	}
+
 	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath) const
 	{
 		const std::filesystem::path p = (assetPath / filename).string() + ".hmsh";
@@ -137,6 +158,31 @@ namespace mmo
 			entry.maxIndex = 0;
 
 			DLOG("Mesh has " << scene.mNumMaterials << " submeshes");
+
+			if (mesh.HasBones())
+			{
+				DLOG("Detected skeletal mesh with " << mesh.mNumBones << " bones");
+
+				for (uint32 i = 0; i < mesh.mNumBones; ++i)
+				{
+					DLOG("Bone: " << mesh.mBones[i]->mName.C_Str() << " (" << mesh.mBones[i]->mNumWeights << " vertex assignments)");
+					Joint joint{};
+					joint.name = mesh.mBones[i]->mName.C_Str();
+					joint.transform = Matrix4(&mesh.mBones[i]->mOffsetMatrix.a1);
+					joint.parent = nullptr;
+					m_joints.push_back(joint);
+
+					for (uint32 j = 0; j < mesh.mBones[i]->mNumWeights; ++j)
+					{
+						VertexBoneAssignment assignment{};
+						assignment.boneIndex = m_joints.size() - 1;
+						assignment.vertexIndex = mesh.mBones[i]->mWeights[j].mVertexId;
+						assignment.weight = mesh.mBones[i]->mWeights[j].mWeight;
+						entry.boneAssignments.push_back(assignment);
+					}
+				}
+			}
+
 			m_meshEntries.push_back(entry);
 		}
 
@@ -215,8 +261,6 @@ namespace mmo
 
 			for (uint32 j = 0; j < face.mNumIndices; ++j)
 			{
-				DLOG("\tINDEX: " << face.mIndices[j] << " ( + " << indexOffset << ")");
-
 				entry.indices.push_back(face.mIndices[j] + indexOffset);
 				entry.maxIndex = std::max(entry.maxIndex, entry.indices.back());
 				indexCount++;
@@ -231,12 +275,6 @@ namespace mmo
 		submesh.triangleCount = indexCount / 3;
 		submesh.indexOffset = submeshIndexStart;
 		entry.subMeshes.push_back(submesh);
-
-		if (mesh.mNumBones > 0)
-		{
-			DLOG("Detected skeletal mesh with " << mesh.mNumBones << " bones");
-		}
-
 		return true;
 	}
 
@@ -254,7 +292,24 @@ namespace mmo
 			return false;
 		}
 
-		return SaveMeshFile(filename.filename().replace_extension().string(), currentAssetPath);
+		const auto filenameWithoutExtension = filename.filename().replace_extension();
+		if (!m_meshEntries.front().boneAssignments.empty())
+		{
+			m_meshEntries.front().skeletonName = (currentAssetPath / filenameWithoutExtension).string();
+		}
+
+		if (!SaveMeshFile(filenameWithoutExtension.string(), currentAssetPath))
+		{
+			ELOG("Failed to save mesh file!");
+			return false;
+		}
+
+		if (!m_meshEntries.front().skeletonName.empty())
+		{
+			return SaveSkeletonFile(filenameWithoutExtension.string(), currentAssetPath);
+		}
+
+		return true;
 	}
 
 	bool FbxImport::SupportsExtension(const String& extension) const noexcept
