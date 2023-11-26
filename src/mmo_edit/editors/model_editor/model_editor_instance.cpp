@@ -17,6 +17,27 @@
 
 namespace mmo
 {
+	void TraverseBone(Scene& scene, SceneNode& node, Bone& bone)
+	{
+		// Create node and attach it to the root node
+		SceneNode* child = node.CreateChildSceneNode(bone.GetPosition(), bone.GetOrientation());
+		child->SetScale(Vector3::UnitScale);
+
+		SceneNode* scaleNode = child->CreateChildSceneNode();
+		scaleNode->SetInheritScale(false);
+		scaleNode->SetScale(Vector3::UnitScale * 0.03f);
+		
+		// Attach debug visual
+		Entity* entity = scene.CreateEntity("Entity_" + bone.GetName(), "Editor/Joint.hmsh");
+		entity->SetRenderQueueGroup(Overlay);
+		scaleNode->AttachObject(*entity);
+
+		for(uint32 i = 0; i < bone.GetNumChildren(); ++i)
+		{
+			TraverseBone(scene, *child, *dynamic_cast<Bone*>(bone.GetChild(i)));
+		}
+	}
+
 	ModelEditorInstance::ModelEditorInstance(EditorHost& host, ModelEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
@@ -60,8 +81,20 @@ namespace mmo
 			m_cameraAnchor->SetPosition(m_entity->GetBoundingBox().GetCenter());
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
 		}
-		
+
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
+
+		// Debug skeleton rendering
+		if (m_mesh->HasSkeleton())
+		{
+			// Render each bone as a debug object
+			Bone* rootBone = m_mesh->GetSkeleton()->GetRootBone();
+			if (rootBone)
+			{
+				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
+				TraverseBone(m_scene, *skeletonRoot, *rootBone);
+			}
+		}
 	}
 
 	ModelEditorInstance::~ModelEditorInstance()
@@ -96,6 +129,23 @@ namespace mmo
 		m_scene.Render(*m_camera);
 		
 		m_viewportRT->Update();
+	}
+
+	void RenderBoneNode(Bone& bone)
+	{
+		if (ImGui::TreeNodeEx(bone.GetName().c_str()))
+		{
+			for (uint32 i = 0; i < bone.GetNumChildren(); ++i)
+			{
+				Bone* childBone = dynamic_cast<Bone*>(bone.GetChild(i));
+				if (childBone)
+				{
+					RenderBoneNode(*childBone);
+				}
+			}
+
+			ImGui::TreePop();
+		}
 	}
 
 	void ModelEditorInstance::Draw()
@@ -170,6 +220,25 @@ namespace mmo
 				
 		        ImGui::EndTable();
 		    }
+
+
+			if (m_mesh->HasSkeleton())
+			{
+				ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+
+				// TODO: Show dropdown for skeleton to be used
+
+				// TODO: Show bone hierarchy in tree view
+				const auto& skeleton = m_mesh->GetSkeleton();
+
+				Bone* rootBone = skeleton->GetRootBone();
+				if (ImGui::BeginChild("Bone Hierarchy"))
+				{
+					RenderBoneNode(*rootBone);
+				}
+				ImGui::EndChild();
+			}
+
 		    ImGui::PopStyleVar();
 
 			ImGui::Separator();
@@ -205,6 +274,12 @@ namespace mmo
 			
 			// Render the render target content into the window as image object
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+			ImGui::SetItemUsingMouseWheel();
+
+			if (ImGui::IsItemHovered())
+			{
+				m_cameraNode->Translate(Vector3::UnitZ* ImGui::GetIO().MouseWheel * 0.1f, TransformSpace::Local);
+			}
 
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{

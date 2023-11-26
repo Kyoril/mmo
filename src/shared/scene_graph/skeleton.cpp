@@ -42,7 +42,7 @@ namespace mmo
 	Bone* Skeleton::CreateBone(const String& name, uint16 handle)
 	{
         ASSERT(handle < MaxBoneCount);
-        ASSERT(handle >= m_boneList.size() && m_boneList[handle] == nullptr);
+        ASSERT(handle >= m_boneList.size() || m_boneList[handle] == nullptr);
         ASSERT(!m_boneListByName.contains(name));
 
         auto ret = std::make_unique<Bone>(name, handle, *this);
@@ -79,7 +79,10 @@ namespace mmo
 	Bone* Skeleton::GetBone(const String& name) const
 	{
 		const auto i = m_boneListByName.find(name);
-        ASSERT(i != m_boneListByName.end());
+		if (i == m_boneListByName.end())
+		{
+			return nullptr;
+		}
 
         return i->second;
 

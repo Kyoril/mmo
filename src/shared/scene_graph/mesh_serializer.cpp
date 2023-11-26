@@ -345,7 +345,12 @@ namespace mmo
 
 		auto& subMesh = m_mesh.CreateSubMesh();
 
-		subMesh.SetMaterial(MaterialManager::Get().Load(materialName));
+		MaterialPtr material = MaterialManager::Get().Load(materialName);
+		if (!material)
+		{
+			material = MaterialManager::Get().Load("Models/Default.hmat");
+		}
+		subMesh.SetMaterial(material);
 		subMesh.m_useSharedVertices = true;
 		subMesh.m_indexStart = indexStart;
 		subMesh.m_indexEnd = indexEnd;

@@ -120,7 +120,7 @@ namespace mmo
 		}
 		else
 		{
-			m_skeleton = SkeletonMgr::Get().Load(m_skeletonName);
+			m_skeleton = SkeletonMgr::Get().Load(m_skeletonName + ".skel");
 			if (!m_skeleton)
 			{
 				WLOG("Failed to load skeleton '" << m_skeletonName << "' for mesh '" << m_name << "' - mesh will not be animated!");

@@ -16,7 +16,9 @@ namespace mmo
 	enum class SkeletonAnimationBlendMode
 	{
 		Average,
-		Cumulative
+		Cumulative,
+
+		Count_
 	};
 
 	class Skeleton
