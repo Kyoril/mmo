@@ -39,6 +39,17 @@ CREATE TABLE `characters` (
   UNIQUE KEY `UNIQUE_NAME` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
+DROP TABLE IF EXISTS `character_chat`;
+
+CREATE TABLE `character_chat` (
+  `character` bigint unsigned NOT NULL,
+  `type` smallint NOT NULL,
+  `message` varchar(255) NOT NULL,
+  `timestamp` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `fk_character_id_idx` (`character`),
+  CONSTRAINT `fk_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 /*Table structure for table `world` */
 
 DROP TABLE IF EXISTS `world`;

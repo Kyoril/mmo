@@ -22,5 +22,9 @@ namespace mmo
 		uint32 startIndex { 0 };
 
 		uint32 endIndex { 0 };
+
+		std::vector<ConstantBuffer*> vertexConstantBuffers;
+
+		std::vector<ConstantBuffer*> pixelConstantBuffers;
 	};
 }

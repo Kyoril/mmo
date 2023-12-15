@@ -12,6 +12,7 @@
 #include "render_window.h"
 #include "render_texture.h"
 #include "material_compiler.h"
+#include "shared/graphics/constant_buffer.h"
 
 
 namespace mmo
@@ -168,6 +169,9 @@ namespace mmo
 
 		/// Creates a new index buffer.
 		virtual IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void* initialData = nullptr) = 0;
+
+		/// Creates a new constant buffer.
+		virtual ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) = 0;
 
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;

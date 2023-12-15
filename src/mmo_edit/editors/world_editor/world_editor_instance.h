@@ -36,6 +36,9 @@ namespace mmo
 		typedef signal<void(const MapEntity&)> TransformChangedSignal;
 		TransformChangedSignal transformChanged;
 
+		typedef signal<void(MapEntity&)> RemoveSignal;
+		RemoveSignal remove;
+
 	public:
 		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity)
 			: m_scene(scene)
@@ -99,6 +102,8 @@ namespace mmo
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
+		void OnMapEntityRemoved(MapEntity& entity);
 
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;

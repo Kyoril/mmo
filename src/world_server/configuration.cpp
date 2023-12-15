@@ -35,7 +35,18 @@ namespace mmo
 		, realmServerPort(constants::DefaultRealmWorldPort)
 		, realmServerAuthName("WorldNode01")
 		, realmServerPassword("")
+		, dataFolder("data")
+		, watchDataForChanges(true)
 	{
+	}
+
+	namespace detail
+	{
+		template <class Table>
+		bool parseBoolean(const Table& table, const String& name, bool defaultValue)
+		{
+			return table.getInteger(name, static_cast<unsigned>(defaultValue)) != 0;
+		}
 	}
 
 	bool Configuration::load(const String &fileName)
@@ -132,6 +143,12 @@ namespace mmo
 			if (const Table *const playerManager = global.getTable("playerManager"))
 			{
 				maxPlayers = playerManager->getInteger("maxCount", maxPlayers);
+			}
+
+			if (const Table* const folders = global.getTable("folders"))
+			{
+				dataFolder = folders->getString("data", dataFolder);
+				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
 
 			if (const Table *const log = global.getTable("log"))

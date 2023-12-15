@@ -3,6 +3,7 @@
 #include "main_window.h"
 
 #include <imgui_internal.h>
+#include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "configuration.h"
 #include "assets/asset_registry.h"
@@ -11,6 +12,7 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "database.h"
+#include "proto_data/project.h"
 
 #ifdef _WIN32
 #	include <windowsx.h>
@@ -30,15 +32,16 @@ namespace mmo
 	static bool s_initialized = false;
 
 	static bool s_showCreatureEditor = false;
+	static bool s_showSpellEditor = false;
 	
-	MainWindow::MainWindow(Configuration& config, AsyncDatabase& database)
+	MainWindow::MainWindow(Configuration& config, proto::Project& project)
 		: m_config(config)
 #if _WIN32
 		, m_windowHandle(nullptr)
 #endif
 		, m_imguiContext(nullptr)
 		, m_fileLoaded(false)
-		, m_database(database)
+		, m_project(project)
 	{
 		// Create the native platform window
 		CreateWindowHandle();
@@ -66,12 +69,7 @@ namespace mmo
 			WLOG("Unable to initialize asset registry: No asset registry path provided!");
 		}
 
-		// Initialize entity headers
-		for (int type = 0; type < static_cast<int>(EntityType::Count_); ++type)
-		{
-			m_entityHeaders[static_cast<EntityType>(type)] = std::vector<EntityHeader>();
-		}
-		
+				
 		// Setup the viewport render texture
 		s_initialized = true;
 
@@ -213,14 +211,6 @@ namespace mmo
 			ImGui::Columns(2, nullptr, true);
 			ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
 			
-			ImGui::BeginChild("creatureListScrolling", ImVec2(350, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::ListBox("##creatureList", &currentItem, [](void* data, int idx, const char** out_text)
-				{
-					if (out_text) *out_text = (*static_cast<std::vector<EntityHeader>*>(data))[idx].name.c_str();
-					return true;
-				}, &m_entityHeaders[EntityType::Creature], m_entityHeaders[EntityType::Creature].size());
-			ImGui::EndChild();
-
 			ImGui::NextColumn();
 			
 			ImGui::BeginChild("creatureDetails", ImVec2(0, 0));
@@ -252,49 +242,33 @@ namespace mmo
 		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
 
-		auto entityLoadHandler = [this](const std::optional<std::vector<EntityHeader>>& result, EntityType type)
+		if (ImGui::Button("Save Project", ImVec2(0, 37)))
 		{
-			if (!result)
-			{
-				ELOG("Failed to load entity list");
-				return;
-			}
+			m_project.save(m_config.projectPath);
+		}
 
-			m_entityHeaders[type].clear();
-			std::ranges::copy(*result, std::back_inserter(m_entityHeaders[type]));
-		};
+		ImGui::SameLine();
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+		ImGui::SameLine();
 
 		if (ImGui::Button("Creatures", ImVec2(0, 37)))
 		{
-			m_database.asyncRequest([entityLoadHandler](auto&& args)
-			{
-				return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Creature);
-			}, &IDatabase::GetEntityList, EntityType::Creature);
 			s_showCreatureEditor = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Spells", ImVec2(0, 37)))
 		{
-			m_database.asyncRequest([entityLoadHandler](auto&& args)
-				{
-					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Spell);
-				}, &IDatabase::GetEntityList, EntityType::Spell);
+			s_showSpellEditor = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Items", ImVec2(0, 37)))
 		{
-			m_database.asyncRequest([entityLoadHandler](auto&& args)
-				{
-					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Item);
-				}, &IDatabase::GetEntityList, EntityType::Item);
+
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Quests", ImVec2(0, 37)))
 		{
-			m_database.asyncRequest([entityLoadHandler](auto&& args)
-				{
-					return entityLoadHandler(std::forward<decltype(args)>(args), EntityType::Quest);
-				}, &IDatabase::GetEntityList, EntityType::Quest);
+
 		}
 		ImGui::End();
 	}
@@ -345,6 +319,8 @@ namespace mmo
 			HandleToolBar();
 
 			ShowCreatureEditor();
+
+			ShowSpellEditor();
 
 			// Draw the editor window modules
 			for (const auto& window : m_editorWindows)
@@ -645,7 +621,154 @@ namespace mmo
 
 		ApplyDefaultStyle();
 	}
-	
+
+	static String s_spellSchoolNames[] = {
+		"Physical",
+		"Holy",
+		"Fire",
+		"Nature",
+		"Frost",
+		"Shadow",
+		"Arcane"
+	};
+
+	static String s_spellEffectNames[] = {
+		"None",
+		"Instakill",
+		"School Damage",
+		"Dummy",
+		"Portal Teleport",
+		"Teleport Units",
+		"Apply Aura",
+		"Power Drain",
+		"Health Leech",
+		"Heal",
+		"Bind",
+		"Portal",
+		"Quest Complete",
+		"Weapon Damage + (noschool)",
+		"Resurrect",
+		"Extra Attacks",
+		"Dodge",
+		"Evade",
+		"Parry",
+		"Block",
+		"Create Item",
+		"Weapon",
+		"Defense",
+		"Persistent Area Aura",
+		"Summon",
+		"Leap",
+		"Energize",
+		"Weapon % Dmg",
+		"Trigger Missile",
+		"Open Lock",
+		"Learn Spell",
+		"Weapon Damage +"
+	};
+
+	void MainWindow::ShowSpellEditor()
+	{
+		static int currentItem = -1;
+
+		if (!s_showSpellEditor) return;
+
+		if (ImGui::Begin("Spells", &s_showSpellEditor))
+		{
+			ImGui::Columns(2, nullptr, true);
+			ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
+
+			if (ImGui::Button("Add new spell", ImVec2(-1, 0)))
+			{
+				auto* spell = m_project.spells.add();
+				spell->set_name("New spell");
+			}
+
+			ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.spells.count());
+			if (ImGui::Button("Remove", ImVec2(-1, 0)))
+			{
+				m_project.spells.remove(m_project.spells.getTemplates().entry().at(currentItem).id());
+			}
+			ImGui::EndDisabled();
+
+			ImGui::BeginChild("spellListScrollable", ImVec2(-1, 0));
+			ImGui::ListBox("##spellList", &currentItem, [](void* data, int idx, const char** out_text)
+			{
+				const proto::Spells* spells = static_cast<proto::Spells*>(data);
+				const auto& entry = spells->entry().at(idx);
+				*out_text = entry.name().c_str();
+				return true;
+
+			}, &m_project.spells.getTemplates(), m_project.spells.count(), 20);
+			ImGui::EndChild();
+
+			ImGui::NextColumn();
+
+			proto::SpellEntry* currentSpell = nullptr;
+			if (currentItem != -1 && currentItem < m_project.spells.count())
+			{
+				currentSpell = &m_project.spells.getTemplates().mutable_entry()->at(currentItem);
+			}
+
+#define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
+	{ \
+		const char* format = "%d"; \
+		uint##datasize value = currentSpell->name(); \
+		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
+		{ \
+			if (value >= min && value <= max) \
+				currentSpell->set_##name(value); \
+		} \
+	}
+#define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
+#define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
+
+			ImGui::BeginChild("spellDetails", ImVec2(-1, -1));
+			if (currentSpell)
+			{
+				ImGui::InputText("Name", currentSpell->mutable_name());
+
+				SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
+				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
+
+				ImGui::Text("Effects");
+				ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 0), ImGuiWindowFlags_AlwaysUseWindowPadding);
+				for (int effectIndex = 0; effectIndex < currentSpell->effects_size(); ++effectIndex)
+				{
+					// Effect frame
+					int currentEffect = currentSpell->effects(effectIndex).type();
+					ImGui::PushID(effectIndex);
+					if (ImGui::Combo("Effect", &currentEffect,
+						[](void* data, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
+							{
+								return false;
+							}
+
+							*out_text = s_spellEffectNames[idx].c_str();
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
+					{
+						currentSpell->mutable_effects(effectIndex)->set_type(currentEffect);
+					}
+					ImGui::PopID();
+					ImGui::SameLine();
+					ImGui::Button("Details");
+				}
+				// Add button
+				if (ImGui::Button("Add Effect", ImVec2(-1, 0)))
+				{
+					currentSpell->add_effects()->set_index(currentSpell->effects_size() - 1);
+				}
+				ImGui::EndChildFrame();
+			}
+			ImGui::EndChild();
+
+			ImGui::End();
+		}
+	}
+
 #ifdef _WIN32
 	LRESULT MainWindow::WindowMsgProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{

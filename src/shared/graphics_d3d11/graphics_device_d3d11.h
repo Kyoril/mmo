@@ -42,6 +42,8 @@ namespace mmo
 
 		IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void* initialData = nullptr) override;
 
+		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
+
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
 		void UpdateSamplerState();

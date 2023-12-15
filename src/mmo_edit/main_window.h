@@ -14,7 +14,6 @@
 
 #include <string>
 
-#include "database.h"
 #include "imgui_node_editor_internal.inl"
 #include "editors/editor_base.h"
 #include "import/import_base.h"
@@ -24,6 +23,11 @@ struct ImGuiContext;
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	class AsyncDatabase;
 	class Configuration;
 	
@@ -34,7 +38,8 @@ namespace mmo
 		, public EditorHost
 	{
 	public:
-		explicit MainWindow(Configuration& config, AsyncDatabase& database);
+		explicit MainWindow(Configuration& config,
+			proto::Project& project);
 		~MainWindow();
 
 	private:
@@ -54,7 +59,8 @@ namespace mmo
 
 		/// Initialize ImGui.
 		void InitImGui();
-		
+
+		void ShowSpellEditor();
 		/// Render ImGui.
 		void RenderImGui();
 
@@ -125,8 +131,7 @@ namespace mmo
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
 		ImFont* m_defaultFont { nullptr };
-		AsyncDatabase& m_database;
 
-		std::map<EntityType, std::vector<EntityHeader>> m_entityHeaders;
+		proto::Project& m_project;
 	};
 }

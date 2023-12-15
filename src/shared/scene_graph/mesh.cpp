@@ -125,6 +125,10 @@ namespace mmo
 			{
 				WLOG("Failed to load skeleton '" << m_skeletonName << "' for mesh '" << m_name << "' - mesh will not be animated!");
 			}
+
+			m_boneMatrices.resize(m_skeleton->GetNumBones());
+			m_skeleton->GetBoneMatrices(m_boneMatrices.data());
+			m_boneMatricesBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_skeleton->GetNumBones(), m_boneMatrices.data());
 		}
 	}
 

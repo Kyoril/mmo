@@ -57,6 +57,8 @@ namespace mmo
 		/// Password of the world node at the realm server.
 		String realmServerPassword;
 
+		String dataFolder;
+		bool watchDataForChanges;
 
 		explicit Configuration();
 		bool load(const String &fileName);

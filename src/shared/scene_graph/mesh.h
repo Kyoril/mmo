@@ -14,6 +14,8 @@
 #include <memory>
 #include <vector>
 
+#include "graphics/constant_buffer.h"
+
 namespace mmo
 {
 	struct VertexBoneAssignment
@@ -88,6 +90,7 @@ namespace mmo
 	public:
 		VertexBufferPtr m_vertexBuffer;
 		IndexBufferPtr m_indexBuffer;
+		ConstantBufferPtr m_boneMatricesBuffer;
 
 	private:
 		SubMeshList m_subMeshes;
@@ -99,6 +102,7 @@ namespace mmo
 		SkeletonPtr m_skeleton{ nullptr };
 		VertexBoneAssignmentList m_boneAssignments;
 		bool m_boneAssignmentsOutOfDate { false };
+		std::vector<Matrix4> m_boneMatrices;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

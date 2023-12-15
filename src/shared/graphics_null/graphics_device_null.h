@@ -83,6 +83,8 @@ namespace mmo
 		std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() override;
 
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
+
+		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
 		// ~ End GraphicsDevice
 	};
 }

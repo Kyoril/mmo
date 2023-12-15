@@ -5,7 +5,6 @@
 
 #include "main_window.h"
 
-#include "base/win_utility.h"
 #include "configuration.h"
 #include "mysql_database.h"
 #include "assets/asset_registry.h"
@@ -23,8 +22,8 @@
 #include "editors/material_editor/material_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
-#include "editors/texture_editor/texture_editor.h"
 #include "log/default_log_levels.h"
+#include "proto_data/project.h"
 
 #ifdef _DEBUG
 #	include <mutex>
@@ -64,31 +63,22 @@ int main(int argc, char* arg[])
 	// The database service object and keep-alive object
 	asio::io_service dbService;
 
-	// Keep the database service alive / busy until this object is alive
-	auto dbWork = std::make_shared<asio::io_context::work>(dbService);
-
-	auto database = std::make_unique<mmo::MySQLDatabase>(mmo::mysql::DatabaseInfo{
-		config.mysqlHost,
-			config.mysqlPort,
-			config.mysqlUser,
-			config.mysqlPassword,
-			config.mysqlDatabase
-	});
-	if (!database->Load())
-	{
-		ELOG("Could not load the database");
-		return 1;
-	}
-
-	const auto async = [&dbService](mmo::Action action) { dbService.post(std::move(action)); };
-	const auto sync = [&ioService](mmo::Action action) { ioService.post(std::move(action)); };
-	mmo::AsyncDatabase asyncDatabase{ *database, async, sync };
-	
 	// Create log window before main window so that we already subscribe to log events as early as possible
 	auto logWindow = std::make_unique<mmo::LogWindow>();
 
+	// Load the project
+	mmo::proto::Project project;
+	if (!project.load(config.projectPath))
+	{
+#ifdef _WIN32
+		MessageBox(nullptr, TEXT("Failed to load project"), TEXT("Error"), MB_OK | MB_ICONERROR);
+#endif
+		ELOG("Failed to load project!");
+		return 1;
+	}
+
 	// Initialize the main window instance
-	mmo::MainWindow mainWindow { config, asyncDatabase };
+	mmo::MainWindow mainWindow { config, project };
 	mainWindow.AddEditorWindow(std::move(logWindow));
 
 	// Setup preview provider manager

@@ -249,4 +249,9 @@ namespace mmo
 	{
 		return std::make_unique<ShaderCompilerNull>();
 	}
+
+	ConstantBufferPtr GraphicsDeviceNull::CreateConstantBuffer(size_t size, const void* initialData)
+	{
+		return nullptr;
+	}
 }
