@@ -60,7 +60,6 @@ namespace mmo
 		/// Initialize ImGui.
 		void InitImGui();
 
-		void ShowSpellEditor();
 		/// Render ImGui.
 		void RenderImGui();
 
