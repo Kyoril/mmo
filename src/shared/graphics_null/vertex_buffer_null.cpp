@@ -26,7 +26,7 @@ namespace mmo
 	{
 	}
 
-	std::unique_ptr<VertexBuffer> VertexBufferNull::Clone()
+	VertexBufferPtr VertexBufferNull::Clone()
 	{
 		return nullptr;
 	}

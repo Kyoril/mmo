@@ -32,15 +32,14 @@ namespace mmo
 		m_subMeshNames[name] = index;
 	}
 
-	SubMesh & Mesh::GetSubMesh(const uint16 index)
+	SubMesh & Mesh::GetSubMesh(const uint16 index) const
 	{
 		return *m_subMeshes[index];
 	}
 
 	SubMesh* Mesh::GetSubMesh(const std::string & name)
 	{
-		const auto index = m_subMeshNames.find(name);
-		if (index != m_subMeshNames.end())
+		if (const auto index = m_subMeshNames.find(name); index != m_subMeshNames.end())
 		{
 			return &GetSubMesh(index->second);
 		}
@@ -78,8 +77,7 @@ namespace mmo
 
 	void Mesh::DestroySubMesh(const std::string & name)
 	{
-		const auto index = m_subMeshNames.find(name);
-		if (index != m_subMeshNames.end())
+		if (const auto index = m_subMeshNames.find(name); index != m_subMeshNames.end())
 		{
 			DestroySubMesh(index->second);
 			m_subMeshNames.erase(index);
@@ -92,7 +90,7 @@ namespace mmo
 		m_boundRadius = GetBoundingRadiusFromAABB(m_aabb);
 	}
 	
-	void Mesh::Render()
+	void Mesh::Render() const
 	{
 		// TODO: Eventually, these should be set by the sub meshes but for now,
 		// this is what is supported by the mesh class.
@@ -144,7 +142,7 @@ namespace mmo
 		m_boneAssignmentsOutOfDate = true;
 	}
 
-	void Mesh::NotifySkeleton(SkeletonPtr& skeleton)
+	void Mesh::NotifySkeleton(const SkeletonPtr& skeleton)
 	{
 		m_skeleton = skeleton;
 		m_skeletonName = skeleton ? skeleton->GetName() : "";

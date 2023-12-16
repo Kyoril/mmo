@@ -32,5 +32,5 @@ namespace mmo
 		size_t m_size;
 	};
 
-	typedef std::unique_ptr<ConstantBuffer> ConstantBufferPtr;
+	typedef std::shared_ptr<ConstantBuffer> ConstantBufferPtr;
 }

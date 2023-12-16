@@ -25,7 +25,7 @@ namespace mmo
 		[[nodiscard]] uint32 GetVertexCount() const { return m_vertexCount; }
 		[[nodiscard]] uint32 GetVertexSize() const { return m_vertexSize; }
 		[[nodiscard]] bool IsDynamic() const { return m_dynamic; }
-		virtual std::unique_ptr<VertexBuffer> Clone() = 0;
+		virtual std::shared_ptr<VertexBuffer> Clone() = 0;
 
 	protected:
 		uint32 m_vertexCount;
@@ -33,5 +33,5 @@ namespace mmo
 		bool m_dynamic;
 	};
 
-	typedef std::unique_ptr<VertexBuffer> VertexBufferPtr;
+	typedef std::shared_ptr<VertexBuffer> VertexBufferPtr;
 }

@@ -12,6 +12,7 @@
 #include "render_window.h"
 #include "render_texture.h"
 #include "material_compiler.h"
+#include "vertex_declaration.h"
 #include "shared/graphics/constant_buffer.h"
 
 
@@ -267,6 +268,14 @@ namespace mmo
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
 
+		virtual VertexDeclaration* CreateVertexDeclaration();
+
+		virtual void DestroyVertexDeclaration(VertexDeclaration& declaration);
+
+		virtual VertexBufferBinding* CreateVertexBufferBinding();
+
+		virtual void DestroyVertexBufferBinding(VertexBufferBinding& binding);
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 
@@ -303,5 +312,7 @@ namespace mmo
 		bool m_restoreDepthWrite { false };
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
+		std::vector<std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
+		std::vector<std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
 	};
 }

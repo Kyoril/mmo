@@ -99,12 +99,12 @@ namespace mmo
 
 	VertexBufferPtr GraphicsDeviceNull::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
 	{
-		return std::make_unique<VertexBufferNull>(*this, VertexCount, VertexSize, dynamic, InitialData);
+		return std::make_shared<VertexBufferNull>(*this, VertexCount, VertexSize, dynamic, InitialData);
 	}
 
 	IndexBufferPtr GraphicsDeviceNull::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void * InitialData)
 	{
-		return std::make_unique<IndexBufferNull>(*this, IndexCount, IndexSize, InitialData);
+		return std::make_shared<IndexBufferNull>(*this, IndexCount, IndexSize, InitialData);
 	}
 
 	ShaderPtr GraphicsDeviceNull::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)

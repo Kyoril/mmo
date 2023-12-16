@@ -5,9 +5,32 @@
 #include "base/non_copyable.h"
 
 #include <cstddef>
+#include <vector>
 
 namespace mmo
 {
+	enum class BufferUsage
+	{
+		Static,
+		Dynamic,
+		WriteOnly,
+		Discardable,
+		StaticWriteOnly,
+		DynamicWriteOnly,
+		DynamicWriteOnlyDiscardable
+	};
+
+	typedef std::vector<BufferUsage> BufferUsageList;
+
+	enum class LockOptions
+	{
+		Normal,
+		Discard,
+		ReadOnly,
+		NoOverwrite,
+		WriteOnly
+	};
+
 	/// This is the base class of a hardware buffer, for example used for vertex buffers.
 	/// It supports map and unmap.
 	class BufferBase 

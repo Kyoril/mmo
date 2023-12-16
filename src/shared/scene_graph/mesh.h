@@ -48,7 +48,7 @@ namespace mmo
 
 		void NameSubMesh(uint16 index, const std::string& name);
 
-		SubMesh& GetSubMesh(uint16 index);
+		SubMesh& GetSubMesh(uint16 index) const;
 
 		SubMesh* GetSubMesh(const std::string& name);
 
@@ -58,22 +58,22 @@ namespace mmo
 
 		void SetBounds(const AABB& bounds);
 
-		void Render();
+		void Render() const;
 
 		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
 		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
 
 		void SetSkeletonName(const String& skeletonName);
 
-		const String& GetSkeletonName() const { return m_skeletonName; }
+        [[nodiscard]] const String& GetSkeletonName() const { return m_skeletonName; }
 
-		const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
+		[[nodiscard]] const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
 
-		uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
+		[[nodiscard]] uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
 
-		const AABB& GetBounds() const noexcept { return m_aabb; }
+		[[nodiscard]] const AABB& GetBounds() const noexcept { return m_aabb; }
 
-		float GetBoundRadius() const noexcept { return m_boundRadius; }
+		[[nodiscard]] float GetBoundRadius() const noexcept { return m_boundRadius; }
 
         [[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
 
@@ -81,11 +81,11 @@ namespace mmo
 
 		void ClearBoneAssignments();
 
-		void NotifySkeleton(SkeletonPtr& skeleton);
+		void NotifySkeleton(const SkeletonPtr& skeleton);
 
-		const SkeletonPtr& GetSkeleton() const { return m_skeleton; }
+		[[nodiscard]] const SkeletonPtr& GetSkeleton() const { return m_skeleton; }
 
-		const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
+		[[nodiscard]] const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
 
 	public:
 		VertexBufferPtr m_vertexBuffer;

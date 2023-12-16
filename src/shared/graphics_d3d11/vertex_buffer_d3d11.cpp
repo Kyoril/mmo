@@ -56,9 +56,9 @@ namespace mmo
 		Context.IASetVertexBuffers(0, ARRAYSIZE(Buffers), Buffers, &Stride, &Offset);
 	}
 
-	std::unique_ptr<VertexBuffer> VertexBufferD3D11::Clone()
+	VertexBufferPtr VertexBufferD3D11::Clone()
 	{
-		auto buffer = std::make_unique<VertexBufferD3D11>(Device, m_vertexCount, m_vertexSize, m_dynamic);
+		auto buffer = std::make_shared<VertexBufferD3D11>(Device, m_vertexCount, m_vertexSize, m_dynamic);
 
 		ID3D11DeviceContext& Context = Device;
 		D3D11_MAPPED_SUBRESOURCE Sub;

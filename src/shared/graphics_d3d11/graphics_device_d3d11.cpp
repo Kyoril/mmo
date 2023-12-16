@@ -601,17 +601,17 @@ namespace mmo
 
 	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void * initialData)
 	{
-		return std::make_unique<VertexBufferD3D11>(*this, vertexCount, vertexSize, dynamic, initialData);
+		return std::make_shared<VertexBufferD3D11>(*this, vertexCount, vertexSize, dynamic, initialData);
 	}
 
 	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void * initialData)
 	{
-		return std::make_unique<IndexBufferD3D11>(*this, indexCount, indexSize, initialData);
+		return std::make_shared<IndexBufferD3D11>(*this, indexCount, indexSize, initialData);
 	}
 
 	ConstantBufferPtr GraphicsDeviceD3D11::CreateConstantBuffer(size_t size, const void* initialData)
 	{
-		return std::make_unique<ConstantBufferD3D11>(*this, *this, size, initialData);
+		return std::make_shared<ConstantBufferD3D11>(*this, *this, size, initialData);
 	}
 
 	ShaderPtr GraphicsDeviceD3D11::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
