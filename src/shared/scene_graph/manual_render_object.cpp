@@ -17,9 +17,8 @@ namespace mmo
 	{
 		operation.topology = GetTopologyType();
 		operation.vertexFormat = GetFormat();
-		operation.vertexBuffer = m_vertexBuffer.get();
-		operation.indexBuffer = m_indexBuffer.get();
-		operation.useIndexes = (m_indexBuffer != nullptr);
+		operation.vertexData = m_vertexData.get();
+		operation.indexData = m_indexData.get();
 	}
 
 	const Matrix4& ManualRenderOperation::GetWorldTransform() const
@@ -35,25 +34,30 @@ namespace mmo
 
 	void ManualLineListOperation::ConvertToSubmesh(SubMesh& subMesh)
 	{
-		subMesh.m_useSharedVertices = false;
-		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
+		subMesh.useSharedVertices = false;
+
+		TODO("Implement");
+		/*subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
 		subMesh.m_indexBuffer = std::move(m_indexBuffer);
 		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();*/
 	}
 
 	void ManualTriangleListOperation::ConvertToSubmesh(SubMesh& subMesh)
 	{
-		subMesh.m_useSharedVertices = false;
-		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
+		subMesh.useSharedVertices = false;
+
+//		subMesh.vertexData = std::make_unique<VertexData>();
+
+		/*subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
 		subMesh.m_indexBuffer = std::move(m_indexBuffer);
 		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();*/
 	}
 
 	ManualRenderObject::ManualRenderObject(GraphicsDevice& device, const String& name)
-		: m_device(device)
-		, MovableObject(name)
+		: MovableObject(name)
+		, m_device(device)
 	{
 	}
 
@@ -105,8 +109,8 @@ namespace mmo
 
 	const String& ManualRenderObject::GetMovableType() const
 	{
-		static String ManualRenderObjectType = "ManualRenderObject";
-		return ManualRenderObjectType;
+		static String manualRenderObjectType = "ManualRenderObject";
+		return manualRenderObjectType;
 	}
 
 	void ManualRenderObject::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)

@@ -22,7 +22,7 @@ namespace mmo
 
 	}
 
-	void IndexBufferNull::Set()
+	void IndexBufferNull::Set(uint16 slot)
 	{
 
 	}

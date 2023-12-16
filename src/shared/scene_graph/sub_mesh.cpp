@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "sub_mesh.h"
+
+#include "material_manager.h"
 #include "mesh.h"
 
 #include "base/macros.h"
@@ -11,80 +13,64 @@
 namespace mmo
 {
 	SubMesh::SubMesh(Mesh & parent)
-		: m_parent(parent)
-		, m_vertexBuffer(nullptr)
-		, m_indexBuffer(nullptr)
+		: parent(parent)
 	{
-	}
-
-	void SubMesh::Render() const
-	{
-		if (m_material)
-		{
-			m_material->Apply(GraphicsDevice::Get());
-		}
-
-		// Set vertex buffer
-		uint32 vertexCount = 0;
-		if (m_useSharedVertices)
-		{
-			ASSERT(m_parent.m_vertexBuffer);
-			m_parent.m_vertexBuffer->Set();
-			vertexCount = m_parent.m_vertexBuffer->GetVertexCount();
-
-			if (m_parent.m_indexBuffer)
-			{
-				m_parent.m_indexBuffer->Set();
-				GraphicsDevice::Get().DrawIndexed();
-			}
-			else
-			{
-				GraphicsDevice::Get().Draw(vertexCount, 0);
-			}
-		}
-		else
-		{
-			ASSERT(m_vertexBuffer);
-			m_vertexBuffer->Set();
-			vertexCount = m_vertexBuffer->GetVertexCount();
-
-			if (m_indexBuffer)
-			{
-				m_indexBuffer->Set();
-				GraphicsDevice::Get().DrawIndexed();
-			}
-			else
-			{
-				GraphicsDevice::Get().Draw(vertexCount, 0);
-			}
-		}
 	}
 
 	void SubMesh::PrepareRenderOperation(RenderOperation& op) const
 	{
-		if (m_useSharedVertices)
+		if (useSharedVertices)
 		{
-			ASSERT(m_parent.m_vertexBuffer);
-			op.vertexBuffer = m_parent.m_vertexBuffer.get();
-			op.indexBuffer = m_parent.m_indexBuffer.get();
-			op.useIndexes = m_parent.m_indexBuffer != nullptr;
+			ASSERT(parent.sharedVertexData);
+			op.vertexData = parent.sharedVertexData.get();
 		}
 		else
 		{
-			ASSERT(m_vertexBuffer);
-			op.vertexBuffer = m_vertexBuffer.get();
-			op.indexBuffer = m_indexBuffer.get();
-			op.useIndexes = m_indexBuffer != nullptr;
+			ASSERT(vertexData);
+			op.vertexData = vertexData.get();
 		}
 
+		op.indexData = indexData.get();
 		op.topology = TopologyType::TriangleList;
 		op.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
-		op.startIndex = m_indexStart;
-		op.endIndex = m_indexEnd;
+	}
+
+	void SubMesh::SetMaterialName(const String& name)
+	{
+		SetMaterial(MaterialManager::Get().Load(name));
 	}
 
 	void SubMesh::SetMaterial(const std::shared_ptr<Material>& material)
 	{
 		m_material = material;
+	}
+
+	void SubMesh::CompileBoneAssignments()
+	{
+		ASSERT(vertexData);
+
+		const uint16 maxBones = parent.NormalizeBoneAssignments(vertexData->vertexCount, m_boneAssignments);
+		if (maxBones != 0)
+		{
+			Mesh::CompileBoneAssignments(m_boneAssignments, maxBones, blendIndexToBoneIndexMap, vertexData.get());
+		}
+
+		m_boneAssignmentsOutOfDate = true;
+	}
+
+	void SubMesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
+	{
+		ASSERT(!useSharedVertices);
+
+		m_boneAssignments.insert(
+			VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign)
+		);
+		m_boneAssignmentsOutOfDate = true;
+	}
+
+	void SubMesh::ClearBoneAssignments()
+	{
+		m_boneAssignments.clear();
+		m_boneAssignmentsOutOfDate = true;
 	}
 }

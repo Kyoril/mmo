@@ -76,19 +76,27 @@ namespace mmo
 
 	public:
 		VertexElement() = default;
-		VertexElement(uint16 source, uint32 offset, VertexElementType type,
-			VertexElementSemantic semantic, unsigned short index = 0);
+		VertexElement(uint16 source, uint32 offset, VertexElementType type, VertexElementSemantic semantic, uint16 index = 0);
 
 	public:
-		uint16 GetSource() const { return m_source; }
-		uint32 GetOffset() const { return m_offset; }
-		VertexElementType GetType() const { return m_type; }
-		VertexElementSemantic GetSemantic() const { return m_semantic; }
-		uint16 GetIndex() const { return m_index; }
-		uint32 GetSize() const;
+		[[nodiscard]] uint16 GetSource() const { return m_source; }
+
+		[[nodiscard]] uint32 GetOffset() const { return m_offset; }
+
+		[[nodiscard]] VertexElementType GetType() const { return m_type; }
+
+		[[nodiscard]] VertexElementSemantic GetSemantic() const { return m_semantic; }
+
+		[[nodiscard]] uint16 GetIndex() const { return m_index; }
+
+		[[nodiscard]] uint32 GetSize() const;
+
 		static uint32 GetTypeSize(VertexElementType type);
+
 		static uint16 GetTypeCount(VertexElementType type);
-		static VertexElementType MultiplyTypeCount(VertexElementType baseType, unsigned short count);
+
+		static VertexElementType MultiplyTypeCount(VertexElementType baseType, uint16 count);
+
 		static VertexElementType GetBaseType(VertexElementType multiType);
 
 		static void ConvertColourValue(VertexElementType srcType, VertexElementType dstType, uint32* ptr);
@@ -153,27 +161,23 @@ namespace mmo
 		static bool VertexElementLess(const VertexElement& e1, const VertexElement& e2);
 
 	public:
-		size_t GetElementCount() const { return m_elementList.size(); }
+		[[nodiscard]] virtual size_t GetElementCount() const { return m_elementList.size(); }
 
-		const std::list<VertexElement>& GetElements() const;
+		[[nodiscard]] virtual const std::list<VertexElement>& GetElements() const;
 
-		const VertexElement* GetElement(uint16 index) const;
+		[[nodiscard]] virtual const VertexElement* GetElement(uint16 index) const;
 
-		void Sort();
+		virtual void Sort();
 
-		void CloseGapsInSource();
+		virtual void CloseGapsInSource();
 
-		VertexDeclaration* GetAutoOrganizedDeclaration(bool skeletalAnimation, bool vertexAnimation, bool vertexAnimationNormals) const;
+		[[nodiscard]] virtual VertexDeclaration* GetAutoOrganizedDeclaration(bool skeletalAnimation, bool vertexAnimation, bool vertexAnimationNormals) const;
 
-		/** Gets the index of the highest source value referenced by this declaration. */
-		uint16 GetMaxSource() const;
+		[[nodiscard]] virtual uint16 GetMaxSource() const;
 
-		virtual const VertexElement& AddElement(uint16 source, uint32 offset, VertexElementType theType,
-			VertexElementSemantic semantic, uint16 index = 0);
+		virtual const VertexElement& AddElement(uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index = 0);
 
-		virtual const VertexElement& InsertElement(uint16 atPosition,
-			uint16 source, uint32 offset, VertexElementType theType,
-			VertexElementSemantic semantic, uint16 index = 0);
+		virtual const VertexElement& InsertElement(uint16 atPosition, uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index = 0);
 
 		virtual void RemoveElement(uint16 index);
 
@@ -181,17 +185,15 @@ namespace mmo
 
 		virtual void RemoveAllElements();
 
-		virtual void ModifyElement(uint16 elem_index, uint16 source, uint32 offset, VertexElementType theType,
-			VertexElementSemantic semantic, uint16 index = 0);
+		virtual void ModifyElement(uint16 elementIndex, uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index = 0);
 
-		virtual const VertexElement* FindElementBySemantic(VertexElementSemantic sem, uint16 index = 0) const;
+		[[nodiscard]] virtual const VertexElement* FindElementBySemantic(VertexElementSemantic sem, uint16 index = 0) const;
 		
-		virtual std::list<VertexElement> FindElementsBySource(uint16 source) const;
+		[[nodiscard]] virtual  std::list<VertexElement> FindElementsBySource(uint16 source) const;
 
-		/** Gets the vertex size defined by this declaration for a given source. */
-		virtual size_t GetVertexSize(uint16 source) const;
+		[[nodiscard]] virtual uint32 GetVertexSize(uint16 source) const;
 
-		virtual uint16 GetNextFreeTextureCoordinate() const;
+		[[nodiscard]] virtual uint16 GetNextFreeTextureCoordinate() const;
 
 		virtual VertexDeclaration* Clone(GraphicsDevice* device = nullptr) const;
 
@@ -222,7 +224,7 @@ namespace mmo
 		}
 	};
 
-	class VertexBufferBinding
+	class VertexBufferBinding final
 	{
 	public:
 		typedef std::map<uint16, VertexBufferPtr> VertexBufferBindingMap;
@@ -237,28 +239,28 @@ namespace mmo
 		virtual ~VertexBufferBinding();
 
 	public:
-		virtual void SetBinding(uint16 index, const VertexBufferPtr& buffer);
+		void SetBinding(uint16 index, const VertexBufferPtr& buffer);
 
-		virtual void UnsetBinding(uint16 index);
+		void UnsetBinding(uint16 index);
 
-		virtual void UnsetAllBindings();
+		void UnsetAllBindings();
 
-		virtual const VertexBufferBindingMap& GetBindings() const;
+		const VertexBufferBindingMap& GetBindings() const;
 
-		virtual const VertexBufferPtr& GetBuffer(uint16 index) const;
+		const VertexBufferPtr& GetBuffer(uint16 index) const;
 
-		virtual bool IsBufferBound(uint16 index) const;
+		bool IsBufferBound(uint16 index) const;
 
-		virtual size_t GetBufferCount() const { return m_bindingMap.size(); }
+		size_t GetBufferCount() const { return m_bindingMap.size(); }
 
-		virtual uint16 GetNextIndex() const { return m_highestIndex++; }
+		uint16 GetNextIndex() const { return m_highestIndex++; }
 
-		virtual uint16 GetLastBoundIndex() const;
+		uint16 GetLastBoundIndex() const;
 
-		virtual bool HasGaps() const;
+		bool HasGaps() const;
 
-		virtual void CloseGaps(BindingIndexMap& bindingIndexMap);
+		void CloseGaps(BindingIndexMap& bindingIndexMap);
 
-		virtual bool HasInstanceData() const;
+		bool HasInstanceData() const;
 	};
 }

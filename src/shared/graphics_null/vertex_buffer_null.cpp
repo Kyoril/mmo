@@ -22,7 +22,7 @@ namespace mmo
 	{
 	}
 
-	void VertexBufferNull::Set()
+	void VertexBufferNull::Set(uint16 slot)
 	{
 	}
 

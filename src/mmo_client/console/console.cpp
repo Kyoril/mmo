@@ -672,14 +672,14 @@ namespace mmo
 		}
 		
 		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
 		
 		gx.SetVertexFormat(VertexFormat::PosColor);
 		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetBlendMode(BlendMode::Alpha);
 		
-		s_consoleVertBuf->Set();
-		s_consoleIndBuf->Set();
+		s_consoleVertBuf->Set(0);
+		s_consoleIndBuf->Set(0);
 		gx.DrawIndexed();
 		
 		s_consoleTextGeom->Draw();

@@ -1,0 +1,54 @@
+#pragma once
+
+#include <d3d11.h>
+
+#include "graphics/vertex_declaration.h"
+
+namespace mmo
+{
+	class VertexShaderD3D11;
+}
+
+namespace mmo
+{
+	class GraphicsDeviceD3D11;
+
+	class VertexDeclarationD3D11 final : public VertexDeclaration
+	{
+		typedef std::map<VertexShaderD3D11*, ID3D11InputLayout*> ShaderToILayoutMap;
+		typedef std::map<VertexShaderD3D11*, D3D11_INPUT_ELEMENT_DESC*> ShaderToInputDesc;
+
+		ShaderToILayoutMap m_shaderToILayoutMap;
+		ShaderToInputDesc m_d3dElements;
+
+	public:
+		VertexDeclarationD3D11(GraphicsDeviceD3D11& device);
+		~VertexDeclarationD3D11() override;
+
+	private:
+		ID3D11InputLayout* GetILayoutByShader(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
+
+	public:
+		const VertexElement& AddElement(uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index) override;
+
+		const VertexElement& InsertElement(uint16 atPosition, uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index) override;
+
+		void RemoveElement(uint16 index) override;
+
+		void RemoveElement(VertexElementSemantic semantic, uint16 index) override;
+
+		void RemoveAllElements() override;
+
+		void ModifyElement(uint16 elementIndex, uint16 source, uint32 offset, VertexElementType theType,VertexElementSemantic semantic, uint16 index) override;
+
+	public:
+		D3D11_INPUT_ELEMENT_DESC* GetD3DVertexDeclaration(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
+
+		void Bind(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
+
+	private:
+		GraphicsDeviceD3D11& m_device;
+		bool m_needsRebuild{ true };
+
+	};
+}

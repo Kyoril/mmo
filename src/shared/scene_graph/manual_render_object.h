@@ -42,39 +42,25 @@ namespace mmo
 		///	be implemented.
 		virtual void Finish();
 
-	public:
-		/// Renders the operation using the graphics device provided when the operation was created.
-		void Render() const
-		{
-			ASSERT(m_vertexBuffer && "No vertex buffer created, did you call Finish before rendering?");
-
-			m_device.SetTopologyType(GetTopologyType());
-			m_device.SetVertexFormat(GetFormat());
-
-			m_vertexBuffer->Set();
-
-			if (m_indexBuffer)
-			{
-				m_indexBuffer->Set();
-				m_device.DrawIndexed();
-			}
-			else
-			{
-				m_device.Draw(m_vertexBuffer->GetVertexCount());
-			}
-		}
-
 		void PrepareRenderOperation(RenderOperation& operation) override;
+
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
+
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
+
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+
 		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
 	protected:
 		GraphicsDevice& m_device;
 		ManualRenderObject& m_parent;
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
+
+		std::unique_ptr<VertexData> m_vertexData;
+		std::unique_ptr<IndexData> m_indexData;
+
+		//VertexBufferPtr m_vertexBuffer;
+		//IndexBufferPtr m_indexBuffer;
 	};
 
 	/// Wrapper class for a RenderOperation which ensures that the Finish method is called
@@ -246,8 +232,17 @@ namespace mmo
 				}
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
-			
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), false, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+
 			ManualRenderOperation::Finish();
 		}
 
@@ -389,7 +384,16 @@ namespace mmo
 
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), false, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
 
 			ManualRenderOperation::Finish();
 		}

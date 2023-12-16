@@ -32,8 +32,7 @@ namespace mmo
         return false;
 	}
 
-	VertexElement::VertexElement(uint16 source, uint32 offset, VertexElementType type, VertexElementSemantic semantic,
-		unsigned short index)
+	VertexElement::VertexElement(const uint16 source, const uint32 offset, const VertexElementType type, const VertexElementSemantic semantic, const uint16 index)
 	{
 		m_source = source;
 		m_offset = offset;
@@ -47,7 +46,7 @@ namespace mmo
         return GetTypeSize(m_type);
 	}
 
-	uint32 VertexElement::GetTypeSize(VertexElementType type)
+	uint32 VertexElement::GetTypeSize(const VertexElementType type)
 	{
         switch (type)
         {
@@ -110,7 +109,7 @@ namespace mmo
         return 0;
 	}
 
-	uint16 VertexElement::GetTypeCount(VertexElementType type)
+	uint16 VertexElement::GetTypeCount(const VertexElementType type)
 	{
 		switch (type)
 		{
@@ -157,7 +156,7 @@ namespace mmo
         return 0;
 	}
 
-	VertexElementType VertexElement::MultiplyTypeCount(VertexElementType baseType, unsigned short count)
+	VertexElementType VertexElement::MultiplyTypeCount(const VertexElementType baseType, const uint16 count)
 	{
         switch (baseType)
         {
@@ -199,7 +198,7 @@ namespace mmo
         return baseType;
 	}
 
-	VertexElementType VertexElement::GetBaseType(VertexElementType multiType)
+	VertexElementType VertexElement::GetBaseType(const VertexElementType multiType)
 	{
 		switch (multiType)
 		{
@@ -245,7 +244,7 @@ namespace mmo
 		return VertexElementType::Float1;
 	}
 
-	void VertexElement::ConvertColourValue(VertexElementType srcType, VertexElementType dstType, uint32* ptr)
+	void VertexElement::ConvertColourValue(const VertexElementType srcType, const VertexElementType dstType, uint32* ptr)
 	{
         if (srcType == dstType)
         {
@@ -272,7 +271,7 @@ namespace mmo
 		return m_elementList;
 	}
 
-	const VertexElement* VertexDeclaration::GetElement(uint16 index) const
+	const VertexElement* VertexDeclaration::GetElement(const uint16 index) const
 	{
         ASSERT(index < m_elementList.size() && "Index out of bounds");
 
@@ -315,8 +314,7 @@ namespace mmo
         }
 	}
 
-	VertexDeclaration* VertexDeclaration::GetAutoOrganizedDeclaration(bool skeletalAnimation, bool vertexAnimation,
-		bool vertexAnimationNormals) const
+	VertexDeclaration* VertexDeclaration::GetAutoOrganizedDeclaration(const bool skeletalAnimation, const bool vertexAnimation, const bool vertexAnimationNormals) const
 	{
         VertexDeclaration* newDecl = Clone();
 
@@ -365,11 +363,11 @@ namespace mmo
                 // Blend weights/indices can be sharing with their own buffer only
                 splitWithNext = true;
                 break;
-            default:
             case VertexElementSemantic::Diffuse:
             case VertexElementSemantic::TextureCoordinate:
             case VertexElementSemantic::Binormal:
             case VertexElementSemantic::Tangent:
+            default:
                 // Make sure position is separate if animated & there were no normals
                 splitWithPrev = prevSemantic == VertexElementSemantic::Position && (skeletalAnimation || vertexAnimation);
                 break;
@@ -403,13 +401,13 @@ namespace mmo
 	{
 		if (m_elementList.empty())
 		{
-						return 0;
+            return 0;
 		}
 
 		uint16 ret = 0;
-		for (auto i = m_elementList.cbegin(); i != m_elementList.cend(); ++i)
+
+		for (auto elem : m_elementList)
 		{
-			const VertexElement& elem = *i;
 			if (elem.GetSource() > ret)
 			{
 				ret = elem.GetSource();
@@ -419,8 +417,7 @@ namespace mmo
 		return ret;
 	}
 
-	const VertexElement& VertexDeclaration::AddElement(uint16 source, uint32 offset, VertexElementType theType,
-		VertexElementSemantic semantic, uint16 index)
+	const VertexElement& VertexDeclaration::AddElement(uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index)
 	{
 		// Refine colour type to a specific type
         if (theType == VertexElementType::Color)
@@ -431,8 +428,7 @@ namespace mmo
         return m_elementList.emplace_back(source, offset, theType, semantic, index);
 	}
 
-	const VertexElement& VertexDeclaration::InsertElement(uint16 atPosition, uint16 source, uint32 offset,
-		VertexElementType theType, VertexElementSemantic semantic, uint16 index)
+	const VertexElement& VertexDeclaration::InsertElement(const uint16 atPosition, const uint16 source, const uint32 offset, const VertexElementType theType, const VertexElementSemantic semantic, const uint16 index)
 	{
         if (atPosition >= m_elementList.size())
         {
@@ -446,7 +442,7 @@ namespace mmo
         return *i;
 	}
 
-	void VertexDeclaration::RemoveElement(uint16 index)
+	void VertexDeclaration::RemoveElement(const uint16 index)
 	{
         ASSERT(index < m_elementList.size() && "Index out of bounds");
 
@@ -455,7 +451,7 @@ namespace mmo
         m_elementList.erase(i);
 	}
 
-	void VertexDeclaration::RemoveElement(VertexElementSemantic semantic, uint16 index)
+	void VertexDeclaration::RemoveElement(const VertexElementSemantic semantic, const uint16 index)
 	{
 		for (auto i = m_elementList.begin(); i != m_elementList.end(); ++i)
 		{
@@ -473,17 +469,16 @@ namespace mmo
         m_elementList.clear();
 	}
 
-	void VertexDeclaration::ModifyElement(uint16 elem_index, uint16 source, uint32 offset, VertexElementType theType,
-		VertexElementSemantic semantic, uint16 index)
+	void VertexDeclaration::ModifyElement(const uint16 elementIndex, const uint16 source, const uint32 offset, const VertexElementType theType, const VertexElementSemantic semantic, const uint16 index)
 	{
-        ASSERT(elem_index < m_elementList.size() && "Index out of bounds");
+        ASSERT(elementIndex < m_elementList.size() && "Index out of bounds");
 
 		auto i = m_elementList.begin();
-		std::advance(i, elem_index);
+		std::advance(i, elementIndex);
 		*i = VertexElement(source, offset, theType, semantic, index);
 	}
 
-	const VertexElement* VertexDeclaration::FindElementBySemantic(VertexElementSemantic sem, uint16 index) const
+	const VertexElement* VertexDeclaration::FindElementBySemantic(const VertexElementSemantic sem, const uint16 index) const
 	{
         for (auto& elem : m_elementList)
         {
@@ -496,7 +491,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	std::list<VertexElement> VertexDeclaration::FindElementsBySource(uint16 source) const
+	std::list<VertexElement> VertexDeclaration::FindElementsBySource(const uint16 source) const
 	{
 		std::list<VertexElement> ret;
 		for (auto& elem : m_elementList)
@@ -510,9 +505,10 @@ namespace mmo
 		return ret;
 	}
 
-	size_t VertexDeclaration::GetVertexSize(uint16 source) const
+	uint32 VertexDeclaration::GetVertexSize(const uint16 source) const
 	{
-		size_t sz = 0;
+		uint32 sz = 0;
+
 		for (auto& elem : m_elementList)
 		{
 	        if (elem.GetSource() == source)
@@ -559,16 +555,16 @@ namespace mmo
 
 	VertexBufferBinding::~VertexBufferBinding()
 	{
-		VertexBufferBinding::UnsetAllBindings();
+		UnsetAllBindings();
 	}
 
-	void VertexBufferBinding::SetBinding(uint16 index, const VertexBufferPtr& buffer)
+	void VertexBufferBinding::SetBinding(const uint16 index, const VertexBufferPtr& buffer)
 	{
         m_bindingMap[index] = buffer;
         m_highestIndex = std::max(m_highestIndex, static_cast<uint16>(index + 1));
 	}
 
-	void VertexBufferBinding::UnsetBinding(uint16 index)
+	void VertexBufferBinding::UnsetBinding(const uint16 index)
 	{
         const auto it = m_bindingMap.find(index);
         ASSERT(it != m_bindingMap.end() && "Index does not exist");
@@ -587,7 +583,7 @@ namespace mmo
 		return m_bindingMap;
 	}
 
-	const VertexBufferPtr& VertexBufferBinding::GetBuffer(uint16 index) const
+	const VertexBufferPtr& VertexBufferBinding::GetBuffer(const uint16 index) const
 	{
 		const auto it = m_bindingMap.find(index);
 		ASSERT(it != m_bindingMap.end() && "Index does not exist");
@@ -595,7 +591,7 @@ namespace mmo
 		return it->second;
 	}
 
-	bool VertexBufferBinding::IsBufferBound(uint16 index) const
+	bool VertexBufferBinding::IsBufferBound(const uint16 index) const
 	{
 		return m_bindingMap.contains(index);
 	}

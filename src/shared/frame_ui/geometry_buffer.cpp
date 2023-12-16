@@ -39,7 +39,7 @@ namespace mmo
 			gx.BindTexture(batch.first, ShaderType::PixelShader, 0);
 
 			// Setup geometry
-			m_hwBuffer->Set();
+			m_hwBuffer->Set(0);
 
 			// Draw vertex buffer data
 			gx.Draw(batch.second, pos);

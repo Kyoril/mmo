@@ -1,6 +1,9 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "scene.h"
+
+#include <ranges>
+
 #include "camera.h"
 #include "mesh_manager.h"
 #include "render_operation.h"
@@ -261,11 +264,9 @@ namespace mmo
 		RenderOperation op { };
 		renderable.PrepareRenderOperation(op);
 
-		op.vertexBuffer->Set();
-		if (op.useIndexes)
+		if (op.vertexData == nullptr || op.vertexData->vertexCount == 0)
 		{
-			ASSERT(op.indexBuffer);
-			op.indexBuffer->Set();
+			return;
 		}
 
 		auto& gx = GraphicsDevice::Get();
@@ -276,8 +277,7 @@ namespace mmo
 		{
 			material = m_defaultMaterial;
 		}
-		
-		gx.SetTopologyType(op.topology);
+
 		gx.SetVertexFormat(op.vertexFormat);
 
 		// Bind textures to the render stage
@@ -285,29 +285,11 @@ namespace mmo
 
 		gx.SetFaceCullMode(material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
 		gx.SetBlendMode(material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
-
-		// TODO: Set light-dependent settings
-		if (material->IsLit())
-		{
-		}
-		else
-		{
-			
-		}
-
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
+		// Bind vertex layout
 		renderable.PreRender(*this, gx);
-
-		if (op.useIndexes)
-		{
-			gx.DrawIndexed(op.startIndex, op.endIndex);
-		}
-		else
-		{
-			gx.Draw(op.endIndex == 0 ? op.vertexBuffer->GetVertexCount() - op.startIndex : op.endIndex - op.startIndex, op.startIndex);
-		}
-
+		gx.Render(op);
 		renderable.PostRender(*this, gx);
 	}
 

@@ -95,6 +95,12 @@ namespace mmo
 		std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() override;
 
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
+
+		VertexDeclaration* CreateVertexDeclaration() override;
+
+		VertexBufferBinding* CreateVertexBufferBinding() override;
+
+		void Render(const RenderOperation& operation) override;
 		// ~ End GraphicsDevice
 
 	public:

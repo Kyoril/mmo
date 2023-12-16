@@ -81,7 +81,7 @@ namespace mmo
 		Context.Unmap(Buffer.Get(), 0);
 	}
 
-	void IndexBufferD3D11::Set()
+	void IndexBufferD3D11::Set(uint16 slot)
 	{
 		ID3D11DeviceContext& Context = Device;
 		Context.IASetIndexBuffer(Buffer.Get(), IndexBufferFormat(IndexSize), 0);

@@ -14,10 +14,12 @@
 #include "texture_d3d11.h"
 #include "vertex_buffer_d3d11.h"
 #include "vertex_shader_d3d11.h"
+#include "vertex_declaration_d3d11.h"
 
 #include "base/macros.h"
 #include "graphics/depth_stencil_hash.h"
 #include "math/radian.h"
+#include "scene_graph/render_operation.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -930,5 +932,43 @@ namespace mmo
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceD3D11::CreateShaderCompiler()
 	{
 		return std::make_unique<ShaderCompilerD3D11>();
+	}
+
+	VertexDeclaration* GraphicsDeviceD3D11::CreateVertexDeclaration()
+	{
+		return m_vertexDeclarations.emplace_back(std::make_unique<VertexDeclarationD3D11>(*this)).get();
+	}
+
+	VertexBufferBinding* GraphicsDeviceD3D11::CreateVertexBufferBinding()
+	{
+		return GraphicsDevice::CreateVertexBufferBinding();
+	}
+
+	void GraphicsDeviceD3D11::Render(const RenderOperation& operation)
+	{
+		GraphicsDevice::Render(operation);
+
+		// Bind vertex buffers
+		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
+		{
+			if (!vertexBuffer)
+			{
+				continue;
+			}
+
+			vertexBuffer->Set(slot);
+		}
+
+		SetTopologyType(operation.topology);
+
+		if (operation.indexData)
+		{
+			operation.indexData->indexBuffer->Set(0);
+			DrawIndexed(operation.indexData->indexStart, operation.indexData->indexStart + operation.indexData->indexCount);
+		}
+		else
+		{
+			Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
+		}
 	}
 }

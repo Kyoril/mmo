@@ -36,8 +36,9 @@ namespace mmo
 			ASSERT(vertexBufferBinding);
 			ASSERT(vertexDeclaration);
 
-			m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
-			m_device->DestroyVertexDeclaration(*vertexDeclaration);
+			// TODO
+			//m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
+			//m_device->DestroyVertexDeclaration(*vertexDeclaration);
 		}
 	}
 

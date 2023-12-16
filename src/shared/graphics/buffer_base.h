@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "base/typedefs.h"
+
 namespace mmo
 {
 	enum class BufferUsage
@@ -46,7 +48,7 @@ namespace mmo
 		/// 
 		virtual void Unmap() = 0;
 		/// 
-		virtual void Set() = 0;
+		virtual void Set(uint16 slot) = 0;
 	};
 
 	/// Scoped buffer lock which will call map in the beginning and unmap at the destructor.

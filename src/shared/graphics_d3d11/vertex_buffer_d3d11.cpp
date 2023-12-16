@@ -45,15 +45,15 @@ namespace mmo
 		Context.Unmap(Buffer.Get(), 0);
 	}
 
-	void VertexBufferD3D11::Set()
+	void VertexBufferD3D11::Set(const uint16 slot)
 	{
-		ID3D11Buffer* Buffers[1] = { Buffer.Get() };
+		ID3D11Buffer* buffers[1] = { Buffer.Get() };
 
-		UINT Stride = static_cast<UINT>(m_vertexSize);
-		UINT Offset = 0;
+		const UINT stride = m_vertexSize;
+		constexpr UINT offset = 0;
 
-		ID3D11DeviceContext& Context = Device;
-		Context.IASetVertexBuffers(0, ARRAYSIZE(Buffers), Buffers, &Stride, &Offset);
+		ID3D11DeviceContext& context = Device;
+		context.IASetVertexBuffers(slot, ARRAYSIZE(buffers), buffers, &stride, &offset);
 	}
 
 	VertexBufferPtr VertexBufferD3D11::Clone()

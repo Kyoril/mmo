@@ -18,6 +18,11 @@
 
 namespace mmo
 {
+	class RenderOperation;
+}
+
+namespace mmo
+{
 	class Radian;
 
 	/// Enumerates supported graphics api's.
@@ -176,6 +181,8 @@ namespace mmo
 
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
+
+		virtual void Render(const RenderOperation& operation) {}
 
 		/// 
 		virtual void Draw(uint32 vertexCount, uint32 start = 0) = 0;

@@ -26,8 +26,8 @@ namespace mmo
 		VertexDeclaration* vertexDeclaration;
 		VertexBufferBinding* vertexBufferBinding;
 		bool deleteDeclarationBinding;
-		size_t vertexStart;
-		size_t vertexCount;
+		uint32 vertexStart;
+		uint32 vertexCount;
 
 		struct HardwareAnimationData
 		{
@@ -59,7 +59,7 @@ namespace mmo
 	{
 	public:
 		IndexData() = default;
-		~IndexData() override;
+		~IndexData() override = default;
 
 	public:
 		IndexBufferPtr indexBuffer { nullptr };

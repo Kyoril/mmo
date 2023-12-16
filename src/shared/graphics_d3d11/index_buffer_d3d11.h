@@ -18,7 +18,7 @@ namespace mmo
 		//~Begin CGxBufferBase
 		virtual void* Map() override;
 		virtual void Unmap() override;
-		virtual void Set() override;
+		virtual void Set(uint16 slot) override;
 		//~End CGxBufferBase
 
 	private:

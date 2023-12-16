@@ -18,6 +18,8 @@
 
 namespace mmo
 {
+	class VertexData;
+
 	struct VertexBoneAssignment
 	{
 		unsigned int vertexIndex;
@@ -34,6 +36,7 @@ namespace mmo
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
 		typedef std::map<std::string, uint16> SubMeshNameMap;
 		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		typedef std::vector<uint16> IndexMap;
 
 	public:
         explicit Mesh(String name)
@@ -57,8 +60,6 @@ namespace mmo
 		void DestroySubMesh(const std::string& name);
 
 		void SetBounds(const AABB& bounds);
-
-		void Render() const;
 
 		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
 		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
@@ -87,10 +88,23 @@ namespace mmo
 
 		[[nodiscard]] const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
 
+		uint16 NormalizeBoneAssignments(uint64 vertexCount, VertexBoneAssignmentList& assignments) const;
+
+		void CompileBoneAssignments();
+
+		void UpdateCompiledBoneAssignments();
+
+	protected:
+		bool m_boneAssignmentsOutOfDate { false };
+
+        static void BuildIndexMap(const VertexBoneAssignmentList& boneAssignments, IndexMap& boneIndexToBlendIndexMap, IndexMap& blendIndexToBoneIndexMap);
+
+        static void CompileBoneAssignments(const VertexBoneAssignmentList& boneAssignments, uint16 numBlendWeightsPerVertex, IndexMap& blendIndexToBoneIndexMap, const VertexData* targetVertexData);
+
 	public:
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
 		ConstantBufferPtr m_boneMatricesBuffer;
+		std::unique_ptr<VertexData> sharedVertexData{nullptr};
+		IndexMap sharedBlendIndexToBoneIndexMap{};
 
 	private:
 		SubMeshList m_subMeshes;
@@ -101,7 +115,6 @@ namespace mmo
 		String m_name;
 		SkeletonPtr m_skeleton{ nullptr };
 		VertexBoneAssignmentList m_boneAssignments;
-		bool m_boneAssignmentsOutOfDate { false };
 		std::vector<Matrix4> m_boneMatrices;
 	};
 
