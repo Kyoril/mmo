@@ -314,7 +314,7 @@ namespace mmo
 			bindIndex = bind->GetNextIndex();
 		}
 
-		const VertexBufferPtr vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(targetVertexData->vertexCount, sizeof(unsigned char) * 4 + sizeof(float) * numBlendWeightsPerVertex, true);
+		const VertexBufferPtr vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(targetVertexData->vertexCount, sizeof(unsigned char) * 4 + sizeof(float) * numBlendWeightsPerVertex, BufferUsage::DynamicWriteOnlyDiscardable);
 		bind->SetBinding(bindIndex, vertexBuffer);
 
 		const VertexElement* pIdxElem, * pWeightElem;
@@ -349,7 +349,7 @@ namespace mmo
 		// Assign data
 		auto i = boneAssignments.begin();
 		const auto end = boneAssignments.end();
-		auto pBase = static_cast<unsigned char*>(vertexBuffer->Map());
+		auto pBase = static_cast<unsigned char*>(vertexBuffer->Map(LockOptions::Discard));
 
 		// Iterate by vertex
 		float* pWeight;

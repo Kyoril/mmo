@@ -15,7 +15,7 @@ namespace mmo
 
 	ID3D11InputLayout* VertexDeclarationD3D11::GetILayoutByShader(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding)
 	{
-		return boundVertexProgram.InputLayout.Get();
+		return nullptr;
 	}
 
 	const VertexElement& VertexDeclarationD3D11::AddElement(uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index)

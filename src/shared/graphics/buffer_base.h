@@ -13,13 +13,13 @@ namespace mmo
 {
 	enum class BufferUsage
 	{
-		Static,
-		Dynamic,
-		WriteOnly,
-		Discardable,
-		StaticWriteOnly,
-		DynamicWriteOnly,
-		DynamicWriteOnlyDiscardable
+		Static = 1,
+		Dynamic = 2,
+		WriteOnly = 4,
+		Discardable = 8,
+		StaticWriteOnly = Static | WriteOnly,
+		DynamicWriteOnly = Dynamic | WriteOnly,
+		DynamicWriteOnlyDiscardable = Dynamic | WriteOnly | Discardable
 	};
 
 	typedef std::vector<BufferUsage> BufferUsageList;
@@ -44,7 +44,7 @@ namespace mmo
 
 	public:
 		/// This method supports mapping the vertex buffer to access it's data if possible.
-		virtual void* Map() = 0;
+		virtual void* Map(LockOptions lock) = 0;
 		/// 
 		virtual void Unmap() = 0;
 		/// 

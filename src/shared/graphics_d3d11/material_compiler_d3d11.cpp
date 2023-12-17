@@ -860,17 +860,17 @@ namespace mmo
 			<< "\tfloat3 binormal : BINORMAL;\n"
 			<< "\tfloat3 tangent : TANGENT;\n";
 
+		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		{
+			vertexShaderStream
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
+		}
+
 		if (type == VertexShaderType::SkinnedLow || type == VertexShaderType::SkinnedMedium || type == VertexShaderType::SkinnedHigh)
 		{
 			vertexShaderStream
 				<< "\tuint4 boneIndices : BLENDINDICES;\n"
 				<< "\tfloat4 boneWeights : BLENDWEIGHT;\n";
-		}
-
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
-		{
-			vertexShaderStream
-				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 
 		vertexShaderStream

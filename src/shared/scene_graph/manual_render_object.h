@@ -240,7 +240,7 @@ namespace mmo
 			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
 			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
 
-			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), false, vertices.data());
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
 			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
 
 			ManualRenderOperation::Finish();
@@ -392,7 +392,7 @@ namespace mmo
 			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
 			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
 
-			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), false, vertices.data());
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
 			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
 
 			ManualRenderOperation::Finish();

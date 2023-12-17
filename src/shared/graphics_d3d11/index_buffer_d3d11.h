@@ -12,11 +12,11 @@ namespace mmo
 	class IndexBufferD3D11 : public IndexBuffer
 	{
 	public:
-		IndexBufferD3D11(GraphicsDeviceD3D11& InDevice, size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData);
+		IndexBufferD3D11(GraphicsDeviceD3D11& InDevice, size_t IndexCount, IndexBufferSize IndexSize, BufferUsage usage, const void* InitialData);
 
 	public:
 		//~Begin CGxBufferBase
-		virtual void* Map() override;
+		virtual void* Map(LockOptions lock) override;
 		virtual void Unmap() override;
 		virtual void Set(uint16 slot) override;
 		//~End CGxBufferBase

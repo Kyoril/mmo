@@ -15,6 +15,8 @@ namespace mmo
 	public:
 		void Update(void* data) override;
 
+		ID3D11Buffer* GetBuffer() const { return m_buffer.Get(); }
+
 	protected:
 		ID3D11Device& m_device;
 		ID3D11DeviceContext& m_context;

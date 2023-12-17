@@ -460,6 +460,26 @@ namespace mmo
 		return result;
 	}
 
+	D3D11_MAP MapLockOptionsToD3D11(LockOptions options)
+	{
+		switch(options)
+		{
+		case LockOptions::Discard:
+			return D3D11_MAP_WRITE_DISCARD;
+		case LockOptions::NoOverwrite:
+			return D3D11_MAP_WRITE_NO_OVERWRITE;
+		case LockOptions::WriteOnly:
+			return D3D11_MAP_WRITE;
+		case LockOptions::ReadOnly:
+			return D3D11_MAP_READ;
+		case LockOptions::Normal:
+			return D3D11_MAP_WRITE_DISCARD;
+		}
+
+		UNREACHABLE();
+		return D3D11_MAP_WRITE_DISCARD;
+	}
+
 	GraphicsDeviceD3D11::GraphicsDeviceD3D11()
 		: m_rasterizerDesc()
 		  , m_samplerDesc(), m_depthStencilDesc()
@@ -601,14 +621,14 @@ namespace mmo
 		m_autoCreatedWindow->Clear(flags);
 	}
 
-	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void * initialData)
+	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void * initialData)
 	{
-		return std::make_shared<VertexBufferD3D11>(*this, vertexCount, vertexSize, dynamic, initialData);
+		return std::make_shared<VertexBufferD3D11>(*this, vertexCount, vertexSize, usage, initialData);
 	}
 
-	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void * initialData)
+	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void * initialData)
 	{
-		return std::make_shared<IndexBufferD3D11>(*this, indexCount, indexSize, initialData);
+		return std::make_shared<IndexBufferD3D11>(*this, indexCount, indexSize, usage, initialData);
 	}
 
 	ConstantBufferPtr GraphicsDeviceD3D11::CreateConstantBuffer(size_t size, const void* initialData)
@@ -957,6 +977,16 @@ namespace mmo
 			}
 
 			vertexBuffer->Set(slot);
+		}
+
+		// Bind additional constant buffers if any
+		int startSlot = 1;
+		for (auto& buffer : operation.vertexConstantBuffers)
+		{
+			ASSERT(buffer);
+
+			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
+			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
 		}
 
 		SetTopologyType(operation.topology);

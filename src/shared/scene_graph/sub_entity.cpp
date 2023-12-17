@@ -18,7 +18,7 @@ namespace mmo
 	{
 		if (m_parent.GetMesh()->HasSkeleton())
 		{
-			operation.vertexConstantBuffers.push_back(m_parent.GetMesh()->m_boneMatricesBuffer.get());
+			operation.vertexConstantBuffers.push_back(m_parent.m_boneMatrixBuffer.get());
 		}
 
 		m_subMesh.PrepareRenderOperation(operation);

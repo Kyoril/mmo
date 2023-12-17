@@ -15,6 +15,8 @@ using Microsoft::WRL::ComPtr;
 
 namespace mmo
 {
+	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
+
 	/// This is the d3d11 implementation of the graphics device class.
 	class GraphicsDeviceD3D11 final
 		: public GraphicsDevice
@@ -38,9 +40,9 @@ namespace mmo
 
 		void Clear(ClearFlags flags = ClearFlags::None) override;
 
-		VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void* initialData = nullptr) override;
+		VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* initialData = nullptr) override;
 
-		IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void* initialData = nullptr) override;
+		IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData = nullptr) override;
 
 		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
 

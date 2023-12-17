@@ -354,7 +354,7 @@ namespace mmo
 		subMesh.indexData = std::make_unique<IndexData>();
 		subMesh.indexData->indexStart = indexStart;
 		subMesh.indexData->indexCount = indexEnd - indexStart;
-		subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, m_entry.indices.data());
+		subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, m_entry.indices.data());
 		// TODO: IndexBuffer?
 
 		SubMeshEntry entry{};
@@ -468,7 +468,7 @@ namespace mmo
 		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
 
 		const uint32 vertexSize = decl->GetVertexSize(0);
-		const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, false, vertices.data());
+		const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, BufferUsage::StaticWriteOnly, vertices.data());
 		m_mesh.sharedVertexData->vertexBufferBinding->SetBinding(0, buffer);
 
 		if (m_mesh.HasSkeleton())

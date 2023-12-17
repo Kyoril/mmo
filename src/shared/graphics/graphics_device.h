@@ -171,10 +171,10 @@ namespace mmo
 		virtual void Clear(ClearFlags flags = ClearFlags::None) = 0;
 
 		/// Creates a new vertex buffer.
-		virtual VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void* initialData = nullptr) = 0;
+		virtual VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* initialData = nullptr) = 0;
 
 		/// Creates a new index buffer.
-		virtual IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void* initialData = nullptr) = 0;
+		virtual IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData = nullptr) = 0;
 
 		/// Creates a new constant buffer.
 		virtual ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) = 0;

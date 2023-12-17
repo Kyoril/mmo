@@ -55,7 +55,7 @@ namespace mmo
 			if (copyData)
 			{
 				// create new buffer with the same settings
-				destBuffer = dev->CreateVertexBuffer(sourceBuffer->GetVertexSize(), sourceBuffer->GetVertexCount(), sourceBuffer->IsDynamic(), nullptr);
+				destBuffer = dev->CreateVertexBuffer(sourceBuffer->GetVertexSize(), sourceBuffer->GetVertexCount(), sourceBuffer->GetUsage(), nullptr);
 
 				// copy data
 				// TODO: dstBuf->copyData(*sourceBuffer, 0, 0, sourceBuffer->GetVertexSize(), true);

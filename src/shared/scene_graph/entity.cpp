@@ -42,6 +42,11 @@ namespace mmo
 		{
 			renderQueue.AddRenderable(*subEntity, GetRenderQueueGroup());
 		}
+
+		if (m_mesh->HasSkeleton())
+		{
+			UpdateAnimations();
+		}
 	}
 
 	void Entity::SetMaterial(const std::shared_ptr<Material>& material)
@@ -50,6 +55,21 @@ namespace mmo
 		{
 			subEntity->SetMaterial(material);
 		}
+	}
+
+	void Entity::UpdateAnimations()
+	{
+		// Move matrices into buffer
+		ASSERT(m_mesh->GetSkeleton());
+
+		if (m_boneMatrices.size() != m_mesh->GetSkeleton()->GetNumBones())
+		{
+			m_boneMatrices.resize(m_mesh->GetSkeleton()->GetNumBones());
+			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_mesh->GetSkeleton()->GetNumBones(), m_boneMatrices.data());
+		}
+
+		m_mesh->GetSkeleton()->GetBoneMatrices(m_boneMatrices.data());
+		m_boneMatrixBuffer->Update(m_boneMatrices.data());
 	}
 
 	void Entity::SetCurrentCamera(Camera& cam)

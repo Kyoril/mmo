@@ -158,6 +158,7 @@ namespace mmo
 	void Material::BindShaders(GraphicsDevice& device)
 	{
 		// Apply
+
 		if (m_vertexShader[0]) m_vertexShader[0]->Set();
 		if (m_pixelShader) m_pixelShader->Set();
 	}

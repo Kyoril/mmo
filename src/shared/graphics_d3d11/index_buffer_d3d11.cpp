@@ -41,7 +41,7 @@ namespace mmo
 	}
 
 
-	IndexBufferD3D11::IndexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData)
+	IndexBufferD3D11::IndexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t IndexCount, IndexBufferSize IndexSize, BufferUsage usage, const void* InitialData)
 		: IndexBuffer(IndexCount, IndexSize)
 		, Device(InDevice)
 	{
@@ -65,12 +65,12 @@ namespace mmo
 		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&BufferDesc, InitialData == nullptr ? nullptr : &InitData, &Buffer)));
 	}
 
-	void * IndexBufferD3D11::Map()
+	void * IndexBufferD3D11::Map(LockOptions lock)
 	{
 		ID3D11DeviceContext& Context = Device;
 
 		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &Sub)));
+		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &Sub)));
 
 		return Sub.pData;
 	}

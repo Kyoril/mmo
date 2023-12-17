@@ -97,14 +97,14 @@ namespace mmo
 	{
 	}
 
-	VertexBufferPtr GraphicsDeviceNull::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
+	VertexBufferPtr GraphicsDeviceNull::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, BufferUsage usage, const void * InitialData)
 	{
-		return std::make_shared<VertexBufferNull>(*this, VertexCount, VertexSize, dynamic, InitialData);
+		return std::make_shared<VertexBufferNull>(*this, VertexCount, VertexSize, usage, InitialData);
 	}
 
-	IndexBufferPtr GraphicsDeviceNull::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void * InitialData)
+	IndexBufferPtr GraphicsDeviceNull::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, BufferUsage usage, const void * InitialData)
 	{
-		return std::make_shared<IndexBufferNull>(*this, IndexCount, IndexSize, InitialData);
+		return std::make_shared<IndexBufferNull>(*this, IndexCount, IndexSize, usage, InitialData);
 	}
 
 	ShaderPtr GraphicsDeviceNull::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)

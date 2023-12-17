@@ -14,6 +14,8 @@ namespace mmo
 
 	class Entity : public MovableObject
 	{
+		friend class SubEntity;
+
 	public:
 
 		typedef LinearSet<Entity*> EntitySet;
@@ -49,6 +51,9 @@ namespace mmo
 		T* GetUserObject() const { return static_cast<T*>(m_userObject); }
 
 	protected:
+		void UpdateAnimations();
+
+	protected:
 		MeshPtr m_mesh{nullptr};
 
 		typedef std::vector<std::unique_ptr<SubEntity>> SubEntities;
@@ -64,6 +69,8 @@ namespace mmo
 		mutable AABB m_fullBoundingBox {};
 
 		void* m_userObject{ nullptr };
+
+		std::vector<Matrix4> m_boneMatrices;
 		
 	protected:
 		void BuildSubEntityList(const MeshPtr& mesh, SubEntities& subEntities);
@@ -78,5 +85,8 @@ namespace mmo
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
+
+	private:
+		ConstantBufferPtr m_boneMatrixBuffer;
 	};
 }
