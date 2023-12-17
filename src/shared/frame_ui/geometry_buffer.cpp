@@ -10,7 +10,7 @@ namespace mmo
 	GeometryBuffer::GeometryBuffer()
 		: m_sync(false)
 	{
-		m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(64, sizeof(Vertex), BufferUsage::StaticWriteOnly, nullptr);
+		m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(64, sizeof(Vertex), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
 	}
 
 	void GeometryBuffer::Draw()
@@ -133,7 +133,7 @@ namespace mmo
 			}
 
 			// Reallocate the buffer
-			m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(size, sizeof(Vertex), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
+			m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(size, sizeof(Vertex), BufferUsage::DynamicWriteOnly, nullptr);
 		}
 
 		// Copy vertex data into hw buffer

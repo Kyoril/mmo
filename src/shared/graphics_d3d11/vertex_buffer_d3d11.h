@@ -12,7 +12,7 @@ namespace mmo
 	class VertexBufferD3D11 final : public VertexBuffer
 	{
 	public:
-		VertexBufferD3D11(GraphicsDeviceD3D11& device, size_t VertexCount, size_t VertexSize, BufferUsage usage, const void* InitialData = nullptr);
+		VertexBufferD3D11(GraphicsDeviceD3D11& device, uint32 vertexCount, uint32 vertexSize, BufferUsage usage, const void* initialData = nullptr);
 
 	public:
 		//~Begin CGxBufferBase
@@ -28,6 +28,5 @@ namespace mmo
 	private:
 		GraphicsDeviceD3D11& m_device;
 		ComPtr<ID3D11Buffer> m_buffer;
-		BufferUsage m_usage;
 	};
 }

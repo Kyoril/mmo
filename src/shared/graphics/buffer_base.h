@@ -40,7 +40,7 @@ namespace mmo
 	{
 	public:
 		/// Virtual default destructor because of inheritance.
-		virtual ~BufferBase() = default;
+		virtual ~BufferBase() override = default;
 
 	public:
 		/// This method supports mapping the vertex buffer to access it's data if possible.
@@ -57,30 +57,30 @@ namespace mmo
 	class CScopedGxBufferLock
 	{
 	public:
-		CScopedGxBufferLock(BufferBase& InBuffer)
-			: Buffer(InBuffer)
+		CScopedGxBufferLock(BufferBase& buffer, const LockOptions options)
+			: m_buffer(buffer)
 		{
-			Memory = reinterpret_cast<T*>(Buffer.Map());
+			m_memory = static_cast<T*>(m_buffer.Map(options));
 		}
 		~CScopedGxBufferLock()
 		{
-			Buffer.Unmap();
+			m_buffer.Unmap();
 		}
 
 	public:
 		T* Get()
 		{
-			return Memory;
+			return m_memory;
 		}
-		T* operator[](std::size_t Index)
+		T* operator[](std::size_t index)
 		{
-			return Memory + Index;
+			return m_memory + index;
 		}
 
 		T* operator->() const { return Get(); }
 
 	private:
-		BufferBase& Buffer;
-		T* Memory;
+		BufferBase& m_buffer;
+		T* m_memory;
 	};
 }

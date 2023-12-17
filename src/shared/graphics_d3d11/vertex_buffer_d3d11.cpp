@@ -11,43 +11,43 @@ namespace mmo
 		return (static_cast<uint32>(usage) & static_cast<uint32>(BufferUsage::Dynamic)) != 0;
 	}
 
-	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & device, size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* InitialData)
+	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & device, const uint32 vertexCount, const uint32 vertexSize, const BufferUsage usage, const void* initialData)
 		: VertexBuffer(vertexCount, vertexSize, usage)
 		, m_device(device)
 	{
 		// Allocate vertex buffer
-		D3D11_BUFFER_DESC BufferDesc;
-		ZeroMemory(&BufferDesc, sizeof(BufferDesc));
-		BufferDesc.Usage = IsDynamicUsage(usage) ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
-		BufferDesc.ByteWidth = static_cast<UINT>(m_vertexSize * m_vertexCount);
-		BufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-		BufferDesc.CPUAccessFlags = IsDynamicUsage(usage) ? D3D11_CPU_ACCESS_WRITE : 0;
-		BufferDesc.MiscFlags = 0;
+		D3D11_BUFFER_DESC bufferDesc;
+		ZeroMemory(&bufferDesc, sizeof(bufferDesc));
+		bufferDesc.Usage = IsDynamicUsage(usage) ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
+		bufferDesc.ByteWidth = m_vertexSize * m_vertexCount;
+		bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		bufferDesc.CPUAccessFlags = IsDynamicUsage(usage) ? D3D11_CPU_ACCESS_WRITE : 0;
+		bufferDesc.MiscFlags = 0;
 
 		// Fill buffer with initial data on creation to speed things up
-		D3D11_SUBRESOURCE_DATA InitData;
-		InitData.pSysMem = InitialData;
-		InitData.SysMemPitch = 0;
-		InitData.SysMemSlicePitch = 0;
+		D3D11_SUBRESOURCE_DATA initData;
+		initData.pSysMem = initialData;
+		initData.SysMemPitch = 0;
+		initData.SysMemSlicePitch = 0;
 
 		ID3D11Device& D3DDevice = m_device;
-		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&BufferDesc, InitialData == nullptr ? nullptr : &InitData, &m_buffer)));
+		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&bufferDesc, initialData == nullptr ? nullptr : &initData, &m_buffer)));
 	}
 
-	void * VertexBufferD3D11::Map(LockOptions lock)
+	void * VertexBufferD3D11::Map(const LockOptions lock)
 	{
-		ID3D11DeviceContext& Context = m_device;
+		ID3D11DeviceContext& context = m_device;
 
-		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(m_buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &Sub)));
+		D3D11_MAPPED_SUBRESOURCE sub;
+		VERIFY(SUCCEEDED(context.Map(m_buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &sub)));
 
-		return Sub.pData;
+		return sub.pData;
 	}
 
 	void VertexBufferD3D11::Unmap()
 	{
-		ID3D11DeviceContext& Context = m_device;
-		Context.Unmap(m_buffer.Get(), 0);
+		ID3D11DeviceContext& context = m_device;
+		context.Unmap(m_buffer.Get(), 0);
 	}
 
 	void VertexBufferD3D11::Set(const uint16 slot)
@@ -65,15 +65,15 @@ namespace mmo
 	{
 		auto buffer = std::make_shared<VertexBufferD3D11>(m_device, m_vertexCount, m_vertexSize, m_usage);
 
-		ID3D11DeviceContext& Context = m_device;
-		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(m_buffer.Get(), 0, D3D11_MAP_READ, 0, &Sub)));
+		ID3D11DeviceContext& context = m_device;
+		D3D11_MAPPED_SUBRESOURCE sub;
+		VERIFY(SUCCEEDED(context.Map(m_buffer.Get(), 0, D3D11_MAP_READ, 0, &sub)));
 
 		void* newBufferData = buffer->Map(LockOptions::Discard);
-		memcpy(newBufferData, Sub.pData, m_vertexSize * m_vertexCount);
+		memcpy(newBufferData, sub.pData, m_vertexSize * m_vertexCount);
 		buffer->Unmap();
 
-		Context.Unmap(m_buffer.Get(), 0);
+		context.Unmap(m_buffer.Get(), 0);
 
 		return std::move(buffer);
 	}
