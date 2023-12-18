@@ -39,7 +39,7 @@ namespace mmo
         return m_creator.CreateBone(name);
     }
 
-    void Bone::SetBindingPose(void)
+    void Bone::SetBindingPose()
     {
         SetInitialState();
 
@@ -57,7 +57,7 @@ namespace mmo
     void Bone::SetManuallyControlled(bool manuallyControlled)
     {
         m_manuallyControlled = manuallyControlled;
-        //m_creator.NotifyManualBoneStateChange(*this);
+        m_creator.NotifyManualBoneStateChange(*this);
     }
 
     bool Bone::IsManuallyControlled() const
@@ -80,7 +80,6 @@ namespace mmo
         // binding pose bone space, and then transform to current
         // derived bone space.
         const Vector3 locTranslate = GetDerivedPosition() + locRotate * (locScale * m_bindDerivedInversePosition);
-
         m.MakeTransform(locTranslate, locScale, locRotate);
     }
 
@@ -96,7 +95,7 @@ namespace mmo
         if (IsManuallyControlled())
         {
             // Dirty the skeleton if manually controlled so animation can be updated
-            //m_creator.NotifyManualBonesDirty();
+            m_creator.NotifyManualBonesDirty();
         }
     }
 }

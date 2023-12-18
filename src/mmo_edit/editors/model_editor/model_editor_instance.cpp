@@ -74,6 +74,7 @@ namespace mmo
 		{
 			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
 		}
+
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
 		{
@@ -95,6 +96,7 @@ namespace mmo
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
 			}
 		}
+
 	}
 
 	ModelEditorInstance::~ModelEditorInstance()
@@ -113,6 +115,19 @@ namespace mmo
 	{
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
+
+		if (auto& skeleton = m_mesh->GetSkeleton())
+		{
+			if (auto* bone = skeleton->GetBone(1))
+			{
+				bone->Yaw(Degree(1), TransformSpace::Parent);
+				bone->SetManuallyControlled(true);
+				bone->Update(true, false);
+
+				Matrix4 offsetMatrix;
+				bone->GetOffsetTransform(offsetMatrix);
+			}
+		}
 
 		auto& gx = GraphicsDevice::Get();
 

@@ -88,11 +88,6 @@ namespace mmo
 		{
 			RenderOperation op;
 			submesh->PrepareRenderOperation(op);
-			if (const auto& material = submesh->GetMaterial())
-			{
-				material->Apply(gx);
-			}
-
 			gx.Render(op);
 		}
 

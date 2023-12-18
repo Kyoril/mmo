@@ -167,6 +167,7 @@ namespace mmo
 			bone->SetPosition(pos);
 			bone->SetOrientation(rot);
 			bone->SetScale(scale);
+			bone->SetBindingPose();
 		}
 
 		return reader;

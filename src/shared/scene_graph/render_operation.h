@@ -14,12 +14,14 @@ namespace mmo
 
 		VertexFormat vertexFormat { VertexFormat::PosColor };
 
-		VertexData* vertexData;
+		VertexData* vertexData{ nullptr };
 
-		IndexData* indexData;
+		IndexData* indexData{ nullptr };
 
-		std::vector<ConstantBuffer*> vertexConstantBuffers;
+		MaterialPtr material{nullptr};
 
-		std::vector<ConstantBuffer*> pixelConstantBuffers;
+		std::vector<ConstantBuffer*> vertexConstantBuffers{};
+
+		std::vector<ConstantBuffer*> pixelConstantBuffers{};
 	};
 }

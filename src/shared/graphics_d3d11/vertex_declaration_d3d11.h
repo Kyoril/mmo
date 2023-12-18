@@ -1,6 +1,7 @@
 #pragma once
 
 #include <d3d11.h>
+#include <wrl/client.h>
 
 #include "graphics/vertex_declaration.h"
 
@@ -15,7 +16,7 @@ namespace mmo
 
 	class VertexDeclarationD3D11 final : public VertexDeclaration
 	{
-		typedef std::map<VertexShaderD3D11*, ID3D11InputLayout*> ShaderToILayoutMap;
+		typedef std::map<VertexShaderD3D11*, Microsoft::WRL::ComPtr<ID3D11InputLayout>> ShaderToILayoutMap;
 		typedef std::map<VertexShaderD3D11*, D3D11_INPUT_ELEMENT_DESC*> ShaderToInputDesc;
 
 		ShaderToILayoutMap m_shaderToILayoutMap;
@@ -42,8 +43,6 @@ namespace mmo
 		void ModifyElement(uint16 elementIndex, uint16 source, uint32 offset, VertexElementType theType,VertexElementSemantic semantic, uint16 index) override;
 
 	public:
-		D3D11_INPUT_ELEMENT_DESC* GetD3DVertexDeclaration(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
-
 		void Bind(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
 
 	private:

@@ -156,8 +156,7 @@ namespace mmo
 
 		for (const auto& bone : m_boneList)
 		{
-			bone->GetOffsetTransform(*matrices);
-			matrices++;
+			bone->GetOffsetTransform(*matrices++);
 		}
 	}
 

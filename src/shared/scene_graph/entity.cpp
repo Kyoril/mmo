@@ -62,10 +62,11 @@ namespace mmo
 		// Move matrices into buffer
 		ASSERT(m_mesh->GetSkeleton());
 
-		if (m_boneMatrices.size() != m_mesh->GetSkeleton()->GetNumBones())
+		if (m_boneMatrices.size() != 128)
 		{
-			m_boneMatrices.resize(m_mesh->GetSkeleton()->GetNumBones());
-			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_mesh->GetSkeleton()->GetNumBones(), m_boneMatrices.data());
+			m_boneMatrices.resize(128);
+			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(
+				sizeof(Matrix4) * 128, m_boneMatrices.data());
 		}
 
 		m_mesh->GetSkeleton()->GetBoneMatrices(m_boneMatrices.data());

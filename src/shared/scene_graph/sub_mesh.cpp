@@ -33,6 +33,7 @@ namespace mmo
 		op.indexData = indexData.get();
 		op.topology = TopologyType::TriangleList;
 		op.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
+		op.material = m_material;
 	}
 
 	void SubMesh::SetMaterialName(const String& name)

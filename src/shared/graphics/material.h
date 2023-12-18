@@ -129,6 +129,10 @@ namespace mmo
 		/// @param compiler The compiler to use for compiling the material.
 		bool Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler);
 
+		ShaderPtr& GetVertexShader(VertexShaderType type) noexcept { return m_vertexShader[static_cast<uint32_t>(type)]; }
+
+		ShaderPtr& GetPixelShader() noexcept { return m_pixelShader; }
+
 		void Apply(GraphicsDevice& device);
 
 	private:

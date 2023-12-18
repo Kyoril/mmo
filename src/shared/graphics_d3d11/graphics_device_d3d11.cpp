@@ -18,6 +18,8 @@
 
 #include "base/macros.h"
 #include "graphics/depth_stencil_hash.h"
+#include "log/default_log_levels.h"
+#include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
 
@@ -968,6 +970,30 @@ namespace mmo
 	{
 		GraphicsDevice::Render(operation);
 
+		ASSERT(operation.material);
+		if (!operation.material)
+		{
+			return;
+		}
+		
+		// TODO: Remove this call / make it internal to reduce the amount of state changes! Materials bring their own assigned shaders and vertex data brings its own input layout
+		SetVertexFormat(operation.vertexFormat);
+
+		// Apply material
+		operation.material->Apply(*this);
+
+		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();
+		if (!vertexShader)
+		{
+			WLOG("No skinning vertex shader found in material " << operation.material->GetName() << " - falling back to default vertex shader");
+			vertexShader = operation.material->GetVertexShader(VertexShaderType::Default).get();
+		}
+
+		// By now we should have a vertex shader
+		ASSERT(vertexShader);
+		vertexShader->Set();
+
 		// Bind vertex buffers
 		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
 		{
@@ -989,6 +1015,10 @@ namespace mmo
 			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
 		}
 
+		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
+		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
+
+		static_cast<VertexDeclarationD3D11*>(operation.vertexData->vertexDeclaration)->Bind(*static_cast<VertexShaderD3D11*>(vertexShader), operation.vertexData->vertexBufferBinding);
 		SetTopologyType(operation.topology);
 
 		if (operation.indexData)

@@ -203,7 +203,7 @@ namespace mmo
 		{
 			ASSERT(!m_lines.empty() && "At least one line has to be added!");
 			
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_lines.size() * 2);
 
 			bool firstLine = true;
@@ -211,10 +211,10 @@ namespace mmo
 			for(auto& line : m_lines)
 			{
 
-				const POS_COL_VERTEX v1 { line.GetStartPosition(), line.GetStartColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1 { line.GetStartPosition(), line.GetStartColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v1);
 
-				const POS_COL_VERTEX v2 { line.GetEndPosition(), line.GetEndColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v2 { line.GetEndPosition(), line.GetEndColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v2);
 				
 				if (firstLine)
@@ -238,7 +238,11 @@ namespace mmo
 
 			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
 			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
-			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
 
 			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
 			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
@@ -357,7 +361,7 @@ namespace mmo
 		{
 			ASSERT(!m_triangles.empty() && "At least one triangle has to be added!");
 
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_triangles.size() * 2);
 
 			bool firstVertex = true;
@@ -366,7 +370,7 @@ namespace mmo
 			{
 				for (uint8_t i = 0; i < 3; ++i)
 				{
-					const POS_COL_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i) };
+					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 					vertices.emplace_back(v1);
 
 					if (firstVertex)
@@ -381,7 +385,6 @@ namespace mmo
 						m_boundingBox.max = TakeMaximum(m_boundingBox.max, triangle.GetPosition(i));
 					}
 				}
-
 			}
 
 			m_vertexData = std::make_unique<VertexData>();
@@ -390,7 +393,11 @@ namespace mmo
 
 			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
 			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
-			decl->AddElement(0, sizeof(float) * 3, VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
 
 			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
 			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
