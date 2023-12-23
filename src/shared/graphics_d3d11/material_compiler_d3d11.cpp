@@ -1001,9 +1001,9 @@ namespace mmo
 		if (m_lit)
 		{
 			vertexShaderStream
-				<< "\toutput.binormal = normalize(mul(transformedBinormal, (float3x3)matWorld));\n"
-				<< "\toutput.tangent = normalize(mul(transformedTangent, (float3x3)matWorld));\n"
-				<< "\toutput.normal = normalize(mul(transformedNormal, (float3x3)matWorld));\n";
+				<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"
+				<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)matWorld));\n"
+				<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)matWorld));\n";
 		}
 
 		// Main procedure end
