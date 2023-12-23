@@ -198,15 +198,6 @@ namespace mmo
 						bone->SetOrientation(boneTrans.ExtractQuaternion());
 						bone->SetScale(boneTrans.GetScale());
 						bone->SetBindingPose();
-
-						for (uint32 j = 0; j < mesh.mBones[i]->mNumWeights; ++j)
-						{
-							VertexBoneAssignment assignment{};
-							assignment.boneIndex = i;
-							assignment.vertexIndex = mesh.mBones[i]->mWeights[j].mVertexId;
-							assignment.weight = mesh.mBones[i]->mWeights[j].mWeight;
-							entry.boneAssignments.push_back(assignment);
-						}
 					}
 				}
 
@@ -251,6 +242,25 @@ namespace mmo
 		MeshEntry& entry = m_meshEntries.front();
 		uint32 indexOffset = entry.vertices.size();
 		uint32 subMeshIndexStart = entry.indices.size();
+
+		for (uint32 i = 0; i < mesh.mNumBones; ++i)
+		{
+			aiNode* boneNode = scene.mRootNode->FindNode(mesh.mBones[i]->mName.C_Str());
+			if (boneNode)
+			{
+				Bone* bone = m_skeleton->GetBone(mesh.mBones[i]->mName.C_Str());
+				ASSERT(bone);
+
+				for (uint32 j = 0; j < mesh.mBones[i]->mNumWeights; ++j)
+				{
+					VertexBoneAssignment assignment{};
+					assignment.boneIndex = i;
+					assignment.vertexIndex = mesh.mBones[i]->mWeights[j].mVertexId + indexOffset;
+					assignment.weight = mesh.mBones[i]->mWeights[j].mWeight;
+					entry.boneAssignments.push_back(assignment);
+				}
+			}
+		}
 
 		// Build vertex data
 		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumVertices << " vertices");

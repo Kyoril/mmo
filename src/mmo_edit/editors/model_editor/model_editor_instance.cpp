@@ -120,7 +120,7 @@ namespace mmo
 		{
 			if (auto* bone = skeleton->GetBone(1))
 			{
-				bone->Yaw(Degree(1), TransformSpace::Parent);
+				bone->Yaw(Degree(1), TransformSpace::Local);
 				bone->SetManuallyControlled(true);
 				bone->Update(true, false);
 
