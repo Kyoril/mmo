@@ -167,7 +167,6 @@ namespace mmo
 			bone->SetPosition(pos);
 			bone->SetOrientation(rot);
 			bone->SetScale(scale);
-			bone->SetBindingPose();
 		}
 
 		return reader;
@@ -206,6 +205,8 @@ namespace mmo
 
 	bool SkeletonDeserializer::OnReadFinished() noexcept
 	{
+		m_skeleton.SetBindingPose();
+
 		return ChunkReader::OnReadFinished();
 	}
 }

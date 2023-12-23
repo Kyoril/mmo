@@ -197,7 +197,6 @@ namespace mmo
 						bone->SetPosition(boneTrans.GetTrans());
 						bone->SetOrientation(boneTrans.ExtractQuaternion());
 						bone->SetScale(boneTrans.GetScale());
-						bone->SetBindingPose();
 					}
 				}
 
@@ -258,6 +257,8 @@ namespace mmo
 					assignment.vertexIndex = mesh.mBones[i]->mWeights[j].mVertexId + indexOffset;
 					assignment.weight = mesh.mBones[i]->mWeights[j].mWeight;
 					entry.boneAssignments.push_back(assignment);
+
+					//DLOG("\tVERTEX:\t" << assignment.vertexIndex << "\tBONE:\t" << assignment.boneIndex << "\tWEIGHT:\t" << assignment.weight);
 				}
 			}
 		}
@@ -381,6 +382,8 @@ namespace mmo
 
 		if (m_skeleton)
 		{
+			m_skeleton->SetBindingPose();
+
 			return SaveSkeletonFile(filenameWithoutExtension.string(), currentAssetPath);
 		}
 
