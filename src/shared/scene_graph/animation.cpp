@@ -2,6 +2,7 @@
 #include "animation.h"
 
 #include <cmath>
+#include <ranges>
 
 namespace mmo
 {
@@ -46,16 +47,13 @@ namespace mmo
 			BuildKeyFrameTimeList();
 		}
 
-
-		float totalAnimationLength = m_duration;
-
-		if (timePos > totalAnimationLength && totalAnimationLength > 0.0f)
+		if (const float totalAnimationLength = m_duration; timePos > totalAnimationLength && totalAnimationLength > 0.0f)
 		{
 			timePos = std::fmod(timePos, totalAnimationLength);
 		}
 
 		// Search for global index
-		const auto it = std::lower_bound(m_keyFrameTimes.begin(), m_keyFrameTimes.end(), timePos);
+		const auto it = std::ranges::lower_bound(m_keyFrameTimes, timePos);
 		return {timePos, static_cast<uint32>(std::distance(m_keyFrameTimes.begin(), it))};
 	}
 
@@ -79,6 +77,21 @@ namespace mmo
 		return ret;
 	}
 
+	uint16 Animation::GetNumNodeTracks() const
+	{
+		return static_cast<uint16>(m_nodeTrackList.size());
+	}
+
+	NodeAnimationTrack* Animation::GetNodeTrack(const uint16 handle) const
+	{
+		if (const auto it = m_nodeTrackList.find(handle); it != m_nodeTrackList.end())
+		{
+			return it->second.get();
+		}
+
+		return nullptr;
+	}
+
 	void Animation::DestroyAllNodeTracks()
 	{
 		m_nodeTrackList.clear();
@@ -90,14 +103,58 @@ namespace mmo
 		DestroyAllNodeTracks();
 	}
 
+	void Animation::ApplyBaseKeyFrame()
+	{
+		if (m_useBaseKeyFrame)
+		{
+			Animation* baseAnim = this;
+			if (!m_baseKeyFrameAnimationName.empty() && m_container)
+			{
+				baseAnim = m_container->GetAnimation(m_baseKeyFrameAnimationName);
+			}
+
+			if (baseAnim)
+			{
+				for (auto& trackPtr : m_nodeTrackList | std::views::values)
+				{
+					NodeAnimationTrack* track = trackPtr.get();
+					NodeAnimationTrack* baseTrack;
+					if (baseAnim == this)
+					{
+						baseTrack = track;
+					}
+					else
+					{
+						baseTrack = baseAnim->GetNodeTrack(track->GetHandle());
+					}
+					
+					TransformKeyFrame kf(baseTrack, m_baseKeyFrameTime);
+					baseTrack->GetInterpolatedKeyFrame(baseAnim->GetTimeIndex(m_baseKeyFrameTime), kf);
+					track->ApplyBaseKeyFrame(&kf);
+				}
+			}
+
+			// Re-base has been done, this is a one-way translation
+			m_useBaseKeyFrame = false;
+		}
+	}
+
 	void Animation::BuildKeyFrameTimeList() const
 	{
 		// Clear old keyframe times
 		m_keyFrameTimes.clear();
 
-		// TODO: Collect all keyframe times from each track
+		// Collect all keyframe times from each track
+		for (const auto& nodeTrack : m_nodeTrackList | std::views::values)
+		{
+			nodeTrack->CollectKeyFrameTimes(m_keyFrameTimes);
+		}
 
-		// TODO: Build global index to local index map for each track
+		// Build global index to local index map for each track
+		for (const auto& nodeTrack : m_nodeTrackList | std::views::values)
+		{
+			nodeTrack->BuildKeyFrameIndexMap(m_keyFrameTimes);
+		}
 
 		// Reset dirty flag
 		m_keyFrameTimesDirty = false;

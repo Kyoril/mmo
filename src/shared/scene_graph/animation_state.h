@@ -19,43 +19,42 @@ namespace mmo
 		typedef std::vector<float> BoneBlendMask;
 
 	public:
-		AnimationState(const String& name, AnimationStateSet& parent, float timePos, float length, float weight = 1.0f, bool enabled = false);
+		AnimationState(String name, AnimationStateSet& parent, float timePos, float length, float weight = 1.0f, bool enabled = false);
         AnimationState(AnimationStateSet& parent, const AnimationState& rhs);
-		virtual ~AnimationState();
 
 	public:
-        const String& GetAnimationName() const { return m_animationName; }
+        [[nodiscard]] const String& GetAnimationName() const { return m_animationName; }
 
-        float GetTimePosition() const { return m_timePos; }
+        [[nodiscard]] float GetTimePosition() const { return m_timePos; }
 
 		void SetTimePosition(float timePos);
 
-        float GetLength() const { return m_length; }
+        [[nodiscard]] float GetLength() const { return m_length; }
 
-        void SetLength(float length) { m_length = length; }
+        void SetLength(const float length) { m_length = length; }
 
-        float GetWeight() const { return m_weight; }
+        [[nodiscard]] float GetWeight() const { return m_weight; }
 
         void SetWeight(float weight);
 
         void AddTime(float offset);
 
-        bool HasEnded() const { return m_timePos >= m_length && !m_loop; }
+		[[nodiscard]] bool HasEnded() const { return m_timePos >= m_length && !m_loop; }
 
-        bool IsEnabled() const { return m_enabled; }
+        [[nodiscard]] bool IsEnabled() const { return m_enabled; }
 
         void SetEnabled(bool enabled);
 
         bool operator==(const AnimationState& rhs) const;
         bool operator!=(const AnimationState& rhs) const;
 
-        void SetLoop(bool loop) { m_loop = loop; }
+        void SetLoop(const bool loop) { m_loop = loop; }
 
-        bool IsLoop() const { return m_loop; }
+        [[nodiscard]] bool IsLoop() const { return m_loop; }
 
         void CopyStateFrom(const AnimationState& animState);
 
-        AnimationStateSet* GetParent() const { return m_parent; }
+        [[nodiscard]] AnimationStateSet* GetParent() const { return m_parent; }
 
         void CreateBlendMask(size_t blendMaskSizeHint, float initialWeight = 1.0f);
 
@@ -65,15 +64,15 @@ namespace mmo
 
         void SetBlendMask(const BoneBlendMask* blendMask);
 
-        const BoneBlendMask* GetBlendMask() const { return m_blendMask.get(); }
+        [[nodiscard]] const BoneBlendMask* GetBlendMask() const { return m_blendMask.get(); }
 
-        bool HasBlendMask() const { return m_blendMask != nullptr; }
+        [[nodiscard]] bool HasBlendMask() const { return m_blendMask != nullptr; }
 
         /// Set the weight for the bone identified by the given handle
-        void SetBlendMaskEntry(size_t boneHandle, float weight);
+        void SetBlendMaskEntry(uint16 boneHandle, float weight) const;
 
         /// Get the weight for the bone identified by the given handle
-        float GetBlendMaskEntry(size_t boneHandle) const
+        [[nodiscard]] float GetBlendMaskEntry(const size_t boneHandle) const
         {
             ASSERT(m_blendMask && m_blendMask->size() > boneHandle);
             return (*m_blendMask)[boneHandle];
@@ -110,9 +109,9 @@ namespace mmo
 	public:
         AnimationState* CreateAnimationState(const String& name, float timePos, float length, float weight = 1.0, bool enabled = false);
 
-        AnimationState* GetAnimationState(const String& name) const;
+        [[nodiscard]] AnimationState* GetAnimationState(const String& name) const;
 
-        bool HasAnimationState(const String& name) const;
+        [[nodiscard]] bool HasAnimationState(const String& name) const;
 
         void RemoveAnimationState(const String& name);
 
@@ -122,11 +121,11 @@ namespace mmo
 
         void NotifyDirty();
 
-        unsigned long GetDirtyFrameNumber() const { return m_dirtyFrameNumber; }
+        [[nodiscard]] uint64 GetDirtyFrameNumber() const { return m_dirtyFrameNumber; }
 
         void NotifyAnimationStateEnabled(AnimationState* target, bool enabled);
 
-        bool HasEnabledAnimationState() const { return !m_enabledAnimationStates.empty(); }
+        [[nodiscard]] bool HasEnabledAnimationState() const { return !m_enabledAnimationStates.empty(); }
 
     protected:
         unsigned long m_dirtyFrameNumber;

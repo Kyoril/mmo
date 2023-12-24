@@ -5,6 +5,7 @@
 #include "sub_entity.h"
 #include "mesh.h"
 #include "base/linear_set.h"
+#include "skeleton_instance.h"
 
 #include "scene_graph/movable_object.h"
 
@@ -29,6 +30,10 @@ namespace mmo
 
 	public:
 		[[nodiscard]] const MeshPtr& GetMesh() const noexcept { return m_mesh; }
+
+		[[nodiscard]] std::shared_ptr<SkeletonInstance> GetSkeleton() const noexcept { return m_skeleton; }
+
+		[[nodiscard]] bool HasSkeleton() const noexcept { return m_skeleton != nullptr; }
 
 		SubEntity* GetSubEntity(uint16 index) const noexcept;
 
@@ -71,6 +76,8 @@ namespace mmo
 		void* m_userObject{ nullptr };
 
 		std::vector<Matrix4> m_boneMatrices;
+
+		std::shared_ptr<SkeletonInstance> m_skeleton;
 		
 	protected:
 		void BuildSubEntityList(const MeshPtr& mesh, SubEntities& subEntities);

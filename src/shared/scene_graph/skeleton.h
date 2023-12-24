@@ -11,6 +11,11 @@
 
 namespace mmo
 {
+	class AnimationStateSet;
+}
+
+namespace mmo
+{
 	struct LinkedSkeletonAnimationSource;
 
 	enum class SkeletonAnimationBlendMode
@@ -21,7 +26,7 @@ namespace mmo
 		Count_
 	};
 
-	class Skeleton
+	class Skeleton : public AnimationContainer
 	{
 		friend class SkeletonInstance;
 
@@ -29,8 +34,8 @@ namespace mmo
 		Skeleton() = default;
 
 	public:
-		Skeleton(const String& name);
-		virtual ~Skeleton() = default;
+		explicit Skeleton(String name);
+		virtual ~Skeleton() override;
 
 	public:
 
@@ -40,53 +45,93 @@ namespace mmo
 
 	public:
 
-		const String& GetName() const { return m_name; }
+		void Load();
 
+		void Unload();
+
+		virtual const String& GetName() const { return m_name; }
+
+		/// Creates a new bone which is owned by this skeleton.
 		virtual Bone* CreateBone();
 
+		/// Creates a new bone with a specific handle which is owned by this skeleton.
+		///	@param handle The handle to give the bone, must be unique within the skeleton.
+		///	@returns Pointer to the new bone. Memory is owned by the skeleton.
 		virtual Bone* CreateBone(uint16 handle);
 
+		/// Creates a new bone with a specific name which is owned by this skeleton.
+		///	@param name The name to give the bone, must be unique within the skeleton.
+		///	@returns Pointer to the new bone. Memory is owned by the skeleton.
 		virtual Bone* CreateBone(const String& name);
 
+		/// Creates a new bone with a specific name and handle which is owned by this skeleton.
+		///	@param name The name to give the bone, must be unique within the skeleton.
+		///	@param handle The handle to give the bone, must be unique within the skeleton.
+		///	@returns Pointer to the new bone. Memory is owned by the skeleton.
 		virtual Bone* CreateBone(const String& name, uint16 handle);
 
+		/// Gets the number of bones in this skeleton.
+		///	@returns The number of bones in this skeleton.
 		virtual uint16 GetNumBones() const;
 
+		/// Gets a pointer to the root bone of the skeleton.
+		///	@returns Pointer to the root bone of the skeleton. nullptr if no root bone.
 		virtual Bone* GetRootBone() const;
 
-		virtual Bone* GetBone(unsigned short handle) const;
+		/// Gets a pointer to the bone with the given handle.
+		///	@returns Pointer to the bone with the given handle, nullptr if not found.
+		virtual Bone* GetBone(uint16 handle) const;
 
+		/// Gets a pointer to the bone with the given name.
+		///	@returns Pointer to the bone with the given name, nullptr if not found.
 		virtual Bone* GetBone(const String& name) const;
 
+		/// Gets whether a bone with the given name exists.
+		///	@returns true if a bone with the given name exists, false otherwise.
 		virtual bool HasBone(const String& name) const;
 
+		/// Sets the binding pose for all bones in this skeleton to their current transformation. The binding pose
+		///	marks the initial state of a bone before any animation is applied.
 		virtual void SetBindingPose();
 
+		/// Resets the transformation of all bones in this skeleton to their binding pose.
+		///	@param resetManualBones If true, manual bones will be reset as well, otherwise they will be ignored.
 		virtual void Reset(bool resetManualBones = false);
 
-		virtual Animation* CreateAnimation(const String& name, const float duration);
+	public:
+		// AnimationContainer implementation
+
+		/// Creates a new animation for animating this skeleton. The animation is owned by this skeleton.
+		Animation& CreateAnimation(const String& name, float duration) override;
+
+		Animation* GetAnimation(uint16 index) const override;
 
 		virtual Animation* GetAnimation(const String& name, const LinkedSkeletonAnimationSource** linker) const;
 
-		virtual Animation* GetAnimation(const String& name) const;
+		Animation* GetAnimation(const String& name) const override;
 
 		virtual Animation* GetAnimationImpl(const String& name, const LinkedSkeletonAnimationSource** linker = nullptr) const;
 
-		virtual bool HasAnimation(const String& name) const;
+		bool HasAnimation(const String& name) const override;
 
-		virtual void RemoveAnimation(const String& name);
+		uint16 GetNumAnimations() const override;
 
+		virtual void SetAnimationState(const AnimationStateSet& animSet);
+
+		void RemoveAnimation(const String& name) override;
+
+	public:
 		virtual void GetBoneMatrices(Matrix4* matrices);
 
 		virtual SkeletonAnimationBlendMode GetBlendMode() const { return m_blendState; }
 
-		virtual void SetBlendMode(SkeletonAnimationBlendMode state) { m_blendState = state; }
+		virtual void SetBlendMode(const SkeletonAnimationBlendMode state) { m_blendState = state; }
 
 		virtual void UpdateTransforms();
 
 		virtual void OptimizeAllAnimations(bool preservingIdentityNodeTracks = false);
 
-		virtual void AddLinkedSkeletonAnimationSource(const String& skelName, float scale = 1.0f);
+		virtual void AddLinkedSkeletonAnimationSource(const String& skeletonName, float scale = 1.0f);
 
 		virtual void RemoveAllLinkedSkeletonAnimationSources();
 
@@ -112,6 +157,10 @@ namespace mmo
 	protected:
 		void DeriveRootBone() const;
 
+		virtual void LoadImpl();
+
+		virtual void UnloadImpl();
+
 	protected:
 		String m_name;
 
@@ -134,7 +183,7 @@ namespace mmo
 		bool m_manualBonesDirty { false };
 
 		/// Storage of animations, lookup by name
-		typedef std::map<String, Animation*> AnimationList;
+		typedef std::map<String, std::unique_ptr<Animation>> AnimationList;
 		AnimationList m_animationsList;
 
 		/// List of references to other skeletons to use animations from 

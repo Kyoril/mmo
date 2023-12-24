@@ -43,6 +43,8 @@ namespace mmo
 			return nullptr;
 		}
 
+		skeleton->Load();
+
 		return m_skeletonsByName[name] = skeleton;
 	}
 

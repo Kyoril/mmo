@@ -17,11 +17,11 @@ namespace mmo
 		virtual ~AnimationContainer() = default;
 
 	public:
-		virtual uint16 GetAnimationCount() const = 0;
+		virtual uint16 GetNumAnimations() const = 0;
 
-		virtual Animation* GetAnimation(uint16 index) = 0;
+		virtual Animation* GetAnimation(uint16 index) const = 0;
 
-		virtual Animation* GetAnimation(const String& name) = 0;
+		virtual Animation* GetAnimation(const String& name) const = 0;
 
 		virtual Animation& CreateAnimation(const String& name, float duration) = 0;
 
@@ -68,6 +68,10 @@ namespace mmo
 
 		NodeAnimationTrack* CreateNodeTrack(uint16 handle, Node* node);
 
+		uint16 GetNumNodeTracks() const;
+
+		NodeAnimationTrack* GetNodeTrack(uint16 handle) const;
+
 	public:
 		void KeyFrameListChanged() const { m_keyFrameTimesDirty = true; }
 
@@ -90,7 +94,7 @@ namespace mmo
 
 		void NotifyContainer(AnimationContainer* container) { m_container = container; }
 
-		AnimationContainer* GetContainer() { return m_container; }
+		AnimationContainer* GetContainer() const { return m_container; }
 
 	public:
 		static void SetDefaultInterpolationMode(InterpolationMode mode) { s_defaultInterpolationMode = mode; }

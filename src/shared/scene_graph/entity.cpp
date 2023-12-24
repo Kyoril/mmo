@@ -3,6 +3,7 @@
 #include "entity.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
+#include "skeleton_instance.h"
 
 namespace mmo
 {
@@ -43,7 +44,7 @@ namespace mmo
 			renderQueue.AddRenderable(*subEntity, GetRenderQueueGroup());
 		}
 
-		if (m_mesh->HasSkeleton())
+		if (HasSkeleton())
 		{
 			UpdateAnimations();
 		}
@@ -60,7 +61,7 @@ namespace mmo
 	void Entity::UpdateAnimations()
 	{
 		// Move matrices into buffer
-		ASSERT(m_mesh->GetSkeleton());
+		ASSERT(m_skeleton);
 
 		if (m_boneMatrices.size() != 128)
 		{
@@ -69,7 +70,7 @@ namespace mmo
 				sizeof(Matrix4) * 128, m_boneMatrices.data());
 		}
 
-		m_mesh->GetSkeleton()->GetBoneMatrices(m_boneMatrices.data());
+		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
 		m_boneMatrixBuffer->Update(m_boneMatrices.data());
 	}
 
@@ -101,6 +102,12 @@ namespace mmo
 			return;
 		}
 
+		if (m_mesh->HasSkeleton())
+		{
+			m_skeleton = std::make_shared<SkeletonInstance>(m_mesh->GetSkeleton());
+			m_skeleton->Load();
+		}
+
 		BuildSubEntityList(m_mesh, m_subEntities);
 
 		if (m_parentNode)
@@ -117,6 +124,8 @@ namespace mmo
 		{
 			return;
 		}
+
+		m_skeleton = nullptr;
 
 		// TODO: Extra cleanup
 		m_childObjects.clear();

@@ -86,10 +86,10 @@ namespace mmo
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
 
 		// Debug skeleton rendering
-		if (m_mesh->HasSkeleton())
+		if (m_entity->HasSkeleton())
 		{
 			// Render each bone as a debug object
-			Bone* rootBone = m_mesh->GetSkeleton()->GetRootBone();
+			Bone* rootBone = m_entity->GetSkeleton()->GetRootBone();
 			if (rootBone)
 			{
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
@@ -116,7 +116,7 @@ namespace mmo
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
-		if (auto& skeleton = m_mesh->GetSkeleton())
+		if (const auto skeleton = m_entity->GetSkeleton())
 		{
 			if (auto* bone = skeleton->GetBone(1))
 			{
