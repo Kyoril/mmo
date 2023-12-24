@@ -5,13 +5,13 @@
 
 namespace mmo
 {
-	KeyFrame::KeyFrame(const AnimationTrack& parent, float time)
+	KeyFrame::KeyFrame(const AnimationTrack* parent, const float time)
 		: m_time(time)
-	    , m_parentTrack(&parent)
+	    , m_parentTrack(parent)
 	{
 	}
 
-	TransformKeyFrame::TransformKeyFrame(const AnimationTrack& parent, float time)
+	TransformKeyFrame::TransformKeyFrame(const AnimationTrack* parent, const float time)
 		: KeyFrame(parent, time)
 	{
 	}
@@ -34,7 +34,7 @@ namespace mmo
 		m_parentTrack->KeyFrameDataChanged();
 	}
 
-	std::shared_ptr<KeyFrame> TransformKeyFrame::Clone(AnimationTrack& newParent) const
+	std::shared_ptr<KeyFrame> TransformKeyFrame::Clone(AnimationTrack* newParent) const
 	{
 		auto result = std::make_shared<TransformKeyFrame>(newParent, m_time);
 		result->m_translate = m_translate;
@@ -43,9 +43,9 @@ namespace mmo
 		return result;
 	}
 
-	std::shared_ptr<KeyFrame> KeyFrame::Clone(AnimationTrack& parent) const
+	std::shared_ptr<KeyFrame> KeyFrame::Clone(AnimationTrack* parent) const
 	{
-		return std::make_shared<KeyFrame>(*m_parentTrack, m_time);
+		return std::make_shared<KeyFrame>(parent, m_time);
 	}
 
 }

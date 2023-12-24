@@ -13,6 +13,7 @@
 #include <ostream>
 
 #include "clamp.h"
+#include "math_utils.h"
 #include "radian.h"
 
 
@@ -200,37 +201,38 @@ namespace mmo
 			
 	public:
 
-		/// Caluclates the dot product of this vector and another one.
-		inline float Dot(Vector3 const& other) const
+		/// Calculates the dot product of this vector and another one.
+		[[nodiscard]] float Dot(Vector3 const& other) const
 		{
 			return x * other.x + y * other.y + z * other.z;
 		}
 
-
-		inline float AbsDot(const Vector3& vec) const
+		[[nodiscard]] float AbsDot(const Vector3& vec) const
 		{
 			return fabs(x * vec.x) + fabs(y * vec.y) + fabs(z * vec.z);
 		}
 
 		/// Calculates the cross product of this vector and another one.
-		inline Vector3 Cross(Vector3 const& other) const
+		[[nodiscard]] Vector3 Cross(Vector3 const& other) const
 		{
-			return Vector3(y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x);
+			return {y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x};
 		}
+
 		/// Gets the length of this vector.
-		inline float GetLength() const
+		[[nodiscard]] float GetLength() const
 		{
 			return sqrtf(GetSquaredLength());
 		}
+
 		/// Gets the squared length of this vector (more performant than GetLength, so
 		/// it should be used instead of GetLength wherever possible).
-		inline float GetSquaredLength() const
+		[[nodiscard]] float GetSquaredLength() const
 		{
 			return x * x + y * y + z * z;
 		}
 
 		/// Normalizes this vector.
-		inline float Normalize()
+		float Normalize()
 		{
 			const float length = GetLength();
 			ASSERT(length > 0.0f);
@@ -241,7 +243,7 @@ namespace mmo
 		}
 
 		/// Returns a normalized copy of this vector.
-		inline Vector3 NormalizedCopy() const
+		[[nodiscard]] Vector3 NormalizedCopy() const
 		{
 			float length = GetLength();
 			if (length <= 0.0f) length = 0.0001f;
@@ -251,9 +253,19 @@ namespace mmo
 			return v / length;
 		}
 
+		[[nodiscard]] float GetDistanceTo(const Vector3& rhs) const
+		{
+			return (*this - rhs).GetLength();
+		}
+
+		[[nodiscard]] float GetSquaredDistanceTo(const Vector3& rhs) const
+		{
+			return (*this - rhs).GetSquaredLength();
+		}
+
 		/// Checks if this vector is almost equal to another vector, but allows some
 		/// minimal offset for each component due to imprecise floating points.
-		inline bool IsNearlyEqual(const Vector3& other, float epsilon = FLT_EPSILON) const
+		[[nodiscard]] bool IsNearlyEqual(const Vector3& other, const float epsilon = FLT_EPSILON) const
 		{
 			return
 				fabs(x - other.x) <= epsilon &&
@@ -262,14 +274,14 @@ namespace mmo
 		}
 
 		/// Checks whether all components of this vector are valid numbers.
-		inline bool IsValid() const
+		[[nodiscard]] bool IsValid() const
 		{
 			// Note: if any of these is NaN for example, the == operator will always return
 			// false, that's why we do checks against x == x etc. here
 			return x == x && y == y && z == z;
 		}
 		
-		inline Radian AngleBetween(const Vector3& dest) const
+		[[nodiscard]] Radian AngleBetween(const Vector3& dest) const
 		{
 			float lenProduct = GetLength() * dest.GetLength();
 
@@ -284,19 +296,25 @@ namespace mmo
 			return ACos(f);
 		}
 
-		inline bool IsZeroLength() const
+		[[nodiscard]] bool IsZeroLength() const
         {
 	        const float squaredLength = (x * x) + (y * y) + (z * z);
             return (squaredLength < (1e-06 * 1e-06));
         }
 
-		Quaternion GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis = Zero) const;
+		[[nodiscard]] Quaternion GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis = Zero) const;
 
-		inline void Ceil(const Vector3& other)
+		void Ceil(const Vector3& other)
 		{
 			if (other.x > x) x = other.x;
 			if (other.y > y) y = other.y;
 			if (other.z > z) z = other.z;
+		}
+
+		[[nodiscard]] bool IsCloseTo(const Vector3& rhs, const float tolerance = 1e-03f) const
+		{
+			return GetSquaredDistanceTo(rhs) <=
+				(GetSquaredLength() + rhs.GetSquaredLength()) * tolerance;
 		}
 	};
 

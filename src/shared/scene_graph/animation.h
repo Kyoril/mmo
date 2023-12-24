@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <vector>
 
 #include "animation_track.h"
@@ -53,7 +54,7 @@ namespace mmo
 
 		float GetDuration() const { return m_duration; }
 
-		void SetDuration(float duration);
+		void SetDuration(const float duration) { m_duration = duration; }
 
 		void Apply(float timePos, float weight = 1.0f, float scale = 1.0f);
 
@@ -61,7 +62,16 @@ namespace mmo
 
 		TimeIndex GetTimeIndex(float timePos) const;
 
+		bool HasNodeTrack(uint16 handle) const;
+
+		NodeAnimationTrack* CreateNodeTrack(uint16 handle);
+
+		NodeAnimationTrack* CreateNodeTrack(uint16 handle, Node* node);
+
 	public:
+		void KeyFrameListChanged() const { m_keyFrameTimesDirty = true; }
+
+		void DestroyAllNodeTracks();
 		void DestroyAllTracks();
 
 	public:
@@ -114,6 +124,10 @@ namespace mmo
 		float m_baseKeyFrameTime;
 		String m_baseKeyFrameAnimationName;
 		AnimationContainer* m_container;
+
+		/// Node tracks, indexed by handle
+		typedef std::map<uint16, std::unique_ptr<NodeAnimationTrack>> NodeTrackList;
+		NodeTrackList m_nodeTrackList;
 
 	protected:
 		void BuildKeyFrameTimeList() const;

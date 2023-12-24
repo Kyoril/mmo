@@ -5,14 +5,15 @@
 
 namespace mmo
 {
-	Animation::InterpolationMode Animation::s_defaultInterpolationMode = Animation::InterpolationMode::Linear;
-	Animation::RotationInterpolationMode Animation::s_defaultRotationInterpolationMode = Animation::RotationInterpolationMode::Linear;
+	Animation::InterpolationMode Animation::s_defaultInterpolationMode = InterpolationMode::Linear;
+	Animation::RotationInterpolationMode Animation::s_defaultRotationInterpolationMode = RotationInterpolationMode::Linear;
 
 	Animation::Animation(String name, const float duration)
 		: m_name(std::move(name))
 		, m_duration(duration)
 		, m_interpolationMode(s_defaultInterpolationMode)
 		, m_rotationInterpolationMode(s_defaultRotationInterpolationMode)
+		, m_keyFrameTimesDirty(false)
 		, m_useBaseKeyFrame(false)
 		, m_baseKeyFrameTime(0.0f)
 		, m_container(nullptr)
@@ -58,8 +59,35 @@ namespace mmo
 		return {timePos, static_cast<uint32>(std::distance(m_keyFrameTimes.begin(), it))};
 	}
 
+	bool Animation::HasNodeTrack(const uint16 handle) const
+	{
+		return m_nodeTrackList.contains(handle);
+	}
+
+	NodeAnimationTrack* Animation::CreateNodeTrack(const uint16 handle)
+	{
+		ASSERT(!HasNodeTrack(handle));
+
+		return (m_nodeTrackList[handle] = std::make_unique<NodeAnimationTrack>(*this, handle)).get();
+	}
+
+	NodeAnimationTrack* Animation::CreateNodeTrack(const uint16 handle, Node* node)
+	{
+		NodeAnimationTrack* ret = CreateNodeTrack(handle);
+		ret->SetAssociatedNode(node);
+
+		return ret;
+	}
+
+	void Animation::DestroyAllNodeTracks()
+	{
+		m_nodeTrackList.clear();
+		KeyFrameListChanged();
+	}
+
 	void Animation::DestroyAllTracks()
 	{
+		DestroyAllNodeTracks();
 	}
 
 	void Animation::BuildKeyFrameTimeList() const

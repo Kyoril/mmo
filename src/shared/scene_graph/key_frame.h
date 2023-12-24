@@ -12,13 +12,13 @@ namespace mmo
 	class KeyFrame
 	{
     public:
-        KeyFrame(const AnimationTrack& parent, float time);
+        KeyFrame(const AnimationTrack* parent, float time);
         virtual ~KeyFrame() = default;
 
 	public:
-        float GetTime() const { return m_time; }
+        [[nodiscard]] float GetTime() const { return m_time; }
 
-        virtual std::shared_ptr<KeyFrame> Clone(AnimationTrack& parent) const;
+        virtual std::shared_ptr<KeyFrame> Clone(AnimationTrack* parent) const;
 
     protected:
         float m_time;
@@ -28,29 +28,30 @@ namespace mmo
 	class TransformKeyFrame : public KeyFrame
 	{
 	public:
-		TransformKeyFrame(const AnimationTrack& parent, float time);
+		TransformKeyFrame(const AnimationTrack* parent, float time);
 		virtual ~TransformKeyFrame() override = default;
 
 	public:
 		virtual void SetTranslate(const Vector3& trans);
 
-		const Vector3& GetTranslate() const { return m_translate; }
+		[[nodiscard]] const Vector3& GetTranslate() const { return m_translate; }
 
 		virtual void SetScale(const Vector3& scale);
 
-		virtual const Vector3& GetScale() const { return m_scale; }
+		[[nodiscard]] virtual const Vector3& GetScale() const { return m_scale; }
 
 		virtual void SetRotation(const Quaternion& rot);
 
-		virtual const Quaternion& GetRotation() const { return m_rotation; }
+		[[nodiscard]] virtual const Quaternion& GetRotation() const { return m_rotation; }
 
-		std::shared_ptr<KeyFrame> Clone(AnimationTrack& newParent) const override;
+		std::shared_ptr<KeyFrame> Clone(AnimationTrack* newParent) const override;
 
 	protected:
 		Vector3 m_translate{ Vector3::Zero };
 		Vector3 m_scale{ Vector3::UnitScale };
 		Quaternion m_rotation{ Quaternion::Identity };
-
-
 	};
+
+	typedef std::shared_ptr<KeyFrame> KeyFramePtr;
+
 }
