@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "entity.h"
+
+#include "animation_state.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
@@ -36,7 +38,24 @@ namespace mmo
 	{
 		return static_cast<uint32>(m_subEntities.size());
 	}
-	
+
+	AnimationState* Entity::GetAnimationState(const String& name) const
+	{
+		ASSERT(m_animationStates);
+		return m_animationStates->GetAnimationState(name);
+	}
+
+	bool Entity::HasAnimationState(const String& name) const
+	{
+		ASSERT(m_animationStates);
+		return m_animationStates->HasAnimationState(name);
+	}
+
+	AnimationStateSet* Entity::GetAllAnimationStates() const
+	{
+		return m_animationStates.get();
+	}
+
 	void Entity::PopulateRenderQueue(RenderQueue& renderQueue)
 	{
 		for (const auto& subEntity : m_subEntities)
@@ -62,6 +81,9 @@ namespace mmo
 	{
 		// Move matrices into buffer
 		ASSERT(m_skeleton);
+
+		// Apply animation states
+		m_skeleton->SetAnimationState(*m_animationStates);
 
 		if (m_boneMatrices.size() != 128)
 		{
@@ -105,6 +127,9 @@ namespace mmo
 		if (m_mesh->HasSkeleton())
 		{
 			m_skeleton = std::make_shared<SkeletonInstance>(m_mesh->GetSkeleton());
+			m_animationStates = std::make_shared<AnimationStateSet>();
+			m_mesh->InitAnimationState(*m_animationStates);
+
 			m_skeleton->Load();
 		}
 
@@ -118,7 +143,7 @@ namespace mmo
 		m_initialized = true;
 	}
 
-	void Entity::Deinitialize()
+	void Entity::DeInitialize()
 	{
 		if (!m_initialized)
 		{

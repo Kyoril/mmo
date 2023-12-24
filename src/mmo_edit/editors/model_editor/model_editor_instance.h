@@ -60,5 +60,6 @@ namespace mmo
 		bool m_initDockLayout { true };
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
+		AnimationState* m_animState{ nullptr };
 	};
 }

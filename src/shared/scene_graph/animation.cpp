@@ -4,6 +4,9 @@
 #include <cmath>
 #include <ranges>
 
+#include "bone.h"
+#include "skeleton.h"
+
 namespace mmo
 {
 	Animation::InterpolationMode Animation::s_defaultInterpolationMode = InterpolationMode::Linear;
@@ -26,18 +29,60 @@ namespace mmo
 		DestroyAllTracks();
 	}
 
-	void Animation::Apply(float timePos, float weight, float scale)
+	void Animation::Apply(const float timePos, const float weight, const float scale)
 	{
 		ApplyBaseKeyFrame();
 
+		// Calculate time index for fast keyframe search
+		const TimeIndex timeIndex = GetTimeIndex(timePos);
 
+		for (const auto& nodeTrack : m_nodeTrackList | std::views::values)
+		{
+			nodeTrack->Apply(timeIndex, weight, scale);
+		}
 	}
 
-	void Animation::Apply(Skeleton& skeleton, float timePos, float weight, float scale)
+	void Animation::ApplyToNode(Node* node, const float timePos, const float weight, const float scale)
 	{
 		ApplyBaseKeyFrame();
 
+		// Calculate time index for fast keyframe search
+		const TimeIndex timeIndex = GetTimeIndex(timePos);
 
+		for (const auto& nodeTrack : m_nodeTrackList | std::views::values)
+		{
+			nodeTrack->ApplyToNode(*node, timeIndex, weight, scale);
+		}
+	}
+
+	void Animation::Apply(const Skeleton& skeleton, const float timePos, const float weight, const float scale)
+	{
+		ApplyBaseKeyFrame();
+
+		// Calculate time index for fast keyframe search
+		const TimeIndex timeIndex = GetTimeIndex(timePos);
+
+		for (const auto& [boneHandle, nodeTrack] : m_nodeTrackList)
+		{
+			// get bone to apply to 
+			Bone* b = skeleton.GetBone(boneHandle);
+			nodeTrack->ApplyToNode(*b, timeIndex, weight, scale);
+		}
+	}
+
+	void Animation::Apply(const Skeleton& skeleton, const float timePos, const float weight, const AnimationState::BoneBlendMask& blendMask, const float scale)
+	{
+		ApplyBaseKeyFrame();
+
+		// Calculate time index for fast keyframe search
+		const TimeIndex timeIndex = GetTimeIndex(timePos);
+
+		for (const auto& [boneHandle, animationTrack] : m_nodeTrackList)
+		{
+			// get bone to apply to 
+			Bone* b = skeleton.GetBone(boneHandle);
+			animationTrack->ApplyToNode(*b, timeIndex, blendMask[b->GetHandle()] * weight, scale);
+		}
 	}
 
 	TimeIndex Animation::GetTimeIndex(float timePos) const
@@ -101,6 +146,18 @@ namespace mmo
 	void Animation::DestroyAllTracks()
 	{
 		DestroyAllNodeTracks();
+	}
+
+	void Animation::SetUseBaseKeyFrame(const bool useBaseKeyFrame, const float keyframeTime, const String& baseAnimName)
+	{
+		if (useBaseKeyFrame != m_useBaseKeyFrame || 
+			keyframeTime != m_baseKeyFrameTime ||
+			baseAnimName != m_baseKeyFrameAnimationName)
+		{
+			m_useBaseKeyFrame = useBaseKeyFrame;
+			m_baseKeyFrameTime = keyframeTime;
+			m_baseKeyFrameAnimationName = baseAnimName;
+		}
 	}
 
 	void Animation::ApplyBaseKeyFrame()

@@ -21,37 +21,33 @@ namespace mmo
 
 	Animation* SkeletonInstance::GetAnimation(const uint16 index) const
 	{
-		return Skeleton::GetAnimation(index);
+		return m_skeleton->GetAnimation(index);
 	}
 
 	Animation* SkeletonInstance::GetAnimationImpl(const String& name,
 		const LinkedSkeletonAnimationSource** linker) const
 	{
-		return Skeleton::GetAnimationImpl(name, linker);
+		return m_skeleton->GetAnimationImpl(name, linker);
 	}
 
 	Animation& SkeletonInstance::CreateAnimation(const String& name, const float duration)
 	{
-		return Skeleton::CreateAnimation(name, duration);
+		return m_skeleton->CreateAnimation(name, duration);
 	}
 
 	Animation* SkeletonInstance::GetAnimation(const String& name, const LinkedSkeletonAnimationSource** linker) const
 	{
-		return Skeleton::GetAnimation(name, linker);
+		return m_skeleton->GetAnimation(name, linker);
 	}
 
 	void SkeletonInstance::RemoveAnimation(const String& name)
 	{
-		Skeleton::RemoveAnimation(name);
+		return m_skeleton->RemoveAnimation(name);
 	}
 
-	void SkeletonInstance::InitAnimationState(AnimationStateSet* animSet)
+	void SkeletonInstance::InitAnimationState(AnimationStateSet& animSet)
 	{
-	}
-
-	void SkeletonInstance::RefreshAnimationState(AnimationStateSet* animSet)
-	{
-
+		m_skeleton->InitAnimationState(animSet);
 	}
 
 	const String& SkeletonInstance::GetName() const

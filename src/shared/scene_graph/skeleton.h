@@ -121,6 +121,8 @@ namespace mmo
 		void RemoveAnimation(const String& name) override;
 
 	public:
+		virtual void InitAnimationState(AnimationStateSet& animationState);
+
 		virtual void GetBoneMatrices(Matrix4* matrices);
 
 		virtual SkeletonAnimationBlendMode GetBlendMode() const { return m_blendState; }

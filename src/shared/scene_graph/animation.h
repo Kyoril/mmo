@@ -3,11 +3,13 @@
 #include <map>
 #include <vector>
 
+#include "animation_state.h"
 #include "animation_track.h"
 #include "base/typedefs.h"
 
 namespace mmo
 {
+	class Entity;
 	class Animation;
 	class Skeleton;
 
@@ -58,7 +60,11 @@ namespace mmo
 
 		void Apply(float timePos, float weight = 1.0f, float scale = 1.0f);
 
-		void Apply(Skeleton& skeleton, float timePos, float weight = 1.0f, float scale = 1.0f);
+		void ApplyToNode(Node* node, float timePos, float weight = 1.0, float scale = 1.0f);
+
+		void Apply(const Skeleton& skeleton, float timePos, float weight = 1.0f, float scale = 1.0f);
+
+		void Apply(const Skeleton& skeleton, float timePos, float weight, const AnimationState::BoneBlendMask& blendMask, float scale);
 
 		TimeIndex GetTimeIndex(float timePos) const;
 
@@ -72,11 +78,18 @@ namespace mmo
 
 		NodeAnimationTrack* GetNodeTrack(uint16 handle) const;
 
-	public:
 		void KeyFrameListChanged() const { m_keyFrameTimesDirty = true; }
 
 		void DestroyAllNodeTracks();
 		void DestroyAllTracks();
+
+		void SetUseBaseKeyFrame(bool useBaseKeyFrame, float keyframeTime, const String& baseAnimName);
+
+		bool GetUseBaseKeyFrame() const { return m_useBaseKeyFrame; }
+
+		float GetBaseKeyFrameTime() const { return m_baseKeyFrameTime; }
+
+		const String& GetBaseKeyFrameAnimationName() const { return m_baseKeyFrameAnimationName; }
 
 	public:
 

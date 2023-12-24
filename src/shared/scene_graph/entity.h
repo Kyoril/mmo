@@ -11,6 +11,7 @@
 
 namespace mmo
 {
+	class AnimationState;
 	class RenderQueue;
 
 	class Entity : public MovableObject
@@ -40,12 +41,17 @@ namespace mmo
 		SubEntity* GetSubEntity(const String& name) const noexcept;
 
 		uint32 GetNumSubEntities() const noexcept;
-		
+
+		AnimationState* GetAnimationState(const String& name) const;
+
+		bool HasAnimationState(const String& name) const;
+
+		AnimationStateSet* GetAllAnimationStates() const;
+
 	public:
 		/// @copydoc MovableObject::SetCurrentCamera
 		virtual void SetCurrentCamera(Camera& cam) override;
 		
-		/// @copydoc MovableObject::UpdateRenderQueue
 		virtual void PopulateRenderQueue(RenderQueue& renderQueue) override;
 
 		void SetMaterial(const std::shared_ptr<Material>& material);
@@ -78,13 +84,15 @@ namespace mmo
 		std::vector<Matrix4> m_boneMatrices;
 
 		std::shared_ptr<SkeletonInstance> m_skeleton;
+
+		std::shared_ptr<AnimationStateSet> m_animationStates{ nullptr };
 		
 	protected:
 		void BuildSubEntityList(const MeshPtr& mesh, SubEntities& subEntities);
 
 		void Initialize();
 
-		void Deinitialize();
+		void DeInitialize();
 
 	public:
 

@@ -127,6 +127,8 @@ namespace mmo
 
         [[nodiscard]] bool HasEnabledAnimationState() const { return !m_enabledAnimationStates.empty(); }
 
+        [[nodiscard]] const EnabledAnimationStateList& GetEnabledAnimationStates() const { return m_enabledAnimationStates; }
+
     protected:
         unsigned long m_dirtyFrameNumber;
         AnimationStateMap m_animationStates;

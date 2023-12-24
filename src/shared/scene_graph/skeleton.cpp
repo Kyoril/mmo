@@ -1,6 +1,8 @@
 
 #include "skeleton.h"
 
+#include <ranges>
+
 #include "animation_state.h"
 
 namespace mmo
@@ -204,7 +206,58 @@ namespace mmo
 
 	void Skeleton::SetAnimationState(const AnimationStateSet& animSet)
 	{
+		/*
+		Algorithm:
+		  1. Reset all bone positions
+		  2. Iterate per AnimationState, if enabled get Animation and call Animation::apply
+		*/
 
+		// Reset bones
+		Reset();
+
+		float weightFactor = 1.0f;
+
+		if (m_blendState == SkeletonAnimationBlendMode::Average)
+		{
+			// Derive total weights so we can rebalance if > 1.0f
+			float totalWeights = 0.0f;
+
+			for (auto& animState : animSet.GetEnabledAnimationStates())
+			{
+				const LinkedSkeletonAnimationSource* linked = nullptr;
+				if (GetAnimationImpl(animState->GetAnimationName(), &linked))
+				{
+					totalWeights += animState->GetWeight();
+				}
+			}
+
+			// Allow < 1.0f, allows fade out of all anims if required 
+			if (totalWeights > 1.0f)
+			{
+				weightFactor = 1.0f / totalWeights;
+			}
+		}
+
+		// Per enabled animation state
+		for (auto& animState : animSet.GetEnabledAnimationStates())
+		{
+			const LinkedSkeletonAnimationSource* linked = nullptr;
+
+			// tolerate state entries for animations we're not aware of
+			if (Animation* anim = GetAnimationImpl(animState->GetAnimationName(), &linked))
+			{
+				if (animState->HasBlendMask())
+				{
+					anim->Apply(*this, animState->GetTimePosition(), animState->GetWeight() * weightFactor,
+						*animState->GetBlendMask(), linked ? linked->scale : 1.0f);
+				}
+				else
+				{
+					anim->Apply(*this, animState->GetTimePosition(),
+						animState->GetWeight() * weightFactor, linked ? linked->scale : 1.0f);
+				}
+			}
+		}
 	}
 
 	bool Skeleton::HasAnimation(const String& name) const
@@ -218,6 +271,17 @@ namespace mmo
 		ASSERT(i != m_animationsList.end());
 
 		m_animationsList.erase(i);
+	}
+
+	void Skeleton::InitAnimationState(AnimationStateSet& animationState)
+	{
+		animationState.RemoveAllAnimationStates();
+
+		// Iterate through all animations
+		for (const auto& animation : m_animationsList | std::views::values)
+		{
+			animationState.CreateAnimationState(animation->GetName(), 0.0f, animation->GetDuration());
+		}
 	}
 
 	void Skeleton::GetBoneMatrices(Matrix4* matrices)

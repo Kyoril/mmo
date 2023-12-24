@@ -161,7 +161,7 @@ namespace mmo
 		m_keyFrameIndexMap.resize(keyFrameTimes.size());
 
 		size_t i = 0, j = 0;
-		while (j <= keyFrameTimes.size())
+		while (j < keyFrameTimes.size())
 		{
 			m_keyFrameIndexMap[j] = static_cast<uint16>(i);
 			while (i < m_keyFrames.size() && m_keyFrames[i]->GetTime() <= keyFrameTimes[j])

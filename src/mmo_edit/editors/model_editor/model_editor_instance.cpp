@@ -9,6 +9,7 @@
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/animation_state.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/material_manager.h"
@@ -60,8 +61,7 @@ namespace mmo
 		m_mesh = std::make_shared<Mesh>("");
 		MeshDeserializer deserializer { *m_mesh };
 
-		const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string());
-		if (inputFile)
+		if (const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string()))
 		{
 			io::StreamSource source { *inputFile };
 			io::Reader reader { source };
@@ -75,6 +75,24 @@ namespace mmo
 			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
 		}
 
+		if (m_mesh->HasSkeleton() && m_mesh->GetSkeleton()->GetNumBones() > 1)
+		{
+			// Create a sample animation
+			Animation& sampleAnim = m_mesh->GetSkeleton()->CreateAnimation("Sample", 2.0f);
+			sampleAnim.SetUseBaseKeyFrame(true, 0.0f, "Sample");
+
+			NodeAnimationTrack* animTrack = sampleAnim.CreateNodeTrack(0, m_mesh->GetSkeleton()->GetBone(0));
+
+			const auto firstFrame = animTrack->CreateNodeKeyFrame(0.0f);
+			firstFrame->SetRotation(Quaternion::Identity);
+
+			const auto secondFrame = animTrack->CreateNodeKeyFrame(1.0f);
+			secondFrame->SetRotation(Quaternion(Degree(90), Vector3::UnitY));
+
+			const auto thirdFrame = animTrack->CreateNodeKeyFrame(2.0f);
+			firstFrame->SetRotation(Quaternion::Identity);
+		}
+		
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
 		{
@@ -89,14 +107,17 @@ namespace mmo
 		if (m_entity->HasSkeleton())
 		{
 			// Render each bone as a debug object
-			Bone* rootBone = m_entity->GetSkeleton()->GetRootBone();
-			if (rootBone)
+			if (Bone* rootBone = m_entity->GetSkeleton()->GetRootBone())
 			{
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
 			}
-		}
 
+			m_animState = m_entity->GetAnimationState("Sample");
+			m_animState->SetLoop(true);
+			m_animState->SetEnabled(true);
+			m_animState->SetWeight(1.0f);
+		}
 	}
 
 	ModelEditorInstance::~ModelEditorInstance()
@@ -116,14 +137,9 @@ namespace mmo
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
-		if (const auto skeleton = m_entity->GetSkeleton())
+		if (m_animState)
 		{
-			if (auto* bone = skeleton->GetBone(1))
-			{
-				/*bone->Yaw(Degree(1), TransformSpace::World);
-				bone->SetManuallyControlled(true);
-				bone->Update(true, false);*/
-			}
+			m_animState->AddTime(0.0166f);
 		}
 
 		auto& gx = GraphicsDevice::Get();

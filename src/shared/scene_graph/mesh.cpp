@@ -256,6 +256,15 @@ namespace mmo
 		}
 	}
 
+	void Mesh::InitAnimationState(AnimationStateSet& animationState)
+	{
+		if (m_skeleton)
+		{
+			m_skeleton->InitAnimationState(animationState);
+			UpdateCompiledBoneAssignments();
+		}
+	}
+
 	void Mesh::BuildIndexMap(const VertexBoneAssignmentList& boneAssignments, IndexMap& boneIndexToBlendIndexMap, IndexMap& blendIndexToBoneIndexMap)
 	{
 		if (boneAssignments.empty())

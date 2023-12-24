@@ -25,9 +25,7 @@ namespace mmo
 
 		void RemoveAnimation(const String& name) override;
 
-		void InitAnimationState(AnimationStateSet* animSet);
-
-		void RefreshAnimationState(AnimationStateSet* animSet);
+		void InitAnimationState(AnimationStateSet& animSet) override;
 
 		const String& GetName() const override;
 

@@ -94,7 +94,9 @@ namespace mmo
 
 		void UpdateCompiledBoneAssignments();
 
-	protected:
+        void InitAnimationState(AnimationStateSet& animationState);
+
+    protected:
 		bool m_boneAssignmentsOutOfDate { false };
 
         static void BuildIndexMap(const VertexBoneAssignmentList& boneAssignments, IndexMap& boneIndexToBlendIndexMap, IndexMap& blendIndexToBoneIndexMap);

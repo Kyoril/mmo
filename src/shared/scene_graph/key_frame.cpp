@@ -13,25 +13,37 @@ namespace mmo
 
 	TransformKeyFrame::TransformKeyFrame(const AnimationTrack* parent, const float time)
 		: KeyFrame(parent, time)
+		, m_translate(Vector3::Zero)
+		, m_scale(Vector3::UnitScale)
+		, m_rotation(Quaternion::Identity)
 	{
 	}
 
 	void TransformKeyFrame::SetTranslate(const Vector3& trans)
 	{
 		m_translate = trans;
-		m_parentTrack->KeyFrameDataChanged();
+		if (m_parentTrack)
+		{
+			m_parentTrack->KeyFrameDataChanged();
+		}
 	}
 
 	void TransformKeyFrame::SetScale(const Vector3& scale)
 	{
 		m_scale = scale;
-		m_parentTrack->KeyFrameDataChanged();
+		if (m_parentTrack)
+		{
+			m_parentTrack->KeyFrameDataChanged();
+		}
 	}
 
 	void TransformKeyFrame::SetRotation(const Quaternion& rot)
 	{
 		m_rotation = rot;
-		m_parentTrack->KeyFrameDataChanged();
+		if (m_parentTrack)
+		{
+			m_parentTrack->KeyFrameDataChanged();
+		}
 	}
 
 	std::shared_ptr<KeyFrame> TransformKeyFrame::Clone(AnimationTrack* newParent) const
