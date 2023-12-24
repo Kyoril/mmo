@@ -41,6 +41,16 @@ namespace mmo
 	private:
 		void Save();
 
+		void SetAnimationState(AnimationState* animState);
+
+		void DrawDetails(const String& id);
+
+		void DrawAnimations(const String& id);
+
+		void DrawBones(const String& id);
+
+		void DrawViewport(const String& id);
+
 	private:
 		ModelEditor& m_editor;
 		scoped_connection m_renderConnection;

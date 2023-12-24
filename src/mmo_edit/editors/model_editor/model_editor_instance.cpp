@@ -112,11 +112,6 @@ namespace mmo
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
 			}
-
-			m_animState = m_entity->GetAnimationState("Sample");
-			m_animState->SetLoop(true);
-			m_animState->SetEnabled(true);
-			m_animState->SetWeight(1.0f);
 		}
 	}
 
@@ -139,7 +134,7 @@ namespace mmo
 
 		if (m_animState)
 		{
-			m_animState->AddTime(0.0166f);
+			m_animState->AddTime(ImGui::GetIO().DeltaTime);
 		}
 
 		auto& gx = GraphicsDevice::Get();
@@ -159,7 +154,7 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void RenderBoneNode(Bone& bone)
+	void RenderBoneNode(const Bone& bone)
 	{
 		if (ImGui::TreeNodeEx(bone.GetName().c_str()))
 		{
@@ -180,158 +175,41 @@ namespace mmo
 	{
 		ImGui::PushID(GetAssetPath().c_str());
 
-		const auto dockspaceId = ImGui::GetID("##model_dockspace_");
-		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+		const auto dockSpaceId = ImGui::GetID("##model_dockspace_");
+		ImGui::DockSpace(dockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
+		const String bonesId = "Bones##" + GetAssetPath().string();
+		const String animationsId = "Animation##" + GetAssetPath().string();
 
-		if (ImGui::Begin(detailsId.c_str()))
-		{
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-		    {
-				if (m_entity != nullptr)
-				{
-					const auto files = AssetRegistry::ListFiles();
+		// Draw sidebar windows
+		DrawDetails(detailsId);
+		DrawBones(bonesId);
+		DrawAnimations(animationsId);
 
-					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
-					{
-						ImGui::PushID(i); // Use field index as identifier.
-						ImGui::TableNextRow();
-					    ImGui::TableSetColumnIndex(0);
-					    ImGui::AlignTextToFramePadding();
-						const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i);
+		// Draw viewport
+		DrawViewport(viewportId);
 
-					    if (nodeOpen)
-					    {
-							ImGui::TableNextRow();
-				            ImGui::TableSetColumnIndex(0);
-				            ImGui::AlignTextToFramePadding();
-							constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-				            ImGui::TreeNodeEx("Field", flags, "Material");
-
-							ImGui::TableSetColumnIndex(1);
-							ImGui::SetNextItemWidth(-FLT_MIN);
-
-							// Setup combo
-							String materialName = "(None)";
-							if (m_entity->GetSubEntity(i)->GetMaterial())
-							{
-								materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
-							}
-
-							ImGui::PushID(i);
-							if (ImGui::BeginCombo("material", materialName.c_str()))
-							{
-								// For each material
-								for (const auto& file : files)
-								{
-									if (!file.ends_with(".hmat")) continue;
-
-									if (ImGui::Selectable(file.c_str()))
-									{
-										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
-									}
-								}
-
-								ImGui::EndCombo();
-							}
-							ImGui::PopID();
-
-							ImGui::NextColumn();
-							ImGui::TreePop();
-						}
-						ImGui::PopID();
-					}
-				}
-				
-		        ImGui::EndTable();
-		    }
-
-
-			if (m_mesh->HasSkeleton())
-			{
-				ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
-
-				// TODO: Show dropdown for skeleton to be used
-
-				// TODO: Show bone hierarchy in tree view
-				const auto& skeleton = m_mesh->GetSkeleton();
-
-				Bone* rootBone = skeleton->GetRootBone();
-				if (ImGui::BeginChild("Bone Hierarchy"))
-				{
-					RenderBoneNode(*rootBone);
-				}
-				ImGui::EndChild();
-			}
-
-		    ImGui::PopStyleVar();
-
-			ImGui::Separator();
-
-			if (ImGui::Button("Save"))
-			{
-				Save();
-			}
-		}
-		ImGui::End();
-		
-		if (ImGui::Begin(viewportId.c_str()))
-		{
-			// Determine the current viewport position
-			auto viewportPos = ImGui::GetWindowContentRegionMin();
-			viewportPos.x += ImGui::GetWindowPos().x;
-			viewportPos.y += ImGui::GetWindowPos().y;
-
-			// Determine the available size for the viewport window and either create the render target
-			// or resize it if needed
-			const auto availableSpace = ImGui::GetContentRegionAvail();
-			
-			if (m_viewportRT == nullptr)
-			{
-				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
-				m_lastAvailViewportSize = availableSpace;
-			}
-			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-			{
-				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
-				m_lastAvailViewportSize = availableSpace;
-			}
-			
-			// Render the render target content into the window as image object
-			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
-			ImGui::SetItemUsingMouseWheel();
-
-			if (ImGui::IsItemHovered())
-			{
-				m_cameraNode->Translate(Vector3::UnitZ* ImGui::GetIO().MouseWheel * 0.1f, TransformSpace::Local);
-			}
-
-			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-			{
-				m_leftButtonPressed = true;
-			}
-		}
-		ImGui::End();
-		
+		// Init dock layout to dock sidebar windows to the right by default
 		if (m_initDockLayout)
 		{
-			ImGui::DockBuilderRemoveNode(dockspaceId);
-			ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
-			ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+			ImGui::DockBuilderRemoveNode(dockSpaceId);
+			ImGui::DockBuilderAddNode(dockSpaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
+			ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
-			auto mainId = dockspaceId;
+			auto mainId = dockSpaceId;
 			const auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			
 			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
+			ImGui::DockBuilderDockWindow(animationsId.c_str(), sideId);
+			ImGui::DockBuilderDockWindow(bonesId.c_str(), sideId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 
 			m_initDockLayout = false;
 		}
 
-		ImGui::DockBuilderFinish(dockspaceId);
+		ImGui::DockBuilderFinish(dockSpaceId);
 
 		ImGui::PopID();
 	}
@@ -399,5 +277,221 @@ namespace mmo
 		serializer.ExportMesh(m_entry, writer);
 
 		ILOG("Successfully saved mesh");
+	}
+
+	void ModelEditorInstance::SetAnimationState(AnimationState* animState)
+	{
+		if (m_animState == animState)
+		{
+			return;
+		}
+
+		if (m_animState)
+		{
+			m_animState->SetEnabled(false);
+		}
+
+		m_animState = animState;
+
+		if (m_animState)
+		{
+			m_animState->SetLoop(true);
+			m_animState->SetEnabled(true);
+			m_animState->SetWeight(1.0f);
+		}
+	}
+
+	void ModelEditorInstance::DrawDetails(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
+			{
+				if (m_entity != nullptr)
+				{
+					const auto files = AssetRegistry::ListFiles();
+
+					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
+					{
+						ImGui::PushID(i); // Use field index as identifier.
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::AlignTextToFramePadding();
+
+						if (const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i))
+						{
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::AlignTextToFramePadding();
+							constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+							ImGui::TreeNodeEx("Field", flags, "Material");
+
+							ImGui::TableSetColumnIndex(1);
+							ImGui::SetNextItemWidth(-FLT_MIN);
+
+							// Setup combo
+							String materialName = "(None)";
+							if (m_entity->GetSubEntity(i)->GetMaterial())
+							{
+								materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
+							}
+
+							ImGui::PushID(i);
+							if (ImGui::BeginCombo("material", materialName.c_str()))
+							{
+								// For each material
+								for (const auto& file : files)
+								{
+									if (!file.ends_with(".hmat")) continue;
+
+									if (ImGui::Selectable(file.c_str()))
+									{
+										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
+									}
+								}
+
+								ImGui::EndCombo();
+							}
+							ImGui::PopID();
+
+							ImGui::NextColumn();
+							ImGui::TreePop();
+						}
+						ImGui::PopID();
+					}
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::PopStyleVar();
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Save"))
+			{
+				Save();
+			}
+		}
+		ImGui::End();
+
+	}
+
+	void ModelEditorInstance::DrawAnimations(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			if (m_mesh->HasSkeleton())
+			{
+				if (ImGui::Button("Import Animation"))
+				{
+
+				}
+
+				ImGui::Separator();
+
+				if (m_mesh->GetSkeleton()->GetNumAnimations() > 0)
+				{
+					// Draw a popup box with all available animations and select the active one
+
+					static const String s_defaultPreviewString = "(None)";
+					const String* previewValue = &s_defaultPreviewString;
+					if (m_animState)
+					{
+						previewValue = &m_animState->GetAnimationName();
+					}
+
+					if (ImGui::BeginCombo("Animation", previewValue->c_str()))
+					{
+						if (ImGui::Selectable(s_defaultPreviewString.c_str()))
+						{
+							SetAnimationState(nullptr);
+						}
+
+						for (uint16 i = 0; i < m_mesh->GetSkeleton()->GetNumAnimations(); ++i)
+						{
+							const auto& anim = m_mesh->GetSkeleton()->GetAnimation(i);
+							if (ImGui::Selectable(anim->GetName().c_str()))
+							{
+								SetAnimationState(m_entity->GetAnimationState(anim->GetName()));
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+				else
+				{
+					ImGui::Text("No animations available");
+				}
+			}
+		}
+		ImGui::End();
+	}
+
+	void ModelEditorInstance::DrawBones(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			if (m_mesh->HasSkeleton())
+			{
+				ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+
+				// TODO: Show dropdown for skeleton to be used
+
+				// TODO: Show bone hierarchy in tree view
+				const auto& skeleton = m_mesh->GetSkeleton();
+
+				Bone* rootBone = skeleton->GetRootBone();
+				if (ImGui::BeginChild("Bone Hierarchy"))
+				{
+					RenderBoneNode(*rootBone);
+				}
+				ImGui::EndChild();
+			}
+		}
+	ImGui::End();
+
+	}
+
+	void ModelEditorInstance::DrawViewport(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			// Determine the current viewport position
+			auto viewportPos = ImGui::GetWindowContentRegionMin();
+			viewportPos.x += ImGui::GetWindowPos().x;
+			viewportPos.y += ImGui::GetWindowPos().y;
+
+			// Determine the available size for the viewport window and either create the render target
+			// or resize it if needed
+			const auto availableSpace = ImGui::GetContentRegionAvail();
+
+			if (m_viewportRT == nullptr)
+			{
+				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+				m_lastAvailViewportSize = availableSpace;
+			}
+			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
+			{
+				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
+				m_lastAvailViewportSize = availableSpace;
+			}
+
+			// Render the render target content into the window as image object
+			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+			ImGui::SetItemUsingMouseWheel();
+
+			if (ImGui::IsItemHovered())
+			{
+				m_cameraNode->Translate(Vector3::UnitZ * ImGui::GetIO().MouseWheel * 0.1f, TransformSpace::Local);
+			}
+
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+			{
+				m_leftButtonPressed = true;
+			}
+		}
+		ImGui::End();
 	}
 }
