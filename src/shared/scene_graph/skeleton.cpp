@@ -206,13 +206,6 @@ namespace mmo
 
 	void Skeleton::SetAnimationState(const AnimationStateSet& animSet)
 	{
-		/*
-		Algorithm:
-		  1. Reset all bone positions
-		  2. Iterate per AnimationState, if enabled get Animation and call Animation::apply
-		*/
-
-		// Reset bones
 		Reset();
 
 		float weightFactor = 1.0f;

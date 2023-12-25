@@ -4,6 +4,9 @@
 
 #include <fstream>
 
+#include "assets/asset_registry.h"
+#include "binary_io/stream_sink.h"
+#include "binary_io/text_writer.h"
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
 #include "log/default_log_levels.h"
@@ -954,20 +957,22 @@ namespace mmo
 			}
 
 			vertexShaderStream
-				<< "\tfor (int i = 0; i < 4; ++i)\n"
+				<< "\n\tfor (int i = 0; i < 4; ++i)\n"
 				<< "\t{\n"
-				<< "\t\tmatrix boneMatrix = matBone[input.boneIndices[i]];\n"
-				<< "\t\ttransformedPos += mul(input.pos, boneMatrix) * input.boneWeights[i];\n";
+				<< "\t\tif(input.boneIndices[i] != 0)\n\t\t{\n"
+				<< "\t\t\tmatrix boneMatrix = matBone[input.boneIndices[i]-1];\n"
+				<< "\t\t\ttransformedPos += mul(input.pos, boneMatrix) * input.boneWeights[i];\n";
 
 			if (m_lit)
 			{
 				vertexShaderStream
-					<< "\t\ttransformedNormal += mul(input.normal, (float3x3)boneMatrix) * input.boneWeights[i];\n"
-					<< "\t\ttransformedBinormal += mul(input.binormal, (float3x3)boneMatrix) * input.boneWeights[i];\n"
-					<< "\t\ttransformedTangent += mul(input.tangent, (float3x3)boneMatrix) * input.boneWeights[i];\n";
+					<< "\t\t\ttransformedNormal += mul(input.normal, boneMatrix) * input.boneWeights[i];\n"
+					<< "\t\t\ttransformedBinormal += mul(input.binormal, boneMatrix) * input.boneWeights[i];\n"
+					<< "\t\t\ttransformedTangent += mul(input.tangent, boneMatrix) * input.boneWeights[i];\n";
 			}
 
-			vertexShaderStream << "\t}\n";
+			vertexShaderStream << "\t\t}\n\n";
+			vertexShaderStream << "\t}\n\n";
 		}
 		else
 		{
@@ -1014,5 +1019,15 @@ namespace mmo
 
 		m_vertexShaderCode = vertexShaderStream.str();
 		vertexShaderStream.clear();
+
+#ifdef _DEBUG
+		// Write shader output to asset registry for debug
+		if (const auto filePtr = AssetRegistry::CreateNewFile("VS_" + std::to_string(static_cast<int>(type)) + ".hlsl"))
+		{
+			io::StreamSink sink(*filePtr);
+			io::TextWriter<char> writer(sink);
+			writer.write(m_vertexShaderCode);
+		}
+#endif
 	}
 }

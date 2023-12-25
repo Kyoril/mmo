@@ -248,7 +248,11 @@ namespace mmo
 			if (boneNode)
 			{
 				Bone* bone = m_skeleton->GetBone(mesh.mBones[i]->mName.C_Str());
-				ASSERT(bone);
+				if (!bone)
+				{
+					WLOG("Bone " << mesh.mBones[i]->mName.C_Str() << " is not part of the skeleton, but referenced by a vertex!");
+					continue;
+				}
 
 				for (uint32 j = 0; j < mesh.mBones[i]->mNumWeights; ++j)
 				{
