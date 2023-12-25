@@ -372,6 +372,7 @@ namespace mmo
 		reader >> io::read_container<uint16>(skeletonName);
 		if (reader)
 		{
+			m_entry.skeletonName = skeletonName;
 			m_mesh.SetSkeletonName(skeletonName);
 		}
 
@@ -387,6 +388,8 @@ namespace mmo
 			>> io::read<float>(assign.weight))
 		{
 			m_mesh.AddBoneAssignment(assign);
+
+			m_entry.boneAssignments.emplace_back(assign);
 		}
 
 		return reader;

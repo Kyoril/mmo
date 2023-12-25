@@ -991,8 +991,10 @@ namespace mmo
 		}
 
 		// By now we should have a vertex shader
-		ASSERT(vertexShader);
-		vertexShader->Set();
+		if (vertexShader)
+		{
+			vertexShader->Set();
+		}
 
 		// Bind vertex buffers
 		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)

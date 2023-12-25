@@ -20,9 +20,10 @@ namespace mmo
 		/// Creates a new instance of the RenderOperation class and initializes it.
 		///	@param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		ManualRenderOperation(GraphicsDevice& device, ManualRenderObject& parent)
+		ManualRenderOperation(GraphicsDevice& device, ManualRenderObject& parent, MaterialPtr material)
 			: m_device(device)
 			, m_parent(parent)
+			, m_material(material)
 		{
 		}
 
@@ -42,6 +43,10 @@ namespace mmo
 		///	be implemented.
 		virtual void Finish();
 
+		[[nodiscard]] MaterialPtr GetMaterial() const override { return m_material; }
+
+		void SetMaterial(const MaterialPtr& material) { m_material = material; }
+
 		void PrepareRenderOperation(RenderOperation& operation) override;
 
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
@@ -58,6 +63,8 @@ namespace mmo
 
 		std::unique_ptr<VertexData> m_vertexData;
 		std::unique_ptr<IndexData> m_indexData;
+
+		MaterialPtr m_material;
 
 		//VertexBufferPtr m_vertexBuffer;
 		//IndexBufferPtr m_indexBuffer;
@@ -167,8 +174,8 @@ namespace mmo
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		explicit ManualLineListOperation(GraphicsDevice& device, ManualRenderObject& parent)
-			: ManualRenderOperation(device, parent)
+		explicit ManualLineListOperation(GraphicsDevice& device, ManualRenderObject& parent, const MaterialPtr& material)
+			: ManualRenderOperation(device, parent, material)
 		{
 		}
 
@@ -183,18 +190,6 @@ namespace mmo
 		[[nodiscard]] VertexFormat GetFormat() const noexcept override
 		{
 			return VertexFormat::PosColor;
-		}
-
-		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.CaptureState();
-			graphicsDevice.SetDepthEnabled(m_depthEnabled);
-			return true;
-		}
-
-		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.RestoreState();
 		}
 
 	public:
@@ -262,16 +257,10 @@ namespace mmo
 
 		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
 
-		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
-
-		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
-
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
 		AABB m_boundingBox;
-		std::shared_ptr<Material> m_material; // TODO
-		bool m_depthEnabled = true;
 	};
 
 	/// A special operation which renders a list of triangles for a ManualRenderObject.
@@ -325,8 +314,8 @@ namespace mmo
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		explicit ManualTriangleListOperation(GraphicsDevice& device, ManualRenderObject& parent)
-			: ManualRenderOperation(device, parent)
+		explicit ManualTriangleListOperation(GraphicsDevice& device, ManualRenderObject& parent, const MaterialPtr& material)
+			: ManualRenderOperation(device, parent, material)
 		{
 		}
 
@@ -341,18 +330,6 @@ namespace mmo
 		[[nodiscard]] VertexFormat GetFormat() const noexcept override
 		{
 			return VertexFormat::PosColor;
-		}
-
-		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.CaptureState();
-			graphicsDevice.SetDepthEnabled(m_depthEnabled);
-			return true;
-		}
-
-		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.RestoreState();
 		}
 
 	public:
@@ -415,17 +392,12 @@ namespace mmo
 
 		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
 
-		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
-
-		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
 		void ConvertToSubmesh(SubMesh& subMesh) override;
 
 	private:
 		/// A list of triangles to render.
 		std::vector<Triangle> m_triangles;
 		AABB m_boundingBox;
-		std::shared_ptr<Material> m_material; // TODO
-		bool m_depthEnabled = true;
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess
@@ -441,10 +413,10 @@ namespace mmo
 
 	public:
 		/// Adds a new render operation to the object which draws a line list.
-		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation();
+		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation(MaterialPtr material);
 
 		/// Adds a new render operation to the object which draws a triangle list.
-		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation();
+		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation(MaterialPtr material);
 
 		/// Removes all operations.
 		void Clear() noexcept;

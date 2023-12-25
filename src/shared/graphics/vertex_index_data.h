@@ -12,15 +12,17 @@ namespace mmo
 	class VertexDeclaration;
 
 	/// @brief Collects data describing vertex source information for render operations.
-	class VertexData final : public NonCopyable
+	class VertexData final
 	{
 	private:
 		GraphicsDevice* m_device;
 
 	public:
 		VertexData(GraphicsDevice* device = nullptr);
+		VertexData(const VertexData& rhs);
+		VertexData& operator=(const VertexData& rhs);
 		VertexData(VertexDeclaration& declaration, VertexBufferBinding& binding);
-		~VertexData() override;
+		~VertexData();
 
 	public:
 		VertexDeclaration* vertexDeclaration;

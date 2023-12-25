@@ -18,6 +18,29 @@ namespace mmo
 		m_hardwareAnimationDataItemsUsed = 0;
 	}
 
+	VertexData::VertexData(const VertexData& rhs)
+	{
+		m_device = rhs.m_device;
+		vertexBufferBinding = rhs.vertexBufferBinding;
+		vertexDeclaration = rhs.vertexDeclaration;
+		deleteDeclarationBinding = false;
+		vertexCount = rhs.vertexCount;
+		vertexStart = rhs.vertexStart;
+		m_hardwareAnimationDataItemsUsed = rhs.m_hardwareAnimationDataItemsUsed;
+	}
+
+	VertexData& VertexData::operator=(const VertexData& rhs)
+	{
+		m_device = rhs.m_device;
+		vertexBufferBinding = rhs.vertexBufferBinding;
+		vertexDeclaration = rhs.vertexDeclaration;
+		deleteDeclarationBinding = false;
+		vertexCount = rhs.vertexCount;
+		vertexStart = rhs.vertexStart;
+		m_hardwareAnimationDataItemsUsed = rhs.m_hardwareAnimationDataItemsUsed;
+		return *this;
+	}
+
 	VertexData::VertexData(VertexDeclaration& declaration, VertexBufferBinding& binding)
 	{
 		m_device = &GraphicsDevice::Get();

@@ -19,6 +19,7 @@ namespace mmo
 		operation.vertexFormat = GetFormat();
 		operation.vertexData = m_vertexData.get();
 		operation.indexData = m_indexData.get();
+		operation.material = m_material;
 	}
 
 	const Matrix4& ManualRenderOperation::GetWorldTransform() const
@@ -47,12 +48,20 @@ namespace mmo
 	{
 		subMesh.useSharedVertices = false;
 
-//		subMesh.vertexData = std::make_unique<VertexData>();
+		subMesh.vertexData = std::make_unique<VertexData>(*m_vertexData->vertexDeclaration, *m_vertexData->vertexBufferBinding);
+		subMesh.vertexData->vertexCount = m_vertexData->vertexCount;
+		subMesh.vertexData->vertexStart = m_vertexData->vertexStart;
+		subMesh.vertexData->m_hardwareAnimationDataList = m_vertexData->m_hardwareAnimationDataList;
 
-		/*subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
-		subMesh.m_indexBuffer = std::move(m_indexBuffer);
-		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();*/
+		if (m_indexData)
+		{
+			subMesh.indexData = std::make_unique<IndexData>();
+			subMesh.indexData->indexCount = m_indexData->indexCount;
+			subMesh.indexData->indexStart = m_indexData->indexStart;
+			subMesh.indexData->indexBuffer = std::move(m_indexData->indexBuffer);
+		}
+
+		subMesh.SetMaterial(m_material);
 	}
 
 	ManualRenderObject::ManualRenderObject(GraphicsDevice& device, const String& name)
@@ -61,9 +70,9 @@ namespace mmo
 	{
 	}
 
-	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation()
+	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation(MaterialPtr material)
 	{
-		auto operation = std::make_unique<ManualLineListOperation>(m_device, *this);
+		auto operation = std::make_unique<ManualLineListOperation>(m_device, *this, material);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
@@ -71,9 +80,9 @@ namespace mmo
 		return *result;
 	}
 
-	ManualRenderOperationRef<ManualTriangleListOperation> ManualRenderObject::AddTriangleListOperation()
+	ManualRenderOperationRef<ManualTriangleListOperation> ManualRenderObject::AddTriangleListOperation(MaterialPtr material)
 	{
-		auto operation = std::make_unique<ManualTriangleListOperation>(m_device, *this);
+		auto operation = std::make_unique<ManualTriangleListOperation>(m_device, *this, material);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));

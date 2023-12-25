@@ -296,33 +296,30 @@ namespace mmo
 		{
 			const Color color = (m_selectedAxis & axis_id::X) == 0 ? Color(1.0f, 0.0f, 0.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
 
-			const auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 			lineOp->AddLine(Vector3(CenterOffset, 0.0f, 0.0f), xTipPos).SetColor(color);
 			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(color);
 			lineOp->AddLine(Vector3(SquareLength, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(color);
-			lineOp->SetDepthEnabled(false);
 		}
 
 		// Y Axis
 		{
 			const Color color = (m_selectedAxis & axis_id::Y) == 0 ? Color(0.0f, 1.0f, 0.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
 
-			const auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 			lineOp->AddLine(Vector3(0.0f, CenterOffset, 0.0f), yTipPos).SetColor(color);
 			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(SquareLength, SquareLength, 0.0f)).SetColor(color);
 			lineOp->AddLine(Vector3(0.0f, SquareLength, 0.0f), Vector3(0.0f, SquareLength, SquareLength)).SetColor(color);
-			lineOp->SetDepthEnabled(false);
 		}
 
 		// Z Axis
 		{
 			const Color color = (m_selectedAxis & axis_id::Z) == 0 ? Color(0.0f, 0.0f, 1.0f, 1.0f) : Color(1.0f, 1.0f, 0.0f, 1.0f);
 
-			const auto lineOp = m_axisLines->AddLineListOperation();
+			const auto lineOp = m_axisLines->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 			lineOp->AddLine(Vector3(0.0f, 0.0f, CenterOffset), zTipPos).SetColor(color);
 			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(0.0f, SquareLength, SquareLength)).SetColor(color);
 			lineOp->AddLine(Vector3(0.0f, 0.0f, SquareLength), Vector3(SquareLength, 0.0f, SquareLength)).SetColor(color);
-			lineOp->SetDepthEnabled(false);
 		}
 	}
 
@@ -364,7 +361,7 @@ namespace mmo
 		m_translationNode = m_widgetNode->CreateChildSceneNode();
 		m_translationNode->AttachObject(*m_axisLines);
 
-		MaterialPtr planeMaterial = MaterialManager::Get().Load("Editor/SelectionHighlight.hmat");
+		MaterialPtr planeMaterial = MaterialManager::Get().Load("Models/Engine/AxisPlaneHighlight.hmat");
 
 		// Setup arrows
 		m_xArrowNode = m_translationNode->CreateChildSceneNode();
@@ -761,7 +758,7 @@ namespace mmo
 		planeObject->SetRenderQueueGroupAndPriority(Overlay, 1000);
 
 		{
-			const auto triangleOp = planeObject->AddTriangleListOperation();
+			const auto triangleOp = planeObject->AddTriangleListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 			triangleOp->AddTriangle(Vector3(SquareLength, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(SquareLength, 0.0f, SquareLength))
 			          .SetColor(Color(1.0f, 1.0f, 0.0f, 0.6f));
 			triangleOp->AddTriangle(
