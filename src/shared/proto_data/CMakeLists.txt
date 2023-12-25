@@ -44,6 +44,7 @@ source_group(defs FILES ${protoFiles})
 
 add_library(proto_data ${PROTO_SRCS} ${PROTO_HDRS} ${srcFiles} ${protoFiles})
 target_include_directories(proto_data PRIVATE ${protobuf_INCLUDE_DIRS})
+target_link_libraries(proto_data libprotobuf ${protobuf_LIBRARIES})
 
 # Solution folder
 set_property(TARGET proto_data PROPERTY FOLDER "shared")
