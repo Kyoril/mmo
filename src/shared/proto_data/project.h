@@ -158,7 +158,7 @@ namespace mmo
 				};
 
 				const std::filesystem::path dataPath = directory;
-				const auto realmDataPath = (dataPath / "data");
+				const auto realmDataPath = (dataPath);
 
 				typedef ProjectLoader<DataLoadContext> RealmProjectLoader;
 				typedef RealmProjectLoader::ManagerEntry ManagerEntry;
@@ -215,8 +215,7 @@ namespace mmo
 			}
 			/// Saves the project.
 			/// @param directory The path to save this project to.
-			bool save(
-			    const String &directory)
+			bool save(const String &directory)
 			{
 				// Remember last used path
 				m_lastPath = directory;
@@ -225,7 +224,7 @@ namespace mmo
 				auto saveStart = GetAsyncTimeMs();
 
 				const std::filesystem::path dataPath = directory;
-				const auto realmDataPath = (dataPath / "mmo");
+				const auto realmDataPath = (dataPath);
 
 				typedef ProjectSaver RealmProjectSaver;
 				typedef ProjectSaver::Manager ManagerEntry;

@@ -24,6 +24,7 @@ namespace mmo
 
 			T1 m_data;
 			std::map<uint32, T2 *> m_templatesById;
+			uint32 m_nextId = 0;
 
 		public:
 
@@ -33,6 +34,8 @@ namespace mmo
 			{
 				// Set byte limit to 128MB
 				const int byteLimit = 1024 * 1024 * 128;
+
+				m_nextId = 0;
 
 				google::protobuf::io::IstreamInputStream zeroCopyStream(&stream);
 				google::protobuf::io::CodedInputStream decoder(&zeroCopyStream);
@@ -53,6 +56,10 @@ namespace mmo
 				{
 					T2 *entry = m_data.mutable_entry(i);
 					m_templatesById[entry->id()] = entry;
+					if (entry->id() >= m_nextId)
+					{
+						m_nextId = entry->id() + 1;
+					}
 				}
 
 				return true;
@@ -75,14 +82,26 @@ namespace mmo
 				m_templatesById.clear();
 				m_data.clear_entry();
 			}
+
 			/// Gets a list of all template entries in this list.
 			const T1 &getTemplates() const
 			{
 				return m_data;
 			}
+
 			T1 &getTemplates()
 			{
 				return m_data;
+			}
+
+			size_t count() const
+			{
+				return m_templatesById.size();
+			}
+
+			T2 *add()
+			{
+				return add(m_nextId++);
 			}
 
 			/// Adds a new entry using the specified id.

@@ -592,7 +592,7 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 			case IDC_PLAY:
 				{
 					// Start the client (TODO?)
-					WinExec("./mmo_client.exe -uptodate", SW_SHOWDEFAULT);
+					WinExec("./MMO.exe -uptodate", SW_SHOWDEFAULT);
 					EndDialog(hDlg, 0);
 					return FALSE;
 				}

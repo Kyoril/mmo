@@ -46,7 +46,7 @@ message SpellEntry {
 	optional int32 baselevel = 11;
 	optional int32 spelllevel = 12;
 	optional float speed = 13;
-	optional uint32 schoolmask = 14;
+	optional uint32 spellSchool = 14;
 	optional uint32 dmgclass = 15;
 	optional int32 itemclass = 16;
 	optional uint32 itemsubclassmask = 17;

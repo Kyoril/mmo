@@ -100,6 +100,7 @@ target_link_libraries(mmo_edit
 	frame_ui
 	paging
 	proto_data
+	libprotobuf
 	sql_wrapper
 	mysql_wrapper)
 	

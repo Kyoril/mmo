@@ -433,6 +433,19 @@ namespace mmo
 				const auto mousePos = ImGui::GetMousePos();
 				const auto contentRectMin = ImGui::GetWindowPos();
 				m_lastContentRectMin = contentRectMin;
+
+				if (ImGui::IsKeyPressed(ImGuiKey_Delete))
+				{
+					if (!m_selection.IsEmpty())
+					{
+						for (auto& selected : m_selection.GetSelectedObjects())
+						{
+							selected->Remove();
+						}
+
+						m_selection.Clear();
+					}
+				}
 			}
 
 			if (ImGui::BeginDragDropTarget())
@@ -704,7 +717,11 @@ namespace mmo
 		m_raySceneQuery->ClearResult();
 		m_raySceneQuery->Execute();
 
-		m_selection.Clear();
+		if (!ImGui::IsKeyPressed(ImGuiKey_LeftShift))
+		{
+			m_selection.Clear();
+		}
+
 		m_debugBoundingBox->Clear();
 
 		const auto& hitResult = m_raySceneQuery->GetLastResult();
@@ -739,9 +756,18 @@ namespace mmo
 			node.SetOrientation(orientation);
 			node.SetScale(scale);
 
-			m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
+	}
+
+	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
+	{
+		m_mapEntities.erase(std::remove_if(m_mapEntities.begin(), m_mapEntities.end(), [&entity](const auto& mapEntity)
+		{
+			return mapEntity.get() == &entity;
+		}), m_mapEntities.end());
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)

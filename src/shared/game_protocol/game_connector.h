@@ -172,6 +172,7 @@ namespace mmo
 				m_resolver.reset();
 				beginConnect(iterator);
 			}
+			
 			void beginConnect(asio::ip::tcp::resolver::iterator iterator)
 			{
 				const typename Super::Socket::endpoint_type endpoint(
@@ -200,11 +201,13 @@ namespace mmo
 					}
 					return;
 				}
-				else if (error.code() == asio::error::operation_aborted)
+
+				if (error.code() == asio::error::operation_aborted)
 				{
 					return;
 				}
-				else if (iterator == asio::ip::tcp::resolver::iterator())
+
+				if (iterator == asio::ip::tcp::resolver::iterator())
 				{
 					if (GetListener())
 					{

@@ -25,6 +25,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
@@ -77,8 +78,6 @@ namespace mmo
 			return 1;
 		}
 
-
-
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -105,7 +104,13 @@ namespace mmo
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");
 		ILOG("Last Change: " << GitLastChange);
 
-
+		// Load game data
+		proto::Project project;
+		if (!project.load(config.dataFolder))
+		{
+			ELOG("Failed to load project from folder '" << config.dataFolder << "'!");
+			return 1;
+		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup

@@ -5,14 +5,14 @@
 
 namespace mmo
 {
-	IndexBufferNull::IndexBufferNull(GraphicsDeviceNull & device, size_t indexCount, IndexBufferSize indexSize, const void* initialData)
+	IndexBufferNull::IndexBufferNull(GraphicsDeviceNull & device, size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData)
 		: IndexBuffer(indexCount, indexSize)
 		, m_device(device)
 	{
 		m_indices.resize(indexCount);
 	}
 
-	void * IndexBufferNull::Map()
+	void * IndexBufferNull::Map(LockOptions options)
 	{
 		return &m_indices[0];
 	}
@@ -22,7 +22,7 @@ namespace mmo
 
 	}
 
-	void IndexBufferNull::Set()
+	void IndexBufferNull::Set(uint16 slot)
 	{
 
 	}

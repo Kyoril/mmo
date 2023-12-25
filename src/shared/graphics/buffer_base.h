@@ -5,9 +5,34 @@
 #include "base/non_copyable.h"
 
 #include <cstddef>
+#include <vector>
+
+#include "base/typedefs.h"
 
 namespace mmo
 {
+	enum class BufferUsage
+	{
+		Static = 1,
+		Dynamic = 2,
+		WriteOnly = 4,
+		Discardable = 8,
+		StaticWriteOnly = Static | WriteOnly,
+		DynamicWriteOnly = Dynamic | WriteOnly,
+		DynamicWriteOnlyDiscardable = Dynamic | WriteOnly | Discardable
+	};
+
+	typedef std::vector<BufferUsage> BufferUsageList;
+
+	enum class LockOptions
+	{
+		Normal,
+		Discard,
+		ReadOnly,
+		NoOverwrite,
+		WriteOnly
+	};
+
 	/// This is the base class of a hardware buffer, for example used for vertex buffers.
 	/// It supports map and unmap.
 	class BufferBase 
@@ -15,15 +40,15 @@ namespace mmo
 	{
 	public:
 		/// Virtual default destructor because of inheritance.
-		virtual ~BufferBase() = default;
+		virtual ~BufferBase() override = default;
 
 	public:
 		/// This method supports mapping the vertex buffer to access it's data if possible.
-		virtual void* Map() = 0;
+		virtual void* Map(LockOptions lock) = 0;
 		/// 
 		virtual void Unmap() = 0;
 		/// 
-		virtual void Set() = 0;
+		virtual void Set(uint16 slot) = 0;
 	};
 
 	/// Scoped buffer lock which will call map in the beginning and unmap at the destructor.
@@ -32,30 +57,30 @@ namespace mmo
 	class CScopedGxBufferLock
 	{
 	public:
-		CScopedGxBufferLock(BufferBase& InBuffer)
-			: Buffer(InBuffer)
+		CScopedGxBufferLock(BufferBase& buffer, const LockOptions options)
+			: m_buffer(buffer)
 		{
-			Memory = reinterpret_cast<T*>(Buffer.Map());
+			m_memory = static_cast<T*>(m_buffer.Map(options));
 		}
 		~CScopedGxBufferLock()
 		{
-			Buffer.Unmap();
+			m_buffer.Unmap();
 		}
 
 	public:
 		T* Get()
 		{
-			return Memory;
+			return m_memory;
 		}
-		T* operator[](std::size_t Index)
+		T* operator[](std::size_t index)
 		{
-			return Memory + Index;
+			return m_memory + index;
 		}
 
 		T* operator->() const { return Get(); }
 
 	private:
-		BufferBase& Buffer;
-		T* Memory;
+		BufferBase& m_buffer;
+		T* m_memory;
 	};
 }

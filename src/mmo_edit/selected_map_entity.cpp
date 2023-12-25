@@ -30,7 +30,7 @@ namespace mmo
 
     void SelectedMapEntity::Remove()
     {
-        // TODO
+        m_entity.remove(m_entity);
     }
 
     void SelectedMapEntity::Deselect()

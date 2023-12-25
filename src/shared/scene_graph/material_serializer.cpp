@@ -33,7 +33,6 @@ namespace mmo
 			if (version >= material_version::Version_0_1)
 			{
 				AddChunkHandler(*MaterialNameChunk, true, *this, &MaterialDeserializer::ReadMaterialNameChunk);
-				AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunk);
 				AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunk);
 				AddChunkHandler(*MaterialTextureChunk, true, *this, &MaterialDeserializer::ReadMaterialTextureChunk);
 				AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeChunk);
@@ -41,6 +40,15 @@ namespace mmo
 				if (version >= material_version::Version_0_2)
 				{
 					AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeV2Chunk);
+				}
+
+				if (version >= material_version::Version_0_3)
+				{
+					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunkV03);
+				}
+				else
+				{
+					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunk);
 				}
 			}
 			else
@@ -152,7 +160,71 @@ namespace mmo
 					return false;
 				}
 
-				m_material.SetVertexShaderCode({ shaderCode });
+				m_material.SetVertexShaderCode(VertexShaderType::Default, { shaderCode });
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialVertexShaderChunkV03(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 shaderCount;
+		if (!(reader >> io::read<uint8>(shaderCount)))
+		{
+			ELOG("Failed to read vertex shader chunk for material " << m_material.GetName());
+			return false;
+		}
+
+		if (shaderCount == 0)
+		{
+			WLOG("Material " << m_material.GetName() << " has no compiled vertex shaders available and might not be used in game client");
+			return true;
+		}
+
+		// Read shader code
+		for (uint8 i = 0; i < shaderCount; ++i)
+		{
+			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
+			String shaderProfile;
+			if (!(reader >> io::read_container<uint8>(shaderProfile)))
+			{
+				return false;
+			}
+
+			VertexShaderType shaderType;
+			if (!(reader >> io::read<uint8>(shaderType)) || static_cast<uint8_t>(shaderType) >= 4)
+			{
+				return false;
+			}
+
+			uint32 shaderCodeSize;
+			if (!(reader >> io::read<uint32>(shaderCodeSize)))
+			{
+				return false;
+			}
+
+			if (shaderCodeSize == 0)
+			{
+				continue;
+			}
+
+			if (shaderProfile != "D3D_SM5")
+			{
+				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
+				reader >> io::skip(shaderCodeSize);
+			}
+			else
+			{
+				std::vector<uint8> shaderCode;
+				shaderCode.resize(shaderCodeSize);
+				if (!(reader >> io::read_range(shaderCode)))
+				{
+					ELOG("Error while reading D3D_SM5 vertex shader code!");
+					return false;
+				}
+
+				m_material.SetVertexShaderCode(shaderType, { shaderCode });
 			}
 		}
 
@@ -241,7 +313,7 @@ namespace mmo
 	
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_2;
+		version = material_version::Version_0_3;
 		
 		// File version chunk
 		{
@@ -289,11 +361,16 @@ namespace mmo
 			ChunkWriter shaderChunkWriter { MaterialVertexShaderChunk, writer };
 
 			// TODO: Number of shaders to write
-			writer << io::write<uint8>(1);
+			writer << io::write<uint8>(4);
 
-			// TODO: Shader model
-			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write_dynamic_range<uint32>(material.GetVertexShaderCode().begin(), material.GetVertexShaderCode().end());
+			for (uint32 i = 0; i < 4; ++i)
+			{
+				// TODO: Shader model
+				writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
+				writer << io::write<uint8>(i);
+				writer << io::write_dynamic_range<uint32>(material.GetVertexShaderCode(static_cast<VertexShaderType>(i)).begin(), material.GetVertexShaderCode(static_cast<VertexShaderType>(i)).end());
+			}
+			
 
 			shaderChunkWriter.Finish();
 		}

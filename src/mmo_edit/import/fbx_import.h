@@ -43,6 +43,50 @@ namespace mmo
 		Matrix4 transform;
 	};
 
+
+	struct SceneAnimNode
+	{
+		std::string m_name;
+		SceneAnimNode* m_parent;
+		std::vector<SceneAnimNode*> m_children;
+
+		//! most recently calculated local transform
+		aiMatrix4x4 m_localTransform;
+
+		//! same, but in world space
+		aiMatrix4x4 m_globalTransform;
+
+		//!  index in the current animation's channel array. -1 if not animated.
+		int m_channelIndex;
+
+		//! Default construction
+		SceneAnimNode()
+			: m_name()
+			, m_parent(nullptr)
+			, m_children()
+			, m_localTransform()
+			, m_globalTransform()
+			, m_channelIndex(-1)
+		{
+		}
+
+		//! Construction from a given name
+		SceneAnimNode(std::string name)
+			: m_name(std::move(name))
+			, m_parent(nullptr)
+			, m_children()
+			, m_localTransform()
+			, m_globalTransform()
+			, m_channelIndex(-1)
+		{
+		}
+
+		//! Destruct all children recursively
+		~SceneAnimNode()
+		{
+		}
+	};
+
 	/// This class can be used to extract relevant informations out of an fbx file.
 	class FbxImport final
 		: public ImportBase
@@ -51,6 +95,9 @@ namespace mmo
 
 		class CustomAssimpLogStream : public Assimp::LogStream
 		{
+		public:
+			virtual ~CustomAssimpLogStream() override = default;
+
 		public:
 			void write(const char* message) override;
 		};
@@ -74,6 +121,8 @@ namespace mmo
 		/// @param node The node to start traversing from.
 		void TraverseScene(const aiNode& node, const aiScene& scene);
 
+		bool SaveSkeletonFile(const String& filename, const Path& assetPath);
+
 		/// @brief Saves the loaded mesh geometry data into the engine's custom mesh file format.
 		/// @param filename The file name of the new mesh file without extension and path.
 		/// @param assetPath The asset path, relative to the game content root folder, where the file will be located.
@@ -94,9 +143,31 @@ namespace mmo
 		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
 	private:
+		const aiMatrix4x4& GetLocalTransform(const aiNode* node) const;
+
+		const aiMatrix4x4& GetGlobalTransform(const aiNode* node) const;
+
+		const std::vector<aiMatrix4x4>& GetBoneMatrices(const aiMesh* mesh, const aiNode* pNode, size_t pMeshIndex);
+
+		static void CalculateGlobalTransform(SceneAnimNode& internalNode);
+
+		SceneAnimNode* CreateNodeTree(const aiNode* node, SceneAnimNode* parent);
+
+	private:
 		std::vector<MeshEntry> m_meshEntries;
-		std::vector<Joint> m_joints;
-		std::stack<Joint*> m_jointStack;
+
+		typedef std::map<const aiNode*, std::unique_ptr<SceneAnimNode>> NodeMap;
+		NodeMap m_nodesByName;
+
+		/** Name to node map to quickly find nodes for given bones by their name */
+		typedef std::map<const char*, const aiNode*> BoneMap;
+		BoneMap m_boneNodesByName;
+
+		/** Array to return transformations results inside. */
+		std::vector<aiMatrix4x4> m_transforms;
+
 		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
+
+		SkeletonPtr m_skeleton{nullptr};
 	};
 }

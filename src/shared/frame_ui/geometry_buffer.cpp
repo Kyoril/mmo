@@ -10,7 +10,7 @@ namespace mmo
 	GeometryBuffer::GeometryBuffer()
 		: m_sync(false)
 	{
-		m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(64, sizeof(Vertex), true, nullptr);
+		m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(64, sizeof(Vertex), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
 	}
 
 	void GeometryBuffer::Draw()
@@ -39,7 +39,7 @@ namespace mmo
 			gx.BindTexture(batch.first, ShaderType::PixelShader, 0);
 
 			// Setup geometry
-			m_hwBuffer->Set();
+			m_hwBuffer->Set(0);
 
 			// Draw vertex buffer data
 			gx.Draw(batch.second, pos);
@@ -59,13 +59,13 @@ namespace mmo
 		AppendGeometry(&vertex, 1);
 	}
 
-	void GeometryBuffer::AppendGeometry(const Vertex * const buffer, uint32 count)
+	void GeometryBuffer::AppendGeometry(const Vertex * const buffer, const uint32 count)
 	{
 		ASSERT(m_activeTexture);
 
 		// See if we need to start a new render batch
 		if (m_batches.empty() || m_batches.back().first != m_activeTexture)
-			m_batches.push_back(BatchInfo(m_activeTexture, 0));
+			m_batches.emplace_back(m_activeTexture, 0);
 
 		// Update size of current batch
 		m_batches.back().second += count;
@@ -133,14 +133,13 @@ namespace mmo
 			}
 
 			// Reallocate the buffer
-			m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(size, sizeof(Vertex), true, nullptr);
+			m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(size, sizeof(Vertex), BufferUsage::DynamicWriteOnly, nullptr);
 		}
 
 		// Copy vertex data into hw buffer
 		if (required > 0)
 		{
-			std::memcpy(m_hwBuffer->Map(),
-				&m_vertices[0], sizeof(Vertex) * m_vertices.size());
+			std::memcpy(m_hwBuffer->Map(LockOptions::Discard), m_vertices.data(), sizeof(Vertex) * m_vertices.size());
 			m_hwBuffer->Unmap();
 		}
 

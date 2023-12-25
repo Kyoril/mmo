@@ -1,12 +1,13 @@
 #include "animation_state.h"
 
 #include <cmath>
+#include <ranges>
 
 namespace mmo
 {
-	AnimationState::AnimationState(const String& name, AnimationStateSet& parent, float timePos, float length, float weight, bool enabled)
+	AnimationState::AnimationState(String name, AnimationStateSet& parent, const float timePos, const float length, const float weight, const bool enabled)
 		: m_blendMask(nullptr)
-		, m_animationName(name)
+		, m_animationName(std::move(name))
 		, m_parent(&parent)
 		, m_timePos(timePos)
 		, m_length(length)
@@ -30,11 +31,7 @@ namespace mmo
 		m_parent->NotifyDirty();
 	}
 
-	AnimationState::~AnimationState()
-	{
-	}
-
-	void AnimationState::SetTimePosition(float timePos)
+	void AnimationState::SetTimePosition(const float timePos)
 	{
 		if (timePos == m_timePos)
 		{
@@ -85,7 +82,7 @@ namespace mmo
 		SetTimePosition(m_timePos + offset);
 	}
 
-	void AnimationState::SetEnabled(bool enabled)
+	void AnimationState::SetEnabled(const bool enabled)
 	{
 		m_enabled = enabled;
 		m_parent->NotifyAnimationStateEnabled(this, enabled);
@@ -164,7 +161,7 @@ namespace mmo
 		SetBlendMaskData(blendMask->data());
 	}
 
-	void AnimationState::SetBlendMaskEntry(size_t boneHandle, float weight)
+	void AnimationState::SetBlendMaskEntry(const uint16 boneHandle, const float weight) const
 	{
 		ASSERT(m_blendMask && m_blendMask->size() > boneHandle);
 
@@ -183,13 +180,13 @@ namespace mmo
 	AnimationStateSet::AnimationStateSet(const AnimationStateSet& rhs)
 		: m_dirtyFrameNumber(std::numeric_limits<unsigned long>::max())
 	{
-		for (const auto& m_animationState : rhs.m_animationStates)
+		for (const auto& animationState : rhs.m_animationStates | std::views::values)
 		{
-			m_animationStates[m_animationState.second->GetAnimationName()] = std::make_unique<AnimationState>(*this, *m_animationState.second);
+			m_animationStates[animationState->GetAnimationName()] = std::make_unique<AnimationState>(*this, *animationState);
 		}
 
 		// Clone enabled animation state list
-		for (auto src : rhs.m_enabledAnimationStates)
+		for (const auto src : rhs.m_enabledAnimationStates)
 		{
 			m_enabledAnimationStates.push_back(GetAnimationState(src->GetAnimationName()));
 		}

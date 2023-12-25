@@ -1,6 +1,11 @@
 
 #include "skeleton_mgr.h"
 
+#include "skeleton_serializer.h"
+#include "assets/asset_registry.h"
+#include "binary_io/stream_source.h"
+#include "log/default_log_levels.h"
+
 namespace mmo
 {
 	SkeletonMgr& SkeletonMgr::Get()
@@ -16,7 +21,30 @@ namespace mmo
 			return m_skeletonsByName[name];
 		}
 
-		const SkeletonPtr skeleton = std::make_shared<Skeleton>(name);
+		// Try to load the file from the registry
+		const auto filePtr = AssetRegistry::OpenFile(name);
+		if (!filePtr)
+		{
+			ELOG("Unable to load mesh file " << name);
+			return nullptr;
+		}
+
+		// Create readers
+		io::StreamSource source{ *filePtr };
+		io::Reader reader{ source };
+
+		// Create the resulting skeleton
+		const auto skeleton = std::make_shared<Skeleton>(name);
+
+		SkeletonDeserializer deserializer{ *skeleton };
+		if (!deserializer.Read(reader))
+		{
+			ELOG("Failed to load skeleton!");
+			return nullptr;
+		}
+
+		skeleton->Load();
+
 		return m_skeletonsByName[name] = skeleton;
 	}
 

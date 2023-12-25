@@ -42,39 +42,25 @@ namespace mmo
 		///	be implemented.
 		virtual void Finish();
 
-	public:
-		/// Renders the operation using the graphics device provided when the operation was created.
-		void Render() const
-		{
-			ASSERT(m_vertexBuffer && "No vertex buffer created, did you call Finish before rendering?");
-
-			m_device.SetTopologyType(GetTopologyType());
-			m_device.SetVertexFormat(GetFormat());
-
-			m_vertexBuffer->Set();
-
-			if (m_indexBuffer)
-			{
-				m_indexBuffer->Set();
-				m_device.DrawIndexed();
-			}
-			else
-			{
-				m_device.Draw(m_vertexBuffer->GetVertexCount());
-			}
-		}
-
 		void PrepareRenderOperation(RenderOperation& operation) override;
+
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
+
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
+
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+
 		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
 	protected:
 		GraphicsDevice& m_device;
 		ManualRenderObject& m_parent;
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
+
+		std::unique_ptr<VertexData> m_vertexData;
+		std::unique_ptr<IndexData> m_indexData;
+
+		//VertexBufferPtr m_vertexBuffer;
+		//IndexBufferPtr m_indexBuffer;
 	};
 
 	/// Wrapper class for a RenderOperation which ensures that the Finish method is called
@@ -217,7 +203,7 @@ namespace mmo
 		{
 			ASSERT(!m_lines.empty() && "At least one line has to be added!");
 			
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_lines.size() * 2);
 
 			bool firstLine = true;
@@ -225,10 +211,10 @@ namespace mmo
 			for(auto& line : m_lines)
 			{
 
-				const POS_COL_VERTEX v1 { line.GetStartPosition(), line.GetStartColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1 { line.GetStartPosition(), line.GetStartColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v1);
 
-				const POS_COL_VERTEX v2 { line.GetEndPosition(), line.GetEndColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v2 { line.GetEndPosition(), line.GetEndColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v2);
 				
 				if (firstLine)
@@ -246,8 +232,21 @@ namespace mmo
 				}
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
-			
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+
 			ManualRenderOperation::Finish();
 		}
 
@@ -362,7 +361,7 @@ namespace mmo
 		{
 			ASSERT(!m_triangles.empty() && "At least one triangle has to be added!");
 
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_triangles.size() * 2);
 
 			bool firstVertex = true;
@@ -371,7 +370,7 @@ namespace mmo
 			{
 				for (uint8_t i = 0; i < 3; ++i)
 				{
-					const POS_COL_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i) };
+					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 					vertices.emplace_back(v1);
 
 					if (firstVertex)
@@ -386,10 +385,22 @@ namespace mmo
 						m_boundingBox.max = TakeMaximum(m_boundingBox.max, triangle.GetPosition(i));
 					}
 				}
-
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
 
 			ManualRenderOperation::Finish();
 		}

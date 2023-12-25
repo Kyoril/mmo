@@ -16,7 +16,7 @@ namespace mmo
 	{
 	public:
 		/// 
-		VertexBuffer(uint32 vertexCount, uint32 vertexSize, bool dynamic);
+		VertexBuffer(uint32 vertexCount, uint32 vertexSize, BufferUsage usage);
 		/// Virtual default destructor because of inheritance.
 		virtual ~VertexBuffer() = default;
 
@@ -24,14 +24,14 @@ namespace mmo
 
 		[[nodiscard]] uint32 GetVertexCount() const { return m_vertexCount; }
 		[[nodiscard]] uint32 GetVertexSize() const { return m_vertexSize; }
-		[[nodiscard]] bool IsDynamic() const { return m_dynamic; }
-		virtual std::unique_ptr<VertexBuffer> Clone() = 0;
+		[[nodiscard]] BufferUsage GetUsage() const { return m_usage; }
+		virtual std::shared_ptr<VertexBuffer> Clone() = 0;
 
 	protected:
 		uint32 m_vertexCount;
 		uint32 m_vertexSize;
-		bool m_dynamic;
+		BufferUsage m_usage;
 	};
 
-	typedef std::unique_ptr<VertexBuffer> VertexBufferPtr;
+	typedef std::shared_ptr<VertexBuffer> VertexBufferPtr;
 }

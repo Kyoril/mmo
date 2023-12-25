@@ -7,6 +7,7 @@
 #include "frame_ui/geometry_helper.h"
 
 #include "math/quaternion.h"
+#include "scene_graph/render_operation.h"
 
 namespace mmo
 {
@@ -55,12 +56,12 @@ namespace mmo
 			const Color color{ 1.0f, 1.0f, 1.0f };
 			const Rect dst{ 0.0f, 0.0f, frameRect.GetWidth(), frameRect.GetHeight() };
 			const GeometryBuffer::Vertex vertices[6]{
-				{ { dst.left,	dst.top,		0.0f }, color, { 0.0f, 0.0f } },
-				{ { dst.left,	dst.bottom,		0.0f }, color, { 0.0f, 1.0f } },
-				{ { dst.right,	dst.bottom,		0.0f }, color, { 1.0f, 1.0f } },
-				{ { dst.right,	dst.bottom,		0.0f }, color, { 1.0f, 1.0f } },
-				{ { dst.right,	dst.top,		0.0f }, color, { 1.0f, 0.0f } },
-				{ { dst.left,	dst.top,		0.0f }, color, { 0.0f, 0.0f } }
+				{ { dst.left,	dst.top,	 0.0f }, color, { 0.0f, 0.0f } },
+				{ { dst.left,	dst.bottom, 0.0f }, color, { 0.0f, 1.0f } },
+				{ { dst.right,	dst.bottom, 0.0f }, color, { 1.0f, 1.0f } },
+				{ { dst.right,	dst.bottom, 0.0f }, color, { 1.0f, 1.0f } },
+				{ { dst.right,	dst.top,	 0.0f }, color, { 1.0f, 0.0f } },
+				{ { dst.left,	dst.top,	 0.0f }, color, { 0.0f, 0.0f } }
 			};
 			m_frame->GetGeometryBuffer().AppendGeometry(vertices, 6);
 		}
@@ -79,11 +80,16 @@ namespace mmo
 		// Setup transforms (TODO: use frame transform properties)
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(View, MakeViewMatrix(Vector3(0.0f, 0.0f, -5.0f), Quaternion(Degree(180), Vector3::UnitY)));
-		gx.SetTransformMatrix(Projection, 
-			gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
+		gx.SetTransformMatrix(Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
+		gx.SetVertexFormat(VertexFormat::PosColorNormalBinormalTangentTex1);
 
 		// Render the actual mesh
-		mesh->Render();
+		for (auto& submesh : mesh->GetSubMeshes())
+		{
+			RenderOperation op;
+			submesh->PrepareRenderOperation(op);
+			gx.Render(op);
+		}
 
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();

@@ -1,13 +1,33 @@
 
 #include "skeleton.h"
 
+#include <ranges>
+
+#include "animation_state.h"
+
 namespace mmo
 {
     static constexpr uint16 MaxBoneCount = 256;
 
-	Skeleton::Skeleton(const String& name)
-		: m_name(name)
+	Skeleton::Skeleton(String name)
+		: AnimationContainer()
+		, m_name(std::move(name))
 	{
+	}
+
+	Skeleton::~Skeleton()
+	{
+		Unload();
+	}
+
+	void Skeleton::Load()
+	{
+		LoadImpl();
+	}
+
+	void Skeleton::Unload()
+	{
+		UnloadImpl();
 	}
 
 	Bone* Skeleton::CreateBone()
@@ -23,7 +43,7 @@ namespace mmo
         ASSERT(handle >= m_boneList.size() && m_boneList[handle] == nullptr);
 
         auto ret = std::make_unique<Bone>(handle, *this);
-        ASSERT(m_boneListByName.find(ret->GetName()) == m_boneListByName.end());
+        ASSERT(m_boneListByName.contains(ret->GetName()));
 
         if (m_boneList.size() <= handle)
         {
@@ -42,7 +62,7 @@ namespace mmo
 	Bone* Skeleton::CreateBone(const String& name, uint16 handle)
 	{
         ASSERT(handle < MaxBoneCount);
-        ASSERT(handle >= m_boneList.size() && m_boneList[handle] == nullptr);
+        ASSERT(handle >= m_boneList.size() || m_boneList[handle] == nullptr);
         ASSERT(!m_boneListByName.contains(name));
 
         auto ret = std::make_unique<Bone>(name, handle, *this);
@@ -57,7 +77,7 @@ namespace mmo
 
 	uint16 Skeleton::GetNumBones() const
 	{
-        return m_boneList.size();
+		return static_cast<uint16>(m_boneList.size());
 	}
 
 	Bone* Skeleton::GetRootBone() const
@@ -70,7 +90,7 @@ namespace mmo
         return m_rootBones[0];
 	}
 
-	Bone* Skeleton::GetBone(unsigned short handle) const
+	Bone* Skeleton::GetBone(const uint16 handle) const
 	{
         ASSERT(handle < m_boneList.size());
         return m_boneList[handle].get();
@@ -79,7 +99,10 @@ namespace mmo
 	Bone* Skeleton::GetBone(const String& name) const
 	{
 		const auto i = m_boneListByName.find(name);
-        ASSERT(i != m_boneListByName.end());
+		if (i == m_boneListByName.end())
+		{
+			return nullptr;
+		}
 
         return i->second;
 
@@ -101,7 +124,7 @@ namespace mmo
         }
 	}
 
-	void Skeleton::Reset(bool resetManualBones)
+	void Skeleton::Reset(const bool resetManualBones)
 	{
 		for (const auto& bone : m_boneList)
 		{
@@ -112,39 +135,153 @@ namespace mmo
 		}
 	}
 
-	Animation* Skeleton::CreateAnimation(const String& name, const float duration)
+	Animation& Skeleton::CreateAnimation(const String& name, const float duration)
 	{
-		// TODO
-		return nullptr;
+		ASSERT(!m_animationsList.contains(name));
+
+		auto anim = std::make_unique<Animation>(name, duration);
+		anim->NotifyContainer(this);
+
+		return *(m_animationsList[name] = std::move(anim));
+	}
+
+	Animation* Skeleton::GetAnimation(const uint16 index) const
+	{
+		ASSERT(index < m_animationsList.size());
+
+		auto it = m_animationsList.begin();
+		std::advance(it, index);
+
+		return it->second.get();
 	}
 
 	Animation* Skeleton::GetAnimation(const String& name, const LinkedSkeletonAnimationSource** linker) const
 	{
-		// TODO
-		return nullptr;
+		Animation* anim = GetAnimationImpl(name, linker);
+		ASSERT(anim);
+
+		return anim;
 	}
 
 	Animation* Skeleton::GetAnimation(const String& name) const
 	{
-		// TODO
-		return nullptr;
+		return GetAnimation(name, nullptr);
 	}
 
 	Animation* Skeleton::GetAnimationImpl(const String& name, const LinkedSkeletonAnimationSource** linker) const
 	{
-		// TODO
-		return nullptr;
+		Animation* ret = nullptr;
+
+		if (const auto i = m_animationsList.find(name); i == m_animationsList.end())
+		{
+			for (auto it = m_linkedSkeletonAnimSourceList.cbegin(); it != m_linkedSkeletonAnimSourceList.cend() && !ret; ++it)
+			{
+				if (!it->skeleton)
+				{
+					ret = it->skeleton->GetAnimationImpl(name);
+					if (ret && linker)
+					{
+						*linker = &(*it);
+					}
+				}
+			}
+		}
+		else
+		{
+			if (linker)
+			{
+				*linker = nullptr;
+			}
+
+			ret = i->second.get();
+		}
+
+		return ret;
+	}
+
+	uint16 Skeleton::GetNumAnimations() const
+	{
+		return static_cast<uint16>(m_animationsList.size());
+	}
+
+	void Skeleton::SetAnimationState(const AnimationStateSet& animSet)
+	{
+		/*
+		Algorithm:
+		  1. Reset all bone positions
+		  2. Iterate per AnimationState, if enabled get Animation and call Animation::apply
+		*/
+
+		// Reset bones
+		Reset();
+
+		float weightFactor = 1.0f;
+
+		if (m_blendState == SkeletonAnimationBlendMode::Average)
+		{
+			// Derive total weights so we can rebalance if > 1.0f
+			float totalWeights = 0.0f;
+
+			for (auto& animState : animSet.GetEnabledAnimationStates())
+			{
+				const LinkedSkeletonAnimationSource* linked = nullptr;
+				if (GetAnimationImpl(animState->GetAnimationName(), &linked))
+				{
+					totalWeights += animState->GetWeight();
+				}
+			}
+
+			// Allow < 1.0f, allows fade out of all anims if required 
+			if (totalWeights > 1.0f)
+			{
+				weightFactor = 1.0f / totalWeights;
+			}
+		}
+
+		// Per enabled animation state
+		for (auto& animState : animSet.GetEnabledAnimationStates())
+		{
+			const LinkedSkeletonAnimationSource* linked = nullptr;
+
+			// tolerate state entries for animations we're not aware of
+			if (Animation* anim = GetAnimationImpl(animState->GetAnimationName(), &linked))
+			{
+				if (animState->HasBlendMask())
+				{
+					anim->Apply(*this, animState->GetTimePosition(), animState->GetWeight() * weightFactor,
+						*animState->GetBlendMask(), linked ? linked->scale : 1.0f);
+				}
+				else
+				{
+					anim->Apply(*this, animState->GetTimePosition(),
+						animState->GetWeight() * weightFactor, linked ? linked->scale : 1.0f);
+				}
+			}
+		}
 	}
 
 	bool Skeleton::HasAnimation(const String& name) const
 	{
-		// TODO
-		return false;
+		return GetAnimationImpl(name) != nullptr;
 	}
 
 	void Skeleton::RemoveAnimation(const String& name)
 	{
-		// TODO
+		const auto i = m_animationsList.find(name);
+		ASSERT(i != m_animationsList.end());
+
+		m_animationsList.erase(i);
+	}
+
+	void Skeleton::InitAnimationState(AnimationStateSet& animationState)
+	{
+		animationState.RemoveAllAnimationStates();
+
+		// Iterate through all animations
+		for (const auto& animation : m_animationsList | std::views::values)
+		{
+			animationState.CreateAnimationState(animation->GetName(), 0.0f, animation->GetDuration());
+		}
 	}
 
 	void Skeleton::GetBoneMatrices(Matrix4* matrices)
@@ -153,8 +290,7 @@ namespace mmo
 
 		for (const auto& bone : m_boneList)
 		{
-			bone->GetOffsetTransform(*matrices);
-			matrices++;
+			bone->GetOffsetTransform(*matrices++);
 		}
 	}
 
@@ -173,7 +309,7 @@ namespace mmo
 		// TODO
 	}
 
-	void Skeleton::AddLinkedSkeletonAnimationSource(const String& skelName, float scale)
+	void Skeleton::AddLinkedSkeletonAnimationSource(const String& skeletonName, float scale)
 	{
 		// TODO
 	}
@@ -251,5 +387,13 @@ namespace mmo
 				m_rootBones.push_back(bone.get());
 			}
 		}
+	}
+
+	void Skeleton::LoadImpl()
+	{
+	}
+
+	void Skeleton::UnloadImpl()
+	{
 	}
 }

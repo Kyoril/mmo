@@ -41,6 +41,18 @@ namespace mmo
 	private:
 		void Save();
 
+		void SetAnimationState(AnimationState* animState);
+
+		void DrawDetails(const String& id);
+
+		void DrawAnimations(const String& id);
+
+		void DrawBones(const String& id);
+
+		void DrawViewport(const String& id);
+
+		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
+
 	private:
 		ModelEditor& m_editor;
 		scoped_connection m_renderConnection;
@@ -60,5 +72,8 @@ namespace mmo
 		bool m_initDockLayout { true };
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
+		AnimationState* m_animState{ nullptr };
+		String m_newAnimationName;
+		String m_animationImportPath;
 	};
 }

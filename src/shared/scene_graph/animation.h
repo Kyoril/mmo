@@ -1,12 +1,15 @@
 #pragma once
 
+#include <map>
 #include <vector>
 
+#include "animation_state.h"
 #include "animation_track.h"
 #include "base/typedefs.h"
 
 namespace mmo
 {
+	class Entity;
 	class Animation;
 	class Skeleton;
 
@@ -16,11 +19,11 @@ namespace mmo
 		virtual ~AnimationContainer() = default;
 
 	public:
-		virtual uint16 GetAnimationCount() const = 0;
+		virtual uint16 GetNumAnimations() const = 0;
 
-		virtual Animation* GetAnimation(uint16 index) = 0;
+		virtual Animation* GetAnimation(uint16 index) const = 0;
 
-		virtual Animation* GetAnimation(const String& name) = 0;
+		virtual Animation* GetAnimation(const String& name) const = 0;
 
 		virtual Animation& CreateAnimation(const String& name, float duration) = 0;
 
@@ -32,6 +35,8 @@ namespace mmo
 	class Animation
 	{
 	public:
+		typedef std::map<uint16, std::unique_ptr<NodeAnimationTrack>> NodeTrackList;
+
 		enum class InterpolationMode
 		{
 			Linear,
@@ -53,18 +58,42 @@ namespace mmo
 
 		float GetDuration() const { return m_duration; }
 
-		void SetDuration(float duration);
+		void SetDuration(const float duration) { m_duration = duration; }
 
 		void Apply(float timePos, float weight = 1.0f, float scale = 1.0f);
 
-		void Apply(Skeleton& skeleton, float timePos, float weight = 1.0f, float scale = 1.0f);
+		void ApplyToNode(Node* node, float timePos, float weight = 1.0, float scale = 1.0f);
+
+		void Apply(const Skeleton& skeleton, float timePos, float weight = 1.0f, float scale = 1.0f);
+
+		void Apply(const Skeleton& skeleton, float timePos, float weight, const AnimationState::BoneBlendMask& blendMask, float scale);
 
 		TimeIndex GetTimeIndex(float timePos) const;
 
-	public:
+		bool HasNodeTrack(uint16 handle) const;
+
+		NodeAnimationTrack* CreateNodeTrack(uint16 handle);
+
+		NodeAnimationTrack* CreateNodeTrack(uint16 handle, Node* node);
+
+		uint16 GetNumNodeTracks() const;
+
+		NodeAnimationTrack* GetNodeTrack(uint16 handle) const;
+
+		void KeyFrameListChanged() const { m_keyFrameTimesDirty = true; }
+
+		void DestroyAllNodeTracks();
 		void DestroyAllTracks();
 
-	public:
+		void SetUseBaseKeyFrame(bool useBaseKeyFrame, float keyframeTime, const String& baseAnimName);
+
+		bool GetUseBaseKeyFrame() const { return m_useBaseKeyFrame; }
+
+		float GetBaseKeyFrameTime() const { return m_baseKeyFrameTime; }
+
+		const String& GetBaseKeyFrameAnimationName() const { return m_baseKeyFrameAnimationName; }
+
+		const NodeTrackList& GetNodeTrackList() const { return m_nodeTrackList; }
 
 		void SetInterpolationMode(const InterpolationMode mode) { m_interpolationMode = mode; }
 
@@ -74,13 +103,13 @@ namespace mmo
 
 		RotationInterpolationMode GetRotationInterpolationMode() const { return m_rotationInterpolationMode; }
 
-	public:
-
 		void ApplyBaseKeyFrame();
 
 		void NotifyContainer(AnimationContainer* container) { m_container = container; }
 
-		AnimationContainer* GetContainer() { return m_container; }
+		AnimationContainer* GetContainer() const { return m_container; }
+
+		void DestroyNodeTrack(uint16 handle);
 
 	public:
 		static void SetDefaultInterpolationMode(InterpolationMode mode) { s_defaultInterpolationMode = mode; }
@@ -93,7 +122,7 @@ namespace mmo
 
 	public:
 
-		void Optimize();
+		void Optimize(bool discardIdentityNodeTracks = true);
 
 		Animation* Clone(const String& newName);
 
@@ -115,7 +144,12 @@ namespace mmo
 		String m_baseKeyFrameAnimationName;
 		AnimationContainer* m_container;
 
+		/// Node tracks, indexed by handle
+		NodeTrackList m_nodeTrackList;
+
 	protected:
 		void BuildKeyFrameTimeList() const;
+
+		void OptimizeNodeTracks(bool discardIdentityTracks = true);
 	};
 }

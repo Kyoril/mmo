@@ -12,7 +12,14 @@
 #include "render_window.h"
 #include "render_texture.h"
 #include "material_compiler.h"
+#include "vertex_declaration.h"
+#include "shared/graphics/constant_buffer.h"
 
+
+namespace mmo
+{
+	class RenderOperation;
+}
 
 namespace mmo
 {
@@ -164,13 +171,18 @@ namespace mmo
 		virtual void Clear(ClearFlags flags = ClearFlags::None) = 0;
 
 		/// Creates a new vertex buffer.
-		virtual VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void* initialData = nullptr) = 0;
+		virtual VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* initialData = nullptr) = 0;
 
 		/// Creates a new index buffer.
-		virtual IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void* initialData = nullptr) = 0;
+		virtual IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData = nullptr) = 0;
+
+		/// Creates a new constant buffer.
+		virtual ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) = 0;
 
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
+
+		virtual void Render(const RenderOperation& operation) {}
 
 		/// 
 		virtual void Draw(uint32 vertexCount, uint32 start = 0) = 0;
@@ -263,6 +275,14 @@ namespace mmo
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
 
+		virtual VertexDeclaration* CreateVertexDeclaration();
+
+		virtual void DestroyVertexDeclaration(VertexDeclaration& declaration);
+
+		virtual VertexBufferBinding* CreateVertexBufferBinding();
+
+		virtual void DestroyVertexBufferBinding(VertexBufferBinding& binding);
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 
@@ -299,5 +319,7 @@ namespace mmo
 		bool m_restoreDepthWrite { false };
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
+		std::vector<std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
+		std::vector<std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
 	};
 }

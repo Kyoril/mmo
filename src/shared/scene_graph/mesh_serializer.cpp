@@ -329,7 +329,6 @@ namespace mmo
 				m_entry.indices.emplace_back(index);
 				m_entry.maxIndex = std::max(m_entry.maxIndex, index);
 			}
-
 		}
 		
 		return reader;
@@ -345,10 +344,18 @@ namespace mmo
 
 		auto& subMesh = m_mesh.CreateSubMesh();
 
-		subMesh.SetMaterial(MaterialManager::Get().Load(materialName));
-		subMesh.m_useSharedVertices = true;
-		subMesh.m_indexStart = indexStart;
-		subMesh.m_indexEnd = indexEnd;
+		MaterialPtr material = MaterialManager::Get().Load(materialName);
+		if (!material)
+		{
+			material = MaterialManager::Get().Load("Models/Default.hmat");
+		}
+		subMesh.SetMaterial(material);
+		subMesh.useSharedVertices = true;
+		subMesh.indexData = std::make_unique<IndexData>();
+		subMesh.indexData->indexStart = indexStart;
+		subMesh.indexData->indexCount = indexEnd - indexStart;
+		subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, m_entry.indices.data());
+		// TODO: IndexBuffer?
 
 		SubMeshEntry entry{};
 		entry.material = materialName;
@@ -448,9 +455,26 @@ namespace mmo
 			vertices[i].uv[0] = v.texCoord.x;
 			vertices[i].uv[1] = v.texCoord.y;
 		}
-		
-		m_mesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX), false, &vertices[0]);
-		m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, &m_entry.indices[0]);
+
+		m_mesh.sharedVertexData = std::make_unique<VertexData>();
+		m_mesh.sharedVertexData->vertexCount = vertices.size();
+
+		VertexDeclaration* decl = m_mesh.sharedVertexData->vertexDeclaration;
+		decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+		const uint32 vertexSize = decl->GetVertexSize(0);
+		const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, BufferUsage::StaticWriteOnly, vertices.data());
+		m_mesh.sharedVertexData->vertexBufferBinding->SetBinding(0, buffer);
+
+		if (m_mesh.HasSkeleton())
+		{
+			m_mesh.UpdateCompiledBoneAssignments();
+		}
 	}
 
 	bool MeshDeserializer::OnReadFinished() noexcept

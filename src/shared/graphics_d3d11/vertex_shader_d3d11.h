@@ -23,6 +23,5 @@ namespace mmo
 	public:
 		GraphicsDeviceD3D11& Device;
 		ComPtr<ID3D11VertexShader> Shader;
-		ComPtr<ID3D11InputLayout> InputLayout;
 	};
 }

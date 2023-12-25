@@ -10,19 +10,19 @@ namespace mmo
 		: VertexShader()
 		, Device(InDevice)
 	{
-		std::copy(
+		std::copy_n(
 			static_cast<const uint8*>(InShaderCode), 
-			static_cast<const uint8*>(InShaderCode) + InShaderCodeSize, 
+			InShaderCodeSize, 
 			std::back_inserter(m_byteCode));
 
-		ID3D11Device& D3DDevice = Device;
-		VERIFY(SUCCEEDED(D3DDevice.CreateVertexShader(InShaderCode, InShaderCodeSize, nullptr, &Shader)));
+		ID3D11Device& d3dDevice = Device;
+		VERIFY(SUCCEEDED(d3dDevice.CreateVertexShader(InShaderCode, InShaderCodeSize, nullptr, &Shader)));
 	}
 
 	void VertexShaderD3D11::Set()
 	{
-		ID3D11DeviceContext& Context = Device;
-		Context.VSSetShader(Shader.Get(), nullptr, 0);
+		ID3D11DeviceContext& context = Device;
+		context.VSSetShader(Shader.Get(), nullptr, 0);
 
 	}
 }

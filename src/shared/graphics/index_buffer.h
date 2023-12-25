@@ -32,5 +32,5 @@ namespace mmo
 		IndexBufferSize IndexSize;
 	};
 
-	typedef std::unique_ptr<IndexBuffer> IndexBufferPtr;
+	typedef std::shared_ptr<IndexBuffer> IndexBufferPtr;
 }
