@@ -76,15 +76,15 @@ namespace mmo
 				<< io::write<uint32>(mesh.indices.size())
 				<< io::write<uint8>(bUse16BitIndices);
 
-			for (size_t i = 0; i < mesh.indices.size(); ++i)
+			for (uint32 index : mesh.indices)
 			{
 				if (bUse16BitIndices)
 				{
-					writer << io::write<uint16>(mesh.indices[i]);
+					writer << io::write<uint16>(index);
 				}
 				else
 				{
-					writer << io::write<uint32>(mesh.indices[i]);
+					writer << io::write<uint32>(index);
 				}
 			}
 		}
@@ -92,12 +92,12 @@ namespace mmo
 
 		if (!mesh.skeletonName.empty())
 		{
-			ChunkWriter skeletonChunKWriter{ MeshSkeletonChunk, writer };
+			ChunkWriter skeletonChunkWriter{ MeshSkeletonChunk, writer };
 			{
 				writer
 					<< io::write_dynamic_range<uint16>(mesh.skeletonName);
 			}
-			skeletonChunKWriter.Finish();
+			skeletonChunkWriter.Finish();
 		}
 
 		for (const auto& boneAssignment : mesh.boneAssignments)

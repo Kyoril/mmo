@@ -682,12 +682,9 @@ namespace mmo
 			aiProcess_Triangulate |
 			aiProcess_JoinIdenticalVertices |
 			aiProcess_SortByPType |
-			aiProcess_MakeLeftHanded |
 			aiProcess_FlipUVs |
-			aiProcess_LimitBoneWeights |
-			aiProcess_PopulateArmatureData |
-			aiProcess_GenNormals |
-			aiProcess_FlipWindingOrder);
+			aiProcess_GenNormals
+		);
 
 		if (!scene)
 		{

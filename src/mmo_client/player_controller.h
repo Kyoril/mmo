@@ -79,17 +79,23 @@ namespace mmo
 		void ResetControls();
 		
 		void MovePlayer();
+
 		void StrafePlayer();
+
 		void TurnPlayer();
+
 		void ApplyLocalMovement(float deltaSeconds) const;
 		
 		void SendMovementUpdate(uint16 opCode) const;
 
 		void StartHeartbeatTimer();
+
 		void StopHeartbeatTimer();
+
 		void UpdateHeartbeat();
 		
 		void NotifyCameraZoomChanged();
+
 		void ClampCameraPitch();
 
 	private:
