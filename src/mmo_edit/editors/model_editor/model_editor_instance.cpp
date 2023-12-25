@@ -27,6 +27,184 @@
 
 namespace mmo
 {
+	template <typename V, typename T> static V Lerp(const V& v0, const V& v1, const T& t)
+	{
+		return v0 * (1 - t) + v1 * t;
+	}
+
+	typedef std::tuple<aiVectorKey*, aiQuatKey*, aiVectorKey*> KeyframeData;
+	typedef std::map<float, KeyframeData> KeyframesMap;
+
+	template <int I>
+	void GetInterpolationIterators(KeyframesMap& keyframes, const KeyframesMap::iterator it, KeyframesMap::reverse_iterator& front, KeyframesMap::iterator& back)
+	{
+		front = KeyframesMap::reverse_iterator(it);
+
+		++front;
+		for (; front != keyframes.rend(); ++front)
+		{
+			if (std::get<I>(front->second) != nullptr)
+			{
+				break;
+			}
+		}
+
+		back = it;
+		++back;
+		for (; back != keyframes.end(); ++back)
+		{
+			if (std::get<I>(back->second) != nullptr)
+			{
+				break;
+			}
+		}
+	}
+
+	aiVector3D GetTranslate(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
+	{
+		aiVectorKey* translateKey = std::get<0>(it->second);
+		aiVector3D vect;
+		if (translateKey)
+		{
+			vect = translateKey->mValue;
+		}
+		else
+		{
+			KeyframesMap::reverse_iterator front;
+			KeyframesMap::iterator back;
+
+			GetInterpolationIterators<0>(keyframes, it, front, back);
+
+			KeyframesMap::reverse_iterator rend = keyframes.rend();
+			KeyframesMap::iterator end = keyframes.end();
+			aiVectorKey* frontKey = nullptr;
+			aiVectorKey* backKey = nullptr;
+
+			if (front != rend)
+				frontKey = std::get<0>(front->second);
+
+			if (back != end)
+				backKey = std::get<0>(back->second);
+
+			// got 2 keys can interpolate
+			if (frontKey && backKey)
+			{
+				float prop =
+					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
+				prop /= ticksPerSecond;
+				vect = Lerp(frontKey->mValue, backKey->mValue, prop);
+			}
+
+			else if (frontKey)
+			{
+				vect = frontKey->mValue;
+			}
+			else if (backKey)
+			{
+				vect = backKey->mValue;
+			}
+		}
+
+		return vect;
+	}
+
+	aiQuaternion GetRotate(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
+	{
+		aiQuatKey* rotationKey = std::get<1>(it->second);
+		aiQuaternion rot;
+		if (rotationKey)
+		{
+			rot = rotationKey->mValue;
+		}
+		else
+		{
+			KeyframesMap::reverse_iterator front;
+			KeyframesMap::iterator back;
+
+			GetInterpolationIterators<1>(keyframes, it, front, back);
+
+			KeyframesMap::reverse_iterator rend = keyframes.rend();
+			KeyframesMap::iterator end = keyframes.end();
+			aiQuatKey* frontKey = nullptr;
+			aiQuatKey* backKey = nullptr;
+
+			if (front != rend)
+				frontKey = std::get<1>(front->second);
+
+			if (back != end)
+				backKey = std::get<1>(back->second);
+
+			// got 2 keys can interpolate
+			if (frontKey && backKey)
+			{
+				float prop =
+					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
+				prop /= ticksPerSecond;
+				aiQuaternion::Interpolate(rot, frontKey->mValue, backKey->mValue, prop);
+			}
+
+			else if (frontKey)
+			{
+				rot = frontKey->mValue;
+			}
+			else if (backKey)
+			{
+				rot = backKey->mValue;
+			}
+		}
+
+		return rot;
+	}
+
+	aiVector3D GetScale(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
+	{
+		aiVectorKey* scaleKey = std::get<2>(it->second);
+		aiVector3D vect(1, 1, 1);
+		if (scaleKey)
+		{
+			vect = scaleKey->mValue;
+		}
+		else
+		{
+			KeyframesMap::reverse_iterator front;
+			KeyframesMap::iterator back;
+
+			GetInterpolationIterators<2>(keyframes, it, front, back);
+
+			KeyframesMap::reverse_iterator rend = keyframes.rend();
+			KeyframesMap::iterator end = keyframes.end();
+			aiVectorKey* frontKey = nullptr;
+			aiVectorKey* backKey = nullptr;
+
+			if (front != rend)
+				frontKey = std::get<2>(front->second);
+
+			if (back != end)
+				backKey = std::get<2>(back->second);
+
+			// got 2 keys can interpolate
+			if (frontKey && backKey)
+			{
+				float prop =
+					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
+				prop /= ticksPerSecond;
+				vect = Lerp(frontKey->mValue, backKey->mValue, prop);
+			}
+
+			else if (frontKey)
+			{
+				vect = frontKey->mValue;
+			}
+			else if (backKey)
+			{
+				vect = backKey->mValue;
+			}
+		}
+
+		return vect;
+	}
+
+
 	void TraverseBone(Scene& scene, SceneNode& node, Bone& bone)
 	{
 		// Create node and attach it to the root node
@@ -539,7 +717,7 @@ namespace mmo
 
 			// Create the animation
 			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
-			animation.SetUseBaseKeyFrame(true, 0.0f, m_newAnimationName);
+			animation.SetUseBaseKeyFrame(true, 0.0f, "");
 
 			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
 			{
@@ -555,65 +733,83 @@ namespace mmo
 					continue;
 				}
 
+				Matrix4 defBonePoseInv;
+				defBonePoseInv.MakeInverseTransform(bone->GetPosition(), bone->GetScale(), bone->GetOrientation());
+
 				// Create a new node track for the bone
 				const uint16 handle = bone->GetHandle();
 				NodeAnimationTrack* track = animation.HasNodeTrack(handle) ? animation.GetNodeTrack(handle) : animation.CreateNodeTrack(handle, bone);
 
-				std::map<double, TransformKeyFrame*> keyFramesByTime;
+				// We need translate, rotate and scale for each keyframe in the track
+				KeyframesMap keyframes;
 
-				for (unsigned posKeyIndex = 0; posKeyIndex < nodeAnim->mNumPositionKeys; ++posKeyIndex)
+				for (unsigned int j = 0; j < nodeAnim->mNumPositionKeys; j++)
 				{
-					const aiVectorKey& posKey = nodeAnim->mPositionKeys[posKeyIndex];
-					DLOG("\t\tPOS #" << posKeyIndex << ": " << posKey.mTime / anim->mTicksPerSecond << " -> " << posKey.mValue.x << ", " << posKey.mValue.y << ", " << posKey.mValue.z)
-
-					if (keyFramesByTime.contains(posKey.mTime))
-					{
-						keyFramesByTime[posKey.mTime]->SetTranslate(Vector3(posKey.mValue.x, posKey.mValue.y, posKey.mValue.z));
-						continue;
-					}
-
-					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(posKey.mTime / anim->mTicksPerSecond));
-					keyFramePtr->SetTranslate(Vector3(posKey.mValue.x, posKey.mValue.y, posKey.mValue.z));
-
-					keyFramesByTime[posKey.mTime] = keyFramePtr.get();
+					keyframes[static_cast<float>(nodeAnim->mPositionKeys[j].mTime / anim->mTicksPerSecond)] =
+						KeyframeData(&(nodeAnim->mPositionKeys[j]), nullptr, nullptr);
 				}
 
-				for (unsigned rotKeyIndex = 0; rotKeyIndex < nodeAnim->mNumRotationKeys; ++rotKeyIndex)
+				for (unsigned int j = 0; j < nodeAnim->mNumRotationKeys; j++)
 				{
-					const aiQuatKey& rotKey = nodeAnim->mRotationKeys[rotKeyIndex];
-					const Quaternion rot(rotKey.mValue.w, rotKey.mValue.x, rotKey.mValue.y, rotKey.mValue.z);
-					DLOG("\t\tROT #" << rotKeyIndex << ": " << rotKey.mTime / anim->mTicksPerSecond << " -> " << rot.GetRoll().GetValueDegrees() << ", " << rot.GetYaw().GetValueDegrees() << ", " << rot.GetPitch().GetValueDegrees());
-
-					if (keyFramesByTime.contains(rotKey.mTime))
+					if (auto it =
+						keyframes.find(static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)); it != keyframes.end())
 					{
-						keyFramesByTime[rotKey.mTime]->SetRotation(rot);
-						continue;
+						std::get<1>(it->second) = &(nodeAnim->mRotationKeys[j]);
+					}
+					else
+					{
+						keyframes[static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)] =
+							KeyframeData(nullptr, &(nodeAnim->mRotationKeys[j]), nullptr);
+					}
+				}
+
+				for (unsigned int j = 0; j < nodeAnim->mNumScalingKeys; j++)
+				{
+					if (auto it =
+						keyframes.find(static_cast<float>(nodeAnim->mScalingKeys[j].mTime / anim->mTicksPerSecond)); it != keyframes.end())
+					{
+						std::get<2>(it->second) = &(nodeAnim->mScalingKeys[j]);
+					}
+					else
+					{
+						keyframes[static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)] =
+							KeyframeData(nullptr, nullptr, &(nodeAnim->mScalingKeys[j]));
+					}
+				}
+
+				auto it = keyframes.begin();
+				for (auto itEnd = keyframes.end(); it != itEnd; ++it)
+				{
+					aiVector3D aiTrans = GetTranslate(keyframes, it, anim->mTicksPerSecond);
+
+					Vector3 trans(aiTrans.x, aiTrans.y, aiTrans.z);
+
+					aiQuaternion aiRot = GetRotate(keyframes, it, anim->mTicksPerSecond);
+					Quaternion rot(aiRot.w, aiRot.x, aiRot.y, aiRot.z);
+
+					aiVector3D aiScale = GetScale(keyframes, it, anim->mTicksPerSecond);
+					Vector3 scale(aiScale.x, aiScale.y, aiScale.z);
+
+					Vector3 transCopy = trans;
+
+					Matrix4 fullTransform;
+					fullTransform.MakeTransform(trans, scale, rot);
+
+					Matrix4 poseToKey = defBonePoseInv * fullTransform;
+					poseToKey.Decomposition(trans, scale, rot);
+
+					auto keyFramePtr = track->CreateNodeKeyFrame(it->first);
+
+					// weirdness with the root bone, But this seems to work
+					if (m_mesh->GetSkeleton()->GetRootBone()->GetName() == bone->GetName())
+					{
+						trans = transCopy - bone->GetPosition();
 					}
 
-					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(rotKey.mTime / anim->mTicksPerSecond));
+					keyFramePtr->SetTranslate(trans);
 					keyFramePtr->SetRotation(rot);
-
-					keyFramesByTime[rotKey.mTime] = keyFramePtr.get();
+					keyFramePtr->SetScale(scale);
 				}
-
-				for (unsigned scaleKeyIndex = 0; scaleKeyIndex < nodeAnim->mNumScalingKeys; ++scaleKeyIndex)
-				{
-					const aiVectorKey& scaleKey = nodeAnim->mScalingKeys[scaleKeyIndex];
-					DLOG("\t\tSCALE #" << scaleKeyIndex << ": " << scaleKey.mTime / anim->mTicksPerSecond << " -> " << scaleKey.mValue.x << ", " << scaleKey.mValue.y << ", " << scaleKey.mValue.z);
-
-					if (keyFramesByTime.contains(scaleKey.mTime))
-					{
-						keyFramesByTime[scaleKey.mTime]->SetScale(Vector3(scaleKey.mValue.x, scaleKey.mValue.y, scaleKey.mValue.z));
-						continue;
-					}
-
-					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(scaleKey.mTime / anim->mTicksPerSecond));
-					keyFramePtr->SetScale(Vector3(scaleKey.mValue.x, scaleKey.mValue.y, scaleKey.mValue.z));
-
-					keyFramesByTime[scaleKey.mTime] = keyFramePtr.get();
-				}
-
-				track->Optimize();
 			}
 
 			animation.Optimize();
