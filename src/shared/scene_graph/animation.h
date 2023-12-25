@@ -35,6 +35,8 @@ namespace mmo
 	class Animation
 	{
 	public:
+		typedef std::map<uint16, std::unique_ptr<NodeAnimationTrack>> NodeTrackList;
+
 		enum class InterpolationMode
 		{
 			Linear,
@@ -91,7 +93,7 @@ namespace mmo
 
 		const String& GetBaseKeyFrameAnimationName() const { return m_baseKeyFrameAnimationName; }
 
-	public:
+		const NodeTrackList& GetNodeTrackList() const { return m_nodeTrackList; }
 
 		void SetInterpolationMode(const InterpolationMode mode) { m_interpolationMode = mode; }
 
@@ -100,8 +102,6 @@ namespace mmo
 		void SetRotationInterpolationMode(const RotationInterpolationMode mode) { m_rotationInterpolationMode = mode; }
 
 		RotationInterpolationMode GetRotationInterpolationMode() const { return m_rotationInterpolationMode; }
-
-	public:
 
 		void ApplyBaseKeyFrame();
 
@@ -145,7 +145,6 @@ namespace mmo
 		AnimationContainer* m_container;
 
 		/// Node tracks, indexed by handle
-		typedef std::map<uint16, std::unique_ptr<NodeAnimationTrack>> NodeTrackList;
 		NodeTrackList m_nodeTrackList;
 
 	protected:

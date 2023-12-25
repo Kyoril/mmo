@@ -40,6 +40,7 @@ namespace mmo
 		bool ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadHierarchyChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadAnimationChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	protected:
 		bool OnReadFinished() noexcept override;

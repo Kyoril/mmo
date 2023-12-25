@@ -23,6 +23,7 @@
 #include "assimp/LogStream.hpp"
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
+#include "scene_graph/skeleton_serializer.h"
 
 namespace mmo
 {
@@ -83,24 +84,6 @@ namespace mmo
 			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
 		}
 
-		if (m_mesh->HasSkeleton() && m_mesh->GetSkeleton()->GetNumBones() > 1)
-		{
-			// Create a sample animation
-			Animation& sampleAnim = m_mesh->GetSkeleton()->CreateAnimation("Sample", 2.0f);
-			sampleAnim.SetUseBaseKeyFrame(true, 0.0f, "Sample");
-
-			NodeAnimationTrack* animTrack = sampleAnim.CreateNodeTrack(0, m_mesh->GetSkeleton()->GetBone(0));
-
-			const auto firstFrame = animTrack->CreateNodeKeyFrame(0.0f);
-			firstFrame->SetRotation(Quaternion::Identity);
-
-			const auto secondFrame = animTrack->CreateNodeKeyFrame(1.0f);
-			secondFrame->SetRotation(Quaternion(Degree(90), Vector3::UnitY));
-
-			const auto thirdFrame = animTrack->CreateNodeKeyFrame(2.0f);
-			firstFrame->SetRotation(Quaternion::Identity);
-		}
-		
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
 		{
@@ -549,6 +532,11 @@ namespace mmo
 			DLOG("Animation " << i << ": " << anim->mName.C_Str() << " with " << anim->mNumChannels << " channels");
 			DLOG("\tDuration: " << anim->mDuration << " ticks (" << (anim->mDuration / anim->mTicksPerSecond) << " seconds)");
 
+			if (m_entity->GetSkeleton()->HasAnimation(m_newAnimationName))
+			{
+				m_entity->GetSkeleton()->RemoveAnimation(m_newAnimationName);
+			}
+
 			// Create the animation
 			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
 			animation.SetUseBaseKeyFrame(true, 0.0f, m_newAnimationName);
@@ -631,6 +619,24 @@ namespace mmo
 			animation.Optimize();
 		}
 
+		// Init animation state
 		m_entity->GetSkeleton()->InitAnimationState(*m_entity->GetAllAnimationStates());
+
+		// Serialize skeleton
+		const std::filesystem::path p = m_mesh->GetSkeleton()->GetName();
+
+		// Create the file name
+		const auto filePtr = AssetRegistry::CreateNewFile(p.string());
+		if (filePtr == nullptr)
+		{
+			ELOG("Unable to create skeleton file " << p);
+			return;
+		}
+
+		io::StreamSink sink{ *filePtr };
+		io::Writer writer{ sink };
+		SkeletonSerializer serializer;
+		serializer.Export(*m_mesh->GetSkeleton(), writer);
+		ILOG("Successfully saved animation to skeleton " << p);
 	}
 }
