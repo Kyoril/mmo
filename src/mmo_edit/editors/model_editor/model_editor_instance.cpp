@@ -3,6 +3,7 @@
 #include "model_editor_instance.h"
 
 #include <imgui_internal.h>
+#include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "model_editor.h"
 #include "editor_host.h"
@@ -15,6 +16,13 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
+
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+#include "assimp/LogStream.hpp"
+#include "assimp/Logger.hpp"
+#include "assimp/DefaultLogger.hpp"
 
 namespace mmo
 {
@@ -384,10 +392,17 @@ namespace mmo
 		{
 			if (m_mesh->HasSkeleton())
 			{
+				// Ask for a name for the new animation
+				ImGui::InputText("Animation Name", &m_newAnimationName, ImGuiInputTextFlags_None, nullptr, nullptr);
+				ImGui::InputText("FBX Path", &m_animationImportPath, ImGuiInputTextFlags_None, nullptr, nullptr);
+
+				ImGui::BeginDisabled(m_newAnimationName.empty() || m_animationImportPath.empty());
 				if (ImGui::Button("Import Animation"))
 				{
-
+					// Do the import
+					ImportAnimationFromFbx(m_animationImportPath, m_newAnimationName);
 				}
+				ImGui::EndDisabled();
 
 				ImGui::Separator();
 
@@ -493,5 +508,129 @@ namespace mmo
 			}
 		}
 		ImGui::End();
+	}
+
+	void ModelEditorInstance::ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName)
+	{
+		Assimp::Importer importer;
+
+		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
+
+		const aiScene* scene = importer.ReadFile(path.string().c_str(),
+			aiProcess_CalcTangentSpace |
+			aiProcess_Triangulate |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_SortByPType |
+			aiProcess_MakeLeftHanded |
+			aiProcess_FlipUVs |
+			aiProcess_LimitBoneWeights |
+			aiProcess_PopulateArmatureData |
+			aiProcess_GenNormals |
+			aiProcess_FlipWindingOrder);
+
+		if (!scene)
+		{
+			ELOG("Failed to open FBX file: " << importer.GetErrorString());
+			return;
+		}
+
+		if (!scene->HasAnimations())
+		{
+			ELOG("FBX file has no animation data!");
+			return;
+		}
+
+		SetAnimationState(nullptr);
+
+		DLOG("Scene has " << scene->mNumAnimations << " animations");
+		for (int i = 0; i < scene->mNumAnimations; ++i)
+		{
+			const aiAnimation* anim = scene->mAnimations[i];
+			DLOG("Animation " << i << ": " << anim->mName.C_Str() << " with " << anim->mNumChannels << " channels");
+			DLOG("\tDuration: " << anim->mDuration << " ticks (" << (anim->mDuration / anim->mTicksPerSecond) << " seconds)");
+
+			// Create the animation
+			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
+			animation.SetUseBaseKeyFrame(true, 0.0f, m_newAnimationName);
+
+			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
+			{
+				aiNodeAnim* nodeAnim = anim->mChannels[channelIndex];
+
+				DLOG("\tBone " << nodeAnim->mNodeName.C_Str());
+
+				// Try to find the given bone in our skeleton
+				Bone* bone = m_entity->GetSkeleton()->GetBone(nodeAnim->mNodeName.C_Str());
+				if (!bone)
+				{
+					ELOG("Unable to find bone " << nodeAnim->mNodeName.C_Str() << " in skeleton, bone animation will not be applied!");
+					continue;
+				}
+
+				// Create a new node track for the bone
+				const uint16 handle = bone->GetHandle();
+				NodeAnimationTrack* track = animation.HasNodeTrack(handle) ? animation.GetNodeTrack(handle) : animation.CreateNodeTrack(handle, bone);
+
+				std::map<double, TransformKeyFrame*> keyFramesByTime;
+
+				for (unsigned posKeyIndex = 0; posKeyIndex < nodeAnim->mNumPositionKeys; ++posKeyIndex)
+				{
+					const aiVectorKey& posKey = nodeAnim->mPositionKeys[posKeyIndex];
+					DLOG("\t\tPOS #" << posKeyIndex << ": " << posKey.mTime / anim->mTicksPerSecond << " -> " << posKey.mValue.x << ", " << posKey.mValue.y << ", " << posKey.mValue.z)
+
+					if (keyFramesByTime.contains(posKey.mTime))
+					{
+						keyFramesByTime[posKey.mTime]->SetTranslate(Vector3(posKey.mValue.x, posKey.mValue.y, posKey.mValue.z));
+						continue;
+					}
+
+					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(posKey.mTime / anim->mTicksPerSecond));
+					keyFramePtr->SetTranslate(Vector3(posKey.mValue.x, posKey.mValue.y, posKey.mValue.z));
+
+					keyFramesByTime[posKey.mTime] = keyFramePtr.get();
+				}
+
+				for (unsigned rotKeyIndex = 0; rotKeyIndex < nodeAnim->mNumRotationKeys; ++rotKeyIndex)
+				{
+					const aiQuatKey& rotKey = nodeAnim->mRotationKeys[rotKeyIndex];
+					const Quaternion rot(rotKey.mValue.w, rotKey.mValue.x, rotKey.mValue.y, rotKey.mValue.z);
+					DLOG("\t\tROT #" << rotKeyIndex << ": " << rotKey.mTime / anim->mTicksPerSecond << " -> " << rot.GetRoll().GetValueDegrees() << ", " << rot.GetYaw().GetValueDegrees() << ", " << rot.GetPitch().GetValueDegrees());
+
+					if (keyFramesByTime.contains(rotKey.mTime))
+					{
+						keyFramesByTime[rotKey.mTime]->SetRotation(rot);
+						continue;
+					}
+
+					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(rotKey.mTime / anim->mTicksPerSecond));
+					keyFramePtr->SetRotation(rot);
+
+					keyFramesByTime[rotKey.mTime] = keyFramePtr.get();
+				}
+
+				for (unsigned scaleKeyIndex = 0; scaleKeyIndex < nodeAnim->mNumScalingKeys; ++scaleKeyIndex)
+				{
+					const aiVectorKey& scaleKey = nodeAnim->mScalingKeys[scaleKeyIndex];
+					DLOG("\t\tSCALE #" << scaleKeyIndex << ": " << scaleKey.mTime / anim->mTicksPerSecond << " -> " << scaleKey.mValue.x << ", " << scaleKey.mValue.y << ", " << scaleKey.mValue.z);
+
+					if (keyFramesByTime.contains(scaleKey.mTime))
+					{
+						keyFramesByTime[scaleKey.mTime]->SetScale(Vector3(scaleKey.mValue.x, scaleKey.mValue.y, scaleKey.mValue.z));
+						continue;
+					}
+
+					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(scaleKey.mTime / anim->mTicksPerSecond));
+					keyFramePtr->SetScale(Vector3(scaleKey.mValue.x, scaleKey.mValue.y, scaleKey.mValue.z));
+
+					keyFramesByTime[scaleKey.mTime] = keyFramePtr.get();
+				}
+
+				track->Optimize();
+			}
+
+			animation.Optimize();
+		}
+
+		m_entity->GetSkeleton()->InitAnimationState(*m_entity->GetAllAnimationStates());
 	}
 }

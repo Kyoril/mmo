@@ -64,7 +64,6 @@ namespace mmo
 
 		for (const auto& [boneHandle, nodeTrack] : m_nodeTrackList)
 		{
-			// get bone to apply to 
 			Bone* b = skeleton.GetBone(boneHandle);
 			nodeTrack->ApplyToNode(*b, timeIndex, weight, scale);
 		}
@@ -196,6 +195,26 @@ namespace mmo
 		}
 	}
 
+	void Animation::DestroyNodeTrack(const uint16 handle)
+	{
+		if (const auto it = m_nodeTrackList.find(handle); it != m_nodeTrackList.end())
+		{
+			m_nodeTrackList.erase(it);
+			KeyFrameListChanged();
+		}
+	}
+
+	void Animation::Optimize(const bool discardIdentityNodeTracks)
+	{
+		OptimizeNodeTracks(discardIdentityNodeTracks);
+	}
+
+	Animation* Animation::Clone(const String& newName)
+	{
+		TODO("Implement");
+		return nullptr;
+	}
+
 	void Animation::BuildKeyFrameTimeList() const
 	{
 		// Clear old keyframe times
@@ -215,5 +234,31 @@ namespace mmo
 
 		// Reset dirty flag
 		m_keyFrameTimesDirty = false;
+	}
+
+	void Animation::OptimizeNodeTracks(const bool discardIdentityTracks)
+	{
+		// Iterate over the node tracks and identify those with no useful keyframes
+		std::list<uint16> tracksToDestroy;
+		NodeTrackList::iterator i;
+		for (auto& i : m_nodeTrackList)
+		{
+			if (NodeAnimationTrack* track = i.second.get(); discardIdentityTracks && !track->HasNonZeroKeyFrames())
+			{
+				// mark the entire track for destruction
+				tracksToDestroy.push_back(i.first);
+			}
+			else
+			{
+				track->Optimize();
+			}
+
+		}
+
+		// Now destroy the tracks we marked for death
+		for (const uint16& handle : tracksToDestroy)
+		{
+			DestroyNodeTrack(handle);
+		}
 	}
 }

@@ -51,6 +51,8 @@ namespace mmo
 
 		void DrawViewport(const String& id);
 
+		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
+
 	private:
 		ModelEditor& m_editor;
 		scoped_connection m_renderConnection;
@@ -71,5 +73,7 @@ namespace mmo
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
 		AnimationState* m_animState{ nullptr };
+		String m_newAnimationName;
+		String m_animationImportPath;
 	};
 }

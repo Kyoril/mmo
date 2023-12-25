@@ -109,6 +109,8 @@ namespace mmo
 
 		AnimationContainer* GetContainer() const { return m_container; }
 
+		void DestroyNodeTrack(uint16 handle);
+
 	public:
 		static void SetDefaultInterpolationMode(InterpolationMode mode) { s_defaultInterpolationMode = mode; }
 
@@ -120,7 +122,7 @@ namespace mmo
 
 	public:
 
-		void Optimize();
+		void Optimize(bool discardIdentityNodeTracks = true);
 
 		Animation* Clone(const String& newName);
 
@@ -148,5 +150,7 @@ namespace mmo
 
 	protected:
 		void BuildKeyFrameTimeList() const;
+
+		void OptimizeNodeTracks(bool discardIdentityTracks = true);
 	};
 }
