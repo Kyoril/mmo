@@ -35,6 +35,8 @@
 #include <mutex>
 #include <thread>
 
+#include "proto_data/project.h"
+
 
 namespace mmo
 {
@@ -116,6 +118,13 @@ namespace mmo
 		ILOG("Last Change: " << GitLastChange);
 
 
+		// Load game data
+		proto::Project project;
+		if (!project.load(config.dataFolder))
+		{
+			ELOG("Failed to load project from folder '" << config.dataFolder << "'!");
+			return 1;
+		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup

@@ -17,6 +17,15 @@ namespace mmo
 {
 	const uint32 Configuration::WorldConfigVersion = 0x01;
 
+	namespace detail
+	{
+		template <class Table>
+		bool parseBoolean(const Table& table, const String& name, bool defaultValue)
+		{
+			return table.getInteger(name, static_cast<unsigned>(defaultValue)) != 0;
+		}
+	}
+
 	Configuration::Configuration()
 		: playerPort(mmo::constants::DefaultRealmPlayerPort)
         , worldPort(mmo::constants::DefaultRealmWorldPort)
@@ -38,6 +47,8 @@ namespace mmo
 		, loginServerPort(constants::DefaultLoginRealmPort)
 		, realmName("YOUR_REALM_NAME_HERE")
 		, realmPasswordHash("0000000000000000000000000000000000000000")
+		, dataFolder("data")
+		, watchDataForChanges(true)
 	{
 	}
 
@@ -128,6 +139,12 @@ namespace mmo
 			{
 				worldPort = worldManager->getInteger("port", worldPort);
 				maxWorlds = worldManager->getInteger("maxCount", maxWorlds);
+			}
+
+			if (const Table* const folders = global.getTable("folders"))
+			{
+				dataFolder = folders->getString("data", dataFolder);
+				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
 
 			if (const Table *const log = global.getTable("log"))

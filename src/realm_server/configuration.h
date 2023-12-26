@@ -60,6 +60,9 @@ namespace mmo
 		/// The password hash of the realm used to authenticate at the login server.
 		String realmPasswordHash;
 
+		String dataFolder;
+		bool watchDataForChanges;
+
 
 		explicit Configuration();
 		bool load(const String &fileName);

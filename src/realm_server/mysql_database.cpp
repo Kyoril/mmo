@@ -211,6 +211,18 @@ namespace mmo
 		return WorldCreationResult::Success;
 	}
 
+	void MySQLDatabase::ChatMessage(const uint64 characterId, const uint16 type, const String message)
+	{
+		if (!m_connection.Execute("INSERT INTO character_chat (`character`, `type`, `message`, `timestamp`) VALUES ("
+			+ std::to_string(characterId) + ", "
+			+ std::to_string(type) + ", '"
+			+ m_connection.EscapeString(message) + "', NOW())"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not save chat message to database");
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorMessage());
