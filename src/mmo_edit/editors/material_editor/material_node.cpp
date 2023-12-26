@@ -481,6 +481,7 @@ namespace mmo
 		compiler.SetTranslucent(m_translucent);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
+		compiler.SetTwoSided(m_isTwoSided);
 		
 		if (m_baseColor.IsLinked())
 		{

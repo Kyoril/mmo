@@ -153,6 +153,15 @@ namespace mmo
 		{
 			device.SetBlendMode(BlendMode::Opaque);
 		}
+
+		if (m_twoSided)
+		{
+			device.SetFaceCullMode(FaceCullMode::None);
+		}
+		else
+		{
+			device.SetFaceCullMode(FaceCullMode::Back);
+		}
 	}
 
 	void Material::BindShaders(GraphicsDevice& device)

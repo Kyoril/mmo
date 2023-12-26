@@ -336,32 +336,11 @@ namespace mmo
 
 		UpdateTanslationAxisLines();
 
-		// TODO: This is hacky AF
-#define BYTE uint8
-#include "../graphics_d3d11/shaders/VS_PosColor.h"
-#include "../graphics_d3d11/shaders/PS_PosColor.h"
-
-		MaterialPtr material = MaterialManager::Get().CreateManual("TranslationAxisPlanes");
-		material->SetTwoSided(true);
-		material->SetCastShadows(false);
-		material->SetDepthTestEnabled(false);
-		material->SetDepthWriteEnabled(false);
-		material->SetType(MaterialType::Translucent);
-
-		// Create std::span<uint8> from const uint8 array g_VS_PosColor
-		std::span vsCode((uint8*)(g_VS_PosColor), sizeof(g_VS_PosColor));
-		material->SetVertexShaderCode(VertexShaderType::Default, vsCode);
-
-		std::span psCode((uint8*)(g_PS_PosColor), sizeof(g_PS_PosColor));
-		material->SetPixelShaderCode(psCode);
-		material->Update();
-#undef BYTE
-
 		// Create translation node
 		m_translationNode = m_widgetNode->CreateChildSceneNode();
 		m_translationNode->AttachObject(*m_axisLines);
 
-		MaterialPtr planeMaterial = MaterialManager::Get().Load("Models/Engine/AxisPlaneHighlight.hmat");
+		const MaterialPtr planeMaterial = MaterialManager::Get().Load("Models/Engine/AxisPlaneHighlight.hmat");
 
 		// Setup arrows
 		m_xArrowNode = m_translationNode->CreateChildSceneNode();

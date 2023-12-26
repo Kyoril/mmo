@@ -33,6 +33,7 @@ namespace mmo
 
 		material.SetDepthWriteEnabled(m_depthWrite);
 		material.SetDepthTestEnabled(m_depthTest);
+		material.SetTwoSided(m_twoSided);
 
 		for (uint32 i = 0; i < 4; ++i)
 		{
