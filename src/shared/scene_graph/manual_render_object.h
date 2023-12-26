@@ -423,6 +423,10 @@ namespace mmo
 
 		MeshPtr ConvertToMesh(const String& meshName) const;
 
+		void SetMaterial(uint32 operationIndex, const MaterialPtr& material) const;
+
+		uint32 GetOperationCount() const noexcept { return static_cast<uint32>(m_operations.size()); }
+
 	public:
 		/// @copydoc MovableObject::GetMovableType
 		[[nodiscard]] const String& GetMovableType() const override;

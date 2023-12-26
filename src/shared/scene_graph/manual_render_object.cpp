@@ -116,6 +116,12 @@ namespace mmo
 		return m;
 	}
 
+	void ManualRenderObject::SetMaterial(const uint32 operationIndex, const MaterialPtr& material) const
+	{
+		ASSERT(operationIndex < m_operations.size());
+		m_operations[operationIndex]->SetMaterial(material);
+	}
+
 	const String& ManualRenderObject::GetMovableType() const
 	{
 		static String manualRenderObjectType = "ManualRenderObject";
