@@ -15,6 +15,7 @@
 #include "editor_windows/asset_window.h"
 #include "editor_windows/log_window.h"
 #include "editor_windows/spell_editor_window.h"
+#include "editor_windows/map_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -89,9 +90,8 @@ int main(int argc, char* arg[])
 	// Setup asset window
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
-
-	auto spellEditorWindow = std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow);
-	mainWindow.AddEditorWindow(std::move(spellEditorWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());

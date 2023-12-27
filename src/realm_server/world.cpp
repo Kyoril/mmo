@@ -18,6 +18,7 @@
 #include "base/utilities.h"
 #include "game/game.h"
 #include "game_protocol/game_outgoing_packet.h"
+#include "proto_data/project.h"
 
 
 namespace mmo
@@ -27,12 +28,14 @@ namespace mmo
 		PlayerManager& playerManager,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
-		const String & address)
+		const String & address,
+		const proto::Project& project)
 		: m_manager(worldManager)
 		, m_playerManager(playerManager)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
+		, m_project(project)
 	{
 		m_connection->setListener(*this);
 
@@ -379,7 +382,15 @@ namespace mmo
 		DLOG("Received new list of hosted map ids from world node, containing " << m_hostedMapIds.size() << " map ids");
 		for(const auto& mapId : m_hostedMapIds)
 		{
-			DLOG("\tMap: " << mapId);
+			if (const proto::MapEntry* mapEntry = m_project.maps.getById(mapId))
+			{
+				DLOG("\tMap: " << mapId << " (" << mapEntry->name() << ")");
+			}
+			else
+			{
+				WLOG("World node hosts unknown map id '" << mapId << "'");
+			}
+			
 		}
 		
 		return PacketParseResult::Pass;
