@@ -54,6 +54,15 @@ CREATE TABLE `character_chat` (
   CONSTRAINT `fk_to_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+DROP TABLE IF EXISTS `character_spells`;
+
+CREATE TABLE `character_spells` (
+  `character` bigint NOT NULL,
+  `spell` int NOT NULL,
+  UNIQUE KEY `idx_char_spell` (`character`,`spell`),
+  KEY `idx_char` (`character`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
+
 /*Table structure for table `world` */
 
 DROP TABLE IF EXISTS `world`;

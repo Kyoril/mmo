@@ -21,6 +21,7 @@ add_definitions("/std:c++latest")
 # We want to use Vista or later API since we need this for
 # GetTickCount64 which is not available on XP and prior
 add_definitions("-D_WIN32_WINNT=0x0A00 -DWIN32_LEAN_AND_MEAN")
+add_definitions("-D_SILENCE_CXX23_ALIGNED_STORAGE_DEPRECATION_WARNING")
 
 # Disable certain warnings, enable multi-cpu builds and allow big precompiled headers
 add_definitions("/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /wd4267 /wd4244 /wd4800 /MP /D_WINSOCK_DEPRECATED_NO_WARNINGS /bigobj /Gy")

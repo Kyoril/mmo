@@ -66,8 +66,6 @@ namespace mmo
 		// Keep the database service alive / busy until this object is alive
 		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
-		PlayerManager playerManager;
-		
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,6 +110,8 @@ namespace mmo
 			return 1;
 		}
 
+		PlayerManager playerManager;
+
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -136,7 +136,8 @@ namespace mmo
 				std::cref(config.hostedMaps),
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
-				std::make_unique<GameObjectFactory>());
+				std::make_unique<GameObjectFactory>(),
+				project);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

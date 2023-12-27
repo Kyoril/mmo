@@ -127,6 +127,11 @@ namespace mmo
 			{
 				ImGui::InputText("Name", currentSpell->mutable_name());
 
+				ImGui::BeginDisabled(true);
+				String idString = std::to_string(currentSpell->id());
+				ImGui::InputText("ID", &idString);
+				ImGui::EndDisabled();
+
 				SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
 				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
 
