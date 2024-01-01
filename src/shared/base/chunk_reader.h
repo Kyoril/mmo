@@ -89,6 +89,14 @@ namespace mmo
 			}
 		}
 
+		void RemoveChunkHandler(const uint32 chunkHeader)
+		{
+			if (m_chunkHandlers.contains(chunkHeader))
+			{
+				m_chunkHandlers.erase(chunkHeader);
+			}
+		}
+
 	protected:
 		/// @brief Whether unhandled chunks should be ignored or make the Read call fail.
 		bool m_ignoreUnhandledChunks { false };

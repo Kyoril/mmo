@@ -34,6 +34,20 @@ namespace mmo
 		m_subMeshNames[name] = index;
 	}
 
+	bool Mesh::GetSubMeshName(const uint16 index, String& name) const
+	{
+		for (const auto& [subMeshName, subMeshIndex] : m_subMeshNames)
+		{
+			if (subMeshIndex == index)
+			{
+				name = subMeshName;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	SubMesh & Mesh::GetSubMesh(const uint16 index) const
 	{
 		return *m_subMeshes[index];
@@ -110,12 +124,23 @@ namespace mmo
 			if (!m_skeleton)
 			{
 				WLOG("Failed to load skeleton '" << m_skeletonName << "' for mesh '" << m_name << "' - mesh will not be animated!");
+				return;
 			}
 
 			m_boneMatrices.resize(m_skeleton->GetNumBones());
 			m_skeleton->GetBoneMatrices(m_boneMatrices.data());
 			m_boneMatricesBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_skeleton->GetNumBones(), m_boneMatrices.data());
 		}
+	}
+
+	void Mesh::SetSkeleton(SkeletonPtr& skeleton)
+	{
+		m_skeleton = skeleton;
+		m_skeletonName = skeleton ? skeleton->GetName() : "";
+
+		m_boneMatrices.resize(m_skeleton->GetNumBones());
+		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
+		m_boneMatricesBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_skeleton->GetNumBones(), m_boneMatrices.data());
 	}
 
 	void Mesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)

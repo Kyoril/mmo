@@ -235,10 +235,12 @@ namespace mmo
 		float Normalize()
 		{
 			const float length = GetLength();
-			ASSERT(length > 0.0f);
-			x /= length;
-			y /= length;
-			z /= length;
+			if (length > 0.0f)
+			{
+				x /= length;
+				y /= length;
+				z /= length;
+			}
 			return length;
 		}
 

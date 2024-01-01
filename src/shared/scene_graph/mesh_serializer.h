@@ -27,7 +27,8 @@ namespace mmo
 			Latest = -1,
 
 			Version_0_1 = 0x0100,
-			Version_0_2 = 0x0200
+			Version_0_2 = 0x0200,
+			Version_0_3 = 0x0300
 		};	
 	}
 
@@ -164,7 +165,7 @@ namespace mmo
 	class MeshSerializer
 	{
 	public:
-		void ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version = mesh_version::Latest);
+		void Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version = mesh_version::Latest);
 	};
 	
 	/// @brief Implementation of the ChunkReader to read chunked mesh files.
@@ -181,6 +182,7 @@ namespace mmo
 		bool ReadVertexV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadIndexChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadSubMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadSubMeshChunkV3(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 

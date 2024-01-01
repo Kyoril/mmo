@@ -11,14 +11,13 @@
 
 namespace mmo
 {
-	/// Manages the available model files in the asset registry.
-	class SpellEditorWindow final
+	class CreatureEditorWindow final
 		: public EditorWindowBase
 		, public NonCopyable
 	{
 	public:
-		explicit SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host);
-		~SpellEditorWindow() override = default;
+		explicit CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host);
+		~CreatureEditorWindow() override = default;
 
 	public:
 		/// Draws the viewport window.

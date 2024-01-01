@@ -28,5 +28,6 @@ namespace mmo
 	private:
 		GraphicsDeviceD3D11& m_device;
 		ComPtr<ID3D11Buffer> m_buffer;
+		ComPtr<ID3D11Buffer> m_tempStagingBuffer;
 	};
 }

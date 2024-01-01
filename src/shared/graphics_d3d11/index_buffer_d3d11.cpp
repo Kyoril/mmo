@@ -43,7 +43,7 @@ namespace mmo
 
 	IndexBufferD3D11::IndexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t IndexCount, IndexBufferSize IndexSize, BufferUsage usage, const void* InitialData)
 		: IndexBuffer(IndexCount, IndexSize)
-		, Device(InDevice)
+		, m_device(InDevice)
 	{
 		// Create an index buffer
 		D3D11_BUFFER_DESC BufferDesc;
@@ -61,31 +61,66 @@ namespace mmo
 		InitData.SysMemSlicePitch = 0;
 
 		// Create the index buffer
-		ID3D11Device& D3DDevice = Device;
-		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&BufferDesc, InitialData == nullptr ? nullptr : &InitData, &Buffer)));
+		ID3D11Device& D3DDevice = m_device;
+		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&BufferDesc, InitialData == nullptr ? nullptr : &InitData, &m_buffer)));
 	}
 
 	void * IndexBufferD3D11::Map(LockOptions lock)
 	{
-		ID3D11DeviceContext& Context = Device;
+		ID3D11DeviceContext& context = m_device;
 
-		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &Sub)));
+		D3D11_MAPPED_SUBRESOURCE sub;
 
-		return Sub.pData;
+		if (lock == LockOptions::ReadOnly)
+		{
+			ASSERT(!m_tempStagingBuffer);
+
+			// Create a staging buffer
+			D3D11_BUFFER_DESC bufferDesc;
+			ZeroMemory(&bufferDesc, sizeof(bufferDesc));
+			bufferDesc.Usage = D3D11_USAGE_STAGING;
+			bufferDesc.ByteWidth = IndexSizeInBytes(IndexSize) * static_cast<UINT>(IndexCount);
+			bufferDesc.BindFlags = 0;
+			bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ;
+			bufferDesc.MiscFlags = 0;
+
+			ID3D11Device& d3dDevice = m_device;
+			VERIFY(SUCCEEDED(d3dDevice.CreateBuffer(&bufferDesc, nullptr, &m_tempStagingBuffer)));
+
+			// Copy the resource from the hardware buffer over to the temp buffer
+			context.CopyResource(m_tempStagingBuffer.Get(), m_buffer.Get());
+
+			// Map the staging buffer instead
+			VERIFY(SUCCEEDED(context.Map(m_tempStagingBuffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &sub)));
+		}
+		else
+		{
+			VERIFY(SUCCEEDED(context.Map(m_buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &sub)));
+		}
+
+		return sub.pData;
 	}
 
 	void IndexBufferD3D11::Unmap()
 	{
-		ID3D11DeviceContext& Context = Device;
-		Context.Unmap(Buffer.Get(), 0);
+		ID3D11DeviceContext& context = m_device;
+
+		if (m_tempStagingBuffer)
+		{
+			context.Unmap(m_tempStagingBuffer.Get(), 0);
+			m_tempStagingBuffer.Reset();
+		}
+		else
+		{
+			context.Unmap(m_buffer.Get(), 0);
+		}
 	}
 
 	void IndexBufferD3D11::Set(uint16 slot)
 	{
-		ID3D11DeviceContext& Context = Device;
-		Context.IASetIndexBuffer(Buffer.Get(), IndexBufferFormat(IndexSize), 0);
+		ID3D11DeviceContext& Context = m_device;
+		Context.IASetIndexBuffer(m_buffer.Get(), IndexBufferFormat(IndexSize), 0);
 
-		Device.SetIndexCount(static_cast<UINT>(IndexCount));
+		m_device.SetIndexCount(static_cast<UINT>(IndexCount));
 	}
 }

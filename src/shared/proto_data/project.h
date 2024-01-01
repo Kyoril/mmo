@@ -7,6 +7,7 @@
 #include "virtual_dir/file_system_reader.h"
 #include "base/clock.h"
 #include "base/filesystem.h"
+#include "shared/proto_data/creature_types.pb.h"
 #include "shared/proto_data/units.pb.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/unit_loot.pb.h"

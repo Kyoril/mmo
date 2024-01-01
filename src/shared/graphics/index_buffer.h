@@ -27,6 +27,8 @@ namespace mmo
 		/// Virtual default destructor because of inheritance.
 		virtual ~IndexBuffer() = default;
 
+		[[nodiscard]] IndexBufferSize GetIndexSize() const { return IndexSize; }
+
 	protected:
 		size_t IndexCount;
 		IndexBufferSize IndexSize;

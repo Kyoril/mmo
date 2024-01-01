@@ -80,6 +80,13 @@ namespace mmo
 			operator=(m3x3);
 		}
 
+		Matrix3 Linear() const
+		{
+			return Matrix3(m[0][0], m[0][1], m[0][2],
+				m[1][0], m[1][1], m[1][2],
+				m[2][0], m[2][1], m[2][2]);
+		}
+
 		/// Exchange the contents of this matrix with another.
 		void swap(Matrix4& other)
 		{

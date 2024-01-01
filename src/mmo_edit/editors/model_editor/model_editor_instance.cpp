@@ -273,7 +273,7 @@ namespace mmo
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
 
 		// Debug skeleton rendering
-		if (m_entity->HasSkeleton())
+		/*if (m_entity->HasSkeleton())
 		{
 			// Render each bone as a debug object
 			if (Bone* rootBone = m_entity->GetSkeleton()->GetRootBone())
@@ -281,7 +281,7 @@ namespace mmo
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
 			}
-		}
+		}*/
 	}
 
 	ModelEditorInstance::~ModelEditorInstance()
@@ -418,20 +418,7 @@ namespace mmo
 	}
 
 	void ModelEditorInstance::Save()
-	{
-		// Apply materials
-		ASSERT(m_entity->GetNumSubEntities() == m_entry.subMeshes.size());
-		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
-		{
-			String materialName = "Default";
-			if (const auto& material = m_entity->GetSubEntity(i)->GetMaterial())
-			{
-				materialName = material->GetName();
-			}
-
-			m_entry.subMeshes[i].material = materialName;
-		}
-		
+	{		
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
@@ -443,8 +430,7 @@ namespace mmo
 		io::Writer writer { sink };
 		
 		MeshSerializer serializer;
-		serializer.ExportMesh(m_entry, writer);
-
+		serializer.Serialize(m_mesh, writer);
 		ILOG("Successfully saved mesh");
 	}
 

@@ -960,7 +960,7 @@ namespace mmo
 				<< "\n\tfor (int i = 0; i < 4; ++i)\n"
 				<< "\t{\n"
 				<< "\t\tif(input.boneIndices[i] != 0)\n\t\t{\n"
-				<< "\t\t\tmatrix boneMatrix = matBone[input.boneIndices[i]-1];\n"
+				<< "\t\t\tcolumn_major matrix boneMatrix = matBone[input.boneIndices[i]-1];\n"
 				<< "\t\t\ttransformedPos += mul(input.pos, boneMatrix) * input.boneWeights[i];\n";
 
 			if (m_lit)

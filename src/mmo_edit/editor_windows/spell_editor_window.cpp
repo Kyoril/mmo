@@ -59,8 +59,8 @@ namespace mmo
 		: EditorWindowBase(name)
 		, m_host(host)
 		, m_project(project)
-		, m_visible(false)
 	{
+		EditorWindowBase::SetVisible(false);
 	}
 
 	bool SpellEditorWindow::Draw()
