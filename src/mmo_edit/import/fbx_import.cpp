@@ -186,58 +186,41 @@ namespace mmo
 		return extension == ".fbx";
 	}
 
-	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* mesh,
-		const MaterialPtr& material, Mesh* mMesh, AABB& boundingBox) const
+	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox) const
 	{
         // if animated all submeshes must have bone weights
-        if (!mBonesByName.empty() && !mesh->HasBones())
+        if (!mBonesByName.empty() && !aiMesh->HasBones())
         {
-            DLOG("Skipping mesh " << mesh->mName.C_Str() << " with no bone weights");
+            DLOG("Skipping mesh " << aiMesh->mName.C_Str() << " with no bone weights");
             return false;
         }
 
         // now begin the object definition
         // We create a submesh per material
-        SubMesh& submesh = mMesh->CreateSubMesh(name + std::to_string(index));
+        SubMesh& submesh = mesh->CreateSubMesh(name + std::to_string(index));
         submesh.useSharedVertices = false;
 
         submesh.SetMaterial(material);
 
         // prime pointers to vertex related data
-        aiVector3D* vec = mesh->mVertices;
-        aiVector3D* norm = mesh->mNormals;
-        aiVector3D* binorm = mesh->mBitangents;
-        aiVector3D* tang = mesh->mTangents;
-        aiVector3D* uv = mesh->mTextureCoords[0];
-        aiColor4D* col = mesh->mColors[0];
+        aiVector3D* vec = aiMesh->mVertices;
+        aiVector3D* norm = aiMesh->mNormals;
+        aiVector3D* binorm = aiMesh->mBitangents;
+        aiVector3D* tang = aiMesh->mTangents;
+        aiVector3D* uv = aiMesh->mTextureCoords[0];
+        aiColor4D* col = aiMesh->mColors[0];
 
         // We must create the vertex data, indicating how many vertices there will be
         submesh.vertexData = std::make_unique<VertexData>();
         submesh.vertexData->vertexStart = 0;
-        submesh.vertexData->vertexCount = mesh->mNumVertices;
-
-        /*
-        switch (mesh->mPrimitiveTypes)
-        {
-        default:
-        case aiPrimitiveType_TRIANGLE:
-            submesh.operationType = RenderOperation::OT_TRIANGLE_LIST;
-            break;
-        case aiPrimitiveType_LINE:
-            submesh.operationType = RenderOperation::OT_LINE_LIST;
-            break;
-        case aiPrimitiveType_POINT:
-            submesh.operationType = RenderOperation::OT_POINT_LIST;
-            break;
-        }
-        */
+        submesh.vertexData->vertexCount = aiMesh->mNumVertices;
 
         // We must now declare what the vertex data contains
         VertexDeclaration* declaration = submesh.vertexData->vertexDeclaration;
-        static const unsigned short source = 0;
-        size_t offset = 0;
+        static constexpr unsigned short source = 0;
+        uint32 offset = 0;
 
-        DLOG(mesh->mNumVertices << " vertices");
+        DLOG(aiMesh->mNumVertices << " vertices");
         offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
         offset += declaration->AddElement(source, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
         offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
@@ -246,35 +229,32 @@ namespace mmo
         offset += declaration->AddElement(source, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
         Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second;
-
         Matrix3 normalMatrix = aiM.Linear().Inverse().Transpose();
 
-        std::vector vertexData(mesh->mNumVertices * (declaration->GetVertexSize(source) / sizeof(float)), 0.0f);
-        float* vdata = vertexData.data();
+        std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertexData(aiMesh->mNumVertices);
+        POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX* dataPointer = vertexData.data();
 
-        // Now we get access to the buffer to fill it.  During so we record the bounding box.
-        for (size_t i = 0; i < mesh->mNumVertices; ++i)
+        // Now we get access to the buffer to fill it. During so we record the bounding box.
+        for (size_t i = 0; i < aiMesh->mNumVertices; ++i)
         {
             // Position
             Vector3 vectorData(vec->x, vec->y, vec->z);
             vectorData = aiM * vectorData;
 
-            *vdata++ = vectorData.x;
-            *vdata++ = vectorData.y;
-            *vdata++ = vectorData.z;
-            boundingBox.Combine(vectorData);
+            dataPointer->pos = vectorData;
             vec++;
+
+            boundingBox.Combine(vectorData);
 
             // Color
             if (col)
             {
-	            auto colorValue = reinterpret_cast<uint32*>(vdata++);
-                *colorValue = Color(col->r, col->g, col->b, col->a);
+                dataPointer->color = Color(col->r, col->g, col->b, col->a);
+                col++;
             }
             else
             {
-                auto colorValue = reinterpret_cast<uint32*>(vdata++);
-                *colorValue = Color::White;
+                dataPointer->color = Color::White;
             }
 
             // Normal
@@ -283,60 +263,50 @@ namespace mmo
                 vectorData = normalMatrix * Vector3(norm->x, norm->y, norm->z);
                 vectorData.Normalize();
 
-                *vdata++ = vectorData.x;
-                *vdata++ = vectorData.y;
-                *vdata++ = vectorData.z;
+                dataPointer->normal = vectorData;
                 norm++;
             }
             else
             {
-	            *vdata++ = 0.0f;
-				*vdata++ = 1.0f;
-				*vdata++ = 0.0f;
+                dataPointer->normal = Vector3::UnitY;
             }
 
             // Binormal
             if (binorm)
             {
-                *vdata++ = binorm->x;
-                *vdata++ = binorm->y;
-                *vdata++ = binorm->z;
+                dataPointer->binormal = Vector3(binorm->x, binorm->y, binorm->z);
                 binorm++;
             }
             else
             {
-                *vdata++ = 1.0f;
-                *vdata++ = 0.0f;
-                *vdata++ = 0.0f;
+                dataPointer->binormal = Vector3::UnitX;
             }
 
             // Tangent
             if (tang)
             {
-                *vdata++ = tang->x;
-                *vdata++ = tang->y;
-                *vdata++ = tang->z;
+                dataPointer->tangent = Vector3(tang->x, tang->y, tang->z);
                 tang++;
             }
             else
             {
-                *vdata++ = 0.0f;
-                *vdata++ = 0.0f;
-                *vdata++ = 1.0f;
+                dataPointer->tangent = Vector3::UnitZ;
             }
 
             // uvs
             if (uv)
             {
-                *vdata++ = uv->x;
-                *vdata++ = uv->y;
+                dataPointer->uv[0] = uv->x;
+                dataPointer->uv[1] = uv->y;
                 uv++;
             }
             else
             {
-                *vdata++ = 0.0f;
-                *vdata++ = 0.0f;
+                dataPointer->uv[0] = 0.0f;
+                dataPointer->uv[1] = 0.0f;
             }
+
+            dataPointer++;
         }
 
         VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(
@@ -347,11 +317,11 @@ namespace mmo
         submesh.vertexData->vertexBufferBinding->SetBinding(source, buffer);
 
         // set bone weights
-        if (mesh->HasBones() && m_skeleton)
+        if (aiMesh->HasBones() && m_skeleton)
         {
-            for (uint32 i = 0; i < mesh->mNumBones; i++)
+            for (uint32 i = 0; i < aiMesh->mNumBones; i++)
             {
-	            if (aiBone* bone = mesh->mBones[i]; nullptr != bone)
+	            if (aiBone* bone = aiMesh->mBones[i]; nullptr != bone)
                 {
                     String boneName = bone->mName.data;
                     for (uint32 weightIdx = 0; weightIdx < bone->mNumWeights; weightIdx++)
@@ -369,26 +339,26 @@ namespace mmo
             }
         }
 
-        if (mesh->mNumFaces == 0)
+        if (aiMesh->mNumFaces == 0)
         {
             return true;
         }
 
-        DLOG(mesh->mNumFaces << " faces");
+        DLOG(aiMesh->mNumFaces << " faces");
 
-        aiFace* faces = mesh->mFaces;
-        int faceSz = mesh->mPrimitiveTypes == aiPrimitiveType_LINE ? 2 : 3;
+        aiFace* faces = aiMesh->mFaces;
+        int faceSz = aiMesh->mPrimitiveTypes == aiPrimitiveType_LINE ? 2 : 3;
 
         // Creates the index data
         submesh.indexData = std::make_unique<IndexData>();
         submesh.indexData->indexStart = 0;
-        submesh.indexData->indexCount = mesh->mNumFaces * faceSz;
+        submesh.indexData->indexCount = aiMesh->mNumFaces * faceSz;
 
-        if (mesh->mNumVertices >= 65536) // 32 bit index buffer
+        if (aiMesh->mNumVertices >= 65536) // 32 bit index buffer
         {
-            std::vector<uint32> indexDataBuffer(mesh->mNumFaces * faceSz);
+            std::vector<uint32> indexDataBuffer(aiMesh->mNumFaces * faceSz);
             uint32* indexData = indexDataBuffer.data();
-            for (size_t i = 0; i < mesh->mNumFaces; ++i)
+            for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
             {
                 for (int j = 0; j < faceSz; j++)
                 {
@@ -407,9 +377,9 @@ namespace mmo
         }
         else // 16 bit index buffer
         {
-            std::vector<uint16> indexDataBuffer(mesh->mNumFaces* faceSz);
+            std::vector<uint16> indexDataBuffer(aiMesh->mNumFaces* faceSz);
             uint16* indexData = indexDataBuffer.data();
-            for (size_t i = 0; i < mesh->mNumFaces; ++i)
+            for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
             {
                 for (int j = 0; j < faceSz; j++)
                     *indexData++ = faces->mIndices[j];

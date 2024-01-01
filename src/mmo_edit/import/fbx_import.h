@@ -61,7 +61,7 @@ namespace mmo
 		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
 	private:
-		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* mesh, const MaterialPtr& material, Mesh* mMesh, AABB& boundingBox) const;
+		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox) const;
 		void GrabNodeNamesFromNode(const aiScene* mScene, const aiNode* pNode);
 		void GrabBoneNamesFromNode(const aiScene* mScene, const aiNode* pNode);
 		void ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,

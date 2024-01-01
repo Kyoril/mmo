@@ -509,10 +509,10 @@ namespace mmo
 			{
 				Vector3 position;
 				uint32 color;
-				float u, v;
 				Vector3 normal;
 				Vector3 binormal;
 				Vector3 tangent;
+				float u, v;
 			};
 
 			std::vector<VertexStruct> vertices(vertexCount);

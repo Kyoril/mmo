@@ -23,6 +23,7 @@
 #include "assimp/LogStream.hpp"
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/skeleton_serializer.h"
 
 namespace mmo
@@ -245,22 +246,8 @@ namespace mmo
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 			
-		m_mesh = std::make_shared<Mesh>("");
-		MeshDeserializer deserializer { *m_mesh };
-
-		if (const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string()))
-		{
-			io::StreamSource source { *inputFile };
-			io::Reader reader { source };
-			if (deserializer.Read(reader))
-			{
-				m_entry = deserializer.GetMeshEntry();
-			}
-		}
-		else
-		{
-			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
-		}
+		m_mesh = MeshManager::Get().Load(m_assetPath.string());
+		ASSERT(m_mesh);
 
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
@@ -467,7 +454,7 @@ namespace mmo
 				{
 					const auto files = AssetRegistry::ListFiles();
 
-					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
+					for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
 					{
 						ImGui::PushID(i); // Use field index as identifier.
 						ImGui::TableNextRow();
@@ -503,6 +490,7 @@ namespace mmo
 									if (ImGui::Selectable(file.c_str()))
 									{
 										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
+										m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
 									}
 								}
 
