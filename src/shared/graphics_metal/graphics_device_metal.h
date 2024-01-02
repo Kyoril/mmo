@@ -32,10 +32,12 @@ namespace mmo
 
 		void Clear(ClearFlags Flags = ClearFlags::None) override;
 
-		VertexBufferPtr CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr) override;
+        ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) override;
 
-		IndexBufferPtr CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void* InitialData = nullptr) override;
+        VertexBufferPtr CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* initialData = nullptr) override;
 
+        IndexBufferPtr CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData = nullptr) override;
+        
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
 		void Draw(uint32 vertexCount, uint32 start = 0) override;

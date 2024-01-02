@@ -24,7 +24,7 @@ namespace mmo
 			m_messages.erase(m_messages.begin());
 		}
 
-		m_messages.emplace_back(std::move(message), r, g, b);
+        m_messages.push_back({message, r, g, b});
 		OnMessagesChanged();
 	}
 
