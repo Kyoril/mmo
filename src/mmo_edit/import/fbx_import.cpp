@@ -144,18 +144,6 @@ namespace mmo
             m_mesh->SetSkeleton(m_skeleton);
         }
 
-        /*for (const auto& subMesh : mesh->GetSubMeshes())
-        {
-            if (!subMesh->useSharedVertices)
-            {
-	            if (VertexDeclaration* newDcl = subMesh->vertexData->vertexDeclaration->GetAutoOrganizedDeclaration(
-		            mesh->HasSkeleton(), false, false); *newDcl != *(subMesh->vertexData->vertexDeclaration))
-                {
-                    subMesh->vertexData->ReorganizeBuffers(*newDcl);
-                }
-            }
-        }*/
-
         // Create the file name
         if (!SaveMeshFile(filenameWithoutExtension.string(), currentAssetPath))
         {

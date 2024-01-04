@@ -401,7 +401,7 @@ namespace mmo
 				{
 					// If so, write weight
 					*pWeight++ = i->second.weight;
-					*pIndex++ = static_cast<unsigned char>(boneIndexToBlendIndexMap[i->second.boneIndex]) + 1;
+					*pIndex++ = static_cast<unsigned char>(i->second.boneIndex) + 1;
 					++i;
 				}
 				else
