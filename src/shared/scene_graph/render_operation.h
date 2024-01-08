@@ -3,6 +3,7 @@
 #pragma once
 
 #include "graphics/graphics_device.h"
+#include "graphics/vertex_index_data.h"
 
 namespace mmo
 {
@@ -13,14 +14,14 @@ namespace mmo
 
 		VertexFormat vertexFormat { VertexFormat::PosColor };
 
-		bool useIndexes { true };
+		VertexData* vertexData{ nullptr };
 
-		VertexBuffer* vertexBuffer;
+		IndexData* indexData{ nullptr };
 
-		IndexBuffer* indexBuffer;
+		MaterialPtr material{nullptr};
 
-		uint32 startIndex { 0 };
+		std::vector<ConstantBuffer*> vertexConstantBuffers{};
 
-		uint32 endIndex { 0 };
+		std::vector<ConstantBuffer*> pixelConstantBuffers{};
 	};
 }

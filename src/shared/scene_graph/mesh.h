@@ -8,13 +8,25 @@
 #include "graphics/index_buffer.h"
 #include "graphics/vertex_buffer.h"
 #include "math/aabb.h"
+#include "skeleton.h"
 
 #include <map>
 #include <memory>
 #include <vector>
 
+#include "graphics/constant_buffer.h"
+
 namespace mmo
 {
+	class VertexData;
+
+	struct VertexBoneAssignment
+	{
+		unsigned int vertexIndex;
+		unsigned short boneIndex;
+		float weight;
+	};
+
 	class Mesh final
 	{
         friend class SubMesh;
@@ -23,6 +35,8 @@ namespace mmo
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
 		typedef std::map<std::string, uint16> SubMeshNameMap;
+		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		typedef std::vector<uint16> IndexMap;
 
 	public:
         explicit Mesh(String name)
@@ -37,7 +51,7 @@ namespace mmo
 
 		void NameSubMesh(uint16 index, const std::string& name);
 
-		SubMesh& GetSubMesh(uint16 index);
+		SubMesh& GetSubMesh(uint16 index) const;
 
 		SubMesh* GetSubMesh(const std::string& name);
 
@@ -47,25 +61,52 @@ namespace mmo
 
 		void SetBounds(const AABB& bounds);
 
-		void Render();
-
 		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
 		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
 
-	public:
-		const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
+		void SetSkeletonName(const String& skeletonName);
 
-		uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
+        [[nodiscard]] const String& GetSkeletonName() const { return m_skeletonName; }
 
-		const AABB& GetBounds() const noexcept { return m_aabb; }
+		[[nodiscard]] const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
 
-		float GetBoundRadius() const noexcept { return m_boundRadius; }
+		[[nodiscard]] uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
+
+		[[nodiscard]] const AABB& GetBounds() const noexcept { return m_aabb; }
+
+		[[nodiscard]] float GetBoundRadius() const noexcept { return m_boundRadius; }
 
         [[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
 
+		void AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign);
+
+		void ClearBoneAssignments();
+
+		void NotifySkeleton(const SkeletonPtr& skeleton);
+
+		[[nodiscard]] const SkeletonPtr& GetSkeleton() const { return m_skeleton; }
+
+		[[nodiscard]] const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
+
+		uint16 NormalizeBoneAssignments(uint64 vertexCount, VertexBoneAssignmentList& assignments) const;
+
+		void CompileBoneAssignments();
+
+		void UpdateCompiledBoneAssignments();
+
+        void InitAnimationState(AnimationStateSet& animationState);
+
+    protected:
+		bool m_boneAssignmentsOutOfDate { false };
+
+        static void BuildIndexMap(const VertexBoneAssignmentList& boneAssignments, IndexMap& boneIndexToBlendIndexMap, IndexMap& blendIndexToBoneIndexMap);
+
+        static void CompileBoneAssignments(const VertexBoneAssignmentList& boneAssignments, uint16 numBlendWeightsPerVertex, IndexMap& blendIndexToBoneIndexMap, const VertexData* targetVertexData);
+
 	public:
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
+		ConstantBufferPtr m_boneMatricesBuffer;
+		std::unique_ptr<VertexData> sharedVertexData{nullptr};
+		IndexMap sharedBlendIndexToBoneIndexMap{};
 
 	private:
 		SubMeshList m_subMeshes;
@@ -74,6 +115,9 @@ namespace mmo
 		float m_boundRadius { 0.0f };
 		String m_skeletonName;
 		String m_name;
+		SkeletonPtr m_skeleton{ nullptr };
+		VertexBoneAssignmentList m_boneAssignments;
+		std::vector<Matrix4> m_boneMatrices;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

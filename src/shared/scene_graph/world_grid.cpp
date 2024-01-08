@@ -2,6 +2,7 @@
 
 #include "world_grid.h"
 
+#include "material_manager.h"
 #include "frame_ui/color.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
@@ -63,7 +64,7 @@ namespace mmo
 		
 		const Vector3 gridOrigin { -width / 2.0f, 0.0f, -height / 2.0f };
 		
-		const auto operation = m_renderObject->AddLineListOperation();
+		const auto operation = m_renderObject->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
 		
 		const Color darkColor(0.4f, 0.4f, 0.4f);
 		const Color lightColor = Color::White;

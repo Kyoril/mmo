@@ -37,7 +37,31 @@ CREATE TABLE `characters` (
   `deleted_account` bigint unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `UNIQUE_NAME` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+
+DROP TABLE IF EXISTS `character_chat`;
+
+CREATE TABLE `character_chat` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `character` bigint unsigned NOT NULL,
+  `type` smallint NOT NULL,
+  `message` varchar(255) NOT NULL,
+  `timestamp` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `to_character` bigint unsigned DEFAULT NULL COMMENT 'Only used for whisper messages, NULL otherwise.',
+  PRIMARY KEY (`id`),
+  KEY `fk_character_id_idx` (`character`),
+  CONSTRAINT `fk_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_to_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+DROP TABLE IF EXISTS `character_spells`;
+
+CREATE TABLE `character_spells` (
+  `character` bigint NOT NULL,
+  `spell` int NOT NULL,
+  UNIQUE KEY `idx_char_spell` (`character`,`spell`),
+  KEY `idx_char` (`character`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
 
 /*Table structure for table `world` */
 
@@ -53,7 +77,7 @@ CREATE TABLE `world` (
   `last_ip` varchar(39) COLLATE latin1_german1_ci DEFAULT NULL,
   `last_build` varchar(32) COLLATE latin1_german1_ci DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

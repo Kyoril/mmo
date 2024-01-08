@@ -7,15 +7,34 @@
 #include "game/each_tile_in_sight.h"
 #include "game/visibility_tile.h"
 #include "game/game_object_s.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
-	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject)
+	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject, CharacterData characterData, const proto::Project& project)
 		: m_connector(realmConnector)
 		, m_character(std::move(characterObject))
+		, m_characterData(std::move(characterData))
+		, m_project(project)
 	{
 		m_character->spawned.connect(*this, &Player::OnSpawned);
 		m_character->tileChangePending.connect(*this, &Player::OnTileChangePending);
+
+		for (const auto& spellId : m_characterData.spellIds)
+		{
+			const proto::SpellEntry* spellEntry = m_project.spells.getById(spellId);
+			if (spellEntry)
+			{
+				DLOG("\tPlayer spell: " << spellEntry->id() << " - " << spellEntry->name());
+
+				// TODO
+				//m_character->AddSpell(spellId);
+			}
+			else
+			{
+				WLOG("Player has unknown spell '" << spellId << "'");
+			}
+		}
 	}
 
 	Player::~Player()
@@ -153,6 +172,14 @@ namespace mmo
 			[this](VisibilityTile &tile)
 		{
 			SpawnTileObjects(tile);
+		});
+
+		// Send initial spells
+		SendPacket([&](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::InitialSpells);
+			packet << io::write_dynamic_range<uint16>(m_characterData.spellIds);
+			packet.Finish();
 		});
 	}
 

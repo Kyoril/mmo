@@ -302,10 +302,10 @@ namespace mmo
 			{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
 		};
 		
-		s_consoleVertBuf = device.CreateVertexBuffer(4, sizeof(POS_COL_VERTEX), true, vertices);
+		s_consoleVertBuf = device.CreateVertexBuffer(4, sizeof(POS_COL_VERTEX), BufferUsage::DynamicWriteOnlyDiscardable, vertices);
 		
 		const uint16 indices[] = { 0, 1, 2, 2, 3, 0 };
-		s_consoleIndBuf = device.CreateIndexBuffer(6, IndexBufferSize::Index_16, indices);
+		s_consoleIndBuf = device.CreateIndexBuffer(6, IndexBufferSize::Index_16, BufferUsage::DynamicWriteOnlyDiscardable, indices);
 		
 		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 16.0f, 0.0f);
 		
@@ -345,7 +345,7 @@ namespace mmo
 			s_consoleTextDirty = true;
 		});
 		
-		s_consoleLayer = Screen::AddLayer(&Console::Paint, 100.0f, ScreenLayerFlags::IdentityTransform);
+		s_consoleLayer = Screen::AddLayer(&Console::Paint, 100.0f, IdentityTransform);
 		
 		s_consoleKeyEvents += 
 		{
@@ -664,7 +664,7 @@ namespace mmo
 			};
 
 			// Update vertex buffer data
-			CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf };
+			CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf, LockOptions::Discard };
 			*lock[0] = vertices[0];
 			*lock[1] = vertices[1];
 			*lock[2] = vertices[2];
@@ -672,14 +672,14 @@ namespace mmo
 		}
 		
 		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
-		gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
 		
 		gx.SetVertexFormat(VertexFormat::PosColor);
 		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetBlendMode(BlendMode::Alpha);
 		
-		s_consoleVertBuf->Set();
-		s_consoleIndBuf->Set();
+		s_consoleVertBuf->Set(0);
+		s_consoleIndBuf->Set(0);
 		gx.DrawIndexed();
 		
 		s_consoleTextGeom->Draw();

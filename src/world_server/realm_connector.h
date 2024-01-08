@@ -17,6 +17,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	class TimerQueue;
 	class WorldInstanceManager;
 	class PlayerManager;
@@ -32,7 +37,7 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-			std::unique_ptr<GameObjectFactory> gameObjectFactory);
+			std::unique_ptr<GameObjectFactory> gameObjectFactory, const proto::Project& project);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -147,6 +152,8 @@ namespace mmo
 		bool m_willTerminate;
 
 		std::vector<uint64> m_hostedMapIds;
+
+		const proto::Project& m_project;
 
 	public:
 		// ~ Begin IConnectorListener

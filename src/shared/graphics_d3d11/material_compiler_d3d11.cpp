@@ -1,6 +1,12 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "material_compiler_d3d11.h"
+
+#include <fstream>
+
+#include "assets/asset_registry.h"
+#include "binary_io/stream_sink.h"
+#include "binary_io/text_writer.h"
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
 #include "log/default_log_levels.h"
@@ -549,108 +555,6 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
-	void MaterialCompilerD3D11::GenerateVertexShaderCode()
-	{
-		m_vertexShaderStream.clear();
-		
-		// VertexIn struct
-		m_vertexShaderStream
-			<< "struct VertexIn\n"
-			<< "{\n"
-			<< "\tfloat4 pos : SV_POSITION;\n"
-			<< "\tfloat4 color : COLOR;\n";
-		
-		m_vertexShaderStream
-			<< "\tfloat3 normal : NORMAL;\n"
-			<< "\tfloat3 binormal : BINORMAL;\n"
-			<< "\tfloat3 tangent : TANGENT;\n";
-
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
-		{
-			m_vertexShaderStream
-				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
-		}
-
-		m_vertexShaderStream
-			<< "};\n\n";
-		
-		// VertexOut struct
-		m_vertexShaderStream
-			<< "struct VertexOut\n"
-			<< "{\n"
-			<< "\tfloat4 pos : SV_POSITION;\n"
-			<< "\tfloat4 color : COLOR;\n";
-
-		if (m_lit)
-		{
-			m_vertexShaderStream
-				<< "\tfloat3 normal : NORMAL;\n"
-				<< "\tfloat3 binormal : BINORMAL;\n"
-				<< "\tfloat3 tangent : TANGENT;\n";
-		}
-		
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
-		{
-			m_vertexShaderStream
-				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
-		}
-		m_vertexShaderStream
-			<< "\tfloat3 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n"
-			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n";
-
-		m_vertexShaderStream
-			<< "};\n\n";
-
-		// Matrix constant buffer
-		m_vertexShaderStream
-			<< "cbuffer Matrices\n"
-			<< "{\n"
-			<< "\tcolumn_major matrix matWorld;\n"
-			<< "\tcolumn_major matrix matView;\n"
-			<< "\tcolumn_major matrix matProj;\n"
-			<< "\tcolumn_major matrix matInvView;\n"
-			<< "};\n\n";
-
-		// Main procedure start
-		m_vertexShaderStream
-			<< "VertexOut main(VertexIn input)\n"
-			<< "{\n"
-			<< "\tVertexOut output;\n\n";
-		
-		// Basic transformations
-		m_vertexShaderStream
-			<< "\tinput.pos.w = 1.0;\n"
-			<< "\toutput.pos = mul(input.pos, matWorld);\n"
-			<< "\toutput.worldPos = output.pos.xyz;\n"
-			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
-			<< "\toutput.pos = mul(float4(output.worldPos, 1.0), matView);\n"
-			<< "\toutput.pos = mul(output.pos, matProj);\n"
-			<< "\toutput.color = input.color;\n";
-
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
-		{
-			m_vertexShaderStream
-				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
-		}
-
-		if (m_lit)
-		{
-			m_vertexShaderStream
-				<< "\toutput.binormal = normalize(mul(input.binormal, (float3x3)matWorld));\n"
-				<< "\toutput.tangent = normalize(mul(input.tangent, (float3x3)matWorld));\n"
-				<< "\toutput.normal = normalize(mul(input.normal, (float3x3)matWorld));\n";
-		}
-
-		// Main procedure end
-		m_vertexShaderStream
-			<< "\n\treturn output;\n"
-			<< "}\n"
-			<< std::endl;
-		
-		m_vertexShaderCode = m_vertexShaderStream.str();
-		m_vertexShaderStream.clear();
-	}
-
 	void MaterialCompilerD3D11::GeneratePixelShaderCode()
 	{
 		m_pixelShaderStream.clear();
@@ -827,6 +731,24 @@ namespace mmo
 			}
 		}
 
+		// Opacity
+		if (m_opacityExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_opacityExpression);
+			if (expression == ExpressionType::Float_1)
+			{
+				m_pixelShaderStream << "\tfloat opacity = expr_" << m_opacityExpression << ";\n\n";
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat metallic = expr_" << m_opacityExpression << ".r;\n\n";
+			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
+		}
+
 		// BaseColor base
 		m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
 		if (m_baseColorExpression != IndexNone)
@@ -899,17 +821,21 @@ namespace mmo
 				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
 				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
 		}
-		
+
+
+		m_pixelShaderStream
+			<< "\tclip( opacity < 0.01f ? -1:1 );\n";
+
 		// Combining it
 		if (m_lit)
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = float4(color, 1.0);\n";
+				<< "\toutputColor = float4(color, opacity);\n";
 		}
 		else
 		{
 			m_pixelShaderStream
-				<< "\toutputColor = float4(baseColor, 1.0);\n";
+				<< "\toutputColor = float4(baseColor, opacity);\n";
 		}
 
 		// End of main function
@@ -920,5 +846,188 @@ namespace mmo
 		
 		m_pixelShaderCode = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
+	}
+
+	void MaterialCompilerD3D11::GenerateVertexShaderCode(VertexShaderType type)
+	{
+		std::ostringstream vertexShaderStream;
+		m_vertexShaderCode.clear();
+
+		// VertexIn struct
+		vertexShaderStream
+			<< "struct VertexIn\n"
+			<< "{\n"
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n"
+			<< "\tfloat3 normal : NORMAL;\n"
+			<< "\tfloat3 binormal : BINORMAL;\n"
+			<< "\tfloat3 tangent : TANGENT;\n";
+
+		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		{
+			vertexShaderStream
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
+		}
+
+		if (type == VertexShaderType::SkinnedLow || type == VertexShaderType::SkinnedMedium || type == VertexShaderType::SkinnedHigh)
+		{
+			vertexShaderStream
+				<< "\tuint4 boneIndices : BLENDINDICES;\n"
+				<< "\tfloat4 boneWeights : BLENDWEIGHT;\n";
+		}
+
+		vertexShaderStream
+			<< "};\n\n";
+
+		// VertexOut struct
+		vertexShaderStream
+			<< "struct VertexOut\n"
+			<< "{\n"
+			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat4 color : COLOR;\n";
+
+		if (m_lit)
+		{
+			vertexShaderStream
+				<< "\tfloat3 normal : NORMAL;\n"
+				<< "\tfloat3 binormal : BINORMAL;\n"
+				<< "\tfloat3 tangent : TANGENT;\n";
+		}
+
+		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		{
+			vertexShaderStream
+				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
+		}
+		vertexShaderStream
+			<< "\tfloat3 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n"
+			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n";
+
+		vertexShaderStream
+			<< "};\n\n";
+
+		uint32 numBones = 0;
+		switch (type)
+		{
+		case VertexShaderType::SkinnedLow: numBones = 32; break;
+		case VertexShaderType::SkinnedMedium: numBones = 64; break;
+		case VertexShaderType::SkinnedHigh: numBones = 128; break;
+		default:
+			numBones = 0;
+			break;
+		}
+
+		// Matrix constant buffer
+		vertexShaderStream
+			<< "cbuffer Matrices\n"
+			<< "{\n"
+			<< "\tcolumn_major matrix matWorld;\n"
+			<< "\tcolumn_major matrix matView;\n"
+			<< "\tcolumn_major matrix matProj;\n"
+			<< "\tcolumn_major matrix matInvView;\n"
+			<< "};\n\n";
+
+		if (numBones > 0)
+		{
+			vertexShaderStream
+				<< "cbuffer Bones\n"
+				<< "{\n"
+				<< "\tcolumn_major matrix matBone[" << numBones << "];\n"	// TODO: Dual quaternion support
+				<< "};\n\n";
+		}
+
+		// Main procedure start
+		vertexShaderStream
+			<< "VertexOut main(VertexIn input)\n"
+			<< "{\n"
+			<< "\tVertexOut output;\n\n";
+
+		const bool withSkinning = (type != VertexShaderType::Default);
+		if (withSkinning)
+		{
+			vertexShaderStream
+				<< "\tfloat4 transformedPos = float4(0.0, 0.0, 0.0, 0.0);\n";
+
+			if (m_lit)
+			{
+				vertexShaderStream
+					<< "\tfloat3 transformedNormal = float3(0.0, 0.0, 0.0);\n"
+					<< "\tfloat3 transformedBinormal = float3(0.0, 0.0, 0.0);\n"
+					<< "\tfloat3 transformedTangent = float3(0.0, 0.0, 0.0);\n";
+			}
+
+			vertexShaderStream
+				<< "\n\tfor (int i = 0; i < 4; ++i)\n"
+				<< "\t{\n"
+				<< "\t\tif(input.boneIndices[i] != 0)\n\t\t{\n"
+				<< "\t\t\tmatrix boneMatrix = matBone[input.boneIndices[i]-1];\n"
+				<< "\t\t\ttransformedPos += mul(input.pos, boneMatrix) * input.boneWeights[i];\n";
+
+			if (m_lit)
+			{
+				vertexShaderStream
+					<< "\t\t\ttransformedNormal += mul(input.normal, boneMatrix) * input.boneWeights[i];\n"
+					<< "\t\t\ttransformedBinormal += mul(input.binormal, boneMatrix) * input.boneWeights[i];\n"
+					<< "\t\t\ttransformedTangent += mul(input.tangent, boneMatrix) * input.boneWeights[i];\n";
+			}
+
+			vertexShaderStream << "\t\t}\n\n";
+			vertexShaderStream << "\t}\n\n";
+		}
+		else
+		{
+			vertexShaderStream
+				<< "\tfloat4 transformedPos = float4(input.pos.xyz, 1.0);\n";
+
+			if (m_lit)
+			{
+				vertexShaderStream
+					<< "\tfloat3 transformedNormal = input.normal;\n"
+					<< "\tfloat3 transformedBinormal = input.binormal;\n"
+					<< "\tfloat3 transformedTangent = input.tangent;\n";
+			}
+		}
+
+		// Basic transformations
+		vertexShaderStream
+			<< "\toutput.pos = mul(transformedPos, matWorld);\n"
+			<< "\toutput.worldPos = output.pos.xyz;\n"
+			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
+			<< "\toutput.pos = mul(output.pos, matView);\n"
+			<< "\toutput.pos = mul(output.pos, matProj);\n"
+			<< "\toutput.color = input.color;\n";
+
+		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		{
+			vertexShaderStream
+				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
+		}
+
+		if (m_lit)
+		{
+			vertexShaderStream
+				<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"
+				<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)matWorld));\n"
+				<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)matWorld));\n";
+		}
+
+		// Main procedure end
+		vertexShaderStream
+			<< "\n\treturn output;\n"
+			<< "}\n"
+			<< std::endl;
+
+		m_vertexShaderCode = vertexShaderStream.str();
+		vertexShaderStream.clear();
+
+#ifdef _DEBUG
+		// Write shader output to asset registry for debug
+		if (const auto filePtr = AssetRegistry::CreateNewFile("VS_" + std::to_string(static_cast<int>(type)) + ".hlsl"))
+		{
+			io::StreamSink sink(*filePtr);
+			io::TextWriter<char> writer(sink);
+			writer.write(m_vertexShaderCode);
+		}
+#endif
 	}
 }

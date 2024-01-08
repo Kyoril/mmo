@@ -213,5 +213,9 @@ namespace mmo
 		SceneNode *m_scaleContentPlaneNode{nullptr};
 		MeshPtr m_scaleAxisPlanes{ nullptr };
 		MeshPtr m_scaleCenterPlanes{ nullptr };
+
+		MaterialPtr m_axisMaterial{ nullptr };
+		MaterialPtr m_axisHighlightMaterial{ nullptr };
+		MaterialPtr m_axisPlaneMaterial{ nullptr };
 	};
 }

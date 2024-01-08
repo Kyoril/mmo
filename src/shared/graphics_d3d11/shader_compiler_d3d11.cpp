@@ -18,7 +18,7 @@ namespace mmo
 	{
 		UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
 #if defined( DEBUG ) || defined( _DEBUG )
-		//flags |= D3DCOMPILE_DEBUG;
+		flags |= D3DCOMPILE_DEBUG;
 #endif
 		
 		String profile;

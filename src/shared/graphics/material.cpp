@@ -27,9 +27,9 @@ namespace mmo
 		m_texturesChanged = true;
 	}
 
-	void Material::SetVertexShaderCode(std::span<uint8> code) noexcept
+	void Material::SetVertexShaderCode(VertexShaderType vertexShaderType, std::span<uint8> code) noexcept
 	{
-		m_vertexShaderCode.assign(code.begin(), code.end());
+		m_vertexShaderCode[static_cast<uint32_t>(vertexShaderType)].assign(code.begin(), code.end());
 		m_vertexShaderChanged = true;
 	}
 
@@ -49,7 +49,8 @@ namespace mmo
 				auto texture = TextureManager::Get().CreateOrRetrieve(textureFile);
 				if (!texture)
 				{
-					ELOG("Unable to load texture " << textureFile);
+					ELOG("Unable to load texture " << textureFile << " (referenced by Material '" << m_name << "')");
+					texture = TextureManager::Get().CreateOrRetrieve("Textures/Engine/DefaultGrid/T_Default_Material_Grid_M.htex");
 				}
 
 				// Still add nullptr - texture won't be rendered
@@ -61,13 +62,19 @@ namespace mmo
 
 		if (m_vertexShaderChanged)
 		{
-			if (!m_vertexShaderCode.empty())
+			uint32 index = 0;
+			for (const auto& code : m_vertexShaderCode)
 			{
-				m_vertexShader = GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, m_vertexShaderCode.data(), m_vertexShaderCode.size());
-			}
-			else
-			{
-				m_vertexShader.reset();
+				if (!code.empty())
+				{
+					m_vertexShader[index] = GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, code.data(), code.size());
+				}
+				else
+				{
+					m_vertexShader[index].reset();
+				}
+
+				index++;
 			}
 
 			m_vertexShaderChanged = false;
@@ -93,19 +100,23 @@ namespace mmo
 		compiler.Compile(*this, shaderCompiler);
 
 		// Compile vertex shader
-		ShaderCompileResult vertexOutput;
-		ShaderCompileInput vertexInput { compiler.GetVertexShaderCode(), ShaderType::VertexShader };
-		shaderCompiler.Compile(vertexInput, vertexOutput);
-		if (vertexOutput.succeeded)
+		for (uint32 i = 0; i < 4; ++i)
 		{
-			m_vertexShaderCode = vertexOutput.code.data;
-			m_vertexShader = std::move(GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, &vertexOutput.code.data[0], vertexOutput.code.data.size()));
+			ShaderCompileResult vertexOutput;
+			ShaderCompileInput vertexInput{ compiler.GetVertexShaderCode(), ShaderType::VertexShader };
+			shaderCompiler.Compile(vertexInput, vertexOutput);
+			if (vertexOutput.succeeded)
+			{
+				m_vertexShaderCode[i] = vertexOutput.code.data;
+				m_vertexShader[i] = std::move(GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, vertexOutput.code.data.data(), vertexOutput.code.data.size()));
+			}
+			else
+			{
+				ELOG("Error compiling vertex shader: " << vertexOutput.errorMessage);
+				return false;
+			}
 		}
-		else
-		{
-			ELOG("Error compiling vertex shader: " << vertexOutput.errorMessage);
-			return false;
-		}
+		
 
 		// Compile pixel shader
 		ShaderCompileResult pixelOutput;
@@ -126,13 +137,15 @@ namespace mmo
 
 	void Material::Apply(GraphicsDevice& device)
 	{
+		// TODO: Determine what vertex shader type we need to bind based on the rendering context or from outside
+
 		BindShaders(device);
 		BindTextures(device);
 
 		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 		device.SetDepthWriteEnabled(m_depthWrite);
 
-		if (m_type == MaterialType::Translucent)
+		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}
@@ -140,11 +153,22 @@ namespace mmo
 		{
 			device.SetBlendMode(BlendMode::Opaque);
 		}
+
+		if (m_twoSided)
+		{
+			device.SetFaceCullMode(FaceCullMode::None);
+		}
+		else
+		{
+			device.SetFaceCullMode(FaceCullMode::Back);
+		}
 	}
 
 	void Material::BindShaders(GraphicsDevice& device)
 	{
-		if (m_vertexShader) m_vertexShader->Set();
+		// Apply
+
+		if (m_vertexShader[0]) m_vertexShader[0]->Set();
 		if (m_pixelShader) m_pixelShader->Set();
 	}
 

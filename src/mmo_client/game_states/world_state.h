@@ -121,6 +121,8 @@ namespace mmo
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
+
 	private:
 
 		bool LoadMap(const String& assetPath);

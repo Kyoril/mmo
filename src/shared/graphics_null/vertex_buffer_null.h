@@ -8,18 +8,18 @@
 
 namespace mmo
 {
-	/// Direct3D 11 implemenation of a vertex buffer.
+	/// Direct3D 11 implementation of a vertex buffer.
 	class VertexBufferNull : public VertexBuffer
 	{
 	public:
-		VertexBufferNull(GraphicsDeviceNull& InDevice, size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr);
+		VertexBufferNull(GraphicsDeviceNull& InDevice, size_t VertexCount, size_t VertexSize, BufferUsage usage, const void* InitialData = nullptr);
 
 	public:
 		//~Begin CGxBufferBase
-		virtual void* Map() override;
+		virtual void* Map(LockOptions options) override;
 		virtual void Unmap() override;
-		virtual void Set() override;
-		std::unique_ptr<VertexBuffer> Clone() override;
+		virtual void Set(uint16 slot) override;
+		VertexBufferPtr Clone() override;
 		//~End CGxBufferBase
 		
 	private:

@@ -274,4 +274,38 @@ namespace mmo
 	{
 		m_depthComparison = comparison;
 	}
+
+	VertexDeclaration* GraphicsDevice::CreateVertexDeclaration()
+	{
+		return m_vertexDeclarations.emplace_back(std::make_unique<VertexDeclaration>()).get();
+	}
+
+	void GraphicsDevice::DestroyVertexDeclaration(VertexDeclaration& declaration)
+	{
+		for (auto it = m_vertexDeclarations.begin(); it != m_vertexDeclarations.end(); ++it)
+		{
+			if (it->get() == &declaration)
+			{
+				m_vertexDeclarations.erase(it);
+				return;
+			}
+		}
+	}
+
+	VertexBufferBinding* GraphicsDevice::CreateVertexBufferBinding()
+	{
+		return m_vertexBufferBindings.emplace_back(std::make_unique<VertexBufferBinding>()).get();
+	}
+
+	void GraphicsDevice::DestroyVertexBufferBinding(VertexBufferBinding& binding)
+	{
+		for (auto it = m_vertexBufferBindings.begin(); it != m_vertexBufferBindings.end(); ++it)
+		{
+			if (it->get() == &binding)
+			{
+				m_vertexBufferBindings.erase(it);
+				return;
+			}
+		}
+	}
 }

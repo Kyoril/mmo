@@ -24,6 +24,7 @@ namespace mmo
 
 			if (!manager.save(managerAbsoluteFileName))
 			{
+				ELOG("Failed to save manager " << manager.name << " to absolute filename " << managerAbsoluteFileName);
 				return false;
 			}
 
@@ -42,9 +43,11 @@ namespace mmo
 
 			for (ProjectSaver::Manager &manager : managers)
 			{
-				success =
-				    saveAndAddManagerToTable(fileTable, directory, manager) &&
-				    success;
+				if (!saveAndAddManagerToTable(fileTable, directory, manager))
+				{
+					ELOG("Failed to save manager " << manager.name << " to file " << manager.fileName);
+					success = false;
+				}
 			}
 
 			return success;
@@ -55,7 +58,10 @@ namespace mmo
 			const mmo::String projectFileName = (directory / "project.txt").string();
 
 			return
-			    sff::save_file(projectFileName, std::bind(saveProjectToTable, std::placeholders::_1, directory, std::ref(managers)));
+			    sff::save_file(projectFileName, [directory, &managers]<typename T0>(T0&& PH1)
+			    {
+				    return saveProjectToTable(std::forward<T0>(PH1), directory, managers);
+			    });
 		}
 	}
 }

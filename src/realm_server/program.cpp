@@ -35,6 +35,8 @@
 #include <mutex>
 #include <thread>
 
+#include "proto_data/project.h"
+
 
 namespace mmo
 {
@@ -116,6 +118,13 @@ namespace mmo
 		ILOG("Last Change: " << GitLastChange);
 
 
+		// Load game data
+		proto::Project project;
+		if (!project.load(config.dataFolder))
+		{
+			ELOG("Failed to load project from folder '" << config.dataFolder << "'!");
+			return 1;
+		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup
@@ -161,7 +170,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -175,7 +184,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(worldManager, playerManager, asyncDatabase, connection, address.to_string());
+			auto world = std::make_shared<World>(worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 

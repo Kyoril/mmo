@@ -6,69 +6,74 @@
 
 namespace mmo
 {
-	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & InDevice, size_t InVertexCount, size_t InVertexSize, bool dynamic, const void* InitialData)
-		: VertexBuffer(InVertexCount, InVertexSize, dynamic)
-		, Device(InDevice)
+	bool IsDynamicUsage(BufferUsage usage)
 	{
-		// Allocate vertex buffer
-		D3D11_BUFFER_DESC BufferDesc;
-		ZeroMemory(&BufferDesc, sizeof(BufferDesc));
-		BufferDesc.Usage = m_dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
-		BufferDesc.ByteWidth = static_cast<UINT>(m_vertexSize * m_vertexCount);
-		BufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-		BufferDesc.CPUAccessFlags = m_dynamic ? D3D11_CPU_ACCESS_WRITE : 0;
-		BufferDesc.MiscFlags = 0;
-
-		// Fill buffer with initial data on creation to speed things up
-		D3D11_SUBRESOURCE_DATA InitData;
-		InitData.pSysMem = InitialData;
-		InitData.SysMemPitch = 0;
-		InitData.SysMemSlicePitch = 0;
-
-		ID3D11Device& D3DDevice = Device;
-		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&BufferDesc, InitialData == nullptr ? nullptr : &InitData, &Buffer)));
+		return (static_cast<uint32>(usage) & static_cast<uint32>(BufferUsage::Dynamic)) != 0;
 	}
 
-	void * VertexBufferD3D11::Map()
+	VertexBufferD3D11::VertexBufferD3D11(GraphicsDeviceD3D11 & device, const uint32 vertexCount, const uint32 vertexSize, const BufferUsage usage, const void* initialData)
+		: VertexBuffer(vertexCount, vertexSize, usage)
+		, m_device(device)
 	{
-		ID3D11DeviceContext& Context = Device;
+		// Allocate vertex buffer
+		D3D11_BUFFER_DESC bufferDesc;
+		ZeroMemory(&bufferDesc, sizeof(bufferDesc));
+		bufferDesc.Usage = IsDynamicUsage(usage) ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
+		bufferDesc.ByteWidth = m_vertexSize * m_vertexCount;
+		bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		bufferDesc.CPUAccessFlags = IsDynamicUsage(usage) ? D3D11_CPU_ACCESS_WRITE : 0;
+		bufferDesc.MiscFlags = 0;
 
-		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &Sub)));
+		// Fill buffer with initial data on creation to speed things up
+		D3D11_SUBRESOURCE_DATA initData;
+		initData.pSysMem = initialData;
+		initData.SysMemPitch = 0;
+		initData.SysMemSlicePitch = 0;
 
-		return Sub.pData;
+		ID3D11Device& D3DDevice = m_device;
+		VERIFY(SUCCEEDED(D3DDevice.CreateBuffer(&bufferDesc, initialData == nullptr ? nullptr : &initData, &m_buffer)));
+	}
+
+	void * VertexBufferD3D11::Map(const LockOptions lock)
+	{
+		ID3D11DeviceContext& context = m_device;
+
+		D3D11_MAPPED_SUBRESOURCE sub;
+		VERIFY(SUCCEEDED(context.Map(m_buffer.Get(), 0, MapLockOptionsToD3D11(lock), 0, &sub)));
+
+		return sub.pData;
 	}
 
 	void VertexBufferD3D11::Unmap()
 	{
-		ID3D11DeviceContext& Context = Device;
-		Context.Unmap(Buffer.Get(), 0);
+		ID3D11DeviceContext& context = m_device;
+		context.Unmap(m_buffer.Get(), 0);
 	}
 
-	void VertexBufferD3D11::Set()
+	void VertexBufferD3D11::Set(const uint16 slot)
 	{
-		ID3D11Buffer* Buffers[1] = { Buffer.Get() };
+		ID3D11Buffer* buffers[1] = { m_buffer.Get() };
 
-		UINT Stride = static_cast<UINT>(m_vertexSize);
-		UINT Offset = 0;
+		const UINT stride = m_vertexSize;
+		constexpr UINT offset = 0;
 
-		ID3D11DeviceContext& Context = Device;
-		Context.IASetVertexBuffers(0, ARRAYSIZE(Buffers), Buffers, &Stride, &Offset);
+		ID3D11DeviceContext& context = m_device;
+		context.IASetVertexBuffers(slot, ARRAYSIZE(buffers), buffers, &stride, &offset);
 	}
 
-	std::unique_ptr<VertexBuffer> VertexBufferD3D11::Clone()
+	VertexBufferPtr VertexBufferD3D11::Clone()
 	{
-		auto buffer = std::make_unique<VertexBufferD3D11>(Device, m_vertexCount, m_vertexSize, m_dynamic);
+		auto buffer = std::make_shared<VertexBufferD3D11>(m_device, m_vertexCount, m_vertexSize, m_usage);
 
-		ID3D11DeviceContext& Context = Device;
-		D3D11_MAPPED_SUBRESOURCE Sub;
-		VERIFY(SUCCEEDED(Context.Map(Buffer.Get(), 0, D3D11_MAP_READ, 0, &Sub)));
+		ID3D11DeviceContext& context = m_device;
+		D3D11_MAPPED_SUBRESOURCE sub;
+		VERIFY(SUCCEEDED(context.Map(m_buffer.Get(), 0, D3D11_MAP_READ, 0, &sub)));
 
-		void* newBufferData = buffer->Map();
-		memcpy(newBufferData, Sub.pData, m_vertexSize * m_vertexCount);
+		void* newBufferData = buffer->Map(LockOptions::Discard);
+		memcpy(newBufferData, sub.pData, m_vertexSize * m_vertexCount);
 		buffer->Unmap();
 
-		Context.Unmap(Buffer.Get(), 0);
+		context.Unmap(m_buffer.Get(), 0);
 
 		return std::move(buffer);
 	}

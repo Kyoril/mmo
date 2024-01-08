@@ -3,6 +3,7 @@
 #include "axis_display.h"
 
 #include "manual_render_object.h"
+#include "material_manager.h"
 #include "scene.h"
 
 namespace mmo
@@ -38,7 +39,7 @@ namespace mmo
 	{
 		m_renderObject->Clear();
 
-		const auto lineOperation = m_renderObject->AddLineListOperation();
+		const auto lineOperation = m_renderObject->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 
 		auto& xAxis = lineOperation->AddLine(Vector3::Zero, Vector3::UnitX);
 		xAxis.SetColor(Color(1.0f, 0.0f, 0.0f));

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 
+#include "material.h"
 #include "base/typedefs.h"
 
 namespace mmo
@@ -121,6 +122,11 @@ namespace mmo
 		///	       expression at all.
 		/// @param expression Index of the ambient occlusion expression to use or IndexNone to not use a ambient occlusion expression at all.
 		virtual void SetAmbientOcclusionExpression(ExpressionIndex expression);
+
+		/// @brief Sets the index of the material's opacity expression or IndexNone to not use a custom opacity
+		///	       expression at all.
+		/// @param expression Index of the opacity expression to use or IndexNone to not use a opacity expression at all.
+		virtual void SetOpacityExpression(ExpressionIndex expression);
 
 		/// @brief Adds a texture coordinate expression.
 		/// @param coordinateIndex The texture coordinate index used.
@@ -244,9 +250,13 @@ namespace mmo
 
 		void SetLit(const bool enable) noexcept { m_lit = enable; }
 
+		void SetTranslucent(const bool enable) noexcept { m_translucent = enable; }
+
+		void SetTwoSided(const bool enable) noexcept { m_twoSided = enable; }
+
 	protected:
 		/// @brief Called to generate the vertex shader code.
-		virtual void GenerateVertexShaderCode() = 0;
+		virtual void GenerateVertexShaderCode(VertexShaderType type) = 0;
 
 		/// @brief Called to generate the pixel shader code.
 		virtual void GeneratePixelShaderCode() = 0;
@@ -264,16 +274,19 @@ namespace mmo
 		ExpressionIndex m_roughnessExpression { IndexNone };			// Float1 (0-1)
 		ExpressionIndex m_ambientOcclusionExpression { IndexNone };	// Float3
 		ExpressionIndex m_metallicExpression { IndexNone };			// Float1 (0-1)
+		ExpressionIndex m_opacityExpression{ IndexNone };			// Float1 (0-1)
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
 		String m_pixelShaderCode;
-		std::ostringstream m_vertexShaderStream;
+		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 
 		bool m_lit { true };
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
+		bool m_translucent{ false };
+		bool m_twoSided { false };
 
 	};
 }

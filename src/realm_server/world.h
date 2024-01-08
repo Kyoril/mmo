@@ -23,6 +23,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	class PlayerManager;
 	class AsyncDatabase;
 
@@ -48,7 +53,8 @@ namespace mmo
 			PlayerManager& playerManager,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
-			const std::string &address);
+			const std::string &address,
+			const proto::Project& project);
 
 		/// Gets the connection class used to send packets to the world node client.
 		Client &GetConnection() const { assert(m_connection); return *m_connection; }
@@ -122,6 +128,7 @@ namespace mmo
 		SHA1Hash m_m2;
 		std::mutex m_joinCallbackMutex;
 		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
+		const proto::Project& m_project;
 
 	private:
 		/// Closes the connection if still connected.

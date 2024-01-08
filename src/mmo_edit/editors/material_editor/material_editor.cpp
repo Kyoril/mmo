@@ -14,6 +14,7 @@
 #include "graphics/material.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/material_serializer.h"
+#include "graphics/shader_compiler.h"
 
 namespace mmo
 {
@@ -114,6 +115,11 @@ namespace mmo
 		material->SetCastShadows(true);
 		material->SetReceivesShadows(true);
 		material->SetTwoSided(false);
+
+		const auto materialCompiler = GraphicsDevice::Get().CreateMaterialCompiler();
+		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
+		materialCompiler->Compile(*material, *shaderCompiler);
+		material->Update();
 
 		io::StreamSink sink { *file };
 		io::Writer writer { sink };

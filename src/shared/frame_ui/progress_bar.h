@@ -1,7 +1,5 @@
 #pragma once
 
-#include <activation.h>
-
 #include "frame.h"
 
 namespace mmo

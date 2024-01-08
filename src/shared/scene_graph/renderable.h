@@ -63,6 +63,6 @@ namespace mmo
         
         [[nodiscard]] virtual bool GetCastsShadows() const { return false; }
         
-        [[nodiscard]] virtual const std::shared_ptr<Material>& GetMaterial() = 0;
+        [[nodiscard]] virtual MaterialPtr GetMaterial() const = 0;
 	};
 }

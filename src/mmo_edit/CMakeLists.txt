@@ -54,7 +54,7 @@ file(GLOB world_editor_src "editors/world_editor/*.h" "editors/world_editor/*.cp
 file(GLOB import_src "import/*.h" "import/*.cpp")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${FBXSDK_INCLUDE_DIR})
+include_directories(${ASSIMPSDK_INCLUDE_DIR})
 
 source_group(src\\imgui FILES ${imgui_src})
 source_group(src\\imgui\\platform FILES ${imgui_platform_src})
@@ -100,6 +100,7 @@ target_link_libraries(mmo_edit
 	frame_ui
 	paging
 	proto_data
+	libprotobuf
 	sql_wrapper
 	mysql_wrapper)
 	
@@ -108,7 +109,7 @@ if (WIN32)
 	target_link_libraries(mmo_edit graphics_d3d11)
 endif()
 
-target_link_libraries(mmo_edit ${FBXSDK_LIBRARIES})
+target_link_libraries(mmo_edit ${ASSIMPSDK_LIBRARIES})
 target_link_libraries(mmo_edit ${OPENSSL_LIBRARIES})
 target_link_libraries(mmo_edit ${EXTRA_LIBS})
 set_property(TARGET mmo_edit PROPERTY FOLDER "editor")

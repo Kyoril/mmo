@@ -239,6 +239,8 @@ namespace mmo
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
+
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -261,6 +263,7 @@ namespace mmo
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::InitialSpells);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -523,6 +526,20 @@ namespace mmo
 		}
 
 		m_unitNameCache.NotifyObjectResponse(guid, std::move(name));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnInitialSpells(game::IncomingPacket& packet)
+	{
+		std::vector<uint32> spellIds;
+		if (!(packet >> io::read_container<uint16>(spellIds)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: Store spell ids
+		DLOG("Received " << spellIds.size() << " initial spells");
+
 		return PacketParseResult::Pass;
 	}
 

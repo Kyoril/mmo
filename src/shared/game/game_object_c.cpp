@@ -34,7 +34,7 @@ namespace mmo
 
 	void GameObjectC::SetupSceneObjects()
 	{
-		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), "Models/Mannequin/Mannequin.hmsh");
+		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), "Models/Mannequin_Edit.hmsh");
 		m_sceneNode->AttachObject(*m_entity);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);

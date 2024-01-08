@@ -16,6 +16,11 @@ namespace mmo
 
 	void SubEntity::PrepareRenderOperation(RenderOperation& operation)
 	{
+		if (m_parent.GetMesh()->HasSkeleton())
+		{
+			operation.vertexConstantBuffers.push_back(m_parent.m_boneMatrixBuffer.get());
+		}
+
 		m_subMesh.PrepareRenderOperation(operation);
 	}
 

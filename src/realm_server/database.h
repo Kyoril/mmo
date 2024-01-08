@@ -85,6 +85,8 @@ namespace mmo
 		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) = 0;
 		
 		virtual std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) = 0;
+
+		virtual void ChatMessage(uint64 characterId, uint16 type, String message) = 0;
 	};
 
 

@@ -9,6 +9,8 @@
 #include <vector>
 #include <span>
 
+#include "mesh.h"
+
 namespace io
 {
 	class Writer;
@@ -108,11 +110,15 @@ namespace mmo
 		/// Name of the mesh.
 		std::string name{};
 
+		std::string skeletonName{};
+
 		/// Vertex data.
 		std::vector<Vertex> vertices{};
 
 		/// Index data.
 		std::vector<uint32> indices{};
+
+		std::vector<VertexBoneAssignment> boneAssignments{};
 
 		/// Max index to determine whether we can use 16 bit index buffers.
 		uint32 maxIndex { 0 };
@@ -126,10 +132,12 @@ namespace mmo
 		{
 			name = other.name;
 			maxIndex = other.maxIndex;
+			skeletonName = other.skeletonName;
 
 			std::copy(other.vertices.begin(), other.vertices.end(), std::back_inserter(vertices));
 			std::copy(other.indices.begin(), other.indices.end(), std::back_inserter(indices));
 			std::copy(other.subMeshes.begin(), other.subMeshes.end(), std::back_inserter(subMeshes));
+			std::copy(other.boneAssignments.begin(), other.boneAssignments.end(), std::back_inserter(boneAssignments));
 		}
 
 		MeshEntry& operator=(const MeshEntry& other)
@@ -137,13 +145,16 @@ namespace mmo
 			vertices.clear();
 			indices.clear();
 			subMeshes.clear();
+			boneAssignments.clear();
 
 			name = other.name;
 			maxIndex = other.maxIndex;
+			skeletonName = other.skeletonName;
 
 			std::copy(other.vertices.begin(), other.vertices.end(), std::back_inserter(vertices));
 			std::copy(other.indices.begin(), other.indices.end(), std::back_inserter(indices));
 			std::copy(other.subMeshes.begin(), other.subMeshes.end(), std::back_inserter(subMeshes));
+			std::copy(other.boneAssignments.begin(), other.boneAssignments.end(), std::back_inserter(boneAssignments));
 
 			return *this;
 		}
@@ -170,6 +181,8 @@ namespace mmo
 		bool ReadVertexV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadIndexChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadSubMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	protected:
 		void CalculateBinormalsAndTangents();

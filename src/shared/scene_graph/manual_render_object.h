@@ -20,9 +20,10 @@ namespace mmo
 		/// Creates a new instance of the RenderOperation class and initializes it.
 		///	@param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		ManualRenderOperation(GraphicsDevice& device, ManualRenderObject& parent)
+		ManualRenderOperation(GraphicsDevice& device, ManualRenderObject& parent, MaterialPtr material)
 			: m_device(device)
 			, m_parent(parent)
+			, m_material(material)
 		{
 		}
 
@@ -42,39 +43,31 @@ namespace mmo
 		///	be implemented.
 		virtual void Finish();
 
-	public:
-		/// Renders the operation using the graphics device provided when the operation was created.
-		void Render() const
-		{
-			ASSERT(m_vertexBuffer && "No vertex buffer created, did you call Finish before rendering?");
+		[[nodiscard]] MaterialPtr GetMaterial() const override { return m_material; }
 
-			m_device.SetTopologyType(GetTopologyType());
-			m_device.SetVertexFormat(GetFormat());
-
-			m_vertexBuffer->Set();
-
-			if (m_indexBuffer)
-			{
-				m_indexBuffer->Set();
-				m_device.DrawIndexed();
-			}
-			else
-			{
-				m_device.Draw(m_vertexBuffer->GetVertexCount());
-			}
-		}
+		void SetMaterial(const MaterialPtr& material) { m_material = material; }
 
 		void PrepareRenderOperation(RenderOperation& operation) override;
+
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
+
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
+
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+
 		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
 	protected:
 		GraphicsDevice& m_device;
 		ManualRenderObject& m_parent;
-		VertexBufferPtr m_vertexBuffer;
-		IndexBufferPtr m_indexBuffer;
+
+		std::unique_ptr<VertexData> m_vertexData;
+		std::unique_ptr<IndexData> m_indexData;
+
+		MaterialPtr m_material;
+
+		//VertexBufferPtr m_vertexBuffer;
+		//IndexBufferPtr m_indexBuffer;
 	};
 
 	/// Wrapper class for a RenderOperation which ensures that the Finish method is called
@@ -181,8 +174,8 @@ namespace mmo
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		explicit ManualLineListOperation(GraphicsDevice& device, ManualRenderObject& parent)
-			: ManualRenderOperation(device, parent)
+		explicit ManualLineListOperation(GraphicsDevice& device, ManualRenderObject& parent, const MaterialPtr& material)
+			: ManualRenderOperation(device, parent, material)
 		{
 		}
 
@@ -199,25 +192,13 @@ namespace mmo
 			return VertexFormat::PosColor;
 		}
 
-		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.CaptureState();
-			graphicsDevice.SetDepthEnabled(m_depthEnabled);
-			return true;
-		}
-
-		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.RestoreState();
-		}
-
 	public:
 		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
 		{
 			ASSERT(!m_lines.empty() && "At least one line has to be added!");
 			
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_lines.size() * 2);
 
 			bool firstLine = true;
@@ -225,10 +206,10 @@ namespace mmo
 			for(auto& line : m_lines)
 			{
 
-				const POS_COL_VERTEX v1 { line.GetStartPosition(), line.GetStartColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1 { line.GetStartPosition(), line.GetStartColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v1);
 
-				const POS_COL_VERTEX v2 { line.GetEndPosition(), line.GetEndColor() };
+				const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v2 { line.GetEndPosition(), line.GetEndColor(), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 				vertices.emplace_back(v2);
 				
 				if (firstLine)
@@ -246,8 +227,21 @@ namespace mmo
 				}
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
-			
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+
 			ManualRenderOperation::Finish();
 		}
 
@@ -263,16 +257,10 @@ namespace mmo
 
 		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
 
-		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
-
-		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
-
 	private:
 		/// A list of lines to render.
 		std::vector<Line> m_lines;
 		AABB m_boundingBox;
-		std::shared_ptr<Material> m_material; // TODO
-		bool m_depthEnabled = true;
 	};
 
 	/// A special operation which renders a list of triangles for a ManualRenderObject.
@@ -326,8 +314,8 @@ namespace mmo
 		/// Creates a new instance of the LineListOperation and initializes it.
 		/// @param device The graphics device used to create gpu resources.
 		///	@param parent The parent object where this operation belongs to.
-		explicit ManualTriangleListOperation(GraphicsDevice& device, ManualRenderObject& parent)
-			: ManualRenderOperation(device, parent)
+		explicit ManualTriangleListOperation(GraphicsDevice& device, ManualRenderObject& parent, const MaterialPtr& material)
+			: ManualRenderOperation(device, parent, material)
 		{
 		}
 
@@ -344,25 +332,13 @@ namespace mmo
 			return VertexFormat::PosColor;
 		}
 
-		bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.CaptureState();
-			graphicsDevice.SetDepthEnabled(m_depthEnabled);
-			return true;
-		}
-
-		void PostRender(Scene& scene, GraphicsDevice& graphicsDevice) override
-		{
-			graphicsDevice.RestoreState();
-		}
-
 	public:
 		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
 		{
 			ASSERT(!m_triangles.empty() && "At least one triangle has to be added!");
 
-			std::vector<POS_COL_VERTEX> vertices;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_triangles.size() * 2);
 
 			bool firstVertex = true;
@@ -371,7 +347,7 @@ namespace mmo
 			{
 				for (uint8_t i = 0; i < 3; ++i)
 				{
-					const POS_COL_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i) };
+					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
 					vertices.emplace_back(v1);
 
 					if (firstVertex)
@@ -386,10 +362,22 @@ namespace mmo
 						m_boundingBox.max = TakeMaximum(m_boundingBox.max, triangle.GetPosition(i));
 					}
 				}
-
 			}
 
-			m_vertexBuffer = m_device.CreateVertexBuffer(vertices.size(), sizeof(POS_COL_VERTEX), false, vertices.data());
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexCount = vertices.size();
+			m_vertexData->vertexStart = 0;
+
+			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
 
 			ManualRenderOperation::Finish();
 		}
@@ -404,17 +392,12 @@ namespace mmo
 
 		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
 
-		[[nodiscard]] const std::shared_ptr<Material>& GetMaterial() override { return m_material; }
-
-		void SetDepthEnabled(bool enableDepth) { m_depthEnabled = enableDepth; }
 		void ConvertToSubmesh(SubMesh& subMesh) override;
 
 	private:
 		/// A list of triangles to render.
 		std::vector<Triangle> m_triangles;
 		AABB m_boundingBox;
-		std::shared_ptr<Material> m_material; // TODO
-		bool m_depthEnabled = true;
 	};
 
 	/// A class which helps rendering manually (at runtime) created objects so you don't have to mess
@@ -430,15 +413,19 @@ namespace mmo
 
 	public:
 		/// Adds a new render operation to the object which draws a line list.
-		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation();
+		ManualRenderOperationRef<ManualLineListOperation> AddLineListOperation(MaterialPtr material);
 
 		/// Adds a new render operation to the object which draws a triangle list.
-		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation();
+		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation(MaterialPtr material);
 
 		/// Removes all operations.
 		void Clear() noexcept;
 
 		MeshPtr ConvertToMesh(const String& meshName) const;
+
+		void SetMaterial(uint32 operationIndex, const MaterialPtr& material) const;
+
+		uint32 GetOperationCount() const noexcept { return static_cast<uint32>(m_operations.size()); }
 
 	public:
 		/// @copydoc MovableObject::GetMovableType

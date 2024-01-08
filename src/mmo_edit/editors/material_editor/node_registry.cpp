@@ -77,7 +77,7 @@ namespace mmo
 	    RebuildTypes();
 	}
 
-	Node* NodeRegistry::Create(const uint32_t typeId, MaterialGraph& material) const
+	GraphNode* NodeRegistry::Create(const uint32_t typeId, MaterialGraph& material) const
 	{
 		for (const auto& nodeInfo : m_Types)
 	    {
@@ -90,7 +90,7 @@ namespace mmo
 	    return nullptr;
 	}
 
-	Node* NodeRegistry::Create(std::string_view typeName, MaterialGraph& material) const
+	GraphNode* NodeRegistry::Create(std::string_view typeName, MaterialGraph& material) const
 	{
 		for (auto& nodeInfo : m_Types)
 	    {

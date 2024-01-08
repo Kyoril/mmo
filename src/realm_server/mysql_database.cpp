@@ -177,7 +177,25 @@ namespace mmo
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
-				
+
+				// Load character spell ids
+				if(mysql::Select spellSelect(m_connection, "SELECT spell FROM character_spells WHERE `character` = " + std::to_string(characterId)); spellSelect.Success())
+				{
+					mysql::Row spellRow(spellSelect);
+					while (spellRow)
+					{
+						uint32 spellId = 0;
+						spellRow.GetField(0, spellId);
+						result.spellIds.push_back(spellId);
+						spellRow = mysql::Row::Next(spellSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character spells");
+				}
+
 				return result;
 			}
 		}
@@ -209,6 +227,18 @@ namespace mmo
 		}
 
 		return WorldCreationResult::Success;
+	}
+
+	void MySQLDatabase::ChatMessage(const uint64 characterId, const uint16 type, const String message)
+	{
+		if (!m_connection.Execute("INSERT INTO character_chat (`character`, `type`, `message`, `timestamp`) VALUES ("
+			+ std::to_string(characterId) + ", "
+			+ std::to_string(type) + ", '"
+			+ m_connection.EscapeString(message) + "', NOW())"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not save chat message to database");
+		}
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

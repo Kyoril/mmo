@@ -15,13 +15,13 @@ namespace mmo
 	class IndexBufferNull : public IndexBuffer
 	{
 	public:
-		IndexBufferNull(GraphicsDeviceNull& device, size_t indexCount, IndexBufferSize indexSize, const void* initialData);
+		IndexBufferNull(GraphicsDeviceNull& device, size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData);
 
 	public:
 		//~Begin CGxBufferBase
-		virtual void* Map() override;
+		virtual void* Map(LockOptions options) override;
 		virtual void Unmap() override;
-		virtual void Set() override;
+		virtual void Set(uint16 slot) override;
 		//~End CGxBufferBase
 
 	private:

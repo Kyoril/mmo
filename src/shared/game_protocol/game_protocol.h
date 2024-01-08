@@ -114,6 +114,8 @@ namespace mmo
 
 				ChatMessage,
 
+				InitialSpells,
+
 				/// Counter constant
 				Count_,
 			};

@@ -14,17 +14,18 @@ namespace mmo
 	struct CharacterData
 	{
 		explicit CharacterData()
-			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f))
+			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {})
 		{
 		}
 
-		explicit CharacterData(const ObjectId characterId, const String& name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing)
+		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds)
 			: characterId(characterId)
-			, name(name)
+			, name(std::move(name))
 			, mapId(mapId)
 			, instanceId(instanceId)
 			, position(position)
 			, facing(facing)
+			, spellIds(spellIds)
 		{
 		}
 
@@ -34,6 +35,8 @@ namespace mmo
 		InstanceId instanceId;
 		Vector3 position;
 		Radian facing;
+
+		std::vector<uint32> spellIds;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -45,7 +48,8 @@ namespace mmo
 			>> io::read<float>(data.position.x)
 			>> io::read<float>(data.position.y)
 			>> io::read<float>(data.position.z)
-			>> data.facing;
+			>> data.facing
+			>> io::read_container<uint16>(data.spellIds);
 	}
 	
 	inline io::Writer& operator<<(io::Writer& reader, const CharacterData& data)
@@ -57,6 +61,7 @@ namespace mmo
 			<< io::write<float>(data.position.x)
 			<< io::write<float>(data.position.y)
 			<< io::write<float>(data.position.z)
-			<< data.facing;
+			<< data.facing
+			<< io::write_dynamic_range<uint16>(data.spellIds);
 	}
 }

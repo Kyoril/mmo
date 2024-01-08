@@ -2,12 +2,17 @@
 
 #pragma once
 
+#include <stack>
+
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
 #include "math/vector3.h"
 
-#include "fbxsdk.h"
+#include <assimp/Importer.hpp>      // C++ importer interface
+#include <assimp/scene.h>           // Output data structure
+#include <assimp/postprocess.h>     // Post processing flags
+#include <assimp/LogStream.hpp>
 
 #include <string>
 #include <vector>
@@ -31,11 +36,72 @@ namespace mmo
 		std::vector<int32> polygonIndices;
 	};
 
+	struct Joint
+	{
+		Joint* parent = nullptr;
+		String name;
+		Matrix4 transform;
+	};
+
+
+	struct SceneAnimNode
+	{
+		std::string m_name;
+		SceneAnimNode* m_parent;
+		std::vector<SceneAnimNode*> m_children;
+
+		//! most recently calculated local transform
+		aiMatrix4x4 m_localTransform;
+
+		//! same, but in world space
+		aiMatrix4x4 m_globalTransform;
+
+		//!  index in the current animation's channel array. -1 if not animated.
+		int m_channelIndex;
+
+		//! Default construction
+		SceneAnimNode()
+			: m_name()
+			, m_parent(nullptr)
+			, m_children()
+			, m_localTransform()
+			, m_globalTransform()
+			, m_channelIndex(-1)
+		{
+		}
+
+		//! Construction from a given name
+		SceneAnimNode(std::string name)
+			: m_name(std::move(name))
+			, m_parent(nullptr)
+			, m_children()
+			, m_localTransform()
+			, m_globalTransform()
+			, m_channelIndex(-1)
+		{
+		}
+
+		//! Destruct all children recursively
+		~SceneAnimNode()
+		{
+		}
+	};
+
 	/// This class can be used to extract relevant informations out of an fbx file.
 	class FbxImport final
 		: public ImportBase
 		, public NonCopyable
 	{
+
+		class CustomAssimpLogStream : public Assimp::LogStream
+		{
+		public:
+			virtual ~CustomAssimpLogStream() override = default;
+
+		public:
+			void write(const char* message) override;
+		};
+
 	public:
 		/// @brief Creates a new instance of the FbxImport class and initializes it.
 		explicit FbxImport();
@@ -49,17 +115,13 @@ namespace mmo
 		/// @return true on success, false otherwise.
 		bool LoadScene(const String& filename);
 
-		/// @brief Initializes the fbx sdk objects to work with the sdk.
-		void InitializeSdkObjects();
-
-		/// @brief Cleanup. Should be called after InitializeSdkObjects.
-		void DestroySdkObjects();
-
 		/// @brief Traverses an FbxNode object and all of it's child objects, loading all relevant
 		///	       data like geometry and converts them if supported.
 		/// @remark This is recursive method.
 		/// @param node The node to start traversing from.
-		void TraverseScene(FbxNode& node);
+		void TraverseScene(const aiNode& node, const aiScene& scene);
+
+		bool SaveSkeletonFile(const String& filename, const Path& assetPath);
 
 		/// @brief Saves the loaded mesh geometry data into the engine's custom mesh file format.
 		/// @param filename The file name of the new mesh file without extension and path.
@@ -71,21 +133,7 @@ namespace mmo
 		/// @param node The node.
 		/// @param mesh The mesh.
 		/// @return true on success, false on error.
-		bool LoadMesh(FbxNode& node, FbxMesh& mesh);
-
-	private:
-		bool InitializeUvSets(FbxMesh& mesh, MeshGeometry& geometry);
-
-		bool LoadMeshVertexPositions(FbxNode& node, const FbxMesh& mesh, MeshGeometry& geometry);
-		
-		bool LoadMeshPolygons(FbxMesh& mesh, MeshGeometry& geometry);
-
-		void GenerateMeshEntry(MeshEntry& entry, const MeshGeometry& geometry);
-
-		void LoadMeshUvs(FbxMesh& mesh, MeshGeometry& geometry);
-
-		void LoadMeshNormals(FbxNode& node, FbxMesh& mesh, MeshGeometry& geometry);
-
+		bool LoadMesh(const aiScene& scene, const aiNode& node, const aiMesh& mesh);
 
 	public:
 		/// @copydoc ImportBase::ImportFromFile
@@ -95,8 +143,31 @@ namespace mmo
 		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
 	private:
+		const aiMatrix4x4& GetLocalTransform(const aiNode* node) const;
+
+		const aiMatrix4x4& GetGlobalTransform(const aiNode* node) const;
+
+		const std::vector<aiMatrix4x4>& GetBoneMatrices(const aiMesh* mesh, const aiNode* pNode, size_t pMeshIndex);
+
+		static void CalculateGlobalTransform(SceneAnimNode& internalNode);
+
+		SceneAnimNode* CreateNodeTree(const aiNode* node, SceneAnimNode* parent);
+
+	private:
 		std::vector<MeshEntry> m_meshEntries;
-		FbxManager* m_sdkManager = nullptr;
-		FbxScene* m_scene = nullptr;
+
+		typedef std::map<const aiNode*, std::unique_ptr<SceneAnimNode>> NodeMap;
+		NodeMap m_nodesByName;
+
+		/** Name to node map to quickly find nodes for given bones by their name */
+		typedef std::map<const char*, const aiNode*> BoneMap;
+		BoneMap m_boneNodesByName;
+
+		/** Array to return transformations results inside. */
+		std::vector<aiMatrix4x4> m_transforms;
+
+		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
+
+		SkeletonPtr m_skeleton{nullptr};
 	};
 }

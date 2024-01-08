@@ -33,7 +33,7 @@ namespace mmo
 		const Matrix4& GetWorldTransform() const override;
 
 		/// @copydoc Renderable::GetMaterial
-		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() override { return m_material ? m_material : m_subMesh.GetMaterial(); }
+		[[nodiscard]] MaterialPtr GetMaterial() const override { return m_material ? m_material : m_subMesh.GetMaterial(); }
 
 		/// @brief Sets the material to use when rendering this renderable.
 		/// @param material The material to use for rendering or nullptr to use a default material.

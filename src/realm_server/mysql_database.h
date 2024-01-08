@@ -40,6 +40,8 @@ namespace mmo
 		/// @copydoc IDatabase::CreateWorkd
 		std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) override;
 
+		void ChatMessage(uint64 characterId, uint16 type, String message) override;
+
 	private:
 		void PrintDatabaseError();
 

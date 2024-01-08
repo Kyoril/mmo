@@ -4,6 +4,7 @@
 
 #include "realm_connector.h"
 #include "vector_sink.h"
+#include "game/character_data.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
 #include "game/game_unit_s.h"
@@ -13,12 +14,18 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	/// @brief This class represents the connection to a player on a realm server that this
 	///	       world node is connected to.
 	class Player final : public TileSubscriber
 	{
 	public:
-		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject);
+		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject,
+		                CharacterData characterData, const proto::Project& project);
 		~Player() override;
 
 	public:
@@ -78,6 +85,8 @@ namespace mmo
 		RealmConnector& m_connector;
 		std::shared_ptr<GameUnitS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
+		CharacterData m_characterData;
+		const proto::Project& m_project;
 	};
 
 }

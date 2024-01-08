@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
 
 #include "graphics_device_d3d11.h"
+
+#include "constant_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
 #include "pixel_shader_d3d11.h"
@@ -12,10 +14,14 @@
 #include "texture_d3d11.h"
 #include "vertex_buffer_d3d11.h"
 #include "vertex_shader_d3d11.h"
+#include "vertex_declaration_d3d11.h"
 
 #include "base/macros.h"
 #include "graphics/depth_stencil_hash.h"
+#include "log/default_log_levels.h"
+#include "luabind/operator.hpp"
 #include "math/radian.h"
+#include "scene_graph/render_operation.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -456,6 +462,26 @@ namespace mmo
 		return result;
 	}
 
+	D3D11_MAP MapLockOptionsToD3D11(LockOptions options)
+	{
+		switch(options)
+		{
+		case LockOptions::Discard:
+			return D3D11_MAP_WRITE_DISCARD;
+		case LockOptions::NoOverwrite:
+			return D3D11_MAP_WRITE_NO_OVERWRITE;
+		case LockOptions::WriteOnly:
+			return D3D11_MAP_WRITE;
+		case LockOptions::ReadOnly:
+			return D3D11_MAP_READ;
+		case LockOptions::Normal:
+			return D3D11_MAP_WRITE_DISCARD;
+		}
+
+		UNREACHABLE();
+		return D3D11_MAP_WRITE_DISCARD;
+	}
+
 	GraphicsDeviceD3D11::GraphicsDeviceD3D11()
 		: m_rasterizerDesc()
 		  , m_samplerDesc(), m_depthStencilDesc()
@@ -521,6 +547,10 @@ namespace mmo
 	{
 		// Clear the state
 		m_immContext->ClearState();
+
+		m_vertexFormat = VertexFormat::Last;
+		m_blendMode = BlendMode::Opaque;
+		m_topologyType = TopologyType::TriangleList;
 
 		// Update the constant buffer
 		if (m_matrixDirty)
@@ -593,14 +623,19 @@ namespace mmo
 		m_autoCreatedWindow->Clear(flags);
 	}
 
-	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, bool dynamic, const void * initialData)
+	VertexBufferPtr GraphicsDeviceD3D11::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void * initialData)
 	{
-		return std::make_unique<VertexBufferD3D11>(*this, vertexCount, vertexSize, dynamic, initialData);
+		return std::make_shared<VertexBufferD3D11>(*this, vertexCount, vertexSize, usage, initialData);
 	}
 
-	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, const void * initialData)
+	IndexBufferPtr GraphicsDeviceD3D11::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void * initialData)
 	{
-		return std::make_unique<IndexBufferD3D11>(*this, indexCount, indexSize, initialData);
+		return std::make_shared<IndexBufferD3D11>(*this, indexCount, indexSize, usage, initialData);
+	}
+
+	ConstantBufferPtr GraphicsDeviceD3D11::CreateConstantBuffer(size_t size, const void* initialData)
+	{
+		return std::make_shared<ConstantBufferD3D11>(*this, *this, size, initialData);
 	}
 
 	ShaderPtr GraphicsDeviceD3D11::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
@@ -919,5 +954,83 @@ namespace mmo
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceD3D11::CreateShaderCompiler()
 	{
 		return std::make_unique<ShaderCompilerD3D11>();
+	}
+
+	VertexDeclaration* GraphicsDeviceD3D11::CreateVertexDeclaration()
+	{
+		return m_vertexDeclarations.emplace_back(std::make_unique<VertexDeclarationD3D11>(*this)).get();
+	}
+
+	VertexBufferBinding* GraphicsDeviceD3D11::CreateVertexBufferBinding()
+	{
+		return GraphicsDevice::CreateVertexBufferBinding();
+	}
+
+	void GraphicsDeviceD3D11::Render(const RenderOperation& operation)
+	{
+		GraphicsDevice::Render(operation);
+
+		ASSERT(operation.material);
+		if (!operation.material)
+		{
+			return;
+		}
+		
+		// TODO: Remove this call / make it internal to reduce the amount of state changes! Materials bring their own assigned shaders and vertex data brings its own input layout
+		SetVertexFormat(operation.vertexFormat);
+
+		// Apply material
+		operation.material->Apply(*this);
+
+		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();
+		if (!vertexShader)
+		{
+			WLOG("No skinning vertex shader found in material " << operation.material->GetName() << " - falling back to default vertex shader");
+			vertexShader = operation.material->GetVertexShader(VertexShaderType::Default).get();
+		}
+
+		// By now we should have a vertex shader
+		if (vertexShader)
+		{
+			vertexShader->Set();
+		}
+
+		// Bind vertex buffers
+		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
+		{
+			if (!vertexBuffer)
+			{
+				continue;
+			}
+
+			vertexBuffer->Set(slot);
+		}
+
+		// Bind additional constant buffers if any
+		int startSlot = 1;
+		for (auto& buffer : operation.vertexConstantBuffers)
+		{
+			ASSERT(buffer);
+
+			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
+			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
+		}
+
+		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
+		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
+
+		static_cast<VertexDeclarationD3D11*>(operation.vertexData->vertexDeclaration)->Bind(*static_cast<VertexShaderD3D11*>(vertexShader), operation.vertexData->vertexBufferBinding);
+		SetTopologyType(operation.topology);
+
+		if (operation.indexData)
+		{
+			operation.indexData->indexBuffer->Set(0);
+			DrawIndexed(operation.indexData->indexStart, operation.indexData->indexStart + operation.indexData->indexCount);
+		}
+		else
+		{
+			Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
+		}
 	}
 }

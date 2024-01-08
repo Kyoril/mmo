@@ -22,7 +22,7 @@ namespace mmo
 {
 	struct NodeTypeInfo;
 	class MaterialGraph;
-	class Node;
+	class GraphNode;
 	class Pin;
 
 	// Dialog for picking new node type
@@ -31,16 +31,16 @@ namespace mmo
 	    void Open(Pin* fromPin = nullptr);
 	    void Show(MaterialGraph& material);
 
-	    Node* GetCreatedNode()       { return m_CreatedNode; }
-	    const Node* GetCreatedNode() const { return m_CreatedNode; }
+		GraphNode* GetCreatedNode()       { return m_CreatedNode; }
+	    const GraphNode* GetCreatedNode() const { return m_CreatedNode; }
 
 	    std::span<Pin*>       GetCreatedLinks()       { return m_CreatedLinks; }
 		std::span<const Pin* const> GetCreatedLinks() const { return {const_cast<const Pin* const*>(m_CreatedLinks.data()), m_CreatedLinks.size() }; }
 
 	private:
-	    static std::vector<Pin*> CreateLinkToFirstMatchingPin(Node& node, Pin& fromPin);
+	    static std::vector<Pin*> CreateLinkToFirstMatchingPin(GraphNode& node, Pin& fromPin);
 
-	    Node* m_CreatedNode = nullptr;
+		GraphNode* m_CreatedNode = nullptr;
 	    std::vector<Pin*> m_CreatedLinks;
 
 	    std::vector<const NodeTypeInfo*> m_SortedNodes;

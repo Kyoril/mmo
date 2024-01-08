@@ -20,13 +20,15 @@
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactory> gameObjectFactory)
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactory> gameObjectFactory,
+		const proto::Project& project)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
 		, m_playerManager(playerManager)
 		, m_worldInstanceManager(worldInstanceManager)
 		, m_willTerminate(false)
+		, m_project(project)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
 
@@ -405,7 +407,7 @@ namespace mmo
 		auto characterObject = std::static_pointer_cast<GameUnitS>(m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player));
 
 		// Create a new player object
-		auto player = std::make_shared<Player>(*this, characterObject);
+		auto player = std::make_shared<Player>(*this, characterObject, characterData, m_project);
 		m_playerManager.AddPlayer(player);
 
 		// Enter the world using the character object

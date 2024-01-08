@@ -18,6 +18,8 @@ namespace mmo
 	static const ChunkMagic MeshVertexChunk= { {'V', 'E', 'R', 'T'} };
 	static const ChunkMagic MeshIndexChunk= { {'I', 'N', 'D', 'X'} };
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
+	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
+	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	
 	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version)
 	{
@@ -74,19 +76,41 @@ namespace mmo
 				<< io::write<uint32>(mesh.indices.size())
 				<< io::write<uint8>(bUse16BitIndices);
 
-			for (size_t i = 0; i < mesh.indices.size(); ++i)
+			for (uint32 index : mesh.indices)
 			{
 				if (bUse16BitIndices)
 				{
-					writer << io::write<uint16>(mesh.indices[i]);
+					writer << io::write<uint16>(index);
 				}
 				else
 				{
-					writer << io::write<uint32>(mesh.indices[i]);
+					writer << io::write<uint32>(index);
 				}
 			}
 		}
 		indexChunkWriter.Finish();
+
+		if (!mesh.skeletonName.empty())
+		{
+			ChunkWriter skeletonChunkWriter{ MeshSkeletonChunk, writer };
+			{
+				writer
+					<< io::write_dynamic_range<uint16>(mesh.skeletonName);
+			}
+			skeletonChunkWriter.Finish();
+		}
+
+		for (const auto& boneAssignment : mesh.boneAssignments)
+		{
+			ChunkWriter boneAssignmentChunk{ MeshBoneChunk, writer };
+			{
+				writer
+					<< io::write<uint32>(boneAssignment.vertexIndex)
+					<< io::write<uint16>(boneAssignment.boneIndex)
+					<< io::write<float>(boneAssignment.weight);
+			}
+			boneAssignmentChunk.Finish();
+		}
 
 		// Write submesh chunks
 		for(const auto& submesh : mesh.subMeshes)
@@ -104,7 +128,6 @@ namespace mmo
 			}
 			submeshChunkWriter.Finish();
 		}
-		
 	}
 
 	MeshDeserializer::MeshDeserializer(Mesh& mesh)
@@ -133,6 +156,8 @@ namespace mmo
 				AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexChunk);
 				AddChunkHandler(*MeshIndexChunk, true, *this, &MeshDeserializer::ReadIndexChunk);
 				AddChunkHandler(*MeshSubMeshChunk, true, *this, &MeshDeserializer::ReadSubMeshChunk);
+				AddChunkHandler(*MeshSkeletonChunk, false, *this, &MeshDeserializer::ReadSkeletonChunk);
+				AddChunkHandler(*MeshBoneChunk, false, *this, &MeshDeserializer::ReadBoneChunk);
 
 				if (version >= mesh_version::Version_0_2)
 				{
@@ -304,7 +329,6 @@ namespace mmo
 				m_entry.indices.emplace_back(index);
 				m_entry.maxIndex = std::max(m_entry.maxIndex, index);
 			}
-
 		}
 		
 		return reader;
@@ -320,10 +344,18 @@ namespace mmo
 
 		auto& subMesh = m_mesh.CreateSubMesh();
 
-		subMesh.SetMaterial(MaterialManager::Get().Load(materialName));
-		subMesh.m_useSharedVertices = true;
-		subMesh.m_indexStart = indexStart;
-		subMesh.m_indexEnd = indexEnd;
+		MaterialPtr material = MaterialManager::Get().Load(materialName);
+		if (!material)
+		{
+			material = MaterialManager::Get().Load("Models/Default.hmat");
+		}
+		subMesh.SetMaterial(material);
+		subMesh.useSharedVertices = true;
+		subMesh.indexData = std::make_unique<IndexData>();
+		subMesh.indexData->indexStart = indexStart;
+		subMesh.indexData->indexCount = indexEnd - indexStart;
+		subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, m_entry.indices.data());
+		// TODO: IndexBuffer?
 
 		SubMeshEntry entry{};
 		entry.material = materialName;
@@ -331,6 +363,35 @@ namespace mmo
 		entry.triangleCount = (indexEnd - indexStart) / 3;
         m_entry.subMeshes.push_back(entry);
 		
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		String skeletonName;
+		reader >> io::read_container<uint16>(skeletonName);
+		if (reader)
+		{
+			m_entry.skeletonName = skeletonName;
+			m_mesh.SetSkeletonName(skeletonName);
+		}
+
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		VertexBoneAssignment assign;
+		if (reader
+			>> io::read<uint32>(assign.vertexIndex)
+			>> io::read<uint16>(assign.boneIndex)
+			>> io::read<float>(assign.weight))
+		{
+			m_mesh.AddBoneAssignment(assign);
+
+			m_entry.boneAssignments.emplace_back(assign);
+		}
+
 		return reader;
 	}
 
@@ -397,9 +458,26 @@ namespace mmo
 			vertices[i].uv[0] = v.texCoord.x;
 			vertices[i].uv[1] = v.texCoord.y;
 		}
-		
-		m_mesh.m_vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(vertices.size(), sizeof(POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX), false, &vertices[0]);
-		m_mesh.m_indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(m_entry.indices.size(), IndexBufferSize::Index_32, &m_entry.indices[0]);
+
+		m_mesh.sharedVertexData = std::make_unique<VertexData>();
+		m_mesh.sharedVertexData->vertexCount = vertices.size();
+
+		VertexDeclaration* decl = m_mesh.sharedVertexData->vertexDeclaration;
+		decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+		const uint32 vertexSize = decl->GetVertexSize(0);
+		const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, BufferUsage::StaticWriteOnly, vertices.data());
+		m_mesh.sharedVertexData->vertexBufferBinding->SetBinding(0, buffer);
+
+		if (m_mesh.HasSkeleton())
+		{
+			m_mesh.UpdateCompiledBoneAssignments();
+		}
 	}
 
 	bool MeshDeserializer::OnReadFinished() noexcept

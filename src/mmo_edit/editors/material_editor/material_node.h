@@ -37,7 +37,7 @@ namespace mmo
 	    Material,
 	};
 	
-	class Node;
+	class GraphNode;
 
 	class PinValue
 	{
@@ -79,13 +79,13 @@ namespace mmo
 	{
 	protected:
 	    uint32 m_id = 0;
-	    Node* m_node = nullptr;
+		GraphNode* m_node = nullptr;
 		PinType m_type = PinType::Material;
 	    std::string_view m_name;
 		mutable const Pin* m_link = nullptr;
 
 	public:
-	    Pin(Node* node, PinType type, std::string_view name = "");
+	    Pin(GraphNode* node, PinType type, std::string_view name = "");
 		virtual ~Pin();
 
 	public:
@@ -118,7 +118,7 @@ namespace mmo
 		
 		[[nodiscard]] bool IsOutput() const;
 		
-		[[nodiscard]] Node* GetNode() const { return m_node; }
+		[[nodiscard]] GraphNode* GetNode() const { return m_node; }
 
 		[[nodiscard]] uint32 GetId() const { return m_id; }
 
@@ -134,11 +134,11 @@ namespace mmo
 			: MaterialPin(nullptr)
 	    {
 	    }
-	    MaterialPin(Node* node)
+	    MaterialPin(GraphNode* node)
 			: Pin(node, PinType::Material)
 	    {
 	    }
-	    MaterialPin(Node* node, std::string_view name)
+	    MaterialPin(GraphNode* node, std::string_view name)
 			: Pin(node, PinType::Material, name)
 	    {
 	    }
@@ -180,7 +180,7 @@ namespace mmo
             detail::fnv_1a_hash(#type), \
             #type, \
             displayName, \
-            [](MaterialGraph& materialGraph) -> Node* { return new type(materialGraph); } \
+            [](MaterialGraph& materialGraph) -> GraphNode* { return new type(materialGraph); } \
         }; \
     } \
     \
@@ -364,17 +364,17 @@ namespace mmo
 	};
 
 	/// @brief Base class of a node in a MaterialGraph.
-	class Node
+	class GraphNode
 	{
 		friend class MaterialGraph;
 
 	public:
 		/// @brief Creates a new instance of the Node class and initializes it.
 		/// @param graph The material graph that this node belongs to.
-		Node(MaterialGraph& graph);
+		GraphNode(MaterialGraph& graph);
 
 		/// @brief Virtual default destructor because of inheritance.
-		virtual ~Node() = default;
+		virtual ~GraphNode() = default;
 
 	public:
 		/// @brief Serializes the contents of this node using a binary writer.
@@ -437,7 +437,7 @@ namespace mmo
 	};
 
 	/// @brief The main node of a material graph, which represents the output node of a material.
-	class MaterialNode final : public Node
+	class MaterialNode final : public GraphNode
 	{
 		static const uint32 Color;
 
@@ -445,7 +445,7 @@ namespace mmo
 	    MAT_NODE(MaterialNode, "Material")
 
 	    MaterialNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -472,6 +472,7 @@ namespace mmo
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
 		bool m_lit { true };
+		bool m_translucent { false };
 		
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
@@ -479,9 +480,10 @@ namespace mmo
 		BoolProperty m_castShadowProp { "Casts Shadows", m_receivesShadows };
 		BoolProperty m_depthTestProp { "Depth Test", m_depthTest };
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
+		BoolProperty m_translucentProperty { "Translucent", m_translucent };
 
-		PropertyBase* m_properties[6] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp };
+		PropertyBase* m_properties[7] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
 	    MaterialPin m_metallic = { this, "Metallic" };
@@ -496,7 +498,7 @@ namespace mmo
 	};
 
 	/// @brief A node which adds a constant float expression.
-	class ConstFloatNode final : public Node
+	class ConstFloatNode final : public GraphNode
 	{
 	public:
 		static const uint32 Color;
@@ -505,7 +507,7 @@ namespace mmo
 	    MAT_NODE(ConstFloatNode, "Const Float")
 
 	    ConstFloatNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
@@ -528,7 +530,7 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds a constant vector expression.
-	class ConstVectorNode final : public Node
+	class ConstVectorNode final : public GraphNode
 	{
 	public:
 		static const uint32 Color;
@@ -537,7 +539,7 @@ namespace mmo
 	    MAT_NODE(ConstVectorNode, "Const Vector")
 
 	    ConstVectorNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
@@ -565,13 +567,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds an expression addition expression.
-	class AddNode final : public Node
+	class AddNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(AddNode, "Add")
 
 	    AddNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -599,13 +601,13 @@ namespace mmo
 	};
 
 	/// @brief A node which adds an expression multiplication expression.
-	class MultiplyNode final : public Node
+	class MultiplyNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(MultiplyNode, "Multiply")
 
 	    MultiplyNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -633,13 +635,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which applies a mask to the RGBA output of an expression and builds a new expression from it.
-	class MaskNode final : public Node
+	class MaskNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(MaskNode, "Mask")
 
 	    MaskNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -669,13 +671,13 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 	
-	class DotNode final : public Node
+	class DotNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(DotNode, "Dot")
 
 	    DotNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -695,13 +697,13 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 
-	class OneMinusNode final : public Node
+	class OneMinusNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(OneMinusNode, "One Minus")
 
 	    OneMinusNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -720,13 +722,13 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 
-	class ClampNode final : public Node
+	class ClampNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(ClampNode, "Clamp")
 
 	    ClampNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -754,13 +756,13 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 
-	class PowerNode final : public Node
+	class PowerNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(PowerNode, "Power")
 
 	    PowerNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -788,13 +790,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds a linear interpolation expression.
-	class LerpNode final : public Node
+	class LerpNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(LerpNode, "Lerp")
 
 	    LerpNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -823,7 +825,7 @@ namespace mmo
 	};
 
 	/// @brief A node which provides a texture coordinate expression.
-	class TextureCoordNode final : public Node
+	class TextureCoordNode final : public GraphNode
 	{
 	public:
 		static const uint32 Color;
@@ -832,7 +834,7 @@ namespace mmo
 	    MAT_NODE(TextureCoordNode, "TexCoord")
 
 	    TextureCoordNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
@@ -859,13 +861,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which provides a pixel's world position as expression.
-	class WorldPositionNode final : public Node
+	class WorldPositionNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(WorldPositionNode, "World Position")
 
 	    WorldPositionNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
@@ -883,13 +885,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which provides a pixel's camera vector (view direction) as expression.
-	class CameraVectorNode final : public Node
+	class CameraVectorNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(CameraVectorNode, "Camera Vector")
 
 	    CameraVectorNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
@@ -907,13 +909,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which provides a pixel's world position as expression.
-	class VertexNormalNode final : public Node
+	class VertexNormalNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(VertexNormalNode, "Vertex Normal")
 
 	    VertexNormalNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
@@ -931,13 +933,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which provides a pixel's interpolated vertex color as expression.
-	class VertexColorNode final : public Node
+	class VertexColorNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(VertexColorNode, "Vertex Color")
 
 	    VertexColorNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetOutputPins() override { return m_outputPins; }
@@ -954,13 +956,13 @@ namespace mmo
 	    Pin* m_outputPins[1] = { &m_coordinates };
 	};
 	
-	class AbsNode final : public Node
+	class AbsNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(AbsNode, "Abs")
 
 	    AbsNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -980,13 +982,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds an expression multiplication expression.
-	class DivideNode final : public Node
+	class DivideNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(DivideNode, "Divide")
 
 	    DivideNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1014,13 +1016,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds an expression subtraction expression.
-	class SubtractNode final : public Node
+	class SubtractNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(SubtractNode, "Subtract")
 
 	    SubtractNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1048,13 +1050,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds an expression subtraction expression.
-	class WorldToTangentNormalNode final : public Node
+	class WorldToTangentNormalNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(WorldToTangentNormalNode, "World Space to Tangent Space Normal")
 
 	    WorldToTangentNormalNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1074,13 +1076,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which adds an expression normalization expression.
-	class NormalizeNode final : public Node
+	class NormalizeNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(NormalizeNode, "Normalize")
 
 	    NormalizeNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1101,13 +1103,13 @@ namespace mmo
 	};
 	
 	/// @brief A node which appends an input expression's value components.
-	class AppendNode final : public Node
+	class AppendNode final : public GraphNode
 	{
 	public:
 	    MAT_NODE(AppendNode, "Append")
 
 	    AppendNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1129,7 +1131,7 @@ namespace mmo
 	};
 
 	/// @brief A node which adds a texture sample expression.
-	class TextureNode final : public Node
+	class TextureNode final : public GraphNode
 	{
 		static const uint32 Color;
 
@@ -1137,7 +1139,7 @@ namespace mmo
 	    MAT_NODE(TextureNode, "Texture")
 
 	    TextureNode(MaterialGraph& material)
-			: Node(material)
+			: GraphNode(material)
 		{}
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }

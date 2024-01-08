@@ -83,37 +83,64 @@ namespace mmo
 		
 	public:
 		[[nodiscard]] Vector3 GetColumn(size_t col) const;
+
 		void SetColumn(size_t col, const Vector3& vec);
+
 		void FromAxes(const Vector3& xAxis, const Vector3& yAxis, const Vector3& zAxis);
+
 		[[nodiscard]] Matrix3 Transpose() const;
+
 		bool Inverse(Matrix3& inverse, float tolerance = 1e-06f) const;
+
 		[[nodiscard]] Matrix3 Inverse(float fTolerance = 1e-06f) const;
+
 		[[nodiscard]] float Determinant() const;
+
 		void SingularValueDecomposition(Matrix3& l, Vector3& s, Matrix3& r) const;
+
 		void SingularValueComposition(const Matrix3& l, const Vector3& s, const Matrix3& r);
+
 		void Orthonormalize();
+
 		void QDUDecomposition(Matrix3& q, Vector3& d, Vector3& u) const;
+
 		[[nodiscard]] float SpectralNorm() const;
+
 		void ToAngleAxis(Vector3& axis, Radian& rfAngle) const;
+
 		void ToAngleAxis(Vector3& rkAxis, Degree& rfAngle) const
 		{
 			Radian r;
 			ToAngleAxis(rkAxis, r);
 			rfAngle = r;
 		}
+
 		void FromAngleAxis(const Vector3& axis, const Radian& angle);
+
 		bool ToEulerAnglesXYZ(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		bool ToEulerAnglesXZY(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		bool ToEulerAnglesYXZ(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		bool ToEulerAnglesYZX(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		bool ToEulerAnglesZXY(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		bool ToEulerAnglesZYX(Radian& yAngle, Radian& pAngle, Radian& rAngle) const;
+
 		void FromEulerAnglesXYZ(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void FromEulerAnglesXZY(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void FromEulerAnglesYXZ(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void FromEulerAnglesYZX(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void FromEulerAnglesZXY(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void FromEulerAnglesZYX(const Radian& yAngle, const Radian& pAngle, const Radian& rAngle);
+
 		void EigenSolveSymmetric(float eigenValue[3], Vector3 eigenVector[3]) const;
 		
 		static void TensorProduct(const Vector3& u, const Vector3& v, Matrix3& product);
@@ -136,6 +163,7 @@ namespace mmo
 
 	private:
 		void Tridiagonal(float diagonals[3], float subDiagonals[3]);
+
 		bool QLAlgorithm(float diagonals[3], float subDiagonals[3]);
 
 	private:
@@ -143,7 +171,9 @@ namespace mmo
 		static const unsigned int msSvdMaxIterations;
 		
 		static void BiDiagonalize(Matrix3& kA, Matrix3& kL, Matrix3& kR);
+
 		static void GolubKahanStep(Matrix3& kA, Matrix3& kL, Matrix3& kR);
+
 		static float MaxCubicRoot(float coefficients[3]);
 
 	public:

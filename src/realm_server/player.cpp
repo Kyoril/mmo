@@ -168,10 +168,9 @@ namespace mmo
 
 		// Setup a weak callback handler
 		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto callbackHandler = [weakThis](bool succeeded, uint64 accountId, const BigNumber& sessionKey) {
+		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const BigNumber& sessionKey) {
 			// Obtain strong reference to see if the client connection is still valid
-			auto strongThis = weakThis.lock();
-			if (strongThis)
+			if (const auto strongThis = weakThis.lock())
 			{
 				// Handle success cases
 				if (succeeded)
@@ -301,7 +300,7 @@ namespace mmo
 		}
 
 		// Database callback handler
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{ shared_from_this() };
 		auto handler = [weakThis](bool success) {
 			if (auto strongThis = weakThis.lock())
 			{
@@ -396,6 +395,9 @@ namespace mmo
 			ELOG("Unsupported chat type received from player: " << log_hex_digit(chatType));
 			return PacketParseResult::Disconnect;
 		}
+
+		// Store in database
+		m_database.asyncRequest([](bool) {}, &IDatabase::ChatMessage, m_characterData->characterId, static_cast<uint16>(chatType), message);
 
 		return PacketParseResult::Pass;
 	}

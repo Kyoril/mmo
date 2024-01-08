@@ -17,9 +17,9 @@ namespace mmo
 	{
 		operation.topology = GetTopologyType();
 		operation.vertexFormat = GetFormat();
-		operation.vertexBuffer = m_vertexBuffer.get();
-		operation.indexBuffer = m_indexBuffer.get();
-		operation.useIndexes = (m_indexBuffer != nullptr);
+		operation.vertexData = m_vertexData.get();
+		operation.indexData = m_indexData.get();
+		operation.material = m_material;
 	}
 
 	const Matrix4& ManualRenderOperation::GetWorldTransform() const
@@ -35,31 +35,44 @@ namespace mmo
 
 	void ManualLineListOperation::ConvertToSubmesh(SubMesh& subMesh)
 	{
-		subMesh.m_useSharedVertices = false;
-		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
+		subMesh.useSharedVertices = false;
+
+		TODO("Implement");
+		/*subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
 		subMesh.m_indexBuffer = std::move(m_indexBuffer);
 		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();*/
 	}
 
 	void ManualTriangleListOperation::ConvertToSubmesh(SubMesh& subMesh)
 	{
-		subMesh.m_useSharedVertices = false;
-		subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
-		subMesh.m_indexBuffer = std::move(m_indexBuffer);
-		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();
+		subMesh.useSharedVertices = false;
+
+		subMesh.vertexData = std::make_unique<VertexData>(*m_vertexData->vertexDeclaration, *m_vertexData->vertexBufferBinding);
+		subMesh.vertexData->vertexCount = m_vertexData->vertexCount;
+		subMesh.vertexData->vertexStart = m_vertexData->vertexStart;
+		subMesh.vertexData->m_hardwareAnimationDataList = m_vertexData->m_hardwareAnimationDataList;
+
+		if (m_indexData)
+		{
+			subMesh.indexData = std::make_unique<IndexData>();
+			subMesh.indexData->indexCount = m_indexData->indexCount;
+			subMesh.indexData->indexStart = m_indexData->indexStart;
+			subMesh.indexData->indexBuffer = std::move(m_indexData->indexBuffer);
+		}
+
+		subMesh.SetMaterial(m_material);
 	}
 
 	ManualRenderObject::ManualRenderObject(GraphicsDevice& device, const String& name)
-		: m_device(device)
-		, MovableObject(name)
+		: MovableObject(name)
+		, m_device(device)
 	{
 	}
 
-	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation()
+	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation(MaterialPtr material)
 	{
-		auto operation = std::make_unique<ManualLineListOperation>(m_device, *this);
+		auto operation = std::make_unique<ManualLineListOperation>(m_device, *this, material);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
@@ -67,9 +80,9 @@ namespace mmo
 		return *result;
 	}
 
-	ManualRenderOperationRef<ManualTriangleListOperation> ManualRenderObject::AddTriangleListOperation()
+	ManualRenderOperationRef<ManualTriangleListOperation> ManualRenderObject::AddTriangleListOperation(MaterialPtr material)
 	{
-		auto operation = std::make_unique<ManualTriangleListOperation>(m_device, *this);
+		auto operation = std::make_unique<ManualTriangleListOperation>(m_device, *this, material);
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
@@ -103,10 +116,16 @@ namespace mmo
 		return m;
 	}
 
+	void ManualRenderObject::SetMaterial(const uint32 operationIndex, const MaterialPtr& material) const
+	{
+		ASSERT(operationIndex < m_operations.size());
+		m_operations[operationIndex]->SetMaterial(material);
+	}
+
 	const String& ManualRenderObject::GetMovableType() const
 	{
-		static String ManualRenderObjectType = "ManualRenderObject";
-		return ManualRenderObjectType;
+		static String manualRenderObjectType = "ManualRenderObject";
+		return manualRenderObjectType;
 	}
 
 	void ManualRenderObject::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)

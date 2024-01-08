@@ -378,7 +378,7 @@ namespace mmo
 	        return;
         }
 		
-		std::vector<Node*> nodesToDelete;
+		std::vector<GraphNode*> nodesToDelete;
         uint32_t brokenLinkCount = 0;
 
         // Process all nodes marked for deletion
@@ -603,7 +603,7 @@ namespace mmo
 	    ImGui::EndPopup();
 	}
 
-	std::vector<Pin*> CreateNodeDialog::CreateLinkToFirstMatchingPin(Node& node, Pin& fromPin)
+	std::vector<Pin*> CreateNodeDialog::CreateLinkToFirstMatchingPin(GraphNode& node, Pin& fromPin)
 	{
 		for (auto nodePin : node.GetInputPins())
 	    {
