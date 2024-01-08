@@ -26,7 +26,6 @@ CREATE TABLE `characters` (
   `class` int DEFAULT NULL,
   `level` tinyint unsigned NOT NULL DEFAULT '1',
   `map` int unsigned NOT NULL,
-  `instance` varchar(64) DEFAULT NULL,
   `zone` int DEFAULT NULL,
   `x` float NOT NULL,
   `y` float NOT NULL,
@@ -35,6 +34,7 @@ CREATE TABLE `characters` (
   `hp` int NOT NULL,
   `deleted_at` datetime DEFAULT NULL,
   `deleted_account` bigint unsigned DEFAULT NULL,
+  `instance` varchar(64) COLLATE latin1_german1_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `UNIQUE_NAME` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
@@ -51,7 +51,7 @@ CREATE TABLE `character_chat` (
   PRIMARY KEY (`id`),
   KEY `fk_character_id_idx` (`character`),
   CONSTRAINT `fk_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_to_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`)
+  CONSTRAINT `fk_to_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 DROP TABLE IF EXISTS `character_spells`;

@@ -35,6 +35,11 @@ playerManager =
 	maxCount = 100
 )
 
+folders = 
+(
+	data = "${DATA_DIR}"
+)
+
 log = 
 (
 	active = 1
