@@ -102,15 +102,20 @@ namespace mmo
 	{
 	}
 
-	VertexBufferPtr GraphicsDeviceMetal::CreateVertexBuffer(size_t VertexCount, size_t VertexSize, bool dynamic, const void * InitialData)
-	{
-		return std::make_unique<VertexBufferMetal>(*this, VertexCount, VertexSize, dynamic, InitialData);
-	}
+    ConstantBufferPtr GraphicsDeviceMetal::CreateConstantBuffer(size_t size, const void* initialData)
+    {
+        return nullptr;
+    }
 
-	IndexBufferPtr GraphicsDeviceMetal::CreateIndexBuffer(size_t IndexCount, IndexBufferSize IndexSize, const void * InitialData)
-	{
-		return std::make_unique<IndexBufferMetal>(*this, IndexCount, IndexSize, InitialData);
-	}
+    VertexBufferPtr GraphicsDeviceMetal::CreateVertexBuffer(size_t vertexCount, size_t vertexSize, BufferUsage usage, const void* initialData)
+    {
+        return std::make_unique<VertexBufferMetal>(*this, vertexCount, vertexSize, usage, initialData);
+    }
+
+    IndexBufferPtr GraphicsDeviceMetal::CreateIndexBuffer(size_t indexCount, IndexBufferSize indexSize, BufferUsage usage, const void* initialData)
+    {
+        return std::make_unique<IndexBufferMetal>(*this, indexCount, indexSize, initialData);
+    }
 
 	ShaderPtr GraphicsDeviceMetal::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
 	{

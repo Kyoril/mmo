@@ -12,7 +12,7 @@ namespace mmo
 		m_indices.resize(indexCount);
 	}
 
-	void * IndexBufferMetal::Map()
+	void * IndexBufferMetal::Map(LockOptions lock)
 	{
 		return &m_indices[0];
 	}
@@ -22,7 +22,7 @@ namespace mmo
 
 	}
 
-	void IndexBufferMetal::Set()
+	void IndexBufferMetal::Set(uint16 slot)
 	{
 
 	}

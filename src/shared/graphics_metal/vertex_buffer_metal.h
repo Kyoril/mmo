@@ -12,14 +12,14 @@ namespace mmo
 	class VertexBufferMetal : public VertexBuffer
 	{
 	public:
-        VertexBufferMetal(GraphicsDeviceMetal& InDevice, size_t VertexCount, size_t VertexSize, bool dynamic, const void* InitialData = nullptr);
+        VertexBufferMetal(GraphicsDeviceMetal& InDevice, size_t VertexCount, size_t VertexSize, BufferUsage usage, const void* InitialData = nullptr);
 
 	public:
 		//~Begin CGxBufferBase
-		virtual void* Map() override;
+		virtual void* Map(LockOptions lock) override;
 		virtual void Unmap() override;
-		virtual void Set() override;
-        virtual std::unique_ptr<VertexBuffer> Clone() override;
+		virtual void Set(uint16 slot) override;
+        virtual std::shared_ptr<VertexBuffer> Clone() override;
 		//~End CGxBufferBase
 		
 	private:
