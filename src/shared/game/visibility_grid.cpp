@@ -18,7 +18,7 @@ namespace mmo
 		}
 
 		// Calculate grid y coordinates
-		outY = static_cast<int32>(floor((static_cast<double>(constants::MapWidth) - (static_cast<double>(position.y) / 33.3333))));
+		outY = static_cast<int32>(floor((static_cast<double>(constants::MapWidth) - (static_cast<double>(position.z) / 33.3333))));
 		if (outY < 0 || outY >= 1024) {
 			return false;
 		}

@@ -23,6 +23,8 @@
 
 namespace mmo
 {
+	class GamePlayer;
+
 	enum class GuidType
 	{
 		Player = 0,
@@ -104,9 +106,26 @@ namespace mmo
 
 		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const;
 
+		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const;
+
+		void ClearFieldChanges();
+
+		/// Gets the world instance of this object. May be nullptr, if the object is
+		/// not in any world.
+		WorldInstance* GetWorldInstance()
+		{
+			return m_worldInstance;
+		}
+
+		/// Sets the world instance of this object. nullptr is valid here, if the object
+		/// is not in any world.
+		void SetWorldInstance(WorldInstance* instance);
+
+
 	protected:
 		ObjectFieldMap m_fields;
 		MovementInfo m_movementInfo;
+		WorldInstance* m_worldInstance { nullptr };
 	};
 	
 	void CreateUpdateBlocks(const GameObjectS &object, std::vector<std::vector<char>> &outBlocks);

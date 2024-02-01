@@ -18,6 +18,7 @@
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
+#include "proto_data/proto_template.h"
 
 namespace mmo
 {
@@ -151,5 +152,7 @@ namespace mmo
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
 		DBCache<String, game::client_realm_packet::NameQuery> m_unitNameCache;
+
+
 	};
 }

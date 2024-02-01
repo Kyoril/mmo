@@ -257,6 +257,9 @@ namespace mmo
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
 
+		// Load game data
+
+
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
 		// Register game states

@@ -47,7 +47,7 @@ namespace mmo
 		}
 	}
 
-	void Player::NotifyObjectsSpawned(std::vector<GameObjectS*>& objects) const
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
 	{
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
@@ -61,7 +61,7 @@ namespace mmo
 		});
 	}
 
-	void Player::NotifyObjectsDespawned(std::vector<GameObjectS*>& objects) const
+	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const
 	{
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		SendPacket([&objects](game::OutgoingPacket& outPacket)

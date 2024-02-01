@@ -10,6 +10,7 @@
 
 namespace mmo
 {
+	class MovementInfo;
 	class GameObjectS;
 	class WorldInstanceManager;
 	class RegularUpdate;
@@ -44,8 +45,19 @@ namespace mmo
 		// Not thread safe
 		void RemoveObjectUpdate(GameObjectS& object);
 
+		void FlushObjectUpdate(uint64 guid);
+
+		GameObjectS* FindObjectByGuid(uint64 guid);
+
 		VisibilityGrid& GetGrid() const;
 
+		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo);
+
+	protected:
+
+		void UpdateObject(GameObjectS& object);
+
+		void OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo);
 
 	private:
 		WorldInstanceManager& m_manager;

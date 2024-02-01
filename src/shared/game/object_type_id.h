@@ -52,8 +52,9 @@ namespace mmo
 
 		enum PlayerFields
 		{
-			Placeholder = UnitFieldCount,
-			
+			Xp = UnitFieldCount,
+			NextLevelXp,
+
 			PlayerFieldCount
 		};
 	}

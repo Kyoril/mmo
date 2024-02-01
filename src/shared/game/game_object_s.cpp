@@ -37,14 +37,18 @@ namespace mmo
 
 	void GameObjectS::ApplyMovementInfo(const MovementInfo& info)
 	{
+		const MovementInfo previousMovement = m_movementInfo;
 		m_movementInfo = info;
+
+		if (m_worldInstance)
+		{
+			m_worldInstance->NotifyObjectMoved(*this, previousMovement, info);
+		}
 	}
 
 	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
 	{
-		writer
-			<< io::write<uint8>(GetTypeId());
-
+		writer << io::write<uint8>(GetTypeId());
 		if (creation)
 		{
 			m_fields.SerializeComplete(writer);
@@ -53,6 +57,22 @@ namespace mmo
 		{
 			m_fields.SerializeChanges(writer);
 		}
+	}
+
+	void GameObjectS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
+	{
+		m_fields.SerializeChanges(writer);
+	}
+
+	void GameObjectS::ClearFieldChanges()
+	{
+		m_fields.MarkAsUnchanged();
+	}
+
+	void GameObjectS::SetWorldInstance(WorldInstance* instance)
+	{
+		// Use new instance
+		m_worldInstance = instance;
 	}
 
 	void CreateUpdateBlocks(const GameObjectS& object, std::vector<std::vector<char>>& outBlocks)

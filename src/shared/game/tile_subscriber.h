@@ -15,9 +15,9 @@ namespace mmo
 	public:
 		virtual const GameUnitS& GetGameUnit() const = 0;
 
-		virtual void NotifyObjectsSpawned(std::vector<GameObjectS*>& objects) const = 0;
+		virtual void NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const = 0;
 
-		virtual void NotifyObjectsDespawned(std::vector<GameObjectS*>& objects) const = 0;
+		virtual void NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const = 0;
 
 		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) = 0;
 	};

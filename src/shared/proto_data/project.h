@@ -135,10 +135,10 @@ namespace mmo
 			Project()
 			{
 			}
+
 			/// Loads the project.
 			/// @param directory The path to load this project from.
-			bool load(
-			    const String &directory)
+			bool load(const String &directory)
 			{
 				// Remember last used path
 				m_lastPath = directory;

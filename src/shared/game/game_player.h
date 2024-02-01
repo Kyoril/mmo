@@ -14,5 +14,11 @@ namespace mmo
 		}
 
 		~GamePlayer() override = default;
+
+	protected:
+		void PrepareFieldMap() override
+		{
+			m_fields.Initialize(object_fields::PlayerFieldCount);
+		}
 	};
 }

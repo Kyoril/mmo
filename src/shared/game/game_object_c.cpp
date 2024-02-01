@@ -42,6 +42,9 @@ namespace mmo
 
 	void GameObjectC::Deserialize(io::Reader& reader)
 	{
+		// Read movement info
+
+
 		if (!(m_fieldMap.DeserializeComplete(reader)))
 		{
 			ASSERT(false);

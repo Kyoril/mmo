@@ -94,6 +94,9 @@ namespace mmo
 		/// @param w The writer to use.
 		io::Writer& SerializeChanges(io::Writer& w) const
 		{
+			// Write number of field values
+			w << io::write<uint8>(m_data.size());
+
 			for (size_t i = 0; i < m_data.size(); i += 8)
 			{
 				uint8 flag = 0;

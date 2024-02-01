@@ -18,6 +18,12 @@ namespace mmo
 
 		virtual ~GameUnitS() override = default;
 
+	protected:
+		virtual void PrepareFieldMap() override
+		{
+			m_fields.Initialize(object_fields::UnitFieldCount);
+		}
+
 	public:
 	};
 }
