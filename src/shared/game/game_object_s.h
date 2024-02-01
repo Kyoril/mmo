@@ -23,7 +23,7 @@
 
 namespace mmo
 {
-	class GamePlayer;
+	class GamePlayerS;
 
 	enum class GuidType
 	{

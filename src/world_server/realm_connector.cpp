@@ -20,7 +20,7 @@
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactory> gameObjectFactory,
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactoryS> gameObjectFactory,
 		const proto::Project& project)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)

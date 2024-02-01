@@ -1,11 +1,11 @@
 
-#include "game_object_factory.h"
-#include "game_player.h"
+#include "game_object_factory_s.h"
+#include "game_player_s.h"
 #include "game_unit_s.h"
 
 namespace mmo
 {
-	std::shared_ptr<GameObjectS> GameObjectFactory::CreateGameObject(ObjectGuid guid, ObjectTypeId typeId)
+	std::shared_ptr<GameObjectS> GameObjectFactoryS::CreateGameObject(ObjectGuid guid, ObjectTypeId typeId)
 	{
 		switch(typeId)
 		{
@@ -14,7 +14,7 @@ namespace mmo
 		case ObjectTypeId::Unit:
 			return std::make_unique<GameUnitS>(guid);
 		case ObjectTypeId::Player:
-			return std::make_unique<GamePlayer>(guid);
+			return std::make_unique<GamePlayerS>(guid);
 		default:
 			return nullptr;
 		}

@@ -6,7 +6,7 @@
 
 namespace mmo
 {
-	class GameObjectFactory final
+	class GameObjectFactoryS final
 	{
 	public:
 		/// @brief Create a new game object for the specified type.

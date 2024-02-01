@@ -3,7 +3,7 @@
 #include "world_instance.h"
 
 #include "each_tile_in_sight.h"
-#include "game_player.h"
+#include "game_player_s.h"
 #include "world_instance_manager.h"
 #include "regular_update.h"
 #include "tile_subscriber.h"

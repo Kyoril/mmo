@@ -13,7 +13,7 @@
 #include "realm_connector.h"
 #include "game/world_instance_manager.h"
 #include "player_manager.h"
-#include "game/game_object_factory.h"
+#include "game/game_object_factory_s.h"
 
 #include <fstream>
 #include <sstream>
@@ -136,7 +136,7 @@ namespace mmo
 				std::cref(config.hostedMaps),
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
-				std::make_unique<GameObjectFactory>(),
+				std::make_unique<GameObjectFactoryS>(),
 				project);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 

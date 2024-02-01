@@ -5,15 +5,15 @@
 namespace mmo
 {
 	/// @brief Represents a playable character in the game world.
-	class GamePlayer final : public GameUnitS
+	class GamePlayerS final : public GameUnitS
 	{
 	public:
-		GamePlayer(const ObjectGuid guid)
+		GamePlayerS(const ObjectGuid guid)
 			: GameUnitS(guid)
 		{
 		}
 
-		~GamePlayer() override = default;
+		~GamePlayerS() override = default;
 
 	protected:
 		void PrepareFieldMap() override
