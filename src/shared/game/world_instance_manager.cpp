@@ -12,8 +12,14 @@
 
 namespace mmo
 {
-	WorldInstanceManager::WorldInstanceManager(asio::io_context& ioContext)
-		: m_updateTimer(ioContext)
+	WorldInstanceManager::WorldInstanceManager(asio::io_context& ioContext,
+		Universe& universe,
+		const proto::Project& project, 
+		IdGenerator<uint64>& objectIdGenerator)
+		: m_universe(universe)
+		, m_objectIdGenerator(objectIdGenerator)
+		, m_project(project)
+		, m_updateTimer(ioContext)
 		, m_lastTick(GetAsyncTimeMs())
 	{
 		ScheduleNextUpdate();
@@ -24,7 +30,7 @@ namespace mmo
 		constexpr int32 maxWorldSize = 64;
 
 		std::unique_lock lock{ m_worldInstanceMutex };
-		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, mapId,
+		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, m_universe, m_objectIdGenerator, m_project, mapId,
 			std::make_unique<SolidVisibilityGrid>(makeVector(maxWorldSize, maxWorldSize)))).get();
 
 		instanceCreated(createdInstance->GetId());

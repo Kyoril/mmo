@@ -7,16 +7,8 @@
 
 namespace mmo
 {
-	GameObjectS::GameObjectS(const uint64 guid)
+	GameObjectS::GameObjectS(const proto::Project& project)
 	{
-		GameObjectS::PrepareFieldMap();
-
-		// Setup fields
-		m_fields.SetFieldValue(object_fields::Guid, guid);
-		m_fields.SetFieldValue(object_fields::Type, ObjectTypeId::Object);
-		m_fields.SetFieldValue(object_fields::Entry, 0);
-		m_fields.SetFieldValue(object_fields::Scale, 1.0f);
-		m_fields.MarkAsUnchanged();
 	}
 
 	GameObjectS::~GameObjectS() = default;
@@ -24,6 +16,11 @@ namespace mmo
 	ObjectTypeId GameObjectS::GetTypeId() const
 	{
 		return ObjectTypeId::Object;
+	}
+
+	void GameObjectS::Initialize()
+	{
+		PrepareFieldMap();
 	}
 
 	Vector3 GameObjectS::GetPredictedPosition()

@@ -13,7 +13,6 @@
 #include "realm_connector.h"
 #include "game/world_instance_manager.h"
 #include "player_manager.h"
-#include "game/game_object_factory_s.h"
 
 #include <fstream>
 #include <sstream>
@@ -25,6 +24,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
+#include "game/universe.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -123,7 +123,10 @@ namespace mmo
 		// World Instance manager setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		WorldInstanceManager worldInstanceManager{ ioService };
+		TimerQueue timer(ioService);
+		Universe universe(ioService, timer);
+		IdGenerator<uint64> objectIdGenerator(0x01);
+		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup
@@ -136,7 +139,6 @@ namespace mmo
 				std::cref(config.hostedMaps),
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
-				std::make_unique<GameObjectFactoryS>(),
 				project);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 

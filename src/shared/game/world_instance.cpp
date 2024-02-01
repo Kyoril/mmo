@@ -2,11 +2,14 @@
 
 #include "world_instance.h"
 
+#include "creature_spawner.h"
 #include "each_tile_in_sight.h"
+#include "game_creature_s.h"
 #include "game_player_s.h"
 #include "world_instance_manager.h"
 #include "regular_update.h"
 #include "tile_subscriber.h"
+#include "universe.h"
 #include "log/default_log_levels.h"
 #include "visibility_grid.h"
 #include "visibility_tile.h"
@@ -14,6 +17,7 @@
 #include "binary_io/vector_sink.h"
 #include "game/game_object_s.h"
 #include "game/each_tile_in_region.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
@@ -56,13 +60,45 @@ namespace mmo
 		out_blocks.push_back(createBlock);
 	}
 
-	WorldInstance::WorldInstance(WorldInstanceManager& manager, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid)
-		: m_manager(manager)
+	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid)
+		: m_universe(universe)
+		, m_objectIdGenerator(objectIdGenerator)
+		, m_manager(manager)
 		, m_mapId(mapId)
+		, m_project(project)
 		, m_visibilityGrid(std::move(visibilityGrid))
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();
+
+		m_mapEntry = m_project.maps.getById(m_mapId);
+		if (!m_mapEntry)
+		{
+			ELOG("Failed to load map data for map id " << m_mapId << ": Map not found!");
+			return;
+		}
+
+		// Add creature spawners
+		for (int i = 0; i < m_mapEntry->unitspawns_size(); ++i)
+		{
+			// Create a new spawner
+			const auto& spawn = m_mapEntry->unitspawns(i);
+
+			const auto* unitEntry = m_project.units.getById(spawn.unitentry());
+			ASSERT(unitEntry);
+
+			std::unique_ptr<CreatureSpawner> spawner(new CreatureSpawner(
+				*this,
+				*unitEntry,
+				spawn));
+
+			m_creatureSpawners.push_back(std::move(spawner));
+
+			if (!spawn.name().empty())
+			{
+				m_creatureSpawnsByName[spawn.name()] = m_creatureSpawners.back().get();
+			}
+		}
 	}
 
 	void WorldInstance::Update(const RegularUpdate& update)
@@ -211,6 +247,23 @@ namespace mmo
 		const MovementInfo& newMovementInfo)
 	{
 		OnObjectMoved(object, previousMovementInfo);
+	}
+
+	std::shared_ptr<GameCreatureS> WorldInstance::SpawnCreature(const proto::UnitEntry& entry, Vector3 position,
+		float o, float randomWalkRadius)
+	{
+		// Create the unit
+		auto spawned = std::make_shared<GameCreatureS>(
+			m_project,
+			m_universe.GetTimers(),
+			entry);
+
+		spawned->Initialize();
+		spawned->Set(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		spawned->ApplyMovementInfo(
+			{ MovementFlags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
+
+		return spawned;
 	}
 
 	void WorldInstance::UpdateObject(GameObjectS& object)

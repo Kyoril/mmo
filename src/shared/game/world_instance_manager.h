@@ -16,6 +16,7 @@
 
 namespace mmo
 {
+	class Universe;
 	class RegularUpdate;
 	class TimerQueue;
 
@@ -32,7 +33,9 @@ namespace mmo
 	public:
 		/// Creates a new instance of the WorldInstanceManager class and initializes it.
 		///	@param ioContext The global async io context to use.
-		explicit WorldInstanceManager(asio::io_context& ioContext);
+		explicit WorldInstanceManager(asio::io_context& ioContext,
+			Universe& universe, const proto::Project& project,
+			IdGenerator<uint64>& objectIdGenerator);
 
 	public:
 		/// Creates a new world instance using a specific map id.
@@ -56,6 +59,10 @@ namespace mmo
 		void ScheduleNextUpdate();
 
 	private:
+		Universe& m_universe;
+		const proto::Project& m_project;
+		IdGenerator<uint64>& m_objectIdGenerator;
+
 		typedef std::vector<std::unique_ptr<WorldInstance>> WorldInstances;
 		asio::high_resolution_timer m_updateTimer;
 

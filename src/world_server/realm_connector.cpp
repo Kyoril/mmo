@@ -14,13 +14,14 @@
 #include "base/timer_queue.h"
 #include "game/character_data.h"
 #include "game/chat_type.h"
+#include "game/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactoryS> gameObjectFactory,
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
 		const proto::Project& project)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
@@ -404,7 +405,10 @@ namespace mmo
 		characterData.instanceId = instance->GetId();
 
 		// Create the character object
-		auto characterObject = std::static_pointer_cast<GameUnitS>(m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player));
+		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
+		characterObject->Initialize();
+		characterObject->Set(object_fields::Guid, characterData.characterId);
+		characterObject->ClearFieldChanges();
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(*this, characterObject, characterData, m_project);

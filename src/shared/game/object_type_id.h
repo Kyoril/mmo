@@ -45,6 +45,14 @@ namespace mmo
 			Level = ObjectFieldCount,
 			MaxHealth,
 			Health,
+
+			Mana,
+			Rage,
+			Energy,
+			MaxMana,
+			MaxRage,
+			MaxEnergy,
+
 			TargetUnit,
 
 			UnitFieldCount,

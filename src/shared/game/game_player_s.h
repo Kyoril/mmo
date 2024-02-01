@@ -8,8 +8,8 @@ namespace mmo
 	class GamePlayerS final : public GameUnitS
 	{
 	public:
-		GamePlayerS(const ObjectGuid guid)
-			: GameUnitS(guid)
+		GamePlayerS(const proto::Project& project, TimerQueue& timerQueue)
+			: GameUnitS(project, timerQueue)
 		{
 		}
 

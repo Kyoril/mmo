@@ -12,8 +12,6 @@
 #include <set>
 #include <vector>
 
-#include "game/game_object_factory_s.h"
-
 
 namespace mmo
 {
@@ -37,7 +35,7 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-			std::unique_ptr<GameObjectFactoryS> gameObjectFactory, const proto::Project& project);
+			const proto::Project& project);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -116,7 +114,6 @@ namespace mmo
 		TimerQueue& m_timerQueue;
 		PlayerManager& m_playerManager;
 		WorldInstanceManager& m_worldInstanceManager;
-		std::unique_ptr<GameObjectFactoryS> m_objectFactory;
 		
 		std::string m_authName;
 
