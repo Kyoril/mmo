@@ -4,6 +4,14 @@
 
 namespace mmo
 {
+	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers): GameObjectS(project)
+	                                                                         , m_timers(timers)
+	                                                                         , m_despawnCountdown(timers)
+	{
+		// Setup unit mover
+		m_mover = make_unique<UnitMover>(*this);
+	}
+
 	void GameUnitS::Initialize()
 	{
 		GameObjectS::Initialize();

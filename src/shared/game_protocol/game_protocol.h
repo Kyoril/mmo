@@ -116,6 +116,8 @@ namespace mmo
 
 				InitialSpells,
 
+				CreatureMove,
+
 				/// Counter constant
 				Count_,
 			};

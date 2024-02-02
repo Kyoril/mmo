@@ -8,7 +8,7 @@
 namespace mmo
 {
 	class Countdown::Impl
-		: std::enable_shared_from_this<Impl>
+		: public std::enable_shared_from_this<Impl>
 	{
 	public:
 		explicit Impl(TimerQueue& timers, Countdown& countdown)
@@ -22,10 +22,13 @@ namespace mmo
 		{
 			++m_delayCount;
 
-			m_countdown->m_running = true;
-			m_timers.AddEvent(
-				std::bind(&Impl::OnPossibleEnd, shared_from_this(), m_delayCount),
-				endTime);
+			if (m_countdown)
+			{
+				m_countdown->m_running = true;
+				m_timers.AddEvent(
+					[strongThis = shared_from_this(), this] { strongThis->OnPossibleEnd(m_delayCount); },
+					endTime);
+			}
 		}
 
 		void Cancel()

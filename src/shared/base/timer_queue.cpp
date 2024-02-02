@@ -17,9 +17,9 @@ namespace mmo
 		return GetAsyncTimeMs();
 	}
 
-	void TimerQueue::AddEvent(EventCallback callback, GameTime time)
+	void TimerQueue::AddEvent(const EventCallback& callback, GameTime time)
 	{
-		m_queue.push(EventEntry(callback, time));
+		m_queue.emplace(callback, time);
 		SetTimer();
 	}
 

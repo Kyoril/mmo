@@ -3,6 +3,7 @@
 #pragma once
 
 #include "game_object_s.h"
+#include "unit_mover.h"
 
 namespace mmo
 {
@@ -19,12 +20,7 @@ namespace mmo
 
 	public:
 		GameUnitS(const proto::Project& project,
-			TimerQueue& timers)
-			: GameObjectS(project)
-			, m_timers(timers)
-			, m_despawnCountdown(timers)
-		{
-		}
+			TimerQueue& timers);
 
 		virtual ~GameUnitS() override = default;
 
@@ -46,8 +42,11 @@ namespace mmo
 	public:
 		TimerQueue& GetTimers() const { return m_timers; }
 
+		UnitMover& GetMover() const { return *m_mover; }
+
 	protected:
 		TimerQueue& m_timers;
 		Countdown m_despawnCountdown;
+		std::unique_ptr<UnitMover> m_mover;
 	};
 }

@@ -318,6 +318,27 @@ namespace mmo
 			return GetSquaredDistanceTo(rhs) <=
 				(GetSquaredLength() + rhs.GetSquaredLength()) * tolerance;
 		}
+
+		[[nodiscard]] Vector3 Lerp(const Vector3& target, float t) const
+		{
+			if (t <= 0.0f) {
+				return *this;
+			}
+
+			if (t >= 1.0f) {
+				return target;
+			}
+
+			// NaN check
+			ASSERT(t == t);
+			ASSERT(x == x);
+			ASSERT(y == y);
+			ASSERT(z == z);
+			ASSERT(target.x == target.x);
+			ASSERT(target.y == target.y);
+			ASSERT(target.z == target.z);
+			return *this + (target - *this) * t;
+		}
 	};
 
 	inline std::ostream& operator<<(std::ostream& o, const mmo::Vector3& b)

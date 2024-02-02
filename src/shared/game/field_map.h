@@ -64,7 +64,7 @@ namespace mmo
 			*data = value;
 						
 			// Mark fields as changed
-			for (uint32 i = 0; i < sizeof(T) / sizeof(uint32); ++i)
+			for (uint32 i = 0; i < sizeof(T) / sizeof(TFieldBase); ++i)
 			{
 				MarkAsChanged(index + i);
 			}

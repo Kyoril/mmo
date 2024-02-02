@@ -260,6 +260,9 @@ namespace mmo
 
 		spawned->Initialize();
 		spawned->Set(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		const uint64 guid = spawned->GetGuid();
+		DLOG("Spawned guid: " << log_hex_digit(guid));
+
 		spawned->ApplyMovementInfo(
 			{ MovementFlags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 

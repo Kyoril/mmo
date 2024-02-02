@@ -35,7 +35,7 @@ namespace mmo
 		/// Adds a new event to the timer queue to expire at a given timestamp value.
 		/// @param callback The callback to be executed on expiration.
 		/// @param time The timestamp at which the event shoud expire.
-		void AddEvent(EventCallback callback, GameTime time);
+		void AddEvent(const EventCallback& callback, GameTime time);
 
 		template<class T, class Type, class Result, class... Args>
 		void AddEvent(const GameTime time, T& instance, Result(Type::*method), Args&&... args)

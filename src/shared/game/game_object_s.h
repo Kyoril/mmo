@@ -186,7 +186,48 @@ namespace mmo
 
 		/// Gets the facing of this object.
 		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
-		
+
+		void Relocate(const Vector3& position, const Radian& facing)
+		{
+			const MovementInfo oldInfo = m_movementInfo;
+
+			m_movementInfo.position = position;
+			m_movementInfo.facing = facing;
+			m_movementInfo.timestamp = GetAsyncTimeMs();
+
+			if (m_worldInstance)
+			{
+				m_worldInstance->NotifyObjectMoved(*this, oldInfo, m_movementInfo);
+			}
+		}
+
+		bool GetTileIndex(TileIndex2D& out_index) const
+		{
+			// This object has to be in a world instance
+			if (!m_worldInstance)
+			{
+				return false;
+			}
+
+			// Try to resolve the objects position
+			return m_worldInstance->GetGrid().GetTilePosition(m_movementInfo.position, out_index[0], out_index[1]);
+		}
+
+		Radian GetAngle(const GameObjectS& other) const
+		{
+			return GetAngle(other.GetPosition().x, other.GetPosition().z);
+		}
+
+		Radian GetAngle(const float x, const float z) const
+		{
+			const float dx = x - GetPosition().x;
+			const float dz = z - GetPosition().z;
+
+			float ang = ::atan2(dz, dx);
+			ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
+			return Radian(ang);
+		}
+
 		/// @brief Gets the movement info.
 		[[nodiscard]] MovementInfo GetMovementInfo() { return m_movementInfo; }
 

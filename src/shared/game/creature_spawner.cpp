@@ -35,13 +35,11 @@ namespace mmo
 			}
 		}
 
-		m_respawnCountdown.ended.connect(
-			std::bind(&CreatureSpawner::OnSpawnTime, this));
+		m_respawnCountdown.ended.connect(*this, &CreatureSpawner::OnSpawnTime);
 	}
 
 	CreatureSpawner::~CreatureSpawner()
-	{
-	}
+	= default;
 
 	void CreatureSpawner::SpawnOne()
 	{
@@ -54,11 +52,11 @@ namespace mmo
 		spawned->ClearFieldChanges();
 
 		// watch for destruction
-		spawned->destroy = std::bind(&CreatureSpawner::OnRemoval, this, std::placeholders::_1);
+		spawned->destroy = [this]<typename TUnit>(TUnit&& destroyedUnit) { OnRemoval(std::forward<TUnit>(destroyedUnit)); };
 		m_world.AddGameObject(*spawned);
 
 		// Remember that creature
-		m_creatures.push_back(std::move(spawned));
+		m_creatures.emplace_back(spawned);
 		++m_currentlySpawned;
 	}
 
@@ -94,7 +92,7 @@ namespace mmo
 		}
 
 		m_respawnCountdown.SetEnd(
-			GetCurrentTime() + m_spawnEntry.respawndelay());
+			GetAsyncTimeMs() + m_spawnEntry.respawndelay());
 	}
 
 	const Vector3& CreatureSpawner::RandomPoint()

@@ -13,6 +13,27 @@
 
 namespace mmo
 {
+	class MapData
+	{
+	public:
+		virtual ~MapData() = default;
+
+		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
+	};
+
+	class SimpleMapData final : public MapData
+	{
+	public:
+		~SimpleMapData() override = default;
+
+		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override
+		{
+			out_path.push_back(start);
+			out_path.push_back(destination);
+			return true;
+		}
+	};
+
 	class Universe;
 
 	namespace proto
@@ -70,6 +91,8 @@ namespace mmo
 
 		std::shared_ptr<GameCreatureS> SpawnCreature(const proto::UnitEntry& entry, Vector3 position, float o, float randomWalkRadius);
 
+		MapData* GetMapData() const { return m_mapData; };
+
 	protected:
 
 		void UpdateObject(GameObjectS& object);
@@ -82,6 +105,7 @@ namespace mmo
 		WorldInstanceManager& m_manager;
 		InstanceId m_id;
 		MapId m_mapId;
+		MapData* m_mapData{nullptr};
 		const proto::Project& m_project;
 		const proto::MapEntry* m_mapEntry{nullptr};
 		volatile bool m_updating { false };
