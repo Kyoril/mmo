@@ -5,8 +5,6 @@
 #include "creature_ai_state.h"
 #include "base/countdown.h"
 #include "game_unit_s.h"
-#include "shared/proto_data/spells.pb.h"
-#include "shared/proto_data/units.pb.h"
 
 namespace mmo
 {
