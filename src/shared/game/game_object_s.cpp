@@ -46,8 +46,12 @@ namespace mmo
 	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		writer << io::write<uint8>(GetTypeId());
+
+		writer << io::write<uint32>(creation ? object_update_flags::HasMovementInfo : object_update_flags::None);
 		if (creation)
 		{
+			writer << m_movementInfo;
+
 			m_fields.SerializeComplete(writer);
 		}
 		else

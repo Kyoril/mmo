@@ -15,6 +15,14 @@ namespace mmo
 
 		virtual ~GameUnitC() override = default;
 
+		virtual void Deserialize(io::Reader& reader) override;
+
+		virtual void Update(float deltaTime) override;
+
+	protected:
+
+		virtual void InitializeFieldMap() override;
+
 	public:
 		void StartMove(bool forward);
 		
@@ -30,10 +38,17 @@ namespace mmo
 
 		void SetFacing(const Radian& facing);
 
+		void SetMovementPath(const std::vector<Vector3>& points);
+
 	public:
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
 
 	protected:
 		MovementInfo m_movementInfo;
+
+		float m_movementAnimationTime = 0.0f;
+		std::unique_ptr<Animation> m_movementAnimation;
+		Vector3 m_movementStart;
+		Vector3 m_movementEnd;
 	};
 }

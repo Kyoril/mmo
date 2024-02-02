@@ -2,6 +2,16 @@
 
 namespace mmo
 {
+	namespace object_update_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			HasMovementInfo = 1 << 0
+		};
+	}
+
 	// Enumerates available object type ids.
 	enum class ObjectTypeId
 	{

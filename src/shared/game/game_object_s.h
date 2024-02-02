@@ -121,16 +121,6 @@ namespace mmo
 		CreatePlayer,
 	};
 
-	namespace object_update_flags
-	{
-		enum Type
-		{
-			None = 0,
-
-			HasMovementInfo = 1 << 0
-		};
-	}
-
 	/// Defines object field visibility modifiers.
 	enum class FieldVisibilityModifier : uint8
 	{

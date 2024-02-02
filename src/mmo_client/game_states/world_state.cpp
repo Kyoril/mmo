@@ -22,6 +22,7 @@
 
 #include "world_deserializer.h"
 #include "game/chat_type.h"
+#include "game/game_object_s.h"
 
 namespace mmo
 {
@@ -403,7 +404,7 @@ namespace mmo
 			ObjectTypeId typeId;
 			if (!(packet >> io::read<uint8>(typeId)))
 			{
-				break;
+				return PacketParseResult::Disconnect;
 			}
 
 			// TODO: switch typeId
@@ -634,7 +635,7 @@ namespace mmo
 		}
 
 		path.push_back(endPosition);
-		it->second->SetMovementPath(path);
+		static_cast<GameUnitC*>(it->second.get())->SetMovementPath(path);
 
 		return PacketParseResult::Pass;
 	}
