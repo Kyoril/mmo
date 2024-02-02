@@ -124,6 +124,8 @@ namespace mmo
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 
+		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
+
 	private:
 
 		bool LoadMap(const String& assetPath);

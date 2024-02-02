@@ -173,6 +173,12 @@ namespace mmo
 	{
 		m_playerController->Update(deltaSeconds);
 
+		for(auto& [guid, object] : m_gameObjectsById)
+		{
+			object->Update(deltaSeconds);
+		}
+
+
 		if (m_cloudsNode && m_playerController->GetRootNode())
 		{
 			m_cloudsNode->SetPosition(m_playerController->GetRootNode()->GetPosition());
@@ -241,6 +247,8 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
+
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -264,6 +272,8 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::InitialSpells);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureMove);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -539,6 +549,92 @@ namespace mmo
 
 		// TODO: Store spell ids
 		DLOG("Received " << spellIds.size() << " initial spells");
+
+		return PacketParseResult::Pass;
+	}
+
+	Vector3 UnpackMovementVector(uint32 packed, const Vector3& mid)
+	{
+		Vector3 p;
+
+		// Extract the x component
+		int x_diff = (packed & 0x7FF); // Extract lower 11 bits
+		if (x_diff > 0x3FF) { // Handle negative values
+			x_diff |= ~0x7FF; // Extend sign bit
+		}
+		p.x = mid.x - (x_diff * 0.25f);
+
+		// Extract the y component
+		int y_diff = ((packed >> 11) & 0x7FF); // Extract next 11 bits
+		if (y_diff > 0x3FF) { // Handle negative values
+			y_diff |= ~0x7FF; // Extend sign bit
+		}
+		p.y = mid.y - (y_diff * 0.25f);
+
+		// Extract the z component
+		int z_diff = ((packed >> 22) & 0x3FF); // Extract next 10 bits
+		if (z_diff > 0x1FF) { // Handle negative values
+			z_diff |= ~0x3FF; // Extend sign bit
+		}
+		p.z = mid.z - (z_diff * 0.25f);
+
+		return p;
+	}
+
+	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket& packet)
+	{
+		std::vector<Vector3> path;
+
+		uint64 guid;
+		Vector3 startPosition;
+		Vector3 endPosition;
+		GameTime timestamp;
+		uint32 pathSize;
+
+		if (!(packet 
+			>> io::read_packed_guid(guid)
+			>> io::read<float>(startPosition.x)
+			>> io::read<float>(startPosition.y)
+			>> io::read<float>(startPosition.z)
+			>> io::read<uint32>(timestamp)
+			>> io::read<uint32>(pathSize)
+			>> io::read<float>(endPosition.x)
+			>> io::read<float>(endPosition.y)
+			>> io::read<float>(endPosition.z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find unit by guid
+		const auto it = m_gameObjectsById.find(guid);
+		if(it == m_gameObjectsById.end())
+		{
+			// We don't know the unit
+			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
+			return PacketParseResult::Pass;
+		}
+
+		// Ensure we are at the start position
+		it->second->GetSceneNode()->SetPosition(startPosition);
+
+		if (pathSize > 1)
+		{
+			const Vector3 mid = (startPosition + endPosition) * 0.5f;
+
+			for (uint32 i = 1; i < pathSize - 1; ++i)
+			{
+				uint32 packed;
+				if (!(packet >> io::read<uint32>(packed)))
+				{
+					return PacketParseResult::Disconnect;
+				}
+
+				path.push_back(UnpackMovementVector(packed, mid));
+			}
+		}
+
+		path.push_back(endPosition);
+		it->second->SetMovementPath(path);
 
 		return PacketParseResult::Pass;
 	}

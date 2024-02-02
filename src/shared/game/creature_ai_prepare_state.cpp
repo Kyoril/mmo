@@ -21,6 +21,9 @@ namespace mmo
 	{
 		CreatureAIState::OnEnter();
 
+		// Update home position
+		GetAI().SetHome(CreatureAI::Home(GetAI().GetControlled().GetPosition()));
+
 		m_preparation.ended.connect([this]()
 			{
 				// Enter idle state

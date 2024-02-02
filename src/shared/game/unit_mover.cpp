@@ -91,7 +91,7 @@ namespace mmo
 
 	bool UnitMover::MoveTo(const Vector3& target, const IShape* clipping/* = nullptr*/)
 	{
-		// TODO: SPeed
+		// TODO: Speed
 		const bool result = MoveTo(target, 7.0f, clipping);
 		m_customSpeed = false;
 		return result;

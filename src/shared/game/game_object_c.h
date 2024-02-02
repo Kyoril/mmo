@@ -27,6 +27,10 @@ namespace mmo
 		
 		[[nodiscard]] SceneNode* GetSceneNode() const noexcept { return m_sceneNode; }
 
+		virtual void Update(float deltaTime);
+
+		virtual void SetMovementPath(const std::vector<Vector3>& points);
+
 	protected:
 		virtual void InitializeFieldMap();
 
@@ -40,5 +44,10 @@ namespace mmo
 		Entity* m_entity { nullptr };
 		SceneNode* m_sceneNode { nullptr };
 		FieldMap<uint32> m_fieldMap;
+
+		float m_movementAnimationTime = 0.0f;
+		std::unique_ptr<Animation> m_movementAnimation;
+		Vector3 m_movementStart;
+		Vector3 m_movementEnd;
 	};
 }

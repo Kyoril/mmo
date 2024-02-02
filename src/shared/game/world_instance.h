@@ -91,7 +91,7 @@ namespace mmo
 
 		std::shared_ptr<GameCreatureS> SpawnCreature(const proto::UnitEntry& entry, Vector3 position, float o, float randomWalkRadius);
 
-		MapData* GetMapData() const { return m_mapData; };
+		MapData* GetMapData() const { return m_mapData.get(); };
 
 	protected:
 
@@ -105,7 +105,7 @@ namespace mmo
 		WorldInstanceManager& m_manager;
 		InstanceId m_id;
 		MapId m_mapId;
-		MapData* m_mapData{nullptr};
+		std::unique_ptr<MapData> m_mapData{nullptr};
 		const proto::Project& m_project;
 		const proto::MapEntry* m_mapEntry{nullptr};
 		volatile bool m_updating { false };

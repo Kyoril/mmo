@@ -43,7 +43,13 @@ message UnitSpawnEntry {
 	optional uint32 defaultemote = 11;
 	optional bool isactive = 12 [default = true];
 	repeated Waypoint waypoints = 13;
-	optional uint32 movement = 14;
+	enum MovementType {
+		STATIONARY = 0;
+		PATROL = 1;
+		ROUTE = 2;
+	}
+	optional MovementType movement = 14 [default = STATIONARY];
+
 	optional uint32 standstate = 15;
 	repeated UnitSpawnLocation locations = 16;
 }

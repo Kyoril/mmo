@@ -30,5 +30,17 @@ namespace mmo
 		/// @copydoc CreatureAIState::OnControlledMoved
 		virtual void OnControlledMoved() override;
 
+	protected:
+		void OnWaitCountdownExpired();
+
+		void OnTargetReached();
+
+		void MoveToRandomPointInRange();
+
+	private:
+
+		Countdown m_waitCountdown;
+
+		scoped_connection_container m_connections;
 	};
 }

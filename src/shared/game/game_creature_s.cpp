@@ -24,7 +24,7 @@ namespace mmo
 
 		// Setup AI
 		m_ai = make_unique<CreatureAI>(
-			*this, CreatureAI::Home(Vector3(0.0f, 0.0f, 0.0f)));
+			*this, CreatureAI::Home(m_movementInfo.position));
 	}
 
 	void GameCreatureS::SetEntry(const proto::UnitEntry& entry)

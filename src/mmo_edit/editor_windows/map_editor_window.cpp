@@ -168,6 +168,22 @@ namespace mmo
 							spawn->set_positionz(z);
 						}
 
+						static const char* s_movementTypeStrings[] = {
+							"Stationary",
+							"Patrol",
+							"Route"
+						};
+
+						int movement = spawn->movement();
+						if (ImGui::Combo("Movement", &movement, [](void* data, int idx, const char** out_text)
+							{
+								*out_text = s_movementTypeStrings[idx];
+								return true;
+							}, nullptr, proto::UnitSpawnEntry_MovementType_MovementType_ARRAYSIZE, -1))
+						{
+							spawn->set_movement(static_cast<proto::UnitSpawnEntry_MovementType>(movement));
+						}
+
 						int unitEntry = spawn->unitentry();
 						if (ImGui::Combo("Unit Entry", &unitEntry, [](void* data, int idx, const char** out_text)
 						{
