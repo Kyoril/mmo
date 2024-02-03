@@ -3,6 +3,8 @@
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 
+#include <iomanip>
+
 namespace mmo
 {
 	namespace
