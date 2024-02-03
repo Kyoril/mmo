@@ -7,8 +7,7 @@ namespace mmo
 {
 	namespace
 	{
-		template<typename T = MovementPath::PositionMap>
-		static Vector3 DoInterpolation(MovementPath::Timestamp timestamp, const T& map)
+		Vector3 DoInterpolation(MovementPath::Timestamp timestamp, const MovementPath::PositionMap& map)
 		{
 			// No data! What should we do? ...
 			if (map.empty())
@@ -22,10 +21,10 @@ namespace mmo
 				return endIt->second;
 
 			// Get start and end iterator
-			typename T::const_iterator t1 = map.end(), t2 = map.end();
+			typename MovementPath::PositionMap::const_iterator t1 = map.end(), t2 = map.end();
 
 			// Get first position and check if it is ahead in time or just the right time
-			typename T::const_iterator it = map.begin();
+			typename MovementPath::PositionMap::const_iterator it = map.begin();
 			if (it->first >= timestamp)
 				return it->second;
 
@@ -111,7 +110,7 @@ namespace mmo
 	Vector3 MovementPath::GetPosition(Timestamp timestamp) const
 	{
 		// Interpolate between the two values
-		return DoInterpolation<PositionMap>(timestamp, m_position);
+		return DoInterpolation(timestamp, m_position);
 	}
 
 	void MovementPath::PrintDebugInfo()
