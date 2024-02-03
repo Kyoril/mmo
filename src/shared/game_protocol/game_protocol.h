@@ -53,6 +53,8 @@ namespace mmo
 
 				ChatMessage = 0x11,
 
+				SetSelection = 0x12,
+
 				/// Counter constant
 				Count_,
 			};

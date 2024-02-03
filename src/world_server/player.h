@@ -49,6 +49,8 @@ namespace mmo
 		/// @copydoc TileSubscriber::GetGameUnit
 		const GameUnitS& GetGameUnit() const override { return *m_character; }
 
+		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const override;
+
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
 		void NotifyObjectsSpawned(const std::vector<GameObjectS*>& object) const override;
 
@@ -79,7 +81,9 @@ namespace mmo
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
 
 	private:
-		void HandleMovementPacket(uint16 opCode, uint32 size, io::Reader& contentReader);
+		void OnSetSelection(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 	private:
 		RealmConnector& m_connector;

@@ -22,15 +22,16 @@ namespace mmo
 		explicit GameObjectC(Scene& scene);
 		~GameObjectC() override;
 
+		virtual void InitializeFieldMap();
+
 	public:
-		virtual void Deserialize(io::Reader& reader);
+		virtual void Deserialize(io::Reader& reader, bool complete);
 		
 		[[nodiscard]] SceneNode* GetSceneNode() const noexcept { return m_sceneNode; }
 
 		virtual void Update(float deltaTime);
 
 	protected:
-		virtual void InitializeFieldMap();
 
 		virtual void SetupSceneObjects();
 

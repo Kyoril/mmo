@@ -2,6 +2,8 @@
 
 #include "player.h"
 
+#include <crude_json.h>
+
 #include "base/utilities.h"
 #include "game/each_tile_in_region.h"
 #include "game/each_tile_in_sight.h"
@@ -47,6 +49,20 @@ namespace mmo
 		}
 	}
 
+	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const
+	{
+		SendPacket([&objects](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::UpdateObject);
+				outPacket << io::write<uint16>(objects.size());
+				for (const auto& object : objects)
+				{
+					object->WriteObjectUpdateBlock(outPacket, false);
+				}
+				outPacket.Finish();
+			});
+	}
+
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
 	{
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
@@ -86,8 +102,26 @@ namespace mmo
 		io::MemorySource source(reinterpret_cast<char*>(buffer.data()), reinterpret_cast<char*>(buffer.data() + buffer.size()));
 		io::Reader reader(source);
 
-		// TODO: Enum packet opcode
-		HandleMovementPacket(opCode, buffer.size(), reader);
+		switch(opCode)
+		{
+		case game::client_realm_packet::SetSelection:
+			OnSetSelection(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::MoveStartForward:
+		case game::client_realm_packet::MoveStartBackward:
+		case game::client_realm_packet::MoveStop:
+		case game::client_realm_packet::MoveStartStrafeLeft:
+		case game::client_realm_packet::MoveStartStrafeRight:
+		case game::client_realm_packet::MoveStopStrafe:
+		case game::client_realm_packet::MoveStartTurnLeft:
+		case game::client_realm_packet::MoveStartTurnRight:
+		case game::client_realm_packet::MoveStopTurn:
+		case game::client_realm_packet::MoveHeartBeat:
+		case game::client_realm_packet::MoveSetFacing:
+			OnMovement(opCode, buffer.size(), reader);
+			break;
+		}
 	}
 
 	void Player::LocalChatMessage(ChatType type, const std::string& message)
@@ -247,7 +281,24 @@ namespace mmo
 		NotifyObjectsSpawned(objects);
 	}
 
-	void Player::HandleMovementPacket(uint16 opCode, uint32 size, io::Reader& contentReader)
+	void Player::OnSetSelection(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 selectedObject;
+		if (!(contentReader >> io::read<uint64>(selectedObject)))
+		{
+			return;
+		}
+
+		DLOG("Selected new target " << log_hex_digit(selectedObject));
+
+		// Try to find the selected object
+
+
+		// Update field (update will be sent to all clients around)
+		m_character->Set(object_fields::TargetUnit, selectedObject);
+	}
+
+	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 characterGuid;
 		MovementInfo info;

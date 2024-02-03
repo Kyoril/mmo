@@ -76,11 +76,16 @@ namespace mmo
 		/// Marks all fields as changed.
 		void MarkAllAsChanged() { m_changes.set(); }
 
+		/// Marks all fields as changed.
+		void MarkAllAsUnchanged() { m_changes.reset(); }
+
 		/// Marks a specific field as changed.
 		void MarkAsChanged(const FieldIndexType index) { m_changes.set(index); }
 		
 		/// Marks all fields as unchanged.
 		void MarkAsUnchanged() { m_changes.reset(); }
+
+		bool HasChanges() const { return m_changes.any(); }
 
 	public:
 		/// Serializes the whole field map, regardless of change flags.
@@ -94,9 +99,6 @@ namespace mmo
 		/// @param w The writer to use.
 		io::Writer& SerializeChanges(io::Writer& w) const
 		{
-			// Write number of field values
-			w << io::write<uint8>(m_data.size());
-
 			for (size_t i = 0; i < m_data.size(); i += 8)
 			{
 				uint8 flag = 0;
@@ -137,7 +139,7 @@ namespace mmo
 		io::Reader& DeserializeChanges(io::Reader& r)
 		{
 			m_changes.reset();
-			
+
 			for (size_t i = 0; i < m_data.size(); i += 8)
 			{
 				uint8 flag;
@@ -166,8 +168,6 @@ namespace mmo
 				}
 			}
 			
-			m_changes.reset();
-
 			return r;
 		}
 	

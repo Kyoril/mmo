@@ -38,6 +38,16 @@ namespace mmo
 		m_despawnCountdown.SetEnd(GetAsyncTimeMs() + despawnDelay);
 	}
 
+	void GameUnitS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
+	{
+		GameObjectS::WriteObjectUpdateBlock(writer, creation);
+	}
+
+	void GameUnitS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
+	{
+		GameObjectS::WriteValueUpdateBlock(writer, creation);
+	}
+
 	void GameUnitS::OnDespawnTimer()
 	{
 		if (m_worldInstance)

@@ -14,7 +14,6 @@ namespace mmo
 		: m_scene(scene)
 		, m_sceneNode(&m_scene.CreateSceneNode())
 	{
-		InitializeFieldMap();
 	}
 
 	GameObjectC::~GameObjectC()
@@ -38,6 +37,7 @@ namespace mmo
 	void GameObjectC::SetupSceneObjects()
 	{
 		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), "Models/Mannequin_Edit.hmsh");
+		m_entity->SetUserObject(this);
 		m_sceneNode->AttachObject(*m_entity);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);
@@ -48,7 +48,7 @@ namespace mmo
 		
 	}
 
-	void GameObjectC::Deserialize(io::Reader& reader)
+	void GameObjectC::Deserialize(io::Reader& reader, bool creation)
 	{
 		uint32 updateFlags = 0;
 		if (!(reader >> io::read<uint32>(updateFlags)))
@@ -56,9 +56,19 @@ namespace mmo
 			return;
 		}
 
-		if (!(m_fieldMap.DeserializeComplete(reader)))
+		if (creation)
 		{
-			ASSERT(false);
+			if (!(m_fieldMap.DeserializeComplete(reader)))
+			{
+				ASSERT(false);
+			}
+		}
+		else
+		{
+			if (!(m_fieldMap.DeserializeChanges(reader)))
+			{
+				ASSERT(false);
+			}
 		}
 
 		ASSERT(GetGuid() > 0);

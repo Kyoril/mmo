@@ -202,6 +202,7 @@ namespace mmo
 	{
 		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
+		m_cloudsEntity->SetQueryFlags(0);
 		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
@@ -401,26 +402,47 @@ namespace mmo
 		{
 			result = PacketParseResult::Disconnect;
 
+			bool creation = false;
 			ObjectTypeId typeId;
-			if (!(packet >> io::read<uint8>(typeId)))
+			if (!(packet 
+				>> io::read<uint8>(typeId)
+				>> io::read<uint8>(creation)))
 			{
 				return PacketParseResult::Disconnect;
 			}
 
-			// TODO: switch typeId
-
-			// Create game object from deserialization
-			auto object = std::make_shared<GameUnitC>(m_scene);
-			object->Deserialize(packet);
-
-			// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
-			if (m_gameObjectsById.empty())
+			if (creation)
 			{
-				m_playerController->SetControlledUnit(object);
-				FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
-			}
+				// Create game object from deserialization
+				auto object = std::make_shared<GameUnitC>(m_scene);
+				object->InitializeFieldMap();
+				object->Deserialize(packet, creation);
 
-			m_gameObjectsById[object->GetGuid()] = std::move(object);
+				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
+				if (m_gameObjectsById.empty())
+				{
+					m_playerController->SetControlledUnit(object);
+					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
+				}
+
+				m_gameObjectsById[object->GetGuid()] = std::move(object);
+			}
+			else
+			{
+				uint64 guid;
+				if (!(packet >> io::read_packed_guid(guid)))
+				{
+					return PacketParseResult::Disconnect;
+				}
+
+				auto it = m_gameObjectsById.find(guid);
+				if (it == m_gameObjectsById.end())
+				{
+					return PacketParseResult::Disconnect;
+				}
+
+				it->second->Deserialize(packet, creation);
+			}
 			
 			result = PacketParseResult::Pass;
 		}

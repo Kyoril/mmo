@@ -534,6 +534,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
 			RegisterPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
 
+			RegisterPacketHandler(game::client_realm_packet::SetSelection, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
@@ -551,6 +552,8 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::MoveStopTurn);
 			ClearPacketHandler(game::client_realm_packet::MoveHeartBeat);
 			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
+
+			ClearPacketHandler(game::client_realm_packet::SetSelection);
 
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 			ClearPacketHandler(game::client_realm_packet::NameQuery);

@@ -28,6 +28,12 @@ namespace mmo
 
 		void TriggerDespawnTimer(GameTime despawnDelay);
 
+		virtual void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
+
+		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const override;
+
+		virtual bool HasMovementInfo() const override { return true; }
+
 	protected:
 		virtual void PrepareFieldMap() override
 		{

@@ -159,6 +159,17 @@ namespace mmo
 		void Set(ObjectFieldMap::FieldIndexType index, T value)
 		{
 			m_fields.SetFieldValue(index, value);
+
+			if (m_worldInstance)
+			{
+				m_worldInstance->AddObjectUpdate(*this);
+			}
+		}
+
+		template<class T>
+		T Get(ObjectFieldMap::FieldIndexType index) const
+		{
+			return m_fields.GetFieldValue<T>(index);
 		}
 
 	protected:
@@ -238,12 +249,11 @@ namespace mmo
 			return m_worldInstance;
 		}
 
-		ObjectFieldMap& GetFields() noexcept { return m_fields; }
-
 		/// Sets the world instance of this object. nullptr is valid here, if the object
 		/// is not in any world.
 		void SetWorldInstance(WorldInstance* instance);
 
+		virtual bool HasMovementInfo() const { return false; }
 
 	protected:
 		ObjectFieldMap m_fields;

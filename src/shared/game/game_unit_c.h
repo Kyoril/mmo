@@ -15,11 +15,15 @@ namespace mmo
 
 		virtual ~GameUnitC() override = default;
 
-		virtual void Deserialize(io::Reader& reader) override;
+		virtual void Deserialize(io::Reader& reader, bool complete) override;
 
 		virtual void Update(float deltaTime) override;
 
-	protected:
+		template<typename T>
+		T Get(const uint32 field) const
+		{
+			return m_fieldMap.GetFieldValue<T>(field);
+		}
 
 		virtual void InitializeFieldMap() override;
 

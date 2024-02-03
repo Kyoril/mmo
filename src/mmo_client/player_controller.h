@@ -6,6 +6,7 @@
 #include "game/game_unit_c.h"
 #include "game/movement.h"
 #include "game_protocol/game_protocol.h"
+#include "scene_graph/scene.h"
 
 namespace mmo
 {
@@ -100,6 +101,7 @@ namespace mmo
 
 	private:
 		Scene& m_scene;
+		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
 		Camera* m_defaultCamera { nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };

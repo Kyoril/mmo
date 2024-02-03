@@ -5,7 +5,7 @@
 
 namespace mmo
 {
-	void GameUnitC::Deserialize(io::Reader& reader)
+	void GameUnitC::Deserialize(io::Reader& reader, bool complete)
 	{
 		uint32 updateFlags = 0;
 		if (!(reader >> io::read<uint32>(updateFlags)))
@@ -13,6 +13,7 @@ namespace mmo
 			return;
 		}
 
+		ASSERT(!complete || (updateFlags & object_update_flags::HasMovementInfo) != 0);
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
 			if (!(reader >> m_movementInfo))
@@ -21,17 +22,38 @@ namespace mmo
 			}
 		}
 
-		if (!(m_fieldMap.DeserializeComplete(reader)))
+		if (complete)
 		{
-			ASSERT(false);
+			if (!(m_fieldMap.DeserializeComplete(reader)))
+			{
+				ASSERT(false);
+			}
+
+			// TODO: Trigger registered field observers
 		}
+		else
+		{
+			if (!(m_fieldMap.DeserializeChanges(reader)))
+			{
+				ASSERT(false);
+			}
+
+			// TODO: Trigger registered field observers
+			m_fieldMap.MarkAllAsUnchanged();
+		}
+		
 
 		ASSERT(GetGuid() > 0);
+		if (complete)
+		{
+			SetupSceneObjects();
+		}
 
-		SetupSceneObjects();
-
-		m_sceneNode->SetDerivedPosition(m_movementInfo.position);
-		m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+		if (updateFlags & object_update_flags::HasMovementInfo)
+		{
+			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
+			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+		}
 	}
 
 	void GameUnitC::Update(float deltaTime)

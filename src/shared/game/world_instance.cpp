@@ -280,9 +280,7 @@ namespace mmo
 			[&object, &objects](TileSubscriber& subscriber)
 			{
 				auto& character = subscriber.GetGameUnit();
-
-				DLOG("Notifying subscriber " << log_hex_digit(subscriber.GetGameUnit().GetGuid()) << " about spawn of character " << log_hex_digit(object.GetGuid()));
-				subscriber.NotifyObjectsSpawned(objects);
+				subscriber.NotifyObjectsUpdated(objects);
 			});
 
 		object.ClearFieldChanges();

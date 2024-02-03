@@ -43,6 +43,9 @@ namespace mmo
 			};
 		}
 
+		m_selectionSceneQuery = m_scene.CreateRayQuery(Ray());
+		m_selectionSceneQuery->SetQueryMask(0xF0000000);
+
 		SetupCamera();
 	}
 
@@ -338,7 +341,40 @@ namespace mmo
 		if (std::abs(m_clickPosition.x - x) <= 8 &&
 			std::abs(m_clickPosition.y - y) <= 8)
 		{
-			DLOG("Raycast");
+			int32 w, h;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
+			m_selectionSceneQuery->ClearResult();
+			m_selectionSceneQuery->SetSortByDistance(true);
+			m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
+				static_cast<float>(x) / static_cast<float>(w), 
+				static_cast<float>(y) / static_cast<float>(h), 1000.0f));
+			m_selectionSceneQuery->Execute();
+
+			const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
+
+			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
+			if (!hitResult.empty())
+			{
+				Entity* entity = (Entity*)hitResult[0].movable;
+				if (entity)
+				{
+					GameUnitC* unit = entity->GetUserObject<GameUnitC>();
+					if (unit)
+					{
+						if (unit->GetGuid() != previousSelectedUnit)
+						{
+							m_connector.SetSelection(unit->GetGuid());
+						}
+					}
+				}
+			}
+			else
+			{
+				if (previousSelectedUnit != 0)
+				{
+					m_connector.SetSelection(0);
+				}
+			}
 		}
 
 		m_lastMousePosition = Point(x, y);

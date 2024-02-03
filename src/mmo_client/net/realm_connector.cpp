@@ -257,4 +257,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::SetSelection(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetSelection);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
 }
