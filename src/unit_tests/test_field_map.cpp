@@ -75,10 +75,10 @@ TEST_CASE("SerializeChangesOnlySerializesChangedFields", "[field_map]")
 	writer.Sink().Flush();
 
 	// One byte for change set bitmask, 4 bytes for float value
-	CHECK(buffer.size() == 6);
-	CHECK(buffer[1] == (uint8)(1 << 2));
+	CHECK(buffer.size() == 5);
+	CHECK(buffer[0] == (uint8)(1 << 2));
 
-	const float* changeValue = reinterpret_cast<float*>(&buffer[2]);
+	const float* changeValue = reinterpret_cast<float*>(&buffer[1]);
 	CHECK(*changeValue == 3.0f);
 }
 
