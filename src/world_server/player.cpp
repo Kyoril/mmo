@@ -2,8 +2,6 @@
 
 #include "player.h"
 
-#include <crude_json.h>
-
 #include "base/utilities.h"
 #include "game/each_tile_in_region.h"
 #include "game/each_tile_in_sight.h"
