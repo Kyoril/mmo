@@ -314,6 +314,8 @@ namespace mmo
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
+		m_mouseDownTime = GetAsyncTimeMs();
+		m_clickPosition = Point(x, y);
 		m_lastMousePosition = Point(x, y);
 
 		if (button == MouseButton_Left)
@@ -333,6 +335,12 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
+		if (std::abs(m_clickPosition.x - x) <= 8 &&
+			std::abs(m_clickPosition.y - y) <= 8)
+		{
+			DLOG("Raycast");
+		}
+
 		m_lastMousePosition = Point(x, y);
 		
 		if (button == MouseButton_Left)

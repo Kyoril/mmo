@@ -16,6 +16,12 @@ namespace mmo
 		m_focusable = true;
 	}
 
+	void Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
+	{
+		Frame::OnMouseDown(button, buttons, position);
+		abort_emission();
+	}
+
 	void Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
 		if (button == MouseButton::Left)
@@ -42,6 +48,7 @@ namespace mmo
 
 		// Call super class method
 		Frame::OnMouseUp(button, buttons, position);
+		abort_emission();
 	}
 
 	void Button::SetLuaClickedHandler(const luabind::object & fn)

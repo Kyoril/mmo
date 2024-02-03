@@ -20,6 +20,8 @@ namespace mmo
 		virtual ~Button() = default;
 
 	public:
+		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 
 	public:

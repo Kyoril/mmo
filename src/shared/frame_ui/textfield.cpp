@@ -219,6 +219,13 @@ namespace mmo
 
 		// Raise the signal from the super class
 		Frame::OnMouseDown(button, buttons, position);
+		abort_emission();
+	}
+
+	void TextField::OnMouseUp(MouseButton button, int32 buttons, const Point& position)
+	{
+		Frame::OnMouseUp(button, buttons, position);
+		abort_emission();
 	}
 
 	void TextField::OnKeyDown(Key key)

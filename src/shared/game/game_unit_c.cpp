@@ -147,7 +147,6 @@ namespace mmo
 
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
-		DLOG("Movement from " << prevPosition << " to " << points.back());
 
 		// First point
 		positions.emplace_back(0.0f, 0.0f, 0.0f);
@@ -157,11 +156,10 @@ namespace mmo
 		for (const auto& point : points)
 		{
 			Vector3 diff = point - prevPosition;
-			DLOG("\tDelta: " << diff);
 			const float distance = diff.GetLength();
 			const float duration = distance / 7.0f;			// TODO: Speed!
 
-			positions.push_back(diff);
+			positions.push_back(point - m_movementStart);
 			keyFrameTimes.push_back(totalDuration + duration);
 			totalDuration += duration;
 			prevPosition = point;

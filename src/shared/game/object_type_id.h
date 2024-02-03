@@ -45,27 +45,41 @@ namespace mmo
 			Entry = 3,
 			/// @brief 32 bit object scale
 			Scale = 4,
+			/// @brief 64 bit object guid
+			Owner = 5,
 
 			/// @brief Number of object fields
-			ObjectFieldCount,
+			ObjectFieldCount = Owner + 1,
 		};
 
 		enum UnitFields
 		{
+			/// @brief 32 bit object field
 			Level = ObjectFieldCount,
+
+			/// @brief 32 bit object field
 			MaxHealth,
+			/// @brief 32 bit object field
 			Health,
 
+			/// @brief 32 bit object field
 			Mana,
+			/// @brief 32 bit object field
 			Rage,
+			/// @brief 32 bit object field
 			Energy,
+
+			/// @brief 32 bit object field
 			MaxMana,
+			/// @brief 32 bit object field
 			MaxRage,
+			/// @brief 32 bit object field
 			MaxEnergy,
 
+			/// @brief 64 bit object guid
 			TargetUnit,
 
-			UnitFieldCount,
+			UnitFieldCount = TargetUnit + 2,
 		};
 
 		enum PlayerFields

@@ -105,10 +105,13 @@ namespace mmo
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
+		Point m_clickPosition{};
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Point m_lastMousePosition {};
 		GameTime m_lastHeartbeat { 0 };
 		uint32 m_controlFlags { ControlFlags::None };
+		uint32 m_mouseDownTime = 0;
+
 	};
 }
