@@ -4,6 +4,8 @@
 
 #include "source.h"
 
+#include <cstring>
+
 namespace io
 {
 	template <class C>
