@@ -5,28 +5,45 @@
 #include <memory>
 
 #include "game/game_object_c.h"
+#include "game/game_unit_c.h"
 
 namespace mmo
 {
 	class ObjectMgr
 	{
 	public:
-		void Initialize();
+		static void Initialize();
 
 		template<typename TObject>
-		std::shared_ptr<TObject> GetObject(uint64 guid)
+		static std::shared_ptr<TObject> Get(uint64 guid)
 		{
-			if (const auto it = m_objectyByGuid.find(guid); it != m_objectyByGuid.end())
+			if (guid == 0)
+			{
+				return nullptr;
+			}
+
+			if (const auto it = ms_objectyByGuid.find(guid); it != ms_objectyByGuid.end())
 			{
 				return std::dynamic_pointer_cast<TObject>(it->second);
 			}
+
+			return nullptr;
 		}
 
-		void AddObject(std::shared_ptr<GameObjectC> object);
+		static void UpdateObjects(float deltaTime);
 
-		void RemoveObject(uint64 guid);
+		static void AddObject(std::shared_ptr<GameObjectC> object);
+
+		static void RemoveObject(uint64 guid);
+
+		static void SetActivePlayer(uint64 guid);
+
+		static uint64 GetActivePlayerGuid();
+
+		static std::shared_ptr<GameUnitC> GetActivePlayer();
 
 	private:
-		std::map<uint64, std::shared_ptr<GameObjectC>> m_objectyByGuid;
+		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
+		static uint64 ms_activePlayerGuid;
 	};
 }

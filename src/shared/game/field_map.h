@@ -72,7 +72,33 @@ namespace mmo
 
 		/// Determines whether the given field is marked as changed.
 		[[nodiscard]] bool IsFieldMarkedAsChanged(const FieldIndexType index) const { return m_changes[index]; }
-		
+
+		int32 GetFirstChangedField() const
+		{
+			for (uint32 i = 0; i < m_data.size(); ++i)
+			{
+				if (m_changes[i])
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
+		int32 GetLastChangedField() const
+		{
+			for (int32 i = m_data.size() - 1; i >= 0; --i)
+			{
+				if (m_changes[i])
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
 		/// Marks all fields as changed.
 		void MarkAllAsChanged() { m_changes.set(); }
 

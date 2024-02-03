@@ -143,7 +143,6 @@ namespace mmo
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
-		std::map<uint64, std::shared_ptr<GameObjectC>> m_gameObjectsById;
 		IdGenerator<uint64> m_objectIdGenerator{ 1 };
 
 		SceneNode* m_cloudsNode { nullptr };
@@ -153,8 +152,9 @@ namespace mmo
 		SceneNode* m_worldRootNode;
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
-		DBCache<String, game::client_realm_packet::NameQuery> m_unitNameCache;
+		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
 
+		scoped_connection_container m_playerObservers;
 
 	};
 }

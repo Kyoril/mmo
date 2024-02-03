@@ -79,6 +79,19 @@ namespace mmo
 
 	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const
 	{
+		const uint64 currentTarget = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (currentTarget != 0)
+		{
+			for (const auto *gameObject : objects)
+			{
+				if (gameObject->GetGuid() == currentTarget)
+				{
+					m_character->Set<uint64>(object_fields::TargetUnit, 0);
+					break;
+				}
+			}
+		}
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{

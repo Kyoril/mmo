@@ -28,8 +28,6 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
-
-			// TODO: Trigger registered field observers
 		}
 		else
 		{
@@ -38,7 +36,14 @@ namespace mmo
 				ASSERT(false);
 			}
 
-			// TODO: Trigger registered field observers
+			const int32 startIndex = m_fieldMap.GetFirstChangedField();
+			const int32 endIndex = m_fieldMap.GetLastChangedField();
+			ASSERT(endIndex >= startIndex);
+			if (startIndex >= 0 && endIndex >= 0)
+			{
+				fieldsChanged(GetGuid(), startIndex, (endIndex - startIndex) + 1);
+			}
+
 			m_fieldMap.MarkAllAsUnchanged();
 		}
 		

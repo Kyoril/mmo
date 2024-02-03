@@ -13,13 +13,12 @@
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
-#include "game/field_map.h"
 #include "game/object_type_id.h"
 #include "scene_graph/entity.h"
-#include "scene_graph/material_manager.h"
 
 #include <zstr/zstr.hpp>
 
+#include "object_mgr.h"
 #include "world_deserializer.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
@@ -43,12 +42,14 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
-		, m_unitNameCache(m_realmConnector)
+		, m_playerNameCache(m_realmConnector)
 	{
 	}
 
 	void WorldState::OnEnter()
 	{
+		ObjectMgr::Initialize();
+
 		SetupWorldScene();
 
 		// Register world renderer
@@ -104,13 +105,14 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		ObjectMgr::Initialize();
+
 		m_worldInstance.reset();
 
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
-		
-		m_gameObjectsById.clear();
+
 		m_playerController.reset();
 		m_worldGrid.reset();
 		m_scene.Clear();
@@ -174,11 +176,7 @@ namespace mmo
 	{
 		m_playerController->Update(deltaSeconds);
 
-		for(auto& [guid, object] : m_gameObjectsById)
-		{
-			object->Update(deltaSeconds);
-		}
-
+		ObjectMgr::UpdateObjects(deltaSeconds);
 
 		if (m_cloudsNode && m_playerController->GetRootNode())
 		{
@@ -418,14 +416,30 @@ namespace mmo
 				object->InitializeFieldMap();
 				object->Deserialize(packet, creation);
 
+				ObjectMgr::AddObject(object);
+
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
-				if (m_gameObjectsById.empty())
+				if (!m_playerController->GetControlledUnit())
 				{
+					ObjectMgr::SetActivePlayer(object->GetGuid());
+
+					// Register player observers
+					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
+						{
+							// Watch for target unit change
+							if (fieldIndex <= object_fields::TargetUnit &&
+								fieldIndex + fieldCount >= object_fields::TargetUnit + 1)
+							{
+								if (ObjectMgr::GetActivePlayerGuid() == guid)
+								{
+									FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+								}
+							}
+						});
+
 					m_playerController->SetControlledUnit(object);
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 				}
-
-				m_gameObjectsById[object->GetGuid()] = std::move(object);
 			}
 			else
 			{
@@ -435,13 +449,13 @@ namespace mmo
 					return PacketParseResult::Disconnect;
 				}
 
-				auto it = m_gameObjectsById.find(guid);
-				if (it == m_gameObjectsById.end())
+				const auto obj = ObjectMgr::Get<GameObjectC>(guid);
+				if (!obj)
 				{
 					return PacketParseResult::Disconnect;
 				}
 
-				it->second->Deserialize(packet, creation);
+				obj->Deserialize(packet, creation);
 			}
 			
 			result = PacketParseResult::Pass;
@@ -480,11 +494,7 @@ namespace mmo
 			}
 			
 			DLOG("Despawning object " << log_hex_digit(id));
-			const auto objectIt = m_gameObjectsById.find(id);
-			if (objectIt != m_gameObjectsById.end())
-			{
-				m_gameObjectsById.erase(objectIt);
-			}
+			ObjectMgr::RemoveObject(id);
 		}
 		
 		return PacketParseResult::Pass;
@@ -499,15 +509,12 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 		
-		const auto objectIt = m_gameObjectsById.find(characterGuid);
-		if (objectIt == m_gameObjectsById.end())
+		const auto unitPtr = ObjectMgr::Get<GameUnitC>(characterGuid);
+		if (!unitPtr)
 		{
 			WLOG("Received movement packet for unknown unit " << log_hex_digit(characterGuid));
 			return PacketParseResult::Pass;
 		}
-
-		auto unitPtr = std::static_pointer_cast<GameUnitC>(objectIt->second);
-		ASSERT(unitPtr);
 
 		// Instantly apply movement data for now
 		unitPtr->GetSceneNode()->SetDerivedPosition(movementInfo.position);
@@ -531,7 +538,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_unitNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
+		m_playerNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
 		{
 			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, message);
 		});
@@ -558,7 +565,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		m_unitNameCache.NotifyObjectResponse(guid, std::move(name));
+		m_playerNameCache.NotifyObjectResponse(guid, std::move(name));
 		return PacketParseResult::Pass;
 	}
 
@@ -629,8 +636,8 @@ namespace mmo
 		}
 
 		// Find unit by guid
-		const auto it = m_gameObjectsById.find(guid);
-		if(it == m_gameObjectsById.end())
+		const auto unitPtr = ObjectMgr::Get<GameUnitC>(guid);
+		if(!unitPtr)
 		{
 			// We don't know the unit
 			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
@@ -638,7 +645,7 @@ namespace mmo
 		}
 
 		// Ensure we are at the start position
-		it->second->GetSceneNode()->SetPosition(startPosition);
+		unitPtr->GetSceneNode()->SetPosition(startPosition);
 
 		if (pathSize > 1)
 		{
@@ -657,7 +664,7 @@ namespace mmo
 		}
 
 		path.push_back(endPosition);
-		static_cast<GameUnitC*>(it->second.get())->SetMovementPath(path);
+		unitPtr->SetMovementPath(path);
 
 		return PacketParseResult::Pass;
 	}

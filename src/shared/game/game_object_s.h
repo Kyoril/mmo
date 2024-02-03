@@ -156,11 +156,11 @@ namespace mmo
 		virtual void Initialize();
 
 		template<class T>
-		void Set(ObjectFieldMap::FieldIndexType index, T value)
+		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{
 			m_fields.SetFieldValue(index, value);
 
-			if (m_worldInstance)
+			if (m_worldInstance && notify)
 			{
 				m_worldInstance->AddObjectUpdate(*this);
 			}

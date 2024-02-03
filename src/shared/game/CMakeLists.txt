@@ -1,7 +1,7 @@
 
 # Add shared graphics library
 add_lib(game)
-target_link_libraries(game assets)
+target_link_libraries(game assets proto_data)
 
 if (APPLE)
     target_link_libraries(game "-framework CoreFoundation")

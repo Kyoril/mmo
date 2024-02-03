@@ -14,13 +14,23 @@ namespace mmo
 		const proto::UnitEntry& entry)
 		: GameUnitS(project, timers)
 		, m_originalEntry(entry)
-		, m_entry(nullptr)
+		, m_entry(&m_originalEntry)
 	{
 	}
 
 	void GameCreatureS::Initialize()
 	{
 		GameUnitS::Initialize();
+
+		// Initialize creature based on unit entry values
+		Set<uint32>(object_fields::Level, m_entry->minlevel(), false);
+		Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth(), false);
+		Set<uint32>(object_fields::Health, m_entry->minlevelhealth(), false);
+		Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana(), false);
+		Set<uint32>(object_fields::Mana, m_entry->minlevelmana(), false);
+		Set<uint32>(object_fields::Entry, m_entry->id(), false);
+		Set<float>(object_fields::Scale, m_entry->scale(), false);
+		ClearFieldChanges();
 
 		// Setup AI
 		m_ai = make_unique<CreatureAI>(

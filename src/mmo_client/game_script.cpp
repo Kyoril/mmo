@@ -13,6 +13,7 @@
 #include <functional>
 #include <utility>
 
+#include "object_mgr.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 
@@ -64,6 +65,95 @@ namespace mmo
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
+		}
+
+		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string& unitName)
+		{
+			if (unitName == "player")
+			{
+				return ObjectMgr::GetActivePlayer();
+			}
+
+			if (unitName == "target")
+			{
+				const auto playerObject = ObjectMgr::GetActivePlayer();
+				if (playerObject)
+				{
+					return ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit));
+				}
+			}
+
+			return nullptr;
+		}
+
+		bool Script_UnitExists(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return true;
+			}
+
+			return false;
+		}
+
+		int32 Script_UnitHealth(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::Health);
+			}
+
+			return 0;
+		}
+
+		int32 Script_UnitHealthMax(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::MaxHealth);
+			}
+
+			return 1;
+		}
+
+		int32 Script_UnitMana(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::Mana);
+			}
+
+			return 0;
+		}
+
+		int32 Script_UnitManaMax(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::MaxMana);
+			}
+
+			return 1;
+		}
+
+		int32 Script_UnitLevel(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::Level);
+			}
+
+			return 1;
+		}
+
+		std::string Script_UnitName(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return "UNIT";
+			}
+
+			return "Unknown";
 		}
 	}
 
@@ -126,7 +216,15 @@ namespace mmo
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
 			luabind::def("EnterWorld", &Script_EnterWorld),
-			luabind::def("print", &Script_Print)
+			luabind::def("print", &Script_Print),
+
+			luabind::def("UnitExists", &Script_UnitExists),
+			luabind::def("UnitHealth", &Script_UnitHealth),
+			luabind::def("UnitHealthMax", &Script_UnitHealthMax),
+			luabind::def("UnitMana", &Script_UnitMana),
+			luabind::def("UnitManaMax", &Script_UnitManaMax),
+			luabind::def("UnitLevel", &Script_UnitLevel),
+			luabind::def("UnitName", &Script_UnitName)
 		];
 
 		// Set login connector instance

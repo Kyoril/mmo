@@ -1,6 +1,7 @@
 #pragma once
 
 #include "field_map.h"
+#include "game_object_s.h"
 #include "base/non_copyable.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
@@ -19,6 +20,9 @@ namespace mmo
 	class GameObjectC : public NonCopyable
 	{
 	public:
+		signal<void(uint64, uint16, uint16)> fieldsChanged;
+
+	public:
 		explicit GameObjectC(Scene& scene);
 		~GameObjectC() override;
 
@@ -32,7 +36,6 @@ namespace mmo
 		virtual void Update(float deltaTime);
 
 	protected:
-
 		virtual void SetupSceneObjects();
 
 	public:

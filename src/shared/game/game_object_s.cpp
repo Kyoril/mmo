@@ -86,6 +86,11 @@ namespace mmo
 	void GameObjectS::ClearFieldChanges()
 	{
 		m_fields.MarkAsUnchanged();
+
+		if (m_worldInstance)
+		{
+			m_worldInstance->RemoveObjectUpdate(*this);
+		}
 	}
 
 	void GameObjectS::SetWorldInstance(WorldInstance* instance)
