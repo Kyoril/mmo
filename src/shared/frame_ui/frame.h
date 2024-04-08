@@ -255,6 +255,10 @@ namespace mmo
 
 		void SetProperty(const std::string& name, const std::string& value);
 
+		bool IsChildOf(Frame& parent) const;
+
+		Pointer FindChild(const std::string& name);
+
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }

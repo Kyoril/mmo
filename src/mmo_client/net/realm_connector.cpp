@@ -266,4 +266,22 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::CreateMonster(uint32 entry)
+	{
+		sendSinglePacket([entry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCreateMonster);
+			packet << io::write<uint32>(entry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::DestroyMonster(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatDestroyMonster);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
 }

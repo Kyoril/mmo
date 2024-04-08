@@ -89,10 +89,10 @@ namespace mmo
 			const auto* unitEntry = m_project.units.getById(spawn.unitentry());
 			ASSERT(unitEntry);
 
-			std::unique_ptr<CreatureSpawner> spawner(new CreatureSpawner(
+			auto spawner = std::make_unique<CreatureSpawner>(
 				*this,
 				*unitEntry,
-				spawn));
+				spawn);
 
 			m_creatureSpawners.push_back(std::move(spawner));
 
@@ -251,8 +251,7 @@ namespace mmo
 		OnObjectMoved(object, previousMovementInfo);
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::SpawnCreature(const proto::UnitEntry& entry, Vector3 position,
-		float o, float randomWalkRadius)
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius) const
 	{
 		// Create the unit
 		auto spawned = std::make_shared<GameCreatureS>(
@@ -266,6 +265,31 @@ namespace mmo
 			{ MovementFlags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
 		return spawned;
+	}
+
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius)
+	{
+		auto creature = CreateCreature(entry, position, o, randomWalkRadius);
+		m_temporaryCreatures[creature->GetGuid()] = creature;
+
+		creature->destroy = [this](const GameObjectS& gameObjectS)
+			{
+				DestroyTemporaryCreature(gameObjectS.GetGuid());
+			};
+
+		return std::move(creature);
+	}
+
+	void WorldInstance::DestroyTemporaryCreature(const uint64 guid)
+	{
+		const auto it = m_temporaryCreatures.find(guid);
+		if (it == m_temporaryCreatures.end())
+		{
+			ELOG("Could not find temporary creature with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		m_temporaryCreatures.erase(it);
 	}
 
 	void WorldInstance::UpdateObject(GameObjectS& object)

@@ -87,7 +87,7 @@ namespace mmo
 	public:
 		inline AnchorPoint GetPoint() const { return m_point; }
 		inline AnchorPoint GetRelativePoint() const { return m_relativePoint; }
-		inline Frame* GetRelativeTo() const { return m_relativeTo.get(); }
+		inline std::shared_ptr<Frame> GetRelativeTo() const { return m_relativeTo; }
 		inline float GetOffset() const { return m_offset; }
 
 	private:

@@ -13,6 +13,9 @@
 #include <functional>
 #include <map>
 #include <cassert>
+#include <algorithm>
+#include <limits>
+#include <vector>
 
 #include "login_connector.h"
 #include "game/character_data.h"
@@ -25,7 +28,6 @@ namespace mmo
 	class LoginConnector;
 	class WorldManager;
 	class World;
-
 
 	/// This class represents a player connction on the login server.
 	class Player final
@@ -97,6 +99,66 @@ namespace mmo
 		void NotifyWorldNodeChanged(World* worldNode);
 
 	public:
+		struct PacketHandlerRegistrationHandle final
+		{
+		private:
+			std::weak_ptr<Player> m_player;
+			uint16 m_opCode;
+
+		public:
+			// Copy operations are deleted to prevent copying
+			PacketHandlerRegistrationHandle(const PacketHandlerRegistrationHandle&) = delete;
+			PacketHandlerRegistrationHandle& operator=(const PacketHandlerRegistrationHandle&) = delete;
+
+			PacketHandlerRegistrationHandle(Player& player, const uint16 opCode)
+				: m_player(player.shared_from_this()), m_opCode(opCode)
+			{
+			}
+
+			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other) noexcept
+				: m_player(std::move(other.m_player)), m_opCode(other.m_opCode)
+			{
+				other.m_opCode = std::numeric_limits<uint16>::max();
+			}
+
+			~PacketHandlerRegistrationHandle()
+			{
+				const std::shared_ptr<Player> strongPlayer = m_player.lock();
+				if (m_opCode != std::numeric_limits<uint16>::max() && strongPlayer)
+				{
+					strongPlayer->ClearPacketHandler(m_opCode);
+				}
+			}
+		};
+
+		struct PacketHandlerHandleContainer final
+		{
+		private:
+			std::vector<PacketHandlerRegistrationHandle> m_handles;
+
+		public:
+			void Add(PacketHandlerRegistrationHandle&& handle)
+			{
+				m_handles.push_back(std::move(handle));
+			}
+
+			void Clear()
+			{
+				m_handles.clear();
+			}
+
+			[[nodiscard]] bool IsEmpty() const
+			{
+				return m_handles.empty();
+			}
+
+		public:
+			PacketHandlerHandleContainer& operator+=(PacketHandlerRegistrationHandle&& handle) {
+				m_handles.push_back(std::move(handle));
+				return *this;
+			}
+		};
+
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint16 opCode, PacketHandler &&handler);
 
@@ -107,6 +169,17 @@ namespace mmo
 			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
 				return (object.*method)(Args1(args)...);
 			});
+		}
+
+		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
+		template <class Instance, class Class, class... Args1>
+		[[nodiscard]] PacketHandlerRegistrationHandle RegisterAutoPacketHandler(uint16 opCode, Instance& object, PacketParseResult(Class::* method)(Args1...))
+		{
+			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
+				return (object.*method)(Args1(args)...);
+				});
+
+			return { *this, opCode };
 		}
 
 		/// Clears a packet handler so that the opcode is no longer handled.
@@ -129,6 +202,8 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
+
+		PacketHandlerHandleContainer m_proxyHandlers;
 
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;

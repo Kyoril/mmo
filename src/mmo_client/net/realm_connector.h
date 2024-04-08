@@ -102,6 +102,10 @@ namespace mmo
 
 		void SetSelection(uint64 guid);
 
+		void CreateMonster(uint32 entry);
+
+		void DestroyMonster(uint64 guid);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

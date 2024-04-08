@@ -46,6 +46,7 @@ namespace mmo
 		other.m_text = m_text;
 		other.m_onLoad = m_onLoad;
 		other.m_onUpdate = m_onUpdate;
+		other.RemoveAllChildren();
 		
 		// Set all properties
 		for (const auto& pair : m_propertiesByName)
@@ -70,6 +71,7 @@ namespace mmo
 			auto& added = (other.m_sectionsByName[pair.first] = pair.second);
 			added.SetComponentFrame(other);
 		}
+
 		// Add state imagery reference
 		for (const auto& pair : m_stateImageriesByName)
 		{
@@ -98,7 +100,7 @@ namespace mmo
 		for (const auto& child : m_children)
 		{
 			// Create a copy of the child frame
-			FramePtr copiedChild = FrameManager::Get().Create(m_type, "", true);
+			FramePtr copiedChild = FrameManager::Get().Create(m_type, other.GetName() + "_" + child->GetName(), true);
 			ASSERT(copiedChild);
 
 			// Copy properties over to child frame
@@ -106,6 +108,22 @@ namespace mmo
 
 			// Add child copy to the copied frame
 			other.m_children.emplace_back(std::move(copiedChild));
+
+			// Copy anchors
+			for (auto& anchor : child->m_anchors)
+			{
+				auto relativeTo = anchor.second->GetRelativeTo();
+				if (relativeTo)
+				{
+					// Check if other frame is part of our template
+					if (relativeTo->IsChildOf(*this))
+					{
+						relativeTo = other.FindChild(other.GetName() + "_" + relativeTo->GetName());
+					}
+				}
+
+				other.SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
+			}
 		}
 	}
 
@@ -561,6 +579,39 @@ namespace mmo
 		{
 			prop->Set(value);
 		}
+	}
+
+	bool Frame::IsChildOf(Frame& parent) const
+	{
+		if (m_parent == &parent)
+		{
+			return true;
+		}
+
+		if (m_parent == nullptr)
+		{
+			return false;
+		}
+
+		return m_parent->IsChildOf(parent);
+	}
+
+	Frame::Pointer Frame::FindChild(const std::string& name)
+	{
+		for (auto& child : m_children)
+		{
+			if (child->GetName() == name)
+			{
+				return child;
+			}
+
+			if (auto found = child->FindChild(name))
+			{
+				return found;
+			}
+		}
+
+		return nullptr;
 	}
 
 	void Frame::Render()

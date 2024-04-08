@@ -520,41 +520,45 @@ namespace mmo
 
 	void Player::EnableProxyPackets(const bool enable)
 	{
+		ASSERT(!enable || m_proxyHandlers.IsEmpty());
+
+		// First clear potential existing proxy handlers (always)
+		m_proxyHandlers.Clear();
+
 		if (enable)
 		{
-			RegisterPacketHandler(game::client_realm_packet::MoveStartForward, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartBackward, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStop, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeLeft, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeRight, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStopStrafe, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnLeft, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnRight, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
-
-			RegisterPacketHandler(game::client_realm_packet::SetSelection, *this, &Player::OnProxyPacket);
+			// Register proxy handlers
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartForward, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartBackward, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStop, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartStrafeLeft, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartStrafeRight, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopStrafe, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartTurnLeft, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartTurnRight, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SetSelection, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateMonster, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDestroyMonster, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CastSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelCast, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelAura, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ChannelStart, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ChannelUpdate, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelChanneling, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackSwing, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackStop, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRecharge, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::UseItem, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
 		}
 		else
 		{
-			ClearPacketHandler(game::client_realm_packet::MoveStartForward);
-			ClearPacketHandler(game::client_realm_packet::MoveStartBackward);
-			ClearPacketHandler(game::client_realm_packet::MoveStop);
-			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeLeft);
-			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeRight);
-			ClearPacketHandler(game::client_realm_packet::MoveStopStrafe);
-			ClearPacketHandler(game::client_realm_packet::MoveStartTurnLeft);
-			ClearPacketHandler(game::client_realm_packet::MoveStartTurnRight);
-			ClearPacketHandler(game::client_realm_packet::MoveStopTurn);
-			ClearPacketHandler(game::client_realm_packet::MoveHeartBeat);
-			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
-
-			ClearPacketHandler(game::client_realm_packet::SetSelection);
-
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 			ClearPacketHandler(game::client_realm_packet::NameQuery);
 		}
@@ -562,8 +566,7 @@ namespace mmo
 
 	void Player::JoinWorld() const
 	{
-		const auto strongWorld = m_world.lock();
-		if (strongWorld)
+		if (const auto strongWorld = m_world.lock())
 		{
 			strongWorld->GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
 			{
@@ -626,6 +629,7 @@ namespace mmo
 		// Check if world instance exists
 		const auto strongWorld = m_world.lock();
 		NotifyWorldNodeChanged(strongWorld.get());
+
 		if (!strongWorld)
 		{
 			WLOG("No world node available which is able to host map " << characterData->mapId << " and/or instance id " << characterData->instanceId);
@@ -675,7 +679,6 @@ namespace mmo
 		if (worldNode)
 		{
 			m_worldDestroyed = worldNode->destroyed.connect(this, &Player::OnWorldDestroyed);
-			EnableProxyPackets(true);
 		}
 	}
 

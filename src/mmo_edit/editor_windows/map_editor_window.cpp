@@ -127,6 +127,9 @@ namespace mmo
 						spawn->set_positiony(0.0f);
 						spawn->set_positionz(0.0f);
 						spawn->set_unitentry(m_project.units.getTemplates().entry(0).id());
+						spawn->set_respawn(true);
+						spawn->set_respawndelay(30 * 1000);
+						spawn->set_isactive(true);
 					}
 
 					ImGui::BeginDisabled(currentCreatureSpawn == -1 || currentCreatureSpawn >= currentEntry->unitspawns_size());
@@ -152,6 +155,7 @@ namespace mmo
 					if (currentCreatureSpawn != -1 && currentCreatureSpawn < currentEntry->unitspawns_size())
 					{
 						auto* spawn = currentEntry->mutable_unitspawns()->Mutable(currentCreatureSpawn);
+
 						float x = spawn->positionx();
 						if (ImGui::InputFloat("Position X", &x))
 						{
@@ -167,6 +171,28 @@ namespace mmo
 						{
 							spawn->set_positionz(z);
 						}
+
+						bool isActive = spawn->isactive();
+						if (ImGui::Checkbox("Active", &isActive))
+						{
+							spawn->set_isactive(isActive);
+						}
+
+						bool respawn = spawn->respawn();
+						if (ImGui::Checkbox("Respawn", &respawn))
+						{
+							spawn->set_respawn(respawn);
+						}
+
+						ImGui::BeginDisabled(!respawn);
+
+						int32 respawnDelay = spawn->respawndelay();
+						if (ImGui::InputInt("Respawn Delay", &respawnDelay))
+						{
+							spawn->set_respawndelay(respawnDelay);
+						}
+
+						ImGui::EndDisabled();
 
 						static const char* s_movementTypeStrings[] = {
 							"Stationary",

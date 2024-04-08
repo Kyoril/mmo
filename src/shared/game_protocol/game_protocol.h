@@ -55,6 +55,23 @@ namespace mmo
 
 				SetSelection = 0x12,
 
+				CheatCreateMonster = 0x13,			// GAME MASTER
+				CheatDestroyMonster = 0x14,			// GAME MASTER
+
+				CastSpell = 0x15,
+				CancelCast = 0x16,
+				CancelAura = 0x17,
+				ChannelStart = 0x18,
+				ChannelUpdate = 0x19,
+				CancelChanneling = 0x1A,
+				AttackSwing = 0x1B,
+				AttackStop = 0x1C,
+
+				CheatLearnSpell = 0x1D,				// GAME MASTER
+				CheatRecharge = 0x1E,				// GAME MASTER
+
+				UseItem = 0x1F,
+
 				/// Counter constant
 				Count_,
 			};
@@ -117,6 +134,19 @@ namespace mmo
 				ChatMessage,
 
 				InitialSpells,
+				LearnedSpell,
+				AttackStart,
+				AttackStop,
+				AttackSwingError,
+
+				CastFailed,
+				SpellStart,
+				SpellGo,
+				SpellFailure,
+				SpellCooldown,
+				UpdateAuraDuration,
+				ChannelStart,
+				ChannelUpdate,
 
 				CreatureMove,
 

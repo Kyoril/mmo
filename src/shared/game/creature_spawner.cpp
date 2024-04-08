@@ -48,7 +48,7 @@ namespace mmo
 		const float o = m_spawnEntry.rotation();
 
 		// Spawn a new creature
-		auto spawned = m_world.SpawnCreature(m_entry, location, o, m_spawnEntry.radius());
+		auto spawned = m_world.CreateCreature(m_entry, location, o, m_spawnEntry.radius());
 		spawned->ClearFieldChanges();
 
 		// watch for destruction

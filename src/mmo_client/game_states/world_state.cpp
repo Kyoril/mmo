@@ -249,10 +249,76 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
+
+
+#ifdef MMO_WITH_DEV_COMMANDS
+		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args)
+		{
+			// Parse the arguments
+			std::istringstream iss(args);
+			std::vector<std::string> tokens;
+			std::string token;
+			while(iss >> token)
+			{
+				tokens.push_back(token);
+			}
+
+			if (tokens.size() != 1)
+			{
+				ELOG("Usage: createmonster <entry>");
+				return;
+			}
+
+			const uint32 entry = std::stoul(tokens[0]);
+			m_realmConnector.CreateMonster(entry);
+		}, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
+
+
+		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args)
+			{
+				// Parse the arguments
+				std::istringstream iss(args);
+				std::vector<std::string> tokens;
+				std::string token;
+				while (iss >> token)
+				{
+					tokens.push_back(token);
+				}
+
+				if (tokens.size() > 1)
+				{
+					ELOG("Usage: destroymonster <entry>");
+					return;
+				}
+
+				uint64 guid = 0;
+				if (tokens.empty())
+				{
+					guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
+				}
+				else
+				{
+					guid = std::stoul(tokens[0]);
+				}
+
+				if (guid == 0)
+				{
+					ELOG("No target selected and no target guid provided to destroy!");
+					return;
+				}
+
+				m_realmConnector.DestroyMonster(guid);
+			}, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
+#endif
 	}
 
 	void WorldState::RemovePacketHandler() const
 	{
+#ifdef MMO_WITH_DEV_COMMANDS
+		Console::UnregisterCommand("createmonster");
+		Console::UnregisterCommand("destroymonster");
+#endif
+
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::DestroyObjects);

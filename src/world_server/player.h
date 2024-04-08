@@ -85,6 +85,10 @@ namespace mmo
 
 		void OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
+
+		void OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		RealmConnector& m_connector;
 		std::shared_ptr<GameUnitS> m_character;

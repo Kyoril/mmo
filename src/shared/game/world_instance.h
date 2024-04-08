@@ -89,9 +89,16 @@ namespace mmo
 
 		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo);
 
-		std::shared_ptr<GameCreatureS> SpawnCreature(const proto::UnitEntry& entry, Vector3 position, float o, float randomWalkRadius);
+		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius) const;
 
-		MapData* GetMapData() const { return m_mapData.get(); };
+		MapData* GetMapData() const { return m_mapData.get(); }
+
+		/// Creates a temporary creature that the world instance will also keep a strong reference to. The creature will not be spawned and thus
+		///	needs to be spawned using the AddGameObject method.
+		std::shared_ptr<GameCreatureS> CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
+
+		/// Removes the reference to a creature that was created using CreateTemporaryCreature. The creature needs to be despawned before this call.
+		void DestroyTemporaryCreature(uint64 guid);
 
 	protected:
 
@@ -113,6 +120,7 @@ namespace mmo
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;
 		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
 
+		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
 
 		typedef std::unordered_map<uint64, GameObjectS*> GameObjectsByGuid;
 		GameObjectsByGuid m_objectsByGuid;

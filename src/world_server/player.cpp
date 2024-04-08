@@ -5,6 +5,7 @@
 #include "base/utilities.h"
 #include "game/each_tile_in_region.h"
 #include "game/each_tile_in_sight.h"
+#include "game/game_creature_s.h"
 #include "game/visibility_tile.h"
 #include "game/game_object_s.h"
 #include "proto_data/project.h"
@@ -117,6 +118,13 @@ namespace mmo
 		{
 		case game::client_realm_packet::SetSelection:
 			OnSetSelection(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::CheatCreateMonster:
+			OnCheatCreateMonster(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatDestroyMonster:
+			OnCheatDestroyMonster(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::MoveStartForward:
@@ -403,5 +411,54 @@ namespace mmo
 				watcher->SendPacket(movementPacket, buffer);
 			}
 		});
+	}
+
+	void Player::OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const
+	{
+		uint32 entry;
+		if (!(contentReader >> io::read<uint32>(entry)))
+		{
+			ELOG("Missing entry id to create a monster");
+			return;
+		}
+
+		DLOG("Creating monster with entry " << entry);
+
+		const auto* creatureEntry = m_project.units.getById(entry);
+
+		// Spawn a new creature
+		ASSERT(m_worldInstance);
+		const auto spawned = m_worldInstance->CreateTemporaryCreature(*creatureEntry, m_character->GetPosition(), 0.0f, 50.0f);
+		spawned->ClearFieldChanges();
+		m_worldInstance->AddGameObject(*spawned);
+	}
+
+	void Player::OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid to destroy a monster");
+			return;
+		}
+
+		DLOG("Destroying monster with guid " << log_hex_digit(guid));
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid) << " to destroy");
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		m_worldInstance->RemoveGameObject(*object);
+		object->destroy(*object);
 	}
 }
