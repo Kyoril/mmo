@@ -256,6 +256,7 @@ namespace mmo
 		virtual bool HasMovementInfo() const { return false; }
 
 	protected:
+		const proto::Project& m_project;
 		ObjectFieldMap m_fields;
 		MovementInfo m_movementInfo;
 		WorldInstance* m_worldInstance { nullptr };

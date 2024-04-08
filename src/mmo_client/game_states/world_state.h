@@ -126,6 +126,18 @@ namespace mmo
 
 		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
 
+		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket& packet);
+
+	private:
+
+#ifdef MMO_WITH_DEV_COMMANDS
+		void Command_LearnSpell(const std::string& cmd, const std::string& args) const;
+
+		void Command_CreateMonster(const std::string& cmd, const std::string& args) const;
+
+		void Command_DestroyMonster(const std::string& cmd, const std::string& args) const;
+#endif
+
 	private:
 
 		bool LoadMap(const String& assetPath);

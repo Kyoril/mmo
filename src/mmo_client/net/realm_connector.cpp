@@ -284,4 +284,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::LearnSpell(uint32 spellId)
+	{
+		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatLearnSpell);
+			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
 }

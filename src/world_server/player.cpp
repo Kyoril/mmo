@@ -8,11 +8,12 @@
 #include "game/game_creature_s.h"
 #include "game/visibility_tile.h"
 #include "game/game_object_s.h"
+#include "game/game_player_s.h"
 #include "proto_data/project.h"
 
 namespace mmo
 {
-	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject, CharacterData characterData, const proto::Project& project)
+	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project)
 		: m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 		, m_characterData(std::move(characterData))
@@ -21,21 +22,10 @@ namespace mmo
 		m_character->spawned.connect(*this, &Player::OnSpawned);
 		m_character->tileChangePending.connect(*this, &Player::OnTileChangePending);
 
-		for (const auto& spellId : m_characterData.spellIds)
-		{
-			const proto::SpellEntry* spellEntry = m_project.spells.getById(spellId);
-			if (spellEntry)
-			{
-				DLOG("\tPlayer spell: " << spellEntry->id() << " - " << spellEntry->name());
+		m_character->spellLearned.connect(*this, &Player::OnSpellLearned);
+		m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned);
 
-				// TODO
-				//m_character->AddSpell(spellId);
-			}
-			else
-			{
-				WLOG("Player has unknown spell '" << spellId << "'");
-			}
-		}
+		m_character->SetInitialSpells(m_characterData.spellIds);
 	}
 
 	Player::~Player()
@@ -125,6 +115,10 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatDestroyMonster:
 			OnCheatDestroyMonster(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::CheatLearnSpell:
+			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::MoveStartForward:
@@ -460,5 +454,62 @@ namespace mmo
 
 		m_worldInstance->RemoveGameObject(*object);
 		object->destroy(*object);
+	}
+
+	void Player::OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint32>(spellId)))
+		{
+			ELOG("Missing spell id to learn a spell");
+			return;
+		}
+
+		// Find spell with entry
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unable to learn spell: Unknown spell " << spellId);
+			return;
+		}
+
+		DLOG("Learning spell " << spellId << " (" << spell->name() << " [" << spell->rank() << "])");
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!targetObject || targetObject->GetTypeId() != ObjectTypeId::Player)
+		{
+			targetObject = m_character.get();
+		}
+
+		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
+		playerCharacter->AddSpell(spellId);
+	}
+
+	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
+	{
+		SendPacket([&spellEntry](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::LearnedSpell);
+			packet << io::write<uint32>(spellEntry.id());
+			packet.Finish();
+		});
+	}
+
+	void Player::OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
+	{
+		SendPacket([&spellEntry](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::UnlearnedSpell);
+			packet << io::write<uint32>(spellEntry.id());
+			packet.Finish();
+		});
 	}
 }

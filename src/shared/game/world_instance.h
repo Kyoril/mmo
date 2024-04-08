@@ -87,7 +87,7 @@ namespace mmo
 
 		VisibilityGrid& GetGrid() const;
 
-		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo);
+		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo) const;
 
 		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius) const;
 
@@ -102,9 +102,9 @@ namespace mmo
 
 	protected:
 
-		void UpdateObject(GameObjectS& object);
+		void UpdateObject(GameObjectS& object) const;
 
-		void OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo);
+		void OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo) const;
 
 	private:
 		Universe& m_universe;

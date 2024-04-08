@@ -7,7 +7,7 @@
 #include "game/character_data.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
-#include "game/game_unit_s.h"
+#include "game/game_player_s.h"
 #include "game/tile_index.h"
 #include "game/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
@@ -24,7 +24,7 @@ namespace mmo
 	class Player final : public TileSubscriber
 	{
 	public:
-		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GameUnitS> characterObject,
+		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
 		                CharacterData characterData, const proto::Project& project);
 		~Player() override;
 
@@ -89,9 +89,16 @@ namespace mmo
 
 		void OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	private:
+		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
+
+		void OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
+
 	private:
 		RealmConnector& m_connector;
-		std::shared_ptr<GameUnitS> m_character;
+		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
 		const proto::Project& m_project;

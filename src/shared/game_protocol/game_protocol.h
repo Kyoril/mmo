@@ -135,6 +135,7 @@ namespace mmo
 
 				InitialSpells,
 				LearnedSpell,
+				UnlearnedSpell,
 				AttackStart,
 				AttackStop,
 				AttackSwingError,

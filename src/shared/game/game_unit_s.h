@@ -2,11 +2,18 @@
 
 #pragma once
 
+#include <set>
+
 #include "game_object_s.h"
 #include "unit_mover.h"
 
 namespace mmo
 {
+	namespace proto
+	{
+		class SpellEntry;
+	}
+
 	/// @brief Represents a living object (unit) in the game world.
 	class GameUnitS : public GameObjectS
 	{
@@ -34,6 +41,20 @@ namespace mmo
 
 		virtual bool HasMovementInfo() const override { return true; }
 
+	public:
+		bool HasSpell(uint32 spellId) const;
+
+		void SetInitialSpells(const std::vector<uint32>& spellIds);
+
+		void AddSpell(uint32 spellId);
+
+		void RemoveSpell(uint32 spellId);
+
+	protected:
+		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
+
+		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
+
 	protected:
 		virtual void PrepareFieldMap() override
 		{
@@ -54,5 +75,7 @@ namespace mmo
 		TimerQueue& m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
+
+		std::set<const proto::SpellEntry*> m_spells;
 	};
 }

@@ -250,65 +250,13 @@ namespace mmo
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 
 #ifdef MMO_WITH_DEV_COMMANDS
-		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args)
-		{
-			// Parse the arguments
-			std::istringstream iss(args);
-			std::vector<std::string> tokens;
-			std::string token;
-			while(iss >> token)
-			{
-				tokens.push_back(token);
-			}
-
-			if (tokens.size() != 1)
-			{
-				ELOG("Usage: createmonster <entry>");
-				return;
-			}
-
-			const uint32 entry = std::stoul(tokens[0]);
-			m_realmConnector.CreateMonster(entry);
-		}, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
-
-
-		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args)
-			{
-				// Parse the arguments
-				std::istringstream iss(args);
-				std::vector<std::string> tokens;
-				std::string token;
-				while (iss >> token)
-				{
-					tokens.push_back(token);
-				}
-
-				if (tokens.size() > 1)
-				{
-					ELOG("Usage: destroymonster <entry>");
-					return;
-				}
-
-				uint64 guid = 0;
-				if (tokens.empty())
-				{
-					guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
-				}
-				else
-				{
-					guid = std::stoul(tokens[0]);
-				}
-
-				if (guid == 0)
-				{
-					ELOG("No target selected and no target guid provided to destroy!");
-					return;
-				}
-
-				m_realmConnector.DestroyMonster(guid);
-			}, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
+		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
+		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
+		Console::RegisterCommand("learnspell", [this](const std::string& cmd, const std::string& args) { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
 #endif
 	}
 
@@ -317,6 +265,7 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::UnregisterCommand("createmonster");
 		Console::UnregisterCommand("destroymonster");
+		Console::UnregisterCommand("learnspell");
 #endif
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
@@ -340,6 +289,9 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::InitialSpells);
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureMove);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::LearnedSpell);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UnlearnedSpell);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -643,8 +595,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// TODO: Store spell ids
-		DLOG("Received " << spellIds.size() << " initial spells");
+		ASSERT(m_playerController->GetControlledUnit());
+		m_playerController->GetControlledUnit()->SetInitialSpells(spellIds);
 
 		return PacketParseResult::Pass;
 	}
@@ -733,6 +685,108 @@ namespace mmo
 		unitPtr->SetMovementPath(path);
 
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellLearnedOrUnlearned(game::IncomingPacket& packet)
+	{
+		uint32 spellId;
+		if (!(packet >> io::read<uint32>(spellId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ASSERT(m_playerController->GetControlledUnit());
+		if (packet.GetId() == game::realm_client_packet::LearnedSpell)
+		{
+			m_playerController->GetControlledUnit()->LearnSpell(spellId);
+		}
+		else
+		{
+			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.size() != 1)
+		{
+			ELOG("Usage: learnspell <entry>");
+			return;
+		}
+
+		const uint32 entry = std::stoul(tokens[0]);
+		if (entry == 0)
+		{
+			ELOG("Invalid spell id provided: '" << entry << "'");
+			return;
+		}
+
+		m_realmConnector.LearnSpell(entry);
+	}
+
+	void WorldState::Command_CreateMonster(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.size() != 1)
+		{
+			ELOG("Usage: createmonster <entry>");
+			return;
+		}
+
+		const uint32 entry = std::stoul(tokens[0]);
+		m_realmConnector.CreateMonster(entry);
+	}
+
+	void WorldState::Command_DestroyMonster(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.size() > 1)
+		{
+			ELOG("Usage: destroymonster <entry>");
+			return;
+		}
+
+		uint64 guid = 0;
+		if (tokens.empty())
+		{
+			guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
+		}
+		else
+		{
+			guid = std::stoul(tokens[0]);
+		}
+
+		if (guid == 0)
+		{
+			ELOG("No target selected and no target guid provided to destroy!");
+			return;
+		}
+
+		m_realmConnector.DestroyMonster(guid);
 	}
 
 	bool WorldState::LoadMap(const String& assetPath)

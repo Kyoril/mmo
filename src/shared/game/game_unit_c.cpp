@@ -204,4 +204,22 @@ namespace mmo
 
 		m_movementEnd = prevPosition;
 	}
+
+	void GameUnitC::SetInitialSpells(const std::vector<uint32>& spellIds)
+	{
+		for (const auto spellId : spellIds)
+		{
+			DLOG("Initial spell: " << spellId);
+		}
+	}
+
+	void GameUnitC::LearnSpell(const uint32 spellId)
+	{
+		DLOG("Learned spell " << spellId);
+	}
+
+	void GameUnitC::UnlearnSpell(const uint32 spellId)
+	{
+		DLOG("Unlearned spell " << spellId);
+	}
 }

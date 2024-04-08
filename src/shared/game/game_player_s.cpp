@@ -2,7 +2,8 @@
 
 #include "game_player_s.h"
 
+#include "proto_data/project.h"
+
 namespace mmo
 {
-
 }

@@ -8,6 +8,7 @@
 namespace mmo
 {
 	GameObjectS::GameObjectS(const proto::Project& project)
+		: m_project(project)
 	{
 	}
 

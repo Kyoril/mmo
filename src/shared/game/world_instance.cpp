@@ -5,7 +5,6 @@
 #include "creature_spawner.h"
 #include "each_tile_in_sight.h"
 #include "game_creature_s.h"
-#include "game_player_s.h"
 #include "world_instance_manager.h"
 #include "regular_update.h"
 #include "tile_subscriber.h"
@@ -246,7 +245,7 @@ namespace mmo
 	}
 
 	void WorldInstance::NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo,
-		const MovementInfo& newMovementInfo)
+		const MovementInfo& newMovementInfo) const
 	{
 		OnObjectMoved(object, previousMovementInfo);
 	}
@@ -292,7 +291,7 @@ namespace mmo
 		m_temporaryCreatures.erase(it);
 	}
 
-	void WorldInstance::UpdateObject(GameObjectS& object)
+	void WorldInstance::UpdateObject(GameObjectS& object) const
 	{
 		const std::vector objects{ &object };
 
@@ -301,7 +300,7 @@ namespace mmo
 		ForEachSubscriberInSight(
 			*m_visibilityGrid,
 			center,
-			[&object, &objects](TileSubscriber& subscriber)
+			[&objects](const TileSubscriber& subscriber)
 			{
 				auto& character = subscriber.GetGameUnit();
 				subscriber.NotifyObjectsUpdated(objects);
@@ -310,7 +309,7 @@ namespace mmo
 		object.ClearFieldChanges();
 	}
 
-	void WorldInstance::OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo)
+	void WorldInstance::OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo) const
 	{
 		// Calculate old tile index
 		TileIndex2D oldIndex;

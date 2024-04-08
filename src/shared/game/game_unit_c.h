@@ -45,6 +45,13 @@ namespace mmo
 		void SetMovementPath(const std::vector<Vector3>& points);
 
 	public:
+		void SetInitialSpells(const std::vector<uint32>& spellIds);
+
+		void LearnSpell(uint32 spellId);
+
+		void UnlearnSpell(uint32 spellId);
+
+	public:
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
 
 	protected:

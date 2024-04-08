@@ -135,6 +135,8 @@ namespace mmo
 					ImGui::BeginDisabled(currentCreatureSpawn == -1 || currentCreatureSpawn >= currentEntry->unitspawns_size());
 					if (ImGui::Button("Remove", ImVec2(-1, 0)))
 					{
+						currentEntry->mutable_unitspawns()->erase(currentEntry->mutable_unitspawns()->begin() + currentCreatureSpawn);
+						currentCreatureSpawn = -1;
 					}
 					ImGui::EndDisabled();
 
@@ -143,7 +145,11 @@ namespace mmo
 					{
 						const auto* spawns = static_cast<google::protobuf::RepeatedPtrField<proto::UnitSpawnEntry>*>(data);
 						const auto& entry = spawns->at(idx);
-						*out_text = entry.name().c_str();
+
+						std::ostringstream stream;
+						stream << "#" << std::setw(6) << std::setfill('0') << entry.unitentry();
+						*out_text = stream.str().c_str();
+
 						return true;
 					}, currentEntry->mutable_unitspawns(), currentEntry->unitspawns_size(), 20);
 					ImGui::EndChild();
