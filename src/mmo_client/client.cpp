@@ -34,6 +34,7 @@
 #include "base/timer_queue.h"
 
 #include "base/executable_path.h"
+#include "client_data/project.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -210,6 +211,13 @@ namespace mmo
 	static std::unique_ptr<TimerQueue> s_timerQueue;
 	static scoped_connection s_timerConnection;
 
+	struct CDBSpellEntry
+	{
+		String name;
+		String description;
+		String icon;
+	};
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -258,7 +266,12 @@ namespace mmo
 		ASSERT(s_loginConnector && s_realmConnector);
 
 		// Load game data
-
+		proto_client::Project project;
+		if (!project.load("ClientDB"))
+		{
+			ELOG("Failed to load project files!");
+			return false;
+		}
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 

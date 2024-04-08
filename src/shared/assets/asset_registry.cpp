@@ -106,9 +106,14 @@ namespace mmo
 		s_filesystemArchive.reset();
 	}
 
-	std::unique_ptr<std::istream> AssetRegistry::OpenFile(const std::string & filename)
+	std::unique_ptr<std::istream> AssetRegistry::OpenFile(std::string filename)
 	{
 		std::unique_lock lock { s_fileLock };
+
+		std::transform(filename.begin(), filename.end(), filename.begin(), [](const char c)
+		{
+			return c == '\\' ? '/' : c;
+		});
 
 		// Try to find the requested file
 		const auto it = s_files.find(filename);

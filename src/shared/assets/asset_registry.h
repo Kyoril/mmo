@@ -32,7 +32,7 @@ namespace mmo
 		static void Destroy();
 
 		/// Opens a file for reading. Returns nullptr if the files doesn't exist.
-		static std::unique_ptr<std::istream> OpenFile(const std::string& filename);
+		static std::unique_ptr<std::istream> OpenFile(std::string filename);
 
 		/// Determines whether a given file name is already taken.
 		static bool HasFile(const std::string& filename);

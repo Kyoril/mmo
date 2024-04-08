@@ -16,6 +16,7 @@
 #include "object_mgr.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
+#include "shared/proto_data/spells.pb.h"
 
 
 namespace mmo
@@ -155,6 +156,11 @@ namespace mmo
 
 			return "Unknown";
 		}
+
+		const proto::SpellEntry* Script_GetSpellById(uint32 spellId)
+		{
+			return nullptr;
+		}
 	}
 
 
@@ -212,6 +218,11 @@ namespace mmo
 				luabind::class_<LoginState>("LoginState")
 					.def("EnterWorld", &LoginState::EnterWorld)),
 
+			luabind::scope(
+				luabind::class_<proto::SpellEntry>("Spell")
+				.def_readonly("id", &proto::SpellEntry::id)
+				.def_readonly("name", &proto::SpellEntry::name)
+				.def_readonly("description", &proto::SpellEntry::description)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -224,7 +235,9 @@ namespace mmo
 			luabind::def("UnitMana", &Script_UnitMana),
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
-			luabind::def("UnitName", &Script_UnitName)
+			luabind::def("UnitName", &Script_UnitName),
+
+			luabind::def("GetSpellById", &Script_GetSpellById)
 		];
 
 		// Set login connector instance

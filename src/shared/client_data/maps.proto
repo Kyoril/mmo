@@ -1,0 +1,20 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message MapEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required string directory = 3;
+	enum MapInstanceType {
+		GLOBAL = 0;
+		DUNGEON = 1;
+		RAID = 2;
+		BATTLEGROUND = 3;
+		ARENA = 4;
+	}
+	optional MapInstanceType instancetype = 4 [default = GLOBAL];
+}
+
+message Maps {
+	repeated MapEntry entry = 1;
+}
