@@ -211,12 +211,7 @@ namespace mmo
 	static std::unique_ptr<TimerQueue> s_timerQueue;
 	static scoped_connection s_timerConnection;
 
-	struct CDBSpellEntry
-	{
-		String name;
-		String description;
-		String icon;
-	};
+	static proto_client::Project s_project;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -266,8 +261,7 @@ namespace mmo
 		ASSERT(s_loginConnector && s_realmConnector);
 
 		// Load game data
-		proto_client::Project project;
-		if (!project.load("ClientDB"))
+		if (!s_project.load("ClientDB"))
 		{
 			ELOG("Failed to load project files!");
 			return false;
@@ -279,11 +273,11 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState, s_project);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
@@ -300,8 +294,7 @@ namespace mmo
 		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
 		if (window)
 		{
-			FrameManager::Get().NotifyScreenSizeChanged(
-			window->GetWidth(), window->GetHeight());	
+			FrameManager::Get().NotifyScreenSizeChanged(window->GetWidth(), window->GetHeight());	
 		}
 
 		// TODO: Initialize other systems

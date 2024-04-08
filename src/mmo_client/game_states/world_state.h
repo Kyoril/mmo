@@ -18,6 +18,7 @@
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
+#include "client_data/project.h"
 #include "proto_data/proto_template.h"
 
 namespace mmo
@@ -42,7 +43,8 @@ namespace mmo
 		/// @brief Creates a new instance of the WorldState class and initializes it.
 		/// @param gameStateManager The game state manager that this state belongs to.
 		/// @param realmConnector The connector which manages the connection to the realm server.
-		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector);
+		/// @param project 
+		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project);
 
 	public:
 		/// @brief The default name of the world state
@@ -168,5 +170,6 @@ namespace mmo
 
 		scoped_connection_container m_playerObservers;
 
+		const proto_client::Project& m_project;
 	};
 }

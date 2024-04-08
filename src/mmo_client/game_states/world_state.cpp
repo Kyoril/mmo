@@ -39,10 +39,11 @@ namespace mmo
 		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
 	
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_playerNameCache(m_realmConnector)
+		, m_project(project)
 	{
 	}
 

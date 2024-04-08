@@ -157,17 +157,18 @@ namespace mmo
 			return "Unknown";
 		}
 
-		const proto::SpellEntry* Script_GetSpellById(uint32 spellId)
+		const proto_client::SpellEntry* Script_GetSpellById(uint32 spellId)
 		{
 			return nullptr;
 		}
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, std::shared_ptr<LoginState> loginState)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, std::shared_ptr<LoginState> loginState, const proto_client::Project& project)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_loginState(std::move(loginState))
+		, m_project(project)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -189,21 +190,29 @@ namespace mmo
 		// Register common functions
 		luabind::module(m_luaState.get())
 		[
-			luabind::scope(
-				luabind::class_<mmo::RealmData>("RealmData")
-					.def_readonly("id", &mmo::RealmData::id)
-					.def_readonly("name", &mmo::RealmData::name)),
+		luabind::scope(
+			luabind::class_<mmo::RealmData>("RealmData")
+			.def_readonly("id", &mmo::RealmData::id)
+			.def_readonly("name", &mmo::RealmData::name)),
 
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
-					.def_readonly("guid", &mmo::CharacterView::GetGuid)
-					.def_readonly("name", &mmo::CharacterView::GetName)
-					.def_readonly("level", &mmo::CharacterView::GetLevel)),
+				.def_readonly("guid", &mmo::CharacterView::GetGuid)
+				.def_readonly("name", &mmo::CharacterView::GetName)
+				.def_readonly("level", &mmo::CharacterView::GetLevel)),
 
 			luabind::scope(
 				luabind::class_<LoginConnector>("LoginConnector")
-					.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
-					.def("IsConnected", &LoginConnector::IsConnected)),
+				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
+				.def("IsConnected", &LoginConnector::IsConnected)),
+
+			luabind::scope(
+				luabind::class_<proto_client::Project>("Project")
+				.def_readonly("spells", &mmo::proto_client::Project::spells)),
+
+			luabind::scope(
+				luabind::class_<proto_client::SpellManager>("SpellManager")
+				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
 
 			luabind::scope(
 				luabind::class_<RealmConnector>("RealmConnector")
@@ -219,10 +228,10 @@ namespace mmo
 					.def("EnterWorld", &LoginState::EnterWorld)),
 
 			luabind::scope(
-				luabind::class_<proto::SpellEntry>("Spell")
-				.def_readonly("id", &proto::SpellEntry::id)
-				.def_readonly("name", &proto::SpellEntry::name)
-				.def_readonly("description", &proto::SpellEntry::description)),
+				luabind::class_<proto_client::SpellEntry>("Spell")
+				.def_readonly("id", &proto_client::SpellEntry::id)
+				.def_readonly("name", &proto_client::SpellEntry::name)
+				.def_readonly("description", &proto_client::SpellEntry::description)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -235,15 +244,13 @@ namespace mmo
 			luabind::def("UnitMana", &Script_UnitMana),
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
-			luabind::def("UnitName", &Script_UnitName),
-
-			luabind::def("GetSpellById", &Script_GetSpellById)
+			luabind::def("UnitName", &Script_UnitName)
 		];
 
-		// Set login connector instance
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["loginState"] = m_loginState.get();
+		luabind::globals(m_luaState.get())["project"] = &m_project;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;
