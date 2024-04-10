@@ -362,6 +362,7 @@ namespace mmo
 	               .def("Clone", &Frame::Clone)
 	               .def("AddChild", &Frame::AddChild)
 	               .def("GetChildCount", &Frame::GetChildCount)
+	               .def("GetChild", &Frame::GetChild)
 	               .def("SetAnchor", &Frame::SetAnchor)
 	               .def("SetSize", &Frame::SetSize)
 	               .def("SetWidth", &Frame::SetWidth)

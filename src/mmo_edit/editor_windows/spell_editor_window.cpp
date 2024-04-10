@@ -143,6 +143,8 @@ namespace mmo
 				ImGui::InputText("ID", &idString);
 				ImGui::EndDisabled();
 
+				ImGui::InputTextMultiline("Description", currentSpell->mutable_description());
+
 				SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
 				SLIDER_UINT32_PROP(baselevel, "Base Level", 0, 100);
 				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
