@@ -119,6 +119,16 @@ namespace mmo
 				currentSpell->set_##name(value); \
 		} \
 	}
+#define SLIDER_FLOAT_PROP(name, label, min, max) \
+	{ \
+		const char* format = "%.2f"; \
+		float value = currentSpell->name(); \
+		if (ImGui::InputScalar(label, ImGuiDataType_Float, &value, nullptr, nullptr)) \
+		{ \
+			if (value >= min && value <= max) \
+				currentSpell->set_##name(value); \
+		} \
+	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
@@ -126,14 +136,22 @@ namespace mmo
 			if (currentSpell)
 			{
 				ImGui::InputText("Name", currentSpell->mutable_name());
+				ImGui::SameLine();
 
 				ImGui::BeginDisabled(true);
 				String idString = std::to_string(currentSpell->id());
 				ImGui::InputText("ID", &idString);
 				ImGui::EndDisabled();
 
+				ImGui::InputTextMultiline("Description", currentSpell->mutable_description());
+
 				SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
+				SLIDER_UINT32_PROP(baselevel, "Base Level", 0, 100);
 				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
+				SLIDER_UINT32_PROP(maxlevel, "Max Level", 0, 100);
+				SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
+				SLIDER_UINT32_PROP(spelllevel, "Spell Level", 0, 100);
+				SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 
 				int currentSchool = currentSpell->spellschool();
 				if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)

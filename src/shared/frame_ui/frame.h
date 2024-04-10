@@ -282,6 +282,9 @@ namespace mmo
 		/// Adds a frame to the list of child frames.
 		virtual uint32 GetChildCount() const { return m_children.size(); }
 
+		/// Adds a frame to the list of child frames.
+		virtual Frame* GetChild(uint32 index) const { return index < m_children.size() ? m_children[index].get() : nullptr; }
+
 		/// Removes all child frames.
 		void RemoveAllChildren();
 
