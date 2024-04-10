@@ -231,7 +231,9 @@ namespace mmo
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
-				.def_readonly("description", &proto_client::SpellEntry::description)),
+				.def_readonly("description", &proto_client::SpellEntry::description)
+				.def_readonly("cost", &proto_client::SpellEntry::description)
+				.def_readonly("casttime", &proto_client::SpellEntry::description)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
