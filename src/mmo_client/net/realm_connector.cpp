@@ -7,6 +7,7 @@
 #include "base/constants.h"
 #include "base/random.h"
 #include "base/sha1.h"
+#include "game/spell_target_map.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 
@@ -290,6 +291,17 @@ namespace mmo
 		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatLearnSpell);
 			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CastSpell);
+			packet
+				<< io::write<uint32>(spellId)
+				<< targetMap;
 			packet.Finish();
 			});
 	}

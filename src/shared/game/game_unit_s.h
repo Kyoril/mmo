@@ -5,7 +5,10 @@
 #include <set>
 
 #include "game_object_s.h"
+#include "spell_cast.h"
+#include "spell_target_map.h"
 #include "unit_mover.h"
+#include "base/countdown.h"
 
 namespace mmo
 {
@@ -24,6 +27,7 @@ namespace mmo
 		signal<void(GameUnitS*)> killed;
 		signal<void(GameUnitS&, float)> threatened;
 		signal<void(GameUnitS*, uint32)> takenDamage;
+		signal<void(const proto::SpellEntry&)> startedCasting;
 
 	public:
 		GameUnitS(const proto::Project& project,
@@ -50,10 +54,14 @@ namespace mmo
 
 		void RemoveSpell(uint32 spellId);
 
+		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
+
 	protected:
 		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
 
 		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
+
+		virtual void OnSpellCastEnded(bool succeeded);
 
 	protected:
 		virtual void PrepareFieldMap() override
@@ -66,6 +74,8 @@ namespace mmo
 		/// 
 		void OnDespawnTimer();
 
+		void TriggerNextAutoAttack();
+
 	public:
 		TimerQueue& GetTimers() const { return m_timers; }
 
@@ -75,7 +85,12 @@ namespace mmo
 		TimerQueue& m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
+		Countdown m_attackSwingCountdown;
+		GameTime m_lastMainHand, m_lastOffHand;
+		Countdown m_regenCountdown;
+		GameTime m_lastManaUse;
 
 		std::set<const proto::SpellEntry*> m_spells;
+		std::unique_ptr<SpellCast> m_spellCast;
 	};
 }

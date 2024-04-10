@@ -91,6 +91,8 @@ namespace mmo
 
 		void OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnSpellCast(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 

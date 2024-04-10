@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class SpellTargetMap;
 	class MovementInfo;
 
 	/// This class manages the connection to the current realm server if there is any.
@@ -107,6 +108,8 @@ namespace mmo
 		void DestroyMonster(uint64 guid);
 
 		void LearnSpell(uint32 spellId);
+
+		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

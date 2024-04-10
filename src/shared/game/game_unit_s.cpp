@@ -7,12 +7,18 @@
 
 namespace mmo
 {
-	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers): GameObjectS(project)
-	                                                                         , m_timers(timers)
-	                                                                         , m_despawnCountdown(timers)
+	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers)
+		: GameObjectS(project)
+		, m_timers(timers)
+		, m_despawnCountdown(timers)
+		, m_attackSwingCountdown(timers)
+		, m_regenCountdown(timers)
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
+
+		// Create spell caster
+		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
 	}
 
 	void GameUnitS::Initialize()
@@ -112,11 +118,60 @@ namespace mmo
 		}
 	}
 
+	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs)
+	{
+		const auto result = m_spellCast->StartCast(spell, target, castTimeMs);
+		if (result.first == spell_cast_result::CastOkay)
+		{
+			startedCasting(spell);
+		}
+
+		// Reset auto attack timer if requested
+		if (result.first == spell_cast_result::CastOkay &&
+			m_attackSwingCountdown.IsRunning() &&
+			result.second)
+		{
+			// Register for casts ended-event
+			if (castTimeMs > 0)
+			{
+				// Pause auto attack during spell cast
+				m_attackSwingCountdown.Cancel();
+				result.second->ended.connect(this, &GameUnitS::OnSpellCastEnded);
+			}
+			else
+			{
+				// Cast already finished since it was an instant cast
+				OnSpellCastEnded(true);
+			}
+		}
+
+		return result.first;
+	}
+
+	void GameUnitS::OnSpellCastEnded(bool succeeded)
+	{
+		// TODO
+		/*if (m_victim)
+		{
+			m_lastMainHand = m_lastOffHand = GetAsyncTimeMs();
+
+			if (!m_attackSwingCountdown.IsRunning())
+			{
+				TriggerNextAutoAttack();
+			}
+		}*/
+	}
+
 	void GameUnitS::OnDespawnTimer()
 	{
 		if (m_worldInstance)
 		{
 			m_worldInstance->RemoveGameObject(*this);
 		}
+	}
+
+	void GameUnitS::TriggerNextAutoAttack()
+	{
+		// TODO
 	}
 }

@@ -9,6 +9,7 @@
 #include "game/visibility_tile.h"
 #include "game/game_object_s.h"
 #include "game/game_player_s.h"
+#include "game/spell_target_map.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -491,6 +492,34 @@ namespace mmo
 
 		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
 		playerCharacter->AddSpell(spellId);
+	}
+
+	void Player::OnSpellCast(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		// Read spell cast packet
+		uint32 spellId;
+		SpellTargetMap targetMap;
+
+		if (!(contentReader >> io::read<uint32>(spellId) >> targetMap))
+		{
+			WLOG("Could not read packet data");
+			return;
+		}
+
+		// Look for the spell
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			return;
+		}
+
+		// Get the cast time of this spell
+		int64 castTime = spell->casttime();
+
+		// TODO: Apply cast time modifiers
+
+		// Spell cast logic
+		m_character->CastSpell(targetMap, *spell, castTime);
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)

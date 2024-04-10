@@ -1,0 +1,547 @@
+
+#include "single_cast_state.h"
+
+#include "no_cast_state.h"
+
+namespace mmo
+{
+	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc)
+		: m_cast(cast)
+		, m_spell(spell)
+		, m_target(target)
+		, m_hasFinished(false)
+		, m_countdown(cast.GetTimerQueue())
+		, m_impactCountdown(cast.GetTimerQueue())
+		, m_castTime(castTime)
+		, m_castEnd(0)
+		, m_isProc(isProc)
+		, m_projectileStart(0)
+		, m_projectileEnd(0)
+		, m_connectedMeleeSignal(false)
+		, m_delayCounter(0)
+		, m_tookCastItem(false)
+		, m_tookReagents(false)
+		, m_attackerProc(0)
+		, m_victimProc(0)
+		, m_canTrigger(false)
+		, m_instantsCast(false)
+		, m_delayedCast(false)
+	{
+		// Check if the executor is in the world
+		auto& executor = m_cast.GetExecuter();
+		const auto* worldInstance = executor.GetWorldInstance();
+
+		//m_castTime *= executor.Get<float>(object_fields::ModCastSpeed);
+
+		auto const casterId = executor.GetGuid();
+
+		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc)
+		{
+			SendPacketFromCaster(
+				executor,
+				[casterId, this](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::SpellStart);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<uint32>(m_spell.id())
+						<< io::write<GameTime>(m_castTime)
+						<< m_target;
+					out_packet.Finish();
+				});
+		}
+
+		if (worldInstance && IsChanneled())
+		{
+			SendPacketFromCaster(
+				executor,
+				[casterId, this](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::ChannelStart);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<uint32>(m_spell.id())
+						<< io::write<int32>(m_spell.duration());
+					out_packet.Finish();
+				}
+			);
+
+			//executor.Set<uint64>(object_fields::ChannelObject, m_target.getUnitTarget());
+			//executor.Set<uint32>(object_fields::ChannelSpell, m_spell.id());
+		}
+
+		const Vector3& location = m_cast.GetExecuter().GetPosition();
+		m_x = location.x, m_y = location.y, m_z = location.z;
+
+		m_countdown.ended.connect([this]()
+			{
+				if (IsChanneled())
+				{
+					this->FinishChanneling();
+				}
+				else
+				{
+					this->OnCastFinished();
+				}
+			});
+	}
+
+	void SingleCastState::Activate()
+	{
+		if (m_castTime > 0)
+		{
+			m_castEnd = GetAsyncTimeMs() + m_castTime;
+			m_countdown.SetEnd(m_castEnd);
+
+			WorldInstance* world = m_cast.GetExecuter().GetWorldInstance();
+			ASSERT(world);
+
+			GameUnitS* unitTarget = nullptr;
+			if (m_target.HasUnitTarget())
+			{
+				unitTarget = dynamic_cast<GameUnitS*>(world->FindObjectByGuid(m_target.GetUnitTarget()));
+			}
+			
+			if (unitTarget)
+			{
+				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
+				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
+			}
+
+			if (m_spell.attributes(0) & spell_attributes::NotInCombat)
+			{
+				m_onThreatened = m_cast.GetExecuter().threatened.connect(std::bind(&SingleCastState::StopCast, this, 0));
+			}
+		}
+		else
+		{
+			WorldInstance* world = m_cast.GetExecuter().GetWorldInstance();
+			ASSERT(world);
+
+			GameUnitS* unitTarget = nullptr;
+			if (m_target.HasUnitTarget())
+			{
+				unitTarget = dynamic_cast<GameUnitS*>(world->FindObjectByGuid(m_target.GetUnitTarget()));
+			}
+
+			if (unitTarget)
+			{
+				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
+				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
+			}
+		}
+
+		OnCastFinished();
+	}
+
+	std::pair<SpellCastResult, SpellCasting*> SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast)
+	{
+		if (!m_hasFinished && !doReplacePreviousCast)
+		{
+			return std::make_pair(spell_cast_result::FailedSpellInProgress, &m_casting);
+		}
+
+		FinishChanneling();
+
+		SpellCasting& casting = CastSpell(
+			cast,
+			spell,
+			target,
+			castTime);
+
+		return std::make_pair(spell_cast_result::CastOkay, &casting);
+	}
+
+	void SingleCastState::StopCast(const GameTime interruptCooldown)
+	{
+		FinishChanneling();
+
+		// Nothing to cancel
+		if (m_hasFinished)
+		{
+			return;
+		}
+
+		m_countdown.Cancel();
+		SendEndCast(spell_cast_result::FailedBadTargets);
+		m_hasFinished = true;
+
+		if (interruptCooldown)
+		{
+			ApplyCooldown(interruptCooldown, interruptCooldown);
+		}
+
+		const std::weak_ptr weakThis = shared_from_this();
+		m_casting.ended(false);
+
+		if (weakThis.lock())
+		{
+			m_cast.SetState(std::make_shared<NoCastState>());
+		}
+	}
+
+	void SingleCastState::OnUserStartsMoving()
+	{
+		if (m_hasFinished)
+		{
+			return;
+		}
+
+		// Interrupt spell cast if moving
+		const Vector3 location = m_cast.GetExecuter().GetPosition();
+		if (location.x != m_x || location.y != m_y || location.z != m_z)
+		{
+			StopCast();
+		}
+	}
+
+	void SingleCastState::FinishChanneling()
+	{
+		if (!IsChanneled())
+		{
+			return;
+		}
+
+		// Caster could have left the world
+		auto* world = m_cast.GetExecuter().GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		const uint64 casterId = m_cast.GetExecuter().GetGuid();
+		SendPacketFromCaster(m_cast.GetExecuter(),
+			[casterId](game::OutgoingPacket& out_packet)
+			{
+				out_packet.Start(game::realm_client_packet::ChannelUpdate);
+				out_packet
+					<< io::write_packed_guid(casterId)
+					<< io::write<GameTime>(0);
+				out_packet.Finish();
+			});
+
+		//m_cast.GetExecuter().Set<uint64>(object_fields::ChannelObject, 0);
+		//m_cast.GetExecuter().Set<uint32>(object_fields::ChannelSpell, 0);
+		m_casting.ended(true);
+	}
+
+	bool SingleCastState::ConsumeItem(bool delayed)
+	{
+		return false;
+	}
+
+	bool SingleCastState::ConsumeReagents(bool delayed)
+	{
+		return false;
+	}
+
+	bool SingleCastState::ConsumePower()
+	{
+		return false;
+	}
+
+	void SingleCastState::ApplyCooldown(uint64 cooldownTimeMS, uint64 catCooldownTimeMS)
+	{
+	}
+
+	void SingleCastState::ApplyAllEffects(bool executeInstants, bool executeDelayed)
+	{
+	}
+
+	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
+	{
+		return 0;
+	}
+
+	uint32 SingleCastState::GetSpellPointsTotal(const proto::SpellEffect& effect, uint32 spellPower, uint32 bonusPct)
+	{
+		return 0;
+	}
+
+	void SingleCastState::MeleeSpecialAttack(const proto::SpellEffect& effect, bool basepointsArePct)
+	{
+		
+	}
+
+	void SingleCastState::SpellEffectInstantKill(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectDummy(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectApplyAura(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectPersistentAreaAura(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectDrainPower(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectHeal(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectQuestComplete(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectEnergize(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectOpenLock(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectDispel(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectSummon(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectSummonPet(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectWeaponDamage(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectPowerBurn(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectTriggerSpell(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectScript(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectAddComboPoints(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectDuel(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectCharge(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectAttackMe(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectInterruptCast(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectLearnSpell(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectScriptEffect(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectDispelMechanic(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectResurrect(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectResurrectNew(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectKnockBack(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectSkill(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
+	{
+	}
+
+	void SingleCastState::SendEndCast(SpellCastResult result)
+	{
+		auto& executer = m_cast.GetExecuter();
+		auto* worldInstance = executer.GetWorldInstance();
+
+		if (!worldInstance || m_spell.attributes(0) & spell_attributes::Passive)
+		{
+			return;
+		}
+
+		// Raise event
+		GetCasting().ended(result == spell_cast_result::CastOkay);
+
+		const uint64 casterId = executer.GetGuid();
+		const uint32 spellId = m_spell.id();
+
+		if (result == spell_cast_result::CastOkay)
+		{
+			// Instead of self-targeting, use unit target
+			SpellTargetMap targetMap = m_target;
+			if (targetMap.GetTargetMap() == spell_cast_target_flags::Self)
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(executer.GetGuid());
+			}
+
+			SendPacketFromCaster(executer,
+				[casterId, spellId, &targetMap](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::SpellGo);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<uint32>(spellId)
+						<< io::write<GameTime>(GetAsyncTimeMs())
+						<< targetMap;
+					out_packet.Finish();
+				});
+		}
+		else
+		{
+			SendPacketFromCaster(executer,
+				[casterId, spellId, result](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::SpellFailure);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<uint32>(spellId)
+						<< io::write<GameTime>(GetAsyncTimeMs())
+						<< io::write<uint8>(result);
+					out_packet.Finish();
+				});
+		}
+	}
+
+	void SingleCastState::OnCastFinished()
+	{
+		auto strongThis = shared_from_this();
+
+		if (m_castTime > 0)
+		{
+			if (!m_cast.GetExecuter().GetWorldInstance())
+			{
+				m_hasFinished = true;
+				return;
+			}
+
+			// TODO: Range check etc.
+		}
+
+		m_hasFinished = true;
+
+		if (!ConsumePower()) 
+		{
+			return;
+		}
+
+		if (!ConsumeReagents()) 
+		{
+			return;
+		}
+
+		if (!ConsumeItem()) 
+		{
+			return;
+		}
+
+		SendEndCast(spell_cast_result::CastOkay);
+
+		if (m_spell.speed() > 0.0f)
+		{
+			// Apply all instant effects
+			ApplyAllEffects(true, false);
+
+			// TODO: calculate distance and start delayed spell effect execution
+		}
+		else
+		{
+			ApplyAllEffects(true, true);
+		}
+
+		if (!IsChanneled())
+		{
+			//may destroy this, too
+			m_casting.ended(true);
+		}
+	}
+
+	void SingleCastState::OnTargetKilled(GameUnitS*)
+	{
+		StopCast();
+	}
+
+	void SingleCastState::OnTargetDespawned(GameObjectS&)
+	{
+		StopCast();
+	}
+
+	void SingleCastState::OnUserDamaged()
+	{
+
+	}
+
+	void SingleCastState::ExecuteMeleeAttack()
+	{
+	}
+}
