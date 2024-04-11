@@ -122,6 +122,10 @@ namespace mmo
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::CastSpell:
+			OnSpellCast(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -510,8 +514,11 @@ namespace mmo
 		const auto* spell = m_project.spells.getById(spellId);
 		if (!spell)
 		{
+			ELOG("Tried to cast unknown spell " << spellId);
 			return;
 		}
+
+		DLOG("Casting spell " << spellId << " (" << spell->name() << ")...");
 
 		// Get the cast time of this spell
 		int64 castTime = spell->casttime();

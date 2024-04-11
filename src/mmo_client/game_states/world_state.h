@@ -130,6 +130,10 @@ namespace mmo
 
 		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket& packet);
 
+		PacketParseResult OnSpellStart(game::IncomingPacket& packet);
+
+		PacketParseResult OnSpellGo(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -139,6 +143,8 @@ namespace mmo
 
 		void Command_DestroyMonster(const std::string& cmd, const std::string& args) const;
 #endif
+
+		void Command_CastSpell(const std::string& cmd, const std::string& args);
 
 	private:
 

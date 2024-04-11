@@ -81,6 +81,7 @@ namespace mmo
 			{
 				auto* spell = m_project.spells.add();
 				spell->set_name("New spell");
+				spell->add_attributes(0);
 			}
 
 			ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.spells.count());
@@ -135,6 +136,12 @@ namespace mmo
 			ImGui::BeginChild("spellDetails", ImVec2(-1, -1));
 			if (currentSpell)
 			{
+				// Migration: Ensure spell has at least one attribute bitmap
+				if (currentSpell->attributes_size() < 1)
+				{
+					currentSpell->add_attributes(0);
+				}
+
 				ImGui::InputText("Name", currentSpell->mutable_name());
 				ImGui::SameLine();
 

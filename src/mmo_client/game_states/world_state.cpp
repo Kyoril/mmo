@@ -22,6 +22,7 @@
 #include "world_deserializer.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
+#include "game/spell_target_map.h"
 
 namespace mmo
 {
@@ -253,12 +254,17 @@ namespace mmo
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
+		
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
 		Console::RegisterCommand("learnspell", [this](const std::string& cmd, const std::string& args) { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
 #endif
+
+		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -268,6 +274,8 @@ namespace mmo
 		Console::UnregisterCommand("destroymonster");
 		Console::UnregisterCommand("learnspell");
 #endif
+
+		Console::UnregisterCommand("cast");
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
@@ -293,6 +301,8 @@ namespace mmo
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::LearnedSpell);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UnlearnedSpell);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellStart);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellGo);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -709,6 +719,47 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnSpellStart(game::IncomingPacket& packet)
+	{
+		uint64 casterId;
+		uint32 spellId;
+		GameTime castTime;
+		SpellTargetMap targetMap;
+
+		if (!(packet 
+			>> io::read_packed_guid(casterId)
+			>> io::read<uint32>(spellId)
+			>> io::read<GameTime>(castTime)
+			>> targetMap))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Unit " << log_hex_digit(casterId) << " starts casting spell " << std::dec << spellId << " (cast time: " << castTime << " ms)");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellGo(game::IncomingPacket& packet)
+	{
+		uint64 casterId;
+		uint32 spellId;
+		GameTime gameTime;
+		SpellTargetMap targetMap;
+
+		if (!(packet
+			>> io::read_packed_guid(casterId)
+			>> io::read<uint32>(spellId)
+			>> io::read<GameTime>(gameTime)
+			>> targetMap))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Unit " << log_hex_digit(casterId) << " finished casting spell " << spellId);
+		return PacketParseResult::Pass;
+	}
+
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -788,6 +839,46 @@ namespace mmo
 		}
 
 		m_realmConnector.DestroyMonster(guid);
+	}
+
+	void WorldState::Command_CastSpell(const std::string& cmd, const std::string& args)
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.size() != 1)
+		{
+			ELOG("Usage: cast <spellId>");
+			return;
+		}
+
+		auto unit = m_playerController->GetControlledUnit();
+		if (!unit)
+		{
+			return;
+		}
+
+		const uint32 entry = std::stoul(tokens[0]);
+		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
+
+		SpellTargetMap targetMap{};
+		if (targetUnitGuid != 0)
+		{
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(targetUnitGuid);
+		}
+		else
+		{
+			targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			targetMap.SetUnitTarget(unit->GetGuid());
+		}
+		
+		m_realmConnector.CastSpell(entry, targetMap);
 	}
 
 	bool WorldState::LoadMap(const String& assetPath)

@@ -107,11 +107,6 @@ namespace mmo
 				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
 				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
 			}
-
-			if (m_spell.attributes(0) & spell_attributes::NotInCombat)
-			{
-				m_onThreatened = m_cast.GetExecuter().threatened.connect(std::bind(&SingleCastState::StopCast, this, 0));
-			}
 		}
 		else
 		{
@@ -129,9 +124,9 @@ namespace mmo
 				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
 				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
 			}
-		}
 
-		OnCastFinished();
+			OnCastFinished();
+		}
 	}
 
 	std::pair<SpellCastResult, SpellCasting*> SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast)
@@ -227,17 +222,17 @@ namespace mmo
 
 	bool SingleCastState::ConsumeItem(bool delayed)
 	{
-		return false;
+		return true;
 	}
 
 	bool SingleCastState::ConsumeReagents(bool delayed)
 	{
-		return false;
+		return true;
 	}
 
 	bool SingleCastState::ConsumePower()
 	{
-		return false;
+		return true;
 	}
 
 	void SingleCastState::ApplyCooldown(uint64 cooldownTimeMS, uint64 catCooldownTimeMS)
