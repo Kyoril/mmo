@@ -130,7 +130,7 @@ namespace mmo
 
 		void ApplyCooldown(uint64 cooldownTimeMS, uint64 catCooldownTimeMS);
 
-		void ApplyAllEffects(bool executeInstants, bool executeDelayed);
+		void ApplyAllEffects();
 
 		int32 CalculateEffectBasePoints(const proto::SpellEffect& effect);
 

@@ -72,7 +72,7 @@ namespace mmo
 		}
 
 		// Adjust the width
-		frameRect.SetWidth(frameRect.GetWidth() * m_progress);
+		frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
 		progressImagery->Render(frameRect, Color::White);
 
 		// Find the state imagery

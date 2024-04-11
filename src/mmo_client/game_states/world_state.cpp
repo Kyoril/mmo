@@ -735,7 +735,20 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("Unit " << log_hex_digit(casterId) << " starts casting spell " << std::dec << spellId << " (cast time: " << castTime << " ms)");
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unknown spell " << spellId << " was cast!");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", spell, castTime);
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -756,7 +769,14 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("Unit " << log_hex_digit(casterId) << " finished casting spell " << spellId);
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
+			}
+		}
+
 		return PacketParseResult::Pass;
 	}
 

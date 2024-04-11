@@ -239,8 +239,107 @@ namespace mmo
 	{
 	}
 
-	void SingleCastState::ApplyAllEffects(bool executeInstants, bool executeDelayed)
+	void SingleCastState::ApplyAllEffects()
 	{
+		// Add spell cooldown if any
+		if (!m_instantsCast && !m_delayedCast)
+		{
+			const uint64 spellCatCD = m_spell.categorycooldown();
+			const uint64 spellCD = m_spell.cooldown();
+
+			GameTime finalCD = spellCD;
+			if (!finalCD) 
+			{
+				finalCD = spellCatCD;
+			}
+
+			if (finalCD)
+			{
+				ApplyCooldown(finalCD, spellCatCD);
+			}
+		}
+
+		// Make sure that this isn't destroyed during the effects
+		auto strong = shared_from_this();
+
+		std::vector<uint32> effects;
+		for (int i = 0; i < m_spell.effects_size(); ++i)
+		{
+			effects.push_back(m_spell.effects(i).type());
+		}
+
+		m_canTrigger = true;
+
+		namespace se = spell_effects;
+
+		std::vector<std::pair<uint32, EffectHandler>> effectMap{
+			{se::Dummy,				std::bind(&SingleCastState::SpellEffectDummy, this, std::placeholders::_1) },
+			{se::InstantKill,			std::bind(&SingleCastState::SpellEffectInstantKill, this, std::placeholders::_1)},
+			{se::PowerDrain,			std::bind(&SingleCastState::SpellEffectDrainPower, this, std::placeholders::_1)},
+			{se::Heal,				std::bind(&SingleCastState::SpellEffectHeal, this, std::placeholders::_1)},
+			{se::Bind,				std::bind(&SingleCastState::SpellEffectBind, this, std::placeholders::_1)},
+			{se::QuestComplete,		std::bind(&SingleCastState::SpellEffectQuestComplete, this, std::placeholders::_1)},
+			{se::Proficiency,			std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)},
+			{se::AddComboPoints,		std::bind(&SingleCastState::SpellEffectAddComboPoints, this, std::placeholders::_1)},
+			{se::Duel,					std::bind(&SingleCastState::SpellEffectDuel, this, std::placeholders::_1)},
+			{se::WeaponDamageNoSchool,	std::bind(&SingleCastState::SpellEffectWeaponDamageNoSchool, this, std::placeholders::_1)},
+			{se::CreateItem,			std::bind(&SingleCastState::SpellEffectCreateItem, this, std::placeholders::_1)},
+			{se::WeaponDamage,			std::bind(&SingleCastState::SpellEffectWeaponDamage, this, std::placeholders::_1)},
+			{se::TeleportUnits,			std::bind(&SingleCastState::SpellEffectTeleportUnits, this, std::placeholders::_1)},
+			{se::TriggerSpell,			std::bind(&SingleCastState::SpellEffectTriggerSpell, this, std::placeholders::_1)},
+			{se::Energize,				std::bind(&SingleCastState::SpellEffectEnergize, this, std::placeholders::_1)},
+			{se::WeaponPercentDamage,	std::bind(&SingleCastState::SpellEffectWeaponPercentDamage, this, std::placeholders::_1)},
+			{se::PowerBurn,				std::bind(&SingleCastState::SpellEffectPowerBurn, this, std::placeholders::_1)},
+			{se::OpenLock,				std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1)},
+			{se::OpenLockItem,			std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1) },
+			{se::ApplyAreaAuraParty,	std::bind(&SingleCastState::SpellEffectApplyAreaAuraParty, this, std::placeholders::_1)},
+			{se::Dispel,				std::bind(&SingleCastState::SpellEffectDispel, this, std::placeholders::_1)},
+			{se::Summon,				std::bind(&SingleCastState::SpellEffectSummon, this, std::placeholders::_1)},
+			{se::SummonPet,				std::bind(&SingleCastState::SpellEffectSummonPet, this, std::placeholders::_1) },
+			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScript, this, std::placeholders::_1)},
+			{se::AttackMe,				std::bind(&SingleCastState::SpellEffectAttackMe, this, std::placeholders::_1)},
+			{se::NormalizedWeaponDmg,	std::bind(&SingleCastState::SpellEffectNormalizedWeaponDamage, this, std::placeholders::_1)},
+			{se::StealBeneficialBuff,	std::bind(&SingleCastState::SpellEffectStealBeneficialBuff, this, std::placeholders::_1)},
+			{se::InterruptCast,			std::bind(&SingleCastState::SpellEffectInterruptCast, this, std::placeholders::_1) },
+			{se::LearnSpell,			std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
+			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScriptEffect, this, std::placeholders::_1) },
+			{se::DispelMechanic,		std::bind(&SingleCastState::SpellEffectDispelMechanic, this, std::placeholders::_1) },
+			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
+			{se::ResurrectNew,			std::bind(&SingleCastState::SpellEffectResurrectNew, this, std::placeholders::_1) },
+			{se::KnockBack,				std::bind(&SingleCastState::SpellEffectKnockBack, this, std::placeholders::_1) },
+			{se::TransDoor,				std::bind(&SingleCastState::SpellEffectTransDoor, this, std::placeholders::_1) },
+			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
+			{se::PersistentAreaAura,	std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
+			{se::ApplyAreaAuraParty,	std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
+			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)}
+		};
+
+		// Make sure that the executer exists after all effects have been executed
+		auto strongCaster = std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
+
+		if (!m_delayedCast)
+		{
+			for (auto& effect : effectMap)
+			{
+				for (int k = 0; k < effects.size(); ++k)
+				{
+					if (effect.first == effects[k])
+					{
+						ASSERT(effect.second);
+						effect.second(m_spell.effects(k));
+					}
+				}
+			}
+
+			m_delayedCast = true;
+		}
+		
+		if (!m_instantsCast || !m_delayedCast)
+		{
+			return;
+		}
+
+		completedEffects();
 	}
 
 	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
@@ -505,13 +604,13 @@ namespace mmo
 		if (m_spell.speed() > 0.0f)
 		{
 			// Apply all instant effects
-			ApplyAllEffects(true, false);
+			ApplyAllEffects();
 
 			// TODO: calculate distance and start delayed spell effect execution
 		}
 		else
 		{
-			ApplyAllEffects(true, true);
+			ApplyAllEffects();
 		}
 
 		if (!IsChanneled())

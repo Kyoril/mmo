@@ -120,6 +120,12 @@ namespace mmo
 
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs)
 	{
+		if (!HasSpell(spell.id()))
+		{
+			WLOG("Player does not know spell " << spell.id());
+			return spell_cast_result::FailedNotKnown;
+		}
+
 		const auto result = m_spellCast->StartCast(spell, target, castTimeMs);
 		if (result.first == spell_cast_result::CastOkay)
 		{

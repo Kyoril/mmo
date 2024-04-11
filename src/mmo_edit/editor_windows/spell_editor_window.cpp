@@ -142,13 +142,23 @@ namespace mmo
 					currentSpell->add_attributes(0);
 				}
 
-				ImGui::InputText("Name", currentSpell->mutable_name());
-				ImGui::SameLine();
+				if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
+				{
+					if (ImGui::TableNextColumn())
+					{
+						ImGui::InputText("Name", currentSpell->mutable_name());
+					}
+					
+					if (ImGui::TableNextColumn())
+					{
+						ImGui::BeginDisabled(true);
+						String idString = std::to_string(currentSpell->id());
+						ImGui::InputText("ID", &idString);
+						ImGui::EndDisabled();
+					}
 
-				ImGui::BeginDisabled(true);
-				String idString = std::to_string(currentSpell->id());
-				ImGui::InputText("ID", &idString);
-				ImGui::EndDisabled();
+					ImGui::EndTable();
+				}
 
 				ImGui::InputTextMultiline("Description", currentSpell->mutable_description());
 
@@ -176,7 +186,7 @@ namespace mmo
 				}
 
 				ImGui::Text("Effects");
-				ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 0), ImGuiWindowFlags_AlwaysUseWindowPadding);
+				ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
 				for (int effectIndex = 0; effectIndex < currentSpell->effects_size(); ++effectIndex)
 				{
 					// Effect frame
@@ -196,10 +206,103 @@ namespace mmo
 					{
 						currentSpell->mutable_effects(effectIndex)->set_type(currentEffect);
 					}
-					ImGui::PopID();
 					ImGui::SameLine();
-					ImGui::Button("Details");
+					if (ImGui::Button("Details"))
+					{
+						ImGui::OpenPopup("SpellEffectDetails");
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Remove"))
+					{
+						currentSpell->mutable_effects()->DeleteSubrange(effectIndex, 1);
+						effectIndex--;
+					}
+
+					if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
+					{
+						ImGui::Text("%s effect #%d", currentSpell->name().c_str(), effectIndex + 1);
+
+						if (ImGui::Combo("Effect", &currentEffect,
+							[](void* data, int idx, const char** out_text)
+							{
+								if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
+								{
+									return false;
+								}
+
+								*out_text = s_spellEffectNames[idx].c_str();
+								return true;
+							}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
+						{
+							currentSpell->mutable_effects(effectIndex)->set_type(currentEffect);
+						}
+
+						ImGui::Text("Points");
+						if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
+						{
+							int basePoints = currentSpell->effects(effectIndex).basepoints();
+							if(ImGui::InputInt("Base Points", &basePoints))
+							{
+								currentSpell->mutable_effects(effectIndex)->set_basepoints(basePoints);
+							}
+
+							float pointsPerLevel = currentSpell->effects(effectIndex).pointsperlevel();
+							if (ImGui::InputFloat("Per Level", &pointsPerLevel))
+							{
+								currentSpell->mutable_effects(effectIndex)->set_pointsperlevel(pointsPerLevel);
+							}
+
+							int diceSides = currentSpell->effects(effectIndex).diesides();
+							if (ImGui::InputInt("Dice Sides", &diceSides))
+							{
+								currentSpell->mutable_effects(effectIndex)->set_diesides(diceSides);
+							}
+
+							float dicePerLevel = currentSpell->effects(effectIndex).diceperlevel();
+							if (ImGui::InputFloat("Dice per Level", &dicePerLevel))
+							{
+								currentSpell->mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
+							}
+
+							static int characterLevel = 1;
+							ImGui::SliderInt("Preview Level", &characterLevel, 1, 60);
+
+							// Calculate level scaling
+							int level = characterLevel;
+							if (level > currentSpell->maxlevel() && currentSpell->maxlevel() > 0)
+							{
+								level = currentSpell->maxlevel();
+							}
+							else if(level < currentSpell->baselevel())
+							{
+								level = currentSpell->baselevel();
+							}
+							level -= currentSpell->baselevel();
+
+							ImGui::BeginDisabled(true);
+							int min = basePoints + level * currentSpell->effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentSpell->effects(effectIndex).diceperlevel());
+							int max = basePoints + level * currentSpell->effects(effectIndex).pointsperlevel() + diceSides + level * currentSpell->effects(effectIndex).diceperlevel();
+							ImGui::InputInt("Min", &min);
+							ImGui::InputInt("Max", &max);
+							ImGui::EndDisabled();
+
+							ImGui::EndChildFrame();
+						}
+
+
+
+
+						if (ImGui::Button("Close"))
+						{
+							ImGui::CloseCurrentPopup();
+						}
+
+						ImGui::EndPopup();
+					}
+
+					ImGui::PopID();
 				}
+
 				// Add button
 				if (ImGui::Button("Add Effect", ImVec2(-1, 0)))
 				{
@@ -210,6 +313,7 @@ namespace mmo
 			ImGui::EndChild();
 
 			ImGui::Columns(1);
+
 		}
 		ImGui::End();
 
