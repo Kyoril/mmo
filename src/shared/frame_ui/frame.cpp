@@ -472,6 +472,18 @@ namespace mmo
 		}
 	}
 
+	float Frame::GetTextHeight()
+	{
+		const FontPtr font = GetFont();
+		if (!font)
+		{
+			return 0.0f;
+		}
+
+		const Rect rect = GetRelativeFrameRect();
+		return font->GetHeight() * font->GetLineCount(m_text, rect);
+	}
+
 	void Frame::ClearAnchor(AnchorPoint point)
 	{
 		const auto it = m_anchors.find(point);
@@ -914,7 +926,7 @@ namespace mmo
 	{
 		Rect parentRect;
 
-		if (m_parent == nullptr && m_parent != this)
+		if (m_parent == nullptr)
 		{
 			// Obtain the current viewport size in pixels in case this 
 			int32 vpW, vpH;

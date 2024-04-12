@@ -134,16 +134,21 @@ namespace mmo
 	public:
 		/// Adds a new state imagery.
 		void AddImagerySection(ImagerySection& section);
+
 		/// Removes a state imagery by name.
 		void RemoveImagerySection(const std::string& name);
+
 		/// Gets an imagery section by name.
 		/// @param name Name of the imagery section.
 		/// @return nullptr if no such imagery section exists.
 		ImagerySection* GetImagerySectionByName(const std::string& name) const;
+
 		/// Adds a new state imagery.
 		void AddStateImagery(StateImagery& stateImagery);
+
 		/// Removes a state imagery by name.
 		void RemoveStateImagery(const std::string& name);
+
 		/// Gets a state imagery by name. Don't keep a pointer on the result, as it is destroyed when
 		/// the style instance is destroyed!
 		/// @param name Name of the state imagery.
@@ -153,63 +158,88 @@ namespace mmo
 	public:
 		/// Gets the type name of this frame.
 		inline const std::string& GetType() const { return m_type; }
+
 		/// Gets the text of this frame.
 		inline const std::string& GetText() const { return m_text; }
+
 		/// Gets the text that is actually rendered.
 		virtual const std::string& GetVisualText() const { return m_text; }
+
 		/// Sets the text of this frame.
 		void SetText(std::string text);
+
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.
 		bool IsVisible(bool localOnly = true) const;
+
 		/// Sets the visibility of this frame.
 		/// @param visible Whether the frame will be visible or not.
 		void SetVisible(bool visible);
+
 		/// Syntactic sugar for SetVisible(true).
 		inline void Show() { SetVisible(true); }
+
 		/// Syntactic sugar for SetVisible(false).
 		inline void Hide() { SetVisible(false); }
+
 		/// Determines whether the frame is currently enabled.
 		/// @param localOnly If set to true, the parent frame's enabled setting is ignored.
 		/// @returns true, if this frame is currently enabled.
 		bool IsEnabled(bool localOnly = true) const;
+
 		/// Enables or disables this frame.
 		/// @param enable Whether the frame should be enabled or disabled.
 		void SetEnabled(bool enable);
+
 		/// Syntactic sugar for SetEnabled(true).
 		inline void Enable() { SetEnabled(true); }
+
 		/// Syntactic sugar for SetEnabled(false).
 		inline void Disable() { SetEnabled(false); }
+
 		/// Determines if this window is the root frame.
 		bool IsRootFrame() const;
+
 		/// Sets the renderer by name.
 		void SetRenderer(const std::string& rendererName);
+
 		/// Gets the renderer instance if there is any.
 		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
+
 		/// Determines whether this frame is clipped by the parent frame.
 		inline bool IsClippedByParent() const { return m_clippedByParent; }
+
 		/// Sets whether this frame is clipped by it's parent frame.
 		void SetClippedByParent(bool clipped);
+
 		/// Returns the position of this frame set by the position property. Keep in mind, that
 		/// this might not represent the actual frame position on screen, as Anchors have higher
 		/// priority than this setting, which is only a fallback if no anchors are set.
 		inline const Point& GetPosition() const { return m_position; }
+
 		/// Sets the position of this frame. Note that anchors have higher priority, so this function
 		/// might have no effect at all.
 		void SetPosition(const Point& position);
+
 		/// Determines if the set anchors can be used to determine the frame's x position.
 		bool AnchorsSatisfyXPosition() const;
+
 		/// Determines if the anchors can be used to determine the frame's y position.
 		bool AnchorsSatisfyYPosition() const;
+
 		/// Determines if the set anchors can be used to determine the frame position.
 		inline bool AnchorsSatisfyPosition() const { return AnchorsSatisfyXPosition() && AnchorsSatisfyYPosition(); }
+
 		/// Determines if the width of this frame can be derived from anchors.
 		bool AnchorsSatisfyWidth() const;
+
 		/// Determines if the height of this frame can be derived from anchors.
 		bool AnchorsSatisfyHeight() const;
+
 		/// Determines if the set anchors can be used to determine the frame size.
 		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
+
 		/// Sets an anchor for this frame.
 		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
 
@@ -225,6 +255,8 @@ namespace mmo
 		float GetWidth() const { return m_pixelSize.width; }
 
 		float GetHeight() const { return m_pixelSize.height; }
+
+		float GetTextHeight();
 
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);

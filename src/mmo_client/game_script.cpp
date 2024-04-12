@@ -158,9 +158,88 @@ namespace mmo
 			return "Unknown";
 		}
 
-		const proto_client::SpellEntry* Script_GetSpellById(uint32 spellId)
+		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int effectIndex, int& min, int& max)
 		{
-			return nullptr;
+			if (effectIndex < 0 || effectIndex >= spell.effects_size())
+			{
+				min = 0;
+				max = 0;
+				return;
+			}
+
+			const auto& effect = spell.effects(effectIndex);
+			min = effect.basepoints();
+			max = effect.basepoints() + effect.diesides();
+		}
+
+		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)
+		{
+			if (spell == nullptr)
+			{
+				return "<NULL>";
+			}
+
+			std::ostringstream strm;
+
+			int min = 0, max = 0, effectIndex = 0;
+
+			const String& desc = spell->description();
+			for (int i = 0; i < desc.size(); ++i)
+			{
+				if (desc[i] == '$' && i < desc.size() - 1)
+				{
+					i++;
+
+					char token = desc[i];
+					switch(token)
+					{
+					case 'd':
+					case 'D':
+						strm << std::setprecision(2) << static_cast<float>(spell->duration()) / 1000.0f;
+						break;
+
+					case 'm':
+						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i+1] - '0';
+						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						strm << min;
+						break;
+
+					case 'M':
+						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i + 1] - '0';
+						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						strm << max;
+						break;
+
+					case 's':
+					case 'S':
+						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i + 1] - '0';
+						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						if (min == max)
+						{
+							strm << min;
+						}
+						else
+						{
+							strm << min << " - " << max;
+						}
+						break;
+					}
+
+					// Skip everything after token until a space is found or string ends
+					while(i < desc.size() - 1 && desc[i] != ' ')
+					{
+						i++;
+					}
+
+					strm << " ";
+				}
+				else
+				{
+					strm << desc[i];
+				}
+			}
+
+			return strm.str();
 		}
 	}
 
@@ -249,7 +328,9 @@ namespace mmo
 			luabind::def("UnitMana", &Script_UnitMana),
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
-			luabind::def("UnitName", &Script_UnitName)
+			luabind::def("UnitName", &Script_UnitName),
+
+			luabind::def("GetSpellDescription", &Script_GetSpellDescription)
 		];
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;

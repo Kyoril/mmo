@@ -163,12 +163,15 @@ namespace mmo
 				ImGui::InputTextMultiline("Description", currentSpell->mutable_description());
 
 				SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
+
 				SLIDER_UINT32_PROP(baselevel, "Base Level", 0, 100);
-				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
-				SLIDER_UINT32_PROP(maxlevel, "Max Level", 0, 100);
-				SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 				SLIDER_UINT32_PROP(spelllevel, "Spell Level", 0, 100);
+				SLIDER_UINT32_PROP(maxlevel, "Max Level", 0, 100);
+
+				SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
+				SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 				SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
+				SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
 
 				int currentSchool = currentSpell->spellschool();
 				if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)
