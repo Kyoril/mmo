@@ -59,21 +59,19 @@ namespace mmo
 		}
 
 		// If there is no progress, we don't need to render anything
-		if (m_progress <= 0.0f)
+		if (m_progress > 0.0f)
 		{
-			return;
-		}
+			// Find the progress imagery
+			const auto* progressImagery = GetStateImageryByName("Progress");
+			if (!progressImagery)
+			{
+				return;
+			}
 
-		// Find the progress imagery
-		const auto* progressImagery = GetStateImageryByName("Progress");
-		if (!progressImagery)
-		{
-			return;
+			// Adjust the width
+			frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
+			progressImagery->Render(frameRect, Color::White);
 		}
-
-		// Adjust the width
-		frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
-		progressImagery->Render(frameRect, Color::White);
 
 		// Find the state imagery
 		const auto* overlayImagery = GetStateImageryByName(IsEnabled() ? "Overlay" : "OverlayDisabled");

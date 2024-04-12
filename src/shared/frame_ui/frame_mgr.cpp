@@ -369,6 +369,7 @@ namespace mmo
 	               .def("SetHeight", &Frame::SetHeight)
 	               .def("GetWidth", &Frame::GetWidth)
 	               .def("GetHeight", &Frame::GetHeight)
+	               .def("GetTextHeight", &Frame::GetTextHeight)
 	               .def("CaptureInput", &Frame::CaptureInput)
 	               .def("HasInputCaptured", &Frame::HasInputCaptured)
 					.def("ReleaseInput", &Frame::ReleaseInput)

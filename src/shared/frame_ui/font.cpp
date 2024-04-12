@@ -617,7 +617,7 @@ namespace mmo
 
 		for (size_t c = 0; c < text.length(); ++c)
 		{
-			if (baseY > area.bottom) return lineCount;
+			if (buffer != nullptr && baseY > area.bottom) return lineCount;
 
 			size_t iterations = 1;
 
