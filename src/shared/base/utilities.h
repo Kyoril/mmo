@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <iomanip>
 #include <vector>
+#include <ctime>
+
+#include "random.h"
 #ifndef _MSC_VER
 #	include <strings.h>
 #endif
@@ -16,7 +19,9 @@
 #endif
 
 namespace mmo
-{	
+{
+	static RandomnessGenerator randomGenerator(time(nullptr));
+
 	/// A custom compare operator used to make string keys in a hash container case insensitive.
 	struct StrCaseIComp
 	{

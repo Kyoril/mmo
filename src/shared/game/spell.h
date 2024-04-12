@@ -6,6 +6,29 @@
 
 namespace mmo
 {
+	namespace power_type
+	{
+		enum Type
+		{
+			/// The most common one, mobs actually have this or rage.
+			Mana,
+
+			/// This is what warriors use to cast their spells.
+			Rage,
+
+			/// Used by rogues to do their spells.
+			Energy,
+
+			///
+			Health,
+
+			Count_,
+			Invalid_ = Count_
+		};
+	}
+
+	typedef power_type::Type PowerType;
+
 	namespace spell_cast_target_flags
 	{
 		enum Type

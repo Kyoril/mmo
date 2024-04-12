@@ -46,6 +46,8 @@ namespace mmo
 		virtual bool HasMovementInfo() const override { return true; }
 
 	public:
+		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
+
 		bool HasSpell(uint32 spellId) const;
 
 		void SetInitialSpells(const std::vector<uint32>& spellIds);
@@ -54,9 +56,17 @@ namespace mmo
 
 		void RemoveSpell(uint32 spellId);
 
+		void SetCooldown(uint32 spellId, GameTime cooldownTimeMs);
+
+		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
+
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
 
+		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
+
 	protected:
+		virtual void OnKilled(GameUnitS* killer);
+
 		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
 
 		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
@@ -92,5 +102,8 @@ namespace mmo
 
 		std::set<const proto::SpellEntry*> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;
+
+		std::map<uint32, GameTime> m_spellCooldowns;
+		std::map<uint32, GameTime> m_spellCategoryCooldowns;
 	};
 }

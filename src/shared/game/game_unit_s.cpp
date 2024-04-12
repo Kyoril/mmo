@@ -19,6 +19,9 @@ namespace mmo
 
 		// Create spell caster
 		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
+
+		m_despawnCountdown.ended.connect(
+			std::bind(&GameUnitS::OnDespawnTimer, this));
 	}
 
 	void GameUnitS::Initialize()
@@ -55,6 +58,23 @@ namespace mmo
 	void GameUnitS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		GameObjectS::WriteValueUpdateBlock(writer, creation);
+	}
+
+	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
+	{
+		const auto now = GetAsyncTimeMs();
+
+		if (const auto it = m_spellCooldowns.find(spellId); it != m_spellCooldowns.end() && it->second > now)
+		{
+			return true;
+		}
+
+		if (const auto it2 = m_spellCategoryCooldowns.find(spellCategory); it2 != m_spellCategoryCooldowns.end() && it2->second > now)
+		{
+			return true;
+		}
+
+		return false;
 	}
 
 	bool GameUnitS::HasSpell(uint32 spellId) const
@@ -118,6 +138,30 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetCooldown(uint32 spellId, GameTime cooldownTimeMs)
+	{
+		if (cooldownTimeMs == 0)
+		{
+			m_spellCooldowns.erase(spellId);
+		}
+		else
+		{
+			m_spellCooldowns[spellId] = GetAsyncTimeMs() + cooldownTimeMs;
+		}
+	}
+
+	void GameUnitS::SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs)
+	{
+		if (cooldownTimeMs == 0)
+		{
+			m_spellCategoryCooldowns.erase(spellCategory);
+		}
+		else
+		{
+			m_spellCategoryCooldowns[spellCategory] = GetAsyncTimeMs() + cooldownTimeMs;
+		}
+	}
+
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs)
 	{
 		if (!HasSpell(spell.id()))
@@ -152,6 +196,44 @@ namespace mmo
 		}
 
 		return result.first;
+	}
+
+	void GameUnitS::Damage(const uint32 damage, uint32 school, GameUnitS* instigator)
+	{
+		uint32 health = Get<uint32>(object_fields::Health);
+		if (health < 1)
+		{
+			return;
+		}
+
+		threatened(*instigator, 1.0f);
+
+		if (health < damage)
+		{
+			health = 0;
+		}
+		else
+		{
+			health -= damage;
+		}
+
+		Set<uint32>(object_fields::Health, health);
+		takenDamage(instigator, damage);
+
+		// Kill event
+		if (health < 1)
+		{
+			OnKilled(instigator);
+		}
+	}
+
+	void GameUnitS::OnKilled(GameUnitS* killer)
+	{
+		m_spellCast->StopCast();
+
+		Set<uint64>(object_fields::TargetUnit, 0);
+
+		killed(killer);
 	}
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)

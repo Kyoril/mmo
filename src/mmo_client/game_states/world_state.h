@@ -134,6 +134,8 @@ namespace mmo
 
 		PacketParseResult OnSpellGo(game::IncomingPacket& packet);
 
+		PacketParseResult OnSpellFailure(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

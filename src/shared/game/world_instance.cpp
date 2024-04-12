@@ -193,6 +193,11 @@ namespace mmo
 				subscriber->NotifyObjectsDespawned(objects);
 			}
 		});
+
+		if (remove.destroy)
+		{
+			remove.destroy(remove);
+		}
 	}
 
 	void WorldInstance::AddObjectUpdate(GameObjectS& object)

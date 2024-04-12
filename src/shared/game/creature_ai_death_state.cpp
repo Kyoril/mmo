@@ -19,6 +19,8 @@ namespace mmo
 	{
 		CreatureAIState::OnEnter();
 
+		DLOG("Creature died. Triggering despawn...")
+
 		auto& controlled = GetControlled();
 
 		// TODO: Grant rewards to players

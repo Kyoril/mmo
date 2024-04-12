@@ -3,6 +3,8 @@
 
 #include "no_cast_state.h"
 
+#include "base/utilities.h"
+
 namespace mmo
 {
 	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc)
@@ -232,11 +234,51 @@ namespace mmo
 
 	bool SingleCastState::ConsumePower()
 	{
+		const int32 totalCost = m_cast.CalculatePowerCost(m_spell);
+		if (totalCost > 0)
+		{
+			if (m_spell.powertype() == power_type::Health)
+			{
+				uint32 currentHealth = m_cast.GetExecuter().Get<uint32>(object_fields::Health);
+				if (totalCost > 0 && currentHealth < static_cast<uint32>(totalCost))
+				{
+					SendEndCast(spell_cast_result::FailedNoPower);
+					m_hasFinished = true;
+					return false;
+				}
+
+				currentHealth -= totalCost;
+				m_cast.GetExecuter().Set<uint32>(object_fields::Health, currentHealth);
+			}
+			else
+			{
+				int32 currentPower = m_cast.GetExecuter().Get<uint32>(object_fields::Mana + m_spell.powertype());
+				if (totalCost > 0 && currentPower < uint32(totalCost))
+				{
+					SendEndCast(spell_cast_result::FailedNoPower);
+					m_hasFinished = true;
+					return false;
+				}
+
+				currentPower -= totalCost;
+				m_cast.GetExecuter().Set<uint32>(object_fields::Mana + m_spell.powertype(), currentPower);
+			}
+		}
+
 		return true;
 	}
 
-	void SingleCastState::ApplyCooldown(uint64 cooldownTimeMS, uint64 catCooldownTimeMS)
+	auto SingleCastState::ApplyCooldown(const GameTime cooldownTimeMs, const GameTime categoryCooldownTimeMs) -> void
 	{
+		if (cooldownTimeMs > 0)
+		{
+			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
+		}
+		
+		if (categoryCooldownTimeMs > 0)
+		{
+			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
+		}
 	}
 
 	void SingleCastState::ApplyAllEffects()
@@ -344,7 +386,31 @@ namespace mmo
 
 	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
 	{
-		return 0;
+		// TODO
+		const int32 comboPoints = 0;
+
+		int32 level = static_cast<int32>(m_cast.GetExecuter().Get<uint32>(object_fields::Level));
+		if (level > m_spell.maxlevel() && m_spell.maxlevel() > 0)
+		{
+			level = m_spell.maxlevel();
+		}
+		else if (level < m_spell.baselevel())
+		{
+			level = m_spell.baselevel();
+		}
+		level -= m_spell.spelllevel();
+
+		// Calculate the damage done
+		const float basePointsPerLevel = effect.pointsperlevel();
+		const float randomPointsPerLevel = effect.diceperlevel();
+		const int32 basePoints = effect.basepoints() + level * basePointsPerLevel;
+		const int32 randomPoints = effect.diesides() + level * randomPointsPerLevel;
+		const int32 comboDamage = effect.pointspercombopoint() * comboPoints;
+
+		std::uniform_int_distribution<int> distribution(effect.basedice(), randomPoints);
+		const int32 randomValue = (effect.basedice() >= randomPoints ? effect.basedice() : distribution(randomGenerator));
+
+		return basePoints + randomValue + comboDamage;
 	}
 
 	uint32 SingleCastState::GetSpellPointsTotal(const proto::SpellEffect& effect, uint32 spellPower, uint32 bonusPct)
@@ -367,6 +433,20 @@ namespace mmo
 
 	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
 	{
+		GameUnitS* unitTarget = nullptr;
+		if (m_target.HasUnitTarget())
+		{
+			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
+		}
+
+		if (unitTarget == nullptr)
+		{
+			return;
+		}
+
+		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
 	}
 
 	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)

@@ -458,7 +458,6 @@ namespace mmo
 		}
 
 		m_worldInstance->RemoveGameObject(*object);
-		object->destroy(*object);
 	}
 
 	void Player::OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader)

@@ -128,7 +128,7 @@ namespace mmo
 
 		bool ConsumePower();
 
-		void ApplyCooldown(uint64 cooldownTimeMS, uint64 catCooldownTimeMS);
+		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		void ApplyAllEffects();
 
