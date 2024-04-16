@@ -2,6 +2,7 @@
 
 #include "game_object_c.h"
 #include "movement_info.h"
+#include "shared/client_data/spells.pb.h"
 
 namespace mmo
 {
@@ -45,11 +46,25 @@ namespace mmo
 		void SetMovementPath(const std::vector<Vector3>& points);
 
 	public:
-		void SetInitialSpells(const std::vector<uint32>& spellIds);
 
-		void LearnSpell(uint32 spellId);
+		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
+
+		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
+
+		bool IsAlive() const { return GetHealth() > 0; }
+
+	public:
+		void SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spellIds);
+
+		void LearnSpell(const proto_client::SpellEntry* spell);
 
 		void UnlearnSpell(uint32 spellId);
+
+		bool HasSpells() const noexcept { return !m_spells.empty(); }
+
+		const proto_client::SpellEntry* GetSpell(uint32 index) const;
+
+		uint32 GetSpellCount() const noexcept { return static_cast<uint32>(m_spells.size()); }
 
 	public:
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
@@ -61,5 +76,6 @@ namespace mmo
 		std::unique_ptr<Animation> m_movementAnimation;
 		Vector3 m_movementStart;
 		Vector3 m_movementEnd;
+		std::vector<const proto_client::SpellEntry*> m_spells;
 	};
 }

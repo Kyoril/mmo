@@ -205,21 +205,32 @@ namespace mmo
 		m_movementEnd = prevPosition;
 	}
 
-	void GameUnitC::SetInitialSpells(const std::vector<uint32>& spellIds)
+	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spells)
 	{
-		for (const auto spellId : spellIds)
-		{
-			DLOG("Initial spell: " << spellId);
-		}
+		m_spells = spells;
 	}
 
-	void GameUnitC::LearnSpell(const uint32 spellId)
+	void GameUnitC::LearnSpell(const proto_client::SpellEntry* spell)
 	{
-		DLOG("Learned spell " << spellId);
+		const auto it = std::find_if(m_spells.begin(), m_spells.end(), [spell](const proto_client::SpellEntry* entry) { return entry->id() == spell->id(); });
+		if (it == m_spells.end())
+		{
+			m_spells.push_back(spell);
+		}
 	}
 
 	void GameUnitC::UnlearnSpell(const uint32 spellId)
 	{
-		DLOG("Unlearned spell " << spellId);
+		std::erase_if(m_spells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
+	}
+
+	const proto_client::SpellEntry* GameUnitC::GetSpell(uint32 index) const
+	{
+		if (index < m_spells.size())
+		{
+			return m_spells[index];
+		}
+
+		return nullptr;
 	}
 }

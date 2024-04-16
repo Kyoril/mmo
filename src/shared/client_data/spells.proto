@@ -99,6 +99,7 @@ message SpellEntry {
 	optional uint32 positive = 64;
 	
 	optional string description = 65;
+	optional string icon = 66;
 }
 
 message Spells {

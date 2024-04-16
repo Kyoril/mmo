@@ -364,6 +364,8 @@ namespace mmo
 	               .def("GetChildCount", &Frame::GetChildCount)
 	               .def("GetChild", &Frame::GetChild)
 	               .def("SetAnchor", &Frame::SetAnchor)
+					.def("ClearAnchor", &Frame::ClearAnchor)
+					.def("ClearAnchors", &Frame::ClearAnchors)
 	               .def("SetSize", &Frame::SetSize)
 	               .def("SetWidth", &Frame::SetWidth)
 	               .def("SetHeight", &Frame::SetHeight)
@@ -374,7 +376,9 @@ namespace mmo
 	               .def("HasInputCaptured", &Frame::HasInputCaptured)
 					.def("ReleaseInput", &Frame::ReleaseInput)
 				   .def("SetProperty", &Frame::SetProperty)
-	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
+	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)
+					.def("SetOnEnterHandler", &Frame::SetOnEnter)
+					.def("SetOnLeaveHandler", &Frame::SetOnLeave)),
 
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
@@ -624,7 +628,15 @@ namespace mmo
 				auto prevFrame = m_hoverFrame;
 				m_hoverFrame = std::move(hoverFrame);
 
-				//DLOG("Hovered frame changed: " << (m_hoverFrame ? m_hoverFrame->GetName() : "(nullptr)"));
+				if (prevFrame)
+				{
+					prevFrame->OnLeave();
+				}
+
+				if (m_hoverFrame)
+				{
+					m_hoverFrame->OnEnter();
+				}
 
 				// Invalidate the old hover frame if there was any
 				if (prevFrame)

@@ -64,6 +64,14 @@ namespace mmo
 
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
 
+		void Kill(GameUnitS* killer);
+
+		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
+
+		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
+
+		bool IsAlive() const { return GetHealth() > 0; }
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 

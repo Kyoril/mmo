@@ -16,6 +16,22 @@ namespace mmo
 		m_focusable = true;
 	}
 
+	void Button::Copy(Frame& other)
+	{
+		Frame::Copy(other);
+
+		const auto otherButton = dynamic_cast<Button*>(&other);
+		if (!otherButton)
+		{
+			return;
+		}
+
+		if (m_clickedHandler.is_valid())
+		{
+			otherButton->m_clickedHandler = m_clickedHandler;
+		}
+	}
+
 	void Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
 	{
 		Frame::OnMouseDown(button, buttons, position);

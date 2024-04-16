@@ -227,6 +227,12 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::Kill(GameUnitS* killer)
+	{
+		Set<uint32>(object_fields::Health, 0);
+		OnKilled(killer);
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast();

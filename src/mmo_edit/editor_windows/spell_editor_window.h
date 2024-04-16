@@ -7,6 +7,7 @@
 #include "editor_window_base.h"
 
 #include "editor_host.h"
+#include "graphics/texture.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -32,5 +33,7 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		proto::Project& m_project;
+		std::vector<String> m_textures;
+		std::map<std::string, TexturePtr> m_iconCache;
 	};
 }

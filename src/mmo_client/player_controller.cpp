@@ -83,6 +83,11 @@ namespace mmo
 			--movementDirection;
 		}
 
+		if (!m_controlledUnit->IsAlive())
+		{
+			movementDirection = 0;
+		}
+
 		if (movementDirection != 0)
 		{
 			if (m_controlFlags & ControlFlags::MoveSent)
@@ -124,6 +129,12 @@ namespace mmo
 		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && (m_controlFlags & ControlFlags::TurnRightKey) != 0)
 		{
 			--direction;
+		}
+
+
+		if (!m_controlledUnit->IsAlive())
+		{
+			direction = 0;
 		}
 
 		if (direction != 0)

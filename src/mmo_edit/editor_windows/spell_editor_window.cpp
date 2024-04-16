@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -61,6 +62,15 @@ namespace mmo
 		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		std::vector<std::string> files = AssetRegistry::ListFiles();
+		for(const auto& filename : files)
+		{
+			if (filename.ends_with(".htex") && filename.starts_with("Interface/Icon"))
+			{
+				m_textures.push_back(filename);
+			}
+		}
 	}
 
 	bool SpellEditorWindow::Draw()
@@ -172,6 +182,40 @@ namespace mmo
 				SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 				SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 				SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
+
+				if (!currentSpell->icon().empty())
+				{
+					if (!m_iconCache.contains(currentSpell->icon()))
+					{
+						m_iconCache[currentSpell->icon()] = TextureManager::Get().CreateOrRetrieve(currentSpell->icon());
+					}
+
+					if (const TexturePtr tex = m_iconCache[currentSpell->icon()])
+					{
+						ImGui::Image(tex->GetTextureObject(), ImVec2(64, 64));
+					}
+				}
+
+				if (ImGui::BeginCombo("Icon", currentSpell->icon().c_str(), ImGuiComboFlags_None))
+				{
+					for (int i = 0; i < m_textures.size(); i++)
+					{
+						ImGui::PushID(i);
+						const bool item_selected = m_textures[i] == currentSpell->icon();
+						const char* item_text = m_textures[i].c_str();
+						if (ImGui::Selectable(item_text, item_selected))
+						{
+							currentSpell->set_icon(item_text);
+						}
+						if (item_selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
 
 				int currentSchool = currentSpell->spellschool();
 				if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)

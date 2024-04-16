@@ -425,6 +425,18 @@ namespace mmo
 
 	void SingleCastState::SpellEffectInstantKill(const proto::SpellEffect& effect)
 	{
+		GameUnitS* unitTarget = nullptr;
+		if (m_target.HasUnitTarget())
+		{
+			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
+		}
+
+		if (unitTarget == nullptr)
+		{
+			return;
+		}
+
+		unitTarget->Kill(&m_cast.GetExecuter());
 	}
 
 	void SingleCastState::SpellEffectDummy(const proto::SpellEffect& effect)

@@ -63,14 +63,12 @@ namespace mmo
 		{
 			// Find the progress imagery
 			const auto* progressImagery = GetStateImageryByName("Progress");
-			if (!progressImagery)
+			if (progressImagery)
 			{
-				return;
+				// Adjust the width
+				frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
+				progressImagery->Render(frameRect, Color::White);
 			}
-
-			// Adjust the width
-			frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
-			progressImagery->Render(frameRect, Color::White);
 		}
 
 		// Find the state imagery

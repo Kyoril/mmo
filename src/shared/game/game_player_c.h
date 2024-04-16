@@ -21,5 +21,8 @@ namespace mmo
 		virtual void Update(float deltaTime) override;
 
 		virtual void InitializeFieldMap() override;
+
+	public:
+
 	};
 }

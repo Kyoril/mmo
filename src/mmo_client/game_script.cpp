@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "object_mgr.h"
+#include "game/game_player_c.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "shared/client_data/spells.pb.h"
@@ -86,6 +87,31 @@ namespace mmo
 			}
 
 			return nullptr;
+		}
+
+		const proto_client::SpellEntry* Script_GetSpell(uint32 index)
+		{
+			const GameUnitC* player = dynamic_cast<GameUnitC*>(ObjectMgr::GetActivePlayer().get());
+			if (!player)
+			{
+				return nullptr;
+			}
+
+			return player->GetSpell(index);
+		}
+
+
+		void Script_CastSpell(uint32 index)
+		{
+			const auto* spell = Script_GetSpell(index);
+			if (spell == nullptr)
+			{
+				WLOG("Unknown spell for index " << index);
+				return;
+			}
+
+			// TODO: Make this more efficient than just executing a console command!
+			Console::ExecuteCommand("cast " + std::to_string(spell->id()));
 		}
 
 		bool Script_UnitExists(const std::string& unitName)
@@ -315,7 +341,8 @@ namespace mmo
 				.def_readonly("cost", &proto_client::SpellEntry::cost)
 				.def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
-				.def_readonly("casttime", &proto_client::SpellEntry::casttime)),
+				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
+				.def_readonly("icon", &proto_client::SpellEntry::icon)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -329,6 +356,9 @@ namespace mmo
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
 			luabind::def("UnitName", &Script_UnitName),
+
+			luabind::def("GetSpell", &Script_GetSpell),
+			luabind::def("CastSpell", &Script_CastSpell),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription)
 		];

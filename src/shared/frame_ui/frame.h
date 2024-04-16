@@ -243,6 +243,8 @@ namespace mmo
 		/// Sets an anchor for this frame.
 		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
 
+		void ClearAnchors();
+
 		/// Sets the size for this frame.
 		void SetSize(float width, float height);
 
@@ -260,6 +262,7 @@ namespace mmo
 
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);
+
 		/// Gets the parent frame.
 		inline Frame* GetParent() const { return m_parent; }
 		/// Determines whether the frame is currently hovered.
@@ -341,8 +344,10 @@ namespace mmo
 
 	public:
 		virtual Rect GetRelativeFrameRect();
+
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();
+
 		/// Gets the font of this frame, or it's parent frames.
 		FontPtr GetFont() const;
 
@@ -352,7 +357,16 @@ namespace mmo
 		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
 		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
+
 		void SetOnEnterPressed(const luabind::object& func) { m_onEnterPressed = func; }
+
+		void SetOnEnter(const luabind::object& func) { m_onEnter = func; }
+
+		void SetOnLeave(const luabind::object& func) { m_onLeave = func; }
+
+		void OnEnter();
+
+		void OnLeave();
 
 	protected:
 		virtual void DrawSelf();
@@ -368,6 +382,7 @@ namespace mmo
 		virtual void OnTextChanged();
 
 		void OnTabPressed();
+
 		void OnEnterPressed();
 
 	private:
@@ -445,6 +460,10 @@ namespace mmo
 		luabind::object m_onEnterPressed;
 
 		luabind::object m_onTabPressed;
+
+		luabind::object m_onEnter;
+
+		luabind::object m_onLeave;
 
 	protected:
 		scoped_connection_container m_propConnections;

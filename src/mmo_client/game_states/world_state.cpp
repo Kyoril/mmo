@@ -257,6 +257,7 @@ namespace mmo
 		
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -303,6 +304,7 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UnlearnedSpell);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellStart);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellGo);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellFailure);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -606,8 +608,24 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		std::vector<const proto_client::SpellEntry*> spells;
+		spells.reserve(spellIds.size());
+
+		for (const auto& spellId : spellIds)
+		{
+			const auto* spell = m_project.spells.getById(spellId);
+			if (spell)
+			{
+				spells.push_back(spell);
+			}
+			else
+			{
+				WLOG("Received unknown initial spell id " << spellId);
+			}
+		}
+
 		ASSERT(m_playerController->GetControlledUnit());
-		m_playerController->GetControlledUnit()->SetInitialSpells(spellIds);
+		m_playerController->GetControlledUnit()->SetInitialSpells(spells);
 
 		return PacketParseResult::Pass;
 	}
@@ -706,10 +724,17 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			WLOG("Unknown spell id " << spellId);
+			return PacketParseResult::Pass;
+		}
+
 		ASSERT(m_playerController->GetControlledUnit());
 		if (packet.GetId() == game::realm_client_packet::LearnedSpell)
 		{
-			m_playerController->GetControlledUnit()->LearnSpell(spellId);
+			m_playerController->GetControlledUnit()->LearnSpell(spell);
 		}
 		else
 		{
@@ -978,6 +1003,8 @@ namespace mmo
 				{
 					errorMessage = s_spellCastResultStrings[result];
 				}
+
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
 			}
 		}

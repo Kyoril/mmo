@@ -12,14 +12,14 @@
 
 namespace mmo
 {
-	Frame::Frame(const std::string& type, const std::string & name)
+	Frame::Frame(const std::string& type, const std::string& name)
 		: m_type(type)
 		, m_name(name)
 		, m_needsRedraw(true)
-		, m_parent(nullptr)
 		, m_visible(true)
 		, m_enabled(true)
 		, m_clippedByParent(false)
+		, m_parent(nullptr)
 		, m_needsLayout(true)
 		, m_focusable(false)
 	{
@@ -46,6 +46,12 @@ namespace mmo
 		other.m_text = m_text;
 		other.m_onLoad = m_onLoad;
 		other.m_onUpdate = m_onUpdate;
+		other.m_needsLayout = true;
+		other.m_needsRedraw = true;
+		other.m_onEnterPressed = m_onEnterPressed;
+		other.m_onTabPressed = m_onTabPressed;
+		other.m_onEnter = m_onEnter;
+		other.m_onLeave = m_onLeave;
 		other.RemoveAllChildren();
 		
 		// Set all properties
@@ -107,7 +113,8 @@ namespace mmo
 			child->Copy(*copiedChild);
 
 			// Add child copy to the copied frame
-			other.m_children.emplace_back(std::move(copiedChild));
+			copiedChild->m_parent = &other;
+			other.m_children.push_back(copiedChild);
 
 			// Copy anchors
 			for (auto& anchor : child->m_anchors)
@@ -122,7 +129,7 @@ namespace mmo
 					}
 				}
 
-				other.SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
+				copiedChild->SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
 			}
 		}
 	}
@@ -495,6 +502,13 @@ namespace mmo
 		}
 	}
 
+	void Frame::ClearAnchors()
+	{
+		m_anchors.clear();
+		m_needsRedraw = true;
+		m_needsLayout = true;
+	}
+
 	bool Frame::IsHovered() const
 	{
 		return this == FrameManager::Get().GetHoveredFrame().get();
@@ -768,6 +782,22 @@ namespace mmo
 		{
 			m_onEnterPressed(this);
 			abort_emission();
+		}
+	}
+
+	void Frame::OnEnter()
+	{
+		if (m_onEnter.is_valid())
+		{
+			m_onEnter(this);
+		}
+	}
+
+	void Frame::OnLeave()
+	{
+		if (m_onLeave.is_valid())
+		{
+			m_onLeave(this);
 		}
 	}
 

@@ -332,6 +332,12 @@ namespace mmo
 			return;
 		}
 
+		if (info.IsMoving() && !m_character->IsAlive())
+		{
+			ELOG("Player tried to move while not being alive anymore");
+			return;
+		}
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 
 		// Translate client-side movement op codes into server side movement op codes for the receiving clients
