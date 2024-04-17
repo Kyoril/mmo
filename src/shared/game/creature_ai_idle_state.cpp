@@ -41,6 +41,13 @@ namespace mmo
 	{
 	}
 
+	void CreatureAIIdleState::OnDamage(GameUnitS& attacker)
+	{
+		CreatureAIState::OnDamage(attacker);
+
+		GetAI().EnterCombat(attacker);
+	}
+
 	void CreatureAIIdleState::OnWaitCountdownExpired()
 	{
 		MoveToRandomPointInRange();

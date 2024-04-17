@@ -3,6 +3,7 @@
 #include "proto_data/project.h"
 #include "world_instance.h"
 #include "each_tile_in_sight.h"
+#include "game_player_s.h"
 #include "binary_io/vector_sink.h"
 #include "log/default_log_levels.h"
 
@@ -41,5 +42,15 @@ namespace mmo
 	{
 		// Setup new entry
 		m_entry = &entry;
+	}
+
+	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)
+	{
+		m_combatParticipantGuids.insert(unit.GetGuid());
+	}
+
+	void GameCreatureS::RemoveCombatParticipant(const uint64 unitGuid)
+	{
+		m_combatParticipantGuids.erase(unitGuid);
 	}
 }

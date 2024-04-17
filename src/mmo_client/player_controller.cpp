@@ -170,6 +170,11 @@ namespace mmo
 				--direction;
 			}
 
+			if (!m_controlledUnit->IsAlive())
+			{
+				direction = 0;
+			}
+
 			if (direction != 0)
 			{
 				if ((m_controlFlags & ControlFlags::TurnSent))
@@ -418,6 +423,7 @@ namespace mmo
 		{
 			return;
 		}
+
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
@@ -438,7 +444,7 @@ namespace mmo
 			ClampCameraPitch();
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive())
 		{
 			const Radian facing = m_cameraAnchorNode->GetDerivedOrientation().GetYaw();
 			m_controlledUnit->GetSceneNode()->SetDerivedOrientation(Quaternion(facing, Vector3::UnitY));
@@ -449,7 +455,7 @@ namespace mmo
 			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
 		}
 		
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive())
 		{
 			if (fabsf(delta.x) >= FLT_EPSILON)
 			{

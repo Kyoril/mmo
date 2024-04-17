@@ -23,12 +23,17 @@ namespace mmo
 
 		/// @copydoc CreatureAIState::OnEnter
 		virtual void OnEnter() override;
+
 		/// @copydoc CreatureAIState::OnLeave
 		virtual void OnLeave() override;
+
 		/// @copydoc CreatureAIState::OnCreatureMovementChanged
 		virtual void OnCreatureMovementChanged() override;
+
 		/// @copydoc CreatureAIState::OnControlledMoved
 		virtual void OnControlledMoved() override;
+
+		virtual void OnDamage(GameUnitS& attacker) override;
 
 	protected:
 		void OnWaitCountdownExpired();

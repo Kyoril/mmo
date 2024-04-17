@@ -20,8 +20,8 @@ namespace mmo
 		// Create spell caster
 		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
 
-		m_despawnCountdown.ended.connect(
-			std::bind(&GameUnitS::OnDespawnTimer, this));
+		m_regenCountdown.ended.connect(this, &GameUnitS::OnRegeneration);
+		m_despawnCountdown.ended.connect(this, &GameUnitS::OnDespawnTimer);
 	}
 
 	void GameUnitS::Initialize()
@@ -58,6 +58,11 @@ namespace mmo
 	void GameUnitS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		GameObjectS::WriteValueUpdateBlock(writer, creation);
+	}
+
+	void GameUnitS::SetLevel(uint32 newLevel)
+	{
+		Set(object_fields::Level, newLevel);
 	}
 
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
@@ -233,6 +238,21 @@ namespace mmo
 		OnKilled(killer);
 	}
 
+	void GameUnitS::StartRegeneration()
+	{
+		if (m_regenCountdown.IsRunning())
+		{
+			return;
+		}
+
+		m_regenCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 2));
+	}
+
+	void GameUnitS::StopRegeneration()
+	{
+		m_regenCountdown.Cancel();
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast();
@@ -254,6 +274,78 @@ namespace mmo
 				TriggerNextAutoAttack();
 			}
 		}*/
+	}
+
+	void GameUnitS::OnRegeneration()
+	{
+		if (!IsAlive())
+		{
+			return;
+		}
+
+		RegenerateHealth();
+
+		if (!IsInCombat())
+		{
+			RegeneratePower(power_type::Rage);
+		}
+
+		RegeneratePower(power_type::Energy);
+		RegeneratePower(power_type::Mana);
+
+		StartRegeneration();
+	}
+
+	void GameUnitS::RegenerateHealth()
+	{
+		if (!IsAlive())
+		{
+			return;
+		}
+
+		// TODO: Do proper health regen formula
+
+		const uint32 maxHealth = GetMaxHealth();
+		uint32 health = GetHealth();
+
+		health += 9;
+		if (health > maxHealth) health = maxHealth;
+
+		Set<uint32>(object_fields::Health, health);
+	}
+
+	void GameUnitS::RegeneratePower(PowerType powerType)
+	{
+		if (!IsAlive())
+		{
+			return;
+		}
+
+		ASSERT(static_cast<uint8>(powerType) < static_cast<uint8>(power_type::Count_));
+
+		// TODO: Do proper power regen formula
+
+		// Get power and max power
+		int32 power = Get<int32>(object_fields::Mana + static_cast<uint8>(powerType));
+		const int32 maxPower = Get<uint32>(object_fields::MaxMana + static_cast<uint8>(powerType));
+
+		switch(powerType)
+		{
+		case power_type::Rage:
+			power -= 6;
+			if (power < 0) power = 0;
+			break;
+		case power_type::Energy:
+			power += 20;
+			if (power > maxPower) power = maxPower;
+			break;
+		case power_type::Mana:
+			power += 9;
+			if (power > maxPower) power = maxPower;
+			break;
+		}
+
+		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
 
 	void GameUnitS::OnDespawnTimer()

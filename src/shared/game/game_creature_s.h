@@ -2,6 +2,7 @@
 #pragma once
 
 #include "creature_ai.h"
+#include "game_player_s.h"
 #include "game_unit_s.h"
 #include "world_instance.h"
 #include "base/linear_set.h"
@@ -56,12 +57,42 @@ namespace mmo
 		/// Changes the creatures entry index. Remember, that the creature always has to
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);
-		
+
+		void AddCombatParticipant(const GameUnitS& unit);
+
+		void RemoveCombatParticipant(uint64 unitGuid);
+
+		bool HasCombatParticipants() const { return !m_combatParticipantGuids.empty(); }
+
+		void RemoveAllCombatParticipants()
+		{
+			m_combatParticipantGuids.clear();
+		}
+
+		/// Executes a callback function for every valid loot recipient.
+		template<typename OnParticipant>
+		void ForEachCombatParticipant(OnParticipant callback)
+		{
+			if (!GetWorldInstance()) 
+			{
+				return;
+			}
+
+			for (auto& guid : m_combatParticipantGuids)
+			{
+				if (auto character = dynamic_cast<GamePlayerS*>(GetWorldInstance()->FindObjectByGuid(guid)))
+				{
+					callback(*character);
+				}
+			}
+		}
+
 	private:
 
 		std::unique_ptr<CreatureAI> m_ai;
 		const proto::UnitEntry& m_originalEntry;
 		const proto::UnitEntry* m_entry;
 		scoped_connection m_onSpawned;
+		std::set<uint64> m_combatParticipantGuids;
 	};
 }

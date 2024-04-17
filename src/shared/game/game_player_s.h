@@ -15,15 +15,19 @@ namespace mmo
 		signal<void(GameUnitS&, const proto::SpellEntry&)> spellUnlearned;
 
 	public:
-		GamePlayerS(const proto::Project& project, TimerQueue& timerQueue)
-			: GameUnitS(project, timerQueue)
-		{
-		}
+		GamePlayerS(const proto::Project& project, TimerQueue& timerQueue);
 
 		~GamePlayerS() override = default;
 
 
+		virtual void Initialize() override;
+
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
+
+	public:
+		void RewardExperience(const uint32 xp);
+
+		virtual void SetLevel(uint32 newLevel) override;
 
 	protected:
 		void OnSpellLearned(const proto::SpellEntry& spell) override

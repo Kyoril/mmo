@@ -5,6 +5,11 @@
 
 namespace mmo
 {
+	void GamePlayerC::Deserialize(io::Reader& reader, bool complete)
+	{
+		GameUnitC::Deserialize(reader, complete);
+	}
+
 	void GamePlayerC::Update(float deltaTime)
 	{
 		GameObjectC::Update(deltaTime);

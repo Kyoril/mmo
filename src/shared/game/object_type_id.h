@@ -85,7 +85,10 @@ namespace mmo
 		enum PlayerFields
 		{
 			Xp = UnitFieldCount,
+
 			NextLevelXp,
+
+			MaxLevel,
 
 			PlayerFieldCount
 		};

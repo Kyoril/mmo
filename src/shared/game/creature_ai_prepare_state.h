@@ -26,6 +26,8 @@ namespace mmo
 		///
 		virtual void OnLeave() override;
 
+		virtual void OnDamage(GameUnitS& attacker) override;
+
 	private:
 
 		scoped_connection m_onThreatened;

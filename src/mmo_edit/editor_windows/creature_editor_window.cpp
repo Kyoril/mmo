@@ -95,6 +95,11 @@ namespace mmo
 				ImGui::InputText("ID", &id);
 				ImGui::EndDisabled();
 
+				SLIDER_UINT32_PROP(minlevel, "Min Level", 1, 100);
+				SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);
+
+				SLIDER_UINT32_PROP(minlevelhealth, "Min Level health", 1, 200000000);
+				SLIDER_UINT32_PROP(maxlevelhealth, "Max Level health", 1, 200000000);
 			}
 			ImGui::EndChild();
 

@@ -25,7 +25,13 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.GetMover().StopMovement();
 
-		// TODO: Grant rewards to players
+		// TODO: Calculate correct amount of XP to award to the participant
+		const int32 xp = 55;
+
+		controlled.ForEachCombatParticipant([xp](GamePlayerS& player)
+			{
+				player.RewardExperience(xp);
+			});
 
 		// Despawn in 30 seconds
 		controlled.TriggerDespawnTimer(30000);

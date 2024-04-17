@@ -46,6 +46,9 @@ namespace mmo
 		virtual bool HasMovementInfo() const override { return true; }
 
 	public:
+		virtual void SetLevel(uint32 newLevel);
+
+	public:
 		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
 
 		bool HasSpell(uint32 spellId) const;
@@ -72,6 +75,12 @@ namespace mmo
 
 		bool IsAlive() const { return GetHealth() > 0; }
 
+		/// Starts the regeneration countdown.
+		void StartRegeneration();
+
+		/// Stops the regeneration countdown.
+		void StopRegeneration();
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
@@ -80,6 +89,14 @@ namespace mmo
 		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
 
 		virtual void OnSpellCastEnded(bool succeeded);
+
+		virtual void OnRegeneration();
+
+		virtual bool IsInCombat() const { /* TODO */ return false; }
+
+		virtual void RegenerateHealth();
+
+		virtual void RegeneratePower(PowerType powerType);
 
 	protected:
 		virtual void PrepareFieldMap() override

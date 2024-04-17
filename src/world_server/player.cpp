@@ -233,6 +233,9 @@ namespace mmo
 			packet << io::write_dynamic_range<uint16>(m_characterData.spellIds);
 			packet.Finish();
 		});
+
+		// Start regeneration immediately
+		m_character->StartRegeneration();
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
@@ -332,9 +335,9 @@ namespace mmo
 			return;
 		}
 
-		if (info.IsMoving() && !m_character->IsAlive())
+		if ((info.IsMoving() || info.IsTurning() || info.IsPitching()) && !m_character->IsAlive())
 		{
-			ELOG("Player tried to move while not being alive anymore");
+			ELOG("Player tried to move or rotate while not being alive anymore");
 			return;
 		}
 

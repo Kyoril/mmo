@@ -174,6 +174,26 @@ namespace mmo
 			return 1;
 		}
 
+		int32 Script_PlayerXp()
+		{
+			if (auto unit = Script_GetUnitByName("player"))
+			{
+				return unit->Get<int32>(object_fields::Xp);
+			}
+
+			return 0;
+		}
+
+		int32 Script_PlayerNextLevelXp()
+		{
+			if (auto unit = Script_GetUnitByName("player"))
+			{
+				return unit->Get<int32>(object_fields::NextLevelXp);
+			}
+
+			return 0;
+		}
+
 		std::string Script_UnitName(const std::string& unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
@@ -356,6 +376,8 @@ namespace mmo
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
 			luabind::def("UnitName", &Script_UnitName),
+			luabind::def("PlayerXp", &Script_PlayerXp),
+			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
 
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def("CastSpell", &Script_CastSpell),
@@ -366,7 +388,6 @@ namespace mmo
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["loginState"] = m_loginState.get();
-		luabind::globals(m_luaState.get())["project"] = &m_project;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

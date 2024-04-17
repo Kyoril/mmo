@@ -43,4 +43,9 @@ namespace mmo
 		CreatureAIState::OnLeave();
 	}
 
+	void CreatureAIPrepareState::OnDamage(GameUnitS& attacker)
+	{
+		CreatureAIState::OnDamage(attacker);
+		GetAI().EnterCombat(attacker);
+	}
 }

@@ -22,6 +22,7 @@
 #include "world_deserializer.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
+#include "game/game_player_c.h"
 #include "game/spell_target_map.h"
 
 namespace mmo
@@ -443,7 +444,20 @@ namespace mmo
 			if (creation)
 			{
 				// Create game object from deserialization
-				auto object = std::make_shared<GameUnitC>(m_scene);
+				std::shared_ptr<GameObjectC> object;
+
+				switch(typeId)
+				{
+				case ObjectTypeId::Unit:
+					object = std::make_shared<GameUnitC>(m_scene);
+					break;
+				case ObjectTypeId::Player:
+					object = std::make_shared<GamePlayerC>(m_scene);
+					break;
+				default:
+					object = std::make_shared<GameObjectC>(m_scene);
+				}
+
 				object->InitializeFieldMap();
 				object->Deserialize(packet, creation);
 
@@ -466,9 +480,26 @@ namespace mmo
 									FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
 								}
 							}
+
+							if ((fieldIndex <= object_fields::Xp && fieldIndex + fieldCount >= object_fields::Xp) ||
+								(fieldIndex <= object_fields::NextLevelXp && fieldIndex + fieldCount >= object_fields::NextLevelXp))
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_XP_CHANGED");
+							}
+
+							if (fieldIndex <= object_fields::Level && fieldIndex + fieldCount >= object_fields::Level)
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_CHANGED");
+							}
+
+							if ((fieldIndex <= object_fields::Health && fieldIndex + fieldCount >= object_fields::Health) ||
+								(fieldIndex <= object_fields::MaxHealth && fieldIndex + fieldCount >= object_fields::MaxHealth))
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
+							}
 						});
 
-					m_playerController->SetControlledUnit(object);
+					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 				}
 			}

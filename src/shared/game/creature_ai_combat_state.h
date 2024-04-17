@@ -36,18 +36,26 @@ namespace mmo
 		/// Initializes a new instance of the CreatureAIIdleState class.
 		/// @param ai The ai class instance this state belongs to.
 		explicit CreatureAICombatState(CreatureAI& ai, GameUnitS& victim);
+
 		/// Default destructor.
 		~CreatureAICombatState() override;
 
 		/// @copydoc CreatureAIState::OnEnter()
 		virtual void OnEnter() override;
+
 		/// @copydoc CreatureAIState::OnLeave()
 		virtual void OnLeave() override;
+
 		/// @copydoc CreatureAIState::OnDamage()
 		virtual void OnDamage(GameUnitS& attacker) override;
+
 		/// @copydoc CreatureAIState::OnCombatMovementChanged()
 		virtual void OnCombatMovementChanged() override;
+
 		/// @copydoc CreatureAIState::OnControlledMoved()
 		virtual void OnControlledMoved() override;
+
+	protected:
+		std::weak_ptr<GameUnitS> m_combatInitiator;
 	};
 }
