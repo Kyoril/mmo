@@ -52,6 +52,8 @@ namespace mmo
 		other.m_onTabPressed = m_onTabPressed;
 		other.m_onEnter = m_onEnter;
 		other.m_onLeave = m_onLeave;
+		other.m_id = m_id;
+		other.m_focusable = m_focusable;
 		other.RemoveAllChildren();
 		
 		// Set all properties

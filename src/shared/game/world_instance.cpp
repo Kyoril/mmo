@@ -177,6 +177,17 @@ namespace mmo
 		}
 
 		DLOG("Removing object " << log_hex_digit(remove.GetGuid()) << " from world instance ...");
+		m_objectsByGuid.erase(it);
+
+		// Clear update
+		if (m_queuedObjectUpdates.contains(&remove))
+		{
+			m_queuedObjectUpdates.erase(&remove);
+		}
+		if (m_objectUpdates.contains(&remove))
+		{
+			m_objectUpdates.erase(&remove);
+		}
 
 		tile->GetGameObjects().remove(&remove);
 		remove.SetWorldInstance(nullptr);

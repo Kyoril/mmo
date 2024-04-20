@@ -28,6 +28,7 @@ namespace mmo
 	static const std::string FrameParentAttribute("parent");
 	static const std::string FrameInheritsAttribute("inherits");
 	static const std::string FrameSetAllPointsAttribute("setAllPoints");
+	static const std::string FrameIdAttribute("id");
 	static const std::string FontElement("Font");
 	static const std::string FontNameAttribute("name");
 	static const std::string FontFileAttribute("file");
@@ -392,6 +393,7 @@ namespace mmo
 		const std::string parent(attributes.GetValueAsString(FrameParentAttribute));
 		const std::string renderer(attributes.GetValueAsString(FrameRendererAttribute));
 		const bool setAllPoints = attributes.GetValueAsBool(FrameSetAllPointsAttribute, false);
+		const int32 id(attributes.GetValueAsInt(FrameIdAttribute, 0));
 
 		// Frame type might be overridden
 		std::string type(attributes.GetValueAsString(FrameTypeAttribute, "Frame"));
@@ -428,6 +430,8 @@ namespace mmo
 		{
 			templateFrame->Copy(*frame);
 		}
+
+		frame->SetId(id);
 
 		// Setup style and renderer
 		if (!renderer.empty()) frame->SetRenderer(renderer);

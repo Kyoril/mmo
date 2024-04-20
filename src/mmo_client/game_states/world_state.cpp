@@ -658,6 +658,8 @@ namespace mmo
 		ASSERT(m_playerController->GetControlledUnit());
 		m_playerController->GetControlledUnit()->SetInitialSpells(spells);
 
+		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
+
 		return PacketParseResult::Pass;
 	}
 
@@ -771,6 +773,8 @@ namespace mmo
 		{
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
 		}
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
 
 		return PacketParseResult::Pass;
 	}

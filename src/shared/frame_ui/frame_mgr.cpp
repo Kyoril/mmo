@@ -377,6 +377,7 @@ namespace mmo
 					.def("ReleaseInput", &Frame::ReleaseInput)
 				   .def("SetProperty", &Frame::SetProperty)
 	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)
+					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
 					.def("SetOnLeaveHandler", &Frame::SetOnLeave)),
 

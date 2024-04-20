@@ -294,6 +294,10 @@ namespace mmo
 
 		Pointer FindChild(const std::string& name);
 
+		int32 GetId() const { return m_id; }
+
+		void SetId(const int32 id) { m_id = id; }
+
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }
@@ -464,6 +468,8 @@ namespace mmo
 		luabind::object m_onEnter;
 
 		luabind::object m_onLeave;
+
+		int32 m_id = 0;
 
 	protected:
 		scoped_connection_container m_propConnections;
