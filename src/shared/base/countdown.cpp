@@ -24,9 +24,11 @@ namespace mmo
 
 			if (m_countdown)
 			{
+				const auto delayCount = m_delayCount;
+
 				m_countdown->m_running = true;
 				m_timers.AddEvent(
-					[strongThis = shared_from_this(), this] { strongThis->OnPossibleEnd(m_delayCount); },
+					[strongThis = shared_from_this(), delayCount] { strongThis->OnPossibleEnd(delayCount); },
 					endTime);
 			}
 		}

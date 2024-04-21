@@ -126,6 +126,13 @@ namespace mmo
 			OnSpellCast(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::AttackSwing:
+			OnAttackSwing(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::AttackStop:
+			OnAttackStop(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -310,13 +317,29 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Selected new target " << log_hex_digit(selectedObject));
-
-		// Try to find the selected object
-
 
 		// Update field (update will be sent to all clients around)
 		m_character->Set(object_fields::TargetUnit, selectedObject);
+
+		if (selectedObject != 0)
+		{
+			// Try to find the selected object
+			GameObjectS* object = m_worldInstance->FindObjectByGuid(selectedObject);
+			if (!object)
+			{
+				ELOG("Failed to find selected object with guid " << log_hex_digit(selectedObject));
+				return;
+			}
+
+			if (m_character->GetVictim() && (object->GetTypeId() == ObjectTypeId::Unit || object->GetTypeId() == ObjectTypeId::Player))
+			{
+				m_character->StartAttack(std::static_pointer_cast<GameUnitS>(object->shared_from_this()));
+			}
+		}
+		else if (m_character->IsAttacking())
+		{
+			m_character->StopAttack();
+		}
 	}
 
 	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -535,6 +558,42 @@ namespace mmo
 
 		// Spell cast logic
 		m_character->CastSpell(targetMap, *spell, castTime);
+	}
+
+	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 victimGuid;
+		GameTime clientTimestamp;
+		if (!(contentReader >> io::read_packed_guid(victimGuid) >> io::read<GameTime>(clientTimestamp)))
+		{
+			ELOG("Failed to read victim guid and client timestamp for attack swing");
+			return;
+		}
+
+		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(victimGuid);
+		if (!targetObject)
+		{
+			ELOG("Failed to find target object with guid " << log_hex_digit(victimGuid));
+			return;
+		}
+
+		if (targetObject->GetTypeId() != ObjectTypeId::Unit && targetObject->GetTypeId() != ObjectTypeId::Player)
+		{
+			ELOG("Target object with guid " << log_hex_digit(victimGuid) << " is not a unit and thus not attackable");
+			return;
+		}
+
+		m_character->StartAttack(std::static_pointer_cast<GameUnitS>(targetObject->shared_from_this()));
+	}
+
+	void Player::OnAttackStop(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		GameTime clientTimestamp;
+		if (!(contentReader >> io::read<GameTime>(clientTimestamp)))
+		{
+			ELOG("Failed to read client timestamp for attack stop");
+			return;
+		}
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)

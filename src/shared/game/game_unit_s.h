@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <memory>
 #include <set>
 
 #include "game_object_s.h"
@@ -81,6 +82,19 @@ namespace mmo
 		/// Stops the regeneration countdown.
 		void StopRegeneration();
 
+	public:
+		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
+
+		bool IsAttacking() const { return GetVictim() != nullptr; }
+
+		GameUnitS* GetVictim() const { return m_victim.lock().get(); }
+
+		void StartAttack(const std::shared_ptr<GameUnitS>& victim);
+
+		void StopAttack();
+
+		void SetTarget(uint64 targetGuid);
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
@@ -111,6 +125,8 @@ namespace mmo
 
 		void TriggerNextAutoAttack();
 
+		void OnAttackSwing();
+
 	public:
 		TimerQueue& GetTimers() const { return m_timers; }
 
@@ -121,9 +137,11 @@ namespace mmo
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
 		Countdown m_attackSwingCountdown;
-		GameTime m_lastMainHand, m_lastOffHand;
+		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		Countdown m_regenCountdown;
 		GameTime m_lastManaUse;
+
+		std::weak_ptr<GameUnitS> m_victim;
 
 		std::set<const proto::SpellEntry*> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;

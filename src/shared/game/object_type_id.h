@@ -49,7 +49,7 @@ namespace mmo
 			Owner = 5,
 
 			/// @brief Number of object fields
-			ObjectFieldCount = Owner + 1,
+			ObjectFieldCount = Owner + 2,
 		};
 
 		enum UnitFields
@@ -79,7 +79,10 @@ namespace mmo
 			/// @brief 64 bit object guid
 			TargetUnit,
 
-			UnitFieldCount = TargetUnit + 2,
+			/// @brief 32 bit time
+			BaseAttackTime = TargetUnit + 2,
+
+			UnitFieldCount = BaseAttackTime + 1,
 		};
 
 		enum PlayerFields

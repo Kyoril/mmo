@@ -9,8 +9,8 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene)
-			: GameUnitC(scene)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver)
+			: GameUnitC(scene, netDriver)
 		{
 		}
 

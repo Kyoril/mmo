@@ -260,6 +260,9 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
 
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
@@ -267,6 +270,7 @@ namespace mmo
 #endif
 
 		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
+		Console::RegisterCommand("startattack", [this](const std::string& cmd, const std::string& args) { Command_StartAttack(cmd, args); }, ConsoleCommandCategory::Game, "Starts attacking the current target.");
 	}
 
 	void WorldState::RemovePacketHandler() const
@@ -277,6 +281,7 @@ namespace mmo
 		Console::UnregisterCommand("learnspell");
 #endif
 
+		Console::UnregisterCommand("cast");
 		Console::UnregisterCommand("cast");
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
@@ -306,6 +311,9 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellStart);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellGo);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellFailure);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStart);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStop);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -449,10 +457,10 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(m_scene);
+					object = std::make_shared<GameUnitC>(m_scene, *this);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(m_scene);
+					object = std::make_shared<GamePlayerC>(m_scene, *this);
 					break;
 				default:
 					object = std::make_shared<GameObjectC>(m_scene);
@@ -1047,6 +1055,39 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnAttackStart(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid, victimGuid;
+		GameTime attackTime;
+		if (!(packet 
+			>> io::read_packed_guid(attackerGuid)
+			>> io::read_packed_guid(victimGuid)
+			>> io::read<GameTime>(attackTime)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("TODO: Unit " << log_hex_digit(attackerGuid) << " started attacking " << log_hex_digit(victimGuid));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnAttackStop(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid;
+		GameTime attackTime;
+		if (!(packet
+			>> io::read_packed_guid(attackerGuid)
+			>> io::read<GameTime>(attackTime)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("TODO: Unit " << log_hex_digit(attackerGuid) << " stopped attacking");
+
+		return PacketParseResult::Pass;
+	}
+
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1168,6 +1209,31 @@ namespace mmo
 		m_realmConnector.CastSpell(entry, targetMap);
 	}
 
+	void WorldState::Command_StartAttack(const std::string& cmd, const std::string& args)
+	{
+		auto unit = m_playerController->GetControlledUnit();
+		if (!unit)
+		{
+			return;
+		}
+
+		uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			ELOG("No target to attack");
+			return;
+		}
+
+		auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid);
+		if (!targetUnit)
+		{
+			ELOG("Target unit not found!");
+			return;
+		}
+
+		unit->Attack(*targetUnit);
+	}
+
 	bool WorldState::LoadMap(const String& assetPath)
 	{
 		m_worldInstance.reset();
@@ -1211,6 +1277,26 @@ namespace mmo
 
 	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
 	{
-		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, "Hello World!");
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name);
+	}
+
+	void WorldState::SendAttackStart(const uint64 victim, const GameTime timestamp)
+	{
+		m_realmConnector.sendSinglePacket([victim, timestamp](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::AttackSwing);
+			packet << io::write_packed_guid(victim) << io::write<GameTime>(timestamp);
+			packet.Finish();
+		});
+	}
+
+	void WorldState::SendAttackStop(const GameTime timestamp)
+	{
+		m_realmConnector.sendSinglePacket([timestamp](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::AttackStop);
+			packet << io::write<GameTime>(timestamp);
+			packet.Finish();
+		});
 	}
 }

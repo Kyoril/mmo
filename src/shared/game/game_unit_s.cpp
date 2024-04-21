@@ -2,7 +2,9 @@
 
 #include "game_unit_s.h"
 
+#include "each_tile_in_sight.h"
 #include "base/utilities.h"
+#include "binary_io/vector_sink.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -22,6 +24,7 @@ namespace mmo
 
 		m_regenCountdown.ended.connect(this, &GameUnitS::OnRegeneration);
 		m_despawnCountdown.ended.connect(this, &GameUnitS::OnDespawnTimer);
+		m_attackSwingCountdown.ended.connect(this, &GameUnitS::OnAttackSwing);
 	}
 
 	void GameUnitS::Initialize()
@@ -43,6 +46,9 @@ namespace mmo
 		Set(object_fields::MaxMana, 100);
 		Set(object_fields::MaxRage, 1000);
 		Set(object_fields::MaxEnergy, 100);
+
+		// Base attack time of one second
+		Set(object_fields::BaseAttackTime, 1000);
 	}
 
 	void GameUnitS::TriggerDespawnTimer(GameTime despawnDelay)
@@ -253,6 +259,65 @@ namespace mmo
 		m_regenCountdown.Cancel();
 	}
 
+	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)
+	{
+		ASSERT(victim);
+
+		if (IsAttacking(victim))
+		{
+			DLOG("Already attacking unit, nothing to do");
+			return;
+		}
+
+		m_victim = victim;
+		Set<uint64>(object_fields::TargetUnit, victim ? victim->GetGuid() : 0);
+
+		const GameTime now = GetAsyncTimeMs();
+
+		// Notify subscribers in sight
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::AttackStart);
+		packet << io::write_packed_guid(GetGuid()) << io::write_packed_guid(victim->GetGuid()) << io::write<GameTime>(now);
+		packet.Finish();
+
+		// Notify all subscribers
+		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
+
+		// Trigger next attack swing
+		TriggerNextAutoAttack();
+	}
+
+	void GameUnitS::StopAttack()
+	{
+		m_attackSwingCountdown.Cancel();
+		m_victim.reset();
+
+		const GameTime now = GetAsyncTimeMs();
+
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::AttackStop);
+		packet << io::write_packed_guid(GetGuid()) << io::write<GameTime>(now);
+		packet.Finish();
+
+		// Notify all subscribers
+		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber & subscriber)
+		{
+			subscriber.SendPacket(packet, buffer);
+		});
+	}
+
+	void GameUnitS::SetTarget(uint64 targetGuid)
+	{
+		Set<uint64>(object_fields::TargetUnit, targetGuid);
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast();
@@ -358,6 +423,36 @@ namespace mmo
 
 	void GameUnitS::TriggerNextAutoAttack()
 	{
-		// TODO
+		const GameTime now = GetAsyncTimeMs();
+		GameTime nextAttackSwing = now;
+
+		const GameTime mainHandCooldown = m_lastMainHand + Get<uint32>(object_fields::BaseAttackTime);
+		if (mainHandCooldown > nextAttackSwing)
+		{
+			nextAttackSwing = mainHandCooldown;
+		}
+
+		m_attackSwingCountdown.SetEnd(nextAttackSwing);
+	}
+
+	void GameUnitS::OnAttackSwing()
+	{
+		const GameTime now = GetAsyncTimeMs();
+		m_lastMainHand = now;
+
+		if (!IsAlive())
+		{
+			return;
+		}
+
+		auto victim = m_victim.lock();
+		if (!victim)
+		{
+			return;
+		}
+
+		DLOG("TODO: Auto attack of unit " << log_hex_digit(GetGuid()) << " on " << log_hex_digit(victim->GetGuid()));
+
+		TriggerNextAutoAttack();
 	}
 }

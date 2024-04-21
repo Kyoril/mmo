@@ -3,10 +3,11 @@
 #pragma once
 
 #include "game_protocol/game_protocol.h"
-#include "game_unit_s.h"
 
 namespace mmo
 {
+	class GameUnitS;
+
 	class TileSubscriber
 	{
 	public:

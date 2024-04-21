@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 
+#include "each_tile_in_sight.h"
 #include "field_map.h"
 #include "base/typedefs.h"
 #include "base/signal.h"
@@ -135,7 +136,7 @@ namespace mmo
 	class VisibilityTile;
 
 	/// This is the base class of server side object, spawned on the world server.
-	class GameObjectS : public std::enable_shared_from_this<GameObjectS>
+	class GameObjectS : public std::enable_shared_from_this<GameObjectS>, public NonCopyable
 	{
 		friend void CreateUpdateBlocks(const GameObjectS &object, std::vector<std::vector<char>> &outBlocks);
 
@@ -170,6 +171,20 @@ namespace mmo
 		T Get(ObjectFieldMap::FieldIndexType index) const
 		{
 			return m_fields.GetFieldValue<T>(index);
+		}
+
+		template<class OnSubscriber>
+		void ForEachSubscriberInSight(OnSubscriber callback)
+		{
+			if (!m_worldInstance)
+			{
+				return;
+			}
+
+			TileIndex2D tileIndex;
+			m_worldInstance->GetGrid().GetTilePosition(GetPosition(), tileIndex[0], tileIndex[1]);
+
+			::mmo::ForEachSubscriberInSight(m_worldInstance->GetGrid(), tileIndex, callback);
 		}
 
 	protected:

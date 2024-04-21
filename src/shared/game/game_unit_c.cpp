@@ -233,4 +233,32 @@ namespace mmo
 
 		return nullptr;
 	}
+
+	void GameUnitC::Attack(GameUnitC& victim)
+	{
+		// Don't do anything if the victim is already the current target
+		if (IsAttacking(victim))
+		{
+			return;
+		}
+
+		// Ensure that we are targeting the victim right now
+		// TODO
+
+		// Send attack
+		m_victim = victim.GetGuid();
+		m_netDriver.SendAttackStart(victim.GetGuid(), GetAsyncTimeMs());
+	}
+
+	void GameUnitC::StopAttack()
+	{
+		if (!IsAttacking())
+		{
+			return;
+		}
+
+		// Send stop attack
+		m_victim = 0;
+		m_netDriver.SendAttackStop(GetAsyncTimeMs());
+	}
 }

@@ -26,6 +26,12 @@ namespace mmo
 		explicit GameObjectC(Scene& scene);
 		~GameObjectC() override;
 
+		template<typename T>
+		T Get(const uint32 field) const
+		{
+			return m_fieldMap.GetFieldValue<T>(field);
+		}
+
 		virtual void InitializeFieldMap();
 
 	public:

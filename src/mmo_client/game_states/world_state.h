@@ -38,6 +38,7 @@ namespace mmo
 	/// his credentials in order to authenticate.
 	class WorldState final
 		: public GameState
+		, public NetClient
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -136,6 +137,10 @@ namespace mmo
 
 		PacketParseResult OnSpellFailure(game::IncomingPacket& packet);
 
+		PacketParseResult OnAttackStart(game::IncomingPacket& packet);
+
+		PacketParseResult OnAttackStop(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -147,6 +152,7 @@ namespace mmo
 #endif
 
 		void Command_CastSpell(const std::string& cmd, const std::string& args);
+		void Command_StartAttack(const std::string& cmd, const std::string& args);
 
 	private:
 
@@ -155,6 +161,13 @@ namespace mmo
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 		void OnChatNameQueryCallback(uint64 guid, const String& name);
+
+	public:
+		// Begin NetClient interface
+		void SendAttackStart(const uint64 victim, const GameTime timestamp) override;
+
+		void SendAttackStop(const GameTime timestamp) override;
+		// End NetClient interface
 
 	private:
 		RealmConnector& m_realmConnector;
