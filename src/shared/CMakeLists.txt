@@ -39,8 +39,4 @@ add_subdirectory(game)
 add_subdirectory(paging)
 add_subdirectory(web_services)
 add_subdirectory(proto_data)
-
-
-if (MMO_BUILD_CLIENT)
-	add_subdirectory(client_data)
-endif ()
+add_subdirectory(client_data)
