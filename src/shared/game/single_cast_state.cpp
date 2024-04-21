@@ -37,7 +37,7 @@ namespace mmo
 
 		auto const casterId = executor.GetGuid();
 
-		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc)
+		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)
 		{
 			SendPacketFromCaster(
 				executor,
