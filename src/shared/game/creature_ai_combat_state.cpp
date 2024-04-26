@@ -25,13 +25,15 @@ namespace mmo
 	{
 		CreatureAIState::OnEnter();
 
+		auto& controlled = GetControlled();
+		controlled.RemoveAllCombatParticipants();
+
 		const auto initiator = m_combatInitiator.lock();
 		AddThreat(*initiator, 0.0f);
 		m_combatInitiator.reset();
 
 		m_nextActionCountdown.ended.connect(this, &CreatureAICombatState::ChooseNextAction);
 
-		auto& controlled = GetControlled();
 		controlled.SetInCombat(false);
 
 		// Watch for threat events
@@ -79,7 +81,6 @@ namespace mmo
 			});
 		}
 
-		controlled.RemoveAllCombatParticipants();
 		m_entered = true;
 
 		// Save weakptr reference
@@ -183,6 +184,7 @@ namespace mmo
 
 			// Add this unit to the list of attacking units
 			threatener.AddAttackingUnit(GetControlled());
+			GetControlled().AddCombatParticipant(threatener);
 		}
 
 		auto& threatEntry = it->second;

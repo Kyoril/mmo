@@ -50,6 +50,9 @@ namespace mmo
 
 		// Store remaining xp after potential levelups
 		Set<uint32>(object_fields::Xp, currentXp);
+
+		// Send packet
+
 	}
 
 	void GamePlayerS::RefreshStats()

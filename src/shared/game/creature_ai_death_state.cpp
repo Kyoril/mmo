@@ -19,8 +19,6 @@ namespace mmo
 	{
 		CreatureAIState::OnEnter();
 
-		DLOG("Creature died. Triggering despawn...")
-
 		// Stop movement immediately
 		auto& controlled = GetControlled();
 		controlled.GetMover().StopMovement();
