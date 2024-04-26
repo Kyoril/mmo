@@ -505,6 +505,12 @@ namespace mmo
 							{
 								FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
 							}
+
+							if ((fieldIndex <= object_fields::Mana && fieldIndex + fieldCount >= object_fields::Mana) ||
+								(fieldIndex <= object_fields::MaxMana && fieldIndex + fieldCount >= object_fields::MaxMana))
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+							}
 						});
 
 					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));

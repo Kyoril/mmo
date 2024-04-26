@@ -6,6 +6,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class ClassEntry;
+	}
+
 	/// @brief Represents a playable character in the game world.
 	class GamePlayerS final : public GameUnitS
 	{
@@ -22,10 +27,14 @@ namespace mmo
 
 		virtual void Initialize() override;
 
+		void SetClass(const proto::ClassEntry& classEntry);
+
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
 	public:
 		void RewardExperience(const uint32 xp);
+
+		void RefreshStats() override;
 
 		virtual void SetLevel(uint32 newLevel) override;
 
@@ -45,5 +54,8 @@ namespace mmo
 		{
 			m_fields.Initialize(object_fields::PlayerFieldCount);
 		}
+
+	private:
+		const proto::ClassEntry* m_classEntry;
 	};
 }

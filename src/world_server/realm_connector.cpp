@@ -17,6 +17,7 @@
 #include "game/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
+#include "proto_data/project.h"
 
 
 namespace mmo
@@ -408,6 +409,10 @@ namespace mmo
 		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
 		characterObject->Initialize();
 		characterObject->Set(object_fields::Guid, characterData.characterId);
+
+		ASSERT(m_project.classes.count() > 0);
+		characterObject->SetClass(*m_project.classes.getById(0));
+		characterObject->RefreshStats();
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object

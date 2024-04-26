@@ -9,6 +9,33 @@
 
 namespace mmo
 {
+	uint32 UnitStats::DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor)
+	{
+		// Check if just at minimum
+		if (statValue <= baseValue)
+		{
+			return statValue;
+		}
+
+		// Init with minimum value
+		uint32 result = baseValue;
+
+		// Apply factor to difference
+		result += (statValue - baseValue) * factor;
+
+		return result;
+	}
+
+	uint32 UnitStats::GetMaxHealthFromStamina(const uint32 stamina)
+	{
+		return DeriveFromBaseWithFactor(stamina, 20, 10);
+	}
+
+	uint32 UnitStats::GetMaxManaFromIntellect(const uint32 intellect)
+	{
+		return DeriveFromBaseWithFactor(intellect, 20, 15);
+	}
+
 	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers)
 		: GameObjectS(project)
 		, m_timers(timers)
@@ -44,8 +71,10 @@ namespace mmo
 		Set(object_fields::Energy, 100);
 
 		Set(object_fields::MaxMana, 100);
-		Set(object_fields::MaxRage, 1000);
+		Set(object_fields::MaxRage, 100);
 		Set(object_fields::MaxEnergy, 100);
+
+		Set<int32>(object_fields::PowerType, power_type::Mana);
 
 		// Base attack time of one second
 		Set(object_fields::BaseAttackTime, 1000);
@@ -66,9 +95,16 @@ namespace mmo
 		GameObjectS::WriteValueUpdateBlock(writer, creation);
 	}
 
+	void GameUnitS::RefreshStats()
+	{
+		// TODO
+	}
+
 	void GameUnitS::SetLevel(uint32 newLevel)
 	{
 		Set(object_fields::Level, newLevel);
+
+		RefreshStats();
 	}
 
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
@@ -316,6 +352,21 @@ namespace mmo
 	void GameUnitS::SetTarget(uint64 targetGuid)
 	{
 		Set<uint64>(object_fields::TargetUnit, targetGuid);
+	}
+
+	void GameUnitS::SetInCombat(bool inCombat)
+	{
+		uint32 flags = Get<uint32>(object_fields::Flags);
+		if (inCombat)
+		{
+			flags |= unit_flags::InCombat;
+		}
+		else
+		{
+			flags &= ~unit_flags::InCombat;
+		}
+
+		Set<uint32>(object_fields::Flags, flags);
 	}
 
 	void GameUnitS::OnKilled(GameUnitS* killer)

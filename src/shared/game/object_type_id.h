@@ -2,6 +2,18 @@
 
 namespace mmo
 {
+	namespace unit_flags
+	{
+		enum Type
+		{
+			None = 0x00000000,
+
+			InCombat = 0x00000001,
+
+
+		};
+	}
+
 	namespace object_update_flags
 	{
 		enum Type
@@ -57,6 +69,9 @@ namespace mmo
 			/// @brief 32 bit object field
 			Level = ObjectFieldCount,
 
+			/// @brief 32 bit unit flags
+			Flags,
+
 			/// @brief 32 bit object field
 			MaxHealth,
 			/// @brief 32 bit object field
@@ -75,6 +90,16 @@ namespace mmo
 			MaxRage,
 			/// @brief 32 bit object field
 			MaxEnergy,
+
+			/// @brief 32 bit object field
+			PowerType,
+
+			StatStamina,
+			StatStrength,
+			StatAgility,
+			StatIntellect,
+			StatSpirit,
+			Armor,
 
 			/// @brief 64 bit object guid
 			TargetUnit,

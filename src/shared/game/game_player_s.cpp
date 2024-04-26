@@ -22,6 +22,14 @@ namespace mmo
 		Set<int32>(object_fields::Level, 1, false);
 	}
 
+	void GamePlayerS::SetClass(const proto::ClassEntry& classEntry)
+	{
+		m_classEntry = &classEntry;
+
+		Set<int32>(object_fields::MaxLevel, classEntry.levelbasevalues_size());
+		Set<int32>(object_fields::PowerType, classEntry.powertype());
+	}
+
 	void GamePlayerS::RewardExperience(const uint32 xp)
 	{
 		// At max level we can't gain any more xp
@@ -44,10 +52,41 @@ namespace mmo
 		Set<uint32>(object_fields::Xp, currentXp);
 	}
 
+	void GamePlayerS::RefreshStats()
+	{
+		ASSERT(m_classEntry);
+
+		GameUnitS::RefreshStats();
+
+		const int32 level = Get<int32>(object_fields::Level);
+		ASSERT(level > 0);
+		ASSERT(level <= m_classEntry->levelbasevalues_size());
+
+		// Adjust stats
+		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
+		Set<uint32>(object_fields::StatStamina, levelStats->stamina());
+		Set<uint32>(object_fields::StatStrength, levelStats->strength());
+		Set<uint32>(object_fields::StatAgility, levelStats->agility());
+		Set<uint32>(object_fields::StatIntellect, levelStats->intellect());
+		Set<uint32>(object_fields::StatSpirit, levelStats->spirit());
+
+		// TODO: Apply item stats
+		
+		// Calculate max health from stats
+		uint32 maxHealth = UnitStats::GetMaxHealthFromStamina(Get<uint32>(object_fields::StatStamina));
+		maxHealth += levelStats->health();
+		Set<uint32>(object_fields::MaxHealth, maxHealth);
+
+		uint32 maxMana = UnitStats::GetMaxManaFromIntellect(Get<uint32>(object_fields::StatIntellect));
+		maxMana += levelStats->mana();
+		Set<uint32>(object_fields::MaxMana, maxMana);
+
+	}
+
 	void GamePlayerS::SetLevel(uint32 newLevel)
 	{
 		// Anything to do?
-		if (newLevel == Get<uint32>(object_fields::Level))
+		if (newLevel == Get<uint32>(object_fields::Level) || newLevel == 0)
 		{
 			return;
 		}

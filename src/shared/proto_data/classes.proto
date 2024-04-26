@@ -4,6 +4,11 @@ package mmo.proto;
 message ClassBaseValues {
 	required uint32 health = 1;
 	required uint32 mana = 2;
+	required uint32 stamina = 3;
+	required uint32 strength = 4;
+	required uint32 agility = 5;
+	required uint32 intellect = 6;
+	required uint32 spirit = 7;
 }
 
 message ClassEntry {
@@ -11,12 +16,9 @@ message ClassEntry {
 	required string name = 2;
 	required string internalName = 3;
 	enum PowerType {
-		HEALTH = -2;
 		MANA = 0;
 		RAGE = 1;
-		FOCUS = 2;
-		ENERGY = 3;
-		HAPPINESS = 4;
+		ENERGY = 2;
 	}
 	required PowerType powertype = 4;
 	required uint32 spellfamily = 5;

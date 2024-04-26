@@ -18,6 +18,16 @@ namespace mmo
 		class SpellEntry;
 	}
 
+	class UnitStats final
+	{
+	public:
+		static uint32 DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor);
+
+		static uint32 GetMaxHealthFromStamina(const uint32 stamina);
+
+		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
+	};
+
 	/// @brief Represents a living object (unit) in the game world.
 	class GameUnitS : public GameObjectS
 	{
@@ -45,6 +55,8 @@ namespace mmo
 		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const override;
 
 		virtual bool HasMovementInfo() const override { return true; }
+
+		virtual void RefreshStats();
 
 	public:
 		virtual void SetLevel(uint32 newLevel);
@@ -95,6 +107,10 @@ namespace mmo
 
 		void SetTarget(uint64 targetGuid);
 
+		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
+
+		void SetInCombat(bool inCombat);
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
@@ -105,8 +121,6 @@ namespace mmo
 		virtual void OnSpellCastEnded(bool succeeded);
 
 		virtual void OnRegeneration();
-
-		virtual bool IsInCombat() const { /* TODO */ return false; }
 
 		virtual void RegenerateHealth();
 

@@ -117,6 +117,8 @@ namespace mmo
 		/// @brief Stops auto attacking.
 		void StopAttack();
 
+		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
