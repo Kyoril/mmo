@@ -695,10 +695,56 @@ namespace mmo
 
 		if (m_spell.speed() > 0.0f)
 		{
-			// Apply all instant effects
-			ApplyAllEffects();
+			uint64 unitTargetGuid = 0;
+			GameUnitS* targetUnit = nullptr;
+			if (m_target.HasUnitTarget() && (unitTargetGuid = m_target.GetUnitTarget()) != 0)
+			{
+				targetUnit = dynamic_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(unitTargetGuid));
+				if (targetUnit != nullptr)
+				{
+					const float distance = ::sqrtf(m_cast.GetExecuter().GetSquaredDistanceTo(targetUnit->GetPosition(), true));
+					const GameTime travelTimeMs = static_cast<GameTime>(distance / m_spell.speed() * 1000.0f);
 
-			// TODO: calculate distance and start delayed spell effect execution
+					// Calculate spell impact delay
+					auto strongTarget = std::static_pointer_cast<GameUnitS>(targetUnit->shared_from_this());
+
+					// This will be executed on the impact
+					m_impactCountdown.ended.connect(
+						[this, strongThis, strongTarget]() mutable
+						{
+							const auto currentTime = GetAsyncTimeMs();
+							const auto& targetLoc = strongTarget->GetPosition();
+
+							// If end quals start time, we are at 100% progress
+							const float percentage = (m_projectileEnd == m_projectileStart) ? 1.0f : static_cast<float>(currentTime - m_projectileStart) / static_cast<float>(m_projectileEnd - m_projectileStart);
+							const Vector3 projectilePos = m_projectileOrigin.Lerp(m_projectileDest, percentage);
+							const float dist = (targetLoc - projectilePos).GetLength();
+							const GameTime timeMS = (dist / m_spell.speed()) * 1000;
+
+							m_projectileOrigin = projectilePos;
+							m_projectileDest = targetLoc;
+							m_projectileStart = currentTime;
+							m_projectileEnd = currentTime + timeMS;
+
+							if (timeMS >= 50)
+							{
+								m_impactCountdown.SetEnd(currentTime + std::min<GameTime>(timeMS, 400));
+							}
+							else
+							{
+								strongThis->ApplyAllEffects();
+								strongTarget.reset();
+								strongThis.reset();
+							}
+						});
+
+					m_projectileStart = GetAsyncTimeMs();
+					m_projectileEnd = m_projectileStart + travelTimeMs;
+					m_projectileOrigin = m_cast.GetExecuter().GetPosition();
+					m_projectileDest = targetUnit->GetPosition();
+					m_impactCountdown.SetEnd(m_projectileStart + std::min<GameTime>(travelTimeMs, 400));
+				}
+			}
 		}
 		else
 		{
@@ -707,7 +753,7 @@ namespace mmo
 
 		if (!IsChanneled())
 		{
-			//may destroy this, too
+			// may destroy this, too
 			m_casting.ended(true);
 		}
 	}

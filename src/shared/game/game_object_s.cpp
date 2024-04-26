@@ -98,7 +98,7 @@ namespace mmo
 	{
 		if (withHeight)
 		{
-			return position.GetSquaredDistanceTo(position);
+			return position.GetSquaredDistanceTo(GetPosition());
 		}
 
 		Vector3 flatPosition = GetPosition();
