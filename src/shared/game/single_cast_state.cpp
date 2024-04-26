@@ -728,7 +728,7 @@ namespace mmo
 
 							if (timeMS >= 50)
 							{
-								m_impactCountdown.SetEnd(currentTime + std::min<GameTime>(timeMS, 400));
+								m_impactCountdown.SetEnd(currentTime + std::min<GameTime>(timeMS, 200));
 							}
 							else
 							{
@@ -742,7 +742,7 @@ namespace mmo
 					m_projectileEnd = m_projectileStart + travelTimeMs;
 					m_projectileOrigin = m_cast.GetExecuter().GetPosition();
 					m_projectileDest = targetUnit->GetPosition();
-					m_impactCountdown.SetEnd(m_projectileStart + std::min<GameTime>(travelTimeMs, 400));
+					m_impactCountdown.SetEnd(m_projectileStart + std::min<GameTime>(travelTimeMs, 200));
 				}
 			}
 		}

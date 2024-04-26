@@ -15,6 +15,7 @@
 #include "scene_graph/light.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
+#include "spell_projectile.h"
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
@@ -192,5 +193,7 @@ namespace mmo
 		scoped_connection_container m_playerObservers;
 
 		const proto_client::Project& m_project;
+
+		std::vector<std::unique_ptr<SpellProjectile>> m_spellProjectiles;
 	};
 }

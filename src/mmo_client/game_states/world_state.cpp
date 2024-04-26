@@ -19,7 +19,9 @@
 #include <zstr/zstr.hpp>
 
 #include "object_mgr.h"
+#include "spell_projectile.h"
 #include "world_deserializer.h"
+#include "base/erase_by_move.h"
 #include "game/chat_type.h"
 #include "game/game_object_s.h"
 #include "game/game_player_c.h"
@@ -108,6 +110,8 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_spellProjectiles.clear();
+
 		ObjectMgr::Initialize();
 
 		m_worldInstance.reset();
@@ -180,6 +184,23 @@ namespace mmo
 		m_playerController->Update(deltaSeconds);
 
 		ObjectMgr::UpdateObjects(deltaSeconds);
+
+		// Update projectiles
+		auto it = m_spellProjectiles.begin();
+		while(it != m_spellProjectiles.end())
+		{
+			const auto& projectile = *it;
+			projectile->Update(deltaSeconds);
+
+			if (projectile->HasHit())
+			{
+				it = EraseByMove(m_spellProjectiles, it);
+			}
+			else
+			{
+				++it;
+			}
+		}
 
 		if (m_cloudsNode && m_playerController->GetRootNode())
 		{
@@ -841,6 +862,30 @@ namespace mmo
 			>> targetMap))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		// Get the spell
+		const auto* spell = m_project.spells.getById(spellId);
+		ASSERT(spell);
+
+		// TODO: Instead of hard coding the projectile stuff in here, make it more flexible by linking some dynamic visual data stuff to spells on the client side
+		if (spell->speed() > 0.0f)
+		{
+			// For each target in the target map
+			if (targetMap.HasUnitTarget())
+			{
+				auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId);
+
+				const uint64 unitTargetGuid = targetMap.GetUnitTarget();
+				auto targetUnit = ObjectMgr::Get<GameUnitC>(unitTargetGuid);
+
+				if (casterUnit && targetUnit)
+				{
+					// Spawn projectile
+					auto projectile = std::make_unique<SpellProjectile>(m_scene, *spell, casterUnit->GetSceneNode()->GetDerivedPosition(), targetUnit);
+					m_spellProjectiles.push_back(std::move(projectile));
+				}
+			}
 		}
 
 		if (m_playerController->GetControlledUnit())
