@@ -253,7 +253,7 @@ namespace mmo
 			return;
 		}
 
-		threatened(*instigator, 1.0f);
+		threatened(*instigator, damage);
 
 		if (health < damage)
 		{
@@ -301,7 +301,6 @@ namespace mmo
 
 		if (IsAttacking(victim))
 		{
-			DLOG("Already attacking unit, nothing to do");
 			return;
 		}
 
@@ -356,17 +355,35 @@ namespace mmo
 
 	void GameUnitS::SetInCombat(bool inCombat)
 	{
-		uint32 flags = Get<uint32>(object_fields::Flags);
 		if (inCombat)
 		{
-			flags |= unit_flags::InCombat;
+			AddFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 		}
 		else
 		{
-			flags &= ~unit_flags::InCombat;
+			RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 		}
+	}
 
-		Set<uint32>(object_fields::Flags, flags);
+	void GameUnitS::AddAttackingUnit(const GameUnitS& attacker)
+	{
+		m_attackingUnits.add(&attacker);
+		SetInCombat(true);
+	}
+
+	void GameUnitS::RemoveAttackingUnit(const GameUnitS& attacker)
+	{
+		m_attackingUnits.remove(&attacker);
+		if (m_attackingUnits.empty())
+		{
+			SetInCombat(false);
+		}
+	}
+
+	void GameUnitS::RemoveAllAttackingUnits()
+	{
+		m_attackingUnits.clear();
+		SetInCombat(false);
 	}
 
 	void GameUnitS::OnKilled(GameUnitS* killer)

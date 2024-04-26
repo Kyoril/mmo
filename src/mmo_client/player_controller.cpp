@@ -204,11 +204,11 @@ namespace mmo
 
 		if (movementInfo.IsTurning())
 		{
-			if (movementInfo.movementFlags & MovementFlags::TurnLeft)
+			if (movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
 				playerNode->Yaw(Degree(180) * deltaSeconds, TransformSpace::World);
 			}
-			else if (movementInfo.movementFlags & MovementFlags::TurnRight)
+			else if (movementInfo.movementFlags & movement_flags::TurnRight)
 			{
 				playerNode->Yaw(Degree(-180) * deltaSeconds, TransformSpace::World);
 			}
@@ -218,19 +218,19 @@ namespace mmo
 		{
 			Vector3 movementVector;
 
-			if (movementInfo.movementFlags & MovementFlags::Forward)
+			if (movementInfo.movementFlags & movement_flags::Forward)
 			{
 				movementVector.z -= 1.0f;
 			}
-			if(movementInfo.movementFlags & MovementFlags::Backward)
+			if(movementInfo.movementFlags & movement_flags::Backward)
 			{
 				movementVector.z += 1.0f;
 			}
-			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
+			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
 				movementVector.x -= 1.0f;
 			}
-			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
+			if(movementInfo.movementFlags & movement_flags::StrafeRight)
 			{
 				movementVector.x += 1.0f;
 			}

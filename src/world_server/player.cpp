@@ -395,7 +395,7 @@ namespace mmo
 
 		if (opCode == game::realm_client_packet::MoveStartForward)
 		{
-			if (m_character->GetMovementInfo().movementFlags & MovementFlags::Forward)
+			if (m_character->GetMovementInfo().movementFlags & movement_flags::Forward)
 			{
 				ELOG("User starts moving forward but was already moving forward")
 				return;
@@ -403,7 +403,7 @@ namespace mmo
 		}
 		else if (opCode == game::realm_client_packet::MoveStartBackward)
 		{
-			if (m_character->GetMovementInfo().movementFlags & MovementFlags::Backward)
+			if (m_character->GetMovementInfo().movementFlags & movement_flags::Backward)
 			{
 				ELOG("User starts moving backward but was already moving backward")
 				return;
@@ -411,7 +411,7 @@ namespace mmo
 		}
 		else if (opCode == game::realm_client_packet::MoveStop)
 		{
-			if ((m_character->GetMovementInfo().movementFlags & MovementFlags::Moving) == 0)
+			if ((m_character->GetMovementInfo().movementFlags & movement_flags::Moving) == 0)
 			{
 				ELOG("User stops movement but was not moving")
 				return;

@@ -55,12 +55,19 @@ namespace mmo
 		/// @param index The field index to set.
 		/// @param value The new value to set.
 		template<class T>
-		void SetFieldValue(FieldIndexType index, T value)
+		bool SetFieldValue(FieldIndexType index, T value)
 		{
 			ASSERT(index <= m_data.size());
 			ASSERT(index * sizeof(TFieldBase) + sizeof(T) <= m_data.size() * sizeof(TFieldBase));
 
 			T* data = reinterpret_cast<T*>(&m_data[index]);
+
+			// Don't need to change anything if value did not change
+			if (*data == value)
+			{
+				return false;
+			}
+
 			*data = value;
 						
 			// Mark fields as changed
@@ -68,6 +75,8 @@ namespace mmo
 			{
 				MarkAsChanged(index + i);
 			}
+
+			return true;
 		}
 
 		/// Determines whether the given field is marked as changed.

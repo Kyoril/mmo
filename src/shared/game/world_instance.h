@@ -10,6 +10,7 @@
 #include "game/game.h"
 #include "visibility_grid.h"
 #include "base/id_generator.h"
+#include "shared/proto_data/maps.pb.h"
 
 namespace mmo
 {
@@ -99,6 +100,20 @@ namespace mmo
 
 		/// Removes the reference to a creature that was created using CreateTemporaryCreature. The creature needs to be despawned before this call.
 		void DestroyTemporaryCreature(uint64 guid);
+
+		bool IsDungeon() const { /*return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_DUNGEON;*/ return false; }
+
+		bool IsRaid() const { /* return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_RAID; */ return false; }
+
+		bool IsInstancedPvE() const { return IsDungeon() || IsRaid(); }
+
+		bool IsPersistent() const { return true; /* return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_GLOBAL; */ }
+
+		bool IsArena() const { return false; /* return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_ARENA; */ }
+
+		bool IsBattleground() const { return false; /* return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_BATTLEGROUND; */ }
+
+		bool IsPvP() const { return IsArena() || IsBattleground(); }
 
 	protected:
 

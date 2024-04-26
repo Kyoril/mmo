@@ -111,6 +111,14 @@ namespace mmo
 
 		void SetInCombat(bool inCombat);
 
+		float GetMeleeReach() const { return 1.5f; /* TODO */ }
+
+		void AddAttackingUnit(const GameUnitS& attacker);
+
+		void RemoveAttackingUnit(const GameUnitS& attacker);
+
+		void RemoveAllAttackingUnits();
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
@@ -147,6 +155,8 @@ namespace mmo
 		UnitMover& GetMover() const { return *m_mover; }
 
 	protected:
+		typedef LinearSet<const GameUnitS*> AttackingUnitSet;
+
 		TimerQueue& m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
@@ -162,5 +172,7 @@ namespace mmo
 
 		std::map<uint32, GameTime> m_spellCooldowns;
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;
+
+		AttackingUnitSet m_attackingUnits;
 	};
 }

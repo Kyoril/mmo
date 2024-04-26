@@ -99,13 +99,13 @@ namespace mmo
 	{
 		if (forward)
 		{
-			m_movementInfo.movementFlags |= MovementFlags::Forward;
-			m_movementInfo.movementFlags &= ~MovementFlags::Backward;
+			m_movementInfo.movementFlags |= movement_flags::Forward;
+			m_movementInfo.movementFlags &= ~movement_flags::Backward;
 		}
 		else
 		{
-			m_movementInfo.movementFlags |= MovementFlags::Backward;
-			m_movementInfo.movementFlags &= ~MovementFlags::Forward;
+			m_movementInfo.movementFlags |= movement_flags::Backward;
+			m_movementInfo.movementFlags &= ~movement_flags::Forward;
 		}
 	}
 
@@ -113,43 +113,43 @@ namespace mmo
 	{
 		if (left)
 		{
-			m_movementInfo.movementFlags |= MovementFlags::StrafeLeft;
-			m_movementInfo.movementFlags &= ~MovementFlags::StrafeRight;
+			m_movementInfo.movementFlags |= movement_flags::StrafeLeft;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
 		}
 		else
 		{
-			m_movementInfo.movementFlags |= MovementFlags::StrafeRight;
-			m_movementInfo.movementFlags &= ~MovementFlags::StrafeLeft;
+			m_movementInfo.movementFlags |= movement_flags::StrafeRight;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
 		}
 	}
 
 	void GameUnitC::StopMove()
 	{
-		m_movementInfo.movementFlags &= ~MovementFlags::Moving;
+		m_movementInfo.movementFlags &= ~movement_flags::Moving;
 	}
 
 	void GameUnitC::StopStrafe()
 	{
-		m_movementInfo.movementFlags &= ~MovementFlags::Strafing;
+		m_movementInfo.movementFlags &= ~movement_flags::Strafing;
 	}
 
 	void GameUnitC::StartTurn(const bool left)
 	{
 		if (left)
 		{
-			m_movementInfo.movementFlags |= MovementFlags::TurnLeft;
-			m_movementInfo.movementFlags &= ~MovementFlags::TurnRight;
+			m_movementInfo.movementFlags |= movement_flags::TurnLeft;
+			m_movementInfo.movementFlags &= ~movement_flags::TurnRight;
 		}
 		else
 		{
-			m_movementInfo.movementFlags |= MovementFlags::TurnRight;
-			m_movementInfo.movementFlags &= ~MovementFlags::TurnLeft;
+			m_movementInfo.movementFlags |= movement_flags::TurnRight;
+			m_movementInfo.movementFlags &= ~movement_flags::TurnLeft;
 		}
 	}
 
 	void GameUnitC::StopTurn()
 	{
-		m_movementInfo.movementFlags &= ~MovementFlags::Turning;
+		m_movementInfo.movementFlags &= ~movement_flags::Turning;
 	}
 
 	void GameUnitC::SetFacing(const Radian& facing)

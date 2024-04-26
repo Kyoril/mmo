@@ -15,9 +15,9 @@ namespace mmo
 {
 	namespace proto_client
 	{
-		typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 		typedef TemplateManager<mmo::proto_client::Spells, mmo::proto_client::SpellEntry> SpellManager;
 		typedef TemplateManager<mmo::proto_client::SpellCategories, mmo::proto_client::SpellCategoryEntry> SpellCategoryManager;
+		//typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -33,7 +33,7 @@ namespace mmo
 
 			// Data managers
 
-			MapManager maps;
+			//MapManager maps;
 			SpellManager spells;
 			SpellCategoryManager spellCategories;
 
@@ -80,7 +80,7 @@ namespace mmo
 
 				ClientProjectLoader::Managers managers;
 				managers.push_back(ManagerEntry("spells", spells));
-				managers.push_back(ManagerEntry("maps", maps));
+				//managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
 
 				if (!ClientProjectLoader::load(
@@ -114,7 +114,7 @@ namespace mmo
 
 				ClientProjectSaver::Managers managers;
 				managers.emplace_back("spells", "spells", spells);
-				managers.emplace_back("maps", "maps", maps);
+				//managers.emplace_back("maps", "maps", maps);
 				managers.emplace_back("spell_categories", "spell_categories", spellCategories);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))

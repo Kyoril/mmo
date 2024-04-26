@@ -277,7 +277,7 @@ namespace mmo
 		spawned->Initialize();
 		spawned->Set(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		spawned->ApplyMovementInfo(
-			{ MovementFlags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
+			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
 		return spawned;
 	}

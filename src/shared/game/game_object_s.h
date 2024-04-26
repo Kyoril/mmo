@@ -159,9 +159,9 @@ namespace mmo
 		template<class T>
 		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{
-			m_fields.SetFieldValue(index, value);
+			const bool updated = m_fields.SetFieldValue(index, value);
 
-			if (m_worldInstance && notify)
+			if (m_worldInstance && notify && updated)
 			{
 				m_worldInstance->AddObjectUpdate(*this);
 			}
@@ -171,6 +171,20 @@ namespace mmo
 		T Get(ObjectFieldMap::FieldIndexType index) const
 		{
 			return m_fields.GetFieldValue<T>(index);
+		}
+
+		template<class T>
+		void AddFlag(ObjectFieldMap::FieldIndexType index, T flag)
+		{
+			const T flags = Get<T>(index);
+			Set<T>(index, flags | flag);
+		}
+
+		template<class T>
+		void RemoveFlag(ObjectFieldMap::FieldIndexType index, T flag)
+		{
+			const T flags = Get<T>(index);
+			Set<T>(index, flags & ~flag);
 		}
 
 		template<class OnSubscriber>
@@ -256,6 +270,8 @@ namespace mmo
 		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const;
 
 		void ClearFieldChanges();
+
+		float GetSquaredDistanceTo(const Vector3& position, bool withHeight) const;
 
 		/// Gets the world instance of this object. May be nullptr, if the object is
 		/// not in any world.

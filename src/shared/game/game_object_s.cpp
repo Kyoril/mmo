@@ -94,6 +94,19 @@ namespace mmo
 		}
 	}
 
+	float GameObjectS::GetSquaredDistanceTo(const Vector3& position, bool withHeight) const
+	{
+		if (withHeight)
+		{
+			return position.GetSquaredDistanceTo(position);
+		}
+
+		Vector3 flatPosition = GetPosition();
+		flatPosition.y = 0.0f;
+
+		return flatPosition.GetSquaredDistanceTo(Vector3(position.x, 0.0f, position.z));
+	}
+
 	void GameObjectS::SetWorldInstance(WorldInstance* instance)
 	{
 		// Use new instance

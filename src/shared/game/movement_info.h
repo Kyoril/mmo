@@ -25,7 +25,7 @@ namespace mmo
 
 	typedef movement_type::Type MovementType;
 
-	namespace MovementFlags
+	namespace movement_flags
 	{
 		/// @brief Enumerates movement flags.
 		enum Type
@@ -123,7 +123,7 @@ namespace mmo
 	{
 	public:
 		/// @brief Movement flags.
-		uint32 movementFlags { MovementFlags::None };
+		uint32 movementFlags { movement_flags::None };
 
 		/// @brief Timestamp of this movement info snapshot.
 		GameTime timestamp { 0 };
@@ -153,13 +153,13 @@ namespace mmo
 		float jumpXZSpeed { 0.0f };
 
 	public:
-		bool IsMoving() const noexcept { return (movementFlags & MovementFlags::Moving) != 0; }
+		bool IsMoving() const noexcept { return (movementFlags & movement_flags::Moving) != 0; }
 
-		bool IsStrafing() const noexcept { return (movementFlags & MovementFlags::Strafing) != 0; }
+		bool IsStrafing() const noexcept { return (movementFlags & movement_flags::Strafing) != 0; }
 
-		bool IsTurning() const noexcept { return (movementFlags & MovementFlags::Turning) != 0; }
+		bool IsTurning() const noexcept { return (movementFlags & movement_flags::Turning) != 0; }
 
-		bool IsPitching() const noexcept { return (movementFlags & MovementFlags::Pitching) != 0; }
+		bool IsPitching() const noexcept { return (movementFlags & movement_flags::Pitching) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)
@@ -170,14 +170,14 @@ namespace mmo
 			<< info.position
 			<< info.facing;
 		
-		if (info.movementFlags & (MovementFlags::Swimming | MovementFlags::Flying))
+		if (info.movementFlags & (movement_flags::Swimming | movement_flags::Flying))
 		{
 			writer << info.pitch;
 		}
 
 		writer << io::write<uint64>(info.fallTime);
 
-		if (info.movementFlags & MovementFlags::Falling)
+		if (info.movementFlags & movement_flags::Falling)
 		{
 			writer
 				<< io::write<float>(info.jumpVelocity)
@@ -197,14 +197,14 @@ namespace mmo
 			>> info.position
 			>> info.facing;
 
-		if (info.movementFlags & (MovementFlags::Swimming | MovementFlags::Flying))
+		if (info.movementFlags & (movement_flags::Swimming | movement_flags::Flying))
 		{
 			reader >> info.pitch;
 		}
 
 		reader >> io::read<uint64>(info.fallTime);
 
-		if (info.movementFlags & MovementFlags::Falling)
+		if (info.movementFlags & movement_flags::Falling)
 		{
 			reader
 				>> io::read<float>(info.jumpVelocity)

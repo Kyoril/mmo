@@ -232,7 +232,7 @@ namespace mmo
 		m_moveEnd = moveTime;
 
 		auto movementInfo = moved.GetMovementInfo();
-		movementInfo.movementFlags = MovementFlags::None;
+		movementInfo.movementFlags = movement_flags::None;
 		moved.ApplyMovementInfo(movementInfo);
 
 		// Send movement packet
