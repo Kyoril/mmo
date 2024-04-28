@@ -142,6 +142,14 @@ namespace mmo
 
 		PacketParseResult OnAttackStop(game::IncomingPacket& packet);
 
+		PacketParseResult OnLogXp(game::IncomingPacket& packet);
+
+		PacketParseResult OnLogSpellDamage(game::IncomingPacket& packet);
+
+		PacketParseResult OnLogNoSpellDamage(game::IncomingPacket& packet);
+
+		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

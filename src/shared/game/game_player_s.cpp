@@ -84,6 +84,9 @@ namespace mmo
 		maxMana += levelStats->mana();
 		Set<uint32>(object_fields::MaxMana, maxMana);
 
+		// TODO
+		Set<float>(object_fields::MinDamage, 8.0f);
+		Set<float>(object_fields::MaxDamage, 12.0f);
 	}
 
 	void GamePlayerS::SetLevel(uint32 newLevel)

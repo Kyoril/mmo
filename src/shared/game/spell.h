@@ -761,4 +761,5 @@ namespace mmo
 	}
 
 	typedef spell_effects::Type SpellEffect;
+
 }

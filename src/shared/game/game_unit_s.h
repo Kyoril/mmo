@@ -120,6 +120,8 @@ namespace mmo
 		void RemoveAllAttackingUnits();
 
 	protected:
+		uint32 CalculateArmorReducedDamage(uint32 attackerLevel, uint32 damage) const;
+
 		virtual void OnKilled(GameUnitS* killer);
 
 		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}

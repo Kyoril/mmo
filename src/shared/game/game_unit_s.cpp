@@ -78,6 +78,8 @@ namespace mmo
 
 		// Base attack time of one second
 		Set(object_fields::BaseAttackTime, 1000);
+		Set<float>(object_fields::MinDamage, 2.0f);
+		Set<float>(object_fields::MaxDamage, 4.0f);
 	}
 
 	void GameUnitS::TriggerDespawnTimer(GameTime despawnDelay)
@@ -105,6 +107,11 @@ namespace mmo
 		Set(object_fields::Level, newLevel);
 
 		RefreshStats();
+
+		// Ensure health, mana and powers are maxed out on level up
+		Set(object_fields::Health, GetMaxHealth());
+		Set(object_fields::Mana, Get<uint32>(object_fields::MaxMana));
+		Set(object_fields::Energy, Get<uint32>(object_fields::MaxEnergy));
 	}
 
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
@@ -386,6 +393,20 @@ namespace mmo
 		SetInCombat(false);
 	}
 
+	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const
+	{
+		float armor = static_cast<float>(Get<uint32>(object_fields::Armor));
+		if (armor < 0.0f)
+		{
+			armor = 0.0f;
+		}
+
+		float factor = armor / (armor + 400.0f + attackerLevel * 85.0f);
+		factor = Clamp(factor, 0.0f, 0.75f);
+
+		return damage - static_cast<uint32>(damage * factor);
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast();
@@ -416,8 +437,11 @@ namespace mmo
 			return;
 		}
 
-		RegenerateHealth();
-
+		if (!IsInCombat())
+		{
+			RegenerateHealth();
+		}
+		
 		if (!IsInCombat())
 		{
 			RegeneratePower(power_type::Rage);
@@ -519,7 +543,22 @@ namespace mmo
 			return;
 		}
 
-		DLOG("TODO: Auto attack of unit " << log_hex_digit(GetGuid()) << " on " << log_hex_digit(victim->GetGuid()));
+		// Calculate damage between minimum and maximum damage
+		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
+		uint32 totalDamage = victim->CalculateArmorReducedDamage(Get<uint32>(object_fields::Level), static_cast<uint32>(distribution(randomGenerator)));
+
+		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
+		const float critChance = 5.0f;			// 5% crit chance hard coded for now
+		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+
+		bool isCrit = false;
+		if (critDistribution(randomGenerator) < critChance)
+		{
+			isCrit = true;
+			totalDamage *= 2;
+		}
+
+		victim->Damage(totalDamage, spell_school::Normal, this);
 
 		TriggerNextAutoAttack();
 	}

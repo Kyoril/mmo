@@ -1139,6 +1139,26 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnLogXp(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnLogSpellDamage(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnLogNoSpellDamage(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);

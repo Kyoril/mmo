@@ -107,7 +107,11 @@ namespace mmo
 			/// @brief 32 bit time
 			BaseAttackTime = TargetUnit + 2,
 
-			UnitFieldCount = BaseAttackTime + 1,
+			/// @brief 32 bit time
+			MinDamage,
+			MaxDamage,
+
+			UnitFieldCount = MaxDamage + 1,
 		};
 
 		enum PlayerFields
