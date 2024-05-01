@@ -5,6 +5,8 @@
 #include "base/clock.h"
 #include "binary_io/vector_sink.h"
 
+#include <cmath>
+
 namespace mmo
 {
 	GameObjectS::GameObjectS(const proto::Project& project)
@@ -105,6 +107,67 @@ namespace mmo
 		flatPosition.y = 0.0f;
 
 		return flatPosition.GetSquaredDistanceTo(Vector3(position.x, 0.0f, position.z));
+	}
+
+	bool GameObjectS::IsInArc(const GameObjectS& other, const Radian& arc) const
+	{
+		return IsInArc(other.GetPosition(), arc);
+	}
+
+	bool GameObjectS::IsInArc(const Vector3& position, const Radian& arcRadian) const
+	{
+		const auto myPosition = GetPosition();
+
+		if (position.x == myPosition.x && position.z == myPosition.z)
+		{
+			return true;
+		}
+
+		const float PI = 3.1415927f;
+		float arc = arcRadian.GetValueRadians();
+
+		// move arc to range 0.. 2*pi
+		while (arc >= 2.0f * PI) {
+			arc -= 2.0f * PI;
+		}
+		while (arc < 0) {
+			arc += 2.0f * PI;
+		}
+
+		float angle = GetAngle(position.x, position.z).GetValueRadians();
+		angle -= GetFacing().GetValueRadians();
+
+		// move angle to range -pi ... +pi
+		while (angle > PI) {
+			angle -= 2.0f * PI;
+		}
+		while (angle < -PI) {
+			angle += 2.0f * PI;
+		}
+
+		float lborder = -1 * (arc / 2.0f);                     // in range -pi..0
+		float rborder = (arc / 2.0f);                           // in range 0..pi
+		return ((angle >= lborder) && (angle <= rborder));
+	}
+
+	bool GameObjectS::IsFacingTowards(const GameObjectS& other) const
+	{
+		return IsFacingTowards(other.GetPosition());
+	}
+
+	bool GameObjectS::IsFacingAwayFrom(const GameObjectS& other) const
+	{
+		return IsFacingAwayFrom(other.GetPosition());
+	}
+
+	bool GameObjectS::IsFacingTowards(const Vector3& position) const
+	{
+		return IsInArc(position, Radian(2.0f * Pi));
+	}
+
+	bool GameObjectS::IsFacingAwayFrom(const Vector3& position) const
+	{
+		return IsInArc(position, Radian(Pi));
 	}
 
 	void GameObjectS::SetWorldInstance(WorldInstance* instance)

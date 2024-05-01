@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "each_tile_in_sight.h"
-#include "field_map.h"
+#include "game/field_map.h"
 #include "base/typedefs.h"
 #include "base/signal.h"
 
@@ -18,8 +18,8 @@
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
-#include "movement_info.h"
-#include "object_type_id.h"
+#include "game/movement_info.h"
+#include "game/object_type_id.h"
 #include "world_instance.h"
 
 namespace mmo
@@ -212,7 +212,7 @@ namespace mmo
 		uint64 GetGuid() const { return m_fields.GetFieldValue<uint64>(object_fields::Guid); }
 
 		/// Gets the position of this object.
-		const Vector3& GetPosition() const noexcept { return m_movementInfo.position; }
+		virtual const Vector3& GetPosition() const noexcept { return m_movementInfo.position; }
 
 		/// Gets the facing of this object.
 		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
@@ -253,7 +253,7 @@ namespace mmo
 			const float dx = x - GetPosition().x;
 			const float dz = z - GetPosition().z;
 
-			float ang = ::atan2(dz, dx);
+			float ang = ::atan2(dx, -dz);
 			ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
 			return Radian(ang);
 		}
@@ -272,6 +272,18 @@ namespace mmo
 		void ClearFieldChanges();
 
 		float GetSquaredDistanceTo(const Vector3& position, bool withHeight) const;
+
+		bool IsInArc(const GameObjectS& other, const Radian& arc) const;
+
+		bool IsInArc(const Vector3& position, const Radian& arc) const;
+
+		bool IsFacingTowards(const GameObjectS& other) const;
+
+		bool IsFacingAwayFrom(const GameObjectS& other) const;
+
+		bool IsFacingTowards(const Vector3& position) const;
+
+		bool IsFacingAwayFrom(const Vector3& position) const;
 
 		/// Gets the world instance of this object. May be nullptr, if the object is
 		/// not in any world.

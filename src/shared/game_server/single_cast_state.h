@@ -10,7 +10,7 @@
 #include "binary_io/vector_sink.h"
 #include "game_protocol/game_protocol.h"
 #include "each_tile_in_sight.h"
-#include "spell.h"
+#include "game/spell.h"
 
 namespace mmo
 {

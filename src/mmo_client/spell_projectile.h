@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/game_unit_c.h"
+#include "game_client/game_unit_c.h"
 #include "base/signal.h"
 
 #include <memory>

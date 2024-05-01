@@ -5,8 +5,8 @@
 #include "base/timer_queue.h"
 #include "base/countdown.h"
 #include "math/vector3.h"
-#include "movement_info.h"
-#include "movement_path.h"
+#include "game/movement_info.h"
+#include "game/movement_path.h"
 #include "base/signal.h"
 
 namespace mmo

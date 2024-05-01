@@ -1,6 +1,7 @@
 
 #include "game_unit_c.h"
 
+#include "base/clock.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -77,6 +78,7 @@ namespace mmo
 			}
 
 			m_sceneNode->SetPosition(m_movementStart);
+			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
 			if (animationFinished)
@@ -86,6 +88,15 @@ namespace mmo
 				// End animation
 				m_movementAnimation.reset();
 				m_movementAnimationTime = 0.0f;
+			}
+		}
+		else
+		{
+			if (const auto strongTarget = m_targetUnit.lock())
+			{
+				Quaternion rotation = Quaternion::Identity;
+				rotation.FromAngleAxis(GetAngle(*strongTarget), Vector3::UnitY);
+				m_sceneNode->SetOrientation(rotation);
 			}
 		}
 	}
@@ -157,6 +168,18 @@ namespace mmo
 		m_movementInfo.facing = facing;
 	}
 
+	Quaternion GetFacingRotation(const Vector3& from, const Vector3& to)
+	{
+		const float dx = from.x - to.x;
+		const float dz = from.z - to.z;
+		float ang = ::atan2(dx, -dz);
+		ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
+
+		Quaternion rotation;
+		rotation.FromAngleAxis(Radian(ang), Vector3::UnitY);
+		return rotation;
+	}
+
 	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points)
 	{
 		m_movementAnimationTime = 0.0f;
@@ -172,8 +195,10 @@ namespace mmo
 		std::vector<float> keyFrameTimes;
 		keyFrameTimes.reserve(points.size() + 1);
 
+		Quaternion prevRotation = GetFacingRotation(Vector3::Zero, points[0] - m_movementStart);
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
+		m_movementStartRot = prevRotation;
 
 		// First point
 		positions.emplace_back(0.0f, 0.0f, 0.0f);
@@ -199,10 +224,26 @@ namespace mmo
 
 		for (size_t i = 0; i < positions.size(); ++i)
 		{
-			track->CreateNodeKeyFrame(keyFrameTimes[i])->SetTranslate(positions[i]);
+			const auto frame = track->CreateNodeKeyFrame(keyFrameTimes[i]);
+			frame->SetTranslate(positions[i]);
+
+			if (i > 1)
+			{
+				prevRotation = GetFacingRotation(positions[i], positions[i - 1]);
+				frame->SetRotation(prevRotation);
+			}
+			else
+			{
+				frame->SetRotation(prevRotation);
+			}
 		}
 
 		m_movementEnd = prevPosition;
+	}
+
+	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
+	{
+		m_targetUnit = targetUnit;
 	}
 
 	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spells)

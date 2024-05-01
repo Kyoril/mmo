@@ -3,7 +3,7 @@
 #pragma once
 
 #include "frame_ui/mouse_event_args.h"
-#include "game/game_unit_c.h"
+#include "game_client/game_unit_c.h"
 #include "game/movement.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/scene.h"

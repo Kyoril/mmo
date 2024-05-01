@@ -73,6 +73,7 @@ target_link_libraries(mmo_client
 	frame_ui
 	expat
 	game
+    game_client
 	scene_graph
     lua
     luabind

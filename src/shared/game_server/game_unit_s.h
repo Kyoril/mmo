@@ -5,9 +5,10 @@
 #include <memory>
 #include <set>
 
+#include "game/auto_attack.h"
 #include "game_object_s.h"
 #include "spell_cast.h"
-#include "spell_target_map.h"
+#include "game/spell_target_map.h"
 #include "unit_mover.h"
 #include "base/countdown.h"
 
@@ -26,6 +27,16 @@ namespace mmo
 		static uint32 GetMaxHealthFromStamina(const uint32 stamina);
 
 		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
+	};
+
+	class NetUnitWatcherS
+	{
+	public:
+		virtual ~NetUnitWatcherS() = default;
+
+	public:
+		virtual void OnAttackSwingEvent(AttackSwingEvent error) = 0;
+
 	};
 
 	/// @brief Represents a living object (unit) in the game world.
@@ -57,6 +68,10 @@ namespace mmo
 		virtual bool HasMovementInfo() const override { return true; }
 
 		virtual void RefreshStats();
+
+		void SetNetUnitWatcher(NetUnitWatcherS* watcher) { m_netUnitWatcher = watcher; }
+
+		const Vector3& GetPosition() const noexcept override;
 
 	public:
 		virtual void SetLevel(uint32 newLevel);
@@ -111,7 +126,7 @@ namespace mmo
 
 		void SetInCombat(bool inCombat);
 
-		float GetMeleeReach() const { return 1.5f; /* TODO */ }
+		float GetMeleeReach() const { return 5.0f; /* TODO */ }
 
 		void AddAttackingUnit(const GameUnitS& attacker);
 
@@ -135,6 +150,8 @@ namespace mmo
 		virtual void RegenerateHealth();
 
 		virtual void RegeneratePower(PowerType powerType);
+
+		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
 
 	protected:
 		virtual void PrepareFieldMap() override
@@ -176,5 +193,8 @@ namespace mmo
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;
 
 		AttackingUnitSet m_attackingUnits;
+
+		NetUnitWatcherS* m_netUnitWatcher = nullptr;
+		mutable Vector3 m_lastPosition;
 	};
 }

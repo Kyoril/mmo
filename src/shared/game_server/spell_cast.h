@@ -1,6 +1,6 @@
 #pragma once
 
-#include "spell_target_map.h"
+#include "game/spell_target_map.h"
 #include "base/signal.h"
 #include "base/timer_queue.h"
 #include "shared/proto_data/spells.pb.h"

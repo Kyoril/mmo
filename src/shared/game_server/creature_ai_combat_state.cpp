@@ -167,17 +167,17 @@ namespace mmo
 			it = m_threat.insert(m_threat.begin(), std::make_pair(guid, ThreatEntry(threatener, 0.0f)));
 
 			// Watch for unit killed signal
-			m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS* killer)
+			m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS*)
 				{
 					RemoveThreat(threatener);
 				});
 
 			auto strongThreatener = std::static_pointer_cast<GameUnitS>(threatener.shared_from_this());
-			std::weak_ptr<GameUnitS> weakThreatener(strongThreatener);
+			std::weak_ptr weakThreatener(strongThreatener);
 
 			// Watch for unit despawned signal
 			m_miscSignals[guid] +=
-				threatener.despawned.connect([this, strongThreatener](GameObjectS& despawned)
+				threatener.despawned.connect([this, strongThreatener](GameObjectS&)
 					{
 						RemoveThreat(*strongThreatener);
 					});
@@ -321,14 +321,14 @@ namespace mmo
 		const float distance = (currentUnitLoc - currentLocation).GetSquaredLength();
 
 		// Check distance and whether we need to move
-		if (distance > ((combatRange * 0.85f) * (combatRange * 0.85f)))
+		if (distance > ((combatRange * 0.5f) * (combatRange * 0.5f)))
 		{
 			Vector3 newTargetLocation = target.GetPredictedPosition();
 			Vector3 direction = (newTargetLocation - currentLocation);
 			if (direction.Normalize() != 0.0f)
 			{
 				// Adjust target location since we don't want to stand IN the target
-				newTargetLocation = newTargetLocation - (direction * target.GetMeleeReach());
+				newTargetLocation = newTargetLocation - (direction * 2.0);
 			}
 
 			// Chase the target

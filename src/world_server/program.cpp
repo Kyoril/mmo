@@ -11,7 +11,7 @@
 #include "auth_protocol/auth_server.h"
 #include "configuration.h"
 #include "realm_connector.h"
-#include "game/world_instance_manager.h"
+#include "game_server/world_instance_manager.h"
 #include "player_manager.h"
 
 #include <fstream>
@@ -24,7 +24,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
-#include "game/universe.h"
+#include "game_server/universe.h"
 #include "proto_data/project.h"
 
 namespace mmo

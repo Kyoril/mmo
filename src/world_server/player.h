@@ -6,10 +6,10 @@
 #include "vector_sink.h"
 #include "game/character_data.h"
 #include "game/chat_type.h"
-#include "game/game_object_s.h"
-#include "game/game_player_s.h"
-#include "game/tile_index.h"
-#include "game/tile_subscriber.h"
+#include "game_server/game_object_s.h"
+#include "game_server/game_player_s.h"
+#include "game_server/tile_index.h"
+#include "game_server/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
 
 namespace mmo
@@ -21,7 +21,7 @@ namespace mmo
 
 	/// @brief This class represents the connection to a player on a realm server that this
 	///	       world node is connected to.
-	class Player final : public TileSubscriber
+	class Player final : public TileSubscriber, public NetUnitWatcherS
 	{
 	public:
 		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
@@ -102,12 +102,16 @@ namespace mmo
 
 		void OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
+	public:
+		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
+
 	private:
 		RealmConnector& m_connector;
 		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
 		const proto::Project& m_project;
+		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
 	};
 
 }

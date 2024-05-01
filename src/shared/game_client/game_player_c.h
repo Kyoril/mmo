@@ -2,7 +2,7 @@
 
 #include "game_object_c.h"
 #include "game_unit_c.h"
-#include "movement_info.h"
+#include "game/movement_info.h"
 
 namespace mmo
 {

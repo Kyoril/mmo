@@ -14,8 +14,8 @@
 #include "visibility_tile.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
-#include "game/game_object_s.h"
-#include "game/each_tile_in_region.h"
+#include "game_server/game_object_s.h"
+#include "game_server/each_tile_in_region.h"
 #include "proto_data/project.h"
 
 namespace mmo

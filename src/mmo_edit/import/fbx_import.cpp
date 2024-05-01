@@ -171,7 +171,7 @@ namespace mmo
 
 	bool FbxImport::SupportsExtension(const String& extension) const noexcept
 	{
-		return extension == ".fbx";
+		return extension == ".fbx" || extension == ".gltf" || extension == ".glb";
 	}
 
 	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox) const

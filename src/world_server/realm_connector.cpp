@@ -4,8 +4,8 @@
 
 #include "player.h"
 #include "player_manager.h"
-#include "game/world_instance_manager.h"
-#include "game/world_instance.h"
+#include "game_server/world_instance_manager.h"
+#include "game_server/world_instance.h"
 #include "version.h"
 
 #include "base/utilities.h"
@@ -14,7 +14,7 @@
 #include "base/timer_queue.h"
 #include "game/character_data.h"
 #include "game/chat_type.h"
-#include "game/game_player_s.h"
+#include "game_server/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"

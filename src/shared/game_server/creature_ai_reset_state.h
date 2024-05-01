@@ -23,5 +23,9 @@ namespace mmo
 		virtual void OnEnter() override;
 		///
 		virtual void OnLeave() override;
+
+	private:
+
+		scoped_connection m_onHomeReached;
 	};
 }

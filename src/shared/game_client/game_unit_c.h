@@ -1,7 +1,7 @@
 #pragma once
 
 #include "game_object_c.h"
-#include "movement_info.h"
+#include "game/movement_info.h"
 #include "shared/client_data/spells.pb.h"
 
 namespace mmo
@@ -79,6 +79,8 @@ namespace mmo
 		/// @brief Returns whether the unit is currently alive.
 		bool IsAlive() const { return GetHealth() > 0; }
 
+		void SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit);
+
 	public:
 		/// @brief Initializes the list of learned spells at once without notification for each single spell.
 		void SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spellIds);
@@ -130,9 +132,12 @@ namespace mmo
 		float m_movementAnimationTime = 0.0f;
 		std::unique_ptr<Animation> m_movementAnimation;
 		Vector3 m_movementStart;
+		Quaternion m_movementStartRot;
 		Vector3 m_movementEnd;
 		std::vector<const proto_client::SpellEntry*> m_spells;
 
 		uint64 m_victim = 0;
+
+		std::weak_ptr<GameUnitC> m_targetUnit;
 	};
 }

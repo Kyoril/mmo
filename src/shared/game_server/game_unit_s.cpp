@@ -77,7 +77,7 @@ namespace mmo
 		Set<int32>(object_fields::PowerType, power_type::Mana);
 
 		// Base attack time of one second
-		Set(object_fields::BaseAttackTime, 1000);
+		Set(object_fields::BaseAttackTime, 2000);
 		Set<float>(object_fields::MinDamage, 2.0f);
 		Set<float>(object_fields::MaxDamage, 4.0f);
 	}
@@ -100,6 +100,12 @@ namespace mmo
 	void GameUnitS::RefreshStats()
 	{
 		// TODO
+	}
+
+	const Vector3& GameUnitS::GetPosition() const noexcept
+	{
+		m_lastPosition = m_mover->GetCurrentLocation();
+		return m_lastPosition;
 	}
 
 	void GameUnitS::SetLevel(uint32 newLevel)
@@ -505,6 +511,17 @@ namespace mmo
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
 
+	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent) const
+	{
+		if (!m_netUnitWatcher)
+		{
+			return;
+		}
+
+		DLOG("Attack swing event: " << attackSwingEvent);
+		m_netUnitWatcher->OnAttackSwingEvent(attackSwingEvent);
+	}
+
 	void GameUnitS::OnDespawnTimer()
 	{
 		if (m_worldInstance)
@@ -529,17 +546,56 @@ namespace mmo
 
 	void GameUnitS::OnAttackSwing()
 	{
+		// This value in milliseconds is used to retry auto attack in case of an error like out of range or wrong facing
+		constexpr GameTime attackSwingErrorDelay = 200;
+
+		// Remember that we tried to swing just now
 		const GameTime now = GetAsyncTimeMs();
 		m_lastMainHand = now;
 
 		if (!IsAlive())
 		{
+			m_victim.reset();
 			return;
 		}
 
 		auto victim = m_victim.lock();
 		if (!victim)
 		{
+			OnAttackSwingEvent(AttackSwingEvent::CantAttack);
+			return;
+		}
+
+		// Turn to target if not an attacking player
+		if (GetTypeId() != ObjectTypeId::Player)
+		{
+			// We don't need to send this to the client as the client will display this itself
+			m_movementInfo.timestamp = GetAsyncTimeMs();
+			m_movementInfo.facing = GetAngle(*victim);
+		}
+
+		// Victim must be alive in order to attack
+		if (!victim->IsAlive())
+		{
+			// We just send the error message and won't trigger another auto attack this time, as it would be pointless anyway
+			OnAttackSwingEvent(AttackSwingEvent::TargetDead);
+			m_victim.reset();
+			return;
+		}
+
+		// Get the distance
+		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (GetMeleeReach() * GetMeleeReach()))
+		{
+			OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
+			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
+			return;
+		}
+
+		// Target must be in front of us
+		if (!IsFacingTowards(*victim))
+		{
+			OnAttackSwingEvent(AttackSwingEvent::WrongFacing);
+			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
 			return;
 		}
 
@@ -560,6 +616,8 @@ namespace mmo
 
 		victim->Damage(totalDamage, spell_school::Normal, this);
 
+		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
+		OnAttackSwingEvent(AttackSwingEvent::Success);
 		TriggerNextAutoAttack();
 	}
 }

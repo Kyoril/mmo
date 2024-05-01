@@ -1,8 +1,8 @@
 
 #include "game_object_c.h"
 
-#include "movement_info.h"
-#include "object_type_id.h"
+#include "game/movement_info.h"
+#include "game/object_type_id.h"
 
 #include "binary_io/reader.h"
 #include "log/default_log_levels.h"
@@ -38,7 +38,11 @@ namespace mmo
 	{
 		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), "Models/Mannequin_Edit.hmsh");
 		m_entity->SetUserObject(this);
-		m_sceneNode->AttachObject(*m_entity);
+
+		//Quaternion rotationOffset;
+		//rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
+		m_entityOffsetNode = m_sceneNode->CreateChildSceneNode(/*Vector3::Zero, rotationOffset*/);
+		m_entityOffsetNode->AttachObject(*m_entity);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);
 	}

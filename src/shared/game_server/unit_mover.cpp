@@ -1,6 +1,6 @@
 
 #include "unit_mover.h"
-#include "circle.h"
+#include "game/circle.h"
 #include "game_unit_s.h"
 #include "world_instance.h"
 #include "universe.h"
@@ -329,7 +329,7 @@ namespace mmo
 	{
 		// Unit didn't move yet or isn't moving at all
 		if (m_moveStart == 0 || !IsMoving() || !m_path.HasPositions()) {
-			return GetMoved().GetPosition();
+			return GetMoved().GetMovementInfo().position;
 		}
 
 		// Determine the current waypoints

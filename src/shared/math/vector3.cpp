@@ -19,58 +19,30 @@ namespace mmo
 
 	Quaternion Vector3::GetRotationTo(const Vector3& dest, const Vector3& fallbackAxis) const
 	{
-		// Based on Stan Melax's article in Game Programming Gems
-		Quaternion q;
+        float a = ::sqrtf(((const Vector3*)this)->GetSquaredLength() * dest.GetSquaredLength());
+        float b = a + dest.Dot(*this);
 
-		// Copy, since cannot modify local
-		Vector3 v0 = *this;
-		Vector3 v1 = dest;
-		v0.Normalize();
-		v1.Normalize();
+        if (::abs(b - 2 * a) <= FLT_EPSILON || a == 0)
+        {
+            return Quaternion::Identity;
+        }
+        
+        Vector3 axis;
 
-		const float d = v0.Dot(v1);
+        if (b < 1e-06 * a)
+        {
+            b = 0.0f;
+            axis = fallbackAxis != Vector3::Zero ? fallbackAxis
+                : ::abs(x) > ::abs(z) ? Vector3(-y, x, 0.0f)
+                : Vector3(0.0f, -z, y);
+        }
+        else
+        {
+            axis = this->Cross(dest);
+        }
 
-		// If dot == 1, vectors are the same
-		if (d >= 1.0f)
-		{
-			return Quaternion::Identity;
-		}
-
-		if (d < (1e-6f - 1.0f))
-		{
-			if (fallbackAxis != Zero)
-			{
-				// rotate 180 degrees about the fallback axis
-				q.FromAngleAxis(Radian(Pi), fallbackAxis);
-			}
-			else
-			{
-				// Generate an axis
-				Vector3 axis = UnitX.Cross(*this);
-				if (axis.IsZeroLength())
-				{
-					axis = UnitY.Cross(*this);
-				}
-
-				axis.Normalize();
-
-				q.FromAngleAxis(Radian(Pi), axis);
-			}
-		}
-		else
-		{
-			const float s = ::sqrt( (1+d)*2 );
-			const float inverseS = 1 / s;
-
-			const Vector3 c = v0.Cross(v1);
-
-			q.x = c.x * inverseS;
-			q.y = c.y * inverseS;
-			q.z = c.z * inverseS;
-			q.w = s * 0.5f;
-			q.Normalize();
-		}
-
-		return q;
+        Quaternion q(b, axis.x, axis.y, axis.z);
+        q.Normalize();
+        return q;
 	}
 }

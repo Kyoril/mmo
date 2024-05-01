@@ -382,6 +382,12 @@ namespace mmo
 						{
 							m_connector.SetSelection(unit->GetGuid());
 						}
+
+						if (button == MouseButton_Right)
+						{
+							// TODO: Support more interactions than auto attack
+							m_controlledUnit->Attack(*unit);
+						}
 					}
 				}
 			}
@@ -504,6 +510,27 @@ namespace mmo
 
 	void PlayerController::OnKeyUp(const int32 key)
 	{
+		if (key == VK_F1)
+		{
+			Radian angle = m_controlledUnit->GetAngle(0.0f, -20.0f);
+			DLOG("Angle to 0, -20: " << angle.GetValueRadians());
+		}
+		if (key == VK_F2)
+		{
+			Radian angle = m_controlledUnit->GetAngle(20.0f, 0.0f);
+			DLOG("Angle to 20, 0: " << angle.GetValueRadians());
+		}
+		if (key == VK_F3)
+		{
+			Radian angle = m_controlledUnit->GetAngle(-20.0f, 0.0f);
+			DLOG("Angle to -20, 0: " << angle.GetValueRadians());
+		}
+		if (key == VK_F4)
+		{
+			Radian angle = m_controlledUnit->GetAngle(0.0f, 20.0f);
+			DLOG("Angle to 0, 20: " << angle.GetValueRadians());
+		}
+
 		switch(key)
 		{
 		case 0x57:

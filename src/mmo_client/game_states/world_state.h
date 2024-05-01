@@ -9,7 +9,7 @@
 #include "game_states/game_state.h"
 
 #include "base/signal.h"
-#include "game/game_object_c.h"
+#include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
 #include "scene_graph/light.h"
@@ -141,6 +141,8 @@ namespace mmo
 		PacketParseResult OnAttackStart(game::IncomingPacket& packet);
 
 		PacketParseResult OnAttackStop(game::IncomingPacket& packet);
+
+		PacketParseResult OnAttackSwingError(game::IncomingPacket& packet);
 
 		PacketParseResult OnLogXp(game::IncomingPacket& packet);
 

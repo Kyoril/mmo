@@ -22,9 +22,9 @@
 #include "spell_projectile.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
+#include "game/auto_attack.h"
 #include "game/chat_type.h"
-#include "game/game_object_s.h"
-#include "game/game_player_c.h"
+#include "game_client/game_player_c.h"
 #include "game/spell_target_map.h"
 
 namespace mmo
@@ -283,6 +283,7 @@ namespace mmo
 
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &WorldState::OnAttackSwingError);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -335,6 +336,7 @@ namespace mmo
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStart);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStop);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackSwingError);
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -553,6 +555,20 @@ namespace mmo
 				}
 
 				obj->Deserialize(packet, creation);
+
+				if (obj->Get<uint32>(object_fields::Type) == static_cast<uint32>(ObjectTypeId::Unit))
+				{
+					if (const auto unit = std::dynamic_pointer_cast<GameUnitC>(obj))
+					{
+						if (const uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit); targetGuid != 0)
+						{
+							if (auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
+							{
+								unit->SetTargetUnit(targetUnit);
+							}
+						}
+					}
+				}
 			}
 			
 			result = PacketParseResult::Pass;
@@ -1136,6 +1152,40 @@ namespace mmo
 
 		DLOG("TODO: Unit " << log_hex_digit(attackerGuid) << " stopped attacking");
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnAttackSwingError(game::IncomingPacket& packet)
+	{
+		AttackSwingEvent attackSwingError;
+
+		if (!(packet
+			>> io::read<uint32>(attackSwingError)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		String errorString;
+		switch(attackSwingError)
+		{
+		case attack_swing_event::CantAttack:
+			errorString = "Can't attack that target";
+			break;
+		case attack_swing_event::TargetDead:
+			errorString = "Target is dead";
+			break;
+		case attack_swing_event::WrongFacing:
+			errorString = "Target must be in front";
+			break;
+		case attack_swing_event::NotStanding:
+			errorString = "Must be standing in order to attack";
+			break;
+		case attack_swing_event::OutOfRange:
+			errorString = "Target is out of range";
+			break;
+		}
+
+		ELOG("Attack swing error: " << errorString);
 		return PacketParseResult::Pass;
 	}
 

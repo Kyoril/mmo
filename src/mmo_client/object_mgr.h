@@ -4,8 +4,8 @@
 
 #include <memory>
 
-#include "game/game_object_c.h"
-#include "game/game_unit_c.h"
+#include "game_client/game_object_c.h"
+#include "game_client/game_unit_c.h"
 
 namespace mmo
 {

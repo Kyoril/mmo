@@ -3,12 +3,12 @@
 #include "player.h"
 
 #include "base/utilities.h"
-#include "game/each_tile_in_region.h"
-#include "game/each_tile_in_sight.h"
-#include "game/game_creature_s.h"
-#include "game/visibility_tile.h"
-#include "game/game_object_s.h"
-#include "game/game_player_s.h"
+#include "game_server/each_tile_in_region.h"
+#include "game_server/each_tile_in_sight.h"
+#include "game_server/game_creature_s.h"
+#include "game_server/visibility_tile.h"
+#include "game_server/game_object_s.h"
+#include "game_server/game_player_s.h"
 #include "game/spell_target_map.h"
 #include "proto_data/project.h"
 
@@ -20,6 +20,8 @@ namespace mmo
 		, m_characterData(std::move(characterData))
 		, m_project(project)
 	{
+		m_character->SetNetUnitWatcher(this);
+
 		m_character->spawned.connect(*this, &Player::OnSpawned);
 		m_character->tileChangePending.connect(*this, &Player::OnTileChangePending);
 
@@ -31,6 +33,11 @@ namespace mmo
 
 	Player::~Player()
 	{
+		if (m_character)
+		{
+			m_character->SetNetUnitWatcher(nullptr);
+		}
+
 		if (m_worldInstance && m_character)
 		{
 			VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -614,5 +621,30 @@ namespace mmo
 			packet << io::write<uint32>(spellEntry.id());
 			packet.Finish();
 		});
+	}
+
+	void Player::OnAttackSwingEvent(AttackSwingEvent attackSwingEvent)
+	{
+		if (m_lastAttackSwingEvent == attackSwingEvent)
+		{
+			return;
+		}
+
+		m_lastAttackSwingEvent = attackSwingEvent;
+
+		// Nothing to do here in these cases
+		if (m_lastAttackSwingEvent == attack_swing_event::Success ||
+			m_lastAttackSwingEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
+		// Notify the client about the attack swing error event
+		SendPacket([attackSwingEvent](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::AttackSwingError);
+				packet << io::write<uint32>(attackSwingEvent);
+				packet.Finish();
+			});
 	}
 }
