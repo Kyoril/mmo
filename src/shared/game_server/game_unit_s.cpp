@@ -318,7 +318,7 @@ namespace mmo
 		}
 
 		m_victim = victim;
-		Set<uint64>(object_fields::TargetUnit, victim ? victim->GetGuid() : 0);
+		SetTarget(victim ? victim->GetGuid() : 0);
 
 		const GameTime now = GetAsyncTimeMs();
 
@@ -344,6 +344,7 @@ namespace mmo
 	{
 		m_attackSwingCountdown.Cancel();
 		m_victim.reset();
+		SetTarget(0);
 
 		const GameTime now = GetAsyncTimeMs();
 

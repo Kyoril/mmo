@@ -23,7 +23,7 @@ namespace mmo
 		m_connections += m_waitCountdown.ended.connect(*this, &CreatureAIIdleState::OnWaitCountdownExpired);
 		m_connections += GetAI().GetControlled().GetMover().targetReached.connect(*this, &CreatureAIIdleState::OnTargetReached);
 
-		MoveToRandomPointInRange();
+		OnTargetReached();
 	}
 
 	void CreatureAIIdleState::OnLeave()

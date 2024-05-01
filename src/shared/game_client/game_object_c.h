@@ -51,11 +51,11 @@ namespace mmo
 
 		[[nodiscard]] Radian GetAngle(const float x, const float z) const
 		{
-			const float dx = x - GetPosition().x;
-			const float dz = z - GetPosition().z;
+			const float dx = GetPosition().x - x;
+			const float dz = GetPosition().z - z;
 
-			float ang = ::atan2(dx, -dz);
-			ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
+			float ang = ::atan2(dx, dz);
+			ang = (ang >= 0) ? ang : 2 * Pi + ang;
 			return Radian(ang);
 		}
 

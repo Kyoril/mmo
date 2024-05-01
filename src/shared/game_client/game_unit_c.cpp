@@ -94,9 +94,7 @@ namespace mmo
 		{
 			if (const auto strongTarget = m_targetUnit.lock())
 			{
-				Quaternion rotation = Quaternion::Identity;
-				rotation.FromAngleAxis(GetAngle(*strongTarget), Vector3::UnitY);
-				m_sceneNode->SetOrientation(rotation);
+				m_sceneNode->SetOrientation(Quaternion(GetAngle(*strongTarget), Vector3::UnitY));
 			}
 		}
 	}
@@ -172,12 +170,10 @@ namespace mmo
 	{
 		const float dx = from.x - to.x;
 		const float dz = from.z - to.z;
-		float ang = ::atan2(dx, -dz);
+		float ang = ::atan2(dx, dz);
 		ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
 
-		Quaternion rotation;
-		rotation.FromAngleAxis(Radian(ang), Vector3::UnitY);
-		return rotation;
+		return Quaternion(Radian(ang), Vector3::UnitY);
 	}
 
 	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points)
@@ -195,10 +191,12 @@ namespace mmo
 		std::vector<float> keyFrameTimes;
 		keyFrameTimes.reserve(points.size() + 1);
 
-		Quaternion prevRotation = GetFacingRotation(Vector3::Zero, points[0] - m_movementStart);
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
+
+		const Quaternion prevRotation = GetFacingRotation(Vector3::Zero, points[0] - m_movementStart);
 		m_movementStartRot = prevRotation;
+		m_sceneNode->SetOrientation(prevRotation);
 
 		// First point
 		positions.emplace_back(0.0f, 0.0f, 0.0f);
@@ -226,16 +224,6 @@ namespace mmo
 		{
 			const auto frame = track->CreateNodeKeyFrame(keyFrameTimes[i]);
 			frame->SetTranslate(positions[i]);
-
-			if (i > 1)
-			{
-				prevRotation = GetFacingRotation(positions[i], positions[i - 1]);
-				frame->SetRotation(prevRotation);
-			}
-			else
-			{
-				frame->SetRotation(prevRotation);
-			}
 		}
 
 		m_movementEnd = prevPosition;

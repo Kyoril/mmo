@@ -123,31 +123,30 @@ namespace mmo
 			return true;
 		}
 
-		const float PI = 3.1415927f;
-		float arc = arcRadian.GetValueRadians();
+		float arc = ::fmodf(arcRadian.GetValueRadians(), 2.0f * Pi);
 
 		// move arc to range 0.. 2*pi
-		while (arc >= 2.0f * PI) {
-			arc -= 2.0f * PI;
+		while (arc >= 2.0f * Pi) {
+			arc -= 2.0f * Pi;
 		}
-		while (arc < 0) {
-			arc += 2.0f * PI;
+		if (arc < 0) {
+			arc += 2.0f * Pi;
 		}
 
 		float angle = GetAngle(position.x, position.z).GetValueRadians();
 		angle -= GetFacing().GetValueRadians();
 
 		// move angle to range -pi ... +pi
-		while (angle > PI) {
-			angle -= 2.0f * PI;
+		while (angle > Pi) {
+			angle -= 2.0f * Pi;
 		}
-		while (angle < -PI) {
-			angle += 2.0f * PI;
+		while (angle < -Pi) {
+			angle += 2.0f * Pi;
 		}
 
-		float lborder = -1 * (arc / 2.0f);                     // in range -pi..0
-		float rborder = (arc / 2.0f);                           // in range 0..pi
-		return ((angle >= lborder) && (angle <= rborder));
+		const float lowerBorder = (arc * -0.5f);                     // in range -pi..0
+		const float upperBorder = (arc * 0.5f);                      // in range 0..pi
+		return ((angle >= lowerBorder) && (angle <= upperBorder));
 	}
 
 	bool GameObjectS::IsFacingTowards(const GameObjectS& other) const
@@ -162,7 +161,8 @@ namespace mmo
 
 	bool GameObjectS::IsFacingTowards(const Vector3& position) const
 	{
-		return IsInArc(position, Radian(2.0f * Pi));
+		// 120 degrees view cone in total
+		return IsInArc(position, Radian(2.0f * Pi / 3));
 	}
 
 	bool GameObjectS::IsFacingAwayFrom(const Vector3& position) const

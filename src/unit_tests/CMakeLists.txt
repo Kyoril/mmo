@@ -14,7 +14,9 @@ target_link_libraries(unit_tests
 	game_protocol
 	hpak
 	hpak_v1_0
-	math)
+	math
+	game
+	game_server)
 	
 target_link_libraries(unit_tests ${OPENSSL_LIBRARIES})
 set_property(TARGET unit_tests PROPERTY FOLDER "tests")
