@@ -13,7 +13,7 @@
 #include <functional>
 #include <utility>
 
-#include "object_mgr.h"
+#include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
