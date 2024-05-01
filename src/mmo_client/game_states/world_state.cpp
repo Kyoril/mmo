@@ -18,7 +18,7 @@
 
 #include <zstr/zstr.hpp>
 
-#include "object_mgr.h"
+#include "game_client/object_mgr.h"
 #include "spell_projectile.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
