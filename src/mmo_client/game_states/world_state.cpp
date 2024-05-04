@@ -285,6 +285,10 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &WorldState::OnAttackSwingError);
 
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::XpLog, *this, &WorldState::OnXpLog);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
@@ -337,6 +341,11 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStart);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStop);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackSwingError);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::XpLog);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellDamageLog);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NonSpellDamageLog);
+
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -1134,8 +1143,6 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("TODO: Unit " << log_hex_digit(attackerGuid) << " started attacking " << log_hex_digit(victimGuid));
-
 		return PacketParseResult::Pass;
 	}
 
@@ -1149,8 +1156,6 @@ namespace mmo
 		{
 			return PacketParseResult::Disconnect;
 		}
-
-		DLOG("TODO: Unit " << log_hex_digit(attackerGuid) << " stopped attacking");
 
 		return PacketParseResult::Pass;
 	}
@@ -1189,17 +1194,73 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLogXp(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnXpLog(game::IncomingPacket& packet)
 	{
+
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLogSpellDamage(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellDamageLog(game::IncomingPacket& packet)
 	{
+		uint64 targetGuid;
+		uint32 amount;
+		SpellSchool school;
+		uint8 flags;
+		uint32 spellId;
+
+		if (!(packet
+			>> io::read_packed_guid(targetGuid)
+			>> io::read<uint32>(spellId)
+			>> io::read<uint32>(amount)
+			>> io::read<uint8>(school)
+			>> io::read<uint8>(flags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		String spellName = "Unknown";
+		if (const auto* spell = m_project.spells.getById(spellId))
+		{
+			spellName = spell->name();
+			if (spell->rank() > 0)
+			{
+				spellName += " (Rank " + std::to_string(spell->rank()) + ")";
+			}
+		}
+
+		String damageSchoolNameString;
+		switch(school)
+		{
+		case SpellSchool::Arcane:
+			damageSchoolNameString = "Arcane";
+			break;
+		case spell_school::Fire:
+			damageSchoolNameString = "Fire";
+			break;
+		case spell_school::Frost:
+			damageSchoolNameString = "Frost";
+			break;
+		case spell_school::Holy:
+			damageSchoolNameString = "Holy";
+			break;
+		case spell_school::Nature:
+			damageSchoolNameString = "Nature";
+			break;
+		case spell_school::Shadow:
+			damageSchoolNameString = "Shadow";
+			break;
+		case spell_school::Normal:
+			damageSchoolNameString = "Physical";
+			break;
+		}
+
+		DLOG("Spell '" << spellName << "' dealed " << amount << " " << damageSchoolNameString << " damage to target " << log_hex_digit(targetGuid));
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLogNoSpellDamage(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnNonSpellDamageLog(game::IncomingPacket& packet)
 	{
 		return PacketParseResult::Pass;
 	}

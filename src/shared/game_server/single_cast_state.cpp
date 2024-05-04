@@ -512,6 +512,9 @@ namespace mmo
 		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
 		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
 		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
+
+		// Log spell damage to client
+		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
 	}
 
 	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)

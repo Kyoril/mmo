@@ -151,6 +151,10 @@ namespace mmo
 
 				CreatureMove,
 
+				SpellDamageLog,
+				NonSpellDamageLog,
+				XpLog,
+
 				/// Counter constant
 				Count_,
 			};

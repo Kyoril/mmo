@@ -287,6 +287,17 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
+		const proto::SpellEntry& spell)
+	{
+		if (!m_netUnitWatcher)
+		{
+			return;
+		}
+
+		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
+	}
+
 	void GameUnitS::Kill(GameUnitS* killer)
 	{
 		Set<uint32>(object_fields::Health, 0);
@@ -616,6 +627,10 @@ namespace mmo
 		}
 
 		victim->Damage(totalDamage, spell_school::Normal, this);
+		if (m_netUnitWatcher)
+		{
+			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, isCrit ? damage_flags::Crit : damage_flags::None);
+		}
 
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
 		OnAttackSwingEvent(AttackSwingEvent::Success);

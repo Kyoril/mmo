@@ -29,6 +29,18 @@ namespace mmo
 		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
 	};
 
+	namespace damage_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			Crit = 1
+		};
+	}
+
+	typedef damage_flags::Type DamageFlags;
+
 	class NetUnitWatcherS
 	{
 	public:
@@ -37,6 +49,11 @@ namespace mmo
 	public:
 		virtual void OnAttackSwingEvent(AttackSwingEvent error) = 0;
 
+		virtual void OnXpLog(uint32 amount) = 0;
+
+		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) = 0;
+
+		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 	};
 
 	/// @brief Represents a living object (unit) in the game world.
@@ -94,6 +111,8 @@ namespace mmo
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
 
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
+
+		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell);
 
 		void Kill(GameUnitS* killer);
 

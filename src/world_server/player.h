@@ -105,6 +105,12 @@ namespace mmo
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
 
+		void OnXpLog(uint32 amount) override;
+
+		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) override;
+
+		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
+
 	private:
 		RealmConnector& m_connector;
 		std::shared_ptr<GamePlayerS> m_character;

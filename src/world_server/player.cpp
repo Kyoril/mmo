@@ -647,4 +647,42 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void Player::OnXpLog(uint32 amount)
+	{
+		SendPacket([amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::XpLog);
+				packet << io::write<uint32>(amount);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell)
+	{
+		SendPacket([targetGuid, amount, school, flags, &spell](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(spell.id())
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(school)
+					<< io::write<uint8>(flags);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags)
+	{
+		SendPacket([targetGuid, amount, flags](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::NonSpellDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(flags);
+				packet.Finish();
+			});
+	}
 }
