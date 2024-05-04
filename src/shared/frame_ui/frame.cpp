@@ -489,8 +489,10 @@ namespace mmo
 			return 0.0f;
 		}
 
-		const Rect rect = GetRelativeFrameRect();
-		return font->GetHeight() * font->GetLineCount(m_text, rect);
+		const Rect rect = GetRelativeFrameRect(false);
+		const uint32 lineCount = font->GetLineCount(m_text, rect);
+		const float result = font->GetHeight() * lineCount;
+		return result;
 	}
 
 	void Frame::ClearAnchor(AnchorPoint point)
@@ -803,10 +805,14 @@ namespace mmo
 		}
 	}
 
-	Rect Frame::GetRelativeFrameRect()
+	Rect Frame::GetRelativeFrameRect(const bool withScale)
 	{
 		// Use the internal size property as the default value
-		const Size mySize = GetPixelSize() * FrameManager::Get().GetUIScaleSize();
+		Size mySize = GetPixelSize();
+		if (withScale)
+		{
+			mySize *= FrameManager::Get().GetUIScaleSize();
+		}
 
 		// Return the rectangle with the calculated size
 		return Rect(Point(), mySize);

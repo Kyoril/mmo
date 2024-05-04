@@ -347,7 +347,7 @@ namespace mmo
 		virtual void OnKeyUp(Key key);
 
 	public:
-		virtual Rect GetRelativeFrameRect();
+		virtual Rect GetRelativeFrameRect(bool withScale = true);
 
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();

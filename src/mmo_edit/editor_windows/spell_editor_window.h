@@ -25,6 +25,9 @@ namespace mmo
 		/// Draws the viewport window.
 		bool Draw() override;
 
+	private:
+		void DrawSpellDetails(proto::SpellEntry& currentSpell);
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 
