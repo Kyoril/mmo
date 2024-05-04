@@ -90,6 +90,11 @@ namespace mmo
 
 	void SingleCastState::Activate()
 	{
+		if (!Validate())
+		{
+			return;
+		}
+
 		if (m_castTime > 0)
 		{
 			m_castEnd = GetAsyncTimeMs() + m_castTime;
@@ -220,6 +225,54 @@ namespace mmo
 		//m_cast.GetExecuter().Set<uint64>(object_fields::ChannelObject, 0);
 		//m_cast.GetExecuter().Set<uint32>(object_fields::ChannelSpell, 0);
 		m_casting.ended(true);
+	}
+
+	bool SingleCastState::Validate()
+	{
+		// Caster either has to be alive or spell has to be castable while dead
+		if (!m_cast.GetExecuter().IsAlive() && !HasAttributes(0, spell_attributes::CastableWhileDead))
+		{
+			SendEndCast(spell_cast_result::FailedCasterDead);
+			return false;
+		}
+
+		// If only castable on daytime, check the current time of day
+		if (HasAttributes(0, spell_attributes::DaytimeOnly) && !HasAttributes(0, spell_attributes::NightOnly))
+		{
+			// TODO
+		}
+
+		if (HasAttributes(0, spell_attributes::NightOnly) && !HasAttributes(0, spell_attributes::DaytimeOnly))
+		{
+			// TODO
+		}
+
+		if (HasAttributes(0, spell_attributes::IndoorOnly) && !HasAttributes(0, spell_attributes::OutdoorOnly))
+		{
+			// TODO: Check whether we are indoor. For now, caster is always considered to be outdoor
+			SendEndCast(spell_cast_result::FailedOnlyIndoors);
+			return false;
+		}
+
+		if (HasAttributes(0, spell_attributes::OutdoorOnly) && !HasAttributes(0, spell_attributes::IndoorOnly))
+		{
+			// TODO: Check whether we are indoor. For now, caster is always considered to be outdoor
+		}
+
+		if (HasAttributes(0, spell_attributes::OnlyStealthed))
+		{
+			// TODO: Check whether we are stealthed. For now, caster is never stealthed
+			SendEndCast(spell_cast_result::FailedOnlyStealthed);
+			return false;
+		}
+
+		if (HasAttributes(0, spell_attributes::NotInCombat) && m_cast.GetExecuter().IsInCombat())
+		{
+			SendEndCast(spell_cast_result::FailedAffectingCombat);
+			return false;
+		}
+
+		return true;
 	}
 
 	bool SingleCastState::ConsumeItem(bool delayed)
@@ -675,6 +728,11 @@ namespace mmo
 		}
 
 		m_hasFinished = true;
+
+		if (!Validate())
+		{
+			return;
+		}
 
 		if (!ConsumePower()) 
 		{

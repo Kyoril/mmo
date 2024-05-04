@@ -53,6 +53,15 @@ namespace mmo
 			return m_casting;
 		}
 
+	private:
+		bool Validate();
+
+		template<class T>
+		bool HasAttributes(uint32 index, T attributes)
+		{
+			return (m_spell.attributes(index) & static_cast<uint32>(attributes)) != 0;
+		}
+
 	public:
 		template <class T>
 		void SendPacketFromCaster(GameUnitS& caster, T generator)
