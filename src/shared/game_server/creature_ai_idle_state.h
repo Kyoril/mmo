@@ -2,6 +2,7 @@
 #pragma once
 
 #include "creature_ai_state.h"
+#include "unit_watcher.h"
 #include "base/countdown.h"
 
 namespace mmo
@@ -47,5 +48,7 @@ namespace mmo
 		Countdown m_waitCountdown;
 
 		scoped_connection_container m_connections;
+
+		std::unique_ptr<UnitWatcher> m_unitWatcher;
 	};
 }

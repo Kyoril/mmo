@@ -12,9 +12,7 @@ namespace mmo
 	{
 	}
 
-	CreatureAIIdleState::~CreatureAIIdleState()
-	{
-	}
+	CreatureAIIdleState::~CreatureAIIdleState() = default;
 
 	void CreatureAIIdleState::OnEnter()
 	{
@@ -23,11 +21,74 @@ namespace mmo
 		m_connections += m_waitCountdown.ended.connect(*this, &CreatureAIIdleState::OnWaitCountdownExpired);
 		m_connections += GetAI().GetControlled().GetMover().targetReached.connect(*this, &CreatureAIIdleState::OnTargetReached);
 
+		const auto& location = GetControlled().GetPosition();
+
+		m_unitWatcher = GetControlled().GetWorldInstance()->GetUnitFinder().WatchUnits(Circle(location.x, location.y, 40.0f), [this](GameUnitS& unit, bool isVisible) -> bool
+			{
+				const auto& controlled = GetControlled();
+				if (&unit == &controlled)
+				{
+					return false;
+				}
+
+				if (!controlled.IsAlive())
+				{
+					return false;
+				}
+
+				if (!unit.IsAlive())
+				{
+					return false;
+				}
+
+				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
+				const GamePlayerS* otherPlayer = dynamic_cast<GamePlayerS*>(&unit);
+				if (otherPlayer == nullptr)
+				{
+					return false;
+				}
+
+
+				const int32 ourLevel = controlled.Get<int32>(object_fields::Level);
+				const int32 otherLevel = unit.Get<int32>(object_fields::Level);
+				const int32 diff = ::abs(ourLevel - otherLevel);
+
+				const float dist = sqrtf(controlled.GetSquaredDistanceTo(unit.GetPosition(), true));
+
+				// Check distance
+				float reqDist = 20.0f;
+				if (ourLevel < otherLevel)
+				{
+					reqDist = Clamp<float>(reqDist - diff, 5.0f, 40.0f);
+				}
+				else if (otherLevel < ourLevel)
+				{
+					reqDist = Clamp<float>(reqDist + diff, 5.0f, 40.0f);
+				}
+
+				if (dist > reqDist)
+				{
+					return false;
+				}
+
+				// TODO: Line of sight check
+
+				GetAI().EnterCombat(unit);
+				return true;
+			});
+
 		OnTargetReached();
+
+		ASSERT(m_unitWatcher);
+		m_unitWatcher->Start();
+
 	}
 
 	void CreatureAIIdleState::OnLeave()
 	{
+		ASSERT(m_unitWatcher);
+		m_unitWatcher.reset();
+
 		m_connections.disconnect();
 
 		CreatureAIState::OnLeave();
@@ -39,6 +100,11 @@ namespace mmo
 
 	void CreatureAIIdleState::OnControlledMoved()
 	{
+		if (m_unitWatcher)
+		{
+			const auto& loc = GetControlled().GetPosition();
+			m_unitWatcher->SetShape(Circle(loc.x, loc.y, 40.0f));
+		}
 	}
 
 	void CreatureAIIdleState::OnDamage(GameUnitS& attacker)

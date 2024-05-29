@@ -59,13 +59,14 @@ namespace mmo
 		out_blocks.push_back(createBlock);
 	}
 
-	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid)
+	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)
 		, m_manager(manager)
 		, m_mapId(mapId)
 		, m_project(project)
 		, m_visibilityGrid(std::move(visibilityGrid))
+		, m_unitFinder(std::move(unitFinder))
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();
@@ -151,10 +152,20 @@ namespace mmo
 		    	subscriber->NotifyObjectsSpawned(objects);
 			}
 		});
+
+		if (GameUnitS* addedUnit = dynamic_cast<GameUnitS*>(&added))
+		{
+			m_unitFinder->AddUnit(*addedUnit);
+		}
 	}
 
 	void WorldInstance::RemoveGameObject(GameObjectS& remove)
 	{
+		if (GameUnitS* removedUnit = dynamic_cast<GameUnitS*>(&remove))
+		{
+			m_unitFinder->RemoveUnit(*removedUnit);
+		}
+
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
 		if (it == m_objectsByGuid.end())
 		{
@@ -264,6 +275,11 @@ namespace mmo
 		const MovementInfo& newMovementInfo) const
 	{
 		OnObjectMoved(object, previousMovementInfo);
+
+		if (GameUnitS* unit = dynamic_cast<GameUnitS*>(&object))
+		{
+			m_unitFinder->UpdatePosition(*unit, previousMovementInfo.position);
+		}
 	}
 
 	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius) const

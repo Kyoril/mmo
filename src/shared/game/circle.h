@@ -10,7 +10,7 @@ namespace mmo
 	/// Represents any 2d shape in the game world.
 	struct IShape
 	{
-		virtual ~IShape();
+		virtual ~IShape() = default;
 
 		virtual Vector<Point, 2> GetBoundingRect() const = 0;
 
@@ -28,6 +28,8 @@ namespace mmo
 		Circle();
 
 		explicit Circle(Distance x, Distance y, Distance radius);
+
+		virtual ~Circle() = default;
 
 		virtual Vector<Point, 2> GetBoundingRect() const override;
 

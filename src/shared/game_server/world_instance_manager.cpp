@@ -9,6 +9,8 @@
 #include <algorithm>
 
 #include "solid_visibility_grid.h"
+#include "tiled_unit_finder.h"
+#include "tiled_unit_finder_tile.h"
 
 namespace mmo
 {
@@ -31,7 +33,8 @@ namespace mmo
 
 		std::unique_lock lock{ m_worldInstanceMutex };
 		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, m_universe, m_objectIdGenerator, m_project, mapId,
-			std::make_unique<SolidVisibilityGrid>(makeVector(maxWorldSize, maxWorldSize)))).get();
+			std::make_unique<SolidVisibilityGrid>(makeVector(maxWorldSize, maxWorldSize)),
+			std::make_unique<TiledUnitFinder>(33.3333f))).get();
 
 		instanceCreated(createdInstance->GetId());
 

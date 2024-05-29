@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "creature_spawner.h"
+#include "unit_finder.h"
 #include "game/game.h"
 #include "visibility_grid.h"
 #include "base/id_generator.h"
@@ -53,7 +54,8 @@ namespace mmo
 	class WorldInstance
 	{
 	public:
-		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid);
+		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid,
+			std::unique_ptr<UnitFinder> unitFinder);
 	
 	public:
 		
@@ -83,6 +85,8 @@ namespace mmo
 		void RemoveObjectUpdate(GameObjectS& object);
 
 		void FlushObjectUpdate(uint64 guid);
+
+		UnitFinder& GetUnitFinder() { return *m_unitFinder; }
 
 		GameObjectS* FindObjectByGuid(uint64 guid);
 
@@ -134,6 +138,7 @@ namespace mmo
 		std::unordered_set<GameObjectS*> m_objectUpdates;
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;
 		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
+		std::unique_ptr<UnitFinder> m_unitFinder;
 
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
 
