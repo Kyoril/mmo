@@ -510,22 +510,22 @@ namespace mmo
 
 	void PlayerController::OnKeyUp(const int32 key)
 	{
-		if (key == VK_F1)
+		if (key == 0x70)
 		{
 			Radian angle = m_controlledUnit->GetAngle(0.0f, -20.0f);
 			DLOG("Angle to 0, -20: " << angle.GetValueRadians());
 		}
-		if (key == VK_F2)
+		if (key == 0x71)
 		{
 			Radian angle = m_controlledUnit->GetAngle(20.0f, 0.0f);
 			DLOG("Angle to 20, 0: " << angle.GetValueRadians());
 		}
-		if (key == VK_F3)
+		if (key == 0x72)
 		{
 			Radian angle = m_controlledUnit->GetAngle(-20.0f, 0.0f);
 			DLOG("Angle to -20, 0: " << angle.GetValueRadians());
 		}
-		if (key == VK_F4)
+		if (key == 0x73)
 		{
 			Radian angle = m_controlledUnit->GetAngle(0.0f, 20.0f);
 			DLOG("Angle to 0, 20: " << angle.GetValueRadians());

@@ -34,6 +34,7 @@ namespace mmo
 			s_mouseCursorHiddenCount = 0;
             
             // TODO
+            
 		}
 	}
 
@@ -42,6 +43,7 @@ namespace mmo
 		if (++s_mouseCursorHiddenCount == 1)
 		{
             // TODO
+            
 		}
 	}
 }
