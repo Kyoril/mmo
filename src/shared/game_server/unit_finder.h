@@ -5,6 +5,7 @@
 #include "game/circle.h"
 
 #include <functional>
+#include <memory>
 
 namespace mmo
 {
