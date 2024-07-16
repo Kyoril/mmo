@@ -125,6 +125,13 @@ namespace mmo
 			OnCheatDestroyMonster(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::CheatFaceMe:
+			OnCheatFaceMe(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatFollowMe:
+			OnCheatFollowMe(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
@@ -601,6 +608,74 @@ namespace mmo
 			ELOG("Failed to read client timestamp for attack stop");
 			return;
 		}
+	}
+
+	void Player::OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid");
+			return;
+		}
+
+		DLOG("Making Monster with guid " << log_hex_digit(guid) << " follow player");
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		// Stop movement immediately
+		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		unit->GetMover().StopMovement();
+
+		// TODO
+		DLOG("TODO");
+	}
+
+	void Player::OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid");
+			return;
+		}
+
+		DLOG("Making Monster with guid " << log_hex_digit(guid) << " face player");
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		// Stop movement immediately
+		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		unit->GetMover().StopMovement();
+
+		// TODO
+		DLOG("TODO");
+
+		
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)

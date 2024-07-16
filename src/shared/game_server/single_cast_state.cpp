@@ -92,6 +92,7 @@ namespace mmo
 	{
 		if (!Validate())
 		{
+			m_hasFinished = true;
 			return;
 		}
 
@@ -205,7 +206,7 @@ namespace mmo
 		}
 
 		// Caster could have left the world
-		auto* world = m_cast.GetExecuter().GetWorldInstance();
+		const auto* world = m_cast.GetExecuter().GetWorldInstance();
 		if (!world)
 		{
 			return;
@@ -233,6 +234,18 @@ namespace mmo
 		if (!m_cast.GetExecuter().IsAlive() && !HasAttributes(0, spell_attributes::CastableWhileDead))
 		{
 			SendEndCast(spell_cast_result::FailedCasterDead);
+			return false;
+		}
+
+		GameUnitS* unitTarget = nullptr;
+		if (m_target.HasUnitTarget())
+		{
+			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
+		}
+
+		if (unitTarget != nullptr && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+		{
+			SendEndCast(spell_cast_result::FailedUnitNotInfront);
 			return false;
 		}
 

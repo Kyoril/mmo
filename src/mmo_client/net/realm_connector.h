@@ -91,7 +91,7 @@ namespace mmo
 		void EnterWorld(const CharacterView& character);
 
 		/// Sends the command to create a new character to the realm.
-		void CreateCharacter(const std::string& name);
+		void CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender);
 
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);
@@ -106,6 +106,10 @@ namespace mmo
 		void CreateMonster(uint32 entry);
 
 		void DestroyMonster(uint64 guid);
+
+		void FaceMe(uint64 guid);
+
+		void FollowMe(uint64 guid);
 
 		void LearnSpell(uint32 spellId);
 

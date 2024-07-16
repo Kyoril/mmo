@@ -97,6 +97,10 @@ namespace mmo
 
 		void OnAttackStop(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 

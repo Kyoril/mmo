@@ -22,6 +22,7 @@
 #include "spell_projectile.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
+#include "base/timer_queue.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
 #include "game_client/game_player_c.h"
@@ -43,11 +44,12 @@ namespace mmo
 		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
 	
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_playerNameCache(m_realmConnector)
 		, m_project(project)
+		, m_timers(timers)
 	{
 	}
 
@@ -293,6 +295,8 @@ namespace mmo
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
 		Console::RegisterCommand("learnspell", [this](const std::string& cmd, const std::string& args) { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
+		Console::RegisterCommand("followme", [this](const std::string& cmd, const std::string& args) { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
+		Console::RegisterCommand("faceme", [this](const std::string& cmd, const std::string& args) { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 #endif
 
 		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
@@ -305,10 +309,12 @@ namespace mmo
 		Console::UnregisterCommand("createmonster");
 		Console::UnregisterCommand("destroymonster");
 		Console::UnregisterCommand("learnspell");
+		Console::UnregisterCommand("followme");
+		Console::UnregisterCommand("faceme");
 #endif
 
 		Console::UnregisterCommand("cast");
-		Console::UnregisterCommand("cast");
+		Console::UnregisterCommand("startattack");
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
@@ -518,6 +524,17 @@ namespace mmo
 								if (ObjectMgr::GetActivePlayerGuid() == guid)
 								{
 									FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+
+									m_targetObservers.disconnect();
+
+									auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit));
+									if (targetUnit)
+									{
+										targetUnit->fieldsChanged.connect([this](uint64, uint16, uint16)
+											{
+												FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+											});
+									}
 								}
 							}
 
@@ -1157,6 +1174,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		if (m_playerController->GetControlledUnit())
+		{
+			if (attackerGuid == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				m_lastAttackSwingEvent = AttackSwingEvent::Unknown;
+				FrameManager::Get().TriggerLuaEvent("PLAYER_ATTACK_STOP");
+			}
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -1170,27 +1196,9 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		String errorString;
-		switch(attackSwingError)
-		{
-		case attack_swing_event::CantAttack:
-			errorString = "Can't attack that target";
-			break;
-		case attack_swing_event::TargetDead:
-			errorString = "Target is dead";
-			break;
-		case attack_swing_event::WrongFacing:
-			errorString = "Target must be in front";
-			break;
-		case attack_swing_event::NotStanding:
-			errorString = "Must be standing in order to attack";
-			break;
-		case attack_swing_event::OutOfRange:
-			errorString = "Target is out of range";
-			break;
-		}
+		m_lastAttackSwingEvent = attackSwingError;
+		OnAttackSwingErrorTimer();
 
-		ELOG("Attack swing error: " << errorString);
 		return PacketParseResult::Pass;
 	}
 
@@ -1351,6 +1359,46 @@ namespace mmo
 		m_realmConnector.DestroyMonster(guid);
 	}
 
+	void WorldState::Command_FaceMe(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
+		if (guid == 0)
+		{
+			ELOG("No target selected and no target guid provided to destroy!");
+			return;
+		}
+
+		m_realmConnector.FaceMe(guid);
+	}
+
+	void WorldState::Command_FollowMe(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
+		if (guid == 0)
+		{
+			ELOG("No target selected and no target guid provided to destroy!");
+			return;
+		}
+
+		m_realmConnector.FollowMe(guid);
+	}
+
 	void WorldState::Command_CastSpell(const std::string& cmd, const std::string& args)
 	{
 		std::istringstream iss(args);
@@ -1460,6 +1508,51 @@ namespace mmo
 	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
 	{
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name);
+	}
+
+	void WorldState::OnAttackSwingErrorTimer()
+	{
+		// Do we need to continue showing the last attack swing error event?
+		if (m_lastAttackSwingEvent == attack_swing_event::Success ||
+			m_lastAttackSwingEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
+		String errorEvent;
+		switch (m_lastAttackSwingEvent)
+		{
+		case attack_swing_event::CantAttack:
+			errorEvent = "ATTACK_SWING_CANT_ATTACK";
+			break;
+		case attack_swing_event::TargetDead:
+			errorEvent = "ATTACK_SWING_TARGET_DEAD";
+			break;
+		case attack_swing_event::WrongFacing:
+			errorEvent = "ATTACK_SWING_WRONG_FACING";
+			break;
+		case attack_swing_event::NotStanding:
+			errorEvent = "ATTACK_SWING_NOT_STANDING";
+			break;
+		case attack_swing_event::OutOfRange:
+			errorEvent = "ATTACK_SWING_OUT_OF_RANGE";
+			break;
+		default:
+			errorEvent = "UNKNOWN";
+			break;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("ATTACK_SWING_ERROR", errorEvent);
+
+		EnqueueNextAttackSwingTimer();
+	}
+
+	void WorldState::EnqueueNextAttackSwingTimer()
+	{
+		m_timers.AddEvent([this]()
+			{
+				OnAttackSwingErrorTimer();
+			}, GetAsyncTimeMs() + 500);
 	}
 
 	void WorldState::SendAttackStart(const uint64 victim, const GameTime timestamp)

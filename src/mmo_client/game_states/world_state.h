@@ -20,10 +20,13 @@
 #include "base/id_generator.h"
 #include "world_deserializer.h"
 #include "client_data/project.h"
+#include "game/auto_attack.h"
 #include "proto_data/proto_template.h"
 
 namespace mmo
 {
+	class TimerQueue;
+
 	namespace game
 	{
 		class IncomingPacket;
@@ -46,7 +49,7 @@ namespace mmo
 		/// @param gameStateManager The game state manager that this state belongs to.
 		/// @param realmConnector The connector which manages the connection to the realm server.
 		/// @param project 
-		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project);
+		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers);
 
 	public:
 		/// @brief The default name of the world state
@@ -160,6 +163,10 @@ namespace mmo
 		void Command_CreateMonster(const std::string& cmd, const std::string& args) const;
 
 		void Command_DestroyMonster(const std::string& cmd, const std::string& args) const;
+
+		void Command_FaceMe(const std::string& cmd, const std::string& args) const;
+
+		void Command_FollowMe(const std::string& cmd, const std::string& args) const;
 #endif
 
 		void Command_CastSpell(const std::string& cmd, const std::string& args);
@@ -172,6 +179,10 @@ namespace mmo
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 		void OnChatNameQueryCallback(uint64 guid, const String& name);
+
+		void OnAttackSwingErrorTimer();
+
+		void EnqueueNextAttackSwingTimer();
 
 	public:
 		// Begin NetClient interface
@@ -201,9 +212,14 @@ namespace mmo
 		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
 
 		scoped_connection_container m_playerObservers;
+		scoped_connection_container m_targetObservers;
 
 		const proto_client::Project& m_project;
 
 		std::vector<std::unique_ptr<SpellProjectile>> m_spellProjectiles;
+
+		TimerQueue& m_timers;
+
+		AttackSwingEvent m_lastAttackSwingEvent{ AttackSwingEvent::Unknown };
 	};
 }

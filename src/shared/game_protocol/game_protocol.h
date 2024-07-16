@@ -72,6 +72,9 @@ namespace mmo
 
 				UseItem = 0x1F,
 
+				CheatFollowMe = 0x20,			// GAME MASTER
+				CheatFaceMe = 0x21,				// GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};
@@ -198,5 +201,34 @@ namespace mmo
 		}
 
 		typedef auth_result::Type AuthResult;
+
+		/// Enumerates possible character creation results.
+		namespace char_create_result
+		{
+			enum Type
+			{
+				Unknown,
+
+				/// Something went wrong like unknown class, race etc.
+				Error,
+
+				/// The character name is in use.
+				NameInUse,
+
+				/// The character class / race is disabled.
+				Disabled,
+
+				/// Number of characters on the realm has been reached.
+				ServerLimit,
+
+				/// Number of characters on the account has been reached.
+				AccountLimit,
+
+				/// The server currently only allows creating characters for players who already have an existing character on the server.
+				OnlyExisting,
+			};
+		}
+
+		typedef char_create_result::Type CharCreateResult;
 	}
 }

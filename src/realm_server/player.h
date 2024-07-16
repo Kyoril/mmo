@@ -24,6 +24,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	class AsyncDatabase;
 	class LoginConnector;
 	class WorldManager;
@@ -46,7 +51,8 @@ namespace mmo
 			LoginConnector &loginConnector,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
-			const std::string &address);
+			std::string address,
+			const proto::Project& project);
 
 		/// Gets the player connection class used to send packets to the client.
 		Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -190,6 +196,7 @@ namespace mmo
 		WorldManager &m_worldManager;
 		LoginConnector &m_loginConnector;
 		AsyncDatabase &m_database;
+		const proto::Project& m_project;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
 		std::string m_accountName;					// Account name in uppercase letters

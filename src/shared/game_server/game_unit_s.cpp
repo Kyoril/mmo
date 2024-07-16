@@ -530,7 +530,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Attack swing event: " << attackSwingEvent);
 		m_netUnitWatcher->OnAttackSwingEvent(attackSwingEvent);
 	}
 

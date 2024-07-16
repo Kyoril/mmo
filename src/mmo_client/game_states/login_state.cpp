@@ -87,6 +87,8 @@ namespace mmo
 	{
 		Console::UnregisterCommand("login");
 
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
+
 		// Disconnect all active connections
 		m_loginConnections.disconnect();
 
@@ -142,8 +144,22 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("CHAR_LIST");
 	}
 
+	PacketParseResult LoginState::OnCharCreationResponse(game::IncomingPacket& packet)
+	{
+		game::CharCreateResult result;
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("CHAR_CREATION_FAILED", static_cast<uint8>(result));
+		return PacketParseResult::Pass;
+	}
+
 	void LoginState::OnRealmDisconnected()
 	{
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
+
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 	}
 
@@ -209,9 +225,11 @@ namespace mmo
 		}
 		else
 		{
+			m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &LoginState::OnCharCreationResponse);
+
 			ASSERT(s_lastRealmVar);
 			s_lastRealmVar->Set(static_cast<int32>(m_realmConnector.GetRealmId()));
-		
+
 			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_SUCCESS");
 		}
 	}

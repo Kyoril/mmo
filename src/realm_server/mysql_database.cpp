@@ -139,16 +139,24 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation)
 	{
-		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, gender, hp, x, y, z, o) VALUES (" +
+		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
-			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " + 
+			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " +
 			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ");"))
 		{
 			PrintDatabaseError();
-			throw mysql::Exception("Could not create character entry");
+
+			if (m_connection.GetErrorCode() == 1062)
+			{
+				return CharCreateResult::NameAlreadyInUse;
+			}
+
+			return CharCreateResult::Error;
 		}
+
+		return CharCreateResult::Success;
 	}
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
@@ -243,6 +251,6 @@ namespace mmo
 
 	void MySQLDatabase::PrintDatabaseError()
 	{
-		ELOG("Realm database error: " << m_connection.GetErrorMessage());
+		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());
 	}
 }
