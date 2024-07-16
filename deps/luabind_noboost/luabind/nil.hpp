@@ -32,7 +32,7 @@ namespace luabind
 		struct nil_type {};
 	}
 
-	constexpr detail::nil_type nil;
+	constexpr detail::nil_type nil_value;
 }
 
 #endif
