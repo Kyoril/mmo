@@ -527,8 +527,7 @@ namespace mmo
 
 									m_targetObservers.disconnect();
 
-									auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit));
-									if (targetUnit)
+									if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)))
 									{
 										targetUnit->fieldsChanged.connect([this](uint64, uint16, uint16)
 											{

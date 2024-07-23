@@ -109,6 +109,15 @@ namespace mmo
 		return flatPosition.GetSquaredDistanceTo(Vector3(position.x, 0.0f, position.z));
 	}
 
+	Vector3 GameObjectS::GetForwardVector() const
+	{
+		const float facing = GetFacing().GetValueRadians();
+		const float cosYaw = cos(facing);
+		const float sinYaw = sin(facing);
+
+		return Vector3(cosYaw, 0.0f, sinYaw).NormalizedCopy();
+	}
+
 	bool GameObjectS::IsInArc(const GameObjectS& other, const Radian& arc) const
 	{
 		return IsInArc(other.GetPosition(), arc);
@@ -118,6 +127,15 @@ namespace mmo
 	{
 		const auto myPosition = GetPosition();
 
+		// Get the direction between the current position and the target position
+		const Vector3 direction = (myPosition - position).NormalizedCopy();
+		const Vector3 forward = GetForwardVector();
+
+		const float dotProduct = direction.Dot(forward);
+		const float angle = acos(dotProduct);
+
+		return angle <= arcRadian.GetValueRadians();
+		/*
 		if (position.x == myPosition.x && position.z == myPosition.z)
 		{
 			return true;
@@ -146,7 +164,7 @@ namespace mmo
 
 		const float lowerBorder = (arc * -0.5f);                     // in range -pi..0
 		const float upperBorder = (arc * 0.5f);                      // in range 0..pi
-		return ((angle >= lowerBorder) && (angle <= upperBorder));
+		return ((angle >= lowerBorder) && (angle <= upperBorder));*/
 	}
 
 	bool GameObjectS::IsFacingTowards(const GameObjectS& other) const

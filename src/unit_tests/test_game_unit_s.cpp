@@ -9,6 +9,69 @@
 
 using namespace mmo;
 
+TEST_CASE("GetForwardVector points to positive x axis with facing 0", "[game_unit_s]")
+{
+	asio::io_service io{};
+	TimerQueue timers{ io };
+	proto::Project project{};
+	std::shared_ptr<GameUnitS> unit = std::make_shared<GameUnitS>(project, timers);
+
+	// Ensure unit is positioned and looking in the right direction
+	MovementInfo movementInfo;
+	movementInfo.position = Vector3(0.0f, 0.0f, 0.0f);
+	movementInfo.facing = Radian(0.0f);
+	movementInfo.fallTime = 0;
+	movementInfo.movementFlags = movement_flags::None;
+	movementInfo.timestamp = 0;
+	unit->ApplyMovementInfo(movementInfo);
+
+	// Ensure that a target away on the positive x-axis is considered to be in front of the unit
+	const Vector3 forward = unit->GetForwardVector();
+	REQUIRE(forward.IsNearlyEqual(Vector3::UnitX));
+}
+
+TEST_CASE("GetForwardVector points to negative x axis with facing Pi", "[game_unit_s]")
+{
+	asio::io_service io{};
+	TimerQueue timers{ io };
+	proto::Project project{};
+	std::shared_ptr<GameUnitS> unit = std::make_shared<GameUnitS>(project, timers);
+
+	// Ensure unit is positioned and looking in the right direction
+	MovementInfo movementInfo;
+	movementInfo.position = Vector3(0.0f, 0.0f, 0.0f);
+	movementInfo.facing = Radian(Pi);
+	movementInfo.fallTime = 0;
+	movementInfo.movementFlags = movement_flags::None;
+	movementInfo.timestamp = 0;
+	unit->ApplyMovementInfo(movementInfo);
+
+	// Ensure that a target away on the positive x-axis is considered to be in front of the unit
+	const Vector3 forward = unit->GetForwardVector();
+	REQUIRE(forward.IsNearlyEqual(Vector3::NegativeUnitX));
+}
+
+TEST_CASE("GetForwardVector points to positive z axis with facing Half Pi", "[game_unit_s]")
+{
+	asio::io_service io{};
+	TimerQueue timers{ io };
+	proto::Project project{};
+	std::shared_ptr<GameUnitS> unit = std::make_shared<GameUnitS>(project, timers);
+
+	// Ensure unit is positioned and looking in the right direction
+	MovementInfo movementInfo;
+	movementInfo.position = Vector3(0.0f, 0.0f, 0.0f);
+	movementInfo.facing = Radian(Pi * 0.5f);
+	movementInfo.fallTime = 0;
+	movementInfo.movementFlags = movement_flags::None;
+	movementInfo.timestamp = 0;
+	unit->ApplyMovementInfo(movementInfo);
+
+	// Ensure that a target away on the positive x-axis is considered to be in front of the unit
+	const Vector3 forward = unit->GetForwardVector();
+	REQUIRE(forward.IsNearlyEqual(Vector3::UnitZ));
+}
+
 TEST_CASE("IsFacingTowards returns true if target location is in front of unit", "[game_unit_s]")
 {
 	asio::io_service io{};

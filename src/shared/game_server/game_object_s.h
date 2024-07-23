@@ -275,6 +275,8 @@ namespace mmo
 
 		float GetSquaredDistanceTo(const Vector3& position, bool withHeight) const;
 
+		Vector3 GetForwardVector() const;
+
 		bool IsInArc(const GameObjectS& other, const Radian& arc) const;
 
 		bool IsInArc(const Vector3& position, const Radian& arc) const;

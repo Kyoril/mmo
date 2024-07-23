@@ -39,9 +39,9 @@ namespace mmo
 		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), "Models/Mannequin_Edit.hmsh");
 		m_entity->SetUserObject(this);
 
-		//Quaternion rotationOffset;
-		//rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
-		m_entityOffsetNode = m_sceneNode->CreateChildSceneNode(/*Vector3::Zero, rotationOffset*/);
+		Quaternion rotationOffset;
+		rotationOffset.FromAngleAxis(Degree(-90), Vector3::UnitY);
+		m_entityOffsetNode = m_sceneNode->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 		m_entityOffsetNode->AttachObject(*m_entity);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);

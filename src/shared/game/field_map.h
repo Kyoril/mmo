@@ -14,7 +14,7 @@
 namespace mmo
 {
 	/// A map for managing flexible fields.
-	template<class TFieldBase, typename std::enable_if<std::is_unsigned<TFieldBase>::value>::type* = nullptr>
+	template<class TFieldBase, std::enable_if_t<std::is_unsigned_v<TFieldBase>>* = nullptr>
 	class FieldMap final
 	{
 	public:

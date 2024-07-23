@@ -145,7 +145,11 @@ namespace mmo
 
 		m_recalcFrustumPlanes = true;
 		m_recalcWorldSpaceCorners = true;
-		m_recalcFrustum = true;
+
+		if (m_obliqueDepthProjection)
+		{
+			m_recalcFrustum = true;
+		}
 	}
 
 	bool Camera::IsViewOutOfDate() const

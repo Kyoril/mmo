@@ -220,19 +220,19 @@ namespace mmo
 
 			if (movementInfo.movementFlags & movement_flags::Forward)
 			{
-				movementVector.z -= 1.0f;
+				movementVector.x += 1.0f;
 			}
 			if(movementInfo.movementFlags & movement_flags::Backward)
 			{
-				movementVector.z += 1.0f;
+				movementVector.x -= 1.0f;
 			}
 			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
-				movementVector.x -= 1.0f;
+				movementVector.z -= 1.0f;
 			}
 			if(movementInfo.movementFlags & movement_flags::StrafeRight)
 			{
-				movementVector.x += 1.0f;
+				movementVector.z += 1.0f;
 			}
 
 			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
@@ -322,6 +322,8 @@ namespace mmo
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
+
+		m_defaultCamera->InvalidateView();
 
 		MovePlayer();
 		StrafePlayer();
@@ -455,7 +457,7 @@ namespace mmo
 			const Radian facing = m_cameraAnchorNode->GetDerivedOrientation().GetYaw();
 			m_controlledUnit->GetSceneNode()->SetDerivedOrientation(Quaternion(facing, Vector3::UnitY));
 			m_cameraAnchorNode->SetOrientation(
-				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX) * Quaternion(Degree(-90.0f), Vector3::UnitY));
 
 			m_controlledUnit->SetFacing(facing);
 			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
@@ -583,7 +585,7 @@ namespace mmo
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
-		//m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+		m_cameraAnchorNode->Yaw(Degree(-90.0f), TransformSpace::Parent);
 
 		NotifyCameraZoomChanged();
 	}
@@ -598,7 +600,9 @@ namespace mmo
 		ASSERT(m_cameraNode);
 		ASSERT(m_cameraAnchorNode);
 		m_cameraNode->SetPosition(Vector3::UnitZ * 3.0f);
-		m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
+
+		const Quaternion defaultRotation(Degree(-90.0f), Vector3::UnitY);
+		m_cameraAnchorNode->SetOrientation(defaultRotation);
 
 		NotifyCameraZoomChanged();
 	}
