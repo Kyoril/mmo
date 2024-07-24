@@ -51,7 +51,7 @@ TEST_CASE("GetForwardVector points to negative x axis with facing Pi", "[game_un
 	REQUIRE(forward.IsNearlyEqual(Vector3::NegativeUnitX));
 }
 
-TEST_CASE("GetForwardVector points to positive z axis with facing Half Pi", "[game_unit_s]")
+TEST_CASE("GetForwardVector points to negative z axis with facing Half Pi", "[game_unit_s]")
 {
 	asio::io_service io{};
 	TimerQueue timers{ io };
@@ -69,7 +69,7 @@ TEST_CASE("GetForwardVector points to positive z axis with facing Half Pi", "[ga
 
 	// Ensure that a target away on the positive x-axis is considered to be in front of the unit
 	const Vector3 forward = unit->GetForwardVector();
-	REQUIRE(forward.IsNearlyEqual(Vector3::UnitZ));
+	REQUIRE(forward.IsNearlyEqual(-Vector3::UnitZ));
 }
 
 TEST_CASE("IsFacingTowards returns true if target location is in front of unit", "[game_unit_s]")
@@ -95,7 +95,7 @@ TEST_CASE("IsFacingTowards returns true if target location is in front of unit",
 	REQUIRE(isFacing);
 }
 
-TEST_CASE("IsInFront returns false if target location is not in front of unit", "[game_unit_s]")
+TEST_CASE("IsInFront returns false if target location is behind of unit", "[game_unit_s]")
 {
 	asio::io_service io{};
 	TimerQueue timers{ io };
@@ -113,7 +113,6 @@ TEST_CASE("IsInFront returns false if target location is not in front of unit", 
 	REQUIRE(unit->GetPosition() == Vector3::Zero);
 	REQUIRE(unit->GetFacing() == Radian(Pi));
 
-	// Ensure that a target away on the negative z-axis is considered to be in front of the unit
 	REQUIRE(!unit->IsFacingTowards(Vector3(1.0f, 0.0f, 0.0f)));
 }
 
@@ -134,7 +133,6 @@ TEST_CASE("IsFacingTowards returns true if target location is in front of unit w
 	unit->ApplyMovementInfo(movementInfo);
 	REQUIRE(unit->GetPosition() == Vector3::Zero);
 
-	// Ensure that a target away on the negative z-axis is considered to be in front of the unit
 	REQUIRE(unit->IsFacingTowards(Vector3(1.0f, 0.0f, 0.0f)));
 }
 
@@ -148,15 +146,15 @@ TEST_CASE("IsFacingTowards returns false if target location is in side of unit w
 	// Ensure unit is positioned and looking in the right direction
 	MovementInfo movementInfo;
 	movementInfo.position = Vector3(0.0f, 0.0f, 0.0f);
-	movementInfo.facing = Radian(Pi / 2.0f);		// 90° rotation
+	movementInfo.facing = Radian(Pi / 2.0f);		// 90° rotation to the "left": forward should now be -z
 	movementInfo.fallTime = 0;
 	movementInfo.movementFlags = movement_flags::None;
 	movementInfo.timestamp = 0;
 	unit->ApplyMovementInfo(movementInfo);
 	REQUIRE(unit->GetPosition() == Vector3::Zero);
 
-	// Ensure that a target away on the negative z-axis is considered to be in front of the unit
-	REQUIRE(!unit->IsFacingTowards(Vector3(1.0f, 0.0f, 0.0f)));
+	// Ensure that a target away on the z-axis is considered to be in front of the unit
+	REQUIRE(!unit->IsFacingTowards(Vector3(0.0f, 0.0f, 1.0f)));
 }
 
 TEST_CASE("IsFacingTowards returns false if target location is in side of unit without unit rotation", "[game_unit_s]")
@@ -176,5 +174,7 @@ TEST_CASE("IsFacingTowards returns false if target location is in side of unit w
 	unit->ApplyMovementInfo(movementInfo);
 	REQUIRE(unit->GetPosition() == Vector3::Zero);
 
+	// Since the unit should be looking forward and forward should be +x, and the view angle is 120° in total, both -z and +z should be considered left/right and thus be not in front
 	REQUIRE(!unit->IsFacingTowards(Vector3(0.0f, 0.0f, 1.0f)));
+	REQUIRE(!unit->IsFacingTowards(Vector3(0.0f, 0.0f, -1.0f)));
 }

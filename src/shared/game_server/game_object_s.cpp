@@ -115,7 +115,7 @@ namespace mmo
 		const float cosYaw = cos(facing);
 		const float sinYaw = sin(facing);
 
-		return Vector3(cosYaw, 0.0f, sinYaw).NormalizedCopy();
+		return Vector3(cosYaw, 0.0f, -sinYaw).NormalizedCopy();
 	}
 
 	bool GameObjectS::IsInArc(const GameObjectS& other, const Radian& arc) const
@@ -128,43 +128,13 @@ namespace mmo
 		const auto myPosition = GetPosition();
 
 		// Get the direction between the current position and the target position
-		const Vector3 direction = (myPosition - position).NormalizedCopy();
+		const Vector3 direction = (position - myPosition).NormalizedCopy();
 		const Vector3 forward = GetForwardVector();
 
 		const float dotProduct = direction.Dot(forward);
 		const float angle = acos(dotProduct);
 
-		return angle <= arcRadian.GetValueRadians();
-		/*
-		if (position.x == myPosition.x && position.z == myPosition.z)
-		{
-			return true;
-		}
-
-		float arc = ::fmodf(arcRadian.GetValueRadians(), 2.0f * Pi);
-
-		// move arc to range 0.. 2*pi
-		while (arc >= 2.0f * Pi) {
-			arc -= 2.0f * Pi;
-		}
-		if (arc < 0) {
-			arc += 2.0f * Pi;
-		}
-
-		float angle = GetAngle(position.x, position.z).GetValueRadians();
-		angle -= GetFacing().GetValueRadians();
-
-		// move angle to range -pi ... +pi
-		while (angle > Pi) {
-			angle -= 2.0f * Pi;
-		}
-		while (angle < -Pi) {
-			angle += 2.0f * Pi;
-		}
-
-		const float lowerBorder = (arc * -0.5f);                     // in range -pi..0
-		const float upperBorder = (arc * 0.5f);                      // in range 0..pi
-		return ((angle >= lowerBorder) && (angle <= upperBorder));*/
+		return angle <= (arcRadian.GetValueRadians() / 2);
 	}
 
 	bool GameObjectS::IsFacingTowards(const GameObjectS& other) const
@@ -180,7 +150,7 @@ namespace mmo
 	bool GameObjectS::IsFacingTowards(const Vector3& position) const
 	{
 		// 120 degrees view cone in total
-		return IsInArc(position, Radian(2.0f * Pi / 3));
+		return IsInArc(position, Radian(2.0f * Pi / 3.0f));
 	}
 
 	bool GameObjectS::IsFacingAwayFrom(const Vector3& position) const
