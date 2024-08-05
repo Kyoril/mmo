@@ -75,6 +75,10 @@ namespace mmo
 				CheatFollowMe = 0x20,			// GAME MASTER
 				CheatFaceMe = 0x21,				// GAME MASTER
 
+				CreatureQuery,
+				ItemQuery,
+				QuestQuery,
+
 				/// Counter constant
 				Count_,
 			};
@@ -157,6 +161,10 @@ namespace mmo
 				SpellDamageLog,
 				NonSpellDamageLog,
 				XpLog,
+
+				CreatureQueryResult,
+				ItemQueryResult,
+				QuestQueryResult,
 
 				/// Counter constant
 				Count_,

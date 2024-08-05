@@ -245,5 +245,6 @@ namespace mmo
 		PacketParseResult OnProxyPacket(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 		PacketParseResult OnNameQuery(game::IncomingPacket& packet);
+		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
 	};
 }

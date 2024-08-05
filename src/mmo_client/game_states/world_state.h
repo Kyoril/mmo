@@ -27,6 +27,28 @@ namespace mmo
 {
 	class TimerQueue;
 
+	struct CreatureInfo
+	{
+		uint64 id;
+		String name;
+		String description;
+	};
+
+	struct ItemInfo
+	{
+		uint64 id;
+		String name;
+		String description;
+	};
+
+	struct QuestInfo
+	{
+		uint64 id;
+		String title;
+		String summary;
+		String description;
+	};
+
 	namespace game
 	{
 		class IncomingPacket;
@@ -129,6 +151,12 @@ namespace mmo
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnCreatureQueryResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnItemQueryResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnQuestQueryResult(game::IncomingPacket& packet);
+
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 
 		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
@@ -210,6 +238,10 @@ namespace mmo
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
 		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
+
+		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery> m_creatureCache;
+		DBCache<ItemInfo, game::client_realm_packet::ItemQuery> m_itemCache;
+		DBCache<QuestInfo, game::client_realm_packet::QuestQuery> m_questCache;
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;

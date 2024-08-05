@@ -490,6 +490,36 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnDbQuery(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		switch(packet.GetId())
+		{
+		case game::client_realm_packet::CreatureQuery:
+			DLOG("Querying for creature " << log_hex_digit(guid) << "...");
+			break;
+
+		case game::client_realm_packet::ItemQuery:
+			DLOG("Querying for item " << log_hex_digit(guid) << "...");
+			break;
+
+		case game::client_realm_packet::QuestQuery:
+			DLOG("Querying for quest " << log_hex_digit(guid) << "...");
+			break;
+
+		default:
+			ELOG("Player tried to query unsupported item, packet handler might be subscribed for wrong op code (" << packet.GetId() << ")");
+			break;
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -609,11 +639,17 @@ namespace mmo
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
+			RegisterPacketHandler(game::client_realm_packet::CreatureQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
 		}
 		else
 		{
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 			ClearPacketHandler(game::client_realm_packet::NameQuery);
+			ClearPacketHandler(game::client_realm_packet::CreatureQuery);
+			ClearPacketHandler(game::client_realm_packet::ItemQuery);
+			ClearPacketHandler(game::client_realm_packet::QuestQuery);
 		}
 	}
 

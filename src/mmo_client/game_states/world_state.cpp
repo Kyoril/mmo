@@ -48,6 +48,9 @@ namespace mmo
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_playerNameCache(m_realmConnector)
+		, m_creatureCache(m_realmConnector)
+		, m_itemCache(m_realmConnector)
+		, m_questCache(m_realmConnector)
 		, m_project(project)
 		, m_timers(timers)
 	{
@@ -291,6 +294,10 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
 
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &WorldState::OnQuestQueryResult);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
@@ -334,6 +341,9 @@ namespace mmo
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureQueryResult);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ItemQueryResult);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::QuestQueryResult);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::InitialSpells);
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureMove);
@@ -704,6 +714,75 @@ namespace mmo
 		}
 
 		m_playerNameCache.NotifyObjectResponse(guid, std::move(name));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnCreatureQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 id;
+		bool succeeded;
+		if (!(packet
+			>> io::read_packed_guid(id)
+			>> io::read<uint8>(succeeded)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!succeeded)
+		{
+			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			return PacketParseResult::Pass;
+		}
+
+		CreatureInfo entry{ id };
+
+		m_creatureCache.NotifyObjectResponse(id, std::move(entry));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnItemQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 id;
+		bool succeeded;
+		if (!(packet
+			>> io::read_packed_guid(id)
+			>> io::read<uint8>(succeeded)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!succeeded)
+		{
+			ELOG("Item query for id " << log_hex_digit(id) << " failed");
+			return PacketParseResult::Pass;
+		}
+
+		ItemInfo entry{ id };
+
+		m_itemCache.NotifyObjectResponse(id, std::move(entry));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnQuestQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 id;
+		bool succeeded;
+		if (!(packet
+			>> io::read_packed_guid(id)
+			>> io::read<uint8>(succeeded)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!succeeded)
+		{
+			ELOG("Quest query for id " << log_hex_digit(id) << " failed");
+			return PacketParseResult::Pass;
+		}
+
+		QuestInfo entry{ id };
+
+		m_questCache.NotifyObjectResponse(id, std::move(entry));
 		return PacketParseResult::Pass;
 	}
 
