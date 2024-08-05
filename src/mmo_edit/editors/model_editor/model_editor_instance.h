@@ -53,6 +53,8 @@ namespace mmo
 
 		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
 
+		void RenderBoneNode(const Bone& bone);
+
 	private:
 		ModelEditor& m_editor;
 		scoped_connection m_renderConnection;
@@ -75,5 +77,9 @@ namespace mmo
 		AnimationState* m_animState{ nullptr };
 		String m_newAnimationName;
 		String m_animationImportPath;
+
+		std::unique_ptr<AxisDisplay> m_selectedBoneAxis{ nullptr };
+		SceneNode* m_selectedBoneNode{ nullptr };
+		String m_selectedBoneName;
 	};
 }

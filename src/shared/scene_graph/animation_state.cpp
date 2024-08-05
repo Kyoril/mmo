@@ -209,8 +209,6 @@ namespace mmo
 	AnimationState* AnimationStateSet::GetAnimationState(const String& name) const
 	{
 		const auto i = m_animationStates.find(name);
-		ASSERT(i != m_animationStates.end() && "AnimationState with this name does not exist!");
-
 		return i != m_animationStates.end() ? i->second.get() : nullptr;
 	}
 

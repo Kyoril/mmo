@@ -14,6 +14,39 @@ namespace mmo
 	{
 		GameObjectC::Update(deltaTime);
 
+		// TODO: This needs to be managed differently or it will explode in complexity here!
+		if (m_movementInfo.IsMoving())
+		{
+			if (m_idleAnimState != nullptr)
+			{
+				m_idleAnimState->SetEnabled(false);
+			}
+			if (m_runAnimState != nullptr)
+			{
+				m_runAnimState->SetEnabled(true);
+			}
+		}
+		else
+		{
+			if (m_idleAnimState != nullptr)
+			{
+				m_idleAnimState->SetEnabled(true);
+			}
+			if (m_runAnimState != nullptr)
+			{
+				m_runAnimState->SetEnabled(false);
+			}
+		}
+
+		if (m_idleAnimState && m_idleAnimState->IsEnabled())
+		{
+			m_idleAnimState->AddTime(deltaTime);
+		}
+		if (m_runAnimState && m_runAnimState->IsEnabled())
+		{
+			m_runAnimState->AddTime(deltaTime);
+		}
+
 		if (m_movementAnimation)
 		{
 			bool animationFinished = false;
@@ -42,5 +75,20 @@ namespace mmo
 	void GamePlayerC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::PlayerFieldCount);
+	}
+
+	void GamePlayerC::SetupSceneObjects()
+	{
+		GameUnitC::SetupSceneObjects();
+
+		if (m_entity->HasAnimationState("Idle"))
+		{
+			m_idleAnimState = m_entity->GetAnimationState("Idle");
+		}
+
+		if (m_entity->HasAnimationState("Run"))
+		{
+			m_runAnimState = m_entity->GetAnimationState("Run");
+		}
 	}
 }

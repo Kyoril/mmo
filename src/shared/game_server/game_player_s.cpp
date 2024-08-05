@@ -80,9 +80,21 @@ namespace mmo
 		maxHealth += levelStats->health();
 		Set<uint32>(object_fields::MaxHealth, maxHealth);
 
+		// Ensure health is properly capped by max health
+		if (Get<uint32>(object_fields::Health) > maxHealth)
+		{
+			Set<uint32>(object_fields::Health, maxHealth);
+		}
+
 		uint32 maxMana = UnitStats::GetMaxManaFromIntellect(Get<uint32>(object_fields::StatIntellect));
 		maxMana += levelStats->mana();
 		Set<uint32>(object_fields::MaxMana, maxMana);
+
+		// Ensure mana is properly capped by max health
+		if (Get<uint32>(object_fields::Mana) > maxMana)
+		{
+			Set<uint32>(object_fields::Mana, maxMana);
+		}
 
 		// TODO
 		Set<float>(object_fields::MinDamage, 8.0f);

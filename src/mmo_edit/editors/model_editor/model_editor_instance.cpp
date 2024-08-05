@@ -259,8 +259,13 @@ namespace mmo
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
 
+		// Append axis to node
+		m_selectedBoneNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+		m_selectedBoneAxis = std::make_unique<AxisDisplay>(m_scene, "SelectedBoneAxis");
+		m_selectedBoneNode->AddChild(m_selectedBoneAxis->GetSceneNode());
+
 		// Debug skeleton rendering
-		/*if (m_entity->HasSkeleton())
+		if (m_entity->HasSkeleton())
 		{
 			// Render each bone as a debug object
 			if (Bone* rootBone = m_entity->GetSkeleton()->GetRootBone())
@@ -268,7 +273,7 @@ namespace mmo
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
 			}
-		}*/
+		}
 	}
 
 	ModelEditorInstance::~ModelEditorInstance()
@@ -310,14 +315,28 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void RenderBoneNode(const Bone& bone)
+	void ModelEditorInstance::RenderBoneNode(const Bone& bone)
 	{
-		if (ImGui::TreeNodeEx(bone.GetName().c_str()))
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
+		if (bone.GetName() == m_selectedBoneName)
 		{
+			flags |= ImGuiTreeNodeFlags_Selected;
+		}
+
+		if (ImGui::TreeNodeEx(bone.GetName().c_str(), flags))
+		{
+			if (ImGui::IsItemClicked())
+			{
+				m_selectedBoneName = bone.GetName();
+
+				ASSERT(m_selectedBoneNode);
+				m_selectedBoneNode->SetPosition(bone.GetDerivedPosition());
+				m_selectedBoneNode->SetOrientation(bone.GetDerivedOrientation());
+			}
+
 			for (uint32 i = 0; i < bone.GetNumChildren(); ++i)
 			{
-				Bone* childBone = dynamic_cast<Bone*>(bone.GetChild(i));
-				if (childBone)
+				if (const auto childBone = dynamic_cast<Bone*>(bone.GetChild(i)))
 				{
 					RenderBoneNode(*childBone);
 				}
@@ -600,8 +619,7 @@ namespace mmo
 				ImGui::EndChild();
 			}
 		}
-	ImGui::End();
-
+		ImGui::End();
 	}
 
 	void ModelEditorInstance::DrawViewport(const String& id)

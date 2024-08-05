@@ -332,6 +332,8 @@ namespace mmo
 		
 		ApplyLocalMovement(deltaSeconds);
 		UpdateHeartbeat();
+
+		
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)

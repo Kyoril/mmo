@@ -22,7 +22,12 @@ namespace mmo
 
 		virtual void InitializeFieldMap() override;
 
+	protected:
+		virtual void SetupSceneObjects() override;
+
 	public:
 
+		AnimationState* m_idleAnimState{nullptr};
+		AnimationState* m_runAnimState{ nullptr };
 	};
 }
