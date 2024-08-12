@@ -104,6 +104,7 @@ namespace mmo
 		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
 		Camera* m_defaultCamera { nullptr };
+		SceneNode* m_cameraOffsetNode{ nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
