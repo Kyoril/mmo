@@ -139,7 +139,7 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds)
 	{
 		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
@@ -156,6 +156,28 @@ namespace mmo
 			return CharCreateResult::Error;
 		}
 
+		const auto characterId = m_connection.GetLastInsertId();
+
+		if (!spellIds.empty())
+		{
+			std::ostringstream queryString;
+			queryString << "INSERT INTO character_spells (`character`, spell) VALUES ";
+
+			for (const auto spellId : spellIds)
+			{
+				queryString << "(" << characterId << ", " << spellId << "),";
+			}
+
+			queryString.seekp(-1, std::ios_base::end);
+			queryString << ";";
+
+			// Adding spells to the character may fail but we don't cancel in this case right now
+			if (!m_connection.Execute(queryString.str()))
+			{
+				PrintDatabaseError();
+			}
+		}
+		
 		return CharCreateResult::Success;
 	}
 

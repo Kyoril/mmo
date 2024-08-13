@@ -139,147 +139,223 @@ namespace mmo
 			ImGui::BeginChild("classDetails", ImVec2(-1, -1));
 			if (currentClass)
 			{
-				if (s_staminaValues.size() != currentClass->levelbasevalues_size())
+				if (ImGui::CollapsingHeader("Base Values", ImGuiTreeNodeFlags_None))
 				{
-					s_healthValues.resize(currentClass->levelbasevalues_size());
-					s_manaValues.resize(currentClass->levelbasevalues_size());
-					s_staminaValues.resize(currentClass->levelbasevalues_size());
-					s_strengthValues.resize(currentClass->levelbasevalues_size());
-					s_agilityValues.resize(currentClass->levelbasevalues_size());
-					s_intellectValues.resize(currentClass->levelbasevalues_size());
-					s_spiritValues.resize(currentClass->levelbasevalues_size());
-
-					for (int i = 0; i < currentClass->levelbasevalues_size(); ++i)
+					if (s_staminaValues.size() != currentClass->levelbasevalues_size())
 					{
-						s_staminaValues[i] = currentClass->levelbasevalues(i).stamina();
-						s_strengthValues[i] = currentClass->levelbasevalues(i).strength();
-						s_intellectValues[i] = currentClass->levelbasevalues(i).intellect();
-						s_agilityValues[i] = currentClass->levelbasevalues(i).agility();
-						s_spiritValues[i] = currentClass->levelbasevalues(i).spirit();
-						s_healthValues[i] = currentClass->levelbasevalues(i).health();
-						s_manaValues[i] = currentClass->levelbasevalues(i).mana();
+						s_healthValues.resize(currentClass->levelbasevalues_size());
+						s_manaValues.resize(currentClass->levelbasevalues_size());
+						s_staminaValues.resize(currentClass->levelbasevalues_size());
+						s_strengthValues.resize(currentClass->levelbasevalues_size());
+						s_agilityValues.resize(currentClass->levelbasevalues_size());
+						s_intellectValues.resize(currentClass->levelbasevalues_size());
+						s_spiritValues.resize(currentClass->levelbasevalues_size());
+
+						for (int i = 0; i < currentClass->levelbasevalues_size(); ++i)
+						{
+							s_staminaValues[i] = currentClass->levelbasevalues(i).stamina();
+							s_strengthValues[i] = currentClass->levelbasevalues(i).strength();
+							s_intellectValues[i] = currentClass->levelbasevalues(i).intellect();
+							s_agilityValues[i] = currentClass->levelbasevalues(i).agility();
+							s_spiritValues[i] = currentClass->levelbasevalues(i).spirit();
+							s_healthValues[i] = currentClass->levelbasevalues(i).health();
+							s_manaValues[i] = currentClass->levelbasevalues(i).mana();
+						}
+					}
+
+					ImGui::PlotLines("Stamina", s_staminaValues.data(), s_staminaValues.size());
+					ImGui::PlotLines("Strength", s_strengthValues.data(), s_strengthValues.size());
+					ImGui::PlotLines("Agility", s_agilityValues.data(), s_agilityValues.size());
+					ImGui::PlotLines("Intellect", s_intellectValues.data(), s_intellectValues.size());
+					ImGui::PlotLines("Spirit", s_spiritValues.data(), s_spiritValues.size());
+					ImGui::PlotLines("Health", s_healthValues.data(), s_healthValues.size());
+					ImGui::PlotLines("Mana", s_manaValues.data(), s_manaValues.size());
+
+					if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
+					{
+						if (ImGui::TableNextColumn())
+						{
+							ImGui::InputText("Name", currentClass->mutable_name());
+						}
+
+						if (ImGui::TableNextColumn())
+						{
+							ImGui::BeginDisabled(true);
+							String idString = std::to_string(currentClass->id());
+							ImGui::InputText("ID", &idString);
+							ImGui::EndDisabled();
+						}
+
+						ImGui::EndTable();
+					}
+
+					ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
+
+					// Add button
+					if (ImGui::Button("Add Value", ImVec2(-1, 0)))
+					{
+						auto* baseValues = currentClass->add_levelbasevalues();
+
+						if (const auto count = currentClass->levelbasevalues_size(); count == 1)
+						{
+							baseValues->set_health(32);
+							baseValues->set_mana(110);
+							baseValues->set_stamina(19);
+							baseValues->set_strength(17);
+							baseValues->set_agility(25);
+							baseValues->set_intellect(22);
+							baseValues->set_spirit(23);
+						}
+						else
+						{
+							baseValues->set_health(currentClass->levelbasevalues(count - 2).health());
+							baseValues->set_mana(currentClass->levelbasevalues(count - 2).mana());
+							baseValues->set_stamina(currentClass->levelbasevalues(count - 2).stamina());
+							baseValues->set_strength(currentClass->levelbasevalues(count - 2).strength());
+							baseValues->set_agility(currentClass->levelbasevalues(count - 2).agility());
+							baseValues->set_intellect(currentClass->levelbasevalues(count - 2).intellect());
+							baseValues->set_spirit(currentClass->levelbasevalues(count - 2).spirit());
+						}
+					}
+
+					if (ImGui::BeginTable("classBaseValues", 8, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+					{
+						ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Stamina", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Strength", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_None);
+						ImGui::TableHeadersRow();
+
+						int value = 0;
+
+						for (int index = 0; index < currentClass->levelbasevalues_size(); ++index)
+						{
+							ImGui::PushID(index);
+
+							ImGui::TableNextRow();
+
+							ImGui::TableNextColumn();
+							ImGui::Text("Level %d", index + 1);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->health();
+							if (ImGui::InputInt("##health", &value)) currentClass->mutable_levelbasevalues(index)->set_health(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->mana();
+							if (ImGui::InputInt("##mana", &value)) currentClass->mutable_levelbasevalues(index)->set_mana(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->stamina();
+							if (ImGui::InputInt("##stamina", &value)) currentClass->mutable_levelbasevalues(index)->set_stamina(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->strength();
+							if (ImGui::InputInt("##strenght", &value)) currentClass->mutable_levelbasevalues(index)->set_strength(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->agility();
+							if (ImGui::InputInt("##agility", &value)) currentClass->mutable_levelbasevalues(index)->set_agility(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->intellect();
+							if (ImGui::InputInt("##intellect", &value)) currentClass->mutable_levelbasevalues(index)->set_intellect(value);
+
+							ImGui::TableNextColumn();
+							value = currentClass->mutable_levelbasevalues(index)->spirit();
+							if (ImGui::InputInt("##spirit", &value)) currentClass->mutable_levelbasevalues(index)->set_spirit(value);
+
+							ImGui::PopID();
+						}
+
+						ImGui::EndTable();
+					}
+
+					ImGui::EndChildFrame();
+				}
+
+				static const char* s_spellNone = "<None>";
+
+				if (ImGui::CollapsingHeader("Spells", ImGuiTreeNodeFlags_None))
+				{
+					// Add button
+					if (ImGui::Button("Add", ImVec2(-1, 0)))
+					{
+						auto* newSpell = currentClass->add_spells();
+						newSpell->set_level(1);
+						newSpell->set_spell(0);
+					}
+
+					if (ImGui::BeginTable("classSpells", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+					{
+						ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort);
+						ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
+
+						for (int index = 0; index < currentClass->spells_size(); ++index)
+						{
+							auto* currentSpell = currentClass->mutable_spells(index);
+
+							ImGui::PushID(index);
+							ImGui::TableNextRow();
+
+							ImGui::TableNextColumn();
+
+							int32 level = currentSpell->level();
+							if (ImGui::InputInt("##level", &level))
+							{
+								currentSpell->set_level(level);
+							}
+
+							ImGui::TableNextColumn();
+
+							int32 spell = currentSpell->spell();
+
+							const auto* spellEntry = m_project.spells.getById(spell);
+							if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_spellNone, ImGuiComboFlags_None))
+							{
+								for (int i = 0; i < m_project.spells.count(); i++)
+								{
+									ImGui::PushID(i);
+									const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
+									const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
+									if (ImGui::Selectable(item_text, item_selected))
+									{
+										currentSpell->set_spell(m_project.spells.getTemplates().entry(i).id());
+									}
+									if (item_selected)
+									{
+										ImGui::SetItemDefaultFocus();
+									}
+									ImGui::PopID();
+								}
+
+								ImGui::EndCombo();
+							}
+
+							ImGui::SameLine();
+
+							if (ImGui::Button("Remove"))
+							{
+								currentClass->mutable_spells()->erase(currentClass->mutable_spells()->begin() + index);
+								index--;
+							}
+
+							ImGui::PopID();
+						}
+
+						ImGui::EndTable();
 					}
 				}
 
-				ImGui::PlotLines("Stamina", s_staminaValues.data(), s_staminaValues.size());
-				ImGui::PlotLines("Strength", s_strengthValues.data(), s_strengthValues.size());
-				ImGui::PlotLines("Agility", s_agilityValues.data(), s_agilityValues.size());
-				ImGui::PlotLines("Intellect", s_intellectValues.data(), s_intellectValues.size());
-				ImGui::PlotLines("Spirit", s_spiritValues.data(), s_spiritValues.size());
-				ImGui::PlotLines("Health", s_healthValues.data(), s_healthValues.size());
-				ImGui::PlotLines("Mana", s_manaValues.data(), s_manaValues.size());
-
-				if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
-				{
-					if (ImGui::TableNextColumn())
-					{
-						ImGui::InputText("Name", currentClass->mutable_name());
-					}
-					
-					if (ImGui::TableNextColumn())
-					{
-						ImGui::BeginDisabled(true);
-						String idString = std::to_string(currentClass->id());
-						ImGui::InputText("ID", &idString);
-						ImGui::EndDisabled();
-					}
-
-					ImGui::EndTable();
-				}
-
-				ImGui::Text("Base Values");
-				ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
-
-				// Add button
-				if (ImGui::Button("Add Value", ImVec2(-1, 0)))
-				{
-					auto* baseValues = currentClass->add_levelbasevalues();
-
-					if (const auto count = currentClass->levelbasevalues_size(); count == 1)
-					{
-						baseValues->set_health(32);
-						baseValues->set_mana(110);
-						baseValues->set_stamina(19);
-						baseValues->set_strength(17);
-						baseValues->set_agility(25);
-						baseValues->set_intellect(22);
-						baseValues->set_spirit(23);
-					}
-					else
-					{
-						baseValues->set_health(currentClass->levelbasevalues(count - 2).health());
-						baseValues->set_mana(currentClass->levelbasevalues(count - 2).mana());
-						baseValues->set_stamina(currentClass->levelbasevalues(count - 2).stamina());
-						baseValues->set_strength(currentClass->levelbasevalues(count - 2).strength());
-						baseValues->set_agility(currentClass->levelbasevalues(count - 2).agility());
-						baseValues->set_intellect(currentClass->levelbasevalues(count - 2).intellect());
-						baseValues->set_spirit(currentClass->levelbasevalues(count - 2).spirit());
-					}
-				}
-
-				if (ImGui::BeginTable("classBaseValues", 8, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-				{
-					ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Stamina", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Strength", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_None);
-					ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_None);
-					ImGui::TableHeadersRow();
-
-					int value = 0;
-
-					for (int index = 0; index < currentClass->levelbasevalues_size(); ++index)
-					{
-						ImGui::PushID(index);
-
-						ImGui::TableNextRow();
-
-						ImGui::TableNextColumn();
-						ImGui::Text("Level %d", index + 1);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->health();
-						if (ImGui::InputInt("##health", &value)) currentClass->mutable_levelbasevalues(index)->set_health(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->mana();
-						if (ImGui::InputInt("##mana", &value)) currentClass->mutable_levelbasevalues(index)->set_mana(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->stamina();
-						if (ImGui::InputInt("##stamina", &value)) currentClass->mutable_levelbasevalues(index)->set_stamina(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->strength();
-						if (ImGui::InputInt("##strenght", &value)) currentClass->mutable_levelbasevalues(index)->set_strength(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->agility();
-						if (ImGui::InputInt("##agility", &value)) currentClass->mutable_levelbasevalues(index)->set_agility(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->intellect();
-						if (ImGui::InputInt("##intellect", &value)) currentClass->mutable_levelbasevalues(index)->set_intellect(value);
-
-						ImGui::TableNextColumn();
-						value = currentClass->mutable_levelbasevalues(index)->spirit();
-						if (ImGui::InputInt("##spirit", &value)) currentClass->mutable_levelbasevalues(index)->set_spirit(value);
-
-						ImGui::PopID();
-					}
-
-					ImGui::EndTable();
-				}
-
-				ImGui::EndChildFrame();
 			}
 			ImGui::EndChild();
 
 			ImGui::Columns(1);
-
 		}
 		ImGui::End();
 

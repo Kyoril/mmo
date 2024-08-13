@@ -320,9 +320,20 @@ namespace mmo
 		const uint32 hp = 1;
 		const Vector3 position;
 		const Degree rotation;
-		
+
+		std::vector<uint32> spellIds;
+		spellIds.reserve(classInstance->spells().size());
+		for(const auto& spell : classInstance->spells())
+		{
+			if (spell.level() <= level)
+			{
+				spellIds.push_back(spell.spell());
+			}
+		}
+
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, race, characterClass, gender, position, rotation);
+		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, race, characterClass, gender, position, rotation,
+			spellIds);
 		
 		return PacketParseResult::Pass;
 	}

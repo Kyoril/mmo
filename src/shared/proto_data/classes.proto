@@ -11,6 +11,11 @@ message ClassBaseValues {
 	required uint32 spirit = 7;
 }
 
+message ClassSpell {
+	required uint32 level = 1;
+	required uint32 spell = 2;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -24,6 +29,7 @@ message ClassEntry {
 	required uint32 spellfamily = 5;
 	optional uint32 flags = 6;
 	repeated ClassBaseValues levelbasevalues = 7;
+	repeated ClassSpell spells = 8;
 }
 
 message Classes {
