@@ -1513,6 +1513,29 @@ namespace mmo
 			targetMap.SetTargetMap(spell_cast_target_flags::Self);
 			targetMap.SetUnitTarget(unit->GetGuid());
 		}
+
+		const auto* spell = m_project.spells.getById(entry);
+		if (!spell)
+		{
+			ELOG("Unknown spell");
+			return;
+		}
+
+		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)
+		{
+			if (unit->GetMovementInfo().IsMoving())
+			{
+				ELOG("Can't cast spell while moving");
+				return;
+			}
+		}
+
+		if ((spell->attributes(0) & spell_attributes::NotInCombat) != 0 &&
+			unit->IsInCombat())
+		{
+			ELOG("Spell not castable while in combat!");
+			return;
+		}
 		
 		m_realmConnector.CastSpell(entry, targetMap);
 	}

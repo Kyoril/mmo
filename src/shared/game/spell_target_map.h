@@ -8,6 +8,32 @@
 
 namespace mmo
 {
+	namespace spell_interrupt_flags
+	{
+		enum Type
+		{
+			/// Used when cast is cancelled for no specific reason (always interrupts the cast)
+			Any = 0x00,
+
+			/// Interrupted on movement
+			Movement = 0x01,
+
+			/// Affected by spell delay?
+			PushBack = 0x02,
+
+			/// Kick / Counter Spell
+			Interrupt = 0x04,
+
+			/// Interrupted on auto attack?
+			AutoAttack = 0x08,
+
+			/// Interrupted on direct damage
+			Damage = 0x10
+		};
+	}
+
+	typedef spell_interrupt_flags::Type SpellInterruptFlags;
+
 	class SpellTargetMap final
 	{
 		friend io::Writer& operator << (io::Writer& w, SpellTargetMap const& targetMap);
