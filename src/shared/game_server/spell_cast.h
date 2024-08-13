@@ -11,6 +11,32 @@ namespace mmo
 {
 	class GameUnitS;
 
+	namespace spell_interrupt_flags
+	{
+		enum Type
+		{
+			/// Used when cast is cancelled for no specific reason (always interrupts the cast)
+			Any = 0x00,
+
+			/// Interrupted on movement
+			Movement = 0x01,
+
+			/// Affected by spell delay?
+			PushBack = 0x02,
+
+			/// Kick / Counter Spell
+			Interrupt = 0x04,
+
+			/// Interrupted on auto attack?
+			AutoAttack = 0x08,
+
+			/// Interrupted on direct damage
+			Damage = 0x10
+		};
+	}
+
+	typedef spell_interrupt_flags::Type SpellInterruptFlags;
+
 	class SpellCasting
 	{
 	public:
@@ -34,7 +60,7 @@ namespace mmo
 			bool doReplacePreviousCast
 		) = 0;
 
-		virtual void StopCast(GameTime interruptCooldown = 0) = 0;
+		virtual void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) = 0;
 
 		virtual void OnUserStartsMoving() = 0;
 
@@ -62,7 +88,7 @@ namespace mmo
 			const SpellTargetMap& target,
 			GameTime castTime);
 
-		void StopCast(GameTime interruptCooldown = 0) const;
+		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 
 		void OnUserStartsMoving();
 

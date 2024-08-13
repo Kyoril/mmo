@@ -17,7 +17,7 @@ namespace mmo
 			bool doReplacePreviousCast
 		) override;
 
-		void StopCast(GameTime interruptCooldown = 0) override;
+		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) override;
 
 		void OnUserStartsMoving() override;
 

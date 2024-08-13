@@ -64,10 +64,10 @@ namespace mmo
 			false);
 	}
 
-	void SpellCast::StopCast(const GameTime interruptCooldown) const
+	void SpellCast::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown) const
 	{
 		ASSERT(m_castState);
-		m_castState->StopCast(interruptCooldown);
+		m_castState->StopCast(reason, interruptCooldown);
 	}
 
 	void SpellCast::OnUserStartsMoving()

@@ -93,6 +93,10 @@ namespace mmo
 	public:
 		virtual void SetLevel(uint32 newLevel);
 
+		virtual void Relocate(const Vector3& position, const Radian& facing) override;
+
+		virtual void ApplyMovementInfo(const MovementInfo& info) override;
+
 	public:
 		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
 

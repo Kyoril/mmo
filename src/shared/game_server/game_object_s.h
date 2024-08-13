@@ -217,7 +217,7 @@ namespace mmo
 		/// Gets the facing of this object.
 		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
 
-		void Relocate(const Vector3& position, const Radian& facing)
+		virtual void Relocate(const Vector3& position, const Radian& facing)
 		{
 			const MovementInfo oldInfo = m_movementInfo;
 
@@ -265,7 +265,7 @@ namespace mmo
 
 		Vector3 GetPredictedPosition();
 
-		void ApplyMovementInfo(const MovementInfo& info);
+		virtual void ApplyMovementInfo(const MovementInfo& info);
 
 		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const;
 

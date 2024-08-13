@@ -7,6 +7,7 @@
 
 #include "assets/asset_registry.h"
 #include "game/spell.h"
+#include "game_server/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
@@ -158,6 +159,17 @@ namespace mmo
 			currentSpell.set_##name(value); \
 		} \
 	}
+#define CHECKBOX_FLAG_PROP(property, label, flags) \
+	{ \
+		bool value = (currentSpell.property() & static_cast<uint32>(flags)) != 0; \
+		if (ImGui::Checkbox(label, &value)) \
+		{ \
+			if (value) \
+				currentSpell.set_##property(currentSpell.property() | static_cast<uint32>(flags)); \
+			else \
+				currentSpell.set_##property(currentSpell.property() & ~static_cast<uint32>(flags)); \
+		} \
+	}
 #define CHECKBOX_ATTR_PROP(index, label, flags) \
 	{ \
 		bool value = (currentSpell.attributes(index) & static_cast<uint32>(flags)) != 0; \
@@ -239,6 +251,15 @@ namespace mmo
 			SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
+		}
+
+		if (ImGui::CollapsingHeader("Interrupt", ImGuiTreeNodeFlags_None))
+		{
+			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
+			CHECKBOX_FLAG_PROP(interruptflags, "Auto Attack", spell_interrupt_flags::AutoAttack);
+			CHECKBOX_FLAG_PROP(interruptflags, "Damage", spell_interrupt_flags::Damage);
+			CHECKBOX_FLAG_PROP(interruptflags, "Push Back", spell_interrupt_flags::PushBack);
+			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
 		}
 
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))

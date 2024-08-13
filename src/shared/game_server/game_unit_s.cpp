@@ -120,6 +120,26 @@ namespace mmo
 		Set(object_fields::Energy, Get<uint32>(object_fields::MaxEnergy));
 	}
 
+	void GameUnitS::Relocate(const Vector3& position, const Radian& facing)
+	{
+		GameObjectS::Relocate(position, facing);
+
+		if (GetPosition() != position)
+		{
+			m_spellCast->StopCast(spell_interrupt_flags::Movement);
+		}
+	}
+
+	void GameUnitS::ApplyMovementInfo(const MovementInfo& info)
+	{
+		if (m_movementInfo.position != info.position)
+		{
+			m_spellCast->StopCast(spell_interrupt_flags::Movement);
+		}
+
+		GameObjectS::ApplyMovementInfo(info);
+	}
+
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
 	{
 		const auto now = GetAsyncTimeMs();
@@ -427,7 +447,7 @@ namespace mmo
 
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
-		m_spellCast->StopCast();
+		m_spellCast->StopCast(spell_interrupt_flags::Any);
 
 		Set<uint64>(object_fields::TargetUnit, 0);
 

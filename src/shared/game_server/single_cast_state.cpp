@@ -155,12 +155,19 @@ namespace mmo
 		return std::make_pair(spell_cast_result::CastOkay, &casting);
 	}
 
-	void SingleCastState::StopCast(const GameTime interruptCooldown)
+	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
 	{
 		FinishChanneling();
 
 		// Nothing to cancel
 		if (m_hasFinished)
+		{
+			return;
+		}
+
+		// Check whether the spell can be interrupted by this action
+		if (reason != spell_interrupt_flags::Any &&
+			(m_spell.interruptflags() & reason) == 0)
 		{
 			return;
 		}
@@ -194,7 +201,7 @@ namespace mmo
 		const Vector3 location = m_cast.GetExecuter().GetPosition();
 		if (location.x != m_x || location.y != m_y || location.z != m_z)
 		{
-			StopCast();
+			StopCast(spell_interrupt_flags::Movement);
 		}
 	}
 
@@ -834,12 +841,12 @@ namespace mmo
 
 	void SingleCastState::OnTargetKilled(GameUnitS*)
 	{
-		StopCast();
+		StopCast(spell_interrupt_flags::Any);
 	}
 
 	void SingleCastState::OnTargetDespawned(GameObjectS&)
 	{
-		StopCast();
+		StopCast(spell_interrupt_flags::Any);
 	}
 
 	void SingleCastState::OnUserDamaged()

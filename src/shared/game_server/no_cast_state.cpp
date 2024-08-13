@@ -20,7 +20,7 @@ namespace mmo
 		return std::make_pair(spell_cast_result::CastOkay, &casting);
 	}
 
-	void NoCastState::StopCast(GameTime interruptCooldown)
+	void NoCastState::StopCast(SpellInterruptFlags reason, GameTime interruptCooldown)
 	{
 	}
 
