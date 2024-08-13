@@ -172,8 +172,21 @@ namespace mmo
 			return;
 		}
 
+		SpellCastResult result = spell_cast_result::FailedBadTargets;
+		switch(reason)
+		{
+		case spell_interrupt_flags::Interrupt:
+		case spell_interrupt_flags::Damage:
+		case spell_interrupt_flags::AutoAttack:
+			result = spell_cast_result::FailedInterrupted;
+			break;
+		case spell_interrupt_flags::Movement:
+			result = spell_cast_result::FailedMoving;
+			break;
+		}
+
 		m_countdown.Cancel();
-		SendEndCast(spell_cast_result::FailedBadTargets);
+		SendEndCast(result);
 		m_hasFinished = true;
 
 		if (interruptCooldown)
