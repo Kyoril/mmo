@@ -112,7 +112,7 @@ namespace mmo
 		// Exceed max level?
 		if (newLevel > Get<int32>(object_fields::MaxLevel))
 		{
-			return;
+			newLevel = Get<int32>(object_fields::MaxLevel);
 		}
 
 		GameUnitS::SetLevel(newLevel);

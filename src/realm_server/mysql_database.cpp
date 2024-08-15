@@ -183,7 +183,7 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -192,18 +192,20 @@ namespace mmo
 				result.characterId = characterId;
 
 				String instanceId;
-				uint8 level = 1;
 				float facing = 0.0f;
 
 				uint32 index = 0;
 				row.GetField(index++, result.name);
-				row.GetField(index++, level);
+				row.GetField<uint8, uint16>(index++, result.level);
 				row.GetField(index++, result.mapId);
 				row.GetField(index++, instanceId);
 				row.GetField(index++, result.position.x);
 				row.GetField(index++, result.position.y);
 				row.GetField(index++, result.position.z);
 				row.GetField(index++, facing);
+				row.GetField(index++, result.gender);
+				row.GetField(index++, result.raceId);
+				row.GetField(index++, result.classId);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);

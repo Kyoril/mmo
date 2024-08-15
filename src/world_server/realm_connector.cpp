@@ -402,6 +402,9 @@ namespace mmo
 			ASSERT(instance);
 		}
 
+		const auto* classEntry = m_project.classes.getById(characterData.classId);
+		ASSERT(classEntry);
+
 		// Apply instance id before sending
 		characterData.instanceId = instance->GetId();
 
@@ -410,9 +413,8 @@ namespace mmo
 		characterObject->Initialize();
 		characterObject->Set(object_fields::Guid, characterData.characterId);
 
-		ASSERT(m_project.classes.count() > 0);
-		characterObject->SetClass(*m_project.classes.getById(0));
-		characterObject->RefreshStats();
+		characterObject->SetClass(*classEntry);
+		characterObject->SetLevel(characterData.level);
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object
