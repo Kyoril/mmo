@@ -188,6 +188,11 @@ namespace mmo
 		{
 			if (auto unit = Script_GetUnitByName("player"))
 			{
+				if (unit->Get<int32>(object_fields::Level) >= unit->Get<int32>(object_fields::MaxLevel))
+				{
+					return 0;
+				}
+
 				return unit->Get<int32>(object_fields::NextLevelXp);
 			}
 
