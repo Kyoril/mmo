@@ -245,7 +245,10 @@ namespace mmo
 		std::string characterName;
 		if (!(packet
 			>> io::read_container<uint8>(characterName)
-			>> io::read<uint8>(characterClass)))
+			>> io::read<uint8>(race)
+			>> io::read<uint8>(characterClass)
+			>> io::read<uint8>(gender)
+			))
 		{
 			return PacketParseResult::Disconnect;
 		}

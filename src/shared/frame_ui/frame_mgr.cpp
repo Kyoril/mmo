@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 
+#include "checkbox_renderer.h"
 #include "progress_bar.h"
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
@@ -284,6 +285,12 @@ namespace mmo
 				return std::make_unique<ButtonRenderer>(name);
 			});
 
+			// CheckboxRenderer
+			frameMgr.RegisterFrameRenderer("CheckboxRenderer", [](const std::string& name)
+				{
+					return std::make_unique<CheckboxRenderer>(name);
+				});
+
 			// TextFieldRenderer
 			frameMgr.RegisterFrameRenderer("TextFieldRenderer", [](const std::string& name)
 			{
@@ -386,6 +393,10 @@ namespace mmo
 
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
+					.def("IsChecked", &Button::IsChecked)
+					.def("SetChecked", &Button::SetChecked)
+					.def("IsCheckable", &Button::IsCheckable)
+					.def("SetCheckable", &Button::SetCheckable)
 					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
 
 			luabind::scope(

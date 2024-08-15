@@ -380,8 +380,10 @@ namespace mmo
 		void QueueGeometry();
 		/// Allows for custom geometry buffer population for custom frame classes.
 		virtual void PopulateGeometryBuffer() {}
+
 		/// Gets the parent rectangle.
 		Rect GetParentRect();
+
 		/// Executed when the text was changed.
 		virtual void OnTextChanged();
 
@@ -392,14 +394,19 @@ namespace mmo
 	private:
 		/// Executed when the clippedByParent property was changed.
 		void OnClippedByParentChanged(const Property& property);
+
 		/// Executed when the text property was changed.
 		void OnTextPropertyChanged(const Property& property);
+
 		/// Executed when the focusable property was changed.
 		void OnFocusablePropertyChanged(const Property& property);
+
 		/// Executed when the enabled property was changed.
 		void OnEnabledPropertyChanged(const Property& property);
+
 		/// Executed when the visible property was changed.
 		void OnVisiblePropertyChanged(const Property& property);
+
 		/// 
 		void OnFontPropertyChanged(const Property& property);
 

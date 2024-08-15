@@ -27,10 +27,30 @@ namespace mmo
 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 
+		bool IsChecked() const { return IsCheckable() && m_checked; }
+
+		void SetChecked(const bool checked) { m_checked = checked; Invalidate(); }
+
+		bool IsCheckable() const { return m_checkable; }
+
+		void SetCheckable(const bool checkable) { m_checkable = checkable; Invalidate(); }
+
 	public:
 		void SetLuaClickedHandler(const luabind::object& fn);
 
 	private:
+		/// Executed when the Checked property was changed.
+		void OnCheckedPropertyChanged(const Property& property);
+
+		/// Executed when the Checkable property was changed.
+		void OnCheckablePropertyChanged(const Property& property);
+
+
+	private:
 		luabind::object m_clickedHandler;
+
+		bool m_checkable{ false };
+
+		bool m_checked{ false };
 	};
 }

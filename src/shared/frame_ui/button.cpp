@@ -12,6 +12,9 @@ namespace mmo
 	Button::Button(const std::string & type, const std::string & name)
 		: Frame(type, name)
 	{
+		m_propConnections += AddProperty("Checkable").Changed.connect(this, &Button::OnCheckablePropertyChanged);
+		m_propConnections += AddProperty("Checked").Changed.connect(this, &Button::OnCheckedPropertyChanged);
+
 		// Buttons are focusable by default
 		m_focusable = true;
 	}
@@ -25,6 +28,9 @@ namespace mmo
 		{
 			return;
 		}
+
+		otherButton->m_checkable = m_checkable;
+		otherButton->m_checked = m_checked;
 
 		if (m_clickedHandler.is_valid())
 		{
@@ -42,6 +48,12 @@ namespace mmo
 	{
 		if (button == MouseButton::Left)
 		{
+			// Toggle checked state if the button is checkable
+			if (IsCheckable())
+			{
+				SetChecked(!IsChecked());
+			}
+
 			if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 			{
 				// Trigger lua clicked event handler if there is any
@@ -70,5 +82,15 @@ namespace mmo
 	void Button::SetLuaClickedHandler(const luabind::object & fn)
 	{
 		m_clickedHandler = fn;
+	}
+
+	void Button::OnCheckedPropertyChanged(const Property& property)
+	{
+		SetChecked(property.GetBoolValue());
+	}
+
+	void Button::OnCheckablePropertyChanged(const Property& property)
+	{
+		SetCheckable(property.GetBoolValue());
 	}
 }
