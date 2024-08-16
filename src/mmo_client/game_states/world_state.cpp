@@ -57,11 +57,17 @@ namespace mmo
 
 		String MapBindingKeyCode(const Key keyCode)
 		{
-			if (keyCode >= 'a' && keyCode <= 'z' ||
-				keyCode >= 'A' && keyCode <= 'Z' ||
+			// Convert numbers and letters to string
+			if (keyCode >= 'A' && keyCode <= 'Z' ||
 				keyCode >= '0' && keyCode <= '9')
 			{
 				return String(1, static_cast<char>(keyCode));
+			}
+
+			// Convert lowercase to uppercase for simplicity
+			if (keyCode >= 'a' && keyCode <= 'z')
+			{
+				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
 			}
 
 			if (keyCode >= VK_F1 && keyCode <= VK_F12)
