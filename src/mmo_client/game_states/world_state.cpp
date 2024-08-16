@@ -104,7 +104,6 @@ namespace mmo
 			case 0x91:		return "SCROLLLOCK";
 			case 0x13:		return "PAUSE";
 			default:
-				TODO("Map missing key code!");
 				break;
 			}
 

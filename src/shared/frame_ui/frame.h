@@ -368,9 +368,9 @@ namespace mmo
 
 		void SetOnLeave(const luabind::object& func) { m_onLeave = func; }
 
-		void OnEnter();
+		virtual void OnMouseEnter();
 
-		void OnLeave();
+		virtual void OnMouseLeave();
 
 	protected:
 		virtual void DrawSelf();

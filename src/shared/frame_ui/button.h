@@ -7,6 +7,20 @@
 
 namespace mmo
 {
+	namespace button_state
+	{
+		enum Type
+		{
+			Normal,
+			Hovered,
+			Pushed
+		};
+	}
+
+
+	typedef button_state::Type ButtonState;
+
+
 	/// This class inherits the Frame class and extends it by some button logic.
 	class Button
 		: public Frame
@@ -27,6 +41,12 @@ namespace mmo
 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 
+		virtual void OnMouseEnter() override;
+
+		virtual void OnMouseLeave() override;
+
+		void SetButtonState(const ButtonState state);
+
 		bool IsChecked() const { return IsCheckable() && m_checked; }
 
 		void SetChecked(const bool checked) { m_checked = checked; Invalidate(); }
@@ -34,6 +54,8 @@ namespace mmo
 		bool IsCheckable() const { return m_checkable; }
 
 		void SetCheckable(const bool checkable) { m_checkable = checkable; Invalidate(); }
+
+		ButtonState GetButtonState() const { return m_state; }
 
 	public:
 		void SetLuaClickedHandler(const luabind::object& fn);
@@ -52,5 +74,7 @@ namespace mmo
 		bool m_checkable{ false };
 
 		bool m_checked{ false };
+
+		ButtonState m_state{ ButtonState::Normal };
 	};
 }

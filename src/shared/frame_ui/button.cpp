@@ -2,6 +2,7 @@
 
 #include "button.h"
 
+#include "frame_mgr.h"
 #include "log/default_log_levels.h"
 
 
@@ -41,6 +42,9 @@ namespace mmo
 	void Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
 	{
 		Frame::OnMouseDown(button, buttons, position);
+
+		SetButtonState(ButtonState::Pushed);
+
 		abort_emission();
 	}
 
@@ -48,6 +52,8 @@ namespace mmo
 	{
 		if (button == MouseButton::Left)
 		{
+			SetButtonState(IsHovered() ? ButtonState::Hovered : ButtonState::Normal);
+
 			// Toggle checked state if the button is checkable
 			if (IsCheckable())
 			{
@@ -77,6 +83,37 @@ namespace mmo
 		// Call super class method
 		Frame::OnMouseUp(button, buttons, position);
 		abort_emission();
+	}
+
+	void Button::OnMouseEnter()
+	{
+		Frame::OnMouseEnter();
+
+		if (m_state != button_state::Pushed)
+		{
+			SetButtonState(button_state::Hovered);
+		}
+	}
+
+	void Button::OnMouseLeave()
+	{
+		Frame::OnMouseLeave();
+
+		if (m_state != button_state::Pushed)
+		{
+			SetButtonState(button_state::Normal);
+		}
+	}
+
+	void Button::SetButtonState(const ButtonState state)
+	{
+		if (state == m_state)
+		{
+			return;
+		}
+
+		m_state = state;
+		Invalidate();
 	}
 
 	void Button::SetLuaClickedHandler(const luabind::object & fn)

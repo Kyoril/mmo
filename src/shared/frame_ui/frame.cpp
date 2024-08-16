@@ -789,7 +789,7 @@ namespace mmo
 		}
 	}
 
-	void Frame::OnEnter()
+	void Frame::OnMouseEnter()
 	{
 		if (m_onEnter.is_valid())
 		{
@@ -797,7 +797,7 @@ namespace mmo
 		}
 	}
 
-	void Frame::OnLeave()
+	void Frame::OnMouseLeave()
 	{
 		if (m_onLeave.is_valid())
 		{

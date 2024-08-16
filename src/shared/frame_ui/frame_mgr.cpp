@@ -358,6 +358,15 @@ namespace mmo
 					]),
 
 			luabind::scope(
+				luabind::class_<ButtonState>("ButtonState")
+				.enum_("type")
+				[
+					luabind::value("NORMAL", 0),
+					luabind::value("HOVERED", 1),
+					luabind::value("PUSHED", 2)
+				]),
+
+			luabind::scope(
 				luabind::class_<Frame>("Frame")
 	               .def("SetText", &Frame::SetText)
 	               .def("GetText", &Frame::GetText)
@@ -397,7 +406,9 @@ namespace mmo
 					.def("SetChecked", &Button::SetChecked)
 					.def("IsCheckable", &Button::IsCheckable)
 					.def("SetCheckable", &Button::SetCheckable)
-					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
+					.def("SetClickedHandler", &Button::SetLuaClickedHandler)
+					.def("SetButtonState", &Button::SetButtonState)
+					.def("GetButtonState", &Button::GetButtonState)),
 
 			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
@@ -645,12 +656,12 @@ namespace mmo
 
 				if (prevFrame)
 				{
-					prevFrame->OnLeave();
+					prevFrame->OnMouseLeave();
 				}
 
 				if (m_hoverFrame)
 				{
-					m_hoverFrame->OnEnter();
+					m_hoverFrame->OnMouseEnter();
 				}
 
 				// Invalidate the old hover frame if there was any
