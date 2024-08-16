@@ -252,7 +252,7 @@ namespace mmo
 		});
 
 		// Initialize the console client which also loads the config file
-		Console::Initialize(currentPath / "Config" / "Config.cfg");
+		Console::Initialize("Config/Config.cfg");
 
 		// Initialize network threads
 		NetInit();

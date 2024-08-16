@@ -38,6 +38,6 @@ namespace mmo
 		virtual ~IInputControl() = default;
 
 	public:
-		virtual void SetControlBit(ControlFlags::Type flag) = 0;
+		virtual void SetControlBit(ControlFlags::Type flag, bool set) = 0;
 	};
 }

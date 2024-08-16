@@ -483,65 +483,7 @@ namespace mmo
 		const float currentZoom = m_cameraNode->GetPosition().z;
 		s_cameraZoomCVar->Set(currentZoom - static_cast<float>(delta));
 	}
-
-	void PlayerController::OnKeyDown(const int32 key)
-	{
-		switch(key)
-		{
-		case 0x57:
-			m_controlFlags |= ControlFlags::MoveForwardKey;
-			return;
-		case 0x53:
-			m_controlFlags |= ControlFlags::MoveBackwardKey;
-			return;
-		case 0x41:
-			m_controlFlags |= ControlFlags::TurnLeftKey;
-			break;
-		case 0x44:
-			m_controlFlags |= ControlFlags::TurnRightKey;
-			break;
-		case 81:
-			m_controlFlags |= ControlFlags::StrafeLeftKey;
-			break;
-		case 69:
-			m_controlFlags |= ControlFlags::StrafeRightKey;
-			break;
-
-		case VK_F1:
-			const Radian facing = (m_cameraAnchorNode->GetOrientation() + m_controlledUnit->GetSceneNode()->GetOrientation()).GetYaw();
-			DLOG(
-				"Facing: " << facing.GetValueRadians() << "; " 
-				<< "Unit facing: " << m_controlledUnit->GetSceneNode()->GetDerivedOrientation().GetYaw().GetValueRadians()
-			);
-			break;
-		}
-	}
-
-	void PlayerController::OnKeyUp(const int32 key)
-	{
-		switch(key)
-		{
-		case 0x57:
-			m_controlFlags &= ~ControlFlags::MoveForwardKey;
-			break;
-		case 0x53:
-			m_controlFlags &= ~ControlFlags::MoveBackwardKey;
-			break;
-		case 0x41:
-			m_controlFlags &= ~ControlFlags::TurnLeftKey;
-			break;
-		case 0x44:
-			m_controlFlags &= ~ControlFlags::TurnRightKey;
-			break;
-		case 81:
-			m_controlFlags &= ~ControlFlags::StrafeLeftKey;
-			break;
-		case 69:
-			m_controlFlags &= ~ControlFlags::StrafeRightKey;
-			break;
-		}
-	}
-	
+		
 	void PlayerController::SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit)
 	{
 		m_cameraOffsetNode->RemoveFromParent();

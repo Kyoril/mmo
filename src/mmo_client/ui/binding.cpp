@@ -117,6 +117,9 @@ namespace mmo
 		}
 
 		XML_ParserFree(parser);
+
+		// Load default bindings
+		Console::ExecuteCommand("run Config/DefaultBindings.cfg");
 	}
 
 	void Bindings::Unload()
@@ -178,7 +181,7 @@ namespace mmo
 
 		try
 		{
-			bindingIt->second.script(keyStateString);
+			bindingIt->second.script(keyName, keyStateString);
 		}
 		catch(const luabind::error& e)
 		{

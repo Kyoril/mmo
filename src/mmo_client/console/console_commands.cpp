@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "assets/asset_registry.h"
+
 
 namespace mmo::console_commands
 {
@@ -28,8 +30,7 @@ namespace mmo::console_commands
 			return;
 		}
 
-		// Open the file for reading
-		std::ifstream file(args.c_str(), std::ios::in);
+		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(args.c_str());
 		if (!file)
 		{
 			ELOG("Could not open script file \"" << args << "\"");
@@ -38,7 +39,7 @@ namespace mmo::console_commands
 
 		// Read the file line by line and try to execute each line
 		std::string line;
-		while (std::getline(file, line))
+		while (std::getline(*file, line))
 		{
 			// Trim line
 			line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](int ch) {

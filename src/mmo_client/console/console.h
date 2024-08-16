@@ -53,7 +53,7 @@ namespace mmo
 
 	public:
 		/// Initializes the console system.
-		static void Initialize(const std::filesystem::path& configFile);
+		static void Initialize(const String& configFile);
 		/// Destroys the console system.
 		static void Destroy();
 

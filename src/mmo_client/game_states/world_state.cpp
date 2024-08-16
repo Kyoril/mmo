@@ -76,32 +76,43 @@ namespace mmo
 
 			switch(keyCode)
 			{
-			case VK_SPACE:		return "SPACE";
-			case VK_RETURN:		return "ENTER";
-			case VK_ESCAPE:		return "ESCAPE";
-			case VK_BACK:		return "BACKSPACE";
-			case VK_TAB:		return "TAB";
-			case VK_ADD:		return "ADD";
-			case VK_SUBTRACT:	return "SUBTRACT";
-			case VK_MULTIPLY:	return "MULTIPLY";
-			case VK_DIVIDE:		return "DIVIDE";
-			case VK_ACCEPT:		return "ACCEPT";
-			case VK_DELETE:		return "DEL";
-			case VK_END:		return "END";
-			case VK_INSERT:		return "INSERT";
-			case VK_LCONTROL:	return "LCTRL";
-			case VK_RCONTROL:	return "RCTRL";
-			case VK_LSHIFT:		return "LSHIFT";
-			case VK_RSHIFT:		return "RSHIFT";
-			case VK_LEFT:		return "LEFT";
-			case VK_RIGHT:		return "RIGHT";
-			case VK_UP:			return "UP";
-			case VK_DOWN:		return "DOWN";
+			case 0x20:		return "SPACE";
+			case 0x0D:		return "ENTER";
+			case 0x1B:		return "ESCAPE";
+			case 0x08:		return "BACKSPACE";
+			case 0x09:		return "TAB";
+			case 0x6B:		return "ADD";
+			case 0x6D:	return "SUBTRACT";
+			case 0x6A:	return "MULTIPLY";
+			case 0x6F:		return "DIVIDE";
+			case 0x1E:		return "ACCEPT";
+			case 0x2E:		return "DEL";
+			case 0x2D:		return "INSERT";
+			case 0xA2:	return "LCTRL";
+			case 0xA3:	return "RCTRL";
+			case 0xA0:		return "LSHIFT";
+			case 0xA1:		return "RSHIFT";
+			case 0x25:		return "LEFT";
+			case 0x27:		return "RIGHT";
+			case 0x26:			return "UP";
+			case 0x28:		return "DOWN";
+			case 0x21:		return "PAGEUP";
+			case 0x22:		return "PAGEDOWN";
+			case 0x23:		return "END";
+			case 0x24:		return "HOME";
+			case 0x2C:		return "PRINTSCREEN";
+			case 0x91:		return "SCROLLLOCK";
+			case 0x13:		return "PAUSE";
+			default:
+				TODO("Map missing key code!");
+				break;
 			}
 
 			return {};
 		}
 	}
+
+	IInputControl* WorldState::s_inputControl = nullptr;
 
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers)
 		: GameState(gameStateManager)
@@ -188,6 +199,7 @@ namespace mmo
 
 		RemoveGameplayCommands();
 
+		s_inputControl = nullptr;
 		m_playerController.reset();
 		m_worldGrid.reset();
 		m_scene.Clear();
@@ -250,7 +262,6 @@ namespace mmo
 			return true;
 		}
 
-		m_playerController->OnKeyDown(key);
 		return true;
 	}
 
@@ -261,13 +272,6 @@ namespace mmo
 			return true;
 		}
 
-		// Enter
-		if (key == 13)
-		{
-			FrameManager::Get().TriggerLuaEvent("OPEN_CHAT");
-		}
-
-		m_playerController->OnKeyUp(key);
 		return true;
 	}
 
@@ -323,6 +327,7 @@ namespace mmo
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector);
+		s_inputControl = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");

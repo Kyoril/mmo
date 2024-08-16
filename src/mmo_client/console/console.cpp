@@ -186,10 +186,8 @@ namespace mmo
 	
 	// Console implementation
 
-	void Console::Initialize(const std::filesystem::path& configFile)
+	void Console::Initialize(const String& configFile)
 	{
-		std::filesystem::create_directories(configFile.parent_path());
-		
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
@@ -202,17 +200,17 @@ namespace mmo
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
-		
+
+		console_commands::ConsoleCommand_Run("run", configFile);
+
 		RegisterGraphicsCVars();
-		
-		console_commands::ConsoleCommand_Run("run", configFile.string());
-		
+
 		s_consoleVisible = false;
 		s_consoleWindowHeight = 210;
-		
-		ILOG("Locale: " << localeCVar->GetStringValue());
+
 		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
-		
+		ILOG("Locale: " << localeCVar->GetStringValue());
+
 		AssetRegistry::Initialize(s_dataPathCVar->GetStringValue(),
 			{
 				"ClientDB.hpak",
@@ -222,8 +220,8 @@ namespace mmo
 				"Textures.hpak",
 				"Worlds.hpak",
 				localeArchive,
-				localeArchive + ".hpak"
-			});
+				localeArchive + ".hpak",
+			});	
 		
 		const GraphicsApi defaultApi =
 #if PLATFORM_WINDOWS

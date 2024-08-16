@@ -35,10 +35,6 @@ namespace mmo
 
 		void OnMouseWheel(int32 delta);
 		
-		void OnKeyDown(int32 key);
-		
-		void OnKeyUp(int32 key);
-		
 		void SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit);
 
 		[[nodiscard]] const std::shared_ptr<GameUnitC>& GetControlledUnit() const noexcept { return m_controlledUnit; }
@@ -73,7 +69,7 @@ namespace mmo
 		void ClampCameraPitch();
 
 	public:
-		void SetControlBit(const ControlFlags::Type flag) override { m_controlFlags |= flag; }
+		void SetControlBit(const ControlFlags::Type flag, bool set) override { if (set) { m_controlFlags |= flag; } else { m_controlFlags &= ~flag; } }
 
 	private:
 		Scene& m_scene;

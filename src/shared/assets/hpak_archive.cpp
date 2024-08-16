@@ -29,7 +29,10 @@ namespace mmo
 	{
 		// Open the hpak archive file for reading
 		m_file = std::make_unique<std::ifstream>(m_name.c_str(), std::ios::in | std::ios::binary);
-		ASSERT(m_file && *m_file);
+		if (!m_file || !*m_file)
+		{
+			return;
+		}
 
 		// Generate source and reader
 		io::StreamSource source{ *m_file };

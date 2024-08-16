@@ -2,9 +2,7 @@
 
 #include "asset_registry.h"
 #include "filesystem_archive.h"
-#ifndef _DEBUG
-#	include "hpak_archive.h"
-#endif
+#include "hpak_archive.h"
 
 #include "log/default_log_levels.h"
 #include "base/utilities.h"
@@ -52,9 +50,7 @@ namespace mmo
 				// Add archive to the list of archives
 				if (archivePath.extension() == ".hpak")
 				{
-#ifndef _DEBUG
 					s_archives.emplace_front(std::make_shared<HPAKArchive>(archivePath.string()));
-#endif
 				}
 				else
 				{
@@ -94,6 +90,49 @@ namespace mmo
 		DLOG("Asset registry: " << s_files.size() << " files");
 	}
 
+	void AssetRegistry::AddArchivePackage(const std::filesystem::path& path)
+	{
+		std::shared_ptr<IArchive> archive;
+
+		auto archivePath = s_basePath / path;
+		if (std::filesystem::exists(archivePath))
+		{
+			// Add archive to the list of archives
+			if (archivePath.extension() == ".hpak")
+			{
+				archive = std::make_shared<HPAKArchive>(archivePath.string());
+			}
+			else
+			{
+				archive = std::make_shared<FileSystemArchive>(archivePath.string());
+			}
+		}
+
+		if (!archive)
+		{
+			return;
+		}
+
+		s_archives.push_front(archive);
+		archive->Load();
+
+		// And enumerate all files the archive contains
+		std::vector<std::string> archiveFiles;
+		archive->EnumerateFiles(archiveFiles);
+
+		// Iterate through the archive files
+		for (const auto& file : archiveFiles)
+		{
+			// If the file hasn't been tracked yet, we will add it to the list
+			// with the current archive that will be used to load the file on 
+			// request
+			if (s_files.find(file) == s_files.end())
+			{
+				s_files[file] = archive;
+			}
+		}
+	}
+
 	void AssetRegistry::Destroy()
 	{
 		// Clear file list
@@ -119,7 +158,7 @@ namespace mmo
 		const auto it = s_files.find(filename);
 		if (it == s_files.end())
 		{
-			return nullptr;
+			return std::make_unique<std::ifstream>(filename, std::ios::binary | std::ios::in);
 		}
 
 		// Open file from archive

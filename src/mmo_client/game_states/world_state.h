@@ -256,5 +256,14 @@ namespace mmo
 		AttackSwingEvent m_lastAttackSwingEvent{ AttackSwingEvent::Unknown };
 
 		Bindings m_bindings;
+
+	private:
+		static IInputControl* s_inputControl;
+
+	public:
+		static IInputControl* GetInputControl()
+		{
+			return s_inputControl;
+		}
 	};
 }

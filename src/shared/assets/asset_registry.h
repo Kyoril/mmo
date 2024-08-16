@@ -28,6 +28,8 @@ namespace mmo
 		/// Initializes the asset registry.
 		static void Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives);
 
+		static void AddArchivePackage(const std::filesystem::path& path);
+
 		/// Destroys the asset registry.
 		static void Destroy();
 

@@ -209,6 +209,78 @@ namespace mmo
 			return "Unknown";
 		}
 
+		void Script_MoveForwardStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveForwardKey, true);
+		}
+
+		void Script_MoveForwardStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveForwardKey, false);
+		}
+
+		void Script_MoveBackwardStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveBackwardKey, true);
+		}
+
+		void Script_MoveBackwardStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveBackwardKey, false);
+		}
+
+		void Script_TurnLeftStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnLeftKey, true);
+		}
+
+		void Script_TurnLeftStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnLeftKey, false);
+		}
+
+		void Script_TurnRightStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnRightKey, true);
+		}
+
+		void Script_TurnRightStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnRightKey, false);
+		}
+
+		void Script_StrafeLeftStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeLeftKey, true);
+		}
+
+		void Script_StrafeLeftStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeLeftKey, false);
+		}
+
+		void Script_StrafeRightStart()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, true);
+		}
+
+		void Script_StrafeRightStop()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, false);
+		}
+
 		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int effectIndex, int& min, int& max)
 		{
 			if (effectIndex < 0 || effectIndex >= spell.effects_size())
@@ -387,7 +459,20 @@ namespace mmo
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def("CastSpell", &Script_CastSpell),
 
-			luabind::def("GetSpellDescription", &Script_GetSpellDescription)
+			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
+
+			luabind::def("MoveForwardStart", &Script_MoveForwardStart),
+			luabind::def("MoveForwardStop", &Script_MoveForwardStop),
+			luabind::def("MoveBackwardStart", &Script_MoveBackwardStart),
+			luabind::def("MoveBackwardStop", &Script_MoveBackwardStop),
+			luabind::def("TurnLeftStart", &Script_TurnLeftStart),
+			luabind::def("TurnLeftStop", &Script_TurnLeftStop),
+			luabind::def("TurnRightStart", &Script_TurnRightStart),
+			luabind::def("TurnRightStop", &Script_TurnRightStop),
+			luabind::def("StrafeLeftStart", &Script_StrafeLeftStart),
+			luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
+			luabind::def("StrafeRightStart", &Script_StrafeRightStart),
+			luabind::def("StrafeRightStop", &Script_StrafeRightStop)
 		];
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
