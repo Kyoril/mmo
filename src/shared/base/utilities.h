@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <vector>
 #include <ctime>
+#include <cctype>
 
 #include "random.h"
 #ifndef _MSC_VER
@@ -29,6 +30,27 @@ namespace mmo
 			return _stricmp(lhs.c_str(), rhs.c_str()) < 0;
 		}
 	};
+
+	// Function to trim whitespace from both ends of a string
+	static inline std::string Trim(const std::string& str)
+	{
+		// Find the first non-whitespace character
+		auto start = std::find_if_not(str.begin(), str.end(), [](unsigned char ch) {
+			return std::isspace(ch);
+			});
+
+		// Find the last non-whitespace character
+		auto end = std::find_if_not(str.rbegin(), str.rend(), [](unsigned char ch) {
+			return std::isspace(ch);
+			}).base();
+
+		// If there's no content, return an empty string
+		if (start >= end) {
+			return "";
+		}
+
+		return std::string(start, end);
+	}
 
 	static inline size_t FindCaseInsensitive(std::string data, std::string toSearch, size_t pos = 0)
 	{

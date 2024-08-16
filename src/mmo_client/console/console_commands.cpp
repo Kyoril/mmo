@@ -7,6 +7,8 @@
 
 #include "log/default_log_levels.h"
 
+#include "base/utilities.h"
+
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -41,11 +43,9 @@ namespace mmo::console_commands
 		std::string line;
 		while (std::getline(*file, line))
 		{
-			// Trim line
-			line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](int ch) {
-				return !std::isspace(ch);
-			}));
-			
+			// Trim line end
+			line = Trim(line);
+
 			if (!line.empty() && line[0] != '#')
 			{
 				Console::ExecuteCommand(line);

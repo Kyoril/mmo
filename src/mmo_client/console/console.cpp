@@ -213,6 +213,7 @@ namespace mmo
 
 		AssetRegistry::Initialize(s_dataPathCVar->GetStringValue(),
 			{
+				"Misc.hpak",
 				"ClientDB.hpak",
 				"Interface.hpak",
 				"Fonts.hpak",
