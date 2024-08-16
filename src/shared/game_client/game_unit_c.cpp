@@ -194,7 +194,11 @@ namespace mmo
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
 
-		const Quaternion prevRotation = GetFacingRotation(Vector3::Zero, points[0] - m_movementStart);
+
+		const Vector3 targetPos = m_movementStart - points[0];
+		const Radian targetAngle = GetAngle(targetPos.x, targetPos.z);
+
+		const Quaternion prevRotation = Quaternion(targetAngle, Vector3::UnitY);
 		m_movementStartRot = prevRotation;
 		m_sceneNode->SetOrientation(prevRotation);
 

@@ -22,6 +22,7 @@
 #include "client_data/project.h"
 #include "game/auto_attack.h"
 #include "proto_data/proto_template.h"
+#include "ui/binding.h"
 
 namespace mmo
 {
@@ -253,5 +254,7 @@ namespace mmo
 		TimerQueue& m_timers;
 
 		AttackSwingEvent m_lastAttackSwingEvent{ AttackSwingEvent::Unknown };
+
+		Bindings m_bindings;
 	};
 }

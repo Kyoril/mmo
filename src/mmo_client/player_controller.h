@@ -7,6 +7,7 @@
 #include "game/movement.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/scene.h"
+#include "input_control.h"
 
 namespace mmo
 {
@@ -15,41 +16,13 @@ namespace mmo
 	class Camera;
 	class RealmConnector;
 
-	namespace ControlFlags
-	{
-		enum Type 
-		{
-			None,
-
-			TurnPlayer = 1 << 0,
-			TurnCamera = 1 << 1,
-			MovePlayerOrTurnCamera = 1 << 2,
-			MoveForwardKey = 1 << 3,
-			MoveBackwardKey = 1 << 4,
-			StrafeLeftKey = 1 << 5,
-			StrafeRightKey = 1 << 6,
-			TurnLeftKey = 1 << 7,
-			TurnRightKey = 1 << 8,
-			PitchUpKey = 1 << 9,
-			PitchDownKey = 1 << 10,
-			Autorun = 1 << 11,
-
-			MoveSent = 1 << 12,
-			StrafeSent = 1 << 13,
-			TurnSent = 1 << 14,
-			PitchSent = 1 << 15,
-			
-			MoveAndTurnPlayer = TurnPlayer | MovePlayerOrTurnCamera
-		};
-	}
-
 	/// @brief This class controls a player entity.
-	class PlayerController final
+	class PlayerController final : public IInputControl
 	{
 	public:
 		PlayerController(Scene& scene, RealmConnector& connector);
 
-		~PlayerController();
+		~PlayerController() override;
 
 	public:
 		void Update(float deltaSeconds);
@@ -98,6 +71,9 @@ namespace mmo
 		void NotifyCameraZoomChanged();
 
 		void ClampCameraPitch();
+
+	public:
+		void SetControlBit(const ControlFlags::Type flag) override { m_controlFlags |= flag; }
 
 	private:
 		Scene& m_scene;

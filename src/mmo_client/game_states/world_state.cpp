@@ -43,7 +43,66 @@ namespace mmo
 		static const char* s_sendChatMessage = "SendChatMessage";
 		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
-	
+
+	namespace
+	{
+		String MapMouseButton(const MouseButton button)
+		{
+			if ((button & MouseButton::Left) == MouseButton::Left) return "LMB";
+			if ((button & MouseButton::Right) == MouseButton::Right) return "RMB";
+			if ((button & MouseButton::Middle) == MouseButton::Middle) return "MMB";
+
+			return {};
+		}
+
+		String MapBindingKeyCode(const Key keyCode)
+		{
+			if (keyCode >= 'a' && keyCode <= 'z' ||
+				keyCode >= 'A' && keyCode <= 'Z' ||
+				keyCode >= '0' && keyCode <= '9')
+			{
+				return String(1, static_cast<char>(keyCode));
+			}
+
+			if (keyCode >= VK_F1 && keyCode <= VK_F12)
+			{
+				return String("F") + std::to_string(keyCode - VK_F1 + 1);
+			}
+
+			if (keyCode >= VK_NUMPAD0 && keyCode <= VK_NUMPAD9)
+			{
+				return String("NUM-") + String(1, static_cast<char>(keyCode - VK_NUMPAD0 + '0'));
+			}
+
+			switch(keyCode)
+			{
+			case VK_SPACE:		return "SPACE";
+			case VK_RETURN:		return "ENTER";
+			case VK_ESCAPE:		return "ESCAPE";
+			case VK_BACK:		return "BACKSPACE";
+			case VK_TAB:		return "TAB";
+			case VK_ADD:		return "ADD";
+			case VK_SUBTRACT:	return "SUBTRACT";
+			case VK_MULTIPLY:	return "MULTIPLY";
+			case VK_DIVIDE:		return "DIVIDE";
+			case VK_ACCEPT:		return "ACCEPT";
+			case VK_DELETE:		return "DEL";
+			case VK_END:		return "END";
+			case VK_INSERT:		return "INSERT";
+			case VK_LCONTROL:	return "LCTRL";
+			case VK_RCONTROL:	return "RCTRL";
+			case VK_LSHIFT:		return "LSHIFT";
+			case VK_RSHIFT:		return "RSHIFT";
+			case VK_LEFT:		return "LEFT";
+			case VK_RIGHT:		return "RIGHT";
+			case VK_UP:			return "UP";
+			case VK_DOWN:		return "DOWN";
+			}
+
+			return {};
+		}
+	}
+
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
@@ -83,6 +142,10 @@ namespace mmo
 
 		// Load ui file
 		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
+
+		// Load bindings
+		m_bindings.Initialize(*m_playerController);
+		m_bindings.Load("Interface/Bindings.xml");
 
 		m_realmConnections += {
 			m_realmConnector.EnterWorldFailed.connect(*this, &WorldState::OnEnterWorldFailed),
@@ -141,6 +204,10 @@ namespace mmo
 		
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
+
+		// Remove bindings
+		m_bindings.Unload();
+		m_bindings.Shutdown();
 	}
 
 	std::string_view WorldState::GetName() const
@@ -150,12 +217,22 @@ namespace mmo
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
+		{
+			return true;
+		}
+
 		m_playerController->OnMouseDown(button, x, y);
 		return true;
 	}
 
 	bool WorldState::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Up))
+		{
+			return true;
+		}
+
 		m_playerController->OnMouseUp(button, x, y);
 		return true;
 	}
@@ -168,12 +245,22 @@ namespace mmo
 
 	bool WorldState::OnKeyDown(const int32 key)
 	{
+		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Down))
+		{
+			return true;
+		}
+
 		m_playerController->OnKeyDown(key);
 		return true;
 	}
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up))
+		{
+			return true;
+		}
+
 		// Enter
 		if (key == 13)
 		{

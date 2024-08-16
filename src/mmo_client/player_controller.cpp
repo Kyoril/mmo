@@ -12,6 +12,7 @@
 #include "scene_graph/scene_node.h"
 
 #include "platform.h"
+#include "console/console.h"
 #include "frame_ui/frame_mgr.h"
 
 namespace mmo
