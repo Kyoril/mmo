@@ -22,6 +22,8 @@ namespace mmo
 		std::uniform_real_distribution distY(0.0f, 100.0f);
 		m_offset = Point(distX(RandomGenerator), 40.0f + distY(RandomGenerator));
 
+		// TODO: Again, don't hardcode this here as it is really unflexible. Instead we would want to configure this somewhere
+		// in the game data.
 		m_font = FontManager::Get().CreateOrRetrieve("Fonts/SKURRI.TTF", 48.0f, 5.0f);
 	}
 

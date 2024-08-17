@@ -307,7 +307,16 @@ namespace mmo
 		ObjectFieldMap m_fields;
 		MovementInfo m_movementInfo;
 		WorldInstance* m_worldInstance { nullptr };
+
+	private:
+		friend io::Writer& operator << (io::Writer& w, GameObjectS const& object);
+		friend io::Reader& operator >> (io::Reader& r, GameObjectS& object);
 	};
-	
+
+	io::Writer& operator << (io::Writer& w, GameObjectS const& object);
+	io::Reader& operator >> (io::Reader& r, GameObjectS& object);
+
 	void CreateUpdateBlocks(const GameObjectS &object, std::vector<std::vector<char>> &outBlocks);
+
+
 }

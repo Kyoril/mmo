@@ -208,5 +208,12 @@ namespace mmo
 
 		NetUnitWatcherS* m_netUnitWatcher = nullptr;
 		mutable Vector3 m_lastPosition;
+
+	private:
+		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);
+		friend io::Reader& operator >> (io::Reader& r, GameUnitS& object);
 	};
+
+	io::Writer& operator << (io::Writer& w, GameUnitS const& object);
+	io::Reader& operator >> (io::Reader& r, GameUnitS& object);
 }

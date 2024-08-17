@@ -22,11 +22,15 @@ namespace mmo
 	{
 		m_character->SetNetUnitWatcher(this);
 
-		m_character->spawned.connect(*this, &Player::OnSpawned);
-		m_character->tileChangePending.connect(*this, &Player::OnTileChangePending);
+		m_characterConnections += {
+			m_character->spawned.connect(*this, &Player::OnSpawned),
+			m_character->despawned.connect(*this, &Player::OnDespawned),
 
-		m_character->spellLearned.connect(*this, &Player::OnSpellLearned);
-		m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned);
+			m_character->tileChangePending.connect(*this, &Player::OnTileChangePending),
+
+			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
+			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned)
+		};
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
 	}
@@ -259,6 +263,11 @@ namespace mmo
 		m_character->StartRegeneration();
 	}
 
+	void Player::OnDespawned(GameObjectS& object)
+	{
+		SaveCharacterData();
+	}
+
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
 	{
 		ASSERT(m_worldInstance);
@@ -321,6 +330,16 @@ namespace mmo
 		}
 
 		NotifyObjectsSpawned(objects);
+	}
+
+	void Player::SaveCharacterData() const
+	{
+		if (!m_character)
+		{
+			return;
+		}
+
+		m_connector.SendCharacterData(*m_character);
 	}
 
 	void Player::OnSetSelection(uint16 opCode, uint32 size, io::Reader& contentReader)

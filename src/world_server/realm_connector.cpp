@@ -324,6 +324,18 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::SendCharacterData(const GamePlayerS& character)
+	{
+		sendSinglePacket([&character](auth::OutgoingPacket & outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::CharacterData);
+			outPacket
+				<< io::write<uint64>(character.GetGuid())
+				<< character;
+			outPacket.Finish();
+		});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);

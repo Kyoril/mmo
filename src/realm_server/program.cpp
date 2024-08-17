@@ -170,7 +170,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -184,7 +184,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
+			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 

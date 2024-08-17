@@ -15,6 +15,8 @@
 
 namespace mmo
 {
+	class GamePlayerS;
+
 	namespace proto
 	{
 		class Project;
@@ -63,6 +65,8 @@ namespace mmo
 		/// @param packetSize 
 		/// @param packetContent 
 		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent);
+
+		void SendCharacterData(const GamePlayerS& character);
 
 	private:
 		/// Perform client-side srp6-a calculations after we received server values

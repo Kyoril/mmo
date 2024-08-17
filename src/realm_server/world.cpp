@@ -18,19 +18,22 @@
 #include "base/utilities.h"
 #include "game/game.h"
 #include "game_protocol/game_outgoing_packet.h"
+#include "game_server/game_player_s.h"
 #include "proto_data/project.h"
 
 
 namespace mmo
 {
 	World::World(
+		TimerQueue& timerQueue,
 		WorldManager& worldManager,
 		PlayerManager& playerManager,
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address,
 		const proto::Project& project)
-		: m_manager(worldManager)
+		: m_timerQueue(timerQueue)
+		, m_manager(worldManager)
 		, m_playerManager(playerManager)
 		, m_database(database)
 		, m_connection(std::move(connection))
@@ -287,6 +290,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceCreated, *strongThis, &World::OnInstanceCreated);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceDestroyed, *strongThis, &World::OnInstanceDestroyed);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::ProxyPacket, *strongThis, &World::OnProxyPacket);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterData, *strongThis, &World::OnCharacterData);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -574,6 +578,24 @@ namespace mmo
 			<< io::write_range(packetContent);
 		player->SendProxyPacket(packetId, outBuffer);
 		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnCharacterData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+
+		GamePlayerS player(m_project, m_timerQueue);
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> player
+			))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
+
 		return PacketParseResult::Pass;
 	}
 

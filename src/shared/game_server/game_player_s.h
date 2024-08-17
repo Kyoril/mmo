@@ -57,5 +57,13 @@ namespace mmo
 
 	private:
 		const proto::ClassEntry* m_classEntry;
+
+	private:
+		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);
+		friend io::Reader& operator >> (io::Reader& r, GamePlayerS& object);
 	};
+
+	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object);
+
+	io::Reader& operator>> (io::Reader& r, GamePlayerS& object);
 }

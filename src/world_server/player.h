@@ -64,6 +64,8 @@ namespace mmo
 
 		void LocalChatMessage(ChatType type, const std::string& message);
 
+		void SaveCharacterData() const;
+
 	public:
 		TileIndex2D GetTileIndex() const;
 
@@ -71,6 +73,8 @@ namespace mmo
 		/// @brief Executed when the character spawned on a world instance.
 		/// @param instance The world instance that the character spawned in.
 		void OnSpawned(WorldInstance& instance);
+
+		void OnDespawned(GameObjectS& object);
 
 		void OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile);
 
@@ -120,6 +124,7 @@ namespace mmo
 		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
+		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
 	};

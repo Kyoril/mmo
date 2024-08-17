@@ -23,6 +23,11 @@
 
 namespace mmo
 {
+	class TimerQueue;
+}
+
+namespace mmo
+{
 	namespace proto
 	{
 		class Project;
@@ -49,6 +54,7 @@ namespace mmo
 
 	public:
 		explicit World(
+			TimerQueue& timerQueue,
 			WorldManager &manager,
 			PlayerManager& playerManager,
 			AsyncDatabase &database,
@@ -102,6 +108,7 @@ namespace mmo
 		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
 
 	private:
+		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
 		PlayerManager& m_playerManager;
 		AsyncDatabase &m_database;
@@ -172,6 +179,8 @@ namespace mmo
 		PacketParseResult OnInstanceDestroyed(auth::IncomingPacket& packet);
 		
 		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
+
+		PacketParseResult OnCharacterData(auth::IncomingPacket& packet);
 	};
 
 }

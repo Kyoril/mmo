@@ -164,6 +164,18 @@ namespace mmo
 		m_worldInstance = instance;
 	}
 
+	io::Writer& operator<<(io::Writer& w, GameObjectS const& object)
+	{
+		object.m_fields.SerializeComplete(w);
+		return w << object.m_movementInfo;
+	}
+
+	io::Reader& operator>>(io::Reader& r, GameObjectS& object)
+	{
+		object.m_fields.DeserializeComplete(r);
+		return r >> object.m_movementInfo;
+	}
+
 	void CreateUpdateBlocks(const GameObjectS& object, std::vector<std::vector<char>>& outBlocks)
 	{
 		// Write create object packet

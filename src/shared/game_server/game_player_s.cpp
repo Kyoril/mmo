@@ -120,4 +120,20 @@ namespace mmo
 		// Update next level xp
 		Set<uint32>(object_fields::NextLevelXp, 400 * newLevel);
 	}
+
+	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)
+	{
+		// Write super class data
+		w << reinterpret_cast<GameUnitS const&>(object);
+
+		return w;
+	}
+
+	io::Reader& operator>>(io::Reader& r, GamePlayerS& object)
+	{
+		// Read super class data
+		r >> reinterpret_cast<GameUnitS&>(object);
+
+		return r;
+	}
 }

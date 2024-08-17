@@ -655,4 +655,19 @@ namespace mmo
 		OnAttackSwingEvent(AttackSwingEvent::Success);
 		TriggerNextAutoAttack();
 	}
+
+	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)
+	{
+		w << reinterpret_cast<GameObjectS const&>(object);
+
+		return w;
+	}
+
+	io::Reader& operator>>(io::Reader& r, GameUnitS& object)
+	{
+		// Read values
+		r >> reinterpret_cast<GameObjectS&>(object);
+
+		return r;
+	}
 }
