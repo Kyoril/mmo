@@ -106,7 +106,6 @@ namespace mmo
 			const auto* spell = Script_GetSpell(index);
 			if (spell == nullptr)
 			{
-				WLOG("Unknown spell for index " << index);
 				return;
 			}
 

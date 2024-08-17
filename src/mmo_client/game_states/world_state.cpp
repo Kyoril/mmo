@@ -23,10 +23,13 @@
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
 #include "base/timer_queue.h"
+#include "frame_ui/text_component.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
+#include "game/damage_school.h"
 #include "game_client/game_player_c.h"
 #include "game/spell_target_map.h"
+#include "ui/world_text_frame.h"
 
 namespace mmo
 {
@@ -308,6 +311,22 @@ namespace mmo
 			m_cloudsNode->SetPosition(m_playerController->GetRootNode()->GetPosition());
 			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.025f), TransformSpace::World);
 		}
+
+		// Update world text frames
+		for (size_t i = 0; i < m_worldTextFrames.size(); )
+		{
+			m_worldTextFrames[i]->Update(deltaSeconds);
+
+			// Maybe delete world text frame if it expired
+			if (m_worldTextFrames[i]->IsExpired())
+			{
+				m_worldTextFrames.erase(m_worldTextFrames.begin() + i);
+			}
+			else
+			{
+				++i;
+			}
+		}
 	}
 	
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -319,6 +338,12 @@ namespace mmo
 	void WorldState::OnPaint()
 	{
 		FrameManager::Get().Draw();
+
+		// Draw world text frames
+		for(const auto& textFrame : m_worldTextFrames)
+		{
+			textFrame->Render();
+		}
 	}
 
 	void WorldState::SetupWorldScene()
@@ -1438,13 +1463,36 @@ namespace mmo
 			break;
 		}
 
-		DLOG("Spell '" << spellName << "' dealed " << amount << " " << damageSchoolNameString << " damage to target " << log_hex_digit(targetGuid));
+		// Find unit
+		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+		if (target)
+		{
+			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+		}
 
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult WorldState::OnNonSpellDamageLog(game::IncomingPacket& packet)
 	{
+		uint64 targetGuid;
+		uint32 amount;
+		DamageFlags flags;
+
+		if (!(packet
+			>> io::read_packed_guid(targetGuid)
+			>> io::read<uint32>(amount)
+			>> io::read<uint8>(flags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+		if (target)
+		{
+			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, (flags & damage_flags::Crit) != 0 ? 4.0f : 2.0f);
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -1771,5 +1819,35 @@ namespace mmo
 			packet << io::write<GameTime>(timestamp);
 			packet.Finish();
 		});
+	}
+
+	void WorldState::AddWorldTextFrame(const Vector3& position, const String& text, const Color& color, float duration)
+	{
+		auto textFrame = std::make_unique<WorldTextFrame>(m_playerController->GetCamera(), position, duration);
+		textFrame->SetText(text);
+
+		// UI styling for rendering
+		{
+			// TODO: Instead of doing this here hardcoded, lets find a way to make this data driven
+			// The reason why this UI element is rendered here manually is because it needs to know of 3d coordinates and convert
+			// them into viewspace, which is not possible with the current UI system via xml/lua serialization alone. Also, I don't
+			// really want to add exposure of 3d coordinates to the UI script system to reduce the possibility of abuse.
+			auto textComponent = std::make_unique<TextComponent>(*textFrame);
+			textComponent->SetColor(color);
+
+			ImagerySection section("Text");
+			section.AddComponent(std::move(textComponent));
+
+			FrameLayer layer;
+			layer.AddSection(*textFrame->AddImagerySection(section));
+
+			StateImagery normalState("Enabled");
+			normalState.AddLayer(layer);
+
+			textFrame->AddStateImagery(normalState);
+			textFrame->SetRenderer("DefaultRenderer");
+		}
+		
+		m_worldTextFrames.push_back(std::move(textFrame));
 	}
 }

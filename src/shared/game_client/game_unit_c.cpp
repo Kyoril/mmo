@@ -194,7 +194,6 @@ namespace mmo
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
 
-
 		const Vector3 targetPos = m_movementStart - points[0];
 		const Radian targetAngle = GetAngle(targetPos.x, targetPos.z);
 

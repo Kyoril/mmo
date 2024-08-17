@@ -50,6 +50,8 @@ namespace mmo
 
 		void InvalidateView() { m_recalcView = true; }
 
+		void GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const;
+
 	protected:
 		void UpdateFrustum() const;
 

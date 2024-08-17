@@ -243,11 +243,11 @@ namespace mmo
 		}
 	}
 
-	void Frame::AddImagerySection(ImagerySection& section)
+	ImagerySection* Frame::AddImagerySection(ImagerySection& section)
 	{
 		ASSERT(m_sectionsByName.find(section.GetName()) == m_sectionsByName.end());
 
-		m_sectionsByName[section.GetName()] = section;
+		return &(m_sectionsByName[section.GetName()] = section);
 	}
 
 	void Frame::RemoveImagerySection(const std::string & name)
@@ -939,7 +939,8 @@ namespace mmo
 			// PopulateGeometryBuffer virtual method.
 			if (m_renderer != nullptr)
 			{
-				m_renderer->Render();
+				optional<Color> color = optional<Color>(Color(1.0f, 1.0f, 1.0f, m_opacity));
+				m_renderer->Render(color);
 			}
 			else
 			{

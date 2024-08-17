@@ -133,7 +133,7 @@ namespace mmo
 
 	public:
 		/// Adds a new state imagery.
-		void AddImagerySection(ImagerySection& section);
+		ImagerySection* AddImagerySection(ImagerySection& section);
 
 		/// Removes a state imagery by name.
 		void RemoveImagerySection(const std::string& name);
@@ -391,6 +391,8 @@ namespace mmo
 
 		void OnEnterPressed();
 
+		void SetOpacity(float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
+
 	private:
 		/// Executed when the clippedByParent property was changed.
 		void OnClippedByParentChanged(const Property& property);
@@ -477,6 +479,8 @@ namespace mmo
 		luabind::object m_onLeave;
 
 		int32 m_id = 0;
+
+		float m_opacity{ 1.0f };
 
 	protected:
 		scoped_connection_container m_propConnections;

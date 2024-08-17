@@ -11,6 +11,7 @@
 #include "game/spell_target_map.h"
 #include "unit_mover.h"
 #include "base/countdown.h"
+#include "game/damage_school.h"
 
 namespace mmo
 {
@@ -28,18 +29,6 @@ namespace mmo
 
 		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
 	};
-
-	namespace damage_flags
-	{
-		enum Type
-		{
-			None = 0,
-
-			Crit = 1
-		};
-	}
-
-	typedef damage_flags::Type DamageFlags;
 
 	class NetUnitWatcherS
 	{

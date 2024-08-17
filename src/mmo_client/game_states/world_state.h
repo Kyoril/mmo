@@ -20,9 +20,11 @@
 #include "base/id_generator.h"
 #include "world_deserializer.h"
 #include "client_data/project.h"
+#include "frame_ui/frame.h"
 #include "game/auto_attack.h"
 #include "proto_data/proto_template.h"
 #include "ui/binding.h"
+#include "ui/world_text_frame.h"
 
 namespace mmo
 {
@@ -221,6 +223,10 @@ namespace mmo
 		// End NetClient interface
 
 	private:
+		/// Adds a floating world text UI element with a duration to the world.
+		void AddWorldTextFrame(const Vector3& position, const String& text, const Color& color, float duration);
+
+	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
@@ -256,6 +262,8 @@ namespace mmo
 		AttackSwingEvent m_lastAttackSwingEvent{ AttackSwingEvent::Unknown };
 
 		Bindings m_bindings;
+
+		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 
 	private:
 		static IInputControl* s_inputControl;

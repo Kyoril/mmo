@@ -12,6 +12,7 @@
 
 #include "matrix3.h"
 #include "quaternion.h"
+#include "vector4.h"
 
 
 namespace mmo
@@ -171,7 +172,7 @@ namespace mmo
 			return r;
 		}
 
-		/*inline Vector4 operator * (const Vector4& v) const
+		inline Vector4 operator * (const Vector4& v) const
 		{
 			return Vector4(
 				m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
@@ -179,7 +180,7 @@ namespace mmo
 				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
 				m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3] * v.w
 			);
-		}*/
+		}
 
 		/*inline Plane operator * (const Plane& p) const
 		{

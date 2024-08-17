@@ -61,6 +61,21 @@ namespace mmo
 		return Ray(rayOrigin, rayDirection, maxDistance);
 	}
 
+	void Camera::GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const
+	{
+		const Matrix4& viewMatrix = GetViewMatrix();
+		const Matrix4& projMatrix = GetProjectionMatrix();
+
+		// Project world position to normalized screen space position
+		const Vector4 positionCameraSpace = viewMatrix * Vector4(worldPosition, 1.0f);
+		const Vector4 clipSpace = projMatrix * positionCameraSpace;
+
+		const Vector3 screenPos = Vector3(clipSpace.x / clipSpace.w, clipSpace.y / clipSpace.w, clipSpace.z / clipSpace.w);
+		
+		x = (screenPos.x + 1.0f) * 0.5f;
+		y = (screenPos.y + 1.0f) * 0.5f;
+	}
+
 	void Camera::UpdateFrustum() const
 	{
 		if (!IsFrustumOutOfDate())
