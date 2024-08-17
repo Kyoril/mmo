@@ -586,6 +586,8 @@ namespace mmo
 		uint64 characterGuid = 0;
 
 		GamePlayerS player(m_project, m_timerQueue);
+		player.Initialize();
+
 		if (!(packet
 			>> io::read<uint64>(characterGuid)
 			>> player
@@ -595,6 +597,16 @@ namespace mmo
 		}
 
 		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
+
+		// RequestHandler
+		auto handler = [](bool result) { };
+		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, 0 /*TODO!*/, player.GetMovementInfo().position,
+			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
+			player.Get<uint32>(object_fields::Xp), 
+			player.Get<uint32>(object_fields::Health), 
+			player.Get<uint32>(object_fields::Mana), 
+			player.Get<uint32>(object_fields::Rage), 
+			player.Get<uint32>(object_fields::Energy));
 
 		return PacketParseResult::Pass;
 	}

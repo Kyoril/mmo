@@ -32,7 +32,7 @@ namespace mmo
 		void DeleteCharacter(uint64 characterGuid) final override;
 		
 		/// @copydoc IDatabase::CreateCharacter
-		std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds) final override;
+		std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy) final override;
 		
 		/// @copydoc IDatabase::CharacterEnterWorld
 		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) override;
@@ -41,6 +41,8 @@ namespace mmo
 		std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) override;
 
 		void ChatMessage(uint64 characterId, uint16 type, String message) override;
+
+		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy) override;
 
 	private:
 		void PrintDatabaseError();

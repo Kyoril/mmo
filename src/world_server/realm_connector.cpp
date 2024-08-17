@@ -425,8 +425,15 @@ namespace mmo
 		characterObject->Initialize();
 		characterObject->Set(object_fields::Guid, characterData.characterId);
 
+		characterObject->Relocate(characterData.position, characterData.facing);
+
 		characterObject->SetClass(*classEntry);
 		characterObject->SetLevel(characterData.level);
+		characterObject->Set<uint32>(object_fields::Xp, characterData.xp);
+		characterObject->Set<uint32>(object_fields::Health, Clamp(characterData.hp, 0u, characterObject->Get<uint32>(object_fields::MaxHealth)));
+		characterObject->Set<uint32>(object_fields::Mana, Clamp(characterData.mana, 0u, characterObject->Get<uint32>(object_fields::MaxMana)));
+		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
+		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object

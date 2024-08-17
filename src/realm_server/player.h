@@ -46,6 +46,7 @@ namespace mmo
 
 	public:
 		explicit Player(
+			TimerQueue& timerQueue,
 			PlayerManager &manager,
 			WorldManager& worldManager,
 			LoginConnector &loginConnector,
@@ -192,6 +193,7 @@ namespace mmo
 		void ClearPacketHandler(uint16 opCode);
 
 	private:
+		TimerQueue& m_timerQueue;
 		PlayerManager &m_manager;
 		WorldManager &m_worldManager;
 		LoginConnector &m_loginConnector;

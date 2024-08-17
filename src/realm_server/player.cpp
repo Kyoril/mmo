@@ -19,11 +19,13 @@
 
 #include "base/utilities.h"
 #include "game/chat_type.h"
+#include "game_server/game_player_s.h"
 
 
 namespace mmo
 {
 	Player::Player(
+		TimerQueue& timerQueue,
 		PlayerManager& playerManager,
 		WorldManager& worldManager,
 		LoginConnector &loginConnector,
@@ -31,7 +33,8 @@ namespace mmo
 		std::shared_ptr<Client> connection,
 		String address,
 		const proto::Project& project)
-		: m_manager(playerManager)
+		: m_timerQueue(timerQueue)
+		, m_manager(playerManager)
 		, m_worldManager(worldManager)
 		, m_loginConnector(loginConnector)
 		, m_database(database)
@@ -320,9 +323,19 @@ namespace mmo
 		// the infrastructure isn't read yet.
 		const uint32 level = 1;
 		const uint32 map = 0;
-		const uint32 hp = 1;
 		const Vector3 position;
 		const Degree rotation;
+
+		// Setup a temporary player object
+		GamePlayerS player(m_project, m_timerQueue);
+		player.Initialize();
+		player.SetClass(*classInstance);
+		player.SetLevel(1);
+
+		const uint32 hp = player.GetMaxHealth();
+		const uint32 mana = player.Get<uint32>(object_fields::MaxMana);
+		const uint32 rage = 0;
+		const uint32 energy = player.Get<uint32>(object_fields::MaxEnergy);
 
 		std::vector<uint32> spellIds;
 		spellIds.reserve(classInstance->spells().size());
@@ -336,7 +349,7 @@ namespace mmo
 
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, race, characterClass, gender, position, rotation,
-			spellIds);
+			spellIds, mana, rage, energy);
 		
 		return PacketParseResult::Pass;
 	}

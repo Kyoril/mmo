@@ -139,12 +139,12 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy)
 	{
-		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o) VALUES (" +
+		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, mana, rage, energy) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
 			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " +
-			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ");"))
+			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ", '" + std::to_string(mana) + "', '" + std::to_string(rage) + "', '" + std::to_string(energy) + "');"))
 		{
 			PrintDatabaseError();
 
@@ -183,7 +183,7 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -206,6 +206,12 @@ namespace mmo
 				row.GetField(index++, result.gender);
 				row.GetField(index++, result.raceId);
 				row.GetField(index++, result.classId);
+
+				row.GetField(index++, result.xp);
+				row.GetField(index++, result.hp);
+				row.GetField(index++, result.mana);
+				row.GetField(index++, result.rage);
+				row.GetField(index++, result.energy);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -270,6 +276,28 @@ namespace mmo
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not save chat message to database");
+		}
+	}
+
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
+		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy)
+	{
+		if (!m_connection.Execute(std::string("UPDATE characters SET ")
+			+ "map = '" + std::to_string(map) + "'"
+			+ ", level = '" + std::to_string(level) + "'"
+			+ ", x = '" + std::to_string(position.x) + "'"
+			+ ", y = '" + std::to_string(position.y) + "'"
+			+ ", z = '" + std::to_string(position.z) + "'"
+			+ ", o = '" + std::to_string(orientation.GetValueRadians()) + "'"
+			+ ", xp = " + std::to_string(xp)
+			+ ", hp = " + std::to_string(hp)
+			+ ", mana = " + std::to_string(mana)
+			+ ", rage = " + std::to_string(rage)
+			+ ", energy = " + std::to_string(energy)
+			+ " WHERE id = '" + std::to_string(characterId) + "'"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update character data!");
 		}
 	}
 
