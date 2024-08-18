@@ -56,6 +56,12 @@ namespace mmo
 			// TODO: Check mechanic requirement
 		}
 
+		// Check for cooldown
+		if (m_executor.SpellHasCooldown(spell.id(), spell.category()))
+		{
+			return std::make_pair(spell_cast_result::FailedNotReady, nullptr);
+		}
+
 		return m_castState->StartCast(
 			*this,
 			spell,

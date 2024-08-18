@@ -370,21 +370,18 @@ namespace mmo
 	void SingleCastState::ApplyAllEffects()
 	{
 		// Add spell cooldown if any
-		if (!m_instantsCast && !m_delayedCast)
+		const uint64 spellCatCD = m_spell.categorycooldown();
+		const uint64 spellCD = m_spell.cooldown();
+
+		GameTime finalCD = spellCD;
+		if (finalCD == 0)
 		{
-			const uint64 spellCatCD = m_spell.categorycooldown();
-			const uint64 spellCD = m_spell.cooldown();
+			finalCD = spellCatCD;
+		}
 
-			GameTime finalCD = spellCD;
-			if (!finalCD) 
-			{
-				finalCD = spellCatCD;
-			}
-
-			if (finalCD)
-			{
-				ApplyCooldown(finalCD, spellCatCD);
-			}
+		if (finalCD)
+		{
+			ApplyCooldown(finalCD, spellCatCD);
 		}
 
 		// Make sure that this isn't destroyed during the effects

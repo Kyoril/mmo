@@ -582,15 +582,28 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Casting spell " << spellId << " (" << spell->name() << ")...");
-
 		// Get the cast time of this spell
 		int64 castTime = spell->casttime();
 
 		// TODO: Apply cast time modifiers
 
+		const uint64 casterId = m_character->GetGuid();
+
 		// Spell cast logic
-		m_character->CastSpell(targetMap, *spell, castTime);
+		auto result = m_character->CastSpell(targetMap, *spell, castTime);
+		if (result != spell_cast_result::CastOkay)
+		{
+			SendPacket([&result, spellId, casterId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellFailure);
+				packet
+					<< io::write_packed_guid(casterId)
+					<< io::write<uint32>(spellId)
+					<< io::write<GameTime>(GetAsyncTimeMs())
+					<< io::write<uint8>(result);
+				packet.Finish();
+			});
+		}
 	}
 
 	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)
