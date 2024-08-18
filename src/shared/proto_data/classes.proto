@@ -16,6 +16,11 @@ message ClassSpell {
 	required uint32 spell = 2;
 }
 
+message AttackPowerStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -30,6 +35,9 @@ message ClassEntry {
 	optional uint32 flags = 6;
 	repeated ClassBaseValues levelbasevalues = 7;
 	repeated ClassSpell spells = 8;
+	optional float attackPowerPerLevel = 9;
+	optional float attackPowerOffset = 10;
+	repeated AttackPowerStatSource attackPowerStatSources = 11;
 }
 
 message Classes {

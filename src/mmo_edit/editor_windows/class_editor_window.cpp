@@ -38,6 +38,8 @@ namespace mmo
 		ImGui::PopStyleVar(2);
 	}
 
+	static const char* s_unknown = "UNKNOWN";
+
 	bool ClassEditorWindow::Draw()
 	{
 		static std::vector<float> s_healthValues;
@@ -68,6 +70,9 @@ namespace mmo
 				classEntry->set_flags(0);
 				classEntry->set_internalname("New class");
 				classEntry->set_spellfamily(0);
+				classEntry->set_attackpowerperlevel(2.0f);
+				classEntry->set_attackpoweroffset(0.0f);
+
 				auto* baseValues = classEntry->add_levelbasevalues();
 				baseValues->set_health(32);
 				baseValues->set_mana(110);
@@ -276,6 +281,83 @@ namespace mmo
 					}
 
 					ImGui::EndChildFrame();
+				}
+
+				if (ImGui::CollapsingHeader("Attack Power", ImGuiTreeNodeFlags_None))
+				{
+					float offset = currentClass->attackpoweroffset();
+					if (ImGui::InputFloat("Attack Power Offset", &offset)) currentClass->set_attackpoweroffset(offset);
+
+					float perLevel = currentClass->attackpowerperlevel();
+					if (ImGui::InputFloat("Attack Power per Level", &perLevel)) currentClass->set_attackpowerperlevel(perLevel);
+
+					ImGui::Text("Attack Power Stat Source");
+
+					// Add button
+					if (ImGui::Button("Add", ImVec2(-1, 0)))
+					{
+						auto* newEntry = currentClass->add_attackpowerstatsources();
+						newEntry->set_statid(0);
+						newEntry->set_factor(1.0f);
+					}
+
+					if (ImGui::BeginTable("statSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+					{
+						ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+						ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
+
+						for (int index = 0; index < currentClass->attackpowerstatsources_size(); ++index)
+						{
+							auto* currentSource = currentClass->mutable_attackpowerstatsources(index);
+
+							static String s_statNames[] = {
+								"Stamina",
+								"Strength",
+								"Agility",
+								"Intellect",
+								"Spirit"
+							};
+
+							ImGui::PushID(index);
+							ImGui::TableNextRow();
+
+							ImGui::TableNextColumn();
+
+							int statId = currentSource->statid();
+							if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
+								{
+									if (index < 0 || index > 4)
+									{
+										*out_text = "";
+										return false;
+									}
+
+									*out_text = s_statNames[index].c_str();
+									return true;
+								}, nullptr, 5))
+							{
+								currentSource->set_statid(statId);
+							}
+
+							ImGui::TableNextColumn();
+
+							float factor = currentSource->factor();
+							if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
+
+							ImGui::SameLine();
+
+							if (ImGui::Button("Remove"))
+							{
+								currentClass->mutable_attackpowerstatsources()->erase(currentClass->mutable_attackpowerstatsources()->begin() + index);
+								index--;
+							}
+
+							ImGui::PopID();
+						}
+
+						ImGui::EndTable();
+					}
 				}
 
 				static const char* s_spellNone = "<None>";

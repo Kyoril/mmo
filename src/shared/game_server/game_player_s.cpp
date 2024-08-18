@@ -96,15 +96,13 @@ namespace mmo
 			Set<uint32>(object_fields::Mana, maxMana);
 		}
 
-		// TODO
-		Set<float>(object_fields::MinDamage, 8.0f);
-		Set<float>(object_fields::MaxDamage, 12.0f);
+		UpdateDamage();
 	}
 
 	void GamePlayerS::SetLevel(uint32 newLevel)
 	{
 		// Anything to do?
-		if (newLevel == Get<uint32>(object_fields::Level) || newLevel == 0)
+		if (newLevel == 0)
 		{
 			return;
 		}
@@ -119,6 +117,43 @@ namespace mmo
 
 		// Update next level xp
 		Set<uint32>(object_fields::NextLevelXp, 400 * newLevel);
+	}
+
+	void GamePlayerS::UpdateDamage()
+	{
+		float minDamage= 1.0f;
+		float maxDamage = 2.0f;
+
+		// TODO: Derive min and max damage from wielded weapon if any
+
+		float baseValue = 0.0f;
+
+		// Calculate base value base on class
+		if (m_classEntry)
+		{
+			baseValue = static_cast<float>(Get<uint32>(object_fields::Level)) * m_classEntry->attackpowerperlevel();
+
+			// Apply stat values
+			for(int i = 0; i < m_classEntry->attackpowerstatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->attackpowerstatsources(i);
+				if (statSource.statid() < 5)
+				{
+					baseValue += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+
+			baseValue += m_classEntry->attackpoweroffset();
+		}
+
+		Set<float>(object_fields::AttackPower, baseValue);
+
+		// 1 dps per 14 attack power
+		const float attackTime = Get<uint32>(object_fields::BaseAttackTime) / 1000.0f;
+		baseValue = baseValue / 14.0f * attackTime;
+
+		Set<float>(object_fields::MinDamage, baseValue + minDamage);
+		Set<float>(object_fields::MaxDamage, baseValue + maxDamage);
 	}
 
 	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)

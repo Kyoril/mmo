@@ -101,6 +101,8 @@ namespace mmo
 			StatSpirit,
 			Armor,
 
+			AttackPower,
+
 			/// @brief 64 bit object guid
 			TargetUnit,
 

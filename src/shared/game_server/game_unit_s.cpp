@@ -99,7 +99,6 @@ namespace mmo
 
 	void GameUnitS::RefreshStats()
 	{
-		// TODO
 	}
 
 	const Vector3& GameUnitS::GetPosition() const noexcept

@@ -38,6 +38,8 @@ namespace mmo
 
 		virtual void SetLevel(uint32 newLevel) override;
 
+		void UpdateDamage();
+		
 	protected:
 		void OnSpellLearned(const proto::SpellEntry& spell) override
 		{
