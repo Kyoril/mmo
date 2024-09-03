@@ -163,6 +163,10 @@ namespace mmo
 
 		// Update the amount of code points
 		SetMaxCodepoint(maxCodepoint);
+
+		// TODO: This is a hack to initialize some commonly used glyph pages
+		GetGlyphData('a');
+
 		return true;
 	}
 
