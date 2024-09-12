@@ -95,6 +95,17 @@ namespace mmo
 
 	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
+        // TODO: Popup import dialog window with import options
+        const Vector3 importScale = Vector3::UnitScale * 0.01f;
+        const Vector3 importOffset = Vector3::Zero;
+        const Quaternion importRotation = Quaternion(Degree(-90), Vector3::UnitX);
+
+        // Build transform matrix
+        const Matrix4 importTransform = 
+            Matrix4::GetScale(importScale) * 
+            Matrix4(importRotation) *
+            Matrix4::GetTrans(importOffset);
+
 		Assimp::Importer importer;
 
 		const aiScene* scene = importer.ReadFile(filename.string(),
@@ -136,7 +147,7 @@ namespace mmo
             CreateBoneHierarchy(scene, scene->mRootNode);
         }
 
-        LoadDataFromNode(scene, scene->mRootNode, m_mesh.get());
+        LoadDataFromNode(scene, scene->mRootNode, m_mesh.get(), importTransform);
 
         if (m_skeleton)
         {
@@ -174,7 +185,7 @@ namespace mmo
 		return extension == ".fbx" || extension == ".gltf" || extension == ".glb";
 	}
 
-	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox) const
+	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const
 	{
         // if animated all submeshes must have bone weights
         if (!mBonesByName.empty() && !aiMesh->HasBones())
@@ -216,7 +227,7 @@ namespace mmo
         offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
         offset += declaration->AddElement(source, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
-        Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second;
+        Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second * transform;
         Matrix3 normalMatrix = aiM.Linear().Inverse().Transpose();
 
         std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertexData(aiMesh->mNumVertices);
@@ -262,7 +273,7 @@ namespace mmo
             // Binormal
             if (binorm)
             {
-                dataPointer->binormal = Vector3(binorm->x, binorm->y, binorm->z);
+                dataPointer->binormal = normalMatrix * Vector3(binorm->x, binorm->y, binorm->z);
                 binorm++;
             }
             else
@@ -273,7 +284,7 @@ namespace mmo
             // Tangent
             if (tang)
             {
-                dataPointer->tangent = Vector3(tang->x, tang->y, tang->z);
+                dataPointer->tangent = normalMatrix * Vector3(tang->x, tang->y, tang->z);
                 tang++;
             }
             else
@@ -521,11 +532,13 @@ namespace mmo
                     parent = m_skeleton->GetBone(pNode->mParent->mName.data);
                 }
             }
+
             if (m_skeleton->HasBone(pNode->mName.data))
             {
                 child = m_skeleton->GetBone(pNode->mName.data);
             }
-            if (parent && child)
+
+            if (parent && child && parent != child)
             {
                 parent->AddChild(*child);
             }
@@ -538,7 +551,7 @@ namespace mmo
         }
 	}
 
-	void FbxImport::LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh)
+	void FbxImport::LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh, const Matrix4& transform)
 	{
         if (pNode->mNumMeshes > 0)
         {
@@ -555,7 +568,7 @@ namespace mmo
             	// TODO: Material creation
                 MaterialPtr material = nullptr;
 
-                CreateSubMesh(pNode->mName.data, idx, pNode, aiMesh, material, mesh, aabb);
+                CreateSubMesh(pNode->mName.data, idx, pNode, aiMesh, material, mesh, aabb, transform);
             }
 
             // We must indicate the bounding box
@@ -566,7 +579,7 @@ namespace mmo
         for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; childIdx++)
         {
             const aiNode* pChildNode = pNode->mChildren[childIdx];
-            LoadDataFromNode(mScene, pChildNode, mesh);
+            LoadDataFromNode(mScene, pChildNode, mesh, transform);
         }
 	}
 
