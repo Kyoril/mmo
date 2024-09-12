@@ -39,13 +39,6 @@ namespace mmo
 		{
 		}
 
-		template <class Unsigned>
-		explicit Grid(Vector<Unsigned, 2> size)
-			: m_contents(size[0] * size[1])
-			, m_width(size[0])
-		{
-		}
-
 		Grid(Grid &&other)
 			: m_contents(std::move(other.m_contents))
 			, m_width(other.m_width)
@@ -82,11 +75,6 @@ namespace mmo
 		bool empty() const
 		{
 			return (m_width == 0);
-		}
-
-		Vector<size_t, 2> getSize() const
-		{
-			return makeVector(width(), height());
 		}
 
 		size_type width() const
@@ -133,36 +121,6 @@ namespace mmo
 		const value_type &operator ()(size_type x, size_type y) const
 		{
 			return get(getIndex(x, y));
-		}
-
-		template <class Unsigned>
-		value_type &operator [](const Vector<Unsigned, 2> &position)
-		{
-			return get(getIndex(position[0], position[1]));
-		}
-
-		template <class Unsigned>
-		const value_type &operator [](const Vector<Unsigned, 2> &position) const
-		{
-			return get(getIndex(position[0], position[1]));
-		}
-
-		template <class Unsigned>
-		void resizePreservingPositions(Vector<Unsigned, 2> size)
-		{
-			const auto oldSize = getSize();
-			Grid newGrid(size);
-			const Vector<Unsigned, 2> preservedElements(
-			    std::min(oldSize[0], size[0]),
-			    std::min(oldSize[1], size[1]));
-			for (size_t y = 0; y < preservedElements[1]; ++y)
-			{
-				for (size_t x = 0; x < preservedElements[0]; ++x)
-				{
-					newGrid(x, y) = (*this)(x, y);
-				}
-			}
-			newGrid.swap(*this);
 		}
 
 	private:

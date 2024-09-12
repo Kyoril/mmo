@@ -86,11 +86,11 @@ namespace mmo
 		if (topLeft[1] < 0) {
 			topLeft[1] = 0;
 		}
-		if (bottomRight[0] >= m_grid.getSize()[0]) {
-			bottomRight[0] = m_grid.getSize()[0] - 1;
+		if (bottomRight[0] >= m_grid.width()) {
+			bottomRight[0] = m_grid.width() - 1;
 		}
-		if (bottomRight[1] >= m_grid.getSize()[1]) {
-			bottomRight[1] = m_grid.getSize()[1] - 1;
+		if (bottomRight[1] >= m_grid.height()) {
+			bottomRight[1] = m_grid.height() - 1;
 		}
 
 		for (auto x = topLeft[0]; x <= bottomRight[0]; ++x)
