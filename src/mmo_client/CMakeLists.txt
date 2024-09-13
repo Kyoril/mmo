@@ -77,7 +77,9 @@ target_link_libraries(mmo_client
 	scene_graph
     lua
     luabind
-    client_data)
+    client_data
+    paging
+    terrain)
 	
 target_link_libraries(mmo_client graphics_null)
 if (WIN32)

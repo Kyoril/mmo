@@ -8,7 +8,7 @@
 #include <thread>
 #include <asio/io_service.hpp>
 
-#include "world_page_loader.h"
+#include "paging/world_page_loader.h"
 #include "base/id_generator.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"

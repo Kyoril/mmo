@@ -22,7 +22,12 @@
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
+#include "paging/loaded_page_section.h"
+#include "paging/page_loader_listener.h"
+#include "paging/page_pov_partitioner.h"
+#include "paging/world_page_loader.h"
 #include "proto_data/proto_template.h"
+#include "terrain/terrain.h"
 #include "ui/binding.h"
 #include "ui/world_text_frame.h"
 
@@ -68,6 +73,7 @@ namespace mmo
 	class WorldState final
 		: public GameState
 		, public NetClient
+		, public IPageLoaderListener
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -226,6 +232,10 @@ namespace mmo
 		/// Adds a floating world text UI element with a duration to the world.
 		void AddWorldTextFrame(const Vector3& position, const String& text, const Color& color, float duration);
 
+		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
+
+		PagePosition GetPagePositionFromCamera() const;
+
 	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;
@@ -264,6 +274,15 @@ namespace mmo
 		Bindings m_bindings;
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
+
+		std::unique_ptr<asio::io_service::work> m_work;
+		asio::io_service m_workQueue;
+		asio::io_service m_dispatcher;
+		std::thread m_backgroundLoader;
+		std::unique_ptr<LoadedPageSection> m_visibleSection;
+		std::unique_ptr<WorldPageLoader> m_pageLoader;
+		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
+		std::unique_ptr<terrain::Terrain> m_terrain;
 
 	private:
 		static IInputControl* s_inputControl;

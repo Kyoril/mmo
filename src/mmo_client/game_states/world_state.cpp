@@ -197,6 +197,12 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		// Stop background loading thread
+		m_work.reset();
+		m_workQueue.stop();
+		m_dispatcher.stop();
+		m_backgroundLoader.join();
+
 		m_spellProjectiles.clear();
 
 		ObjectMgr::Initialize();
@@ -285,6 +291,8 @@ namespace mmo
 
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
+		m_dispatcher.poll();
+
 		m_playerController->Update(deltaSeconds);
 
 		ObjectMgr::UpdateObjects(deltaSeconds);
@@ -374,6 +382,40 @@ namespace mmo
 		m_sunLight->SetPowerScale(1.0f);
 		m_sunLight->SetColor(Color::White);
 		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
+
+		m_terrain = std::make_unique<terrain::Terrain>(m_scene, &m_playerController->GetCamera(), 64, 64);
+
+		// Ensure the work queue is always busy
+		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
+
+		// Setup background loading thread
+		auto& workQueue = m_workQueue;
+		auto& dispatcher = m_dispatcher;
+		m_backgroundLoader = std::thread([&workQueue]()
+			{
+				workQueue.run();
+			});
+
+		const auto addWork = [&workQueue](const WorldPageLoader::Work& work)
+			{
+				workQueue.post(work);
+			};
+		const auto synchronize = [&dispatcher](const WorldPageLoader::Work& work)
+			{
+				dispatcher.post(work);
+			};
+
+		const PagePosition pos = GetPagePositionFromCamera();
+		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
+		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
+
+		PagePosition worldSize(64, 64);
+		m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
+			worldSize,
+			2,
+			pos,
+			*m_pageLoader
+		);
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -1849,5 +1891,31 @@ namespace mmo
 		}
 		
 		m_worldTextFrames.push_back(std::move(textFrame));
+	}
+
+	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable)
+	{
+		const auto& mainPage = page.GetMainPage();
+		const PagePosition& pos = mainPage.GetPosition();
+
+		if (isAvailable)
+		{
+			m_terrain->PreparePage(pos.x(), pos.y());
+			m_terrain->LoadPage(pos.x(), pos.y());
+		}
+		else
+		{
+			m_terrain->UnloadPage(pos.x(), pos.y());
+		}
+	}
+
+	PagePosition WorldState::GetPagePositionFromCamera() const
+	{
+		ASSERT(m_playerController);
+
+		const auto& camPos = m_playerController->GetCamera().GetDerivedPosition();
+		return PagePosition(static_cast<uint32>(
+			32 - floor(camPos.x / terrain::constants::PageSize)),
+			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
 	}
 }
