@@ -6,7 +6,7 @@
 
 #include "editor_host.h"
 #include "world_editor.h"
-#include "world_page_loader.h"
+#include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_layout.h"
 #include "log/default_log_levels.h"
