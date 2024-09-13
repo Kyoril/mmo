@@ -7,22 +7,21 @@
 #include "editor_entry_window_base.h"
 
 #include "editor_host.h"
-#include "graphics/texture.h"
 #include "proto_data/project.h"
 
 namespace mmo
 {
 	/// Manages the available model files in the asset registry.
-	class SpellEditorWindow final
-		: public EditorEntryWindowBase<proto::Spells, proto::SpellEntry>
+	class RangeTypeEditorWindow final
+		: public EditorEntryWindowBase<proto::Ranges, proto::RangeType>
 		, public NonCopyable
 	{
 	public:
-		explicit SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host);
-		~SpellEditorWindow() override = default;
+		explicit RangeTypeEditorWindow(const String& name, proto::Project& project, EditorHost& host);
+		~RangeTypeEditorWindow() override = default;
 
 	private:
-		void DrawDetailsImpl(proto::SpellEntry& currentEntry) override;
+		void DrawDetailsImpl(proto::RangeType& currentEntry) override;
 
 	public:
 		bool IsDockable() const noexcept override { return true; }
@@ -31,7 +30,5 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
-		std::vector<String> m_textures;
-		std::map<std::string, TexturePtr> m_iconCache;
 	};
 }

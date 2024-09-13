@@ -59,9 +59,8 @@ namespace mmo
 	};
 
 	SpellEditorWindow::SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host)
-		: EditorWindowBase(name)
+		: EditorEntryWindowBase(project, project.spells, name)
 		, m_host(host)
-		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
 
@@ -75,120 +74,57 @@ namespace mmo
 		}
 	}
 
-	bool SpellEditorWindow::Draw()
+	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
 	{
-		if (ImGui::Begin(m_name.c_str(), &m_visible))
-		{
-			ImGui::Columns(2, nullptr, true);
-			static bool widthSet = false;
-			if (!widthSet)
-			{
-				ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
-				widthSet = true;
-			}
 
-			static int currentItem = -1;
-
-			if (ImGui::Button("Add new spell", ImVec2(-1, 0)))
-			{
-				auto* spell = m_project.spells.add();
-				spell->set_name("New spell");
-				spell->add_attributes(0);
-			}
-
-			ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.spells.count());
-			if (ImGui::Button("Remove", ImVec2(-1, 0)))
-			{
-				m_project.spells.remove(m_project.spells.getTemplates().entry().at(currentItem).id());
-			}
-			ImGui::EndDisabled();
-
-			ImGui::BeginChild("spellListScrollable", ImVec2(-1, 0));
-			ImGui::ListBox("##spellList", &currentItem, [](void* data, int idx, const char** out_text)
-				{
-					const proto::Spells* spells = static_cast<proto::Spells*>(data);
-					const auto& entry = spells->entry().at(idx);
-					*out_text = entry.name().c_str();
-					return true;
-
-				}, &m_project.spells.getTemplates(), m_project.spells.count(), 20);
-			ImGui::EndChild();
-
-			ImGui::NextColumn();
-
-			proto::SpellEntry* currentSpell = nullptr;
-			if (currentItem != -1 && currentItem < m_project.spells.count())
-			{
-				currentSpell = &m_project.spells.getTemplates().mutable_entry()->at(currentItem);
-			}
-
-			if (ImGui::BeginChild("spellDetails", ImVec2(-1, -1)))
-			{
-				if (currentSpell)
-				{
-					DrawSpellDetails(*currentSpell);
-				}
-				ImGui::EndChild();
-			}
-
-			ImGui::Columns(1);
-
-		}
-		ImGui::End();
-
-		return false;
-	}
-
-	void SpellEditorWindow::DrawSpellDetails(proto::SpellEntry& currentSpell)
-	{
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \
-		uint##datasize value = currentSpell.name(); \
+		uint##datasize value = currentEntry.name(); \
 		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
 		{ \
 			if (value >= min && value <= max) \
-				currentSpell.set_##name(value); \
+				currentEntry.set_##name(value); \
 		} \
 	}
 #define CHECKBOX_BOOL_PROP(name, label) \
 	{ \
-		bool value = currentSpell.name(); \
+		bool value = currentEntry.name(); \
 		if (ImGui::Checkbox(label, &value)) \
 		{ \
-			currentSpell.set_##name(value); \
+			currentEntry.set_##name(value); \
 		} \
 	}
 #define CHECKBOX_FLAG_PROP(property, label, flags) \
 	{ \
-		bool value = (currentSpell.property() & static_cast<uint32>(flags)) != 0; \
+		bool value = (currentEntry.property() & static_cast<uint32>(flags)) != 0; \
 		if (ImGui::Checkbox(label, &value)) \
 		{ \
 			if (value) \
-				currentSpell.set_##property(currentSpell.property() | static_cast<uint32>(flags)); \
+				currentEntry.set_##property(currentEntry.property() | static_cast<uint32>(flags)); \
 			else \
-				currentSpell.set_##property(currentSpell.property() & ~static_cast<uint32>(flags)); \
+				currentEntry.set_##property(currentEntry.property() & ~static_cast<uint32>(flags)); \
 		} \
 	}
 #define CHECKBOX_ATTR_PROP(index, label, flags) \
 	{ \
-		bool value = (currentSpell.attributes(index) & static_cast<uint32>(flags)) != 0; \
+		bool value = (currentEntry.attributes(index) & static_cast<uint32>(flags)) != 0; \
 		if (ImGui::Checkbox(label, &value)) \
 		{ \
 			if (value) \
-				currentSpell.mutable_attributes()->Set(index, currentSpell.attributes(index) | static_cast<uint32>(flags)); \
+				currentEntry.mutable_attributes()->Set(index, currentEntry.attributes(index) | static_cast<uint32>(flags)); \
 			else \
-				currentSpell.mutable_attributes()->Set(index, currentSpell.attributes(index) & ~static_cast<uint32>(flags)); \
+				currentEntry.mutable_attributes()->Set(index, currentEntry.attributes(index) & ~static_cast<uint32>(flags)); \
 		} \
 	}
 #define SLIDER_FLOAT_PROP(name, label, min, max) \
 	{ \
 		const char* format = "%.2f"; \
-		float value = currentSpell.name(); \
+		float value = currentEntry.name(); \
 		if (ImGui::InputScalar(label, ImGuiDataType_Float, &value, nullptr, nullptr)) \
 		{ \
 			if (value >= min && value <= max) \
-				currentSpell.set_##name(value); \
+				currentEntry.set_##name(value); \
 		} \
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
@@ -196,9 +132,9 @@ namespace mmo
 
 
 		// Migration: Ensure spell has at least one attribute bitmap
-		if (currentSpell.attributes_size() < 1)
+		if (currentEntry.attributes_size() < 1)
 		{
-			currentSpell.add_attributes(0);
+			currentEntry.add_attributes(0);
 		}
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
@@ -207,13 +143,13 @@ namespace mmo
 			{
 				if (ImGui::TableNextColumn())
 				{
-					ImGui::InputText("Name", currentSpell.mutable_name());
+					ImGui::InputText("Name", currentEntry.mutable_name());
 				}
 
 				if (ImGui::TableNextColumn())
 				{
 					ImGui::BeginDisabled(true);
-					String idString = std::to_string(currentSpell.id());
+					String idString = std::to_string(currentEntry.id());
 					ImGui::InputText("ID", &idString);
 					ImGui::EndDisabled();
 				}
@@ -221,9 +157,9 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
-			ImGui::InputTextMultiline("Description", currentSpell.mutable_description());
+			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());
 
-			int currentSchool = currentSpell.spellschool();
+			int currentSchool = currentEntry.spellschool();
 			if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)
 				{
 					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellSchoolNames))
@@ -235,7 +171,7 @@ namespace mmo
 					return true;
 				}, nullptr, IM_ARRAYSIZE(s_spellSchoolNames), -1))
 			{
-				currentSpell.set_spellschool(currentSchool);
+				currentEntry.set_spellschool(currentSchool);
 			}
 		}
 
@@ -252,8 +188,8 @@ namespace mmo
 			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
 
-			const bool hasRange = currentSpell.has_rangetype();
-			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentSpell.rangetype()) : nullptr;
+			const bool hasRange = currentEntry.has_rangetype();
+			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentEntry.rangetype()) : nullptr;
 			const String rangePreview = currentRange ? currentRange->internalname() : "<None>";
 
 			if (ImGui::BeginCombo("Range", rangePreview.c_str(), ImGuiComboFlags_None))
@@ -261,7 +197,7 @@ namespace mmo
 				ImGui::PushID(-1);
 				if (ImGui::Selectable("<None>", !hasRange))
 				{
-					currentSpell.clear_rangetype();
+					currentEntry.clear_rangetype();
 				}
 				if (!hasRange)
 				{
@@ -276,7 +212,7 @@ namespace mmo
 					const char* item_text = range.internalname().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
-						currentSpell.set_rangetype(range.id());
+						currentEntry.set_rangetype(range.id());
 					}
 					if (item_selected)
 					{
@@ -341,29 +277,29 @@ namespace mmo
 		static bool s_spellClientVisible = false;
 		if (ImGui::CollapsingHeader("Client Only", ImGuiTreeNodeFlags_None))
 		{
-			if (!currentSpell.icon().empty())
+			if (!currentEntry.icon().empty())
 			{
-				if (!m_iconCache.contains(currentSpell.icon()))
+				if (!m_iconCache.contains(currentEntry.icon()))
 				{
-					m_iconCache[currentSpell.icon()] = TextureManager::Get().CreateOrRetrieve(currentSpell.icon());
+					m_iconCache[currentEntry.icon()] = TextureManager::Get().CreateOrRetrieve(currentEntry.icon());
 				}
 
-				if (const TexturePtr tex = m_iconCache[currentSpell.icon()])
+				if (const TexturePtr tex = m_iconCache[currentEntry.icon()])
 				{
 					ImGui::Image(tex->GetTextureObject(), ImVec2(64, 64));
 				}
 			}
 
-			if (ImGui::BeginCombo("Icon", currentSpell.icon().c_str(), ImGuiComboFlags_None))
+			if (ImGui::BeginCombo("Icon", currentEntry.icon().c_str(), ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_textures.size(); i++)
 				{
 					ImGui::PushID(i);
-					const bool item_selected = m_textures[i] == currentSpell.icon();
+					const bool item_selected = m_textures[i] == currentEntry.icon();
 					const char* item_text = m_textures[i].c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
-						currentSpell.set_icon(item_text);
+						currentEntry.set_icon(item_text);
 					}
 					if (item_selected)
 					{
@@ -380,10 +316,10 @@ namespace mmo
 		if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
-			for (int effectIndex = 0; effectIndex < currentSpell.effects_size(); ++effectIndex)
+			for (int effectIndex = 0; effectIndex < currentEntry.effects_size(); ++effectIndex)
 			{
 				// Effect frame
-				int currentEffect = currentSpell.effects(effectIndex).type();
+				int currentEffect = currentEntry.effects(effectIndex).type();
 				ImGui::PushID(effectIndex);
 				if (ImGui::Combo("Effect", &currentEffect,
 					[](void* data, int idx, const char** out_text)
@@ -397,7 +333,7 @@ namespace mmo
 						return true;
 					}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
 				{
-					currentSpell.mutable_effects(effectIndex)->set_type(currentEffect);
+					currentEntry.mutable_effects(effectIndex)->set_type(currentEffect);
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("Details"))
@@ -407,13 +343,13 @@ namespace mmo
 				ImGui::SameLine();
 				if (ImGui::Button("Remove"))
 				{
-					currentSpell.mutable_effects()->DeleteSubrange(effectIndex, 1);
+					currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
 					effectIndex--;
 				}
 
 				if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
 				{
-					ImGui::Text("%s effect #%d", currentSpell.name().c_str(), effectIndex + 1);
+					ImGui::Text("%s effect #%d", currentEntry.name().c_str(), effectIndex + 1);
 
 					if (ImGui::Combo("Effect", &currentEffect,
 						[](void* data, int idx, const char** out_text)
@@ -427,34 +363,34 @@ namespace mmo
 							return true;
 						}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
 					{
-						currentSpell.mutable_effects(effectIndex)->set_type(currentEffect);
+						currentEntry.mutable_effects(effectIndex)->set_type(currentEffect);
 					}
 
 					ImGui::Text("Points");
 					if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
 					{
-						int basePoints = currentSpell.effects(effectIndex).basepoints();
+						int basePoints = currentEntry.effects(effectIndex).basepoints();
 						if (ImGui::InputInt("Base Points", &basePoints))
 						{
-							currentSpell.mutable_effects(effectIndex)->set_basepoints(basePoints);
+							currentEntry.mutable_effects(effectIndex)->set_basepoints(basePoints);
 						}
 
-						float pointsPerLevel = currentSpell.effects(effectIndex).pointsperlevel();
+						float pointsPerLevel = currentEntry.effects(effectIndex).pointsperlevel();
 						if (ImGui::InputFloat("Per Level", &pointsPerLevel))
 						{
-							currentSpell.mutable_effects(effectIndex)->set_pointsperlevel(pointsPerLevel);
+							currentEntry.mutable_effects(effectIndex)->set_pointsperlevel(pointsPerLevel);
 						}
 
-						int diceSides = currentSpell.effects(effectIndex).diesides();
+						int diceSides = currentEntry.effects(effectIndex).diesides();
 						if (ImGui::InputInt("Dice Sides", &diceSides))
 						{
-							currentSpell.mutable_effects(effectIndex)->set_diesides(diceSides);
+							currentEntry.mutable_effects(effectIndex)->set_diesides(diceSides);
 						}
 
-						float dicePerLevel = currentSpell.effects(effectIndex).diceperlevel();
+						float dicePerLevel = currentEntry.effects(effectIndex).diceperlevel();
 						if (ImGui::InputFloat("Dice per Level", &dicePerLevel))
 						{
-							currentSpell.mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
+							currentEntry.mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
 						}
 
 						static int characterLevel = 1;
@@ -462,19 +398,19 @@ namespace mmo
 
 						// Calculate level scaling
 						int level = characterLevel;
-						if (level > currentSpell.maxlevel() && currentSpell.maxlevel() > 0)
+						if (level > currentEntry.maxlevel() && currentEntry.maxlevel() > 0)
 						{
-							level = currentSpell.maxlevel();
+							level = currentEntry.maxlevel();
 						}
-						else if (level < currentSpell.baselevel())
+						else if (level < currentEntry.baselevel())
 						{
-							level = currentSpell.baselevel();
+							level = currentEntry.baselevel();
 						}
-						level -= currentSpell.baselevel();
+						level -= currentEntry.baselevel();
 
 						ImGui::BeginDisabled(true);
-						int min = basePoints + level * currentSpell.effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentSpell.effects(effectIndex).diceperlevel());
-						int max = basePoints + level * currentSpell.effects(effectIndex).pointsperlevel() + diceSides + level * currentSpell.effects(effectIndex).diceperlevel();
+						int min = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentEntry.effects(effectIndex).diceperlevel());
+						int max = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + diceSides + level * currentEntry.effects(effectIndex).diceperlevel();
 						ImGui::InputInt("Min", &min);
 						ImGui::InputInt("Max", &max);
 						ImGui::EndDisabled();
@@ -496,7 +432,7 @@ namespace mmo
 			// Add button
 			if (ImGui::Button("Add Effect", ImVec2(-1, 0)))
 			{
-				currentSpell.add_effects()->set_index(currentSpell.effects_size() - 1);
+				currentEntry.add_effects()->set_index(currentEntry.effects_size() - 1);
 			}
 
 			ImGui::EndChildFrame();
