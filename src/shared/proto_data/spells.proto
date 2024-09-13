@@ -1,6 +1,17 @@
 syntax = "proto2";
 package mmo.proto;
 
+message RangeType {
+	required uint32 id = 1;
+	required float range = 2;
+	optional string name = 3;
+	optional string internalName = 4;
+}
+
+message Ranges {
+	repeated RangeType entry = 1;
+}
+
 message SpellReagent {
 	required uint32 item = 1;
 	optional uint32 count = 2 [default = 1];

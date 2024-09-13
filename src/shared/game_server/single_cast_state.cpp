@@ -269,6 +269,21 @@ namespace mmo
 			return false;
 		}
 
+		if (unitTarget && m_spell.has_rangetype())
+		{
+			// TODO: Resolve range type from project (we don't have a project reference here yet!)
+			const proto::RangeType* rangeType = nullptr;
+			if (rangeType && rangeType->range() > 0.0f)
+			{
+				// If distance is too big, cancel casting. Note we use squared distance check as distance involves sqrt which is more expansive
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > rangeType->range() * rangeType->range())
+				{
+					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
+		}
+
 		// If only castable on daytime, check the current time of day
 		if (HasAttributes(0, spell_attributes::DaytimeOnly) && !HasAttributes(0, spell_attributes::NightOnly))
 		{

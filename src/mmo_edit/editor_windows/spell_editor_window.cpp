@@ -251,6 +251,49 @@ namespace mmo
 			SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
+
+			const bool hasRange = currentSpell.has_rangetype();
+			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentSpell.rangetype()) : nullptr;
+			const String rangePreview = currentRange ? currentRange->internalname() : "<None>";
+
+			if (ImGui::BeginCombo("Range", rangePreview.c_str(), ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable("<None>", !hasRange))
+				{
+					currentSpell.clear_rangetype();
+				}
+				if (!hasRange)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+				ImGui::PopID();
+
+				for (const auto& range : m_project.ranges.getTemplates().entry())
+				{
+					ImGui::PushID(range.id());
+					const bool item_selected = currentRange && currentRange->id() == range.id();
+					const char* item_text = range.internalname().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentSpell.set_rangetype(range.id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Edit Ranges"))
+			{
+				// TODO: Open popup
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Interrupt", ImGuiTreeNodeFlags_None))
