@@ -102,7 +102,8 @@ target_link_libraries(mmo_edit
 	proto_data
 	libprotobuf
 	sql_wrapper
-	mysql_wrapper)
+	mysql_wrapper
+	terrain)
 	
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)

@@ -43,6 +43,20 @@ namespace mmo
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 
+			void CreateIndexData(uint32 lod, uint32 neighborState);
+
+			uint16 GetIndex(size_t x, size_t y) const;
+
+			enum class Direction : uint8
+			{
+				North = 0,
+				East = 1,
+				South = 2,
+				West = 3
+			};
+
+			uint32 StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx);
+
 		private:
 			Page& m_page;
 			AABB m_bounds;

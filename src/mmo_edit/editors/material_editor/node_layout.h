@@ -4,7 +4,7 @@
 
 namespace mmo
 {
-	class Grid
+	class GridLayout
 	{
 	public:
 	    void Begin(const char* id, int columns, float width = -1.0f);

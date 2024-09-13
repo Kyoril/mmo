@@ -9,7 +9,7 @@
 
 #include "tile.h"
 
-static constexpr float MapWidth = 256.0f;
+static constexpr float MapWidth = 512.0f;
 
 namespace mmo
 {
@@ -62,9 +62,11 @@ namespace mmo
 
 			m_preparing = true;
 
-			m_heightmap.fill(100.0f);
+			m_heightmap.fill(1.0f);
 			m_normals.fill(Vector3::UnitY);
 			m_tangents.fill(Vector3::UnitZ);
+
+			// TODO: Read page file
 
 			m_prepared = true;
 			m_preparing = false;
@@ -88,7 +90,7 @@ namespace mmo
 
 			String pageBaseName = "Page_" + std::to_string(m_x) + "_" + std::to_string(m_z);
 
-			const uint32 tileVerts = 32;
+			const uint32 tileVerts = 17;
 			const uint32 tileCount = 16;
 
 			m_Tiles = TileGrid(tileCount, tileCount);
@@ -98,7 +100,7 @@ namespace mmo
 				{
 					String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
 					auto& tile = m_Tiles(i, j);
-					tile.reset(new Tile(tileName, *this, i * tileVerts, j * tileVerts));
+					tile = std::make_unique<Tile>(tileName, *this, i * 16, j * 16);
 
 					m_pageNode->AttachObject(*tile);
 				}
@@ -146,13 +148,13 @@ namespace mmo
 
 		float Page::GetHeightAt(size_t x, size_t y) const
 		{
-			if (x > 128 ||
-				y > 128)
+			if (x > 256 ||
+				y > 256)
 			{
-				return 100.0f;
+				return 1.0f;
 			}
 
-			return m_heightmap[x + y * (128 + 1)];
+			return m_heightmap[x + y * (256 + 1)];
 		}
 
 		float Page::GetSmoothHeightAt(float x, float y) const
@@ -162,10 +164,10 @@ namespace mmo
 
 		void Page::UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly)
 		{
-			unsigned int fromTileX = fromX / (16 - 1);
-			unsigned int fromTileZ = fromZ / (16 - 1);
-			unsigned int toTileX = toX / (16 - 1);
-			unsigned int toTileZ = toZ / (16 - 1);
+			unsigned int fromTileX = fromX / (17 - 1);
+			unsigned int fromTileZ = fromZ / (17 - 1);
+			unsigned int toTileX = toX / (17 - 1);
+			unsigned int toTileZ = toZ / (17 - 1);
 
 			for (unsigned int x = fromTileX; x <= toTileX; x++)
 			{

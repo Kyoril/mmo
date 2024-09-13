@@ -5,12 +5,12 @@
 
 namespace mmo
 {
-	void Grid::Begin(const char* id, const int columns, const float width)
+	void GridLayout::Begin(const char* id, const int columns, const float width)
 	{
 	    Begin(ImGui::GetID(id), columns, width);
 	}
 
-	void Grid::Begin(const ImU32 id, const int columns, const float width)
+	void GridLayout::Begin(const ImU32 id, const int columns, const float width)
 	{
 	    m_cursorPos = ImGui::GetCursorScreenPos();
 
@@ -33,7 +33,7 @@ namespace mmo
 	    EnterCell(0, 0);
 	}
 
-	void Grid::NextColumn()
+	void GridLayout::NextColumn()
 	{
 	    LeaveCell();
 
@@ -63,7 +63,7 @@ namespace mmo
 	    EnterCell(nextColumn, nextRow);
 	}
 
-	void Grid::NextRow()
+	void GridLayout::NextRow()
 	{
 	    LeaveCell();
 
@@ -86,7 +86,7 @@ namespace mmo
 	    EnterCell(m_column, m_row + 1);
 	}
 
-	void Grid::EnterCell(const int column, const int row)
+	void GridLayout::EnterCell(const int column, const int row)
 	{
 	    m_column = column;
 	    m_row    = row;
@@ -113,7 +113,7 @@ namespace mmo
 	    ImGui::BeginGroup();
 	}
 
-	void Grid::LeaveCell()
+	void GridLayout::LeaveCell()
 	{
 	    ImGui::EndGroup();
 
@@ -127,13 +127,13 @@ namespace mmo
 	    ImGui::PopID();
 	}
 
-	void Grid::SetColumnAlignment(float alignment)
+	void GridLayout::SetColumnAlignment(float alignment)
 	{
 	    alignment = ImClamp(alignment, 0.0f, 1.0f);
 	    m_columnAlignment = alignment;
 	}
 
-	void Grid::End()
+	void GridLayout::End()
 	{
 	    LeaveCell();
 

@@ -37,7 +37,7 @@ namespace mmo
 			m_scene.DestroySceneNode(*m_terrainNode);
 		}
 
-		void Terrain::PreparePage(TileId x, TileId y)
+		void Terrain::PreparePage(uint32 x, uint32 y)
 		{
 			if (!(x < m_width) || !(y < m_height)) {
 				return;
@@ -46,7 +46,7 @@ namespace mmo
 			m_pages(x, y)->Prepare();
 		}
 
-		void Terrain::LoadPage(TileId x, TileId y)
+		void Terrain::LoadPage(uint32 x, uint32 y)
 		{
 			if (!(x < m_width) || !(y < m_height)) {
 				return;
@@ -61,7 +61,7 @@ namespace mmo
 			page->Load();
 		}
 
-		void Terrain::UnloadPage(TileId x, TileId y)
+		void Terrain::UnloadPage(uint32 x, uint32 y)
 		{
 			if (!(x < m_width) || !(y < m_height)) {
 				return;
@@ -135,7 +135,7 @@ namespace mmo
 			return page->GetTile(tileX, tileZ);
 		}
 
-		Page* Terrain::GetPage(TileId x, TileId z)
+		Page* Terrain::GetPage(uint32 x, uint32 z)
 		{
 			if (x >= m_width || z >= m_height) {
 				return nullptr;

@@ -21,6 +21,7 @@
 #include "scene_graph/world_grid.h"
 #include "transform_widget.h"
 #include "selection.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
@@ -129,6 +130,8 @@ namespace mmo
 		Vector3 m_cameraVelocity{};
 		bool m_hovering{ false };
 
+		std::unique_ptr<terrain::Terrain> m_terrain;
+
 		bool m_gridSnap { true };
 		float m_gridSizes[7] = { 0.1f, 0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 4.0f };
 		int m_currentGridSizeIndex { 3 };
@@ -155,5 +158,9 @@ namespace mmo
 		ImVec2 m_lastContentRectMin{};
 
 		std::map<uint16, WorldPage> m_pages;
+
+		SceneNode* m_cloudsNode{ nullptr };
+		Entity* m_cloudsEntity{ nullptr };
+		Light* m_sunLight{ nullptr };
 	};
 }

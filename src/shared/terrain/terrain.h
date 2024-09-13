@@ -31,11 +31,11 @@ namespace mmo
 
 		public:
 
-			void PreparePage(TileId tileX, TileId tileZ);
+			void PreparePage(uint32 tileX, uint32 tileZ);
 
-			void LoadPage(TileId x, TileId y);
+			void LoadPage(uint32 x, uint32 y);
 
-			void UnloadPage(TileId x, TileId y);
+			void UnloadPage(uint32 x, uint32 y);
 
 			float GetAt(uint32 x, uint32 z);
 
@@ -55,7 +55,7 @@ namespace mmo
 
 			Tile* GetTile(int32 x, int32 z);
 
-			Page* GetPage(TileId x, TileId z);
+			Page* GetPage(uint32 x, uint32 z);
 
 			void SetBaseFileName(const String& name);
 

@@ -216,6 +216,17 @@ namespace mmo
 			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
 		}
 
+		// Setup terrain
+		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
+
+		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
+		m_cloudsEntity->SetQueryFlags(0);
+		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
+		m_cloudsNode->AttachObject(*m_cloudsEntity);
+		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
+		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
+
 		ILOG("Successfully read world file!");
 	}
 
@@ -295,6 +306,8 @@ namespace mmo
 			}
 		}
 
+		m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
+
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
 		
@@ -315,9 +328,8 @@ namespace mmo
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
+		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-		
 		m_scene.Render(*m_camera);
 		m_transformWidget->Update(m_camera);
 		
@@ -773,15 +785,18 @@ namespace mmo
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
 	{
 		const auto &mainPage = page.GetMainPage();
-		const auto &pos = mainPage.GetPosition();
+		const PagePosition &pos = mainPage.GetPosition();
 
 		if (isAvailable)
 		{
 			DLOG("Page " << mainPage.GetPosition() << " is available!");
+			m_terrain->PreparePage(pos.x(), pos.y());
+			m_terrain->LoadPage(pos.x(), pos.y());
 		}
 		else
 		{
 			DLOG("Page " << mainPage.GetPosition() << " is unavailable");
+			m_terrain->UnloadPage(pos.x(), pos.y());
 		}
 	}
 }
