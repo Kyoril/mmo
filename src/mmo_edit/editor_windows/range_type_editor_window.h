@@ -23,6 +23,10 @@ namespace mmo
 	private:
 		void DrawDetailsImpl(proto::RangeType& currentEntry) override;
 
+		void OnNewEntry(proto::TemplateManager<proto::Ranges, proto::RangeType>::EntryType& entry) override;
+
+		const String& EntryDisplayName(const proto::RangeType& entry) override;
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 

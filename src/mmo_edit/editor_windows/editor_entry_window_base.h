@@ -6,9 +6,12 @@
 #include "proto_data/proto_template.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "proto_data/project.h"
+
+#include "imgui_listbox.h"
 
 namespace mmo
 {
@@ -73,13 +76,12 @@ namespace mmo
 			ImGui::EndDisabled();
 
 			ImGui::BeginChild("entryListScrollable", ImVec2(-1, 0));
-			ImGui::ListBox("##entryList", &currentItem, [](void* data, int idx, const char** out_text)
+			ListBox("##entryList", &currentItem, [this](void* data, int idx, const char** out_text)
 				{
 					const T1* entries = static_cast<T1*>(data);
 					const auto& entry = entries->entry().at(idx);
-					*out_text = entry.name().c_str();
+					*out_text = this->EntryDisplayName(entry).c_str();
 					return true;
-
 				}, &m_manager.getTemplates(), m_manager.count(), 20);
 			ImGui::EndChild();
 

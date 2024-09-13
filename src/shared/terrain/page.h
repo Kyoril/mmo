@@ -5,6 +5,7 @@
 #include "base/grid.h"
 #include "graphics/material.h"
 #include "math/aabb.h"
+#include "terrain.h"
 
 #include <unordered_map>
 #include <array>
@@ -32,7 +33,7 @@ namespace mmo
 		class Page
 		{
 		public:
-			explicit Page(Terrain& terrain, uint32 x, uint32 z);
+			explicit Page(Terrain& terrain, int32 x, int32 z);
 			~Page();
 
 		public:
@@ -91,13 +92,13 @@ namespace mmo
 			MaterialPtr m_material;
 			TileGrid m_Tiles;
 
-			std::array<float, 257 * 257> m_heightmap;
-			std::array<Vector3, 257 * 257> m_normals;
-			std::array<Vector3, 257 * 257> m_tangents;
+			std::array<float, constants::VerticesPerPage * constants::VerticesPerPage> m_heightmap;
+			std::array<Vector3, constants::VerticesPerPage* constants::VerticesPerPage> m_normals;
+			std::array<Vector3, constants::VerticesPerPage* constants::VerticesPerPage> m_tangents;
 			std::vector<String> m_textures;
 
-			uint32 m_x;
-			uint32 m_z;
+			int32 m_x;
+			int32 m_z;
 			bool m_preparing;
 			bool m_prepared;
 			bool m_loaded;

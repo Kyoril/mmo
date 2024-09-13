@@ -9,13 +9,11 @@
 
 #include "tile.h"
 
-static constexpr float MapWidth = 512.0f;
-
 namespace mmo
 {
 	namespace terrain
 	{
-		Page::Page(Terrain& terrain, uint32 x, uint32 z)
+		Page::Page(Terrain& terrain, int32 x, int32 z)
 			: m_terrain(terrain)
 			, m_x(x)
 			, m_z(z)
@@ -23,24 +21,20 @@ namespace mmo
 			, m_prepared(false)
 			, m_loaded(false)
 		{
+			const Vector3 offset = Vector3(
+				static_cast<float>(32 - m_x) * constants::PageSize,
+				0.0f,
+				static_cast<float>(32 - m_z) * constants::PageSize
+			);
+
 			// Bounding box
 			m_boundingBox = AABB(
-				Vector3(
-					static_cast<float>(m_x) * MapWidth,
-					0.0f,
-					static_cast<float>(m_z) * MapWidth
-				),
-				Vector3(
-					static_cast<float>(m_x) * MapWidth + MapWidth,
-					0.0f,
-					static_cast<float>(m_z) * MapWidth + MapWidth
-				)
+				offset,
+				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize)
 			);
 
 			m_pageNode = m_terrain.GetNode()->CreateChildSceneNode();
-			m_pageNode->SetPosition(Vector3(static_cast<float>(m_x) * MapWidth,
-				0.0f,
-				static_cast<float>(m_z) * MapWidth));
+			m_pageNode->SetPosition(offset);
 		}
 
 		Page::~Page()
@@ -62,7 +56,7 @@ namespace mmo
 
 			m_preparing = true;
 
-			m_heightmap.fill(1.0f);
+			m_heightmap.fill(0.0f);
 			m_normals.fill(Vector3::UnitY);
 			m_tangents.fill(Vector3::UnitZ);
 
@@ -90,17 +84,14 @@ namespace mmo
 
 			String pageBaseName = "Page_" + std::to_string(m_x) + "_" + std::to_string(m_z);
 
-			const uint32 tileVerts = 17;
-			const uint32 tileCount = 16;
-
-			m_Tiles = TileGrid(tileCount, tileCount);
-			for (unsigned int i = 0; i < tileCount; i++)
+			m_Tiles = TileGrid(constants::TilesPerPage, constants::TilesPerPage);
+			for (unsigned int i = 0; i < constants::TilesPerPage; i++)
 			{
-				for (unsigned int j = 0; j < tileCount; j++)
+				for (unsigned int j = 0; j < constants::TilesPerPage; j++)
 				{
 					String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
 					auto& tile = m_Tiles(i, j);
-					tile = std::make_unique<Tile>(tileName, *this, i * 16, j * 16);
+					tile = std::make_unique<Tile>(tileName, *this, i * (constants::VerticesPerTile - 1), j * (constants::VerticesPerTile - 1));
 
 					m_pageNode->AttachObject(*tile);
 				}
@@ -148,13 +139,13 @@ namespace mmo
 
 		float Page::GetHeightAt(size_t x, size_t y) const
 		{
-			if (x > 256 ||
-				y > 256)
+			if (x >= constants::VerticesPerPage ||
+				y >= constants::VerticesPerPage)
 			{
-				return 1.0f;
+				return 0.0f;
 			}
 
-			return m_heightmap[x + y * (256 + 1)];
+			return m_heightmap[x + y * constants::VerticesPerPage];
 		}
 
 		float Page::GetSmoothHeightAt(float x, float y) const
@@ -164,10 +155,10 @@ namespace mmo
 
 		void Page::UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly)
 		{
-			unsigned int fromTileX = fromX / (17 - 1);
-			unsigned int fromTileZ = fromZ / (17 - 1);
-			unsigned int toTileX = toX / (17 - 1);
-			unsigned int toTileZ = toZ / (17 - 1);
+			unsigned int fromTileX = fromX / (constants::VerticesPerTile - 1);
+			unsigned int fromTileZ = fromZ / (constants::VerticesPerTile - 1);
+			unsigned int toTileX = toX / (constants::VerticesPerTile - 1);
+			unsigned int toTileZ = toZ / (constants::VerticesPerTile - 1);
 
 			for (unsigned int x = fromTileX; x <= toTileX; x++)
 			{
@@ -246,8 +237,8 @@ namespace mmo
 
 		void Page::UpdateBoundingBox()
 		{
-			m_boundingBox = AABB(Vector3(m_x * MapWidth, 0.0f, m_z * MapWidth),
-				Vector3(m_x * MapWidth + MapWidth, 0.0f, m_z * MapWidth + MapWidth));
+			m_boundingBox = AABB(Vector3(m_x * constants::PageSize, 0.0f, m_z * constants::PageSize),
+				Vector3(m_x * constants::PageSize + constants::PageSize, 0.0f, m_z * constants::PageSize + constants::PageSize));
 
 			for (auto& tile : m_Tiles)
 			{

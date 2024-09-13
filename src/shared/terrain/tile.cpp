@@ -4,11 +4,7 @@
 #include "page.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/scene_node.h"
-
-static constexpr uint32 TilesPerPage = 16;
-static constexpr uint32 VerticesPerPage = 256;
-static constexpr uint32 VerticesPerTile = VerticesPerPage / TilesPerPage;
-static constexpr uint32 VerticesPerTileSquared = VerticesPerTile * VerticesPerTile;
+#include "terrain.h"
 
 namespace mmo
 {
@@ -23,8 +19,8 @@ namespace mmo
 		{
 			SetRenderQueueGroup(WorldGeometry1);
 
-			m_tileX = m_startX / (17 - 1);
-			m_tileZ = m_startZ / (17 - 1);
+			m_tileX = m_startX / (constants::VerticesPerTile - 1);
+			m_tileZ = m_startZ / (constants::VerticesPerTile - 1);
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0);
@@ -85,7 +81,7 @@ namespace mmo
 		{
 			m_vertexData = std::make_unique<VertexData>();
 			m_vertexData->vertexStart = 0;
-			m_vertexData->vertexCount = 17*17;
+			m_vertexData->vertexCount = constants::VerticesPerTile * constants::VerticesPerTile;
 
 			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
 			VertexBufferBinding* bind = m_vertexData->vertexBufferBinding;
@@ -98,13 +94,13 @@ namespace mmo
 			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
 			offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
-			const size_t endX = startX + 17;
-			const size_t endZ = startZ + 17;
+			const size_t endX = startX + constants::VerticesPerTile;
+			const size_t endZ = startZ + constants::VerticesPerTile;
 
 			float minHeight = m_page.GetHeightAt(0, 0);
 			float maxHeight = minHeight;
 
-			const float scale = 2.0f;
+			const float scale = constants::TileSize / (constants::VerticesPerTile - 1);
 
 			struct VertexStruct
 			{
@@ -130,8 +126,8 @@ namespace mmo
 					// TODO: vert->binormal = m_page.GetTangentAt(i, j);
 					vert->binormal = Vector3::UnitX;
 					vert->color = 0xFFFFFFFF;
-					vert->u = static_cast<float>(i) / static_cast<float>(256 + 1);
-					vert->v = static_cast<float>(j) / static_cast<float>(256 + 1);
+					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
+					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 
 					if (height < minHeight) {
 						minHeight = height;
@@ -172,9 +168,7 @@ namespace mmo
 			const unsigned int south = southLOD ? step : 0;
 			const unsigned int west = westLOD ? step : 0;
 
-			const uint32 tileSize = 17;
-
-			const size_t newLength = (tileSize / step) * (tileSize / step) * 2 * 2 * 2;
+			const size_t newLength = (constants::VerticesPerTile / step) * (constants::VerticesPerTile / step) * 2 * 2 * 2;
 			std::vector<uint16> indices(newLength);
 			uint16* pIdx = indices.data();
 
@@ -183,9 +177,9 @@ namespace mmo
 			// go over all vertices and combine them to triangles in trilist format.
 			// leave out the edges if we need to stitch those in case over lower LOD at the
 			// neighbour.
-			for (unsigned int j = north; j < tileSize - 1 - south; j += step)
+			for (unsigned int j = north; j < constants::VerticesPerTile - 1 - south; j += step)
 			{
-				for (unsigned int i = west; i < tileSize - 1 - east; i += step)
+				for (unsigned int i = west; i < constants::VerticesPerTile - 1 - east; i += step)
 				{
 					// triangles
 					*pIdx++ = GetIndex(i, j);
@@ -222,7 +216,7 @@ namespace mmo
 
 		uint16 Tile::GetIndex(size_t x, size_t y) const
 		{
-			return static_cast<uint16>(x + (y * 17));
+			return static_cast<uint16>(x + (y * constants::VerticesPerTile));
 		}
 
 		uint32 Tile::StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx)

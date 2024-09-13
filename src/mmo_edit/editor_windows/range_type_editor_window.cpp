@@ -52,4 +52,15 @@ namespace mmo
 			SLIDER_FLOAT_PROP(range, "Range", 0.0f, 50000.0f);
 		}
 	}
+
+	void RangeTypeEditorWindow::OnNewEntry(proto::TemplateManager<proto::Ranges, proto::RangeType>::EntryType& entry)
+	{
+		entry.set_internalname("New Range Type");
+		entry.set_range(5.0f);
+	}
+
+	const String& RangeTypeEditorWindow::EntryDisplayName(const proto::RangeType& entry)
+	{
+		return entry.internalname();
+	}
 }

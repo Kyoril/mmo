@@ -106,6 +106,8 @@ namespace mmo
 
 		void OnMapEntityRemoved(MapEntity& entity);
 
+		PagePosition GetPagePositionFromCamera() const;
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 

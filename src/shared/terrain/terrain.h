@@ -19,6 +19,17 @@ namespace mmo
 		class Tile;
 		class Page;
 
+		namespace constants
+		{
+			constexpr uint32 VerticesPerTile = 9;
+			constexpr uint32 TilesPerPage = 16;
+			constexpr uint32 VerticesPerPage = (VerticesPerTile - 1) * TilesPerPage + 1;
+			constexpr uint32 MaxPages = 64;
+			constexpr uint32 MaxPagesSquared = MaxPages * MaxPages;
+			constexpr float TileSize = 33.33333f;
+			constexpr float PageSize = TileSize * TilesPerPage;
+		}
+
 
 		typedef uint16 TileId;
 
