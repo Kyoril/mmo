@@ -320,6 +320,10 @@ namespace mmo
 			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.025f), TransformSpace::World);
 		}
 
+		const auto pos = GetPagePositionFromCamera();
+		m_memoryPointOfView->UpdateCenter(pos);
+		m_visibleSection->UpdateCenter(pos);
+
 		// Update world text frames
 		for (size_t i = 0; i < m_worldTextFrames.size(); )
 		{
