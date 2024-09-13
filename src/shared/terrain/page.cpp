@@ -22,9 +22,9 @@ namespace mmo
 			, m_loaded(false)
 		{
 			const Vector3 offset = Vector3(
-				static_cast<float>(32 - m_x) * constants::PageSize,
+				static_cast<float>(static_cast<double>(32 - m_x) * constants::PageSize),
 				0.0f,
-				static_cast<float>(32 - m_z) * constants::PageSize
+				static_cast<float>(static_cast<double>(32 - m_z) * constants::PageSize)
 			);
 
 			// Bounding box

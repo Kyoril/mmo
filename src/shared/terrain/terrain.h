@@ -26,8 +26,8 @@ namespace mmo
 			constexpr uint32 VerticesPerPage = (VerticesPerTile - 1) * TilesPerPage + 1;
 			constexpr uint32 MaxPages = 64;
 			constexpr uint32 MaxPagesSquared = MaxPages * MaxPages;
-			constexpr float TileSize = 33.33333f;
-			constexpr float PageSize = TileSize * TilesPerPage;
+			constexpr double TileSize = 33.33333f;
+			constexpr double PageSize = TileSize * TilesPerPage;
 		}
 
 
