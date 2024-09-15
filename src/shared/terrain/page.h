@@ -92,10 +92,10 @@ namespace mmo
 			MaterialPtr m_material;
 			TileGrid m_Tiles;
 
-			std::array<float, constants::VerticesPerPage * constants::VerticesPerPage> m_heightmap;
-			std::array<Vector3, constants::VerticesPerPage* constants::VerticesPerPage> m_normals;
-			std::array<Vector3, constants::VerticesPerPage* constants::VerticesPerPage> m_tangents;
-			std::vector<String> m_textures;
+			std::vector <float> m_heightmap;
+			std::vector <Vector3> m_normals;
+			std::vector <Vector3> m_tangents;
+			std::vector <String> m_textures;
 
 			int32 m_x;
 			int32 m_z;

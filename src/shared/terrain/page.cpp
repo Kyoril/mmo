@@ -56,9 +56,9 @@ namespace mmo
 
 			m_preparing = true;
 
-			m_heightmap.fill(0.0f);
-			m_normals.fill(Vector3::UnitY);
-			m_tangents.fill(Vector3::UnitZ);
+			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
+			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
+			m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
 
 			// TODO: Read page file
 
