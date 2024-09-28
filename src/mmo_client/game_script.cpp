@@ -191,6 +191,13 @@ namespace mmo
 			return 0;
 		}
 
+		int32 Script_GetPlayerAura(int32 id)
+		{
+			// TODO: Get buff index
+
+			return -1;
+		}
+
 		void Script_UnitStat(const std::string& unitName, uint32 statId, int32& out_base, int32& out_modifier)
 		{
 			out_base = -1;
@@ -203,8 +210,9 @@ namespace mmo
 
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
-				out_base = unit->Get<int32>(object_fields::StatStamina + statId);
-				out_modifier = unit->Get<int32>(object_fields::PosStatStamina + statId) - unit->Get<int32>(object_fields::NegStatStamina + statId);
+				const int32 bonus = unit->Get<int32>(object_fields::PosStatStamina + statId) - unit->Get<int32>(object_fields::NegStatStamina + statId);
+				out_base = unit->Get<int32>(object_fields::StatStamina + statId) - bonus;
+				out_modifier = bonus;
 			}
 		}
 
@@ -483,6 +491,7 @@ namespace mmo
 
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def("CastSpell", &Script_CastSpell),
+			luabind::def("GetPlayerAura", &Script_GetPlayerAura),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 

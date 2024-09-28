@@ -30,6 +30,7 @@ namespace mmo
 		m_propConnections += AddProperty("Enabled").Changed.connect(this, &Frame::OnEnabledPropertyChanged);
 		m_propConnections += AddProperty("Visible").Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
+		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
 	}
 
 	void Frame::Copy(Frame & other)
@@ -939,8 +940,9 @@ namespace mmo
 			// PopulateGeometryBuffer virtual method.
 			if (m_renderer != nullptr)
 			{
-				optional<Color> color = optional<Color>(Color(1.0f, 1.0f, 1.0f, m_opacity));
-				m_renderer->Render(color);
+				Color color = m_color;
+				color.SetAlpha(m_opacity);
+				m_renderer->Render(optional<Color>(color));
 			}
 			else
 			{
@@ -1041,6 +1043,20 @@ namespace mmo
 
 		// Invalidate all children as they might depend on our font
 		InvalidateChildren(true);
+	}
+
+	void Frame::OnColorPropertyChanged(const Property& property)
+	{
+		argb_t argb;
+
+		std::stringstream colorStream;
+		colorStream.str(property.GetValue());
+		colorStream.clear();
+		colorStream >> std::hex >> argb;
+
+		m_color = argb;
+
+		Invalidate(false);
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()

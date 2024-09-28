@@ -412,6 +412,8 @@ namespace mmo
 		/// 
 		void OnFontPropertyChanged(const Property& property);
 
+		void OnColorPropertyChanged(const Property& property);
+
 	protected:
 		typedef std::vector<Pointer> ChildList;
 
@@ -481,6 +483,8 @@ namespace mmo
 		int32 m_id = 0;
 
 		float m_opacity{ 1.0f };
+
+		Color m_color { Color::White };
 
 	protected:
 		scoped_connection_container m_propConnections;
