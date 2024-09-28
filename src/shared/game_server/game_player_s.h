@@ -24,7 +24,6 @@ namespace mmo
 
 		~GamePlayerS() override = default;
 
-
 		virtual void Initialize() override;
 
 		void SetClass(const proto::ClassEntry& classEntry);
@@ -39,6 +38,9 @@ namespace mmo
 		virtual void SetLevel(uint32 newLevel) override;
 
 		void UpdateDamage();
+
+	protected:
+		void UpdateStat(int32 stat);
 		
 	protected:
 		void OnSpellLearned(const proto::SpellEntry& spell) override

@@ -99,6 +99,19 @@ namespace mmo
 			StatAgility,
 			StatIntellect,
 			StatSpirit,
+
+			PosStatStamina,
+			PosStatStrength,
+			PosStatAgility,
+			PosStatIntellect,
+			PosStatSpirit,
+
+			NegStatStamina,
+			NegStatStrength,
+			NegStatAgility,
+			NegStatIntellect,
+			NegStatSpirit,
+
 			Armor,
 
 			AttackPower,

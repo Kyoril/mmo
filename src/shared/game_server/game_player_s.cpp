@@ -61,17 +61,18 @@ namespace mmo
 
 		GameUnitS::RefreshStats();
 
+		// Update all stats
+		for (int i = 0; i < 5; ++i)
+		{
+			UpdateStat(i);
+		}
+
 		const int32 level = Get<int32>(object_fields::Level);
 		ASSERT(level > 0);
 		ASSERT(level <= m_classEntry->levelbasevalues_size());
 
 		// Adjust stats
 		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
-		Set<uint32>(object_fields::StatStamina, levelStats->stamina());
-		Set<uint32>(object_fields::StatStrength, levelStats->strength());
-		Set<uint32>(object_fields::StatAgility, levelStats->agility());
-		Set<uint32>(object_fields::StatIntellect, levelStats->intellect());
-		Set<uint32>(object_fields::StatSpirit, levelStats->spirit());
 
 		// TODO: Apply item stats
 		
@@ -112,6 +113,14 @@ namespace mmo
 		{
 			newLevel = Get<int32>(object_fields::MaxLevel);
 		}
+
+		// Adjust stats
+		const auto* levelStats = &m_classEntry->levelbasevalues(newLevel - 1);
+		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, levelStats->stamina());
+		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, levelStats->strength());
+		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, levelStats->agility());
+		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, levelStats->intellect());
+		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, levelStats->spirit());
 
 		GameUnitS::SetLevel(newLevel);
 
@@ -154,6 +163,29 @@ namespace mmo
 
 		Set<float>(object_fields::MinDamage, baseValue + minDamage);
 		Set<float>(object_fields::MaxDamage, baseValue + maxDamage);
+	}
+
+	void GamePlayerS::UpdateStat(int32 stat)
+	{
+		// Validate stat
+		if (stat > 4)
+		{
+			return;
+		}
+
+		// Determine unit mod
+		const UnitMods mod = GetUnitModByStat(stat);
+
+		// Calculate values
+		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue);
+		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
+		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
+		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
+
+		const float value = (baseVal * basePct + totalVal) * totalPct;
+		Set<int32>(object_fields::StatStamina + stat, static_cast<int32>(value));
+		Set<int32>(object_fields::PosStatStamina + stat, totalVal > 0 ? static_cast<int32>(totalVal) : 0);
+		Set<int32>(object_fields::NegStatStamina + stat, totalVal < 0 ? static_cast<int32>(totalVal) : 0);
 	}
 
 	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)

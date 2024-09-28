@@ -4,6 +4,7 @@
 
 #include <map>
 
+#include "aura_container.h"
 #include "game_unit_s.h"
 #include "spell_cast.h"
 #include "tile_subscriber.h"
@@ -190,7 +191,9 @@ namespace mmo
 		void SpellEffectTransDoor(const proto::SpellEffect& effect);
 
 	private:
+		AuraContainer& GetOrCreateAuraContainer(GameUnitS& target);
 
+	private:
 		SpellCast& m_cast;
 		const proto::SpellEntry& m_spell;
 		SpellTargetMap m_target;
@@ -220,11 +223,9 @@ namespace mmo
 		uint32 m_victimProc;
 		bool m_canTrigger;
 		HitResultMap m_hitResults;
-		//game::WeaponAttack m_attackType;
 		std::vector<uint64> m_dynObjectsToDespawn;
 		bool m_instantsCast, m_delayedCast;
 		scoped_connection m_onChannelAuraRemoved;
-		//std::map<UInt64, std::shared_ptr<AuraSpellSlot>> m_auraSlots;
 
 		void SendEndCast(SpellCastResult result);
 		void OnCastFinished();
@@ -232,6 +233,8 @@ namespace mmo
 		void OnTargetDespawned(GameObjectS&);
 		void OnUserDamaged();
 		void ExecuteMeleeAttack();	// deal damage stored in m_meleeDamage
+
+		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 
 		typedef std::function<void(const proto::SpellEffect&)> EffectHandler;
 	};

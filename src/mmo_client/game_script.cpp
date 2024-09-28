@@ -17,9 +17,17 @@
 #include "game_client/game_player_c.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
+#include "luabind/out_value_policy.hpp"
 #include "shared/client_data/spells.pb.h"
 #include "shared/proto_data/spells.pb.h"
 
+
+namespace luabind
+{
+	// A little helper to combine multiple policies
+	template <typename... T>
+ 	using joined = typename luabind::meta::join<T...>::type;
+}
 
 namespace mmo
 {
@@ -181,6 +189,23 @@ namespace mmo
 			}
 
 			return 0;
+		}
+
+		void Script_UnitStat(const std::string& unitName, uint32 statId, int32& out_base, int32& out_modifier)
+		{
+			out_base = -1;
+			out_modifier = -1;
+
+			if (statId >= 5)
+			{
+				return;
+			}
+
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				out_base = unit->Get<int32>(object_fields::StatStamina + statId);
+				out_modifier = unit->Get<int32>(object_fields::PosStatStamina + statId) - unit->Get<int32>(object_fields::NegStatStamina + statId);
+			}
 		}
 
 		int32 Script_PlayerNextLevelXp()
@@ -451,6 +476,7 @@ namespace mmo
 			luabind::def("UnitMana", &Script_UnitMana),
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
+			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 			luabind::def("UnitName", &Script_UnitName),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),

@@ -96,6 +96,7 @@ namespace mmo
 			PeriodicTriggerSpell,
 			PeriodicEnergize,
 			ModStat,
+			ProcTriggerSpell,
 
 			Count_,
 			Invalid_ = Count_

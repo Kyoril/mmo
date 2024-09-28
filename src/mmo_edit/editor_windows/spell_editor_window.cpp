@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "game/aura.h"
 #include "game/spell.h"
 #include "game_server/spell_cast.h"
 #include "graphics/texture_mgr.h"
@@ -58,6 +59,29 @@ namespace mmo
 		"Weapon Damage +"
 	};
 
+	static String s_auraTypeNames[] = {
+		"None",
+		"Dummy",
+		"PeriodicHeal",
+		"ModAttackSpeed",
+		"ModDamageDone",
+		"ModDamageTaken",
+		"ModHealth",
+		"ModMana",
+		"ModResistance",
+		"PeriodicTriggerSpell",
+		"PeriodicEnergize",
+		"ModStat",
+		"ProcTriggerSpell"
+	};
+
+	static String s_statNames[] = {
+		"Stamina",
+		"Strength",
+		"Agility",
+		"Intellect",
+		"Spirit"
+	};
 	SpellEditorWindow::SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.spells, name)
 		, m_host(host)
@@ -347,84 +371,7 @@ namespace mmo
 					effectIndex--;
 				}
 
-				if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
-				{
-					ImGui::Text("%s effect #%d", currentEntry.name().c_str(), effectIndex + 1);
-
-					if (ImGui::Combo("Effect", &currentEffect,
-						[](void* data, int idx, const char** out_text)
-						{
-							if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
-							{
-								return false;
-							}
-
-							*out_text = s_spellEffectNames[idx].c_str();
-							return true;
-						}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
-					{
-						currentEntry.mutable_effects(effectIndex)->set_type(currentEffect);
-					}
-
-					ImGui::Text("Points");
-					if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
-					{
-						int basePoints = currentEntry.effects(effectIndex).basepoints();
-						if (ImGui::InputInt("Base Points", &basePoints))
-						{
-							currentEntry.mutable_effects(effectIndex)->set_basepoints(basePoints);
-						}
-
-						float pointsPerLevel = currentEntry.effects(effectIndex).pointsperlevel();
-						if (ImGui::InputFloat("Per Level", &pointsPerLevel))
-						{
-							currentEntry.mutable_effects(effectIndex)->set_pointsperlevel(pointsPerLevel);
-						}
-
-						int diceSides = currentEntry.effects(effectIndex).diesides();
-						if (ImGui::InputInt("Dice Sides", &diceSides))
-						{
-							currentEntry.mutable_effects(effectIndex)->set_diesides(diceSides);
-						}
-
-						float dicePerLevel = currentEntry.effects(effectIndex).diceperlevel();
-						if (ImGui::InputFloat("Dice per Level", &dicePerLevel))
-						{
-							currentEntry.mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
-						}
-
-						static int characterLevel = 1;
-						ImGui::SliderInt("Preview Level", &characterLevel, 1, 60);
-
-						// Calculate level scaling
-						int level = characterLevel;
-						if (level > currentEntry.maxlevel() && currentEntry.maxlevel() > 0)
-						{
-							level = currentEntry.maxlevel();
-						}
-						else if (level < currentEntry.baselevel())
-						{
-							level = currentEntry.baselevel();
-						}
-						level -= currentEntry.baselevel();
-
-						ImGui::BeginDisabled(true);
-						int min = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentEntry.effects(effectIndex).diceperlevel());
-						int max = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + diceSides + level * currentEntry.effects(effectIndex).diceperlevel();
-						ImGui::InputInt("Min", &min);
-						ImGui::InputInt("Max", &max);
-						ImGui::EndDisabled();
-
-						ImGui::EndChildFrame();
-					}
-
-					if (ImGui::Button("Close"))
-					{
-						ImGui::CloseCurrentPopup();
-					}
-
-					ImGui::EndPopup();
-				}
+				DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
 
 				ImGui::PopID();
 			}
@@ -436,6 +383,141 @@ namespace mmo
 			}
 
 			ImGui::EndChildFrame();
+		}
+	}
+
+	void SpellEditorWindow::DrawEffectDialog(proto::SpellEntry& currentEntry, proto::SpellEffect& effect, int32 effectIndex)
+	{
+		if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
+		{
+			ImGui::Text("%s effect #%d", currentEntry.name().c_str(), effectIndex + 1);
+
+			int currentEffectType = effect.type();
+			if (ImGui::Combo("Effect", &currentEffectType,
+				[](void* data, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
+					{
+						return false;
+					}
+
+					*out_text = s_spellEffectNames[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
+			{
+				currentEntry.mutable_effects(effectIndex)->set_type(currentEffectType);
+			}
+
+			switch(currentEffectType)
+			{
+			case spell_effects::ApplyAura:
+				DrawSpellAuraEffectDetails(effect);
+				break;
+			default:
+				break;
+			}
+
+			ImGui::Text("Points");
+
+			if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
+			{
+				int basePoints = currentEntry.effects(effectIndex).basepoints();
+				if (ImGui::InputInt("Base Points", &basePoints))
+				{
+					currentEntry.mutable_effects(effectIndex)->set_basepoints(basePoints);
+				}
+
+				float pointsPerLevel = currentEntry.effects(effectIndex).pointsperlevel();
+				if (ImGui::InputFloat("Per Level", &pointsPerLevel))
+				{
+					currentEntry.mutable_effects(effectIndex)->set_pointsperlevel(pointsPerLevel);
+				}
+
+				int diceSides = currentEntry.effects(effectIndex).diesides();
+				if (ImGui::InputInt("Dice Sides", &diceSides))
+				{
+					currentEntry.mutable_effects(effectIndex)->set_diesides(diceSides);
+				}
+
+				float dicePerLevel = currentEntry.effects(effectIndex).diceperlevel();
+				if (ImGui::InputFloat("Dice per Level", &dicePerLevel))
+				{
+					currentEntry.mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
+				}
+
+				static int characterLevel = 1;
+				ImGui::SliderInt("Preview Level", &characterLevel, 1, 60);
+
+				// Calculate level scaling
+				int level = characterLevel;
+				if (level > currentEntry.maxlevel() && currentEntry.maxlevel() > 0)
+				{
+					level = currentEntry.maxlevel();
+				}
+				else if (level < currentEntry.baselevel())
+				{
+					level = currentEntry.baselevel();
+				}
+				level -= currentEntry.baselevel();
+
+				ImGui::BeginDisabled(true);
+				int min = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentEntry.effects(effectIndex).diceperlevel());
+				int max = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + diceSides + level * currentEntry.effects(effectIndex).diceperlevel();
+				ImGui::InputInt("Min", &min);
+				ImGui::InputInt("Max", &max);
+				ImGui::EndDisabled();
+
+				ImGui::EndChildFrame();
+			}
+
+			if (ImGui::Button("Close"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void SpellEditorWindow::DrawSpellAuraEffectDetails(proto::SpellEffect& effect)
+	{
+		int currentAuraType = effect.aura();
+		if (ImGui::Combo("Aura", &currentAuraType,
+			[](void* data, int idx, const char** out_text)
+			{
+				if (idx < 0 || idx >= IM_ARRAYSIZE(s_auraTypeNames))
+				{
+					return false;
+				}
+
+				*out_text = s_auraTypeNames[idx].c_str();
+				return true;
+			}, nullptr, IM_ARRAYSIZE(s_auraTypeNames)))
+		{
+			effect.set_aura(currentAuraType);
+		}
+
+		switch (currentAuraType)
+		{
+		case aura_type::ModStat:
+			{
+				int currentStat = effect.miscvaluea();
+				if (ImGui::Combo("Stat", &currentStat,
+					[](void* data, int idx, const char** out_text)
+					{
+						if (idx < 0 || idx >= IM_ARRAYSIZE(s_statNames))
+						{
+							return false;
+						}
+
+						*out_text = s_statNames[idx].c_str();
+						return true;
+					}, nullptr, IM_ARRAYSIZE(s_statNames)))
+				{
+					effect.set_miscvaluea(currentStat);
+				}
+			}
+			break;
 		}
 	}
 }

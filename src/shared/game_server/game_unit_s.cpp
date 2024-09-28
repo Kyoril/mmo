@@ -58,6 +58,15 @@ namespace mmo
 	{
 		GameObjectS::Initialize();
 
+		// Initialize unit mods
+		for (size_t i = 0; i < unit_mods::End; ++i)
+		{
+			m_unitMods[i][unit_mod_type::BaseValue] = 0.0f;
+			m_unitMods[i][unit_mod_type::TotalValue] = 0.0f;
+			m_unitMods[i][unit_mod_type::BasePct] = 1.0f;
+			m_unitMods[i][unit_mod_type::TotalPct] = 1.0f;
+		}
+
 		// Initialize some values
 		Set(object_fields::Type, ObjectTypeId::Unit);
 		Set(object_fields::Scale, 1.0f);
@@ -107,6 +116,49 @@ namespace mmo
 		return m_lastPosition;
 	}
 
+	float GameUnitS::GetModifierValue(UnitMods mod, UnitModType type) const
+	{
+		return m_unitMods[mod][type];
+	}
+
+	void GameUnitS::SetModifierValue(UnitMods mod, UnitModType type, float value)
+	{
+		m_unitMods[mod][type] = value;
+	}
+
+	void GameUnitS::UpdateModifierValue(UnitMods mod, UnitModType type, float amount, bool apply)
+	{
+		if (mod >= unit_mods::End || type >= unit_mod_type::End)
+		{
+			return;
+		}
+
+		switch (type)
+		{
+		case unit_mod_type::BaseValue:
+		case unit_mod_type::TotalValue:
+		{
+			m_unitMods[mod][type] += (apply ? amount : -amount);
+			break;
+		}
+
+		case unit_mod_type::BasePct:
+		case unit_mod_type::TotalPct:
+		{
+			if (amount == -100.0f) {
+				amount = -99.99f;
+			}
+			m_unitMods[mod][type] *= (apply ? (100.0f + amount) / 100.0f : 100.0f / (100.0f + amount));
+			break;
+		}
+
+		default:
+			break;
+		}
+
+		RefreshStats();
+	}
+
 	void GameUnitS::SetLevel(uint32 newLevel)
 	{
 		Set(object_fields::Level, newLevel);
@@ -137,6 +189,58 @@ namespace mmo
 		}
 
 		GameObjectS::ApplyMovementInfo(info);
+	}
+
+	PowerType GameUnitS::GetPowerTypeByUnitMod(UnitMods mod)
+	{
+		switch (mod)
+		{
+		case unit_mods::Rage:
+			return power_type::Rage;
+		case unit_mods::Energy:
+			return power_type::Energy;
+
+		default:
+			break;
+		}
+
+		return power_type::Mana;
+	}
+
+	UnitMods GameUnitS::GetUnitModByStat(uint8 stat)
+	{
+		switch (stat)
+		{
+		case 1:
+			return unit_mods::StatAgility;
+		case 2:
+			return unit_mods::StatStamina;
+		case 3:
+			return unit_mods::StatIntellect;
+		case 4:
+			return unit_mods::StatSpirit;
+
+		default:
+			break;
+		}
+
+		return unit_mods::StatStrength;
+	}
+
+	UnitMods GameUnitS::GetUnitModByPower(PowerType power)
+	{
+		switch (power)
+		{
+		case power_type::Rage:
+			return unit_mods::Rage;
+		case power_type::Energy:
+			return unit_mods::Energy;
+
+		default:
+			break;
+		}
+
+		return unit_mods::Mana;
 	}
 
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
@@ -336,6 +440,14 @@ namespace mmo
 	void GameUnitS::StopRegeneration()
 	{
 		m_regenCountdown.Cancel();
+	}
+
+	void GameUnitS::ApplyAura(std::unique_ptr<AuraContainer>&& aura)
+	{
+		ASSERT(aura);
+
+		auto& appliedAura = m_auras.emplace_back(std::move(aura));
+		appliedAura->SetApplied(true);
 	}
 
 	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)

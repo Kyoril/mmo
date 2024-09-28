@@ -24,6 +24,10 @@ namespace mmo
 	private:
 		void DrawDetailsImpl(proto::SpellEntry& currentEntry) override;
 
+		void DrawEffectDialog(proto::SpellEntry& currentEntry, proto::SpellEffect& effect, int32 effectIndex);
+
+		void DrawSpellAuraEffectDetails(proto::SpellEffect& effect);
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 

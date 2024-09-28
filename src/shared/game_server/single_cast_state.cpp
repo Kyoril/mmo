@@ -413,44 +413,44 @@ namespace mmo
 		namespace se = spell_effects;
 
 		std::vector<std::pair<uint32, EffectHandler>> effectMap{
-			{se::Dummy,				std::bind(&SingleCastState::SpellEffectDummy, this, std::placeholders::_1) },
-			{se::InstantKill,			std::bind(&SingleCastState::SpellEffectInstantKill, this, std::placeholders::_1)},
-			{se::PowerDrain,			std::bind(&SingleCastState::SpellEffectDrainPower, this, std::placeholders::_1)},
-			{se::Heal,				std::bind(&SingleCastState::SpellEffectHeal, this, std::placeholders::_1)},
-			{se::Bind,				std::bind(&SingleCastState::SpellEffectBind, this, std::placeholders::_1)},
-			{se::QuestComplete,		std::bind(&SingleCastState::SpellEffectQuestComplete, this, std::placeholders::_1)},
-			{se::Proficiency,			std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)},
-			{se::AddComboPoints,		std::bind(&SingleCastState::SpellEffectAddComboPoints, this, std::placeholders::_1)},
+			{se::Dummy,					std::bind(&SingleCastState::SpellEffectDummy, this, std::placeholders::_1) },
+			{se::InstantKill,				std::bind(&SingleCastState::SpellEffectInstantKill, this, std::placeholders::_1)},
+			{se::PowerDrain,				std::bind(&SingleCastState::SpellEffectDrainPower, this, std::placeholders::_1)},
+			{se::Heal,					std::bind(&SingleCastState::SpellEffectHeal, this, std::placeholders::_1)},
+			{se::Bind,					std::bind(&SingleCastState::SpellEffectBind, this, std::placeholders::_1)},
+			{se::QuestComplete,			std::bind(&SingleCastState::SpellEffectQuestComplete, this, std::placeholders::_1)},
+			{se::Proficiency,				std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)},
+			{se::AddComboPoints,			std::bind(&SingleCastState::SpellEffectAddComboPoints, this, std::placeholders::_1)},
 			{se::Duel,					std::bind(&SingleCastState::SpellEffectDuel, this, std::placeholders::_1)},
 			{se::WeaponDamageNoSchool,	std::bind(&SingleCastState::SpellEffectWeaponDamageNoSchool, this, std::placeholders::_1)},
-			{se::CreateItem,			std::bind(&SingleCastState::SpellEffectCreateItem, this, std::placeholders::_1)},
+			{se::CreateItem,				std::bind(&SingleCastState::SpellEffectCreateItem, this, std::placeholders::_1)},
 			{se::WeaponDamage,			std::bind(&SingleCastState::SpellEffectWeaponDamage, this, std::placeholders::_1)},
 			{se::TeleportUnits,			std::bind(&SingleCastState::SpellEffectTeleportUnits, this, std::placeholders::_1)},
 			{se::TriggerSpell,			std::bind(&SingleCastState::SpellEffectTriggerSpell, this, std::placeholders::_1)},
 			{se::Energize,				std::bind(&SingleCastState::SpellEffectEnergize, this, std::placeholders::_1)},
-			{se::WeaponPercentDamage,	std::bind(&SingleCastState::SpellEffectWeaponPercentDamage, this, std::placeholders::_1)},
+			{se::WeaponPercentDamage,		std::bind(&SingleCastState::SpellEffectWeaponPercentDamage, this, std::placeholders::_1)},
 			{se::PowerBurn,				std::bind(&SingleCastState::SpellEffectPowerBurn, this, std::placeholders::_1)},
 			{se::OpenLock,				std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1)},
 			{se::OpenLockItem,			std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1) },
-			{se::ApplyAreaAuraParty,	std::bind(&SingleCastState::SpellEffectApplyAreaAuraParty, this, std::placeholders::_1)},
-			{se::Dispel,				std::bind(&SingleCastState::SpellEffectDispel, this, std::placeholders::_1)},
-			{se::Summon,				std::bind(&SingleCastState::SpellEffectSummon, this, std::placeholders::_1)},
+			{se::ApplyAreaAuraParty,		std::bind(&SingleCastState::SpellEffectApplyAreaAuraParty, this, std::placeholders::_1)},
+			{se::Dispel,					std::bind(&SingleCastState::SpellEffectDispel, this, std::placeholders::_1)},
+			{se::Summon,					std::bind(&SingleCastState::SpellEffectSummon, this, std::placeholders::_1)},
 			{se::SummonPet,				std::bind(&SingleCastState::SpellEffectSummonPet, this, std::placeholders::_1) },
 			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScript, this, std::placeholders::_1)},
 			{se::AttackMe,				std::bind(&SingleCastState::SpellEffectAttackMe, this, std::placeholders::_1)},
-			{se::NormalizedWeaponDmg,	std::bind(&SingleCastState::SpellEffectNormalizedWeaponDamage, this, std::placeholders::_1)},
-			{se::StealBeneficialBuff,	std::bind(&SingleCastState::SpellEffectStealBeneficialBuff, this, std::placeholders::_1)},
+			{se::NormalizedWeaponDmg,		std::bind(&SingleCastState::SpellEffectNormalizedWeaponDamage, this, std::placeholders::_1)},
+			{se::StealBeneficialBuff,		std::bind(&SingleCastState::SpellEffectStealBeneficialBuff, this, std::placeholders::_1)},
 			{se::InterruptCast,			std::bind(&SingleCastState::SpellEffectInterruptCast, this, std::placeholders::_1) },
-			{se::LearnSpell,			std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
+			{se::LearnSpell,				std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
 			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScriptEffect, this, std::placeholders::_1) },
-			{se::DispelMechanic,		std::bind(&SingleCastState::SpellEffectDispelMechanic, this, std::placeholders::_1) },
+			{se::DispelMechanic,			std::bind(&SingleCastState::SpellEffectDispelMechanic, this, std::placeholders::_1) },
 			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
 			{se::ResurrectNew,			std::bind(&SingleCastState::SpellEffectResurrectNew, this, std::placeholders::_1) },
 			{se::KnockBack,				std::bind(&SingleCastState::SpellEffectKnockBack, this, std::placeholders::_1) },
 			{se::TransDoor,				std::bind(&SingleCastState::SpellEffectTransDoor, this, std::placeholders::_1) },
 			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
-			{se::PersistentAreaAura,	std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
-			{se::ApplyAreaAuraParty,	std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
+			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
+			{se::ApplyAreaAuraParty,		std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
 			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)}
 		};
 
@@ -474,10 +474,14 @@ namespace mmo
 			m_delayedCast = true;
 		}
 		
-		if (!m_instantsCast || !m_delayedCast)
+		// Apply aura containers to their respective owners
+		for(auto& [targetUnit, auraContainer] : m_targetAuraContainers)
 		{
-			return;
+			targetUnit->ApplyAura(std::move(auraContainer));
 		}
+
+		// Clear auras
+		m_targetAuraContainers.clear();
 
 		completedEffects();
 	}
@@ -568,6 +572,33 @@ namespace mmo
 
 	void SingleCastState::SpellEffectApplyAura(const proto::SpellEffect& effect)
 	{
+		// Okay, so we have an ApplyAura effect here. Here comes the thing:
+
+		// One spell can apply multiple auras, either on the same target or even on multiple targets.
+		// For example, a buff can apply two auras to the casting unit, which for example buffs the armor value and adds an on hit trigger effect to slow a potential attacker.
+
+		// Both these "auras" would be displayed as one aura icon on the casting unit in the UI because its the same spell that triggered both these auras.
+		// However, the game can also apply multiple auras. For example, a spell could apply one aura to the target and a second aura to the caster at the same time.
+		// These would be considered two auras in the UI and on the client, because it's on two targets.
+
+		// The same goes for auras that are applied to multiple targets at once, like an AoE HOT effect or something like that.
+
+		// So what we want to do in this ApplyAuraEffect is to create one AuraContainer for each target that is affected and add an aura to that container.
+		// After all effects have been processed, we then want to apply all created aura containers for their respective targets.
+
+		GameUnitS* unitTarget = nullptr;
+		if (m_target.HasUnitTarget())
+		{
+			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
+		}
+
+		if (unitTarget == nullptr)
+		{
+			return;
+		}
+
+		auto& container = GetOrCreateAuraContainer(*unitTarget);
+		container.AddAuraEffect(effect, CalculateEffectBasePoints(effect));
 	}
 
 	void SingleCastState::SpellEffectPersistentAreaAura(const proto::SpellEffect& effect)
@@ -704,6 +735,17 @@ namespace mmo
 
 	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
 	{
+	}
+
+	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)
+	{
+		if (m_targetAuraContainers.contains(&target))
+		{
+			return *m_targetAuraContainers[&target];
+		}
+
+		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell.id(), m_spell.duration()));
+		return *container;
 	}
 
 	void SingleCastState::SendEndCast(SpellCastResult result)

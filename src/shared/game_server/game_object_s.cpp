@@ -139,11 +139,21 @@ namespace mmo
 
 	bool GameObjectS::IsFacingTowards(const GameObjectS& other) const
 	{
+		if (&other == this)
+		{
+			return true;
+		}
+
 		return IsFacingTowards(other.GetPosition());
 	}
 
 	bool GameObjectS::IsFacingAwayFrom(const GameObjectS& other) const
 	{
+		if (&other == this)
+		{
+			return true;
+		}
+
 		return IsFacingAwayFrom(other.GetPosition());
 	}
 
