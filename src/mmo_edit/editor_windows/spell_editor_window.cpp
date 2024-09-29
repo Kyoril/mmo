@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "spell_editor_window.h"
 
@@ -82,6 +82,17 @@ namespace mmo
 		"Intellect",
 		"Spirit"
 	};
+
+	static String s_resistanceNames[] = {
+		"Armor",
+		"Holy",
+		"Fire",
+		"Nature",
+		"Frost",
+		"Shadow",
+		"Arcane"
+	};
+
 	SpellEditorWindow::SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.spells, name)
 		, m_host(host)
@@ -210,7 +221,7 @@ namespace mmo
 			SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
 			SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
-			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 100000);
+			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 10000000);
 
 			const bool hasRange = currentEntry.has_rangetype();
 			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentEntry.rangetype()) : nullptr;
@@ -516,6 +527,26 @@ namespace mmo
 				{
 					effect.set_miscvaluea(currentStat);
 				}
+			}
+			break;
+
+		case aura_type::ModResistance:
+			{
+			int resistanceType = effect.miscvaluea();
+			if (ImGui::Combo("Resistance", &resistanceType,
+				[](void* data, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_resistanceNames))
+					{
+						return false;
+					}
+
+					*out_text = s_resistanceNames[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_resistanceNames)))
+			{
+				effect.set_miscvaluea(resistanceType);
+			}
 			}
 			break;
 		}

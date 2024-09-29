@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "http_update_source.h"
 #include "virtual_dir/path.h"

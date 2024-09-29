@@ -1,4 +1,4 @@
-﻿// Changes by Robin Klimonow (Kyoril):
+﻿// Changes by Kyoril (Kyoril):
 //  No longer inherits from std::iterator as this behavior is deprecated in C++17.
 //	Instead, those classes should typedef the 5 types iterator_category, value_type,
 //	difference_Type, pointer and reference manually.

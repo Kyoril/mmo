@@ -114,6 +114,9 @@ namespace mmo
 
 			Armor,
 
+			PosStatArmor,
+			NegStatArmor,
+
 			AttackPower,
 
 			/// @brief 64 bit object guid

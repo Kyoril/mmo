@@ -74,6 +74,8 @@ namespace mmo
 	private:
 		void HandleModStat(const Aura& aura, bool apply);
 
+		void HandleModResistance(const Aura& aura, bool apply);
+
 	private:
 
 		GameUnitS &m_owner;

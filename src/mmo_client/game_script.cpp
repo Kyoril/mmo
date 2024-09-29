@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "game_script.h"
 #include "console/console.h"
@@ -212,6 +212,19 @@ namespace mmo
 			{
 				const int32 bonus = unit->Get<int32>(object_fields::PosStatStamina + statId) - unit->Get<int32>(object_fields::NegStatStamina + statId);
 				out_base = unit->Get<int32>(object_fields::StatStamina + statId) - bonus;
+				out_modifier = bonus;
+			}
+		}
+
+		void Script_UnitArmor(const std::string& unitName, int32& out_base, int32& out_modifier)
+		{
+			out_base = -1;
+			out_modifier = -1;
+
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				const int32 bonus = unit->Get<int32>(object_fields::PosStatArmor) - unit->Get<int32>(object_fields::NegStatArmor);
+				out_base = unit->Get<int32>(object_fields::Armor) - bonus;
 				out_modifier = bonus;
 			}
 		}
@@ -485,6 +498,7 @@ namespace mmo
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
 			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 			luabind::def("UnitName", &Script_UnitName),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),

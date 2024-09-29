@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "game_player_s.h"
 
@@ -66,6 +66,13 @@ namespace mmo
 		{
 			UpdateStat(i);
 		}
+
+		// Update armor value
+		const int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
+		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue));
+		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
+		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
+		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
 
 		const int32 level = Get<int32>(object_fields::Level);
 		ASSERT(level > 0);

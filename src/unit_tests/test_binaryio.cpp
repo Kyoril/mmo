@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "catch.hpp"
 #include "container_source.h"

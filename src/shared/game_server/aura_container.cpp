@@ -73,6 +73,7 @@ namespace mmo
 			case AuraType::ModAttackSpeed:
 				break;
 			case AuraType::ModResistance:
+				HandleModResistance(aura, apply);
 				break;
 				
 			}
@@ -98,6 +99,22 @@ namespace mmo
 
 		// Apply stat modifier
 		m_owner.UpdateModifierValue(GameUnitS::GetUnitModByStat(stat), 
+			unit_mod_type::TotalValue,
+			aura.basePoints,
+			apply);
+	}
+
+	void AuraContainer::HandleModResistance(const Aura& aura, bool apply)
+	{
+		const int32 resistance = aura.effect->miscvaluea();
+
+		if (resistance < 0 || resistance > 6)
+		{
+			ELOG("AURA_TYPE_MOD_RESISTANCE: Invalid resistance index " << resistance);
+			return;
+		}
+
+		m_owner.UpdateModifierValue(static_cast<UnitMods>(static_cast<uint32>(unit_mods::Armor) + resistance),
 			unit_mod_type::TotalValue,
 			aura.basePoints,
 			apply);
