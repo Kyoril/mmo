@@ -32,7 +32,13 @@ namespace mmo
 
 	std::optional<AccountData> MySQLDatabase::getAccountDataByName(std::string name)
 	{
-		mysql::Select select(m_connection, "SELECT id,username,s,v FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id,username,s,v,"
+			"CASE "
+			"WHEN banned = 1 AND (ban_expiration IS NULL) THEN 2 "
+			"WHEN banned = 1 AND (ban_expiration >= NOW()) THEN 1 "
+			"ELSE 0 "
+			"END AS ban_state "
+			"FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -44,6 +50,7 @@ namespace mmo
 				row.GetField(1, data.name);
 				row.GetField(2, data.s);
 				row.GetField(3, data.v);
+				row.GetField<BanState, uint32>(4, data.banned);
 				return data;
 			}
 		}
@@ -197,6 +204,34 @@ namespace mmo
 		}
 
 		return RealmCreationResult::Success;
+	}
+
+	void MySQLDatabase::banAccount(uint64 accountId, const std::string& expiration)
+	{
+		std::ostringstream query;
+		query << "UPDATE account SET banned = 1";
+
+		if (!expiration.empty())
+		{
+			query << ", ban_expiration = '" << m_connection.EscapeString(expiration) << "'";
+		}
+
+		query << "WHERE id = " << accountId << " LIMIT 1";
+
+		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to ban account " + std::to_string(accountId));
+		}
+	}
+
+	void MySQLDatabase::unbanAccount(uint64 accountId)
+	{
+		if (!m_connection.Execute("UPDATE account SET banned = 0, ban_expiration = NULL WHERE id = " + std::to_string(accountId) + " LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to unban account " + std::to_string(accountId));
+		}
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

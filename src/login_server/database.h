@@ -29,6 +29,14 @@ namespace mmo
 		InternalServerError
 	};
 
+	enum class BanState : uint8
+	{
+		None,
+
+		Temporarily,
+		Permanent
+	};
+
 	/// Contains account data in a structure.
 	struct AccountData
 	{
@@ -40,6 +48,8 @@ namespace mmo
 		std::string s;
 		/// The account password verifier.
 		std::string v;
+
+		BanState banned;
 	};
 
 	/// Contains data used by a realm for authentification.
@@ -98,6 +108,10 @@ namespace mmo
 		virtual std::optional<AccountCreationResult> accountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
 
 		virtual std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
+
+		virtual void banAccount(uint64 accountId, const std::string& expiration) = 0;
+
+		virtual void unbanAccount(uint64 accountId) = 0;
 	};
 
 

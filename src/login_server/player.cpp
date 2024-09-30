@@ -197,25 +197,38 @@ namespace mmo
 				auth::AuthResult authResult = auth::auth_result::FailWrongCredentials;
 				if (result)
 				{
-					// Generate s and v bignumber values to calculate with
-					strongThis->m_s.setHexStr(result->s);
-					strongThis->m_v.setHexStr(result->v);
+					if (result->banned == BanState::Temporarily)
+					{
+						WLOG("Account " << result->name << " is temporarily suspended!");
+						authResult = auth::auth_result::FailSuspended;
+					}
+					else if(result->banned == BanState::Permanent)
+					{
+						WLOG("Account " << result->name << " is permanently banned!");
+						authResult = auth::auth_result::FailBanned;
+					}
+					else
+					{
+						// Generate s and v bignumber values to calculate with
+						strongThis->m_s.setHexStr(result->s);
+						strongThis->m_v.setHexStr(result->v);
 
-					// Store account id
-					strongThis->m_accountId = result->id;
+						// Store account id
+						strongThis->m_accountId = result->id;
 
-					// We are NOT banned so continue
-					authResult = auth::auth_result::Success;
+						// We are NOT banned so continue
+						authResult = auth::auth_result::Success;
 
-					strongThis->m_b.setRand(19 * 8);
-					const BigNumber gmod = constants::srp::g.modExp(strongThis->m_b, constants::srp::N);
-					strongThis->m_B = ((strongThis->m_v * 3) + gmod) % constants::srp::N;
+						strongThis->m_b.setRand(19 * 8);
+						const BigNumber gmod = constants::srp::g.modExp(strongThis->m_b, constants::srp::N);
+						strongThis->m_B = ((strongThis->m_v * 3) + gmod) % constants::srp::N;
 
-					assert(gmod.getNumBytes() <= 32);
-					strongThis->m_unk3.setRand(16 * 8);
+						assert(gmod.getNumBytes() <= 32);
+						strongThis->m_unk3.setRand(16 * 8);
 
-					// Allow handling the logon proof packet now
-					strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::HandleLogonProof);
+						// Allow handling the logon proof packet now
+						strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::HandleLogonProof);
+					}
 				}
 				else
 				{
