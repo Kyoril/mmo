@@ -4,6 +4,7 @@
 #include "update_source.h"
 #include "update_url.h"
 #include "file_system_update_source.h"
+#include "https_update_source.h"
 #include "http_update_source.h"
 
 
@@ -24,8 +25,15 @@ namespace mmo
 
 			case UP_HTTP:
 				source.reset(new HTTPUpdateSource(
+					url.host,
+					static_cast<uint16>(url.port ? url.port : 80),
+					url.path));
+				break;
+
+			case UP_HTTPS:
+				source.reset(new HTTPSUpdateSource(
 				                 url.host,
-				                 static_cast<uint16>(url.port ? url.port : 80),
+				                 static_cast<uint16>(url.port ? url.port : 443),
 				                 url.path));
 				break;
 

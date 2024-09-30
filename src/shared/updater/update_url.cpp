@@ -36,6 +36,30 @@ namespace mmo::updating
 				path = "/";
 			}
 		}
+		else if (url.rfind("https://", 0) == 0)
+		{
+			scheme = UP_HTTPS;
+			const auto beginOfHost = url.begin() + 8;
+			const auto slash = std::find(beginOfHost, url.end(), '/');
+			const auto colon = std::find(beginOfHost, slash, ':');
+			if (colon != slash)
+			{
+				port = std::atoi(std::string(colon + 1, slash).c_str());
+			}
+
+			host.assign(beginOfHost, colon);
+			path.assign(slash, url.end());
+
+			if (host.empty())
+			{
+				throw std::invalid_argument("Invalid URL: Host expected");
+			}
+
+			if (path.empty())
+			{
+				path = "/";
+			}
+		}
 		else
 		{
 			scheme = UP_FileSystem;

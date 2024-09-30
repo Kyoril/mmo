@@ -10,7 +10,8 @@ namespace mmo::updating
 	enum UpdateURLScheme
 	{
 	    UP_FileSystem,
-	    UP_HTTP
+	    UP_HTTP,
+		UP_HTTPS
 	};
 
 

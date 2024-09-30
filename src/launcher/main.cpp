@@ -34,8 +34,6 @@ int main(int argc, char *argv[])
 #include <mutex>
 #include <chrono>
 #include <memory>
-#include <optional>
-#include <any>
 #include <array>
 #include <set>
 #include "asio.hpp"
@@ -55,10 +53,10 @@ int main(int argc, char *argv[])
 
 #include "updater/open_source_from_url.h"
 #include "updater/update_url.h"
+#include "updater/update_source.h"
 #include "updater/prepare_parameters.h"
 #include "updater/update_parameters.h"
 #include "updater/prepare_update.h"
-#include "updater/update_source.h"
 #include "updater/updater_progress_handler.h"
 #include "updater/prepare_progress_handler.h"
 #include "updater/update_application.h"
@@ -70,7 +68,7 @@ int main(int argc, char *argv[])
 namespace
 {
 	const std::string UpdateSourceUrl =
-	    "http://patch.mmo-dev.net"
+	    "https://patch.mmo-dev.net"
 	    ;
 	
 	bool isSelfUpdateEnabled = true;
@@ -125,11 +123,11 @@ namespace mmo
 {
 	namespace updating
 	{
-		struct Win32ProgressHandler
+		struct Win32ProgressHandler final
 			: IPrepareProgressHandler
 			, IUpdaterProgressHandler
 		{
-			virtual void updateFile(const std::string &name, std::uintmax_t size, std::uintmax_t loaded) override
+			void updateFile(const std::string &name, std::uintmax_t size, std::uintmax_t loaded) override
 			{
 				std::scoped_lock guiLock{ m_guiMutex };
 
@@ -176,7 +174,7 @@ namespace mmo
 				}
 			}
 
-			virtual void beginCheckLocalCopy(const std::string &name) override
+			void beginCheckLocalCopy(const std::string &name) override
 			{
 			}
 
@@ -200,6 +198,8 @@ namespace mmo
 }
 
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+static volatile bool g_shouldQuit = false;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 {
@@ -267,6 +267,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		DialogBoxA(hInstance, MAKEINTRESOURCE(IDD_DIALOG1), NULL, MainDlgProc);
 
 		// Wait for the update thread to terminate
+		g_shouldQuit = true;
 		updatingThread.join();
 	}
 	catch (const cxxopts::OptionException& ex)
@@ -467,7 +468,7 @@ namespace mmo
 								}
 							}
 
-							while (step.step(updateParameters)) {
+							while (!g_shouldQuit && step.step(updateParameters)) {
 								;
 							}
 
@@ -495,7 +496,9 @@ namespace mmo
 				    std::back_inserter(threads),
 				    updatePerformanceConcurrency,
 					[&dispatcher]() {
-						return std::thread([&dispatcher] { dispatcher.run(); });
+						return std::thread([&dispatcher] {
+							dispatcher.run();
+						});
 					}
 				);
 
@@ -505,6 +508,11 @@ namespace mmo
 				    std::bind(&std::thread::join, std::placeholders::_1));
 
 				dispatcher.run();
+			}
+
+			if (g_shouldQuit)
+			{
+				return false;
 			}
 
 			DLOG("Updated " << updated << " / " << updateSize << " bytes");
@@ -609,6 +617,7 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_DESTROY:
 		{
 			PostQuitMessage(0);
+			g_shouldQuit = true;
 			return TRUE;
 		}
 	}
