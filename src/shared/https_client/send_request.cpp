@@ -48,6 +48,7 @@ namespace mmo
 				}
 			}
 
+#ifdef _WIN32
 			namespace
 			{
 				void add_windows_root_certs(asio::ssl::context& ctx)
@@ -75,6 +76,7 @@ namespace mmo
 					SSL_CTX_set_cert_store(ctx.native_handle(), store);
 				}
 			}
+#endif
 
 			https_client::Response sendRequest(
 			    const std::string &host,
@@ -193,7 +195,8 @@ namespace mmo
 						std::size_t bytes_read = ssl_stream->read_some(asio::buffer(buf), ec);
 						if (ec == asio::error::eof)
 							break;
-						else if (ec)
+
+						if (ec)
 							throw asio::system_error(ec);
 						body.append(buf, bytes_read);
 					}
