@@ -14,8 +14,11 @@ namespace mmo
 
 
 		void appendPath(Path &left, const Path &right);
+
 		Path joinPaths(Path left, const Path &right);
+
 		std::pair<Path, Path> splitLeaf(Path path);
+
 		std::pair<Path, Path> splitRoot(Path path);
 	}
 }

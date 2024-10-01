@@ -11,6 +11,7 @@
 #include "game/character_flags.h"
 #include "math/vector3.h"
 #include "math/degree.h"
+#include "virtual_dir/file_system_reader.h"
 
 
 namespace mmo
@@ -22,17 +23,87 @@ namespace mmo
 
 	bool MySQLDatabase::Load()
 	{
-		if (!m_connection.Connect(m_connectionInfo))
+		if (!m_connection.Connect(m_connectionInfo, true))
 		{
 			ELOG("Could not connect to the realm database");
 			ELOG(m_connection.GetErrorMessage());
 			return false;
 		}
+		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
-		// Mark all realms as offline
-		ILOG("Connected to MySQL at " <<
-			m_connectionInfo.host << ":" <<
-			m_connectionInfo.port);
+		// Apply all updates
+		ILOG("Checking for database updates...");
+
+		virtual_dir::FileSystemReader reader(m_connectionInfo.updatePath);
+		auto updates = reader.queryEntries("");
+
+		// Iterate through all updates
+		for (const auto& update : updates)
+		{
+			// Check for .sql ending in string
+			if (!update.ends_with(".sql"))
+			{
+				continue;
+			}
+
+			// Remove ending .sql from file
+			const auto updateName = update.substr(0, update.size() - 4);
+
+			// Check if update has already been applied
+			mysql::Select select(m_connection, "SELECT 1 FROM `history` WHERE `id` = '" + m_connection.EscapeString(updateName) + "' LIMIT 1;");
+			if (!select.Success())
+			{
+				// There was an error
+				PrintDatabaseError();
+				return false;
+			}
+
+			if (!mysql::Row(select))
+			{
+				ILOG("Applying database update " << updateName << "...");
+
+				// Row does not exist, apply update
+				std::ostringstream buffer;
+				auto stream = reader.readFile(update, true);
+
+				mysql::Transaction transaction(m_connection);
+
+				std::string line;
+				while (std::getline(*stream, line))
+				{
+					buffer << line << "\n";
+				}
+
+				buffer << "INSERT INTO `history` (`id`) VALUES ('" << m_connection.EscapeString(updateName) << "');";
+
+				if (!m_connection.Execute(buffer.str()))
+				{
+					PrintDatabaseError();
+					return false;
+				}
+
+				// Drop all results
+				do
+				{
+					if (auto* result = m_connection.StoreResult())
+					{
+						::mysql_free_result(result);
+					}
+				} while (!mysql_next_result(m_connection.GetHandle()));
+
+				transaction.Commit();
+			}
+		}
+
+		m_connection.Disconnect();
+
+		if (!m_connection.Connect(m_connectionInfo, false))
+		{
+			ELOG("Could not reconnect to the realm database");
+			ELOG(m_connection.GetErrorMessage());
+			return false;
+		}
+		ILOG("Database is ready!");
 
 		return true;
 	}

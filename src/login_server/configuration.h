@@ -33,6 +33,8 @@ namespace mmo
 		/// The mysql database to be used.
 		String mysqlDatabase;
 
+		String mysqlUpdatePath;
+
 		/// Indicates whether or not file logging is enabled.
 		bool isLogActive;
 		/// File name of the log file.

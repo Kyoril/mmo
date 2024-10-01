@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y libmysqlclient-dev libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
 COPY --from=builder /app/bin/realm_server /app/realm_server
+COPY --from=builder /app/data/realm/updates /app/updates/realm
 COPY --from=builder /app/docker/realm_server/run_server.sh /app/run_server.sh
 
 # Copy binary from builder stage

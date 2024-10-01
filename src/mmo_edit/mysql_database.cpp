@@ -15,7 +15,7 @@ namespace mmo
 
 	bool MySQLDatabase::Load()
 	{
-		if (!m_connection.Connect(m_connectionInfo))
+		if (!m_connection.Connect(m_connectionInfo, false))
 		{
 			ELOG("Could not connect to the editor database");
 			ELOG(m_connection.GetErrorMessage());

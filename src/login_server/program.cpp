@@ -117,7 +117,8 @@ namespace mmo
 			config.mysqlPort,
 			config.mysqlUser, 
 			config.mysqlPassword, 
-			config.mysqlDatabase 
+			config.mysqlDatabase,
+			config.mysqlUpdatePath
 		});
 		if (!database->Load())
 		{
