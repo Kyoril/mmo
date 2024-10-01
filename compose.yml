@@ -1,0 +1,114 @@
+# This is a docker compose sample file which can be used to host all of the MMO server components.
+# Before this can run, you need to prepare some stuff.
+# 
+# First of all, this does not host a mysql server for you in a separate docker container yet. You need to have a mysql server
+# running on your host machine or add a separate container hosting it and adjust the MYSQL_HOST_NAME settings accordingly.
+#
+# After that, you need to change all the MYSQL_USER and MYSQL_PASSWORD settings to match your mysql server settings for the 
+# mysql user to login.
+# 
+# You also need to ensure that the mysql databases and database schemas are applied and that the user(s) have access to the
+# databases and tables. Maybe I will automate that in this compose file later.
+# 
+# You will also need to use the login server, realm and world REST apis to create a realm entry and a world entry at the login server
+# and the realm server respectively. This is required because on startup, the realm server will try to connect to
+# a login server and needs to authenticate there in order to appear in the players realm list.
+# The same goes for a world node: it will connect to one or multiple realms on startup and needs to authenticate there in order
+# for the realm to allow it to server worlds for it.
+# After registering a new realm and world node, you will update the REALM_PASSWORD_HASH_SHA1 and WORLD_PASSWORD_HASH_SHA1 settings
+# to the sha1 hashes of the passwords you used when registering the realm / world node, and the REALM_NAME and WORLD_NODE_NAME settings
+# to the names you provided when registering the realm / world node.
+# 
+# I know this might be a bit rough, but I will try to automate this process in the future and improve it. This template
+# will hopefully still be useful for you as a starting point to not have figure out everything entirely from scratch!
+
+version: "3.7"
+volumes:
+  data-volume:
+    name: mmo-shared-data
+    
+services:
+  data-service:
+    image: kyoril/mmo_data:latest
+    volumes:
+      - data-volume:/data
+    # This service doesn't need to stay running; it just provides the data
+    command: ["true"]
+    
+  login_server:
+    image: kyoril/mmo_login_server:latest
+    hostname: mmo-dev-login
+    environment:
+      - LOGIN_WEB_API_PASSWORD=test
+      - LOGIN_WEB_API_USER=mmo-dev
+      - MYSQL_DATABASE=mmo_login
+      - MYSQL_HOST_NAME=host.docker.internal
+      - MYSQL_PASSWORD=MYSQL_PASSWORD
+      - MYSQL_USER_NAME=MYSQL_USER
+    expose:
+      - 3724
+      - 6279
+      - 8090
+    ports:
+      - "3724:3724"
+      - "127.0.0.1:8090:8090"
+      - "6279:6279"
+    extra_hosts:
+      host.docker.internal: "172.17.0.1"
+    networks:
+      - mmo_game_servers
+    restart: on-failure
+
+  realm_server_01:
+    image: kyoril/mmo_realm_server:latest
+    hostname: mmo-dev-realm-01
+    volumes:
+      - data-volume:/data
+    environment:
+      - LOGIN_HOST_NAME=mmo-dev-login
+      - LOGIN_REALM_NAME=REALM_NAME
+      - LOGIN_REALM_PASSWORD_HASH=REALM_PASSWORD_HASH_SHA1
+      - MYSQL_DATABASE=mmo_realm_01
+      - MYSQL_HOST_NAME=host.docker.internal
+      - MYSQL_PASSWORD=MYSQL_PASSWORD
+      - MYSQL_USER_NAME=MYSQL_USER
+      - WEB_API_PASSWORD=test
+      - WEB_API_USER=mmo-dev
+      - DATA_DIR=/data
+    expose:
+      - 6280
+      - 8092
+      - 8130
+    ports:
+      - "8130:8130"
+      - "8092:8092"
+    extra_hosts:
+      host.docker.internal: "172.17.0.1"
+    networks:
+      - mmo_game_servers
+    restart: on-failure
+
+  world_node_01:
+    image: kyoril/mmo_world_server:latest
+    hostname: mmo-dev-node-01
+    volumes:
+      - data-volume:/data
+    environment:
+      - MYSQL_DATABASE=mmo_world_01
+      - MYSQL_HOST_NAME=host.docker.internal
+      - MYSQL_PASSWORD=MYSQL_PASSWORD
+      - MYSQL_USER_NAME=MYSQL_USER
+      - REALM_HOST_NAME=mmo-dev-realm-01
+      - REALM_WORLD_PORT=6280
+      - REALM_WORLD_NAME=WORLD_NODE_NAME
+      - REALM_WORLD_PASSWORD_HASH=WORLD_PASSWORD_HASH_SHA1
+      - DATA_DIR=/data
+    extra_hosts:
+      host.docker.internal: "172.17.0.1"
+    networks:
+      - mmo_game_servers
+    restart: on-failure
+    
+networks:
+  mmo_game_servers:
+    driver: bridge
