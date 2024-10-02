@@ -279,7 +279,7 @@ namespace mmo
 
 					String argName = arg.substr(0, delimiterPos);
 					String argValue = arg.substr(delimiterPos + 1);
-					packet.m_postFormArguments[argName] = argValue;
+					packet.m_postFormArguments[argName] = UrlDecode(argValue);
 				}
 
 				return receive_state::Complete;

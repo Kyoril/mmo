@@ -109,9 +109,9 @@ namespace mmo
 
 		virtual std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
 
-		virtual void banAccount(uint64 accountId, const std::string& expiration) = 0;
+		virtual void banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) = 0;
 
-		virtual void unbanAccount(uint64 accountId) = 0;
+		virtual void unbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
 	};
 
 

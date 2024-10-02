@@ -10,6 +10,8 @@
 #include "player.h"
 #include "log/default_log_levels.h"
 
+#include <regex>
+
 namespace mmo
 {
 	namespace
@@ -77,6 +79,14 @@ namespace mmo
 				else if (url == "/create-realm")
 				{
 					handleCreateRealm(request, response);
+				}
+				else if (url == "/ban-account")
+				{
+					handleBanAccount(request, response);
+				}
+				else if (url == "/unban-account")
+				{
+					handleUnbanAccount(request, response);
 				}
 				else
 				{
@@ -237,5 +247,97 @@ namespace mmo
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
 		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+	}
+
+	namespace
+	{
+		bool isValidDateTime(const std::string& dateTime)
+		{
+			// Regular expression for "YYYY-MM-DD HH:MM:SS" format
+			std::regex dateTimeRegex(
+				R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\s(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$)"
+			);
+
+			return std::regex_match(dateTime, dateTimeRegex);
+		}
+	}
+	
+	void WebClient::handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountNameIt = arguments.find("account_name");
+		const auto expirationIt = arguments.find("expiration");
+		const auto reasonIt = arguments.find("reason");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		if (expirationIt != arguments.end() && !isValidDateTime(expirationIt->second))
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'\"}");
+			return;
+		}
+
+		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+		const String expiration = expirationIt == arguments.end() ? "" : expirationIt->second;
+		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
+
+		try
+		{
+			m_service.getDatabase().banAccountByName(name, expiration, reason);
+			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+		}
+		catch(...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
+	}
+
+	void WebClient::handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountNameIt = arguments.find("account_name");
+		const auto reasonIt = arguments.find("reason");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
+
+		try
+		{
+			m_service.getDatabase().unbanAccountByName(name, reason);
+			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
 	}
 }

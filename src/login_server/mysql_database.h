@@ -26,8 +26,10 @@ namespace mmo
 		void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) override;
 		std::optional<AccountCreationResult> accountCreate(const std::string& id, const std::string& s, const std::string& v) override;
 		std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) override;
-		void banAccount(uint64 accountId, const std::string& expiration) override;
-		void unbanAccount(uint64 accountId) override;
+
+		void banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) override;
+
+		void unbanAccountByName(const std::string& accountName, const std::string& reason) override;
 
 	private:
 		void PrintDatabaseError();

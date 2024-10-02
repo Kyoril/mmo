@@ -9,6 +9,7 @@
 #include <vector>
 #include <ctime>
 #include <cctype>
+#include <sstream>
 
 #include "random.h"
 #ifndef _MSC_VER
@@ -23,6 +24,39 @@ namespace mmo
 {
 	static RandomnessGenerator randomGenerator(time(nullptr));
 
+	static inline std::string UrlDecode(const std::string& encoded)
+	{
+		std::string decoded;
+		char ch;
+		int hexValue;
+
+		for (size_t i = 0; i < encoded.length(); ++i) 
+		{
+			if (encoded[i] == '%' && i + 2 < encoded.length() &&
+				std::isxdigit(encoded[i + 1]) && std::isxdigit(encoded[i + 2]))
+			{
+				// Convert hex to character
+				std::stringstream ss;
+				ss << std::hex << encoded.substr(i + 1, 2);
+				ss >> hexValue;
+				ch = static_cast<char>(hexValue);
+				decoded += ch;
+				i += 2; // Skip the next two hex digits
+			}
+			else if (encoded[i] == '+')
+			{
+				// Convert '+' to space
+				decoded += ' ';
+			}
+			else
+			{
+				// Copy normal character
+				decoded += encoded[i];
+			}
+		}
+
+		return decoded;
+	}
 	/// A custom compare operator used to make string keys in a hash container case insensitive.
 	struct StrCaseIComp
 	{

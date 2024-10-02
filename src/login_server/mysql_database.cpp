@@ -281,32 +281,57 @@ namespace mmo
 		return RealmCreationResult::Success;
 	}
 
-	void MySQLDatabase::banAccount(uint64 accountId, const std::string& expiration)
+	void MySQLDatabase::banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason)
 	{
+		mysql::Transaction transaction(m_connection);
+
 		std::ostringstream query;
-		query << "UPDATE account SET banned = 1";
+		query << "UPDATE `account` SET `banned` = 1";
 
 		if (!expiration.empty())
 		{
-			query << ", ban_expiration = '" << m_connection.EscapeString(expiration) << "'";
+			query << ", `ban_expiration` = '" << m_connection.EscapeString(expiration) << "'";
 		}
 
-		query << "WHERE id = " << accountId << " LIMIT 1";
+		query << " WHERE `username` = '" << m_connection.EscapeString(accountName) << "' LIMIT 1";
 
 		if (!m_connection.Execute(query.str()))
 		{
 			PrintDatabaseError();
-			throw mysql::Exception("Failed to ban account " + std::to_string(accountId));
+			throw mysql::Exception("Failed to ban account " + accountName);
 		}
-	}
 
-	void MySQLDatabase::unbanAccount(uint64 accountId)
-	{
-		if (!m_connection.Execute("UPDATE account SET banned = 0, ban_expiration = NULL WHERE id = " + std::to_string(accountId) + " LIMIT 1"))
+		const String expirationValue = expiration.empty() ? "NULL" : "'" + m_connection.EscapeString(expiration) + "'";
+		const String reasonValue = reason.empty() ? "NULL" : "'" + m_connection.EscapeString(reason) + "'";
+
+		if (!m_connection.Execute("INSERT INTO `account_ban_history` (`account_id`, `banned`, `expiration`, `reason`) SELECT `id`, 1, " + expirationValue + ", " + reasonValue + " FROM `account` WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
 		{
 			PrintDatabaseError();
-			throw mysql::Exception("Failed to unban account " + std::to_string(accountId));
+			throw mysql::Exception("Failed to ban account " + accountName);
 		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::unbanAccountByName(const std::string& accountName, const std::string& reason)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		if (!m_connection.Execute("UPDATE `account` SET `banned` = 0, `ban_expiration` = NULL WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to unban account " + accountName);
+		}
+
+		const String reasonValue = reason.empty() ? "NULL" : "'" + m_connection.EscapeString(reason) + "'";
+
+		if (!m_connection.Execute("INSERT INTO `account_ban_history` (`account_id`, `banned`, `expiration`, `reason`) SELECT `id`, 0, NULL, " + reasonValue + " FROM `account` WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to ban account " + accountName);
+		}
+
+		transaction.Commit();
 	}
 
 	void MySQLDatabase::PrintDatabaseError()
