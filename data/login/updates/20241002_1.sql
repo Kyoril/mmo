@@ -9,4 +9,4 @@ CREATE TABLE `account_ban_history` (
   `banned` tinyint DEFAULT NULL,
   KEY `fk_account_ban_history_account_id_idx` (`account_id`),
   CONSTRAINT `fk_account_ban_history_account_id` FOREIGN KEY (`account_id`) REFERENCES `account` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
