@@ -40,17 +40,19 @@ namespace mmo
 			std::shared_ptr<Client> connection,
 			const std::string &address);
 
+		void Kick();
+
 		/// Gets the player connection class used to send packets to the client.
-		inline Client &getConnection() { assert(m_connection); return *m_connection; }
+		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
 		/// Gets the player manager which manages all connected players.
-		inline PlayerManager &getManager() const { return m_manager; }
+		inline PlayerManager &GetManager() const { return m_manager; }
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
-		inline bool isAuthentificated() const { return false;/* (getSession() != nullptr);*/ }
+		inline bool IsAuthenticated() const { return false;/* (getSession() != nullptr);*/ }
 		/// Gets the account name the player is logged in with.
-		inline const std::string &getAccountName() const { return m_accountName; }
+		inline const std::string &GetAccountName() const { return m_accountName; }
 		/// 
-		inline uint32 getAccountId() const { return m_accountId; }
+		inline uint64 GetAccountId() const { return m_accountId; }
 		/// Returns the client locale.
 		inline const auth::AuthLocale &getLocale() const { return m_locale; }
 
@@ -80,7 +82,7 @@ namespace mmo
 		uint8 m_version2;						// Minor version: 0.X.0.00000
 		uint8 m_version3;						// Patch version: 0.0.X.00000
 		uint16 m_build;							// Build version: 0.0.0.XXXXX
-		uint32 m_accountId;						// Account ID
+		uint64 m_accountId;						// Account ID
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 

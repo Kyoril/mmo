@@ -53,6 +53,9 @@ namespace mmo
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
 
 	public:
+		void NotifyAccountBanned(uint64 accountId);
+
+	public:
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint8 opCode, PacketHandler &&handler);
 		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.

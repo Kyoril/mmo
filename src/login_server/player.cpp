@@ -34,12 +34,18 @@ namespace mmo
 		RegisterPacketHandler(auth::client_login_packet::ReconnectChallenge, *this, &Player::HandleLogonChallenge);
 	}
 
+	void Player::Kick()
+	{
+		DLOG("Kicking player with account " << m_accountName << " (" << m_accountId << ")");
+		destroy();
+	}
+
 	void Player::destroy()
 	{
 		m_connection->resetListener();
 		m_connection.reset();
 
-		m_manager.playerDisconnected(*this);
+		m_manager.PlayerDisconnected(*this);
 	}
 
 	void Player::connectionLost()
@@ -233,7 +239,7 @@ namespace mmo
 				else
 				{
 					// Invalid account name display
-					WLOG("Invalid account name " << strongThis->getAccountName());
+					WLOG("Invalid account name " << strongThis->GetAccountName());
 				}
 
 				// Send packet with result

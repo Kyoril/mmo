@@ -50,6 +50,12 @@ namespace mmo
 		m_connection->setListener(*this);
 	}
 
+	void Player::Kick()
+	{
+		DLOG("Kicking player with account " << GetAccountName() << " (" << GetAccountId() << ")");
+		Destroy();
+	}
+
 	void Player::Destroy()
 	{
 		if (const auto strongWorld = m_world.lock())

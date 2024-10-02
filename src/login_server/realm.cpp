@@ -132,6 +132,21 @@ namespace mmo
 		});
 	}
 
+	void Realm::NotifyAccountBanned(uint64 accountId)
+	{
+		if (!IsAuthentificated())
+		{
+			return;
+		}
+
+		// Send response packet to the realm server
+		m_connection->sendSinglePacket([accountId](auth::OutgoingPacket& packet) {
+			packet.Start(auth::login_realm_packet::AccountBanned);
+			packet << io::write<uint64>(accountId);
+			packet.Finish();
+			});
+	}
+
 	void Realm::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };

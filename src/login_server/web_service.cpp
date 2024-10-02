@@ -9,22 +9,24 @@ namespace mmo
 	    uint16 port,
 	    String password,
 	    PlayerManager &playerManager,
+		RealmManager& realmManager,
 		IDatabase &database
 	)
 		: web::WebService(service, port)
 		, m_playerManager(playerManager)
+		, m_realmManager(realmManager)
 		, m_database(database)
 		, m_startTime(GetAsyncTimeMs())
 		, m_password(std::move(password))
 	{
 	}
 
-	GameTime WebService::getStartTime() const
+	GameTime WebService::GetStartTime() const
 	{
 		return m_startTime;
 	}
 
-	const String &WebService::getPassword() const
+	const String &WebService::GetPassword() const
 	{
 		return m_password;
 	}

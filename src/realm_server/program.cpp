@@ -205,7 +205,7 @@ namespace mmo
 
 
 		// Setup the login connector and connect to the login server
-		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue);
+		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue, playerManager);
 		if (!loginConnector->Login(config.loginServerAddress, config.loginServerPort, config.realmName, config.realmPasswordHash))
 		{
 			return 1;

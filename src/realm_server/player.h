@@ -55,6 +55,8 @@ namespace mmo
 			std::string address,
 			const proto::Project& project);
 
+		void Kick();
+
 		/// Gets the player connection class used to send packets to the client.
 		Client &GetConnection() { assert(m_connection); return *m_connection; }
 
@@ -74,6 +76,8 @@ namespace mmo
 
 		/// Gets the account name the player is logged in with.
 		const std::string &GetAccountName() const { return m_accountName; }
+
+		uint64 GetAccountId() const { return m_accountId; }
 
 		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
 

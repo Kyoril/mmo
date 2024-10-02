@@ -34,6 +34,5 @@ namespace mmo
 
 	private:
 		WebService& m_service;
-		
 	};
 }

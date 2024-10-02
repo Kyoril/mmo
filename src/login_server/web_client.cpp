@@ -12,6 +12,8 @@
 
 #include <regex>
 
+#include "realm_manager.h"
+
 namespace mmo
 {
 	namespace
@@ -35,7 +37,7 @@ namespace mmo
 		                          [this](const std::string &name, const std::string &password) -> bool
 			{
 				(void)name;
-				const auto &expectedPassword = static_cast<WebService &>(this->getService()).getPassword();
+				const auto &expectedPassword = static_cast<WebService &>(this->getService()).GetPassword();
 				return (expectedPassword == password);
 			}))
 		{
@@ -50,7 +52,7 @@ namespace mmo
 			{
 				if (url == "/uptime")
 				{
-					const GameTime startTime = static_cast<WebService &>(getService()).getStartTime();
+					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
 
 					std::ostringstream message;
 					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
@@ -162,7 +164,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 		
 		// Execute
-		const auto result = m_service.getDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
@@ -228,7 +230,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		const auto result = m_service.getDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
@@ -296,8 +298,27 @@ namespace mmo
 
 		try
 		{
-			m_service.getDatabase().banAccountByName(name, expiration, reason);
+			std::optional<AccountData> account = m_service.GetDatabase().getAccountDataByName(name);
+			if (!account)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				return;
+			}
+
+			if (account->banned != BanState::None)
+			{
+				response.setStatus(net::http::OutgoingAnswer::Conflict);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_ALREADY_BANNED\", \"message\":\"The account is already banned right now!\"}");
+				return;
+			}
+
+			m_service.GetDatabase().banAccountByName(name, expiration, reason);
 			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+
+			// Notify subscribers
+			m_service.GetRealmManager().NotifyAccountBanned(account->id);
+			m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
 		}
 		catch(...)
 		{
@@ -331,7 +352,7 @@ namespace mmo
 
 		try
 		{
-			m_service.getDatabase().unbanAccountByName(name, reason);
+			m_service.GetDatabase().unbanAccountByName(name, reason);
 			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
 		}
 		catch (...)

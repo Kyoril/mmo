@@ -19,12 +19,12 @@ namespace mmo
 	{
 	}
 
-	GameTime WebService::getStartTime() const
+	GameTime WebService::GetStartTime() const
 	{
 		return m_startTime;
 	}
 
-	const String &WebService::getPassword() const
+	const String &WebService::GetPassword() const
 	{
 		return m_password;
 	}

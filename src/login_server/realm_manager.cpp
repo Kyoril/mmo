@@ -85,4 +85,14 @@ namespace mmo
 
 		return nullptr;
 	}
+
+	void RealmManager::NotifyAccountBanned(uint64 accountId)
+	{
+		std::scoped_lock scopedLock{ m_realmsMutex };
+
+		for (const auto& realm : m_realms)
+		{
+			realm->NotifyAccountBanned(accountId);
+		}
+	}
 }

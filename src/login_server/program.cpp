@@ -213,7 +213,7 @@ namespace mmo
 
 			auto player = std::make_shared<Player>(playerManager, realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
-			playerManager.addPlayer(std::move(player));
+			playerManager.AddPlayer(std::move(player));
 
 			// Now we can start receiving data
 			connection->startReceiving();
@@ -234,6 +234,7 @@ namespace mmo
 			config.webPort,
 			config.webPassword,
 			playerManager,
+			realmManager,
 			*database
 			);
 		

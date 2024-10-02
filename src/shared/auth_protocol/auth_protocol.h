@@ -74,6 +74,9 @@ namespace mmo
 				/// Sent as response to a realms ClientAuthSession packet and contains authentication results (succeeded or failed,
 				/// as well as additional client session details that might be required).
 				ClientAuthSessionResponse = 0x02,
+
+				/// Notifies the realm that an account has been banned, which allows the realm to close the connection to the player client.
+				AccountBanned = 0x03,
 			};
 		}
 

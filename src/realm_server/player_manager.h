@@ -31,10 +31,15 @@ namespace mmo
 		/// Notifies the manager that a player has been disconnected which will
 		/// delete the player instance.
 		void PlayerDisconnected(Player &player);
+
 		/// Determines whether the player capacity limit has been reached.
 		bool HasPlayerCapacityBeenReached();
+
 		/// Adds a new player instance to the manager.
 		void AddPlayer(std::shared_ptr<Player> added);
+
+		void KickPlayerByAccountId(uint64 accountId);
+
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);
 
