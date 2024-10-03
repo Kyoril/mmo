@@ -17,8 +17,8 @@ namespace mmo
 	const uint32 Configuration::ModelEditorConfigVersion = 0x01;
 
 	Configuration::Configuration()
-		: assetRegistryPath("")
-		, projectPath("")
+		: assetRegistryPath("Data")
+		, projectPath("Project")
 		, mysqlHost("127.0.0.1")
 		, mysqlPort(mmo::constants::DefaultMySQLPort)
 		, mysqlUser("mmo")
