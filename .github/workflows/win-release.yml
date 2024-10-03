@@ -30,8 +30,7 @@ jobs:
 
       - name: Build project
         run: |
-          echo Number of processors: %NUMBER_OF_PROCESSORS%
-          cmake --build build --config Release --parallel %NUMBER_OF_PROCESSORS%
+          cmake --build build --config Release --parallel 4
 
       - name: Package artifacts
         shell: pwsh
