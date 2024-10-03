@@ -19,7 +19,7 @@ jobs:
         id: vcpkg
         with:
           pkgs: openssl mysql-connector-cpp
-          triplet: x64-windows
+          triplet: x64-windows-release
           token: ${{ github.token }}
           github-binarycache: true
 
