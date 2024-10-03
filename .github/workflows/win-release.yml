@@ -35,7 +35,10 @@ jobs:
       - name: Package artifacts
         shell: pwsh
         run: |
-          $VCPKG_BIN_DIR = "${{ github.workspace }}/vcpkg/installed/x64-windows-release/bin"
+          $VCPKG_BIN_DIR = "${{ env.VCPKG_ROOT }}\installed\x64-windows-release\bin"
+
+          Get-ChildItem -Path $VCPKG_BIN_DIR -Recurse -Include *.dll
+          Get-ChildItem -Path "${{ github.workspace }}\installed" -Recurse -Include *.dll
 
           mkdir tools
           mkdir tools/config
