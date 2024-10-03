@@ -1,0 +1,54 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+      - feature/win-release-action
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup vcpkg
+        uses: actions/setup-vcpkg@v1
+        with:
+          vcpkgTriplet: 'x64-windows'
+          # Install OpenSSL and MySQL client libraries
+          vcpkgArguments: 'install openssl mysql-connector-c'
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\scripts\buildsystems\vcpkg.cmake
+
+      - name: Build project
+        run: cmake --build build --config Release
+
+      - name: Package artifacts
+        # Adjust the paths according to your build output
+        run: Compress-Archive -Path bin\Release\* -DestinationPath release.zip
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          # This token is provided automatically by GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: 'build-${{ github.run_number }}'
+          release_name: 'Release build-${{ github.run_number }}'
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release.zip
+          asset_name: release.zip
+          asset_content_type: application/zip
