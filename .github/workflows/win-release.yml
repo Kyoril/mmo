@@ -20,7 +20,7 @@ jobs:
         uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
-          pkgs: openssl mysql-connector-cpp
+          pkgs: openssl libmysql
           triplet: x64-windows-release
           token: ${{ github.token }}
           github-binarycache: true
@@ -57,6 +57,7 @@ jobs:
           copy bin\Release\mmo_edit.exe tools\
           xcopy data\client tools\Data /E
           xcopy data\editor\data tools\Project /E
+          Copy-Item "deps\assimp\Windows\VS2022\bin\assimp-*-mt.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\libssl-*.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\libcrypto-*.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\mysqlcppconn*.dll" tools\
