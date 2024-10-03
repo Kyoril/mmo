@@ -14,15 +14,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup vcpkg
-        uses: actions/setup-vcpkg@v1
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        id: vcpkg
         with:
-          vcpkgTriplet: 'x64-windows'
-          # Install OpenSSL and MySQL client libraries
-          vcpkgArguments: 'install openssl mysql-connector-c'
+          pkgs: openssl mysql-connector-c
+          triplet: x64-windows-release
+          token: ${{ github.token }}
+          github-binarycache: true
 
       - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}\scripts\buildsystems\vcpkg.cmake
+        run: cmake -S . -B build -DMMO_BUILD_CLIENT=ON -DMMO_BUILD_EDITOR=ON -DMMO_BUILD_LAUNCHER=ON -DMMO_BUILD_TOOLS=ON -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
       - name: Build project
         run: cmake --build build --config Release
