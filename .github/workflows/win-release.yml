@@ -40,10 +40,8 @@ jobs:
       - name: Package artifacts
         shell: pwsh
         run: |
-          $VCPKG_BIN_DIR = "${{ env.VCPKG_ROOT }}\installed\x64-windows-release\bin"
-
-          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include *.dll
-
+          $VCPKG_BIN_DIR = "${{ github.workspace }}\vcpkg\installed\x64-windows-release\bin"
+          
           mkdir tools
           mkdir tools/config
           mkdir tools/Data
@@ -61,7 +59,7 @@ jobs:
           xcopy data\editor\data tools\Project /E
           Copy-Item "$VCPKG_BIN_DIR\libssl-*.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\libcrypto-*.dll" tools\
-          Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" tools\
+          Copy-Item "$VCPKG_BIN_DIR\mysqlcppconn*.dll" tools\
           
           copy bin\Release\mmo_client.exe client\
           copy bin\Release\Launcher.exe client\
@@ -74,7 +72,7 @@ jobs:
           copy bin\Release\world_server.exe servers\
           Copy-Item "$VCPKG_BIN_DIR\libssl-*.dll" servers\
           Copy-Item "$VCPKG_BIN_DIR\libcrypto-*.dll" servers\
-          Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" servers\
+          Copy-Item "$VCPKG_BIN_DIR\mysqlcppconn*.dll" servers\
           
           Compress-Archive -Path tools\* -DestinationPath tools.zip
           Compress-Archive -Path client\* -DestinationPath client.zip
