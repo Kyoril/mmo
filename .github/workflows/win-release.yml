@@ -20,7 +20,7 @@ jobs:
         uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
-          pkgs: openssl libmysql
+          pkgs: openssl:x64-windows-static libmysql
           triplet: x64-windows-release
           token: ${{ github.token }}
           github-binarycache: true
@@ -60,7 +60,7 @@ jobs:
           Copy-Item "deps\assimp\Windows\VS2022\bin\assimp-*-mt.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\libssl-*.dll" tools\
           Copy-Item "$VCPKG_BIN_DIR\libcrypto-*.dll" tools\
-          Copy-Item "$VCPKG_BIN_DIR\mysqlcppconn*.dll" tools\
+          Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" tools\
           
           copy bin\Release\mmo_client.exe client\
           copy bin\Release\Launcher.exe client\
@@ -73,7 +73,7 @@ jobs:
           copy bin\Release\world_server.exe servers\
           Copy-Item "$VCPKG_BIN_DIR\libssl-*.dll" servers\
           Copy-Item "$VCPKG_BIN_DIR\libcrypto-*.dll" servers\
-          Copy-Item "$VCPKG_BIN_DIR\mysqlcppconn*.dll" servers\
+          Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" servers\
           
           Compress-Archive -Path tools\* -DestinationPath tools.zip
           Compress-Archive -Path client\* -DestinationPath client.zip
