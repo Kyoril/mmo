@@ -73,7 +73,7 @@ namespace
 	
 	bool isSelfUpdateEnabled = true;
 	std::thread updatingThread;
-	size_t updatePerformanceConcurrency = 1;
+	size_t updatePerformanceConcurrency = 4;
 	std::string previousExecutableToBeRemoved;
 	bool doRetryRemovePreviousExecutable = false;
 	HWND dialogHandle = NULL;
