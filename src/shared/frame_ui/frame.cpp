@@ -449,6 +449,7 @@ namespace mmo
 	{
 		// Create a new anchor
 		m_anchors[point] = std::make_unique<Anchor>(point, relativePoint, relativeTo, offset);
+
 		Invalidate();
 	}
 
@@ -526,6 +527,11 @@ namespace mmo
 		if (includeLayout)
 		{
 			m_needsLayout = true;
+
+			for (auto& child : m_children)
+			{
+				child->Invalidate(includeLayout);
+			}
 		}
 	}
 
@@ -860,8 +866,10 @@ namespace mmo
 	{
 		// Try to use cached abs rect
 		if (!m_needsLayout)
+		{
 			return m_absRectCache;
-
+		}
+		
 		// First, obtain the relative frame rect
 		m_absRectCache = GetRelativeFrameRect();
 
