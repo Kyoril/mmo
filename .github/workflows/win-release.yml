@@ -20,7 +20,7 @@ jobs:
         uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
-          pkgs: openssl:x64-windows-static mysql-connector-cpp
+          pkgs: openssl:x64-windows-static mysql-connector-cpp libmysql
           triplet: x64-windows-release
           token: ${{ github.token }}
           github-binarycache: true
@@ -66,6 +66,7 @@ jobs:
           copy bin\Release\login_server.exe servers\
           copy bin\Release\realm_server.exe servers\
           copy bin\Release\world_server.exe servers\
+          Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" servers\
           
           Compress-Archive -Path tools\* -DestinationPath tools.zip
           Compress-Archive -Path client\* -DestinationPath client.zip
