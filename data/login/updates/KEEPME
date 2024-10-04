@@ -1,0 +1,2 @@
+You can actually remove me once there are update SQL files. But if this folder is empty, it leads to all kind of errors in automated building processes
+because git does not create empty directories :(
