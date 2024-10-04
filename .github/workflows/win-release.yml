@@ -33,86 +33,86 @@ jobs:
       - name: Configure CMake
         run: cmake -S . -B build -DMMO_BUILD_CLIENT=ON -DMMO_BUILD_EDITOR=ON -DMMO_BUILD_LAUNCHER=ON -DMMO_BUILD_TOOLS=ON -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
-      #- name: Build project
-      #  run: |
-      #    cmake --build build --config Release --parallel 4
+      - name: Build project
+        run: |
+          cmake --build build --config Release --parallel 4
 
-      #- name: Package artifacts
-      #  shell: pwsh
-      #  run: |
-      #    $VCPKG_BIN_DIR = "${{ github.workspace }}\vcpkg\installed\x64-windows-release\bin"
-      #    
-      #    mkdir tools
-      #    mkdir tools/config
-      #    mkdir tools/Data
-      #    mkdir tools/Project
-      #    mkdir client
-      #    mkdir client/Config
-      #    mkdir client/Data
-      #    mkdir servers
-      #    mkdir servers/config
-#
-      #    copy bin\Release\update_compiler.exe tools\
-      #    copy bin\Release\hpak_tool.exe tools\
-      #    copy bin\Release\mmo_edit.exe tools\
-      #    xcopy data\client tools\Data /E
-      #    xcopy data\editor\data tools\Project /E
-      #    Copy-Item "deps\assimp\Windows\VS2022\bin\assimp-*-mt.dll" tools\
-      #    
-      #    copy bin\Release\mmo_client.exe client\
-      #    copy bin\Release\Launcher.exe client\
-      #    xcopy data\client client\Data /E
-      #    
-      #    copy bin\Release\login_server.exe servers\
-      #    copy bin\Release\realm_server.exe servers\
-      #    copy bin\Release\world_server.exe servers\
-      #    Copy-Item "$VCPKG_BIN_DIR\libmysql.dll" servers\
-      #    
-      #    Compress-Archive -Path tools\* -DestinationPath tools.zip
-      #    Compress-Archive -Path client\* -DestinationPath client.zip
-      #    Compress-Archive -Path servers\* -DestinationPath servers.zip
-#
-      #- name: Create GitHub Release
-      #  id: create_release
-      #  uses: actions/create-release@v1
-      #  env:
-      #    # This token is provided automatically by GitHub Actions
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    tag_name: 'build-${{ github.run_number }}'
-      #    release_name: 'Release build-${{ github.run_number }}'
-      #    draft: false
-      #    prerelease: true
-#
-      ## Upload tools.zip
-      #- name: Upload tools.zip
-      #  uses: actions/upload-release-asset@v1
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    upload_url: ${{ steps.create_release.outputs.upload_url }}
-      #    asset_path: tools.zip
-      #    asset_name: tools.zip
-      #    asset_content_type: application/zip
-#
-      ## Upload client.zip
-      #- name: Upload client.zip
-      #  uses: actions/upload-release-asset@v1
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    upload_url: ${{ steps.create_release.outputs.upload_url }}
-      #    asset_path: client.zip
-      #    asset_name: client.zip
-      #    asset_content_type: application/zip
-#
-      ## Upload servers.zip
-      #- name: Upload servers.zip
-      #  uses: actions/upload-release-asset@v1
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    upload_url: ${{ steps.create_release.outputs.upload_url }}
-      #    asset_path: servers.zip
-      #    asset_name: servers.zip
-      #    asset_content_type: application/zip
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $VCPKG_BIN_DIR = "${{ github.workspace }}\vcpkg\installed\x64-windows-release\bin"
+          
+          mkdir tools
+          mkdir tools/config
+          mkdir tools/Data
+          mkdir tools/Project
+          mkdir client
+          mkdir client/Config
+          mkdir client/Data
+          mkdir servers
+          mkdir servers/config
+
+          copy bin\Release\update_compiler.exe tools\
+          copy bin\Release\hpak_tool.exe tools\
+          copy bin\Release\mmo_edit.exe tools\
+          xcopy data\client tools\Data /E
+          xcopy data\editor\data tools\Project /E
+          Copy-Item "deps\assimp\Windows\VS2022\bin\assimp-*-mt.dll" tools\
+          
+          copy bin\Release\mmo_client.exe client\
+          copy bin\Release\Launcher.exe client\
+          xcopy data\client client\Data /E
+          
+          copy bin\Release\login_server.exe servers\
+          copy bin\Release\realm_server.exe servers\
+          copy bin\Release\world_server.exe servers\
+          Copy-Item "C:\Program Files\MySQL\MySQL Server *\lib\libmysql.dll" servers\
+          
+          Compress-Archive -Path tools\* -DestinationPath tools.zip
+          Compress-Archive -Path client\* -DestinationPath client.zip
+          Compress-Archive -Path servers\* -DestinationPath servers.zip
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          # This token is provided automatically by GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: 'build-${{ github.run_number }}'
+          release_name: 'Release build-${{ github.run_number }}'
+          draft: false
+          prerelease: true
+
+      # Upload tools.zip
+      - name: Upload tools.zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: tools.zip
+          asset_name: tools.zip
+          asset_content_type: application/zip
+
+      # Upload client.zip
+      - name: Upload client.zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: client.zip
+          asset_name: client.zip
+          asset_content_type: application/zip
+
+      # Upload servers.zip
+      - name: Upload servers.zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: servers.zip
+          asset_name: servers.zip
+          asset_content_type: application/zip
