@@ -20,7 +20,7 @@ jobs:
         uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
-          pkgs: openssl:x64-windows-static mysqlconnector-cpp
+          pkgs: openssl:x64-windows-static mysql-connector-cpp
           triplet: x64-windows-release
           token: ${{ github.token }}
           github-binarycache: true
