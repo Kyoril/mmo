@@ -74,8 +74,8 @@ jobs:
           Copy-Item "C:\Program Files\MySQL\MySQL Server *\lib\libmysql.dll" servers\
           copy data\login\login_db_schema_full.sql servers\full_db\login\database.sql
           copy data\realm\realm_db_schema_full.sql servers\full_db\realm\database.sql
-          xcopy data\login\updates servers\updates\login /E
-          xcopy data\realm\updates servers\updates\realm /E
+          xcopy data\login\updates servers\updates\login /E /i /c
+          xcopy data\realm\updates servers\updates\realm /E /i /c
           
           Compress-Archive -Path tools\* -DestinationPath tools.zip
           Compress-Archive -Path client\* -DestinationPath client.zip
