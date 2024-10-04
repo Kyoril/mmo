@@ -66,6 +66,7 @@ if( MYSQL_INCLUDE_DIR AND EXISTS "${MYSQL_INCLUDE_DIR}/mysql_version.h" )
 		"^.*MYSQL_SERVER_VERSION[ \t]+\"([^\"]+)\".*$" "\\1" MYSQL_VERSION_STRING
 		"${MYSQL_VERSION_H}" )
 	message(STATUS "MySQL Version: ${MYSQL_VERSION_STRING}")
+	message(STATUS "MySQL Library: ${MYSQL_LIBRARY}")
 else()
 	message(STATUS "MySQL header doesn't exist")
 endif()
