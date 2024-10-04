@@ -730,6 +730,11 @@ namespace mmo
 								(fieldIndex <= object_fields::MaxHealth && fieldIndex + fieldCount >= object_fields::MaxHealth))
 							{
 								FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
+
+								if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
+								{
+									FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
+								}
 							}
 
 							if ((fieldIndex <= object_fields::Mana && fieldIndex + fieldCount >= object_fields::Mana) ||
@@ -741,6 +746,11 @@ namespace mmo
 
 					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
+
+					if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
+					{
+						FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
+					}
 				}
 			}
 			else

@@ -68,5 +68,8 @@ namespace mmo
 		std::shared_ptr<LoginState> m_loginState;
 
 		const proto_client::Project& m_project;
+
+	private:
+		void Script_ReviveMe();
 	};
 }

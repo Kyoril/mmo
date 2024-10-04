@@ -151,6 +151,10 @@ namespace mmo
 			OnAttackStop(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::ReviveRequest:
+			OnReviveRequest(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -708,6 +712,20 @@ namespace mmo
 		DLOG("TODO");
 
 		
+	}
+
+	void Player::OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		// Check if player is actually dead
+		if (m_character->IsAlive())
+		{
+			ELOG("Player tried to revive while being alive");
+			return;
+		}
+
+		// For now, we simply reset the player health back to the maximum health value.
+		// We will need to teleport the player back to it's binding point once teleportation is supported!
+		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth));
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)

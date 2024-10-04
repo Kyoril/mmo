@@ -499,12 +499,16 @@ namespace mmo
 		}
 		
 		std::vector<uint8> buffer;
-		buffer.resize(packetSize);
-		packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
-		if (!packet)
+
+		if (packetSize > 0)
 		{
-			ELOG("Failed to read PROXY_PACKET packet");
-			return PacketParseResult::Disconnect;
+			buffer.resize(packetSize);
+			packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
+			if (!packet)
+			{
+				ELOG("Failed to read PROXY_PACKET packet");
+				return PacketParseResult::Disconnect;
+			}
 		}
 
 		player->HandleProxyPacket(static_cast<game::client_realm_packet::Type>(opCode), buffer);

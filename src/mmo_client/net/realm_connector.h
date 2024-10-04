@@ -115,6 +115,8 @@ namespace mmo
 
 		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
+		void SendReviveRequest();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

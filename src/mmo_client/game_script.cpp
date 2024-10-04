@@ -254,6 +254,11 @@ namespace mmo
 			return "Unknown";
 		}
 
+		void Script_ReviveMe()
+		{
+			
+		}
+
 		void Script_MoveForwardStart()
 		{
 			if (!WorldState::GetInputControl()) return;
@@ -520,7 +525,9 @@ namespace mmo
 			luabind::def("StrafeLeftStart", &Script_StrafeLeftStart),
 			luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
 			luabind::def("StrafeRightStart", &Script_StrafeRightStart),
-			luabind::def("StrafeRightStop", &Script_StrafeRightStop)
+			luabind::def("StrafeRightStop", &Script_StrafeRightStop),
+
+			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
 		];
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
@@ -531,5 +538,8 @@ namespace mmo
 		m_globalFunctionsRegistered = true;
 	}
 
-
+	void GameScript::Script_ReviveMe()
+	{
+		m_realmConnector.SendReviveRequest();
+	}
 }

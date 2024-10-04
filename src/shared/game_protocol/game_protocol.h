@@ -79,6 +79,8 @@ namespace mmo
 				ItemQuery,
 				QuestQuery,
 
+				ReviveRequest,
+
 				/// Counter constant
 				Count_,
 			};

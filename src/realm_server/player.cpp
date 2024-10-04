@@ -420,11 +420,14 @@ namespace mmo
 				<< io::write<uint16>(packet.GetId())
 				<< io::write<uint32>(packet.GetSize());
 
-			std::vector<uint8> buffer;
-			buffer.resize(packet.GetSize());
-			packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
-			outPacket << io::write_range(buffer);
-
+			if (packet.GetSize() > 0)
+			{
+				std::vector<uint8> buffer;
+				buffer.resize(packet.GetSize());
+				packet.getSource()->read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
+				outPacket << io::write_range(buffer);
+			}
+			
 			outPacket.Finish();
 		});
 
@@ -669,6 +672,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackStop, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFaceMe, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFollowMe, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ReviveRequest, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);

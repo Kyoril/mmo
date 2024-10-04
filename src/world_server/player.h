@@ -105,6 +105,8 @@ namespace mmo
 
 		void OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
