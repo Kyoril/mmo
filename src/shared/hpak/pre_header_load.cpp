@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "pre_header_load.h"
 #include "pre_header.h"

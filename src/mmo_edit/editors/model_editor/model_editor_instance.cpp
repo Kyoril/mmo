@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "model_editor_instance.h"
 
@@ -23,6 +23,7 @@
 #include "assimp/LogStream.hpp"
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/skeleton_serializer.h"
 
 namespace mmo
@@ -245,22 +246,8 @@ namespace mmo
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 			
-		m_mesh = std::make_shared<Mesh>("");
-		MeshDeserializer deserializer { *m_mesh };
-
-		if (const auto inputFile = AssetRegistry::OpenFile(GetAssetPath().string()))
-		{
-			io::StreamSource source { *inputFile };
-			io::Reader reader { source };
-			if (deserializer.Read(reader))
-			{
-				m_entry = deserializer.GetMeshEntry();
-			}
-		}
-		else
-		{
-			ELOG("Unable to load mesh file " << GetAssetPath() << ": file not found!");
-		}
+		m_mesh = MeshManager::Get().Load(m_assetPath.string());
+		ASSERT(m_mesh);
 
 		m_entity = m_scene.CreateEntity("Entity", m_mesh);
 		if (m_entity)
@@ -271,6 +258,11 @@ namespace mmo
 		}
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
+
+		// Append axis to node
+		m_selectedBoneNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+		m_selectedBoneAxis = std::make_unique<AxisDisplay>(m_scene, "SelectedBoneAxis");
+		m_selectedBoneNode->AddChild(m_selectedBoneAxis->GetSceneNode());
 
 		// Debug skeleton rendering
 		if (m_entity->HasSkeleton())
@@ -323,14 +315,28 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void RenderBoneNode(const Bone& bone)
+	void ModelEditorInstance::RenderBoneNode(const Bone& bone)
 	{
-		if (ImGui::TreeNodeEx(bone.GetName().c_str()))
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
+		if (bone.GetName() == m_selectedBoneName)
 		{
+			flags |= ImGuiTreeNodeFlags_Selected;
+		}
+
+		if (ImGui::TreeNodeEx(bone.GetName().c_str(), flags))
+		{
+			if (ImGui::IsItemClicked())
+			{
+				m_selectedBoneName = bone.GetName();
+
+				ASSERT(m_selectedBoneNode);
+				m_selectedBoneNode->SetPosition(bone.GetDerivedPosition());
+				m_selectedBoneNode->SetOrientation(bone.GetDerivedOrientation());
+			}
+
 			for (uint32 i = 0; i < bone.GetNumChildren(); ++i)
 			{
-				Bone* childBone = dynamic_cast<Bone*>(bone.GetChild(i));
-				if (childBone)
+				if (const auto childBone = dynamic_cast<Bone*>(bone.GetChild(i)))
 				{
 					RenderBoneNode(*childBone);
 				}
@@ -418,20 +424,7 @@ namespace mmo
 	}
 
 	void ModelEditorInstance::Save()
-	{
-		// Apply materials
-		ASSERT(m_entity->GetNumSubEntities() == m_entry.subMeshes.size());
-		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
-		{
-			String materialName = "Default";
-			if (const auto& material = m_entity->GetSubEntity(i)->GetMaterial())
-			{
-				materialName = material->GetName();
-			}
-
-			m_entry.subMeshes[i].material = materialName;
-		}
-		
+	{		
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
@@ -443,8 +436,7 @@ namespace mmo
 		io::Writer writer { sink };
 		
 		MeshSerializer serializer;
-		serializer.ExportMesh(m_entry, writer);
-
+		serializer.Serialize(m_mesh, writer);
 		ILOG("Successfully saved mesh");
 	}
 
@@ -481,7 +473,7 @@ namespace mmo
 				{
 					const auto files = AssetRegistry::ListFiles();
 
-					for (size_t i = 0; i < m_entity->GetNumSubEntities(); ++i)
+					for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
 					{
 						ImGui::PushID(i); // Use field index as identifier.
 						ImGui::TableNextRow();
@@ -517,6 +509,7 @@ namespace mmo
 									if (ImGui::Selectable(file.c_str()))
 									{
 										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
+										m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
 									}
 								}
 
@@ -626,8 +619,7 @@ namespace mmo
 				ImGui::EndChild();
 			}
 		}
-	ImGui::End();
-
+		ImGui::End();
 	}
 
 	void ModelEditorInstance::DrawViewport(const String& id)

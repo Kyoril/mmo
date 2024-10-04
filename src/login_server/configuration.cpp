@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "configuration.h"
 
@@ -27,6 +27,7 @@ namespace mmo
 		, mysqlUser("mmo")
 		, mysqlPassword("")
 		, mysqlDatabase("mmo_login")
+		, mysqlUpdatePath("updates/login")
 		, isLogActive(true)
 		, logFileName("logs/login")
 		, isLogFileBuffering(false)
@@ -91,6 +92,7 @@ namespace mmo
 				mysqlUser = mysqlDatabaseTable->getString("user", mysqlUser);
 				mysqlPassword = mysqlDatabaseTable->getString("password", mysqlPassword);
 				mysqlDatabase = mysqlDatabaseTable->getString("database", mysqlDatabase);
+				mysqlUpdatePath = mysqlDatabaseTable->getString("updatePath", mysqlUpdatePath);
 			}
 
 			if (const Table *const mysqlDatabaseTable = global.getTable("webServer"))
@@ -172,6 +174,7 @@ namespace mmo
 			mysqlDatabaseTable.addKey("user", mysqlUser);
 			mysqlDatabaseTable.addKey("password", mysqlPassword);
 			mysqlDatabaseTable.addKey("database", mysqlDatabase);
+			mysqlDatabaseTable.addKey("updatePath", mysqlUpdatePath);
 			mysqlDatabaseTable.Finish();
 		}
 

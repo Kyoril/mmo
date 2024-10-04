@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 // This file contains the entry point of the game and takes care of initializing the
 // game as well as starting the main loop for the application. This is used on all
@@ -34,6 +34,7 @@
 #include "base/timer_queue.h"
 
 #include "base/executable_path.h"
+#include "client_data/project.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -210,6 +211,8 @@ namespace mmo
 	static std::unique_ptr<TimerQueue> s_timerQueue;
 	static scoped_connection s_timerConnection;
 
+	static proto_client::Project s_project;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -249,7 +252,7 @@ namespace mmo
 		});
 
 		// Initialize the console client which also loads the config file
-		Console::Initialize(currentPath / "Config" / "Config.cfg");
+		Console::Initialize("Config/Config.cfg");
 
 		// Initialize network threads
 		NetInit();
@@ -257,17 +260,24 @@ namespace mmo
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
 
+		// Load game data
+		if (!s_project.load("ClientDB"))
+		{
+			ELOG("Failed to load project files!");
+			return false;
+		}
+
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState, s_project);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
@@ -284,8 +294,7 @@ namespace mmo
 		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
 		if (window)
 		{
-			FrameManager::Get().NotifyScreenSizeChanged(
-			window->GetWidth(), window->GetHeight());	
+			FrameManager::Get().NotifyScreenSizeChanged(window->GetWidth(), window->GetHeight());	
 		}
 
 		// TODO: Initialize other systems

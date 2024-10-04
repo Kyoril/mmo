@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -10,7 +10,8 @@ namespace mmo::updating
 	enum UpdateURLScheme
 	{
 	    UP_FileSystem,
-	    UP_HTTP
+	    UP_HTTP,
+		UP_HTTPS
 	};
 
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -13,6 +13,11 @@
 
 #include <functional>
 
+
+namespace mmo
+{
+	class PlayerManager;
+}
 
 namespace mmo
 {
@@ -49,6 +54,7 @@ namespace mmo
 		// Internal io service
 		asio::io_service& m_ioService;
 		TimerQueue& m_timerQueue;
+		PlayerManager& m_playerManager;
 
 		// Server srp6 numbers
 		BigNumber m_B;
@@ -94,7 +100,7 @@ namespace mmo
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
-		explicit LoginConnector(asio::io_service &io, TimerQueue& queue);
+		explicit LoginConnector(asio::io_service &io, TimerQueue& queue, PlayerManager& playerManager);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -137,6 +143,9 @@ namespace mmo
 
 		// Handles the ClientAuthSessionResponse packet from the login server.
 		PacketParseResult OnClientAuthSessionResponse(auth::IncomingPacket &packet);
+
+		// Handles the ClientAuthSessionResponse packet from the login server.
+		PacketParseResult OnAccountBanned(auth::IncomingPacket& packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

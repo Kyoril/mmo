@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "fbx_import.h"
 
@@ -14,6 +14,7 @@
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/skeleton_mgr.h"
 #include "scene_graph/skeleton_serializer.h"
 
@@ -25,6 +26,8 @@
 
 namespace mmo
 {
+    int FbxImport::msBoneCount = 0;
+
 	void FbxImport::CustomAssimpLogStream::write(const char* message)
 	{
 		ILOG("[ASSIMP] " << message);
@@ -44,53 +47,6 @@ namespace mmo
 		// Unfortunately manual release is required here before kill otherwise assimp will fuck up memory
 		m_customLogStream.release();
 		Assimp::DefaultLogger::kill();
-	}
-
-	bool FbxImport::LoadScene(const String& filename)
-	{
-		// Remove existing mesh entries
-		m_meshEntries.clear();
-
-		Assimp::Importer importer;
-
-		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
-
-		const aiScene* scene = importer.ReadFile(filename.c_str(),
-			aiProcess_CalcTangentSpace |
-			aiProcess_Triangulate |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_SortByPType |
-			aiProcess_FlipUVs | 
-			aiProcess_LimitBoneWeights | 
-			aiProcess_GenNormals
-			);
-
-		if (!scene)
-		{
-			ELOG("Failed to open FBX file: " << importer.GetErrorString());
-			return false;
-		}
-
-		TraverseScene(*scene->mRootNode, *scene);
-
-		return true;
-	}
-
-	void FbxImport::TraverseScene(const aiNode& node, const aiScene& scene)
-	{
-		for (uint32 i = 0; i < node.mNumMeshes; ++i)
-		{
-			const aiMesh* mesh = scene.mMeshes[node.mMeshes[i]];
-			if (!LoadMesh(scene, node, *mesh))
-			{
-				ELOG("Failed to load mesh!");
-			}
-		}
-
-		for (uint32 i = 0; i < node.mNumChildren; ++i)
-		{
-			TraverseScene(*node.mChildren[i], scene);
-		}
 	}
 
 	bool FbxImport::SaveSkeletonFile(const String& filename, const Path& assetPath)
@@ -132,344 +88,528 @@ namespace mmo
 		io::Writer writer{ sink };
 
 		MeshSerializer serializer;
-		serializer.ExportMesh(m_meshEntries.front(), writer);
+		serializer.Serialize(m_mesh, writer);
 
-		return true;
-	}
-
-	bool FbxImport::LoadMesh(const aiScene& scene, const aiNode& node, const aiMesh& mesh)
-	{
-		ILOG("Processing mesh node " << node.mName.C_Str() << "...");
-
-		if (!mesh.HasTangentsAndBitangents())
-		{
-			WLOG("Mesh is missing tangent info");
-		}
-
-		Matrix4 transformation = Matrix4(
-			&node.mTransformation.a1
-		);
-
-		aiNode* parent = node.mParent;
-		while (parent)
-		{
-			transformation = transformation * &parent->mTransformation.a1;
-			parent = parent->mParent;
-		}
-
-		// Create a new mesh entry
-		if (m_meshEntries.empty())
-		{
-			MeshEntry entry;
-			entry.name = node.mName.C_Str();
-			entry.maxIndex = 0;
-
-			DLOG("Mesh has " << scene.mNumMaterials << " submeshes");
-			if (mesh.HasBones())
-			{
-				m_skeleton = std::make_shared<Skeleton>("Import");
-
-				CreateNodeTree(scene.mRootNode, nullptr);
-
-				// Initialize bone node map
-				for (unsigned int n = 0; n < mesh.mNumBones; ++n)
-				{
-					const aiBone* bone = mesh.mBones[n];
-					m_boneNodesByName[bone->mName.data] = scene.mRootNode->FindNode(bone->mName);
-				}
-
-				// Calculate bone transforms
-				auto& matrices = GetBoneMatrices(&mesh, &node, 0);
-
-				// First load all joints and their respective vertex assignment info
-				DLOG("Detected skeletal mesh with " << mesh.mNumBones << " bones");
-				for (uint32 i = 0; i < mesh.mNumBones; ++i)
-				{
-					aiNode* boneNode = scene.mRootNode->FindNode(mesh.mBones[i]->mName.C_Str());
-					if (boneNode)
-					{
-						const auto boneTrans = Matrix4(&GetLocalTransform(boneNode)/*matrices[i]*/.a1);
-
-						Bone* bone = m_skeleton->CreateBone(mesh.mBones[i]->mName.C_Str());
-						ASSERT(bone);
-						bone->SetPosition(boneTrans.GetTrans());
-						bone->SetOrientation(boneTrans.ExtractQuaternion());
-						bone->SetScale(boneTrans.GetScale());
-					}
-				}
-
-				// Resolve hierarchy in a second pass to know which joint is parented to which joint
-				for (uint16 i = 0; i < m_skeleton->GetNumBones(); ++i)
-				{
-					Bone* childBone = m_skeleton->GetBone(i);
-
-					aiNode* node = scene.mRootNode->FindNode(childBone->GetName().c_str());
-					if (node != nullptr)
-					{
-						aiNode* parent = node->mParent;
-						while(parent)
-						{
-							Bone* parentBone = m_skeleton->GetBone(parent->mName.C_Str());
-							if (childBone && parentBone)
-							{
-								parentBone->AddChild(*childBone);
-								break;
-							}
-
-							parent = parent->mParent;
-						}
-					}
-				}
-
-				// The root bone of the skeleton should use the global transform from the file to apply global transformations correctly
-				Bone* root = m_skeleton->GetRootBone();
-				if (root)
-				{
-					const auto rootTransform = Matrix4(&GetGlobalTransform(scene.mRootNode->FindNode(root->GetName().c_str())).a1);
-					root->SetPosition(rootTransform.GetTrans());
-					root->SetOrientation(rootTransform.ExtractQuaternion());
-					root->SetScale(rootTransform.GetScale());
-					root->SetBindingPose();
-				}
-			}
-
-			m_meshEntries.push_back(entry);
-		}
-
-		MeshEntry& entry = m_meshEntries.front();
-		uint32 indexOffset = entry.vertices.size();
-		uint32 subMeshIndexStart = entry.indices.size();
-
-		for (uint32 i = 0; i < mesh.mNumBones; ++i)
-		{
-			aiNode* boneNode = scene.mRootNode->FindNode(mesh.mBones[i]->mName.C_Str());
-			if (boneNode)
-			{
-				Bone* bone = m_skeleton->GetBone(mesh.mBones[i]->mName.C_Str());
-				if (!bone)
-				{
-					WLOG("Bone " << mesh.mBones[i]->mName.C_Str() << " is not part of the skeleton, but referenced by a vertex!");
-					continue;
-				}
-
-				for (uint32 j = 0; j < mesh.mBones[i]->mNumWeights; ++j)
-				{
-					VertexBoneAssignment assignment{};
-					assignment.boneIndex = i;
-					assignment.vertexIndex = mesh.mBones[i]->mWeights[j].mVertexId + indexOffset;
-					assignment.weight = mesh.mBones[i]->mWeights[j].mWeight;
-					entry.boneAssignments.push_back(assignment);
-
-					//DLOG("\tVERTEX:\t" << assignment.vertexIndex << "\tBONE:\t" << assignment.boneIndex << "\tWEIGHT:\t" << assignment.weight);
-				}
-			}
-		}
-
-		// Build vertex data
-		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumVertices << " vertices");
-		const uint32 startVertex = entry.vertices.size();
-		const uint32 endVertex = startVertex + mesh.mNumVertices;
-		for (uint32 i = startVertex; i < endVertex; ++i)
-		{
-			const uint32 j = i - startVertex;
-
-			entry.vertices.emplace_back();
-
-			if (mesh.HasPositions())
-			{
-				entry.vertices[i].position = transformation * Vector3(
-					mesh.mVertices[j].x, mesh.mVertices[j].y, mesh.mVertices[j].z);
-			}
-			else
-			{
-				entry.vertices[i].position = Vector3::Zero;
-			}
-			
-			entry.vertices[i].color = 0xFFFFFFFF;
-			if (mesh.mColors[0])
-			{
-				entry.vertices[i].color =
-					Color(mesh.mColors[0][j].r, mesh.mColors[0][j].g, mesh.mColors[0][j].b, mesh.mColors[0][j].a);
-			}
-
-			if (mesh.HasNormals())
-			{
-				entry.vertices[i].normal = (transformation * Vector3(
-					mesh.mNormals[j].x, mesh.mNormals[j].y, mesh.mNormals[j].z)).NormalizedCopy();
-			}
-			else
-			{
-				entry.vertices[i].normal = Vector3::UnitY;
-			}
-
-			if (mesh.HasTangentsAndBitangents())
-			{
-				entry.vertices[i].tangent = (transformation * Vector3(
-					mesh.mTangents[j].x, mesh.mTangents[j].y, mesh.mTangents[j].z)).NormalizedCopy();
-
-				entry.vertices[i].binormal = (transformation * Vector3(
-					mesh.mBitangents[j].x, mesh.mBitangents[j].y, mesh.mBitangents[j].z)).NormalizedCopy();
-			}
-			else
-			{
-				entry.vertices[i].tangent = Vector3::UnitX;
-				entry.vertices[i].binormal = Vector3::UnitZ;
-			}
-			
-			if (mesh.mTextureCoords[0])
-			{
-				entry.vertices[i].texCoord = Vector3(
-					mesh.mTextureCoords[0][j].x, mesh.mTextureCoords[0][j].y, mesh.mTextureCoords[0][j].z);
-			}
-			else
-			{
-				entry.vertices[i].texCoord = Vector3::Zero;
-			}
-		}
-
-		// Build index data
-		uint32 indexCount = 0;
-		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << mesh.mNumFaces << " faces");
-		for (uint32 i = 0; i < mesh.mNumFaces; ++i)
-		{
-			aiFace face = mesh.mFaces[i];
-
-			for (uint32 j = 0; j < face.mNumIndices; ++j)
-			{
-				entry.indices.push_back(face.mIndices[j] + indexOffset);
-				entry.maxIndex = std::max(entry.maxIndex, entry.indices.back());
-				indexCount++;
-			}
-		}
-
-		DLOG("\tSubmesh " << mesh.mMaterialIndex << " has " << indexCount << " indices");
-
-		SubMeshEntry subMesh{};
-		aiMaterial* material = scene.mMaterials[mesh.mMaterialIndex];
-		subMesh.material = material->GetName().C_Str();
-		subMesh.triangleCount = indexCount / 3;
-		subMesh.indexOffset = subMeshIndexStart;
-		entry.subMeshes.push_back(subMesh);
 		return true;
 	}
 
 	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
-		if (!LoadScene(filename.string()))
+        // TODO: Popup import dialog window with import options
+        const Vector3 importScale = Vector3::UnitScale * 0.01f;
+        const Vector3 importOffset = Vector3::Zero;
+        const Quaternion importRotation = Quaternion(Degree(-90), Vector3::UnitX);
+
+        // Build transform matrix
+        const Matrix4 importTransform = 
+            Matrix4::GetScale(importScale) * 
+            Matrix4(importRotation) *
+            Matrix4::GetTrans(importOffset);
+
+		Assimp::Importer importer;
+
+		const aiScene* scene = importer.ReadFile(filename.string(),
+			aiProcess_CalcTangentSpace |
+			aiProcess_Triangulate |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_SortByPType |
+			aiProcess_FlipUVs |
+			aiProcess_GenNormals
+		);
+
+		if (!scene)
 		{
+			ELOG("Failed to open FBX file: " << importer.GetErrorString());
 			return false;
 		}
 
-		// TODO: Change this, but for now we will create a vertex and index buffer from the first mesh that was found
-		if (m_meshEntries.empty())
-		{
-			WLOG("FBX has no geometry data!");
-			return false;
-		}
+        mNodeDerivedTransformByName.clear();
 
-		const auto filenameWithoutExtension = filename.filename().replace_extension();
-		if (!m_meshEntries.front().boneAssignments.empty())
-		{
-			std::string skeletonName = (currentAssetPath / filenameWithoutExtension).string();
-			std::ranges::replace(skeletonName, '\\', '/');
+        m_mesh = MeshManager::Get().CreateManual((currentAssetPath / filename).string() + ".hmsh");
 
-			m_meshEntries.front().skeletonName = skeletonName;
-		}
+		GrabNodeNamesFromNode(scene, scene->mRootNode);
+		GrabBoneNamesFromNode(scene, scene->mRootNode);
 
-		if (!SaveMeshFile(filenameWithoutExtension.string(), currentAssetPath))
-		{
-			ELOG("Failed to save mesh file!");
-			return false;
-		}
+		ComputeNodesDerivedTransform(scene, scene->mRootNode, scene->mRootNode->mTransformation);
 
-		if (m_skeleton)
-		{
-			m_skeleton->SetBindingPose();
+        const auto filenameWithoutExtension = filename.filename().replace_extension();
+        if (!mBonesByName.empty())
+        {
+            const std::filesystem::path p = (currentAssetPath / filenameWithoutExtension).string();
 
-			return SaveSkeletonFile(filenameWithoutExtension.string(), currentAssetPath);
-		}
+            String skeletonName = p.string();
+            std::ranges::replace(skeletonName, '\\', '/');
+            m_skeleton = std::make_shared<Skeleton>(skeletonName);
+
+            msBoneCount = 0;
+            CreateBonesFromNode(scene, scene->mRootNode);
+            msBoneCount = 0;
+            CreateBoneHierarchy(scene, scene->mRootNode);
+        }
+
+        LoadDataFromNode(scene, scene->mRootNode, m_mesh.get(), importTransform);
+
+        if (m_skeleton)
+        {
+            DLOG("Root bone: " << m_skeleton->GetRootBone()->GetName());
+            m_mesh->SetSkeleton(m_skeleton);
+        }
+
+        // Create the file name
+        if (!SaveMeshFile(filenameWithoutExtension.string(), currentAssetPath))
+        {
+            ELOG("Failed to save mesh file!");
+            return false;
+        }
+
+        // Serialize skeleton
+        if (m_skeleton)
+        {
+            if (!SaveSkeletonFile(filenameWithoutExtension.string(), currentAssetPath))
+            {
+                ELOG("Failed to save skeleton file!");
+                return false;
+            }
+        }
+
+        mBonesByName.clear();
+        mBoneNodesByName.clear();
+        boneMap.clear();
+        m_skeleton.reset();
 
 		return true;
 	}
 
 	bool FbxImport::SupportsExtension(const String& extension) const noexcept
 	{
-		return extension == ".fbx";
+		return extension == ".fbx" || extension == ".gltf" || extension == ".glb";
 	}
 
-	const aiMatrix4x4 IdentityMatrix;
-
-	const aiMatrix4x4& FbxImport::GetLocalTransform(const aiNode* node) const
+	bool FbxImport::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const
 	{
-		NodeMap::const_iterator it = m_nodesByName.find(node);
-		if (it == m_nodesByName.end()) {
-			return IdentityMatrix;
-		}
+        // if animated all submeshes must have bone weights
+        if (!mBonesByName.empty() && !aiMesh->HasBones())
+        {
+            DLOG("Skipping mesh " << aiMesh->mName.C_Str() << " with no bone weights");
+            return false;
+        }
 
-		return it->second->m_localTransform;
+        // now begin the object definition
+        // We create a submesh per material
+        SubMesh& submesh = mesh->CreateSubMesh(name + std::to_string(index));
+        submesh.useSharedVertices = false;
+
+        submesh.SetMaterial(material);
+
+        // prime pointers to vertex related data
+        aiVector3D* vec = aiMesh->mVertices;
+        aiVector3D* norm = aiMesh->mNormals;
+        aiVector3D* binorm = aiMesh->mBitangents;
+        aiVector3D* tang = aiMesh->mTangents;
+        aiVector3D* uv = aiMesh->mTextureCoords[0];
+        aiColor4D* col = aiMesh->mColors[0];
+
+        // We must create the vertex data, indicating how many vertices there will be
+        submesh.vertexData = std::make_unique<VertexData>();
+        submesh.vertexData->vertexStart = 0;
+        submesh.vertexData->vertexCount = aiMesh->mNumVertices;
+
+        // We must now declare what the vertex data contains
+        VertexDeclaration* declaration = submesh.vertexData->vertexDeclaration;
+        static constexpr unsigned short source = 0;
+        uint32 offset = 0;
+
+        DLOG(aiMesh->mNumVertices << " vertices");
+        offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
+        offset += declaration->AddElement(source, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+        offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+        offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+        offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
+        offset += declaration->AddElement(source, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
+
+        Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second * transform;
+        Matrix3 normalMatrix = aiM.Linear().Inverse().Transpose();
+
+        std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertexData(aiMesh->mNumVertices);
+        POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX* dataPointer = vertexData.data();
+
+        // Now we get access to the buffer to fill it. During so we record the bounding box.
+        for (size_t i = 0; i < aiMesh->mNumVertices; ++i)
+        {
+            // Position
+            Vector3 vectorData(vec->x, vec->y, vec->z);
+            vectorData = aiM * vectorData;
+
+            dataPointer->pos = vectorData;
+            vec++;
+
+            boundingBox.Combine(vectorData);
+
+            // Color
+            if (col)
+            {
+                dataPointer->color = Color(col->r, col->g, col->b, col->a);
+                col++;
+            }
+            else
+            {
+                dataPointer->color = Color::White;
+            }
+
+            // Normal
+            if (norm)
+            {
+                vectorData = normalMatrix * Vector3(norm->x, norm->y, norm->z);
+                vectorData.Normalize();
+
+                dataPointer->normal = vectorData;
+                norm++;
+            }
+            else
+            {
+                dataPointer->normal = Vector3::UnitY;
+            }
+
+            // Binormal
+            if (binorm)
+            {
+                dataPointer->binormal = normalMatrix * Vector3(binorm->x, binorm->y, binorm->z);
+                binorm++;
+            }
+            else
+            {
+                dataPointer->binormal = Vector3::UnitX;
+            }
+
+            // Tangent
+            if (tang)
+            {
+                dataPointer->tangent = normalMatrix * Vector3(tang->x, tang->y, tang->z);
+                tang++;
+            }
+            else
+            {
+                dataPointer->tangent = Vector3::UnitZ;
+            }
+
+            // uvs
+            if (uv)
+            {
+                dataPointer->uv[0] = uv->x;
+                dataPointer->uv[1] = uv->y;
+                uv++;
+            }
+            else
+            {
+                dataPointer->uv[0] = 0.0f;
+                dataPointer->uv[1] = 0.0f;
+            }
+
+            dataPointer++;
+        }
+
+        VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(
+            submesh.vertexData->vertexCount,
+            submesh.vertexData->vertexDeclaration->GetVertexSize(source),
+            BufferUsage::StaticWriteOnly,
+            vertexData.data());
+        submesh.vertexData->vertexBufferBinding->SetBinding(source, buffer);
+
+        // set bone weights
+        if (aiMesh->HasBones() && m_skeleton)
+        {
+            for (uint32 i = 0; i < aiMesh->mNumBones; i++)
+            {
+	            if (aiBone* bone = aiMesh->mBones[i]; nullptr != bone)
+                {
+                    String boneName = bone->mName.data;
+                    for (uint32 weightIdx = 0; weightIdx < bone->mNumWeights; weightIdx++)
+                    {
+                        aiVertexWeight aiWeight = bone->mWeights[weightIdx];
+
+                        VertexBoneAssignment vba;
+                        vba.vertexIndex = aiWeight.mVertexId;
+                        vba.boneIndex = m_skeleton->GetBone(boneName)->GetHandle();
+                        vba.weight = aiWeight.mWeight;
+
+                        submesh.AddBoneAssignment(vba);
+                    }
+                }
+            }
+        }
+
+        if (aiMesh->mNumFaces == 0)
+        {
+            return true;
+        }
+
+        DLOG(aiMesh->mNumFaces << " faces");
+
+        aiFace* faces = aiMesh->mFaces;
+        int faceSz = aiMesh->mPrimitiveTypes == aiPrimitiveType_LINE ? 2 : 3;
+
+        // Creates the index data
+        submesh.indexData = std::make_unique<IndexData>();
+        submesh.indexData->indexStart = 0;
+        submesh.indexData->indexCount = aiMesh->mNumFaces * faceSz;
+
+        if (aiMesh->mNumVertices >= 65536) // 32 bit index buffer
+        {
+            std::vector<uint32> indexDataBuffer(aiMesh->mNumFaces * faceSz);
+            uint32* indexData = indexDataBuffer.data();
+            for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
+            {
+                for (int j = 0; j < faceSz; j++)
+                {
+                    *indexData++ = faces->mIndices[j];
+                }
+
+                faces++;
+            }
+
+            submesh.indexData->indexBuffer = 
+                GraphicsDevice::Get().CreateIndexBuffer(
+					submesh.indexData->indexCount,
+                    IndexBufferSize::Index_32,
+					BufferUsage::StaticWriteOnly,
+					indexDataBuffer.data());
+        }
+        else // 16 bit index buffer
+        {
+            std::vector<uint16> indexDataBuffer(aiMesh->mNumFaces* faceSz);
+            uint16* indexData = indexDataBuffer.data();
+            for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
+            {
+                for (int j = 0; j < faceSz; j++)
+                    *indexData++ = faces->mIndices[j];
+
+                faces++;
+            }
+
+            submesh.indexData->indexBuffer =
+                GraphicsDevice::Get().CreateIndexBuffer(
+                    submesh.indexData->indexCount,
+                    IndexBufferSize::Index_16,
+                    BufferUsage::StaticWriteOnly,
+                    indexDataBuffer.data());
+        }
+
+        return true;
 	}
 
-	const aiMatrix4x4& FbxImport::GetGlobalTransform(const aiNode* node) const
+	void FbxImport::GrabNodeNamesFromNode(const aiScene* mScene, const aiNode* pNode)
 	{
-		NodeMap::const_iterator it = m_nodesByName.find(node);
-		if (it == m_nodesByName.end()) {
-			return IdentityMatrix;
-		}
+		boneMap.emplace(String(pNode->mName.data), false);
+		mBoneNodesByName[pNode->mName.data] = pNode;
+		DLOG("Node " << pNode->mName.C_Str() << " found");
 
-		return it->second->m_globalTransform;
-	}
-
-	const std::vector<aiMatrix4x4>& FbxImport::GetBoneMatrices(const aiMesh* mesh, const aiNode* pNode, size_t pMeshIndex /* = 0 */)
-	{
-		// resize array and initialize it with identity matrices
-		m_transforms.resize(mesh->mNumBones, aiMatrix4x4());
-
-		// calculate the mesh's inverse global transform
-		aiMatrix4x4 globalInverseMeshTransform = GetGlobalTransform(pNode);
-		globalInverseMeshTransform.Inverse();
-
-		// Bone matrices transform from mesh coordinates in bind pose to mesh coordinates in skinned pose
-		// Therefore the formula is offsetMatrix * currentGlobalTransform * inverseCurrentMeshTransform
-		for (size_t a = 0; a < mesh->mNumBones; ++a)
+		// Traverse all child nodes of the current node instance
+		for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; ++childIdx)
 		{
-			const aiBone* bone = mesh->mBones[a];
-			const aiMatrix4x4& currentGlobalTransform = GetGlobalTransform(m_boneNodesByName[bone->mName.data]);
-			m_transforms[a] = globalInverseMeshTransform * currentGlobalTransform * bone->mOffsetMatrix;
-		}
-
-		// and return the result
-		return m_transforms;
-	}
-
-	void FbxImport::CalculateGlobalTransform(SceneAnimNode& internalNode)
-	{
-		// concatenate all parent transforms to get the global transform for this node
-		internalNode.m_globalTransform = internalNode.m_localTransform;
-		const SceneAnimNode* node = internalNode.m_parent;
-		while (node)
-		{
-			internalNode.m_globalTransform = node->m_localTransform * internalNode.m_globalTransform;
-			node = node->m_parent;
+			const aiNode* pChildNode = pNode->mChildren[childIdx];
+			GrabNodeNamesFromNode(mScene, pChildNode);
 		}
 	}
 
-	SceneAnimNode* FbxImport::CreateNodeTree(const aiNode* node, SceneAnimNode* parent)
+	void FbxImport::GrabBoneNamesFromNode(const aiScene* mScene, const aiNode* pNode)
 	{
-		// create a node
-		auto internalNode = std::make_unique<SceneAnimNode>(node->mName.data);
-		internalNode->m_parent = parent;
+        if (pNode->mNumMeshes > 0)
+        {
+            for (unsigned int idx = 0; idx < pNode->mNumMeshes; ++idx)
+            {
+                const aiMesh* mesh = mScene->mMeshes[pNode->mMeshes[idx]];
+                if (!mesh->HasBones())
+                {
+                    continue;
+                }
 
-		// copy its transformation
-		internalNode->m_localTransform = node->mTransformation;
-		CalculateGlobalTransform(*internalNode);
+                for (uint32 i = 0; i < mesh->mNumBones; ++i)
+                {
+                    const aiBone* bone = mesh->mBones[i];
+                    if (!bone)
+                    {
+                        continue;
+                    }
 
-		// continue for all child nodes and assign the created internal nodes as our children
-		for (unsigned int a = 0; a < node->mNumChildren; ++a)
+                    mBonesByName[bone->mName.data] = bone;
+                    DLOG("(" << i << ") REAL BONE with name: " << bone->mName.C_Str());
+
+                    // flag this node and all parents of this node as needed, until we reach the node
+                    // holding the mesh, or the parent.
+                    const aiNode* node = mScene->mRootNode->FindNode(bone->mName.data);
+                    while (node)
+                    {
+                        if (node->mName == pNode->mName)
+                        {
+                            FlagNodeAsNeeded(node->mName.data);
+                            break;
+                        }
+                        if (node->mName == pNode->mParent->mName)
+                        {
+                            FlagNodeAsNeeded(node->mName.data);
+                            break;
+                        }
+
+                        // Not a root node, flag this as needed and continue to the parent
+                        FlagNodeAsNeeded(node->mName.data);
+                        node = node->mParent;
+                    }
+
+                    // Flag all children of this node as needed
+                    node = mScene->mRootNode->FindNode(bone->mName.data);
+                    MarkAllChildNodesAsNeeded(node);
+                }
+            }
+        }
+
+		// Traverse all child nodes of the current node instance
+		for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; childIdx++)
 		{
-			SceneAnimNode* childNode = CreateNodeTree(node->mChildren[a], internalNode.get());
-			internalNode->m_children.push_back(childNode);
+			const aiNode* pChildNode = pNode->mChildren[childIdx];
+			GrabBoneNamesFromNode(mScene, pChildNode);
 		}
+	}
 
-		return (m_nodesByName[node] = std::move(internalNode)).get();
+	void FbxImport::ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,
+		const aiMatrix4x4& accTransform)
+	{
+        if (!mNodeDerivedTransformByName.contains(pNode->mName.data))
+        {
+            mNodeDerivedTransformByName[pNode->mName.data] = Matrix4(accTransform[0]);
+        }
+        for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; ++childIdx)
+        {
+            const aiNode* pChildNode = pNode->mChildren[childIdx];
+            ComputeNodesDerivedTransform(mScene, pChildNode, accTransform * pChildNode->mTransformation);
+        }
+	}
+
+	void FbxImport::CreateBonesFromNode(const aiScene* mScene, const aiNode* pNode)
+	{
+        if (IsNodeNeeded(pNode->mName.data))
+        {
+            String boneName = pNode->mName.data;
+            if (pNode->mNumMeshes == 0)
+            {
+                Bone* bone = m_skeleton->CreateBone(boneName, msBoneCount);
+
+                aiQuaternion rot;
+                aiVector3D pos;
+                aiVector3D scale;
+
+                const aiMatrix4x4& aiM = pNode->mTransformation;
+
+                if (!aiM.IsIdentity())
+                {
+                    aiM.Decompose(scale, rot, pos);
+                    bone->SetPosition(Vector3(pos.x, pos.y, pos.z));
+                    bone->SetOrientation(Quaternion(rot.w, rot.x, rot.y, rot.z));
+                }
+
+                DLOG("(" << msBoneCount << ") Creating bone '" << boneName << "'");
+                msBoneCount++;
+            }
+        }
+
+        // Traverse all child nodes of the current node instance
+        for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; ++childIdx)
+        {
+            const aiNode* pChildNode = pNode->mChildren[childIdx];
+            CreateBonesFromNode(mScene, pChildNode);
+        }
+	}
+
+	void FbxImport::CreateBoneHierarchy(const aiScene* mScene, const aiNode* pNode)
+	{
+        if (IsNodeNeeded(pNode->mName.data))
+        {
+            Bone* parent = 0;
+            Bone* child = 0;
+            if (pNode->mParent)
+            {
+                if (m_skeleton->HasBone(pNode->mParent->mName.data))
+                {
+                    parent = m_skeleton->GetBone(pNode->mParent->mName.data);
+                }
+            }
+
+            if (m_skeleton->HasBone(pNode->mName.data))
+            {
+                child = m_skeleton->GetBone(pNode->mName.data);
+            }
+
+            if (parent && child && parent != child)
+            {
+                parent->AddChild(*child);
+            }
+        }
+        // Traverse all child nodes of the current node instance
+        for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; childIdx++)
+        {
+            const aiNode* pChildNode = pNode->mChildren[childIdx];
+            CreateBoneHierarchy(mScene, pChildNode);
+        }
+	}
+
+	void FbxImport::LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh, const Matrix4& transform)
+	{
+        if (pNode->mNumMeshes > 0)
+        {
+            AABB aabb = mesh->GetBounds();
+
+            for (unsigned int idx = 0; idx < pNode->mNumMeshes; ++idx)
+            {
+	            const aiMesh* aiMesh = mScene->mMeshes[pNode->mMeshes[idx]];
+                DLOG("Submesh " << idx << " for mesh '" << String(pNode->mName.data) << "'");
+
+                // Create a material instance for the mesh.
+                const aiMaterial* pAIMaterial = mScene->mMaterials[aiMesh->mMaterialIndex];
+
+            	// TODO: Material creation
+                MaterialPtr material = nullptr;
+
+                CreateSubMesh(pNode->mName.data, idx, pNode, aiMesh, material, mesh, aabb, transform);
+            }
+
+            // We must indicate the bounding box
+            mesh->SetBounds(aabb);
+        }
+
+        // Traverse all child nodes of the current node instance
+        for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; childIdx++)
+        {
+            const aiNode* pChildNode = pNode->mChildren[childIdx];
+            LoadDataFromNode(mScene, pChildNode, mesh, transform);
+        }
+	}
+
+	void FbxImport::MarkAllChildNodesAsNeeded(const aiNode* pNode)
+	{
+        FlagNodeAsNeeded(pNode->mName.data);
+
+        // Traverse all child nodes of the current node instance
+        for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; ++childIdx)
+        {
+            const aiNode* pChildNode = pNode->mChildren[childIdx];
+            MarkAllChildNodesAsNeeded(pChildNode);
+        }
+	}
+
+	void FbxImport::FlagNodeAsNeeded(const char* name)
+	{
+		if (const auto it = boneMap.find(String(name)); it != boneMap.end())
+        {
+            it->second = true;
+        }
+	}
+
+	bool FbxImport::IsNodeNeeded(const char* name)
+	{
+		if (const auto it = boneMap.find(String(name)); it != boneMap.end())
+        {
+            return it->second;
+        }
+
+        return false;
 	}
 }

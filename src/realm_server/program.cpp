@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "program.h"
 #include "login_connector.h"
@@ -135,7 +135,8 @@ namespace mmo
 			config.mysqlPort,
 			config.mysqlUser,
 			config.mysqlPassword,
-			config.mysqlDatabase
+			config.mysqlDatabase,
+			config.mysqlUpdatePath
 			});
 		if (!database->Load())
 		{
@@ -170,7 +171,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -184,7 +185,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
+			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 
@@ -204,7 +205,7 @@ namespace mmo
 
 
 		// Setup the login connector and connect to the login server
-		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue);
+		auto loginConnector = std::make_shared<LoginConnector>(ioService, timerQueue, playerManager);
 		if (!loginConnector->Login(config.loginServerAddress, config.loginServerPort, config.realmName, config.realmPasswordHash))
 		{
 			return 1;
@@ -230,7 +231,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -244,7 +245,7 @@ namespace mmo
 				return;
 			}
 
-			auto player = std::make_shared<Player>(playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string());
+			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project);
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mesh.h"
 #include "graphics/graphics_device.h"
@@ -32,6 +32,20 @@ namespace mmo
 	void Mesh::NameSubMesh(const uint16 index, const std::string & name)
 	{
 		m_subMeshNames[name] = index;
+	}
+
+	bool Mesh::GetSubMeshName(const uint16 index, String& name) const
+	{
+		for (const auto& [subMeshName, subMeshIndex] : m_subMeshNames)
+		{
+			if (subMeshIndex == index)
+			{
+				name = subMeshName;
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	SubMesh & Mesh::GetSubMesh(const uint16 index) const
@@ -110,12 +124,23 @@ namespace mmo
 			if (!m_skeleton)
 			{
 				WLOG("Failed to load skeleton '" << m_skeletonName << "' for mesh '" << m_name << "' - mesh will not be animated!");
+				return;
 			}
 
 			m_boneMatrices.resize(m_skeleton->GetNumBones());
 			m_skeleton->GetBoneMatrices(m_boneMatrices.data());
 			m_boneMatricesBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_skeleton->GetNumBones(), m_boneMatrices.data());
 		}
+	}
+
+	void Mesh::SetSkeleton(SkeletonPtr& skeleton)
+	{
+		m_skeleton = skeleton;
+		m_skeletonName = skeleton ? skeleton->GetName() : "";
+
+		m_boneMatrices.resize(m_skeleton->GetNumBones());
+		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
+		m_boneMatricesBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * m_skeleton->GetNumBones(), m_boneMatrices.data());
 	}
 
 	void Mesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
@@ -376,7 +401,7 @@ namespace mmo
 				{
 					// If so, write weight
 					*pWeight++ = i->second.weight;
-					*pIndex++ = static_cast<unsigned char>(boneIndexToBlendIndexMap[i->second.boneIndex]) + 1;
+					*pIndex++ = static_cast<unsigned char>(i->second.boneIndex) + 1;
 					++i;
 				}
 				else

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "configuration.h"
 
@@ -36,6 +36,7 @@ namespace mmo
 		, mysqlUser("mmo")
 		, mysqlPassword("")
 		, mysqlDatabase("mmo_realm_01")
+		, mysqlUpdatePath("updates/realm")
 		, isLogActive(true)
 		, logFileName("logs/realm_01")
 		, isLogFileBuffering(false)
@@ -106,6 +107,7 @@ namespace mmo
 				mysqlUser = mysqlDatabaseTable->getString("user", mysqlUser);
 				mysqlPassword = mysqlDatabaseTable->getString("password", mysqlPassword);
 				mysqlDatabase = mysqlDatabaseTable->getString("database", mysqlDatabase);
+				mysqlUpdatePath = mysqlDatabaseTable->getString("updatePath", mysqlUpdatePath);
 			}
 
 			if (const Table *const realmConfig = global.getTable("realmConfig"))
@@ -198,6 +200,7 @@ namespace mmo
 			mysqlDatabaseTable.addKey("user", mysqlUser);
 			mysqlDatabaseTable.addKey("password", mysqlPassword);
 			mysqlDatabaseTable.addKey("database", mysqlDatabase);
+			mysqlDatabaseTable.addKey("updatePath", mysqlUpdatePath);
 			mysqlDatabaseTable.Finish();
 		}
 

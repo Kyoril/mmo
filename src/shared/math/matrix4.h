@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -12,6 +12,7 @@
 
 #include "matrix3.h"
 #include "quaternion.h"
+#include "vector4.h"
 
 
 namespace mmo
@@ -78,6 +79,13 @@ namespace mmo
 			rot.ToRotationMatrix(m3x3);
 			operator=(Identity);
 			operator=(m3x3);
+		}
+
+		Matrix3 Linear() const
+		{
+			return Matrix3(m[0][0], m[0][1], m[0][2],
+				m[1][0], m[1][1], m[1][2],
+				m[2][0], m[2][1], m[2][2]);
 		}
 
 		/// Exchange the contents of this matrix with another.
@@ -164,7 +172,7 @@ namespace mmo
 			return r;
 		}
 
-		/*inline Vector4 operator * (const Vector4& v) const
+		inline Vector4 operator * (const Vector4& v) const
 		{
 			return Vector4(
 				m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
@@ -172,7 +180,7 @@ namespace mmo
 				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
 				m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3] * v.w
 			);
-		}*/
+		}
 
 		/*inline Plane operator * (const Plane& p) const
 		{

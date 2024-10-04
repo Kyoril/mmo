@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -12,6 +12,11 @@
 
 namespace mmo
 {
+	namespace proto_client
+	{
+		class Project;
+	}
+
 	class LoginState;
 
 	/// Helper class for deleting a lua_State in a smart pointer.
@@ -35,7 +40,8 @@ namespace mmo
 		GameScript(
 			LoginConnector& loginConnector,
 			RealmConnector& realmConnector,
-			std::shared_ptr<LoginState> loginState);
+			std::shared_ptr<LoginState> loginState,
+			const proto_client::Project& project);
 
 	public:
 		/// Gets the current lua state
@@ -60,5 +66,7 @@ namespace mmo
 		bool m_globalFunctionsRegistered = false;
 
 		std::shared_ptr<LoginState> m_loginState;
+
+		const proto_client::Project& m_project;
 	};
 }

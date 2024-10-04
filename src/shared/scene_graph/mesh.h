@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -51,6 +51,8 @@ namespace mmo
 
 		void NameSubMesh(uint16 index, const std::string& name);
 
+		bool GetSubMeshName(uint16 index, String& name) const;
+
 		SubMesh& GetSubMesh(uint16 index) const;
 
 		SubMesh* GetSubMesh(const std::string& name);
@@ -65,6 +67,8 @@ namespace mmo
 		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
 
 		void SetSkeletonName(const String& skeletonName);
+
+		void SetSkeleton(SkeletonPtr& skeleton);
 
         [[nodiscard]] const String& GetSkeletonName() const { return m_skeletonName; }
 

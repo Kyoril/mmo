@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "realm.h"
 #include "database.h"
@@ -130,6 +130,21 @@ namespace mmo
 
 			packet.Finish();
 		});
+	}
+
+	void Realm::NotifyAccountBanned(uint64 accountId)
+	{
+		if (!IsAuthentificated())
+		{
+			return;
+		}
+
+		// Send response packet to the realm server
+		m_connection->sendSinglePacket([accountId](auth::OutgoingPacket& packet) {
+			packet.Start(auth::login_realm_packet::AccountBanned);
+			packet << io::write<uint64>(accountId);
+			packet.Finish();
+			});
 	}
 
 	void Realm::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)

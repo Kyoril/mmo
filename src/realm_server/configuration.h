@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -32,6 +32,8 @@ namespace mmo
 		String mysqlPassword;
 		/// The mysql database to be used.
 		String mysqlDatabase;
+		/// Path to where update files in the form of "YYYYMMDD_INDEX.sql" are stored.
+		String mysqlUpdatePath;
 
 		/// Indicates whether or not file logging is enabled.
 		bool isLogActive;

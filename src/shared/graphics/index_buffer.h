@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -26,6 +26,8 @@ namespace mmo
 		IndexBuffer(size_t InIndexCount, IndexBufferSize InIndexSize);
 		/// Virtual default destructor because of inheritance.
 		virtual ~IndexBuffer() = default;
+
+		[[nodiscard]] IndexBufferSize GetIndexSize() const { return IndexSize; }
 
 	protected:
 		size_t IndexCount;

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "frame.h"
 #include "frame_mgr.h"
@@ -12,14 +12,14 @@
 
 namespace mmo
 {
-	Frame::Frame(const std::string& type, const std::string & name)
+	Frame::Frame(const std::string& type, const std::string& name)
 		: m_type(type)
 		, m_name(name)
 		, m_needsRedraw(true)
-		, m_parent(nullptr)
 		, m_visible(true)
 		, m_enabled(true)
 		, m_clippedByParent(false)
+		, m_parent(nullptr)
 		, m_needsLayout(true)
 		, m_focusable(false)
 	{
@@ -30,6 +30,7 @@ namespace mmo
 		m_propConnections += AddProperty("Enabled").Changed.connect(this, &Frame::OnEnabledPropertyChanged);
 		m_propConnections += AddProperty("Visible").Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
+		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
 	}
 
 	void Frame::Copy(Frame & other)
@@ -46,6 +47,15 @@ namespace mmo
 		other.m_text = m_text;
 		other.m_onLoad = m_onLoad;
 		other.m_onUpdate = m_onUpdate;
+		other.m_needsLayout = true;
+		other.m_needsRedraw = true;
+		other.m_onEnterPressed = m_onEnterPressed;
+		other.m_onTabPressed = m_onTabPressed;
+		other.m_onEnter = m_onEnter;
+		other.m_onLeave = m_onLeave;
+		other.m_id = m_id;
+		other.m_focusable = m_focusable;
+		other.RemoveAllChildren();
 		
 		// Set all properties
 		for (const auto& pair : m_propertiesByName)
@@ -70,6 +80,7 @@ namespace mmo
 			auto& added = (other.m_sectionsByName[pair.first] = pair.second);
 			added.SetComponentFrame(other);
 		}
+
 		// Add state imagery reference
 		for (const auto& pair : m_stateImageriesByName)
 		{
@@ -98,14 +109,31 @@ namespace mmo
 		for (const auto& child : m_children)
 		{
 			// Create a copy of the child frame
-			FramePtr copiedChild = FrameManager::Get().Create(m_type, "", true);
+			FramePtr copiedChild = FrameManager::Get().Create(m_type, other.GetName() + "_" + child->GetName(), true);
 			ASSERT(copiedChild);
 
 			// Copy properties over to child frame
 			child->Copy(*copiedChild);
 
 			// Add child copy to the copied frame
-			other.m_children.emplace_back(std::move(copiedChild));
+			copiedChild->m_parent = &other;
+			other.m_children.push_back(copiedChild);
+
+			// Copy anchors
+			for (auto& anchor : child->m_anchors)
+			{
+				auto relativeTo = anchor.second->GetRelativeTo();
+				if (relativeTo)
+				{
+					// Check if other frame is part of our template
+					if (relativeTo->IsChildOf(*this))
+					{
+						relativeTo = other.FindChild(other.GetName() + "_" + relativeTo->GetName());
+					}
+				}
+
+				copiedChild->SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
+			}
 		}
 	}
 
@@ -216,11 +244,11 @@ namespace mmo
 		}
 	}
 
-	void Frame::AddImagerySection(ImagerySection& section)
+	ImagerySection* Frame::AddImagerySection(ImagerySection& section)
 	{
 		ASSERT(m_sectionsByName.find(section.GetName()) == m_sectionsByName.end());
 
-		m_sectionsByName[section.GetName()] = section;
+		return &(m_sectionsByName[section.GetName()] = section);
 	}
 
 	void Frame::RemoveImagerySection(const std::string & name)
@@ -454,6 +482,20 @@ namespace mmo
 		}
 	}
 
+	float Frame::GetTextHeight()
+	{
+		const FontPtr font = GetFont();
+		if (!font)
+		{
+			return 0.0f;
+		}
+
+		const Rect rect = GetRelativeFrameRect(false);
+		const uint32 lineCount = font->GetLineCount(m_text, rect);
+		const float result = font->GetHeight() * lineCount;
+		return result;
+	}
+
 	void Frame::ClearAnchor(AnchorPoint point)
 	{
 		const auto it = m_anchors.find(point);
@@ -463,6 +505,13 @@ namespace mmo
 			m_needsRedraw = true;
 			m_needsLayout = true;
 		}
+	}
+
+	void Frame::ClearAnchors()
+	{
+		m_anchors.clear();
+		m_needsRedraw = true;
+		m_needsLayout = true;
 	}
 
 	bool Frame::IsHovered() const
@@ -561,6 +610,39 @@ namespace mmo
 		{
 			prop->Set(value);
 		}
+	}
+
+	bool Frame::IsChildOf(Frame& parent) const
+	{
+		if (m_parent == &parent)
+		{
+			return true;
+		}
+
+		if (m_parent == nullptr)
+		{
+			return false;
+		}
+
+		return m_parent->IsChildOf(parent);
+	}
+
+	Frame::Pointer Frame::FindChild(const std::string& name)
+	{
+		for (auto& child : m_children)
+		{
+			if (child->GetName() == name)
+			{
+				return child;
+			}
+
+			if (auto found = child->FindChild(name))
+			{
+				return found;
+			}
+		}
+
+		return nullptr;
 	}
 
 	void Frame::Render()
@@ -708,10 +790,30 @@ namespace mmo
 		}
 	}
 
-	Rect Frame::GetRelativeFrameRect()
+	void Frame::OnMouseEnter()
+	{
+		if (m_onEnter.is_valid())
+		{
+			m_onEnter(this);
+		}
+	}
+
+	void Frame::OnMouseLeave()
+	{
+		if (m_onLeave.is_valid())
+		{
+			m_onLeave(this);
+		}
+	}
+
+	Rect Frame::GetRelativeFrameRect(const bool withScale)
 	{
 		// Use the internal size property as the default value
-		const Size mySize = GetPixelSize() * FrameManager::Get().GetUIScaleSize();
+		Size mySize = GetPixelSize();
+		if (withScale)
+		{
+			mySize *= FrameManager::Get().GetUIScaleSize();
+		}
 
 		// Return the rectangle with the calculated size
 		return Rect(Point(), mySize);
@@ -838,7 +940,9 @@ namespace mmo
 			// PopulateGeometryBuffer virtual method.
 			if (m_renderer != nullptr)
 			{
-				m_renderer->Render();
+				Color color = m_color;
+				color.SetAlpha(m_opacity);
+				m_renderer->Render(optional<Color>(color));
 			}
 			else
 			{
@@ -863,7 +967,7 @@ namespace mmo
 	{
 		Rect parentRect;
 
-		if (m_parent == nullptr && m_parent != this)
+		if (m_parent == nullptr)
 		{
 			// Obtain the current viewport size in pixels in case this 
 			int32 vpW, vpH;
@@ -939,6 +1043,20 @@ namespace mmo
 
 		// Invalidate all children as they might depend on our font
 		InvalidateChildren(true);
+	}
+
+	void Frame::OnColorPropertyChanged(const Property& property)
+	{
+		argb_t argb;
+
+		std::stringstream colorStream;
+		colorStream.str(property.GetValue());
+		colorStream.clear();
+		colorStream >> std::hex >> argb;
+
+		m_color = argb;
+
+		Invalidate(false);
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()

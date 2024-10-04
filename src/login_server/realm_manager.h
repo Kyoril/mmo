@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -7,6 +7,8 @@
 #include <memory>
 #include <mutex>
 #include <list>
+
+#include "base/signal.h"
 
 namespace mmo
 {
@@ -31,14 +33,20 @@ namespace mmo
 		/// Notifies the manager that a player has been disconnected which will
 		/// delete the player instance.
 		void RealmDisconnected(Realm &realm);
+
 		/// Determines whether the player capacity limit has been reached.
 		bool HasCapacityBeenReached();
+
 		/// Adds a new player instance to the manager.
 		void AddRealm(std::shared_ptr<Realm> added);
+
 		/// Gets a realm by it's name.
 		Realm *GetRealmByName(const String &realmName);
+
 		/// 
 		Realm *GetRealmByID(uint32 id);
+
+		void NotifyAccountBanned(uint64 accountId);
 
 		/// Executes a function callback for each realm.
 		template<class Functor>

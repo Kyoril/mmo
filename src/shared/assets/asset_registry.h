@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -28,11 +28,13 @@ namespace mmo
 		/// Initializes the asset registry.
 		static void Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives);
 
+		static void AddArchivePackage(const std::filesystem::path& path);
+
 		/// Destroys the asset registry.
 		static void Destroy();
 
 		/// Opens a file for reading. Returns nullptr if the files doesn't exist.
-		static std::unique_ptr<std::istream> OpenFile(const std::string& filename);
+		static std::unique_ptr<std::istream> OpenFile(std::string filename);
 
 		/// Determines whether a given file name is already taken.
 		static bool HasFile(const std::string& filename);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "file_system_reader.h"
 
@@ -57,10 +57,15 @@ namespace mmo
 			std::set<Path> entries;
 			const auto fullPath = m_directory / fileName;
 
+			// If folder does not exist, return empty set
+			if (!std::filesystem::exists(fullPath) || !std::filesystem::is_directory(fullPath))
+			{
+				return entries;
+			}
+
 			for (std::filesystem::directory_iterator i(fullPath); i != std::filesystem::directory_iterator(); ++i)
 			{
-				entries.insert(
-				    i->path().filename().string()
+				entries.insert(i->path().filename().string()
 				);
 			}
 

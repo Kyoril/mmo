@@ -1,12 +1,14 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
+#include "connection.h"
 #include "game_states/game_state.h"
 
 #include "screen.h"
 
 #include "auth_protocol/auth_protocol.h"
+#include "game_protocol/game_protocol.h"
 #include "base/signal.h"
 #include "frame_ui/frame_mgr.h"
 
@@ -54,6 +56,9 @@ namespace mmo
 
 		/// 
 		void OnCharListUpdated();
+
+		/// 
+		PacketParseResult OnCharCreationResponse(game::IncomingPacket& packet);
 
 		// 
 		void OnRealmDisconnected();

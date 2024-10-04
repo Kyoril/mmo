@@ -1,11 +1,13 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
 #include "frame_ui/mouse_event_args.h"
-#include "game/game_unit_c.h"
+#include "game_client/game_unit_c.h"
 #include "game/movement.h"
 #include "game_protocol/game_protocol.h"
+#include "scene_graph/scene.h"
+#include "input_control.h"
 
 namespace mmo
 {
@@ -14,41 +16,13 @@ namespace mmo
 	class Camera;
 	class RealmConnector;
 
-	namespace ControlFlags
-	{
-		enum Type 
-		{
-			None,
-
-			TurnPlayer = 1 << 0,
-			TurnCamera = 1 << 1,
-			MovePlayerOrTurnCamera = 1 << 2,
-			MoveForwardKey = 1 << 3,
-			MoveBackwardKey = 1 << 4,
-			StrafeLeftKey = 1 << 5,
-			StrafeRightKey = 1 << 6,
-			TurnLeftKey = 1 << 7,
-			TurnRightKey = 1 << 8,
-			PitchUpKey = 1 << 9,
-			PitchDownKey = 1 << 10,
-			Autorun = 1 << 11,
-
-			MoveSent = 1 << 12,
-			StrafeSent = 1 << 13,
-			TurnSent = 1 << 14,
-			PitchSent = 1 << 15,
-			
-			MoveAndTurnPlayer = TurnPlayer | MovePlayerOrTurnCamera
-		};
-	}
-
 	/// @brief This class controls a player entity.
-	class PlayerController final
+	class PlayerController final : public IInputControl
 	{
 	public:
 		PlayerController(Scene& scene, RealmConnector& connector);
 
-		~PlayerController();
+		~PlayerController() override;
 
 	public:
 		void Update(float deltaSeconds);
@@ -60,10 +34,6 @@ namespace mmo
 		void OnMouseMove(int32 x, int32 y);
 
 		void OnMouseWheel(int32 delta);
-		
-		void OnKeyDown(int32 key);
-		
-		void OnKeyUp(int32 key);
 		
 		void SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit);
 
@@ -98,17 +68,25 @@ namespace mmo
 
 		void ClampCameraPitch();
 
+	public:
+		void SetControlBit(const ControlFlags::Type flag, bool set) override { if (set) { m_controlFlags |= flag; } else { m_controlFlags &= ~flag; } }
+
 	private:
 		Scene& m_scene;
+		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
 		Camera* m_defaultCamera { nullptr };
+		SceneNode* m_cameraOffsetNode{ nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
+		Point m_clickPosition{};
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Point m_lastMousePosition {};
 		GameTime m_lastHeartbeat { 0 };
 		uint32 m_controlFlags { ControlFlags::None };
+		uint32 m_mouseDownTime = 0;
+
 	};
 }

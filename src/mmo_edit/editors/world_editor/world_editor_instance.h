@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -8,7 +8,7 @@
 #include <thread>
 #include <asio/io_service.hpp>
 
-#include "world_page_loader.h"
+#include "paging/world_page_loader.h"
 #include "base/id_generator.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
@@ -21,6 +21,7 @@
 #include "scene_graph/world_grid.h"
 #include "transform_widget.h"
 #include "selection.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
@@ -105,6 +106,8 @@ namespace mmo
 
 		void OnMapEntityRemoved(MapEntity& entity);
 
+		PagePosition GetPagePositionFromCamera() const;
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
@@ -128,6 +131,8 @@ namespace mmo
 		MeshEntry m_entry { };
 		Vector3 m_cameraVelocity{};
 		bool m_hovering{ false };
+
+		std::unique_ptr<terrain::Terrain> m_terrain;
 
 		bool m_gridSnap { true };
 		float m_gridSizes[7] = { 0.1f, 0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 4.0f };
@@ -155,5 +160,9 @@ namespace mmo
 		ImVec2 m_lastContentRectMin{};
 
 		std::map<uint16, WorldPage> m_pages;
+
+		SceneNode* m_cloudsNode{ nullptr };
+		Entity* m_cloudsEntity{ nullptr };
+		Light* m_sunLight{ nullptr };
 	};
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mysql_database.h"
 
@@ -11,6 +11,7 @@
 #include "game/character_flags.h"
 #include "math/vector3.h"
 #include "math/degree.h"
+#include "virtual_dir/file_system_reader.h"
 
 
 namespace mmo
@@ -22,17 +23,87 @@ namespace mmo
 
 	bool MySQLDatabase::Load()
 	{
-		if (!m_connection.Connect(m_connectionInfo))
+		if (!m_connection.Connect(m_connectionInfo, true))
 		{
 			ELOG("Could not connect to the realm database");
 			ELOG(m_connection.GetErrorMessage());
 			return false;
 		}
+		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
-		// Mark all realms as offline
-		ILOG("Connected to MySQL at " <<
-			m_connectionInfo.host << ":" <<
-			m_connectionInfo.port);
+		// Apply all updates
+		ILOG("Checking for database updates...");
+
+		virtual_dir::FileSystemReader reader(m_connectionInfo.updatePath);
+		auto updates = reader.queryEntries("");
+
+		// Iterate through all updates
+		for (const auto& update : updates)
+		{
+			// Check for .sql ending in string
+			if (!update.ends_with(".sql"))
+			{
+				continue;
+			}
+
+			// Remove ending .sql from file
+			const auto updateName = update.substr(0, update.size() - 4);
+
+			// Check if update has already been applied
+			mysql::Select select(m_connection, "SELECT 1 FROM `history` WHERE `id` = '" + m_connection.EscapeString(updateName) + "' LIMIT 1;");
+			if (!select.Success())
+			{
+				// There was an error
+				PrintDatabaseError();
+				return false;
+			}
+
+			if (!mysql::Row(select))
+			{
+				ILOG("Applying database update " << updateName << "...");
+
+				// Row does not exist, apply update
+				std::ostringstream buffer;
+				auto stream = reader.readFile(update, true);
+
+				mysql::Transaction transaction(m_connection);
+
+				std::string line;
+				while (std::getline(*stream, line))
+				{
+					buffer << line << "\n";
+				}
+
+				buffer << "INSERT INTO `history` (`id`) VALUES ('" << m_connection.EscapeString(updateName) << "');";
+
+				if (!m_connection.Execute(buffer.str()))
+				{
+					PrintDatabaseError();
+					return false;
+				}
+
+				// Drop all results
+				do
+				{
+					if (auto* result = m_connection.StoreResult())
+					{
+						::mysql_free_result(result);
+					}
+				} while (!mysql_next_result(m_connection.GetHandle()));
+
+				transaction.Commit();
+			}
+		}
+
+		m_connection.Disconnect();
+
+		if (!m_connection.Connect(m_connectionInfo, false))
+		{
+			ELOG("Could not reconnect to the realm database");
+			ELOG(m_connection.GetErrorMessage());
+			return false;
+		}
+		ILOG("Database is ready!");
 
 		return true;
 	}
@@ -139,21 +210,51 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, const Vector3& position, const Degree& orientation)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 characterClass, uint32 race, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy)
 	{
-		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, gender, hp, x, y, z, o) VALUES (" +
+		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, mana, rage, energy) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
-			std::to_string(race) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " + 
-			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ");"))
+			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " +
+			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ", '" + std::to_string(mana) + "', '" + std::to_string(rage) + "', '" + std::to_string(energy) + "');"))
 		{
 			PrintDatabaseError();
-			throw mysql::Exception("Could not create character entry");
+
+			if (m_connection.GetErrorCode() == 1062)
+			{
+				return CharCreateResult::NameAlreadyInUse;
+			}
+
+			return CharCreateResult::Error;
 		}
+
+		const auto characterId = m_connection.GetLastInsertId();
+
+		if (!spellIds.empty())
+		{
+			std::ostringstream queryString;
+			queryString << "INSERT INTO character_spells (`character`, spell) VALUES ";
+
+			for (const auto spellId : spellIds)
+			{
+				queryString << "(" << characterId << ", " << spellId << "),";
+			}
+
+			queryString.seekp(-1, std::ios_base::end);
+			queryString << ";";
+
+			// Adding spells to the character may fail but we don't cancel in this case right now
+			if (!m_connection.Execute(queryString.str()))
+			{
+				PrintDatabaseError();
+			}
+		}
+		
+		return CharCreateResult::Success;
 	}
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -162,18 +263,26 @@ namespace mmo
 				result.characterId = characterId;
 
 				String instanceId;
-				uint8 level = 1;
 				float facing = 0.0f;
 
 				uint32 index = 0;
 				row.GetField(index++, result.name);
-				row.GetField(index++, level);
+				row.GetField<uint8, uint16>(index++, result.level);
 				row.GetField(index++, result.mapId);
 				row.GetField(index++, instanceId);
 				row.GetField(index++, result.position.x);
 				row.GetField(index++, result.position.y);
 				row.GetField(index++, result.position.z);
 				row.GetField(index++, facing);
+				row.GetField(index++, result.gender);
+				row.GetField(index++, result.raceId);
+				row.GetField(index++, result.classId);
+
+				row.GetField(index++, result.xp);
+				row.GetField(index++, result.hp);
+				row.GetField(index++, result.mana);
+				row.GetField(index++, result.rage);
+				row.GetField(index++, result.energy);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -241,8 +350,30 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
+		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy)
+	{
+		if (!m_connection.Execute(std::string("UPDATE characters SET ")
+			+ "map = '" + std::to_string(map) + "'"
+			+ ", level = '" + std::to_string(level) + "'"
+			+ ", x = '" + std::to_string(position.x) + "'"
+			+ ", y = '" + std::to_string(position.y) + "'"
+			+ ", z = '" + std::to_string(position.z) + "'"
+			+ ", o = '" + std::to_string(orientation.GetValueRadians()) + "'"
+			+ ", xp = " + std::to_string(xp)
+			+ ", hp = " + std::to_string(hp)
+			+ ", mana = " + std::to_string(mana)
+			+ ", rage = " + std::to_string(rage)
+			+ ", energy = " + std::to_string(energy)
+			+ " WHERE id = '" + std::to_string(characterId) + "'"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update character data!");
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
-		ELOG("Realm database error: " << m_connection.GetErrorMessage());
+		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());
 	}
 }

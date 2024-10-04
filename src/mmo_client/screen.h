@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 // This file contains the screen system. The screen system is a system which hooks into the
 // event loops Paint event. It allows to draw things in order and should also simplify the 

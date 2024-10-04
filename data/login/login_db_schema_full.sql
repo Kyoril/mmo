@@ -28,9 +28,11 @@ CREATE TABLE `account` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_login` datetime DEFAULT NULL,
   `last_ip` varchar(39) CHARACTER SET latin1 COLLATE latin1_german1_ci DEFAULT NULL,
+  `banned` tinyint DEFAULT '0',
+  `ban_expiration` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
 
 /*Table structure for table `account_info` */
 
@@ -75,6 +77,13 @@ CREATE TABLE `realm` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+
+DROP TABLE IF EXISTS `history`;
+
+CREATE TABLE `history` (
+  `id` varchar(32) COLLATE latin1_german1_ci NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

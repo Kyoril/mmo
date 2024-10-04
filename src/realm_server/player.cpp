@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "player.h"
 #include "player_manager.h"
@@ -13,28 +13,34 @@
 #include "log/default_log_levels.h"
 #include "math/vector3.h"
 #include "math/degree.h"
+#include "proto_data/project.h"
 
 #include <functional>
 
 #include "base/utilities.h"
 #include "game/chat_type.h"
+#include "game_server/game_player_s.h"
 
 
 namespace mmo
 {
 	Player::Player(
+		TimerQueue& timerQueue,
 		PlayerManager& playerManager,
 		WorldManager& worldManager,
 		LoginConnector &loginConnector,
 		AsyncDatabase& database, 
-		std::shared_ptr<Client> connection, 
-		const String & address)
-		: m_manager(playerManager)
+		std::shared_ptr<Client> connection,
+		String address,
+		const proto::Project& project)
+		: m_timerQueue(timerQueue)
+		, m_manager(playerManager)
 		, m_worldManager(worldManager)
 		, m_loginConnector(loginConnector)
 		, m_database(database)
+		, m_project(project)
 		, m_connection(std::move(connection))
-		, m_address(address)
+		, m_address(std::move(address))
 		, m_accountId(0)
 	{
 		// Generate random seed for packet header encryption & decryption
@@ -42,6 +48,12 @@ namespace mmo
 		m_seed = dist(RandomGenerator);
 
 		m_connection->setListener(*this);
+	}
+
+	void Player::Kick()
+	{
+		DLOG("Kicking player with account " << GetAccountName() << " (" << GetAccountId() << ")");
+		Destroy();
 	}
 
 	void Player::Destroy()
@@ -64,13 +76,13 @@ namespace mmo
 	void Player::DoCharEnum()
 	{
 		// RequestHandler
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{ shared_from_this() };
 		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
 			if (auto strongThis = weakThis.lock())
 			{
 				// Lock around m_characterViews
 				{
-					std::scoped_lock<std::mutex> lock{ strongThis->m_charViewMutex };
+					std::scoped_lock lock{ strongThis->m_charViewMutex };
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
@@ -167,7 +179,7 @@ namespace mmo
 		}
 
 		// Setup a weak callback handler
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{ shared_from_this() };
 		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const BigNumber& sessionKey) {
 			// Obtain strong reference to see if the client connection is still valid
 			if (const auto strongThis = weakThis.lock())
@@ -238,42 +250,112 @@ namespace mmo
 
 	PacketParseResult Player::OnCreateChar(game::IncomingPacket& packet)
 	{
+		uint8 race = 0, characterClass = 0, gender = 0;
 		std::string characterName;
-		if (!(packet >> io::read_container<uint8>(characterName)))
+		if (!(packet
+			>> io::read_container<uint8>(characterName)
+			>> io::read<uint8>(race)
+			>> io::read<uint8>(characterClass)
+			>> io::read<uint8>(gender)
+			))
 		{
 			return PacketParseResult::Disconnect;
 		}
+
+		// Check input parameters for invalid values
+		if (characterName.empty() || characterName.size() > 12 || gender > 1 || race > 0)
+		{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		// Check if given character class exists
+		const auto* classInstance = m_project.classes.getById(characterClass);
+		if (classInstance == nullptr)
+		{
+			ELOG("Unable to find character class " << log_hex_digit(characterClass));
+			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		// TODO: Check if race exists
+		//const auto* raceEntry = m_project.races.getById(race);
 		
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto handler = [weakThis](bool success) {
-			if (auto strongThis = weakThis.lock())
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis](const std::optional<CharCreateResult>& result) {
+			if (const auto strongThis = weakThis.lock())
 			{
-				if (success)
+				if (!result)
+				{
+					ELOG("Character creation failed due to an exception!");
+					strongThis->GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
+						{
+							// TODO: This is not correct because we don't know if NameInUse is really the exact error
+							outPacket.Start(game::realm_client_packet::CharCreateResponse);
+							outPacket << io::write<uint8>(game::char_create_result::NameInUse);
+							outPacket.Finish();
+						});
+					return;
+				}
+
+				if (result.value() == CharCreateResult::Success)
 				{
 					strongThis->DoCharEnum();
+					return;
 				}
-				else
-				{
-					ELOG("Failed to create character!");
-				}
+
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
+					{
+						// TODO: This is not correct because we don't know if NameInUse is really the exact error
+						outPacket.Start(game::realm_client_packet::CharCreateResponse);
+						outPacket << io::write<uint8>(
+							result.value() == CharCreateResult::NameAlreadyInUse ? game::char_create_result::NameInUse : game::char_create_result::Error);
+						outPacket.Finish();
+					});
 			}
 		};
 
 		// TODO: Load real start values from static game data instead of hard code it here. However,
 		// the infrastructure isn't read yet.
 		const uint32 level = 1;
-		const uint32 race = 1;
 		const uint32 map = 0;
-		const uint32 hp = 1;
-		const uint32 gender = 0;
 		const Vector3 position;
 		const Degree rotation;
-		
-		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest<void>([characterName, level, race, map, hp, gender, &position, &rotation, this](auto&& database)
+
+		// Setup a temporary player object
+		GamePlayerS player(m_project, m_timerQueue);
+		player.Initialize();
+		player.SetClass(*classInstance);
+		player.SetLevel(1);
+
+		const uint32 hp = player.GetMaxHealth();
+		const uint32 mana = player.Get<uint32>(object_fields::MaxMana);
+		const uint32 rage = 0;
+		const uint32 energy = player.Get<uint32>(object_fields::MaxEnergy);
+
+		std::vector<uint32> spellIds;
+		spellIds.reserve(classInstance->spells().size());
+		for(const auto& spell : classInstance->spells())
 		{
-			database->CreateCharacter(characterName, this->m_accountId, map, level, hp, race, gender, position, rotation);
-		}, std::move(handler));
+			if (spell.level() <= level)
+			{
+				spellIds.push_back(spell.spell());
+			}
+		}
+
+		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
+		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, race, characterClass, gender, position, rotation,
+			spellIds, mana, rage, energy);
 		
 		return PacketParseResult::Pass;
 	}
@@ -441,6 +523,36 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnDbQuery(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		switch(packet.GetId())
+		{
+		case game::client_realm_packet::CreatureQuery:
+			DLOG("Querying for creature " << log_hex_digit(guid) << "...");
+			break;
+
+		case game::client_realm_packet::ItemQuery:
+			DLOG("Querying for item " << log_hex_digit(guid) << "...");
+			break;
+
+		case game::client_realm_packet::QuestQuery:
+			DLOG("Querying for quest " << log_hex_digit(guid) << "...");
+			break;
+
+		default:
+			ELOG("Player tried to query unsupported item, packet handler might be subscribed for wrong op code (" << packet.GetId() << ")");
+			break;
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -520,47 +632,63 @@ namespace mmo
 
 	void Player::EnableProxyPackets(const bool enable)
 	{
+		ASSERT(!enable || m_proxyHandlers.IsEmpty());
+
+		// First clear potential existing proxy handlers (always)
+		m_proxyHandlers.Clear();
+
 		if (enable)
 		{
-			RegisterPacketHandler(game::client_realm_packet::MoveStartForward, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartBackward, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStop, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeLeft, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartStrafeRight, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStopStrafe, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnLeft, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStartTurnRight, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
-			RegisterPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
-
+			// Register proxy handlers
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartForward, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartBackward, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStop, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartStrafeLeft, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartStrafeRight, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopStrafe, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartTurnLeft, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartTurnRight, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopTurn, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveHeartBeat, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SetSelection, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateMonster, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDestroyMonster, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CastSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelCast, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelAura, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ChannelStart, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ChannelUpdate, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelChanneling, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackSwing, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackStop, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRecharge, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::UseItem, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackSwing, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AttackStop, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFaceMe, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFollowMe, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
+			RegisterPacketHandler(game::client_realm_packet::CreatureQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
 		}
 		else
 		{
-			ClearPacketHandler(game::client_realm_packet::MoveStartForward);
-			ClearPacketHandler(game::client_realm_packet::MoveStartBackward);
-			ClearPacketHandler(game::client_realm_packet::MoveStop);
-			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeLeft);
-			ClearPacketHandler(game::client_realm_packet::MoveStartStrafeRight);
-			ClearPacketHandler(game::client_realm_packet::MoveStopStrafe);
-			ClearPacketHandler(game::client_realm_packet::MoveStartTurnLeft);
-			ClearPacketHandler(game::client_realm_packet::MoveStartTurnRight);
-			ClearPacketHandler(game::client_realm_packet::MoveStopTurn);
-			ClearPacketHandler(game::client_realm_packet::MoveHeartBeat);
-			ClearPacketHandler(game::client_realm_packet::MoveSetFacing);
-
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 			ClearPacketHandler(game::client_realm_packet::NameQuery);
+			ClearPacketHandler(game::client_realm_packet::CreatureQuery);
+			ClearPacketHandler(game::client_realm_packet::ItemQuery);
+			ClearPacketHandler(game::client_realm_packet::QuestQuery);
 		}
 	}
 
 	void Player::JoinWorld() const
 	{
-		const auto strongWorld = m_world.lock();
-		if (strongWorld)
+		if (const auto strongWorld = m_world.lock())
 		{
 			strongWorld->GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
 			{
@@ -623,6 +751,7 @@ namespace mmo
 		// Check if world instance exists
 		const auto strongWorld = m_world.lock();
 		NotifyWorldNodeChanged(strongWorld.get());
+
 		if (!strongWorld)
 		{
 			WLOG("No world node available which is able to host map " << characterData->mapId << " and/or instance id " << characterData->instanceId);
@@ -672,7 +801,6 @@ namespace mmo
 		if (worldNode)
 		{
 			m_worldDestroyed = worldNode->destroyed.connect(this, &Player::OnWorldDestroyed);
-			EnableProxyPackets(true);
 		}
 	}
 

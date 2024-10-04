@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "font.h"
 
@@ -163,6 +163,10 @@ namespace mmo
 
 		// Update the amount of code points
 		SetMaxCodepoint(maxCodepoint);
+
+		// TODO: This is a hack to initialize some commonly used glyph pages
+		GetGlyphData('a');
+
 		return true;
 	}
 
@@ -617,7 +621,7 @@ namespace mmo
 
 		for (size_t c = 0; c < text.length(); ++c)
 		{
-			if (baseY > area.bottom) return lineCount;
+			if (buffer != nullptr && baseY > area.bottom) return lineCount;
 
 			size_t iterations = 1;
 

@@ -1,10 +1,12 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mysql_database.h"
 #include "mysql_wrapper/mysql_row.h"
 #include "mysql_wrapper/mysql_select.h"
 #include "mysql_wrapper/mysql_statement.h"
 #include "log/default_log_levels.h"
+
+#include "virtual_dir/file_system_reader.h"
 
 namespace mmo
 {
@@ -15,24 +17,103 @@ namespace mmo
 
 	bool MySQLDatabase::Load()
 	{
-		if (!m_connection.Connect(m_connectionInfo))
+		if (!m_connection.Connect(m_connectionInfo, true))
 		{
 			ELOG("Could not connect to the login database");
 			ELOG(m_connection.GetErrorMessage());
 			return false;
 		}
+		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
-		// Mark all realms as offline
-		ILOG("Connected to MySQL at " <<
-			m_connectionInfo.host << ":" <<
-			m_connectionInfo.port);
+		// Apply all updates
+		ILOG("Checking for database updates...");
+
+		virtual_dir::FileSystemReader reader(m_connectionInfo.updatePath);
+		auto updates = reader.queryEntries("");
+
+		// Iterate through all updates
+		for (const auto& update : updates)
+		{
+			// Check for .sql ending in string
+			if (!update.ends_with(".sql"))
+			{
+				continue;
+			}
+
+			// Remove ending .sql from file
+			const auto updateName = update.substr(0, update.size() - 4);
+
+			// Check if update has already been applied
+			mysql::Select select(m_connection, "SELECT 1 FROM `history` WHERE `id` = '" + m_connection.EscapeString(updateName) + "' LIMIT 1;");
+			if (!select.Success())
+			{
+				// There was an error
+				PrintDatabaseError();
+				return false;
+			}
+
+			if (!mysql::Row(select))
+			{
+				ILOG("Applying database update " << updateName << "...");
+
+				// Row does not exist, apply update
+				std::ostringstream buffer;
+				auto stream = reader.readFile(update, true);
+
+				mysql::Transaction transaction(m_connection);
+
+				std::string line;
+				while (std::getline(*stream, line))
+				{
+					buffer << line << "\n";
+				}
+
+				buffer << "INSERT INTO `history` (`id`) VALUES ('" << m_connection.EscapeString(updateName) << "');";
+
+				if (!m_connection.Execute(buffer.str()))
+				{
+					PrintDatabaseError();
+					return false;
+				}
+
+				// Drop all results
+				do
+				{
+					if (auto* result = m_connection.StoreResult())
+					{
+						::mysql_free_result(result);
+					}
+				} while (!mysql_next_result(m_connection.GetHandle()));
+				
+				transaction.Commit();
+			}
+		}
+
+		// Disconnect
+		m_connection.Disconnect();
+
+		// Reconnect without multi query for security reasons
+		if (!m_connection.Connect(m_connectionInfo, false))
+		{
+			ELOG("Could not reconnect to the login database");
+			ELOG(m_connection.GetErrorMessage());
+			return false;
+		}
+
+		ILOG("Database is ready!");
 
 		return true;
 	}
 
 	std::optional<AccountData> MySQLDatabase::getAccountDataByName(std::string name)
 	{
-		mysql::Select select(m_connection, "SELECT id,username,s,v FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id,username,s,v,"
+			"CASE "
+			"WHEN banned = 1 AND (ban_expiration IS NULL) THEN 2 "
+			"WHEN banned = 1 AND (ban_expiration >= NOW()) THEN 1 "
+			"ELSE 0 "
+			"END AS ban_state "
+			"FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -44,6 +125,7 @@ namespace mmo
 				row.GetField(1, data.name);
 				row.GetField(2, data.s);
 				row.GetField(3, data.v);
+				row.GetField<BanState, uint32>(4, data.banned);
 				return data;
 			}
 		}
@@ -197,6 +279,59 @@ namespace mmo
 		}
 
 		return RealmCreationResult::Success;
+	}
+
+	void MySQLDatabase::banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		std::ostringstream query;
+		query << "UPDATE `account` SET `banned` = 1";
+
+		if (!expiration.empty())
+		{
+			query << ", `ban_expiration` = '" << m_connection.EscapeString(expiration) << "'";
+		}
+
+		query << " WHERE `username` = '" << m_connection.EscapeString(accountName) << "' LIMIT 1";
+
+		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to ban account " + accountName);
+		}
+
+		const String expirationValue = expiration.empty() ? "NULL" : "'" + m_connection.EscapeString(expiration) + "'";
+		const String reasonValue = reason.empty() ? "NULL" : "'" + m_connection.EscapeString(reason) + "'";
+
+		if (!m_connection.Execute("INSERT INTO `account_ban_history` (`account_id`, `banned`, `expiration`, `reason`) SELECT `id`, 1, " + expirationValue + ", " + reasonValue + " FROM `account` WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to ban account " + accountName);
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::unbanAccountByName(const std::string& accountName, const std::string& reason)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		if (!m_connection.Execute("UPDATE `account` SET `banned` = 0, `ban_expiration` = NULL WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to unban account " + accountName);
+		}
+
+		const String reasonValue = reason.empty() ? "NULL" : "'" + m_connection.EscapeString(reason) + "'";
+
+		if (!m_connection.Execute("INSERT INTO `account_ban_history` (`account_id`, `banned`, `expiration`, `reason`) SELECT `id`, 0, NULL, " + reasonValue + " FROM `account` WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Failed to ban account " + accountName);
+		}
+
+		transaction.Commit();
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mysql_database.h"
 #include "mysql_wrapper/mysql_row.h"
@@ -15,7 +15,7 @@ namespace mmo
 
 	bool MySQLDatabase::Load()
 	{
-		if (!m_connection.Connect(m_connectionInfo))
+		if (!m_connection.Connect(m_connectionInfo, false))
 		{
 			ELOG("Could not connect to the editor database");
 			ELOG(m_connection.GetErrorMessage());

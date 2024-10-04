@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -235,10 +235,12 @@ namespace mmo
 		float Normalize()
 		{
 			const float length = GetLength();
-			ASSERT(length > 0.0f);
-			x /= length;
-			y /= length;
-			z /= length;
+			if (length > 0.0f)
+			{
+				x /= length;
+				y /= length;
+				z /= length;
+			}
 			return length;
 		}
 
@@ -315,6 +317,27 @@ namespace mmo
 		{
 			return GetSquaredDistanceTo(rhs) <=
 				(GetSquaredLength() + rhs.GetSquaredLength()) * tolerance;
+		}
+
+		[[nodiscard]] Vector3 Lerp(const Vector3& target, float t) const
+		{
+			if (t <= 0.0f) {
+				return *this;
+			}
+
+			if (t >= 1.0f) {
+				return target;
+			}
+
+			// NaN check
+			ASSERT(t == t);
+			ASSERT(x == x);
+			ASSERT(y == y);
+			ASSERT(z == z);
+			ASSERT(target.x == target.x);
+			ASSERT(target.y == target.y);
+			ASSERT(target.z == target.z);
+			return *this + (target - *this) * t;
 		}
 	};
 

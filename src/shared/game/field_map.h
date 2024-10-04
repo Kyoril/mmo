@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -14,7 +14,7 @@
 namespace mmo
 {
 	/// A map for managing flexible fields.
-	template<class TFieldBase, typename std::enable_if<std::is_unsigned<TFieldBase>::value>::type* = nullptr>
+	template<class TFieldBase, std::enable_if_t<std::is_unsigned_v<TFieldBase>>* = nullptr>
 	class FieldMap final
 	{
 	public:
@@ -55,32 +55,72 @@ namespace mmo
 		/// @param index The field index to set.
 		/// @param value The new value to set.
 		template<class T>
-		void SetFieldValue(FieldIndexType index, T value)
+		bool SetFieldValue(FieldIndexType index, T value)
 		{
 			ASSERT(index <= m_data.size());
 			ASSERT(index * sizeof(TFieldBase) + sizeof(T) <= m_data.size() * sizeof(TFieldBase));
 
 			T* data = reinterpret_cast<T*>(&m_data[index]);
+
+			// Don't need to change anything if value did not change
+			if (*data == value)
+			{
+				return false;
+			}
+
 			*data = value;
 						
 			// Mark fields as changed
-			for (uint32 i = 0; i < sizeof(T) / sizeof(uint32); ++i)
+			for (uint32 i = 0; i < sizeof(T) / sizeof(TFieldBase); ++i)
 			{
 				MarkAsChanged(index + i);
 			}
+
+			return true;
 		}
 
 		/// Determines whether the given field is marked as changed.
 		[[nodiscard]] bool IsFieldMarkedAsChanged(const FieldIndexType index) const { return m_changes[index]; }
-		
+
+		int32 GetFirstChangedField() const
+		{
+			for (uint32 i = 0; i < m_data.size(); ++i)
+			{
+				if (m_changes[i])
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
+		int32 GetLastChangedField() const
+		{
+			for (int32 i = m_data.size() - 1; i >= 0; --i)
+			{
+				if (m_changes[i])
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
 		/// Marks all fields as changed.
 		void MarkAllAsChanged() { m_changes.set(); }
+
+		/// Marks all fields as changed.
+		void MarkAllAsUnchanged() { m_changes.reset(); }
 
 		/// Marks a specific field as changed.
 		void MarkAsChanged(const FieldIndexType index) { m_changes.set(index); }
 		
 		/// Marks all fields as unchanged.
 		void MarkAsUnchanged() { m_changes.reset(); }
+
+		bool HasChanges() const { return m_changes.any(); }
 
 	public:
 		/// Serializes the whole field map, regardless of change flags.
@@ -134,7 +174,7 @@ namespace mmo
 		io::Reader& DeserializeChanges(io::Reader& r)
 		{
 			m_changes.reset();
-			
+
 			for (size_t i = 0; i < m_data.size(); i += 8)
 			{
 				uint8 flag;
@@ -163,8 +203,6 @@ namespace mmo
 				}
 			}
 			
-			m_changes.reset();
-
 			return r;
 		}
 	

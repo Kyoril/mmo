@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "texture_import.h"
 
@@ -244,8 +244,8 @@ namespace mmo
 
 				ILOG("Generating mip #" << i << " with size " << newWidth << "x" << newHeight);
 
-				const stbir_pixel_layout pixelLayout = data.format == ImageFormat::RGBX ? STBIR_RGB : STBIR_RGBA;
-				const uint32 numChannels = data.format == ImageFormat::RGBX ? 3 : 4;
+				const stbir_pixel_layout pixelLayout = /*data.format == ImageFormat::RGBX ? STBIR_RGB : */STBIR_RGBA;
+				const uint32 numChannels = /*data.format == ImageFormat::RGBX ? 3 :*/ 4;
 
 				// Resize the image
 				resizedData.resize(newWidth * newHeight * numChannels);

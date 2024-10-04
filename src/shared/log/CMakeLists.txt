@@ -1,4 +1,4 @@
-# Copyright (C) 2019, Robin Klimonow. All rights reserved.
+# Copyright (C) 2019, Kyoril. All rights reserved.
 
 add_lib(log)
 target_link_libraries(log base)

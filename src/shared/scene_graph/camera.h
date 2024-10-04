@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -49,6 +49,8 @@ namespace mmo
 		Ray GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const;
 
 		void InvalidateView() { m_recalcView = true; }
+
+		void GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const;
 
 	protected:
 		void UpdateFrustum() const;

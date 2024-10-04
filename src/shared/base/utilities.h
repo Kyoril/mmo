@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -7,6 +7,11 @@
 #include <algorithm>
 #include <iomanip>
 #include <vector>
+#include <ctime>
+#include <cctype>
+#include <sstream>
+
+#include "random.h"
 #ifndef _MSC_VER
 #	include <strings.h>
 #endif
@@ -16,7 +21,42 @@
 #endif
 
 namespace mmo
-{	
+{
+	static RandomnessGenerator randomGenerator(time(nullptr));
+
+	static inline std::string UrlDecode(const std::string& encoded)
+	{
+		std::string decoded;
+		char ch;
+		int hexValue;
+
+		for (size_t i = 0; i < encoded.length(); ++i) 
+		{
+			if (encoded[i] == '%' && i + 2 < encoded.length() &&
+				std::isxdigit(encoded[i + 1]) && std::isxdigit(encoded[i + 2]))
+			{
+				// Convert hex to character
+				std::stringstream ss;
+				ss << std::hex << encoded.substr(i + 1, 2);
+				ss >> hexValue;
+				ch = static_cast<char>(hexValue);
+				decoded += ch;
+				i += 2; // Skip the next two hex digits
+			}
+			else if (encoded[i] == '+')
+			{
+				// Convert '+' to space
+				decoded += ' ';
+			}
+			else
+			{
+				// Copy normal character
+				decoded += encoded[i];
+			}
+		}
+
+		return decoded;
+	}
 	/// A custom compare operator used to make string keys in a hash container case insensitive.
 	struct StrCaseIComp
 	{
@@ -24,6 +64,27 @@ namespace mmo
 			return _stricmp(lhs.c_str(), rhs.c_str()) < 0;
 		}
 	};
+
+	// Function to trim whitespace from both ends of a string
+	static inline std::string Trim(const std::string& str)
+	{
+		// Find the first non-whitespace character
+		auto start = std::find_if_not(str.begin(), str.end(), [](unsigned char ch) {
+			return std::isspace(ch);
+			});
+
+		// Find the last non-whitespace character
+		auto end = std::find_if_not(str.rbegin(), str.rend(), [](unsigned char ch) {
+			return std::isspace(ch);
+			}).base();
+
+		// If there's no content, return an empty string
+		if (start >= end) {
+			return "";
+		}
+
+		return std::string(start, end);
+	}
 
 	static inline size_t FindCaseInsensitive(std::string data, std::string toSearch, size_t pos = 0)
 	{

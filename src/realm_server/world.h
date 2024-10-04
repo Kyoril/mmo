@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -20,6 +20,11 @@
 #include "game/character_data.h"
 #include "game/chat_type.h"
 
+
+namespace mmo
+{
+	class TimerQueue;
+}
 
 namespace mmo
 {
@@ -49,6 +54,7 @@ namespace mmo
 
 	public:
 		explicit World(
+			TimerQueue& timerQueue,
 			WorldManager &manager,
 			PlayerManager& playerManager,
 			AsyncDatabase &database,
@@ -102,6 +108,7 @@ namespace mmo
 		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
 
 	private:
+		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
 		PlayerManager& m_playerManager;
 		AsyncDatabase &m_database;
@@ -172,6 +179,8 @@ namespace mmo
 		PacketParseResult OnInstanceDestroyed(auth::IncomingPacket& packet);
 		
 		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
+
+		PacketParseResult OnCharacterData(auth::IncomingPacket& packet);
 	};
 
 }

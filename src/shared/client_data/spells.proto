@@ -1,0 +1,118 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message RangeType {
+	required uint32 id = 1;
+	required float range = 2;
+	optional string name = 3;
+	optional string internalName = 4;
+}
+
+message Ranges {
+	repeated RangeType entry = 1;
+}
+
+message SpellReagent {
+	required uint32 item = 1;
+	optional uint32 count = 2 [default = 1];
+}
+
+message SpellEffect {
+	required uint32 index = 1;
+	required uint32 type = 2;
+	optional int32 basepoints = 3;
+	optional int32 diesides = 4;
+	optional int32 basedice = 5;
+	optional float diceperlevel = 6;
+	optional float pointsperlevel = 7;
+	optional uint32 mechanic = 8;
+	optional uint32 targeta = 9;
+	optional uint32 targetb = 10;
+	optional float radius = 11;
+	optional uint32 aura = 12;
+	optional int32 amplitude = 13;
+	optional float multiplevalue = 14;
+	optional uint32 chaintarget = 15;
+	optional uint32 itemtype = 16;
+	optional int32 miscvaluea = 17;
+	optional int32 miscvalueb = 18;
+	optional uint32 triggerspell = 19;
+	optional uint32 summonunit = 20;
+	optional int32 pointspercombopoint = 21;
+	optional uint64 affectmask = 22;
+	optional float dmgmultiplier = 23 [default = 1.0];
+}
+
+message SpellEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	repeated uint32 attributes = 3;
+	repeated SpellEffect effects = 4;
+	optional uint64 cooldown = 5;
+	optional uint32 casttime = 6;
+	optional int32 powertype = 7;
+	optional uint32 cost = 8;
+	optional uint32 costpct = 9;
+	optional int32 maxlevel = 10;
+	optional int32 baselevel = 11;
+	optional int32 spelllevel = 12;
+	optional float speed = 13;
+	optional uint32 spellSchool = 14;
+	optional uint32 dmgclass = 15;
+	optional int32 itemclass = 16;
+	optional uint32 itemsubclassmask = 17;
+	repeated uint32 skillsonlearnspell = 18;
+	optional uint32 facing = 19;
+	optional int32 duration = 20;
+	optional int32 maxduration = 21;
+	optional uint32 interruptflags = 22;
+	optional uint32 aurainterruptflags = 23;
+	optional float minrange = 24;
+	optional float maxrange = 25;
+	optional uint32 rangetype = 26;
+	optional uint32 targetmap = 27;
+	optional float targetx = 28;
+	optional float targety = 29;
+	optional float targetz = 30;
+	optional float targeto = 31;
+	optional uint32 maxtargets = 32;
+	optional uint32 talentcost = 33;
+	optional uint32 procflags = 34;
+	optional uint32 procchance = 35;
+	optional uint32 proccharges = 36;
+	optional uint32 mechanic = 37;
+	repeated uint32 additionalspells = 38;
+	optional uint32 category = 39;
+	optional uint64 categorycooldown = 40;
+	optional uint32 dispel = 41;
+	optional uint32 family = 42;
+	optional uint64 familyflags = 43;
+	optional uint32 focusobject = 44;
+	optional uint32 procschool = 45;
+	optional uint32 procfamily = 46;
+	optional uint64 procfamilyflags = 47;
+	optional uint32 procexflags = 48;
+	optional float procpermin = 49;
+	optional uint32 proccooldown = 50;
+	optional uint32 proccustomflags = 51;
+	optional uint32 baseid = 52;
+	optional uint32 channelinterruptflags = 53;
+	optional uint32 stackamount = 54;
+	optional uint32 skill = 55;
+	optional uint32 trivialskilllow = 56;
+	optional uint32 trivialskillhigh = 57;
+	optional uint32 racemask = 58;
+	optional uint32 classmask = 59;
+	repeated SpellReagent reagents = 60;
+	optional uint32 rank = 61;
+	optional uint32 prevspell = 62;
+	optional uint32 nextspell = 63;
+	optional uint32 positive = 64;
+	
+	optional string description = 65;
+	optional string icon = 66;
+}
+
+message Spells {
+	repeated SpellEntry entry = 1;
+}

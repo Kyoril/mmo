@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "program.h"
 #include "configuration.h"
@@ -117,7 +117,8 @@ namespace mmo
 			config.mysqlPort,
 			config.mysqlUser, 
 			config.mysqlPassword, 
-			config.mysqlDatabase 
+			config.mysqlDatabase,
+			config.mysqlUpdatePath
 		});
 		if (!database->Load())
 		{
@@ -212,7 +213,7 @@ namespace mmo
 
 			auto player = std::make_shared<Player>(playerManager, realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
-			playerManager.addPlayer(std::move(player));
+			playerManager.AddPlayer(std::move(player));
 
 			// Now we can start receiving data
 			connection->startReceiving();
@@ -233,6 +234,7 @@ namespace mmo
 			config.webPort,
 			config.webPassword,
 			playerManager,
+			realmManager,
 			*database
 			);
 		

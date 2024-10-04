@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -22,8 +22,9 @@ namespace mmo
 		//~End CGxBufferBase
 
 	private:
-		GraphicsDeviceD3D11& Device;
-		ComPtr<ID3D11Buffer> Buffer;
+		GraphicsDeviceD3D11& m_device;
+		ComPtr<ID3D11Buffer> m_buffer;
+		ComPtr<ID3D11Buffer> m_tempStagingBuffer;
 	};
 }
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "catch.hpp"
 #include "memory_source.h"
@@ -25,7 +25,7 @@ public:
 
 // Include after ASSERT macro definition to prevent setting this macro
 #include "game/field_map.h"
-#include "game/game_object_s.h"
+#include "game_server/game_object_s.h"
 
 using namespace mmo;
 

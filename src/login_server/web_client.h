@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -29,9 +29,10 @@ namespace mmo
 		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void handleCreateAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		WebService& m_service;
-		
 	};
 }

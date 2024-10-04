@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -25,10 +25,10 @@ namespace mmo
 			IDatabase &database
 		);
 
-		PlayerManager &getPlayerManager() const { return m_playerManager; }
-		IDatabase &getDatabase() const { return m_database; }
-		GameTime getStartTime() const;
-		const String &getPassword() const;
+		PlayerManager &GetPlayerManager() const { return m_playerManager; }
+		IDatabase &GetDatabase() const { return m_database; }
+		GameTime GetStartTime() const;
+		const String &GetPassword() const;
 
 		virtual web::WebService::WebClientPtr createClient(std::shared_ptr<Client> connection) override;
 

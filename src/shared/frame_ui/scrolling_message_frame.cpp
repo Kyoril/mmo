@@ -26,17 +26,29 @@ namespace mmo
 
         m_messages.push_back({message, r, g, b});
 		OnMessagesChanged();
+
+		ScrollToBottom();
 	}
 
 	void ScrollingMessageFrame::ScrollUp()
 	{
-		m_linePosition = std::max(m_linePosition - 1, 0);
+		if (IsAtTop())
+		{
+			return;
+		}
+
+		m_linePosition--;
 		Invalidate();
 	}
 
 	void ScrollingMessageFrame::ScrollDown()
 	{
-		m_linePosition = std::min(m_linePosition + 1, GetMessageCount() - 1);
+		if (IsAtBottom())
+		{
+			return;
+		}
+
+		m_linePosition++;
 		Invalidate();
 	}
 
@@ -48,7 +60,8 @@ namespace mmo
 
 	void ScrollingMessageFrame::ScrollToBottom()
 	{
-		m_linePosition = GetMessageCount() - 1;
+		m_linePosition = std::max(0, m_lineCount - m_visibleLineCount);
+
 		Invalidate();
 	}
 
@@ -72,7 +85,7 @@ namespace mmo
 
 	bool ScrollingMessageFrame::IsAtBottom() const
 	{
-		return m_linePosition >= GetMessageCount() - 1;
+		return m_linePosition >= m_lineCount - m_linePosition;
 	}
 
 	const ScrollingMessageFrame::Message& ScrollingMessageFrame::GetMessageAt(size_t index) const
@@ -164,10 +177,7 @@ namespace mmo
 				m_lineCount += font->GetLineCount(message.message, contentRect, textScale);
 			}
 
-			if (m_linePosition >= m_lineCount)
-			{
-				m_linePosition = std::max(0, m_lineCount - 1);
-			}
+			m_linePosition = std::max(0, m_lineCount - m_visibleLineCount);
 		}
 		else
 		{

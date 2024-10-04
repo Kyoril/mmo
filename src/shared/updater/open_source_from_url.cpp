@@ -1,9 +1,10 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "open_source_from_url.h"
 #include "update_source.h"
 #include "update_url.h"
 #include "file_system_update_source.h"
+#include "https_update_source.h"
 #include "http_update_source.h"
 
 
@@ -24,8 +25,15 @@ namespace mmo
 
 			case UP_HTTP:
 				source.reset(new HTTPUpdateSource(
+					url.host,
+					static_cast<uint16>(url.port ? url.port : 80),
+					url.path));
+				break;
+
+			case UP_HTTPS:
+				source.reset(new HTTPSUpdateSource(
 				                 url.host,
-				                 static_cast<uint16>(url.port ? url.port : 80),
+				                 static_cast<uint16>(url.port ? url.port : 443),
 				                 url.path));
 				break;
 

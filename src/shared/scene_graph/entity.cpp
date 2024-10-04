@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "entity.h"
 
@@ -41,13 +41,21 @@ namespace mmo
 
 	AnimationState* Entity::GetAnimationState(const String& name) const
 	{
-		ASSERT(m_animationStates);
+		if (!m_animationStates)
+		{
+			return nullptr;
+		}
+
 		return m_animationStates->GetAnimationState(name);
 	}
 
 	bool Entity::HasAnimationState(const String& name) const
 	{
-		ASSERT(m_animationStates);
+		if (!m_animationStates)
+		{
+			return false;
+		}
+
 		return m_animationStates->HasAnimationState(name);
 	}
 

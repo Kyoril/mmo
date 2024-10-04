@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "frame_mgr.h"
 #include "frame_layer.h"
@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 
+#include "checkbox_renderer.h"
 #include "progress_bar.h"
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
@@ -174,9 +175,12 @@ namespace mmo
 			// Parse the file contents
 			if (XML_Parse(parser, &buffer[0], buffer.size(), XML_TRUE) == XML_STATUS_ERROR)
 			{
+				XML_ParserFree(parser);
 				ELOG("Xml Error: " << XML_ErrorString(XML_GetErrorCode(parser)) << " - File '" << filename << "', Line " << XML_GetErrorLineNumber(parser));
 				return;
 			}
+
+			XML_ParserFree(parser);
 		}
 
 		/// Subroutine for loading a *.toc file for the frame ui. A toc file is a text file which
@@ -281,6 +285,12 @@ namespace mmo
 				return std::make_unique<ButtonRenderer>(name);
 			});
 
+			// CheckboxRenderer
+			frameMgr.RegisterFrameRenderer("CheckboxRenderer", [](const std::string& name)
+				{
+					return std::make_unique<CheckboxRenderer>(name);
+				});
+
 			// TextFieldRenderer
 			frameMgr.RegisterFrameRenderer("TextFieldRenderer", [](const std::string& name)
 			{
@@ -348,6 +358,15 @@ namespace mmo
 					]),
 
 			luabind::scope(
+				luabind::class_<ButtonState>("ButtonState")
+				.enum_("type")
+				[
+					luabind::value("NORMAL", 0),
+					luabind::value("HOVERED", 1),
+					luabind::value("PUSHED", 2)
+				]),
+
+			luabind::scope(
 				luabind::class_<Frame>("Frame")
 	               .def("SetText", &Frame::SetText)
 	               .def("GetText", &Frame::GetText)
@@ -362,21 +381,34 @@ namespace mmo
 	               .def("Clone", &Frame::Clone)
 	               .def("AddChild", &Frame::AddChild)
 	               .def("GetChildCount", &Frame::GetChildCount)
+	               .def("GetChild", &Frame::GetChild)
 	               .def("SetAnchor", &Frame::SetAnchor)
+					.def("ClearAnchor", &Frame::ClearAnchor)
+					.def("ClearAnchors", &Frame::ClearAnchors)
 	               .def("SetSize", &Frame::SetSize)
 	               .def("SetWidth", &Frame::SetWidth)
 	               .def("SetHeight", &Frame::SetHeight)
 	               .def("GetWidth", &Frame::GetWidth)
 	               .def("GetHeight", &Frame::GetHeight)
+	               .def("GetTextHeight", &Frame::GetTextHeight)
 	               .def("CaptureInput", &Frame::CaptureInput)
 	               .def("HasInputCaptured", &Frame::HasInputCaptured)
 					.def("ReleaseInput", &Frame::ReleaseInput)
 				   .def("SetProperty", &Frame::SetProperty)
-	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)),
+	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)
+					.property("id", &Frame::GetId, &Frame::SetId)
+					.def("SetOnEnterHandler", &Frame::SetOnEnter)
+					.def("SetOnLeaveHandler", &Frame::SetOnLeave)),
 
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
-					.def("SetClickedHandler", &Button::SetLuaClickedHandler)),
+					.def("IsChecked", &Button::IsChecked)
+					.def("SetChecked", &Button::SetChecked)
+					.def("IsCheckable", &Button::IsCheckable)
+					.def("SetCheckable", &Button::SetCheckable)
+					.def("SetClickedHandler", &Button::SetLuaClickedHandler)
+					.def("SetButtonState", &Button::SetButtonState)
+					.def("GetButtonState", &Button::GetButtonState)),
 
 			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
@@ -622,7 +654,15 @@ namespace mmo
 				auto prevFrame = m_hoverFrame;
 				m_hoverFrame = std::move(hoverFrame);
 
-				//DLOG("Hovered frame changed: " << (m_hoverFrame ? m_hoverFrame->GetName() : "(nullptr)"));
+				if (prevFrame)
+				{
+					prevFrame->OnMouseLeave();
+				}
+
+				if (m_hoverFrame)
+				{
+					m_hoverFrame->OnMouseEnter();
+				}
 
 				// Invalidate the old hover frame if there was any
 				if (prevFrame)

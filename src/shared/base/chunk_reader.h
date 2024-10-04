@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -86,6 +86,14 @@ namespace mmo
 			else
 			{
 				m_requiredChunkHandlers.erase(chunkHeader);
+			}
+		}
+
+		void RemoveChunkHandler(const uint32 chunkHeader)
+		{
+			if (m_chunkHandlers.contains(chunkHeader))
+			{
+				m_chunkHandlers.erase(chunkHeader);
 			}
 		}
 

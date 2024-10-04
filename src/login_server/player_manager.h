@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -26,19 +26,26 @@ namespace mmo
 		explicit PlayerManager(
 		    size_t playerCapacity
 		);
+
 		~PlayerManager();
 
 		/// Notifies the manager that a player has been disconnected which will
 		/// delete the player instance.
-		void playerDisconnected(Player &player);
+		void PlayerDisconnected(Player &player);
+
 		/// Determines whether the player capacity limit has been reached.
-		bool hasPlayerCapacityBeenReached();
+		bool HasPlayerCapacityBeenReached();
+
 		/// Adds a new player instance to the manager.
-		void addPlayer(std::shared_ptr<Player> added);
+		void AddPlayer(std::shared_ptr<Player> added);
+
 		/// Gets a player by his account name.
-		Player *getPlayerByAccountName(const String &accountName);
+		Player *GetPlayerByAccountName(const String &accountName);
+
 		/// 
-		Player *getPlayerByAccountID(uint32 accountId);
+		Player *GetPlayerByAccountID(uint64 accountId);
+
+		void KickPlayerByAccountId(uint64 accountId);
 
 	private:
 

@@ -51,7 +51,7 @@ IF(APPLE)
     SET(MACOSX_BUNDLE_BUNDLE_NAME "${CMAKE_PROJECT_NAME}")
     SET(MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
     SET(MACOSX_BUNDLE_BUNDLE_VERSION "0")
-    SET(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2019 - 2022, Robin Klimonow. All rights reserved.")
+    SET(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2019 - 2022, Kyoril. All rights reserved.")
     SET(MACOSX_BUNDLE_NSMAIN_NIB_FILE "MainMenu")
     SET(MACOSX_BUNDLE_NSPRINCIPAL_CLASS "NSApplication")
 ENDIF(APPLE)
@@ -73,9 +73,13 @@ target_link_libraries(mmo_client
 	frame_ui
 	expat
 	game
+    game_client
 	scene_graph
     lua
-    luabind)
+    luabind
+    client_data
+    paging
+    terrain)
 	
 target_link_libraries(mmo_client graphics_null)
 if (WIN32)

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "realm_manager.h"
 #include "realm.h"
@@ -84,5 +84,15 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	void RealmManager::NotifyAccountBanned(uint64 accountId)
+	{
+		std::scoped_lock scopedLock{ m_realmsMutex };
+
+		for (const auto& realm : m_realms)
+		{
+			realm->NotifyAccountBanned(accountId);
+		}
 	}
 }

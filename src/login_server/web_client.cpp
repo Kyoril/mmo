@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "web_client.h"
 
@@ -9,6 +9,10 @@
 #include "player_manager.h"
 #include "player.h"
 #include "log/default_log_levels.h"
+
+#include <regex>
+
+#include "realm_manager.h"
 
 namespace mmo
 {
@@ -33,7 +37,7 @@ namespace mmo
 		                          [this](const std::string &name, const std::string &password) -> bool
 			{
 				(void)name;
-				const auto &expectedPassword = static_cast<WebService &>(this->getService()).getPassword();
+				const auto &expectedPassword = static_cast<WebService &>(this->getService()).GetPassword();
 				return (expectedPassword == password);
 			}))
 		{
@@ -48,7 +52,7 @@ namespace mmo
 			{
 				if (url == "/uptime")
 				{
-					const GameTime startTime = static_cast<WebService &>(getService()).getStartTime();
+					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
 
 					std::ostringstream message;
 					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
@@ -77,6 +81,14 @@ namespace mmo
 				else if (url == "/create-realm")
 				{
 					handleCreateRealm(request, response);
+				}
+				else if (url == "/ban-account")
+				{
+					handleBanAccount(request, response);
+				}
+				else if (url == "/unban-account")
+				{
+					handleUnbanAccount(request, response);
 				}
 				else
 				{
@@ -152,7 +164,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 		
 		// Execute
-		const auto result = m_service.getDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
@@ -218,7 +230,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		const auto result = m_service.getDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
@@ -237,5 +249,116 @@ namespace mmo
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
 		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+	}
+
+	namespace
+	{
+		bool isValidDateTime(const std::string& dateTime)
+		{
+			// Regular expression for "YYYY-MM-DD HH:MM:SS" format
+			std::regex dateTimeRegex(
+				R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\s(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$)"
+			);
+
+			return std::regex_match(dateTime, dateTimeRegex);
+		}
+	}
+	
+	void WebClient::handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountNameIt = arguments.find("account_name");
+		const auto expirationIt = arguments.find("expiration");
+		const auto reasonIt = arguments.find("reason");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		if (expirationIt != arguments.end() && !isValidDateTime(expirationIt->second))
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'\"}");
+			return;
+		}
+
+		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+		const String expiration = expirationIt == arguments.end() ? "" : expirationIt->second;
+		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
+
+		try
+		{
+			std::optional<AccountData> account = m_service.GetDatabase().getAccountDataByName(name);
+			if (!account)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				return;
+			}
+
+			if (account->banned != BanState::None)
+			{
+				response.setStatus(net::http::OutgoingAnswer::Conflict);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_ALREADY_BANNED\", \"message\":\"The account is already banned right now!\"}");
+				return;
+			}
+
+			m_service.GetDatabase().banAccountByName(name, expiration, reason);
+			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+
+			// Notify subscribers
+			m_service.GetRealmManager().NotifyAccountBanned(account->id);
+			m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
+		}
+		catch(...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
+	}
+
+	void WebClient::handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountNameIt = arguments.find("account_name");
+		const auto reasonIt = arguments.find("reason");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
+
+		try
+		{
+			m_service.GetDatabase().unbanAccountByName(name, reason);
+			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
 	}
 }

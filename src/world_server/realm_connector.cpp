@@ -1,11 +1,11 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "realm_connector.h"
 
 #include "player.h"
 #include "player_manager.h"
-#include "game/world_instance_manager.h"
-#include "game/world_instance.h"
+#include "game_server/world_instance_manager.h"
+#include "game_server/world_instance.h"
 #include "version.h"
 
 #include "base/utilities.h"
@@ -14,13 +14,15 @@
 #include "base/timer_queue.h"
 #include "game/character_data.h"
 #include "game/chat_type.h"
+#include "game_server/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
+#include "proto_data/project.h"
 
 
 namespace mmo
 {
-	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager, std::unique_ptr<GameObjectFactory> gameObjectFactory,
+	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
 		const proto::Project& project)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
@@ -322,6 +324,18 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::SendCharacterData(const GamePlayerS& character)
+	{
+		sendSinglePacket([&character](auth::OutgoingPacket & outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::CharacterData);
+			outPacket
+				<< io::write<uint64>(character.GetGuid())
+				<< character;
+			outPacket.Finish();
+		});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);
@@ -400,11 +414,27 @@ namespace mmo
 			ASSERT(instance);
 		}
 
+		const auto* classEntry = m_project.classes.getById(characterData.classId);
+		ASSERT(classEntry);
+
 		// Apply instance id before sending
 		characterData.instanceId = instance->GetId();
 
 		// Create the character object
-		auto characterObject = std::static_pointer_cast<GameUnitS>(m_objectFactory->CreateGameObject(characterData.characterId, ObjectTypeId::Player));
+		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
+		characterObject->Initialize();
+		characterObject->Set(object_fields::Guid, characterData.characterId);
+
+		characterObject->Relocate(characterData.position, characterData.facing);
+
+		characterObject->SetClass(*classEntry);
+		characterObject->SetLevel(characterData.level);
+		characterObject->Set<uint32>(object_fields::Xp, characterData.xp);
+		characterObject->Set<uint32>(object_fields::Health, Clamp(characterData.hp, 0u, characterObject->Get<uint32>(object_fields::MaxHealth)));
+		characterObject->Set<uint32>(object_fields::Mana, Clamp(characterData.mana, 0u, characterObject->Get<uint32>(object_fields::MaxMana)));
+		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
+		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
+		characterObject->ClearFieldChanges();
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(*this, characterObject, characterData, m_project);

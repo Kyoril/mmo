@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -14,11 +14,12 @@ namespace mmo
 	struct CharacterData
 	{
 		explicit CharacterData()
-			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {})
+			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {}, 0, 0, 0, 1, 0, 20, 0, 0, 0)
 		{
 		}
 
-		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds)
+		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds,
+			uint32 classId, uint32 raceId, uint8 gender, uint8 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy)
 			: characterId(characterId)
 			, name(std::move(name))
 			, mapId(mapId)
@@ -26,6 +27,15 @@ namespace mmo
 			, position(position)
 			, facing(facing)
 			, spellIds(spellIds)
+			, classId(classId)
+			, raceId(raceId)
+			, gender(gender)
+			, level(level)
+			, xp(xp)
+			, hp(hp)
+			, mana(mana)
+			, rage(rage)
+			, energy(energy)
 		{
 		}
 
@@ -35,7 +45,15 @@ namespace mmo
 		InstanceId instanceId;
 		Vector3 position;
 		Radian facing;
-
+		uint32 classId;
+		uint32 raceId;
+		uint8 gender;
+		uint8 level;
+		uint32 xp;
+		uint32 hp;
+		uint32 mana;
+		uint32 rage;
+		uint32 energy;
 		std::vector<uint32> spellIds;
 	};
 
@@ -49,7 +67,17 @@ namespace mmo
 			>> io::read<float>(data.position.y)
 			>> io::read<float>(data.position.z)
 			>> data.facing
-			>> io::read_container<uint16>(data.spellIds);
+			>> io::read_container<uint16>(data.spellIds)
+			>> io::read<uint32>(data.classId)
+			>> io::read<uint32>(data.raceId)
+			>> io::read<uint32>(data.gender)
+			>> io::read<uint8>(data.level)
+			>> io::read<uint32>(data.xp)
+			>> io::read<uint32>(data.hp)
+			>> io::read<uint32>(data.mana)
+			>> io::read<uint32>(data.rage)
+			>> io::read<uint32>(data.energy)
+		;
 	}
 	
 	inline io::Writer& operator<<(io::Writer& reader, const CharacterData& data)
@@ -62,6 +90,16 @@ namespace mmo
 			<< io::write<float>(data.position.y)
 			<< io::write<float>(data.position.z)
 			<< data.facing
-			<< io::write_dynamic_range<uint16>(data.spellIds);
+			<< io::write_dynamic_range<uint16>(data.spellIds)
+			<< io::write<uint32>(data.classId)
+			<< io::write<uint32>(data.raceId)
+			<< io::write<uint32>(data.gender)
+			<< io::write<uint8>(data.level)
+			<< io::write<uint32>(data.xp)
+			<< io::write<uint32>(data.hp)
+			<< io::write<uint32>(data.mana)
+			<< io::write<uint32>(data.rage)
+			<< io::write<uint32>(data.energy)
+			;
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "world_editor_instance.h"
 
@@ -6,7 +6,7 @@
 
 #include "editor_host.h"
 #include "world_editor.h"
-#include "world_page_loader.h"
+#include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_layout.h"
 #include "log/default_log_levels.h"
@@ -24,9 +24,6 @@ namespace mmo
 
 	/// @brief Used for map entities.
 	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
-
-	/// @brief Used to get all known objects.
-	static constexpr uint32 SceneQueryFlags_All = 0xffffffff;
 
 	constexpr uint32 versionHeader = 'MVER';
 	constexpr uint32 meshHeader = 'MESH';
@@ -58,6 +55,7 @@ namespace mmo
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
+		m_worldGrid->SetVisible(false);
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &WorldEditorInstance::Render);
 
@@ -72,9 +70,6 @@ namespace mmo
 			workQueue.run();
 		});
 
-		const auto& camPos = m_camera->GetDerivedPosition();
-		const PagePosition pos(camPos.x / (m_worldGrid->GetGridSize() * m_worldGrid->GetLargeGridInterval()), camPos.z / (m_worldGrid->GetGridSize() * m_worldGrid->GetLargeGridInterval()));
-
 		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
 		{
 			workQueue.post(work);
@@ -84,6 +79,7 @@ namespace mmo
 			dispatcher.post(work);
 		};
 
+		const PagePosition pos = GetPagePositionFromCamera();
 		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 		
@@ -216,6 +212,17 @@ namespace mmo
 			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
 		}
 
+		// Setup terrain
+		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
+		
+		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
+		m_cloudsEntity->SetQueryFlags(0);
+		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
+		m_cloudsNode->AttachObject(*m_cloudsEntity);
+		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
+		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
+		
 		ILOG("Successfully read world file!");
 	}
 
@@ -295,11 +302,12 @@ namespace mmo
 			}
 		}
 
+		m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
+
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
-		
-		const auto& camPos = m_camera->GetDerivedPosition();
-		const PagePosition pos(camPos.x / 533.3333f, camPos.z / 533.3333f);
+
+		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
 		
@@ -315,9 +323,8 @@ namespace mmo
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
+		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-		
 		m_scene.Render(*m_camera);
 		m_transformWidget->Update(m_camera);
 		
@@ -490,7 +497,10 @@ namespace mmo
 			ImGui::SetItemAllowOverlap();
 			ImGui::SetCursorPos(ImVec2(16, 16));
 			
-			ImGui::Button("Toggle Grid");
+			if (ImGui::Button("Toggle Grid"))
+			{
+				m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
+			}
 			ImGui::SameLine();
 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 			ImGui::SameLine();
@@ -770,18 +780,30 @@ namespace mmo
 		}), m_mapEntities.end());
 	}
 
+	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
+	{
+		const auto& camPos = m_camera->GetDerivedPosition();
+		return PagePosition(static_cast<uint32>(
+			32 - floor(camPos.x / terrain::constants::PageSize)),
+			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
+
+	}
+
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
 	{
 		const auto &mainPage = page.GetMainPage();
-		const auto &pos = mainPage.GetPosition();
+		const PagePosition &pos = mainPage.GetPosition();
 
 		if (isAvailable)
 		{
 			DLOG("Page " << mainPage.GetPosition() << " is available!");
+			m_terrain->PreparePage(pos.x(), pos.y());
+			m_terrain->LoadPage(pos.x(), pos.y());
 		}
 		else
 		{
 			DLOG("Page " << mainPage.GetPosition() << " is unavailable");
+			m_terrain->UnloadPage(pos.x(), pos.y());
 		}
 	}
 }

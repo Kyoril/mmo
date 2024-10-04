@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "graphics_device_d3d11.h"
 
@@ -977,7 +977,7 @@ namespace mmo
 		}
 		
 		// TODO: Remove this call / make it internal to reduce the amount of state changes! Materials bring their own assigned shaders and vertex data brings its own input layout
-		SetVertexFormat(operation.vertexFormat);
+		//SetVertexFormat(operation.vertexFormat);
 
 		// Apply material
 		operation.material->Apply(*this);

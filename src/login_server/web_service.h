@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 
 namespace mmo
 {
+	class RealmManager;
 	class PlayerManager;
 	struct IDatabase;
 
@@ -22,19 +23,22 @@ namespace mmo
 		    uint16 port,
 		    String password,
 		    PlayerManager &playerManager,
+			RealmManager &realmManager,
 			IDatabase &database
 		);
 
-		PlayerManager &getPlayerManager() const { return m_playerManager; }
-		IDatabase &getDatabase() const { return m_database; }
-		GameTime getStartTime() const;
-		const String &getPassword() const;
+		PlayerManager &GetPlayerManager() const { return m_playerManager; }
+		RealmManager& GetRealmManager() const { return m_realmManager; }
+		IDatabase &GetDatabase() const { return m_database; }
+		GameTime GetStartTime() const;
+		const String &GetPassword() const;
 
 		virtual web::WebService::WebClientPtr createClient(std::shared_ptr<Client> connection) override;
 
 	private:
 
 		PlayerManager &m_playerManager;
+		RealmManager& m_realmManager;
 		IDatabase &m_database;
 		const GameTime m_startTime;
 		const String m_password;

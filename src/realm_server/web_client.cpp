@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "web_client.h"
 
@@ -33,7 +33,7 @@ namespace mmo
 		                          [this](const std::string &name, const std::string &password) -> bool
 			{
 				(void)name;
-				const auto &expectedPassword = static_cast<WebService &>(this->getService()).getPassword();
+				const auto &expectedPassword = static_cast<WebService &>(this->getService()).GetPassword();
 				return (expectedPassword == password);
 			}))
 		{
@@ -48,7 +48,7 @@ namespace mmo
 			{
 				if (url == "/uptime")
 				{
-					const GameTime startTime = static_cast<WebService &>(getService()).getStartTime();
+					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
 
 					std::ostringstream message;
 					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
@@ -148,7 +148,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		const auto result = m_service.getDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == WorldCreationResult::WorldNameAlreadyInUse)

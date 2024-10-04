@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -529,15 +529,18 @@ namespace io
 			if (!r) return r;
 			
 			surr.guid = 0;
-			
+
 			std::uint8_t value = 0;
-			for (size_t i = 0; i < sizeof(std::uint8_t); ++i)
+			for (std::uint8_t i = 0; bitMask != 0; ++i)
 			{
-				if (bitMask & (1 << i))
+				if (bitMask & 0x01)
 				{
+					// Calculate the shift amount based on the current index
 					r >> io::read<std::uint8_t>(value);
-					surr.guid |= static_cast<std::uint64_t>(value) << i;
+					surr.guid |= static_cast<std::uint64_t>(value) << (i * 8);
 				}
+
+				bitMask >>= 1; // Move to the next bit in the bitmask
 			}
 			
 			return r;

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "material_editor_instance.h"
 
@@ -161,7 +161,7 @@ namespace mmo
 
             ImGui::Dummy(ImVec2(100.0f, 0.0f)); // For minimum node width
 
-            Grid layout;
+			GridLayout layout;
             layout.Begin(node->GetId(), 2, 100.0f);
             layout.SetColumnAlignment(0.0f);
 

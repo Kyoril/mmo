@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "configuration.h"
 
@@ -17,8 +17,8 @@ namespace mmo
 	const uint32 Configuration::ModelEditorConfigVersion = 0x01;
 
 	Configuration::Configuration()
-		: assetRegistryPath("")
-		, projectPath("")
+		: assetRegistryPath("Data")
+		, projectPath("Project")
 		, mysqlHost("127.0.0.1")
 		, mysqlPort(mmo::constants::DefaultMySQLPort)
 		, mysqlUser("mmo")

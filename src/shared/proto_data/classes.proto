@@ -4,6 +4,21 @@ package mmo.proto;
 message ClassBaseValues {
 	required uint32 health = 1;
 	required uint32 mana = 2;
+	required uint32 stamina = 3;
+	required uint32 strength = 4;
+	required uint32 agility = 5;
+	required uint32 intellect = 6;
+	required uint32 spirit = 7;
+}
+
+message ClassSpell {
+	required uint32 level = 1;
+	required uint32 spell = 2;
+}
+
+message AttackPowerStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
 }
 
 message ClassEntry {
@@ -11,17 +26,18 @@ message ClassEntry {
 	required string name = 2;
 	required string internalName = 3;
 	enum PowerType {
-		HEALTH = -2;
 		MANA = 0;
 		RAGE = 1;
-		FOCUS = 2;
-		ENERGY = 3;
-		HAPPINESS = 4;
+		ENERGY = 2;
 	}
 	required PowerType powertype = 4;
 	required uint32 spellfamily = 5;
 	optional uint32 flags = 6;
 	repeated ClassBaseValues levelbasevalues = 7;
+	repeated ClassSpell spells = 8;
+	optional float attackPowerPerLevel = 9;
+	optional float attackPowerOffset = 10;
+	repeated AttackPowerStatSource attackPowerStatSources = 11;
 }
 
 message Classes {

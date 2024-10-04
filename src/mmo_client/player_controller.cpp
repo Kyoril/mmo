@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "player_controller.h"
 
@@ -12,6 +12,8 @@
 #include "scene_graph/scene_node.h"
 
 #include "platform.h"
+#include "console/console.h"
+#include "frame_ui/frame_mgr.h"
 
 namespace mmo
 {
@@ -43,6 +45,9 @@ namespace mmo
 			};
 		}
 
+		m_selectionSceneQuery = m_scene.CreateRayQuery(Ray());
+		m_selectionSceneQuery->SetQueryMask(0xF0000000);
+
 		SetupCamera();
 	}
 
@@ -53,16 +58,25 @@ namespace mmo
 		if (m_defaultCamera)
 		{
 			m_scene.DestroyCamera(*m_defaultCamera);
+			m_defaultCamera = nullptr;
 		}
 
 		if (m_cameraNode)
 		{
 			m_scene.DestroySceneNode(*m_cameraNode);
+			m_cameraNode = nullptr;
 		}
 
 		if (m_cameraAnchorNode)
 		{
 			m_scene.DestroySceneNode(*m_cameraAnchorNode);
+			m_cameraAnchorNode = nullptr;
+		}
+
+		if (m_cameraOffsetNode)
+		{
+			m_scene.DestroySceneNode(*m_cameraOffsetNode);
+			m_cameraOffsetNode = nullptr;
 		}
 	}
 
@@ -77,6 +91,11 @@ namespace mmo
 		if (m_controlFlags & ControlFlags::MoveBackwardKey)
 		{
 			--movementDirection;
+		}
+
+		if (!m_controlledUnit->IsAlive())
+		{
+			movementDirection = 0;
 		}
 
 		if (movementDirection != 0)
@@ -122,6 +141,12 @@ namespace mmo
 			--direction;
 		}
 
+
+		if (!m_controlledUnit->IsAlive())
+		{
+			direction = 0;
+		}
+
 		if (direction != 0)
 		{
 			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
@@ -155,6 +180,11 @@ namespace mmo
 				--direction;
 			}
 
+			if (!m_controlledUnit->IsAlive())
+			{
+				direction = 0;
+			}
+
 			if (direction != 0)
 			{
 				if ((m_controlFlags & ControlFlags::TurnSent))
@@ -184,11 +214,11 @@ namespace mmo
 
 		if (movementInfo.IsTurning())
 		{
-			if (movementInfo.movementFlags & MovementFlags::TurnLeft)
+			if (movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
 				playerNode->Yaw(Degree(180) * deltaSeconds, TransformSpace::World);
 			}
-			else if (movementInfo.movementFlags & MovementFlags::TurnRight)
+			else if (movementInfo.movementFlags & movement_flags::TurnRight)
 			{
 				playerNode->Yaw(Degree(-180) * deltaSeconds, TransformSpace::World);
 			}
@@ -198,21 +228,21 @@ namespace mmo
 		{
 			Vector3 movementVector;
 
-			if (movementInfo.movementFlags & MovementFlags::Forward)
+			if (movementInfo.movementFlags & movement_flags::Forward)
 			{
-				movementVector.z -= 1.0f;
+				movementVector.x += 1.0f;
 			}
-			if(movementInfo.movementFlags & MovementFlags::Backward)
-			{
-				movementVector.z += 1.0f;
-			}
-			if (movementInfo.movementFlags & MovementFlags::StrafeLeft)
+			if(movementInfo.movementFlags & movement_flags::Backward)
 			{
 				movementVector.x -= 1.0f;
 			}
-			if(movementInfo.movementFlags & MovementFlags::StrafeRight)
+			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
-				movementVector.x += 1.0f;
+				movementVector.z -= 1.0f;
+			}
+			if(movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				movementVector.z += 1.0f;
 			}
 
 			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
@@ -303,6 +333,8 @@ namespace mmo
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
 
+		m_defaultCamera->InvalidateView();
+
 		MovePlayer();
 		StrafePlayer();
 
@@ -310,10 +342,14 @@ namespace mmo
 		
 		ApplyLocalMovement(deltaSeconds);
 		UpdateHeartbeat();
+
+		
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
+		m_mouseDownTime = GetAsyncTimeMs();
+		m_clickPosition = Point(x, y);
 		m_lastMousePosition = Point(x, y);
 
 		if (button == MouseButton_Left)
@@ -333,6 +369,51 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
+		if (std::abs(m_clickPosition.x - x) <= 8 &&
+			std::abs(m_clickPosition.y - y) <= 8)
+		{
+			int32 w, h;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
+			m_selectionSceneQuery->ClearResult();
+			m_selectionSceneQuery->SetSortByDistance(true);
+			m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
+				static_cast<float>(x) / static_cast<float>(w), 
+				static_cast<float>(y) / static_cast<float>(h), 1000.0f));
+			m_selectionSceneQuery->Execute();
+
+			const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
+
+			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
+			if (!hitResult.empty())
+			{
+				Entity* entity = (Entity*)hitResult[0].movable;
+				if (entity)
+				{
+					GameUnitC* unit = entity->GetUserObject<GameUnitC>();
+					if (unit)
+					{
+						if (unit->GetGuid() != previousSelectedUnit)
+						{
+							m_connector.SetSelection(unit->GetGuid());
+						}
+
+						if (button == MouseButton_Right)
+						{
+							// TODO: Support more interactions than auto attack
+							m_controlledUnit->Attack(*unit);
+						}
+					}
+				}
+			}
+			else
+			{
+				if (previousSelectedUnit != 0)
+				{
+					m_connector.SetSelection(0);
+				}
+			}
+		}
+
 		m_lastMousePosition = Point(x, y);
 		
 		if (button == MouseButton_Left)
@@ -362,6 +443,7 @@ namespace mmo
 		{
 			return;
 		}
+
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
 		m_lastMousePosition = position;
@@ -382,28 +464,15 @@ namespace mmo
 			ClampCameraPitch();
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive())
 		{
-			const Radian facing = m_cameraAnchorNode->GetDerivedOrientation().GetYaw();
-			m_controlledUnit->GetSceneNode()->SetDerivedOrientation(Quaternion(facing, Vector3::UnitY));
+			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
+			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
 			m_cameraAnchorNode->SetOrientation(
-				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
+				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(false), Vector3::UnitX));
 
 			m_controlledUnit->SetFacing(facing);
 			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
-		}
-		
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
-		{
-			if (fabsf(delta.x) >= FLT_EPSILON)
-			{
-				m_controlledUnit->GetSceneNode()->SetDerivedOrientation(
-					Quaternion(m_cameraAnchorNode->GetDerivedOrientation().GetYaw(), Vector3::UnitY));
-				m_cameraAnchorNode->SetOrientation(
-					Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(), Vector3::UnitX));
-				
-				SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
-			}
 		}
 	}
 
@@ -414,67 +483,17 @@ namespace mmo
 		const float currentZoom = m_cameraNode->GetPosition().z;
 		s_cameraZoomCVar->Set(currentZoom - static_cast<float>(delta));
 	}
-
-	void PlayerController::OnKeyDown(const int32 key)
-	{
-		switch(key)
-		{
-		case 0x57:
-			m_controlFlags |= ControlFlags::MoveForwardKey;
-			return;
-		case 0x53:
-			m_controlFlags |= ControlFlags::MoveBackwardKey;
-			return;
-		case 0x41:
-			m_controlFlags |= ControlFlags::TurnLeftKey;
-			break;
-		case 0x44:
-			m_controlFlags |= ControlFlags::TurnRightKey;
-			break;
-		case 81:
-			m_controlFlags |= ControlFlags::StrafeLeftKey;
-			break;
-		case 69:
-			m_controlFlags |= ControlFlags::StrafeRightKey;
-			break;
-		}
-	}
-
-	void PlayerController::OnKeyUp(const int32 key)
-	{
-		switch(key)
-		{
-		case 0x57:
-			m_controlFlags &= ~ControlFlags::MoveForwardKey;
-			break;
-		case 0x53:
-			m_controlFlags &= ~ControlFlags::MoveBackwardKey;
-			break;
-		case 0x41:
-			m_controlFlags &= ~ControlFlags::TurnLeftKey;
-			break;
-		case 0x44:
-			m_controlFlags &= ~ControlFlags::TurnRightKey;
-			break;
-		case 81:
-			m_controlFlags &= ~ControlFlags::StrafeLeftKey;
-			break;
-		case 69:
-			m_controlFlags &= ~ControlFlags::StrafeRightKey;
-			break;
-		}
-	}
-	
+		
 	void PlayerController::SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit)
 	{
-		m_cameraAnchorNode->RemoveFromParent();
+		m_cameraOffsetNode->RemoveFromParent();
 
 		m_controlledUnit = controlledUnit;
 
 		if (m_controlledUnit)
 		{
 			ASSERT(m_controlledUnit->GetSceneNode());
-			m_controlledUnit->GetSceneNode()->AddChild(*m_cameraAnchorNode);
+			m_controlledUnit->GetSceneNode()->AddChild(*m_cameraOffsetNode);
 		}
 	}
 
@@ -494,7 +513,10 @@ namespace mmo
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
-		//m_cameraAnchorNode->Yaw(Degree(180.0f), TransformSpace::Parent);
+
+		m_cameraOffsetNode = &m_scene.CreateSceneNode("CameraOffset");
+		m_cameraOffsetNode->AddChild(*m_cameraAnchorNode);
+		m_cameraOffsetNode->Yaw(Degree(-90.0f), TransformSpace::Parent);
 
 		NotifyCameraZoomChanged();
 	}
@@ -509,7 +531,9 @@ namespace mmo
 		ASSERT(m_cameraNode);
 		ASSERT(m_cameraAnchorNode);
 		m_cameraNode->SetPosition(Vector3::UnitZ * 3.0f);
-		m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
+
+		const Quaternion defaultRotation(Degree(0.0f), Vector3::UnitY);
+		m_cameraAnchorNode->SetOrientation(defaultRotation);
 
 		NotifyCameraZoomChanged();
 	}

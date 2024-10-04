@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "timer_queue.h"
 #include "macros.h"
@@ -17,9 +17,9 @@ namespace mmo
 		return GetAsyncTimeMs();
 	}
 
-	void TimerQueue::AddEvent(EventCallback callback, GameTime time)
+	void TimerQueue::AddEvent(const EventCallback& callback, GameTime time)
 	{
-		m_queue.push(EventEntry(callback, time));
+		m_queue.emplace(callback, time);
 		SetTimer();
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -74,6 +74,9 @@ namespace mmo
 				/// Sent as response to a realms ClientAuthSession packet and contains authentication results (succeeded or failed,
 				/// as well as additional client session details that might be required).
 				ClientAuthSessionResponse = 0x02,
+
+				/// Notifies the realm that an account has been banned, which allows the realm to close the connection to the player client.
+				AccountBanned = 0x03,
 			};
 		}
 
@@ -144,7 +147,9 @@ namespace mmo
 				PlayerCharacterLeft = 0x07,
 				
 				/// A packet which will be forwarded to the game client.
-				ProxyPacket = 0x08
+				ProxyPacket = 0x08,
+
+				CharacterData,
 			};
 		}
 

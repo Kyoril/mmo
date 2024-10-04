@@ -1,6 +1,8 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mesh_serializer.h"
+
+#include <ranges>
 
 #include "material_manager.h"
 #include "mesh.h"
@@ -21,110 +23,173 @@ namespace mmo
 	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
 	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	
-	void MeshSerializer::ExportMesh(const MeshEntry& mesh, io::Writer& writer, MeshVersion version)
+	void WriteVertexData(const VertexData& vertexData, io::Writer& writer)
+	{
+		writer << io::write<uint32>(vertexData.vertexCount);
+
+		// Get shared vertex data
+		const auto buffer = vertexData.vertexBufferBinding->GetBuffer(0);
+
+		auto bufferData = static_cast<uint8*>(buffer->Map(LockOptions::ReadOnly));
+		ASSERT(bufferData);
+
+		for (size_t i = 0; i < vertexData.vertexCount; ++i)
+		{
+			const VertexElement* posElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
+			float* position = nullptr;
+			posElement->BaseVertexPointerToElement(bufferData, &position);
+			writer
+				<< io::write<float>(*position++)
+				<< io::write<float>(*position++)
+				<< io::write<float>(*position++);
+
+			const VertexElement* colElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Diffuse);
+			uint32* color = nullptr;
+			colElement->BaseVertexPointerToElement(bufferData, &color);
+			writer
+				<< io::write<uint32>(*color++);
+
+			const VertexElement* texElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::TextureCoordinate);
+			float* tex = nullptr;
+			texElement->BaseVertexPointerToElement(bufferData, &tex);
+			writer
+				<< io::write<float>(*tex++)
+				<< io::write<float>(*tex++)
+				<< io::write<float>(0.0f);
+
+			const VertexElement* normalElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Normal);
+			float* normal = nullptr;
+			normalElement->BaseVertexPointerToElement(bufferData, &normal);
+			writer
+				<< io::write<float>(*normal++)
+				<< io::write<float>(*normal++)
+				<< io::write<float>(*normal++);
+
+			const VertexElement* binormalElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Binormal);
+			float* binormal = nullptr;
+			binormalElement->BaseVertexPointerToElement(bufferData, &binormal);
+			writer
+				<< io::write<float>(*binormal++)
+				<< io::write<float>(*binormal++)
+				<< io::write<float>(*binormal++);
+
+			const VertexElement* tangentElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Tangent);
+			float* tangent = nullptr;
+			tangentElement->BaseVertexPointerToElement(bufferData, &tangent);
+			writer
+				<< io::write<float>(*tangent++)
+				<< io::write<float>(*tangent++)
+				<< io::write<float>(*tangent++);
+
+			bufferData += vertexData.vertexDeclaration->GetVertexSize(0);
+		}
+
+		buffer->Unmap();
+	}
+
+	void WriteIndexData(const IndexData& indexData, io::Writer& writer)
+	{
+		writer
+			<< io::write<uint32>(indexData.indexCount)
+			<< io::write<uint8>(indexData.indexBuffer->GetIndexSize());
+
+		if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
+		{
+			const uint16* indices = reinterpret_cast<uint16*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
+			ASSERT(indices);
+
+			for (size_t i = 0; i < indexData.indexCount; ++i)
+			{
+				writer << io::write<uint16>(*indices++);
+			}
+		}
+		else
+		{
+			const uint32* indices = reinterpret_cast<uint32*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
+			ASSERT(indices);
+
+			for (size_t i = 0; i < indexData.indexCount; ++i)
+			{
+				writer << io::write<uint32>(*indices++);
+			}
+		}
+
+		indexData.indexBuffer->Unmap();
+	}
+
+	void MeshSerializer::Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version)
 	{
 		if (version == mesh_version::Latest)
 		{
-			version = mesh_version::Version_0_2;
+			version = mesh_version::Version_0_3;
 		}
-		
+
 		// Write the vertex chunk data
 		ChunkWriter meshChunk{ MeshChunkMagic, writer };
 		{
 			writer << io::write<uint32>(version);
 		}
 		meshChunk.Finish();
-		
-		// Write the vertex chunk data
-		ChunkWriter vertexChunkWriter{ MeshVertexChunk, writer };
+
+		if (mesh->sharedVertexData)
 		{
-			writer << io::write<uint32>(mesh.vertices.size());
-			for (size_t i = 0; i < mesh.vertices.size(); ++i)
+			// Write the vertex chunk data
+			ChunkWriter vertexChunkWriter{ MeshVertexChunk, writer };
 			{
-				writer
-					<< io::write<float>(mesh.vertices[i].position.x)
-					<< io::write<float>(mesh.vertices[i].position.y)
-					<< io::write<float>(mesh.vertices[i].position.z);
-				writer
-					<< io::write<uint32>(mesh.vertices[i].color);
-				writer
-					<< io::write<float>(mesh.vertices[i].texCoord.x)
-					<< io::write<float>(mesh.vertices[i].texCoord.y)
-					<< io::write<float>(mesh.vertices[i].texCoord.z);
-				writer
-					<< io::write<float>(mesh.vertices[i].normal.x)
-					<< io::write<float>(mesh.vertices[i].normal.y)
-					<< io::write<float>(mesh.vertices[i].normal.z);
-				writer
-					<< io::write<float>(mesh.vertices[i].binormal.x)
-					<< io::write<float>(mesh.vertices[i].binormal.y)
-					<< io::write<float>(mesh.vertices[i].binormal.z);
-				writer
-					<< io::write<float>(mesh.vertices[i].tangent.x)
-					<< io::write<float>(mesh.vertices[i].tangent.y)
-					<< io::write<float>(mesh.vertices[i].tangent.z);
+				WriteVertexData(*mesh->sharedVertexData, writer);
 			}
+			vertexChunkWriter.Finish();
 		}
-		vertexChunkWriter.Finish();
 
-		// Write the index chunk data
-		ChunkWriter indexChunkWriter{ MeshIndexChunk, writer };
-		{
-			const bool bUse16BitIndices = mesh.vertices.size() <= std::numeric_limits<uint16>().max();
-			
-			writer
-				<< io::write<uint32>(mesh.indices.size())
-				<< io::write<uint8>(bUse16BitIndices);
-
-			for (uint32 index : mesh.indices)
-			{
-				if (bUse16BitIndices)
-				{
-					writer << io::write<uint16>(index);
-				}
-				else
-				{
-					writer << io::write<uint32>(index);
-				}
-			}
-		}
-		indexChunkWriter.Finish();
-
-		if (!mesh.skeletonName.empty())
+		if (mesh->HasSkeleton())
 		{
 			ChunkWriter skeletonChunkWriter{ MeshSkeletonChunk, writer };
 			{
 				writer
-					<< io::write_dynamic_range<uint16>(mesh.skeletonName);
+					<< io::write_dynamic_range<uint16>(mesh->GetSkeletonName());
 			}
 			skeletonChunkWriter.Finish();
 		}
 
-		for (const auto& boneAssignment : mesh.boneAssignments)
-		{
-			ChunkWriter boneAssignmentChunk{ MeshBoneChunk, writer };
-			{
-				writer
-					<< io::write<uint32>(boneAssignment.vertexIndex)
-					<< io::write<uint16>(boneAssignment.boneIndex)
-					<< io::write<float>(boneAssignment.weight);
-			}
-			boneAssignmentChunk.Finish();
-		}
-
 		// Write submesh chunks
-		for(const auto& submesh : mesh.subMeshes)
+		uint16 submeshIndex = 0;
+		for (const auto& submesh : mesh->GetSubMeshes())
 		{
 			ChunkWriter submeshChunkWriter{ MeshSubMeshChunk, writer };
 			{
-				// Material name
-				writer
-					<< io::write_dynamic_range<uint16>(submesh.material);
+				// Try to get name of the submesh
+				String name;
+				mesh->GetSubMeshName(submeshIndex++, name);
 
-				// Start index & end index
-				writer
-					<< io::write<uint32>(submesh.indexOffset)
-					<< io::write<uint32>(submesh.indexOffset + submesh.triangleCount * 3);
+				// Write material name
+				writer << io::write_dynamic_range<uint8>(name);
+				writer << io::write_dynamic_range<uint16>(submesh->GetMaterial() ? submesh->GetMaterial()->GetName() : "Models/Default.hmat");
+
+				// Write vertex data
+				writer << io::write<uint8>(submesh->useSharedVertices);
+				if (!submesh->useSharedVertices)
+				{
+					WriteVertexData(*submesh->vertexData, writer);
+				}
+
+				// Write index data
+				writer << io::write<uint8>(submesh->indexData != nullptr);
+				if (submesh->indexData)
+				{
+					WriteIndexData(*submesh->indexData, writer);
+				}
+
+				// Write vertex bone assignments
+				const uint32 vertexBoneAssignmentCount = submesh->GetBoneAssignments().size();
+				writer << io::write<uint32>(vertexBoneAssignmentCount);
+
+				for (const auto& [vertexIndex, boneIndex, weight] : submesh->GetBoneAssignments() | std::views::values)
+				{
+					writer
+						<< io::write<uint32>(vertexIndex)
+						<< io::write<uint16>(boneIndex)
+						<< io::write<float>(weight);
+				}
 			}
 			submeshChunkWriter.Finish();
 		}
@@ -144,24 +209,32 @@ namespace mmo
 		reader >> io::read<uint32>(version);
 
 		m_version = static_cast<MeshVersion>(version);
-		if (version < mesh_version::Version_0_2)
+		if (version < mesh_version::Version_0_3)
 		{
-			WLOG("Mesh is using an old file format, please consider upgrading it!");
+			WLOG("Mesh '" << m_mesh.GetName() << "' is using an old file format, please consider upgrading it!");
 		}
 
 		if (reader)
 		{
 			if (version >= mesh_version::Version_0_1)
 			{
-				AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexChunk);
-				AddChunkHandler(*MeshIndexChunk, true, *this, &MeshDeserializer::ReadIndexChunk);
-				AddChunkHandler(*MeshSubMeshChunk, true, *this, &MeshDeserializer::ReadSubMeshChunk);
+				AddChunkHandler(*MeshVertexChunk, false, *this, &MeshDeserializer::ReadVertexChunk);
+				AddChunkHandler(*MeshIndexChunk, false, *this, &MeshDeserializer::ReadIndexChunk);
+				AddChunkHandler(*MeshSubMeshChunk, false, *this, &MeshDeserializer::ReadSubMeshChunk);
 				AddChunkHandler(*MeshSkeletonChunk, false, *this, &MeshDeserializer::ReadSkeletonChunk);
 				AddChunkHandler(*MeshBoneChunk, false, *this, &MeshDeserializer::ReadBoneChunk);
 
 				if (version >= mesh_version::Version_0_2)
 				{
-					AddChunkHandler(*MeshVertexChunk, true, *this, &MeshDeserializer::ReadVertexV2Chunk);
+					AddChunkHandler(*MeshVertexChunk, false, *this, &MeshDeserializer::ReadVertexV2Chunk);
+
+					if (version >= mesh_version::Version_0_3)
+					{
+						AddChunkHandler(*MeshSubMeshChunk, false, *this, &MeshDeserializer::ReadSubMeshChunkV3);
+
+						// Chunk no longer supported in V03 because there is no longer global index data
+						RemoveChunkHandler(*MeshIndexChunk);
+					}
 				}
 			}
 			else
@@ -366,6 +439,199 @@ namespace mmo
 		return reader;
 	}
 
+	bool MeshDeserializer::ReadSubMeshChunkV3(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		AABB bounds = m_mesh.GetBounds();
+
+		String name;
+		if (!(reader >> io::read_container<uint8>(name)))
+		{
+			ELOG("Failed to read submesh name");
+			return false;
+		}
+
+		String materialName;
+		reader >> io::read_container<uint16>(materialName);
+
+		MaterialPtr material = MaterialManager::Get().Load(materialName);
+		if (!material)
+		{
+			material = MaterialManager::Get().Load("Models/Default.hmat");
+			ASSERT(material);
+		}
+
+		// Create the sub mesh
+		auto& subMesh = m_mesh.CreateSubMesh();
+		if (!name.empty())
+		{
+			m_mesh.NameSubMesh(m_mesh.GetSubMeshCount() - 1, name);
+		}
+
+		subMesh.SetMaterial(material);
+
+		bool useSharedVertices = false;
+		if (!(reader >> io::read<uint8>(useSharedVertices)))
+		{
+			ELOG("Failed to read submesh useSharedVertices");
+			return false;
+		}
+
+		subMesh.useSharedVertices = useSharedVertices;
+		ASSERT(!useSharedVertices || m_mesh.sharedVertexData);
+
+		if (!useSharedVertices)
+		{
+			// Read vertex data
+			subMesh.vertexData = std::make_unique<VertexData>();
+
+			// TODO: Read vertex data
+
+			uint32 vertexCount = 0;
+			if (!(reader >> io::read<uint32>(vertexCount)))
+			{
+				ELOG("Failed to read submesh vertexCount");
+				return false;
+			}
+
+			subMesh.vertexData->vertexCount = vertexCount;
+			subMesh.vertexData->vertexStart = 0;
+
+			// Setup vertex buffer binding
+			uint32 offset = 0;
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
+			offset += subMesh.vertexData->vertexDeclaration->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
+
+			struct VertexStruct
+			{
+				Vector3 position;
+				uint32 color;
+				Vector3 normal;
+				Vector3 binormal;
+				Vector3 tangent;
+				float u, v;
+			};
+
+			std::vector<VertexStruct> vertices(vertexCount);
+
+			VertexStruct* vert = vertices.data();
+			for (uint32 i = 0; i < vertexCount; ++i)
+			{
+				if (!(reader
+					>> io::read<float>(vert->position.x)
+					>> io::read<float>(vert->position.y)
+					>> io::read<float>(vert->position.z)
+					
+					>> io::read<uint32>(vert->color)
+
+					>> io::read<float>(vert->u)
+					>> io::read<float>(vert->v)
+					>> io::skip<float>()
+					
+					>> io::read<float>(vert->normal.x)
+					>> io::read<float>(vert->normal.y)
+					>> io::read<float>(vert->normal.z)
+					
+					>> io::read<float>(vert->binormal.x)
+					>> io::read<float>(vert->binormal.y)
+					>> io::read<float>(vert->binormal.z)
+
+					>> io::read<float>(vert->tangent.x)
+					>> io::read<float>(vert->tangent.y)
+					>> io::read<float>(vert->tangent.z)))
+				{
+					ELOG("Failed to read submesh vertex data");
+					return false;
+				}
+
+				bounds.Combine(vert->position);
+
+				vert++;
+			}
+
+			VertexBufferPtr bufferPtr = GraphicsDevice::Get().CreateVertexBuffer(vertexCount, subMesh.vertexData->vertexDeclaration->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
+			subMesh.vertexData->vertexBufferBinding->SetBinding(0, bufferPtr);
+		}
+
+		// Read index data
+		bool hasIndexData = false;
+		if (!(reader >> io::read<uint8>(hasIndexData)))
+		{
+			ELOG("Failed to read submesh hasIndexData");
+			return false;
+		}
+
+		if (hasIndexData)
+		{
+			subMesh.indexData = std::make_unique<IndexData>();
+
+			uint32 indexCount = 0;
+			IndexBufferSize indexSize;
+			if (!(reader >> io::read<uint32>(indexCount) >> io::read<uint8>(indexSize)))
+			{
+				ELOG("Failed to read submesh indexCount or indexSize");
+				return false;
+			}
+
+			subMesh.indexData->indexCount = indexCount;
+			subMesh.indexData->indexStart = 0;
+
+			if (indexSize == IndexBufferSize::Index_16)
+			{
+				std::vector<uint16> indices(indexCount, 0);
+				if (!(reader >> io::read_range(indices)))
+				{
+					ELOG("Failed to read submesh indices");
+					return false;
+				}
+
+				subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_16, BufferUsage::StaticWriteOnly, indices.data());
+			}
+			else
+			{
+				std::vector<uint32> indices(indexCount, 0);
+				if (!(reader >> io::read_range(indices)))
+				{
+					ELOG("Failed to read submesh indices");
+					return false;
+				}
+
+				subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(indexCount, IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, indices.data());
+			}
+		}
+
+		// Read bone assignments
+		uint32 vertexBoneAssignmentCount = 0;
+		if (!(reader >> io::read<uint32>(vertexBoneAssignmentCount)))
+		{
+			ELOG("Failed to read submesh vertexBoneAssignmentCount");
+			return false;
+		}
+
+		for (uint32 i = 0; i < vertexBoneAssignmentCount; ++i)
+		{
+			VertexBoneAssignment assign;
+			if (!(reader
+				>> io::read<uint32>(assign.vertexIndex)
+				>> io::read<uint16>(assign.boneIndex)
+				>> io::read<float>(assign.weight)))
+			{
+				ELOG("Failed to read submesh vertexBoneAssignment");
+				return false;
+			}
+
+			subMesh.AddBoneAssignment(assign);
+		}
+
+		// Update bounding box
+		m_mesh.SetBounds(bounds);
+
+		return true;
+	}
+
 	bool MeshDeserializer::ReadSkeletonChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		String skeletonName;
@@ -444,35 +710,38 @@ namespace mmo
 			CalculateBinormalsAndTangents();
 		}
 
-		std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
-		vertices.resize(m_entry.vertices.size());
-
-		for (size_t i = 0; i < vertices.size(); ++i)
+		if (m_version <= mesh_version::Version_0_2)
 		{
-			const auto& v = m_entry.vertices[i];
-			vertices[i].pos = v.position;
-			vertices[i].color = v.color;
-			vertices[i].normal = v.normal;
-			vertices[i].binormal = v.binormal;
-			vertices[i].tangent = v.tangent;
-			vertices[i].uv[0] = v.texCoord.x;
-			vertices[i].uv[1] = v.texCoord.y;
+			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
+			vertices.resize(m_entry.vertices.size());
+
+			for (size_t i = 0; i < vertices.size(); ++i)
+			{
+				const auto& v = m_entry.vertices[i];
+				vertices[i].pos = v.position;
+				vertices[i].color = v.color;
+				vertices[i].normal = v.normal;
+				vertices[i].binormal = v.binormal;
+				vertices[i].tangent = v.tangent;
+				vertices[i].uv[0] = v.texCoord.x;
+				vertices[i].uv[1] = v.texCoord.y;
+			}
+
+			m_mesh.sharedVertexData = std::make_unique<VertexData>();
+			m_mesh.sharedVertexData->vertexCount = vertices.size();
+
+			VertexDeclaration* decl = m_mesh.sharedVertexData->vertexDeclaration;
+			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+
+			const uint32 vertexSize = decl->GetVertexSize(0);
+			const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, BufferUsage::StaticWriteOnly, vertices.data());
+			m_mesh.sharedVertexData->vertexBufferBinding->SetBinding(0, buffer);
 		}
-
-		m_mesh.sharedVertexData = std::make_unique<VertexData>();
-		m_mesh.sharedVertexData->vertexCount = vertices.size();
-
-		VertexDeclaration* decl = m_mesh.sharedVertexData->vertexDeclaration;
-		decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
-		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
-		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
-		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
-		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
-		decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
-
-		const uint32 vertexSize = decl->GetVertexSize(0);
-		const VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(m_mesh.sharedVertexData->vertexCount, vertexSize, BufferUsage::StaticWriteOnly, vertices.data());
-		m_mesh.sharedVertexData->vertexBufferBinding->SetBinding(0, buffer);
 
 		if (m_mesh.HasSkeleton())
 		{

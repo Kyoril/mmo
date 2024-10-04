@@ -1,6 +1,8 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "login_connector.h"
+
+#include "player_manager.h"
 #include "version.h"
 
 #include "base/constants.h"
@@ -10,10 +12,11 @@
 
 namespace mmo
 {
-	LoginConnector::LoginConnector(asio::io_service & io, TimerQueue& queue)
+	LoginConnector::LoginConnector(asio::io_service & io, TimerQueue& queue, PlayerManager& playerManager)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
+		, m_playerManager(playerManager)
 		, m_willTerminate(false)
 	{
 	}
@@ -320,6 +323,7 @@ namespace mmo
 
 				// Register required packet handlers
 				RegisterPacketHandler(auth::login_realm_packet::ClientAuthSessionResponse, *this, &LoginConnector::OnClientAuthSessionResponse);
+				RegisterPacketHandler(auth::login_realm_packet::AccountBanned, *this, &LoginConnector::OnAccountBanned);
 			}
 			else
 			{
@@ -413,6 +417,20 @@ namespace mmo
 		{
 			callback(result == auth::auth_result::Success, accountId, sessionKey);
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult LoginConnector::OnAccountBanned(auth::IncomingPacket& packet)
+	{
+		uint64 accountId = 0;
+		if (!(packet >> io::read<uint64>(accountId)))
+		{
+			ELOG("Failed to read AccountBanned packet from login server!");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_playerManager.KickPlayerByAccountId(accountId);
 
 		return PacketParseResult::Pass;
 	}

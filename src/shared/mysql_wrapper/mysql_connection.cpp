@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "mysql_connection.h"
 #include "mysql_exception.h"
@@ -20,15 +20,16 @@ namespace mmo
 		    uint16 port,
 		    const String &user,
 		    const String &password,
-		    const String &database)
+		    const String &database,
+			const String& updatePath)
 			: host(host)
 			, port(port)
 			, user(user)
 			, password(password)
 			, database(database)
+			, updatePath(updatePath)
 		{
 		}
-
 
 		Connection::Connection()
 			: m_mySQL(new MYSQL)
@@ -40,7 +41,7 @@ namespace mmo
 			}
 		}
 
-		Connection::Connection(const DatabaseInfo &info)
+		Connection::Connection(const DatabaseInfo &info, bool allowMultiQuery)
 			: m_mySQL(new MYSQL)
 			, m_isConnected(false)
 		{
@@ -48,7 +49,8 @@ namespace mmo
 			{
 				throw std::bad_alloc();
 			}
-			if (!Connect(info))
+
+			if (!Connect(info, allowMultiQuery))
 			{
 				throw Exception(mysql_error(GetHandle()));
 			}
@@ -81,7 +83,7 @@ namespace mmo
 			swap(m_isConnected, other.m_isConnected);
 		}
 
-		bool Connection::Connect(const DatabaseInfo &info)
+		bool Connection::Connect(const DatabaseInfo &info, bool allowMultiQuery)
 		{
 			assert(!m_isConnected);
 
@@ -100,10 +102,24 @@ namespace mmo
 			                      info.database.c_str(),
 			                      static_cast<uint16>(info.port),
 			                      0,
-			                      0);
+								  allowMultiQuery ? CLIENT_MULTI_STATEMENTS : 0);
 
 			m_isConnected = (result != nullptr);
 			return m_isConnected;
+		}
+
+		void Connection::Disconnect()
+		{
+			if (IsConnected())
+			{
+				::mysql_close(GetHandle());
+				m_isConnected = false;
+
+				if (!::mysql_init(m_mySQL.get()))
+				{
+					throw std::bad_alloc();
+				}
+			}
 		}
 
 		bool Connection::Execute(const String &query)
@@ -120,7 +136,8 @@ namespace mmo
 		{
 			if (!Execute(query))
 			{
-				throw QueryFailException(GetErrorMessage());
+				const char* errorMessage = GetErrorMessage();
+				throw QueryFailException(errorMessage);
 			}
 		}
 

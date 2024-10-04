@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "web_service.h"
 
@@ -19,12 +19,12 @@ namespace mmo
 	{
 	}
 
-	GameTime WebService::getStartTime() const
+	GameTime WebService::GetStartTime() const
 	{
 		return m_startTime;
 	}
 
-	const String &WebService::getPassword() const
+	const String &WebService::GetPassword() const
 	{
 		return m_password;
 	}

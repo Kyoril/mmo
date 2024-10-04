@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -19,6 +19,7 @@ namespace mmo
 			String user;
 			String password;
 			String database;
+			String updatePath;
 
 
 			DatabaseInfo();
@@ -27,7 +28,8 @@ namespace mmo
 				uint16 port,
 			    const String &user,
 			    const String &password,
-			    const String &database);
+			    const String &database,
+				const String &updatePath);
 		};
 
 
@@ -42,11 +44,12 @@ namespace mmo
 
 			Connection();
 			Connection(Connection  &&other);
-			explicit Connection(const DatabaseInfo &info);
+			explicit Connection(const DatabaseInfo &info, bool allowMultiQuery);
 			~Connection();
 			Connection &operator = (Connection &&other);
 			void Swap(Connection &other);
-			bool Connect(const DatabaseInfo &info);
+			bool Connect(const DatabaseInfo &info, bool allowMultiQuery);
+			void Disconnect();
 			bool Execute(const String &query);
 			void TryExecute(const String &query);
 			const char *GetErrorMessage();

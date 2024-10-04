@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "player_manager.h"
 #include "player.h"
@@ -50,6 +50,36 @@ namespace mmo
 
 		// Challenge the newly connected client for authentication
 		added->SendAuthChallenge();
+	}
+
+	void PlayerManager::KickPlayerByAccountId(uint64 accountId)
+	{
+		std::shared_ptr<Player> player;
+
+		// We do finding the player in a scope so that we only lock the m_playerMutex as long as we really need to.
+		// After we found the player, we release it because kicking the player will also try to remove him from the list
+		// of players, which also tries to lock the mutex which would result in a deadlock.
+		{
+			std::scoped_lock playerLock{ m_playerMutex };
+
+			const auto p = std::find_if(
+					m_players.begin(),
+					m_players.end(),
+					[&accountId](const std::shared_ptr<Player>& p)
+					{
+						return (p->IsAuthenticated() && accountId == p->GetAccountId());
+					});
+
+			if (p != m_players.end())
+			{
+				player = *p;
+			}
+		}
+
+		if (player)
+		{
+			player->Kick();
+		}
 	}
 
 	Player * PlayerManager::GetPlayerByAccountName(const String &accountName)

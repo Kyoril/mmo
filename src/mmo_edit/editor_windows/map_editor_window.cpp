@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "map_editor_window.h"
 
@@ -104,6 +104,133 @@ namespace mmo
 					}, nullptr, IM_ARRAYSIZE(s_mapInstanceType), -1))
 				{
 					currentEntry->set_instancetype(static_cast<mmo::proto::MapEntry_MapInstanceType>(instanceType));
+				}
+
+				// Creature spawns
+				if (ImGui::CollapsingHeader("Creature Spawns"))
+				{
+					ImGui::BeginChild("creatureSpawns", ImVec2(-1, 0));
+					ImGui::Columns(2, nullptr, true);
+					static bool widthSet = false;
+					if (!widthSet)
+					{
+						ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
+						widthSet = true;
+					}
+
+					static int currentCreatureSpawn = -1;
+
+					if (ImGui::Button("Add new creature spawn", ImVec2(-1, 0)))
+					{
+						auto* spawn = currentEntry->mutable_unitspawns()->Add();
+						spawn->set_positionx(0.0f);
+						spawn->set_positiony(0.0f);
+						spawn->set_positionz(0.0f);
+						spawn->set_unitentry(m_project.units.getTemplates().entry(0).id());
+						spawn->set_respawn(true);
+						spawn->set_respawndelay(30 * 1000);
+						spawn->set_isactive(true);
+					}
+
+					ImGui::BeginDisabled(currentCreatureSpawn == -1 || currentCreatureSpawn >= currentEntry->unitspawns_size());
+					if (ImGui::Button("Remove", ImVec2(-1, 0)))
+					{
+						currentEntry->mutable_unitspawns()->erase(currentEntry->mutable_unitspawns()->begin() + currentCreatureSpawn);
+						currentCreatureSpawn = -1;
+					}
+					ImGui::EndDisabled();
+
+					ImGui::BeginChild("creatureSpawnListScrollable", ImVec2(-1, 0));
+					ImGui::ListBox("##creatureSpawnList", &currentCreatureSpawn, [](void* data, int idx, const char** out_text)
+					{
+						const auto* spawns = static_cast<google::protobuf::RepeatedPtrField<proto::UnitSpawnEntry>*>(data);
+						const auto& entry = spawns->at(idx);
+
+						std::ostringstream stream;
+						stream << "#" << std::setw(6) << std::setfill('0') << entry.unitentry();
+						*out_text = stream.str().c_str();
+
+						return true;
+					}, currentEntry->mutable_unitspawns(), currentEntry->unitspawns_size(), 20);
+					ImGui::EndChild();
+
+					ImGui::NextColumn();
+
+					// show editable details of selected creature spawn
+					ImGui::BeginChild("creatureSpawnDetails", ImVec2(-1, -1));
+					if (currentCreatureSpawn != -1 && currentCreatureSpawn < currentEntry->unitspawns_size())
+					{
+						auto* spawn = currentEntry->mutable_unitspawns()->Mutable(currentCreatureSpawn);
+
+						float x = spawn->positionx();
+						if (ImGui::InputFloat("Position X", &x))
+						{
+							spawn->set_positionx(x);
+						}
+						float y = spawn->positiony();
+						if (ImGui::InputFloat("Position Y", &y))
+						{
+							spawn->set_positiony(y);
+						}
+						float z = spawn->positionz();
+						if (ImGui::InputFloat("Position Z", &z))
+						{
+							spawn->set_positionz(z);
+						}
+
+						bool isActive = spawn->isactive();
+						if (ImGui::Checkbox("Active", &isActive))
+						{
+							spawn->set_isactive(isActive);
+						}
+
+						bool respawn = spawn->respawn();
+						if (ImGui::Checkbox("Respawn", &respawn))
+						{
+							spawn->set_respawn(respawn);
+						}
+
+						ImGui::BeginDisabled(!respawn);
+
+						int32 respawnDelay = spawn->respawndelay();
+						if (ImGui::InputInt("Respawn Delay", &respawnDelay))
+						{
+							spawn->set_respawndelay(respawnDelay);
+						}
+
+						ImGui::EndDisabled();
+
+						static const char* s_movementTypeStrings[] = {
+							"Stationary",
+							"Patrol",
+							"Route"
+						};
+
+						int movement = spawn->movement();
+						if (ImGui::Combo("Movement", &movement, [](void* data, int idx, const char** out_text)
+							{
+								*out_text = s_movementTypeStrings[idx];
+								return true;
+							}, nullptr, proto::UnitSpawnEntry_MovementType_MovementType_ARRAYSIZE, -1))
+						{
+							spawn->set_movement(static_cast<proto::UnitSpawnEntry_MovementType>(movement));
+						}
+
+						int unitEntry = spawn->unitentry();
+						if (ImGui::Combo("Unit Entry", &unitEntry, [](void* data, int idx, const char** out_text)
+						{
+								const auto* units = static_cast<proto::Units*>(data);
+								const auto& entry = units->entry().at(idx);
+								*out_text = entry.name().c_str();
+								return true;
+							}, &m_project.units.getTemplates(), m_project.units.count(), -1))
+						{
+							spawn->set_unitentry(m_project.units.getTemplates().entry(unitEntry).id());
+						}
+					}
+					ImGui::EndChild();
+
+					ImGui::EndChild();
 				}
 			}
 			ImGui::EndChild();

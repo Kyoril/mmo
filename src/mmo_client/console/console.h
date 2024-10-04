@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -53,7 +53,7 @@ namespace mmo
 
 	public:
 		/// Initializes the console system.
-		static void Initialize(const std::filesystem::path& configFile);
+		static void Initialize(const String& configFile);
 		/// Destroys the console system.
 		static void Destroy();
 

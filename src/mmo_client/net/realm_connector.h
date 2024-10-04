@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class SpellTargetMap;
 	class MovementInfo;
 
 	/// This class manages the connection to the current realm server if there is any.
@@ -90,7 +91,7 @@ namespace mmo
 		void EnterWorld(const CharacterView& character);
 
 		/// Sends the command to create a new character to the realm.
-		void CreateCharacter(const std::string& name);
+		void CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender);
 
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);
@@ -99,6 +100,20 @@ namespace mmo
 		const std::string& GetRealmName() const { return m_realmName; }
 
 		void SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info);
+
+		void SetSelection(uint64 guid);
+
+		void CreateMonster(uint32 entry);
+
+		void DestroyMonster(uint64 guid);
+
+		void FaceMe(uint64 guid);
+
+		void FollowMe(uint64 guid);
+
+		void LearnSpell(uint32 spellId);
+
+		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

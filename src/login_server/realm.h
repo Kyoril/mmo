@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -51,6 +51,9 @@ namespace mmo
 		inline const std::string& GetRealmListAddress() const { return m_realmListAddress; }
 		/// Gets the realm list port.
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
+
+	public:
+		void NotifyAccountBanned(uint64 accountId);
 
 	public:
 		/// Registers a packet handler.

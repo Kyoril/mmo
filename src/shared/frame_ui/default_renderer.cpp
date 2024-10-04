@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "default_renderer.h"
 #include "state_imagery.h"
@@ -19,7 +19,7 @@ namespace mmo
 
 		if (imagery)
 		{
-			imagery->Render(m_frame->GetAbsoluteFrameRect(), Color::White);
+			imagery->Render(m_frame->GetAbsoluteFrameRect(), colorOverride.value_or(Color::White));
 		}
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -133,17 +133,22 @@ namespace mmo
 
 	public:
 		/// Adds a new state imagery.
-		void AddImagerySection(ImagerySection& section);
+		ImagerySection* AddImagerySection(ImagerySection& section);
+
 		/// Removes a state imagery by name.
 		void RemoveImagerySection(const std::string& name);
+
 		/// Gets an imagery section by name.
 		/// @param name Name of the imagery section.
 		/// @return nullptr if no such imagery section exists.
 		ImagerySection* GetImagerySectionByName(const std::string& name) const;
+
 		/// Adds a new state imagery.
 		void AddStateImagery(StateImagery& stateImagery);
+
 		/// Removes a state imagery by name.
 		void RemoveStateImagery(const std::string& name);
+
 		/// Gets a state imagery by name. Don't keep a pointer on the result, as it is destroyed when
 		/// the style instance is destroyed!
 		/// @param name Name of the state imagery.
@@ -153,65 +158,92 @@ namespace mmo
 	public:
 		/// Gets the type name of this frame.
 		inline const std::string& GetType() const { return m_type; }
+
 		/// Gets the text of this frame.
 		inline const std::string& GetText() const { return m_text; }
+
 		/// Gets the text that is actually rendered.
 		virtual const std::string& GetVisualText() const { return m_text; }
+
 		/// Sets the text of this frame.
 		void SetText(std::string text);
+
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.
 		bool IsVisible(bool localOnly = true) const;
+
 		/// Sets the visibility of this frame.
 		/// @param visible Whether the frame will be visible or not.
 		void SetVisible(bool visible);
+
 		/// Syntactic sugar for SetVisible(true).
 		inline void Show() { SetVisible(true); }
+
 		/// Syntactic sugar for SetVisible(false).
 		inline void Hide() { SetVisible(false); }
+
 		/// Determines whether the frame is currently enabled.
 		/// @param localOnly If set to true, the parent frame's enabled setting is ignored.
 		/// @returns true, if this frame is currently enabled.
 		bool IsEnabled(bool localOnly = true) const;
+
 		/// Enables or disables this frame.
 		/// @param enable Whether the frame should be enabled or disabled.
 		void SetEnabled(bool enable);
+
 		/// Syntactic sugar for SetEnabled(true).
 		inline void Enable() { SetEnabled(true); }
+
 		/// Syntactic sugar for SetEnabled(false).
 		inline void Disable() { SetEnabled(false); }
+
 		/// Determines if this window is the root frame.
 		bool IsRootFrame() const;
+
 		/// Sets the renderer by name.
 		void SetRenderer(const std::string& rendererName);
+
 		/// Gets the renderer instance if there is any.
 		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
+
 		/// Determines whether this frame is clipped by the parent frame.
 		inline bool IsClippedByParent() const { return m_clippedByParent; }
+
 		/// Sets whether this frame is clipped by it's parent frame.
 		void SetClippedByParent(bool clipped);
+
 		/// Returns the position of this frame set by the position property. Keep in mind, that
 		/// this might not represent the actual frame position on screen, as Anchors have higher
 		/// priority than this setting, which is only a fallback if no anchors are set.
 		inline const Point& GetPosition() const { return m_position; }
+
 		/// Sets the position of this frame. Note that anchors have higher priority, so this function
 		/// might have no effect at all.
 		void SetPosition(const Point& position);
+
 		/// Determines if the set anchors can be used to determine the frame's x position.
 		bool AnchorsSatisfyXPosition() const;
+
 		/// Determines if the anchors can be used to determine the frame's y position.
 		bool AnchorsSatisfyYPosition() const;
+
 		/// Determines if the set anchors can be used to determine the frame position.
 		inline bool AnchorsSatisfyPosition() const { return AnchorsSatisfyXPosition() && AnchorsSatisfyYPosition(); }
+
 		/// Determines if the width of this frame can be derived from anchors.
 		bool AnchorsSatisfyWidth() const;
+
 		/// Determines if the height of this frame can be derived from anchors.
 		bool AnchorsSatisfyHeight() const;
+
 		/// Determines if the set anchors can be used to determine the frame size.
 		inline bool AnchorsSatisfySize() const { return AnchorsSatisfyWidth() && AnchorsSatisfyHeight(); }
+
 		/// Sets an anchor for this frame.
 		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
+
+		void ClearAnchors();
 
 		/// Sets the size for this frame.
 		void SetSize(float width, float height);
@@ -226,8 +258,11 @@ namespace mmo
 
 		float GetHeight() const { return m_pixelSize.height; }
 
+		float GetTextHeight();
+
 		/// Clears an anchor point.
 		void ClearAnchor(AnchorPoint point);
+
 		/// Gets the parent frame.
 		inline Frame* GetParent() const { return m_parent; }
 		/// Determines whether the frame is currently hovered.
@@ -255,6 +290,14 @@ namespace mmo
 
 		void SetProperty(const std::string& name, const std::string& value);
 
+		bool IsChildOf(Frame& parent) const;
+
+		Pointer FindChild(const std::string& name);
+
+		int32 GetId() const { return m_id; }
+
+		void SetId(const int32 id) { m_id = id; }
+
 	public:
 		/// Gets a string object holding the name of this frame.
 		inline const std::string& GetName() const { return m_name; }
@@ -277,6 +320,9 @@ namespace mmo
 		
 		/// Adds a frame to the list of child frames.
 		virtual uint32 GetChildCount() const { return m_children.size(); }
+
+		/// Adds a frame to the list of child frames.
+		virtual Frame* GetChild(uint32 index) const { return index < m_children.size() ? m_children[index].get() : nullptr; }
 
 		/// Removes all child frames.
 		void RemoveAllChildren();
@@ -301,9 +347,11 @@ namespace mmo
 		virtual void OnKeyUp(Key key);
 
 	public:
-		virtual Rect GetRelativeFrameRect();
+		virtual Rect GetRelativeFrameRect(bool withScale = true);
+
 		/// Used to get the frame rectangle.
 		virtual Rect GetAbsoluteFrameRect();
+
 		/// Gets the font of this frame, or it's parent frames.
 		FontPtr GetFont() const;
 
@@ -313,7 +361,16 @@ namespace mmo
 		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
 		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
+
 		void SetOnEnterPressed(const luabind::object& func) { m_onEnterPressed = func; }
+
+		void SetOnEnter(const luabind::object& func) { m_onEnter = func; }
+
+		void SetOnLeave(const luabind::object& func) { m_onLeave = func; }
+
+		virtual void OnMouseEnter();
+
+		virtual void OnMouseLeave();
 
 	protected:
 		virtual void DrawSelf();
@@ -323,27 +380,39 @@ namespace mmo
 		void QueueGeometry();
 		/// Allows for custom geometry buffer population for custom frame classes.
 		virtual void PopulateGeometryBuffer() {}
+
 		/// Gets the parent rectangle.
 		Rect GetParentRect();
+
 		/// Executed when the text was changed.
 		virtual void OnTextChanged();
 
 		void OnTabPressed();
+
 		void OnEnterPressed();
+
+		void SetOpacity(float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
 
 	private:
 		/// Executed when the clippedByParent property was changed.
 		void OnClippedByParentChanged(const Property& property);
+
 		/// Executed when the text property was changed.
 		void OnTextPropertyChanged(const Property& property);
+
 		/// Executed when the focusable property was changed.
 		void OnFocusablePropertyChanged(const Property& property);
+
 		/// Executed when the enabled property was changed.
 		void OnEnabledPropertyChanged(const Property& property);
+
 		/// Executed when the visible property was changed.
 		void OnVisiblePropertyChanged(const Property& property);
+
 		/// 
 		void OnFontPropertyChanged(const Property& property);
+
+		void OnColorPropertyChanged(const Property& property);
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
@@ -406,6 +475,16 @@ namespace mmo
 		luabind::object m_onEnterPressed;
 
 		luabind::object m_onTabPressed;
+
+		luabind::object m_onEnter;
+
+		luabind::object m_onLeave;
+
+		int32 m_id = 0;
+
+		float m_opacity{ 1.0f };
+
+		Color m_color { Color::White };
 
 	protected:
 		scoped_connection_container m_propConnections;

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "material_compiler_d3d11.h"
 
@@ -946,33 +946,19 @@ namespace mmo
 		if (withSkinning)
 		{
 			vertexShaderStream
-				<< "\tfloat4 transformedPos = float4(0.0, 0.0, 0.0, 0.0);\n";
+				<< "\tmatrix boneMatrix = matBone[input.boneIndices[0]-1] * input.boneWeights[0];\n"
+				<< "\tif(input.boneIndices[1] != 0) { boneMatrix += matBone[input.boneIndices[1]-1] * input.boneWeights[1]; }\n"
+				<< "\tif(input.boneIndices[2] != 0) { boneMatrix += matBone[input.boneIndices[2]-1] * input.boneWeights[2]; }\n"
+				<< "\tif(input.boneIndices[3] != 0) { boneMatrix += matBone[input.boneIndices[3]-1] * input.boneWeights[3]; }\n\n";
 
+			vertexShaderStream << "\tfloat4 transformedPos = mul(float4(input.pos.xyz, 1.0), boneMatrix);\n";
 			if (m_lit)
 			{
 				vertexShaderStream
-					<< "\tfloat3 transformedNormal = float3(0.0, 0.0, 0.0);\n"
-					<< "\tfloat3 transformedBinormal = float3(0.0, 0.0, 0.0);\n"
-					<< "\tfloat3 transformedTangent = float3(0.0, 0.0, 0.0);\n";
+					<< "\tfloat3 transformedNormal = mul(input.normal, (float3x3)boneMatrix);\n"
+					<< "\tfloat3 transformedBinormal = mul(input.binormal, (float3x3)boneMatrix);\n"
+					<< "\tfloat3 transformedTangent = mul(input.tangent, (float3x3)boneMatrix);\n\n";
 			}
-
-			vertexShaderStream
-				<< "\n\tfor (int i = 0; i < 4; ++i)\n"
-				<< "\t{\n"
-				<< "\t\tif(input.boneIndices[i] != 0)\n\t\t{\n"
-				<< "\t\t\tmatrix boneMatrix = matBone[input.boneIndices[i]-1];\n"
-				<< "\t\t\ttransformedPos += mul(input.pos, boneMatrix) * input.boneWeights[i];\n";
-
-			if (m_lit)
-			{
-				vertexShaderStream
-					<< "\t\t\ttransformedNormal += mul(input.normal, boneMatrix) * input.boneWeights[i];\n"
-					<< "\t\t\ttransformedBinormal += mul(input.binormal, boneMatrix) * input.boneWeights[i];\n"
-					<< "\t\t\ttransformedTangent += mul(input.tangent, boneMatrix) * input.boneWeights[i];\n";
-			}
-
-			vertexShaderStream << "\t\t}\n\n";
-			vertexShaderStream << "\t}\n\n";
 		}
 		else
 		{
@@ -984,7 +970,7 @@ namespace mmo
 				vertexShaderStream
 					<< "\tfloat3 transformedNormal = input.normal;\n"
 					<< "\tfloat3 transformedBinormal = input.binormal;\n"
-					<< "\tfloat3 transformedTangent = input.tangent;\n";
+					<< "\tfloat3 transformedTangent = input.tangent;\n\n";
 			}
 		}
 

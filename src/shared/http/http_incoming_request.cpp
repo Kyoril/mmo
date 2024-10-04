@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "http_incoming_request.h"
 
@@ -279,7 +279,7 @@ namespace mmo
 
 					String argName = arg.substr(0, delimiterPos);
 					String argValue = arg.substr(delimiterPos + 1);
-					packet.m_postFormArguments[argName] = argValue;
+					packet.m_postFormArguments[argName] = UrlDecode(argValue);
 				}
 
 				return receive_state::Complete;

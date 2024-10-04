@@ -26,18 +26,22 @@ CREATE TABLE `characters` (
   `class` int DEFAULT NULL,
   `level` tinyint unsigned NOT NULL DEFAULT '1',
   `map` int unsigned NOT NULL,
-  `instance` varchar(64) DEFAULT NULL,
   `zone` int DEFAULT NULL,
   `x` float NOT NULL,
   `y` float NOT NULL,
   `z` float NOT NULL,
   `o` float NOT NULL DEFAULT '0',
-  `hp` int NOT NULL,
+  `hp` int NOT NULL DEFAULT '20',
   `deleted_at` datetime DEFAULT NULL,
   `deleted_account` bigint unsigned DEFAULT NULL,
+  `instance` varchar(64) COLLATE latin1_german1_ci DEFAULT NULL,
+  `xp` int unsigned DEFAULT '0',
+  `mana` int unsigned DEFAULT '0',
+  `rage` smallint unsigned DEFAULT '0',
+  `energy` smallint unsigned DEFAULT '100',
   PRIMARY KEY (`id`),
   UNIQUE KEY `UNIQUE_NAME` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
 
 DROP TABLE IF EXISTS `character_chat`;
 
@@ -50,17 +54,17 @@ CREATE TABLE `character_chat` (
   `to_character` bigint unsigned DEFAULT NULL COMMENT 'Only used for whisper messages, NULL otherwise.',
   PRIMARY KEY (`id`),
   KEY `fk_character_id_idx` (`character`),
-  CONSTRAINT `fk_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_to_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`)
+  CONSTRAINT `fk_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 DROP TABLE IF EXISTS `character_spells`;
 
 CREATE TABLE `character_spells` (
-  `character` bigint NOT NULL,
+  `character` bigint unsigned NOT NULL,
   `spell` int NOT NULL,
   UNIQUE KEY `idx_char_spell` (`character`,`spell`),
-  KEY `idx_char` (`character`)
+  KEY `idx_char` (`character`),
+  CONSTRAINT `fk_spell_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
 
 /*Table structure for table `world` */
@@ -76,6 +80,13 @@ CREATE TABLE `world` (
   `last_login` datetime DEFAULT NULL,
   `last_ip` varchar(39) COLLATE latin1_german1_ci DEFAULT NULL,
   `last_build` varchar(32) COLLATE latin1_german1_ci DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+
+DROP TABLE IF EXISTS `history`;
+
+CREATE TABLE `history` (
+  `id` varchar(32) COLLATE latin1_german1_ci NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 

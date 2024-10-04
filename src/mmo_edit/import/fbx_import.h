@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -22,71 +22,6 @@
 
 namespace mmo
 {
-	struct MeshUvSet
-	{
-		std::vector<Vector3> uvs;
-	};
-	
-	struct MeshGeometry
-	{
-		std::vector<Vector3> positions;
-		std::vector<MeshUvSet> uvSets;
-		std::vector<Vector3> normals;
-		std::vector<uint32> colors;
-		std::vector<int32> polygonIndices;
-	};
-
-	struct Joint
-	{
-		Joint* parent = nullptr;
-		String name;
-		Matrix4 transform;
-	};
-
-
-	struct SceneAnimNode
-	{
-		std::string m_name;
-		SceneAnimNode* m_parent;
-		std::vector<SceneAnimNode*> m_children;
-
-		//! most recently calculated local transform
-		aiMatrix4x4 m_localTransform;
-
-		//! same, but in world space
-		aiMatrix4x4 m_globalTransform;
-
-		//!  index in the current animation's channel array. -1 if not animated.
-		int m_channelIndex;
-
-		//! Default construction
-		SceneAnimNode()
-			: m_name()
-			, m_parent(nullptr)
-			, m_children()
-			, m_localTransform()
-			, m_globalTransform()
-			, m_channelIndex(-1)
-		{
-		}
-
-		//! Construction from a given name
-		SceneAnimNode(std::string name)
-			: m_name(std::move(name))
-			, m_parent(nullptr)
-			, m_children()
-			, m_localTransform()
-			, m_globalTransform()
-			, m_channelIndex(-1)
-		{
-		}
-
-		//! Destruct all children recursively
-		~SceneAnimNode()
-		{
-		}
-	};
-
 	/// This class can be used to extract relevant informations out of an fbx file.
 	class FbxImport final
 		: public ImportBase
@@ -110,17 +45,6 @@ namespace mmo
 		~FbxImport() override;
 		
 	private:
-		/// @brief Loads The given FBX file from disk.
-		/// @param filename Full path filename of the fbx file to load.
-		/// @return true on success, false otherwise.
-		bool LoadScene(const String& filename);
-
-		/// @brief Traverses an FbxNode object and all of it's child objects, loading all relevant
-		///	       data like geometry and converts them if supported.
-		/// @remark This is recursive method.
-		/// @param node The node to start traversing from.
-		void TraverseScene(const aiNode& node, const aiScene& scene);
-
 		bool SaveSkeletonFile(const String& filename, const Path& assetPath);
 
 		/// @brief Saves the loaded mesh geometry data into the engine's custom mesh file format.
@@ -128,12 +52,6 @@ namespace mmo
 		/// @param assetPath The asset path, relative to the game content root folder, where the file will be located.
 		/// @return true on success, false on errors. Errors will produce error logs using ELOG.
 		bool SaveMeshFile(const String& filename, const Path& assetPath) const;
-
-		/// @brief Loads a mesh node. Called by TraverseScene when it found a node containing a mesh.
-		/// @param node The node.
-		/// @param mesh The mesh.
-		/// @return true on success, false on error.
-		bool LoadMesh(const aiScene& scene, const aiNode& node, const aiMesh& mesh);
 
 	public:
 		/// @copydoc ImportBase::ImportFromFile
@@ -143,31 +61,41 @@ namespace mmo
 		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
 	private:
-		const aiMatrix4x4& GetLocalTransform(const aiNode* node) const;
-
-		const aiMatrix4x4& GetGlobalTransform(const aiNode* node) const;
-
-		const std::vector<aiMatrix4x4>& GetBoneMatrices(const aiMesh* mesh, const aiNode* pNode, size_t pMeshIndex);
-
-		static void CalculateGlobalTransform(SceneAnimNode& internalNode);
-
-		SceneAnimNode* CreateNodeTree(const aiNode* node, SceneAnimNode* parent);
-
-	private:
-		std::vector<MeshEntry> m_meshEntries;
-
-		typedef std::map<const aiNode*, std::unique_ptr<SceneAnimNode>> NodeMap;
-		NodeMap m_nodesByName;
-
-		/** Name to node map to quickly find nodes for given bones by their name */
-		typedef std::map<const char*, const aiNode*> BoneMap;
-		BoneMap m_boneNodesByName;
-
-		/** Array to return transformations results inside. */
-		std::vector<aiMatrix4x4> m_transforms;
+		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const;
+		void GrabNodeNamesFromNode(const aiScene* mScene, const aiNode* pNode);
+		void GrabBoneNamesFromNode(const aiScene* mScene, const aiNode* pNode);
+		void ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,
+			const aiMatrix4x4& accTransform);
+		void CreateBonesFromNode(const aiScene* mScene, const aiNode* pNode);
+		void CreateBoneHierarchy(const aiScene* mScene, const aiNode* pNode);
+		void LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh, const Matrix4& transform);
+		void MarkAllChildNodesAsNeeded(const aiNode* pNode);
+		void FlagNodeAsNeeded(const char* name);
+		bool IsNodeNeeded(const char* name);
 
 		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
 
-		SkeletonPtr m_skeleton{nullptr};
+		typedef std::map<String, bool> boneMapType;
+		boneMapType boneMap;
+		int mLoaderParams;
+
+		String mCustomAnimationName;
+
+		typedef std::map<String, const aiNode*> BoneNodeMap;
+		BoneNodeMap mBoneNodesByName;
+
+		typedef std::map<String, const aiBone*> BoneMap;
+		BoneMap mBonesByName;
+
+		typedef std::map<String, Matrix4> NodeTransformMap;
+		NodeTransformMap mNodeDerivedTransformByName;
+
+		MeshPtr m_mesh;
+		SkeletonPtr m_skeleton;
+
+		static int msBoneCount;
+
+		float mTicksPerSecond;
+		float mAnimationSpeedModifier;
 	};
 }

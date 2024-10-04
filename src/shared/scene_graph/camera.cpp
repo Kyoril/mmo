@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "camera.h"
 
@@ -59,6 +59,21 @@ namespace mmo
 		rayDirection.Normalize();
 
 		return Ray(rayOrigin, rayDirection, maxDistance);
+	}
+
+	void Camera::GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const
+	{
+		const Matrix4& viewMatrix = GetViewMatrix();
+		const Matrix4& projMatrix = GetProjectionMatrix();
+
+		// Project world position to normalized screen space position
+		const Vector4 positionCameraSpace = viewMatrix * Vector4(worldPosition, 1.0f);
+		const Vector4 clipSpace = projMatrix * positionCameraSpace;
+
+		const Vector3 screenPos = Vector3(clipSpace.x / clipSpace.w, clipSpace.y / clipSpace.w, clipSpace.z / clipSpace.w);
+		
+		x = (screenPos.x + 1.0f) * 0.5f;
+		y = (screenPos.y + 1.0f) * 0.5f;
 	}
 
 	void Camera::UpdateFrustum() const
@@ -145,7 +160,11 @@ namespace mmo
 
 		m_recalcFrustumPlanes = true;
 		m_recalcWorldSpaceCorners = true;
-		m_recalcFrustum = true;
+
+		if (m_obliqueDepthProjection)
+		{
+			m_recalcFrustum = true;
+		}
 	}
 
 	bool Camera::IsViewOutOfDate() const

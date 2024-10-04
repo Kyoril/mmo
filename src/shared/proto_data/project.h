@@ -7,6 +7,7 @@
 #include "virtual_dir/file_system_reader.h"
 #include "base/clock.h"
 #include "base/filesystem.h"
+#include "shared/proto_data/creature_types.pb.h"
 #include "shared/proto_data/units.pb.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/unit_loot.pb.h"
@@ -48,6 +49,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::ObjectLoot, mmo::proto::LootEntry> ObjectLootManager;
 		typedef TemplateManager<mmo::proto::ItemLoot, mmo::proto::LootEntry> ItemLootManager;
 		typedef TemplateManager<mmo::proto::SkinningLoot, mmo::proto::LootEntry> SkinningLootManager;
+		typedef TemplateManager<mmo::proto::Ranges, mmo::proto::RangeType> RangeManager;
 		typedef TemplateManager<mmo::proto::Spells, mmo::proto::SpellEntry> SpellManager;
 		typedef TemplateManager<mmo::proto::Skills, mmo::proto::SkillEntry> SkillManager;
 		typedef TemplateManager<mmo::proto::Trainers, mmo::proto::TrainerEntry> TrainerManager;
@@ -121,6 +123,7 @@ namespace mmo
 			VariableManager variables;
 			NpcTextManager npcTexts;
 			GossipMenuManager gossipMenus;
+			RangeManager ranges;
 
 		private:
 
@@ -134,10 +137,10 @@ namespace mmo
 			Project()
 			{
 			}
+
 			/// Loads the project.
 			/// @param directory The path to load this project from.
-			bool load(
-			    const String &directory)
+			bool load(const String &directory)
 			{
 				// Remember last used path
 				m_lastPath = directory;
@@ -164,6 +167,7 @@ namespace mmo
 				typedef RealmProjectLoader::ManagerEntry ManagerEntry;
 
 				RealmProjectLoader::Managers managers;
+				managers.push_back(ManagerEntry("ranges", ranges));
 				managers.push_back(ManagerEntry("spells", spells));
 				managers.push_back(ManagerEntry("units", units));
 				managers.push_back(ManagerEntry("objects", objects));
@@ -230,6 +234,7 @@ namespace mmo
 				typedef ProjectSaver::Manager ManagerEntry;
 
 				RealmProjectSaver::Managers managers;
+				managers.push_back(ManagerEntry("ranges", "ranges", ranges));
 				managers.push_back(ManagerEntry("spells", "spells", spells));
 				managers.push_back(ManagerEntry("units", "units", units));
 				managers.push_back(ManagerEntry("objects", "objects", objects));

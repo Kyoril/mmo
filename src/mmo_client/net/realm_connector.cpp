@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "realm_connector.h"
 #include "version.h"
@@ -7,6 +7,7 @@
 #include "base/constants.h"
 #include "base/random.h"
 #include "base/sha1.h"
+#include "game/spell_target_map.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 
@@ -228,11 +229,15 @@ namespace mmo
 		});
 	}
 
-	void RealmConnector::CreateCharacter(const std::string& name)
+	void RealmConnector::CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender)
 	{
-		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+		sendSinglePacket([&name, race, characterClass, characterGender](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CreateChar);
-			packet << io::write_dynamic_range<uint8>(name);
+			packet
+				<< io::write_dynamic_range<uint8>(name)
+				<< io::write<uint8>(race)
+				<< io::write<uint8>(characterClass)
+				<< io::write<uint8>(characterGender);
 			packet.Finish();
 			});
 	}
@@ -254,6 +259,71 @@ namespace mmo
 			packet.Start(opCode);
 			packet << io::write<uint64>(characterId);
 			packet << info;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SetSelection(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetSelection);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CreateMonster(uint32 entry)
+	{
+		sendSinglePacket([entry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCreateMonster);
+			packet << io::write<uint32>(entry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::DestroyMonster(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatDestroyMonster);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::FaceMe(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatFaceMe);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::FollowMe(uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatFollowMe);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::LearnSpell(uint32 spellId)
+	{
+		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatLearnSpell);
+			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CastSpell);
+			packet
+				<< io::write<uint32>(spellId)
+				<< targetMap;
 			packet.Finish();
 			});
 	}

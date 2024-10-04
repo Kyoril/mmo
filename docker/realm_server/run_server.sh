@@ -41,6 +41,11 @@ worldManager =
 	maxCount = 255
 )
 
+folders = 
+(
+	data = "${DATA_DIR}"
+)
+
 log = 
 (
 	active = 1

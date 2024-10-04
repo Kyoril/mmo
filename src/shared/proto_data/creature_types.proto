@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto;
+
+message CreatureTypeEntry {
+	required uint32 id = 1;
+	required string name = 2;
+}
+
+message CreatureTypes {
+	repeated CreatureTypeEntry entry = 1;
+}

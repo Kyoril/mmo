@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -12,11 +12,11 @@
 #include <set>
 #include <vector>
 
-#include "game/game_object_factory.h"
-
 
 namespace mmo
 {
+	class GamePlayerS;
+
 	namespace proto
 	{
 		class Project;
@@ -37,7 +37,7 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-			std::unique_ptr<GameObjectFactory> gameObjectFactory, const proto::Project& project);
+			const proto::Project& project);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -65,6 +65,8 @@ namespace mmo
 		/// @param packetSize 
 		/// @param packetContent 
 		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent);
+
+		void SendCharacterData(const GamePlayerS& character);
 
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
@@ -116,7 +118,6 @@ namespace mmo
 		TimerQueue& m_timerQueue;
 		PlayerManager& m_playerManager;
 		WorldInstanceManager& m_worldInstanceManager;
-		std::unique_ptr<GameObjectFactory> m_objectFactory;
 		
 		std::string m_authName;
 

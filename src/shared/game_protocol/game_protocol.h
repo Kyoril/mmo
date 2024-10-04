@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -52,6 +52,32 @@ namespace mmo
 				NameQuery = 0x10,
 
 				ChatMessage = 0x11,
+
+				SetSelection = 0x12,
+
+				CheatCreateMonster = 0x13,			// GAME MASTER
+				CheatDestroyMonster = 0x14,			// GAME MASTER
+
+				CastSpell = 0x15,
+				CancelCast = 0x16,
+				CancelAura = 0x17,
+				ChannelStart = 0x18,
+				ChannelUpdate = 0x19,
+				CancelChanneling = 0x1A,
+				AttackSwing = 0x1B,
+				AttackStop = 0x1C,
+
+				CheatLearnSpell = 0x1D,				// GAME MASTER
+				CheatRecharge = 0x1E,				// GAME MASTER
+
+				UseItem = 0x1F,
+
+				CheatFollowMe = 0x20,			// GAME MASTER
+				CheatFaceMe = 0x21,				// GAME MASTER
+
+				CreatureQuery,
+				ItemQuery,
+				QuestQuery,
 
 				/// Counter constant
 				Count_,
@@ -115,6 +141,30 @@ namespace mmo
 				ChatMessage,
 
 				InitialSpells,
+				LearnedSpell,
+				UnlearnedSpell,
+				AttackStart,
+				AttackStop,
+				AttackSwingError,
+
+				CastFailed,
+				SpellStart,
+				SpellGo,
+				SpellFailure,
+				SpellCooldown,
+				UpdateAuraDuration,
+				ChannelStart,
+				ChannelUpdate,
+
+				CreatureMove,
+
+				SpellDamageLog,
+				NonSpellDamageLog,
+				XpLog,
+
+				CreatureQueryResult,
+				ItemQueryResult,
+				QuestQueryResult,
 
 				/// Counter constant
 				Count_,
@@ -159,5 +209,34 @@ namespace mmo
 		}
 
 		typedef auth_result::Type AuthResult;
+
+		/// Enumerates possible character creation results.
+		namespace char_create_result
+		{
+			enum Type
+			{
+				Unknown,
+
+				/// Something went wrong like unknown class, race etc.
+				Error,
+
+				/// The character name is in use.
+				NameInUse,
+
+				/// The character class / race is disabled.
+				Disabled,
+
+				/// Number of characters on the realm has been reached.
+				ServerLimit,
+
+				/// Number of characters on the account has been reached.
+				AccountLimit,
+
+				/// The server currently only allows creating characters for players who already have an existing character on the server.
+				OnlyExisting,
+			};
+		}
+
+		typedef char_create_result::Type CharCreateResult;
 	}
 }

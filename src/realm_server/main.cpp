@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "base/typedefs.h"
 #include "base/service.h"
@@ -39,7 +39,6 @@ int main(int argc, char* argv[])
 	try
 	{
 		configFileName = results["config"].as<std::string>();
-		ILOG("Using config file " << configFileName << "...");
 	}
 	catch(const std::exception& e)
 	{
@@ -81,6 +80,8 @@ int main(int argc, char* argv[])
 	{
 		ILOG("Starting the realm server application...");
 	}
+
+	ILOG("Using config file " << configFileName << "...");
 
 	// Notify in case of debug builds
 #ifdef _DEBUG

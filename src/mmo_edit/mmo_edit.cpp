@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include <asio/io_context.hpp>
 #include <asio/io_service.hpp>
@@ -16,6 +16,9 @@
 #include "editor_windows/log_window.h"
 #include "editor_windows/spell_editor_window.h"
 #include "editor_windows/map_editor_window.h"
+#include "editor_windows/creature_editor_window.h"
+#include "editor_windows/class_editor_window.h"
+#include "editor_windows/range_type_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -90,8 +93,11 @@ int main(int argc, char* arg[])
 	// Setup asset window
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
