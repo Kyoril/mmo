@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - feature/win-release-action
 
 jobs:
   build-and-release:
@@ -50,7 +49,13 @@ jobs:
           mkdir client/Config
           mkdir client/Data
           mkdir servers
-          mkdir servers/config
+          mkdir servers\config
+          mkdir servers\updates
+          mkdir servers\updates\login
+          mkdir servers\updates\realm
+          mkdir servers\full_db
+          mkdir servers\full_db\login
+          mkdir servers\full_db\realm
 
           copy bin\Release\update_compiler.exe tools\
           copy bin\Release\hpak_tool.exe tools\
@@ -67,6 +72,10 @@ jobs:
           copy bin\Release\realm_server.exe servers\
           copy bin\Release\world_server.exe servers\
           Copy-Item "C:\Program Files\MySQL\MySQL Server *\lib\libmysql.dll" servers\
+          copy data\login\login_db_schema_full.sql servers\full_db\login\database.sql
+          copy data\realm\realm_db_schema_full.sql servers\full_db\realm\database.sql
+          xcopy data\login\updates servers\updates\login /E
+          xcopy data\realm\updates servers\updates\realm /E
           
           Compress-Archive -Path tools\* -DestinationPath tools.zip
           Compress-Archive -Path client\* -DestinationPath client.zip
