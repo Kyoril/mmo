@@ -72,7 +72,13 @@ namespace mmo
 		"PeriodicTriggerSpell",
 		"PeriodicEnergize",
 		"ModStat",
-		"ProcTriggerSpell"
+		"ProcTriggerSpell",
+
+		"PeriodicDamage",
+		"ModIncreaseSpeed",
+		"ModDecreaseSpeed",
+		"ModSpeedAlways",
+		"ModSpeedNonStacking"
 	};
 
 	static String s_statNames[] = {

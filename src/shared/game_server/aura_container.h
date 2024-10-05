@@ -71,10 +71,22 @@ namespace mmo
 			return m_duration > 0;
 		}
 
+		int32 GetMaximumBasePoints(AuraType type) const;
+
+		int32 GetMinimumBasePoints(AuraType type) const;
+
+		float GetTotalMultiplier(AuraType type) const;
+
 	private:
 		void HandleModStat(const Aura& aura, bool apply);
 
 		void HandleModResistance(const Aura& aura, bool apply);
+
+		void HandleRunSpeedModifier(const Aura& aura, bool apply);
+
+		void HandleSwimSpeedModifier(const Aura& aura, bool apply);
+
+		void HandleFlySpeedModifier(const Aura& aura, bool apply);
 
 	private:
 

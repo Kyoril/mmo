@@ -8,6 +8,7 @@
 #include "base/big_number.h"
 #include "base/signal.h"
 #include "game/character_view.h"
+#include "game/movement_type.h"
 
 #include "asio/io_service.hpp"
 
@@ -116,6 +117,8 @@ namespace mmo
 		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		void SendReviveRequest();
+
+		void SendMovementSpeedAck(MovementType type, uint32 ackId, float speed, const MovementInfo& movementInfo);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

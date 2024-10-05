@@ -192,6 +192,10 @@ namespace mmo
 
 		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket& packet);
 
+		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket& packet);
+
+		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

@@ -168,6 +168,17 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing:
 			OnMovement(opCode, buffer.size(), reader);
 			break;
+
+		case game::client_realm_packet::ForceMoveSetWalkSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetTurnRateAck:
+		case game::client_realm_packet::ForceSetFlightSpeedAck:
+		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
+			OnClientAck(opCode, buffer.size(), reader);
+			break;
 		}
 	}
 
@@ -379,6 +390,12 @@ namespace mmo
 		}
 	}
 
+	void Player::Kick()
+	{
+		m_worldInstance->RemoveGameObject(*m_character);
+		m_character.reset();
+	}
+
 	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 characterGuid;
@@ -398,6 +415,14 @@ namespace mmo
 		if ((info.IsMoving() || info.IsTurning() || info.IsPitching()) && !m_character->IsAlive())
 		{
 			ELOG("Player tried to move or rotate while not being alive anymore");
+			return;
+		}
+
+		// Make sure that there is no timed out pending movement change (lag tolerance)
+		if (m_character->HasTimedOutPendingMovementChange())
+		{
+			ELOG("Player probably tried to skip or delay an ack packet");
+			Kick();
 			return;
 		}
 
@@ -726,6 +751,156 @@ namespace mmo
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
 		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth));
+	}
+
+	bool ValidateSpeedAck(const PendingMovementChange& change, float receivedSpeed, MovementType& outMoveTypeSent)
+	{
+		switch (change.changeType)
+		{
+		case MovementChangeType::SpeedChangeWalk:				outMoveTypeSent = movement_type::Walk; break;
+		case MovementChangeType::SpeedChangeRun:				outMoveTypeSent = movement_type::Run; break;
+		case MovementChangeType::SpeedChangeRunBack:			outMoveTypeSent = movement_type::Backwards; break;
+		case MovementChangeType::SpeedChangeSwim:				outMoveTypeSent = movement_type::Swim; break;
+		case MovementChangeType::SpeedChangeSwimBack:			outMoveTypeSent = movement_type::SwimBackwards; break;
+		case MovementChangeType::SpeedChangeTurnRate:			outMoveTypeSent = movement_type::Turn; break;
+		case MovementChangeType::SpeedChangeFlightSpeed:		outMoveTypeSent = movement_type::Flight; break;
+		case MovementChangeType::SpeedChangeFlightBackSpeed:	outMoveTypeSent = movement_type::FlightBackwards; break;
+		default:
+			ELOG("Incorrect ack data for speed change ack");
+			return false;
+		}
+
+		if (std::fabs(receivedSpeed - change.speed) > FLT_EPSILON)
+		{
+			ELOG("Incorrect speed value received in ack");
+			return false;
+		}
+
+		return true;
+	}
+
+	void Player::OnClientAck(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 ackId;
+		if (!(contentReader >> io::read<uint32>(ackId)))
+		{
+			ELOG("Failed to read ack id");
+			Kick();
+			return;
+		}
+
+		if (!m_character->HasPendingMovementChange())
+		{
+			ELOG("Received ack for movement change but no pending movement change was found");
+			Kick();
+			return;
+		}
+
+		// Try to consume client ack
+		PendingMovementChange change = m_character->PopPendingMovementChange();
+		if (change.counter != ackId)
+		{
+			ELOG("Received client ack with wrong index (different index expected)");
+			Kick();
+			return;
+		}
+
+		// Read movement info
+		MovementInfo info;
+		if (!(contentReader >> info))
+		{
+			ELOG("Could not read movement info from ack packet 0x" << std::hex << opCode);
+			return;
+		}
+
+		// TODO: Validate movement speed
+
+
+		// Used by speed change acks
+		MovementType typeSent = movement_type::Count;
+		float receivedSpeed = 0.0f;
+
+		// Check op-code dependant checks and actions
+		switch (opCode)
+		{
+		case game::client_realm_packet::ForceMoveSetWalkSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetTurnRateAck:
+		case game::client_realm_packet::ForceSetFlightSpeedAck:
+		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
+			{
+				// Read the additional new speed value (note that this is in units/second).
+				if (!(contentReader >> receivedSpeed))
+				{
+					WLOG("Incomplete ack packet data received!");
+					Kick();
+					return;
+				}
+
+				// Validate that all parameters match the pending movement change and also determine
+				// the movement type that should be altered based on the change.
+				if (!ValidateSpeedAck(change, receivedSpeed, typeSent))
+				{
+					Kick();
+					return;
+				}
+
+				// Used to validate if the opCode matches the determined move code
+				static uint16 speedAckOpCodes[MovementType::Count] = {
+					game::client_realm_packet::ForceMoveSetWalkSpeedAck,
+					game::client_realm_packet::ForceMoveSetRunSpeedAck,
+					game::client_realm_packet::ForceMoveSetRunBackSpeedAck,
+					game::client_realm_packet::ForceMoveSetSwimSpeedAck,
+					game::client_realm_packet::ForceMoveSetSwimBackSpeedAck,
+					game::client_realm_packet::ForceMoveSetTurnRateAck,
+					game::client_realm_packet::ForceSetFlightSpeedAck,
+					game::client_realm_packet::ForceSetFlightBackSpeedAck
+				};
+
+				// Validate that the movement type has the expected value based on the opcode
+				if (typeSent >= MovementType::Count ||
+					opCode != speedAckOpCodes[typeSent])
+				{
+					WLOG("Wrong movement type in speed ack packet!");
+					Kick();
+					return;
+				}
+
+				// Determine the base speed and make sure it's greater than 0, since we want to
+				// use it as divider
+				const float baseSpeed = m_character->GetBaseSpeed(typeSent);
+				ASSERT(baseSpeed > 0.0f);
+
+				// Calculate the speed rate
+				receivedSpeed /= baseSpeed;
+				break;
+			}
+		}
+
+		// Apply movement info
+		m_character->ApplyMovementInfo(info);
+
+		// Perform application - we need to do this after all checks have been made
+		switch (opCode)
+		{
+		case game::client_realm_packet::ForceMoveSetWalkSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunSpeedAck:
+		case game::client_realm_packet::ForceMoveSetRunBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimSpeedAck:
+		case game::client_realm_packet::ForceMoveSetSwimBackSpeedAck:
+		case game::client_realm_packet::ForceMoveSetTurnRateAck:
+		case game::client_realm_packet::ForceSetFlightSpeedAck:
+		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
+			// Apply speed rate so that anti cheat detection can detect speed hacks
+			// properly now since we made sure that the client has received the speed
+			// change and all following movement packets need to use these new speed
+			// values.
+			m_character->ApplySpeedChange(typeSent, receivedSpeed);
+			break;
+		}
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)

@@ -69,6 +69,8 @@ namespace mmo
 		/// @brief Makes the unit follow a given path of points.
 		void SetMovementPath(const std::vector<Vector3>& points);
 
+		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
+
 	public:
 		/// @brief Returns the current health of this unit.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }

@@ -341,8 +341,8 @@ namespace mmo
 			}
 
 			const auto& effect = spell.effects(effectIndex);
-			min = effect.basepoints();
-			max = effect.basepoints() + effect.diesides();
+			min = std::abs(effect.basepoints());
+			max = std::abs(effect.basepoints() + effect.diesides());
 		}
 
 		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)

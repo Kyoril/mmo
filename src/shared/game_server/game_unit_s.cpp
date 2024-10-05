@@ -180,6 +180,41 @@ namespace mmo
 		RefreshStats();
 	}
 
+	PendingMovementChange GameUnitS::PopPendingMovementChange()
+	{
+		ASSERT(!m_pendingMoveChanges.empty());
+
+		PendingMovementChange change = m_pendingMoveChanges.front();
+		m_pendingMoveChanges.pop_front();
+
+		return change;
+	}
+
+	void GameUnitS::PushPendingMovementChange(PendingMovementChange change)
+	{
+		m_pendingMoveChanges.emplace_back(change);
+	}
+
+	bool GameUnitS::HasTimedOutPendingMovementChange() const
+	{
+		/// A flat timeout tolerance value in milliseconds. If an expected client ack hasn't been received
+		/// within this amount of time, it is handled as a disconnect. Note that this value doesn't mean that you
+		/// get kicked immediatly after 750 ms, as the check is performed in the movement packet handler. So,
+		/// if you don't move, for example, the ack can be delayed an infinite amount of time until you finally move.
+		static constexpr GameTime ClientAckTimeoutToleranceMs = 1500;
+
+		// No pending movement change = no timed out change
+		if (m_pendingMoveChanges.empty())
+		{
+			return false;
+		}
+
+		// Compare timestamp
+		const GameTime now = GetAsyncTimeMs();
+		const GameTime timeout = m_pendingMoveChanges.front().timestamp + ClientAckTimeoutToleranceMs;
+		return (timeout <= now);
+	}
+
 	void GameUnitS::SetLevel(uint32 newLevel)
 	{
 		Set(object_fields::Level, newLevel);
@@ -594,15 +629,35 @@ namespace mmo
 		return baseSpeed * m_speedBonus[type];
 	}
 
+
 	void GameUnitS::NotifySpeedChanged(MovementType type, bool initial)
 	{
 		float speed = 1.0f;
 
-		MovementChangeType changeType;
+		MovementChangeType changeType = MovementChangeType::SpeedChangeRun;
 
 		// Apply speed buffs
+		int32 mainSpeedMod = 0;
+		float stackBonus = 1.0f, nonStackBonus = 1.0f;
+
+		mainSpeedMod = GetMaximumBasePoints(aura_type::ModIncreaseSpeed);
+		stackBonus = GetTotalMultiplier(aura_type::ModSpeedAlways);
+		nonStackBonus = (100.0f + static_cast<float>(GetMaximumBasePoints(aura_type::ModSpeedNonStacking))) / 100.0f;
+
+		const float bonus = nonStackBonus > stackBonus ? nonStackBonus : stackBonus;
+		speed = mainSpeedMod ? bonus * (100.0f + static_cast<float>(mainSpeedMod)) / 100.0f : bonus;
 
 		// Apply slow buffs
+		int32 slow = GetMinimumBasePoints(aura_type::ModDecreaseSpeed);
+		int32 slowNonStack = GetMinimumBasePoints(aura_type::ModSpeedNonStacking);
+		slow = slow < slowNonStack ? slow : slowNonStack;
+
+		// Slow has to be <= 0
+		ASSERT(slow <= 0);
+		if (slow)
+		{
+			speed += (speed * static_cast<float>(slow) / 100.0f);
+		}
 
 		float oldBonus = m_speedBonus[type];
 
@@ -641,7 +696,7 @@ namespace mmo
 				change.changeType = changeType;
 				change.speed = absSpeed;
 				change.timestamp = GetAsyncTimeMs();
-				m_pendingMoveChanges.emplace_back(change);
+				PushPendingMovementChange(change);
 
 				// Notify the watcher
 				m_netUnitWatcher->OnSpeedChangeApplied(type, absSpeed, ackId);
@@ -819,6 +874,65 @@ namespace mmo
 		}
 
 		m_netUnitWatcher->OnAttackSwingEvent(attackSwingEvent);
+	}
+
+	int32 GameUnitS::GetMaximumBasePoints(const AuraType type) const
+	{
+		int32 threshold = 0;
+
+		for (auto& aura : m_auras)
+		{
+			if (!aura->IsApplied())
+			{
+				continue;
+			}
+
+			const int32 max = aura->GetMaximumBasePoints(type);
+			if (max > threshold)
+			{
+				threshold = max;
+			}
+		}
+
+		return threshold;
+	}
+
+	int32 GameUnitS::GetMinimumBasePoints(const AuraType type) const
+	{
+		int32 threshold = 0;
+
+		for (auto& aura : m_auras)
+		{
+			if (!aura->IsApplied())
+			{
+				continue;
+			}
+
+			const int32 min = aura->GetMinimumBasePoints(type);
+			if (min < threshold)
+			{
+				threshold = min;
+			}
+		}
+
+		return threshold;
+	}
+
+	float GameUnitS::GetTotalMultiplier(const AuraType type) const
+	{
+		float multiplier = 1.0f;
+
+		for (auto& aura : m_auras)
+		{
+			if (!aura->IsApplied())
+			{
+				continue;
+			}
+
+			multiplier *= aura->GetTotalMultiplier(type);
+		}
+
+		return multiplier;
 	}
 
 	void GameUnitS::OnDespawnTimer()

@@ -31,7 +31,7 @@ namespace mmo
 				}
 
 				// Calculate new position
-				const Radian o = GetMoved().GetAngle(m_target.x, m_target.y);
+				const Radian o = GetMoved().GetAngle(m_target.x, m_target.z);
 				const Vector3 oldPosition = GetCurrentLocation();
 				GetMoved().Relocate(oldPosition, o);
 
@@ -91,8 +91,7 @@ namespace mmo
 
 	bool UnitMover::MoveTo(const Vector3& target, const IShape* clipping/* = nullptr*/)
 	{
-		// TODO: Speed
-		const bool result = MoveTo(target, 7.0f, clipping);
+		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), clipping);
 		m_customSpeed = false;
 		return result;
 	}
@@ -172,7 +171,7 @@ namespace mmo
 
 			// Calculate our orientation
 			const float dx = target.x - currentLoc.x;
-			const float dy = target.y - currentLoc.y;
+			const float dy = target.z - currentLoc.z;
 			float o = ::atan2(dy, dx);
 			o = (o >= 0) ? o : 2 * 3.1415927f + o;
 
@@ -288,7 +287,7 @@ namespace mmo
 		// Update current location
 		auto currentLoc = GetCurrentLocation();
 		const float dx = m_target.x - currentLoc.x;
-		const float dy = m_target.y - currentLoc.y;
+		const float dy = m_target.z - currentLoc.z;
 		float o = ::atan2(dy, dx);
 		o = (o >= 0) ? o : 2 * 3.1415927f + o;
 

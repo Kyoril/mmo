@@ -54,6 +54,8 @@ namespace mmo
 			}
 		}
 
+		m_applied = apply;
+
 		// TODO: Apply auras to the owning unit and notify others
 		for(const auto& aura : m_auras)
 		{
@@ -75,16 +77,80 @@ namespace mmo
 			case AuraType::ModResistance:
 				HandleModResistance(aura, apply);
 				break;
-				
+			case AuraType::ModSpeedAlways:
+			case AuraType::ModIncreaseSpeed:
+				HandleRunSpeedModifier(aura, apply);
+				break;
+			case AuraType::ModDecreaseSpeed:
+			case AuraType::ModSpeedNonStacking:
+				HandleRunSpeedModifier(aura, apply);
+				HandleSwimSpeedModifier(aura, apply);
+				HandleFlySpeedModifier(aura, apply);
+				break;
 			}
 		}
-
-		m_applied = apply;
 	}
 
 	bool AuraContainer::IsExpired() const
 	{
 		return m_duration > 0 && m_expiration <= GetAsyncTimeMs();
+	}
+
+	int32 AuraContainer::GetMaximumBasePoints(const AuraType type) const
+	{
+		int32 threshold = 0;
+
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			if (it->type != type)
+			{
+				continue;
+			}
+
+			if (it->basePoints > threshold)
+			{
+				threshold = it->basePoints;
+			}
+		}
+
+		return threshold;
+	}
+
+	int32 AuraContainer::GetMinimumBasePoints(AuraType type) const
+	{
+		int32 threshold = 0;
+
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			if (it->type != type)
+			{
+				continue;
+			}
+
+			if (it->basePoints < threshold)
+			{
+				threshold = it->basePoints;
+			}
+		}
+
+		return threshold;
+	}
+
+	float AuraContainer::GetTotalMultiplier(const AuraType type) const
+	{
+		float multiplier = 1.0f;
+
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			if (it->type != type)
+			{
+				continue;
+			}
+
+			multiplier *= (100.0f + static_cast<float>(it->basePoints)) / 100.0f;
+		}
+
+		return multiplier;
 	}
 
 	void AuraContainer::HandleModStat(const Aura& aura, bool apply)
@@ -118,5 +184,20 @@ namespace mmo
 			unit_mod_type::TotalValue,
 			aura.basePoints,
 			apply);
+	}
+
+	void AuraContainer::HandleRunSpeedModifier(const Aura& aura, bool apply)
+	{
+		m_owner.NotifySpeedChanged(movement_type::Run);
+	}
+
+	void AuraContainer::HandleSwimSpeedModifier(const Aura& aura, bool apply)
+	{
+		m_owner.NotifySpeedChanged(movement_type::Swim);
+	}
+
+	void AuraContainer::HandleFlySpeedModifier(const Aura& aura, bool apply)
+	{
+		m_owner.NotifySpeedChanged(movement_type::Flight);
 	}
 }

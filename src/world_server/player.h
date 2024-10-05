@@ -80,6 +80,8 @@ namespace mmo
 
 		void SpawnTileObjects(VisibilityTile& tile);
 
+		void Kick();
+
 	public:
 		/// @brief Gets the character guid.
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
@@ -106,6 +108,8 @@ namespace mmo
 		void OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnClientAck(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);

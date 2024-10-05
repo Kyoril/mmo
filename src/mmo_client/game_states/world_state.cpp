@@ -466,6 +466,25 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &WorldState::OnQuestQueryResult);
 
+
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
@@ -529,6 +548,24 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::XpLog);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellDamageLog);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NonSpellDamageLog);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceSetFlightSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed);
+
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetWalkSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetRunSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetSwimSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetTurnRate);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightSpeed);
+		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightBackSpeed);
 
 	}
 
@@ -1554,6 +1591,124 @@ namespace mmo
 
 	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket& packet)
 	{
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMovementSpeedChanged(game::IncomingPacket& packet)
+	{
+		static MovementType typesByPacket[] = {
+			movement_type::Walk,
+			movement_type::Run,
+			movement_type::Backwards,
+			movement_type::Swim,
+			movement_type::SwimBackwards,
+			movement_type::Turn,
+			movement_type::Flight,
+			movement_type::FlightBackwards
+		};
+
+		uint64 guid;
+		MovementInfo movementInfo;
+		float speed;
+		if (!(packet >> io::read_packed_guid(guid)
+			>> movementInfo >> io::read<float>(speed)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find unit
+		std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(guid);
+		if (!unit)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		// Adjust position
+		unit->GetSceneNode()->SetPosition(movementInfo.position);
+
+		MovementType type = movement_type::Run;
+		switch(packet.GetId())
+		{
+		case game::realm_client_packet::MoveSetWalkSpeed:
+			type = movement_type::Walk;
+			break;
+		case game::realm_client_packet::MoveSetRunSpeed:
+			type = movement_type::Run;
+			break;
+		case game::realm_client_packet::MoveSetRunBackSpeed:
+			type = movement_type::Backwards;
+			break;
+		case game::realm_client_packet::MoveSetSwimSpeed:
+			type = movement_type::Swim;
+			break;
+		case game::realm_client_packet::MoveSetSwimBackSpeed:
+			type = movement_type::SwimBackwards;
+			break;
+		case game::realm_client_packet::MoveSetTurnRate:
+			type = movement_type::Turn;
+			break;
+		case game::realm_client_packet::SetFlightSpeed:
+			type = movement_type::Flight;
+			break;
+		case game::realm_client_packet::SetFlightBackSpeed:
+			type = movement_type::FlightBackwards;
+			break;
+		}
+
+		unit->SetSpeed(type, speed);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnForceMovementSpeedChange(game::IncomingPacket& packet)
+	{
+		const std::shared_ptr<GameUnitC>& unit = m_playerController->GetControlledUnit();
+		if (!unit)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		MovementType type = movement_type::Run;
+		switch (packet.GetId())
+		{
+		case game::realm_client_packet::MoveSetWalkSpeed:
+			type = movement_type::Walk;
+			break;
+		case game::realm_client_packet::MoveSetRunSpeed:
+			type = movement_type::Run;
+			break;
+		case game::realm_client_packet::MoveSetRunBackSpeed:
+			type = movement_type::Backwards;
+			break;
+		case game::realm_client_packet::MoveSetSwimSpeed:
+			type = movement_type::Swim;
+			break;
+		case game::realm_client_packet::MoveSetSwimBackSpeed:
+			type = movement_type::SwimBackwards;
+			break;
+		case game::realm_client_packet::MoveSetTurnRate:
+			type = movement_type::Turn;
+			break;
+		case game::realm_client_packet::SetFlightSpeed:
+			type = movement_type::Flight;
+			break;
+		case game::realm_client_packet::SetFlightBackSpeed:
+			type = movement_type::FlightBackwards;
+			break;
+		}
+
+		uint32 ackId;
+		float speed;
+
+		if (!(packet >> io::read<uint32>(ackId)
+			>> io::read<float>(speed)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Apply speed modifier announce locally and send ack to the server
+		unit->SetSpeed(type, speed);
+		m_realmConnector.SendMovementSpeedAck(type, ackId, speed, unit->GetMovementInfo());
+
 		return PacketParseResult::Pass;
 	}
 

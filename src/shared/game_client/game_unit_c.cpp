@@ -175,16 +175,6 @@ namespace mmo
 		m_movementInfo.facing = facing;
 	}
 
-	Quaternion GetFacingRotation(const Vector3& from, const Vector3& to)
-	{
-		const float dx = from.x - to.x;
-		const float dz = from.z - to.z;
-		float ang = ::atan2(dx, dz);
-		ang = (ang >= 0) ? ang : 2 * 3.1415927f + ang;
-
-		return Quaternion(Radian(ang), Vector3::UnitY);
-	}
-
 	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points)
 	{
 		m_movementAnimationTime = 0.0f;
@@ -219,7 +209,7 @@ namespace mmo
 		{
 			Vector3 diff = point - prevPosition;
 			const float distance = diff.GetLength();
-			const float duration = distance / 7.0f;			// TODO: Speed!
+			const float duration = distance / m_unitSpeed[movement_type::Run];
 
 			positions.push_back(point - m_movementStart);
 			keyFrameTimes.push_back(totalDuration + duration);

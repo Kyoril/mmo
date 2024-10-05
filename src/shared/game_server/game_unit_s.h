@@ -279,6 +279,17 @@ namespace mmo
 		/// Modifies the given unit modifier value by adding or subtracting it from the current value.
 		void UpdateModifierValue(UnitMods mod, UnitModType type, float amount, bool apply);
 
+		/// Gets the next pending movement change and removes it from the queue of pending movement changes.
+		/// You need to make sure that there are any pending changes before calling this method.
+		PendingMovementChange PopPendingMovementChange();
+
+		void PushPendingMovementChange(PendingMovementChange change);
+
+		bool HasPendingMovementChange() const { return !m_pendingMoveChanges.empty(); }
+
+		/// Determines whether there is a timed out pending movement change.
+		bool HasTimedOutPendingMovementChange() const;
+
 	public:
 		virtual void SetLevel(uint32 newLevel);
 
@@ -386,6 +397,13 @@ namespace mmo
 		virtual void RegeneratePower(PowerType powerType);
 
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
+
+	public:
+		int32 GetMaximumBasePoints(AuraType type) const;
+
+		int32 GetMinimumBasePoints(AuraType type) const;
+
+		float GetTotalMultiplier(AuraType type) const;
 
 	protected:
 		virtual void PrepareFieldMap() override

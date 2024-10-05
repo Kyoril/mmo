@@ -97,6 +97,11 @@ namespace mmo
 			PeriodicEnergize,
 			ModStat,
 			ProcTriggerSpell,
+			PeriodicDamage,
+			ModIncreaseSpeed,
+			ModDecreaseSpeed,
+			ModSpeedAlways,
+			ModSpeedNonStacking,
 
 			Count_,
 			Invalid_ = Count_
