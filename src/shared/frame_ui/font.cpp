@@ -621,8 +621,6 @@ namespace mmo
 
 		for (size_t c = 0; c < text.length(); ++c)
 		{
-			if (buffer != nullptr && baseY > area.bottom) return lineCount;
-
 			size_t iterations = 1;
 
 			char g = text[c];
@@ -640,10 +638,7 @@ namespace mmo
 
 				if (buffer) image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
 
-				for (size_t i = 0; i < iterations; ++i)
-				{
-					glyphPos.x += glyph->GetAdvance(scale);
-				}
+				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 
 				if (glyphPos.x >= area.right)
 				{

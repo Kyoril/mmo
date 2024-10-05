@@ -492,7 +492,7 @@ namespace mmo
 		}
 
 		const Rect rect = GetAbsoluteFrameRect();
-		const uint32 lineCount = font->GetLineCount(m_text, rect);
+		const uint32 lineCount = font->GetLineCount(m_text, rect, FrameManager::Get().GetUIScale().y);
 		const float result = font->GetHeight() * lineCount;
 		return result;
 	}
