@@ -405,20 +405,34 @@ namespace mmo
 						break;
 
 					case 'm':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i+1] - '0';
+						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						{
+							effectIndex = desc[i + 1] - '0';
+							i++;
+						}
+
 						Spell_GetEffectPoints(*spell, effectIndex, min, max);
 						strm << min;
 						break;
 
 					case 'M':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i + 1] - '0';
+						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						{
+							effectIndex = desc[i + 1] - '0';
+							i++;
+						}
 						Spell_GetEffectPoints(*spell, effectIndex, min, max);
 						strm << max;
 						break;
 
 					case 's':
 					case 'S':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ') effectIndex = desc[i + 1] - '0';
+						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						{
+							effectIndex = desc[i + 1] - '0';
+							i++;
+						}
+
 						Spell_GetEffectPoints(*spell, effectIndex, min, max);
 						if (min == max)
 						{
@@ -430,14 +444,6 @@ namespace mmo
 						}
 						break;
 					}
-
-					// Skip everything after token until a space is found or string ends
-					while(i < desc.size() - 1 && desc[i] != ' ')
-					{
-						i++;
-					}
-
-					strm << " ";
 				}
 				else
 				{

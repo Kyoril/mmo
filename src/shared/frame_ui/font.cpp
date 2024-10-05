@@ -654,6 +654,51 @@ namespace mmo
 
 	int Font::GetLineCount(const std::string& text, const Rect& area, float scale)
 	{
-		return DrawText(text, area, nullptr, scale, 0);
+		int lineCount = 1;
+
+		const float height = GetHeight(scale);
+		const float baseline = GetBaseline(scale);
+		const Point position = area.GetPosition();
+
+		float baseY = position.y + baseline;
+		Point glyphPos(position);
+
+		size_t lastWordIndex = 0;
+		
+		for (size_t c = 0; c < text.length(); ++c)
+		{
+			size_t iterations = 1;
+
+			char g = text[c];
+			if (g == '\t')
+			{
+				lastWordIndex = c;
+				g = ' ';
+				iterations = 4;
+			}
+			else if(g == ' ')
+			{
+				lastWordIndex = c;
+			}
+
+			const FontGlyph* glyph = nullptr;
+			if ((glyph = GetGlyphData(g)))
+			{
+				const FontImage* const image = glyph->GetImage();
+				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
+				glyphPos.x += glyph->GetAdvance(scale) * iterations;
+
+				if (glyphPos.x >= area.right)
+				{
+					glyphPos.x = position.x;
+					baseY += height;
+
+					++lineCount;
+					c = lastWordIndex + 1;
+				}
+			}
+		}
+
+		return lineCount;
 	}
 }
