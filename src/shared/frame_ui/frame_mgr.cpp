@@ -25,6 +25,7 @@
 
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "scrolling_message_frame.h"
+#include "luabind/operator.hpp"
 
 
 namespace mmo
@@ -398,7 +399,9 @@ namespace mmo
 	               .property("userData", &Frame::GetUserData, &Frame::SetUserData)
 					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
-					.def("SetOnLeaveHandler", &Frame::SetOnLeave)),
+					.def("SetOnLeaveHandler", &Frame::SetOnLeave)
+					.def("__eq", &Frame::IsEqualTo)
+				),
 
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")

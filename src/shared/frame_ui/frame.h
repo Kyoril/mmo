@@ -26,6 +26,7 @@
 
 #include "lua.hpp"
 #include "luabind/object.hpp"
+#include "luabind/operator.hpp"
 
 
 namespace mmo
@@ -75,6 +76,11 @@ namespace mmo
 		signal<void(const MouseEventArgs& args)> MouseDown;
 		/// Fired when the mouse button was released after being pressed on this frame.
 		signal<void(const MouseEventArgs& args)> MouseUp;
+
+	public:
+		/// Special luabind operator overload function to implement shared_ptr comparison which does otherwise simply not work in luabind
+		///	as a shared_ptr<T> is not a T* and thus the == operator does not exist (which results in a lua error when trying to compare).
+		bool IsEqualTo(const Pointer& rhs) const { return this == rhs.get(); }
 
 	public:
 		Frame(const std::string& type, const std::string& name);
