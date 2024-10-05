@@ -142,6 +142,96 @@ namespace mmo
 		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) = 0;
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
+
+		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
+	};
+
+	/// Enumerates possible movement changes which need to be acknowledged by the client.
+	enum class MovementChangeType
+	{
+		/// Default value. Do not use!
+		Invalid,
+
+		/// Character has been rooted or unrooted.
+		Root,
+		/// Character can or can no longer walk on water.
+		WaterWalk,
+		/// Character is hovering or no longer hovering.
+		Hover,
+		/// Character can or can no longer fly.
+		CanFly,
+		/// Character has or has no longer slow fall
+		FeatherFall,
+
+		/// Walk speed changed
+		SpeedChangeWalk,
+		/// Run speed changed
+		SpeedChangeRun,
+		/// Run back speed changed
+		SpeedChangeRunBack,
+		/// Swim speed changed
+		SpeedChangeSwim,
+		/// Swim back speed changed
+		SpeedChangeSwimBack,
+		/// Turn rate changed
+		SpeedChangeTurnRate,
+		/// Flight speed changed
+		SpeedChangeFlightSpeed,
+		/// Flight back speed changed
+		SpeedChangeFlightBackSpeed,
+
+		/// Character teleported
+		Teleport,
+		/// Character was knocked back
+		KnockBack
+	};
+
+	/// Bundles informations which are only used for knock back acks.
+	struct KnockBackInfo
+	{
+		float vcos = 0.0f;
+		float vsin = 0.0f;
+		/// 2d speed value
+		float speedXY = 0.0f;
+		/// z axis speed value
+		float speedZ = 0.0f;
+	};
+
+	struct TeleportInfo
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+		float z = 0.0f;
+		float o = 0.0f;
+	};
+
+	/// Contains infos about a pending movement change which first needs to
+	/// be acknowledged by the client before it's effects can be applied.
+	struct PendingMovementChange final
+	{
+		/// A counter which is used to verify that the ackknowledged change
+		/// is for the expected pending change.
+		uint32 counter = 0;
+		/// Defines what kind of change should be applied.
+		MovementChangeType changeType = MovementChangeType::Invalid;
+		/// A timestamp value used for timeouts.
+		GameTime timestamp = 0;
+
+		// Additional data to perform checks whether the ack packet data is correct
+		// and hasn't been modified at the client side.
+		union
+		{
+			/// The new value which should be applied. Currently only used for speed changes.
+			float speed;
+
+			/// Whether the respective movement flags should be applied or misapplied. This is
+			/// only used for Hover / FeatherFall etc., and ignored for speed changes.
+			bool apply;
+
+			KnockBackInfo knockBackInfo {};
+
+			TeleportInfo teleportInfo;
+		};
 	};
 
 	/// @brief Represents a living object (unit) in the game world.
@@ -262,6 +352,20 @@ namespace mmo
 
 		void RemoveAllAttackingUnits();
 
+		static float GetBaseSpeed(const MovementType type);
+
+		float GetSpeed(const MovementType type) const;
+
+		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
+		/// If this unit is player controlled, a client notification is sent and the speed is
+		/// only changed after the client has acknowledged this change. Otherwise, the speed
+		/// is immediately applied using ApplySpeedChange.
+		void NotifySpeedChanged(MovementType type, bool initial = false);
+
+		/// Immediately applies a speed change for this unit. Never call this method directly
+		/// unless you know what you're doing.
+		void ApplySpeedChange(MovementType type, float speed, bool initial = false);
+
 	protected:
 		uint32 CalculateArmorReducedDamage(uint32 attackerLevel, uint32 damage) const;
 
@@ -301,6 +405,9 @@ namespace mmo
 
 		UnitMover& GetMover() const { return *m_mover; }
 
+		/// Generates the next client ack id for this unit.
+		inline uint32 GenerateAckId() { return m_ackGenerator.GenerateId(); }
+
 	protected:
 		typedef LinearSet<const GameUnitS*> AttackingUnitSet;
 
@@ -330,6 +437,10 @@ namespace mmo
 		typedef std::array<float, unit_mod_type::End> UnitModTypeArray;
 		typedef std::array<UnitModTypeArray, unit_mods::End> UnitModArray;
 		UnitModArray m_unitMods;
+
+		std::array<float, movement_type::Count> m_speedBonus;
+		IdGenerator<uint32> m_ackGenerator;
+		std::list<PendingMovementChange> m_pendingMoveChanges;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

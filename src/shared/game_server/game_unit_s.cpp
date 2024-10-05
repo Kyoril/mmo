@@ -67,6 +67,8 @@ namespace mmo
 			m_unitMods[i][unit_mod_type::TotalPct] = 1.0f;
 		}
 
+		m_speedBonus.fill(1.0f);
+
 		// Initialize some values
 		Set(object_fields::Type, ObjectTypeId::Unit);
 		Set(object_fields::Scale, 1.0f);
@@ -99,6 +101,17 @@ namespace mmo
 	void GameUnitS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
 	{
 		GameObjectS::WriteObjectUpdateBlock(writer, creation);
+
+		// Speeds
+		writer
+			<< io::write<float>(GetSpeed(movement_type::Walk))
+			<< io::write<float>(GetSpeed(movement_type::Run))
+			<< io::write<float>(GetSpeed(movement_type::Backwards))
+			<< io::write<float>(GetSpeed(movement_type::Swim))
+			<< io::write<float>(GetSpeed(movement_type::SwimBackwards))
+			<< io::write<float>(GetSpeed(movement_type::Flight))
+			<< io::write<float>(GetSpeed(movement_type::FlightBackwards))
+			<< io::write<float>(GetSpeed(movement_type::Turn));
 	}
 
 	void GameUnitS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
@@ -540,6 +553,142 @@ namespace mmo
 	{
 		m_attackingUnits.clear();
 		SetInCombat(false);
+	}
+
+	float GameUnitS::GetBaseSpeed(const MovementType type)
+	{
+		switch (type)
+		{
+		case movement_type::Walk:
+			return 2.5f;
+		case movement_type::Run:
+			return 7.0f;
+		case movement_type::Backwards:
+			return 4.5f;
+		case movement_type::Swim:
+			return 4.75f;
+		case movement_type::SwimBackwards:
+			return 2.5f;
+		case movement_type::Turn:
+			return 3.1415927f;
+		case movement_type::Flight:
+			return 7.0f;
+		case movement_type::FlightBackwards:
+			return 4.5f;
+		default:
+			return 0.0f;
+		}
+	}
+
+	float GameUnitS::GetSpeed(const MovementType type) const
+	{
+		const float baseSpeed = GetBaseSpeed(type);
+		return baseSpeed * m_speedBonus[type];
+	}
+
+	void GameUnitS::NotifySpeedChanged(MovementType type, bool initial)
+	{
+		float speed = 1.0f;
+
+		MovementChangeType changeType;
+
+		// Apply speed buffs
+
+		// Apply slow buffs
+
+		float oldBonus = m_speedBonus[type];
+
+		// If there is a pending movement change...
+		if (!initial)
+		{
+			if (!m_pendingMoveChanges.empty())
+			{
+				// Iterate backwards until we find a pending movement change for this move type
+				for (auto it = m_pendingMoveChanges.cend(); it != m_pendingMoveChanges.cbegin(); --it)
+				{
+					if (it->changeType == changeType)
+					{
+						DLOG("Found pending move change for type " << type << ": using this as old value");
+						oldBonus = it->speed / GetBaseSpeed(type);
+						break;
+					}
+				}
+			}
+		}
+
+		if (oldBonus != speed)
+		{
+			// If there is a watcher, we need to notify him about this change first, and he needs
+			// to send an ack packet before we finally apply the speed change. If there is no
+			// watcher, we simply apply the speed change as this is most likely a creature which isn't
+			// controlled by a player (however, mind-controlled creatures will have a m_netWatcher).
+			if (m_netUnitWatcher != nullptr && !initial)
+			{
+				const uint32 ackId = GenerateAckId();
+				const float absSpeed = GetBaseSpeed(type) * speed;
+
+				// Expect ack opcode
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = changeType;
+				change.speed = absSpeed;
+				change.timestamp = GetAsyncTimeMs();
+				m_pendingMoveChanges.emplace_back(change);
+
+				// Notify the watcher
+				m_netUnitWatcher->OnSpeedChangeApplied(type, absSpeed, ackId);
+			}
+			else
+			{
+				// Immediately apply speed change
+				ApplySpeedChange(type, speed);
+			}
+		}
+	}
+
+	void GameUnitS::ApplySpeedChange(MovementType type, float speed, bool initial)
+	{
+		// Now store the speed bonus value
+		m_speedBonus[type] = speed;
+
+		// Notify all tile subscribers about this event
+		if (!initial)
+		{
+			// Send packets to all listeners around except ourself
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
+			game::Protocol::OutgoingPacket packet(sink);
+
+			static const uint16 moveOpCodes[MovementType::Count] = {
+				game::realm_client_packet::MoveSetWalkSpeed,
+				game::realm_client_packet::MoveSetRunSpeed,
+				game::realm_client_packet::MoveSetRunBackSpeed,
+				game::realm_client_packet::MoveSetSwimSpeed,
+				game::realm_client_packet::MoveSetSwimBackSpeed,
+				game::realm_client_packet::MoveSetTurnRate,
+				game::realm_client_packet::SetFlightSpeed,
+				game::realm_client_packet::SetFlightBackSpeed
+			};
+
+			packet.Start(moveOpCodes[type]);
+			packet
+				<< io::write_packed_guid(GetGuid())
+				<< GetMovementInfo()
+				<< io::write<float>(speed * GetBaseSpeed(type));
+			packet.Finish();
+
+			ForEachSubscriberInSight(
+				[&packet, &buffer, this](TileSubscriber& subscriber)
+				{
+					if (&subscriber.GetGameUnit() != this)
+					{
+						subscriber.SendPacket(packet, buffer);
+					}
+				});
+		}
+
+		// Notify the unit mover about this change
+		m_mover->OnMoveSpeedChanged(type);
 	}
 
 	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const

@@ -810,4 +810,27 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void Player::OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId)
+	{
+		SendPacket([type, speed, ackId](game::OutgoingPacket& packet)
+			{
+				static const uint16 moveOpCodes[MovementType::Count] = {
+					game::realm_client_packet::ForceMoveSetWalkSpeed,
+					game::realm_client_packet::ForceMoveSetRunSpeed,
+					game::realm_client_packet::ForceMoveSetRunBackSpeed,
+					game::realm_client_packet::ForceMoveSetSwimSpeed,
+					game::realm_client_packet::ForceMoveSetSwimBackSpeed,
+					game::realm_client_packet::ForceMoveSetTurnRate,
+					game::realm_client_packet::ForceSetFlightSpeed,
+					game::realm_client_packet::ForceSetFlightBackSpeed
+				};
+
+				packet.Start(moveOpCodes[type]);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<float>(speed);
+				packet.Finish();
+			});
+	}
 }

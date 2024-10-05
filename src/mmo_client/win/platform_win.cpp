@@ -34,6 +34,11 @@ namespace mmo
 		s_mouseCaptured = false;
 	}
 
+	void PlatformWin::ResetCursorPosition()
+	{
+		SetCursorPos(s_mouseCaptureX, s_mouseCaptureY);
+	}
+
 	void PlatformWin::ShowCursor()
 	{
 		if (--s_mouseCursorHiddenCount <= 0)

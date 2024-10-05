@@ -10,6 +10,8 @@ namespace mmo
 
 		static void ReleaseMouseCapture();
 
+		static void ResetCursorPosition();
+
 		static void ShowCursor();
 
 		static void HideCursor();

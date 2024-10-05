@@ -121,6 +121,9 @@ namespace mmo
 
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
+		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
+
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
@@ -139,5 +142,7 @@ namespace mmo
 		uint64 m_victim = 0;
 
 		std::weak_ptr<GameUnitC> m_targetUnit;
+
+		float m_unitSpeed[movement_type::Count];
 	};
 }

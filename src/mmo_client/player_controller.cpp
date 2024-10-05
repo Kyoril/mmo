@@ -216,11 +216,11 @@ namespace mmo
 		{
 			if (movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
-				playerNode->Yaw(Degree(180) * deltaSeconds, TransformSpace::World);
+				playerNode->Yaw(Radian(m_controlledUnit->GetSpeed(movement_type::Turn)) * deltaSeconds, TransformSpace::World);
 			}
 			else if (movementInfo.movementFlags & movement_flags::TurnRight)
 			{
-				playerNode->Yaw(Degree(-180) * deltaSeconds, TransformSpace::World);
+				playerNode->Yaw(Radian(-m_controlledUnit->GetSpeed(movement_type::Turn)) * deltaSeconds, TransformSpace::World);
 			}
 		}
 
@@ -245,7 +245,14 @@ namespace mmo
 				movementVector.z += 1.0f;
 			}
 
-			playerNode->Translate(movementVector.NormalizedCopy() * 7.0f * deltaSeconds, TransformSpace::Local);
+			MovementType movementType = movement_type::Run;
+			if (movementVector.x < 0.0)
+			{
+				movementType = movement_type::Backwards;
+			}
+
+			// TODO: Apply movement speed values like run back, walk etc.
+			playerNode->Translate(movementVector.NormalizedCopy() * m_controlledUnit->GetSpeed(movementType) * deltaSeconds, TransformSpace::Local);
 		}
 	}
 
@@ -446,7 +453,10 @@ namespace mmo
 
 		const Point position(x, y);
 		const Point delta = position - m_lastMousePosition;
-		m_lastMousePosition = position;
+
+
+		//m_lastMousePosition = position;
+		Platform::ResetCursorPosition();
 
 		SceneNode* yawNode = m_cameraAnchorNode;
 		if (delta.x != 0.0f)

@@ -47,7 +47,16 @@ namespace mmo
 
 			m_fieldMap.MarkAllAsUnchanged();
 		}
-		
+
+		reader
+			>> io::read<float>(m_unitSpeed[movement_type::Walk])
+			>> io::read<float>(m_unitSpeed[movement_type::Run])
+			>> io::read<float>(m_unitSpeed[movement_type::Backwards])
+			>> io::read<float>(m_unitSpeed[movement_type::Swim])
+			>> io::read<float>(m_unitSpeed[movement_type::SwimBackwards])
+			>> io::read<float>(m_unitSpeed[movement_type::Flight])
+			>> io::read<float>(m_unitSpeed[movement_type::FlightBackwards])
+			>> io::read<float>(m_unitSpeed[movement_type::Turn]);
 
 		ASSERT(GetGuid() > 0);
 		if (complete)

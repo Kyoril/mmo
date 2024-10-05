@@ -81,6 +81,15 @@ namespace mmo
 
 				ReviveRequest,
 
+				ForceMoveSetWalkSpeedAck,
+				ForceMoveSetRunSpeedAck,
+				ForceMoveSetRunBackSpeedAck,
+				ForceMoveSetSwimSpeedAck,
+				ForceMoveSetSwimBackSpeedAck,
+				ForceMoveSetTurnRateAck,
+				ForceSetFlightSpeedAck,
+				ForceSetFlightBackSpeedAck,
+
 				/// Counter constant
 				Count_,
 			};
@@ -167,6 +176,24 @@ namespace mmo
 				CreatureQueryResult,
 				ItemQueryResult,
 				QuestQueryResult,
+
+				ForceMoveSetWalkSpeed,
+				ForceMoveSetRunSpeed,
+				ForceMoveSetRunBackSpeed,
+				ForceMoveSetSwimSpeed,
+				ForceMoveSetSwimBackSpeed,
+				ForceMoveSetTurnRate,
+				ForceSetFlightSpeed,
+				ForceSetFlightBackSpeed,
+
+				MoveSetWalkSpeed,
+				MoveSetRunSpeed,
+				MoveSetRunBackSpeed,
+				MoveSetSwimSpeed,
+				MoveSetSwimBackSpeed,
+				MoveSetTurnRate,
+				SetFlightSpeed,
+				SetFlightBackSpeed,
 
 				/// Counter constant
 				Count_,

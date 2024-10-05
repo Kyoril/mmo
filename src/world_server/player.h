@@ -121,6 +121,8 @@ namespace mmo
 
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
+		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
+
 	private:
 		RealmConnector& m_connector;
 		std::shared_ptr<GamePlayerS> m_character;
