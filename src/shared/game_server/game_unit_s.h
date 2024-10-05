@@ -211,11 +211,11 @@ namespace mmo
 	{
 		/// A counter which is used to verify that the ackknowledged change
 		/// is for the expected pending change.
-		uint32 counter = 0;
+		uint32 counter;
 		/// Defines what kind of change should be applied.
-		MovementChangeType changeType = MovementChangeType::Invalid;
+		MovementChangeType changeType;
 		/// A timestamp value used for timeouts.
-		GameTime timestamp = 0;
+		GameTime timestamp;
 
 		// Additional data to perform checks whether the ack packet data is correct
 		// and hasn't been modified at the client side.
@@ -228,10 +228,12 @@ namespace mmo
 			/// only used for Hover / FeatherFall etc., and ignored for speed changes.
 			bool apply;
 
-			KnockBackInfo knockBackInfo {};
+			KnockBackInfo knockBackInfo;
 
 			TeleportInfo teleportInfo;
 		};
+
+		PendingMovementChange();
 	};
 
 	/// @brief Represents a living object (unit) in the game world.

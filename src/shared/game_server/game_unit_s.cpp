@@ -36,6 +36,14 @@ namespace mmo
 		return DeriveFromBaseWithFactor(intellect, 20, 15);
 	}
 
+	PendingMovementChange::PendingMovementChange()
+	{
+		counter = 0;
+		changeType = MovementChangeType::Invalid;
+		speed = 0.0f;
+		timestamp = 0;
+	}
+
 	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers)
 		: GameObjectS(project)
 		, m_timers(timers)
