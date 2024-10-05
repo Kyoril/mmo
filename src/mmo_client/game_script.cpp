@@ -368,7 +368,40 @@ namespace mmo
 					{
 					case 'd':
 					case 'D':
-						strm << std::setprecision(2) << static_cast<float>(spell->duration()) / 1000.0f;
+						{
+							// Default display value is seconds
+							double displayValue = static_cast<double>(spell->duration()) / 1000.0;
+							String formatTemplate = "FORMAT_DURATION_SECONDS";
+
+							if (spell->duration() >= 60000 * 60)
+							{
+								// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
+								displayValue /= 3600.0;
+								formatTemplate = "FORMAT_DURATION_HOURS";
+							}
+							else if (spell->duration() >= 60000)
+							{
+								displayValue /= 60.0;
+								formatTemplate = "FORMAT_DURATION_MINUTES";
+							}
+
+							if (token == 'd')
+							{
+								formatTemplate += "_PRECISE";
+							}
+
+							auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
+							if (format)
+							{
+								char buffer[128];
+								sprintf_s(buffer, format->c_str(), displayValue);
+								strm << buffer;
+							}
+							else
+							{
+								strm << formatTemplate;
+							}
+						}
 						break;
 
 					case 'm':
