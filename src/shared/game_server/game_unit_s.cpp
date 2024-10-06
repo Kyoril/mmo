@@ -772,7 +772,14 @@ namespace mmo
 	{
 		m_spellCast->StopCast(spell_interrupt_flags::Any);
 
+		StopAttack();
+		StopRegeneration();
+
 		Set<uint64>(object_fields::TargetUnit, 0);
+		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+
+		// For now, remove all auras
+		m_auras.clear();
 
 		killed(killer);
 	}
