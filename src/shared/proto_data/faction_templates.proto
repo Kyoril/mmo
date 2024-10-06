@@ -3,13 +3,14 @@ package mmo.proto;
 
 message FactionTemplateEntry {
 	required uint32 id = 1;
-	required uint32 flags = 2;
-	optional uint32 selfmask = 3;
-	optional uint32 friendmask = 4;
-	optional uint32 enemymask = 5;
-	required uint32 faction = 6;
-	repeated uint32 friends = 7;
-	repeated uint32 enemies = 8;
+	required string name = 2;
+	required uint32 flags = 3;
+	optional uint32 selfmask = 4;
+	optional uint32 friendmask = 5;
+	optional uint32 enemymask = 6;
+	required uint32 faction = 7;
+	repeated uint32 friends = 8;
+	repeated uint32 enemies = 9;
 }
 
 message FactionTemplates {

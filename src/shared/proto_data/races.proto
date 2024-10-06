@@ -29,7 +29,7 @@ message InitialItems {
 message RaceEntry {
 	required uint32 id = 1;
 	required string name = 2;
-	required uint32 faction = 3;
+	required uint32 factionTemplate = 3;
 	required uint32 malemodel = 4;
 	required uint32 femalemodel = 5;
 	required uint32 baselanguage = 6;

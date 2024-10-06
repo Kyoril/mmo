@@ -20,6 +20,10 @@ namespace mmo
 	class EditorEntryWindowBase : public EditorWindowBase
 	{
 	public:
+		typedef T1 ArrayType;
+		typedef T2 EntryType;
+
+	public:
 		explicit EditorEntryWindowBase(proto::Project& project, proto::TemplateManager<T1, T2>& manager, const String& name);
 		virtual ~EditorEntryWindowBase() = default;
 

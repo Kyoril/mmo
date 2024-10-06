@@ -27,6 +27,9 @@
 #include "editors/material_editor/material_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
+#include "editor_windows/faction_editor_window.h"
+#include "editor_windows/faction_template_editor_window.h"
+#include "editor_windows/race_editor_window.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -97,7 +100,10 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionEditorWindow>("Faction Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionTemplateEditorWindow>("Faction Template Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
