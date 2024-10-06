@@ -15,5 +15,9 @@ namespace mmo
 		static void ShowCursor();
 
 		static void HideCursor();
+
+		static bool IsMouseCaptured();
+
+		static void GetCapturedMousePosition(int& x, int& y);
 	};
 }

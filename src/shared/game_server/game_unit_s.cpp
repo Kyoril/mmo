@@ -667,7 +667,7 @@ namespace mmo
 			if (!m_pendingMoveChanges.empty())
 			{
 				// Iterate backwards until we find a pending movement change for this move type
-				for (auto it = m_pendingMoveChanges.cend(); it != m_pendingMoveChanges.cbegin(); --it)
+				for (auto it = m_pendingMoveChanges.crbegin(); it != m_pendingMoveChanges.crend(); ++it)
 				{
 					if (it->changeType == changeType)
 					{

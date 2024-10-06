@@ -645,6 +645,12 @@ namespace mmo
 			return;
 		}
 
+		// Cant attack ourself
+		if (victimGuid == m_character->GetGuid())
+		{
+			return;
+		}
+
 		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(victimGuid);
 		if (!targetObject)
 		{
@@ -881,7 +887,7 @@ namespace mmo
 		}
 
 		// Apply movement info
-		m_character->ApplyMovementInfo(info);
+		//m_character->ApplyMovementInfo(info);
 
 		// Perform application - we need to do this after all checks have been made
 		switch (opCode)

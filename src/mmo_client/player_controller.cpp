@@ -335,7 +335,7 @@ namespace mmo
 		{
 			return;
 		}
-		
+
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
@@ -356,8 +356,13 @@ namespace mmo
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_mouseDownTime = GetAsyncTimeMs();
-		m_clickPosition = Point(x, y);
-		m_lastMousePosition = Point(x, y);
+		m_clickPosition = Vector<int32, 2>(x, y);
+
+		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
+		{
+			m_lastMousePosition = Vector<int32, 2>(x, y);
+			DLOG("SET lastPosition to " << m_lastMousePosition.x() << ", " << m_lastMousePosition.y());
+		}
 
 		if (button == MouseButton_Left)
 		{
@@ -376,8 +381,8 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (std::abs(m_clickPosition.x - x) <= 8 &&
-			std::abs(m_clickPosition.y - y) <= 8)
+		if (std::abs(m_clickPosition.x() - x) <= 8 &&
+			std::abs(m_clickPosition.y() - y) <= 8)
 		{
 			int32 w, h;
 			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
@@ -421,8 +426,6 @@ namespace mmo
 			}
 		}
 
-		m_lastMousePosition = Point(x, y);
-		
 		if (button == MouseButton_Left)
 		{
 			m_controlFlags &= ~ControlFlags::TurnCamera;
@@ -451,24 +454,31 @@ namespace mmo
 			return;
 		}
 
-		const Point position(x, y);
-		const Point delta = position - m_lastMousePosition;
+		// We need the captured mouse position in screen coordinates
+		Vector<int32, 2> capturedPosition;
+		Platform::GetCapturedMousePosition(capturedPosition.x(), capturedPosition.y());
 
+		// Get the local mouse position and calculate delta to the last mouse position
+		const Vector<int32, 2> position(x, y);
+		const Vector<int32, 2> delta = position - m_lastMousePosition;
 
-		//m_lastMousePosition = position;
+		// Reset platform mouse cursor to captured position to prevent it from reaching the edge of the screen
 		Platform::ResetCursorPosition();
 
+		// Update the last mouse position to ensure it is exactly where the cursor was captured, but in screen coordinates
+		m_lastMousePosition = capturedPosition + (m_lastMousePosition - capturedPosition);
+
 		SceneNode* yawNode = m_cameraAnchorNode;
-		if (delta.x != 0.0f)
+		if (std::abs(delta.x()) > 0)
 		{
-			yawNode->Yaw(Degree(delta.x * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
+			yawNode->Yaw(Degree(delta.x() * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
 		}
 		
-		if (delta.y != 0.0f)
+		if (std::abs(delta.y()) > 0)
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
 
-			const Radian deltaPitch = Degree(delta.y * factor * s_mouseSensitivityCVar->GetFloatValue());
+			const Radian deltaPitch = Degree(delta.y() * factor * s_mouseSensitivityCVar->GetFloatValue());
 			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
 
 			ClampCameraPitch();
@@ -533,7 +543,7 @@ namespace mmo
 
 	void PlayerController::ResetControls()
 	{
-		m_lastMousePosition = Point::Zero;
+		m_lastMousePosition.clear();
 		m_leftButtonDown = false;
 		m_rightButtonDown = false;
 		m_controlFlags = ControlFlags::None;

@@ -273,6 +273,12 @@ namespace mmo
 			return;
 		}
 
+		// We cant attack ourselves
+		if (&victim == this)
+		{
+			return;
+		}
+
 		// Ensure that we are targeting the victim right now
 		// TODO
 

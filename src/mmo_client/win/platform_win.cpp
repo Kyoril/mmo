@@ -55,4 +55,20 @@ namespace mmo
 			::ShowCursor(false);
 		}
 	}
+
+	bool PlatformWin::IsMouseCaptured()
+	{
+		return s_mouseCaptured;
+	}
+
+	void PlatformWin::GetCapturedMousePosition(int& x, int& y)
+	{
+		if (!s_mouseCaptured) {
+			x = -1;
+			y = -1;
+			return;
+		}
+		x = s_mouseCaptureX;
+		y = s_mouseCaptureY;
+	}
 }
