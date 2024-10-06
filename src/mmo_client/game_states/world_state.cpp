@@ -1833,6 +1833,53 @@ namespace mmo
 		m_realmConnector.FollowMe(guid);
 	}
 
+	namespace spell_target_requirements
+	{
+		enum Type
+		{
+			None = 0,
+
+			FriendlyUnitTarget = 1 << 0,
+			HostileUnitTarget = 1 << 1,
+			AnyUnitTarget = FriendlyUnitTarget | HostileUnitTarget,
+
+			AreaTarget = 1 << 2,
+
+			PartyMemberTarget = 1 << 3,
+			PetTarget = 1 << 4,
+			ObjectTarget = 1 << 5,
+		};
+	}
+
+	static uint64 GetSpellTargetRequirements(const proto_client::SpellEntry& spell)
+	{
+		uint64 targetRequirements = spell_target_requirements::None;
+
+		for (const auto& effect : spell.effects())
+		{
+			switch (effect.targeta())
+			{
+			case spell_effect_targets::TargetAlly:
+				targetRequirements |= spell_target_requirements::FriendlyUnitTarget;
+				continue;
+			case spell_effect_targets::TargetAny:
+				targetRequirements |= spell_target_requirements::AnyUnitTarget;
+				continue;
+			case spell_effect_targets::TargetEnemy:
+				targetRequirements |= spell_target_requirements::HostileUnitTarget;
+				continue;
+			case spell_effect_targets::ObjectTarget:
+				targetRequirements |= spell_target_requirements::ObjectTarget;
+				continue;
+			case spell_effect_targets::Pet:
+				targetRequirements |= spell_target_requirements::PetTarget;
+				continue;
+			}
+		}
+
+		return targetRequirements;
+	}
+
 	void WorldState::Command_CastSpell(const std::string& cmd, const std::string& args)
 	{
 		std::istringstream iss(args);
@@ -1859,22 +1906,43 @@ namespace mmo
 		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
 
 		SpellTargetMap targetMap{};
-		if (targetUnitGuid != 0)
-		{
-			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-			targetMap.SetUnitTarget(targetUnitGuid);
-		}
-		else
-		{
-			targetMap.SetTargetMap(spell_cast_target_flags::Self);
-			targetMap.SetUnitTarget(unit->GetGuid());
-		}
 
 		const auto* spell = m_project.spells.getById(entry);
 		if (!spell)
 		{
 			ELOG("Unknown spell");
 			return;
+		}
+
+		// Check if we need to provide a target unit
+		uint64 requirements = GetSpellTargetRequirements(*spell);
+		if ((requirements & spell_target_requirements::AnyUnitTarget) != 0)
+		{
+			// Validate if target unit exists
+			std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetUnitGuid);
+			if (!targetUnit)
+			{
+				// If friendly unit target is required and we have none, target ourself instead automatically
+				if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0)
+				{
+					targetUnit = unit;
+				}
+				else
+				{
+					// TODO: Instead of printing an error here we should trigger a selection mode where the user has to click on a target unit instead
+
+					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
+					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
+					ELOG("No target unit selected!");
+					return;
+				}
+			}
+
+			// TODO: There is a target unit, check friend / foe requirements
+
+			// Set target unit
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(targetUnit->GetGuid());
 		}
 
 		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)

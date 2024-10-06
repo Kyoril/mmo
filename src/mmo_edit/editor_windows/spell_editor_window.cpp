@@ -99,6 +99,27 @@ namespace mmo
 		"Arcane"
 	};
 
+	static String s_effectTargets[] = {
+		"Caster",
+		"Nearby Enemy",
+		"Nearby Party",
+		"Nearby Ally",
+		"Pet",
+		"Target Enemy",
+		"Source Area",
+		"Target Area",
+		"Home",
+		"Source Area Enemy",
+		"Target Area Enemy",
+		"Database Location",
+		"Caster Location",
+		"Caster Area Party",
+		"Target Ally",
+		"Object Target",
+		"Cone Enemy",
+		"Target Any"
+	};
+
 	SpellEditorWindow::SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.spells, name)
 		, m_host(host)
@@ -282,6 +303,15 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
 		}
 
+		if (ImGui::CollapsingHeader("Interrupt", ImGuiTreeNodeFlags_None))
+		{
+			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
+			CHECKBOX_FLAG_PROP(interruptflags, "Auto Attack", spell_interrupt_flags::AutoAttack);
+			CHECKBOX_FLAG_PROP(interruptflags, "Damage", spell_interrupt_flags::Damage);
+			CHECKBOX_FLAG_PROP(interruptflags, "Push Back", spell_interrupt_flags::PushBack);
+			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
+		}
+
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
 		{
 			CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
@@ -432,6 +462,21 @@ namespace mmo
 				break;
 			default:
 				break;
+			}
+
+			int effectTarget = effect.targeta();
+			if (ImGui::Combo("Target", &effectTarget, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_effectTargets))
+					{
+						return false;
+					}
+
+					*out_text = s_effectTargets[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_effectTargets), -1))
+			{
+				effect.set_targeta(effectTarget);
 			}
 
 			ImGui::Text("Points");

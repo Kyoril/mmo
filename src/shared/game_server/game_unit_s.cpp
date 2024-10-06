@@ -62,6 +62,17 @@ namespace mmo
 		m_attackSwingCountdown.ended.connect(this, &GameUnitS::OnAttackSwing);
 	}
 
+	GameUnitS::~GameUnitS()
+	{
+		// First misapply all auras before deleting them
+		for (auto& aura : m_auras)
+		{
+			aura->SetApplied(false);
+		}
+
+		m_auras.clear();
+	}
+
 	void GameUnitS::Initialize()
 	{
 		GameObjectS::Initialize();
@@ -466,8 +477,31 @@ namespace mmo
 		}
 	}
 
+	int32 GameUnitS::Heal(uint32 amount, GameUnitS* instigator)
+	{
+		uint32 health = Get<uint32>(object_fields::Health);
+		if (health < 1)
+		{
+			return 0;
+		}
+
+		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
+		if (health >= maxHealth)
+		{
+			return 0;
+		}
+
+		if (health + amount > maxHealth)
+		{
+			amount = maxHealth - health;
+		}
+
+		Set<uint32>(object_fields::Health, health + amount);
+		return static_cast<int32>(amount);
+	}
+
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
-		const proto::SpellEntry& spell)
+	                               const proto::SpellEntry& spell)
 	{
 		if (!m_netUnitWatcher)
 		{
@@ -779,6 +813,11 @@ namespace mmo
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 
 		// For now, remove all auras
+		for (auto& aura : m_auras)
+		{
+			aura->SetApplied(false);
+		}
+
 		m_auras.clear();
 
 		killed(killer);

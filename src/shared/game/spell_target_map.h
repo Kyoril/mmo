@@ -34,6 +34,33 @@ namespace mmo
 
 	typedef spell_interrupt_flags::Type SpellInterruptFlags;
 
+	namespace spell_effect_targets
+	{
+		enum Type
+		{
+			Caster,
+			NearbyEnemy,
+			NearbyParty,
+			NearbyAlly,
+			Pet,
+			TargetEnemy,
+			SourceArea,
+			TargetArea,
+			Home,
+			SourceAreaEnemy,
+			TargetAreaEnemy,
+			DatabaseLocation,
+			CasterLocation,
+			CasterAreaParty,
+			TargetAlly,
+			ObjectTarget,
+			ConeEnemy,
+			TargetAny
+		};
+	}
+
+	typedef spell_effect_targets::Type SpellEffectTargets;
+
 	class SpellTargetMap final
 	{
 		friend io::Writer& operator << (io::Writer& w, SpellTargetMap const& targetMap);

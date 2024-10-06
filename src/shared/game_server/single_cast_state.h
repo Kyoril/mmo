@@ -63,6 +63,8 @@ namespace mmo
 			return (m_spell.attributes(index) & static_cast<uint32>(attributes)) != 0;
 		}
 
+		std::shared_ptr<GameUnitS> GetEffectUnitTarget(const proto::SpellEffect& effect);
+
 	public:
 		template <class T>
 		void SendPacketFromCaster(GameUnitS& caster, T generator)

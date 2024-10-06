@@ -323,6 +323,29 @@ namespace mmo
 		return true;
 	}
 
+	std::shared_ptr<GameUnitS> SingleCastState::GetEffectUnitTarget(const proto::SpellEffect& effect)
+	{
+		switch (effect.targeta())
+		{
+		case spell_effect_targets::Caster:
+			return std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
+		case spell_effect_targets::TargetAlly:
+		case spell_effect_targets::TargetEnemy:
+		case spell_effect_targets::TargetAny:
+			{
+				GameObjectS* targetObject = m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget());
+				if (!targetObject)
+				{
+					return nullptr;
+				}
+
+				return std::dynamic_pointer_cast<GameUnitS>(targetObject->shared_from_this());
+			}
+		default:
+			return nullptr;
+		}
+	}
+
 	bool SingleCastState::ConsumeItem(bool delayed)
 	{
 		return true;
@@ -527,13 +550,8 @@ namespace mmo
 
 	void SingleCastState::SpellEffectInstantKill(const proto::SpellEffect& effect)
 	{
-		GameUnitS* unitTarget = nullptr;
-		if (m_target.HasUnitTarget())
-		{
-			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
-		}
-
-		if (unitTarget == nullptr)
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
 		{
 			return;
 		}
@@ -547,13 +565,8 @@ namespace mmo
 
 	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
 	{
-		GameUnitS* unitTarget = nullptr;
-		if (m_target.HasUnitTarget())
-		{
-			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
-		}
-
-		if (unitTarget == nullptr)
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
 		{
 			return;
 		}
@@ -586,13 +599,8 @@ namespace mmo
 		// So what we want to do in this ApplyAuraEffect is to create one AuraContainer for each target that is affected and add an aura to that container.
 		// After all effects have been processed, we then want to apply all created aura containers for their respective targets.
 
-		GameUnitS* unitTarget = nullptr;
-		if (m_target.HasUnitTarget())
-		{
-			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
-		}
-
-		if (unitTarget == nullptr)
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
 		{
 			return;
 		}
@@ -623,6 +631,18 @@ namespace mmo
 
 	void SingleCastState::SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));	// TODO: Weapon damage!
+		unitTarget->Damage(damageAmount, spell_school::Normal, &m_cast.GetExecuter());
+
+		// Log spell damage to client
+		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, spell_school::Normal, DamageFlags::None, m_spell);
 	}
 
 	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
@@ -659,6 +679,18 @@ namespace mmo
 
 	void SingleCastState::SpellEffectWeaponDamage(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));	// TODO: Weapon damage!
+		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
+
+		// Log spell damage to client
+		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
 	}
 
 	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)

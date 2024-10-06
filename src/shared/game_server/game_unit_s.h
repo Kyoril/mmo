@@ -252,7 +252,7 @@ namespace mmo
 		GameUnitS(const proto::Project& project,
 			TimerQueue& timers);
 
-		virtual ~GameUnitS() override = default;
+		virtual ~GameUnitS() override;
 
 		virtual void Initialize() override;
 
@@ -321,6 +321,8 @@ namespace mmo
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
 
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
+
+		int32 Heal(uint32 amount, GameUnitS* instigator);
 
 		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell);
 
