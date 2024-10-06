@@ -15,7 +15,7 @@ namespace mmo
 		if (s_mouseCaptured) return;
 
 		POINT pt;
-		GetCursorPos(&pt);
+		::GetCursorPos(&pt);
 		s_mouseCaptureX = pt.x;
 		s_mouseCaptureY = pt.y;
 
@@ -28,7 +28,7 @@ namespace mmo
 	{
 		if (!s_mouseCaptured) return;
 
-		SetCursorPos(s_mouseCaptureX, s_mouseCaptureY);
+		::SetCursorPos(s_mouseCaptureX, s_mouseCaptureY);
 		ShowCursor();
 
 		s_mouseCaptured = false;
@@ -70,5 +70,18 @@ namespace mmo
 		}
 		x = s_mouseCaptureX;
 		y = s_mouseCaptureY;
+	}
+
+	void PlatformWin::GetCursorPos(int& x, int& y)
+	{
+		POINT pt;
+		::GetCursorPos(&pt);
+		x = pt.x;
+		y = pt.y;
+	}
+
+	void PlatformWin::SetCursorPos(int x, int y)
+	{
+		::SetCursorPos(x, y);
 	}
 }

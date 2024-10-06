@@ -30,7 +30,7 @@ namespace mmo
 		if (!s_mouseSensitivityCVar)
 		{
 			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
-			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "true");
+			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "1");
 
 			s_maxCameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("MaxCameraZoom", "Gets or sets the maximum camera zoom value.", "8");
 			s_maxCameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
@@ -360,8 +360,10 @@ namespace mmo
 
 		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
-			m_lastMousePosition = Vector<int32, 2>(x, y);
-			DLOG("SET lastPosition to " << m_lastMousePosition.x() << ", " << m_lastMousePosition.y());
+			POINT cursorPos;
+			GetCursorPos(&cursorPos);
+			m_lastMousePosition[0] = cursorPos.x;
+			m_lastMousePosition[1] = cursorPos.y;
 		}
 
 		if (button == MouseButton_Left)
@@ -381,8 +383,7 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (std::abs(m_clickPosition.x() - x) <= 8 &&
-			std::abs(m_clickPosition.y() - y) <= 8)
+		if (std::abs(m_clickPosition.x() - x) <= 8 && std::abs(m_clickPosition.y() - y) <= 8)
 		{
 			int32 w, h;
 			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
@@ -398,7 +399,7 @@ namespace mmo
 			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
 			if (!hitResult.empty())
 			{
-				Entity* entity = (Entity*)hitResult[0].movable;
+				Entity* entity = static_cast<Entity*>(hitResult[0].movable);
 				if (entity)
 				{
 					GameUnitC* unit = entity->GetUserObject<GameUnitC>();
@@ -454,31 +455,26 @@ namespace mmo
 			return;
 		}
 
-		// We need the captured mouse position in screen coordinates
-		Vector<int32, 2> capturedPosition;
-		Platform::GetCapturedMousePosition(capturedPosition.x(), capturedPosition.y());
-
 		// Get the local mouse position and calculate delta to the last mouse position
-		const Vector<int32, 2> position(x, y);
-		const Vector<int32, 2> delta = position - m_lastMousePosition;
+		int32 cursorX, cursorY;
+		Platform::GetCursorPos(cursorX, cursorY);
+		const int32 deltaX = cursorX - m_lastMousePosition.x();
+		const int32 deltaY = cursorY - m_lastMousePosition.y();
 
 		// Reset platform mouse cursor to captured position to prevent it from reaching the edge of the screen
 		Platform::ResetCursorPosition();
 
-		// Update the last mouse position to ensure it is exactly where the cursor was captured, but in screen coordinates
-		m_lastMousePosition = capturedPosition + (m_lastMousePosition - capturedPosition);
-
 		SceneNode* yawNode = m_cameraAnchorNode;
-		if (std::abs(delta.x()) > 0)
+		if (std::abs(deltaX) > 0)
 		{
-			yawNode->Yaw(Degree(delta.x() * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
+			yawNode->Yaw(Degree(static_cast<float>(deltaX) * s_mouseSensitivityCVar->GetFloatValue() * -1.0f), TransformSpace::Parent);
 		}
 		
-		if (std::abs(delta.y()) > 0)
+		if (std::abs(deltaY) > 0)
 		{
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
 
-			const Radian deltaPitch = Degree(delta.y() * factor * s_mouseSensitivityCVar->GetFloatValue());
+			const Radian deltaPitch = Degree(static_cast<float>(deltaY) * factor * s_mouseSensitivityCVar->GetFloatValue());
 			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
 
 			ClampCameraPitch();
