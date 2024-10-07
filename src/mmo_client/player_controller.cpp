@@ -356,7 +356,7 @@ namespace mmo
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		m_mouseDownTime = GetAsyncTimeMs();
-		m_clickPosition = Vector<int32, 2>(x, y);
+		m_mouseMoved = 0;
 
 		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
@@ -383,7 +383,16 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (std::abs(m_clickPosition.x() - x) <= 8 && std::abs(m_clickPosition.y() - y) <= 8)
+		if (button == MouseButton_Left)
+		{
+			m_controlFlags &= ~ControlFlags::TurnCamera;
+		}
+		else if (button == MouseButton_Right)
+		{
+			m_controlFlags &= ~ControlFlags::TurnPlayer;
+		}
+
+		if (m_mouseMoved <= 16)
 		{
 			int32 w, h;
 			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
@@ -427,15 +436,6 @@ namespace mmo
 			}
 		}
 
-		if (button == MouseButton_Left)
-		{
-			m_controlFlags &= ~ControlFlags::TurnCamera;
-		}
-		else if (button == MouseButton_Right)
-		{
-			m_controlFlags &= ~ControlFlags::TurnPlayer;
-		}
-
 		if (button == MouseButton_Left || button == MouseButton_Right && 
 			(m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
@@ -460,6 +460,8 @@ namespace mmo
 		Platform::GetCursorPos(cursorX, cursorY);
 		const int32 deltaX = cursorX - m_lastMousePosition.x();
 		const int32 deltaY = cursorY - m_lastMousePosition.y();
+
+		m_mouseMoved += std::abs(deltaX) + std::abs(deltaY);
 
 		// Reset platform mouse cursor to captured position to prevent it from reaching the edge of the screen
 		Platform::ResetCursorPosition();

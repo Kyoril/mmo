@@ -81,7 +81,7 @@ namespace mmo
 		SceneNode* m_cameraAnchorNode { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
-		Vector<int32, 2> m_clickPosition{};
+		uint32 m_mouseMoved = 0;
 		bool m_leftButtonDown { false };
 		bool m_rightButtonDown { false };
 		Vector<int32, 2> m_lastMousePosition {};
