@@ -2,14 +2,17 @@
 #include "object_mgr.h"
 
 #include "base/macros.h"
+#include "client_data/project.h"
 
 namespace mmo
 {
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
+	const proto_client::Project* ObjectMgr::ms_project = nullptr;
 
-	void ObjectMgr::Initialize()
+	void ObjectMgr::Initialize(const proto_client::Project& project)
 	{
+		ms_project = &project;
 		ms_objectyByGuid.clear();
 		ms_activePlayerGuid = 0;
 	}
@@ -56,5 +59,15 @@ namespace mmo
 		}
 
 		return Get<GameUnitC>(ms_activePlayerGuid);
+	}
+
+	const proto_client::ModelDataEntry* ObjectMgr::GetModelData(const uint32 displayId)
+	{
+		if (!ms_project)
+		{
+			return nullptr;
+		}
+
+		return ms_project->models.getById(displayId);
 	}
 }

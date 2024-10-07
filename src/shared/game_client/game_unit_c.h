@@ -44,6 +44,9 @@ namespace mmo
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 
+	protected:
+		virtual void SetupSceneObjects() override;
+
 	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);

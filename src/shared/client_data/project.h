@@ -10,6 +10,7 @@
 #include "shared/client_data/spells.pb.h"
 #include "shared/client_data/maps.pb.h"
 #include "shared/client_data/spell_categories.pb.h"
+#include "shared/client_data/model_data.pb.h"
 
 namespace mmo
 {
@@ -17,6 +18,7 @@ namespace mmo
 	{
 		typedef TemplateManager<mmo::proto_client::Spells, mmo::proto_client::SpellEntry> SpellManager;
 		typedef TemplateManager<mmo::proto_client::SpellCategories, mmo::proto_client::SpellCategoryEntry> SpellCategoryManager;
+		typedef TemplateManager<mmo::proto_client::ModelDatas, mmo::proto_client::ModelDataEntry> ModelDataManager;
 		//typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 
 		/// This class contains contains all the static game data like item templates.
@@ -36,6 +38,7 @@ namespace mmo
 			//MapManager maps;
 			SpellManager spells;
 			SpellCategoryManager spellCategories;
+			ModelDataManager models;
 
 		private:
 
@@ -82,6 +85,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("spells", spells));
 				//managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
+				managers.push_back(ManagerEntry("model_data", models));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -116,6 +120,7 @@ namespace mmo
 				managers.emplace_back("spells", "spells", spells);
 				//managers.emplace_back("maps", "maps", maps);
 				managers.emplace_back("spell_categories", "spell_categories", spellCategories);
+				managers.emplace_back("model_data", "model_data", models);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

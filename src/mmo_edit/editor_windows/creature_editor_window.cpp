@@ -11,102 +11,146 @@
 namespace mmo
 {
 	CreatureEditorWindow::CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host)
-		: EditorWindowBase(name)
+		: EditorEntryWindowBase(project, project.units, name)
 		, m_host(host)
 		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
 	}
 
-	bool CreatureEditorWindow::Draw()
+	void CreatureEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		if (ImGui::Begin(m_name.c_str(), &m_visible))
-		{
-			ImGui::Columns(2, nullptr, true);
-			static bool widthSet = false;
-			if (!widthSet)
-			{
-				ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
-				widthSet = true;
-			}
-
-			static int currentItem = -1;
-
-			if (ImGui::Button("Add new creature", ImVec2(-1, 0)))
-			{
-				auto* unit = m_project.units.add();
-				unit->set_name("New Creature");
-				unit->set_minlevel(1);
-				unit->set_maxlevel(1);
-				unit->set_faction(0);
-				unit->set_malemodel(0);
-				unit->set_femalemodel(0);
-				unit->set_type(0);
-				unit->set_family(0);
-
-			}
-
-			ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.units.count());
-			if (ImGui::Button("Remove", ImVec2(-1, 0)))
-			{
-				m_project.units.remove(m_project.units.getTemplates().entry().at(currentItem).id());
-			}
-			ImGui::EndDisabled();
-
-			ImGui::BeginChild("creatureListScrollable", ImVec2(-1, 0));
-			ImGui::ListBox("##creatureList", &currentItem, [](void* data, int idx, const char** out_text)
-				{
-					const proto::Units* units = static_cast<proto::Units*>(data);
-					const auto& entry = units->entry().at(idx);
-					*out_text = entry.name().c_str();
-					return true;
-
-				}, &m_project.units.getTemplates(), m_project.units.count(), 20);
-			ImGui::EndChild();
-
-			ImGui::NextColumn();
-
-			proto::UnitEntry* currentEntry = nullptr;
-			if (currentItem != -1 && currentItem < m_project.units.count())
-			{
-				currentEntry = &m_project.units.getTemplates().mutable_entry()->at(currentItem);
-			}
-
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \
-		uint##datasize value = currentEntry->name(); \
+		uint##datasize value = currentEntry.name(); \
 		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
 		{ \
 			if (value >= min && value <= max) \
-				currentEntry->set_##name(value); \
+				currentEntry.set_##name(value); \
 		} \
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-			ImGui::BeginChild("mapDetails", ImVec2(-1, -1));
-			if (currentEntry)
+		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
-				ImGui::InputText("Name", currentEntry->mutable_name());
+				if (ImGui::TableNextColumn())
+				{
+					ImGui::InputText("Name", currentEntry.mutable_name());
+				}
 
-				String id = std::to_string(currentEntry->id());
-				ImGui::BeginDisabled(true);
-				ImGui::InputText("ID", &id);
-				ImGui::EndDisabled();
+				if (ImGui::TableNextColumn())
+				{
+					ImGui::BeginDisabled(true);
+					String idString = std::to_string(currentEntry.id());
+					ImGui::InputText("ID", &idString);
+					ImGui::EndDisabled();
+				}
 
-				SLIDER_UINT32_PROP(minlevel, "Min Level", 1, 100);
-				SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);
-
-				SLIDER_UINT32_PROP(minlevelhealth, "Min Level health", 1, 200000000);
-				SLIDER_UINT32_PROP(maxlevelhealth, "Max Level health", 1, 200000000);
+				ImGui::EndTable();
 			}
-			ImGui::EndChild();
-
-			ImGui::Columns(1);
 		}
-		ImGui::End();
 
-		return false;
+		static const char* s_factionTemplateNone = "<None>";
+
+		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			int32 factionTemplate = currentEntry.factiontemplate();
+
+			const auto* factionEntry = m_project.factionTemplates.getById(factionTemplate);
+			if (ImGui::BeginCombo("Faction Template", factionEntry != nullptr ? factionEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.factionTemplates.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.factionTemplates.getTemplates().entry(i).id() == factionTemplate;
+					const char* item_text = m_project.factionTemplates.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_factiontemplate(m_project.factionTemplates.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			int32 maleModel = currentEntry.malemodel();
+
+			const auto* maleModelEntry = m_project.models.getById(maleModel);
+			if (ImGui::BeginCombo("Male Model", maleModelEntry != nullptr ? maleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.models.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.models.getTemplates().entry(i).id() == maleModel;
+					const char* item_text = m_project.models.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_malemodel(m_project.models.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			int32 femaleModel = currentEntry.malemodel();
+
+			const auto* femaleModelEntry = m_project.models.getById(maleModel);
+			if (ImGui::BeginCombo("Female Model", femaleModelEntry != nullptr ? femaleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.models.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.models.getTemplates().entry(i).id() == femaleModel;
+					const char* item_text = m_project.models.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_femalemodel(m_project.models.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			SLIDER_UINT32_PROP(minlevel, "Min Level", 1, 100);
+			SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);
+			SLIDER_UINT32_PROP(minlevelhealth, "Min Level health", 1, 200000000);
+			SLIDER_UINT32_PROP(maxlevelhealth, "Max Level health", 1, 200000000);
+		}
+	}
+
+	void CreatureEditorWindow::OnNewEntry(proto::TemplateManager<proto::Units, proto::UnitEntry>::EntryType& entry)
+	{
+		entry.set_minlevel(1);
+		entry.set_maxlevel(1);
+		entry.set_factiontemplate(0);
+		entry.set_malemodel(0);
+		entry.set_femalemodel(0);
+		entry.set_type(0);
+		entry.set_family(0);
 	}
 }

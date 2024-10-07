@@ -136,7 +136,7 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
-		ObjectMgr::Initialize();
+		ObjectMgr::Initialize(m_project);
 
 		SetupWorldScene();
 
@@ -205,7 +205,7 @@ namespace mmo
 
 		m_spellProjectiles.clear();
 
-		ObjectMgr::Initialize();
+		ObjectMgr::Initialize(m_project);
 
 		m_worldInstance.reset();
 

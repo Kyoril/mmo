@@ -31,6 +31,8 @@ namespace mmo
 		Set<uint32>(object_fields::Mana, m_entry->minlevelmana(), false);
 		Set<uint32>(object_fields::Entry, m_entry->id(), false);
 		Set<float>(object_fields::Scale, m_entry->scale(), false);
+		Set<uint32>(object_fields::DisplayId, m_entry->malemodel(), false);	// TODO: gender roll
+		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate(), false);
 		ClearFieldChanges();
 
 		// Setup AI

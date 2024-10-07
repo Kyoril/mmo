@@ -36,6 +36,7 @@
 #include "shared/proto_data/gtvalues.pb.h"
 #include "shared/proto_data/variables.pb.h"
 #include "shared/proto_data/gossip_menus.pb.h"
+#include "shared/proto_data/model_data.pb.h"
 
 namespace mmo
 {
@@ -75,6 +76,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Variables, mmo::proto::VariableEntry> VariableManager;
 		typedef TemplateManager<mmo::proto::NpcTexts, mmo::proto::NpcTextEntry> NpcTextManager;
 		typedef TemplateManager<mmo::proto::GossipMenus, mmo::proto::GossipMenuEntry> GossipMenuManager;
+		typedef TemplateManager<mmo::proto::ModelDatas, mmo::proto::ModelDataEntry> ModelDataManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -124,6 +126,7 @@ namespace mmo
 			NpcTextManager npcTexts;
 			GossipMenuManager gossipMenus;
 			RangeManager ranges;
+			ModelDataManager models;
 
 		private:
 
@@ -201,6 +204,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("variables", variables));
 				managers.push_back(ManagerEntry("npc_texts", npcTexts));
 				managers.push_back(ManagerEntry("gossip_menus", gossipMenus));
+				managers.push_back(ManagerEntry("model_data", models));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -268,6 +272,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("variables", "variables", variables));
 				managers.push_back(ManagerEntry("npc_texts", "npc_texts", npcTexts));
 				managers.push_back(ManagerEntry("gossip_menus", "gossip_menus", gossipMenus));
+				managers.push_back(ManagerEntry("model_data", "model_data", models));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

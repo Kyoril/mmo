@@ -1,8 +1,11 @@
 
 #include "game_unit_c.h"
 
+#include "object_mgr.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/scene.h"
+#include "shared/client_data/model_data.pb.h"
 
 namespace mmo
 {
@@ -111,6 +114,24 @@ namespace mmo
 	void GameUnitC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::UnitFieldCount);
+	}
+
+	void GameUnitC::SetupSceneObjects()
+	{
+		GameObjectC::SetupSceneObjects();
+
+		// Load display id value and resolve it
+		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
+		if (!modelEntry)
+		{
+			ELOG("Unable to resolve display id " << displayId << " for unit");
+			return;
+		}
+
+		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), modelEntry->filename());
+		m_entity->SetUserObject(this);
+		m_entityOffsetNode->AttachObject(*m_entity);
 	}
 
 	void GameUnitC::StartMove(const bool forward)

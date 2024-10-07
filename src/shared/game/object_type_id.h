@@ -69,6 +69,9 @@ namespace mmo
 			/// @brief 32 bit object field
 			Level = ObjectFieldCount,
 
+			FactionTemplate,
+			DisplayId,
+
 			/// @brief 32 bit unit flags
 			Flags,
 
