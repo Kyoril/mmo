@@ -109,9 +109,9 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
-			int32 femaleModel = currentEntry.malemodel();
+			int32 femaleModel = currentEntry.femalemodel();
 
-			const auto* femaleModelEntry = m_project.models.getById(maleModel);
+			const auto* femaleModelEntry = m_project.models.getById(femaleModel);
 			if (ImGui::BeginCombo("Female Model", femaleModelEntry != nullptr ? femaleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_project.models.count(); i++)

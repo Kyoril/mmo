@@ -8,6 +8,7 @@ namespace mmo
 {
 	namespace proto
 	{
+		class RaceEntry;
 		class ClassEntry;
 	}
 
@@ -27,6 +28,12 @@ namespace mmo
 		virtual void Initialize() override;
 
 		void SetClass(const proto::ClassEntry& classEntry);
+
+		void SetRace(const proto::RaceEntry& raceEntry);
+
+		void SetGender(uint8 gender);
+
+		uint8 GetGender() const;
 
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
@@ -61,6 +68,7 @@ namespace mmo
 
 	private:
 		const proto::ClassEntry* m_classEntry;
+		const proto::RaceEntry* m_raceEntry;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

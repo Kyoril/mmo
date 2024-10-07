@@ -30,6 +30,35 @@ namespace mmo
 		Set<int32>(object_fields::PowerType, classEntry.powertype());
 	}
 
+	void GamePlayerS::SetRace(const proto::RaceEntry& raceEntry)
+	{
+		m_raceEntry = &raceEntry;
+
+		Set<uint32>(object_fields::Race, raceEntry.id());
+		Set<uint32>(object_fields::FactionTemplate, raceEntry.factiontemplate());
+	}
+
+	void GamePlayerS::SetGender(uint8 gender)
+	{
+		uint32 bytes = Get<uint32>(object_fields::Bytes);
+
+		// Update gender (first byte)
+		bytes |= (static_cast<uint32>(gender) << 0);
+		Set<uint32>(object_fields::Bytes, bytes);
+
+		// Update visual
+		if (m_raceEntry)
+		{
+			Set<uint32>(object_fields::DisplayId, gender == 0 ? m_raceEntry->malemodel() : m_raceEntry->femalemodel());
+		}
+	}
+
+	uint8 GamePlayerS::GetGender() const
+	{
+		const uint32 bytes = Get<uint32>(object_fields::Bytes);
+		return bytes & 0xff;
+	}
+
 	void GamePlayerS::RewardExperience(const uint32 xp)
 	{
 		// At max level we can't gain any more xp

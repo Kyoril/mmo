@@ -69,6 +69,8 @@ namespace mmo
 			/// @brief 32 bit object field
 			Level = ObjectFieldCount,
 
+			Bytes,
+
 			FactionTemplate,
 			DisplayId,
 
@@ -142,6 +144,10 @@ namespace mmo
 			NextLevelXp,
 
 			MaxLevel,
+
+			Class,
+
+			Race,
 
 			PlayerFieldCount
 		};

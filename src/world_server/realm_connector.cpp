@@ -411,11 +411,44 @@ namespace mmo
 		{
 			DLOG("Unable to find any world instance for map id " << log_hex_digit(characterData.mapId) << ": Creating new one");
 			instance = &m_worldInstanceManager.CreateInstance(characterData.mapId);
-			ASSERT(instance);
+			if (!instance)
+			{
+				ELOG("Failed to create world instance for map " << characterData.mapId);
+				sendSinglePacket([&characterData](auth::OutgoingPacket& outPacket)
+					{
+						outPacket.Start(auth::world_realm_packet::PlayerCharacterJoinFailed);
+						outPacket << io::write_packed_guid(characterData.characterId);
+						outPacket.Finish();
+					});
+				return PacketParseResult::Pass;
+			}
 		}
 
 		const auto* classEntry = m_project.classes.getById(characterData.classId);
-		ASSERT(classEntry);
+		if (!classEntry)
+		{
+			ELOG("Character data contains unknown class id " << characterData.classId << " - ensure data project is up to date with the realm!");
+			sendSinglePacket([&characterData](auth::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(auth::world_realm_packet::PlayerCharacterJoinFailed);
+					outPacket << io::write_packed_guid(characterData.characterId);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		const auto* raceEntry = m_project.races.getById(characterData.raceId);
+		if (!raceEntry)
+		{
+			ELOG("Character data contains unknown race id " << characterData.raceId << " - ensure data project is up to date with the realm!");
+			sendSinglePacket([&characterData](auth::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(auth::world_realm_packet::PlayerCharacterJoinFailed);
+					outPacket << io::write_packed_guid(characterData.characterId);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
 
 		// Apply instance id before sending
 		characterData.instanceId = instance->GetId();
@@ -428,6 +461,8 @@ namespace mmo
 		characterObject->Relocate(characterData.position, characterData.facing);
 
 		characterObject->SetClass(*classEntry);
+		characterObject->SetRace(*raceEntry);
+		characterObject->SetGender(characterData.gender);
 		characterObject->SetLevel(characterData.level);
 		characterObject->Set<uint32>(object_fields::Xp, characterData.xp);
 		characterObject->Set<uint32>(object_fields::Health, Clamp(characterData.hp, 0u, characterObject->Get<uint32>(object_fields::MaxHealth)));

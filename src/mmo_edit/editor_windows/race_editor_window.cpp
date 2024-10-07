@@ -154,6 +154,58 @@ namespace mmo
 			VECTOR3_PROP(startposx, startposy, startposz, "Starting Position");
 			SLIDER_FLOAT_PROP(startrotation, "Starting Rotation", 0.0f, Pi * 2.0f);
 		}
+
+
+		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			int32 maleModel = currentEntry.malemodel();
+
+			const auto* maleModelEntry = m_project.models.getById(maleModel);
+			if (ImGui::BeginCombo("Male Model", maleModelEntry != nullptr ? maleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.models.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.models.getTemplates().entry(i).id() == maleModel;
+					const char* item_text = m_project.models.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_malemodel(m_project.models.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			int32 femaleModel = currentEntry.femalemodel();
+
+			const auto* femaleModelEntry = m_project.models.getById(femaleModel);
+			if (ImGui::BeginCombo("Female Model", femaleModelEntry != nullptr ? femaleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.models.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.models.getTemplates().entry(i).id() == femaleModel;
+					const char* item_text = m_project.models.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_femalemodel(m_project.models.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+		}
 	}
 
 	void RaceEditorWindow::OnNewEntry(proto::TemplateManager<proto::Races, proto::RaceEntry>::EntryType& entry)
