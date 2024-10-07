@@ -1,5 +1,7 @@
 ![Linux Servers](https://github.com/Kyoril/mmo/workflows/Linux%20Servers/badge.svg)
 
+If you want, you can support me on [ko-fi](https://ko-fi.com/kyoril)!
+
 Login Screen             |  Character Selection Screen
 :-------------------------:|:-------------------------:
 <img src="https://user-images.githubusercontent.com/9358023/85418557-34ccf280-b571-11ea-866c-7e18aaf989b6.png" width="600">  |  <img src="https://cdn.discordapp.com/attachments/679667054424359054/793784839647395850/unknown.png" width="600">
