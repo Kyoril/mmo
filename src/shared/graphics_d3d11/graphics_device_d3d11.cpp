@@ -996,6 +996,11 @@ namespace mmo
 			vertexShader->Set();
 		}
 
+		if (!vertexShader)
+		{
+			return;
+		}
+
 		// Bind vertex buffers
 		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
 		{
