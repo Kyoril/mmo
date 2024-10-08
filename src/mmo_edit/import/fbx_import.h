@@ -22,6 +22,8 @@
 
 namespace mmo
 {
+	class EditorHost;
+
 	/// This class can be used to extract relevant informations out of an fbx file.
 	class FbxImport final
 		: public ImportBase
@@ -39,11 +41,14 @@ namespace mmo
 
 	public:
 		/// @brief Creates a new instance of the FbxImport class and initializes it.
-		explicit FbxImport();
+		explicit FbxImport(EditorHost& host);
 
 		/// @brief Destroys an instance of the FbxImport class and performs cleanup.
 		~FbxImport() override;
-		
+
+		/// Override this method if the importer needs to render some UI elements.
+		void Draw() override;
+
 	private:
 		bool SaveSkeletonFile(const String& filename, const Path& assetPath);
 
@@ -52,6 +57,8 @@ namespace mmo
 		/// @param assetPath The asset path, relative to the game content root folder, where the file will be located.
 		/// @return true on success, false on errors. Errors will produce error logs using ELOG.
 		bool SaveMeshFile(const String& filename, const Path& assetPath) const;
+
+		bool DoImportInternal();
 
 	public:
 		/// @copydoc ImportBase::ImportFromFile
@@ -72,6 +79,7 @@ namespace mmo
 		void FlagNodeAsNeeded(const char* name);
 		bool IsNodeNeeded(const char* name);
 
+		EditorHost& m_host;
 		std::unique_ptr<CustomAssimpLogStream> m_customLogStream;
 
 		typedef std::map<String, bool> boneMapType;
@@ -96,5 +104,13 @@ namespace mmo
 
 		float mTicksPerSecond;
 		float mAnimationSpeedModifier;
+
+		Path m_fileToImport;
+		Path m_importAssetPath;
+		bool m_showImportFileDialog = false;
+
+		Vector3 m_importOffset = Vector3::Zero;
+		Vector3 m_importScale = Vector3::UnitScale;;
+		Quaternion m_importRotation = Quaternion::Identity;
 	};
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "world_editor_instance.h"
 
@@ -365,11 +365,27 @@ namespace mmo
 			if (!m_selection.IsEmpty())
 			{
 				// Transform rotation into human readable format
-				Radian x, y, z;
 				Matrix3 rot;
 				m_selection.GetSelectedObjects().back()->GetOrientation().ToRotationMatrix(rot);
-				rot.ToEulerAnglesXYZ(x, y, z);
-				float angles[3] = { x.GetValueDegrees(), y.GetValueDegrees(), z.GetValueDegrees() };
+
+				// Compute Pitch
+				float pitchRad = std::asin(-rot[0][2]);
+				float cosPitch = std::cos(pitchRad);
+				float yawRad, rollRad;
+
+				if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
+				{
+					// Compute Yaw
+					yawRad = std::atan2(rot[0][1], rot[0][0]);
+					// Compute Roll
+					rollRad = std::atan2(rot[1][2], rot[2][2]);
+				}
+				else
+				{
+					// Gimbal lock case
+					yawRad = 0.0f;
+					rollRad = std::atan2(-rot[2][1], rot[1][1]);
+				}
 
 				Vector3 position = m_selection.GetSelectedObjects().back()->GetPosition();
 				Vector3 scale = m_selection.GetSelectedObjects().back()->GetScale();
@@ -378,12 +394,19 @@ namespace mmo
 				{
 					m_selection.GetSelectedObjects().back()->SetPosition(position);
 				}
-				if (ImGui::InputFloat3("Rotation", angles))
+
+				float angles[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees() };
+				if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
 				{
-					rot.FromEulerAnglesXYZ(Degree(angles[0]), Degree(angles[1]), Degree(angles[2]));
-					const Quaternion quat{ rot };
-					m_selection.GetSelectedObjects().back()->SetOrientation(quat);
+					Quaternion qRoll(Degree(angles[0]), Vector3(1, 0, 0));
+					Quaternion qPitch(Degree(angles[2]), Vector3(0, 0, 1));
+					Quaternion qYaw(Degree(angles[1]), Vector3(0, 1, 0));
+					Quaternion rotation = (qYaw * qPitch * qRoll);
+					rotation.Normalize();
+
+					m_selection.GetSelectedObjects().back()->SetOrientation(rotation);
 				}
+
 				if (ImGui::InputFloat3("Scale", scale.Ptr()))
 				{
 					m_selection.GetSelectedObjects().back()->SetScale(scale);

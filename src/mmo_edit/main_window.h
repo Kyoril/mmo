@@ -120,7 +120,6 @@ namespace mmo
 		ImGuiDockNodeFlags m_dockSpaceFlags;
 		bool m_applyDefaultLayout = true;
 		ImGuiContext* m_imguiContext;
-		FbxImport m_importer;
 		bool m_fileLoaded;
 		std::string m_modelName;
 		std::vector<std::unique_ptr<EditorWindowBase>> m_editorWindows;

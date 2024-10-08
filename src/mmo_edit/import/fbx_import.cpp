@@ -1,9 +1,11 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
 #include "fbx_import.h"
 
 #include <fstream>
+#include <imgui.h>
 
+#include "editor_host.h"
 #include "assimp/LogStream.hpp"
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
@@ -33,7 +35,8 @@ namespace mmo
 		ILOG("[ASSIMP] " << message);
 	}
 
-	FbxImport::FbxImport()
+	FbxImport::FbxImport(EditorHost& host)
+		: m_host(host)
 	{
 		m_customLogStream = std::make_unique<CustomAssimpLogStream>();
 
@@ -47,6 +50,70 @@ namespace mmo
 		// Unfortunately manual release is required here before kill otherwise assimp will fuck up memory
 		m_customLogStream.release();
 		Assimp::DefaultLogger::kill();
+	}
+
+	void FbxImport::Draw()
+	{
+		if (m_showImportFileDialog)
+		{
+            ImGui::OpenPopup("Model Import Settings");
+            m_showImportFileDialog = false;
+		}
+
+        if (ImGui::BeginPopupModal("Model Import Settings", nullptr))
+        {
+            ImGui::Text("Enter a name for the new material:");
+
+            ImGui::InputFloat3("Offset", m_importOffset.Ptr(), "%.3f");
+            ImGui::InputFloat3("Scale", m_importScale.Ptr(), "%.3f");
+
+            Matrix3 rot;
+            m_importRotation.ToRotationMatrix(rot);
+
+            // Compute Pitch
+            float pitchRad = std::asin(-rot[0][2]);
+            float cosPitch = std::cos(pitchRad);
+            float yawRad, rollRad;
+
+            if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
+            {
+                // Compute Yaw
+                yawRad = std::atan2(rot[0][1], rot[0][0]);
+                // Compute Roll
+                rollRad = std::atan2(rot[1][2], rot[2][2]);
+            }
+            else
+            {
+                // Gimbal lock case
+                yawRad = 0.0f;
+                rollRad = std::atan2(-rot[2][1], rot[1][1]);
+            }
+
+            float rotation[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees()};
+            if (ImGui::InputFloat3("Rotation (Roll, Yaw, Pitch)", rotation, "%.3f"))
+            {
+                Quaternion qRoll(Degree(rotation[0]), Vector3(1, 0, 0));
+                Quaternion qPitch(Degree(rotation[2]), Vector3(0, 0, 1));
+                Quaternion qYaw(Degree(rotation[1]), Vector3(0, 1, 0));
+                m_importRotation = (qYaw * qPitch * qRoll);
+                m_importRotation.Normalize();
+            }
+
+            if (ImGui::Button("Import"))
+            {
+                DoImportInternal();
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel"))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
 	}
 
 	bool FbxImport::SaveSkeletonFile(const String& filename, const Path& assetPath)
@@ -93,49 +160,44 @@ namespace mmo
 		return true;
 	}
 
-	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
+	bool FbxImport::DoImportInternal()
 	{
-        // TODO: Popup import dialog window with import options
-        const Vector3 importScale = Vector3::UnitScale/* * 0.01f*/;
-        const Vector3 importOffset = Vector3::Zero;
-        const Quaternion importRotation = Quaternion::Identity; /*Quaternion(Degree(-90), Vector3::UnitX)*/;
-
         // Build transform matrix
-        const Matrix4 importTransform = 
-            Matrix4::GetScale(importScale) * 
-            Matrix4(importRotation) *
-            Matrix4::GetTrans(importOffset);
+        const Matrix4 importTransform =
+            Matrix4::GetScale(m_importScale) *
+            Matrix4(m_importRotation) *
+            Matrix4::GetTrans(m_importOffset);
 
-		Assimp::Importer importer;
+        Assimp::Importer importer;
 
-		const aiScene* scene = importer.ReadFile(filename.string(),
-			aiProcess_CalcTangentSpace |
-			aiProcess_Triangulate |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_SortByPType |
-			aiProcess_FlipUVs |
-			aiProcess_GenNormals
-		);
+        const aiScene* scene = importer.ReadFile(m_fileToImport.string(),
+            aiProcess_CalcTangentSpace |
+            aiProcess_Triangulate |
+            aiProcess_JoinIdenticalVertices |
+            aiProcess_SortByPType |
+            aiProcess_FlipUVs |
+            aiProcess_GenNormals
+        );
 
-		if (!scene)
-		{
-			ELOG("Failed to open FBX file: " << importer.GetErrorString());
-			return false;
-		}
+        if (!scene)
+        {
+            ELOG("Failed to open FBX file: " << importer.GetErrorString());
+            return false;
+        }
 
         mNodeDerivedTransformByName.clear();
 
-        m_mesh = MeshManager::Get().CreateManual((currentAssetPath / filename).string() + ".hmsh");
+        m_mesh = MeshManager::Get().CreateManual((m_importAssetPath / m_fileToImport).string() + ".hmsh");
 
-		GrabNodeNamesFromNode(scene, scene->mRootNode);
-		GrabBoneNamesFromNode(scene, scene->mRootNode);
+        GrabNodeNamesFromNode(scene, scene->mRootNode);
+        GrabBoneNamesFromNode(scene, scene->mRootNode);
 
-		ComputeNodesDerivedTransform(scene, scene->mRootNode, scene->mRootNode->mTransformation);
+        ComputeNodesDerivedTransform(scene, scene->mRootNode, scene->mRootNode->mTransformation);
 
-        const auto filenameWithoutExtension = filename.filename().replace_extension();
+        const auto filenameWithoutExtension = m_fileToImport.filename().replace_extension();
         if (!mBonesByName.empty())
         {
-            const std::filesystem::path p = (currentAssetPath / filenameWithoutExtension).string();
+            const std::filesystem::path p = (m_importAssetPath / filenameWithoutExtension).string();
 
             String skeletonName = p.string();
             std::ranges::replace(skeletonName, '\\', '/');
@@ -158,7 +220,7 @@ namespace mmo
         }
 
         // Create the file name
-        if (!SaveMeshFile(filenameWithoutExtension.string(), currentAssetPath))
+        if (!SaveMeshFile(filenameWithoutExtension.string(), m_importAssetPath))
         {
             ELOG("Failed to save mesh file!");
             return false;
@@ -167,7 +229,7 @@ namespace mmo
         // Serialize skeleton
         if (m_skeleton)
         {
-            if (!SaveSkeletonFile(filenameWithoutExtension.string(), currentAssetPath))
+            if (!SaveSkeletonFile(filenameWithoutExtension.string(), m_importAssetPath))
             {
                 ELOG("Failed to save skeleton file!");
                 return false;
@@ -179,8 +241,20 @@ namespace mmo
         boneMap.clear();
         m_skeleton.reset();
 
-		return true;
+        m_host.assetImported(m_importAssetPath);
+
+        return true;
 	}
+
+	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
+    {
+        // Remember these
+        m_fileToImport = filename;
+        m_importAssetPath = currentAssetPath;
+        m_showImportFileDialog = true;
+
+        return true;
+    }
 
 	bool FbxImport::SupportsExtension(const String& extension) const noexcept
 	{

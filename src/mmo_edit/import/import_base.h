@@ -14,6 +14,9 @@ namespace mmo
 		/// @brief Virtual default destructor because of inheritance.
 		virtual ~ImportBase() = default;
 
+		/// Override this method if the importer needs to render some UI elements.
+		virtual void Draw() {};
+
 	public:
 		/// @brief Does the actual file import for a given source file.
 		/// @param filename The full path of the file to import.

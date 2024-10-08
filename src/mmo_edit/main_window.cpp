@@ -326,7 +326,13 @@ namespace mmo
 			{
 				editor->Draw();
 			}
-			
+
+			// Draw the importer modules
+			for (const auto& importer : m_imports)
+			{
+				importer->Draw();
+			}
+
 			const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
 			std::erase_if(m_uninitializedEditorInstances, [dockSpaceId](const String& name)
 			{

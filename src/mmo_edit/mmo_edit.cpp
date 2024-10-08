@@ -110,7 +110,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
-	mainWindow.AddImport(std::make_unique<mmo::FbxImport>());
+	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));
 
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
