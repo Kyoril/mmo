@@ -32,7 +32,8 @@ namespace mmo
 			NormalizeNode::GetStaticTypeInfo(),
 			VertexColorNode::GetStaticTypeInfo(),
 			AppendNode::GetStaticTypeInfo(),
-			WorldToTangentNormalNode::GetStaticTypeInfo()
+			WorldToTangentNormalNode::GetStaticTypeInfo(),
+			MaterialFunctionNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

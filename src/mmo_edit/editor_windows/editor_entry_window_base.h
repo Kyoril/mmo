@@ -49,6 +49,7 @@ namespace mmo
 		, m_project(project)
 		, m_manager(manager)
 	{
+		m_hasToolbarButton = true;
 	}
 
 	template <class T1, class T2>

@@ -16,6 +16,9 @@ namespace mmo
 		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		m_hasToolbarButton = true;
+		m_toolbarButtonText = "Creatures";
 	}
 
 	void CreatureEditorWindow::DrawDetailsImpl(EntryType& currentEntry)

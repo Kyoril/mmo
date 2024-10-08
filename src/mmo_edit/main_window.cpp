@@ -250,25 +250,21 @@ namespace mmo
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 		ImGui::SameLine();
 
-		if (ImGui::Button("Creatures", ImVec2(0, 37)))
+		for(auto& window : m_editorWindows)
 		{
-			s_showCreatureEditor = true;
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Spells", ImVec2(0, 37)))
-		{
-			s_showSpellEditor = true;
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Items", ImVec2(0, 37)))
-		{
+			if (!window->HasToolbarButton())
+			{
+				continue;
+			}
 
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Quests", ImVec2(0, 37)))
-		{
+			if (ImGui::Button(window->GetToolbarButtonText().c_str(), ImVec2(0, 37)))
+			{
+				window->Open();
+			}
 
+			ImGui::SameLine();
 		}
+
 		ImGui::End();
 	}
 

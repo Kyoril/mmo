@@ -23,6 +23,9 @@ namespace mmo
 		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		m_hasToolbarButton = true;
+		m_toolbarButtonText = "Classes";
 	}
 
 	// Make the UI compact because there are so many fields

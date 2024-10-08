@@ -18,6 +18,7 @@ namespace mmo
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 MaterialFunctionNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -1004,6 +1005,23 @@ namespace mmo
 				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
 			}
 		}
+
+		return m_compiledExpressionId;
+	}
+
+	std::span<Pin*> MaterialFunctionNode::GetInputPins()
+	{
+		return {};
+	}
+
+	std::span<Pin*> MaterialFunctionNode::GetOutputPins()
+	{
+		return {};
+	}
+
+	ExpressionIndex MaterialFunctionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		// TODO: Add material function ref
 
 		return m_compiledExpressionId;
 	}

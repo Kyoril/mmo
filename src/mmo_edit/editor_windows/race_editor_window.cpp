@@ -17,6 +17,9 @@ namespace mmo
 		, m_host(host)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		m_hasToolbarButton = true;
+		m_toolbarButtonText = "Races";
 	}
 
 	void RaceEditorWindow::DrawDetailsImpl(EntryType& currentEntry)

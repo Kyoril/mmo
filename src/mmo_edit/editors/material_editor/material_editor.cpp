@@ -20,10 +20,11 @@ namespace mmo
 {
 	/// @brief Default file extension for material files.
 	static const String MaterialExtension = ".hmat";
+	static const String MaterialFunctionExtension = ".hmf";
 	
 	bool MaterialEditor::CanLoadAsset(const String& extension) const
 	{
-		return extension == MaterialExtension;
+		return extension == MaterialExtension || extension == MaterialFunctionExtension;
 	}
 
 	void MaterialEditor::AddCreationContextMenuItems()
@@ -31,6 +32,10 @@ namespace mmo
 		if (ImGui::MenuItem("Create New Material"))
 		{
 			m_showMaterialNameDialog = true;
+		}
+		if (ImGui::MenuItem("Create New Material Function"))
+		{
+			m_showMaterialFunctionNameDialog = true;
 		}
 	}
 
@@ -69,6 +74,37 @@ namespace mmo
 
 			ImGui::EndPopup();
 		}
+
+		if (m_showMaterialFunctionNameDialog)
+		{
+			ImGui::OpenPopup("Create New Material Function");
+			m_showMaterialFunctionNameDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Create New Material Function", nullptr, ImGuiWindowFlags_NoResize))
+		{
+			ImGui::Text("Enter a name for the new material function:");
+
+			ImGui::InputText("##field", &m_materialFunctionName);
+			ImGui::SameLine();
+			ImGui::Text(MaterialFunctionExtension.c_str());
+
+			if (ImGui::Button("Create"))
+			{
+				CreateNewMaterial();
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+
 	}
 
 	std::shared_ptr<EditorInstance> MaterialEditor::OpenAssetImpl(const Path& asset)
@@ -126,6 +162,26 @@ namespace mmo
 
 		MaterialSerializer serializer;
 		serializer.Export(*material, writer);
+
+		file->flush();
+
+		m_host.assetImported(m_host.GetCurrentPath());
+	}
+
+	void MaterialEditor::CreateNewMaterialFunction()
+	{
+		auto currentPath = m_host.GetCurrentPath();
+		currentPath /= m_materialFunctionName + MaterialFunctionExtension;
+		m_materialFunctionName.clear();
+
+		const auto file = AssetRegistry::CreateNewFile(currentPath.string());
+		if (!file)
+		{
+			ELOG("Failed to create new material function");
+			return;
+		}
+
+		// TODO: Add material function creation logic here
 
 		file->flush();
 

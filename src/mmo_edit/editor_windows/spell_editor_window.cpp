@@ -126,6 +126,9 @@ namespace mmo
 	{
 		EditorWindowBase::SetVisible(false);
 
+		m_hasToolbarButton = true;
+		m_toolbarButtonText = "Spells";
+
 		std::vector<std::string> files = AssetRegistry::ListFiles();
 		for(const auto& filename : files)
 		{

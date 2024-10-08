@@ -47,6 +47,10 @@ namespace mmo
 		/// @brief Called when it's time to draw the window.
 		virtual bool Draw() = 0;
 
+		virtual bool HasToolbarButton() const { return m_hasToolbarButton; }
+
+		virtual const String& GetToolbarButtonText() const { return m_toolbarButtonText; }
+
 		/// @brief Determines whether the window is dockable.
 		/// @return True if the window is dockable, false otherwise.
 		[[nodiscard]] virtual bool IsDockable() const noexcept { return false; }
@@ -65,5 +69,7 @@ namespace mmo
 	protected:
 		String m_name;
 		bool m_visible { true };
+		bool m_hasToolbarButton{ false };
+		String m_toolbarButtonText;
 	};
 }

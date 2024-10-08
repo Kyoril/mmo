@@ -16,6 +16,8 @@ namespace mmo
 	{
 		EditorWindowBase::SetVisible(false);
 
+		m_toolbarButtonText = "Models";
+
 		std::vector<std::string> files = AssetRegistry::ListFiles();
 		for (const auto& filename : files)
 		{

@@ -1173,4 +1173,37 @@ namespace mmo
 	    Pin* m_inputPins[1] = { &m_uvs };
 	    Pin* m_outputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_rgba };
 	};
+
+
+	/// @brief A node which adds a material function expression.
+	class MaterialFunctionNode final : public GraphNode
+	{
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(MaterialFunctionNode, "Material Function")
+
+		MaterialFunctionNode(MaterialGraph& material)
+		: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetInputPins() override;
+		std::span<Pin*> GetOutputPins() override;
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		[[nodiscard]] std::string_view GetMaterialFunction() const { return m_materialFunctionPath.GetPath(); }
+
+		void SetMaterialFunction(const std::string_view texture) { m_materialFunctionPath.SetPath(texture); }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		AssetPathValue m_materialFunctionPath{ "", ".hmf" };
+		AssetPathProperty m_materialFunctionPathProp{ "Material Function", m_materialFunctionPath };
+
+		PropertyBase* m_properties[1] = { &m_materialFunctionPathProp };
+	};
 }

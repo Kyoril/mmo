@@ -9,6 +9,8 @@ namespace mmo
 		, m_host(host)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		m_hasToolbarButton = false;
 	}
 
 	void RangeTypeEditorWindow::DrawDetailsImpl(proto::RangeType& currentEntry)

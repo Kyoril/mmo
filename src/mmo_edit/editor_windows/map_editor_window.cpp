@@ -24,6 +24,8 @@ namespace mmo
 		, m_project(project)
 	{
 		EditorWindowBase::SetVisible(false);
+
+		m_toolbarButtonText = "Maps";
 	}
 
 	bool MapEditorWindow::Draw()
