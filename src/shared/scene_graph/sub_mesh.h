@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "graphics/graphics_device.h"
 #include "graphics/material.h"
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
@@ -44,6 +45,8 @@ namespace mmo
 
 		void CompileBoneAssignments();
 
+		void SetTopologyType(TopologyType type) { m_topologyType = type; }
+
 	public:
 		Mesh& parent;
 
@@ -56,6 +59,8 @@ namespace mmo
 		std::shared_ptr<Material> m_material;
 		bool useSharedVertices { true };
 		bool m_boneAssignmentsOutOfDate{false};
+
+		TopologyType m_topologyType = TopologyType::TriangleList;
 
 		VertexBoneAssignmentList m_boneAssignments{};
 	};

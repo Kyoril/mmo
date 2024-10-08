@@ -37,11 +37,22 @@ namespace mmo
 	{
 		subMesh.useSharedVertices = false;
 
-		TODO("Implement");
-		/*subMesh.m_vertexBuffer = std::move(m_vertexBuffer);
-		subMesh.m_indexBuffer = std::move(m_indexBuffer);
-		subMesh.m_indexStart = 0;
-		subMesh.m_indexEnd = subMesh.m_vertexBuffer->GetVertexCount();*/
+		subMesh.vertexData = std::make_unique<VertexData>(*m_vertexData->vertexDeclaration, *m_vertexData->vertexBufferBinding);
+		subMesh.vertexData->vertexCount = m_vertexData->vertexCount;
+		subMesh.vertexData->vertexStart = m_vertexData->vertexStart;
+		subMesh.vertexData->m_hardwareAnimationDataList = m_vertexData->m_hardwareAnimationDataList;
+
+		subMesh.SetTopologyType(TopologyType::LineList);
+
+		if (m_indexData)
+		{
+			subMesh.indexData = std::make_unique<IndexData>();
+			subMesh.indexData->indexCount = m_indexData->indexCount;
+			subMesh.indexData->indexStart = m_indexData->indexStart;
+			subMesh.indexData->indexBuffer = std::move(m_indexData->indexBuffer);
+		}
+
+		subMesh.SetMaterial(m_material);
 	}
 
 	void ManualTriangleListOperation::ConvertToSubmesh(SubMesh& subMesh)

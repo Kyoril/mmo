@@ -31,7 +31,7 @@ namespace mmo
 		}
 
 		op.indexData = indexData.get();
-		op.topology = TopologyType::TriangleList;
+		op.topology = m_topologyType;
 		op.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
 		op.material = m_material;
 	}

@@ -12,7 +12,7 @@ namespace mmo
 
     void SelectedMapEntity::Translate(const Vector3& delta)
     {
-        m_entity.GetSceneNode().Translate(delta, TransformSpace::Local);
+        m_entity.GetSceneNode().Translate(delta, TransformSpace::World);
         positionChanged(*this);
     }
 

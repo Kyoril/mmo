@@ -121,6 +121,10 @@ namespace mmo
 
 		void TranslationMouseMoved(Ray& ray, const float x, const float y);
 
+		void RotationMouseMoved(Ray& ray, const float x, const float y);
+
+		void ScaleMouseMoved(Ray& ray, const float x, const float y);
+
 	private:
 		// Common
 		static const float LineLength;
@@ -217,5 +221,9 @@ namespace mmo
 		MaterialPtr m_axisMaterial{ nullptr };
 		MaterialPtr m_axisHighlightMaterial{ nullptr };
 		MaterialPtr m_axisPlaneMaterial{ nullptr };
+
+		MaterialPtr m_xAxisMaterial{ nullptr };
+		MaterialPtr m_yAxisMaterial{ nullptr };
+		MaterialPtr m_zAxisMaterial{ nullptr };
 	};
 }

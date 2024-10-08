@@ -11,6 +11,7 @@
 #include "frame_ui/mouse_event_args.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
+#include "math/intersects.h"
 
 namespace mmo
 {
@@ -49,6 +50,10 @@ namespace mmo
 		m_axisMaterial = MaterialManager::Get().Load("Models/Engine/Axis.hmat");
 		m_axisHighlightMaterial = MaterialManager::Get().Load("Models/Engine/AxisHighlight.hmat");
 
+		m_xAxisMaterial = MaterialManager::Get().Load("Models/Engine/XAxis.hmat");
+		m_yAxisMaterial = MaterialManager::Get().Load("Models/Engine/YAxis.hmat");
+		m_zAxisMaterial = MaterialManager::Get().Load("Models/Engine/ZAxis.hmat");
+
 		CreatePlaneMesh();
 
 		// Translation-Mode initialization
@@ -83,9 +88,6 @@ namespace mmo
 		if (m_xArrow) m_scene.DestroyEntity(*m_xArrow);
 		if (m_yArrow) m_scene.DestroyEntity(*m_yArrow);
 		if (m_zArrow) m_scene.DestroyEntity(*m_zArrow);
-		if (m_xCircle) m_scene.DestroyEntity(*m_xCircle);
-		if (m_yCircle) m_scene.DestroyEntity(*m_yCircle);
-		if (m_zCircle) m_scene.DestroyEntity(*m_zCircle);
 		if (m_fullCircleEntity) m_scene.DestroyEntity(*m_fullCircleEntity);
 		m_scene.DestroyCamera(*m_dummyCamera);
 		if (m_widgetNode)
@@ -209,10 +211,10 @@ namespace mmo
 				TranslationMouseMoved(ray, x, y);
 				break;
 			case TransformMode::Rotate:
-				//RotationMouseMoved(ray, x, y);
+				RotationMouseMoved(ray, x, y);
 				break;
 			case TransformMode::Scale:
-				//ScaleMouseMoved(ray, x, y);
+				ScaleMouseMoved(ray, x, y);
 				break;
 			}
 		}
@@ -402,6 +404,177 @@ namespace mmo
 
 	void TransformWidget::SetupRotation()
 	{
+		// Create one node for all rotation objects
+		m_rotationNode = m_widgetNode->CreateChildSceneNode();
+		m_rotationNode->SetVisible(false);
+
+		const size_t numSteps = 12;
+		const Color fillColor(1.0f, 1.0f, 1.0f, 0.3f);
+
+		// Create circle mesh
+		if (!m_circleMesh)
+		{
+			ManualRenderObject* circles = m_scene.CreateManualRenderObject("__CircleMesh__");
+			const float endAngle = Pi / 2.0f;
+
+			// Outer circle
+			{
+				auto linesOp = circles->AddLineListOperation(m_axisMaterial);
+				float angle = 0.0f;
+				for (; angle < endAngle; angle += endAngle / numSteps)
+				{
+					linesOp->AddLine(
+						Vector3(OuterRadius * ::cosf(angle),
+							OuterRadius * ::sinf(angle),
+							0.0f),
+						Vector3(OuterRadius * ::cosf(angle + endAngle / numSteps),
+							OuterRadius * ::sinf(angle + endAngle / numSteps),
+							0.0f)
+					).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+				}
+
+				linesOp->AddLine(
+					Vector3(OuterRadius * ::cosf(angle),
+						OuterRadius * ::sinf(angle),
+						0.0f),
+					Vector3(0.0f,
+						OuterRadius,
+						0.0f)
+				).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			}
+			
+			// Inner circle
+			{
+				auto linesOp = circles->AddLineListOperation(m_axisMaterial);
+				float angle = 0.0f;
+				for (; angle < endAngle; angle += endAngle / numSteps)
+				{
+					linesOp->AddLine(
+						Vector3(InnerRadius * ::cosf(angle),
+							InnerRadius * ::sinf(angle),
+							0.0f),
+						Vector3(InnerRadius * ::cosf(angle + endAngle / numSteps),
+							InnerRadius * ::sinf(angle + endAngle / numSteps),
+							0.0f)
+					).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+				}
+
+				linesOp->AddLine(
+					Vector3(InnerRadius * ::cosf(angle),
+						InnerRadius * ::sinf(angle),
+						0.0f),
+					Vector3(0.0f,
+						InnerRadius,
+						0.0f)
+				).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+			}
+
+			// Fill circle
+#if 0
+			circles->begin("Editor/AxisX", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
+			for (float angle = 0.0f; angle < endAngle; angle += endAngle / numSteps)
+			{
+				circles->position(OuterRadius * Ogre::Math::Cos(angle), OuterRadius * Ogre::Math::Sin(angle), 0.0f);
+				circles->colour(fillColor);
+				circles->position(InnerRadius * Ogre::Math::Cos(angle), InnerRadius * Ogre::Math::Sin(angle), 0.0f);
+				circles->colour(fillColor);
+			}
+			circles->position(0.0f, OuterRadius, 0.0f);
+			circles->colour(fillColor);
+			circles->position(0.0f, InnerRadius, 0.0f);
+			circles->colour(fillColor);
+			circles->end();
+#endif
+
+			m_circleMesh = circles->ConvertToMesh(CircleMeshName);
+			m_scene.DestroyManualRenderObject(*circles);
+		}
+
+#if 0
+		if (!Ogre::MeshManager::getSingleton().resourceExists(FullCircleMeshName))
+		{
+			Ogre::ManualObject* fullCircle = m_sceneMgr.createManualObject();
+			const float endAngle2 = 2.0f * Ogre::Math::PI;
+
+			// Outer circle
+			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_LINE_STRIP);
+			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
+			{
+				fullCircle->position(
+					OuterRadius * Ogre::Math::Cos(angle),
+					OuterRadius * Ogre::Math::Sin(angle),
+					0.0f);
+			}
+			fullCircle->position(0.0f, OuterRadius, 0.0f);
+			fullCircle->end();
+
+			// Inner circle
+			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_LINE_STRIP);
+			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
+			{
+				fullCircle->position(
+					InnerRadius * Ogre::Math::Cos(angle),
+					InnerRadius * Ogre::Math::Sin(angle),
+					0.0f);
+			}
+			fullCircle->position(0.0f, InnerRadius, 0.0f);
+			fullCircle->end();
+
+			// Fill circle
+			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
+			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
+			{
+				fullCircle->position(OuterRadius * Ogre::Math::Cos(angle), OuterRadius * Ogre::Math::Sin(angle), 0.0f);
+				fullCircle->colour(fillColor);
+				fullCircle->position(InnerRadius * Ogre::Math::Cos(angle), InnerRadius * Ogre::Math::Sin(angle), 0.0f);
+				fullCircle->colour(fillColor);
+			}
+			fullCircle->position(0.0f, OuterRadius, 0.0f);
+			fullCircle->colour(fillColor);
+			fullCircle->position(0.0f, InnerRadius, 0.0f);
+			fullCircle->colour(fillColor);
+			fullCircle->end();
+
+			m_fullCircleMesh = fullCircle->convertToMesh(FullCircleMeshName);
+			m_sceneMgr.destroyManualObject(fullCircle);
+		}
+		else
+		{
+			m_fullCircleMesh = Ogre::MeshManager::getSingleton().getByName(FullCircleMeshName);
+		}
+#endif
+
+		// Create circle entities and attach to scene
+		m_zRotNode = m_rotationNode->CreateChildSceneNode();
+		m_xRotNode = m_rotationNode->CreateChildSceneNode();
+		m_xRotNode->Yaw(Degree(-90.0f), TransformSpace::Local);
+		m_yRotNode = m_rotationNode->CreateChildSceneNode();
+		m_yRotNode->Pitch(Degree(90.0f), TransformSpace::Local);
+
+		/*
+		m_fullCircleEntity = m_scene.CreateEntity("FullCircleEntity", m_circleMesh);
+		m_fullCircleEntity->SetQueryFlags(0);
+		m_fullCircleEntity->SetRenderQueueGroup(Overlay - 1);
+		*/
+
+		m_xCircle = m_scene.CreateEntity("XCircle", m_circleMesh);
+		m_xCircle->SetQueryFlags(0);
+		m_xCircle->SetRenderQueueGroup(Overlay - 1);
+		m_xCircle->SetMaterial(m_xAxisMaterial);
+
+		m_yCircle = m_scene.CreateEntity("YCircle", m_circleMesh);
+		m_yCircle->SetQueryFlags(0);
+		m_yCircle->SetRenderQueueGroup(Overlay - 1);
+		m_yCircle->SetMaterial(m_yAxisMaterial);
+
+		m_zCircle = m_scene.CreateEntity("ZCircle", m_circleMesh);
+		m_zCircle->SetQueryFlags(0);
+		m_zCircle->SetRenderQueueGroup(Overlay - 1);
+		m_zCircle->SetMaterial(m_zAxisMaterial);
+
+		m_xRotNode->AttachObject(*m_xCircle);
+		m_yRotNode->AttachObject(*m_yCircle);
+		m_zRotNode->AttachObject(*m_zCircle);
 	}
 
 	void TransformWidget::SetupScale()
@@ -446,6 +619,32 @@ namespace mmo
 
 	void TransformWidget::UpdateRotation()
 	{
+		if ((m_selectedAxis & axis_id::X))
+		{
+			m_xCircle->SetMaterial(m_axisHighlightMaterial);
+		}
+		else
+		{
+			m_xCircle->SetMaterial(m_xAxisMaterial);
+		}
+
+		if ((m_selectedAxis & axis_id::Y))
+		{
+			m_yCircle->SetMaterial(m_axisHighlightMaterial);
+		}
+		else
+		{
+			m_yCircle->SetMaterial(m_yAxisMaterial);
+		}
+
+		if ((m_selectedAxis & axis_id::Z))
+		{
+			m_zCircle->SetMaterial(m_axisHighlightMaterial);
+		}
+		else
+		{
+			m_zCircle->SetMaterial(m_zAxisMaterial);
+		}
 	}
 
 	void TransformWidget::UpdateScale()
@@ -461,7 +660,7 @@ namespace mmo
 		if (!m_visible)
 		{
 			m_translationNode->SetVisible(false);
-			//m_rotationNode->SetVisible(false);
+			m_rotationNode->SetVisible(false);
 			//m_scaleNode->SetVisible(false);
 			return;
 		}
@@ -475,13 +674,13 @@ namespace mmo
 				m_xyPlaneNode->SetVisible(false);
 				m_xzPlaneNode->SetVisible(false);
 				m_yzPlaneNode->SetVisible(false);
-				//m_rotationNode->SetVisible(false);
+				m_rotationNode->SetVisible(false);
 				//m_scaleNode->SetVisible(false);
 				break;
 
 			case TransformMode::Rotate:
 				m_translationNode->SetVisible(false);
-				//m_rotationNode->SetVisible(true);
+				m_rotationNode->SetVisible(true);
 				//m_scaleNode->SetVisible(false);
 				break;
 
@@ -491,7 +690,7 @@ namespace mmo
 				//m_scaleXZPlaneNode->SetVisible(false);
 				//m_scaleYZPlaneNode->SetVisible(false);
 				m_translationNode->SetVisible(false);
-				//m_rotationNode->SetVisible(false);
+				m_rotationNode->SetVisible(false);
 				break;
 			}
 		}
@@ -535,6 +734,13 @@ namespace mmo
 
 	void TransformWidget::ApplyRotation(const Quaternion& rotation)
 	{
+		m_rotation = rotation * m_rotation;
+
+		// Rotate around own position
+		for (auto& selected : m_selection.GetSelectedObjects())
+		{
+			selected->Rotate(rotation);
+		}
 	}
 
 	void TransformWidget::FinishRotation()
@@ -545,14 +751,6 @@ namespace mmo
 		}
 		else
 		{
-			for (auto& obj : m_selection.GetSelectedObjects())
-			{
-				/*obj.Position = obj.SceneNode._getDerivedPosition();
-				obj.Orientation = obj.SceneNode._getDerivedOrientation();
-				m_rotationCenter->removeChild(obj.SceneNode);
-				m_sceneMgr.getRootSceneNode()->addChild(obj.SceneNode);*/
-			}
-
 			// Remove rotation center node
 			m_scene.DestroySceneNode(*m_rotationCenter);
 			m_rotationCenter = nullptr;
@@ -863,6 +1061,250 @@ namespace mmo
 				}
 
 				ApplyTranslation(distance);
+			}
+		}
+	}
+
+	void TransformWidget::RotationMouseMoved(Ray& ray, const float x, const float y)
+	{
+		if (!m_active)
+		{
+			Plane zRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
+			Plane yRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
+			Plane xRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
+
+			auto zRes = ray.Intersects(zRotPlane);
+			auto yRes = ray.Intersects(yRotPlane);
+			auto xRes = ray.Intersects(xRotPlane);
+
+			bool xHit = false, yHit = false, zHit = false;
+			const float bias = 0.1f;
+
+			if (zRes.first)
+			{
+				Vector3 zIntersection = ray.GetPoint(zRes.second) - m_relativeWidgetPos;
+
+				zHit = (zIntersection.GetLength() <= ((OuterRadius + bias) * m_widgetNode->GetScale().x))
+					&& (zIntersection.GetLength() >= ((InnerRadius - bias) * m_widgetNode->GetScale().x));
+
+				{
+					zIntersection = m_widgetNode->GetOrientation().Inverse() * zIntersection;
+					zHit = zHit
+						&& ((m_zRotNode->GetScale().x * zIntersection.x) >= 0
+							&& (m_zRotNode->GetScale().y * zIntersection.y >= 0));
+				}
+			}
+			if (yRes.first)
+			{
+				Vector3 yIntersection = ray.GetPoint(yRes.second) - m_relativeWidgetPos;
+
+				yHit = (yIntersection.GetLength() <= ((OuterRadius + bias) * m_widgetNode->GetScale().x))
+					&& (yIntersection.GetLength() >= ((InnerRadius - bias) * m_widgetNode->GetScale().x));
+
+				{
+					yIntersection = m_widgetNode->GetOrientation().Inverse() * yIntersection;
+
+					// Using y-scale for flipped z-axis because of rotation
+					yHit = yHit
+						&& ((m_yRotNode->GetScale().x * yIntersection.x) >= 0
+							&& (m_yRotNode->GetScale().y * yIntersection.z >= 0));
+				}
+			}
+			if (xRes.first)
+			{
+				Vector3 xIntersection = ray.GetPoint(xRes.second) - m_relativeWidgetPos;
+
+				xHit = (xIntersection.GetLength() <= ((OuterRadius + bias) * m_widgetNode->GetScale().x))
+					&& (xIntersection.GetLength() >= ((InnerRadius - bias) * m_widgetNode->GetScale().x));
+
+				{
+					xIntersection = m_widgetNode->GetOrientation().Inverse() * xIntersection;
+
+					// Using x-scale for flipped z-axis because of rotation
+					xHit = xHit
+						&& ((m_xRotNode->GetScale().x * xIntersection.z) >= 0
+							&& (m_xRotNode->GetScale().y * xIntersection.y >= 0));
+				}
+			}
+
+			if (zHit)
+			{
+				m_selectedAxis = axis_id::Z;
+			}
+			else if (yHit)
+			{
+				m_selectedAxis = axis_id::Y;
+			}
+			else if (xHit)
+			{
+				m_selectedAxis = axis_id::X;
+			}
+			else
+			{
+				m_selectedAxis = axis_id::None;
+			}
+		}
+		else
+		{
+			Vector3 axis(0.0f, 0.0f, 0.0f);
+			Vector<float, 2> mouse(x - m_lastMouse[0], y - m_lastMouse[1]);
+			Radian angle(-mouse[0] * 0.08f);
+			angle += Radian(mouse[1] * 0.08f);
+
+			switch (m_selectedAxis)
+			{
+			case axis_id::X:
+			{
+				axis = Vector3::UnitX;
+				if (m_camDir.x < 0)
+				{
+					angle *= -1.0f;
+				}
+				break;
+			}
+
+			case axis_id::Y:
+			{
+				axis = Vector3::UnitY;
+				if (m_camDir.y < 0)
+				{
+					angle *= -1.0f;
+				}
+				break;
+			}
+
+			case axis_id::Z:
+			{
+				axis = Vector3::UnitZ;
+				if (m_camDir.z < 0)
+				{
+					angle *= -1.0f;
+				}
+				break;
+			}
+			}
+
+			axis = m_widgetNode->GetOrientation() * axis;
+			const Quaternion rot(angle, axis);
+			ApplyRotation(rot);
+		}
+	}
+
+	void TransformWidget::ScaleMouseMoved(Ray& ray, const float x, const float y)
+	{
+		if (!m_active)
+		{
+			m_selectedAxis = axis_id::None;
+
+			// Inner verts
+			Vector3 innerY = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(0.0f, SquareLength, 0.0f) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+			Vector3 innerZ = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(0.0f, 0.0f, SquareLength) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+			Vector3 innerX = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(SquareLength, 0.0f, 0.0f) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+
+			// Inner rectangle hit test for scale on all three axis
+			auto res = Intersects(ray, innerY, innerZ, innerX, true, true);
+			if (res.first)
+			{
+				m_selectedAxis = AxisId(axis_id::All);
+				return;
+			}
+
+			// Outer verts
+			Vector3 outerY = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(0.0f, LineLength * 0.75f, 0.0f) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+			Vector3 outerZ = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(0.0f, 0.0f, LineLength * 0.75f) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+			Vector3 outerX = m_relativeWidgetPos + m_widgetNode->GetOrientation() * (Vector3(LineLength * 0.75f, 0.0f, 0.0f) * m_widgetNode->GetScale() * m_scaleNode->GetScale());
+
+			// XY check
+			if (Intersects(ray, outerX, innerX, innerY, true, true).first ||
+				Intersects(ray, innerY, outerY, outerX, true, true).first)
+			{
+				m_selectedAxis = AxisId(axis_id::XY);
+				return;
+			}
+
+			// XZ check
+			if (Intersects(ray, outerX, innerX, innerZ, true, true).first ||
+				Intersects(ray, innerZ, outerZ, outerX, true, true).first)
+			{
+				m_selectedAxis = AxisId(axis_id::XZ);
+				return;
+			}
+
+			// YZ check
+			if (Intersects(ray, outerY, innerY, innerZ, true, true).first ||
+				Intersects(ray, innerZ, outerZ, outerY, true, true).first)
+			{
+				m_selectedAxis = AxisId(axis_id::YZ);
+				return;
+			}
+
+			if ((res = ray.Intersects(GetScalePlane(axis_id::X))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+
+				if (dir.x > std::min(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().x) &&
+					dir.x <= std::max(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().x))
+				{
+					Vector3 projection = Vector3::UnitX * dir.Dot(Vector3::UnitX);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::X;
+						return;
+					}
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Y))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+
+				if (dir.y > std::min(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().y) &&
+					dir.y <= std::max(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().y))
+				{
+					Vector3 projection = Vector3::UnitY * dir.Dot(Vector3::UnitY);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::Y;
+						return;
+					}
+				}
+			}
+			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Z))).first)
+			{
+				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				dir = m_widgetNode->GetOrientation().Inverse() * dir;
+				if (dir.z > std::min(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().z) &&
+					dir.z <= std::max(0.0f, LineLength * m_widgetNode->GetScale().x * m_scaleNode->GetScale().z))
+				{
+					Vector3 projection = Vector3::UnitZ * dir.Dot(Vector3::UnitZ);
+					Vector3 difference = dir - projection;
+					if (difference.GetLength() < AxisBoxWidth * m_widgetNode->GetScale().x)
+					{
+						m_selectedAxis = axis_id::Z;
+						return;
+					}
+				}
+			}
+		}
+		else
+		{
+			// Translate
+			if (!m_selection.IsEmpty())
+			{
+				const Vector3 distance(1.0f, 1.0f, 1.0f);
+
+				const Vector3 direction(
+					((m_selectedAxis & axis_id::X) ? 1.0f : 0.0f),
+					((m_selectedAxis & axis_id::Y) ? 1.0f : 0.0f),
+					((m_selectedAxis & axis_id::Z) ? 1.0f : 0.0f));
+
+				Vector<float, 2> mouse(x - m_lastMouse[0], y - m_lastMouse[1]);
+
+				Vector3 scale = distance + ((direction * (-mouse[1] * 0.008f)));
+				ApplyScale(scale);
 			}
 		}
 	}

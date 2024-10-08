@@ -343,6 +343,19 @@ namespace mmo
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
 
+		if (ImGui::IsKeyPressed(ImGuiKey_1, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Translate);
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_2, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Rotate);
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_3, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Scale);
+		}
+
 		if (ImGui::Begin(detailsId.c_str()))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
