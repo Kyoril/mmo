@@ -49,6 +49,24 @@ namespace mmo
 
 		// TODO: Serialize world file contents
 
+		constexpr uint32 versionHeader = 'MVER';
+		constexpr uint32 meshHeader = 'MESH';
+		constexpr uint32 entityHeader = 'MENT';
+
+		// Start writing file
+		writer
+			<< io::write<uint32>(versionHeader)
+			<< io::write<uint32>(sizeof(uint32))
+			<< io::write<uint32>(0x0001);
+
+		// Write mesh names
+		writer
+			<< io::write<uint32>(meshHeader)
+			<< io::write<uint32>(0);
+
+		// TODO
+		sink.Flush();
+
 
 		file->flush();
 

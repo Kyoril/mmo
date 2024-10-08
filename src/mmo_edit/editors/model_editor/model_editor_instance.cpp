@@ -214,7 +214,7 @@ namespace mmo
 
 		SceneNode* scaleNode = child->CreateChildSceneNode();
 		scaleNode->SetInheritScale(false);
-		scaleNode->SetScale(Vector3::UnitScale * 0.03f);
+		scaleNode->SetScale(Vector3::UnitScale * 0.1f);
 		
 		// Attach debug visual
 		Entity* entity = scene.CreateEntity("Entity_" + bone.GetName(), "Editor/Joint.hmsh");
@@ -675,7 +675,9 @@ namespace mmo
 			aiProcess_JoinIdenticalVertices |
 			aiProcess_SortByPType |
 			aiProcess_FlipUVs |
-			aiProcess_GenNormals
+			aiProcess_GenNormals |
+			aiProcess_LimitBoneWeights |
+			aiProcess_ImproveCacheLocality
 		);
 
 		if (!scene)
@@ -704,6 +706,12 @@ namespace mmo
 				m_entity->GetSkeleton()->RemoveAnimation(m_newAnimationName);
 			}
 
+			// DefBonePose a matrix that represents the local bone transform (can build from Ogre bone components)
+			// PoseToKey a matrix representing the keyframe translation
+			// What assimp stores aiNodeAnim IS the decomposed form of the transform (DefBonePose * PoseToKey)
+			// To get PoseToKey which is what Ogre needs we'ed have to build the transform from components in
+			// aiNodeAnim and then DefBonePose.Inverse() * aiNodeAnim(generated transform) will be the right transform
+
 			// Create the animation
 			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
 			animation.SetUseBaseKeyFrame(true, 0.0f, "");
@@ -711,7 +719,6 @@ namespace mmo
 			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
 			{
 				aiNodeAnim* nodeAnim = anim->mChannels[channelIndex];
-
 				DLOG("\tBone " << nodeAnim->mNodeName.C_Str());
 
 				// Try to find the given bone in our skeleton
@@ -770,7 +777,6 @@ namespace mmo
 				for (auto itEnd = keyframes.end(); it != itEnd; ++it)
 				{
 					aiVector3D aiTrans = GetTranslate(keyframes, it, anim->mTicksPerSecond);
-
 					Vector3 trans(aiTrans.x, aiTrans.y, aiTrans.z);
 
 					aiQuaternion aiRot = GetRotate(keyframes, it, anim->mTicksPerSecond);

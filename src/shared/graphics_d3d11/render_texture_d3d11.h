@@ -18,14 +18,19 @@ namespace mmo
 		RenderTextureD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height);
 		virtual ~RenderTextureD3D11() = default;
 
+
 	public:
-		virtual void LoadRaw(void* data, size_t dataSize) final override;
-		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
-		virtual void Activate() final override;
-		virtual void Clear(ClearFlags flags) final override;
-		virtual void Resize(uint16 width, uint16 height) final override;
-		virtual void Update() final override {};
-		virtual void* GetTextureObject() const final override { return m_shaderResourceView.Get(); }
+		virtual TexturePtr StoreToTexture() override;
+
+	public:
+		void LoadRaw(void* data, size_t dataSize) final override;
+		void Bind(ShaderType shader, uint32 slot = 0) final override;
+		void Activate() final override;
+		void Clear(ClearFlags flags) final override;
+		void Resize(uint16 width, uint16 height) final override;
+		void Update() final override {};
+		void* GetTextureObject() const final override { return m_shaderResourceView.Get(); }
+		ID3D11Texture2D* GetTex2D() const { return m_renderTargetTex.Get(); }
 
 	public:
 		inline ID3D11ShaderResourceView* GetShaderResourceView() const { return m_shaderResourceView.Get(); }

@@ -64,8 +64,7 @@ namespace mmo
 		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const;
 		void GrabNodeNamesFromNode(const aiScene* mScene, const aiNode* pNode);
 		void GrabBoneNamesFromNode(const aiScene* mScene, const aiNode* pNode);
-		void ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,
-			const aiMatrix4x4& accTransform);
+		void ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode, const aiMatrix4x4& accTransform);
 		void CreateBonesFromNode(const aiScene* mScene, const aiNode* pNode);
 		void CreateBoneHierarchy(const aiScene* mScene, const aiNode* pNode);
 		void LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh, const Matrix4& transform);

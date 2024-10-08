@@ -7,6 +7,8 @@
 #include <vector>
 #include <stdexcept>
 
+#include "render_texture_d3d11.h"
+
 
 namespace mmo
 {
@@ -15,6 +17,39 @@ namespace mmo
 	{
 		m_header.width = width;
 		m_header.height = height;
+	}
+
+	void TextureD3D11::FromRenderTexture(RenderTextureD3D11& renderTexture)
+	{
+		m_header.width = static_cast<RenderTarget&>(renderTexture).GetWidth();
+		m_header.height = static_cast<RenderTarget&>(renderTexture).GetHeight();
+
+		// Obtain ID3D11Device object by casting
+		ID3D11Device& dev = m_device;
+
+		// Create texture description
+		D3D11_TEXTURE2D_DESC td;
+		ZeroMemory(&td, sizeof(td));
+		td.ArraySize = 1;
+		td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		m_header.format = tex::v1_0::RGBA;
+		td.Height = m_header.height;
+		td.Width = m_header.width;
+
+		// Determine number of mip levels
+		td.MipLevels = 1;
+		td.SampleDesc.Count = 1;
+		td.SampleDesc.Quality = 0;
+		td.Usage = D3D11_USAGE_DEFAULT;
+
+		// Create texture object
+		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, nullptr, &m_texture)));
+
+		ID3D11DeviceContext& context = m_device;
+		context.CopyResource(m_texture.Get(), static_cast<ID3D11Resource*>(renderTexture.GetTex2D()));
+
+		CreateShaderResourceView();
 	}
 
 	void TextureD3D11::Load(std::unique_ptr<std::istream>& stream)

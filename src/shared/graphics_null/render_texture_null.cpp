@@ -49,4 +49,9 @@ namespace mmo
 		m_height = height;
 		m_resizePending = true;
 	}
+
+	TexturePtr RenderTextureNull::StoreToTexture()
+	{
+		return nullptr;
+	}
 }

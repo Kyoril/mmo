@@ -8,6 +8,11 @@
 
 namespace mmo
 {
+	class RenderTextureD3D11;
+}
+
+namespace mmo
+{
 	/// D3D11 implementation of the texture class.
 	class TextureD3D11 final
 		: public Texture
@@ -17,6 +22,7 @@ namespace mmo
 		TextureD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height);
 
 	public:
+		void FromRenderTexture(RenderTextureD3D11& renderTexture);
 		virtual void Load(std::unique_ptr<std::istream>& stream) final override;
 		virtual void LoadRaw(void* data, size_t dataSize) final override;
 		/// Gets the memory usage of this texture in bytes on the gpu.

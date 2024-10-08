@@ -96,9 +96,9 @@ namespace mmo
 	bool FbxImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
         // TODO: Popup import dialog window with import options
-        const Vector3 importScale = Vector3::UnitScale * 0.01f;
+        const Vector3 importScale = Vector3::UnitScale/* * 0.01f*/;
         const Vector3 importOffset = Vector3::Zero;
-        const Quaternion importRotation = Quaternion(Degree(-90), Vector3::UnitX);
+        const Quaternion importRotation = Quaternion::Identity; /*Quaternion(Degree(-90), Vector3::UnitX)*/;
 
         // Build transform matrix
         const Matrix4 importTransform = 
@@ -151,6 +151,8 @@ namespace mmo
 
         if (m_skeleton)
         {
+            m_skeleton->SetBindingPose();
+
             DLOG("Root bone: " << m_skeleton->GetRootBone()->GetName());
             m_mesh->SetSkeleton(m_skeleton);
         }
@@ -470,8 +472,7 @@ namespace mmo
 		}
 	}
 
-	void FbxImport::ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,
-		const aiMatrix4x4& accTransform)
+	void FbxImport::ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode, const aiMatrix4x4& accTransform)
 	{
         if (!mNodeDerivedTransformByName.contains(pNode->mName.data))
         {
@@ -484,6 +485,15 @@ namespace mmo
         }
 	}
 
+    Matrix4 ConvertMatrix(const aiMatrix4x4& aiMat)
+	{
+        return Matrix4(
+            aiMat.a1, aiMat.a2, aiMat.a3, aiMat.a4,
+            aiMat.b1, aiMat.b2, aiMat.b3, aiMat.b4,
+            aiMat.c1, aiMat.c2, aiMat.c3, aiMat.c4,
+            aiMat.d1, aiMat.d2, aiMat.d3, aiMat.d4);
+    }
+
 	void FbxImport::CreateBonesFromNode(const aiScene* mScene, const aiNode* pNode)
 	{
         if (IsNodeNeeded(pNode->mName.data))
@@ -493,18 +503,16 @@ namespace mmo
             {
                 Bone* bone = m_skeleton->CreateBone(boneName, msBoneCount);
 
-                aiQuaternion rot;
-                aiVector3D pos;
-                aiVector3D scale;
-
                 const aiMatrix4x4& aiM = pNode->mTransformation;
 
-                if (!aiM.IsIdentity())
-                {
-                    aiM.Decompose(scale, rot, pos);
-                    bone->SetPosition(Vector3(pos.x, pos.y, pos.z));
-                    bone->SetOrientation(Quaternion(rot.w, rot.x, rot.y, rot.z));
-                }
+                Matrix4 boneMatrix = ConvertMatrix(aiM);
+                Vector3 scale;
+                Vector3 pos;
+                Quaternion rot;
+                boneMatrix.Decomposition(pos, scale, rot);
+
+                bone->SetPosition(pos);
+                bone->SetOrientation(rot);
 
                 DLOG("(" << msBoneCount << ") Creating bone '" << boneName << "'");
                 msBoneCount++;

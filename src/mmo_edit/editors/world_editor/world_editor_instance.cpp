@@ -100,6 +100,17 @@ namespace mmo
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
 
+		// Setup terrain
+		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
+
+		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
+		m_cloudsEntity->SetQueryFlags(0);
+		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
+		m_cloudsNode->AttachObject(*m_cloudsEntity);
+		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
+		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
+
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
 		if (!streamPtr)
@@ -155,24 +166,22 @@ namespace mmo
 			return;
 		}
 
-		if (chunkSize <= 0)
-		{
-			return;
-		}
-
-		const size_t contentStart = source.position();
 		std::vector<String> meshNames;
-		while(source.position() - contentStart < chunkSize)
+		if (chunkSize > 0)
 		{
-			String meshName;
-			if (!(reader >> io::read_string(meshName)))
+			const size_t contentStart = source.position();
+			while (source.position() - contentStart < chunkSize)
 			{
-				ELOG("Failed to read world file: Unexpected end of file");
-				return;
-			}
+				String meshName;
+				if (!(reader >> io::read_string(meshName)))
+				{
+					ELOG("Failed to read world file: Unexpected end of file");
+					return;
+				}
 
-			meshNames.emplace_back(std::move(meshName));
-			DLOG("\tMesh name: " << meshNames.back());
+				meshNames.emplace_back(std::move(meshName));
+				DLOG("\tMesh name: " << meshNames.back());
+			}
 		}
 
 		// Read entities
@@ -212,17 +221,6 @@ namespace mmo
 			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
 		}
 
-		// Setup terrain
-		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
-		
-		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
-		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
-		m_cloudsEntity->SetQueryFlags(0);
-		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
-		m_cloudsNode->AttachObject(*m_cloudsEntity);
-		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
-		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
-		
 		ILOG("Successfully read world file!");
 	}
 
@@ -302,7 +300,10 @@ namespace mmo
 			}
 		}
 
-		m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
+		if (m_cloudsNode)
+		{
+			m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
+		}
 
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
@@ -791,6 +792,11 @@ namespace mmo
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
 	{
+		if (!m_terrain)
+		{
+			return;
+		}
+
 		const auto &mainPage = page.GetMainPage();
 		const PagePosition &pos = mainPage.GetPosition();
 

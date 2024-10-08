@@ -7,6 +7,9 @@
 
 #include <d3d11.h>
 
+#include "texture_d3d11.h"
+#include "graphics/texture_mgr.h"
+
 namespace mmo
 {
 	RenderTextureD3D11::RenderTextureD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height)
@@ -23,6 +26,14 @@ namespace mmo
 		//m_clearColorFloat[1] = 1.0f;
 		//m_clearColorFloat[2] = 1.0f;
 		//m_clearColorFloat[3] = 1.0f;
+	}
+
+	TexturePtr RenderTextureD3D11::StoreToTexture()
+	{
+		auto texture = std::make_shared<TextureD3D11>(m_device, m_width, m_height);
+		texture->FromRenderTexture(*this);
+
+		return texture;
 	}
 
 	void RenderTextureD3D11::LoadRaw(void * data, size_t dataSize)

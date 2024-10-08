@@ -11,6 +11,7 @@
 
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
+#include "preview_providers/material_preview_provider.h"
 
 #include "editor_windows/asset_window.h"
 #include "editor_windows/log_window.h"
@@ -40,9 +41,10 @@
 
 namespace mmo
 {
-	void AddDefaultPreviewProviders(PreviewProviderManager& manager)
+	void AddDefaultPreviewProviders(PreviewProviderManager& manager, EditorHost& host)
 	{
 		manager.AddPreviewProvider(std::make_unique<mmo::TexturePreviewProvider>());
+		manager.AddPreviewProvider(std::make_unique<mmo::MaterialPreviewProvider>(host));
 	}
 }
 
@@ -92,7 +94,7 @@ int main(int argc, char* arg[])
 
 	// Setup preview provider manager
 	mmo::PreviewProviderManager previewProviderManager;
-	AddDefaultPreviewProviders(previewProviderManager);
+	AddDefaultPreviewProviders(previewProviderManager, mainWindow);
 
 	// Setup asset window
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
