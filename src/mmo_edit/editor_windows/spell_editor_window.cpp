@@ -306,15 +306,6 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
 		}
 
-		if (ImGui::CollapsingHeader("Interrupt", ImGuiTreeNodeFlags_None))
-		{
-			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
-			CHECKBOX_FLAG_PROP(interruptflags, "Auto Attack", spell_interrupt_flags::AutoAttack);
-			CHECKBOX_FLAG_PROP(interruptflags, "Damage", spell_interrupt_flags::Damage);
-			CHECKBOX_FLAG_PROP(interruptflags, "Push Back", spell_interrupt_flags::PushBack);
-			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
-		}
-
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
 		{
 			CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);

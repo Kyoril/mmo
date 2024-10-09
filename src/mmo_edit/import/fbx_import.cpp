@@ -575,21 +575,28 @@ namespace mmo
             String boneName = pNode->mName.data;
             if (pNode->mNumMeshes == 0)
             {
-                Bone* bone = m_skeleton->CreateBone(boneName, msBoneCount);
+                if (m_skeleton->HasBone(boneName))
+				{
+					DLOG("Bone '" << boneName << "' already exists");
+				}
+                else
+                {
+                    Bone* bone = m_skeleton->CreateBone(boneName, msBoneCount);
 
-                const aiMatrix4x4& aiM = pNode->mTransformation;
+                    const aiMatrix4x4& aiM = pNode->mTransformation;
 
-                Matrix4 boneMatrix = ConvertMatrix(aiM);
-                Vector3 scale;
-                Vector3 pos;
-                Quaternion rot;
-                boneMatrix.Decomposition(pos, scale, rot);
+                    Matrix4 boneMatrix = ConvertMatrix(aiM);
+                    Vector3 scale;
+                    Vector3 pos;
+                    Quaternion rot;
+                    boneMatrix.Decomposition(pos, scale, rot);
 
-                bone->SetPosition(pos);
-                bone->SetOrientation(rot);
+                    bone->SetPosition(pos);
+                    bone->SetOrientation(rot);
 
-                DLOG("(" << msBoneCount << ") Creating bone '" << boneName << "'");
-                msBoneCount++;
+                    DLOG("(" << msBoneCount << ") Creating bone '" << boneName << "'");
+                    msBoneCount++;
+                }
             }
         }
 

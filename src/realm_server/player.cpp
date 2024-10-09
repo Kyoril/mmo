@@ -263,7 +263,7 @@ namespace mmo
 		}
 
 		// Check input parameters for invalid values
-		if (characterName.empty() || characterName.size() > 12 || gender > 1 || race > 0)
+		if (characterName.empty() || characterName.size() > 12 || gender > 1)
 		{
 			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
 				{
@@ -288,9 +288,19 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// TODO: Check if race exists
-		//const auto* raceEntry = m_project.races.getById(race);
-		
+		const auto* raceEntry = m_project.races.getById(race);
+		if (raceEntry == nullptr)
+		{
+			ELOG("Unable to find character race " << log_hex_digit(race));
+			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
 		std::weak_ptr weakThis{ shared_from_this() };
 		auto handler = [weakThis](const std::optional<CharCreateResult>& result) {
 			if (const auto strongThis = weakThis.lock())
@@ -328,14 +338,16 @@ namespace mmo
 		// TODO: Load real start values from static game data instead of hard code it here. However,
 		// the infrastructure isn't read yet.
 		const uint32 level = 1;
-		const uint32 map = 0;
-		const Vector3 position;
-		const Degree rotation;
+		const uint32 map = raceEntry->startmap();
+		const Vector3 position(raceEntry->startposx(), raceEntry->startposy(), raceEntry->startposz());
+		const Angle rotation(raceEntry->startrotation());
 
 		// Setup a temporary player object
 		GamePlayerS player(m_project, m_timerQueue);
 		player.Initialize();
 		player.SetClass(*classInstance);
+		player.SetRace(*raceEntry);
+		player.SetGender(gender);
 		player.SetLevel(1);
 
 		const uint32 hp = player.GetMaxHealth();
@@ -353,8 +365,8 @@ namespace mmo
 			}
 		}
 
-		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, race, characterClass, gender, position, rotation,
+		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
+		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
 			spellIds, mana, rage, energy);
 		
 		return PacketParseResult::Pass;

@@ -331,18 +331,50 @@ namespace mmo
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, false);
 		}
 
-		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int effectIndex, int& min, int& max)
+		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, int32 casterLevel, int32& minBasePoints, int32& maxBasePoints)
 		{
+			if (casterLevel > spell.maxlevel() && spell.maxlevel() > 0)
+			{
+				casterLevel = spell.maxlevel();
+			}
+			else if (casterLevel < spell.baselevel())
+			{
+				casterLevel = spell.baselevel();
+			}
+			casterLevel -= spell.spelllevel();
+
+			// Calculate the damage done
+			const float basePointsPerLevel = effect.pointsperlevel();
+			const float randomPointsPerLevel = effect.diceperlevel();
+			const int32 basePoints = effect.basepoints() + casterLevel * basePointsPerLevel;
+			const int32 randomPoints = effect.diesides() + casterLevel * randomPointsPerLevel;
+
+			minBasePoints = basePoints + effect.basedice();
+			maxBasePoints = basePoints + randomPoints;
+		}
+
+		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int32 level, int effectIndex, int& min, int& max)
+		{
+			min = 0;
+			max = 0;
+
 			if (effectIndex < 0 || effectIndex >= spell.effects_size())
 			{
-				min = 0;
-				max = 0;
+				return;
+			}
+
+			if (effectIndex >= spell.effects_size())
+			{
 				return;
 			}
 
 			const auto& effect = spell.effects(effectIndex);
-			min = std::abs(effect.basepoints());
-			max = std::abs(effect.basepoints() + effect.diesides());
+
+			int32 minPoints = 0, maxPoints = 0;
+			CalculateEffectBasePoints(effect, spell, level, minPoints, maxPoints);
+
+			min = std::abs(minPoints);
+			max = std::abs(maxPoints);
 		}
 
 		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)
@@ -351,6 +383,8 @@ namespace mmo
 			{
 				return "<NULL>";
 			}
+
+			int32 level = Script_UnitLevel("player");
 
 			std::ostringstream strm;
 
@@ -411,7 +445,7 @@ namespace mmo
 							i++;
 						}
 
-						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
 						strm << min;
 						break;
 
@@ -421,7 +455,7 @@ namespace mmo
 							effectIndex = desc[i + 1] - '0';
 							i++;
 						}
-						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
 						strm << max;
 						break;
 
@@ -433,7 +467,7 @@ namespace mmo
 							i++;
 						}
 
-						Spell_GetEffectPoints(*spell, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
 						if (min == max)
 						{
 							strm << min;
