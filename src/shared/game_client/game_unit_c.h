@@ -3,9 +3,13 @@
 #include "game_object_c.h"
 #include "game/movement_info.h"
 #include "shared/client_data/spells.pb.h"
+#include "game/creature_data.h"
 
 namespace mmo
 {
+	class GameUnitC;
+	class GamePlayerC;
+
 	/// @brief An interface for handling client network events related to units.
 	class NetClient : public NonCopyable
 	{
@@ -18,6 +22,10 @@ namespace mmo
 
 		/// @brief An attack stop request happened.
 		virtual void SendAttackStop(const GameTime timestamp) = 0;
+
+		virtual void GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player) = 0;
+
+		virtual void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) = 0;
 	};
 
 	/// @brief Base class for a unit in the game client. A unit is a living object in the game world which can be interacted with,
@@ -128,6 +136,9 @@ namespace mmo
 
 		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
 
+		void SetCreatureInfo(const CreatureInfo& creatureInfo) { m_creatureInfo = creatureInfo; }
+
+		const String& GetName() const override;
 
 	public:
 		/// @brief Returns the current movement information of this unit.
@@ -149,5 +160,7 @@ namespace mmo
 		std::weak_ptr<GameUnitC> m_targetUnit;
 
 		float m_unitSpeed[movement_type::Count];
+
+		CreatureInfo m_creatureInfo;
 	};
 }

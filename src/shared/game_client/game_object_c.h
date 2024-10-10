@@ -6,6 +6,8 @@
 #include "scene_graph/scene_node.h"
 #include "game/object_type_id.h"
 
+#include <memory>
+
 namespace io
 {
 	class Reader;
@@ -16,7 +18,7 @@ namespace mmo
 	class Scene;
 
 	/// @brief Represents a game object at the client.
-	class GameObjectC : public NonCopyable
+	class GameObjectC : public NonCopyable, public std::enable_shared_from_this<GameObjectC>
 	{
 	public:
 		signal<void(uint64, uint16, uint16)> fieldsChanged;
@@ -66,6 +68,8 @@ namespace mmo
 			ang = (ang >= 0) ? ang : 2 * Pi + ang;
 			return Radian(ang);
 		}
+
+		virtual const String& GetName() const;
 
 	public:
 		virtual void Deserialize(io::Reader& reader, bool complete);

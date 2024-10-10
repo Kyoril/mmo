@@ -48,6 +48,12 @@ namespace mmo
 		
 	}
 
+	const String& GameObjectC::GetName() const
+	{
+		static String unknown = "Unknown";
+		return unknown;
+	}
+
 	void GameObjectC::Deserialize(io::Reader& reader, bool creation)
 	{
 		uint32 updateFlags = 0;

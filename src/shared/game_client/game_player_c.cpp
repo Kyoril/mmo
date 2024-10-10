@@ -8,6 +8,8 @@ namespace mmo
 	void GamePlayerC::Deserialize(io::Reader& reader, bool complete)
 	{
 		GameUnitC::Deserialize(reader, complete);
+
+		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 	}
 
 	void GamePlayerC::Update(float deltaTime)
@@ -75,6 +77,16 @@ namespace mmo
 	void GamePlayerC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::PlayerFieldCount);
+	}
+
+	const String& GamePlayerC::GetName() const
+	{
+		if (m_name.empty())
+		{
+			return GameObjectC::GetName();
+		}
+
+		return m_name;
 	}
 
 	void GamePlayerC::SetupSceneObjects()

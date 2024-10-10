@@ -30,17 +30,11 @@
 #include "terrain/terrain.h"
 #include "ui/binding.h"
 #include "ui/world_text_frame.h"
+#include "game/creature_data.h"
 
 namespace mmo
 {
 	class TimerQueue;
-
-	struct CreatureInfo
-	{
-		uint64 id;
-		String name;
-		String description;
-	};
 
 	struct ItemInfo
 	{
@@ -296,5 +290,9 @@ namespace mmo
 		{
 			return s_inputControl;
 		}
+
+		void GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
+
+		void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) override;
 	};
 }

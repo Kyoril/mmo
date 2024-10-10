@@ -72,6 +72,13 @@ namespace mmo
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
 		}
+
+		// TODO: Get npc name
+		uint32 entryId = Get<uint32>(object_fields::Entry);
+		if (entryId)
+		{
+			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+		}
 	}
 
 	void GameUnitC::Update(float deltaTime)
@@ -318,5 +325,15 @@ namespace mmo
 		// Send stop attack
 		m_victim = 0;
 		m_netDriver.SendAttackStop(GetAsyncTimeMs());
+	}
+
+	const String& GameUnitC::GetName() const
+	{
+		if (m_creatureInfo.name.empty())
+		{
+			return GameObjectC::GetName();
+		}
+
+		return m_creatureInfo.name;
 	}
 }

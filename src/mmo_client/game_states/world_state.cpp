@@ -2155,4 +2155,26 @@ namespace mmo
 			32 - floor(camPos.x / terrain::constants::PageSize)),
 			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
 	}
+
+	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
+	{
+		m_playerNameCache.Get(guid, [player](uint64, const String& name)
+		{
+			if (const std::shared_ptr<GamePlayerC> strong = player.lock())
+			{
+				strong->SetName(name);
+			}
+		});
+	}
+
+	void WorldState::GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature)
+	{
+		m_creatureCache.Get(guid, [creature](uint64, const CreatureInfo& data)
+		{
+			if (const std::shared_ptr<GameUnitC> strong = creature.lock())
+			{
+				strong->SetCreatureInfo(data);
+			}
+		});
+	}
 }

@@ -248,7 +248,7 @@ namespace mmo
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
-				return "UNIT";
+				return unit->GetName();
 			}
 
 			return "Unknown";
