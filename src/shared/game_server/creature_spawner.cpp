@@ -51,6 +51,17 @@ namespace mmo
 		auto spawned = m_world.CreateCreature(m_entry, location, o, m_spawnEntry.radius());
 		spawned->ClearFieldChanges();
 
+		CreatureMovement movement = creature_movement::None;
+		if (m_spawnEntry.movement() >= creature_movement::Invalid)
+		{
+			WLOG("Invalid movement type for creature spawn - spawn ignored");
+		}
+		else
+		{
+			movement = static_cast<CreatureMovement>(m_spawnEntry.movement());
+		}
+		spawned->SetMovementType(movement);
+
 		// watch for destruction
 		spawned->destroy = [this]<typename TUnit>(TUnit&& destroyedUnit) { OnRemoval(std::forward<TUnit>(destroyedUnit)); };
 		m_world.AddGameObject(*spawned);

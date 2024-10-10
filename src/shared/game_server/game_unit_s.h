@@ -116,6 +116,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class FactionTemplateEntry;
 		class SpellEntry;
 	}
 
@@ -381,9 +382,17 @@ namespace mmo
 		/// unless you know what you're doing.
 		void ApplySpeedChange(MovementType type, float speed, bool initial = false);
 
-	protected:
 		uint32 CalculateArmorReducedDamage(uint32 attackerLevel, uint32 damage) const;
 
+		/// If this returns true, the other unit is an enemy and we can attack it.
+		bool UnitIsEnemy(const GameUnitS& other) const;
+
+		/// If this returns true, the unit is a friend of us and thus we can not attack it.
+		bool UnitIsFriendly(const GameUnitS& other) const;
+
+		const proto::FactionTemplateEntry* GetFactionTemplate() const;
+
+	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
 		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
@@ -463,6 +472,11 @@ namespace mmo
 		std::array<float, movement_type::Count> m_speedBonus;
 		IdGenerator<uint32> m_ackGenerator;
 		std::list<PendingMovementChange> m_pendingMoveChanges;
+
+		float m_manaRegenPerTick = 0.0f;
+		float m_healthRegenPerTick = 0.0f;
+
+		mutable const proto::FactionTemplateEntry* m_cachedFactionTemplate = nullptr;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

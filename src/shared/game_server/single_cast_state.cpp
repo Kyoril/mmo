@@ -328,6 +328,8 @@ namespace mmo
 		switch (effect.targeta())
 		{
 		case spell_effect_targets::Caster:
+		case spell_effect_targets::NearbyParty:
+			// TODO: Nearby party
 			return std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
 		case spell_effect_targets::TargetAlly:
 		case spell_effect_targets::TargetEnemy:
@@ -339,7 +341,29 @@ namespace mmo
 					return nullptr;
 				}
 
-				return std::dynamic_pointer_cast<GameUnitS>(targetObject->shared_from_this());
+				auto unit = std::dynamic_pointer_cast<GameUnitS>(targetObject->shared_from_this());
+				if (unit)
+				{
+					switch (effect.targeta())
+					{
+					case spell_effect_targets::TargetAlly:
+						if (!m_cast.GetExecuter().UnitIsFriendly(*unit))
+						{
+							// Target has to be an ally but is not
+							return nullptr;
+						}
+						break;
+					case spell_effect_targets::TargetEnemy:
+						if (!m_cast.GetExecuter().UnitIsEnemy(*unit))
+						{
+							// Target has to be an enemy but is not
+							return nullptr;
+						}
+						break;
+					}
+				}
+
+				return unit;
 			}
 		default:
 			return nullptr;
@@ -442,38 +466,20 @@ namespace mmo
 			{se::Heal,					std::bind(&SingleCastState::SpellEffectHeal, this, std::placeholders::_1)},
 			{se::Bind,					std::bind(&SingleCastState::SpellEffectBind, this, std::placeholders::_1)},
 			{se::QuestComplete,			std::bind(&SingleCastState::SpellEffectQuestComplete, this, std::placeholders::_1)},
-			{se::Proficiency,				std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)},
-			{se::AddComboPoints,			std::bind(&SingleCastState::SpellEffectAddComboPoints, this, std::placeholders::_1)},
-			{se::Duel,					std::bind(&SingleCastState::SpellEffectDuel, this, std::placeholders::_1)},
 			{se::WeaponDamageNoSchool,	std::bind(&SingleCastState::SpellEffectWeaponDamageNoSchool, this, std::placeholders::_1)},
 			{se::CreateItem,				std::bind(&SingleCastState::SpellEffectCreateItem, this, std::placeholders::_1)},
 			{se::WeaponDamage,			std::bind(&SingleCastState::SpellEffectWeaponDamage, this, std::placeholders::_1)},
 			{se::TeleportUnits,			std::bind(&SingleCastState::SpellEffectTeleportUnits, this, std::placeholders::_1)},
-			{se::TriggerSpell,			std::bind(&SingleCastState::SpellEffectTriggerSpell, this, std::placeholders::_1)},
 			{se::Energize,				std::bind(&SingleCastState::SpellEffectEnergize, this, std::placeholders::_1)},
 			{se::WeaponPercentDamage,		std::bind(&SingleCastState::SpellEffectWeaponPercentDamage, this, std::placeholders::_1)},
-			{se::PowerBurn,				std::bind(&SingleCastState::SpellEffectPowerBurn, this, std::placeholders::_1)},
 			{se::OpenLock,				std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1)},
-			{se::OpenLockItem,			std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1) },
-			{se::ApplyAreaAuraParty,		std::bind(&SingleCastState::SpellEffectApplyAreaAuraParty, this, std::placeholders::_1)},
 			{se::Dispel,					std::bind(&SingleCastState::SpellEffectDispel, this, std::placeholders::_1)},
 			{se::Summon,					std::bind(&SingleCastState::SpellEffectSummon, this, std::placeholders::_1)},
 			{se::SummonPet,				std::bind(&SingleCastState::SpellEffectSummonPet, this, std::placeholders::_1) },
-			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScript, this, std::placeholders::_1)},
-			{se::AttackMe,				std::bind(&SingleCastState::SpellEffectAttackMe, this, std::placeholders::_1)},
-			{se::NormalizedWeaponDmg,		std::bind(&SingleCastState::SpellEffectNormalizedWeaponDamage, this, std::placeholders::_1)},
-			{se::StealBeneficialBuff,		std::bind(&SingleCastState::SpellEffectStealBeneficialBuff, this, std::placeholders::_1)},
-			{se::InterruptCast,			std::bind(&SingleCastState::SpellEffectInterruptCast, this, std::placeholders::_1) },
 			{se::LearnSpell,				std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
-			{se::ScriptEffect,			std::bind(&SingleCastState::SpellEffectScriptEffect, this, std::placeholders::_1) },
-			{se::DispelMechanic,			std::bind(&SingleCastState::SpellEffectDispelMechanic, this, std::placeholders::_1) },
 			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
-			{se::ResurrectNew,			std::bind(&SingleCastState::SpellEffectResurrectNew, this, std::placeholders::_1) },
-			{se::KnockBack,				std::bind(&SingleCastState::SpellEffectKnockBack, this, std::placeholders::_1) },
-			{se::TransDoor,				std::bind(&SingleCastState::SpellEffectTransDoor, this, std::placeholders::_1) },
 			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
 			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
-			{se::ApplyAreaAuraParty,		std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
 			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)}
 		};
 
@@ -631,18 +637,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect)
 	{
-		auto unitTarget = GetEffectUnitTarget(effect);
-		if (!unitTarget)
-		{
-			return;
-		}
-
-		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));	// TODO: Weapon damage!
-		unitTarget->Damage(damageAmount, spell_school::Normal, &m_cast.GetExecuter());
-
-		// Log spell damage to client
-		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, spell_school::Normal, DamageFlags::None, m_spell);
+		InternalSpellEffectWeaponDamage(effect, SpellSchool::Normal);
 	}
 
 	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
@@ -679,18 +674,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectWeaponDamage(const proto::SpellEffect& effect)
 	{
-		auto unitTarget = GetEffectUnitTarget(effect);
-		if (!unitTarget)
-		{
-			return;
-		}
-
-		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));	// TODO: Weapon damage!
-		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
-
-		// Log spell damage to client
-		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
+		InternalSpellEffectWeaponDamage(effect, static_cast<SpellSchool>(m_spell.spellschool()));
 	}
 
 	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
@@ -727,6 +711,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect)
 	{
+		InternalSpellEffectWeaponDamage(effect, static_cast<SpellSchool>(m_spell.spellschool()));
 	}
 
 	void SingleCastState::SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect)
@@ -767,6 +752,40 @@ namespace mmo
 
 	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
 	{
+	}
+
+	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		const float minDamage = m_cast.GetExecuter().Get<float>(object_fields::MinDamage);
+		const float maxDamage = m_cast.GetExecuter().Get<float>(object_fields::MaxDamage);
+		const uint32 casterLevel = m_cast.GetExecuter().Get<uint32>(object_fields::Level);
+
+		const int32 bonus = CalculateEffectBasePoints(effect);
+
+		// Calculate damage between minimum and maximum damage
+		std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
+		uint32 totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, static_cast<uint32>(distribution(randomGenerator)));
+
+		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
+		const float critChance = 5.0f;			// 5% crit chance hard coded for now
+		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+
+		bool isCrit = false;
+		if (critDistribution(randomGenerator) < critChance)
+		{
+			isCrit = true;
+			totalDamage *= 2;
+		}
+
+		// Log spell damage to client
+		unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter());
+		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
 	}
 
 	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)

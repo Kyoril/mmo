@@ -32,6 +32,7 @@ namespace mmo
 		"Portal Teleport",
 		"Teleport Units",
 		"Apply Aura",
+		"Environmental Damage",
 		"Power Drain",
 		"Health Leech",
 		"Heal",
@@ -56,6 +57,19 @@ namespace mmo
 		"Trigger Missile",
 		"Open Lock",
 		"Learn Spell",
+		"Spell Defense",
+		"Dispel",
+		"Language",
+		"Dual Wield",
+		"Teleport Units Face Caster",
+		"Skill Step",
+		"Spawn",
+		"Trade Skill",
+		"Stealth",
+		"Detect",
+		"Tame Creature",
+		"Summon Pet",
+		"Learn Pet Spell",
 		"Weapon Damage +"
 	};
 

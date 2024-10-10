@@ -38,6 +38,16 @@ message ClassEntry {
 	optional float attackPowerPerLevel = 9;
 	optional float attackPowerOffset = 10;
 	repeated AttackPowerStatSource attackPowerStatSources = 11;
+	// How much mana is regenerated per tick. If this value is 10, then 10 mana is regenerated every tick (+ spirit).
+	optional float baseManaRegenPerTick = 12;
+	// How much spirit is converted to 1 mana per tick. If this value is 5, then 10 spirit will regenerate 2 mana per regen tick.
+	optional float spiritPerManaRegen = 13;
+	// How much health is regnerated per tick.
+	optional float healthRegenPerTick = 14;
+	// How much spirit is converted to 1 health per tick.
+	optional float spiritPerHealthRegen = 15;
+
+
 }
 
 message Classes {

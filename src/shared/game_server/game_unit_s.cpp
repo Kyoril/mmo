@@ -549,8 +549,15 @@ namespace mmo
 			return;
 		}
 
-		m_victim = victim;
 		SetTarget(victim ? victim->GetGuid() : 0);
+		if (victim->GetGuid() == GetGuid() || !UnitIsEnemy(*victim))
+		{
+			// Unit is not an enemy, so we wont attack
+			StopAttack();
+			return;
+		}
+
+		m_victim = victim;
 
 		const GameTime now = GetAsyncTimeMs();
 
@@ -576,7 +583,6 @@ namespace mmo
 	{
 		m_attackSwingCountdown.Cancel();
 		m_victim.reset();
-		SetTarget(0);
 
 		const GameTime now = GetAsyncTimeMs();
 
@@ -802,11 +808,97 @@ namespace mmo
 		return damage - static_cast<uint32>(damage * factor);
 	}
 
+	bool GameUnitS::UnitIsEnemy(const GameUnitS& other) const
+	{
+		const proto::FactionTemplateEntry* faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry* otherFaction = other.GetFactionTemplate();
+
+		if (!faction || !otherFaction)
+		{
+			return false;
+		}
+
+		for (int i = 0; i < faction->enemies_size(); ++i)
+		{
+			const auto& enemy = faction->enemies(i);
+			if (enemy == otherFaction->faction())
+			{
+				return true;
+			}
+		}
+
+		for (int i = 0; i < faction->friends_size(); ++i)
+		{
+			const auto& friendly = faction->friends(i);
+			if (friendly == otherFaction->faction())
+			{
+				return false;
+			}
+		}
+
+		if (faction->enemymask() != 0 &&(faction->enemymask() & otherFaction->selfmask()) != 0)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	bool GameUnitS::UnitIsFriendly(const GameUnitS& other) const
+	{
+		const proto::FactionTemplateEntry* faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry* otherFaction = other.GetFactionTemplate();
+
+		if (!faction || !otherFaction)
+		{
+			return false;
+		}
+
+		for (int i = 0; i < faction->enemies_size(); ++i)
+		{
+			const auto& enemy = faction->enemies(i);
+			if (enemy == otherFaction->faction())
+			{
+				return false;
+			}
+		}
+
+		for (int i = 0; i < faction->friends_size(); ++i)
+		{
+			const auto& friendly = faction->friends(i);
+			if (friendly == otherFaction->faction())
+			{
+				return true;
+			}
+		}
+
+		return (faction->friendmask() & otherFaction->selfmask()) != 0;
+	}
+
+	const proto::FactionTemplateEntry* GameUnitS::GetFactionTemplate() const
+	{
+		// Do we have a cache?
+		if (m_cachedFactionTemplate)
+		{
+			// Check if cache is still valid
+			if (Get<uint32>(object_fields::FactionTemplate) == m_cachedFactionTemplate->id())
+			{
+				// All good, return cache
+				return m_cachedFactionTemplate;
+			}
+		}
+
+		// Refresh or build cache
+		m_cachedFactionTemplate = m_project.factionTemplates.getById(Get<uint32>(object_fields::FactionTemplate));
+		return m_cachedFactionTemplate;
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast(spell_interrupt_flags::Any);
 
 		StopAttack();
+		SetTarget(0);
 		StopRegeneration();
 
 		Set<uint64>(object_fields::TargetUnit, 0);
@@ -872,7 +964,7 @@ namespace mmo
 		const uint32 maxHealth = GetMaxHealth();
 		uint32 health = GetHealth();
 
-		health += 9;
+		health += m_healthRegenPerTick;
 		if (health > maxHealth) health = maxHealth;
 
 		Set<uint32>(object_fields::Health, health);
@@ -904,7 +996,7 @@ namespace mmo
 			if (power > maxPower) power = maxPower;
 			break;
 		case power_type::Mana:
-			power += 9;
+			power += m_manaRegenPerTick;
 			if (power > maxPower) power = maxPower;
 			break;
 		}

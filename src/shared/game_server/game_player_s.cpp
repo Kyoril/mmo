@@ -28,6 +28,8 @@ namespace mmo
 
 		Set<int32>(object_fields::MaxLevel, classEntry.levelbasevalues_size());
 		Set<int32>(object_fields::PowerType, classEntry.powertype());
+
+		RefreshStats();
 	}
 
 	void GamePlayerS::SetRace(const proto::RaceEntry& raceEntry)
@@ -132,6 +134,20 @@ namespace mmo
 		{
 			Set<uint32>(object_fields::Mana, maxMana);
 		}
+
+		if (m_classEntry->spiritperhealthregen() != 0.0f)
+		{
+			m_healthRegenPerTick = (Get<uint32>(object_fields::StatSpirit) / m_classEntry->spiritperhealthregen());
+		}
+		m_healthRegenPerTick += m_classEntry->healthregenpertick();
+		if (m_healthRegenPerTick < 0.0f) m_healthRegenPerTick = 0.0f;
+		
+		if (m_classEntry->spiritpermanaregen() != 0.0f)
+		{
+			m_manaRegenPerTick = (Get<uint32>(object_fields::StatSpirit) / m_classEntry->spiritpermanaregen());
+		}
+		m_manaRegenPerTick += m_classEntry->basemanaregenpertick();
+		if (m_manaRegenPerTick < 0.0f) m_manaRegenPerTick = 0.0f;
 
 		UpdateDamage();
 	}

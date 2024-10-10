@@ -42,12 +42,10 @@ namespace mmo
 				}
 
 				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
-				const GamePlayerS* otherPlayer = dynamic_cast<GamePlayerS*>(&unit);
-				if (otherPlayer == nullptr)
+				if (!controlled.UnitIsEnemy(unit))
 				{
 					return false;
 				}
-
 
 				const int32 ourLevel = controlled.Get<int32>(object_fields::Level);
 				const int32 otherLevel = unit.Get<int32>(object_fields::Level);
@@ -77,11 +75,10 @@ namespace mmo
 				return true;
 			});
 
-		OnTargetReached();
-
 		ASSERT(m_unitWatcher);
 		m_unitWatcher->Start();
 
+		OnCreatureMovementChanged();
 	}
 
 	void CreatureAIIdleState::OnLeave()
@@ -96,6 +93,10 @@ namespace mmo
 
 	void CreatureAIIdleState::OnCreatureMovementChanged()
 	{
+		if (GetControlled().GetMovementType() == creature_movement::Random)
+		{
+			OnTargetReached();
+		}
 	}
 
 	void CreatureAIIdleState::OnControlledMoved()

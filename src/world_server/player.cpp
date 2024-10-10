@@ -757,6 +757,7 @@ namespace mmo
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
 		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth));
+		m_character->StartRegeneration();
 	}
 
 	bool ValidateSpeedAck(const PendingMovementChange& change, float receivedSpeed, MovementType& outMoveTypeSent)

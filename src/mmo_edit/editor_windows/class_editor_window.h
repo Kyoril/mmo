@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "editor_entry_window_base.h"
 #include "base/non_copyable.h"
 
 #include "editor_window_base.h"
@@ -14,7 +15,7 @@ namespace mmo
 {
 	/// Manages the available model files in the asset registry.
 	class ClassEditorWindow final
-		: public EditorWindowBase
+		: public EditorEntryWindowBase<proto::Classes, proto::ClassEntry>
 		, public NonCopyable
 	{
 	public:
@@ -22,8 +23,9 @@ namespace mmo
 		~ClassEditorWindow() override = default;
 
 	public:
-		/// Draws the viewport window.
-		bool Draw() override;
+		void DrawDetailsImpl(EntryType& currentEntry) override;
+
+		void OnNewEntry(proto::TemplateManager<proto::Classes, proto::ClassEntry>::EntryType& entry) override;
 
 	public:
 		bool IsDockable() const noexcept override { return true; }

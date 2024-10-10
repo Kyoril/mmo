@@ -3,6 +3,7 @@
 #include "creature_ai.h"
 #include "game_creature_s.h"
 #include "universe.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -227,6 +228,7 @@ namespace mmo
 			m_threat.empty())
 		{
 			controlled.StopAttack();
+			controlled.SetTarget(0);
 			ChooseNextAction();
 		}
 	}
@@ -302,6 +304,7 @@ namespace mmo
 		else if (!newVictim)
 		{
 			controlled.StopAttack();
+			controlled.SetTarget(0);
 		}
 	}
 

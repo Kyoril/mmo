@@ -23,6 +23,7 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.GetMover().StopMovement();
 		controlled.StopAttack();
+		controlled.SetTarget(0);
 
 		// TODO: Calculate correct amount of XP to award to the participant
 		const int32 xp = 55;

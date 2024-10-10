@@ -193,6 +193,9 @@ namespace mmo
 		void SpellEffectTransDoor(const proto::SpellEffect& effect);
 
 	private:
+		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);
+
+	private:
 		AuraContainer& GetOrCreateAuraContainer(GameUnitS& target);
 
 	private:

@@ -123,6 +123,134 @@ namespace mmo
 				ImGui::EndTable();
 			}
 		}
+
+		static const char* s_none = "<None>";
+
+		if (ImGui::CollapsingHeader("Friends", ImGuiTreeNodeFlags_None))
+		{
+			// Add button
+			if (ImGui::Button("Add Friend", ImVec2(-1, 0)))
+			{
+				currentEntry.add_friends(0);
+			}
+
+			if (ImGui::BeginTable("friends", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.friends_size(); ++index)
+				{
+					uint32 currentFriend = currentEntry.friends(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					ImGui::Text("%d", index);
+					ImGui::TableNextColumn();
+
+					const auto* friendEntry = m_project.factions.getById(currentEntry.friends(index));
+					if (ImGui::BeginCombo("##friend", friendEntry != nullptr ? friendEntry->name().c_str() : s_none, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.factions.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.factions.getTemplates().entry(i).id() == currentEntry.friends(index);
+							const char* item_text = m_project.factions.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentEntry.mutable_friends()->Set(index, m_project.factions.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_friends()->erase(currentEntry.mutable_friends()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Enemies", ImGuiTreeNodeFlags_None))
+		{
+			// Add button
+			if (ImGui::Button("Add Enemy", ImVec2(-1, 0)))
+			{
+				currentEntry.add_enemies(0);
+			}
+
+			if (ImGui::BeginTable("enemies", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.enemies_size(); ++index)
+				{
+					uint32 currentEnemy = currentEntry.enemies(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					ImGui::Text("%d", index);
+					ImGui::TableNextColumn();
+
+					const auto* enemyEntry = m_project.factions.getById(currentEnemy);
+					if (ImGui::BeginCombo("##enemy", enemyEntry != nullptr ? enemyEntry->name().c_str() : s_none, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.factions.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.factions.getTemplates().entry(i).id() == currentEntry.enemies(index);
+							const char* item_text = m_project.factions.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentEntry.mutable_enemies()->Set(index, m_project.factions.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_enemies()->erase(currentEntry.mutable_enemies()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
 	}
 
 	void FactionTemplateEditorWindow::OnNewEntry(proto::TemplateManager<ArrayType, EntryType>::EntryType& entry)

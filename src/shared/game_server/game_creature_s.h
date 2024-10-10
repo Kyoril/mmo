@@ -15,6 +15,21 @@ namespace mmo
 		class ItemEntry;
 	}
 
+	namespace creature_movement
+	{
+		enum Type
+		{
+			None = 0,
+			Random = 1,
+			Waypoints = 2,
+
+			Invalid,
+			Count_ = Invalid
+		};
+	}
+
+	typedef creature_movement::Type CreatureMovement;
+
 	/// Represents an AI controlled creature unit in the game.
 	class GameCreatureS final : public GameUnitS
 	{
@@ -69,6 +84,10 @@ namespace mmo
 			m_combatParticipantGuids.clear();
 		}
 
+		CreatureMovement GetMovementType() const { return m_movement; }
+
+		void SetMovementType(CreatureMovement movementType);
+
 		/// Executes a callback function for every valid loot recipient.
 		template<typename OnParticipant>
 		void ForEachCombatParticipant(OnParticipant callback)
@@ -94,5 +113,6 @@ namespace mmo
 		const proto::UnitEntry* m_entry;
 		scoped_connection m_onSpawned;
 		std::set<uint64> m_combatParticipantGuids;
+		CreatureMovement m_movement;
 	};
 }

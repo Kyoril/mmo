@@ -7,6 +7,8 @@
 
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
+#include "math/degree.h"
+#include "math/radian.h"
 
 namespace mmo
 {
@@ -164,20 +166,18 @@ namespace mmo
 					{
 						auto* spawn = currentEntry->mutable_unitspawns()->Mutable(currentCreatureSpawn);
 
-						float x = spawn->positionx();
-						if (ImGui::InputFloat("Position X", &x))
+						float position[3] = { spawn->positionx(), spawn->positiony(), spawn->positionz() };
+						if (ImGui::InputFloat3("Spawn Position", position, "%.3f"))
 						{
-							spawn->set_positionx(x);
+							spawn->set_positionx(position[0]);
+							spawn->set_positionx(position[1]);
+							spawn->set_positionx(position[2]);
 						}
-						float y = spawn->positiony();
-						if (ImGui::InputFloat("Position Y", &y))
+
+						float rotation = Radian(spawn->rotation()).GetValueDegrees();
+						if (ImGui::InputFloat("Spawn Rotation in Degrees", &rotation))
 						{
-							spawn->set_positiony(y);
-						}
-						float z = spawn->positionz();
-						if (ImGui::InputFloat("Position Z", &z))
-						{
-							spawn->set_positionz(z);
+							spawn->set_rotation(Degree(rotation).GetValueRadians());
 						}
 
 						bool isActive = spawn->isactive();

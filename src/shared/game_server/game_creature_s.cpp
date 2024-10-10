@@ -55,4 +55,13 @@ namespace mmo
 	{
 		m_combatParticipantGuids.erase(unitGuid);
 	}
+
+	void GameCreatureS::SetMovementType(CreatureMovement movementType)
+	{
+		if (m_movement != movementType)
+		{
+			m_movement = movementType;
+			m_ai->OnCreatureMovementChanged();
+		}
+	}
 }
