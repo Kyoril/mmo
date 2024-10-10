@@ -337,6 +337,10 @@ namespace mmo
 			// Chase the target
 			GetControlled().GetMover().MoveTo(newTargetLocation);
 		}
+		else
+		{
+			GetControlled().Relocate(GetControlled().GetPosition(), GetControlled().GetAngle(target));
+		}
 	}
 
 	void CreatureAICombatState::ChooseNextAction()

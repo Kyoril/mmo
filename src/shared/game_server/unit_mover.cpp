@@ -59,17 +59,17 @@ namespace mmo
 				// Fire signal since we reached our target
 				targetReached();
 
-				Radian angle = GetMoved().GetFacing();
+				const Radian o = GetMoved().GetAngle(m_target.x, m_target.z);
 				auto& target = m_target;
 
 				// Update creatures position
 				const auto strongUnit = GetMoved().shared_from_this();
 				std::weak_ptr weakUnit(strongUnit);
-				GetMoved().GetWorldInstance()->GetUniverse().Post([weakUnit, target, angle]()
+				GetMoved().GetWorldInstance()->GetUniverse().Post([weakUnit, target, o]()
 					{
 						if (const auto strongUnit = weakUnit.lock())
 						{
-							strongUnit->Relocate(target, angle);
+							strongUnit->Relocate(target, o);
 						}
 					});
 			});
@@ -146,10 +146,10 @@ namespace mmo
 	{
 		auto& moved = GetMoved();
 
-		/*if (!moved.IsAlive() || moved.IsStunned() || moved.IsRootedForMovement())
+		if (!moved.IsAlive() /*|| moved.IsStunned() || moved.IsRootedForMovement()*/)
 		{
 			return false;
-		}*/
+		}
 
 		// Get current location
 		m_customSpeed = true;
@@ -170,12 +170,8 @@ namespace mmo
 			m_moveUpdated.Cancel();
 
 			// Calculate our orientation
-			const float dx = target.x - currentLoc.x;
-			const float dy = target.z - currentLoc.z;
-			float o = ::atan2(dy, dx);
-			o = (o >= 0) ? o : 2 * 3.1415927f + o;
-
-			moved.Relocate(currentLoc, Radian(o));
+			const Radian o = moved.GetAngle(target.x, target.z);
+			moved.Relocate(currentLoc, o);
 		}
 
 		auto* world = moved.GetWorldInstance();
