@@ -2,6 +2,8 @@
 
 #include "selectable.h"
 
+#include <functional>
+
 namespace mmo
 {
 	class MapEntity;
@@ -9,7 +11,7 @@ namespace mmo
 	class SelectedMapEntity : public Selectable
 	{
 	public:
-		SelectedMapEntity(MapEntity& entity);
+		SelectedMapEntity(MapEntity& entity, const std::function<void(Selectable&)>& duplication);
 
 	public:
 		// Inherited via Selectable
@@ -24,8 +26,10 @@ namespace mmo
 		void SetPosition(const Vector3& position) const override;
 		void SetOrientation(const Quaternion& orientation) const override;
 		void SetScale(const Vector3& scale) const override;
+		void Duplicate() override;
 
 	private:
 		MapEntity& m_entity;
+		std::function<void(Selectable&)> m_duplication;
 	};
 }

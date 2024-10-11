@@ -99,6 +99,19 @@ namespace mmo
 
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
+		m_transformWidget->copySelection += [this]()
+		{
+			if (m_selection.IsEmpty())
+			{
+				return;
+			}
+
+			// Copy selection
+			for(const auto& selected : m_selection.GetSelectedObjects())
+			{
+				selected->Duplicate();
+			}
+		};
 
 		// Setup terrain
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
@@ -343,6 +356,11 @@ namespace mmo
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
 
+		if (ImGui::IsKeyPressed(ImGuiKey_LeftAlt, false))
+		{
+			m_transformWidget->SetCopyMode(true);
+		}
+
 		if (ImGui::IsKeyPressed(ImGuiKey_1, false))
 		{
 			m_transformWidget->SetTransformMode(TransformMode::Translate);
@@ -350,10 +368,6 @@ namespace mmo
 		if (ImGui::IsKeyPressed(ImGuiKey_2, false))
 		{
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
-		}
-		if (ImGui::IsKeyPressed(ImGuiKey_3, false))
-		{
-			m_transformWidget->SetTransformMode(TransformMode::Scale);
 		}
 
 		if (ImGui::Begin(detailsId.c_str()))
@@ -377,29 +391,6 @@ namespace mmo
 
 			if (!m_selection.IsEmpty())
 			{
-				// Transform rotation into human readable format
-				Matrix3 rot;
-				m_selection.GetSelectedObjects().back()->GetOrientation().ToRotationMatrix(rot);
-
-				// Compute Pitch
-				float pitchRad = std::asin(-rot[0][2]);
-				float cosPitch = std::cos(pitchRad);
-				float yawRad, rollRad;
-
-				if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
-				{
-					// Compute Yaw
-					yawRad = std::atan2(rot[0][1], rot[0][0]);
-					// Compute Roll
-					rollRad = std::atan2(rot[1][2], rot[2][2]);
-				}
-				else
-				{
-					// Gimbal lock case
-					yawRad = 0.0f;
-					rollRad = std::atan2(-rot[2][1], rot[1][1]);
-				}
-
 				Vector3 position = m_selection.GetSelectedObjects().back()->GetPosition();
 				Vector3 scale = m_selection.GetSelectedObjects().back()->GetScale();
 
@@ -408,16 +399,19 @@ namespace mmo
 					m_selection.GetSelectedObjects().back()->SetPosition(position);
 				}
 
-				float angles[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees() };
+				Rotator rotation = m_selection.GetSelectedObjects().back()->GetOrientation().ToRotator();
+
+				float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
 				if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
 				{
-					Quaternion qRoll(Degree(angles[0]), Vector3(1, 0, 0));
-					Quaternion qPitch(Degree(angles[2]), Vector3(0, 0, 1));
-					Quaternion qYaw(Degree(angles[1]), Vector3(0, 1, 0));
-					Quaternion rotation = (qYaw * qPitch * qRoll);
-					rotation.Normalize();
+					rotation.roll = angles[0];
+					rotation.pitch = angles[2];
+					rotation.yaw = angles[1];
 
-					m_selection.GetSelectedObjects().back()->SetOrientation(rotation);
+					Quaternion quaternion = Quaternion::FromRotator(rotation);
+					quaternion.Normalize();
+
+					m_selection.GetSelectedObjects().back()->SetOrientation(quaternion);
 				}
 
 				if (ImGui::InputFloat3("Scale", scale.Ptr()))
@@ -780,15 +774,18 @@ namespace mmo
 				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
 				if (mapEntity)
 				{
-					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity));
+					String asset = entity->GetMesh()->GetName().data();
+					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
+					{
+						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale());
+					}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 				}
 			}
 		}
 	}
 
-	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position,
-		const Quaternion& orientation, const Vector3& scale)
+	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
 	{
 		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);

@@ -50,6 +50,7 @@ namespace mmo
 	public:
 		signal<void()> modeChanged;
 		signal<void()> coordinateSystemChanged;
+		signal<void()> copySelection;
 
 	public:
 		explicit TransformWidget(Selection& selection, Scene& scene, Camera& camera);
@@ -71,6 +72,8 @@ namespace mmo
 		void OnMouseReleased(uint32 buttons, float x, float y);
 
 		void SetSnapToGrid(bool snap, float gridSize);
+
+		void SetCopyMode(bool copyMode);
 
 	private:
 		void UpdateTanslationAxisLines();

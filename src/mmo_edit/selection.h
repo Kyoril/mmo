@@ -32,6 +32,8 @@ namespace mmo
 
 		const bool IsEmpty() const;
 
+		void CopySelectedObjects();
+
 	private:
 		SelectionList m_selected;
 	};

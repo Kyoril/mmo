@@ -5,8 +5,9 @@
 
 namespace mmo
 {
-    SelectedMapEntity::SelectedMapEntity(MapEntity& entity)
+    SelectedMapEntity::SelectedMapEntity(MapEntity& entity, const std::function<void(Selectable&)>& duplication)
         : m_entity(entity)
+		, m_duplication(duplication)
     {
     }
 
@@ -69,5 +70,13 @@ namespace mmo
     {
 		m_entity.GetSceneNode().SetScale(scale);
 		scaleChanged(*this);
+    }
+
+    void SelectedMapEntity::Duplicate()
+    {
+        if (m_duplication)
+		{
+			m_duplication(*this);
+		}
     }
 }

@@ -197,7 +197,7 @@ namespace mmo
 			if (m_copyMode && m_active)
 			{
 				m_copyMode = false;
-				//ProjectManager.CopySelectedObjects();
+				copySelection();
 			}
 
 			Ray ray = m_dummyCamera->GetCameraToViewportRay(
@@ -265,6 +265,7 @@ namespace mmo
 	{
 		if (buttons == 0)
 		{
+			m_copyMode = false;
 			m_active = false;
 
 			switch (m_mode)
@@ -288,6 +289,11 @@ namespace mmo
 	{
 		m_snap = snap;
 		m_step = gridSize;
+	}
+
+	void TransformWidget::SetCopyMode(bool copyMode)
+	{
+		m_copyMode = copyMode;
 	}
 
 	void TransformWidget::UpdateTanslationAxisLines()

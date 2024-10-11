@@ -9,11 +9,17 @@
 #include <cstring>
 #include <utility>
 
+#include "degree.h"
+
 namespace mmo
 {
 	class Radian;
 	class Matrix3;
-	
+
+	struct Rotator
+	{
+		Degree roll, yaw, pitch;
+	};
 	
 	class Quaternion final
 	{
@@ -51,6 +57,98 @@ namespace mmo
 			: w(0), x(0), y(0), z(0)
 		{
 			std::memcpy(&w, arr, sizeof(float) * 4);
+		}
+
+	public:
+
+		float ClampAxis(float Angle) const
+		{
+			// returns Angle in the range (-360,360)
+			Angle = fmod(Angle, 360.0f);
+
+			if (Angle < 0.0f)
+			{
+				// shift to [0,360) range
+				Angle += 360.0f;
+			}
+
+			return Angle;
+		}
+
+		float NormalizeAxis(float Angle) const
+		{
+			// returns Angle in the range [0,360)
+			Angle = ClampAxis(Angle);
+
+			if (Angle > 180.0f)
+			{
+				// shift to (-180,180]
+				Angle -= 360.0f;
+			}
+
+			return Angle;
+		}
+
+		Rotator ToRotator() const
+		{
+			const float SingularityTest = z * x - w * y;
+			const float YawY = 2.f * (w * z + y * y);
+			const float YawX = (1.f - 2.f * (y * y + z * z));
+
+			const float SINGULARITY_THRESHOLD = 0.4999995f;
+			const float RAD_TO_DEG = (180.f / Pi);
+			float Pitch, Yaw, Roll;
+
+			if (SingularityTest < -SINGULARITY_THRESHOLD)
+			{
+				Pitch = -90.f;
+				Yaw = (atan2(YawY, YawX) * RAD_TO_DEG);
+				Roll = NormalizeAxis(-Yaw - (2.f * atan2(x, w) * RAD_TO_DEG));
+			}
+			else if (SingularityTest > SINGULARITY_THRESHOLD)
+			{
+				Pitch = 90.f;
+				Yaw = (atan2(YawY, YawX) * RAD_TO_DEG);
+				Roll = NormalizeAxis(Yaw - (2.f * atan2(x, w) * RAD_TO_DEG));
+			}
+			else
+			{
+				Pitch = (asin(2.f * SingularityTest) * RAD_TO_DEG);
+				Yaw = (atan2(YawY, YawX) * RAD_TO_DEG);
+				Roll = (atan2(-2.f * (w * x + y * z), (1.f - 2.f * (x * x + y * y))) * RAD_TO_DEG);
+			}
+
+			return { Degree(Roll), Degree(Yaw), Degree(Pitch) };
+		}
+
+		static inline void SinCos(float* ScalarSin, float* ScalarCos, float Value)
+		{
+			*ScalarSin = sin(Value);
+			*ScalarCos = cos(Value);
+		}
+
+		static Quaternion FromRotator(const Rotator& rotator)
+		{
+			const float DEG_TO_RAD = Pi / (180.f);
+			const float RADS_DIVIDED_BY_2 = DEG_TO_RAD / 2.f;
+			float SP, SY, SR;
+			float CP, CY, CR;
+
+			const float PitchNoWinding = fmod(rotator.pitch.GetValueDegrees(), 360.0f);
+			const float YawNoWinding = fmod(rotator.yaw.GetValueDegrees(), 360.0f);
+			const float RollNoWinding = fmod(rotator.roll.GetValueDegrees(), 360.0f);
+
+			SinCos(&SP, &CP, PitchNoWinding * RADS_DIVIDED_BY_2);
+			SinCos(&SY, &CY, YawNoWinding * RADS_DIVIDED_BY_2);
+			SinCos(&SR, &CR, RollNoWinding * RADS_DIVIDED_BY_2);
+
+			Quaternion RotationQuat;
+			RotationQuat.x = CR * SP * SY - SR * CP * CY;
+			RotationQuat.y = -CR * SP * CY - SR * CP * SY;
+			RotationQuat.z = CR * CP * SY - SR * SP * CY;
+			RotationQuat.w = CR * CP * CY + SR * SP * SY;
+
+			return RotationQuat;
 		}
 
 	public:

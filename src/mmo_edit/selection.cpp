@@ -49,4 +49,9 @@ namespace mmo
 	{
 		return m_selected.empty();
 	}
+
+	void Selection::CopySelectedObjects()
+	{
+
+	}
 }

@@ -156,7 +156,6 @@ namespace mmo
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
-		MapEntity* m_selectedMapEntity{ nullptr };
 		ImVec2 m_lastContentRectMin{};
 
 		std::map<uint16, WorldPage> m_pages;

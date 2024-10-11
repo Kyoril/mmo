@@ -21,6 +21,8 @@ namespace mmo
 		virtual ~Selectable() = default;
 
 	public:
+		virtual void Duplicate() = 0;
+
 		/// Translates the selected object.
 		/// @param delta The position offset.
 		virtual void Translate(const Vector3& delta) = 0;
