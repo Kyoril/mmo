@@ -88,6 +88,8 @@ namespace mmo
 
 		void SetMovementType(CreatureMovement movementType);
 
+		void RefreshStats() override;
+
 		/// Executes a callback function for every valid loot recipient.
 		template<typename OnParticipant>
 		void ForEachCombatParticipant(OnParticipant callback)

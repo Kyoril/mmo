@@ -33,6 +33,15 @@ namespace mmo
 				currentEntry.set_##name(value); \
 		} \
 	}
+#define SLIDER_FLOAT_PROP(name, label, min, max) \
+	{ \
+		float value = currentEntry.name(); \
+		if (ImGui::InputFloat(label, &value)) \
+		{ \
+			if (value >= min && value <= max) \
+				currentEntry.set_##name(value); \
+		} \
+	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
@@ -143,6 +152,11 @@ namespace mmo
 			SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);
 			SLIDER_UINT32_PROP(minlevelhealth, "Min Level health", 1, 200000000);
 			SLIDER_UINT32_PROP(maxlevelhealth, "Max Level health", 1, 200000000);
+
+			SLIDER_UINT32_PROP(armor, "Armor", 0, 100000);
+
+			SLIDER_FLOAT_PROP(minmeleedmg, "Min Melee Dmg", 0.0f, 10000000.0f);
+			SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
 		}
 	}
 
