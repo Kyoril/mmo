@@ -549,15 +549,15 @@ namespace mmo
 		switch(packet.GetId())
 		{
 		case game::client_realm_packet::CreatureQuery:
-			DLOG("Querying for creature " << log_hex_digit(guid) << "...");
+			OnQueryCreature(guid);
 			break;
 
 		case game::client_realm_packet::ItemQuery:
-			DLOG("Querying for item " << log_hex_digit(guid) << "...");
+			OnQueryItem(guid);
 			break;
 
 		case game::client_realm_packet::QuestQuery:
-			DLOG("Querying for quest " << log_hex_digit(guid) << "...");
+			OnQueryQuest(guid);
 			break;
 
 		default:
@@ -827,6 +827,67 @@ namespace mmo
 		{
 			m_worldDestroyed = worldNode->destroyed.connect(this, &Player::OnWorldDestroyed);
 		}
+	}
+
+	void Player::OnQueryCreature(uint64 entry)
+	{
+		DLOG("Querying for creature " << log_hex_digit(entry) << "...");
+
+		const proto::UnitEntry* unit = m_project.units.getById(entry);
+		if (unit == nullptr)
+		{
+			WLOG("Could not find creature entry " << log_hex_digit(entry));
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::CreatureQueryResult);
+					packet
+						<< io::write_packed_guid(entry)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+			return;
+		}
+
+		m_connection->sendSinglePacket([unit](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::CreatureQueryResult);
+				packet
+					<< io::write_packed_guid(unit->id())
+					<< io::write<uint8>(true)
+					<< io::write_range(unit->name()) << io::write<uint8>(0)
+					<< io::write_range(unit->subname()) << io::write<uint8>(0);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnQueryQuest(uint64 entry)
+	{
+		DLOG("Querying for quest " << log_hex_digit(entry) << "...");
+
+		// TODO
+		m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestQueryResult);
+				packet
+					<< io::write_packed_guid(entry)
+					<< io::write<uint8>(false);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnQueryItem(uint64 entry)
+	{
+		DLOG("Querying for item " << log_hex_digit(entry) << "...");
+
+		// TODO
+		m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ItemQueryResult);
+				packet
+					<< io::write_packed_guid(entry)
+					<< io::write<uint8>(false);
+				packet.Finish();
+			});
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

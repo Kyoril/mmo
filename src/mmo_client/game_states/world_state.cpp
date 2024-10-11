@@ -943,6 +943,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		DLOG("Received creature data for entry " << id);
+
 		if (!succeeded)
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
@@ -950,6 +952,11 @@ namespace mmo
 		}
 
 		CreatureInfo entry{ id };
+		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname)))
+		{
+			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			return PacketParseResult::Pass;
+		}
 
 		m_creatureCache.NotifyObjectResponse(id, std::move(entry));
 		return PacketParseResult::Pass;

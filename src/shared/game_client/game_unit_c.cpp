@@ -74,8 +74,8 @@ namespace mmo
 		}
 
 		// TODO: Get npc name
-		uint32 entryId = Get<uint32>(object_fields::Entry);
-		if (entryId)
+		int32 entryId = Get<int32>(object_fields::Entry);
+		if (entryId != -1)
 		{
 			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
 		}

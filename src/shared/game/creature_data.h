@@ -8,6 +8,6 @@ namespace mmo
 	{
 		uint64 id;
 		String name;
-		String description;
+		String subname;
 	};
 }

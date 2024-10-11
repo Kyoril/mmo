@@ -109,6 +109,12 @@ namespace mmo
 
 		void NotifyWorldNodeChanged(World* worldNode);
 
+		void OnQueryCreature(uint64 entry);
+
+		void OnQueryQuest(uint64 entry);
+
+		void OnQueryItem(uint64 entry);
+
 	public:
 		struct PacketHandlerRegistrationHandle final
 		{

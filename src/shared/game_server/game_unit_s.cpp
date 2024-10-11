@@ -92,6 +92,8 @@ namespace mmo
 		Set(object_fields::Type, ObjectTypeId::Unit);
 		Set(object_fields::Scale, 1.0f);
 
+		Set(object_fields::Entry, -1);
+
 		// Set unit values
 		Set(object_fields::Health, 60u);
 		Set(object_fields::MaxHealth, 60u);
