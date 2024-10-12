@@ -12,9 +12,11 @@
 #include "binary_io/stream_sink.h"
 #include "binary_io/writer.h"
 #include "graphics/material.h"
+#include "graphics/material_instance.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/material_serializer.h"
 #include "graphics/shader_compiler.h"
+#include "scene_graph/material_instance_serializer.h"
 
 namespace mmo
 {
@@ -41,6 +43,15 @@ namespace mmo
 
 	void MaterialEditor::AddAssetActions(const String& asset)
 	{
+		// TODO: this should probably be moved to the MaterialEditorInstance class but the editor interface is not yet compatible with injecting
+		// actions from other editor instances to different asset types.
+		if (ImGui::MenuItem("Create Material Instance"))
+		{
+			m_selectedMaterial = MaterialManager::Get().Load(asset);
+
+			m_materialInstanceName = Path(asset).filename().replace_extension().string() + "_Instance";
+			m_showMaterialInstanceDialog = true;
+		}
 	}
 
 	void MaterialEditor::DrawImpl()
@@ -91,7 +102,7 @@ namespace mmo
 
 			if (ImGui::Button("Create"))
 			{
-				CreateNewMaterial();
+				CreateNewMaterialFunction();
 				ImGui::CloseCurrentPopup();
 			}
 
@@ -105,6 +116,35 @@ namespace mmo
 			ImGui::EndPopup();
 		}
 
+		if (m_showMaterialInstanceDialog)
+		{
+			ImGui::OpenPopup("Create Material Instance");
+			m_showMaterialInstanceDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Create Material Instance", nullptr, ImGuiWindowFlags_NoResize))
+		{
+			ImGui::Text("Enter a name for the new material instance:");
+
+			ImGui::InputText("##field", &m_materialInstanceName);
+			ImGui::SameLine();
+			ImGui::Text(".hmi");
+
+			if (ImGui::Button("Create"))
+			{
+				CreateNewMaterialInstance();
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 	}
 
 	std::shared_ptr<EditorInstance> MaterialEditor::OpenAssetImpl(const Path& asset)
@@ -186,5 +226,30 @@ namespace mmo
 		file->flush();
 
 		m_host.assetImported(m_host.GetCurrentPath());
+	}
+
+	void MaterialEditor::CreateNewMaterialInstance()
+	{
+		auto currentPath = m_host.GetCurrentPath();
+		currentPath /= m_materialInstanceName + ".hmi";
+
+		const auto file = AssetRegistry::CreateNewFile(currentPath.string());
+		if (!file)
+		{
+			ELOG("Failed to create new material instance");
+			return;
+		}
+
+		const auto instance = std::make_shared<MaterialInstance>(m_materialInstanceName, m_selectedMaterial);
+		io::StreamSink sink(*file);
+		io::Writer writer(sink);
+
+		MaterialInstanceSerializer serializer;
+		serializer.Export(*instance, writer);
+
+		file->flush();
+
+		m_host.assetImported(m_host.GetCurrentPath());
+		m_materialInstanceName.clear();
 	}
 }

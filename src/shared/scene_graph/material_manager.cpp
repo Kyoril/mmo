@@ -2,8 +2,10 @@
 
 #include "material_manager.h"
 
+#include "material_instance_serializer.h"
 #include "material_serializer.h"
 #include "assets/asset_registry.h"
+#include "graphics/material_instance.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -35,23 +37,54 @@ namespace mmo
 			return nullptr;
 		}
 
-		auto material = std::make_shared<Material>(filename);
-
-		io::StreamSource source { *file };
-		io::Reader reader { source };
-
-		MaterialDeserializer deserializer { *material };
-		if (!deserializer.Read(reader))
+		std::filesystem::path p = filename;
+		if (p.extension() == ".hmi")
 		{
-			ELOG("Failed to load material");
-			return nullptr;
+			// TODO: Default material
+			auto defaultMaterial = std::make_shared<Material>("__DEFAULT__");
+
+			auto materialInstance = std::make_shared<MaterialInstance>(filename, defaultMaterial);
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+
+			MaterialInstanceDeserializer deserializer{ *materialInstance };
+			if (!deserializer.Read(reader))
+			{
+				ELOG("Failed to load material");
+				return nullptr;
+			}
+
+			materialInstance->Update();
+
+			m_materials.emplace(filename, materialInstance);
+			return materialInstance;
+		}
+		else if(p.extension() == ".hmat")
+		{
+			auto material = std::make_shared<Material>(filename);
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+
+			MaterialDeserializer deserializer{ *material };
+			if (!deserializer.Read(reader))
+			{
+				ELOG("Failed to load material");
+				return nullptr;
+			}
+
+			material->Update();
+
+			m_materials.emplace(filename, material);
+			return material;
+		}
+		else
+		{
+			ELOG("Failed to load material: Unknown file extension found '" << p.extension().string() << "'");
 		}
 
-		material->Update();
-
-		m_materials.emplace(filename, material);
-
-		return material;
+		return nullptr;
 	}
 
 	MaterialPtr MaterialManager::CreateManual(const std::string_view name)

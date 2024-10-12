@@ -59,6 +59,14 @@ namespace mmo
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const noexcept override { ASSERT(m_parent); return m_parent->IsLit(); }
 
+		[[nodiscard]] bool IsDepthTestEnabled() const noexcept override { return m_depthTest; }
+
+		void SetDepthTestEnabled(const bool enable) noexcept override { m_depthTest = enable; }
+
+		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept override { return m_depthWrite; }
+
+		void SetDepthWriteEnabled(const bool enable) noexcept override { m_depthWrite = enable; }
+
 		[[nodiscard]] std::string_view GetName() const noexcept override { return m_name; }
 
 		/// @brief Sets the name of the material.
@@ -69,7 +77,9 @@ namespace mmo
 
 		[[nodiscard]] MaterialPtr GetParent() const noexcept { return m_parent; }
 
-	protected:
+		std::shared_ptr<MaterialInstance> AsShared();
+
+	public:
 		void DerivePropertiesFromParent();
 
 	public:
@@ -90,6 +100,8 @@ namespace mmo
 		bool m_castShadows;
 		bool m_receiveShadows;
 		MaterialType m_type;
+		bool m_depthTest;
+		bool m_depthWrite;
 	};
 
 }

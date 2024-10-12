@@ -26,6 +26,7 @@
 
 #include "editors/model_editor/model_editor.h"
 #include "editors/material_editor/material_editor.h"
+#include "editors/material_instance_editor/material_instance_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editor_windows/faction_editor_window.h"
@@ -115,6 +116,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow));
 
 	// Run the database service thread

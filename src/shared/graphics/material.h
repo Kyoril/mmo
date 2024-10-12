@@ -97,6 +97,14 @@ namespace mmo
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] virtual bool IsLit() const noexcept = 0;
 
+		[[nodiscard]] virtual bool IsDepthTestEnabled() const noexcept = 0;
+
+		void virtual SetDepthTestEnabled(const bool enable) noexcept = 0;
+
+		[[nodiscard]] virtual bool IsDepthWriteEnabled() const noexcept = 0;
+
+		virtual void SetDepthWriteEnabled(const bool enable) noexcept = 0;
+
 		[[nodiscard]] virtual std::string_view GetName() const noexcept = 0;
 	};
 
@@ -163,13 +171,13 @@ namespace mmo
 		
 		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode() const noexcept { return { m_pixelShaderCode }; }
 
-		[[nodiscard]] bool IsDepthTestEnabled() const noexcept { return m_depthTest; }
+		[[nodiscard]] bool IsDepthTestEnabled() const noexcept override { return m_depthTest; }
 		
-		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
+		void SetDepthTestEnabled(const bool enable) noexcept override { m_depthTest = enable; }
 
-		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept { return m_depthWrite; }
+		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept override { return m_depthWrite; }
 		
-		void SetDepthWriteEnabled(const bool enable) noexcept { m_depthWrite = enable; }
+		void SetDepthWriteEnabled(const bool enable) noexcept override { m_depthWrite = enable; }
 
 		std::shared_ptr<Material> AsShared();
 

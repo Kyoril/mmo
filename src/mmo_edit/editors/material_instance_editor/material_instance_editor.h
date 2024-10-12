@@ -5,17 +5,16 @@
 #include <map>
 
 #include "editors/editor_base.h"
-#include "graphics/material.h"
 
 namespace mmo
 {
 	/// @brief Editor implementation to support creation and editing of materials.
-	class MaterialEditor final : public EditorBase
+	class MaterialInstanceEditor final : public EditorBase
 	{
 	public:
 		/// @brief Default constructor.
 		/// @param host Host which provides support for stuff editors might require.
-		explicit MaterialEditor(EditorHost& host)
+		explicit MaterialInstanceEditor(EditorHost& host)
 			: EditorBase(host)
 		{
 		}
@@ -46,18 +45,9 @@ namespace mmo
 		/// @brief Called when a new material should be created.
 		void CreateNewMaterial();
 
-		void CreateNewMaterialFunction();
-
-		void CreateNewMaterialInstance();
-
 	private:
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showMaterialNameDialog { false };
-		bool m_showMaterialFunctionNameDialog{ false };
-		bool m_showMaterialInstanceDialog{ false };
 		String m_materialName;
-		String m_materialFunctionName;
-		String m_materialInstanceName;
-		MaterialPtr m_selectedMaterial;
 	};
 }

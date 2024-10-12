@@ -11,14 +11,13 @@ namespace mmo
 		: m_name(name)
 		, m_parent(nullptr)
 	{
-		ASSERT(m_parent);
-
+		ASSERT(parent);
 		SetParent(parent);
 	}
 
 	void MaterialInstance::SetParent(MaterialPtr parent) noexcept
 	{
-		ASSERT(m_parent);
+		ASSERT(parent);
 
 		// Parent must be valid
 		if (!parent)
@@ -52,12 +51,19 @@ namespace mmo
 		}
 	}
 
+	std::shared_ptr<MaterialInstance> MaterialInstance::AsShared()
+	{
+		return std::static_pointer_cast<MaterialInstance>(shared_from_this());
+	}
+
 	void MaterialInstance::DerivePropertiesFromParent()
 	{
 		m_type = m_parent->GetType();
 		m_receiveShadows = m_parent->IsReceivingShadows();
 		m_castShadows = m_parent->IsCastingShadows();
 		m_twoSided = m_parent->IsTwoSided();
+		m_depthTest = m_parent->IsDepthTestEnabled();
+		m_depthWrite = m_parent->IsDepthWriteEnabled();
 	}
 
 	void MaterialInstance::Update()

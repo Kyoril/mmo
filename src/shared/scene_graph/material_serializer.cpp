@@ -10,7 +10,7 @@
 namespace mmo
 {
 	static const ChunkMagic MaterialChunkMagic = MakeChunkMagic('TAMH');
-	static const ChunkMagic MaterialNameChunk = MakeChunkMagic('EMAN');
+	static const ChunkMagic MaterialInstanceNameChunk = MakeChunkMagic('EMAN');
 	static const ChunkMagic MaterialAttributeChunk = MakeChunkMagic('RTTA');
 	static const ChunkMagic MaterialVertexShaderChunk = MakeChunkMagic('XTRV');
 	static const ChunkMagic MaterialPixelShaderChunk = MakeChunkMagic('LXIP');
@@ -32,7 +32,7 @@ namespace mmo
 		{
 			if (version >= material_version::Version_0_1)
 			{
-				AddChunkHandler(*MaterialNameChunk, true, *this, &MaterialDeserializer::ReadMaterialNameChunk);
+				AddChunkHandler(*MaterialInstanceNameChunk, true, *this, &MaterialDeserializer::ReadMaterialNameChunk);
 				AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunk);
 				AddChunkHandler(*MaterialTextureChunk, true, *this, &MaterialDeserializer::ReadMaterialTextureChunk);
 				AddChunkHandler(*MaterialAttributeChunk, true, *this, &MaterialDeserializer::ReadMaterialAttributeChunk);
@@ -324,7 +324,7 @@ namespace mmo
 
 		// Material name
 		{
-			ChunkWriter nameChunkWriter { MaterialNameChunk, writer };
+			ChunkWriter nameChunkWriter { MaterialInstanceNameChunk, writer };
 			writer << io::write_dynamic_range<uint8>(material.GetName().begin(), material.GetName().end());
 			nameChunkWriter.Finish();
 		}
