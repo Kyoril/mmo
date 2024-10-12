@@ -563,6 +563,46 @@ namespace mmo
 		Pin* m_OutputPins[1] = { &m_Float };
 	};
 
+	/// @brief 
+	class IfNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(IfNode, "If")
+
+		IfNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_threshold{ 0.00001f };
+		FloatProperty m_thresholdProperty{ "Equals Threshold", m_threshold };
+
+		PropertyBase* m_properties[1] = { &m_thresholdProperty };
+
+		MaterialPin m_aPin = { this, "A" };
+		MaterialPin m_bPin = { this, "B" };
+		MaterialPin m_greaterPin = { this, "A > B" };
+		MaterialPin m_equalsPin = { this, "A == B" };
+		MaterialPin m_lessPin = { this, "A < B" };
+
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[5] = {&m_aPin, &m_bPin, &m_greaterPin, &m_equalsPin, &m_lessPin};
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
 	/// @brief A node which adds a constant vector expression.
 	class ConstVectorNode final : public GraphNode
 	{

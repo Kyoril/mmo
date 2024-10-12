@@ -103,8 +103,7 @@ namespace mmo
 		ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
 
 	public:
-		std::map<String, float> m_floatParameters;
-
-		std::map<String, Vector4> m_vectorParameters;
+		std::vector<ScalarParameterValue> m_floatParameters;
+		std::vector<VectorParameterValue> m_vectorParameters;
 	};
 }

@@ -20,6 +20,7 @@ namespace ax
 
 namespace mmo
 {
+	class MaterialEditor;
 	struct NodeTypeInfo;
 	class MaterialGraph;
 	class GraphNode;
@@ -52,7 +53,7 @@ namespace mmo
 	class MaterialEditorInstance final : public EditorInstance
 	{
 	public:
-		MaterialEditorInstance(EditorHost& host, const Path& assetPath);
+		MaterialEditorInstance(MaterialEditor& editor, EditorHost& host, const Path& assetPath);
 		~MaterialEditorInstance() override;
 
 	public:
@@ -79,6 +80,7 @@ namespace mmo
 		void HandleContextMenuAction(MaterialGraph& material);
 
 	private:
+		MaterialEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;

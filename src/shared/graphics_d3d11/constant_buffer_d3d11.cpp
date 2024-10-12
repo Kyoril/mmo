@@ -11,7 +11,7 @@ namespace mmo
 		// Ensure size aligns to 16
 		if (size % 16 != 0)
 		{
-			size = (size / 16) + 16;
+			size = ((size / 16) * 16) + 16;
 		}
 
 		D3D11_BUFFER_DESC desc;

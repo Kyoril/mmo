@@ -10,10 +10,12 @@
 
 #include <cinttypes>
 
+#include "material_instance_editor.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
+#include "preview_providers/preview_provider_manager.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
 
@@ -40,8 +42,9 @@ namespace mmo
 		m_viewportRT->Update();
     }
 
-	MaterialInstanceEditorInstance::MaterialInstanceEditorInstance(EditorHost& host, const Path& assetPath)
+	MaterialInstanceEditorInstance::MaterialInstanceEditorInstance(MaterialInstanceEditor& editor, EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
+		, m_editor(editor)
 	{
 		// Load material instance
 		m_material = std::static_pointer_cast<MaterialInstance>(MaterialManager::Get().Load(assetPath.string()));
@@ -94,6 +97,8 @@ namespace mmo
 		io::Writer writer { sink };
 
 		ILOG("Successfully saved material");
+
+    	m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
 	}
 
 	void MaterialInstanceEditorInstance::Draw()

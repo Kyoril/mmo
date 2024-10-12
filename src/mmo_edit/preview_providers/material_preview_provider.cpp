@@ -37,6 +37,14 @@ namespace mmo
 		m_renderConnection = m_host.beforeUiUpdate.connect(this, &MaterialPreviewProvider::RenderMaterialPreview);
 	}
 
+	void MaterialPreviewProvider::InvalidatePreview(const String& assetPath)
+	{
+		if (m_previewTextures.contains(assetPath))
+		{
+			m_previewTextures.erase(assetPath);
+		}
+	}
+
 	ImTextureID MaterialPreviewProvider::GetAssetPreview(const String& assetPath)
 	{
 		const auto it = m_previewTextures.find(assetPath);
@@ -52,7 +60,7 @@ namespace mmo
 
 	const std::set<String>& MaterialPreviewProvider::GetSupportedExtensions() const
 	{
-		static std::set<String> extensions { ".hmat" };
+		static std::set<String> extensions { ".hmat", ".hmi" };
 		return extensions;
 	}
 

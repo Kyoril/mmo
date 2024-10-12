@@ -19,6 +19,8 @@ namespace mmo
 		virtual ~AssetPreviewProvider() override = default;
 		
 	public:
+		virtual void InvalidatePreview(const String& assetPath) {};
+
 		/// @brief Provides a texture id for a given asset to use for previewing the given asset.
 		[[nodiscard]] virtual ImTextureID GetAssetPreview(const String& assetPath) = 0;
 

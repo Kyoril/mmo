@@ -26,4 +26,12 @@ namespace mmo
 
 		return it->get();
 	}
+
+	void PreviewProviderManager::InvalidatePreview(const String& assetPath)
+	{
+		for (auto&provider : m_previewProviders)
+		{
+			provider->InvalidatePreview(assetPath);
+		}
+	}
 }

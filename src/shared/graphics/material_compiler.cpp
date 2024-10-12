@@ -23,6 +23,7 @@ namespace mmo
 	void MaterialCompiler::Compile(Material& material, ShaderCompiler& shaderCompiler)
 	{
 		m_material = &material;
+		m_material->ClearParameters();
 
 		if (m_lit)
 		{

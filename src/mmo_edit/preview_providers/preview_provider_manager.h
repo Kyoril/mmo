@@ -22,6 +22,8 @@ namespace mmo
 
 		AssetPreviewProvider* GetPreviewProviderForExtension(const String& extension);
 
+		void InvalidatePreview(const String& assetPath);
+
 	private:
 		std::vector<std::unique_ptr<AssetPreviewProvider>> m_previewProviders;
 	};

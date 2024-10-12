@@ -562,18 +562,23 @@ namespace mmo
 		m_pixelShaderStream
 			<< "static const float PI = 3.14159265359;\n\n";
 
+		m_pixelShaderStream
+			<< "float select(bool expression, float whenTrue, float whenFalse) {\n"
+			<< "\treturn expression ? whenTrue : whenFalse;\n"
+			<< "}\n\n";
+
 		const auto& scalarParams = m_floatParameters;
 		if (!scalarParams.empty())
 		{
-
 			m_pixelShaderStream
 				<< "cbuffer ScalarParameters\n"
 				<< "{\n";
 
 			for (const auto& param : scalarParams)
 			{
-				m_material->AddScalarParameter(param.first, param.second);
-				m_pixelShaderStream << "\tfloat s" << param.first << ";\n";
+				DLOG("[MAT] Add scalar parameter #" << m_material->GetScalarParameters().size() + 1 << ": " << param.name);
+				m_material->AddScalarParameter(param.name, param.value);
+				m_pixelShaderStream << "\tfloat s" << param.name << ";\n";
 			}
 
 			m_pixelShaderStream
@@ -589,8 +594,8 @@ namespace mmo
 
 			for (const auto& param : vectorParams)
 			{
-				m_material->AddVectorParameter(param.first, param.second);
-				m_pixelShaderStream << "\tfloat4 v" << param.first << ";\n";
+				m_material->AddVectorParameter(param.name, param.value);
+				m_pixelShaderStream << "\tfloat4 v" << param.name << ";\n";
 			}
 
 			m_pixelShaderStream
@@ -950,7 +955,16 @@ namespace mmo
 	ExpressionIndex MaterialCompilerD3D11::AddScalarParameterExpression(std::string_view name, float defaultValue)
 	{
 		// Ensure parameter exists
-		m_floatParameters[String(name)] = defaultValue;
+		if (const auto it = std::find_if(m_floatParameters.begin(), m_floatParameters.end(), [&name](const auto& param) { return param.name == name; }); it == m_floatParameters.end())
+		{
+			DLOG("Adding float parameter #" << m_floatParameters.size() + 1 << ": " << name);
+			m_floatParameters.emplace_back(String(name), defaultValue);
+		}
+		else
+		{
+			DLOG("Updating float parameter " << name << " default value");
+			it->value = defaultValue;
+		}
 
 		std::ostringstream outputStream;
 		outputStream << "s" << name;
@@ -962,7 +976,14 @@ namespace mmo
 	ExpressionIndex MaterialCompilerD3D11::AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue)
 	{
 		// Ensure parameter exists
-		m_vectorParameters[String(name)] = defaultValue;
+		if (const auto it = std::find_if(m_vectorParameters.begin(), m_vectorParameters.end(), [&name](const auto& param) { return param.name == name; }); it == m_vectorParameters.end())
+		{
+			m_vectorParameters.emplace_back(String(name), defaultValue);
+		}
+		else
+		{
+			it->value = defaultValue;
+		}
 
 		std::ostringstream outputStream;
 		outputStream << "v" << name;

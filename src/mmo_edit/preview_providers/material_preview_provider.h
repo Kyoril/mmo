@@ -21,6 +21,8 @@ namespace mmo
 		~MaterialPreviewProvider() override = default;
 
 	public:
+		virtual void InvalidatePreview(const String& assetPath) override;
+
 		/// @copydoc AssetPreviewProvider::GetAssetPreview
 		[[nodiscard]] ImTextureID GetAssetPreview(const String& assetPath) override;
 		

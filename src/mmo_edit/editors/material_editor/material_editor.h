@@ -9,14 +9,17 @@
 
 namespace mmo
 {
+	class PreviewProviderManager;
+
 	/// @brief Editor implementation to support creation and editing of materials.
 	class MaterialEditor final : public EditorBase
 	{
 	public:
 		/// @brief Default constructor.
 		/// @param host Host which provides support for stuff editors might require.
-		explicit MaterialEditor(EditorHost& host)
+		explicit MaterialEditor(EditorHost& host, PreviewProviderManager& previewManager)
 			: EditorBase(host)
+			, m_previewManager(previewManager)
 		{
 		}
 
@@ -31,6 +34,8 @@ namespace mmo
 		void AddCreationContextMenuItems() override;
 
 		void AddAssetActions(const String& asset) override;
+
+		PreviewProviderManager& GetPreviewManager() const { return m_previewManager; }
 
 	protected:
 		/// @copydoc EditorBase::DrawImpl
@@ -51,6 +56,7 @@ namespace mmo
 		void CreateNewMaterialInstance();
 
 	private:
+		PreviewProviderManager& m_previewManager;
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showMaterialNameDialog { false };
 		bool m_showMaterialFunctionNameDialog{ false };

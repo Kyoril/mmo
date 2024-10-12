@@ -15,6 +15,7 @@ namespace mmo
 {
 	const uint32 ConstFloatNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ScalarParameterNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 IfNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 VectorParameterNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
@@ -540,6 +541,58 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex IfNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			std::ostringstream strm;
+
+			if (!m_aPin.IsLinked())
+			{
+				ELOG("'if' node requires expression for input 'A'!");
+				return IndexNone;
+			}
+
+			if (!m_bPin.IsLinked())
+			{
+				ELOG("'if' node requires expression for input 'B'!");
+				return IndexNone;
+			}
+
+			const ExpressionIndex aExpression = m_aPin.GetLink()->GetNode()->Compile(compiler, m_aPin.GetLink());
+			const ExpressionIndex bExpression = m_bPin.GetLink()->GetNode()->Compile(compiler, m_bPin.GetLink());
+
+			const auto aType = compiler.GetExpressionType(aExpression);
+			const auto bType = compiler.GetExpressionType(bExpression);
+			const uint32 aSize = GetExpressionTypeComponentCount(aType);
+			const uint32 bSize = GetExpressionTypeComponentCount(bType);
+
+			if (aSize != bSize)
+			{
+				WLOG("input size of A and B does not equal!");
+			}
+
+			if (m_equalsPin.IsLinked())
+			{
+				const ExpressionIndex greaterExpression = m_greaterPin.GetLink()->GetNode()->Compile(compiler, m_greaterPin.GetLink());
+				const ExpressionIndex lessExpression = m_lessPin.GetLink()->GetNode()->Compile(compiler, m_lessPin.GetLink());
+				const ExpressionIndex equalExpression = m_equalsPin.GetLink()->GetNode()->Compile(compiler, m_equalsPin.GetLink());
+
+				strm << "select((abs(expr_" << aExpression << " - expr_" << bExpression << ") > " << m_threshold << "), select((expr_" << aExpression << " >= expr_" << bExpression << "), expr_" << greaterExpression << ", expr_" << lessExpression << "), expr_" << equalExpression << ")";
+			}
+			else
+			{
+				const ExpressionIndex greaterExpression = m_greaterPin.GetLink()->GetNode()->Compile(compiler, m_greaterPin.GetLink());
+				const ExpressionIndex lessExpression = m_lessPin.GetLink()->GetNode()->Compile(compiler, m_lessPin.GetLink());
+				strm << "select((expr_" << aExpression << " >= expr_" << bExpression << "), expr_" << greaterExpression << ", expr_" << lessExpression << ")";
+			}
+
+			m_compiledExpressionId = compiler.AddExpression(strm.str(), aSize < bSize ? aType : bType);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex ConstVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -561,6 +614,30 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddVectorParameterExpression(m_name, Vector4(m_value.GetRed(), m_value.GetGreen(), m_value.GetBlue(), m_value.GetAlpha()));
+		}
+
+		if (outputPin && outputPin != &m_argb)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
 		}
 
 		return m_compiledExpressionId;

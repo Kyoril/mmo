@@ -13,11 +13,13 @@
 
 namespace mmo
 {
+	class MaterialInstanceEditor;
+
 	/// @brief An editor instance for editing a material.
 	class MaterialInstanceEditorInstance final : public EditorInstance
 	{
 	public:
-		MaterialInstanceEditorInstance(EditorHost& host, const Path& assetPath);
+		MaterialInstanceEditorInstance(MaterialInstanceEditor& editor, EditorHost& host, const Path& assetPath);
 		~MaterialInstanceEditorInstance() override;
 
 	public:
@@ -37,6 +39,7 @@ namespace mmo
 		void RenderMaterialPreview();
 
 	private:
+		MaterialInstanceEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;

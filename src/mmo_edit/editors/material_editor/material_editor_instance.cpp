@@ -18,6 +18,7 @@
 
 #include <cinttypes>
 
+#include "material_editor.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
@@ -25,6 +26,7 @@
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
 #include "graphics/shader_compiler.h"
+#include "preview_providers/preview_provider_manager.h"
 
 
 namespace mmo
@@ -626,8 +628,9 @@ namespace mmo
 	    return {};
 	}
 
-	MaterialEditorInstance::MaterialEditorInstance(EditorHost& host, const Path& assetPath)
+	MaterialEditorInstance::MaterialEditorInstance(MaterialEditor& editor, EditorHost& host, const Path& assetPath)
 		: EditorInstance(host, assetPath)
+		, m_editor(editor)
 	{
 		ed::Config editorConfig;
 		editorConfig.SettingsFile = nullptr;
@@ -714,6 +717,8 @@ namespace mmo
 		{
 			m_entity->SetMaterial(m_material);
 		}
+
+		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
 	}
 
 	void MaterialEditorInstance::Save() const
@@ -742,6 +747,7 @@ namespace mmo
 		m_graph->Serialize(writer);
 
 		ILOG("Successfully saved material");
+		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
 	}
 
 	void MaterialEditorInstance::Draw()

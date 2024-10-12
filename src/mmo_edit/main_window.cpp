@@ -11,6 +11,7 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "database.h"
+#include "editor_windows/asset_window.h"
 #include "proto_data/project.h"
 
 #ifdef _WIN32
@@ -842,5 +843,9 @@ namespace mmo
 
 			editor->AddAssetActions(asset);
 		}
+	}
+
+	void MainWindow::InvalidateAssetPreview(const String& asset)
+	{
 	}
 }

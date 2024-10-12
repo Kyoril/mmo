@@ -155,7 +155,7 @@ namespace mmo
 			return it->second;
 		}
 
-		const auto instance = m_instances.emplace(asset, std::make_shared<MaterialEditorInstance>(m_host, asset));
+		const auto instance = m_instances.emplace(asset, std::make_shared<MaterialEditorInstance>(*this, m_host, asset));
 		if (!instance.second)
 		{
 			ELOG("Failed to open model editor instance");

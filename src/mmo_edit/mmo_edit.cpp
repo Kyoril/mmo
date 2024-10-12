@@ -115,8 +115,8 @@ int main(int argc, char* arg[])
 
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));
+	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow));
 
 	// Run the database service thread

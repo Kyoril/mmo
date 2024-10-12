@@ -111,6 +111,8 @@ namespace mmo
 
 		void ShowAssetActionContextMenu(const String& asset) override;
 
+		void InvalidateAssetPreview(const String& asset) override;
+
 	private:
 		Configuration& m_config;
 #ifdef _WIN32
