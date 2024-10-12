@@ -37,7 +37,7 @@ namespace mmo
 
 		/// @brief Sets the material to use when rendering this renderable.
 		/// @param material The material to use for rendering or nullptr to use a default material.
-		void SetMaterial(const std::shared_ptr<Material>& material) noexcept { m_material = material; }
+		void SetMaterial(const MaterialPtr& material) noexcept { m_material = material; }
 
 	private:
 		Entity& m_parent;

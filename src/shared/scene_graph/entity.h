@@ -54,7 +54,7 @@ namespace mmo
 		
 		virtual void PopulateRenderQueue(RenderQueue& renderQueue) override;
 
-		void SetMaterial(const std::shared_ptr<Material>& material);
+		void SetMaterial(const MaterialPtr& material);
 
 		void SetUserObject(void* userObject) { m_userObject = userObject; }
 

@@ -634,7 +634,7 @@ namespace mmo
 	    m_context = ed::CreateEditor(&editorConfig);
 		ed::SetCurrentEditor(m_context);
 
-		m_material = MaterialManager::Get().CreateManual(assetPath.string());
+		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
 		m_material->SetName(assetPath.string());
 		m_graph = std::make_unique<MaterialGraph>();
 

@@ -398,7 +398,7 @@ namespace mmo
 
 		float m_defaultShadowFarDist { 0.0f };
 
-		std::shared_ptr<Material> m_defaultMaterial;
+		MaterialPtr m_defaultMaterial;
 
 		bool m_frozen{ false };
 	};

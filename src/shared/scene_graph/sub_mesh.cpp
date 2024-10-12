@@ -41,7 +41,7 @@ namespace mmo
 		SetMaterial(MaterialManager::Get().Load(name));
 	}
 
-	void SubMesh::SetMaterial(const std::shared_ptr<Material>& material)
+	void SubMesh::SetMaterial(const MaterialPtr& material)
 	{
 		m_material = material;
 	}

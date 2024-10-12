@@ -77,7 +77,7 @@ namespace mmo
 		}
 	}
 
-	void Entity::SetMaterial(const std::shared_ptr<Material>& material)
+	void Entity::SetMaterial(const MaterialPtr& material)
 	{
 		for (auto& subEntity : m_subEntities)
 		{

@@ -28,13 +28,13 @@ namespace mmo
 		void PrepareRenderOperation(RenderOperation& op) const;
 
 		/// @brief Gets the material assigned to this sub mesh.
-		[[nodiscard]] std::shared_ptr<Material>& GetMaterial() noexcept { return m_material; }
+		[[nodiscard]] MaterialPtr& GetMaterial() noexcept { return m_material; }
 
 		void SetMaterialName(const String& name);
 
 		/// @brief Sets the material used by this sub mesh.
 		/// @param material The new material to use or nullptr if no material should be used.
-		void SetMaterial(const std::shared_ptr<Material>& material);
+		void SetMaterial(const MaterialPtr& material);
 
 		void AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign);
 
@@ -56,7 +56,7 @@ namespace mmo
 		typedef std::vector<uint16> IndexMap;
 		IndexMap blendIndexToBoneIndexMap{};
 
-		std::shared_ptr<Material> m_material;
+		MaterialPtr m_material;
 		bool useSharedVertices { true };
 		bool m_boneAssignmentsOutOfDate{false};
 
