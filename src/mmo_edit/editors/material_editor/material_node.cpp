@@ -14,9 +14,12 @@ static ImTextureID s_headerBackground = nullptr;
 namespace mmo
 {
 	const uint32 ConstFloatNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ScalarParameterNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
+	const uint32 VectorParameterNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 TextureParameterNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 MaterialFunctionNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 
@@ -527,7 +530,33 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex ScalarParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value), ExpressionType::Float_1);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex ConstVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			std::ostringstream strm;
+			strm << "float4(";
+			strm << m_value.GetRed() << ", " << m_value.GetGreen() << ", " << m_value.GetBlue() << ", " << m_value.GetAlpha();
+			strm << ")";
+			strm.flush();
+
+			m_compiledExpressionId = compiler.AddExpression(strm.str(), ExpressionType::Float_4);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex VectorParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
@@ -969,6 +998,47 @@ namespace mmo
 	}
 
 	ExpressionIndex TextureNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			int32 uvExpression = IndexNone;
+
+			if (m_uvs.IsLinked())
+			{
+				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler, m_uvs.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false);
+		}
+
+		if (outputPin && outputPin != &m_rgba)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex TextureParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{

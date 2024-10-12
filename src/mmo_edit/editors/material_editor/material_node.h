@@ -528,7 +528,41 @@ namespace mmo
 
 	    Pin* m_OutputPins[1] = { &m_Float };
 	};
-	
+
+	/// @brief A node which adds a constant float expression.
+	class ScalarParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ScalarParameterNode, "Scalar Parameter")
+
+		ScalarParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		float m_value{ 0.0f };
+		FloatProperty m_valueProperty{ "Value", m_value };
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[2] = { &m_nameProperty, &m_valueProperty };
+
+		MaterialPin m_Float = { this };
+
+		Pin* m_OutputPins[1] = { &m_Float };
+	};
+
 	/// @brief A node which adds a constant vector expression.
 	class ConstVectorNode final : public GraphNode
 	{
@@ -565,7 +599,46 @@ namespace mmo
 
 	    Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
 	};
-	
+
+	/// @brief A node which adds a constant vector expression.
+	class VectorParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(VectorParameterNode, "Vector Parameter")
+
+		VectorParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		mmo::Color m_value{ Color::White };
+		ColorProperty m_valueProperty{ "Value", m_value };
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[2] = { &m_nameProperty, &m_valueProperty };
+
+		MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_argb = { this, "ARGB" };
+
+		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
+	};
+
 	/// @brief A node which adds an expression addition expression.
 	class AddNode final : public GraphNode
 	{
@@ -1172,6 +1245,56 @@ namespace mmo
 		
 	    Pin* m_inputPins[1] = { &m_uvs };
 	    Pin* m_outputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_rgba };
+	};
+
+	/// @brief A node which adds a texture sample expression which uses a named texture parameter.
+	class TextureParameterNode final : public GraphNode
+	{
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(TextureParameterNode, "Texture Parameter")
+
+		TextureParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		[[nodiscard]] std::string_view GetTexture() const { return m_texturePath.GetPath(); }
+
+		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
+
+		[[nodiscard]] std::string_view GetName() const { return m_textureName; }
+
+		void SetName(const std::string_view name) { m_textureName = name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_textureName;
+		AssetPathValue m_texturePath{ "", ".htex" };
+		AssetPathProperty m_texturePathProp{ "Texture", m_texturePath };
+		StringProperty m_nameProp{ "Name", m_textureName };
+
+		PropertyBase* m_properties[2] = { &m_nameProp, &m_texturePathProp };
+
+		MaterialPin m_uvs = { this, "UVs" };
+
+		MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_rgba = { this, "RGBA" };
+
+		Pin* m_inputPins[1] = { &m_uvs };
+		Pin* m_outputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_rgba };
 	};
 
 
