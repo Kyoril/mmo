@@ -10,6 +10,10 @@
 #include <span>
 #include <memory>
 
+#include "constant_buffer.h"
+#include "math/vector3.h"
+#include "math/vector4.h"
+
 namespace mmo
 {
 	class ShaderCompiler;
@@ -47,6 +51,31 @@ namespace mmo
 		SkinnedHigh
 	};
 
+	struct ScalarParameterValue
+	{
+		String name;
+		float value;
+	};
+
+	struct VectorParameterValue
+	{
+		String name;
+		Vector4 value;
+	};
+
+	struct TextureParameterValue
+	{
+		String name;
+		TexturePtr texture;
+	};
+
+	enum class MaterialParameterType : uint8
+	{
+		Scalar,
+		Vector,
+		Texture
+	};
+
 	class MaterialInterface : public std::enable_shared_from_this<MaterialInterface>
 	{
 	public:
@@ -62,6 +91,8 @@ namespace mmo
 		virtual ShaderPtr& GetPixelShader() noexcept = 0;
 
 		virtual void Apply(GraphicsDevice& device) = 0;
+
+		virtual ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) = 0;
 
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
@@ -106,6 +137,32 @@ namespace mmo
 		virtual void SetDepthWriteEnabled(const bool enable) noexcept = 0;
 
 		[[nodiscard]] virtual std::string_view GetName() const noexcept = 0;
+
+		virtual void ClearParameters() = 0;
+
+		virtual const std::vector<ScalarParameterValue>& GetScalarParameters() const = 0;
+
+		virtual void AddScalarParameter(std::string_view name, float defaultValue) = 0;
+
+		virtual void SetScalarParameter(std::string_view name, float value) = 0;
+
+		virtual bool GetScalarParameter(std::string_view name, float& out_value) = 0;
+
+		virtual const std::vector<VectorParameterValue>& GetVectorParameters() const = 0;
+
+		virtual void AddVectorParameter(std::string_view name, const Vector4& defaultValue) = 0;
+
+		virtual void SetVectorParameter(std::string_view name, const Vector4& value) = 0;
+
+		virtual bool GetVectorParameter(std::string_view name, Vector4& out_value) = 0;
+
+		virtual const std::vector<TextureParameterValue>& GetTextureParameters() const = 0;
+
+		virtual void AddTextureParameter(std::string_view name, TexturePtr defaultValue) = 0;
+
+		virtual void SetTextureParameter(std::string_view name, TexturePtr value) = 0;
+
+		virtual bool GetTextureParameter(std::string_view name, TexturePtr& out_value) = 0;
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -179,6 +236,30 @@ namespace mmo
 		
 		void SetDepthWriteEnabled(const bool enable) noexcept override { m_depthWrite = enable; }
 
+		virtual ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) override;
+
+		virtual void ClearParameters() override;
+
+		virtual void AddScalarParameter(std::string_view name, float defaultValue) override;
+
+		virtual void SetScalarParameter(std::string_view name, float value) override;
+
+		virtual bool GetScalarParameter(std::string_view name, float& out_value) override;
+
+		virtual void AddVectorParameter(std::string_view name, const Vector4& defaultValue) override;
+
+		virtual void SetVectorParameter(std::string_view name, const Vector4& value) override;
+
+		virtual bool GetVectorParameter(std::string_view name, Vector4& out_value) override;
+
+		virtual void AddTextureParameter(std::string_view name, TexturePtr defaultValue) override;
+
+		virtual void SetTextureParameter(std::string_view name, TexturePtr value) override;
+
+		virtual bool GetTextureParameter(std::string_view name, TexturePtr& out_value) override;
+
+		uint32 GetParameterIndex();
+
 		std::shared_ptr<Material> AsShared();
 
 	public:
@@ -202,7 +283,14 @@ namespace mmo
 		void BindShaders(GraphicsDevice& device);
 
 		void BindTextures(GraphicsDevice& device);
-		
+
+	public:
+		const std::vector<ScalarParameterValue>& GetScalarParameters() const override { return m_scalarParameters; }
+
+		const std::vector<VectorParameterValue>& GetVectorParameters() const override { return m_vectorParameters; }
+
+		const std::vector<TextureParameterValue>& GetTextureParameters() const override { return m_textureParameters; }
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -220,6 +308,14 @@ namespace mmo
 		bool m_pixelShaderChanged { true };
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
+
+		std::vector<ScalarParameterValue> m_scalarParameters;
+		std::vector<VectorParameterValue> m_vectorParameters;
+		std::vector<TextureParameterValue> m_textureParameters;
+
+		bool m_bufferLayoutDirty[3] { true, true, true };
+		bool m_bufferDataDirty[3] { true, true, true };
+		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

@@ -92,6 +92,34 @@ namespace mmo
 
 		void Apply(GraphicsDevice& device) override;
 
+		ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) override;
+
+		void ClearParameters() override;
+
+		void AddScalarParameter(std::string_view name, float defaultValue) override;
+
+		void SetScalarParameter(std::string_view name, float value) override;
+
+		bool GetScalarParameter(std::string_view name, float& out_value) override;
+
+		void AddVectorParameter(std::string_view name, const Vector4& defaultValue) override;
+
+		void SetVectorParameter(std::string_view name, const Vector4& value) override;
+
+		bool GetVectorParameter(std::string_view name, Vector4& out_value) override;
+
+		void AddTextureParameter(std::string_view name, TexturePtr defaultValue) override;
+
+		void SetTextureParameter(std::string_view name, TexturePtr value) override;
+
+		bool GetTextureParameter(std::string_view name, TexturePtr& out_value) override;
+
+		const std::vector<ScalarParameterValue>& GetScalarParameters() const override { return m_scalarParameters; }
+
+		const std::vector<VectorParameterValue>& GetVectorParameters() const override { return m_vectorParameters; }
+
+		const std::vector<TextureParameterValue>& GetTextureParameters() const override { return m_textureParameters; }
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
@@ -102,6 +130,14 @@ namespace mmo
 		MaterialType m_type;
 		bool m_depthTest;
 		bool m_depthWrite;
+
+		std::vector<ScalarParameterValue> m_scalarParameters;
+		std::vector<VectorParameterValue> m_vectorParameters;
+		std::vector<TextureParameterValue> m_textureParameters;
+
+		bool m_bufferLayoutDirty[3]{ true, true, true };
+		bool m_bufferDataDirty[3]{ true, true, true };
+		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
 	};
 
 }

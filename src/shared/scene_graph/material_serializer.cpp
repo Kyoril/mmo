@@ -15,6 +15,9 @@ namespace mmo
 	static const ChunkMagic MaterialVertexShaderChunk = MakeChunkMagic('XTRV');
 	static const ChunkMagic MaterialPixelShaderChunk = MakeChunkMagic('LXIP');
 	static const ChunkMagic MaterialTextureChunk = MakeChunkMagic('TXET');
+	static const ChunkMagic MaterialScalarParamChunk = MakeChunkMagic('RAPS');
+	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
+	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
 	
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
@@ -45,6 +48,10 @@ namespace mmo
 				if (version >= material_version::Version_0_3)
 				{
 					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunkV03);
+
+					AddChunkHandler(*MaterialScalarParamChunk, false, *this, &MaterialDeserializer::ReadMaterialScalarParamChunk);
+					AddChunkHandler(*MaterialVectorParamChunk, false, *this, &MaterialDeserializer::ReadMaterialVectorParamChunk);
+					AddChunkHandler(*MaterialTextureParamChunk, false, *this, &MaterialDeserializer::ReadMaterialTextureParamChunk);
 				}
 				else
 				{
@@ -310,7 +317,70 @@ namespace mmo
 
 		return reader;
 	}
-	
+
+	bool MaterialDeserializer::ReadMaterialScalarParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 numParams;
+		if (reader >> io::read<uint16>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				float defaultValue;
+				if ((reader >> io::read_container<uint8>(name) >> io::read<float>(defaultValue)))
+				{
+					m_material.AddScalarParameter(name, defaultValue);
+				}
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialVectorParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 numParams;
+		if (reader >> io::read<uint16>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				Vector4 defaultValue;
+				if ((reader >> io::read_container<uint8>(name) 
+					>> io::read<float>(defaultValue.x)
+					>> io::read<float>(defaultValue.y)
+					>> io::read<float>(defaultValue.z)
+					>> io::read<float>(defaultValue.w)))
+				{
+					m_material.AddVectorParameter(name, defaultValue);
+				}
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialTextureParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 numParams;
+		if (reader >> io::read<uint8>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				String defaultTexture;
+				if ((reader >> io::read_container<uint8>(name)
+					>> io::read_container<uint16>(defaultTexture)))
+				{
+					// TODO value
+					m_material.AddTextureParameter(name, nullptr);
+				}
+			}
+		}
+
+		return reader;
+	}
+
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
 		version = material_version::Version_0_3;
@@ -343,6 +413,39 @@ namespace mmo
 			writer.WritePOD(attributes);
 			attributeChunkWriter.Finish();
 		}
+
+		// Scalar Parameters
+		if (!material.GetScalarParameters().empty())
+		{
+			ChunkWriter scalarParamChunkWriter{ MaterialScalarParamChunk, writer };
+			writer << io::write<uint16>(material.GetScalarParameters().size());
+			for (const auto& param : material.GetScalarParameters())
+			{
+				writer << io::write_dynamic_range<uint8>(param.name) << io::write<float>(param.value);
+			}
+
+			scalarParamChunkWriter.Finish();
+		}
+
+		// Vector Parameters
+		if (!material.GetVectorParameters().empty())
+		{
+			ChunkWriter vectorParamChunkWriter{ MaterialVectorParamChunk, writer };
+			writer << io::write<uint16>(material.GetVectorParameters().size());
+			for (const auto& param : material.GetVectorParameters())
+			{
+				writer
+					<< io::write_dynamic_range<uint8>(param.name)
+					<< io::write<float>(param.value.x)
+					<< io::write<float>(param.value.y)
+					<< io::write<float>(param.value.z)
+					<< io::write<float>(param.value.w);
+			}
+
+			vectorParamChunkWriter.Finish();
+		}
+
+		// TODO: Texture parameters
 
 		// Texture chunk
 		{

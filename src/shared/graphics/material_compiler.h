@@ -140,6 +140,12 @@ namespace mmo
 		/// @return Index of the texture sample expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) = 0;
 
+		virtual ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb) = 0;
+
+		virtual ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) = 0;
+
+		virtual ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) = 0;
+
 		/// @brief Adds a multiply expression.
 		/// @param first The first expression for the multiply (left side).
 		/// @param second The second expression for the multiply (right side).

@@ -22,6 +22,8 @@ namespace mmo
 
 	void MaterialCompiler::Compile(Material& material, ShaderCompiler& shaderCompiler)
 	{
+		m_material = &material;
+
 		if (m_lit)
 		{
 			material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
@@ -84,6 +86,8 @@ namespace mmo
 
 		// Add shader code to the material
 		material.SetPixelShaderCode({pixelOutput.code.data });
+
+		m_material = nullptr;
 	}
 	
 	ExpressionType MaterialCompiler::GetExpressionType(ExpressionIndex index)

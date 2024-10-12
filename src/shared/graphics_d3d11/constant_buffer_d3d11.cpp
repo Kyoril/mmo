@@ -8,6 +8,12 @@ namespace mmo
 		, m_device(device)
 		, m_context(context)
 	{
+		// Ensure size aligns to 16
+		if (size % 16 != 0)
+		{
+			size = (size / 16) + 16;
+		}
+
 		D3D11_BUFFER_DESC desc;
 		desc.ByteWidth = static_cast<uint32>(size);
 		desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -26,6 +32,39 @@ namespace mmo
 
 	ConstantBufferD3D11::~ConstantBufferD3D11()
 	{
+	}
+
+	void ConstantBufferD3D11::BindToStage(ShaderType type, uint32 slot)
+	{
+		ID3D11Buffer* buffers[1] = { m_buffer.Get() };
+
+		switch(type)
+		{
+		case ShaderType::VertexShader:
+			m_context.VSSetConstantBuffers(slot, 1, buffers);
+			break;
+
+		case ShaderType::PixelShader:
+			m_context.PSSetConstantBuffers(slot, 1, buffers);
+			break;
+
+		case ShaderType::GeometryShader:
+			m_context.GSSetConstantBuffers(slot, 1, buffers);
+			break;
+
+		case ShaderType::DomainShader:
+			m_context.DSSetConstantBuffers(slot, 1, buffers);
+			break;
+
+		case ShaderType::HullShader:
+			m_context.HSSetConstantBuffers(slot, 1, buffers);
+			break;
+
+		case ShaderType::ComputeShader:
+			m_context.CSSetConstantBuffers(slot, 1, buffers);
+			break;
+		}
+		
 	}
 
 	void ConstantBufferD3D11::Update(void* data)

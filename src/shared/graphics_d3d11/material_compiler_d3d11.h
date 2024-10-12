@@ -93,5 +93,18 @@ namespace mmo
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
 		void GeneratePixelShaderCode() override;
+
+	public:
+		ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture,
+			ExpressionIndex coordinates, bool srgb) override;
+
+		ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) override;
+
+		ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
+
+	public:
+		std::map<String, float> m_floatParameters;
+
+		std::map<String, Vector4> m_vectorParameters;
 	};
 }

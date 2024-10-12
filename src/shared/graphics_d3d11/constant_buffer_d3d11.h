@@ -13,6 +13,8 @@ namespace mmo
 		~ConstantBufferD3D11() override;
 
 	public:
+		void BindToStage(ShaderType type, uint32 slot) override;
+
 		void Update(void* data) override;
 
 		ID3D11Buffer* GetBuffer() const { return m_buffer.Get(); }

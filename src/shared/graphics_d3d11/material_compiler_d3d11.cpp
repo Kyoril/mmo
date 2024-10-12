@@ -562,6 +562,41 @@ namespace mmo
 		m_pixelShaderStream
 			<< "static const float PI = 3.14159265359;\n\n";
 
+		const auto& scalarParams = m_floatParameters;
+		if (!scalarParams.empty())
+		{
+
+			m_pixelShaderStream
+				<< "cbuffer ScalarParameters\n"
+				<< "{\n";
+
+			for (const auto& param : scalarParams)
+			{
+				m_material->AddScalarParameter(param.first, param.second);
+				m_pixelShaderStream << "\tfloat s" << param.first << ";\n";
+			}
+
+			m_pixelShaderStream
+				<< "};\n\n";
+		}
+
+		const auto& vectorParams = m_vectorParameters;
+		if (!vectorParams.empty())
+		{
+			m_pixelShaderStream
+				<< "cbuffer VectorParameters\n"
+				<< "{\n";
+
+			for (const auto& param : vectorParams)
+			{
+				m_material->AddVectorParameter(param.first, param.second);
+				m_pixelShaderStream << "\tfloat4 v" << param.first << ";\n";
+			}
+
+			m_pixelShaderStream
+				<< "};\n\n";
+		}
+		
 		// VertexOut struct
 		m_pixelShaderStream
 			<< "struct VertexOut\n"
@@ -846,6 +881,94 @@ namespace mmo
 		
 		m_pixelShaderCode = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
+
+
+#ifdef _DEBUG
+		// Write shader output to asset registry for debug
+		if (const auto filePtr = AssetRegistry::CreateNewFile("PS.hlsl"))
+		{
+			io::StreamSink sink(*filePtr);
+			io::TextWriter<char> writer(sink);
+			writer.write(m_pixelShaderCode);
+		}
+#endif
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb)
+	{
+		// TODO!
+
+		// Ensure the parameter exists
+		m_material->AddTextureParameter(name, nullptr);
+		if (texture.empty())
+		{
+			WLOG("Trying to sample empty texture");
+			return IndexNone;
+		}
+
+		int32 textureIndex;
+		for (textureIndex = 0; textureIndex < m_textures.size(); ++textureIndex)
+		{
+			if (m_textures[textureIndex] == texture)
+			{
+				break;
+			}
+		}
+
+		if (textureIndex == m_textures.size())
+		{
+			m_textures.emplace_back(texture);
+		}
+
+		std::ostringstream outputStream;
+		if (srgb)
+		{
+			outputStream << "pow(";
+		}
+
+		outputStream << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
+		if (coordinates == IndexNone)
+		{
+			outputStream << "input.uv0";
+		}
+		else
+		{
+			outputStream << "expr_" << coordinates << ".xy";
+		}
+		outputStream << ")";
+
+		if (srgb)
+		{
+			outputStream << ", 2.2)";
+		}
+
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddScalarParameterExpression(std::string_view name, float defaultValue)
+	{
+		// Ensure parameter exists
+		m_floatParameters[String(name)] = defaultValue;
+
+		std::ostringstream outputStream;
+		outputStream << "s" << name;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue)
+	{
+		// Ensure parameter exists
+		m_vectorParameters[String(name)] = defaultValue;
+
+		std::ostringstream outputStream;
+		outputStream << "v" << name;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
 	void MaterialCompilerD3D11::GenerateVertexShaderCode(VertexShaderType type)

@@ -79,6 +79,12 @@ namespace mmo
 
 		bool ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
+		bool ReadMaterialScalarParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialVectorParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadMaterialTextureParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 	private:
 		Material& m_material;
 	};

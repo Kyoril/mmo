@@ -534,7 +534,7 @@ namespace mmo
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value), ExpressionType::Float_1);
+			m_compiledExpressionId = compiler.AddScalarParameterExpression(m_name, m_value);
 		}
 
 		return m_compiledExpressionId;
@@ -560,13 +560,7 @@ namespace mmo
 	{
 		if (m_compiledExpressionId == IndexNone)
 		{
-			std::ostringstream strm;
-			strm << "float4(";
-			strm << m_value.GetRed() << ", " << m_value.GetGreen() << ", " << m_value.GetBlue() << ", " << m_value.GetAlpha();
-			strm << ")";
-			strm.flush();
-
-			m_compiledExpressionId = compiler.AddExpression(strm.str(), ExpressionType::Float_4);
+			m_compiledExpressionId = compiler.AddVectorParameterExpression(m_name, Vector4(m_value.GetRed(), m_value.GetGreen(), m_value.GetBlue(), m_value.GetAlpha()));
 		}
 
 		return m_compiledExpressionId;

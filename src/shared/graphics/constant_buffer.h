@@ -22,6 +22,8 @@ namespace mmo
 		virtual ~ConstantBuffer() = default;
 
 	public:
+		virtual void BindToStage(ShaderType type, uint32 slot) = 0;
+
 		/// A fast way to update the data of the constant buffer. Data has to have the same size as the buffer!
 		virtual void Update(void* data) = 0;
 

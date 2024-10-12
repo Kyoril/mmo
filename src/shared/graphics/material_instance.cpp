@@ -44,6 +44,27 @@ namespace mmo
 		// Update parent
 		m_parent = parent;
 
+		// Take parent parameter default values
+		m_scalarParameters.clear();
+		m_scalarParameters.reserve(m_parent->GetScalarParameters().size());
+		m_vectorParameters.clear();
+		m_vectorParameters.reserve(m_parent->GetVectorParameters().size());
+		m_textureParameters.clear();
+		m_textureParameters.reserve(m_parent->GetTextureParameters().size());
+
+		for (auto& param : m_parent->GetScalarParameters())
+		{
+			m_scalarParameters.push_back(param);
+		}
+		for (auto& param : m_parent->GetVectorParameters())
+		{
+			m_vectorParameters.push_back(param);
+		}
+		for (auto& param : m_parent->GetTextureParameters())
+		{
+			m_textureParameters.push_back(param);
+		}
+
 		// Refresh base values from parent material if this is the first reference to a parent material
 		if (!hadParent)
 		{
@@ -74,5 +95,159 @@ namespace mmo
 	void MaterialInstance::Apply(GraphicsDevice& device)
 	{
 		m_parent->Apply(device);
+	}
+
+	ConstantBufferPtr MaterialInstance::GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device)
+	{
+		if (m_bufferLayoutDirty[0])
+		{
+			m_parameterBuffers[0].reset();
+
+			if (!m_scalarParameters.empty())
+			{
+				std::vector<float> initialData;
+				for (auto& param : m_scalarParameters)
+				{
+					initialData.push_back(param.value);
+				}
+
+				m_parameterBuffers[0] = device.CreateConstantBuffer(sizeof(float) * m_scalarParameters.size(), initialData.data());
+			}
+
+			m_bufferLayoutDirty[0] = false;
+			m_bufferDataDirty[0] = false;
+		}
+
+		if (m_bufferDataDirty[0])
+		{
+			std::vector<float> initialData;
+			for (auto& param : m_scalarParameters)
+			{
+				initialData.push_back(param.value);
+			}
+			m_parameterBuffers[0]->Update(initialData.data());
+			m_bufferDataDirty[0] = false;
+		}
+
+		if (m_bufferLayoutDirty[1])
+		{
+			m_parameterBuffers[1].reset();
+
+			if (!m_vectorParameters.empty())
+			{
+				std::vector<Vector4> initialData;
+				for (auto& param : m_vectorParameters)
+				{
+					initialData.push_back(param.value);
+				}
+
+				m_parameterBuffers[1] = device.CreateConstantBuffer(sizeof(Vector4) * m_vectorParameters.size(), initialData.data());
+			}
+
+			m_bufferLayoutDirty[1] = false;
+			m_bufferDataDirty[1] = false;
+		}
+
+		if (m_bufferDataDirty[1])
+		{
+			std::vector<Vector4> initialData;
+			for (auto& param : m_vectorParameters)
+			{
+				initialData.push_back(param.value);
+			}
+			m_parameterBuffers[1]->Update(initialData.data());
+			m_bufferDataDirty[1] = false;
+		}
+
+		return m_parameterBuffers[(uint8)type];
+	}
+
+	void MaterialInstance::ClearParameters()
+	{
+		m_scalarParameters.clear();
+		m_vectorParameters.clear();
+		m_textureParameters.clear();
+	}
+
+	void MaterialInstance::AddScalarParameter(std::string_view name, float defaultValue)
+	{
+	}
+
+	void MaterialInstance::SetScalarParameter(std::string_view name, float value)
+	{
+		const auto it = std::find_if(m_scalarParameters.begin(), m_scalarParameters.end(), [&name](const ScalarParameterValue& value) { return value.name == name; });
+		if (it == m_scalarParameters.end())
+		{
+			return;
+		}
+
+		if (it->value != value)
+		{
+			m_bufferDataDirty[(uint8)MaterialParameterType::Scalar] = true;
+			it->value = value;
+		}
+	}
+
+	bool MaterialInstance::GetScalarParameter(std::string_view name, float& out_value)
+	{
+		const auto it = std::find_if(m_scalarParameters.begin(), m_scalarParameters.end(), [&name](const ScalarParameterValue& value) { return value.name == name; });
+		if (it == m_scalarParameters.end())
+		{
+			return false;
+		}
+
+		out_value = it->value;
+		return true;
+	}
+
+	void MaterialInstance::AddVectorParameter(std::string_view name, const Vector4& defaultValue)
+	{
+	}
+
+	void MaterialInstance::SetVectorParameter(std::string_view name, const Vector4& value)
+	{
+		const auto it = std::find_if(m_vectorParameters.begin(), m_vectorParameters.end(), [&name](const VectorParameterValue& value) { return value.name == name; });
+		if (it == m_vectorParameters.end())
+		{
+			return;
+		}
+
+		if (it->value != value)
+		{
+			m_bufferDataDirty[(uint8)MaterialParameterType::Vector] = true;
+			it->value = value;
+		}
+	}
+
+	bool MaterialInstance::GetVectorParameter(std::string_view name, Vector4& out_value)
+	{
+		const auto it = std::find_if(m_vectorParameters.begin(), m_vectorParameters.end(), [&name](const VectorParameterValue& value) { return value.name == name; });
+		if (it == m_vectorParameters.end())
+		{
+			return false;
+		}
+
+		out_value = it->value;
+		return true;
+	}
+
+	void MaterialInstance::AddTextureParameter(std::string_view name, TexturePtr defaultValue)
+	{
+	}
+
+	void MaterialInstance::SetTextureParameter(std::string_view name, TexturePtr value)
+	{
+	}
+
+	bool MaterialInstance::GetTextureParameter(std::string_view name, TexturePtr& out_value)
+	{
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
+		if (it == m_textureParameters.end())
+		{
+			return false;
+		}
+
+		out_value = it->texture;
+		return true;
 	}
 }

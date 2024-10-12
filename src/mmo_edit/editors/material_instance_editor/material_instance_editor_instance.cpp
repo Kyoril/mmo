@@ -150,11 +150,40 @@ namespace mmo
 		if (ImGui::Begin(detailsId.c_str(), nullptr))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-		    {
 
-		        ImGui::EndTable();
-		    }
+			// Scalar parameters
+			if (ImGui::CollapsingHeader("Scalar Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				for (const auto& param : m_material->GetScalarParameters())
+				{
+					float value = param.value;
+					if (ImGui::InputFloat(param.name.c_str(), &value))
+					{
+						m_material->SetScalarParameter(param.name, value);
+					}
+				}
+			}
+
+			if (ImGui::CollapsingHeader("Vector Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				for (const auto& param : m_material->GetVectorParameters())
+				{
+					float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
+					if (ImGui::InputFloat4(param.name.c_str(), values))
+					{
+						m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
+					}
+				}
+			}
+
+			if (ImGui::CollapsingHeader("Texture Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				for (const auto& param : m_material->GetTextureParameters())
+				{
+					// TODO!
+				}
+			}
+
 		    ImGui::PopStyleVar();
 		}
 		ImGui::End();

@@ -1022,6 +1022,17 @@ namespace mmo
 			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
 		}
 
+		// Bind additional constant buffers if any
+		int psStartSlot = 0;
+		if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
+		{
+			scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+		}
+		if (const ConstantBufferPtr vectorBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Vector, *this))
+		{
+			vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+		}
+
 		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
 		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
 

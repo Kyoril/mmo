@@ -504,7 +504,7 @@ namespace mmo
 								// For each material
 								for (const auto& file : files)
 								{
-									if (!file.ends_with(".hmat")) continue;
+									if (!file.ends_with(".hmat") && !file.ends_with(".hmi")) continue;
 
 									if (ImGui::Selectable(file.c_str()))
 									{
