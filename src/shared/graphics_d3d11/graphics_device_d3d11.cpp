@@ -815,6 +815,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::BindTexture(const TexturePtr texture, const ShaderType shader, const uint32 slot)
 	{
+		if (!texture)
+		{
+			return;
+		}
+
 		// TODO: Mark the BindTexture method obsolete? Technically it's no longer being needed
 		texture->Bind(shader, slot);
 		

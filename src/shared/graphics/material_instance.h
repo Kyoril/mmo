@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <map>
+
 #include "base/typedefs.h"
 
 #include "graphics/shader_base.h"
@@ -25,6 +27,8 @@ namespace mmo
 		virtual ~MaterialInstance() override = default;
 
 	public:
+		virtual std::shared_ptr<Material> GetBaseMaterial() override { return m_parent->GetBaseMaterial(); }
+
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
 		virtual void SetTwoSided(const bool value) noexcept override { m_twoSided = value; }
@@ -134,6 +138,7 @@ namespace mmo
 		std::vector<ScalarParameterValue> m_scalarParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;
 		std::vector<TextureParameterValue> m_textureParameters;
+		std::map<String, TexturePtr> m_textureParamTextures;
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

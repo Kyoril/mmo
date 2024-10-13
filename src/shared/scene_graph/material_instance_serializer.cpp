@@ -111,8 +111,6 @@ namespace mmo
 
 	bool MaterialInstanceDeserializer::ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		//m_material.ClearTextures();
-
 		uint8 numTextures;
 		if ((reader >> io::read<uint8>(numTextures)))
 		{
@@ -123,8 +121,6 @@ namespace mmo
 				{
 					break;
 				}
-
-				//m_material.AddTexture(textureFile);
 			}
 		}
 
@@ -185,7 +181,6 @@ namespace mmo
 				if ((reader >> io::read_container<uint8>(name)
 					>> io::read_container<uint16>(defaultTexture)))
 				{
-					// TODO value
 					m_materialInstance.SetTextureParameter(name, defaultTexture);
 				}
 			}
@@ -266,18 +261,20 @@ namespace mmo
 			vectorParamChunkWriter.Finish();
 		}
 
-		/*
-		// Texture chunk
+		// Texture Parameters
+		if (!materialInstance.GetTextureParameters().empty())
 		{
-			ChunkWriter textureChunkWriter { MaterialTextureChunk, writer };
-			writer << io::write<uint8>(material.GetTextureFiles().size());
-			for(const auto& textureFileName : material.GetTextureFiles())
+			ChunkWriter textureParamChunk{ MaterialTextureParamChunk, writer };
+			writer << io::write<uint8>(materialInstance.GetTextureParameters().size());
+			for (const auto& param : materialInstance.GetTextureParameters())
 			{
-				writer << io::write_dynamic_range<uint8>(textureFileName);
+				writer
+					<< io::write_dynamic_range<uint8>(param.name)
+					<< io::write_dynamic_range<uint16>(param.texture);
 			}
 
-			textureChunkWriter.Finish();
+			textureParamChunk.Finish();
 		}
-		*/
+
 	}
 }

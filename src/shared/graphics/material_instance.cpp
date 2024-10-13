@@ -51,6 +51,7 @@ namespace mmo
 		m_vectorParameters.reserve(m_parent->GetVectorParameters().size());
 		m_textureParameters.clear();
 		m_textureParameters.reserve(m_parent->GetTextureParameters().size());
+		m_textureParamTextures.clear();
 
 		for (auto& param : m_parent->GetScalarParameters())
 		{
@@ -63,6 +64,7 @@ namespace mmo
 		for (auto& param : m_parent->GetTextureParameters())
 		{
 			m_textureParameters.push_back(param);
+			m_textureParamTextures[param.name] = TextureManager::Get().CreateOrRetrieve(param.texture);
 		}
 
 		// Refresh base values from parent material if this is the first reference to a parent material
@@ -94,7 +96,41 @@ namespace mmo
 
 	void MaterialInstance::Apply(GraphicsDevice& device)
 	{
-		m_parent->Apply(device);
+		// Bind shaders from the material
+		if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
+		if (m_parent->GetPixelShader()) m_parent->GetPixelShader()->Set();
+
+		// Bind base material static textures
+		auto baseMaterial = GetBaseMaterial();
+		baseMaterial->BindTextures(device);
+
+		// Bind texture parameter override textures
+		uint32 shaderSlot = baseMaterial->GetTextureFiles().size();
+		for (auto& param : m_textureParameters)
+		{
+			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+		}
+
+		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+		device.SetDepthWriteEnabled(m_depthWrite);
+
+		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
+		{
+			device.SetBlendMode(BlendMode::Alpha);
+		}
+		else
+		{
+			device.SetBlendMode(BlendMode::Opaque);
+		}
+
+		if (m_twoSided)
+		{
+			device.SetFaceCullMode(FaceCullMode::None);
+		}
+		else
+		{
+			device.SetFaceCullMode(FaceCullMode::Back);
+		}
 	}
 
 	ConstantBufferPtr MaterialInstance::GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device)
@@ -167,6 +203,7 @@ namespace mmo
 		m_scalarParameters.clear();
 		m_vectorParameters.clear();
 		m_textureParameters.clear();
+		m_textureParamTextures.clear();
 	}
 
 	void MaterialInstance::AddScalarParameter(std::string_view name, float defaultValue)
@@ -237,6 +274,14 @@ namespace mmo
 
 	void MaterialInstance::SetTextureParameter(std::string_view name, const String& value)
 	{
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const auto& value) { return value.name == name; });
+		if (it == m_textureParameters.end())
+		{
+			return;
+		}
+
+		it->texture = value;
+		m_textureParamTextures[String(name)] = TextureManager::Get().CreateOrRetrieve(value);
 	}
 
 	bool MaterialInstance::GetTextureParameter(std::string_view name, String& out_value)

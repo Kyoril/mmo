@@ -109,6 +109,7 @@ namespace mmo
 		m_scalarParameters.clear();
 		m_vectorParameters.clear();
 		m_textureParameters.clear();
+		m_textureParamTextures.clear();
 	}
 
 	void Material::AddScalarParameter(std::string_view name, float defaultValue)
@@ -197,7 +198,9 @@ namespace mmo
 			return;
 		}
 
+		m_textureParamTextures[String(name)] = TextureManager::Get().CreateOrRetrieve(defaultValue);
 		m_textureParameters.emplace_back(String(name), defaultValue);
+
 		m_bufferLayoutDirty[(uint8)MaterialParameterType::Texture] = true;
 	}
 
@@ -213,6 +216,7 @@ namespace mmo
 		{
 			m_bufferDataDirty[(uint8)MaterialParameterType::Texture] = true;
 			it->texture = value;
+			m_textureParamTextures[String(name)] = TextureManager::Get().CreateOrRetrieve(value);
 		}
 	}
 
@@ -226,6 +230,11 @@ namespace mmo
 
 		out_value = it->texture;
 		return true;
+	}
+
+	std::shared_ptr<Material> Material::AsShared()
+	{
+		return std::static_pointer_cast<Material>(shared_from_this());
 	}
 
 	void Material::Update()
@@ -327,10 +336,16 @@ namespace mmo
 	void Material::Apply(GraphicsDevice& device)
 	{
 		// TODO: Determine what vertex shader type we need to bind based on the rendering context or from outside
-
 		BindShaders(device);
 		BindTextures(device);
 
+		// Bind texture parameter textures
+		uint32 shaderSlot = m_textures.size();
+		for (auto& param : m_textureParameters)
+		{
+			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+		}
+		
 		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 		device.SetDepthWriteEnabled(m_depthWrite);
 
@@ -356,7 +371,6 @@ namespace mmo
 	void Material::BindShaders(GraphicsDevice& device)
 	{
 		// Apply
-
 		if (m_vertexShader[0]) m_vertexShader[0]->Set();
 		if (m_pixelShader) m_pixelShader->Set();
 	}

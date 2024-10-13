@@ -369,10 +369,10 @@ namespace mmo
 			{
 				String name;
 				String defaultTexture;
-				if ((reader >> io::read_container<uint8>(name)
+				if ((reader 
+					>> io::read_container<uint8>(name)
 					>> io::read_container<uint16>(defaultTexture)))
 				{
-					// TODO value
 					m_material.AddTextureParameter(name, defaultTexture);
 				}
 			}
@@ -445,7 +445,20 @@ namespace mmo
 			vectorParamChunkWriter.Finish();
 		}
 
-		// TODO: Texture parameters
+		// Texture parameters
+		if (!material.GetTextureParameters().empty())
+		{
+			ChunkWriter vectorParamChunkWriter{ MaterialTextureParamChunk, writer };
+			writer << io::write<uint8>(material.GetTextureParameters().size());
+			for (const auto& param : material.GetTextureParameters())
+			{
+				writer
+					<< io::write_dynamic_range<uint8>(param.name)
+					<< io::write_dynamic_range<uint16>(param.texture);
+			}
+
+			vectorParamChunkWriter.Finish();
+		}
 
 		// Texture chunk
 		{

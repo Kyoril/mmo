@@ -1120,7 +1120,7 @@ namespace mmo
 				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler, m_uvs.GetLink());
 			}
 
-			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false);
+			m_compiledExpressionId = compiler.AddTextureParameterSample(m_textureName, m_texturePath.GetPath(), uvExpression, false);
 		}
 
 		if (outputPin && outputPin != &m_rgba)

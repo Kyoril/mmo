@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <map>
+
 #include "base/typedefs.h"
 
 #include "graphics/shader_base.h"
@@ -16,6 +18,7 @@
 
 namespace mmo
 {
+	class Material;
 	class ShaderCompiler;
 	class GraphicsDevice;
 	class MaterialCompiler;
@@ -85,6 +88,8 @@ namespace mmo
 
 		/// @brief Ensures that the material is loaded.
 		virtual void Update() = 0;
+
+		virtual std::shared_ptr<Material> GetBaseMaterial() = 0;
 
 		virtual ShaderPtr& GetVertexShader(VertexShaderType type) noexcept = 0;
 
@@ -176,6 +181,8 @@ namespace mmo
 		virtual ~Material() override = default;
 
 	public:
+		virtual std::shared_ptr<Material> GetBaseMaterial() override { return AsShared(); }
+
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
 		void SetTwoSided(const bool value) noexcept override { m_twoSided = value; }
@@ -277,10 +284,10 @@ namespace mmo
 		/// @param compiler The compiler to use for compiling the material.
 		bool Compile(MaterialCompiler& compiler, ShaderCompiler& shaderCompiler);
 
+		void BindTextures(GraphicsDevice& device);
+
 	private:
 		void BindShaders(GraphicsDevice& device);
-
-		void BindTextures(GraphicsDevice& device);
 
 	public:
 		const std::vector<ScalarParameterValue>& GetScalarParameters() const override { return m_scalarParameters; }
@@ -314,6 +321,7 @@ namespace mmo
 		bool m_bufferLayoutDirty[3] { true, true, true };
 		bool m_bufferDataDirty[3] { true, true, true };
 		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
+		std::map<String, TexturePtr> m_textureParamTextures;
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

@@ -105,5 +105,6 @@ namespace mmo
 	public:
 		std::vector<ScalarParameterValue> m_floatParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;
+		std::vector<TextureParameterValue> m_textureParameters;
 	};
 }

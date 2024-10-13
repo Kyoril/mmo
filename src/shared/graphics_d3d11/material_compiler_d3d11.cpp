@@ -634,6 +634,20 @@ namespace mmo
 			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
 		}
 
+		// Add texture parameter samplers
+		const auto& textureParams = m_textureParameters;
+		if (!textureParams.empty())
+		{
+			for (size_t i = 0; i < textureParams.size(); ++i)
+			{
+				m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
+				m_pixelShaderStream
+					<< "// " << textureParams[i].name << "\n"
+					<< "Texture2D texparam" << i << ";\n"
+					<< "SamplerState paramsampler" << i << ";\n\n";
+			}
+		}
+
 		if (m_lit)
 		{
 			// fresnelSchlick
@@ -901,27 +915,24 @@ namespace mmo
 
 	ExpressionIndex MaterialCompilerD3D11::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb)
 	{
-		// TODO!
-
-		// Ensure the parameter exists
-		if (texture.empty())
+		// Ensure parameter exists
+		uint32 paramIndex = 0;
+		auto it = m_textureParameters.begin();
+		for (; it != m_textureParameters.end(); ++it, ++paramIndex)
 		{
-			WLOG("Trying to sample empty texture");
-			return IndexNone;
-		}
-
-		int32 textureIndex;
-		for (textureIndex = 0; textureIndex < m_textures.size(); ++textureIndex)
-		{
-			if (m_textures[textureIndex] == texture)
+			if (it->name == name)
 			{
+				DLOG("Updating texture parameter " << name << " default value");
+				it->texture = texture;
 				break;
 			}
 		}
 
-		if (textureIndex == m_textures.size())
+		if (it == m_textureParameters.end())
 		{
-			m_textures.emplace_back(texture);
+			DLOG("Adding texture parameter #" << m_textureParameters.size() + 1 << ": " << name);
+			m_textureParameters.emplace_back(String(name), String(texture));
+			paramIndex = m_textureParameters.size() - 1;
 		}
 
 		std::ostringstream outputStream;
@@ -930,7 +941,7 @@ namespace mmo
 			outputStream << "pow(";
 		}
 
-		outputStream << "tex" << textureIndex << ".Sample(sampler" << textureIndex << ", ";
+		outputStream << "texparam" << paramIndex << ".Sample(paramsampler" << paramIndex << ", ";
 		if (coordinates == IndexNone)
 		{
 			outputStream << "input.uv0";
