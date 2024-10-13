@@ -1,21 +1,22 @@
-FROM ubuntu:22.04 as builder
+FROM debian:stable-slim as builder
 
 WORKDIR /app
-COPY . /app
 
-RUN apt-get update && apt-get install -y g++ cmake git zlib1g-dev libssl-dev libmysqlclient-dev uuid-dev
+RUN apt-get update && apt-get install -y g++ cmake git zlib1g-dev libssl-dev libmariadb-dev-compat uuid-dev
+
+COPY . /app
 
 RUN mkdir -p build && \
 	cd build && \
 	cmake /app && \
-	make realm_server
+	make -j4 realm_server
 
 
-FROM ubuntu:22.04
+FROM debian:stable-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libmysqlclient-dev libssl-dev uuid-dev
+RUN apt-get update && apt-get install -y libmariadb-dev-compat libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
 COPY --from=builder /app/bin/realm_server /app/realm_server

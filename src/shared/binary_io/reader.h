@@ -6,6 +6,7 @@
 #include <string>
 #include <cstddef>
 #include <cmath>
+#include <cstdint>
 
 namespace io
 {
