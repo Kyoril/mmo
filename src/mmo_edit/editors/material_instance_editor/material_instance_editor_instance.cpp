@@ -186,7 +186,7 @@ namespace mmo
 					for (const auto& param : m_material->GetVectorParameters())
 					{
 						float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
-						if (ImGui::InputFloat4(param.name.c_str(), values))
+						if (ImGui::ColorEdit4(param.name.c_str(), values, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float))
 						{
 							m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
 						}
