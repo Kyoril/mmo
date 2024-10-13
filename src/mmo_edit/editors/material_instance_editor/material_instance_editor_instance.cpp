@@ -165,6 +165,8 @@ namespace mmo
 				// Scalar parameters
 				if (ImGui::CollapsingHeader("Scalar Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+					ImGui::PushID("ScalarParameters");
+
 					for (const auto& param : m_material->GetScalarParameters())
 					{
 						float value = param.value;
@@ -173,10 +175,14 @@ namespace mmo
 							m_material->SetScalarParameter(param.name, value);
 						}
 					}
+
+					ImGui::PopID();
 				}
 
 				if (ImGui::CollapsingHeader("Vector Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+					ImGui::PushID("VectorParameters");
+
 					for (const auto& param : m_material->GetVectorParameters())
 					{
 						float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
@@ -185,14 +191,55 @@ namespace mmo
 							m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
 						}
 					}
+
+					ImGui::PopID();
 				}
 
 				if (ImGui::CollapsingHeader("Texture Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+					ImGui::PushID("TextureParameters");
+
 					for (const auto& param : m_material->GetTextureParameters())
 					{
-						// TODO!
+						if (ImGui::BeginCombo(param.name.c_str(), !param.texture.empty() ? param.texture.c_str() : "(None)", ImGuiComboFlags_HeightLargest))
+						{
+							if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+							{
+								ImGui::SetKeyboardFocusHere(0);
+							}
+							m_assetFilter.Draw("##asset_filter");
+
+							if (ImGui::BeginChild("##asset_scroll_area", ImVec2(0, 400)))
+							{
+								const auto files = AssetRegistry::ListFiles(".htex");
+								for (auto& file : files)
+								{
+									if (m_assetFilter.IsActive())
+									{
+										if (!m_assetFilter.PassFilter(file.c_str()))
+										{
+											continue;
+										}
+									}
+
+									ImGui::PushID(file.c_str());
+									if (ImGui::Selectable(Path(file).filename().string().c_str()))
+									{
+										m_material->SetTextureParameter(param.name, file);
+
+										m_assetFilter.Clear();
+										ImGui::CloseCurrentPopup();
+									}
+									ImGui::PopID();
+								}
+							}
+							ImGui::EndChild();
+
+							ImGui::EndCombo();
+						}
 					}
+
+					ImGui::PopID();
 				}
 
 			}

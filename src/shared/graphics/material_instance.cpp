@@ -231,15 +231,15 @@ namespace mmo
 		return true;
 	}
 
-	void MaterialInstance::AddTextureParameter(std::string_view name, TexturePtr defaultValue)
+	void MaterialInstance::AddTextureParameter(std::string_view name, const String& defaultValue)
 	{
 	}
 
-	void MaterialInstance::SetTextureParameter(std::string_view name, TexturePtr value)
+	void MaterialInstance::SetTextureParameter(std::string_view name, const String& value)
 	{
 	}
 
-	bool MaterialInstance::GetTextureParameter(std::string_view name, TexturePtr& out_value)
+	bool MaterialInstance::GetTextureParameter(std::string_view name, String& out_value)
 	{
 		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
 		if (it == m_textureParameters.end())

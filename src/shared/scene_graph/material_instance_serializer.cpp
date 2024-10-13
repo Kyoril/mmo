@@ -186,7 +186,7 @@ namespace mmo
 					>> io::read_container<uint16>(defaultTexture)))
 				{
 					// TODO value
-					m_materialInstance.SetTextureParameter(name, nullptr);
+					m_materialInstance.SetTextureParameter(name, defaultTexture);
 				}
 			}
 		}

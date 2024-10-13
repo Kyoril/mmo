@@ -45,6 +45,9 @@ namespace mmo
 		/// Returns a list of file names in the asset registry.
 		static std::vector<std::string> ListFiles();
 
+		/// Returns a list of file names in the asset registry.
+		static std::vector<std::string> ListFiles(const std::string& extension);
+
 	private:
 		static std::mutex s_fileLock;
 	};

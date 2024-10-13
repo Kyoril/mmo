@@ -904,7 +904,6 @@ namespace mmo
 		// TODO!
 
 		// Ensure the parameter exists
-		m_material->AddTextureParameter(name, nullptr);
 		if (texture.empty())
 		{
 			WLOG("Trying to sample empty texture");

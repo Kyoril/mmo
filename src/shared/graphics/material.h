@@ -66,7 +66,7 @@ namespace mmo
 	struct TextureParameterValue
 	{
 		String name;
-		TexturePtr texture;
+		String texture;
 	};
 
 	enum class MaterialParameterType : uint8
@@ -158,11 +158,11 @@ namespace mmo
 
 		virtual const std::vector<TextureParameterValue>& GetTextureParameters() const = 0;
 
-		virtual void AddTextureParameter(std::string_view name, TexturePtr defaultValue) = 0;
+		virtual void AddTextureParameter(std::string_view name, const String& defaultValue) = 0;
 
-		virtual void SetTextureParameter(std::string_view name, TexturePtr value) = 0;
+		virtual void SetTextureParameter(std::string_view name, const String& value) = 0;
 
-		virtual bool GetTextureParameter(std::string_view name, TexturePtr& out_value) = 0;
+		virtual bool GetTextureParameter(std::string_view name, String& out_value) = 0;
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -252,13 +252,11 @@ namespace mmo
 
 		virtual bool GetVectorParameter(std::string_view name, Vector4& out_value) override;
 
-		virtual void AddTextureParameter(std::string_view name, TexturePtr defaultValue) override;
+		virtual void AddTextureParameter(std::string_view name, const String& defaultValue) override;
 
-		virtual void SetTextureParameter(std::string_view name, TexturePtr value) override;
+		virtual void SetTextureParameter(std::string_view name, const String& value) override;
 
-		virtual bool GetTextureParameter(std::string_view name, TexturePtr& out_value) override;
-
-		uint32 GetParameterIndex();
+		virtual bool GetTextureParameter(std::string_view name, String& out_value) override;
 
 		std::shared_ptr<Material> AsShared();
 

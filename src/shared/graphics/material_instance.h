@@ -108,11 +108,11 @@ namespace mmo
 
 		bool GetVectorParameter(std::string_view name, Vector4& out_value) override;
 
-		void AddTextureParameter(std::string_view name, TexturePtr defaultValue) override;
+		void AddTextureParameter(std::string_view name, const String& defaultValue) override;
 
-		void SetTextureParameter(std::string_view name, TexturePtr value) override;
+		void SetTextureParameter(std::string_view name, const String& value) override;
 
-		bool GetTextureParameter(std::string_view name, TexturePtr& out_value) override;
+		bool GetTextureParameter(std::string_view name, String& out_value) override;
 
 		const std::vector<ScalarParameterValue>& GetScalarParameters() const override { return m_scalarParameters; }
 

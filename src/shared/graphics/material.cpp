@@ -158,7 +158,6 @@ namespace mmo
 			return;
 		}
 
-		const uint32 index = GetParameterIndex();
 		m_vectorParameters.emplace_back(String(name), defaultValue);
 		m_bufferLayoutDirty[(uint8)MaterialParameterType::Vector] = true;
 	}
@@ -180,10 +179,17 @@ namespace mmo
 
 	bool Material::GetVectorParameter(std::string_view name, Vector4& out_value)
 	{
-		return false;
+		const auto it = std::find_if(m_vectorParameters.begin(), m_vectorParameters.end(), [&name](const auto& value) { return value.name == name; });
+		if (it == m_vectorParameters.end())
+		{
+			return false;
+		}
+
+		out_value = it->value;
+		return true;
 	}
 
-	void Material::AddTextureParameter(std::string_view name, TexturePtr defaultValue)
+	void Material::AddTextureParameter(std::string_view name, const String& defaultValue)
 	{
 		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
 		if (it != m_textureParameters.end())
@@ -191,22 +197,35 @@ namespace mmo
 			return;
 		}
 
-		const uint32 index = GetParameterIndex();
 		m_textureParameters.emplace_back(String(name), defaultValue);
+		m_bufferLayoutDirty[(uint8)MaterialParameterType::Texture] = true;
 	}
 
-	void Material::SetTextureParameter(std::string_view name, TexturePtr value)
+	void Material::SetTextureParameter(std::string_view name, const String& value)
 	{
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
+		if (it != m_textureParameters.end())
+		{
+			return;
+		}
+
+		if (it->texture != value)
+		{
+			m_bufferDataDirty[(uint8)MaterialParameterType::Texture] = true;
+			it->texture = value;
+		}
 	}
 
-	bool Material::GetTextureParameter(std::string_view name, TexturePtr& out_value)
+	bool Material::GetTextureParameter(std::string_view name, String& out_value)
 	{
-		return false;
-	}
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const auto& value) { return value.name == name; });
+		if (it == m_textureParameters.end())
+		{
+			return false;
+		}
 
-	uint32 Material::GetParameterIndex()
-	{
-		return m_scalarParameters.size() + m_vectorParameters.size() + m_textureParameters.size();
+		out_value = it->texture;
+		return true;
 	}
 
 	void Material::Update()

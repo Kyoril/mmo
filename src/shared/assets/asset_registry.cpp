@@ -204,14 +204,30 @@ namespace mmo
 
 	std::vector<std::string> AssetRegistry::ListFiles()
 	{
-		std::unique_lock lock { s_fileLock };
+		std::unique_lock lock{ s_fileLock };
 		std::vector<std::string> result;
 
 		for (const auto& file : s_files)
 		{
 			result.push_back(file.first);
 		}
-		
+
+		return result;
+	}
+
+	std::vector<std::string> AssetRegistry::ListFiles(const std::string& extension)
+	{
+		std::unique_lock lock{ s_fileLock };
+		std::vector<std::string> result;
+
+		for (const auto& file : s_files)
+		{
+			if (extension.empty() || file.first.ends_with(extension))
+			{
+				result.push_back(file.first);
+			}
+		}
+
 		return result;
 	}
 }

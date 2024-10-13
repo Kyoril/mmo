@@ -373,7 +373,7 @@ namespace mmo
 					>> io::read_container<uint16>(defaultTexture)))
 				{
 					// TODO value
-					m_material.AddTextureParameter(name, nullptr);
+					m_material.AddTextureParameter(name, defaultTexture);
 				}
 			}
 		}
