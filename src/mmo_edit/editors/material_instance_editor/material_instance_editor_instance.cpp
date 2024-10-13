@@ -16,6 +16,7 @@
 #include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
 #include "preview_providers/preview_provider_manager.h"
+#include "scene_graph/material_instance_serializer.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
 
@@ -96,6 +97,9 @@ namespace mmo
 		io::StreamSink sink { *file };
 		io::Writer writer { sink };
 
+		MaterialInstanceSerializer serializer;
+		serializer.Export(*m_material, writer);
+
 		ILOG("Successfully saved material");
 
     	m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
@@ -156,37 +160,41 @@ namespace mmo
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
 
-			// Scalar parameters
-			if (ImGui::CollapsingHeader("Scalar Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+			if (m_material)
 			{
-				for (const auto& param : m_material->GetScalarParameters())
+				// Scalar parameters
+				if (ImGui::CollapsingHeader("Scalar Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					float value = param.value;
-					if (ImGui::InputFloat(param.name.c_str(), &value))
+					for (const auto& param : m_material->GetScalarParameters())
 					{
-						m_material->SetScalarParameter(param.name, value);
+						float value = param.value;
+						if (ImGui::InputFloat(param.name.c_str(), &value))
+						{
+							m_material->SetScalarParameter(param.name, value);
+						}
 					}
 				}
-			}
 
-			if (ImGui::CollapsingHeader("Vector Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				for (const auto& param : m_material->GetVectorParameters())
+				if (ImGui::CollapsingHeader("Vector Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
-					if (ImGui::InputFloat4(param.name.c_str(), values))
+					for (const auto& param : m_material->GetVectorParameters())
 					{
-						m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
+						float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
+						if (ImGui::InputFloat4(param.name.c_str(), values))
+						{
+							m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
+						}
 					}
 				}
-			}
 
-			if (ImGui::CollapsingHeader("Texture Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				for (const auto& param : m_material->GetTextureParameters())
+				if (ImGui::CollapsingHeader("Texture Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					// TODO!
+					for (const auto& param : m_material->GetTextureParameters())
+					{
+						// TODO!
+					}
 				}
+
 			}
 
 		    ImGui::PopStyleVar();

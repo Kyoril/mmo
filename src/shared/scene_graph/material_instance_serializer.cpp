@@ -16,6 +16,9 @@ namespace mmo
 	static const ChunkMagic MaterialInstanceParentChunk = MakeChunkMagic('TNRP');
 	static const ChunkMagic MaterialAttributeChunk = MakeChunkMagic('RTTA');
 	static const ChunkMagic MaterialTextureChunk = MakeChunkMagic('TXET');
+	static const ChunkMagic MaterialScalarParamChunk = MakeChunkMagic('RAPS');
+	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
+	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
 	
 	MaterialInstanceDeserializer::MaterialInstanceDeserializer(MaterialInstance& materialInstance)
 		: ChunkReader(true)
@@ -37,6 +40,10 @@ namespace mmo
 				AddChunkHandler(*MaterialInstanceParentChunk, true, *this, &MaterialInstanceDeserializer::ReadParentChunk);
 				AddChunkHandler(*MaterialTextureChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialTextureChunk);
 				AddChunkHandler(*MaterialAttributeChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialAttributeV2Chunk);
+
+				AddChunkHandler(*MaterialScalarParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialScalarParamChunk);
+				AddChunkHandler(*MaterialVectorParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialVectorParamChunk);
+				AddChunkHandler(*MaterialTextureParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialTextureParamChunk);
 			}
 			else
 			{
@@ -123,7 +130,70 @@ namespace mmo
 
 		return reader;
 	}
-	
+
+	bool MaterialInstanceDeserializer::ReadMaterialScalarParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 numParams;
+		if (reader >> io::read<uint16>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				float defaultValue;
+				if ((reader >> io::read_container<uint8>(name) >> io::read<float>(defaultValue)))
+				{
+					m_materialInstance.SetScalarParameter(name, defaultValue);
+				}
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialInstanceDeserializer::ReadMaterialVectorParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 numParams;
+		if (reader >> io::read<uint16>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				Vector4 defaultValue;
+				if ((reader >> io::read_container<uint8>(name)
+					>> io::read<float>(defaultValue.x)
+					>> io::read<float>(defaultValue.y)
+					>> io::read<float>(defaultValue.z)
+					>> io::read<float>(defaultValue.w)))
+				{
+					m_materialInstance.SetVectorParameter(name, defaultValue);
+				}
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialInstanceDeserializer::ReadMaterialTextureParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 numParams;
+		if (reader >> io::read<uint8>(numParams))
+		{
+			for (uint16 i = 0; i < numParams; ++i)
+			{
+				String name;
+				String defaultTexture;
+				if ((reader >> io::read_container<uint8>(name)
+					>> io::read_container<uint16>(defaultTexture)))
+				{
+					// TODO value
+					m_materialInstance.SetTextureParameter(name, nullptr);
+				}
+			}
+		}
+
+		return reader;
+	}
+
 	void MaterialInstanceSerializer::Export(const MaterialInstance& materialInstance, io::Writer& writer, MaterialInstanceVersion version)
 	{
 		version = material_instance_version::Version_0_1;
@@ -163,6 +233,37 @@ namespace mmo
 			ChunkWriter attributeChunkWriter { MaterialAttributeChunk, writer };
 			writer.WritePOD(attributes);
 			attributeChunkWriter.Finish();
+		}
+
+		// Scalar Parameters
+		if (!materialInstance.GetScalarParameters().empty())
+		{
+			ChunkWriter scalarParamChunkWriter{ MaterialScalarParamChunk, writer };
+			writer << io::write<uint16>(materialInstance.GetScalarParameters().size());
+			for (const auto& param : materialInstance.GetScalarParameters())
+			{
+				writer << io::write_dynamic_range<uint8>(param.name) << io::write<float>(param.value);
+			}
+
+			scalarParamChunkWriter.Finish();
+		}
+
+		// Vector Parameters
+		if (!materialInstance.GetVectorParameters().empty())
+		{
+			ChunkWriter vectorParamChunkWriter{ MaterialVectorParamChunk, writer };
+			writer << io::write<uint16>(materialInstance.GetVectorParameters().size());
+			for (const auto& param : materialInstance.GetVectorParameters())
+			{
+				writer
+					<< io::write_dynamic_range<uint8>(param.name)
+					<< io::write<float>(param.value.x)
+					<< io::write<float>(param.value.y)
+					<< io::write<float>(param.value.z)
+					<< io::write<float>(param.value.w);
+			}
+
+			vectorParamChunkWriter.Finish();
 		}
 
 		/*
