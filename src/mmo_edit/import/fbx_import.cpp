@@ -335,7 +335,7 @@ namespace mmo
             // Normal
             if (norm)
             {
-                vectorData = normalMatrix * Vector3(norm->x, norm->y, norm->z);
+                vectorData = normalMatrix * Vector3(norm->x, norm->y, norm->z).NormalizedCopy();
                 vectorData.Normalize();
 
                 dataPointer->normal = vectorData;
@@ -346,27 +346,20 @@ namespace mmo
                 dataPointer->normal = Vector3::UnitY;
             }
 
-            // Binormal
-            if (binorm)
+            // Calculate binormal and tangent from normal
+            const Vector3 c1 = dataPointer->normal.Cross(Vector3::UnitZ);
+            const Vector3 c2 = dataPointer->normal.Cross(Vector3::UnitY);
+            if (c1.GetSquaredLength() > c2.GetSquaredLength())
             {
-                dataPointer->binormal = normalMatrix * Vector3(binorm->x, binorm->y, binorm->z);
-                binorm++;
+                dataPointer->tangent = c1;
             }
             else
             {
-                dataPointer->binormal = Vector3::UnitX;
+                dataPointer->tangent = c2;
             }
-
-            // Tangent
-            if (tang)
-            {
-                dataPointer->tangent = normalMatrix * Vector3(tang->x, tang->y, tang->z);
-                tang++;
-            }
-            else
-            {
-                dataPointer->tangent = Vector3::UnitZ;
-            }
+            dataPointer->tangent.Normalize();
+            dataPointer->binormal = dataPointer->normal.Cross(dataPointer->tangent);
+            dataPointer->binormal.Normalize();
 
             // uvs
             if (uv)
