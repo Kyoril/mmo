@@ -272,6 +272,8 @@ namespace mmo
 			{
 				SceneNode* skeletonRoot = m_scene.GetRootSceneNode().CreateChildSceneNode("SkeletonRoot");
 				TraverseBone(m_scene, *skeletonRoot, *rootBone);
+
+				skeletonRoot->SetVisible(false, true);
 			}
 		}
 	}
@@ -405,6 +407,10 @@ namespace mmo
 		{
 			m_rightButtonPressed = false;
 		}
+		else if(button == 2)
+		{
+			m_middleButtonPressed = false;
+		}
 	}
 
 	void ModelEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
@@ -417,6 +423,11 @@ namespace mmo
 		{
 			m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 			m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+		}
+
+		if (m_middleButtonPressed)
+		{
+			m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
 		}
 
 		m_lastMouseX = x;
@@ -658,6 +669,11 @@ namespace mmo
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{
 				m_leftButtonPressed = true;
+			}
+
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Middle))
+			{
+				m_middleButtonPressed = true;
 			}
 		}
 		ImGui::End();

@@ -71,6 +71,7 @@ namespace mmo
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
 		bool m_rightButtonPressed { false };
+		bool m_middleButtonPressed { false };
 		bool m_initDockLayout { true };
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };

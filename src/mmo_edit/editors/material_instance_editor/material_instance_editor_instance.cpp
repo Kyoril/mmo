@@ -49,6 +49,7 @@ namespace mmo
 	{
 		// Load material instance
 		m_material = std::static_pointer_cast<MaterialInstance>(MaterialManager::Get().Load(assetPath.string()));
+		m_material->SetName(assetPath.string());
 
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");

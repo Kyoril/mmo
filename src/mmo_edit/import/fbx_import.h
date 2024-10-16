@@ -108,6 +108,7 @@ namespace mmo
 		Path m_fileToImport;
 		Path m_importAssetPath;
 		bool m_showImportFileDialog = false;
+		bool m_importTangents = false;
 
 		Vector3 m_importOffset = Vector3::Zero;
 		Vector3 m_importScale = Vector3::UnitScale;;

@@ -62,10 +62,12 @@ namespace mmo
 
         if (ImGui::BeginPopupModal("Model Import Settings", nullptr))
         {
-            ImGui::Text("Enter a name for the new material:");
+            ImGui::Text("Enter a name for the new model:");
 
             ImGui::InputFloat3("Offset", m_importOffset.Ptr(), "%.3f");
             ImGui::InputFloat3("Scale", m_importScale.Ptr(), "%.3f");
+
+            ImGui::Checkbox("Import tangents", &m_importTangents);
 
             Matrix3 rot;
             m_importRotation.ToRotationMatrix(rot);
@@ -346,20 +348,38 @@ namespace mmo
                 dataPointer->normal = Vector3::UnitY;
             }
 
-            // Calculate binormal and tangent from normal
-            const Vector3 c1 = dataPointer->normal.Cross(Vector3::UnitZ);
-            const Vector3 c2 = dataPointer->normal.Cross(Vector3::UnitY);
-            if (c1.GetSquaredLength() > c2.GetSquaredLength())
+            // Shall we try to import binormals and tangents and do we even have them?
+            if (m_importTangents && binorm && tang)
             {
-                dataPointer->tangent = c1;
+            	// Binormal
+                vectorData = normalMatrix * Vector3(binorm->x, binorm->y, binorm->z).NormalizedCopy();
+                vectorData.Normalize();
+                dataPointer->binormal = vectorData;
+                binorm++;
+
+                // Tangent
+                vectorData = normalMatrix * Vector3(tang->x, tang->y, tang->z).NormalizedCopy();
+                vectorData.Normalize();
+                dataPointer->tangent = vectorData;
+                tang++;
             }
             else
             {
-                dataPointer->tangent = c2;
+                // Calculate binormal and tangent from normal
+                const Vector3 c1 = dataPointer->normal.Cross(Vector3::UnitZ);
+                const Vector3 c2 = dataPointer->normal.Cross(Vector3::UnitY);
+                if (c1.GetSquaredLength() > c2.GetSquaredLength())
+                {
+                    dataPointer->tangent = c1;
+                }
+                else
+                {
+                    dataPointer->tangent = c2;
+                }
+                dataPointer->tangent.Normalize();
+                dataPointer->binormal = dataPointer->normal.Cross(dataPointer->tangent);
+                dataPointer->binormal.Normalize();
             }
-            dataPointer->tangent.Normalize();
-            dataPointer->binormal = dataPointer->normal.Cross(dataPointer->tangent);
-            dataPointer->binormal.Normalize();
 
             // uvs
             if (uv)

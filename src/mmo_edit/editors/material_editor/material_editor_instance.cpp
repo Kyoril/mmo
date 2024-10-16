@@ -638,7 +638,6 @@ namespace mmo
 		ed::SetCurrentEditor(m_context);
 
 		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
-		m_material->SetName(assetPath.string());
 		m_graph = std::make_unique<MaterialGraph>();
 
 		ExecutableMaterialGraphLoadContext context;
@@ -691,6 +690,7 @@ namespace mmo
 		}
 
 		m_renderConnection = host.beforeUiUpdate.connect(this, &MaterialEditorInstance::RenderMaterialPreview);
+		m_material->SetName(assetPath.string());
 	}
 
 	MaterialEditorInstance::~MaterialEditorInstance()
