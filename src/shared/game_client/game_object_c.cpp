@@ -37,7 +37,7 @@ namespace mmo
 	void GameObjectC::SetupSceneObjects()
 	{
 		Quaternion rotationOffset;
-		rotationOffset.FromAngleAxis(Degree(-90), Vector3::UnitY);
+		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
 		m_entityOffsetNode = m_sceneNode->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);

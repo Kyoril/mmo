@@ -1063,9 +1063,9 @@ namespace mmo
 		uint32 numBones = 0;
 		switch (type)
 		{
-		case VertexShaderType::SkinnedLow: numBones = 32; break;
-		case VertexShaderType::SkinnedMedium: numBones = 64; break;
-		case VertexShaderType::SkinnedHigh: numBones = 128; break;
+		case VertexShaderType::SkinnedLow: numBones = 64; break;
+		case VertexShaderType::SkinnedMedium: numBones = 128; break;
+		case VertexShaderType::SkinnedHigh: numBones = 256; break;
 		default:
 			numBones = 0;
 			break;

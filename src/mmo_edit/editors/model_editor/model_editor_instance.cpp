@@ -214,7 +214,7 @@ namespace mmo
 
 		SceneNode* scaleNode = child->CreateChildSceneNode();
 		scaleNode->SetInheritScale(false);
-		scaleNode->SetScale(Vector3::UnitScale * 0.1f);
+		scaleNode->SetScale(Vector3::UnitScale * 0.01f);
 		
 		// Attach debug visual
 		Entity* entity = scene.CreateEntity("Entity_" + bone.GetName(), "Editor/Joint.hmsh");
@@ -706,15 +706,12 @@ namespace mmo
 				m_entity->GetSkeleton()->RemoveAnimation(m_newAnimationName);
 			}
 
-			// DefBonePose a matrix that represents the local bone transform (can build from Ogre bone components)
-			// PoseToKey a matrix representing the keyframe translation
-			// What assimp stores aiNodeAnim IS the decomposed form of the transform (DefBonePose * PoseToKey)
-			// To get PoseToKey which is what Ogre needs we'ed have to build the transform from components in
-			// aiNodeAnim and then DefBonePose.Inverse() * aiNodeAnim(generated transform) will be the right transform
+			m_entity->GetSkeleton()->Reset();
 
 			// Create the animation
 			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
-			animation.SetUseBaseKeyFrame(true, 0.0f, "");
+			animation.SetUseBaseKeyFrame(false, 0.0f, "");
+			animation.SetInterpolationMode(Animation::InterpolationMode::Linear);
 
 			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
 			{
@@ -803,7 +800,7 @@ namespace mmo
 
 					keyFramePtr->SetTranslate(trans);
 					keyFramePtr->SetRotation(rot);
-					keyFramePtr->SetScale(scale);
+					//keyFramePtr->SetScale(scale);
 				}
 			}
 

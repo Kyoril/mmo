@@ -101,7 +101,7 @@ namespace mmo
 		for (const auto& bone : m_skeleton->m_rootBones)
 		{
 			CloneBoneAndChildren(bone, nullptr);
-			bone->Update(true, false);
+			bone->Update(true, true);
 		}
 
 		SetBindingPose();

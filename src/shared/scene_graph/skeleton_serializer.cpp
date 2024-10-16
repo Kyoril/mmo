@@ -285,7 +285,7 @@ namespace mmo
 			return false;
 		}
 
-		anim.SetUseBaseKeyFrame(true, baseKeyFrameTime, baseKeyFrameAnimationName);
+		anim.SetUseBaseKeyFrame(false, baseKeyFrameTime, baseKeyFrameAnimationName);
 
 		uint16 numTracks;
 		if (!(reader >> io::read<uint16>(numTracks)))
