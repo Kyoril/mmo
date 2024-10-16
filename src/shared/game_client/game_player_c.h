@@ -29,6 +29,8 @@ namespace mmo
 			m_name = name;
 		}
 
+		void SetTargetAnimState(AnimationState* newTargetState);
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
@@ -37,5 +39,8 @@ namespace mmo
 		AnimationState* m_idleAnimState{nullptr};
 		AnimationState* m_runAnimState{ nullptr };
 		String m_name;
+
+		AnimationState* m_targetState = nullptr;
+		AnimationState* m_currentState = nullptr;
 	};
 }

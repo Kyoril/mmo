@@ -811,7 +811,7 @@ namespace mmo
 					// weirdness with the root bone, But this seems to work
 					if (m_mesh->GetSkeleton()->GetRootBone()->GetName() == bone->GetName())
 					{
-						trans = transCopy - bone->GetPosition();
+						//trans = transCopy - bone->GetPosition();
 					}
 
 					keyFramePtr->SetTranslate(trans);

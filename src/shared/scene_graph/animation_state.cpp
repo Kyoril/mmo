@@ -70,6 +70,8 @@ namespace mmo
 	void AnimationState::SetWeight(const float weight)
 	{
 		m_weight = weight;
+		if (m_weight < 0.0f) m_weight = 0.0f;
+		if (m_weight > 1.0f) m_weight = 1.0f;
 
 		if (m_enabled)
 		{

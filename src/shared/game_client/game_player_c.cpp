@@ -19,24 +19,39 @@ namespace mmo
 		// TODO: This needs to be managed differently or it will explode in complexity here!
 		if (m_movementInfo.IsMoving())
 		{
-			if (m_idleAnimState != nullptr)
-			{
-				m_idleAnimState->SetEnabled(false);
-			}
-			if (m_runAnimState != nullptr)
-			{
-				m_runAnimState->SetEnabled(true);
-			}
+			SetTargetAnimState(m_runAnimState);
 		}
 		else
 		{
-			if (m_idleAnimState != nullptr)
+			SetTargetAnimState(m_idleAnimState);
+		}
+
+		// Interpolate
+		if (m_targetState != m_currentState)
+		{
+			if (m_targetState && !m_currentState)
 			{
-				m_idleAnimState->SetEnabled(true);
+				m_currentState = m_targetState;
+				m_targetState = nullptr;
+
+				m_currentState->SetWeight(1.0f);
+				m_currentState->SetEnabled(true);
 			}
-			if (m_runAnimState != nullptr)
+		}
+
+		if (m_currentState && m_targetState)
+		{
+			m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
+			m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
+
+			if (m_targetState->GetWeight() >= 1.0f)
 			{
-				m_runAnimState->SetEnabled(false);
+				m_targetState->SetWeight(1.0f);
+				m_currentState->SetWeight(0.0f);
+				m_currentState->SetEnabled(false);
+
+				m_currentState = m_targetState;
+				m_targetState = nullptr;
 			}
 		}
 
@@ -87,6 +102,28 @@ namespace mmo
 		}
 
 		return m_name;
+	}
+
+	void GamePlayerC::SetTargetAnimState(AnimationState* newTargetState)
+	{
+		if (m_targetState == newTargetState)
+		{
+			// Nothing to do here, we are already there
+			return;
+		}
+
+		if (m_currentState == newTargetState)
+		{
+			m_targetState = nullptr;
+			return;
+		}
+
+		m_targetState = newTargetState;
+		if (m_targetState)
+		{
+			m_targetState->SetWeight(m_currentState ? (1.0f - m_currentState->GetWeight()) : 0.0f);
+			m_targetState->SetEnabled(true);
+		}
 	}
 
 	void GamePlayerC::SetupSceneObjects()
