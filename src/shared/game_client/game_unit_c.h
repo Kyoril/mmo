@@ -49,6 +49,8 @@ namespace mmo
 		/// @brief Updates the unit. Should be called once per frame per unit.
 		virtual void Update(float deltaTime) override;
 
+		virtual void ApplyMovementInfo(const MovementInfo& movementInfo);
+
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 

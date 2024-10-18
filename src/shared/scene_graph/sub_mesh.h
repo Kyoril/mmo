@@ -47,6 +47,8 @@ namespace mmo
 
 		void SetTopologyType(TopologyType type) { m_topologyType = type; }
 
+		bool BoneAssignmentsOutOfDate() const { return m_boneAssignmentsOutOfDate; }
+
 	public:
 		Mesh& parent;
 
@@ -56,12 +58,12 @@ namespace mmo
 		typedef std::vector<uint16> IndexMap;
 		IndexMap blendIndexToBoneIndexMap{};
 
-		MaterialPtr m_material;
+		MaterialPtr m_material { nullptr };
 		bool useSharedVertices { true };
-		bool m_boneAssignmentsOutOfDate{false};
 
+	private:
+		bool m_boneAssignmentsOutOfDate { false };
 		TopologyType m_topologyType = TopologyType::TriangleList;
-
-		VertexBoneAssignmentList m_boneAssignments{};
+		VertexBoneAssignmentList m_boneAssignments {};
 	};
 }

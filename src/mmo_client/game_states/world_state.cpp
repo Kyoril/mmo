@@ -879,9 +879,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Instantly apply movement data for now
-		unitPtr->GetSceneNode()->SetDerivedPosition(movementInfo.position);
-		unitPtr->GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+		unitPtr->ApplyMovementInfo(movementInfo);
 
 		return PacketParseResult::Pass;
 	}

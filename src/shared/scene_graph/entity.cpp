@@ -95,9 +95,8 @@ namespace mmo
 
 		if (m_boneMatrices.size() != 256)
 		{
-			m_boneMatrices.resize(256);
-			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(
-				sizeof(Matrix4) * 256, m_boneMatrices.data());
+			m_boneMatrices.resize(256, Matrix4::Identity);
+			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * 256, m_boneMatrices.data());
 		}
 
 		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
@@ -132,16 +131,18 @@ namespace mmo
 			return;
 		}
 
+		m_boneMatrices.clear();
+
+		BuildSubEntityList(m_mesh, m_subEntities);
+
 		if (m_mesh->HasSkeleton())
 		{
 			m_skeleton = std::make_shared<SkeletonInstance>(m_mesh->GetSkeleton());
 			m_animationStates = std::make_shared<AnimationStateSet>();
-			m_mesh->InitAnimationState(*m_animationStates);
+			m_skeleton->InitAnimationState(*m_animationStates);
 
 			m_skeleton->Load();
 		}
-
-		BuildSubEntityList(m_mesh, m_subEntities);
 
 		if (m_parentNode)
 		{
@@ -184,6 +185,9 @@ namespace mmo
 
 	void Entity::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
 	{
-		// TODO
+		for(const auto& subEntity : m_subEntities)
+		{
+			visitor.Visit(*subEntity, 0, false);
+		}
 	}
 }

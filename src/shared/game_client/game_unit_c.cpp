@@ -118,6 +118,16 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::ApplyMovementInfo(const MovementInfo& movementInfo)
+	{
+		m_movementInfo = movementInfo;
+
+		// Instantly apply movement data for now
+		GetSceneNode()->SetDerivedPosition(movementInfo.position);
+		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+
+	}
+
 	void GameUnitC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::UnitFieldCount);

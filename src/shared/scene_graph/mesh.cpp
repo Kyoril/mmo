@@ -274,7 +274,7 @@ namespace mmo
 
 		for (const auto& subMesh : m_subMeshes)
 		{
-			if (subMesh->m_boneAssignmentsOutOfDate)
+			if (subMesh->BoneAssignmentsOutOfDate())
 			{
 				subMesh->CompileBoneAssignments();
 			}
@@ -393,6 +393,13 @@ namespace mmo
 			/// Convert to specific pointers
 			pWeightElem->BaseVertexPointerToElement(pBase, &pWeight);
 			pIdxElem->BaseVertexPointerToElement(pBase, &pIndex);
+
+			// Initialize vertex pointer
+			*pIndex++ = 0;
+			*pIndex++ = 0;
+			*pIndex++ = 0;
+			*pIndex++ = 0;
+			pIndex -= 4;
 
 			for (uint16 bone = 0; bone < numBlendWeightsPerVertex; ++bone)
 			{

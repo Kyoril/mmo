@@ -56,7 +56,7 @@ namespace mmo
 			Mesh::CompileBoneAssignments(m_boneAssignments, maxBones, blendIndexToBoneIndexMap, vertexData.get());
 		}
 
-		m_boneAssignmentsOutOfDate = true;
+		m_boneAssignmentsOutOfDate = false;
 	}
 
 	void SubMesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
