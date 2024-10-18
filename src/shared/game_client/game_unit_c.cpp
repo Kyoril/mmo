@@ -123,11 +123,6 @@ namespace mmo
 			{
 				SetTargetAnimState(m_idleAnimState);
 			}
-
-			if (const auto strongTarget = m_targetUnit.lock())
-			{
-				m_sceneNode->SetOrientation(Quaternion(GetAngle(*strongTarget), Vector3::UnitY));
-			}
 		}
 
 		// Interpolate
