@@ -13,6 +13,141 @@
 
 namespace mmo
 {
+	static const char* s_itemClassStrings[] = {
+		"Consumable",
+		"Container",
+		"Weapon",
+		"Gem",
+		"Armor",
+		"Reagent",
+		"Projectile",
+		"Trade Goods",
+		"Generic",
+		"Recipe",
+		"Money",
+		"Quiver",
+		"Quest",
+		"Key",
+		"Permanent",
+		"Junk"
+	};
+
+	static const char* s_itemSubclassConsumableStrings[] = {
+		"Consumable",
+		"Potion",
+		"Elixir",
+		"Flask",
+		"Scroll",
+		"Food",
+		"Item Enhancement",
+		"Bandage"
+	};
+
+	static const char* s_itemSubclassContainerStrings[] = {
+		"Container"
+	};
+
+	static const char* s_itemSubclassWeaponStrings[] = {
+		"One Handed Axe",
+		"Two Handed Axe",
+		"Bow",
+		"Gun",
+		"One Handed Mace",
+		"Two Handed Mace",
+		"Polearm",
+		"One Handed Sword",
+		"Two Handed Sword",
+		"Staff",
+		"Fist",
+		"Dagger",
+		"Thrown",
+		"Spear",
+		"Cross Bow",
+		"Wand",
+		"Fishing Pole"
+	};
+
+
+	static const char* s_itemSubclassGemStrings[] = {
+		"Red",
+		"Blue",
+		"Yellow",
+		"Purple",
+		"Green",
+		"Orange",
+		"Prismatic"
+	};
+
+	static const char* s_itemSubclassArmorStrings[] = {
+		"Misc",
+		"Cloth",
+		"Leather",
+		"Mail",
+		"Plate",
+		"Buckler",
+		"Shield",
+		"Libram",
+		"Idol",
+		"Totem"
+	};
+
+	static const char* s_itemSubclassProjectileStrings[] = {
+		"Wand",
+		"Bolt",
+		"Arrow",
+		"Bullet",
+		"Thrown"
+	};
+
+	static const char* s_itemSubclassTradeGoodsStrings[] = {
+		"TradeGoods",
+		"Parts",
+		"Eplosives",
+		"Devices",
+		"Jewelcrafting",
+		"Cloth",
+		"Leather",
+		"MetalStone",
+		"Meat",
+		"Herb",
+		"Elemental",
+		"TradeGoodsOther",
+		"Enchanting",
+		"Material",
+	};
+
+	static const char* s_inventoryTypeStrings[] = {
+		"NonEquip",
+		"Head",
+		"Neck",
+		"Shoulders",
+		"Body",
+		"Chest",
+		"Waist",
+		"Legs",
+		"Feet",
+		"Wrists",
+		"Hands",
+		"Finger",
+		"Trinket",
+		"Weapon",
+		"Shield",
+		"Ranged",
+		"Cloak",
+		"TwoHandedWeapon",
+		"Bag",
+		"Tabard",
+		"Robe",
+		"MainHandWeapon",
+		"OffHandWeapon",
+		"Holdable",
+		"Ammo",
+		"Thrown",
+		"RangedRight",
+		"Quiver",
+		"Relic"
+	};
+
 	ItemEditorWindow::ItemEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.items, name)
 		, m_host(host)
