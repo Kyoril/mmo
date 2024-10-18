@@ -28,184 +28,6 @@
 
 namespace mmo
 {
-	template <typename V, typename T> static V Lerp(const V& v0, const V& v1, const T& t)
-	{
-		return v0 * (1 - t) + v1 * t;
-	}
-
-	typedef std::tuple<aiVectorKey*, aiQuatKey*, aiVectorKey*> KeyframeData;
-	typedef std::map<float, KeyframeData> KeyframesMap;
-
-	template <int I>
-	void GetInterpolationIterators(KeyframesMap& keyframes, const KeyframesMap::iterator it, KeyframesMap::reverse_iterator& front, KeyframesMap::iterator& back)
-	{
-		front = KeyframesMap::reverse_iterator(it);
-
-		++front;
-		for (; front != keyframes.rend(); ++front)
-		{
-			if (std::get<I>(front->second) != nullptr)
-			{
-				break;
-			}
-		}
-
-		back = it;
-		++back;
-		for (; back != keyframes.end(); ++back)
-		{
-			if (std::get<I>(back->second) != nullptr)
-			{
-				break;
-			}
-		}
-	}
-
-	aiVector3D GetTranslate(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
-	{
-		aiVectorKey* translateKey = std::get<0>(it->second);
-		aiVector3D vect;
-		if (translateKey)
-		{
-			vect = translateKey->mValue;
-		}
-		else
-		{
-			KeyframesMap::reverse_iterator front;
-			KeyframesMap::iterator back;
-
-			GetInterpolationIterators<0>(keyframes, it, front, back);
-
-			KeyframesMap::reverse_iterator rend = keyframes.rend();
-			KeyframesMap::iterator end = keyframes.end();
-			aiVectorKey* frontKey = nullptr;
-			aiVectorKey* backKey = nullptr;
-
-			if (front != rend)
-				frontKey = std::get<0>(front->second);
-
-			if (back != end)
-				backKey = std::get<0>(back->second);
-
-			// got 2 keys can interpolate
-			if (frontKey && backKey)
-			{
-				float prop =
-					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
-				prop /= ticksPerSecond;
-				vect = Lerp(frontKey->mValue, backKey->mValue, prop);
-			}
-
-			else if (frontKey)
-			{
-				vect = frontKey->mValue;
-			}
-			else if (backKey)
-			{
-				vect = backKey->mValue;
-			}
-		}
-
-		return vect;
-	}
-
-	aiQuaternion GetRotate(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
-	{
-		aiQuatKey* rotationKey = std::get<1>(it->second);
-		aiQuaternion rot;
-		if (rotationKey)
-		{
-			rot = rotationKey->mValue;
-		}
-		else
-		{
-			KeyframesMap::reverse_iterator front;
-			KeyframesMap::iterator back;
-
-			GetInterpolationIterators<1>(keyframes, it, front, back);
-
-			KeyframesMap::reverse_iterator rend = keyframes.rend();
-			KeyframesMap::iterator end = keyframes.end();
-			aiQuatKey* frontKey = nullptr;
-			aiQuatKey* backKey = nullptr;
-
-			if (front != rend)
-				frontKey = std::get<1>(front->second);
-
-			if (back != end)
-				backKey = std::get<1>(back->second);
-
-			// got 2 keys can interpolate
-			if (frontKey && backKey)
-			{
-				float prop =
-					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
-				prop /= ticksPerSecond;
-				aiQuaternion::Interpolate(rot, frontKey->mValue, backKey->mValue, prop);
-			}
-
-			else if (frontKey)
-			{
-				rot = frontKey->mValue;
-			}
-			else if (backKey)
-			{
-				rot = backKey->mValue;
-			}
-		}
-
-		return rot;
-	}
-
-	aiVector3D GetScale(KeyframesMap& keyframes, KeyframesMap::iterator it, double ticksPerSecond)
-	{
-		aiVectorKey* scaleKey = std::get<2>(it->second);
-		aiVector3D vect(1, 1, 1);
-		if (scaleKey)
-		{
-			vect = scaleKey->mValue;
-		}
-		else
-		{
-			KeyframesMap::reverse_iterator front;
-			KeyframesMap::iterator back;
-
-			GetInterpolationIterators<2>(keyframes, it, front, back);
-
-			KeyframesMap::reverse_iterator rend = keyframes.rend();
-			KeyframesMap::iterator end = keyframes.end();
-			aiVectorKey* frontKey = nullptr;
-			aiVectorKey* backKey = nullptr;
-
-			if (front != rend)
-				frontKey = std::get<2>(front->second);
-
-			if (back != end)
-				backKey = std::get<2>(back->second);
-
-			// got 2 keys can interpolate
-			if (frontKey && backKey)
-			{
-				float prop =
-					(float)(((double)it->first - frontKey->mTime) / (backKey->mTime - frontKey->mTime));
-				prop /= ticksPerSecond;
-				vect = Lerp(frontKey->mValue, backKey->mValue, prop);
-			}
-
-			else if (frontKey)
-			{
-				vect = frontKey->mValue;
-			}
-			else if (backKey)
-			{
-				vect = backKey->mValue;
-			}
-		}
-
-		return vect;
-	}
-
-
 	void TraverseBone(Scene& scene, SceneNode& node, Bone& bone)
 	{
 		// Create node and attach it to the root node
@@ -300,6 +122,12 @@ namespace mmo
 			m_animState->AddTime(ImGui::GetIO().DeltaTime);
 		}
 
+		if (m_selectedBone && m_selectedBoneNode)
+		{
+			m_selectedBoneNode->SetPosition(m_selectedBone->GetDerivedPosition());
+			m_selectedBoneNode->SetOrientation(m_selectedBone->GetDerivedOrientation());
+		}
+
 		auto& gx = GraphicsDevice::Get();
 
 		// Render the scene first
@@ -317,7 +145,7 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void ModelEditorInstance::RenderBoneNode(const Bone& bone)
+	void ModelEditorInstance::RenderBoneNode(Bone& bone)
 	{
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
 		if (bone.GetName() == m_selectedBoneName)
@@ -330,10 +158,7 @@ namespace mmo
 			if (ImGui::IsItemClicked())
 			{
 				m_selectedBoneName = bone.GetName();
-
-				ASSERT(m_selectedBoneNode);
-				m_selectedBoneNode->SetPosition(bone.GetDerivedPosition());
-				m_selectedBoneNode->SetOrientation(bone.GetDerivedOrientation());
+				m_selectedBone = &bone;
 			}
 
 			for (uint32 i = 0; i < bone.GetNumChildren(); ++i)
@@ -613,14 +438,14 @@ namespace mmo
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
-			if (m_mesh->HasSkeleton())
+			if (m_entity->HasSkeleton())
 			{
 				ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
 				// TODO: Show dropdown for skeleton to be used
 
 				// TODO: Show bone hierarchy in tree view
-				const auto& skeleton = m_mesh->GetSkeleton();
+				const auto& skeleton = m_entity->GetSkeleton();
 
 				Bone* rootBone = skeleton->GetRootBone();
 				if (ImGui::BeginChild("Bone Hierarchy"))
@@ -675,6 +500,7 @@ namespace mmo
 			{
 				m_middleButtonPressed = true;
 			}
+
 		}
 		ImGui::End();
 	}
@@ -686,14 +512,7 @@ namespace mmo
 		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
 
 		const aiScene* scene = importer.ReadFile(path.string().c_str(),
-			aiProcess_CalcTangentSpace |
-			aiProcess_Triangulate |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_SortByPType |
-			aiProcess_FlipUVs |
-			aiProcess_GenNormals |
-			aiProcess_LimitBoneWeights |
-			aiProcess_ImproveCacheLocality
+			aiProcess_SortByPType
 		);
 
 		if (!scene)
@@ -717,6 +536,9 @@ namespace mmo
 			DLOG("Animation " << i << ": " << anim->mName.C_Str() << " with " << anim->mNumChannels << " channels");
 			DLOG("\tDuration: " << anim->mDuration << " ticks (" << (anim->mDuration / anim->mTicksPerSecond) << " seconds)");
 
+			// Setup an animation evaluator instance
+			m_animEvaluator = std::make_unique<AnimEvaluator>(anim);
+
 			if (m_entity->GetSkeleton()->HasAnimation(m_newAnimationName))
 			{
 				m_entity->GetSkeleton()->RemoveAnimation(m_newAnimationName);
@@ -732,7 +554,6 @@ namespace mmo
 			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
 			{
 				aiNodeAnim* nodeAnim = anim->mChannels[channelIndex];
-				DLOG("\tBone " << nodeAnim->mNodeName.C_Str());
 
 				// Try to find the given bone in our skeleton
 				Bone* bone = m_entity->GetSkeleton()->GetBone(nodeAnim->mNodeName.C_Str());
@@ -745,78 +566,62 @@ namespace mmo
 				Matrix4 defBonePoseInv;
 				defBonePoseInv.MakeInverseTransform(bone->GetPosition(), bone->GetScale(), bone->GetOrientation());
 
+				const aiMatrix4x4 aiBonePoseInv(
+					defBonePoseInv[0][0], defBonePoseInv[0][1], defBonePoseInv[0][2], defBonePoseInv[0][3],
+					defBonePoseInv[1][0], defBonePoseInv[1][1], defBonePoseInv[1][2], defBonePoseInv[1][3],
+					defBonePoseInv[2][0], defBonePoseInv[2][1], defBonePoseInv[2][2], defBonePoseInv[2][3],
+					defBonePoseInv[3][0], defBonePoseInv[3][1], defBonePoseInv[3][2], defBonePoseInv[3][3]
+				);
+
 				// Create a new node track for the bone
 				const uint16 handle = bone->GetHandle();
 				NodeAnimationTrack* track = animation.HasNodeTrack(handle) ? animation.GetNodeTrack(handle) : animation.CreateNodeTrack(handle, bone);
 
-				// We need translate, rotate and scale for each keyframe in the track
-				KeyframesMap keyframes;
-
+				// Iterate through each key type and note the time value
+				std::set<double> keyTimes;
 				for (unsigned int j = 0; j < nodeAnim->mNumPositionKeys; j++)
 				{
-					keyframes[static_cast<float>(nodeAnim->mPositionKeys[j].mTime / anim->mTicksPerSecond)] =
-						KeyframeData(&(nodeAnim->mPositionKeys[j]), nullptr, nullptr);
+					keyTimes.insert(nodeAnim->mPositionKeys[j].mTime / anim->mTicksPerSecond);
 				}
 
 				for (unsigned int j = 0; j < nodeAnim->mNumRotationKeys; j++)
 				{
-					if (auto it =
-						keyframes.find(static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)); it != keyframes.end())
-					{
-						std::get<1>(it->second) = &(nodeAnim->mRotationKeys[j]);
-					}
-					else
-					{
-						keyframes[static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)] =
-							KeyframeData(nullptr, &(nodeAnim->mRotationKeys[j]), nullptr);
-					}
+					keyTimes.insert(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond);
 				}
 
 				for (unsigned int j = 0; j < nodeAnim->mNumScalingKeys; j++)
 				{
-					if (auto it =
-						keyframes.find(static_cast<float>(nodeAnim->mScalingKeys[j].mTime / anim->mTicksPerSecond)); it != keyframes.end())
-					{
-						std::get<2>(it->second) = &(nodeAnim->mScalingKeys[j]);
-					}
-					else
-					{
-						keyframes[static_cast<float>(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond)] =
-							KeyframeData(nullptr, nullptr, &(nodeAnim->mScalingKeys[j]));
-					}
+					keyTimes.insert(nodeAnim->mScalingKeys[j].mTime / anim->mTicksPerSecond);
 				}
 
-				auto it = keyframes.begin();
-				for (auto itEnd = keyframes.end(); it != itEnd; ++it)
+				const auto& boneLocalTransforms = m_animEvaluator->GetTransformations();
+
+				// Now for each key, create a keyframe
+				for (const auto time : keyTimes)
 				{
-					aiVector3D aiTrans = GetTranslate(keyframes, it, anim->mTicksPerSecond);
+					m_animEvaluator->Evaluate(time);
+
+					// Update local bone transform
+					aiVector3D aiTrans, aiScale;
+					aiQuaternion aiRot;
+
+					boneLocalTransforms[channelIndex].Decompose(aiScale, aiRot, aiTrans);
+					Vector3 transCopy(aiTrans.x, aiTrans.y, aiTrans.z);
+					
+					const aiMatrix4x4 pose = aiBonePoseInv * boneLocalTransforms[channelIndex];
+					pose.Decompose(aiScale, aiRot, aiTrans);
+
 					Vector3 trans(aiTrans.x, aiTrans.y, aiTrans.z);
-
-					aiQuaternion aiRot = GetRotate(keyframes, it, anim->mTicksPerSecond);
 					Quaternion rot(aiRot.w, aiRot.x, aiRot.y, aiRot.z);
-
-					aiVector3D aiScale = GetScale(keyframes, it, anim->mTicksPerSecond);
 					Vector3 scale(aiScale.x, aiScale.y, aiScale.z);
 
-					Vector3 transCopy = trans;
+					// This line ensures that we set the translation relative to the bind pose instead of relative to the last key frame!
+					trans = transCopy - bone->GetPosition();
 
-					Matrix4 fullTransform;
-					fullTransform.MakeTransform(trans, scale, rot);
-
-					Matrix4 poseToKey = defBonePoseInv * fullTransform;
-					poseToKey.Decomposition(trans, scale, rot);
-
-					auto keyFramePtr = track->CreateNodeKeyFrame(it->first);
-
-					// weirdness with the root bone, But this seems to work
-					if (m_mesh->GetSkeleton()->GetRootBone()->GetName() == bone->GetName())
-					{
-						//trans = transCopy - bone->GetPosition();
-					}
-
+					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(time));
 					keyFramePtr->SetTranslate(trans);
 					keyFramePtr->SetRotation(rot);
-					//keyFramePtr->SetScale(scale);
+					keyFramePtr->SetScale(scale);
 				}
 			}
 

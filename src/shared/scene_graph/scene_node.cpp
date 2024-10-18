@@ -137,7 +137,14 @@ namespace mmo
 		if (parent)
 		{
 			const auto* sceneParent = dynamic_cast<SceneNode*>(parent);
-			SetInSceneGraph(sceneParent->IsInSceneGraph());
+			if (sceneParent)
+			{
+				SetInSceneGraph(sceneParent->IsInSceneGraph());
+			}
+			else
+			{
+				SetInSceneGraph(false);
+			}
 		}
 		else
 		{

@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 
+#include "anim_evaluator.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
@@ -53,7 +54,7 @@ namespace mmo
 
 		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
 
-		void RenderBoneNode(const Bone& bone);
+		void RenderBoneNode(Bone& bone);
 
 	private:
 		ModelEditor& m_editor;
@@ -82,5 +83,9 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_selectedBoneAxis{ nullptr };
 		SceneNode* m_selectedBoneNode{ nullptr };
 		String m_selectedBoneName;
+		Bone* m_selectedBone{ nullptr };
+
+		std::unique_ptr<AnimEvaluator> m_animEvaluator;
+
 	};
 }
