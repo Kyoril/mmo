@@ -61,6 +61,8 @@ namespace mmo
 	static const std::string OnUpdateElement("OnUpdate");
 	static const std::string OnTabPressedElement("OnTabPressed");
 	static const std::string OnEnterPressedElement("OnEnterPressed");
+	static const std::string OnShowElement("OnShow");
+	static const std::string OnHideElement("OnHide");
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
@@ -233,6 +235,14 @@ namespace mmo
 			{
 				ElementOnUpdateStart(attributes);
 			}
+			else if (element == OnShowElement)
+			{
+				ElementOnShowStart(attributes);
+			}
+			else if (element == OnHideElement)
+			{
+				ElementOnHideStart(attributes);
+			}
 			else if (element == OnTabPressedElement)
 			{
 				ElementOnTabPressedStart(attributes);
@@ -367,6 +377,14 @@ namespace mmo
 			else if (element == OnEnterPressedElement)
 			{
 				ElementOnEnterPressedEnd();
+			}
+			else if (element == OnShowElement)
+			{
+				ElementOnShowEnd();
+			}
+			else if (element == OnHideElement)
+			{
+				ElementOnHideEnd();
 			}
 		}
 	}
@@ -1159,6 +1177,46 @@ namespace mmo
 			{
 				const luabind::object onEnterPressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEnterPressed", script);
 				frame->SetOnEnterPressed(onEnterPressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnShowStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnShowElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnShowEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onShow = FrameManager::Get().CompileFunction(frame->GetName() + ":OnShow", script);
+				frame->SetOnShow(onShow);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnHideStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnHideElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnHideEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onHide = FrameManager::Get().CompileFunction(frame->GetName() + ":OnHide", script);
+				frame->SetOnHide(onHide);
 			});
 	}
 }

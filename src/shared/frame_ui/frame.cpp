@@ -56,6 +56,8 @@ namespace mmo
 		other.m_onTabPressed = m_onTabPressed;
 		other.m_onEnter = m_onEnter;
 		other.m_onLeave = m_onLeave;
+		other.m_onShow = m_onShow;
+		other.m_onHide = m_onHide;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.RemoveAllChildren();
@@ -320,10 +322,25 @@ namespace mmo
 
 	void Frame::SetVisible(bool visible)
 	{
-		if (m_visible != visible)
+		if (m_visible == visible)
 		{
-			m_visible = visible;
-			VisibilityChanged();
+			return;
+		}
+
+		m_visible = visible;
+		VisibilityChanged();
+
+		if (m_visible && IsVisible(false))
+		{
+			OnShow();
+		}
+		else if (!m_visible)
+		{
+			// We were visible locally before, see if parent was visible as well (not just locally) which means we were actually visible and are now no longer visible
+			if (m_parent && m_parent->IsVisible(false))
+			{
+				OnHide();
+			}
 		}
 	}
 
@@ -796,6 +813,32 @@ namespace mmo
 		{
 			m_onEnterPressed(this);
 			abort_emission();
+		}
+	}
+
+	void Frame::OnShow()
+	{
+		if (m_onShow)
+		{
+			m_onShow(this);
+		}
+
+		for(const auto& child : m_children)
+		{
+			child->OnShow();
+		}
+	}
+
+	void Frame::OnHide()
+	{
+		if (m_onHide)
+		{
+			m_onHide(this);
+		}
+
+		for (const auto& child : m_children)
+		{
+			child->OnHide();
 		}
 	}
 

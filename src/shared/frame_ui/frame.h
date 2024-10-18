@@ -374,6 +374,14 @@ namespace mmo
 
 		void SetOnLeave(const luabind::object& func) { m_onLeave = func; }
 
+		void SetOnShow(const luabind::object& func) { m_onShow = func; }
+
+		void SetOnHide(const luabind::object& func) { m_onHide = func; }
+
+		virtual void OnShow();
+
+		virtual void OnHide();
+
 		virtual void OnMouseEnter();
 
 		virtual void OnMouseLeave();
@@ -473,6 +481,10 @@ namespace mmo
 		luabind::object m_onLoad{};
 
 		luabind::object m_onUpdate{};
+
+		luabind::object m_onShow{};
+
+		luabind::object m_onHide{};
 
 		uint32 m_flags = 0;
 
