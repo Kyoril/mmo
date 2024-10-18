@@ -142,6 +142,8 @@ namespace mmo
 
 		const String& GetName() const override;
 
+		void SetTargetAnimState(AnimationState* newTargetState);
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
@@ -164,5 +166,13 @@ namespace mmo
 		float m_unitSpeed[movement_type::Count];
 
 		CreatureInfo m_creatureInfo;
+
+	protected:
+		// Animation stuff
+		AnimationState* m_idleAnimState{ nullptr };
+		AnimationState* m_runAnimState{ nullptr };
+
+		AnimationState* m_targetState = nullptr;
+		AnimationState* m_currentState = nullptr;
 	};
 }

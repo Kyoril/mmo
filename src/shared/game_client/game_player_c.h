@@ -29,18 +29,10 @@ namespace mmo
 			m_name = name;
 		}
 
-		void SetTargetAnimState(AnimationState* newTargetState);
-
 	protected:
 		virtual void SetupSceneObjects() override;
 
-	public:
-
-		AnimationState* m_idleAnimState{nullptr};
-		AnimationState* m_runAnimState{ nullptr };
+	protected:
 		String m_name;
-
-		AnimationState* m_targetState = nullptr;
-		AnimationState* m_currentState = nullptr;
 	};
 }
