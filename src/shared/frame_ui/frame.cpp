@@ -35,9 +35,12 @@ namespace mmo
 
 	void Frame::Copy(Frame & other)
 	{
-		// Apply renderer property
-		other.SetRenderer(m_renderer->GetName());
-
+		if (m_renderer)
+		{
+			// Apply renderer property
+			other.SetRenderer(m_renderer->GetName());
+		}
+		
 		// Apply other properties
 		other.m_enabled = m_enabled;
 		other.m_visible = m_visible;

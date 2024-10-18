@@ -254,7 +254,7 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -283,6 +283,8 @@ namespace mmo
 				row.GetField(index++, result.mana);
 				row.GetField(index++, result.rage);
 				row.GetField(index++, result.energy);
+
+				row.GetField(index++, result.money);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -351,7 +353,7 @@ namespace mmo
 	}
 
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
-		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy)
+		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money)
 	{
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
@@ -365,6 +367,7 @@ namespace mmo
 			+ ", mana = " + std::to_string(mana)
 			+ ", rage = " + std::to_string(rage)
 			+ ", energy = " + std::to_string(energy)
+			+ ", money = " + std::to_string(money)
 			+ " WHERE id = '" + std::to_string(characterId) + "'"))
 		{
 			PrintDatabaseError();

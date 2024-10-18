@@ -54,6 +54,7 @@ namespace mmo
 		uint32 mana;
 		uint32 rage;
 		uint32 energy;
+		uint32 money;
 		std::vector<uint32> spellIds;
 	};
 
@@ -77,6 +78,7 @@ namespace mmo
 			>> io::read<uint32>(data.mana)
 			>> io::read<uint32>(data.rage)
 			>> io::read<uint32>(data.energy)
+			>> io::read<uint32>(data.money)
 		;
 	}
 	
@@ -100,6 +102,7 @@ namespace mmo
 			<< io::write<uint32>(data.mana)
 			<< io::write<uint32>(data.rage)
 			<< io::write<uint32>(data.energy)
+			<< io::write<uint32>(data.money)
 			;
 	}
 }

@@ -27,6 +27,11 @@ namespace mmo
 		explicit GameObjectC(Scene& scene);
 		~GameObjectC() override;
 
+		virtual ObjectTypeId GetTypeId() const
+		{
+			return ObjectTypeId::Object;
+		}
+
 		template<typename T>
 		T Get(const uint32 field) const
 		{

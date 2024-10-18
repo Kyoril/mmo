@@ -42,7 +42,7 @@ namespace mmo
 
 		void ChatMessage(uint64 characterId, uint16 type, String message) override;
 
-		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy) override;
+		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money) override;
 
 	private:
 		void PrintDatabaseError();

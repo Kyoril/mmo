@@ -229,6 +229,16 @@ namespace mmo
 			}
 		}
 
+		int32 Script_UnitMoney(const std::string& unitName)
+		{
+			if (std::shared_ptr<GameUnitC> unit = nullptr; (unit = Script_GetUnitByName(unitName)) != nullptr && unit->GetTypeId() == ObjectTypeId::Player)
+			{
+				return unit->Get<int32>(object_fields::Money);
+			}
+
+			return 0;
+		}
+
 		int32 Script_PlayerNextLevelXp()
 		{
 			if (auto unit = Script_GetUnitByName("player"))
@@ -578,6 +588,7 @@ namespace mmo
 			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 			luabind::def("UnitName", &Script_UnitName),
+			luabind::def("UnitMoney", &Script_UnitMoney),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
 

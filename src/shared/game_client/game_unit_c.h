@@ -40,6 +40,11 @@ namespace mmo
 		{
 		}
 
+		virtual ObjectTypeId GetTypeId() const override
+		{
+			return ObjectTypeId::Unit;
+		}
+
 		/// @brief Destroys the instance of the GameUnitC class.
 		virtual ~GameUnitC() override = default;
 

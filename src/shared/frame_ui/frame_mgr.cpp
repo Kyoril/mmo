@@ -176,8 +176,8 @@ namespace mmo
 			// Parse the file contents
 			if (XML_Parse(parser, &buffer[0], buffer.size(), XML_TRUE) == XML_STATUS_ERROR)
 			{
-				XML_ParserFree(parser);
 				ELOG("Xml Error: " << XML_ErrorString(XML_GetErrorCode(parser)) << " - File '" << filename << "', Line " << XML_GetErrorLineNumber(parser));
+				XML_ParserFree(parser);
 				return;
 			}
 

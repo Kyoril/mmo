@@ -606,7 +606,8 @@ namespace mmo
 			player.Get<uint32>(object_fields::Health), 
 			player.Get<uint32>(object_fields::Mana), 
 			player.Get<uint32>(object_fields::Rage), 
-			player.Get<uint32>(object_fields::Energy));
+			player.Get<uint32>(object_fields::Energy),
+			player.Get<uint32>(object_fields::Money));
 
 		return PacketParseResult::Pass;
 	}

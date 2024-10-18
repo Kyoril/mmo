@@ -16,6 +16,11 @@ namespace mmo
 
 		virtual ~GamePlayerC() override = default;
 
+		virtual ObjectTypeId GetTypeId() const override
+		{
+			return ObjectTypeId::Player;
+		}
+
 		virtual void Deserialize(io::Reader& reader, bool complete) override;
 
 		virtual void Update(float deltaTime) override;

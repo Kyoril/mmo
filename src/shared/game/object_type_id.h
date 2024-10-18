@@ -149,6 +149,10 @@ namespace mmo
 
 			Race,
 
+			CharacterBytes,
+
+			Money,
+
 			PlayerFieldCount
 		};
 	}
