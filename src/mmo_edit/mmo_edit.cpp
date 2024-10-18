@@ -20,6 +20,7 @@
 #include "editor_windows/creature_editor_window.h"
 #include "editor_windows/class_editor_window.h"
 #include "editor_windows/range_type_editor_window.h"
+#include "editor_windows/item_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -109,6 +110,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));

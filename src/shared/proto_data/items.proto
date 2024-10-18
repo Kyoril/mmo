@@ -98,6 +98,8 @@ message ItemEntry {
 	optional float rangedrange = 64;
 	// Item skill type (weapons or armor)
 	optional uint32 skill = 65;
+
+	optional string icon = 68;
 }
 
 message Items {
