@@ -59,7 +59,6 @@ namespace mmo
 
 		[[nodiscard]] Radian GetAngle(const float fromX, const float fromZ, const float toX, const float toZ) const
 		{
-			const auto& position = GetPosition();
 			const float dx = toX - fromX;
 			const float dz = toZ - fromZ;
 

@@ -85,11 +85,16 @@ namespace mmo
 	{
 		GameObjectC::Update(deltaTime);
 
+		const bool isDead = GetHealth() <= 0;
+
 		if (m_movementAnimation)
 		{
 			bool animationFinished = false;
 
-			SetTargetAnimState(m_runAnimState);
+			if (!isDead)
+			{
+				SetTargetAnimState(m_runAnimState);
+			}
 
 			m_movementAnimationTime += deltaTime;
 			if (m_movementAnimationTime >= m_movementAnimation->GetDuration())
@@ -104,7 +109,11 @@ namespace mmo
 
 			if (animationFinished)
 			{
-				SetTargetAnimState(m_idleAnimState);
+				if (!isDead)
+				{
+					SetTargetAnimState(m_idleAnimState);
+				}
+
 				m_sceneNode->SetDerivedPosition(m_movementEnd);
 
 				// End animation
@@ -112,7 +121,7 @@ namespace mmo
 				m_movementAnimationTime = 0.0f;
 			}
 		}
-		else
+		else if (!isDead)
 		{
 			// TODO: This needs to be managed differently or it will explode in complexity here!
 			if (m_movementInfo.IsMoving())
@@ -123,6 +132,12 @@ namespace mmo
 			{
 				SetTargetAnimState(m_idleAnimState);
 			}
+		}
+
+		// Always force dead state
+		if (isDead && m_currentState != m_deathState && m_targetState != m_deathState)
+		{
+			SetTargetAnimState(m_deathState);
 		}
 
 		// Interpolate
@@ -154,6 +169,10 @@ namespace mmo
 			}
 		}
 
+		if (m_deathState && m_deathState->IsEnabled())
+		{
+			m_deathState->AddTime(deltaTime);
+		}
 		if (m_idleAnimState && m_idleAnimState->IsEnabled())
 		{
 			m_idleAnimState->AddTime(deltaTime);
@@ -204,6 +223,13 @@ namespace mmo
 		if (m_entity->HasAnimationState("Run"))
 		{
 			m_runAnimState = m_entity->GetAnimationState("Run");
+		}
+
+		if (m_entity->HasAnimationState("Death"))
+		{
+			m_deathState = m_entity->GetAnimationState("Death");
+			m_deathState->SetLoop(false);
+			m_deathState->SetTimePosition(0.0f);
 		}
 	}
 
@@ -287,7 +313,7 @@ namespace mmo
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
 
-		const Vector3 targetPos = m_movementStart - points[0];
+		const Vector3 targetPos = points.back();
 		const Radian targetAngle = GetAngle(targetPos.x, targetPos.z);
 
 		const Quaternion prevRotation = Quaternion(targetAngle, Vector3::UnitY);

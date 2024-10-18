@@ -33,7 +33,7 @@ namespace mmo
 
 	void AnimationState::SetTimePosition(const float timePos)
 	{
-		if (timePos == m_timePos)
+		if (timePos == m_timePos || (!m_loop && m_timePos >= m_length))
 		{
 			return;
 		}
@@ -55,7 +55,7 @@ namespace mmo
 			{
 				m_timePos = 0;
 			}
-			else if (m_timePos > m_length)
+			else if (m_timePos >= m_length)
 			{
 				m_timePos = m_length;
 			}
@@ -69,6 +69,11 @@ namespace mmo
 
 	void AnimationState::SetWeight(const float weight)
 	{
+		if (m_weight == weight)
+		{
+			return;
+		}
+
 		m_weight = weight;
 		if (m_weight < 0.0f) m_weight = 0.0f;
 		if (m_weight > 1.0f) m_weight = 1.0f;
@@ -86,6 +91,11 @@ namespace mmo
 
 	void AnimationState::SetEnabled(const bool enabled)
 	{
+		if (m_enabled == enabled)
+		{
+			return;
+		}
+
 		m_enabled = enabled;
 		m_parent->NotifyAnimationStateEnabled(this, enabled);
 	}

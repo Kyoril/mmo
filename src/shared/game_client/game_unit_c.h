@@ -171,6 +171,7 @@ namespace mmo
 		// Animation stuff
 		AnimationState* m_idleAnimState{ nullptr };
 		AnimationState* m_runAnimState{ nullptr };
+		AnimationState* m_deathState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;
