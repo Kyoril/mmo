@@ -65,7 +65,8 @@ namespace mmo
         // map into anim's duration
         double time = 0.0f;
         if (mAnim->mDuration > 0.0) {
-            time = fmod(pTime, mAnim->mDuration);
+            // Clamp animation
+            time = std::max(std::min(pTime, mAnim->mDuration), 0.0);
         }
 
         if (mTransforms.size() != mAnim->mNumChannels) {

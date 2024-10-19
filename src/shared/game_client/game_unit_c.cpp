@@ -86,11 +86,9 @@ namespace mmo
 		GameObjectC::Update(deltaTime);
 
 		const bool isDead = GetHealth() <= 0;
-
 		if (m_movementAnimation)
 		{
 			bool animationFinished = false;
-
 			if (!isDead)
 			{
 				SetTargetAnimState(m_runAnimState);
@@ -135,7 +133,7 @@ namespace mmo
 		}
 
 		// Always force dead state
-		if (isDead && m_currentState != m_deathState && m_targetState != m_deathState)
+		if (isDead)
 		{
 			SetTargetAnimState(m_deathState);
 		}
@@ -160,7 +158,6 @@ namespace mmo
 
 			if (m_targetState->GetWeight() >= 1.0f)
 			{
-				m_targetState->SetWeight(1.0f);
 				m_currentState->SetWeight(0.0f);
 				m_currentState->SetEnabled(false);
 

@@ -117,7 +117,7 @@ namespace mmo
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
-		if (m_animState)
+		if (m_animState && m_playAnimation)
 		{
 			m_animState->AddTime(ImGui::GetIO().DeltaTime);
 		}
@@ -292,7 +292,7 @@ namespace mmo
 
 		if (m_animState)
 		{
-			m_animState->SetLoop(true);
+			m_animState->SetTimePosition(0.0f);
 			m_animState->SetEnabled(true);
 			m_animState->SetWeight(1.0f);
 		}
@@ -423,6 +423,32 @@ namespace mmo
 							}
 						}
 						ImGui::EndCombo();
+					}
+
+					if (m_animState)
+					{
+						bool looped = m_animState->IsLoop();
+						if (ImGui::Checkbox("Looped", &looped))
+						{
+							m_animState->SetLoop(looped);
+						}
+					}
+
+					if (ImGui::Checkbox("Play", &m_playAnimation) && m_playAnimation)
+					{
+						if (m_animState)
+						{
+							m_animState->SetTimePosition(0.0f);
+						}
+					}
+
+					if (m_animState != nullptr)
+					{
+						float timePos = m_animState->GetTimePosition();
+						if (ImGui::SliderFloat("Time pos", &timePos, 0.0f, m_animState->GetLength()))
+						{
+							m_animState->SetTimePosition(timePos);
+						}
 					}
 				}
 				else

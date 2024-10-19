@@ -33,7 +33,7 @@ namespace mmo
 
 	void AnimationState::SetTimePosition(const float timePos)
 	{
-		if (timePos == m_timePos || (!m_loop && m_timePos >= m_length))
+		if (timePos == m_timePos)
 		{
 			return;
 		}
@@ -209,8 +209,7 @@ namespace mmo
 		RemoveAllAnimationStates();
 	}
 
-	AnimationState* AnimationStateSet::CreateAnimationState(const String& name, float timePos, float length,
-		float weight, bool enabled)
+	AnimationState* AnimationStateSet::CreateAnimationState(const String& name, float timePos, float length, float weight, bool enabled)
 	{
 		const auto i = m_animationStates.find(name);
 		ASSERT(i == m_animationStates.end() && "AnimationState with this name already exists!");
