@@ -293,6 +293,11 @@ namespace mmo
 	void GameUnitC::SetFacing(const Radian& facing)
 	{
 		m_movementInfo.facing = facing;
+
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
+		}
 	}
 
 	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points)

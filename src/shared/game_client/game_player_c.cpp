@@ -1,6 +1,7 @@
 
 #include "game_player_c.h"
 
+#include "object_mgr.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -15,7 +16,6 @@ namespace mmo
 	void GamePlayerC::Update(float deltaTime)
 	{
 		GameUnitC::Update(deltaTime);
-
 	}
 
 	void GamePlayerC::InitializeFieldMap()
