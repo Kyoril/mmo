@@ -2,6 +2,23 @@
 
 namespace mmo
 {
+	namespace item_quality
+	{
+		enum Type
+		{
+			Poor,
+			Common,
+			Uncommon,
+			Rare,
+			Epic,
+			Legendary,
+
+			Count_
+		};
+	}
+
+	typedef item_quality::Type ItemQuality;
+
 	namespace item_class
 	{
 		enum Type

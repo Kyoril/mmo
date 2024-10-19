@@ -1,19 +1,162 @@
 // Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "item_editor_window.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
 #include "game/aura.h"
+#include "game/item.h"
 #include "game/spell.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
+namespace ImGui
+{
+	static ImVector<ImRect> s_GroupPanelLabelStack;
+
+	void BeginGroupPanel(const char* name, const ImVec2& size = ImVec2(-1.0f, -1.0f))
+	{
+		ImGui::BeginGroup();
+
+		auto cursorPos = ImGui::GetCursorScreenPos();
+		auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+		auto frameHeight = ImGui::GetFrameHeight();
+		ImGui::BeginGroup();
+
+		ImVec2 effectiveSize = size;
+		if (size.x < 0.0f)
+			effectiveSize.x = ImGui::GetContentRegionAvail().x;
+		else
+			effectiveSize.x = size.x;
+		ImGui::Dummy(ImVec2(effectiveSize.x, 0.0f));
+
+		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+		ImGui::SameLine(0.0f, 0.0f);
+		ImGui::BeginGroup();
+		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+		ImGui::SameLine(0.0f, 0.0f);
+		ImGui::TextUnformatted(name);
+		auto labelMin = ImGui::GetItemRectMin();
+		auto labelMax = ImGui::GetItemRectMax();
+		ImGui::SameLine(0.0f, 0.0f);
+		ImGui::Dummy(ImVec2(0.0, frameHeight + itemSpacing.y));
+		ImGui::BeginGroup();
+
+		ImGui::PopStyleVar(2);
+
+#if IMGUI_VERSION_NUM >= 17301
+		ImGui::GetCurrentWindow()->ContentRegionRect.Max.x -= frameHeight * 0.5f;
+		ImGui::GetCurrentWindow()->WorkRect.Max.x -= frameHeight * 0.5f;
+		ImGui::GetCurrentWindow()->InnerRect.Max.x -= frameHeight * 0.5f;
+#else
+		ImGui::GetCurrentWindow()->ContentsRegionRect.Max.x -= frameHeight * 0.5f;
+#endif
+		ImGui::GetCurrentWindow()->Size.x -= frameHeight;
+
+		auto itemWidth = ImGui::CalcItemWidth();
+		ImGui::PushItemWidth(ImMax(0.0f, itemWidth - frameHeight));
+
+		s_GroupPanelLabelStack.push_back(ImRect(labelMin, labelMax));
+	}
+
+	void EndGroupPanel()
+	{
+		ImGui::PopItemWidth();
+
+		auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+		auto frameHeight = ImGui::GetFrameHeight();
+
+		ImGui::EndGroup();
+
+		ImGui::EndGroup();
+
+		ImGui::SameLine(0.0f, 0.0f);
+		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+		ImGui::Dummy(ImVec2(0.0, frameHeight - frameHeight * 0.5f - itemSpacing.y));
+
+		ImGui::EndGroup();
+
+		auto itemMin = ImGui::GetItemRectMin();
+		auto itemMax = ImGui::GetItemRectMax();
+
+		auto labelRect = s_GroupPanelLabelStack.back();
+		s_GroupPanelLabelStack.pop_back();
+
+		ImVec2 halfFrame = ImVec2(frameHeight * 0.25f, frameHeight) * 0.5f;
+		ImRect frameRect = ImRect(itemMin + halfFrame, itemMax - ImVec2(halfFrame.x, 0.0f));
+		labelRect.Min.x -= itemSpacing.x;
+		labelRect.Max.x += itemSpacing.x;
+		for (int i = 0; i < 4; ++i)
+		{
+			switch (i)
+			{
+				// left half-plane
+			case 0: ImGui::PushClipRect(ImVec2(-FLT_MAX, -FLT_MAX), ImVec2(labelRect.Min.x, FLT_MAX), true); break;
+				// right half-plane
+			case 1: ImGui::PushClipRect(ImVec2(labelRect.Max.x, -FLT_MAX), ImVec2(FLT_MAX, FLT_MAX), true); break;
+				// top
+			case 2: ImGui::PushClipRect(ImVec2(labelRect.Min.x, -FLT_MAX), ImVec2(labelRect.Max.x, labelRect.Min.y), true); break;
+				// bottom
+			case 3: ImGui::PushClipRect(ImVec2(labelRect.Min.x, labelRect.Max.y), ImVec2(labelRect.Max.x, FLT_MAX), true); break;
+			}
+
+			ImGui::GetWindowDrawList()->AddRect(
+				frameRect.Min, frameRect.Max,
+				ImColor(ImGui::GetStyleColorVec4(ImGuiCol_Border)),
+				halfFrame.x);
+
+			ImGui::PopClipRect();
+		}
+
+		ImGui::PopStyleVar(2);
+
+#if IMGUI_VERSION_NUM >= 17301
+		ImGui::GetCurrentWindow()->ContentRegionRect.Max.x += frameHeight * 0.5f;
+		ImGui::GetCurrentWindow()->WorkRect.Max.x += frameHeight * 0.5f;
+		ImGui::GetCurrentWindow()->InnerRect.Max.x += frameHeight * 0.5f;
+#else
+		ImGui::GetCurrentWindow()->ContentsRegionRect.Max.x += frameHeight * 0.5f;
+#endif
+		ImGui::GetCurrentWindow()->Size.x += frameHeight;
+
+		ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+		ImGui::EndGroup();
+	}
+}
+
 namespace mmo
 {
-	static const char* s_itemClassStrings[] = {
+	static const std::vector<String> s_itemQualityStrings = {
+		"Poor",
+		"Common",
+		"Uncommon",
+		"Rare",
+		"Epic",
+		"Legendary"
+	};
+
+	static const ImColor s_itemQualityColors[] = {
+		ImColor(0.62f, 0.62f, 0.62f),
+		ImColor(1.0f, 1.0f, 1.0f),
+		ImColor(0.12f, 1.0f, 0.0f),
+		ImColor(0.0f, 0.44f, 0.87f),
+		ImColor(0.64f, 0.21f, 0.93f),
+		ImColor(1.0f, 0.5f, 0.0f)
+	};
+
+	static const std::vector<String> s_itemClassStrings = {
 		"Consumable",
 		"Container",
 		"Weapon",
@@ -32,7 +175,7 @@ namespace mmo
 		"Junk"
 	};
 
-	static const char* s_itemSubclassConsumableStrings[] = {
+	static const std::vector<String> s_itemSubclassConsumableStrings = {
 		"Consumable",
 		"Potion",
 		"Elixir",
@@ -43,11 +186,11 @@ namespace mmo
 		"Bandage"
 	};
 
-	static const char* s_itemSubclassContainerStrings[] = {
+	static const std::vector<String> s_itemSubclassContainerStrings = {
 		"Container"
 	};
 
-	static const char* s_itemSubclassWeaponStrings[] = {
+	static const std::vector<String> s_itemSubclassWeaponStrings = {
 		"One Handed Axe",
 		"Two Handed Axe",
 		"Bow",
@@ -67,8 +210,7 @@ namespace mmo
 		"Fishing Pole"
 	};
 
-
-	static const char* s_itemSubclassGemStrings[] = {
+	static const std::vector<String> s_itemSubclassGemStrings = {
 		"Red",
 		"Blue",
 		"Yellow",
@@ -78,7 +220,7 @@ namespace mmo
 		"Prismatic"
 	};
 
-	static const char* s_itemSubclassArmorStrings[] = {
+	static const std::vector<String> s_itemSubclassArmorStrings = {
 		"Misc",
 		"Cloth",
 		"Leather",
@@ -91,7 +233,7 @@ namespace mmo
 		"Totem"
 	};
 
-	static const char* s_itemSubclassProjectileStrings[] = {
+	static const std::vector<String> s_itemSubclassProjectileStrings = {
 		"Wand",
 		"Bolt",
 		"Arrow",
@@ -99,7 +241,7 @@ namespace mmo
 		"Thrown"
 	};
 
-	static const char* s_itemSubclassTradeGoodsStrings[] = {
+	static const std::vector<String> s_itemSubclassTradeGoodsStrings = {
 		"TradeGoods",
 		"Parts",
 		"Eplosives",
@@ -116,7 +258,7 @@ namespace mmo
 		"Material",
 	};
 
-	static const char* s_inventoryTypeStrings[] = {
+	static const std::vector<String> s_inventoryTypeStrings = {
 		"NonEquip",
 		"Head",
 		"Neck",
@@ -134,16 +276,16 @@ namespace mmo
 		"Shield",
 		"Ranged",
 		"Cloak",
-		"TwoHandedWeapon",
+		"Two Handed Weapon",
 		"Bag",
 		"Tabard",
 		"Robe",
-		"MainHandWeapon",
-		"OffHandWeapon",
+		"Main Hand Weapon",
+		"Off Hand Weapon",
 		"Holdable",
 		"Ammo",
 		"Thrown",
-		"RangedRight",
+		"Ranged Right",
 		"Quiver",
 		"Relic"
 	};
@@ -227,6 +369,23 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
+#define MONEY_PROP_LABEL(name) \
+	{ \
+		const int32 gold = ::floor(currentEntry.name() / 10000); \
+		const int32 silver = ::floor(::fmod(currentEntry.name(), 10000) / 100);\
+		const int32 copper = ::fmod(currentEntry.name(), 100);\
+		if (gold > 0) \
+		{ \
+			ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.0f, 1.0f), "%d g", gold); \
+			ImGui::SameLine(); \
+		} \
+		if (silver > 0 || gold > 0) \
+		{ \
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%d s", silver); \
+			ImGui::SameLine(); \
+		} \
+		ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.0f, 1.0f), "%d c", copper); \
+	}
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -248,7 +407,136 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
-			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());
+			ImGui::InputText("Description", currentEntry.mutable_description());
+
+			// Class
+			int currentItemClass = currentEntry.itemclass();
+			if (ImGui::Combo("Class", &currentItemClass, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= s_itemClassStrings.size())
+					{
+						return false;
+					}
+
+					*out_text = s_itemClassStrings[idx].c_str();
+					return true;
+				}, nullptr, s_itemClassStrings.size(), -1))
+			{
+				currentEntry.set_itemclass(currentItemClass);
+			}
+
+			// Subclass
+			const std::vector<String>* subclassStrings = nullptr;
+			bool hasInventoryType = false;
+			switch(currentItemClass)
+			{
+			case ItemClass::Consumable:	subclassStrings = &s_itemSubclassConsumableStrings; break;
+			case ItemClass::Weapon:		subclassStrings = &s_itemSubclassWeaponStrings; hasInventoryType = true; break;
+			case ItemClass::Armor:		subclassStrings = &s_itemSubclassArmorStrings; hasInventoryType = true; break;
+			case ItemClass::Container:	subclassStrings = &s_itemSubclassContainerStrings; break;
+			case ItemClass::Gem:		subclassStrings = &s_itemSubclassGemStrings; break;
+			case ItemClass::Reagent:	break;
+			case ItemClass::Projectile:	subclassStrings = &s_itemSubclassProjectileStrings; break;
+			case ItemClass::TradeGoods: subclassStrings = &s_itemSubclassTradeGoodsStrings; break;
+			case ItemClass::Generic: break;
+			case ItemClass::Recipe: break;
+			case ItemClass::Money: break;
+			case ItemClass::Quiver: break;
+			case ItemClass::Quest: break;
+			case ItemClass::Key: break;
+			case ItemClass::Permanent: break;
+			case ItemClass::Junk: break;
+			default: break;
+			}
+
+			if (subclassStrings)
+			{
+				int currentSubclass = currentEntry.subclass();
+				if (ImGui::Combo("Subclass", &currentSubclass, [](void* texts, int idx, const char** out_text)
+					{
+						const std::vector<String>* strings = static_cast<std::vector<String>*>(texts);
+						if (idx < 0 || idx >= strings->size())
+						{
+							return false;
+						}
+
+						*out_text = (*strings)[idx].c_str();
+						return true;
+					}, (void*)subclassStrings, subclassStrings->size(), -1))
+				{
+					currentEntry.set_subclass(currentSubclass);
+				}
+			}
+
+			// Inventory Type
+			if (hasInventoryType)
+			{
+				int inventoryType = currentEntry.inventorytype();
+				if (ImGui::Combo("Inventory Type", &inventoryType, [](void*, int idx, const char** out_text)
+					{
+						if (idx < 0 || idx >= s_inventoryTypeStrings.size())
+						{
+							return false;
+						}
+
+						*out_text = s_inventoryTypeStrings[idx].c_str();
+						return true;
+					}, nullptr, s_inventoryTypeStrings.size(), -1))
+				{
+					currentEntry.set_inventorytype(inventoryType);
+				}
+
+				SLIDER_UINT32_PROP(durability, "Durability", 0, 200);
+			}
+
+			// Quality
+			int currentQuality = currentEntry.quality();
+			if (ImGui::Combo("Quality", &currentQuality, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= s_itemQualityStrings.size())
+					{
+						return false;
+					}
+
+					*out_text = s_itemQualityStrings[idx].c_str();
+					return true;
+				}, nullptr, s_itemQualityStrings.size(), -1))
+			{
+				currentEntry.set_quality(currentQuality);
+			}
+
+
+			ImGui::BeginGroupPanel("Tooltip Preview", ImVec2(0, -1));
+			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
+
+			if (!currentEntry.description().empty())
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.82f, 0.0f, 1.0f));
+				ImGui::TextWrapped("\"%s\"", currentEntry.description().c_str());
+				ImGui::PopStyleColor();
+			}
+
+			if (currentEntry.sellprice() > 0)
+			{
+				ImGui::Text("Sell Price: ");
+				ImGui::SameLine();
+				MONEY_PROP_LABEL(sellprice);
+			}
+			ImGui::EndGroupPanel();
+		}
+
+		if (ImGui::CollapsingHeader("Vendor", ImGuiTreeNodeFlags_None))
+		{
+			SLIDER_UINT32_PROP(buycount, "Buy Count", 0, 100000000);
+
+			SLIDER_UINT32_PROP(buyprice, "Buy Price", 0, 100000000);
+			ImGui::SameLine();
+			MONEY_PROP_LABEL(buyprice);
+
+			SLIDER_UINT32_PROP(sellprice, "Sell Price", 0, 100000000);
+			ImGui::SameLine();
+			MONEY_PROP_LABEL(sellprice);
+
 		}
 
 		static bool s_spellClientVisible = false;
