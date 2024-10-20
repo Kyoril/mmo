@@ -276,7 +276,7 @@ namespace mmo
 				row.GetField(index++, result.position.y);
 				row.GetField(index++, result.position.z);
 				row.GetField(index++, facing);
-				row.GetField(index++, result.gender);
+				row.GetField<uint8, uint16>(index++, result.gender);
 				row.GetField(index++, result.raceId);
 				row.GetField(index++, result.classId);
 

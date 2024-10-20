@@ -44,8 +44,10 @@ namespace mmo
 	{
 		uint32 bytes = Get<uint32>(object_fields::Bytes);
 
-		// Update gender (first byte)
-		bytes |= (static_cast<uint32>(gender) << 0);
+		// Clear the first byte (gender) and then set the new gender
+		bytes &= 0xffffff00; // Clear the first byte (mask with 0s in the gender byte and 1s elsewhere)
+		bytes |= static_cast<uint32>(gender); // Set the new gender
+
 		Set<uint32>(object_fields::Bytes, bytes);
 
 		// Update visual
@@ -58,7 +60,7 @@ namespace mmo
 	uint8 GamePlayerS::GetGender() const
 	{
 		const uint32 bytes = Get<uint32>(object_fields::Bytes);
-		return bytes & 0xff;
+		return bytes & 0xff; // Return only the first byte (gender)
 	}
 
 	void GamePlayerS::RewardExperience(const uint32 xp)
