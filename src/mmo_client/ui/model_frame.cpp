@@ -9,8 +9,8 @@ namespace mmo
 		: Frame("Model", name)
 	{
 		// Register default properties and subscribe to their Changed events.
-		auto& fileProp = AddProperty("ModelFile", "");
-		m_propConnections += fileProp.Changed.connect(this, &ModelFrame::OnModelFileChanged);
+		m_propConnections += AddProperty("ModelFile", "").Changed.connect(this, &ModelFrame::OnModelFileChanged);
+
 	}
 
 	void ModelFrame::SetModelFile(const std::string & filename)

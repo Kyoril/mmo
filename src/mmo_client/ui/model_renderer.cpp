@@ -26,10 +26,12 @@ namespace mmo
 		}
 
 		// Get the model frame's mesh and stop if there is no mesh to render
-		const auto mesh = m_modelFrame->GetMesh();
-		if (!mesh)
+		if ((!m_scene && m_modelFrame->GetMesh()) ||
+			(m_scene && m_entity && m_entity->GetMesh() != m_modelFrame->GetMesh()))
 		{
-			return;
+			m_frame->GetGeometryBuffer().Reset();
+
+			NotifyFrameAttached();
 		}
 
 		// Grab the graphics device instance
@@ -73,22 +75,9 @@ namespace mmo
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
 		
-		gx.SetDepthEnabled(true);
-		gx.SetDepthWriteEnabled(true);
-		gx.SetDepthTestComparison(DepthTestMethod::Less);
-
-		// Setup transforms (TODO: use frame transform properties)
-		gx.SetTransformMatrix(World, Matrix4::Identity);
-		gx.SetTransformMatrix(View, MakeViewMatrix(Vector3(0.0f, 0.0f, -5.0f), Quaternion(Degree(180), Vector3::UnitY)));
-		gx.SetTransformMatrix(Projection, gx.MakeProjectionMatrix(Degree(45.0f) , m_lastFrameRect.GetWidth() / m_lastFrameRect.GetHeight(), 0.01f, 100.0f));
-		gx.SetVertexFormat(VertexFormat::PosColorNormalBinormalTangentTex1);
-
-		// Render the actual mesh
-		for (auto& submesh : mesh->GetSubMeshes())
+		if (m_scene && m_camera)
 		{
-			RenderOperation op;
-			submesh->PrepareRenderOperation(op);
-			gx.Render(op);
+			m_scene->Render(*m_camera);
 		}
 
 		// Restore state before drawing the frame's geometry buffer
@@ -122,10 +111,25 @@ namespace mmo
 		m_frameRenderEndCon = m_frame->RenderingEnded.connect([this]() {
 			m_frame->Invalidate(false);
 		});
+
+		if (m_modelFrame->GetMesh())
+		{
+			m_scene = std::make_unique<Scene>();
+			m_entityNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::Zero, Quaternion(Degree(-120), Vector3::UnitY));
+			m_entity = m_scene->CreateEntity("CharacterMesh", m_modelFrame->GetMesh());
+			m_entityNode->AttachObject(*m_entity);
+
+			m_cameraAnchorNode = m_entityNode->CreateChildSceneNode(Vector3::UnitY);
+			m_cameraNode = m_cameraAnchorNode->CreateChildSceneNode(Vector3::UnitZ * 4.0f);
+			m_camera = m_scene->CreateCamera("Camera");
+			m_cameraNode->AttachObject(*m_camera);
+		}
 	}
 
 	void ModelRenderer::NotifyFrameDetached()
 	{
+		m_scene.reset();
+
 		// We no longer manually reset the frame
 		m_frame->RemoveFlags(static_cast<uint32>(FrameFlags::ManualResetBuffer));
 

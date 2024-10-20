@@ -19,7 +19,8 @@ namespace mmo
 			<< io::write<uint32>(characterView.m_raceId)
 			<< io::write<uint32>(characterView.m_classId)
 			<< io::write<uint8>(characterView.m_gender)
-			<< io::write<uint8>(characterView.m_dead ? 1 : 0);
+			<< io::write<uint8>(characterView.m_dead ? 1 : 0)
+			<< io::write<uint32>(characterView.m_displayId);
 	}
 
 	io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView)
@@ -33,6 +34,7 @@ namespace mmo
 			>> io::read<uint32>(outCharacterView.m_raceId)
 			>> io::read<uint32>(outCharacterView.m_classId)
 			>> io::read<uint8>(outCharacterView.m_gender)
-			>> io::read<uint8>(outCharacterView.m_dead);
+			>> io::read<uint8>(outCharacterView.m_dead)
+			>> io::read<uint32>(outCharacterView.m_displayId);
 	}
 }

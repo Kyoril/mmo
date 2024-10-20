@@ -86,8 +86,14 @@ namespace mmo
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
-					for (const auto& charView : result.value())
+					for (auto& charView : result.value())
 					{
+						// Resolve display id from race/class (TODO: Maybe do this somewhere else or differently? This seems like a wrong place to do this, but it works :/)
+						if (const auto* raceEntry = strongThis->m_project.races.getById(charView.GetRaceId()))
+						{
+							charView.SetDisplayId(charView.GetGender() == Male ? raceEntry->malemodel() : raceEntry->femalemodel());
+						}
+
 						strongThis->m_characterViews[charView.GetGuid()] = charView;
 					}
 				}

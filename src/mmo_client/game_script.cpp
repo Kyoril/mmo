@@ -535,7 +535,12 @@ namespace mmo
 				luabind::class_<mmo::CharacterView>("CharacterView")
 				.def_readonly("guid", &mmo::CharacterView::GetGuid)
 				.def_readonly("name", &mmo::CharacterView::GetName)
-				.def_readonly("level", &mmo::CharacterView::GetLevel)),
+				.def_readonly("level", &mmo::CharacterView::GetLevel)
+				.def_readonly("displayId", &mmo::CharacterView::GetDisplayId)
+				.def_readonly("dead", &mmo::CharacterView::IsDead)
+				.def_readonly("raceId", &mmo::CharacterView::GetRaceId)
+				.def_readonly("classId", &mmo::CharacterView::GetClassId)
+				.def_readonly("map", &mmo::CharacterView::GetMapId)),
 
 			luabind::scope(
 				luabind::class_<LoginConnector>("LoginConnector")
@@ -544,11 +549,22 @@ namespace mmo
 
 			luabind::scope(
 				luabind::class_<proto_client::Project>("Project")
-				.def_readonly("spells", &mmo::proto_client::Project::spells)),
+				.def_readonly("spells", &mmo::proto_client::Project::spells)
+				.def_readonly("models", &mmo::proto_client::Project::models)),
 
 			luabind::scope(
 				luabind::class_<proto_client::SpellManager>("SpellManager")
 				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
+
+			luabind::scope(
+				luabind::class_<proto_client::ModelDataManager>("ModelDataManager")
+				.def_const<const proto_client::ModelDataEntry*, proto_client::ModelDataManager, uint32>("GetById", &mmo::proto_client::ModelDataManager::getById)),
+
+			luabind::scope(
+				luabind::class_<proto_client::ModelDataEntry>("ModelData")
+				.def_readonly("id", &proto_client::ModelDataEntry::id)
+				.def_readonly("name", &proto_client::ModelDataEntry::name)
+				.def_readonly("filename", &proto_client::ModelDataEntry::filename)),
 
 			luabind::scope(
 				luabind::class_<RealmConnector>("RealmConnector")
@@ -617,6 +633,7 @@ namespace mmo
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["loginState"] = m_loginState.get();
+		luabind::globals(m_luaState.get())["gameData"] = &m_project;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

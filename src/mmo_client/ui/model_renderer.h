@@ -9,6 +9,7 @@
 #include "graphics/vertex_buffer.h"
 #include "graphics/index_buffer.h"
 #include "base/signal.h"
+#include "scene_graph/scene.h"
 
 
 namespace mmo
@@ -27,8 +28,10 @@ namespace mmo
 		void Render(
 			optional<Color> colorOverride = optional<Color>(),
 			optional<Rect> clipper = optional<Rect>()) override;
+
 		/// Called to notify the renderer that a frame has been attached.
 		void NotifyFrameAttached() override;
+
 		/// Called to notify the renderer that a frame has been detached.
 		void NotifyFrameDetached() override;
 
@@ -37,5 +40,12 @@ namespace mmo
 		Rect m_lastFrameRect;
 		ModelFrame* m_modelFrame;
 		scoped_connection m_frameRenderEndCon;
+		std::unique_ptr<Scene> m_scene;
+		SceneNode* m_entityNode = nullptr;
+		SceneNode* m_cameraAnchorNode = nullptr;
+		SceneNode* m_cameraNode = nullptr;
+		Entity* m_entity = nullptr;
+		Camera* m_camera = nullptr;
+		
 	};
 }

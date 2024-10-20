@@ -31,6 +31,7 @@ namespace mmo
 	private:
 		/// Contains a list of all property connections.
 		scoped_connection_container m_propConnections;
+
 		/// The mesh instance.
 		MeshPtr m_mesh;
 	};

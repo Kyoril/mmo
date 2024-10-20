@@ -28,6 +28,7 @@ namespace mmo
 	public:
 		/// Default constructor.
 		CharacterView() noexcept = default;
+
 		/// Initialize a constant character view.
 		CharacterView(
 			const uint64 guid,
@@ -38,7 +39,8 @@ namespace mmo
 			const uint32 raceId,
 			const uint32 classId,
 			const uint8 gender, 
-			const bool dead) noexcept
+			const bool dead,
+			const uint32 displayId) noexcept
 			: m_guid(guid)
 			, m_name(std::move(name))
 			, m_level(level)
@@ -48,28 +50,43 @@ namespace mmo
 			, m_classId(classId)
 			, m_gender(gender)
 			, m_dead(dead)
+			, m_displayId(displayId)
 		{
 		}
 
 	public:
 		/// Gets the Guid of the character.
 		[[nodiscard]] uint64 GetGuid() const { return m_guid; }
+
 		/// Gets the name of the character.
 		[[nodiscard]] const std::string& GetName() const { return m_name; }
+
 		/// Gets the character level.
 		[[nodiscard]] uint8 GetLevel() const { return m_level; }
+
 		/// Gets the map id of the character.
 		[[nodiscard]] uint32 GetMapId() const { return m_mapId; }
+
 		/// Gets the zone id of the character.
 		[[nodiscard]] uint32 GetZoneId() const { return m_zoneId; }
+
 		/// Gets the race id of the character.
 		[[nodiscard]] uint32 GetRaceId() const { return m_raceId; }
+
 		/// Gets the class id of the character.
 		[[nodiscard]] uint32 GetClassId() const { return m_classId; }
+
 		/// Gets the gender of the character.
 		[[nodiscard]] uint8 GetGender() const { return m_gender; }
+
 		/// Gets whether the character is currently dead.
 		[[nodiscard]] bool IsDead() const { return m_dead; }
+
+		/// Gets the characters display id.
+		[[nodiscard]] uint32 GetDisplayId() const { return m_displayId; }
+
+		/// Sets the characters display id. This is a workaround because resolving the actual display id is a post processing step based on race/gender combination.
+		void SetDisplayId(const uint32 displayId) { m_displayId = displayId; }
 
 	private:
 		/// The character guid.
@@ -90,6 +107,8 @@ namespace mmo
 		uint8 m_gender = Male;
 		/// Whether the character is currently dead.
 		bool m_dead = false;
+		/// Gets the display id of the character.
+		uint32 m_displayId = 0;
 
 		// TODO: Add more attributes of a character in here, for example item display id's
 		// for previewing a character's equipment, pet display id etc. etc.

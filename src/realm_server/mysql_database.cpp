@@ -131,6 +131,7 @@ namespace mmo
 				row.GetField(index++, zone);
 				row.GetField(index++, race);
 				row.GetField(index++, charClass);
+				row.GetField<uint8, uint16>(index++, gender);
 				row.GetField(index++, flags);
 
 				result.emplace_back(
@@ -142,8 +143,9 @@ namespace mmo
 						zone, 
 						race, 
 						charClass, 
-						gender, 
-						(flags & character_flags::Dead) != 0));
+						gender,
+						(flags & character_flags::Dead) != 0,
+						0));
 
 				// Next line entry
 				row = row.Next(select);
