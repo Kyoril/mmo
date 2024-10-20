@@ -37,6 +37,7 @@ namespace mmo
 	public:
 		/// Gets the name of this renderer.
 		inline const std::string& GetName() const { return m_name; }
+
 		/// Gets the frame that is attached to this renderer instance.
 		inline Frame* GetFrame() const { return m_frame; }
 
@@ -48,12 +49,15 @@ namespace mmo
 		virtual void Render(
 			optional<Color> colorOverride = optional<Color>(), 
 			optional<Rect> clipper = optional<Rect>()) = 0;
+
 		/// Called once per frame to update anything that needs to be updated every frame,
 		/// like animations.
 		/// @param elapsedSeconds Time since the last call to update in seconds.
 		virtual void Update(float elapsedSeconds) {}
+
 		/// Called to notify the renderer that a frame has been attached.
 		virtual void NotifyFrameAttached() {}
+
 		/// Called to notify the renderer that a frame has been detached.
 		virtual void NotifyFrameDetached() {}
 

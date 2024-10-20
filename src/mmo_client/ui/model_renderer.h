@@ -22,6 +22,8 @@ namespace mmo
 		ModelRenderer(const std::string& name);
 
 	public:
+		virtual void Update(float elapsedSeconds) override;
+
 		/// @brief Renders a given frame using this renderer instance.
 		/// @param colorOverride An optional color override for tinting.
 		/// @param clipper An optional clip rect.
@@ -46,6 +48,7 @@ namespace mmo
 		SceneNode* m_cameraNode = nullptr;
 		Entity* m_entity = nullptr;
 		Camera* m_camera = nullptr;
+		AnimationState* m_animationState = nullptr;
 		
 	};
 }

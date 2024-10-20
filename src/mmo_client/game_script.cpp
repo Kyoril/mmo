@@ -22,6 +22,7 @@
 #include "shared/proto_data/spells.pb.h"
 
 
+
 namespace luabind
 {
 	// A little helper to combine multiple policies

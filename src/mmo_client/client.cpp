@@ -180,7 +180,20 @@ namespace mmo
 			FrameManager::Get().NotifyKeyUp(key);
 			return false;
 		});
-		
+
+		// Expose model frame methods to lua
+		luabind::module(&s_gameScript->GetLuaState())
+		[
+			luabind::scope(
+				luabind::class_<ModelFrame, Frame>("ModelFrame")
+				.def("SetModelFile", &ModelFrame::SetModelFile)
+				.def("Yaw", &ModelFrame::Yaw)
+				.def("SetZoom", &ModelFrame::SetZoom)
+				.def("GetZoom", &ModelFrame::GetZoom)
+				.def("GetYaw", &ModelFrame::GetYaw)
+				.def("ResetYaw", &ModelFrame::ResetYaw))
+		];
+
 		return true;
 	}
 

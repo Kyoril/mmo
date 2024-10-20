@@ -17,6 +17,17 @@ namespace mmo
 	{
 	}
 
+	void ModelRenderer::Update(float elapsedSeconds)
+	{
+		FrameRenderer::Update(elapsedSeconds);
+
+		if (m_animationState)
+		{
+			m_animationState->AddTime(elapsedSeconds);
+		}
+
+	}
+
 	void ModelRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		// Anything to render here?
@@ -32,6 +43,12 @@ namespace mmo
 			m_frame->GetGeometryBuffer().Reset();
 
 			NotifyFrameAttached();
+		}
+
+		if (m_modelFrame && m_scene)
+		{
+			m_entityNode->SetOrientation(Quaternion(Degree(m_modelFrame->GetYaw()), Vector3::UnitY));
+			m_cameraNode->SetPosition(Vector3::UnitZ * m_modelFrame->GetZoom());
 		}
 
 		// Grab the graphics device instance
@@ -115,19 +132,30 @@ namespace mmo
 		if (m_modelFrame->GetMesh())
 		{
 			m_scene = std::make_unique<Scene>();
-			m_entityNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::Zero, Quaternion(Degree(-120), Vector3::UnitY));
+			m_entityNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::Zero, Quaternion(Degree(m_modelFrame->GetYaw()), Vector3::UnitY));
 			m_entity = m_scene->CreateEntity("CharacterMesh", m_modelFrame->GetMesh());
 			m_entityNode->AttachObject(*m_entity);
 
-			m_cameraAnchorNode = m_entityNode->CreateChildSceneNode(Vector3::UnitY);
-			m_cameraNode = m_cameraAnchorNode->CreateChildSceneNode(Vector3::UnitZ * 4.0f);
+			m_cameraAnchorNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::UnitY, Quaternion(Degree(-120), Vector3::UnitY));
+			m_cameraNode = m_cameraAnchorNode->CreateChildSceneNode(Vector3::UnitZ * m_modelFrame->GetZoom());
 			m_camera = m_scene->CreateCamera("Camera");
 			m_cameraNode->AttachObject(*m_camera);
+
+			if (!m_modelFrame->GetAnimation().empty())
+			{
+				m_animationState = m_entity->GetAnimationState(m_modelFrame->GetAnimation());
+				if (m_animationState)
+				{
+					m_animationState->SetLoop(true);
+					m_animationState->SetEnabled(true);
+				}
+			}
 		}
 	}
 
 	void ModelRenderer::NotifyFrameDetached()
 	{
+		m_animationState = nullptr;
 		m_scene.reset();
 
 		// We no longer manually reset the frame
