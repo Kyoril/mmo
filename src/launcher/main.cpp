@@ -78,8 +78,8 @@ namespace
 	bool doRetryRemovePreviousExecutable = false;
 	HWND dialogHandle = NULL;
 	std::uintmax_t updateSize = 0;
-	std::uintmax_t updated = 0;
-	std::uintmax_t lastUpdateStatus = 0;
+	volatile std::atomic<std::uintmax_t> updated = 0;
+	std::uintmax_t lastUpdateStatus = 0; 
 
 	void ShowVersionInfoDialog()
 	{
@@ -132,38 +132,22 @@ namespace mmo
 				std::scoped_lock guiLock{ m_guiMutex };
 
 				// Increment download counter
-				if (loaded > lastUpdateStatus)
+				if (loaded >= size)
 				{
-					updated += loaded - lastUpdateStatus;
+					updated += loaded;
 				}
-
-				// Update last update status
-				lastUpdateStatus = loaded;
 
 				// Status string
 				std::stringstream statusStream;
-				statusStream << "Updating file " << name << "...";
+				statusStream << "Updating...";
 				SetDlgItemTextA(dialogHandle, IDC_STATUS_LABEL, statusStream.str().c_str());
 
 				const auto loadedMB = static_cast<float>(loaded) / 1024.0f / 1024.0f;
 				const auto sizeMB = static_cast<float>(size) / 1024.0f / 1024.0f;
 
-				// Current file
-				std::stringstream currentStream;
-				currentStream << std::fixed << std::setprecision(2) << loadedMB << " / " << std::setprecision(2) << sizeMB << " MB";
-				SetDlgItemTextA(dialogHandle, IDC_CURRENT, currentStream.str().c_str());
-
 				// Progress bar
 				int percent = static_cast<int>(static_cast<float>(updated) / static_cast<float>(updateSize) * 100.0f);
 				SendMessageA(GetDlgItem(dialogHandle, IDC_PROGRESS_BAR), PBM_SETPOS, percent, 0);
-
-				const auto updatedMb = static_cast<float>(updated) / 1024.0f / 1024.0f;
-				const auto updateSizeMb = static_cast<float>(updateSize) / 1024.0f / 1024.0f;
-				
-				// Overall progress
-				std::stringstream totalStream;
-				totalStream << std::fixed << std::setprecision(2) << updatedMb << " / " << std::setprecision(2) << updateSizeMb << " MB (" << percent << "%)";
-				SetDlgItemTextA(dialogHandle, IDC_TOTAL, totalStream.str().c_str());
 
 				// Log file process
 				if (loaded >= size)

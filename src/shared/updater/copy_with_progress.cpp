@@ -50,5 +50,7 @@ namespace mmo::updating
 				break;
 			}
 		}
+
+		parameters.progressHandler.updateFile(name, originalSize, originalSize);
 	}
 }
