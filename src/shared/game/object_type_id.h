@@ -137,6 +137,16 @@ namespace mmo
 			UnitFieldCount = MaxDamage + 1,
 		};
 
+#define VISIBLE_ITEM_FIELDS(index, offset) \
+	VisibleItem##index##_CREATOR = offset, \
+	VisibleItem##index##_0 = VisibleItem##index##_CREATOR + 2, \
+	VisibleItem##index##_PROPERTIES = VisibleItem##index##_0 + 12
+
+#define VISIBLE_ITEM_FIELDS_NEXT(index, prev) \
+	VisibleItem##index##_CREATOR = VisibleItem##prev##_PROPERTIES + 1, \
+	VisibleItem##index##_0 = VisibleItem##index##_CREATOR + 2, \
+	VisibleItem##index##_PROPERTIES = VisibleItem##index##_0 + 12
+
 		enum PlayerFields
 		{
 			Xp = UnitFieldCount,
@@ -153,7 +163,83 @@ namespace mmo
 
 			Money,
 
+			// Visible item fields
+			VISIBLE_ITEM_FIELDS(1, Money + 1),
+			VISIBLE_ITEM_FIELDS_NEXT(2, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(3, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(4, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(5, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(6, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(7, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(8, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(9, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(10, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(11, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(12, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(13, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(14, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(15, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(16, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(17, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(18, 1),
+			VISIBLE_ITEM_FIELDS_NEXT(19, 1),
+
+			// Inventory fields
+			InvSlotHead = VisibleItem19_PROPERTIES + 1,
+			PackSlot_1 = InvSlotHead + 46,
+			BankSlot_1 = PackSlot_1 + 32,
+			BankBagSlot_1 = 0x226 + unit_fields::UnitFieldCount,
+			VendorBuybackSlot_1 = 0x234 + unit_fields::UnitFieldCount,
+
 			PlayerFieldCount
+		};
+
+		enum ItemFields
+		{
+			/// 64 bit guid of owning player.
+			ItemOwner = ObjectFieldCount,
+
+			/// 64 bit guid of containing object.
+			Contained = ItemOwner + 2,
+
+			/// 64 bit guid of creating player or 0 in most cases if no creator. Creator name will be displayed in tooltip to players.
+			Creator = Contained + 2,
+
+			/// 32 bit stack count.
+			StackCount = Creator + 2,
+
+			/// 32 bit duration.
+			Duration,
+
+			/// 32 bit * 5
+			SpellCharges,
+
+			ItemFlags = SpellCharges + 5,
+
+			Enchantment,
+
+			PropertySeed,
+
+			RandomPropertiesID,
+
+			ItemTextID,
+
+			Durability,
+
+			MaxDurability,
+
+			ItemFieldCount
+		};
+
+		enum BagFields
+		{
+			/// 32 bit value representing the number of actual slots the bag supports. Maximum is 36.
+			NumSlots = ItemFieldCount,
+
+			// 36x 64 bit slots (item guids).
+			Slot_1,
+
+			BagFieldCount = Slot_1 + (36 * 2),
 		};
 	}
 }

@@ -538,7 +538,7 @@ namespace mmo
 	{
 		ASSERT(aura);
 
-		auto& appliedAura = m_auras.emplace_back(std::move(aura));
+		const auto& appliedAura = m_auras.emplace_back(std::move(aura));
 		appliedAura->SetApplied(true);
 	}
 

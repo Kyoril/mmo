@@ -121,6 +121,8 @@ namespace mmo
 		}
 		else if (!isDead)
 		{
+			ApplyLocalMovement(deltaTime);
+
 			// TODO: This needs to be managed differently or it will explode in complexity here!
 			if (m_movementInfo.IsMoving())
 			{
@@ -177,6 +179,56 @@ namespace mmo
 		if (m_runAnimState && m_runAnimState->IsEnabled())
 		{
 			m_runAnimState->AddTime(deltaTime);
+		}
+	}
+
+	void GameUnitC::ApplyLocalMovement(float deltaTime)
+	{
+		auto* playerNode = GetSceneNode();
+
+		const auto& movementInfo = GetMovementInfo();
+
+		if (movementInfo.IsTurning())
+		{
+			if (movementInfo.movementFlags & movement_flags::TurnLeft)
+			{
+				playerNode->Yaw(Radian(GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
+			}
+			else if (movementInfo.movementFlags & movement_flags::TurnRight)
+			{
+				playerNode->Yaw(Radian(-GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
+			}
+		}
+
+		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
+		{
+			Vector3 movementVector;
+
+			if (movementInfo.movementFlags & movement_flags::Forward)
+			{
+				movementVector.x += 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::Backward)
+			{
+				movementVector.x -= 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				movementVector.z -= 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				movementVector.z += 1.0f;
+			}
+
+			MovementType movementType = movement_type::Run;
+			if (movementVector.x < 0.0)
+			{
+				movementType = movement_type::Backwards;
+			}
+
+			// TODO: Apply movement speed values like run back, walk etc.
+			playerNode->Translate(movementVector.NormalizedCopy() * GetSpeed(movementType) * deltaTime, TransformSpace::Local);
 		}
 	}
 
