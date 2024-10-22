@@ -90,6 +90,15 @@ namespace mmo
 				ForceSetFlightSpeedAck,
 				ForceSetFlightBackSpeedAck,
 
+				AutoStoreLootItem,
+				AutoEquipItem,
+				AutoStoreBagItem,
+				SwapItem,
+				SwapInvItem,
+				SplitItem,
+				AutoEquipItemSlot,
+				DestroyItem,
+
 				/// Counter constant
 				Count_,
 			};

@@ -111,6 +111,22 @@ namespace mmo
 
 		void OnClientAck(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnAutoStoreLootItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnAutoStoreBagItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnSwapItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnSwapInvItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnSplitItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnAutoEquipItemSlot(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnDestroyItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 

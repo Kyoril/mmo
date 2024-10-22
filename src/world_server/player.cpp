@@ -156,6 +156,28 @@ namespace mmo
 			OnReviveRequest(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::AutoStoreLootItem:
+			OnAutoStoreLootItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::AutoEquipItem:
+			OnAutoEquipItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::AutoStoreBagItem:
+			OnAutoStoreBagItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::SwapItem:
+			OnSwapItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::SwapInvItem:
+			OnSwapInvItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::AutoEquipItemSlot:
+			OnAutoEquipItemSlot(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::DestroyItem:
+			OnDestroyItem(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -914,6 +936,227 @@ namespace mmo
 			// values.
 			m_character->ApplySpeedChange(typeSent, receivedSpeed);
 			break;
+		}
+	}
+
+	void Player::OnAutoStoreLootItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 lootSlot;
+		if (!(contentReader >> io::read<uint8>(lootSlot)))
+		{
+			WLOG("Failed to read loot slot");
+			return;
+		}
+
+		// TODO: Check current loot
+
+	}
+
+	void Player::OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 srcBag, srcSlot;
+		if (!(contentReader >> io::read<uint8>(srcBag) >> io::read<uint8>(srcSlot)))
+		{
+			WLOG("Failed to read source bag and slot");
+			return;
+		}
+
+		auto& inv = m_character->GetInventory();
+		auto absSrcSlot = Inventory::GetAbsoluteSlot(srcBag, srcSlot);
+		auto item = inv.GetItemAtSlot(absSrcSlot);
+		if (!item)
+		{
+			ELOG("Item not found");
+			return;
+		}
+
+		uint8 targetSlot = 0xFF;
+
+		// Check if item is equippable
+		const auto& entry = item->GetEntry();
+		switch (entry.inventorytype())
+		{
+		case inventory_type::Head:
+			targetSlot = player_equipment_slots::Head;
+			break;
+		case inventory_type::Cloak:
+			targetSlot = player_equipment_slots::Back;
+			break;
+		case inventory_type::Neck:
+			targetSlot = player_equipment_slots::Neck;
+			break;
+		case inventory_type::Feet:
+			targetSlot = player_equipment_slots::Feet;
+			break;
+		case inventory_type::Body:
+			targetSlot = player_equipment_slots::Body;
+			break;
+		case inventory_type::Chest:
+		case inventory_type::Robe:
+			targetSlot = player_equipment_slots::Chest;
+			break;
+		case inventory_type::Legs:
+			targetSlot = player_equipment_slots::Legs;
+			break;
+		case inventory_type::Shoulders:
+			targetSlot = player_equipment_slots::Shoulders;
+			break;
+		case inventory_type::TwoHandedWeapon:
+		case inventory_type::MainHandWeapon:
+			targetSlot = player_equipment_slots::Mainhand;
+			break;
+		case inventory_type::OffHandWeapon:
+		case inventory_type::Shield:
+		case inventory_type::Holdable:
+			targetSlot = player_equipment_slots::Offhand;
+			break;
+		case inventory_type::Weapon:
+			targetSlot = player_equipment_slots::Mainhand;
+			break;
+		case inventory_type::Finger:
+			targetSlot = player_equipment_slots::Finger1;
+			break;
+		case inventory_type::Trinket:
+			targetSlot = player_equipment_slots::Trinket1;
+			break;
+		case inventory_type::Wrists:
+			targetSlot = player_equipment_slots::Wrists;
+			break;
+		case inventory_type::Tabard:
+			targetSlot = player_equipment_slots::Tabard;
+			break;
+		case inventory_type::Hands:
+			targetSlot = player_equipment_slots::Hands;
+			break;
+		case inventory_type::Waist:
+			targetSlot = player_equipment_slots::Waist;
+			break;
+		case inventory_type::Ranged:
+		case inventory_type::RangedRight:
+		case inventory_type::Thrown:
+			targetSlot = player_equipment_slots::Ranged;
+			break;
+		default:
+			if (entry.itemclass() == item_class::Container ||
+				entry.itemclass() == item_class::Quiver)
+			{
+				for (uint16 slot = player_inventory_slots::Start; slot < player_inventory_slots::End; ++slot)
+				{
+					auto bag = inv.GetBagAtSlot(slot | 0xFF00);
+					if (!bag)
+					{
+						targetSlot = slot;
+						break;
+					}
+				}
+
+				if (targetSlot == 0xFF)
+				{
+					//m_character->inventoryChangeFailure(game::inventory_change_failure::NoEquipmentSlotAvailable, item.get(), nullptr);
+					return;
+				}
+			}
+			break;
+		}
+
+		// Check if valid slot found
+		auto absDstSlot = Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot);
+		if (!Inventory::IsEquipmentSlot(absDstSlot) && !Inventory::IsBagPackSlot(absDstSlot))
+		{
+			ELOG("Invalid target slot: " << targetSlot);
+			//m_character->inventoryChangeFailure(game::inventory_change_failure::ItemCantBeEquipped, item.get(), nullptr);
+			return;
+		}
+
+		// Get item at target slot
+		if (auto result = inv.SwapItems(absSrcSlot, absDstSlot); result != inventory_change_failure::Okay)
+		{
+			// Something went wrong
+			ELOG("ERROR: " << result);
+		}
+	}
+
+	void Player::OnAutoStoreBagItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 srcBag, srcSlot, dstBag;
+		if (!(contentReader >> io::read<uint8>(srcBag) >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstBag)))
+		{
+			WLOG("Failed to read source bag, source slot and destination bag");
+			return;
+		}
+
+		// TODO
+	}
+
+	void Player::OnSwapItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 srcBag, srcSlot, dstBag, dstSlot;
+		if (!(contentReader >> io::read<uint8>(srcBag) >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstBag) >> io::read<uint8>(dstSlot)))
+		{
+			WLOG("Failed to read source bag, source slot, destination bag and destination slot");
+			return;
+		}
+		
+		auto& inv = m_character->GetInventory();
+		auto result = inv.SwapItems(
+			Inventory::GetAbsoluteSlot(srcBag, srcSlot),
+			Inventory::GetAbsoluteSlot(dstBag, dstSlot));
+		if (!result)
+		{
+			ELOG("ERRROR: " << result);
+		}
+	}
+
+	void Player::OnSwapInvItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 srcSlot, dstSlot;
+		if (!(contentReader >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstSlot)))
+		{
+			WLOG("Failed to read source slot and destination slot");
+			return;
+		}
+
+		auto& inv = m_character->GetInventory();
+		auto result = inv.SwapItems(
+			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, srcSlot),
+			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, dstSlot));
+		if (!result)
+		{
+			ELOG("ERRROR: " << result);
+		}
+	}
+
+	void Player::OnSplitItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 srcBag, srcSlot, dstBag, dstSlot, count;
+		if (!(contentReader >> io::read<uint8>(srcBag) >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstBag) >> io::read<uint8>(dstSlot) >> io::read<uint8>(count)))
+		{
+			WLOG("Failed to read source bag, source slot, destination bag, destination slot and count");
+			return;
+		}
+
+		// TODO
+	}
+
+	void Player::OnAutoEquipItemSlot(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+
+	}
+
+	void Player::OnDestroyItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 bag, slot, count;
+		if (!(contentReader >> io::read<uint8>(bag) >> io::read<uint8>(slot) >> io::read<uint8>(count)))
+		{
+			WLOG("Failed to read bag, slot and count");
+			return;
+		}
+
+		auto result = m_character->GetInventory().RemoveItem(Inventory::GetAbsoluteSlot(bag, slot), count);
+		if (!result)
+		{
+			// TODO:
+			ELOG("ERRROR: " << result);
 		}
 	}
 

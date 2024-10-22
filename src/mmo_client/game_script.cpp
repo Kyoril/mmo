@@ -13,6 +13,7 @@
 #include <functional>
 #include <utility>
 
+#include "cursor.h"
 #include "game/item.h"
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
@@ -35,6 +36,8 @@ namespace luabind
 namespace mmo
 {
 	CharacterView s_selectedCharacter;
+
+	extern Cursor g_cursor;
 
 	// Static script methods
 	namespace
@@ -248,6 +251,30 @@ namespace mmo
 			}
 
 			return nullptr;
+		}
+
+		void Script_PickupContainerItem(uint32 slot)
+		{
+			// Check if the cursor has an item
+			if (g_cursor.GetCursorItem() != static_cast<uint32>(-1))
+			{
+				// We already have an item picked up, so swap items in slots
+				if (slot != g_cursor.GetCursorItem())
+				{
+					// Actually a different slot: Check the target slot and if we should swap items
+
+
+				}
+
+				g_cursor.Clear();
+			}
+			else
+			{
+				// Pick up the item from the slot
+				g_cursor.SetItem(slot);
+
+				// Lock the old item slot
+			}
 		}
 
 		const ItemInfo* Script_GetInventorySlotItem(const char* unitName, int32 slotId)
