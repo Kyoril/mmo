@@ -3,9 +3,12 @@
 #include <set>
 
 #include "game_unit_s.h"
+#include "inventory.h"
 
 namespace mmo
 {
+	class GameItemS;
+
 	namespace proto
 	{
 		class RaceEntry;
@@ -37,6 +40,12 @@ namespace mmo
 
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
+		/// Applies or removes item stats for this character.
+		void ApplyItemStats(GameItemS& item, bool apply);
+
+		/// Gets a reference to the characters inventory component.
+		Inventory& GetInventory() { return m_inventory; }
+
 	public:
 		void RewardExperience(const uint32 xp);
 
@@ -45,6 +54,8 @@ namespace mmo
 		virtual void SetLevel(uint32 newLevel) override;
 
 		void UpdateDamage();
+
+		void UpdateArmor();
 
 	protected:
 		void UpdateStat(int32 stat);
@@ -67,6 +78,7 @@ namespace mmo
 		}
 
 	private:
+		Inventory m_inventory;
 		const proto::ClassEntry* m_classEntry;
 		const proto::RaceEntry* m_raceEntry;
 

@@ -250,8 +250,7 @@ namespace mmo
 		signal<void(const proto::SpellEntry&)> startedCasting;
 
 	public:
-		GameUnitS(const proto::Project& project,
-			TimerQueue& timers);
+		GameUnitS(const proto::Project& project, TimerQueue& timers);
 
 		virtual ~GameUnitS() override;
 

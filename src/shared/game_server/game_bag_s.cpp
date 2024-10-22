@@ -5,7 +5,7 @@
 
 namespace mmo
 {
-	GameBagS::GameBagS(proto::Project& project, const proto::ItemEntry& entry)
+	GameBagS::GameBagS(const proto::Project& project, const proto::ItemEntry& entry)
 		: GameItemS(project, entry)
 	{
 	}

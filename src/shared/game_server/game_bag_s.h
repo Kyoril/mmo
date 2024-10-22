@@ -11,7 +11,7 @@ namespace mmo
 
 	public:
 
-		explicit GameBagS(proto::Project& project, const proto::ItemEntry& entry);
+		explicit GameBagS(const proto::Project& project, const proto::ItemEntry& entry);
 		~GameBagS() override = default;
 
 	public:

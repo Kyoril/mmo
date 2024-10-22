@@ -93,19 +93,19 @@ namespace mmo
 		/// @param amount The amount of items to create, has to be greater than 0.
 		/// @param out_slots If not nullptr, a map, containing all slots and counters will be filled.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure createItems(const proto::ItemEntry& entry, uint16 amount = 1, std::map<uint16, uint16>* out_addedBySlot = nullptr);
+		InventoryChangeFailure CreateItems(const proto::ItemEntry& entry, uint16 amount = 1, std::map<uint16, uint16>* out_addedBySlot = nullptr);
 
 		/// Tries to add multiple existing items of the same entry to the inventory.
 		/// @param entry The item template to be used for creating new items.
 		/// @param out_slot If not nullptr, a slot number that will be used by the item.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure addItem(std::shared_ptr<GameItemS> item, uint16* out_slot = nullptr);
+		InventoryChangeFailure AddItem(std::shared_ptr<GameItemS> item, uint16* out_slot = nullptr);
 
 		/// Tries to remove multiple items of the same entry.
 		/// @param entry The item template to delete.
 		/// @param amount The amount of items to delete. If 0, ALL items of that entry are deleted.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure removeItems(const proto::ItemEntry& entry, uint16 amount = 1);
+		InventoryChangeFailure RemoveItems(const proto::ItemEntry& entry, uint16 amount = 1);
 
 		/// Tries to remove an item at a specified slot.
 		/// @param absoluteSlot The item slot to delete from.
@@ -113,34 +113,34 @@ namespace mmo
 		///               so that if stacks >= actual item stacks, simply all stacks will be removed as well.
 		/// @param sold If set to true, the item will be moved to the list of buyback items.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure removeItem(uint16 absoluteSlot, uint16 stacks = 0, bool sold = false);
+		InventoryChangeFailure RemoveItem(uint16 absoluteSlot, uint16 stacks = 0, bool sold = false);
 
 		/// Tries to remove an item by it's guid. This is basically just a shortcut to findItemByGUID() and removeItem().
 		/// @param guid The item guid.
 		/// @param stacks The number of stacks to remove. If 0, ALL stacks will be removed. Stacks are capped automatically,
 		///               so that if stacks >= actual item stacks, simply all stacks will be removed as well.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure removeItemByGUID(uint64 guid, uint16 stacks = 0);
+		InventoryChangeFailure RemoveItemByGUID(uint64 guid, uint16 stacks = 0);
 
 		/// Tries to swap two slots. Can also be used to move items, if one of the slots is
 		/// empty.
 		/// @param slotA The first (source) slot.
 		/// @param slotB The second (destination) slot.
 		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure swapItems(uint16 slotA, uint16 slotB);
+		InventoryChangeFailure SwapItems(uint16 slotA, uint16 slotB);
 
 		/// Determines whether a slot is valid for the given item entry and this character.
 		/// This also validates equipment slots and bags.
 		/// @param slot The absolute slot index to check.
 		/// @param entry The item prototype to check.
 		/// @return game::inventory_change_failure::Okay if the slot is valid.
-		InventoryChangeFailure isValidSlot(uint16 slot, const proto::ItemEntry& entry) const;
+		InventoryChangeFailure IsValidSlot(uint16 slot, const proto::ItemEntry& entry) const;
 
 		/// Determines whether the specified items can be stored.
-		InventoryChangeFailure canStoreItems(const proto::ItemEntry& entry, uint16 amount = 1) const;
+		InventoryChangeFailure CanStoreItems(const proto::ItemEntry& entry, uint16 amount = 1) const;
 		
 		/// Gets a reference of the owner of this inventory.
-		GamePlayerS& getOwner() {
+		GamePlayerS& GetOwner() {
 			return m_owner;
 		}
 
@@ -148,83 +148,83 @@ namespace mmo
 		/// so you don't need to worry about performance too much here.
 		/// @param itemId The entry id of the searched item.
 		/// @returns Number of items that the player has.
-		uint16 getItemCount(uint32 itemId) const;
+		uint16 GetItemCount(uint32 itemId) const;
 
 		/// Determines whether the player has an item in his inventory. This method is merely
 		/// syntactic sugar, it simply checks if getItemCount(itemId) is greater that 0.
 		/// @param itemid The entry id of the searched item.
 		/// @returns true if the player has the item.
-		bool hasItem(uint32 itemId) const {
-			return getItemCount(itemId) > 0;
+		bool HasItem(uint32 itemId) const {
+			return GetItemCount(itemId) > 0;
 		}
 
 		/// Determines whether the character has equipped a quiver. This is useful because
 		/// players can only equip one quiver at a time, so this check might be used at multiple
 		/// locations.
 		/// @returns true if the player has equipped a quiver.
-		bool hasEquippedQuiver() const;
+		bool HasEquippedQuiver() const;
 
 		/// Gets an absolute slot position from a bag index and a bag slot.
-		static uint16 getAbsoluteSlot(uint8 bag, uint8 slot);
+		static uint16 GetAbsoluteSlot(uint8 bag, uint8 slot);
 
 		/// Splits an absolute slot into a bag index and a bag slot.
-		static bool getRelativeSlots(uint16 absoluteSlot, uint8& out_bag, uint8& out_slot);
+		static bool GetRelativeSlots(uint16 absoluteSlot, uint8& out_bag, uint8& out_slot);
 
 		/// Gets the amount of free inventory slots.
-		uint16 getFreeSlotCount() const {
+		uint16 GetFreeSlotCount() const {
 			return m_freeSlots;
 		}
 
 		/// Returns an item at a specified absolute slot.
-		std::shared_ptr<GameItemS> getItemAtSlot(uint16 absoluteSlot) const;
+		std::shared_ptr<GameItemS> GetItemAtSlot(uint16 absoluteSlot) const;
 
 		/// Returns a bag at a specified absolute slot.
-		std::shared_ptr<GameBagS> getBagAtSlot(uint16 absolute_slot) const;
+		std::shared_ptr<GameBagS> GetBagAtSlot(uint16 absolute_slot) const;
 
 		/// Returns the weapon at a specified slot.
-		std::shared_ptr<GameItemS> getWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool useable) const;
+		std::shared_ptr<GameItemS> GetWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool useable) const;
 
 		/// Finds an item by it's guid.
 		/// @param guid The GUID of the searched item.
 		/// @param out_slot The absolute item slot will be stored there.
 		/// @returns false if the item could not be found.
-		bool findItemByGUID(uint64 guid, uint16& out_slot) const;
+		bool FindItemByGUID(uint64 guid, uint16& out_slot) const;
 
 		/// Determines whether the given slot is an equipment slot.
-		static bool isEquipmentSlot(uint16 absoluteSlot);
+		static bool IsEquipmentSlot(uint16 absoluteSlot);
 
 		/// Determines whether the given slot is a custom bag slot (not in a bag, but a bag equipment slot).
-		static bool isBagPackSlot(uint16 absoluteSlot);
+		static bool IsBagPackSlot(uint16 absoluteSlot);
 
 		/// Determines whether the given slot is a slot in the default bag.
-		static bool isInventorySlot(uint16 absoluteSlot);
+		static bool IsInventorySlot(uint16 absoluteSlot);
 
 		/// Determines whether the given slot is a slot in a bag (not the default bag).
-		static bool isBagSlot(uint16 absoluteSlot);
+		static bool IsBagSlot(uint16 absoluteSlot);
 
 		/// Determines whether the given slot is a slot in a bag bar.
-		static bool isBagBarSlot(uint16 absoluteSlot);
+		static bool IsBagBarSlot(uint16 absoluteSlot);
 
 		/// Determines whether the given slot is a buyback slot.
-		static bool isBuyBackSlot(uint16 absoluteSlot);
+		static bool IsBuyBackSlot(uint16 absoluteSlot);
 
 		/// Tries to repair all items in the players bags and also consumes money from the owner.
 		/// @returns Repair cost that couldn't be consumed, so if this is greater than 0, there was an error.
-		uint32 repairAllItems();
+		uint32 RepairAllItems();
 
 		/// Tries to repair an item at the given slot and also consume money from the owner.
 		/// @returns Repair cost that couldn't be consumed, so if this is greater than 0, there was an error.
-		uint32 repairItem(uint16 absoluteSlot);
+		uint32 RepairItem(uint16 absoluteSlot);
 
 	public:
 
 		/// Adds a new realm data entry to the inventory. Note that this method should only be called
 		/// on the realm, when the inventory is loaded from the database.
-		void addRealmData(const ItemData& data);
+		void AddRealmData(const ItemData& data);
 
 		/// Gets the inventory's realm data, if any. Should only be used on the realm when saving the
 		/// inventory into the database.
-		const std::vector<ItemData> getItemData() const {
+		const std::vector<ItemData> GetItemData() const {
 			return m_realmData;
 		}
 
@@ -232,7 +232,7 @@ namespace mmo
 		/// the players spawn packet, so that all items that are available to the player will be sent
 		/// at once.
 		/// @param out_blocks A reference to the array of update blocks to send.
-		void addSpawnBlocks(std::vector<std::vector<char>>& out_blocks);
+		void AddSpawnBlocks(std::vector<std::vector<char>>& out_blocks);
 
 	private:
 
@@ -240,15 +240,15 @@ namespace mmo
 		typedef std::function<bool(uint8, uint8, uint8)> BagCallbackFunc;
 
 		/// Executes a callback function for every bag the player has (including the default bag).
-		void forEachBag(BagCallbackFunc callback);
+		void ForEachBag(BagCallbackFunc callback);
 
 		/// Fired when an item despawns (this signal is used to force item removal, currently used
 		/// when lootable item no longer has loot).
-		void onItemDespawned(GameObjectS& object);
+		void OnItemDespawned(GameObjectS& object);
 
-		void onSetItemEquipped(uint32 set);
+		void OnSetItemEquipped(uint32 set);
 
-		void onSetItemUnequipped(uint32 set);
+		void OnSetItemUnequipped(uint32 set);
 
 	private:
 

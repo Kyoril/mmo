@@ -188,10 +188,12 @@ namespace mmo
 			InvSlotHead = VisibleItem19_PROPERTIES + 1,
 			PackSlot_1 = InvSlotHead + 46,
 			BankSlot_1 = PackSlot_1 + 32,
-			BankBagSlot_1 = 0x226 + unit_fields::UnitFieldCount,
-			VendorBuybackSlot_1 = 0x234 + unit_fields::UnitFieldCount,
+			BankBagSlot_1 = BankSlot_1 + 56,
+			VendorBuybackSlot_1 = BankBagSlot_1 + 14,
+			BuybackPrice_1 = VendorBuybackSlot_1 + 12,
+			BuybackTimestamp_1 = BuybackPrice_1 + 12,
 
-			PlayerFieldCount
+			PlayerFieldCount = VendorBuybackSlot_1 + 24,
 		};
 
 		enum ItemFields

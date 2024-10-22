@@ -6,7 +6,7 @@
 
 namespace mmo
 {
-	GameItemS::GameItemS(proto::Project& project, const proto::ItemEntry& entry)
+	GameItemS::GameItemS(const proto::Project& project, const proto::ItemEntry& entry)
 		: GameObjectS(project)
 		, m_entry(entry)
 	{

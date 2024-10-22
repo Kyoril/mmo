@@ -54,8 +54,7 @@ namespace mmo
 	class WorldInstance
 	{
 	public:
-		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid,
-			std::unique_ptr<UnitFinder> unitFinder);
+		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder);
 	
 	public:
 		
@@ -119,6 +118,8 @@ namespace mmo
 
 		bool IsPvP() const { return IsArena() || IsBattleground(); }
 
+		IdGenerator<uint64>& GetItemIdGenerator() { return m_itemIdGenerator; }
+
 	protected:
 
 		void UpdateObject(GameObjectS& object) const;
@@ -128,6 +129,7 @@ namespace mmo
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;
+		IdGenerator<uint64> m_itemIdGenerator;
 		WorldInstanceManager& m_manager;
 		InstanceId m_id;
 		MapId m_mapId;

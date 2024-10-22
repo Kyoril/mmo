@@ -11,12 +11,12 @@ namespace mmo
 	}
 
 	/// @brief Represents an item instance in a world..
-	class GameItemS final : public GameObjectS
+	class GameItemS : public GameObjectS
 	{
 		signal<void()> equipped;
 
 	public:
-		explicit GameItemS(proto::Project& project, const proto::ItemEntry& entry);
+		explicit GameItemS(const proto::Project& project, const proto::ItemEntry& entry);
 
 		~GameItemS() override = default;
 

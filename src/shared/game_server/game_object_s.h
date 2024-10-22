@@ -201,6 +201,8 @@ namespace mmo
 			::mmo::ForEachSubscriberInSight(m_worldInstance->GetGrid(), tileIndex, callback);
 		}
 
+		const proto::Project& GetProject() const { return m_project; }
+
 	protected:
 		virtual void PrepareFieldMap()
 		{

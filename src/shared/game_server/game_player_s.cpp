@@ -2,12 +2,15 @@
 
 #include "game_player_s.h"
 
+#include "game_item_s.h"
 #include "proto_data/project.h"
+#include "game/item.h"
 
 namespace mmo
 {
 	GamePlayerS::GamePlayerS(const proto::Project& project, TimerQueue& timerQueue)
 		: GameUnitS(project, timerQueue)
+		, m_inventory(*this)
 	{
 	}
 
@@ -63,6 +66,106 @@ namespace mmo
 		return bytes & 0xff; // Return only the first byte (gender)
 	}
 
+	void GamePlayerS::ApplyItemStats(GameItemS& item, bool apply)
+	{
+		const auto& itemEntry = item.GetEntry();
+
+		if (itemEntry.durability() == 0 || item.Get<uint32>(object_fields::Durability) > 0)
+		{
+			// Apply values
+			for (int i = 0; i < itemEntry.stats_size(); ++i)
+			{
+				const auto& stat = itemEntry.stats(i);
+				if (stat.value() != 0)
+				{
+					switch (stat.type())
+					{
+					case item_stat::Mana:
+						UpdateModifierValue(unit_mods::Mana, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Health:
+						UpdateModifierValue(unit_mods::Health, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Agility:
+						UpdateModifierValue(unit_mods::StatAgility, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Strength:
+						UpdateModifierValue(unit_mods::StatStrength, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Intellect:
+						UpdateModifierValue(unit_mods::StatIntellect, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Spirit:
+						UpdateModifierValue(unit_mods::StatSpirit, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					case item_stat::Stamina:
+						UpdateModifierValue(unit_mods::StatStamina, unit_mod_type::TotalValue, stat.value(), apply);
+						break;
+					default:
+						break;
+					}
+				}
+			}
+
+			std::array<bool, 6> shouldUpdateResi;
+			shouldUpdateResi.fill(false);
+
+			if (itemEntry.holyres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceHoly, unit_mod_type::TotalValue, itemEntry.holyres(), apply);
+				shouldUpdateResi[0] = true;
+			}
+			if (itemEntry.fireres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceFire, unit_mod_type::TotalValue, itemEntry.fireres(), apply);
+				shouldUpdateResi[1] = true;
+			}
+			if (itemEntry.natureres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceNature, unit_mod_type::TotalValue, itemEntry.natureres(), apply);
+				shouldUpdateResi[2] = true;
+			}
+			if (itemEntry.frostres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceFrost, unit_mod_type::TotalValue, itemEntry.frostres(), apply);
+				shouldUpdateResi[3] = true;
+			}
+			if (itemEntry.shadowres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceShadow, unit_mod_type::TotalValue, itemEntry.shadowres(), apply);
+				shouldUpdateResi[4] = true;
+			}
+			if (itemEntry.arcaneres() != 0)
+			{
+				UpdateModifierValue(unit_mods::ResistanceArcane, unit_mod_type::TotalValue, itemEntry.arcaneres(), apply);
+				shouldUpdateResi[5] = true;
+			}
+
+			if (apply)
+			{
+				SpellTargetMap targetMap;
+				targetMap.SetUnitTarget(GetGuid());
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+
+				for (auto& spell : item.GetEntry().spells())
+				{
+					// Trigger == onEquip?
+					if (spell.trigger() == item_spell_trigger::OnEquip)
+					{
+						//CastSpell(targetMap, spell.spell(), 0, item.GetGuid());
+					}
+				}
+			}
+			else
+			{
+				//getAuras().removeAllAurasDueToItem(item.GetGuid());
+			}
+
+			UpdateArmor();
+			UpdateDamage();
+		}
+	}
+
 	void GamePlayerS::RewardExperience(const uint32 xp)
 	{
 		// At max level we can't gain any more xp
@@ -100,12 +203,7 @@ namespace mmo
 			UpdateStat(i);
 		}
 
-		// Update armor value
-		const int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
-		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue));
-		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
-		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
-		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
+		UpdateArmor();
 
 		const int32 level = Get<int32>(object_fields::Level);
 		ASSERT(level > 0);
@@ -219,6 +317,17 @@ namespace mmo
 		Set<float>(object_fields::MaxDamage, baseValue + maxDamage);
 	}
 
+	void GamePlayerS::UpdateArmor()
+	{
+		// Update armor value
+		const int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
+		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue));
+		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
+		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
+		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
+
+	}
+
 	void GamePlayerS::UpdateStat(int32 stat)
 	{
 		// Validate stat
@@ -246,7 +355,7 @@ namespace mmo
 	{
 		// Write super class data
 		w << reinterpret_cast<GameUnitS const&>(object);
-
+		w << object.m_inventory;
 		return w;
 	}
 
@@ -254,6 +363,7 @@ namespace mmo
 	{
 		// Read super class data
 		r >> reinterpret_cast<GameUnitS&>(object);
+		r >> object.m_inventory;
 
 		return r;
 	}
