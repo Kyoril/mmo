@@ -1524,7 +1524,7 @@ namespace mmo
 		m_realmData.push_back(data);
 	}
 
-	void Inventory::AddSpawnBlocks(std::vector<std::vector<char>>& out_blocks)
+	void Inventory::ConstructFromRealmData(std::vector<GameObjectS*>& out_items)
 	{
 		// Reconstruct realm data if available
 		if (!m_realmData.empty())
@@ -1562,8 +1562,8 @@ namespace mmo
 				}
 				
 				auto newItemId = world->GetItemIdGenerator().GenerateId();
-				item->Set<int64>(object_fields::Guid, CreateEntryGUID(newItemId, entry->id(), GuidType::Item));
 				item->Initialize();
+				item->Set<uint64>(object_fields::Guid, CreateEntryGUID(newItemId, entry->id(), GuidType::Item));
 				item->Set<uint64>(object_fields::ItemOwner, m_owner.GetGuid());
 				item->Set<uint64>(object_fields::Creator, data.creator);
 				item->Set<uint64>(object_fields::Contained, m_owner.GetGuid());
@@ -1634,6 +1634,11 @@ namespace mmo
 				m_itemDespawnSignals[item->GetGuid()]
 					= item->despawned.connect(std::bind(&Inventory::OnItemDespawned, this, std::placeholders::_1));
 
+				item->ClearFieldChanges();
+
+				// Notify
+				out_items.push_back(item.get());
+
 				// Quest check
 				//m_owner.onQuestItemAddedCredit(item->GetEntry(), data.stackCount);
 
@@ -1659,46 +1664,13 @@ namespace mmo
 				{
 					pair.second->Set<uint64>(object_fields::Contained, bag->GetGuid());
 					bag->Set<uint64>(object_fields::Slot_1 + ((pair.first & 0xFF) * 2), pair.second->GetGuid());
+					bag->ClearFieldChanges();
 				}
 			}
-		}
-
-		for (auto& pair : m_itemsBySlot)
-		{
-			std::vector<char> createItemBlock;
-			io::VectorSink createItemSink(createItemBlock);
-			io::Writer createItemWriter(createItemSink);
-			{
-				uint8 updateType = 0x02;						// Item
-				uint8 updateFlags = 0x08 | 0x10;				//
-				uint64 guid = pair.second->GetGuid();
-
-				auto objectTypeId = pair.second->GetTypeId();	// Item
-
-				// Header with object guid and type
-				createItemWriter
-					<< io::write<uint8>(updateType)
-					<< io::write_packed_guid(guid)
-					<< io::write<uint8>(objectTypeId)
-					<< io::write<uint8>(updateFlags);
-				if (updateFlags & 0x08)
-				{
-					createItemWriter
-						<< io::write<uint32>(guidLowerPart(guid));
-				}
-				if (updateFlags & 0x10)
-				{
-					createItemWriter
-						<< io::write<uint32>((guid << 48) & 0x0000FFFF);
-				}
-
-				//pair.second->WriteValueUpdateBlock(createItemWriter, m_owner, true);
-			}
-			out_blocks.push_back(std::move(createItemBlock));
 		}
 	}
 
-	void Inventory::ForEachBag(BagCallbackFunc callback)
+	void Inventory::ForEachBag(const BagCallbackFunc& callback) const
 	{
 		// Enumerates all possible bags
 		static std::array<uint8, 5> bags =
@@ -1776,8 +1748,7 @@ namespace mmo
 		if (object.m_realmData.empty())
 		{
 			// Inventory has actual item instances, so we serialize this object for realm usage
-			w
-				<< io::write<uint16>(object.m_itemsBySlot.size());
+			w << io::write<uint16>(object.m_itemsBySlot.size());
 			for (const auto& pair : object.m_itemsBySlot)
 			{
 				ItemData data;
@@ -1795,8 +1766,7 @@ namespace mmo
 		else
 		{
 			// Inventory has realm data left, and no item instances
-			w
-				<< io::write<uint16>(object.m_realmData.size());
+			w << io::write<uint16>(object.m_realmData.size());
 			for (const auto& data : object.m_realmData)
 			{
 				w << data;

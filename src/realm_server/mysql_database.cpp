@@ -9,15 +9,18 @@
 #include "mysql_wrapper/mysql_statement.h"
 #include "log/default_log_levels.h"
 #include "game/character_flags.h"
+#include "game_server/inventory.h"
 #include "math/vector3.h"
 #include "math/degree.h"
+#include "proto_data/project.h"
 #include "virtual_dir/file_system_reader.h"
 
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo)
-		: m_connectionInfo(std::move(connectionInfo))
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project)
+		: m_project(project)
+		, m_connectionInfo(std::move(connectionInfo))
 	{
 	}
 
@@ -279,13 +282,11 @@ namespace mmo
 				row.GetField<uint8, uint16>(index++, result.gender);
 				row.GetField(index++, result.raceId);
 				row.GetField(index++, result.classId);
-
 				row.GetField(index++, result.xp);
 				row.GetField(index++, result.hp);
 				row.GetField(index++, result.mana);
 				row.GetField(index++, result.rage);
 				row.GetField(index++, result.energy);
-
 				row.GetField(index++, result.money);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
@@ -307,6 +308,39 @@ namespace mmo
 				{
 					PrintDatabaseError();
 					throw mysql::Exception("Could not load character spells");
+				}
+
+				// Load item data
+				mysql::Select itemSelect(m_connection, 
+					"SELECT `entry`, `slot`, `creator`, `count`, `durability` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
+				if (itemSelect.Success())
+				{
+					mysql::Row itemRow(itemSelect);
+					while (itemRow)
+					{
+						// Read item data
+						ItemData data;
+						itemRow.GetField(0, data.entry);
+						itemRow.GetField(1, data.slot);
+						itemRow.GetField(2, data.creator);
+						itemRow.GetField<uint8, uint16>(3, data.stackCount);
+						itemRow.GetField(4, data.durability);
+						if (const auto* itemEntry = m_project.items.getById(data.entry))
+						{
+							// More than 15 minutes passed since last save?
+							if (const bool isConjured = (itemEntry->flags() & item_flags::Conjured) != 0; !isConjured)
+							{
+								result.items.emplace_back(std::move(data));
+							}
+						}
+						else
+						{
+							WLOG("Unknown item in character database: " << data.entry);
+						}
+
+						// Next row
+						itemRow = mmo::mysql::Row::Next(itemSelect);
+					}
 				}
 
 				return result;
@@ -355,7 +389,7 @@ namespace mmo
 	}
 
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
-		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money)
+		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items)
 	{
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
@@ -375,6 +409,54 @@ namespace mmo
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update character data!");
 		}
+
+		// Delete character items
+		if (!m_connection.Execute("DELETE FROM `character_items` WHERE `owner`=" + std::to_string(characterId) + ";"))
+		{
+			// There was an error
+			PrintDatabaseError();
+			throw mysql::Exception("Could not update character inventory data!");
+		}
+
+		// Save character items
+		if (!items.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_items` (`owner`, `entry`, `slot`, `creator`, `count`, `durability`) VALUES ";
+			bool isFirstItem = true;
+			for (auto& item : items)
+			{
+				// Don't save buyback slots into the database!
+				if (Inventory::IsBuyBackSlot(item.slot))
+					continue;
+
+				if (!isFirstItem) strm << ",";
+				else
+				{
+					isFirstItem = false;
+				}
+
+				strm << "(" << characterId << "," << item.entry << "," << item.slot << ",";
+				if (item.creator == 0)
+				{
+					strm << "NULL";
+				}
+				else
+				{
+					strm << item.creator;
+				}
+				strm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				// There was an error
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character inventory data!");
+			}
+		}
+
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

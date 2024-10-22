@@ -7,6 +7,7 @@
 
 namespace mmo
 {
+	class GameItemC;
 	class GameUnitC;
 	class GamePlayerC;
 
@@ -26,6 +27,8 @@ namespace mmo
 		virtual void GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player) = 0;
 
 		virtual void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) = 0;
+
+		virtual void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) = 0;
 	};
 
 	/// @brief Base class for a unit in the game client. A unit is a living object in the game world which can be interacted with,

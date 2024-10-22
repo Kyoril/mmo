@@ -29,6 +29,7 @@
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
 #include "game/spell_target_map.h"
+#include "game_client/game_item_c.h"
 #include "ui/world_text_frame.h"
 
 namespace mmo
@@ -715,6 +716,9 @@ namespace mmo
 				case ObjectTypeId::Player:
 					object = std::make_shared<GamePlayerC>(m_scene, *this);
 					break;
+				case ObjectTypeId::Item:
+					object = std::make_shared<GameItemC>(m_scene, *this);
+					break;
 				default:
 					object = std::make_shared<GameObjectC>(m_scene);
 				}
@@ -724,8 +728,9 @@ namespace mmo
 
 				ObjectMgr::AddObject(object);
 
+
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
-				if (!m_playerController->GetControlledUnit())
+				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
@@ -750,6 +755,11 @@ namespace mmo
 											});
 									}
 								}
+							}
+
+							if ((fieldIndex < object_fields::BankSlot_1 && fieldIndex + fieldCount >= object_fields::InvSlotHead))
+							{
+								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
 							}
 
 							if ((fieldIndex <= object_fields::Xp && fieldIndex + fieldCount >= object_fields::Xp) ||
@@ -926,7 +936,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		m_playerNameCache.NotifyObjectResponse(guid, std::move(name));
+		m_playerNameCache.NotifyObjectResponse(guid, name);
 		return PacketParseResult::Pass;
 	}
 
@@ -956,7 +966,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		m_creatureCache.NotifyObjectResponse(id, std::move(entry));
+		m_creatureCache.NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
 	}
 
@@ -978,8 +988,13 @@ namespace mmo
 		}
 
 		ItemInfo entry{ id };
+		if (!(packet >> entry))
+		{
+			ELOG("Failed to read item info!");
+			return PacketParseResult::Disconnect;
+		}
 
-		m_itemCache.NotifyObjectResponse(id, std::move(entry));
+		m_itemCache.NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
 	}
 
@@ -2181,5 +2196,16 @@ namespace mmo
 				strong->SetCreatureInfo(data);
 			}
 		});
+	}
+
+	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GameItemC> item)
+	{
+		m_itemCache.Get(guid, [item](uint64, const ItemInfo& data)
+			{
+				if (const std::shared_ptr<GameItemC> strong = item.lock())
+				{
+					strong->NotifyItemData(data);
+				}
+			});
 	}
 }

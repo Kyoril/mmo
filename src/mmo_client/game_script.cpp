@@ -13,6 +13,8 @@
 #include <functional>
 #include <utility>
 
+#include "game/item.h"
+#include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
 #include "luabind/luabind.hpp"
@@ -180,6 +182,125 @@ namespace mmo
 			}
 
 			return 1;
+		}
+
+		int32 Script_GetBackpackSlot(int32 slotId)
+		{
+			// Invalid backpack slot
+			if (slotId < 0 || slotId >= player_inventory_pack_slots::End - player_inventory_pack_slots::Start)
+			{
+				return -1;
+			}
+
+			return (static_cast<uint16>(player_inventory_slots::Bag_0) << 8) | static_cast<uint16>(player_inventory_pack_slots::Start + slotId);
+		}
+
+		bool Script_IsBackpackSlot(int32 slotId)
+		{
+			return static_cast<uint16>(slotId >> 8) == player_inventory_slots::Bag_0 &&
+				static_cast<uint16>(slotId & 0xFF) >= player_inventory_pack_slots::Start &&
+				static_cast<uint16>(slotId & 0xFF) <= player_inventory_pack_slots::End;
+		}
+
+		int32 Script_GetBagSlot(int32 bagIndex, int32 slotId)
+		{
+			// Only 4 bags are supported
+			if (bagIndex < 1 || bagIndex >= player_inventory_slots::End - player_inventory_slots::Start)
+			{
+				return -1;
+			}
+
+			// Maximum number of slots per bag is 36
+			if (slotId < 0 || slotId >= 36)
+			{
+				return -1;
+			}
+
+			// Bag index starts at 1, so we need to subtract 1
+			return (static_cast<uint16>(player_inventory_slots::Start + bagIndex - 1) << 8) | static_cast<uint16>(slotId);
+		}
+
+		std::shared_ptr<GameItemC> GetItemFromSlot(const char* unitName, int32 slotId)
+		{
+			if (const auto unit = Script_GetUnitByName(unitName))
+			{
+				if (unit->GetTypeId() != ObjectTypeId::Player)
+				{
+					return nullptr;
+				}
+
+				// Backpack?
+				uint64 itemGuid = 0;
+				if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0)
+				{
+					const uint8 slotFieldOffset = (static_cast<uint8>(slotId & 0xFF) - player_inventory_slots::End) * 2;
+					itemGuid = unit->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
+				}
+
+				if (itemGuid == 0)
+				{
+					return nullptr;
+				}
+
+				// Get item at the specified slot
+				std::shared_ptr<GameItemC> item = ObjectMgr::Get<GameItemC>(itemGuid);
+				return item;
+			}
+
+			return nullptr;
+		}
+
+		const ItemInfo* Script_GetInventorySlotItem(const char* unitName, int32 slotId)
+		{
+			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
+			if (!item)
+			{
+				return nullptr;
+			}
+
+			return item->GetEntry();
+		}
+
+		const char* Script_GetInventorySlotIcon(const char* unitName, int32 slotId)
+		{
+			static const String s_defaultItemIcon = "Interface\\Icons\\Spells\\S_Attack.htex";
+
+			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
+			if (!item)
+			{
+				return nullptr;
+			}
+
+			const ItemInfo* itemEntry = item->GetEntry();
+			if (itemEntry && !itemEntry->icon.empty())
+			{
+				return itemEntry->icon.c_str();
+			}
+
+			return s_defaultItemIcon.c_str();
+		}
+
+		int32 Script_GetInventorySlotCount(const char* unitName, int32 slotId)
+		{
+			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
+			if (!item)
+			{
+				return -1;
+			}
+
+			return item->Get<uint32>(object_fields::StackCount);
+		}
+
+		int32 Script_GetInventorySlotQuality(const char* unitName, int32 slotId)
+		{
+			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
+			if (!item)
+			{
+				return -1;
+			}
+
+			const auto* itemEntry = item->GetEntry();
+			return itemEntry ? itemEntry->quality : -1;
 		}
 
 		int32 Script_PlayerXp()
@@ -498,6 +619,37 @@ namespace mmo
 
 			return strm.str();
 		}
+
+		const char* Script_GetItemClass(ItemInfo* self)
+		{
+			static const char* s_itemClassStrings[] = {
+				"CONSUMABLE",
+				"CONTAINER",
+				"WEAPON",
+				"GEM",
+				"ARMOR",
+				"REAGENT",
+				"PROJECTILE",
+				"TRADEGOODS",
+				"GENERIC",
+				"RECIPE",
+				"MONEY",
+				"QUIVER",
+				"QUEST",
+				"KEY",
+				"PERMANENT",
+				"JUNK"
+			};
+
+			static_assert(std::size(s_itemClassStrings) == item_class::Count_, "Item class strings array size mismatch");
+
+			if(!self)
+			{
+				return nullptr;
+			}
+
+			return s_itemClassStrings[self->itemClass];
+		}
 	}
 
 
@@ -581,6 +733,16 @@ namespace mmo
 					.def("EnterWorld", &LoginState::EnterWorld)),
 
 			luabind::scope(
+				luabind::class_<ItemInfo>("Item")
+				.def_readonly("id", &ItemInfo::id)
+				.def_readonly("name", &ItemInfo::name)
+				.def_readonly("description", &ItemInfo::description)
+				.def_readonly("quality", &ItemInfo::quality)
+				.def("class", &Script_GetItemClass)
+				.def_readonly("subclass", &ItemInfo::itemSubclass)
+				.def_readonly("icon", &ItemInfo::icon)),
+
+			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
@@ -627,6 +789,16 @@ namespace mmo
 			luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
 			luabind::def("StrafeRightStart", &Script_StrafeRightStart),
 			luabind::def("StrafeRightStop", &Script_StrafeRightStop),
+
+			luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
+			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),
+			luabind::def("GetBagSlot", &Script_GetBagSlot),
+
+			luabind::def("GetInventorySlotItem", &Script_GetInventorySlotItem),
+
+			luabind::def("GetInventorySlotIcon", &Script_GetInventorySlotIcon),
+			luabind::def("GetInventorySlotCount", &Script_GetInventorySlotCount),
+			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
 		];

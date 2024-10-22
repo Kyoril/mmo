@@ -1,4 +1,5 @@
 #pragma once
+#include "item.h"
 
 namespace mmo
 {
@@ -184,10 +185,17 @@ namespace mmo
 			VISIBLE_ITEM_FIELDS_NEXT(18, 1),
 			VISIBLE_ITEM_FIELDS_NEXT(19, 1),
 
-			// Inventory fields
+			// Each of the beneath fields contains a uint64 value (so 2 fields actually) with an item object guid or 0 if no item is located at the given slot!
+
+			// 23 equippable slots (19 visible + 4 bags)
 			InvSlotHead = VisibleItem19_PROPERTIES + 1,
-			PackSlot_1 = InvSlotHead + 46,
-			BankSlot_1 = PackSlot_1 + 32,
+
+			// 16 backpack slots
+			PackSlot_1 = InvSlotHead + (player_inventory_pack_slots::Start) * 2,
+
+			// 28 bank slots
+			BankSlot_1 = PackSlot_1 + (player_inventory_pack_slots::End - player_inventory_pack_slots::Start) * 2,
+
 			BankBagSlot_1 = BankSlot_1 + 56,
 			VendorBuybackSlot_1 = BankBagSlot_1 + 14,
 			BuybackPrice_1 = VendorBuybackSlot_1 + 12,

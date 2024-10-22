@@ -470,6 +470,13 @@ namespace mmo
 		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
+
+		// Construct inventory data
+		for (const auto& itemData : characterData.items)
+		{
+			characterObject->GetInventory().AddRealmData(itemData);
+		}
+
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object

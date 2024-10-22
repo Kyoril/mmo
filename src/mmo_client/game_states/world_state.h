@@ -36,13 +36,6 @@ namespace mmo
 {
 	class TimerQueue;
 
-	struct ItemInfo
-	{
-		uint64 id;
-		String name;
-		String description;
-	};
-
 	struct QuestInfo
 	{
 		uint64 id;
@@ -294,5 +287,7 @@ namespace mmo
 		void GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
 
 		void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) override;
+
+		void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) override;
 	};
 }

@@ -137,7 +137,7 @@ namespace mmo
 			config.mysqlPassword,
 			config.mysqlDatabase,
 			config.mysqlUpdatePath
-			});
+			}, project);
 		if (!database->Load())
 		{
 			ELOG("Could not load the database");

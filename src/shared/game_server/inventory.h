@@ -224,15 +224,10 @@ namespace mmo
 
 		/// Gets the inventory's realm data, if any. Should only be used on the realm when saving the
 		/// inventory into the database.
-		const std::vector<ItemData> GetItemData() const {
-			return m_realmData;
-		}
+		const std::vector<ItemData>& GetItemData() const { return m_realmData; }
 
-		/// Adds spawn blocks for every item in the inventory. These blocks will be included in
-		/// the players spawn packet, so that all items that are available to the player will be sent
-		/// at once.
-		/// @param out_blocks A reference to the array of update blocks to send.
-		void AddSpawnBlocks(std::vector<std::vector<char>>& out_blocks);
+		/// Constructs actual items from realm data and actually "spawns" the items objects.
+		void ConstructFromRealmData(std::vector<GameObjectS*>& out_items);
 
 	private:
 
@@ -240,7 +235,7 @@ namespace mmo
 		typedef std::function<bool(uint8, uint8, uint8)> BagCallbackFunc;
 
 		/// Executes a callback function for every bag the player has (including the default bag).
-		void ForEachBag(BagCallbackFunc callback);
+		void ForEachBag(const BagCallbackFunc& callback) const;
 
 		/// Fired when an item despawns (this signal is used to force item removal, currently used
 		/// when lootable item no longer has loot).

@@ -53,9 +53,9 @@ namespace mmo
 
 		}
 
-		void NotifyObjectResponse(uint64 guid, T&& object)
+		void NotifyObjectResponse(uint64 guid, const T& object)
 		{
-			m_cache[guid] = std::move(object);
+			m_cache[guid] = object;
 			const T& objectRef = m_cache[guid];
 
 			auto range = m_pendingRequests.equal_range(guid);

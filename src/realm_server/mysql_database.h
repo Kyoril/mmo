@@ -8,12 +8,17 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	/// MySQL implementation of the login server database system.
 	class MySQLDatabase final 
 		: public IDatabase
 	{
 	public:
-		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project);
 
 		/// Tries to establish a connection to the MySQL server.
 		bool Load();
@@ -42,12 +47,13 @@ namespace mmo
 
 		void ChatMessage(uint64 characterId, uint16 type, String message) override;
 
-		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money) override;
+		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items) override;
 
 	private:
 		void PrintDatabaseError();
 
 	private:
+		const proto::Project& m_project;
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
 	};

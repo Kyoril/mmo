@@ -296,6 +296,11 @@ namespace mmo
 
 	void Frame::SetText(std::string text)
 	{
+		if (text == m_text)
+		{
+			return;
+		}
+
 		// Apply new text and invalidate rendering
 		m_text = std::move(text);
 

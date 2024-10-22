@@ -10,6 +10,7 @@
 #include "game_server/game_object_s.h"
 #include "game_server/game_player_s.h"
 #include "game/spell_target_map.h"
+#include "game_server/game_bag_s.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -249,10 +250,16 @@ namespace mmo
 	void Player::OnSpawned(WorldInstance& instance)
 	{
 		m_worldInstance = &instance;
-		
+
 		// Self spawn
-		std::vector object(1, (GameObjectS*)m_character.get());
-		NotifyObjectsSpawned( object);
+		std::vector<GameObjectS*> objects;
+
+		// Ensure the inventory is initialized
+		m_character->GetInventory().ConstructFromRealmData(objects);
+		objects.push_back(m_character.get());
+
+		// Notify player about spawned objects
+		NotifyObjectsSpawned(objects);
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		tile.GetWatchers().add(this);

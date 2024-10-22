@@ -885,13 +885,128 @@ namespace mmo
 	{
 		DLOG("Querying for item " << log_hex_digit(entry) << "...");
 
-		// TODO
-		m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+		const proto::ItemEntry* itemEntry = m_project.items.getById(entry);
+		if (!itemEntry)
+		{
+			WLOG("Item with entry " << entry << " could not be found!");
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::ItemQueryResult);
+					packet
+						<< io::write_packed_guid(entry)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+		}
+
+		// Map item entry
+		ItemInfo info;
+		info.name = itemEntry->name();
+		info.description = itemEntry->description();
+		info.id = entry;
+		info.itemClass = itemEntry->itemclass();
+		info.itemSubclass = itemEntry->subclass();
+		info.displayId = itemEntry->displayid();
+		info.quality = itemEntry->quality();
+		info.flags = itemEntry->flags();
+		info.buyCount = itemEntry->buycount();
+		info.buyPrice = itemEntry->buyprice();
+		info.sellPrice = itemEntry->sellprice();
+		info.inventoryType = itemEntry->inventorytype();
+		info.allowedClasses = itemEntry->allowedclasses();
+		info.allowedRaces = itemEntry->allowedraces();
+		info.itemlevel = itemEntry->itemlevel();
+		info.requiredlevel = itemEntry->requiredlevel();
+		info.requiredskill = itemEntry->requiredskill();
+		info.requiredskillrank = itemEntry->requiredskillrank();
+		info.requiredspell = itemEntry->requiredspell();
+		info.requiredrep = itemEntry->requiredrep();
+		info.requiredreprank = itemEntry->requiredreprank();
+		info.requiredcityrank = itemEntry->requiredcityrank();
+		info.requiredrep = itemEntry->requiredrep();
+		info.requiredreprank = itemEntry->requiredreprank();
+		info.maxcount = itemEntry->maxcount();
+		info.maxstack = itemEntry->maxstack();
+		info.containerslots = itemEntry->containerslots();
+
+		for (int i = 0; i < 10; ++i)
+		{
+			if (i >= itemEntry->stats_size())
+			{
+				info.stats[i].type = -1;
+				info.stats[i].value = 0;
+			}
+			else
+			{
+				const auto& stat = itemEntry->stats(i);
+				info.stats[i].type = stat.type();
+				info.stats[i].value = stat.value();
+			}
+		}
+
+		for (int i = 0; i < 5; ++i)
+		{
+			if (i >= itemEntry->damage_size())
+			{
+				info.damage[i].type = -1;
+				info.damage[i].min = 0;
+				info.damage[i].max = 0;
+			}
+			else
+			{
+				const auto& damage = itemEntry->damage(i);
+				info.damage[i].type = damage.type();
+				info.damage[i].min = damage.mindmg();
+				info.damage[i].max = damage.maxdmg();
+			}
+		}
+
+		for (int i = 0; i < 5; ++i)
+		{
+			if (i >= itemEntry->spells_size())
+			{
+				info.spells[i].spellId = -1;
+				info.damage[i].type = -1;
+			}
+			else
+			{
+				const auto& spell = itemEntry->spells(i);
+				info.spells[i].spellId = spell.spell();
+				info.damage[i].type = spell.trigger();
+			}
+		}
+
+		info.armor = itemEntry->armor();
+		info.resistance[0] = itemEntry->holyres();
+		info.resistance[1] = itemEntry->fireres();
+		info.resistance[2] = itemEntry->natureres();
+		info.resistance[3] = itemEntry->frostres();
+		info.resistance[4] = itemEntry->shadowres();
+		info.resistance[5] = itemEntry->arcaneres();
+		info.ammotype = itemEntry->ammotype();
+
+		info.bonding = itemEntry->bonding();
+		info.lockid = itemEntry->lockid();
+		info.sheath = itemEntry->sheath();
+		info.randomproperty = itemEntry->randomproperty();
+		info.randomsuffix = itemEntry->randomsuffix();
+		info.block = itemEntry->block();
+		info.itemset = itemEntry->itemset();
+		info.material = itemEntry->material();
+		info.maxdurability = itemEntry->durability();
+		info.area = itemEntry->area();
+		info.extraflags = itemEntry->extraflags();
+		info.startquestid = itemEntry->questentry();
+		info.skill = itemEntry->skill();
+		info.icon = itemEntry->icon();
+
+		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::ItemQueryResult);
 				packet
 					<< io::write_packed_guid(entry)
-					<< io::write<uint8>(false);
+					<< io::write<uint8>(true)
+					<< info;
 				packet.Finish();
 			});
 	}

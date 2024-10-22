@@ -8,6 +8,7 @@
 #include "game.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
+#include "game_server/inventory.h"
 
 namespace mmo
 {
@@ -56,6 +57,7 @@ namespace mmo
 		uint32 energy;
 		uint32 money;
 		std::vector<uint32> spellIds;
+		std::vector<ItemData> items;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -79,6 +81,7 @@ namespace mmo
 			>> io::read<uint32>(data.rage)
 			>> io::read<uint32>(data.energy)
 			>> io::read<uint32>(data.money)
+			>> io::read_container<uint16>(data.items)
 		;
 	}
 	
@@ -103,6 +106,7 @@ namespace mmo
 			<< io::write<uint32>(data.rage)
 			<< io::write<uint32>(data.energy)
 			<< io::write<uint32>(data.money)
+			<< io::write_dynamic_range<uint16>(data.items)
 			;
 	}
 }

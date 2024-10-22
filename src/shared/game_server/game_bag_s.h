@@ -22,6 +22,12 @@ namespace mmo
 		uint32 GetSlotCount() const { return Get<uint32>(object_fields::NumSlots); }
 
 		bool IsEmpty() const;
+
+	protected:
+		void PrepareFieldMap() override
+		{
+			m_fields.Initialize(object_fields::BagFieldCount);
+		}
 	};
 
 

@@ -1,5 +1,13 @@
 #pragma once
 
+#include "base/typedefs.h"
+
+namespace io
+{
+	class Writer;
+	class Reader;
+}
+
 namespace mmo
 {
 	namespace item_quality
@@ -591,4 +599,93 @@ namespace mmo
 	}
 
 	typedef item_spell_trigger::Type ItemSpellTrigger;
+
+
+	struct ItemStats
+	{
+		uint8 type;
+		uint32 value;
+	};
+
+	struct ItemDamage
+	{
+		int8 type;
+		float min;
+		float max;
+	};
+
+	struct ItemSpell
+	{
+		uint32 spellId;
+		uint8 triggertype;
+	};
+
+	struct ItemSocket
+	{
+		uint32 color;
+		uint32 content;
+	};
+
+	struct ItemInfo
+	{
+		uint64 id;
+		String name;
+		String description;
+		uint32 itemClass;
+		uint32 itemSubclass;
+		uint32 inventoryType;
+		uint32 displayId;
+		uint32 quality;
+		uint32 flags;
+		uint32 buyCount;
+		uint32 buyPrice;
+		uint32 sellPrice;
+		int32 allowedClasses;
+		int32 allowedRaces;
+		uint32 itemlevel;
+		uint32 requiredlevel;
+		uint32 requiredskill;
+		uint32 requiredskillrank;
+		uint32 requiredspell;
+		uint32 requiredhonorrank;
+		uint32 requiredcityrank;
+		uint32 requiredrep;
+		uint32 requiredreprank;
+		uint32 maxcount;
+		uint32 maxstack;
+		uint32 containerslots;
+		ItemStats stats[10];
+		ItemDamage damage[5];
+		uint32 armor;
+		uint32 resistance[6];
+		uint32 ammotype;
+		ItemSpell spells[5];
+		uint32 bonding;
+		uint32 lockid;
+		uint32 sheath;
+		uint32 randomproperty;
+		uint32 randomsuffix;
+		uint32 block;
+		uint32 itemset;
+		uint32 maxdurability;
+		uint32 area;
+		int32 map;
+		int32 bagfamily;
+		int32 material;
+		int32 totemcategory;
+		ItemSocket sockets[3];
+		uint32 socketbonus;
+		uint32 gemproperties;
+		uint32 disenchantskillval;
+		uint32 foodtype;
+		uint32 duration;
+		uint32 extraflags;
+		uint32 startquestid;
+		float rangedrangepercent;
+		uint32 skill;
+		String icon;
+	};
+
+	io::Writer& operator<<(io::Writer& writer, const ItemInfo& itemInfo);
+	io::Reader& operator>>(io::Reader& reader, ItemInfo& outItemInfo);
 }
