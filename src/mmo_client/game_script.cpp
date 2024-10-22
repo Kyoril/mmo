@@ -37,7 +37,7 @@ namespace mmo
 {
 	CharacterView s_selectedCharacter;
 
-	extern Cursor g_cursor;
+	Cursor g_cursor;
 
 	// Static script methods
 	namespace
@@ -251,30 +251,6 @@ namespace mmo
 			}
 
 			return nullptr;
-		}
-
-		void Script_PickupContainerItem(uint32 slot)
-		{
-			// Check if the cursor has an item
-			if (g_cursor.GetCursorItem() != static_cast<uint32>(-1))
-			{
-				// We already have an item picked up, so swap items in slots
-				if (slot != g_cursor.GetCursorItem())
-				{
-					// Actually a different slot: Check the target slot and if we should swap items
-
-
-				}
-
-				g_cursor.Clear();
-			}
-			else
-			{
-				// Pick up the item from the slot
-				g_cursor.SetItem(slot);
-
-				// Lock the old item slot
-			}
 		}
 
 		const ItemInfo* Script_GetInventorySlotItem(const char* unitName, int32 slotId)
@@ -827,6 +803,8 @@ namespace mmo
 			luabind::def("GetInventorySlotCount", &Script_GetInventorySlotCount),
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 
+			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
+
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
 		];
 
@@ -837,6 +815,40 @@ namespace mmo
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;
+	}
+
+	void GameScript::PickupContainerItem(uint32 slot) const
+	{
+		// Check if the cursor has an item
+		if (g_cursor.GetCursorItem() != static_cast<uint32>(-1))
+		{
+			// We already have an item picked up, so swap items in slots
+			if (slot != g_cursor.GetCursorItem())
+			{
+				// Actually a different slot: Check the target slot and if we should swap items
+				auto targetItem = GetItemFromSlot("player", slot);
+				if (targetItem)
+				{
+					// Swap source and target slot
+					m_realmConnector.SwapInvItem(slot & 0xFF, g_cursor.GetCursorItem() & 0xFF);
+				}
+				else
+				{
+					// Drop item in slot
+					m_realmConnector.SwapInvItem(slot & 0xFF, g_cursor.GetCursorItem() & 0xFF);
+				}
+			}
+
+			g_cursor.Clear();
+		}
+		else
+		{
+			// Pick up the item from the slot
+			g_cursor.SetItem(slot);
+
+			// Lock the old item slot
+		}
+
 	}
 
 	void GameScript::Script_ReviveMe()

@@ -9,6 +9,8 @@
 
 #include <memory>
 
+#include "base/typedefs.h"
+
 
 namespace mmo
 {
@@ -50,6 +52,8 @@ namespace mmo
 	private:
 		/// Registers global functions to the internal lua state.
 		void RegisterGlobalFunctions();
+
+		void PickupContainerItem(::uint32 slot) const;
 
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;

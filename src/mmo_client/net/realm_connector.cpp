@@ -355,4 +355,98 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::AutoStoreLootItem(uint8 lootSlot)
+	{
+		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoStoreLootItem);
+			packet
+				<< io::write<uint8>(lootSlot);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::AutoEquipItem(uint8 srcBag, uint8 srcSlot)
+	{
+		sendSinglePacket([srcBag, srcSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoEquipItem);
+			packet
+				<< io::write<uint8>(srcBag)
+				<< io::write<uint8>(srcSlot);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::AutoStoreBagItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag)
+	{
+		sendSinglePacket([srcBag, srcSlot, dstBag](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoStoreBagItem);
+			packet
+				<< io::write<uint8>(srcBag)
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstBag);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot)
+	{
+		sendSinglePacket([srcBag, srcSlot, dstBag, dstSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SwapItem);
+			packet
+				<< io::write<uint8>(srcBag)
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstBag)
+				<< io::write<uint8>(dstSlot);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SwapInvItem(uint8 srcSlot, uint8 dstSlot)
+	{
+		sendSinglePacket([srcSlot, dstSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SwapInvItem);
+			packet
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstSlot);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SplitItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot, uint8 count)
+	{
+		sendSinglePacket([srcBag, srcSlot, dstBag, dstSlot, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SplitItem);
+			packet
+				<< io::write<uint8>(srcBag)
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstBag)
+				<< io::write<uint8>(dstSlot)
+				<< io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::AutoEquipItemSlot(uint64 itemGUID, uint8 dstSlot)
+	{
+		sendSinglePacket([itemGUID, dstSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoEquipItemSlot);
+			packet
+				<< io::write_packed_guid(itemGUID)
+				<< io::write<uint8>(dstSlot);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::DestroyItem(uint8 bag, uint8 slot, uint8 count)
+	{
+		sendSinglePacket([bag, slot, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::DestroyItem);
+			packet
+				<< io::write<uint8>(bag)
+				<< io::write<uint8>(slot)
+				<< io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
 }

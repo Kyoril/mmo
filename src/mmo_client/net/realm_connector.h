@@ -120,6 +120,22 @@ namespace mmo
 
 		void SendMovementSpeedAck(MovementType type, uint32 ackId, float speed, const MovementInfo& movementInfo);
 
+		void AutoStoreLootItem(uint8 lootSlot);
+
+		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);
+
+		void AutoStoreBagItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag);
+
+		void SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot);
+
+		void SwapInvItem(uint8 srcSlot, uint8 dstSlot);
+
+		void SplitItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot, uint8 count);
+
+		void AutoEquipItemSlot(uint64 itemGUID, uint8 dstSlot);
+
+		void DestroyItem(uint8 bag, uint8 slot, uint8 count);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

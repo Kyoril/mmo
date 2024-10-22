@@ -1101,7 +1101,7 @@ namespace mmo
 		auto result = inv.SwapItems(
 			Inventory::GetAbsoluteSlot(srcBag, srcSlot),
 			Inventory::GetAbsoluteSlot(dstBag, dstSlot));
-		if (!result)
+		if (result)
 		{
 			ELOG("ERRROR: " << result);
 		}
@@ -1120,7 +1120,7 @@ namespace mmo
 		auto result = inv.SwapItems(
 			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, srcSlot),
 			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, dstSlot));
-		if (!result)
+		if (result)
 		{
 			ELOG("ERRROR: " << result);
 		}

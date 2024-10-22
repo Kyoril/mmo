@@ -29,6 +29,6 @@ namespace mmo
 	private:
 		CursorItemType m_type = CursorItemType::None;
 
-		uint32 m_itemSlot = 0;
+		uint32 m_itemSlot = static_cast<uint32>(-1);
 	};
 }
