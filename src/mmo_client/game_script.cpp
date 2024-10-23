@@ -830,12 +830,12 @@ namespace mmo
 				if (targetItem)
 				{
 					// Swap source and target slot
-					m_realmConnector.SwapInvItem(slot & 0xFF, g_cursor.GetCursorItem() & 0xFF);
+					m_realmConnector.SwapInvItem(g_cursor.GetCursorItem() & 0xFF, slot & 0xFF);
 				}
 				else
 				{
 					// Drop item in slot
-					m_realmConnector.SwapInvItem(slot & 0xFF, g_cursor.GetCursorItem() & 0xFF);
+					m_realmConnector.SwapInvItem(g_cursor.GetCursorItem() & 0xFF, slot & 0xFF);
 				}
 			}
 
