@@ -11,6 +11,8 @@ namespace mmo
 
 			InCombat = 0x00000001,
 
+			Lootable = 0x00000002,
+
 
 		};
 	}

@@ -47,6 +47,26 @@ namespace mmo
 		RefreshStats();
 	}
 
+	void GameCreatureS::AddLootRecipient(uint64 guid)
+	{
+		m_lootRecipients.add(guid);
+	}
+
+	void GameCreatureS::RemoveLootRecipients()
+	{
+		m_lootRecipients.clear();
+	}
+
+	bool GameCreatureS::IsLootRecipient(GamePlayerS& character) const
+	{
+		return m_lootRecipients.contains(character.GetGuid());
+	}
+
+	void GameCreatureS::SetUnitLoot(std::unique_ptr<LootInstance> unitLoot)
+	{
+		m_unitLoot = std::move(unitLoot);
+	}
+
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)
 	{
 		m_combatParticipantGuids.insert(unit.GetGuid());

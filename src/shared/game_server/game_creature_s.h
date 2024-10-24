@@ -4,6 +4,7 @@
 #include "creature_ai.h"
 #include "game_player_s.h"
 #include "game_unit_s.h"
+#include "loot_instance.h"
 #include "world_instance.h"
 #include "base/linear_set.h"
 
@@ -73,6 +74,44 @@ namespace mmo
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);
 
+		/// Updates the creatures loot recipient. Values of 0 mean no recipient.
+		void AddLootRecipient(uint64 guid);
+
+		/// Removes all loot recipients.
+		void RemoveLootRecipients();
+
+		/// Determines whether a specific character is allowed to loot this creature.
+		bool IsLootRecipient(GamePlayerS& character) const;
+
+		/// Determines whether this creature is tagged by a player or group.
+		bool IsTagged() const { return !m_lootRecipients.empty(); }
+
+		/// Get unit loot.
+		std::shared_ptr<LootInstance> getUnitLoot() const { return m_unitLoot; }
+
+		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
+
+		/// Gets the number of loot recipients.
+		uint32 GetLootRecipientCount() const { return m_lootRecipients.size(); }
+
+		/// Executes a callback function for every valid loot recipient.
+		template<typename OnRecipient>
+		void ForEachLootRecipient(OnRecipient callback)
+		{
+			if (!GetWorldInstance()) 
+			{
+				return;
+			}
+
+			for (auto& guid : m_lootRecipients)
+			{
+				if (std::shared_ptr<GamePlayerS> character = std::dynamic_pointer_cast<GamePlayerS>(GetWorldInstance()->FindObjectByGuid(guid)->shared_from_this()))
+				{
+					callback(character);
+				}
+			}
+		}
+
 		void AddCombatParticipant(const GameUnitS& unit);
 
 		void RemoveCombatParticipant(uint64 unitGuid);
@@ -116,5 +155,7 @@ namespace mmo
 		scoped_connection m_onSpawned;
 		std::set<uint64> m_combatParticipantGuids;
 		CreatureMovement m_movement;
+		std::shared_ptr<LootInstance> m_unitLoot;
+		LootRecipients m_lootRecipients;
 	};
 }

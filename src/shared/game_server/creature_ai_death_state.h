@@ -2,6 +2,7 @@
 #pragma once
 
 #include "creature_ai_state.h"
+#include "base/signal.h"
 
 namespace mmo
 {
@@ -22,5 +23,8 @@ namespace mmo
 		virtual void OnEnter() override;
 		///
 		virtual void OnLeave() override;
+
+	private:
+		scoped_connection m_onLootCleared;
 	};
 }

@@ -600,6 +600,22 @@ namespace mmo
 
 	typedef item_spell_trigger::Type ItemSpellTrigger;
 
+	namespace loot_slot_type
+	{
+		enum Type
+		{
+			/// Player can loot the item.
+			AllowLoot = 0,
+			/// Roll is ongoing. Player cannot loot.
+			RollOngoing = 1,
+			/// Item can only be distributed by group loot master.
+			Master = 2,
+			/// Item is shown in red. Player cannot loot.
+			Locked = 3,
+			/// Ignore binding confirmation and etc., for single player looting.
+			Owner = 4
+		};
+	}
 
 	struct ItemStats
 	{
