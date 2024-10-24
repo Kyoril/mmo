@@ -242,6 +242,7 @@ namespace mmo
 
 		// Ensure the logs directory exists
 		std::filesystem::create_directories(currentPath / "Logs");
+		std::filesystem::create_directories(currentPath / "Config");
 
 		// Setup the log file connection after opening the log file
 		s_logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
