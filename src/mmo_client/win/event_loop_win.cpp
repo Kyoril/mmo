@@ -60,6 +60,12 @@ namespace mmo
 		MSG msg = { nullptr };
 		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
+			// Check for WM_QUIT first and don't process it if it's there
+			if (msg.message == WM_QUIT)
+			{
+				return false;
+			}
+
 			// Process input messages
 			switch (msg.message)
 			{
@@ -108,8 +114,7 @@ namespace mmo
 			DispatchMessage(&msg);
 		}
 
-		// If WM_QUIT is received, quit
-		return (msg.message != WM_QUIT);
+		return true;
 	}
 
 	void EventLoop::Run()
