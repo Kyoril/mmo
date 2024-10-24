@@ -493,8 +493,24 @@ namespace mmo
 
 		if (m_currentState == newTargetState)
 		{
-			m_targetState = nullptr;
+			// Cancel any ongoing transition
+			if (m_targetState)
+			{
+				m_targetState->SetWeight(0.0f);
+				m_targetState->SetEnabled(false);
+				m_targetState = nullptr;
+			}
+
+			// Ensure current state's weight is 1.0f
+			m_currentState->SetWeight(1.0f);
 			return;
+		}
+
+		// Reset any existing target state
+		if (m_targetState)
+		{
+			m_targetState->SetWeight(0.0f);
+			m_targetState->SetEnabled(false);
 		}
 
 		m_targetState = newTargetState;
