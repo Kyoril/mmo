@@ -784,8 +784,8 @@ namespace mmo
 								}
 							}
 
-							if ((fieldIndex <= object_fields::Mana && fieldIndex + fieldCount >= object_fields::Mana) ||
-								(fieldIndex <= object_fields::MaxMana && fieldIndex + fieldCount >= object_fields::MaxMana))
+							if ((fieldIndex <= object_fields::Energy && fieldIndex + fieldCount >= object_fields::Mana) ||
+								(fieldIndex <= object_fields::MaxEnergy && fieldIndex + fieldCount >= object_fields::MaxMana))
 							{
 								FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
 							}

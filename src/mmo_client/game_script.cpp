@@ -167,10 +167,11 @@ namespace mmo
 
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
-				return unit->Get<int32>(object_fields::Mana + powerType);
+				const int32 power = unit->Get<int32>(object_fields::Mana + powerType);
+				return power;
 			}
 
-			return 0;
+			return -1;
 		}
 
 		int32 Script_UnitPowerMax(const std::string& unitName, int32 powerType)
@@ -182,10 +183,11 @@ namespace mmo
 
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
-				return unit->Get<int32>(object_fields::MaxMana + powerType);
+				const int32 maxPower = unit->Get<int32>(object_fields::MaxMana + powerType);
+				return maxPower;
 			}
 
-			return 1;
+			return -1;
 		}
 
 		int32 Script_UnitMana(const std::string& unitName)
@@ -793,6 +795,7 @@ namespace mmo
 				.def_readonly("description", &proto_client::SpellEntry::description)
 				.def_readonly("cost", &proto_client::SpellEntry::cost)
 				.def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
+				.def_readonly("powertype", &proto_client::SpellEntry::powertype)
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
 				.def_readonly("icon", &proto_client::SpellEntry::icon)),

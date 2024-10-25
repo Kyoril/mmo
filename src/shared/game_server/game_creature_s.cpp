@@ -44,6 +44,7 @@ namespace mmo
 		Set<float>(object_fields::Scale, m_entry->scale());
 		Set<uint32>(object_fields::DisplayId, m_entry->malemodel());	// TODO: gender roll
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
+		Set<uint32>(object_fields::PowerType, power_type::Mana);	// TODO
 		RefreshStats();
 	}
 

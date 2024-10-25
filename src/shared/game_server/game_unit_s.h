@@ -408,6 +408,8 @@ namespace mmo
 
 		virtual void RegeneratePower(PowerType powerType);
 
+		virtual void AddPower(PowerType powerType, int32 amount);
+
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
 
 	public:

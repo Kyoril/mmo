@@ -472,6 +472,20 @@ namespace mmo
 		Set<uint32>(object_fields::Health, health);
 		takenDamage(instigator, damage);
 
+		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)
+		{
+			const uint32 maxHealth = GetMaxHealth();
+			const float K = 30.0f;
+
+			int32 rageGenerated = static_cast<int32>((damage / maxHealth) * K);
+			if (rageGenerated < 1)
+			{
+				rageGenerated = 1;
+			}
+
+			AddPower(power_type::Rage, rageGenerated);
+		}
+
 		// Kill event
 		if (health < 1)
 		{
@@ -946,10 +960,6 @@ namespace mmo
 		if (!IsInCombat())
 		{
 			RegenerateHealth();
-		}
-		
-		if (!IsInCombat())
-		{
 			RegeneratePower(power_type::Rage);
 		}
 
@@ -965,8 +975,6 @@ namespace mmo
 		{
 			return;
 		}
-
-		// TODO: Do proper health regen formula
 
 		const uint32 maxHealth = GetMaxHealth();
 		uint32 health = GetHealth();
@@ -986,21 +994,14 @@ namespace mmo
 
 		ASSERT(static_cast<uint8>(powerType) < static_cast<uint8>(power_type::Count_));
 
-		// TODO: Do proper power regen formula
-
-		// Get power and max power
-		int32 power = Get<int32>(object_fields::Mana + static_cast<uint8>(powerType));
-		const int32 maxPower = Get<uint32>(object_fields::MaxMana + static_cast<uint8>(powerType));
-
+		int32 amount = 0;
 		switch(powerType)
 		{
 		case power_type::Rage:
-			power -= 6;
-			if (power < 0) power = 0;
+			amount -= 3;
 			break;
 		case power_type::Energy:
-			power += 20;
-			if (power > maxPower) power = maxPower;
+			amount += 20;
 			break;
 		case power_type::Mana:
 			// Don't regen mana if we used mana in the last 5 seconds
@@ -1009,10 +1010,23 @@ namespace mmo
 				break;
 			}
 
-			power += m_manaRegenPerTick;
-			if (power > maxPower) power = maxPower;
+			amount += static_cast<int32>(m_manaRegenPerTick);
 			break;
 		}
+
+		AddPower(powerType, amount);
+	}
+
+	void GameUnitS::AddPower(PowerType powerType, int32 amount)
+	{
+		// Get power and max power
+		int32 power = Get<int32>(object_fields::Mana + static_cast<uint8>(powerType));
+		const int32 maxPower = Get<uint32>(object_fields::MaxMana + static_cast<uint8>(powerType));
+
+		power += amount;
+
+		if (power < 0) power = 0;
+		if (power > maxPower) power = maxPower;
 
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
@@ -1182,6 +1196,18 @@ namespace mmo
 		if (m_netUnitWatcher)
 		{
 			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, isCrit ? damage_flags::Crit : damage_flags::None);
+		}
+
+		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)
+		{
+			const uint32 level = Get<uint32>(object_fields::Level);
+			const float C = 3.0f;
+			const float B = 5.0f;	// TODO: Maybe make this depend on weapon speed
+
+			int32 rageGenerated = static_cast<int32>((static_cast<float>(totalDamage) / (C * static_cast<float>(level))) + B);
+			if (rageGenerated < 1) rageGenerated = 1;
+
+			AddPower(power_type::Rage, rageGenerated);
 		}
 
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
