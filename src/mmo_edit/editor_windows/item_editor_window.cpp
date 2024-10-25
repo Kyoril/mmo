@@ -290,6 +290,41 @@ namespace mmo
 		"Relic"
 	};
 
+	static const char* s_statTypeStrings[] = {
+		"Mana",
+		"Health",
+		"Agility",
+		"Strength",
+		"Intellect",
+		"Spirit",
+		"Stamina",
+		"DefenseSkillRating",
+		"DodgeRating",
+		"ParryRating",
+		"BlockRating",
+		"HitMeleeRating",
+		"HitRangedRating",
+		"HitSpellRating",
+		"CritMeleeRating",
+		"CritRangedRating",
+		"CritSpellRating",
+		"HitTakenMeleeRating",
+		"HitTakenRangedRating",
+		"HitTakenSpellRating",
+		"CritTakenMeleeRating",
+		"CritTakenRangedRating",
+		"CritTakenSpellRating",
+		"HasteMeleeRating",
+		"HasteRangedRating",
+		"HasteSpellRating",
+		"HitRating",
+		"CritRating",
+		"HitTakenRating",
+		"CritTakenRating",
+		"HasteRating",
+		"ExpertiseRating"
+	};
+
 	ItemEditorWindow::ItemEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.items, name)
 		, m_host(host)
@@ -509,6 +544,23 @@ namespace mmo
 			ImGui::BeginGroupPanel("Tooltip Preview", ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
 
+			if (currentItemClass == item_class::Weapon || currentItemClass == item_class::Armor)
+			{
+				ImGui::Text("%s", s_inventoryTypeStrings[currentEntry.inventorytype()].c_str());
+			}
+			if (currentEntry.armor() > 0)
+			{
+				ImGui::Text("%d Armor", currentEntry.armor());
+			}
+			if (currentEntry.block() > 0)
+			{
+				ImGui::Text("%d Block", currentEntry.block());
+			}
+			if (currentEntry.durability() > 0)
+			{
+				ImGui::Text("Durability %d / %d", currentEntry.durability(), currentEntry.durability());
+			}
+
 			if (!currentEntry.description().empty())
 			{
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.82f, 0.0f, 1.0f));
@@ -525,6 +577,60 @@ namespace mmo
 			ImGui::EndGroupPanel();
 		}
 
+		// Equippable items can have stats and spells
+		if (currentEntry.itemclass() == ItemClass::Armor || currentEntry.itemclass() == ItemClass::Weapon)
+		{
+			if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_None))
+			{
+				SLIDER_UINT32_PROP(armor, "Armor", 0, 100000000);
+
+				// Shields can have a block value
+				if (currentEntry.itemclass() == ItemClass::Armor && currentEntry.subclass() == ItemSubclassArmor::Shield)
+				{
+					SLIDER_UINT32_PROP(block, "Block", 0, 100000000);
+				}
+
+				for (int32 i = 0; i < 10; ++i)
+				{
+					ImGui::PushID(i);
+
+					int32 statType = i >= currentEntry.stats_size() ? -1 : currentEntry.stats(i).type();
+					if (ImGui::BeginCombo("Stat Type", statType < 0 ? "None" : s_statTypeStrings[statType], ImGuiComboFlags_None))
+					{
+						// Remove the stat entry
+						if (ImGui::Selectable("None", false))
+						{
+							currentEntry.mutable_stats()->erase(currentEntry.mutable_stats()->begin() + i);
+						}
+
+						for (int32 j = 0; j < std::size(s_statTypeStrings); ++j)
+						{
+							if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
+							{
+								if (i >= currentEntry.stats_size())
+								{
+									currentEntry.add_stats()->set_type(j);
+								}
+								else
+								{
+									currentEntry.mutable_stats(i)->set_type(j);
+								}
+							}
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::PopID();
+				}
+			}
+
+			if (ImGui::CollapsingHeader("Spells", ImGuiTreeNodeFlags_None))
+			{
+
+			}
+		}
+		
 		if (ImGui::CollapsingHeader("Vendor", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(buycount, "Buy Count", 0, 100000000);

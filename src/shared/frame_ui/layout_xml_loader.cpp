@@ -63,6 +63,8 @@ namespace mmo
 	static const std::string OnEnterPressedElement("OnEnterPressed");
 	static const std::string OnShowElement("OnShow");
 	static const std::string OnHideElement("OnHide");
+	static const std::string OnEnterElement("OnEnter");
+	static const std::string OnLeaveElement("OnLeave");
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
@@ -255,7 +257,7 @@ namespace mmo
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
 				// the developers.
-				WLOG("Unknown element found while parsing the ui-layout file: '" << element << "'");
+				WLOG("Unknown element found while parsing the ui-layout file '" << m_filename << "': '" << element << "'");
 			}
 		}
 	}

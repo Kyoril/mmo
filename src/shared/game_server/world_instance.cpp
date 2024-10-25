@@ -120,6 +120,13 @@ namespace mmo
 	{
 		m_objectsByGuid.emplace(added.GetGuid(), &added);
 
+		// No need for visibility updates for item objects
+		if (added.GetTypeId() == ObjectTypeId::Item ||
+			added.GetTypeId() == ObjectTypeId::Container)
+		{
+			return;
+		}
+
 		const auto& position = added.GetPosition();
 
 		TileIndex2D gridIndex;
@@ -172,22 +179,9 @@ namespace mmo
 			ELOG("Could not find object!");
 			return;
 		}
-		
-		TileIndex2D gridIndex;
-		if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
-		{
-			ELOG("Could not resolve grid location!");
-			return;
-		}
-		
-		auto *tile = m_visibilityGrid->GetTile(gridIndex);
-		if (!tile)
-		{
-			ELOG("Could not find tile!");
-			return;
-		}
 
 		DLOG("Removing object " << log_hex_digit(remove.GetGuid()) << " from world instance ...");
+
 		m_objectsByGuid.erase(it);
 
 		// Clear update
@@ -200,21 +194,41 @@ namespace mmo
 			m_objectUpdates.erase(&remove);
 		}
 
-		tile->GetGameObjects().remove(&remove);
+		// No need for visibility updates for item objects
+		if (remove.GetTypeId() != ObjectTypeId::Item &&
+			remove.GetTypeId() != ObjectTypeId::Container)
+		{
+			TileIndex2D gridIndex;
+			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
+			{
+				ELOG("Could not resolve grid location!");
+				return;
+			}
+
+			auto* tile = m_visibilityGrid->GetTile(gridIndex);
+			if (!tile)
+			{
+				ELOG("Could not find tile!");
+				return;
+			}
+
+			tile->GetGameObjects().remove(&remove);
+
+			ForEachTileInSight(
+				*m_visibilityGrid,
+				tile->GetPosition(),
+				[&remove](VisibilityTile& tile)
+				{
+					std::vector objects{ &remove };
+					for (const auto* subscriber : tile.GetWatchers())
+					{
+						subscriber->NotifyObjectsDespawned(objects);
+					}
+				});
+		}
+
 		remove.SetWorldInstance(nullptr);
 		remove.despawned(remove);
-
-		ForEachTileInSight(
-		    *m_visibilityGrid,
-		    tile->GetPosition(),
-		    [&remove](VisibilityTile & tile)
-		{
-		    std::vector objects { &remove };
-		    for (const auto *subscriber : tile.GetWatchers())
-			{
-				subscriber->NotifyObjectsDespawned(objects);
-			}
-		});
 
 		if (remove.destroy)
 		{

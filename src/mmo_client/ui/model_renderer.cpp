@@ -41,7 +41,7 @@ namespace mmo
 			(m_scene && m_entity && m_entity->GetMesh() != m_modelFrame->GetMesh()))
 		{
 			m_frame->GetGeometryBuffer().Reset();
-
+			m_frame->Invalidate(true);
 			NotifyFrameAttached();
 		}
 
@@ -73,7 +73,7 @@ namespace mmo
 			// Populate the frame's geometry buffer
 			m_frame->GetGeometryBuffer().SetActiveTexture(m_renderTexture);
 			const Color color{ 1.0f, 1.0f, 1.0f };
-			const Rect dst{ 0.0f, 0.0f, frameRect.GetWidth(), frameRect.GetHeight() };
+			const Rect dst{ frameRect.left, frameRect.top, frameRect.right, frameRect.bottom };
 			const GeometryBuffer::Vertex vertices[6]{
 				{ { dst.left,	dst.top,	 0.0f }, color, { 0.0f, 0.0f } },
 				{ { dst.left,	dst.bottom, 0.0f }, color, { 0.0f, 1.0f } },
@@ -94,6 +94,7 @@ namespace mmo
 		
 		if (m_scene && m_camera)
 		{
+			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
 			m_scene->Render(*m_camera);
 		}
 
@@ -117,13 +118,16 @@ namespace mmo
 		m_frame->AddFlags(static_cast<uint32>(FrameFlags::ManualResetBuffer));
 
 		// Get the frame's last rectangle and initialize it
-		m_lastFrameRect = m_frame->GetAbsoluteFrameRect();
+		auto lastFrameRect = m_frame->GetAbsoluteFrameRect();
 
 		// Create the render texture
-		m_renderTexture = GraphicsDevice::Get().CreateRenderTexture(
-			m_frame->GetName(), static_cast<uint16>(m_lastFrameRect.GetWidth()), static_cast<uint16>(m_lastFrameRect.GetHeight()));
-		ASSERT(m_renderTexture);
-
+		if (!m_renderTexture)
+		{
+			m_renderTexture = GraphicsDevice::Get().CreateRenderTexture(
+				m_frame->GetName(), static_cast<uint16>(lastFrameRect.GetWidth()), static_cast<uint16>(lastFrameRect.GetHeight()));
+			ASSERT(m_renderTexture);
+		}
+		
 		// After the frame has been rendered, invalidate it to re-render next frame automatically
 		m_frameRenderEndCon = m_frame->RenderingEnded.connect([this]() {
 			m_frame->Invalidate(false);

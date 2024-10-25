@@ -110,6 +110,11 @@ namespace mmo
 			std::array<bool, 6> shouldUpdateResi;
 			shouldUpdateResi.fill(false);
 
+			if (itemEntry.armor())
+			{
+				UpdateModifierValue(unit_mods::Armor, unit_mod_type::BaseValue, itemEntry.armor(), apply);
+			}
+
 			if (itemEntry.holyres() != 0)
 			{
 				UpdateModifierValue(unit_mods::ResistanceHoly, unit_mod_type::TotalValue, itemEntry.holyres(), apply);
@@ -188,7 +193,10 @@ namespace mmo
 		Set<uint32>(object_fields::Xp, currentXp);
 
 		// Send packet
-
+		if (m_netUnitWatcher)
+		{
+			m_netUnitWatcher->OnXpLog(xp);
+		}
 	}
 
 	void GamePlayerS::RefreshStats()

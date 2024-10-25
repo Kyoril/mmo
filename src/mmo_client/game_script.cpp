@@ -273,6 +273,8 @@ namespace mmo
 					itemGuid = unit->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
 				}
 
+
+
 				if (itemGuid == 0)
 				{
 					return nullptr;

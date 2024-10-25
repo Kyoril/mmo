@@ -262,7 +262,7 @@ namespace mmo
 					m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
 					if (IsBagBarSlot(slot))
 					{
-						//m_owner.ApplyItemStats(*item, true);
+						m_owner.ApplyItemStats(*item, true);
 					}
 					
 					if (IsEquipmentSlot(slot))
@@ -398,14 +398,14 @@ namespace mmo
 			m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
 			if (IsBagBarSlot(targetSlot))
 			{
-				//m_owner.ApplyItemStats(*item, true);
+				m_owner.ApplyItemStats(*item, true);
 			}
 			
 			if (IsEquipmentSlot(targetSlot))
 			{
 				m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
 				m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
-				//m_owner.ApplyItemStats(*item, true);
+				m_owner.ApplyItemStats(*item, true);
 			}
 		}
 		else if (IsBagSlot(targetSlot))
@@ -540,14 +540,14 @@ namespace mmo
 				m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), 0);
 				if (IsBagBarSlot(absoluteSlot))
 				{
-					//m_owner.ApplyItemStats(*item, false);
+					m_owner.ApplyItemStats(*item, false);
 				}
 
 				if (IsEquipmentSlot(absoluteSlot))
 				{
 					m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
 					m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
-					//m_owner.ApplyItemStats(*item, false);
+					m_owner.ApplyItemStats(*item, false);
 				}
 			}
 			else if (IsBagSlot(absoluteSlot))
@@ -668,17 +668,6 @@ namespace mmo
 			if ((slotA & 0xFF) != player_equipment_slots::Mainhand &&
 				(slotA & 0xFF) != player_equipment_slots::Offhand &&
 				(slotA & 0xFF) != player_equipment_slots::Ranged)
-			{
-				//m_owner.inventoryChangeFailure(game::inventory_change_failure::NotInCombat, srcItem.get(), dstItem.get());
-				return inventory_change_failure::NotInCombat;
-			}
-		}
-
-		if (m_owner.IsInCombat() && IsEquipmentSlot(slotB))
-		{
-			if ((slotB & 0xFF) != player_equipment_slots::Mainhand &&
-				(slotB & 0xFF) != player_equipment_slots::Offhand &&
-				(slotB & 0xFF) != player_equipment_slots::Ranged)
 			{
 				//m_owner.inventoryChangeFailure(game::inventory_change_failure::NotInCombat, srcItem.get(), dstItem.get());
 				return inventory_change_failure::NotInCombat;
@@ -1192,13 +1181,15 @@ namespace mmo
 
 			return inventory_change_failure::Okay;
 		}
-		else if (IsInventorySlot(slot))
+
+		if (IsInventorySlot(slot))
 		{
 			// TODO: Inventory slot validation? However, isInventorySlot already
 			// performs some checks
 			return inventory_change_failure::Okay;
 		}
-		else if (IsBagSlot(slot))
+
+		if (IsBagSlot(slot))
 		{
 			// Validate bag
 			auto bag = GetBagAtSlot(slot);
@@ -1220,7 +1211,8 @@ namespace mmo
 
 			return inventory_change_failure::Okay;
 		}
-		else if (IsBagPackSlot(slot))
+
+		if (IsBagPackSlot(slot))
 		{
 			if (entry.itemclass() != item_class::Container &&
 				entry.itemclass() != item_class::Quiver)
@@ -1435,7 +1427,7 @@ namespace mmo
 	bool Inventory::IsBagBarSlot(uint16 absoluteSlot)
 	{
 		return (
-			absoluteSlot >> 8 == player_inventory_slots::Bag_0 &&
+			(absoluteSlot >> 8) == player_inventory_slots::Bag_0 &&
 			(absoluteSlot & 0xFF) >= player_inventory_slots::Start &&
 			(absoluteSlot & 0xFF) < player_inventory_slots::End
 			);
@@ -1513,7 +1505,7 @@ namespace mmo
 		// Reapply item stats if needed
 		if (durability == 0 && IsEquipmentSlot(absoluteSlot))
 		{
-			//m_owner.ApplyItemStats(*item, true);
+			m_owner.ApplyItemStats(*item, true);
 		}
 
 		return totalCost;
