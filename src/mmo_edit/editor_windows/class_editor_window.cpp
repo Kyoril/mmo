@@ -317,6 +317,77 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Armor", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("Armor Stat Source");
+
+			// Add button
+			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_armorstatsources();
+				newEntry->set_statid(0);
+				newEntry->set_factor(1.0f);
+			}
+
+			if (ImGui::BeginTable("armorStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.armorstatsources_size(); ++index)
+				{
+					auto* currentSource = currentEntry.mutable_armorstatsources(index);
+
+					static String s_statNames[] = {
+						"Stamina",
+						"Strength",
+						"Agility",
+						"Intellect",
+						"Spirit"
+					};
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int statId = currentSource->statid();
+					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
+						{
+							if (index < 0 || index > 4)
+							{
+								*out_text = "";
+								return false;
+							}
+
+							*out_text = s_statNames[index].c_str();
+							return true;
+						}, nullptr, 5))
+					{
+						currentSource->set_statid(statId);
+					}
+
+					ImGui::TableNextColumn();
+
+					float factor = currentSource->factor();
+					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_armorstatsources()->erase(currentEntry.mutable_armorstatsources()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Regeneration", ImGuiTreeNodeFlags_None))
 		{
 			float baseManaRegen = currentEntry.basemanaregenpertick();

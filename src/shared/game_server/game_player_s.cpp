@@ -328,8 +328,24 @@ namespace mmo
 	void GamePlayerS::UpdateArmor()
 	{
 		// Update armor value
-		const int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
+		int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
 		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue));
+
+		// Class
+		if (m_classEntry)
+		{
+			// Apply stat values
+			for (int i = 0; i < m_classEntry->armorstatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->armorstatsources(i);
+				if (statSource.statid() < 5)
+				{
+					baseArmor += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+
+		}
+
 		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
 		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);

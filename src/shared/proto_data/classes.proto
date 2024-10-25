@@ -21,6 +21,11 @@ message AttackPowerStatSource {
 	required float factor = 2;
 }
 
+message ArmorStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -46,6 +51,8 @@ message ClassEntry {
 	optional float healthRegenPerTick = 14;
 	// How much spirit is converted to 1 health per tick.
 	optional float spiritPerHealthRegen = 15;
+	
+	repeated AttackPowerStatSource armorStatSources = 16;
 
 
 }
