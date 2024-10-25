@@ -14,6 +14,12 @@
 
 namespace mmo
 {
+	static String s_powerTypes[] = {
+		"Mana",
+		"Rage",
+		"Energy"
+	};
+
 	static String s_spellSchoolNames[] = {
 		"Physical",
 		"Holy",
@@ -257,6 +263,28 @@ namespace mmo
 		if (ImGui::CollapsingHeader("Casting", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
+
+			int32 powerType = currentEntry.powertype();
+			if (ImGui::BeginCombo("Power Type", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < 3; i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = powerType == i;
+					const char* item_text = s_powerTypes[i].c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_powertype(i);
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
 
 			SLIDER_UINT32_PROP(baselevel, "Base Level", 0, 100);
 			SLIDER_UINT32_PROP(spelllevel, "Spell Level", 0, 100);

@@ -15,6 +15,7 @@
 
 #include "cursor.h"
 #include "game/item.h"
+#include "game/spell.h"
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
@@ -152,6 +153,36 @@ namespace mmo
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
 				return unit->Get<int32>(object_fields::MaxHealth);
+			}
+
+			return 1;
+		}
+
+		int32 Script_UnitPower(const std::string& unitName, int32 powerType)
+		{
+			if (powerType < 0 || powerType > power_type::Energy)
+			{
+				return -1;
+			}
+
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::Mana + powerType);
+			}
+
+			return 0;
+		}
+
+		int32 Script_UnitPowerMax(const std::string& unitName, int32 powerType)
+		{
+			if (powerType < 0 || powerType > power_type::Energy)
+			{
+				return -1;
+			}
+
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::MaxMana + powerType);
 			}
 
 			return 1;
@@ -319,6 +350,16 @@ namespace mmo
 		int32 Script_GetPlayerAura(int32 id)
 		{
 			// TODO: Get buff index
+
+			return -1;
+		}
+
+		int32 Script_UnitPowerType(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				return unit->Get<int32>(object_fields::PowerType);
+			}
 
 			return -1;
 		}
@@ -766,11 +807,14 @@ namespace mmo
 			luabind::def("UnitHealthMax", &Script_UnitHealthMax),
 			luabind::def("UnitMana", &Script_UnitMana),
 			luabind::def("UnitManaMax", &Script_UnitManaMax),
+			luabind::def("UnitPower", &Script_UnitPower),
+			luabind::def("UnitPowerMax", &Script_UnitPowerMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
 			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 			luabind::def("UnitName", &Script_UnitName),
 			luabind::def("UnitMoney", &Script_UnitMoney),
+			luabind::def("UnitPowerType", &Script_UnitPowerType),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
 

@@ -87,6 +87,28 @@ namespace mmo
 
 				ImGui::EndTable();
 			}
+
+			int32 powerType = currentEntry.powertype();
+			if (ImGui::BeginCombo("Power Type", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < 3; i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = powerType == i;
+					const char* item_text = s_powerTypes[i].c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_powertype(static_cast<proto::ClassEntry_PowerType>(i));
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Base Values", ImGuiTreeNodeFlags_None))
