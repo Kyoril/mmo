@@ -347,7 +347,8 @@ namespace mmo
 					switch (effect.targeta())
 					{
 					case spell_effect_targets::TargetAlly:
-						if (!m_cast.GetExecuter().UnitIsFriendly(*unit))
+						// For now we consider all non-hostile units as allies
+						if (m_cast.GetExecuter().UnitIsEnemy(*unit))
 						{
 							// Target has to be an ally but is not
 							return nullptr;
@@ -625,6 +626,18 @@ namespace mmo
 
 	void SingleCastState::SpellEffectHeal(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+
+		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+		const uint32 healingAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+		unitTarget->Heal(healingAmount, &m_cast.GetExecuter());
+
+		// TODO: Heal log to show healing numbers at the clients
 	}
 
 	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
