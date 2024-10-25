@@ -542,6 +542,11 @@ namespace mmo
 		appliedAura->SetApplied(true);
 	}
 
+	void GameUnitS::NotifyManaUsed()
+	{
+		m_lastManaUse = GetAsyncTimeMs();
+	}
+
 	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)
 	{
 		ASSERT(victim);
@@ -998,6 +1003,12 @@ namespace mmo
 			if (power > maxPower) power = maxPower;
 			break;
 		case power_type::Mana:
+			// Don't regen mana if we used mana in the last 5 seconds
+			if (GetAsyncTimeMs() - m_lastManaUse < 5000)
+			{
+				break;
+			}
+
 			power += m_manaRegenPerTick;
 			if (power > maxPower) power = maxPower;
 			break;

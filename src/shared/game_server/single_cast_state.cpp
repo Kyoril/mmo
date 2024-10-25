@@ -411,6 +411,12 @@ namespace mmo
 
 				currentPower -= totalCost;
 				m_cast.GetExecuter().Set<uint32>(object_fields::Mana + m_spell.powertype(), currentPower);
+
+				// Mana has been used, modify mana regeneration counter
+				if (m_spell.powertype() == power_type::Mana)
+				{
+					m_cast.GetExecuter().NotifyManaUsed();
+				}
 			}
 		}
 

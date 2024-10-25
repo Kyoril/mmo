@@ -342,6 +342,8 @@ namespace mmo
 
 		void ApplyAura(std::unique_ptr<AuraContainer>&& aura);
 
+		void NotifyManaUsed();
+
 	public:
 		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
 
@@ -447,7 +449,7 @@ namespace mmo
 		Countdown m_attackSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		Countdown m_regenCountdown;
-		GameTime m_lastManaUse;
+		GameTime m_lastManaUse = 0;
 
 		std::weak_ptr<GameUnitS> m_victim;
 
