@@ -21,8 +21,10 @@ namespace mmo
 
 	private:
 		void OnProgressChanged(const Property& property);
+		void OnProgressColorChanged(const Property& property);
 
 	protected:
 		float m_progress;
+		Color m_progressColor = Color::White;
 	};
 }

@@ -10,6 +10,7 @@ namespace mmo
 		: Frame(type, name)
 	{
 		m_propConnections += AddProperty("Progress", "0.0").Changed.connect(this, &ProgressBar::OnProgressChanged);
+		m_propConnections += AddProperty("ProgressColor", "FFFFFFFF").Changed.connect(this, &ProgressBar::OnProgressColorChanged);
 	}
 
 	ProgressBar::~ProgressBar()
@@ -20,6 +21,7 @@ namespace mmo
 	{
 		Frame::Copy(frame);
 
+		// Frame properties are copied automatically, nothing to do here
 	}
 
 	void ProgressBar::SetProgress(const float progress)
@@ -55,7 +57,7 @@ namespace mmo
 		Rect frameRect = GetAbsoluteFrameRect();
 		if (imagery)
 		{
-			imagery->Render(frameRect, Color::White);
+			imagery->Render(frameRect, m_color);
 		}
 
 		// If there is no progress, we don't need to render anything
@@ -67,7 +69,7 @@ namespace mmo
 			{
 				// Adjust the width
 				frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
-				progressImagery->Render(frameRect, Color::White);
+				progressImagery->Render(frameRect, m_progressColor);
 			}
 		}
 
@@ -75,7 +77,7 @@ namespace mmo
 		const auto* overlayImagery = GetStateImageryByName(IsEnabled() ? "Overlay" : "OverlayDisabled");
 		if (overlayImagery)
 		{
-			overlayImagery->Render(GetAbsoluteFrameRect(), Color::White);
+			overlayImagery->Render(GetAbsoluteFrameRect(), m_color);
 		}
 	}
 
@@ -90,6 +92,19 @@ namespace mmo
 			WLOG("Invalid argument for progress bar progress: '" + property.GetValue() << "'");
 			SetProgress(0.0f);
 		}
-		
+	}
+
+	void ProgressBar::OnProgressColorChanged(const Property& property)
+	{
+		argb_t argb;
+
+		std::stringstream colorStream;
+		colorStream.str(property.GetValue());
+		colorStream.clear();
+		colorStream >> std::hex >> argb;
+
+		m_progressColor = argb;
+
+		Invalidate(false);
 	}
 }
