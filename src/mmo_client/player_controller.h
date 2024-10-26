@@ -72,6 +72,8 @@ namespace mmo
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override { if (set) { m_controlFlags |= flag; } else { m_controlFlags &= ~flag; } }
 
+		void OnHoveredUnitChanged(GameUnitC* previousHoveredUnit);
+
 	private:
 		Scene& m_scene;
 		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
@@ -88,6 +90,8 @@ namespace mmo
 		GameTime m_lastHeartbeat { 0 };
 		uint32 m_controlFlags { ControlFlags::None };
 		uint32 m_mouseDownTime = 0;
+		int32 m_x = 0, m_y = 0;
+		GameUnitC* m_hoveredUnit = nullptr;
 
 	};
 }

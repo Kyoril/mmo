@@ -2,6 +2,7 @@
 
 #include "player_controller.h"
 
+#include "cursor.h"
 #include "event_loop.h"
 #include "vector_sink.h"
 #include "net/realm_connector.h"
@@ -22,6 +23,8 @@ namespace mmo
 	static ConsoleVar* s_invertVMouseCVar = nullptr;
 	static ConsoleVar* s_maxCameraZoomCVar = nullptr;
 	static ConsoleVar* s_cameraZoomCVar = nullptr;
+
+	extern Cursor g_cursor;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector)
 		: m_scene(scene)
@@ -283,6 +286,21 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::OnHoveredUnitChanged(GameUnitC* previousHoveredUnit)
+	{
+		if (m_hoveredUnit)
+		{
+			g_cursor.SetCursorType(CursorType::Attack);
+		}
+		else
+		{
+			g_cursor.SetCursorType(CursorType::Pointer);
+		}
+
+		// TODO: Raise UI event?
+
+	}
+
 	void PlayerController::Update(const float deltaSeconds)
 	{
 		if (!m_controlledUnit)
@@ -293,7 +311,6 @@ namespace mmo
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
-
 		m_defaultCamera->InvalidateView();
 
 		MovePlayer();
@@ -304,11 +321,42 @@ namespace mmo
 		ApplyLocalMovement(deltaSeconds);
 		UpdateHeartbeat();
 
-		
+		// Fire unit raycast
+		m_selectionSceneQuery->ClearResult();
+		m_selectionSceneQuery->SetSortByDistance(true);
+		m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
+			static_cast<float>(m_x) / static_cast<float>(w),
+			static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
+		m_selectionSceneQuery->Execute();
+
+		const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
+
+		GameUnitC* newHoveredUnit = nullptr;
+
+		const auto& hitResult = m_selectionSceneQuery->GetLastResult();
+		if (!hitResult.empty())
+		{
+			Entity* entity = static_cast<Entity*>(hitResult[0].movable);
+			if (entity)
+			{
+				newHoveredUnit = entity->GetUserObject<GameUnitC>();
+			}
+		}
+
+		if (newHoveredUnit != m_hoveredUnit)
+		{
+			GameUnitC* previousUnit = m_hoveredUnit;
+			m_hoveredUnit = newHoveredUnit;
+
+			OnHoveredUnitChanged(previousUnit);
+		}
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
+		m_x = x;
+		m_y = y;
+
 		m_mouseDownTime = GetAsyncTimeMs();
 		m_mouseMoved = 0;
 
@@ -337,6 +385,9 @@ namespace mmo
 
 	void PlayerController::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
+		m_x = x;
+		m_y = y;
+
 		if (button == MouseButton_Left)
 		{
 			m_controlFlags &= ~ControlFlags::TurnCamera;
@@ -348,37 +399,19 @@ namespace mmo
 
 		if (m_mouseMoved <= 16)
 		{
-			int32 w, h;
-			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h, nullptr, nullptr);
-			m_selectionSceneQuery->ClearResult();
-			m_selectionSceneQuery->SetSortByDistance(true);
-			m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
-				static_cast<float>(x) / static_cast<float>(w), 
-				static_cast<float>(y) / static_cast<float>(h), 1000.0f));
-			m_selectionSceneQuery->Execute();
-
 			const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
 
-			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
-			if (!hitResult.empty())
+			if (m_hoveredUnit)
 			{
-				Entity* entity = static_cast<Entity*>(hitResult[0].movable);
-				if (entity)
+				if (m_hoveredUnit->GetGuid() != previousSelectedUnit)
 				{
-					GameUnitC* unit = entity->GetUserObject<GameUnitC>();
-					if (unit)
-					{
-						if (unit->GetGuid() != previousSelectedUnit)
-						{
-							m_connector.SetSelection(unit->GetGuid());
-						}
+					m_connector.SetSelection(m_hoveredUnit->GetGuid());
+				}
 
-						if (button == MouseButton_Right)
-						{
-							// TODO: Support more interactions than auto attack
-							m_controlledUnit->Attack(*unit);
-						}
-					}
+				if (button == MouseButton_Right)
+				{
+					// TODO: Support more interactions than auto attack
+					m_controlledUnit->Attack(*m_hoveredUnit);
 				}
 			}
 			else
@@ -403,6 +436,9 @@ namespace mmo
 		{
 			return;
 		}
+
+		m_x = x;
+		m_y = y;
 
 		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
