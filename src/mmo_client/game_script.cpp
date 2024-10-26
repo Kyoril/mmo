@@ -855,6 +855,12 @@ namespace mmo
 
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
+			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
+			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
+			luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot) { return this->LootSlotIsCoin(slot); }),
+			luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot) { return this->LootSlotIsItem(slot); }),
+			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
+
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
 		];
 
@@ -923,6 +929,31 @@ namespace mmo
 		}
 
 		m_realmConnector.SetSelection(target->GetGuid());
+	}
+
+	void GameScript::LootSlot(int32 slot, bool force) const
+	{
+		// TODO
+	}
+
+	int32 GameScript::GetNumLootItems() const
+	{
+		return 0;
+	}
+
+	bool GameScript::LootSlotIsItem(int32 slot) const
+	{
+		return false;
+	}
+
+	bool GameScript::LootSlotIsCoin(int32 slot) const
+	{
+		return false;
+	}
+
+	void GameScript::CloseLoot()
+	{
+		// TODO
 	}
 
 	void GameScript::Script_ReviveMe()

@@ -57,6 +57,16 @@ namespace mmo
 
 		void TargetUnit(const char* name) const;
 
+		void LootSlot(int32 slot, bool force) const;
+
+		int32 GetNumLootItems() const;
+
+		bool LootSlotIsItem(int32 slot) const;
+
+		bool LootSlotIsCoin(int32 slot) const;
+
+		void CloseLoot();
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
