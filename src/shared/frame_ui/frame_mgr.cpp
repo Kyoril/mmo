@@ -145,7 +145,11 @@ namespace mmo
 		/// @param filename Name of the file in case it is needed.
 		static void LoadFrameXML(std::unique_ptr<std::istream> file, const std::string& filename)
 		{
-			ASSERT(file);
+			if (!file)
+			{
+				ELOG("Could not load file " << filename << " for reading!");
+				return;
+			}
 
 			// Set the name of the layout file that is currently processed
 			s_layoutXmlLoader.SetFilename(filename);
@@ -157,11 +161,17 @@ namespace mmo
 
 			// Allocate buffer
 			std::vector<char> buffer;
-			buffer.resize(fileSize);
+
+			if (fileSize <= 0)
+			{
+				ELOG("Could not read file " << filename << ": File is empty");
+				return;
+			}
 
 			// Read file content
+			buffer.resize(fileSize);
 			file->read(&buffer[0], buffer.size());
-
+			
 			// Create the xml parser
 			XML_Parser parser = XML_ParserCreate(nullptr);
 
