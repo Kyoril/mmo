@@ -130,7 +130,7 @@ namespace mmo
 
 		int DrawText(const std::string& text, const Rect& area, GeometryBuffer* buffer, float scale = 1.0f, argb_t color = 0xFFFFFFFF);
 
-		int GetLineCount(const std::string& text, const Rect& area, float scale = 1.0f);
+		int GetLineCount(const std::string& text, const Rect& area, float scale = 1.0f, bool wordWrap = true);
 
 	public:
 		/// Gets the default spacing between two lines of text in pixels.

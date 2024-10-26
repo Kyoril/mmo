@@ -47,16 +47,22 @@ namespace mmo
 	private:
 		void PopulateGeometryBuffer() override;
 
-		int RenderMessage(const Message& message, Rect& frameRect);
+
+		struct LineInfo
+		{
+			String line;
+			const Message* message;
+		};
+
+		int RenderLine(const LineInfo& line, Rect& frameRect);
 
 	private:
 		void OnMessagesChanged();
 
 	private:
-
 		std::vector<Message> m_messages;
+		std::vector<LineInfo> m_lineCache;
 		int m_linePosition = 0;
-		int m_lineCount = 0;
 		int m_visibleLineCount = 0;
 	};
 }

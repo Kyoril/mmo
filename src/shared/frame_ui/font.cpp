@@ -652,7 +652,7 @@ namespace mmo
 		return lineCount;
 	}
 
-	int Font::GetLineCount(const std::string& text, const Rect& area, float scale)
+	int Font::GetLineCount(const std::string& text, const Rect& area, float scale, bool wordWrap)
 	{
 		int lineCount = 1;
 
@@ -694,7 +694,11 @@ namespace mmo
 					baseY += height;
 
 					++lineCount;
-					c = lastWordIndex + 1;
+
+					if (wordWrap)
+					{
+						c = lastWordIndex + 1;
+					}
 				}
 			}
 		}

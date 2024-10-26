@@ -60,7 +60,7 @@ namespace mmo
 
 	void ScrollingMessageFrame::ScrollToBottom()
 	{
-		m_linePosition = std::max(0, m_lineCount - m_visibleLineCount);
+		m_linePosition = std::max<int32>(0, m_lineCache.size() - m_visibleLineCount);
 
 		Invalidate();
 	}
@@ -85,7 +85,7 @@ namespace mmo
 
 	bool ScrollingMessageFrame::IsAtBottom() const
 	{
-		return m_linePosition >= m_lineCount - m_linePosition;
+		return m_linePosition >= m_lineCache.size() - m_linePosition;
 	}
 
 	const ScrollingMessageFrame::Message& ScrollingMessageFrame::GetMessageAt(size_t index) const
@@ -135,10 +135,10 @@ namespace mmo
 		const float lineHeight = font->GetHeight(textScale);
 		if (font)
 		{
-			for (int i = m_linePosition; i < GetMessageCount(); ++i)
+			for (int i = m_linePosition; i < m_lineCache.size(); ++i)
 			{
-				const ScrollingMessageFrame::Message& message = GetMessageAt(i);
-				int linesRendered = RenderMessage(message, frameRect);
+				const auto& line = m_lineCache[i];
+				const int linesRendered = RenderLine(line, frameRect);
 
 				lineCount += linesRendered;
 				if (lineCount > m_visibleLineCount)
@@ -149,12 +149,12 @@ namespace mmo
 		}
 	}
 
-	int ScrollingMessageFrame::RenderMessage(const Message& message, Rect& frameRect)
+	int ScrollingMessageFrame::RenderLine(const LineInfo& line, Rect& frameRect)
 	{
 		const float textScale = FrameManager::Get().GetUIScale().y;
 		const float lineHeight = GetFont()->GetHeight(textScale);
 
-		int linesRendered = GetFont()->DrawText(message.message, frameRect, &m_geometryBuffer, textScale, Color(message.r, message.g, message.b, 1.0f));
+		int linesRendered = GetFont()->DrawText(line.line, frameRect, &m_geometryBuffer, textScale, Color(line.message->r, line.message->g, line.message->b, 1.0f));
 		frameRect.top += lineHeight * linesRendered;
 
 		return linesRendered;
@@ -162,22 +162,72 @@ namespace mmo
 
 	void ScrollingMessageFrame::OnMessagesChanged()
 	{
-		m_lineCount = 0;
+		m_lineCache.clear();
 
 		const float textScale = FrameManager::Get().GetUIScale().y;
 
-		FontPtr font = GetFont();
-		if (font)
+		if (const FontPtr font = GetFont())
 		{
 			const Rect contentRect = GetAbsoluteFrameRect();
 			m_visibleLineCount = contentRect.GetHeight() / font->GetHeight(textScale);
 
 			for (const auto& message : m_messages)
 			{
-				m_lineCount += font->GetLineCount(message.message, contentRect, textScale);
+				int lineCount = 1;
+
+				const float height = font->GetHeight(textScale);
+				const float baseline = font->GetBaseline(textScale);
+				const Point position = contentRect.GetPosition();
+
+				float baseY = position.y + baseline;
+				Point glyphPos(position);
+
+				String line;
+
+				for (size_t c = 0; c < message.message.length(); ++c)
+				{
+					size_t iterations = 1;
+
+					char g = message.message[c];
+					if (g == '\t')
+					{
+						g = ' ';
+						iterations = 4;
+					}
+
+					const FontGlyph* glyph = nullptr;
+					if ((glyph = font->GetGlyphData(g)))
+					{
+						const FontImage* const image = glyph->GetImage();
+						glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * textScale) + 4;
+						glyphPos.x += glyph->GetAdvance(textScale) * iterations;
+
+						if (glyphPos.x >= contentRect.right)
+						{
+							m_lineCache.push_back({ line, &message });
+
+							line.clear();
+							line.push_back(g);
+
+							glyphPos.x = position.x;
+							baseY += height;
+						}
+						else
+						{
+							line.push_back(g);
+						}
+					}
+				}
+
+				if (!line.empty())
+				{
+					m_lineCache.push_back({ line, &message });
+					line.clear();
+				}
 			}
 
-			m_linePosition = std::max(0, m_lineCount - m_visibleLineCount);
+			// Log it
+			DLOG("New line count: " << m_lineCache.size() << " / " << m_visibleLineCount);
 		}
 		else
 		{
