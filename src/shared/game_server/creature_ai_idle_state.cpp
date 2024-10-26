@@ -74,11 +74,11 @@ namespace mmo
 				GetAI().EnterCombat(unit);
 				return true;
 			});
-
 		ASSERT(m_unitWatcher);
-		m_unitWatcher->Start();
 
 		OnCreatureMovementChanged();
+
+		m_unitWatcher->Start();
 	}
 
 	void CreatureAIIdleState::OnLeave()

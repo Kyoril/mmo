@@ -48,6 +48,11 @@ namespace mmo
 		
 	}
 
+	bool GameObjectC::CanBeLooted() const
+	{
+		return false;
+	}
+
 	const String& GameObjectC::GetName() const
 	{
 		static String unknown = "Unknown";

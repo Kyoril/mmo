@@ -99,6 +99,10 @@ namespace mmo
 				AutoEquipItemSlot,
 				DestroyItem,
 
+				Loot,
+				LootMoney,
+				LootRelease,
+
 				/// Counter constant
 				Count_,
 			};
@@ -203,6 +207,13 @@ namespace mmo
 				MoveSetTurnRate,
 				SetFlightSpeed,
 				SetFlightBackSpeed,
+
+				LootResponse,
+				LootReleaseResponse,
+				LootRemoved,
+				LootMoneyNotify,
+				LootItemNotify,
+				LootClearMoney,
 
 				/// Counter constant
 				Count_,

@@ -64,11 +64,44 @@ namespace mmo
 
 				ImGui::EndTable();
 			}
+
+			static const char* s_unitLootNone = "<None>";
+
+			uint32 lootEntry = currentEntry.unitlootentry();
+
+			const auto* unitLootEntry = m_project.unitLoot.getById(lootEntry);
+			if (ImGui::BeginCombo("Unit Loot Entry", unitLootEntry != nullptr ? unitLootEntry->name().c_str() : s_unitLootNone, ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable(s_unitLootNone, unitLootEntry == nullptr))
+				{
+					currentEntry.set_unitlootentry(-1);
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.unitLoot.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.unitLoot.getTemplates().entry(i).id() == lootEntry;
+					const char* item_text = m_project.unitLoot.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_factiontemplate(m_project.unitLoot.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
 		}
 
 		static const char* s_factionTemplateNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_None))
 		{
 			int32 factionTemplate = currentEntry.factiontemplate();
 
@@ -95,7 +128,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
 			int32 maleModel = currentEntry.malemodel();
 
@@ -146,7 +179,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(minlevel, "Min Level", 1, 100);
 			SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);

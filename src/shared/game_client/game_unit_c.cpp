@@ -423,6 +423,12 @@ namespace mmo
 		mmo::SetQueryMask(m_sceneNode, mask);
 	}
 
+	bool GameUnitC::CanBeLooted() const
+	{
+		// Check if lootable flag is set!
+		return (Get<uint32>(object_fields::Flags) & unit_flags::Lootable) != 0;
+	}
+
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
 	{
 		m_targetUnit = targetUnit;

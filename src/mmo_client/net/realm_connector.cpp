@@ -449,4 +449,32 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::Loot(uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::Loot);
+			packet
+				<< io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::LootMoney()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootMoney);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::LootRelease(uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootRelease);
+			packet
+				<< io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
 }

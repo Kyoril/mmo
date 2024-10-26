@@ -450,6 +450,11 @@ namespace mmo
 		return result.first;
 	}
 
+	void GameUnitS::CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown)
+	{
+		m_spellCast->StopCast(reason, interruptCooldown);
+	}
+
 	void GameUnitS::Damage(const uint32 damage, uint32 school, GameUnitS* instigator)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);

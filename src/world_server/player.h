@@ -14,6 +14,8 @@
 
 namespace mmo
 {
+	class LootInstance;
+
 	namespace proto
 	{
 		class Project;
@@ -65,6 +67,12 @@ namespace mmo
 		void LocalChatMessage(ChatType type, const std::string& message);
 
 		void SaveCharacterData() const;
+
+		void OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source);
+
+		void CloseLootDialog();
+
+		bool IsLooting() const;
 
 	public:
 		TileIndex2D GetTileIndex() const;
@@ -127,6 +135,12 @@ namespace mmo
 
 		void OnDestroyItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnLoot(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnLootMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
@@ -151,6 +165,11 @@ namespace mmo
 		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
+		std::shared_ptr<LootInstance> m_loot{ nullptr };
+		std::shared_ptr<GameObjectS> m_lootSource{ nullptr };
+
+		scoped_connection_container m_lootSignals;
+		scoped_connection m_onLootSourceDespawned;
 	};
 
 }

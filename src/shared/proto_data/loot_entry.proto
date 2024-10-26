@@ -19,4 +19,7 @@ message LootGroup {
 message LootEntry {
 	required uint32 id = 1;
 	repeated LootGroup groups = 2;
+	required string name = 3;
+	optional uint32 minmoney = 4;
+	optional uint32 maxmoney = 5;
 }

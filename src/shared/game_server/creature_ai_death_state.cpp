@@ -47,10 +47,11 @@ namespace mmo
 
 		GameTime despawnDelay = constants::OneSecond * 30;
 
-		// Generate loot
-		auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetGuid(), lootEntry, entry.minlootgold(), entry.maxlootgold(), lootRecipients);
-		if (!loot->IsEmpty())
+		if (lootEntry)
 		{
+			// Generate loot
+			auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), lootRecipients);
+
 			// 3 Minutes of despawn delay if creature still has loot
 			despawnDelay = constants::OneMinute * 3;
 
@@ -61,9 +62,8 @@ namespace mmo
 				});
 
 			controlled.SetUnitLoot(std::move(loot));
-			controlled.AddFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
 		}
-
+		
 		// Activate despawn timer
 		controlled.TriggerDespawnTimer(despawnDelay);
 	}

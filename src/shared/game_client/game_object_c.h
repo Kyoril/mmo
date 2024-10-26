@@ -86,6 +86,8 @@ namespace mmo
 
 		virtual void Update(float deltaTime);
 
+		virtual bool CanBeLooted() const;
+
 	protected:
 		virtual void SetupSceneObjects();
 

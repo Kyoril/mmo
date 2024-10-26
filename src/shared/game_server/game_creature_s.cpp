@@ -66,6 +66,16 @@ namespace mmo
 	void GameCreatureS::SetUnitLoot(std::unique_ptr<LootInstance> unitLoot)
 	{
 		m_unitLoot = std::move(unitLoot);
+
+		// This unit is lootable if the unit loot is set
+		if (m_unitLoot)
+		{
+			AddFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
+		}
+		else
+		{
+			RemoveFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
+		}
 	}
 
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)

@@ -320,6 +320,8 @@ namespace mmo
 
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
 
+		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0);
+
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
 
 		int32 Heal(uint32 amount, GameUnitS* instigator);

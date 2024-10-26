@@ -19,6 +19,8 @@ namespace mmo
 		Interact,
 
 		Attack,
+
+		Loot,
 	};
 
 	class Cursor

@@ -290,7 +290,14 @@ namespace mmo
 	{
 		if (m_hoveredUnit)
 		{
-			g_cursor.SetCursorType(CursorType::Attack);
+			if(m_hoveredUnit->CanBeLooted())
+			{
+				g_cursor.SetCursorType(CursorType::Loot);
+			}
+			else
+			{
+				g_cursor.SetCursorType(CursorType::Attack);
+			}
 		}
 		else
 		{
@@ -410,8 +417,16 @@ namespace mmo
 
 				if (button == MouseButton_Right)
 				{
-					// TODO: Support more interactions than auto attack
-					m_controlledUnit->Attack(*m_hoveredUnit);
+					if (m_hoveredUnit->CanBeLooted())
+					{
+						// Open the loot dialog if we are close enough
+						m_connector.Loot(m_hoveredUnit->GetGuid());
+					}
+					else
+					{
+						// TODO: add other interactions
+						m_controlledUnit->Attack(*m_hoveredUnit);
+					}
 				}
 			}
 			else

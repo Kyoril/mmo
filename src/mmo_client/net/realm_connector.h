@@ -136,6 +136,12 @@ namespace mmo
 
 		void DestroyItem(uint8 bag, uint8 slot, uint8 count);
 
+		void Loot(uint64 lootObjectGuid);
+
+		void LootMoney();
+
+		void LootRelease(uint64 lootObjectGuid);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

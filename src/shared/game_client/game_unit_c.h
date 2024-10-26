@@ -96,6 +96,8 @@ namespace mmo
 
 		virtual void SetQueryMask(uint32 mask);
 
+		bool CanBeLooted() const override;
+
 	public:
 		/// @brief Returns the current health of this unit.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
