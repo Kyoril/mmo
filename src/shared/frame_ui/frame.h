@@ -76,6 +76,9 @@ namespace mmo
 		signal<void(const MouseEventArgs& args)> MouseDown;
 		/// Fired when the mouse button was released after being pressed on this frame.
 		signal<void(const MouseEventArgs& args)> MouseUp;
+		/// Triggered when the button was clicked.
+		signal<void()> Clicked;
+
 
 	public:
 		/// Special luabind operator overload function to implement shared_ptr comparison which does otherwise simply not work in luabind
@@ -378,6 +381,8 @@ namespace mmo
 
 		void SetOnHide(const luabind::object& func) { m_onHide = func; }
 
+		void SetOnClick(const luabind::object& func);
+
 		virtual void OnShow();
 
 		virtual void OnHide();
@@ -385,6 +390,8 @@ namespace mmo
 		virtual void OnMouseEnter();
 
 		virtual void OnMouseLeave();
+
+		virtual void OnClick();
 
 	protected:
 		virtual void DrawSelf();
@@ -497,6 +504,8 @@ namespace mmo
 		luabind::object m_onEnter;
 
 		luabind::object m_onLeave;
+
+		luabind::object m_onClick;
 
 		int32 m_id = 0;
 

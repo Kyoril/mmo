@@ -32,11 +32,6 @@ namespace mmo
 
 		otherButton->m_checkable = m_checkable;
 		otherButton->m_checked = m_checked;
-
-		if (m_clickedHandler.is_valid())
-		{
-			otherButton->m_clickedHandler = m_clickedHandler;
-		}
 	}
 
 	void Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
@@ -58,25 +53,6 @@ namespace mmo
 			if (IsCheckable())
 			{
 				SetChecked(!IsChecked());
-			}
-
-			if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
-			{
-				// Trigger lua clicked event handler if there is any
-				if (m_clickedHandler.is_valid())
-				{
-					try
-					{
-						m_clickedHandler(this);
-					}
-					catch (const luabind::error& e)
-					{
-						ELOG("Lua error: " << e.what());
-					}
-				}
-
-				// Afterwards, signal the event
-				Clicked();
 			}
 		}
 
@@ -114,11 +90,6 @@ namespace mmo
 
 		m_state = state;
 		Invalidate();
-	}
-
-	void Button::SetLuaClickedHandler(const luabind::object & fn)
-	{
-		m_clickedHandler = fn;
 	}
 
 	void Button::OnCheckedPropertyChanged(const Property& property)

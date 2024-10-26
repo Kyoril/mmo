@@ -61,6 +61,11 @@ namespace mmo
 
 		String MapBindingKeyCode(const Key keyCode)
 		{
+			if (keyCode >= VK_F1 && keyCode <= VK_F12)
+			{
+				return String("F") + std::to_string(keyCode - VK_F1 + 1);
+			}
+
 			// Convert numbers and letters to string
 			if (keyCode >= 'A' && keyCode <= 'Z' ||
 				keyCode >= '0' && keyCode <= '9')
@@ -72,11 +77,6 @@ namespace mmo
 			if (keyCode >= 'a' && keyCode <= 'z')
 			{
 				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
-			}
-
-			if (keyCode >= VK_F1 && keyCode <= VK_F12)
-			{
-				return String("F") + std::to_string(keyCode - VK_F1 + 1);
 			}
 
 			if (keyCode >= VK_NUMPAD0 && keyCode <= VK_NUMPAD9)

@@ -1086,18 +1086,18 @@ namespace mmo
 	void LayoutXmlLoader::ElementOnClickEnd()
 	{
 		FramePtr frame = m_frames.top();
-		if (std::shared_ptr<Button> buttonPtr = std::dynamic_pointer_cast<Button>(frame))
+		if (frame)
 		{
 			String script = m_text;
-			m_scriptFunctions.push_back([buttonPtr, script]()
+			m_scriptFunctions.push_back([frame, script]()
 			{
-				const luabind::object onClick = FrameManager::Get().CompileFunction(buttonPtr->GetName() + ":OnClick", script);
-				buttonPtr->SetLuaClickedHandler(onClick);
+				const luabind::object onClick = FrameManager::Get().CompileFunction(frame->GetName() + ":OnClick", script);
+				frame->SetOnClick(onClick);
 			});
 		}
 		else
 		{
-			ELOG("OnClick element found in frame '" << frame->GetName() << "' which is not a button!");
+			ELOG("OnClick element found outside of frame!");
 		}
 	}
 

@@ -58,6 +58,7 @@ namespace mmo
 		other.m_onLeave = m_onLeave;
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
+		other.m_onClick = m_onClick;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.RemoveAllChildren();
@@ -821,6 +822,16 @@ namespace mmo
 		}
 	}
 
+	void Frame::SetOnClick(const luabind::object& func)
+	{
+		m_onClick = func;
+
+		if (m_onClick)
+		{
+			m_focusable = true;
+		}
+	}
+
 	void Frame::OnShow()
 	{
 		if (m_onShow)
@@ -861,6 +872,23 @@ namespace mmo
 		{
 			m_onLeave(this);
 		}
+	}
+
+	void Frame::OnClick()
+	{
+		if (m_onClick.is_valid())
+		{
+			try
+			{
+				m_onClick(this);
+			}
+			catch(const luabind::error& e)
+			{
+				ELOG("Error calling " << GetName() << ":OnClick: " << e.what());
+			}
+		}
+
+		Clicked();
 	}
 
 	Rect Frame::GetRelativeFrameRect(const bool withScale)
@@ -1133,11 +1161,30 @@ namespace mmo
 
 		// Simply raise the signal
 		MouseDown(MouseEventArgs(buttons, position.x, position.y));
+
+		if (m_onClick.is_valid())
+		{
+			abort_emission();
+		}
 	}
 
 	void Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
+		if (button == Left)
+		{
+			if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
+			{
+				// Trigger lua clicked event handler if there is any
+				OnClick();
+			}
+		}
+
 		// Simply raise the signal
 		MouseUp(MouseEventArgs(buttons, position.x, position.y));
+
+		if (m_onClick.is_valid())
+		{
+			abort_emission();
+		}
 	}
 }

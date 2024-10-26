@@ -822,6 +822,7 @@ namespace mmo
 			luabind::def("UnitPowerType", &Script_UnitPowerType),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
+			luabind::def<std::function<void(const char*)>>("TargetUnit", [this](const char* unitName) { this->TargetUnit(unitName); }),
 
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def("CastSpell", &Script_CastSpell),
@@ -898,6 +899,30 @@ namespace mmo
 			// Lock the old item slot
 		}
 
+	}
+
+	void GameScript::TargetUnit(const char* name) const
+	{
+		if (!name || !*name)
+		{
+			ELOG("No unit name given to TargetUnit function!");
+			return;
+		}
+
+		auto player = Script_GetUnitByName("player");
+		if (!player)
+		{
+			return;
+		}
+
+		auto target = Script_GetUnitByName(name);
+		if (!target)
+		{
+			ELOG("Unable to find target unit " << name);
+			return;
+		}
+
+		m_realmConnector.SetSelection(target->GetGuid());
 	}
 
 	void GameScript::Script_ReviveMe()

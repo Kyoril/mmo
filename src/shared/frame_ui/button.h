@@ -26,10 +26,6 @@ namespace mmo
 		: public Frame
 	{
 	public:
-		/// Triggered when the button was clicked.
-		signal<void()> Clicked;
-
-	public:
 		explicit Button(const std::string& type, const std::string& name);
 		virtual ~Button() = default;
 
@@ -57,9 +53,6 @@ namespace mmo
 
 		ButtonState GetButtonState() const { return m_state; }
 
-	public:
-		void SetLuaClickedHandler(const luabind::object& fn);
-
 	private:
 		/// Executed when the Checked property was changed.
 		void OnCheckedPropertyChanged(const Property& property);
@@ -69,8 +62,6 @@ namespace mmo
 
 
 	private:
-		luabind::object m_clickedHandler;
-
 		bool m_checkable{ false };
 
 		bool m_checked{ false };

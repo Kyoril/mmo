@@ -55,6 +55,8 @@ namespace mmo
 
 		void PickupContainerItem(::uint32 slot) const;
 
+		void TargetUnit(const char* name) const;
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 

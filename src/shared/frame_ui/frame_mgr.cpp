@@ -409,7 +409,7 @@ namespace mmo
 					.def("SetChecked", &Button::SetChecked)
 					.def("IsCheckable", &Button::IsCheckable)
 					.def("SetCheckable", &Button::SetCheckable)
-					.def("SetClickedHandler", &Button::SetLuaClickedHandler)
+					.def("SetClickedHandler", &Button::SetOnClick)
 					.def("SetButtonState", &Button::SetButtonState)
 					.def("GetButtonState", &Button::GetButtonState)),
 
