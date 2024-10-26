@@ -405,6 +405,24 @@ namespace mmo
 		m_movementEnd = prevPosition;
 	}
 
+	static void SetQueryMask(SceneNode* node, const uint32 mask)
+	{
+		for (uint32 i = 0; i < node->GetNumAttachedObjects(); ++i)
+		{
+			node->GetAttachedObject(i)->SetQueryFlags(mask);
+		}
+
+		for (uint32 i = 0; i < node->GetNumChildren(); ++i)
+		{
+			SetQueryMask(static_cast<SceneNode*>(node->GetChild(i)), mask);
+		}
+	}
+
+	void GameUnitC::SetQueryMask(const uint32 mask)
+	{
+		mmo::SetQueryMask(m_sceneNode, mask);
+	}
+
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
 	{
 		m_targetUnit = targetUnit;

@@ -496,12 +496,21 @@ namespace mmo
 	{
 		m_cameraOffsetNode->RemoveFromParent();
 
+		// Re-enable selection for previously controlled unit
+		if (m_controlledUnit)
+		{
+			m_controlledUnit->SetQueryMask(0xFFFFFFFF);
+		}
+
 		m_controlledUnit = controlledUnit;
 
 		if (m_controlledUnit)
 		{
 			ASSERT(m_controlledUnit->GetSceneNode());
 			m_controlledUnit->GetSceneNode()->AddChild(*m_cameraOffsetNode);
+
+			// Not selectable via clicking when controlled
+			m_controlledUnit->SetQueryMask(0);
 		}
 	}
 

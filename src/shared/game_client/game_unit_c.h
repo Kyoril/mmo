@@ -94,6 +94,8 @@ namespace mmo
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 
+		virtual void SetQueryMask(uint32 mask);
+
 	public:
 		/// @brief Returns the current health of this unit.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
