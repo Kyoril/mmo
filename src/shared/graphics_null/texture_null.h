@@ -22,7 +22,10 @@ namespace mmo
 		/// Gets the memory usage of this texture in bytes on the gpu.
 		virtual uint32 GetMemorySize() const override;
 		virtual void* GetTextureObject() const final override { return nullptr; }
+		virtual void* GetRawTexture() const final override { return nullptr; }
 		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
+		void CopyPixelDataTo(uint8* destination) override;
+		uint32 GetPixelDataSize() const override;
 
 	private:
 		GraphicsDeviceNull& m_device;

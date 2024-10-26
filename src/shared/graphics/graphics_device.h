@@ -158,6 +158,10 @@ namespace mmo
 		static void Destroy();
 
 	public:
+		virtual void SetHardwareCursor(void* osCursorData) = 0;
+
+		virtual void* GetHardwareCursor() = 0;
+
 		/// Resets the graphics device for a new frame.
 		virtual void Reset() = 0;
 

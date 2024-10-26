@@ -26,7 +26,10 @@ namespace mmo
 		virtual void Resize(uint16 width, uint16 height) final override;
 		virtual void Update() final override {};
 		virtual void* GetTextureObject() const final override { return nullptr; }
+		virtual void* GetRawTexture() const final override { return nullptr; }
 		TexturePtr StoreToTexture() override;
+		void CopyPixelDataTo(uint8* destination) override;
+		uint32 GetPixelDataSize() const override;
 
 	private:
 		bool m_resizePending;

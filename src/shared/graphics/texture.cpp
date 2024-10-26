@@ -44,6 +44,27 @@ namespace mmo
 
 	}
 
+	PixelFormat Texture::GetPixelFormat() const
+	{
+		switch (m_header.format)
+		{
+		case tex::v1_0::RGB:
+			return PixelFormat::R8G8B8A8;
+		case tex::v1_0::RGBA:
+			return PixelFormat::R8G8B8A8;
+		case tex::v1_0::DXT1:
+			return PixelFormat::DXT1;
+		case tex::v1_0::DXT5:
+			return PixelFormat::DXT5;
+		case tex::v1_0::FLOAT_RGB:
+			return PixelFormat::R32G32B32A32;
+		case tex::v1_0::FLOAT_RGBA:
+			return PixelFormat::R32G32B32A32;
+		default:
+			return PixelFormat::Unknown;
+		}
+	}
+
 	void Texture::SetDebugName(String debugName)
 	{
 #ifdef _DEBUG

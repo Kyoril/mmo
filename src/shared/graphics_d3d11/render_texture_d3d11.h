@@ -29,14 +29,22 @@ namespace mmo
 		void Clear(ClearFlags flags) final override;
 		void Resize(uint16 width, uint16 height) final override;
 		void Update() final override {};
+
 		void* GetTextureObject() const final override { return m_shaderResourceView.Get(); }
+
 		ID3D11Texture2D* GetTex2D() const { return m_renderTargetTex.Get(); }
+
+		virtual void* GetRawTexture() const final override { return GetTex2D(); }
 
 	public:
 		inline ID3D11ShaderResourceView* GetShaderResourceView() const { return m_shaderResourceView.Get(); }
 
 	private:
 		void CreateResources();
+
+	public:
+		void CopyPixelDataTo(uint8* destination) override;
+		uint32 GetPixelDataSize() const override;
 
 	private:
 		ComPtr<ID3D11Texture2D> m_renderTargetTex;

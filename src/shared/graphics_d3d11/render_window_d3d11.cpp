@@ -276,6 +276,21 @@ namespace mmo
 				SetWindowLongPtr(Wnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
 			}
 			return 0;
+		case WM_SETCURSOR:
+			// Check if the cursor is over the client area
+			if (LOWORD(LParam) == HTCLIENT) 
+			{
+				// Set your custom cursor
+				HCURSOR customCursor = static_cast<HCURSOR>(GraphicsDevice::Get().GetHardwareCursor());
+				if (customCursor)
+				{
+					SetCursor(customCursor);
+					return TRUE;  // Mark the message as handled
+				}
+				
+				return FALSE;
+			}
+			break;
 		case WM_DESTROY:
 			if (window) window->Closed();
 			return 0;

@@ -150,4 +150,47 @@ namespace mmo
 		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
 		VERIFY(SUCCEEDED(d3d_dev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
+
+	void RenderTextureD3D11::CopyPixelDataTo(uint8* destination)
+	{
+		// Step 1: Create a staging texture with CPU read access
+		D3D11_TEXTURE2D_DESC textureDesc;
+		m_renderTargetTex->GetDesc(&textureDesc);
+
+		textureDesc.Usage = D3D11_USAGE_STAGING;
+		textureDesc.BindFlags = 0;
+		textureDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+		ID3D11Texture2D* stagingTexture = nullptr;
+		ID3D11Device& d3d11Device = m_device;
+		HRESULT hr = d3d11Device.CreateTexture2D(&textureDesc, nullptr, &stagingTexture);
+		if (FAILED(hr)) return;
+
+		// Step 2: Copy the texture data to the staging texture
+		ID3D11DeviceContext* context = nullptr;
+		d3d11Device.GetImmediateContext(&context);
+		context->CopyResource(stagingTexture, m_renderTargetTex.Get());
+
+		// Step 3: Map the staging texture to read its data
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+		hr = context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
+		if (FAILED(hr))
+		{
+			stagingTexture->Release();
+			context->Release();
+			return;
+		}
+
+		// Copy pixel data to buffer
+		memcpy(destination, mappedResource.pData, GetPixelDataSize());
+
+		context->Unmap(stagingTexture, 0);
+		stagingTexture->Release();
+		context->Release();
+	}
+
+	uint32 RenderTextureD3D11::GetPixelDataSize() const
+	{
+		return m_width * m_height * 4;
+	}
 }

@@ -42,4 +42,13 @@ namespace mmo
 		m_device.SetTextureAddressMode(GetTextureAddressModeU(), GetTextureAddressModeV(), GetTextureAddressModeW());
 		m_device.SetTextureFilter(GetTextureFilter());
 	}
+
+	void TextureNull::CopyPixelDataTo(uint8* destination)
+	{
+	}
+
+	uint32 TextureNull::GetPixelDataSize() const
+	{
+		return 0;
+	}
 }

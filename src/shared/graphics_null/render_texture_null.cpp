@@ -54,4 +54,13 @@ namespace mmo
 	{
 		return nullptr;
 	}
+
+	void RenderTextureNull::CopyPixelDataTo(uint8* destination)
+	{
+	}
+
+	uint32 RenderTextureNull::GetPixelDataSize() const
+	{
+		return 0;
+	}
 }

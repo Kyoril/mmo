@@ -103,6 +103,10 @@ namespace mmo
 		VertexBufferBinding* CreateVertexBufferBinding() override;
 
 		void Render(const RenderOperation& operation) override;
+
+		void SetHardwareCursor(void* osCursorData) override;
+
+		void* GetHardwareCursor() override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -202,5 +206,7 @@ namespace mmo
 		
 		Matrix4 m_inverseView;
 		Matrix4 m_restoreInverseView;
+
+		HCURSOR m_hardwareCursor = nullptr;
 	};
 }

@@ -20,6 +20,8 @@
 #include "stb_image/stb_image.h"
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include <imgui.h>
+
 #include "stb_image/stb_image_resize2.h"
 
 namespace mmo
@@ -30,22 +32,12 @@ namespace mmo
 
 	bool TextureImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
-		int32 width, height, numChannels;
-		std::vector<uint8> rawData;
-		if (!ReadTextureData(filename, width, height, numChannels, rawData))
-		{
-			return false;
-		}
-		
-		TextureData data;
-		if (!ConvertData(rawData, width, height, numChannels, data))
-		{
-			return false;
-		}
-		
-		// SomeImageFile.jpg => SomeImageFile
-		const Path name = filename.filename().replace_extension();
-		return CreateTextureAsset(name, currentAssetPath, data);
+		// Remember these
+		m_fileToImport = filename;
+		m_importAssetPath = currentAssetPath;
+		m_showImportFileDialog = true;
+
+		return true;
 	}
 
 	bool TextureImport::SupportsExtension(const String& extension) const noexcept
@@ -60,6 +52,55 @@ namespace mmo
 		};
 
 		return supportedExtension.contains(extension);
+	}
+
+	void TextureImport::Draw()
+	{
+		if (m_showImportFileDialog)
+		{
+			ImGui::OpenPopup("Texture Import Settings");
+			m_showImportFileDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Texture Import Settings", nullptr))
+		{
+			ImGui::Checkbox("Apply compression", &m_useCompression);
+
+			if (ImGui::Button("Import"))
+			{
+				DoImportInternal();
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	bool TextureImport::DoImportInternal()
+	{
+		int32 width, height, numChannels;
+		std::vector<uint8> rawData;
+		if (!ReadTextureData(m_fileToImport, width, height, numChannels, rawData))
+		{
+			return false;
+		}
+
+		TextureData data;
+		if (!ConvertData(rawData, width, height, numChannels, data))
+		{
+			return false;
+		}
+
+		// SomeImageFile.jpg => SomeImageFile
+		const Path name = m_fileToImport.filename().replace_extension();
+		return CreateTextureAsset(name, m_importAssetPath, data);
 	}
 
 	bool TextureImport::ReadTextureData(const Path& filename, int32& width, int32& height, int32& numChannels, std::vector<uint8>& rawData) const
@@ -187,6 +228,12 @@ namespace mmo
 		if ((data.width % 4) != 0 || (data.height % 4) != 0)
 		{
 			WLOG("DXT compression requires that both the width and height of the source image have to be a multiple of 4! Compression is disabled...");
+			applyCompression = false;
+		}
+
+		// Ensure compression is turned off if not wanted
+		if (!m_useCompression)
+		{
 			applyCompression = false;
 		}
 

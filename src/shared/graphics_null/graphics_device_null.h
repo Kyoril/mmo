@@ -85,6 +85,10 @@ namespace mmo
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
 
 		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
+
+		void SetHardwareCursor(void* osCursorData) override;
+
+		void* GetHardwareCursor() override;
 		// ~ End GraphicsDevice
 	};
 }

@@ -27,6 +27,8 @@ namespace mmo
 		DXT1,
 		DXT3,
 		DXT5,
+
+		Unknown
 	};
 
 	/// Enumerates possible face cull modes.
@@ -95,6 +97,14 @@ namespace mmo
 
 		/// Gets the underlying texture object.
 		virtual void* GetTextureObject() const = 0;
+
+		virtual void* GetRawTexture() const = 0;
+
+		virtual void CopyPixelDataTo(uint8* destination) = 0;
+
+		virtual uint32 GetPixelDataSize() const = 0;
+
+		virtual PixelFormat GetPixelFormat() const;
 
 		virtual TextureAddressMode GetTextureAddressModeU() const { return m_addressModeU; }
 

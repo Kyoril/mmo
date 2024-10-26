@@ -1054,4 +1054,14 @@ namespace mmo
 			Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
 		}
 	}
+
+	void GraphicsDeviceD3D11::SetHardwareCursor(void* osCursorData)
+	{
+		m_hardwareCursor = static_cast<HCURSOR>(osCursorData);
+	}
+
+	void* GraphicsDeviceD3D11::GetHardwareCursor()
+	{
+		return m_hardwareCursor;
+	}
 }

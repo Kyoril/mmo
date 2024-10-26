@@ -254,4 +254,13 @@ namespace mmo
 	{
 		return nullptr;
 	}
+
+	void GraphicsDeviceNull::SetHardwareCursor(void* osCursorData)
+	{
+	}
+
+	void* GraphicsDeviceNull::GetHardwareCursor()
+	{
+		return nullptr;
+	}
 }

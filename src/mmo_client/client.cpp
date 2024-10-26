@@ -30,6 +30,7 @@
 #include <thread>
 #include <memory>
 
+#include "cursor.h"
 #include "game_states/world_state.h"
 #include "base/timer_queue.h"
 
@@ -121,6 +122,7 @@ namespace mmo
 	static scoped_connection_container s_frameUiConnections;
 	static std::unique_ptr<GameScript> s_gameScript;
 
+	extern Cursor g_cursor;
 
 	/// Initializes everything related to FrameUI.
 	bool InitializeFrameUi()
@@ -147,6 +149,12 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("Model", [](const std::string& name) {
 			return std::make_shared<ModelFrame>(name);
 		});
+
+		// Setup cursor graphics
+		g_cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
+		g_cursor.LoadCursorTypeFromTexture(CursorType::Interact, "Interface/Cursor/gears001.htex");
+		g_cursor.LoadCursorTypeFromTexture(CursorType::Attack, "Interface/Cursor/sword001.htex");
+		g_cursor.SetCursorType(CursorType::Pointer);
 
 		// Connect idle event
 		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)

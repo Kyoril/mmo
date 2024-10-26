@@ -23,11 +23,21 @@ namespace mmo
 
 	public:
 		void FromRenderTexture(RenderTextureD3D11& renderTexture);
+
 		virtual void Load(std::unique_ptr<std::istream>& stream) final override;
+
 		virtual void LoadRaw(void* data, size_t dataSize) final override;
+
 		/// Gets the memory usage of this texture in bytes on the gpu.
 		virtual uint32 GetMemorySize() const;
+
 		virtual void* GetTextureObject() const final override { return m_shaderView.Get(); }
+
+		virtual void* GetRawTexture() const final override { return m_texture.Get(); }
+
+		virtual void CopyPixelDataTo(uint8* destination) override;
+
+		virtual uint32 GetPixelDataSize() const override;
 
 	private:
 		void CreateShaderResourceView();

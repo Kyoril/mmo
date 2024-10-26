@@ -39,6 +39,12 @@ namespace mmo
 		/// @copydoc ImportBase::SupportsExtension
 		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
 
+		/// Override this method if the importer needs to render some UI elements.
+		void Draw() override;
+
+	private:
+		bool DoImportInternal();
+
 	private:
 		/// Contains infos about a source image file.
 		struct TextureData final
@@ -70,5 +76,11 @@ namespace mmo
 		/// @param assetPath The asset path where the texture will be stored.
 		/// @return true on success, false otherwise.
 		bool CreateTextureAsset(const Path& name, const Path& assetPath, TextureData& data) const;
+
+	private:
+		Path m_fileToImport;
+		Path m_importAssetPath;
+		bool m_showImportFileDialog = false;
+		bool m_useCompression = false;
 	};
 }
