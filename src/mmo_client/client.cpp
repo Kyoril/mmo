@@ -31,6 +31,7 @@
 #include <memory>
 
 #include "cursor.h"
+#include "loot_client.h"
 #include "game_states/world_state.h"
 #include "base/timer_queue.h"
 
@@ -235,6 +236,11 @@ namespace mmo
 
 	static proto_client::Project s_project;
 
+	std::unique_ptr<LootClient> s_lootClient;
+
+	typedef DBCache<ItemInfo, game::client_realm_packet::ItemQuery> DBItemCache;
+	std::unique_ptr<DBItemCache> s_itemCache;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -290,17 +296,23 @@ namespace mmo
 			return false;
 		}
 
+		// Initialize item cache (TODO: Try loading cache from file so we maybe won't have to ask the server next time we run the client)
+		s_itemCache = std::make_unique<DBItemCache>(*s_realmConnector);
+
+		// Initialize loot client
+		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
+
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_itemCache);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, loginState, s_project);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, loginState, s_project);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

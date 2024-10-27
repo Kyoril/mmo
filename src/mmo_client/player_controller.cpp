@@ -11,6 +11,7 @@
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
+#include "loot_client.h"
 
 #include "platform.h"
 #include "console/console.h"
@@ -26,8 +27,9 @@ namespace mmo
 
 	extern Cursor g_cursor;
 
-	PlayerController::PlayerController(Scene& scene, RealmConnector& connector)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient)
 		: m_scene(scene)
+		, m_lootClient(lootClient)
 		, m_connector(connector)
 	{
 		if (!s_mouseSensitivityCVar)
@@ -420,7 +422,7 @@ namespace mmo
 					if (m_hoveredUnit->CanBeLooted())
 					{
 						// Open the loot dialog if we are close enough
-						m_connector.Loot(m_hoveredUnit->GetGuid());
+						m_lootClient.LootObject(*m_hoveredUnit);
 					}
 					else
 					{

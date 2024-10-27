@@ -14,6 +14,8 @@
 
 namespace mmo
 {
+	class LootClient;
+
 	namespace proto_client
 	{
 		class Project;
@@ -42,6 +44,7 @@ namespace mmo
 		GameScript(
 			LoginConnector& loginConnector,
 			RealmConnector& realmConnector,
+			LootClient& lootClient,
 			std::shared_ptr<LoginState> loginState,
 			const proto_client::Project& project);
 
@@ -65,7 +68,9 @@ namespace mmo
 
 		bool LootSlotIsCoin(int32 slot) const;
 
-		void CloseLoot();
+		void GetLootSlotInfo(int32 slot, char** out_icon, char** out_text, int32& out_count) const;
+
+		void CloseLoot() const;
 
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
@@ -74,6 +79,8 @@ namespace mmo
 		LoginConnector& m_loginConnector;
 
 		RealmConnector& m_realmConnector;
+
+		LootClient& m_lootClient;
 
 		/// The current lua state.
 		LuaStatePtr m_luaState;
@@ -86,6 +93,6 @@ namespace mmo
 		const proto_client::Project& m_project;
 
 	private:
-		void Script_ReviveMe();
+		void Script_ReviveMe() const;
 	};
 }

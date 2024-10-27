@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "cursor.h"
+#include "loot_client.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game_client/game_item_c.h"
@@ -701,9 +702,10 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, std::shared_ptr<LoginState> loginState, const proto_client::Project& project)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
+		, m_lootClient(lootClient)
 		, m_loginState(std::move(loginState))
 		, m_project(project)
 	{
@@ -938,25 +940,56 @@ namespace mmo
 
 	int32 GameScript::GetNumLootItems() const
 	{
-		return 0;
+		return m_lootClient.GetNumLootItems();
 	}
 
-	bool GameScript::LootSlotIsItem(int32 slot) const
+	bool GameScript::LootSlotIsItem(const int32 slot) const
 	{
-		return false;
+		if (m_lootClient.HasMoney())
+		{
+			if (slot == 1)
+			{
+				return false;
+			}
+
+			return slot < m_lootClient.GetNumLootItems();
+		}
+
+		return (slot - 1) < m_lootClient.GetNumLootItems();
 	}
 
-	bool GameScript::LootSlotIsCoin(int32 slot) const
+	bool GameScript::LootSlotIsCoin(const int32 slot) const
 	{
-		return false;
+		if (!m_lootClient.HasMoney() || slot != 1)
+		{
+			return false;
+		}
+
+		return true;
 	}
 
-	void GameScript::CloseLoot()
+	void GameScript::GetLootSlotInfo(int32 slot, char** out_icon, char** out_text, int32& out_count) const
 	{
-		// TODO
+		if (slot < 1 || slot > m_lootClient.GetNumLootItems())
+		{
+			out_icon = nullptr;
+			out_text = nullptr;
+			out_count = 0;
+			return;
+		}
+
+		static char moneyBuffer[128];
+		if (m_lootClient.HasMoney() && slot == 1)
+		{
+		}
 	}
 
-	void GameScript::Script_ReviveMe()
+	void GameScript::CloseLoot() const
+	{
+		m_lootClient.CloseLoot();
+	}
+
+	void GameScript::Script_ReviveMe() const
 	{
 		m_realmConnector.SendReviveRequest();
 	}

@@ -12,6 +12,7 @@
 
 namespace mmo
 {
+	class LootClient;
 	class Scene;
 	class SceneNode;
 	class Camera;
@@ -21,7 +22,7 @@ namespace mmo
 	class PlayerController final : public IInputControl
 	{
 	public:
-		PlayerController(Scene& scene, RealmConnector& connector);
+		PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient);
 
 		~PlayerController() override;
 
@@ -76,6 +77,7 @@ namespace mmo
 
 	private:
 		Scene& m_scene;
+		LootClient& m_lootClient;
 		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
 		Camera* m_defaultCamera { nullptr };

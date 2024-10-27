@@ -440,7 +440,9 @@ namespace mmo
 		SendPacket([&](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::LootResponse);
-			packet << io::write<uint64>(m_loot->getLootGuid());
+			packet
+				<< io::write<uint64>(m_loot->getLootGuid())
+				<< io::write<uint8>(loot_type::Corpse);
 			lootInstance->Serialize(packet, m_character->GetGuid());
 			packet.Finish();
 		});
@@ -449,6 +451,7 @@ namespace mmo
 	void Player::CloseLootDialog()
 	{
 		m_lootSignals.disconnect();
+		m_onLootSourceDespawned.disconnect();
 
 		if (!m_loot)
 		{
@@ -469,8 +472,6 @@ namespace mmo
 
 		m_loot = nullptr;
 		m_lootSource = nullptr;
-
-		m_onLootSourceDespawned.disconnect();
 	}
 
 	void Player::OnSetSelection(uint16 opCode, uint32 size, io::Reader& contentReader)

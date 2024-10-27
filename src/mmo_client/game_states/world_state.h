@@ -55,6 +55,8 @@ namespace mmo
 	class Entity;
 	class SceneNode;
 
+	class LootClient;
+
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class WorldState final
@@ -67,7 +69,7 @@ namespace mmo
 		/// @param gameStateManager The game state manager that this state belongs to.
 		/// @param realmConnector The connector which manages the connection to the realm server.
 		/// @param project 
-		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers);
+		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache);
 
 	public:
 		/// @brief The default name of the world state
@@ -245,10 +247,9 @@ namespace mmo
 		SceneNode* m_worldRootNode;
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
+		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
 		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
-
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery> m_creatureCache;
-		DBCache<ItemInfo, game::client_realm_packet::ItemQuery> m_itemCache;
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery> m_questCache;
 
 		scoped_connection_container m_playerObservers;
@@ -274,6 +275,7 @@ namespace mmo
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		std::unique_ptr<terrain::Terrain> m_terrain;
+		LootClient& m_lootClient;
 
 	private:
 		static IInputControl* s_inputControl;

@@ -2,6 +2,7 @@
 
 #include "world_state.h"
 #include "client.h"
+#include "loot_client.h"
 
 #include "event_loop.h"
 #include "game_state_mgr.h"
@@ -31,6 +32,7 @@
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
 #include "ui/world_text_frame.h"
+#include "game/loot.h"
 
 namespace mmo
 {
@@ -123,12 +125,13 @@ namespace mmo
 
 	IInputControl* WorldState::s_inputControl = nullptr;
 
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
+		, m_lootClient(lootClient)
 		, m_playerNameCache(m_realmConnector)
 		, m_creatureCache(m_realmConnector)
-		, m_itemCache(m_realmConnector)
+		, m_itemCache(itemCache)
 		, m_questCache(m_realmConnector)
 		, m_project(project)
 		, m_timers(timers)
@@ -369,7 +372,7 @@ namespace mmo
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
-		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector);
+		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient);
 		s_inputControl = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
@@ -486,6 +489,8 @@ namespace mmo
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
 		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
+		m_lootClient.Initialize();
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
@@ -568,6 +573,7 @@ namespace mmo
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightSpeed);
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightBackSpeed);
 
+		m_lootClient.Shutdown();
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -1731,6 +1737,7 @@ namespace mmo
 
 		return PacketParseResult::Pass;
 	}
+
 
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{

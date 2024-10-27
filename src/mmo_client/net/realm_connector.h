@@ -73,6 +73,86 @@ namespace mmo
 		PacketParseResult connectionPacketReceived(game::IncomingPacket &packet) override;
 		// ~ End IConnectorListener
 
+		struct PacketHandlerRegistrationHandle final
+		{
+		private:
+			std::weak_ptr<RealmConnector> m_connector;
+			uint16 m_opCode;
+
+		public:
+			// Copy operations are deleted to prevent copying
+			PacketHandlerRegistrationHandle(const PacketHandlerRegistrationHandle&) = delete;
+			PacketHandlerRegistrationHandle& operator=(const PacketHandlerRegistrationHandle&) = delete;
+
+			PacketHandlerRegistrationHandle(RealmConnector& connector, const uint16 opCode)
+				: m_connector(std::static_pointer_cast<RealmConnector>(connector.shared_from_this())), m_opCode(opCode)
+			{
+			}
+
+			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other) noexcept
+				: m_connector(std::move(other.m_connector)), m_opCode(other.m_opCode)
+			{
+				other.m_opCode = std::numeric_limits<uint16>::max();
+			}
+
+			PacketHandlerRegistrationHandle& operator=(PacketHandlerRegistrationHandle&& other) noexcept
+			{
+				m_connector = std::move(other.m_connector);
+				m_opCode = other.m_opCode;
+				other.m_opCode = std::numeric_limits<uint16>::max();
+				return *this;
+			}
+
+			~PacketHandlerRegistrationHandle()
+			{
+				const std::shared_ptr<RealmConnector> strongConnector = m_connector.lock();
+				if (m_opCode != std::numeric_limits<uint16>::max() && strongConnector)
+				{
+					strongConnector->ClearPacketHandler(m_opCode);
+				}
+			}
+		};
+
+		struct PacketHandlerHandleContainer final
+		{
+		private:
+			std::vector<PacketHandlerRegistrationHandle> m_handles;
+
+		public:
+			void Add(PacketHandlerRegistrationHandle&& handle)
+			{
+				m_handles.push_back(std::move(handle));
+			}
+
+			void Clear()
+			{
+				m_handles.clear();
+			}
+
+			[[nodiscard]] bool IsEmpty() const
+			{
+				return m_handles.empty();
+			}
+
+		public:
+			PacketHandlerHandleContainer& operator+=(PacketHandlerRegistrationHandle&& handle)
+			{
+				m_handles.push_back(std::move(handle));
+				return *this;
+			}
+		};
+
+		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
+		template <class Instance, class Class, class... Args1>
+		[[nodiscard]] PacketHandlerRegistrationHandle RegisterAutoPacketHandler(uint16 opCode, Instance& object, PacketParseResult(Class::* method)(Args1...))
+		{
+			RegisterPacketHandler(opCode, [&object, method](Args1... args) {
+				return (object.*method)(Args1(args)...);
+				});
+
+			return { *this, opCode };
+		}
+
 	public:
 		/// Sets login data
 		void SetLoginData(const std::string& accountName, const BigNumber& sessionKey);
