@@ -22,6 +22,16 @@ namespace mmo
 		}
 		~LootClient() = default;
 
+		struct LootItem
+		{
+			uint8 slot;
+			uint32 itemId;
+			uint32 displayId;
+			uint32 count;
+			uint8 lootType;
+			const ItemInfo* itemInfo = nullptr;
+		};
+
 	public:
 		void Initialize();
 
@@ -32,9 +42,15 @@ namespace mmo
 
 		void CloseLoot();
 
+		uint32 GetNumLootSlots() const;
+
 		uint32 GetNumLootItems() const;
 
 		bool HasMoney() const;
+
+		const String& GetLootMoneyString() const { return m_lootMoneyString; }
+
+		LootItem* GetLootItem(uint32 index);
 
 	private:
 		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
@@ -56,16 +72,8 @@ namespace mmo
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlerConnections;
 
 		uint32 m_lootMoney = 0;
-
-		struct LootItem
-		{
-			uint8 slot;
-			uint32 itemId;
-			uint32 displayId;
-			uint32 count;
-			uint8 lootType;
-		};
-
 		std::vector<LootItem> m_lootItems;
+		String m_lootMoneyString;
+		uint32 m_itemInfoMissing = 0;
 	};
 }

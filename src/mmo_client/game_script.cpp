@@ -862,6 +862,7 @@ namespace mmo
 			luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot) { return this->LootSlotIsCoin(slot); }),
 			luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot) { return this->LootSlotIsItem(slot); }),
 			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
+			luabind::def<std::function<void(int32, String&, String&, int32&)>>("GetLootSlotInfo", [this](int32 slot, String& out_icon, String& out_text, int32& out_count) { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
 		];
@@ -948,7 +949,7 @@ namespace mmo
 		else
 		{
 			// Loot item from slot
-			m_realmConnector.AutoStoreLootItem(slot);
+			m_realmConnector.AutoStoreLootItem(slot - 1);
 		}
 
 		// TODO
@@ -956,11 +957,16 @@ namespace mmo
 
 	int32 GameScript::GetNumLootItems() const
 	{
-		return m_lootClient.GetNumLootItems();
+		return m_lootClient.GetNumLootSlots();
 	}
 
 	bool GameScript::LootSlotIsItem(const int32 slot) const
 	{
+		if (slot < 1)
+		{
+			return false;
+		}
+
 		if (m_lootClient.HasMoney())
 		{
 			if (slot == 1)
@@ -968,14 +974,19 @@ namespace mmo
 				return false;
 			}
 
-			return slot < m_lootClient.GetNumLootItems();
+			return slot - 1 <= m_lootClient.GetNumLootItems();
 		}
 
-		return (slot - 1) < m_lootClient.GetNumLootItems();
+		return slot <= m_lootClient.GetNumLootItems();
 	}
 
 	bool GameScript::LootSlotIsCoin(const int32 slot) const
 	{
+		if (slot < 1)
+		{
+			return false;
+		}
+
 		if (!m_lootClient.HasMoney() || slot != 1)
 		{
 			return false;
@@ -984,20 +995,39 @@ namespace mmo
 		return true;
 	}
 
-	void GameScript::GetLootSlotInfo(int32 slot, char** out_icon, char** out_text, int32& out_count) const
+	void GameScript::GetLootSlotInfo(int32 slot, String& out_icon, String& out_text, int32& out_count) const
 	{
-		if (slot < 1 || slot > m_lootClient.GetNumLootItems())
+		if (slot < 1 || slot > m_lootClient.GetNumLootSlots())
 		{
-			out_icon = nullptr;
-			out_text = nullptr;
+			out_icon = "";
+			out_text = "";
 			out_count = 0;
 			return;
 		}
 
-		static char moneyBuffer[128];
 		if (m_lootClient.HasMoney() && slot == 1)
 		{
+			out_icon = "Interface/Icons/Items/Tex_spare_parts_11_b.htex";
+			out_text = m_lootClient.GetLootMoneyString();
+			out_count = 1;
+			return;
 		}
+
+		// Get item from slot
+		if (m_lootClient.HasMoney()) slot--;
+
+		LootClient::LootItem* item = m_lootClient.GetLootItem(slot - 1);
+		if (!item || !item->itemInfo)
+		{
+			out_icon = "";
+			out_text = "";
+			out_count = 0;
+			return;
+		}
+
+		out_icon = item->itemInfo->icon;
+		out_text = item->itemInfo->name;
+		out_count = item->count;
 	}
 
 	void GameScript::CloseLoot() const

@@ -460,6 +460,9 @@ namespace mmo
 				currentEntry.set_itemclass(currentItemClass);
 			}
 
+			SLIDER_UINT32_PROP(maxcount, "Max Count", 0, 255);
+			SLIDER_UINT32_PROP(maxstack, "Max Stack", 0, 255);
+
 			// Subclass
 			const std::vector<String>* subclassStrings = nullptr;
 			bool hasInventoryType = false;
@@ -539,7 +542,6 @@ namespace mmo
 			{
 				currentEntry.set_quality(currentQuality);
 			}
-
 
 			ImGui::BeginGroupPanel("Tooltip Preview", ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());

@@ -23,6 +23,16 @@ namespace mmo
 		m_requestedLootObject = 0;
 	}
 
+	LootClient::LootItem* LootClient::GetLootItem(uint32 index)
+	{
+		if (index < m_lootItems.size())
+		{
+			return &m_lootItems[index];
+		}
+
+		return nullptr;
+	}
+
 	PacketParseResult LootClient::OnLootResponse(game::IncomingPacket& packet)
 	{
 		uint64 objectGuid;
@@ -60,6 +70,53 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Build loot money string
+		std::ostringstream strm;
+		const int32 gold = ::floor(m_lootMoney / 10000);
+		const int32 silver = ::floor(::fmod(m_lootMoney, 10000) / 100);
+		const int32 copper = ::fmod(m_lootMoney, 100);
+		if (gold > 0)
+		{
+			strm << gold << " ";
+			
+			if (const String* goldString = FrameManager::Get().GetLocalization().FindStringById("GOLD"))
+			{
+				strm << *goldString << " ";
+			}
+			else
+			{
+				strm << "GOLD ";
+			}
+		}
+		if (silver > 0)
+		{
+			strm << silver << " ";
+
+			if (const String* silverString = FrameManager::Get().GetLocalization().FindStringById("SILVER"))
+			{
+				strm << *silverString << " ";
+			}
+			else
+			{
+				strm << "SILVER ";
+			}
+		}
+		if (copper > 0)
+		{
+			strm << copper << " ";
+
+			if (const String* silverString = FrameManager::Get().GetLocalization().FindStringById("COPPER"))
+			{
+				strm << *silverString << " ";
+			}
+			else
+			{
+				strm << "COPPER ";
+			}
+		}
+
+		m_lootMoneyString = strm.str();
+
 		m_lootItems.clear();
 		m_lootItems.reserve(12);
 
@@ -71,20 +128,42 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 			m_lootItems.emplace_back(std::move(item));
+
+			m_itemInfoMissing++;
+			m_itemCache.Get(item.itemId, [&](uint64 id, const ItemInfo& itemInfo)
+			{
+				for (auto& lootItem : m_lootItems)
+				{
+					if (lootItem.itemId == id)
+					{
+						lootItem.itemInfo = &itemInfo;
+					}
+				}
+
+				if (m_itemInfoMissing == 1 && m_requestedLootObject != 0)
+				{
+					m_itemInfoMissing = 0;
+
+					// Notify the loot frame manager
+					FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
+				}
+				else
+				{
+					m_itemInfoMissing--;
+				}
+			});
 		}
 
-		DLOG("Loot received - Gold: " << m_lootMoney << "; Items: " << static_cast<uint16>(itemCount));
-
-		// Notify the loot frame manager
-		FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
+		if (m_lootItems.empty())
+		{
+			FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
+		}
 
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult LootClient::OnLootReleaseResponse(game::IncomingPacket& packet)
 	{
-		DLOG("Received SMSG_LOOT_RELEASE_RESPONSE");
-
 		m_lootMoney = 0;
 		m_lootItems.clear();
 		m_lootItems.reserve(12);
@@ -151,7 +230,7 @@ namespace mmo
 		m_requestedLootObject = 0;
 	}
 
-	uint32 LootClient::GetNumLootItems() const
+	uint32 LootClient::GetNumLootSlots() const
 	{
 		uint32 count = static_cast<uint32>(m_lootItems.size());
 
@@ -161,6 +240,11 @@ namespace mmo
 		}
 
 		return count;
+	}
+
+	uint32 LootClient::GetNumLootItems() const
+	{
+		return static_cast<uint32>(m_lootItems.size());
 	}
 
 	bool LootClient::HasMoney() const
