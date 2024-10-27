@@ -142,7 +142,10 @@ namespace mmo
 
 	void LootClient::CloseLoot()
 	{
-		ASSERT(m_requestedLootObject != 0);
+		if (m_requestedLootObject == 0)
+		{
+			return;
+		}
 
 		m_realmConnector.LootRelease(m_requestedLootObject);
 		m_requestedLootObject = 0;

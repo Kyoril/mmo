@@ -2,6 +2,7 @@
 
 #include "player.h"
 
+#include "player_manager.h"
 #include "base/utilities.h"
 #include "game_server/each_tile_in_region.h"
 #include "game_server/each_tile_in_sight.h"
@@ -16,8 +17,9 @@
 
 namespace mmo
 {
-	Player::Player(RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project)
-		: m_connector(realmConnector)
+	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project)
+		: m_manager(playerManager)
+		, m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 		, m_characterData(std::move(characterData))
 		, m_project(project)
@@ -1363,7 +1365,82 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Player " << log_hex_digit(m_character->GetGuid()) << " wants to loot money");
+		uint32 lootGold = m_loot->getGold();
+		if (lootGold == 0)
+		{
+			WLOG("No gold to loot!");
+			return;
+		}
+
+		// Check if it's a creature
+		std::vector<std::shared_ptr<GamePlayerS>> recipients;
+		if (m_lootSource->GetTypeId() == ObjectTypeId::Unit)
+		{
+			// If looting a creature, loot has to be shared between nearby group members
+			std::shared_ptr<GameCreatureS> creature = std::dynamic_pointer_cast<GameCreatureS>(m_lootSource);
+			creature->ForEachLootRecipient([&recipients](std::shared_ptr<GamePlayerS>& recipient)
+			{
+				recipients.push_back(recipient);
+			});
+
+			// If this fires, the creature has no loot recipients added. Please check CreatureAIDeathState::OnEnter!
+			ASSERT(!recipients.empty());
+
+			// Share gold
+			lootGold /= recipients.size();
+			if (lootGold == 0)
+			{
+				lootGold = 1;
+			}
+		}
+		else
+		{
+			// We will be the only recipient
+			recipients.push_back(m_character);
+		}
+
+		// Reward with gold
+		for (const std::shared_ptr<GamePlayerS>& recipient : recipients)
+		{
+			uint32 coinage = recipient->Get<uint32>(object_fields::Money);
+			if (coinage >= std::numeric_limits<uint32>::max() - lootGold)
+			{
+				coinage = std::numeric_limits<uint32>::max();
+			}
+			else
+			{
+				coinage += lootGold;
+			}
+			recipient->Set<uint32>(object_fields::Money, coinage);
+
+			// Notify players
+			if (std::shared_ptr<Player> player = m_manager.GetPlayerByCharacterGuid(recipient->GetGuid()))
+			{
+				if (recipients.size() > 1)
+				{
+					player->SendPacket([lootGold](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::LootMoneyNotify);
+						packet << io::write<uint32>(lootGold);
+						packet.Finish();
+					});
+				}
+
+				// TODO: Put this packet into the LootInstance class or in an event callback maybe
+				if (m_lootSource &&
+					m_lootSource->GetGuid() == m_loot->getLootGuid())
+				{
+					player->SendPacket([lootGold](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::LootClearMoney);
+						packet.Finish();
+					});
+				}
+			}
+		}
+
+		// Take gold (WARNING: May reset m_loot as loot may become empty after this)
+		m_loot->TakeGold();
 	}
 
 	void Player::OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader)

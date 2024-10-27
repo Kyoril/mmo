@@ -480,7 +480,7 @@ namespace mmo
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object
-		auto player = std::make_shared<Player>(*this, characterObject, characterData, m_project);
+		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project);
 		m_playerManager.AddPlayer(player);
 
 		// Enter the world using the character object

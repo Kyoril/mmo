@@ -26,7 +26,7 @@ namespace mmo
 	class Player final : public TileSubscriber, public NetUnitWatcherS
 	{
 	public:
-		explicit Player(RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
+		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
 		                CharacterData characterData, const proto::Project& project);
 		~Player() override;
 
@@ -158,6 +158,7 @@ namespace mmo
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
 	private:
+		PlayerManager& m_manager;
 		RealmConnector& m_connector;
 		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };

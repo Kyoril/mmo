@@ -935,6 +935,22 @@ namespace mmo
 
 	void GameScript::LootSlot(int32 slot, bool force) const
 	{
+		if (slot < 1 || slot > GetNumLootItems())
+		{
+			ELOG("Unable to loot: Invalid slot " << slot);
+			return;
+		}
+
+		if (m_lootClient.HasMoney() && slot == 1)
+		{
+			m_realmConnector.LootMoney();
+		}
+		else
+		{
+			// Loot item from slot
+			m_realmConnector.AutoStoreLootItem(slot);
+		}
+
 		// TODO
 	}
 

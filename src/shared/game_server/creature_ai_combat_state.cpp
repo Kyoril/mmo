@@ -132,6 +132,16 @@ namespace mmo
 		CreatureAIState::OnDamage(attacker);
 
 		GetControlled().AddCombatParticipant(attacker);
+
+		if (attacker.GetTypeId() == ObjectTypeId::Player)
+		{
+			if (!GetControlled().IsTagged())
+			{
+				GetControlled().AddLootRecipient(attacker.GetGuid());
+
+				// TODO: Add group members to the list of loot recipients (TODO: We need a party system ^^)
+			}
+		}
 	}
 
 	void CreatureAICombatState::OnCombatMovementChanged()
