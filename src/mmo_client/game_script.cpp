@@ -699,6 +699,68 @@ namespace mmo
 
 			return s_itemClassStrings[self->itemClass];
 		}
+
+		const char* Script_GetItemSubclass(ItemInfo* self)
+		{
+			static const char* s_itemClassStrings[] = {
+				"CONSUMABLE",
+				"CONTAINER",
+				"WEAPON",
+				"GEM",
+				"ARMOR",
+				"REAGENT",
+				"PROJECTILE",
+				"TRADEGOODS",
+				"GENERIC",
+				"RECIPE",
+				"MONEY",
+				"QUIVER",
+				"QUEST",
+				"KEY",
+				"PERMANENT",
+				"JUNK"
+			};
+
+			static_assert(std::size(s_itemClassStrings) == item_class::Count_, "Item class strings array size mismatch");
+
+			if (!self)
+			{
+				return nullptr;
+			}
+
+			return s_itemClassStrings[self->itemClass];
+		}
+
+		const char* Script_GetItemInventoryType(ItemInfo* self)
+		{
+			static const char* s_itemClassStrings[] = {
+				"CONSUMABLE",
+				"CONTAINER",
+				"WEAPON",
+				"GEM",
+				"ARMOR",
+				"REAGENT",
+				"PROJECTILE",
+				"TRADEGOODS",
+				"GENERIC",
+				"RECIPE",
+				"MONEY",
+				"QUIVER",
+				"QUEST",
+				"KEY",
+				"PERMANENT",
+				"JUNK"
+			};
+
+			static_assert(std::size(s_itemClassStrings) == item_class::Count_, "Item class strings array size mismatch");
+
+			if (!self)
+			{
+				return nullptr;
+			}
+
+			return s_itemClassStrings[self->itemClass];
+		}
 	}
 
 
@@ -788,7 +850,11 @@ namespace mmo
 				.def_readonly("name", &ItemInfo::name)
 				.def_readonly("description", &ItemInfo::description)
 				.def_readonly("quality", &ItemInfo::quality)
-				.def("class", &Script_GetItemClass)
+				.def_readonly("armor", &ItemInfo::armor)
+				.def_readonly("maxdurability", &ItemInfo::maxdurability)
+				.def("GetClass", &Script_GetItemClass)
+				.def("GetInventoryType", &Script_GetItemInventoryType)
+				.def("GetSubclass", &Script_GetItemSubclass)
 				.def_readonly("subclass", &ItemInfo::itemSubclass)
 				.def_readonly("icon", &ItemInfo::icon)),
 

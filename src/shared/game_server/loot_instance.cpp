@@ -40,8 +40,8 @@ namespace mmo
 				//auto shuffled = group;
 				//TODO std::shuffle(shuffled.definitions().begin(), shuffled.definitions().end(), randomGenerator);
 
-				bool foundNonEqualChanced = false;
 				std::vector<const proto::LootDefinition*> equalChanced;
+				std::vector<const proto::LootDefinition*> nonEqualChanced;
 				for (int i = 0; i < group.definitions_size(); ++i)
 				{
 					const auto& def = group.definitions(i);
@@ -80,20 +80,21 @@ namespace mmo
 					if (def.dropchance() > 0.0f &&
 						def.dropchance() >= groupRoll)
 					{
-						AddLootItem(def);
-						foundNonEqualChanced = true;
-						break;
+						nonEqualChanced.push_back(&def);
 					}
-
-					groupRoll -= def.dropchance();
 				}
 
-				if (!foundNonEqualChanced &&
-					!equalChanced.empty())
+				if (nonEqualChanced.empty() && !equalChanced.empty())
 				{
 					std::uniform_int_distribution<uint32> equalDistribution(0, equalChanced.size() - 1);
 					uint32 index = equalDistribution(randomGenerator);
 					AddLootItem(*equalChanced[index]);
+				}
+				else if (!nonEqualChanced.empty())
+				{
+					std::uniform_int_distribution<uint32> nonEqualDistribution(0, nonEqualChanced.size() - 1);
+					uint32 index = nonEqualDistribution(randomGenerator);
+					AddLootItem(*nonEqualChanced[index]);
 				}
 			}
 		}
