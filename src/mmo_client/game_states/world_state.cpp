@@ -33,6 +33,7 @@
 #include "game_client/game_item_c.h"
 #include "ui/world_text_frame.h"
 #include "game/loot.h"
+#include "game_client/game_bag_c.h"
 
 namespace mmo
 {
@@ -692,6 +693,7 @@ namespace mmo
 		uint16 numObjectUpdates;
 		if (!(packet >> io::read<uint16>(numObjectUpdates)))
 		{
+			ELOG("Failed to read update object count!");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -706,6 +708,7 @@ namespace mmo
 				>> io::read<uint8>(typeId)
 				>> io::read<uint8>(creation)))
 			{
+				ELOG("Failed to read object update type");
 				return PacketParseResult::Disconnect;
 			}
 
@@ -725,15 +728,25 @@ namespace mmo
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(m_scene, *this);
 					break;
+				case ObjectTypeId::Container:
+					object = std::make_shared<GameBagC>(m_scene, *this);
+					break;
 				default:
-					object = std::make_shared<GameObjectC>(m_scene);
+					ASSERT(!! "Unknown object type");
 				}
+
+				ASSERT(object);
 
 				object->InitializeFieldMap();
 				object->Deserialize(packet, creation);
 
-				ObjectMgr::AddObject(object);
+				if (!packet)
+				{
+					ELOG("Failed to read object fields of object creation packet #" << i << " (Object type: " << static_cast<int32>(typeId) << ")");
+					return PacketParseResult::Disconnect;
+				}
 
+				ObjectMgr::AddObject(object);
 
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
@@ -811,16 +824,23 @@ namespace mmo
 				uint64 guid;
 				if (!(packet >> io::read_packed_guid(guid)))
 				{
+					ELOG("Failed to read object guid of object update packet #" << i);
 					return PacketParseResult::Disconnect;
 				}
 
 				const auto obj = ObjectMgr::Get<GameObjectC>(guid);
 				if (!obj)
 				{
+					ELOG("Failed to find updated object with guid " << log_hex_digit(guid));
 					return PacketParseResult::Disconnect;
 				}
 
 				obj->Deserialize(packet, creation);
+				if (!packet)
+				{
+					ELOG("Failed to read object fields of object update packet #" << i << " (Object guid: " << log_hex_digit(guid) << ")");
+					return PacketParseResult::Disconnect;
+				}
 
 				if (obj->Get<uint32>(object_fields::Type) == static_cast<uint32>(ObjectTypeId::Unit))
 				{

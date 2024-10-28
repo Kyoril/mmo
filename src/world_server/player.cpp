@@ -26,14 +26,25 @@ namespace mmo
 	{
 		m_character->SetNetUnitWatcher(this);
 
+		// Inventory change signals
+		auto& inventory = m_character->GetInventory();
+
 		m_characterConnections += {
+			// Spawn signals
 			m_character->spawned.connect(*this, &Player::OnSpawned),
 			m_character->despawned.connect(*this, &Player::OnDespawned),
 
+			// Movement signals
 			m_character->tileChangePending.connect(*this, &Player::OnTileChangePending),
 
+			// Spell signals
 			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
-			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned)
+			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
+
+			// Inventory signals
+			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
+			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
+			inventory.itemInstanceDestroyed.connect(this, &Player::OnItemDestroyed),
 		};
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
@@ -52,6 +63,24 @@ namespace mmo
 			tile.GetWatchers().optionalRemove(this);
 			m_worldInstance->RemoveGameObject(*m_character);
 		}
+	}
+
+	void Player::OnItemCreated(std::shared_ptr<GameItemS> item, uint16 slot)
+	{
+		const std::vector<GameObjectS*> objects{ item.get() };
+		NotifyObjectsSpawned(objects);
+	}
+
+	void Player::OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot)
+	{
+		const std::vector<GameObjectS*> objects{ item.get() };
+		NotifyObjectsUpdated(objects);
+	}
+
+	void Player::OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot)
+	{
+		const std::vector<GameObjectS*> objects{ item.get() };
+		NotifyObjectsDespawned(objects);
 	}
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const

@@ -366,6 +366,11 @@ namespace mmo
 		m_x = x;
 		m_y = y;
 
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
 		m_mouseDownTime = GetAsyncTimeMs();
 		m_mouseMoved = 0;
 
@@ -396,6 +401,11 @@ namespace mmo
 	{
 		m_x = x;
 		m_y = y;
+
+		if (!m_controlledUnit)
+		{
+			return;
+		}
 
 		if (button == MouseButton_Left)
 		{
@@ -503,6 +513,11 @@ namespace mmo
 
 	void PlayerController::OnMouseWheel(const int32 delta)
 	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
 		ASSERT(m_cameraNode);
 
 		const float currentZoom = m_cameraNode->GetPosition().z;

@@ -347,6 +347,9 @@ namespace mmo
 	void ItemEditorWindow::OnNewEntry(EntryType& entry)
 	{
 		EditorEntryWindowBase::OnNewEntry(entry);
+
+		// Stack count starts at 1
+		entry.set_maxstack(1);
 	}
 
 	void ItemEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
@@ -422,6 +425,12 @@ namespace mmo
 		ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.0f, 1.0f), "%d c", copper); \
 	}
 
+		// Migration for broken maxstack
+		if (currentEntry.maxstack() == 0)
+		{
+			currentEntry.set_maxstack(1);
+		}
+
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
@@ -444,6 +453,20 @@ namespace mmo
 
 			ImGui::InputText("Description", currentEntry.mutable_description());
 
+			SLIDER_UINT32_PROP(maxcount, "Max Count", 0, 255);
+			SLIDER_UINT32_PROP(maxstack, "Max Stack", 1, 255);
+
+			if (currentEntry.itemclass() == ItemClass::Container)
+			{
+				// Ensure container slot count is clamped
+				if (currentEntry.containerslots() < 1 || currentEntry.containerslots() > 36)
+				{
+					currentEntry.set_containerslots(std::min<uint32>(std::max<uint32>(1, currentEntry.containerslots()), 36));
+				}
+
+				SLIDER_UINT32_PROP(containerslots, "Slot Count", 1, 36);
+			}
+
 			// Class
 			int currentItemClass = currentEntry.itemclass();
 			if (ImGui::Combo("Class", &currentItemClass, [](void*, int idx, const char** out_text)
@@ -459,9 +482,6 @@ namespace mmo
 			{
 				currentEntry.set_itemclass(currentItemClass);
 			}
-
-			SLIDER_UINT32_PROP(maxcount, "Max Count", 0, 255);
-			SLIDER_UINT32_PROP(maxstack, "Max Stack", 0, 255);
 
 			// Subclass
 			const std::vector<String>* subclassStrings = nullptr;

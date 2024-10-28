@@ -130,33 +130,39 @@ namespace mmo
 			m_lootItems.emplace_back(std::move(item));
 
 			m_itemInfoMissing++;
-			m_itemCache.Get(item.itemId, [&](uint64 id, const ItemInfo& itemInfo)
-			{
-				for (auto& lootItem : m_lootItems)
-				{
-					if (lootItem.itemId == id)
-					{
-						lootItem.itemInfo = &itemInfo;
-					}
-				}
-
-				if (m_itemInfoMissing == 1 && m_requestedLootObject != 0)
-				{
-					m_itemInfoMissing = 0;
-
-					// Notify the loot frame manager
-					FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
-				}
-				else
-				{
-					m_itemInfoMissing--;
-				}
-			});
 		}
 
 		if (m_lootItems.empty())
 		{
 			FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
+		}
+		else
+		{
+			for (auto& item : m_lootItems)
+			{
+				m_itemCache.Get(item.itemId, [&](uint64 id, const ItemInfo& itemInfo)
+					{
+						for (auto& lootItem : m_lootItems)
+						{
+							if (lootItem.itemId == id)
+							{
+								lootItem.itemInfo = &itemInfo;
+							}
+						}
+
+						if (m_itemInfoMissing == 1 && m_requestedLootObject != 0)
+						{
+							m_itemInfoMissing = 0;
+
+							// Notify the loot frame manager
+							FrameManager::Get().TriggerLuaEvent("LOOT_OPENED");
+						}
+						else
+						{
+							m_itemInfoMissing--;
+						}
+					});
+			}
 		}
 
 		return PacketParseResult::Pass;

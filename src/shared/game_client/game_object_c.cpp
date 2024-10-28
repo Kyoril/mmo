@@ -73,6 +73,8 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			SetupSceneObjects();
 		}
 		else
 		{
@@ -83,7 +85,5 @@ namespace mmo
 		}
 
 		ASSERT(GetGuid() > 0);
-
-		SetupSceneObjects();
 	}
 }

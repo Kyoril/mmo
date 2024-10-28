@@ -74,6 +74,12 @@ namespace mmo
 
 		bool IsLooting() const;
 
+		void OnItemCreated(std::shared_ptr<GameItemS> item, uint16 slot);
+
+		void OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot);
+
+		void OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot);
+
 	public:
 		TileIndex2D GetTileIndex() const;
 

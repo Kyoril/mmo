@@ -37,7 +37,7 @@ namespace mmo
 		{
 			return m_fieldMap.GetFieldValue<T>(field);
 		}
-
+		
 		virtual void InitializeFieldMap();
 
 	public:
