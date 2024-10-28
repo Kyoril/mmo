@@ -170,8 +170,8 @@ namespace mmo
 						if (ImGui::InputFloat3("Spawn Position", position, "%.3f"))
 						{
 							spawn->set_positionx(position[0]);
-							spawn->set_positionx(position[1]);
-							spawn->set_positionx(position[2]);
+							spawn->set_positiony(position[1]);
+							spawn->set_positionz(position[2]);
 						}
 
 						float rotation = Radian(spawn->rotation()).GetValueDegrees();

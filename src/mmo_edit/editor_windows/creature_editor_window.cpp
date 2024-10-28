@@ -86,7 +86,7 @@ namespace mmo
 					const char* item_text = m_project.unitLoot.getTemplates().entry(i).name().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
-						currentEntry.set_factiontemplate(m_project.unitLoot.getTemplates().entry(i).id());
+						currentEntry.set_unitlootentry(m_project.unitLoot.getTemplates().entry(i).id());
 					}
 					if (item_selected)
 					{

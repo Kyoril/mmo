@@ -583,6 +583,20 @@ namespace mmo
 				ImGui::Text("Durability %d / %d", currentEntry.durability(), currentEntry.durability());
 			}
 
+			// Stats
+			for (int i = 0; i < currentEntry.stats_size(); ++i)
+			{
+				if (currentEntry.stats(i).value() > 0)
+				{
+					ImGui::TextColored(ImColor(0.0f, 1.0f, 0.0f, 1.0f), "+%d %s", currentEntry.stats(i).value(), s_statTypeStrings[currentEntry.stats(i).type()]);
+				}
+				else if(currentEntry.stats(i).value() < 0)
+				{
+					ImGui::TextColored(ImColor(1.0f, 0.0f, 0.0f, 1.0f), "-%d %s", currentEntry.stats(i).value(), s_statTypeStrings[currentEntry.stats(i).type()]);
+				}
+				
+			}
+
 			if (!currentEntry.description().empty())
 			{
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.82f, 0.0f, 1.0f));
@@ -612,38 +626,55 @@ namespace mmo
 					SLIDER_UINT32_PROP(block, "Block", 0, 100000000);
 				}
 
-				for (int32 i = 0; i < 10; ++i)
+				ImGui::BeginDisabled(currentEntry.stats_size() >= 10);
+				if (ImGui::Button("Add Stat"))
 				{
-					ImGui::PushID(i);
+					currentEntry.add_stats()->set_type(0);
+				}
+				ImGui::EndDisabled();
 
-					int32 statType = i >= currentEntry.stats_size() ? -1 : currentEntry.stats(i).type();
-					if (ImGui::BeginCombo("Stat Type", statType < 0 ? "None" : s_statTypeStrings[statType], ImGuiComboFlags_None))
+				if (ImGui::BeginTable("statsTable", 6, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+				{
+					ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableHeadersRow();
+
+					for (int index = 0; index < currentEntry.stats_size(); ++index)
 					{
-						// Remove the stat entry
-						if (ImGui::Selectable("None", false))
-						{
-							currentEntry.mutable_stats()->erase(currentEntry.mutable_stats()->begin() + i);
-						}
+						auto* stat = currentEntry.mutable_stats(index);
 
-						for (int32 j = 0; j < std::size(s_statTypeStrings); ++j)
+						ImGui::PushID(index);
+						ImGui::TableNextRow();
+
+						ImGui::TableNextColumn();
+
+						int32 statType = stat->type();
+						if (ImGui::BeginCombo("Stat Type", statType < 0 ? "None" : s_statTypeStrings[statType], ImGuiComboFlags_None))
 						{
-							if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
+							// Remove the stat entry
+							for (int32 j = 0; j < std::size(s_statTypeStrings); ++j)
 							{
-								if (i >= currentEntry.stats_size())
+								if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
 								{
-									currentEntry.add_stats()->set_type(j);
-								}
-								else
-								{
-									currentEntry.mutable_stats(i)->set_type(j);
+									stat->set_type(j);
 								}
 							}
+
+							ImGui::EndCombo();
 						}
 
-						ImGui::EndCombo();
+						ImGui::TableNextColumn();
+
+						int value = stat->value();
+						if (ImGui::InputInt("##value", &value))
+						{
+							stat->set_value(value);
+						}
+
+						ImGui::PopID();
 					}
 
-					ImGui::PopID();
+					ImGui::EndTable();
 				}
 			}
 
