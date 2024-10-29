@@ -5,7 +5,7 @@
 
 # Modifications by Robin Klimonow (Kyoril) for the mmo project
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 project(luabind)
 
 include_directories(

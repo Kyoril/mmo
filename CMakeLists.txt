@@ -9,7 +9,7 @@ include(FetchContent)
 FetchContent_Declare(
   protobuf
   GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-  GIT_TAG        v3.19.1
+  GIT_TAG        v3.21.12
 )
 
 FetchContent_GetProperties(protobuf)
@@ -21,9 +21,10 @@ if(NOT protobuf_POPULATED)
   set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
   set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
   set(protobuf_BUILD_PROTOC_BINARIES ON CACHE BOOL "" FORCE)
+  set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
 
   # Add the fetched Google Protobuf as a subdirectory
-  add_subdirectory(${protobuf_SOURCE_DIR}/cmake ${protobuf_BINARY_DIR})
+  add_subdirectory(${protobuf_SOURCE_DIR} ${protobuf_BINARY_DIR})
   
   set_property(TARGET libprotobuf PROPERTY FOLDER "deps")
   set_property(TARGET libprotobuf-lite PROPERTY FOLDER "deps")
