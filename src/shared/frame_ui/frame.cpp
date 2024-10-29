@@ -40,7 +40,7 @@ namespace mmo
 			// Apply renderer property
 			other.SetRenderer(m_renderer->GetName());
 		}
-		
+
 		// Apply other properties
 		other.m_enabled = m_enabled;
 		other.m_visible = m_visible;
@@ -115,7 +115,7 @@ namespace mmo
 		for (const auto& child : m_children)
 		{
 			// Create a copy of the child frame
-			FramePtr copiedChild = FrameManager::Get().Create(m_type, other.GetName() + "_" + child->GetName(), true);
+			FramePtr copiedChild = FrameManager::Get().Create(child->GetType(), other.GetName() + "_" + child->GetName(), true);
 			ASSERT(copiedChild);
 
 			// Copy properties over to child frame

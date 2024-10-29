@@ -50,6 +50,7 @@ namespace mmo
 		FrameRenderer::NotifyFrameAttached();
 
 		m_button = dynamic_cast<Button*>(m_frame);
+		ASSERT(m_button);
 	}
 
 	void ButtonRenderer::NotifyFrameDetached()
