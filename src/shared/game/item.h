@@ -105,7 +105,9 @@ namespace mmo
 			Spear,
 			CrossBow,
 			Wand,
-			FishingPole
+			FishingPole,
+
+			Count_
 		};
 	}
 
@@ -270,7 +272,9 @@ namespace mmo
 			Thrown,
 			RangedRight,
 			Quiver,
-			Relic
+			Relic,
+
+			Count_
 		};
 	}
 

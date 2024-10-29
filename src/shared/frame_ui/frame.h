@@ -222,6 +222,10 @@ namespace mmo
 		/// Sets whether this frame is clipped by it's parent frame.
 		void SetClippedByParent(bool clipped);
 
+		int32 GetX() const { return static_cast<int32>(m_absRectCache.GetPosition().x); }
+
+		int32 GetY() const { return static_cast<int32>(m_absRectCache.GetPosition().y); }
+
 		/// Returns the position of this frame set by the position property. Keep in mind, that
 		/// this might not represent the actual frame position on screen, as Anchors have higher
 		/// priority than this setting, which is only a fallback if no anchors are set.

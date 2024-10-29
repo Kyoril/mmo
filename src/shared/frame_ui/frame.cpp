@@ -836,7 +836,14 @@ namespace mmo
 	{
 		if (m_onShow)
 		{
-			m_onShow(this);
+			try
+			{
+				m_onShow(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << GetName() << ":OnShow: " << e.what());
+			}
 		}
 
 		for(const auto& child : m_children)
@@ -849,7 +856,14 @@ namespace mmo
 	{
 		if (m_onHide)
 		{
-			m_onHide(this);
+			try
+			{
+				m_onHide(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << GetName() << ":OnHide: " << e.what());
+			}
 		}
 
 		for (const auto& child : m_children)
@@ -862,7 +876,14 @@ namespace mmo
 	{
 		if (m_onEnter.is_valid())
 		{
-			m_onEnter(this);
+			try
+			{
+				m_onEnter(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << GetName() << ":OnEnter: " << e.what());
+			}
 		}
 	}
 
@@ -870,7 +891,14 @@ namespace mmo
 	{
 		if (m_onLeave.is_valid())
 		{
-			m_onLeave(this);
+			try
+			{
+				m_onLeave(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << GetName() << ":OnLeave: " << e.what());
+			}
 		}
 	}
 
