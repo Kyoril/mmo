@@ -814,7 +814,7 @@ namespace mmo
 			return *m_targetAuraContainers[&target];
 		}
 
-		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell.id(), m_spell.duration()));
+		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, m_spell.duration()));
 		return *container;
 	}
 

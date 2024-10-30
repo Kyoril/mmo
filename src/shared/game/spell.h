@@ -297,6 +297,9 @@ namespace mmo
 			/// Spell is executed on next weapon swing.
 			OnNextSwing = 0x00000004,
 
+			/// Allows the aura to be applied by multiple casters on the same target.
+			OnlyOneStackTotal = 0x00000008,
+
 			/// Spell is a player ability.
 			Ability = 0x00000010,
 

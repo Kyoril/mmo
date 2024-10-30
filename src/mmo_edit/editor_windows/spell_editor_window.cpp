@@ -353,6 +353,7 @@ namespace mmo
 			CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
 			CHECKBOX_ATTR_PROP(0, "Ranged", spell_attributes::Ranged);
 			CHECKBOX_ATTR_PROP(0, "On Next Swing", spell_attributes::OnNextSwing);
+			CHECKBOX_ATTR_PROP(0, "Only One Stack Total", spell_attributes::OnlyOneStackTotal);
 			CHECKBOX_ATTR_PROP(0, "Ability", spell_attributes::Ability);
 			CHECKBOX_ATTR_PROP(0, "Trade Spell", spell_attributes::TradeSpell);
 			CHECKBOX_ATTR_PROP(0, "Passive", spell_attributes::Passive);

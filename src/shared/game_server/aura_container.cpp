@@ -8,10 +8,10 @@
 
 namespace mmo
 {
-	AuraContainer::AuraContainer(GameUnitS& owner, uint64 casterId, uint32 spellId, GameTime duration)
+	AuraContainer::AuraContainer(GameUnitS& owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration)
 		: m_owner(owner)
 		, m_casterId(casterId)
-		, m_spellId(spellId)
+		, m_spell(spell)
 		, m_duration(duration)
 		, m_expirationCountdown(owner.GetTimers())
 	{
@@ -96,6 +96,11 @@ namespace mmo
 		return m_duration > 0 && m_expiration <= GetAsyncTimeMs();
 	}
 
+	uint32 AuraContainer::GetSpellId() const
+	{
+		return m_spell.id();
+	}
+
 	int32 AuraContainer::GetMaximumBasePoints(const AuraType type) const
 	{
 		int32 threshold = 0;
@@ -155,26 +160,32 @@ namespace mmo
 
 	bool AuraContainer::ShouldOverwriteAura(AuraContainer& other) const
 	{
+		// NOTE: If we return true here, the other aura will be removed and replaced by this aura container instead
+
 		if (&other == this)
 		{
 			return true;
 		}
 
 		const bool sameSpellId = other.GetSpellId() == GetSpellId();
-		const bool stackForDifferentCasters = true;
+		const bool onlyOneStackTotal = (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
 		const bool sameCaster = other.GetCasterId() == GetCasterId();
 		const bool sameItem = false;
 
+		// Right now, same caster and same spell id means we overwrite the old aura with this one
+		// TODO: maybe add some settings here to explicitly allow stacking?
 		if (sameCaster && sameSpellId)
 		{
 			return true;
 		}
 
-		if (sameSpellId && !sameCaster && stackForDifferentCasters)
+		// Same spell but different casters: If we allow stacking for different casters
+		if (sameSpellId && !sameCaster && onlyOneStackTotal)
 		{
-			return false;
+			return true;
 		}
 
+		// Should not overwrite, but create a whole new aura
 		return false;
 	}
 

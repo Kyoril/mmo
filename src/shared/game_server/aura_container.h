@@ -10,6 +10,7 @@ namespace mmo
 {
 	namespace proto
 	{
+		class SpellEntry;
 		class SpellEffect;
 	}
 
@@ -29,7 +30,7 @@ namespace mmo
 	public:
 
 		/// Initializes a new AuraContainer for a specific owner unit.
-		explicit AuraContainer(GameUnitS &owner, uint64 casterId, uint32 spellId, GameTime duration);
+		explicit AuraContainer(GameUnitS &owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration);
 
 		~AuraContainer();
 
@@ -56,10 +57,7 @@ namespace mmo
 			return m_casterId;
 		}
 
-		uint32 GetSpellId() const
-		{
-			return m_spellId;
-		}
+		uint32 GetSpellId() const;
 
 		GameTime GetDuration() const
 		{
@@ -96,7 +94,7 @@ namespace mmo
 
 		uint64 m_casterId;
 
-		uint32 m_spellId;
+		const proto::SpellEntry& m_spell;
 
 		std::vector<Aura> m_auras;
 
