@@ -14,6 +14,7 @@
 #include "imgui_node_editor.h"
 #include "link_query_result.h"
 #include "node_type_info.h"
+#include "base/signal.h"
 #include "graphics/material_compiler.h"
 
 namespace ed = ax::NodeEditor;
@@ -213,6 +214,9 @@ namespace mmo
 	class PropertyBase
 	{
 	public:
+		signal<void()> OnValueChanged;
+
+	public:
 		typedef std::variant<int32, float, String, bool, AssetPathValue, Color> ValueType;
 
 	public:
@@ -240,7 +244,7 @@ namespace mmo
 
 		/// @brief Sets the value of this property.
 		/// @param value The new value to use.
-		virtual void SetValue(const ValueType& value) noexcept { m_value = value; }
+		virtual void SetValue(const ValueType& value) noexcept { m_value = value; OnValueChanged(); }
 
 	protected:
 		std::string m_name;
@@ -271,8 +275,8 @@ namespace mmo
 				return;
 			}
 
-			PropertyBase::SetValue(value);
 			m_ref = *newValue;
+			PropertyBase::SetValue(value);
 		}
 
 	protected:
@@ -508,8 +512,12 @@ namespace mmo
 
 	    ConstFloatNode(MaterialGraph& material)
 			: GraphNode(material)
-		{}
-		
+	    {
+			m_valueChangedConnection = m_valueProperty.OnValueChanged.connect([this] { m_valueString = std::to_string(m_value); });
+	    }
+
+		[[nodiscard]] std::string_view GetName() const override { return m_valueString; }
+
 	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
@@ -521,6 +529,9 @@ namespace mmo
 	private:
 		float m_value { 0.0f };
 		FloatProperty m_valueProperty { "Value", m_value };
+
+		scoped_connection m_valueChangedConnection;
+		String m_valueString;
 
 		PropertyBase* m_properties[1] = { &m_valueProperty };
 
@@ -545,6 +556,8 @@ namespace mmo
 		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
 
 		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
 
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
@@ -658,6 +671,8 @@ namespace mmo
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
@@ -1308,7 +1323,7 @@ namespace mmo
 
 		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
 
-		[[nodiscard]] std::string_view GetName() const { return m_textureName; }
+		[[nodiscard]] std::string_view GetName() const override { return m_textureName; }
 
 		void SetName(const std::string_view name) { m_textureName = name; }
 

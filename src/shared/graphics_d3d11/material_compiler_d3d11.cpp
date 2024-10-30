@@ -795,7 +795,7 @@ namespace mmo
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat metallic = expr_" << m_opacityExpression << ".r;\n\n";
+				m_pixelShaderStream << "\tfloat opacity = expr_" << m_opacityExpression << ".r;\n\n";
 			}
 		}
 		else
