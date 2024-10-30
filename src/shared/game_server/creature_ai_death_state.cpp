@@ -124,11 +124,6 @@ namespace mmo
 				strongCharacter->RewardExperience(xp * rate);
 			}
 
-			controlled.ForEachCombatParticipant([xp](GamePlayerS& player)
-				{
-					player.RewardExperience(xp);
-				});
-
 			const auto* lootEntry = controlled.GetProject().unitLoot.getById(entry.unitlootentry());
 
 			if (lootEntry)
