@@ -19,7 +19,7 @@ namespace mmo
 	{
 	public:
 		/// Type of a field index. Also determines the maximum amount of fields.
-		typedef uint8 FieldIndexType;
+		typedef uint16 FieldIndexType;
 
 		static constexpr size_t MaxFieldCount = 1 << std::numeric_limits<FieldIndexType>::digits;
 		

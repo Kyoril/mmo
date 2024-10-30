@@ -20,4 +20,21 @@ namespace mmo
 
 
     Matrix4 MakeViewMatrix(const Vector3& position, const Quaternion& orientation);
+
+	template<class T>
+	T Interpolate(T min, T max, float t)
+	{
+		// Some optimization
+		if (t <= 0.0f)
+		{
+			return min;
+		}
+		else if (t >= 1.0f)
+		{
+			return max;
+		}
+
+		// Linear interpolation
+		return min + (max - min) * t;
+	}
 }

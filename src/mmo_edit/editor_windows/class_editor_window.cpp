@@ -240,6 +240,49 @@ namespace mmo
 			ImGui::EndChildFrame();
 		}
 
+
+		if (ImGui::CollapsingHeader("Experience Points", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::PlotLines("XP to next level", [](void* data, int idx) -> float
+				{
+					EntryType* entry = (EntryType*)data;
+					return static_cast<float>(entry->xptonextlevel(idx));
+				}, &currentEntry, currentEntry.xptonextlevel_size(), 0, 0, FLT_MAX, FLT_MAX, ImVec2(0, 200));
+
+
+			if (ImGui::Button("Add Value", ImVec2(-1, 0)))
+			{
+				currentEntry.add_xptonextlevel(currentEntry.xptonextlevel_size() == 0 ? 400 : currentEntry.xptonextlevel(currentEntry.xptonextlevel_size() - 1) * 2);
+			}
+
+			if (ImGui::BeginTable("xpToNextLevelTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("XP", ImGuiTableColumnFlags_None);
+				ImGui::TableHeadersRow();
+
+				int value = 0;
+
+				for (int index = 0; index < currentEntry.xptonextlevel_size(); ++index)
+				{
+					ImGui::PushID(index);
+
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+					ImGui::Text("%d", index + 1);
+
+					ImGui::TableNextColumn();
+					value = currentEntry.xptonextlevel(index);
+					if (ImGui::InputInt("##xp", &value)) currentEntry.set_xptonextlevel(index, value);
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Attack Power", ImGuiTreeNodeFlags_None))
 		{
 			float offset = currentEntry.attackpoweroffset();

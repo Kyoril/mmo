@@ -183,7 +183,7 @@ namespace mmo
 		currentXp += xp;
 
 		// Levelup as often as required
-		while(currentXp > Get<uint32>(object_fields::NextLevelXp))
+		while(currentXp >= Get<uint32>(object_fields::NextLevelXp))
 		{
 			currentXp -= Get<uint32>(object_fields::NextLevelXp);
 			SetLevel(Get<uint32>(object_fields::Level) + 1);
@@ -268,6 +268,8 @@ namespace mmo
 			return;
 		}
 
+		ASSERT(m_classEntry);
+
 		// Exceed max level?
 		if (newLevel > Get<int32>(object_fields::MaxLevel))
 		{
@@ -285,7 +287,26 @@ namespace mmo
 		GameUnitS::SetLevel(newLevel);
 
 		// Update next level xp
-		Set<uint32>(object_fields::NextLevelXp, 400 * newLevel);
+		uint32 xpToNextLevel = 400 * newLevel;		// Dummy default value
+		if (newLevel - 1 >= m_classEntry->xptonextlevel_size())
+		{
+			if (m_classEntry->xptonextlevel_size() == 0)
+			{
+				WLOG("Class " << m_classEntry->name() << " has no experience points per level set, a default value will be used!");
+			}
+			else
+			{
+				WLOG("Class " << m_classEntry->name() << " has no experience points per level set for level " << newLevel << ", value from last level will be used!");
+				xpToNextLevel = m_classEntry->xptonextlevel(m_classEntry->xptonextlevel_size() - 1);
+			}
+		}
+		else
+		{
+			xpToNextLevel = m_classEntry->xptonextlevel(newLevel - 1);
+		}
+
+		Set<uint32>(object_fields::NextLevelXp, xpToNextLevel);
+		
 	}
 
 	void GamePlayerS::UpdateDamage()

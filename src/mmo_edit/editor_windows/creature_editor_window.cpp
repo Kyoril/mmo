@@ -8,6 +8,13 @@
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 
+namespace ImGui
+{
+	void BeginGroupPanel(const char* name, const ImVec2& size = ImVec2(-1.0f, -1.0f));
+
+	void EndGroupPanel();
+}
+
 namespace mmo
 {
 	CreatureEditorWindow::CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host)
@@ -181,15 +188,33 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
 		{
-			SLIDER_UINT32_PROP(minlevel, "Min Level", 1, 100);
-			SLIDER_UINT32_PROP(maxlevel, "Max Level", 1, 100);
-			SLIDER_UINT32_PROP(minlevelhealth, "Min Level health", 1, 200000000);
-			SLIDER_UINT32_PROP(maxlevelhealth, "Max Level health", 1, 200000000);
+			ImGui::BeginGroupPanel("Level");
+			SLIDER_UINT32_PROP(minlevel, "Min", 1, 100);
+			SLIDER_UINT32_PROP(maxlevel, "Max", 1, 100);
+			ImGui::EndGroupPanel();
+
+			ImGui::BeginGroupPanel("Health");
+			SLIDER_UINT32_PROP(minlevelhealth, "Min", 1, 200000000);
+			SLIDER_UINT32_PROP(maxlevelhealth, "Max", 1, 200000000);
+			ImGui::EndGroupPanel();
+
+			ImGui::BeginGroupPanel("Experience");
+			SLIDER_UINT32_PROP(minlevelxp, "Min Level XP", 0, 10000000);
+			SLIDER_UINT32_PROP(maxlevelxp, "Max Level XP", 0, 10000000);
+			if (ImGui::Button("Calculate XP"))
+			{
+				const float eliteFactor = currentEntry.rank() > 0 ? 2.0f : 1.0f;
+				currentEntry.set_minlevelxp((currentEntry.minlevel() * 5 + 45) * eliteFactor);
+				currentEntry.set_maxlevelxp((currentEntry.maxlevel() * 5 + 45) * eliteFactor);
+			}
+			ImGui::EndGroupPanel();
 
 			SLIDER_UINT32_PROP(armor, "Armor", 0, 100000);
 
+			ImGui::BeginGroupPanel("Damage");
 			SLIDER_FLOAT_PROP(minmeleedmg, "Min Melee Dmg", 0.0f, 10000000.0f);
 			SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
+			ImGui::EndGroupPanel();
 		}
 	}
 

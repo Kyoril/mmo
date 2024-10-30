@@ -395,6 +395,8 @@ namespace mmo
 
 		const proto::FactionTemplateEntry* GetFactionTemplate() const;
 
+		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 

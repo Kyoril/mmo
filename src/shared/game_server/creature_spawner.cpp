@@ -3,7 +3,6 @@
 #include "world_instance.h"
 #include "world_instance_manager.h"
 #include "game_unit_s.h"
-//#include "game_creature_s.h"
 #include "game_creature_s.h"
 #include "universe.h"
 #include "base/erase_by_move.h"

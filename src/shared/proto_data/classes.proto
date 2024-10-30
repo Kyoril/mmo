@@ -54,7 +54,7 @@ message ClassEntry {
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
 
-
+	repeated uint32 xpToNextLevel = 17;
 }
 
 message Classes {

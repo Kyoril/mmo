@@ -431,12 +431,20 @@ namespace mmo
 
 				// Backpack?
 				uint64 itemGuid = 0;
-				if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0)
+				if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 && 
+					(slotId & 0xFF) >= player_inventory_pack_slots::Start && 
+					(slotId & 0xFF) < player_inventory_pack_slots::End)
 				{
 					const uint8 slotFieldOffset = (static_cast<uint8>(slotId & 0xFF) - player_inventory_slots::End) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
 				}
-
+				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
+					(slotId & 0xFF) >= player_equipment_slots::Start &&
+					(slotId & 0xFF) < player_equipment_slots::End)
+				{
+					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
+					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+				}
 
 
 				if (itemGuid == 0)

@@ -267,8 +267,9 @@ namespace mmo
 					
 					if (IsEquipmentSlot(slot))
 					{
-						m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
-						m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
+						constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+						m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
+						m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
 						m_owner.ApplyItemStats(*item, true);
 					}
 				}
@@ -403,8 +404,9 @@ namespace mmo
 			
 			if (IsEquipmentSlot(targetSlot))
 			{
-				m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
-				m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
+				constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+				m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
+				m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
 				m_owner.ApplyItemStats(*item, true);
 			}
 		}
@@ -545,8 +547,9 @@ namespace mmo
 
 				if (IsEquipmentSlot(absoluteSlot))
 				{
-					m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
-					m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
+					constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+					m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
+					m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
 					m_owner.ApplyItemStats(*item, false);
 				}
 			}
@@ -881,8 +884,9 @@ namespace mmo
 		// Update visuals
 		if (IsEquipmentSlot(slotA))
 		{
-			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + ((slotA & 0xFF) * 16), (dstItem ? dstItem->GetEntry().id() : 0));
-			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + ((slotA & 0xFF) * 16), (dstItem ? dstItem->Get<uint64>(object_fields::Creator) : 0));
+			constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + ((slotA & 0xFF) * slotSize), (dstItem ? dstItem->GetEntry().id() : 0));
+			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + ((slotA & 0xFF) * slotSize), (dstItem ? dstItem->Get<uint64>(object_fields::Creator) : 0));
 			m_owner.ApplyItemStats(*srcItem, false);
 			if (srcItem->GetEntry().itemset() != 0)
 			{
@@ -899,8 +903,9 @@ namespace mmo
 		}
 		if (IsEquipmentSlot(slotB))
 		{
-			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + ((slotB & 0xFF) * 16), srcItem->GetEntry().id());
-			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + ((slotB & 0xFF) * 16), srcItem->Get<uint64>(object_fields::Creator));
+			constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + ((slotB & 0xFF) * slotSize), srcItem->GetEntry().id());
+			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + ((slotB & 0xFF) * slotSize), srcItem->Get<uint64>(object_fields::Creator));
 			m_owner.ApplyItemStats(*srcItem, true);
 			if (srcItem->GetEntry().itemset() != 0)
 			{
@@ -1580,9 +1585,12 @@ namespace mmo
 
 					if (IsEquipmentSlot(data.slot))
 					{
+						// Ensure slot size is valid
+						constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+
 						m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
-						m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * 16), item->GetEntry().id());
-						m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * 16), item->Get<uint64>(object_fields::Creator));
+						m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
+						m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
 						m_owner.ApplyItemStats(*item, true);
 						if (item->GetEntry().itemset() != 0)
 						{
