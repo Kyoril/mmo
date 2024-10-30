@@ -438,6 +438,21 @@ namespace mmo
 		// First, close a potential previous loot dialog
 		CloseLootDialog();
 
+		if (!source)
+		{
+			WLOG("No loot source given!");
+			return;
+		}
+
+		// Check if the distance is okay
+		if (source->HasMovementInfo() &&
+			m_character->GetSquaredDistanceTo(source->GetPosition(), true) >= LootDistance * LootDistance)
+		{
+			// Distance is too big
+			WLOG("Player tried to open loot of target which is too far away!");
+			return;
+		}
+
 		m_loot = lootInstance;
 		m_lootSource = source;
 
@@ -1074,6 +1089,16 @@ namespace mmo
 			return;
 		}
 
+		// Check if the distance is okay
+		if (m_lootSource &&
+			m_lootSource->HasMovementInfo() &&
+			m_character->GetSquaredDistanceTo(m_lootSource->GetPosition(), true) >= LootDistance * LootDistance)
+		{
+			// Distance is too big
+			WLOG("Player tried to open loot of target which is too far away!");
+			return;
+		}
+
 		const LootItem* lootItem = m_loot->GetLootDefinition(lootSlot);
 		if (!lootItem)
 		{
@@ -1391,6 +1416,16 @@ namespace mmo
 		if (!m_loot)
 		{
 			ELOG("Player tried to loot money without having a loot window open");
+			return;
+		}
+
+		// Check if the distance is okay
+		if (m_lootSource &&
+			m_lootSource->HasMovementInfo() &&
+			m_character->GetSquaredDistanceTo(m_lootSource->GetPosition(), true) >= LootDistance * LootDistance)
+		{
+			// Distance is too big
+			WLOG("Player tried to open loot of target which is too far away!");
 			return;
 		}
 

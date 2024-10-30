@@ -1,8 +1,12 @@
 
 #pragma once
 
+#include "base/typedefs.h"
+
 namespace mmo
 {
+	// Loot distance is 5 meters.
+	constexpr float LootDistance = 5.0f;
 
 	namespace loot_error
 	{

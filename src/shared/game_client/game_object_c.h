@@ -77,6 +77,8 @@ namespace mmo
 			return Radian(ang);
 		}
 
+		bool IsWithinRange(GameObjectC& other, float range) const;
+
 		virtual const String& GetName() const;
 
 	public:

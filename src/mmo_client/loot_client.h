@@ -38,6 +38,10 @@ namespace mmo
 		void Shutdown();
 
 	public:
+		bool IsLooting() const { return m_requestedLootObject != 0; }
+
+		uint64 GetLootedObjectGuid() const { return m_requestedLootObject; }
+
 		void LootObject(const GameObjectC& object);
 
 		void CloseLoot();

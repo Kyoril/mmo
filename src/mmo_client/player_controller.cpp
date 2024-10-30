@@ -16,6 +16,8 @@
 #include "platform.h"
 #include "console/console.h"
 #include "frame_ui/frame_mgr.h"
+#include "game/loot.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -330,6 +332,16 @@ namespace mmo
 		ApplyLocalMovement(deltaSeconds);
 		UpdateHeartbeat();
 
+		// When we are looting, check the distance to the looted object on movement
+		if (m_lootClient.IsLooting() && m_controlledUnit->GetMovementInfo().IsMoving())
+		{
+			const auto lootedObject = ObjectMgr::Get<GameObjectC>(m_lootClient.GetLootedObjectGuid());
+			if (lootedObject && !m_controlledUnit->IsWithinRange(*lootedObject, LootDistance))
+			{
+				m_lootClient.CloseLoot();
+			}
+		}
+
 		// Fire unit raycast
 		m_selectionSceneQuery->ClearResult();
 		m_selectionSceneQuery->SetSortByDistance(true);
@@ -352,13 +364,9 @@ namespace mmo
 			}
 		}
 
-		if (newHoveredUnit != m_hoveredUnit)
-		{
-			GameUnitC* previousUnit = m_hoveredUnit;
-			m_hoveredUnit = newHoveredUnit;
-
-			OnHoveredUnitChanged(previousUnit);
-		}
+		GameUnitC* previousUnit = m_hoveredUnit;
+		m_hoveredUnit = newHoveredUnit;
+		OnHoveredUnitChanged(previousUnit);
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -431,8 +439,15 @@ namespace mmo
 				{
 					if (m_hoveredUnit->CanBeLooted())
 					{
-						// Open the loot dialog if we are close enough
-						m_lootClient.LootObject(*m_hoveredUnit);
+						if (m_controlledUnit->IsWithinRange(*m_hoveredUnit, LootDistance))
+						{
+							// Open the loot dialog if we are close enough
+							m_lootClient.LootObject(*m_hoveredUnit);
+						}
+						else
+						{
+							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
+						}
 					}
 					else
 					{

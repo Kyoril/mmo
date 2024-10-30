@@ -53,6 +53,12 @@ namespace mmo
 		return false;
 	}
 
+	bool GameObjectC::IsWithinRange(GameObjectC& other, float range) const
+	{
+		const auto diff = other.GetPosition() - GetPosition();
+		return diff.GetSquaredLength() <= range * range;
+	}
+
 	const String& GameObjectC::GetName() const
 	{
 		static String unknown = "Unknown";
