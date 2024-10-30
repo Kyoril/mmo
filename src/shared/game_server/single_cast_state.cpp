@@ -4,6 +4,7 @@
 #include "no_cast_state.h"
 
 #include "base/utilities.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
@@ -271,8 +272,7 @@ namespace mmo
 
 		if (unitTarget && m_spell.has_rangetype())
 		{
-			// TODO: Resolve range type from project (we don't have a project reference here yet!)
-			const proto::RangeType* rangeType = nullptr;
+			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());
 			if (rangeType && rangeType->range() > 0.0f)
 			{
 				// If distance is too big, cancel casting. Note we use squared distance check as distance involves sqrt which is more expansive

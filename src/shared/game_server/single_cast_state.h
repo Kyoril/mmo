@@ -134,6 +134,7 @@ namespace mmo
 
 	private:
 
+
 		bool ConsumeItem(bool delayed = true);
 
 		bool ConsumeReagents(bool delayed = true);

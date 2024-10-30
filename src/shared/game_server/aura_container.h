@@ -77,6 +77,8 @@ namespace mmo
 
 		float GetTotalMultiplier(AuraType type) const;
 
+		bool ShouldOverwriteAura(AuraContainer& other) const;
+
 	private:
 		void HandleModStat(const Aura& aura, bool apply);
 

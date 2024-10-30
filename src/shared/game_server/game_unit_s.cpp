@@ -557,6 +557,16 @@ namespace mmo
 	{
 		ASSERT(aura);
 
+		// Remove existing auras first
+		for (auto it = m_auras.begin(); it != m_auras.end();)
+		{
+			if (auto& existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
+			{
+				it = m_auras.erase(it);
+			}
+		}
+
+		// Apply new aura
 		const auto& appliedAura = m_auras.emplace_back(std::move(aura));
 		appliedAura->SetApplied(true);
 	}

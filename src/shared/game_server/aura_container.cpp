@@ -153,6 +153,31 @@ namespace mmo
 		return multiplier;
 	}
 
+	bool AuraContainer::ShouldOverwriteAura(AuraContainer& other) const
+	{
+		if (&other == this)
+		{
+			return true;
+		}
+
+		const bool sameSpellId = other.GetSpellId() == GetSpellId();
+		const bool stackForDifferentCasters = true;
+		const bool sameCaster = other.GetCasterId() == GetCasterId();
+		const bool sameItem = false;
+
+		if (sameCaster && sameSpellId)
+		{
+			return true;
+		}
+
+		if (sameSpellId && !sameCaster && stackForDifferentCasters)
+		{
+			return false;
+		}
+
+		return false;
+	}
+
 	void AuraContainer::HandleModStat(const Aura& aura, bool apply)
 	{
 		const int32 stat = aura.effect->miscvaluea();
