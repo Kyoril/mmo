@@ -107,7 +107,7 @@ namespace mmo
 		void OnLoginError(auth::AuthResult result);
 
 		/// Adds a termination event to the global queue to terminate the server after a certain amount of time.
-		void QueueTermination();
+		void QueueReconnect();
 
 		/// Sends the set of map ids that can be hosted to the realm server.
 		void PropagateHostedMapIds();
@@ -150,7 +150,7 @@ namespace mmo
 		/// Whether the realm connector will request application termination due to wrong login requests at the
 		/// realm server (termination is logical since we have to guess for wrong credentials, which can only be
 		/// fixed after a server restart anyway).
-		bool m_willTerminate;
+		bool m_willReconnect;
 
 		std::vector<uint64> m_hostedMapIds;
 

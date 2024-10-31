@@ -29,7 +29,7 @@ namespace mmo
 		, m_timerQueue(queue)
 		, m_playerManager(playerManager)
 		, m_worldInstanceManager(worldInstanceManager)
-		, m_willTerminate(false)
+		, m_willReconnect(false)
 		, m_project(project)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
@@ -65,6 +65,9 @@ namespace mmo
 		// Reset calculated hash values
 		M1hash.fill(0);
 		M2hash.fill(0);
+
+		// Clear all packet handlers just to be sure
+		m_packetHandlers.clear();
 	}
 	
 	void RealmConnector::DoSRP6ACalculation()
@@ -245,26 +248,32 @@ namespace mmo
 	{
 		// Output error code in chat before terminating the application
 		ELOG("[Realm Server] Could not authenticate world at realm server. Error code 0x" << std::hex << static_cast<uint16>(result));
-		QueueTermination();
+		QueueReconnect();
 	}
 
-	void RealmConnector::QueueTermination()
+	void RealmConnector::QueueReconnect()
 	{
 		// Prevent double timer
-		if (m_willTerminate)
+		if (m_willReconnect)
 		{
 			return;
 		}
 
+		Reset();
+		close();
+
+		m_willReconnect = true;
+
+
 		// Termination callback
-		const auto termination = [this]() {
-			// TODO: might need to change this to a global event to trigger instead in case we have more than one major io service object
-			m_ioService.stop();
+		const auto reconnect = [this]() {
+			m_willReconnect = false;
+			connect(m_realmAddress, m_realmPort, *this, m_ioService);
 		};
 
 		// Notify the user
-		WLOG("Server will terminate in 5 seconds...");
-		m_timerQueue.AddEvent(termination, m_timerQueue.GetNow() + constants::OneSecond * 5);
+		WLOG("Reconnect in 5 seconds...");
+		m_timerQueue.AddEvent(reconnect, m_timerQueue.GetNow() + constants::OneSecond * 5);
 	}
 
 	void RealmConnector::PropagateHostedMapIds()
@@ -366,7 +375,7 @@ namespace mmo
 			{
 				// Output error code in chat before terminating the application
 				ELOG("[Login Server] Could not authenticate world at realm server, hash mismatch detected!");
-				QueueTermination();
+				QueueReconnect();
 
 				return PacketParseResult::Disconnect;
 			}
@@ -645,10 +654,12 @@ namespace mmo
 
 		// Clear packet handlers
 		ClearPacketHandlers();
+		QueueReconnect();
 	}
 
 	void RealmConnector::connectionMalformedPacket()
 	{
 		ELOG("Received a malformed packet");
+		QueueReconnect();
 	}
 }
