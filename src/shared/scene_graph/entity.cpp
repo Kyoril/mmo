@@ -64,6 +64,20 @@ namespace mmo
 		return m_animationStates.get();
 	}
 
+	void Entity::SetMesh(MeshPtr mesh)
+	{
+		m_initialized = false;
+
+		m_animationStates.reset();
+		m_skeleton.reset();
+		m_boneMatrices.clear();
+		m_subEntities.clear();
+
+		m_mesh = mesh;
+
+		Initialize();
+	}
+
 	void Entity::PopulateRenderQueue(RenderQueue& renderQueue)
 	{
 		for (const auto& subEntity : m_subEntities)

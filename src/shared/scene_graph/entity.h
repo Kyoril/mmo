@@ -48,6 +48,8 @@ namespace mmo
 
 		AnimationStateSet* GetAllAnimationStates() const;
 
+		void SetMesh(MeshPtr mesh);
+
 	public:
 		/// @copydoc MovableObject::SetCurrentCamera
 		virtual void SetCurrentCamera(Camera& cam) override;

@@ -6,6 +6,11 @@
 
 namespace mmo
 {
+	class SelectableVisitor;
+}
+
+namespace mmo
+{
 	class Selectable
 	{
 	public:
@@ -21,6 +26,8 @@ namespace mmo
 		virtual ~Selectable() = default;
 
 	public:
+		virtual void Visit(SelectableVisitor& visitor) = 0;
+
 		virtual void Duplicate() = 0;
 
 		/// Translates the selected object.

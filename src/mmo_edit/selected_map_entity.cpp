@@ -79,4 +79,9 @@ namespace mmo
 			m_duplication(*this);
 		}
     }
+
+    void SelectedMapEntity::Visit(SelectableVisitor& visitor)
+    {
+        visitor.Visit(*this);
+    }
 }

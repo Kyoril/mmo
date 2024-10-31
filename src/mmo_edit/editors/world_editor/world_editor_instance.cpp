@@ -16,6 +16,7 @@
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {
@@ -245,6 +246,7 @@ namespace mmo
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
 
+		m_transformWidget.reset();
 		m_mapEntities.clear();
 		m_worldGrid.reset();
 		m_scene.Clear();
@@ -345,6 +347,16 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
+	static const char* s_editModeStrings[] = {
+		"None",
+
+		"Map Entities",
+		"Terrain",
+		"Spawns"
+	};
+
+	static_assert(std::size(s_editModeStrings) == static_cast<uint32>(WorldEditMode::Count_), "There needs to be one string per enum value to display!");
+
 	void WorldEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
@@ -389,34 +401,61 @@ namespace mmo
 
 			ImGui::Separator();
 
+			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
+			{
+				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
+				{
+					ImGui::PushID(i);
+					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
+					{
+						m_editMode = static_cast<WorldEditMode>(i);
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			ImGui::Separator();
+
 			if (!m_selection.IsEmpty())
 			{
-				Vector3 position = m_selection.GetSelectedObjects().back()->GetPosition();
-				Vector3 scale = m_selection.GetSelectedObjects().back()->GetScale();
+				Selectable* selected = m_selection.GetSelectedObjects().back().get();
 
-				if (ImGui::InputFloat3("Position", position.Ptr()))
+				if (ImGui::CollapsingHeader("Entity"))
 				{
-					m_selection.GetSelectedObjects().back()->SetPosition(position);
+					selected->Visit(*this);
 				}
 
-				Rotator rotation = m_selection.GetSelectedObjects().back()->GetOrientation().ToRotator();
-
-				float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
-				if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
+				if (ImGui::CollapsingHeader("Transform"))
 				{
-					rotation.roll = angles[0];
-					rotation.pitch = angles[2];
-					rotation.yaw = angles[1];
+					Vector3 position = selected->GetPosition();
+					Vector3 scale = selected->GetScale();
 
-					Quaternion quaternion = Quaternion::FromRotator(rotation);
-					quaternion.Normalize();
+					if (ImGui::InputFloat3("Position", position.Ptr()))
+					{
+						selected->SetPosition(position);
+					}
 
-					m_selection.GetSelectedObjects().back()->SetOrientation(quaternion);
-				}
+					Rotator rotation = selected->GetOrientation().ToRotator();
 
-				if (ImGui::InputFloat3("Scale", scale.Ptr()))
-				{
-					m_selection.GetSelectedObjects().back()->SetScale(scale);
+					float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
+					if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
+					{
+						rotation.roll = angles[0];
+						rotation.pitch = angles[2];
+						rotation.yaw = angles[1];
+
+						Quaternion quaternion = Quaternion::FromRotator(rotation);
+						quaternion.Normalize();
+
+						selected->SetOrientation(quaternion);
+					}
+
+					if (ImGui::InputFloat3("Scale", scale.Ptr()))
+					{
+						selected->SetScale(scale);
+					}
 				}
 			}
 		}
@@ -486,43 +525,46 @@ namespace mmo
 				}
 			}
 
-			if (ImGui::BeginDragDropTarget())
-		    {
-				// We only accept mesh file drops
-		        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-		        {
-					Vector3 position = Vector3::Zero;
-
-					const ImVec2 mousePos = ImGui::GetMousePos();
-					const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
-					const Ray ray = m_camera->GetCameraToViewportRay(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-												(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-												10000.0f);
-					const auto hit = ray.Intersects(plane);
-					if (hit.first)
+			if (m_editMode == WorldEditMode::StaticMapEntities)
+			{
+				if (ImGui::BeginDragDropTarget())
+				{
+					// We only accept mesh file drops
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 					{
-						position = ray.GetPoint(hit.second);
-					}
-					else
-					{
-						position = ray.GetPoint(10.0f);
-					}
+						Vector3 position = Vector3::Zero;
 
-					// Snap to grid?
-					if (m_gridSnap)
-					{
-						const float gridSize = m_gridSizes[m_currentGridSizeIndex];
+						const ImVec2 mousePos = ImGui::GetMousePos();
+						const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
+						const Ray ray = m_camera->GetCameraToViewportRay(
+							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+							10000.0f);
+						const auto hit = ray.Intersects(plane);
+						if (hit.first)
+						{
+							position = ray.GetPoint(hit.second);
+						}
+						else
+						{
+							position = ray.GetPoint(10.0f);
+						}
 
-						// Snap position to grid size
-						position.x = std::round(position.x / gridSize) * gridSize;
-						position.y = std::round(position.y / gridSize) * gridSize;
-						position.z = std::round(position.z / gridSize) * gridSize;
+						// Snap to grid?
+						if (m_gridSnap)
+						{
+							const float gridSize = m_gridSizes[m_currentGridSizeIndex];
+
+							// Snap position to grid size
+							position.x = std::round(position.x / gridSize) * gridSize;
+							position.y = std::round(position.y / gridSize) * gridSize;
+							position.z = std::round(position.z / gridSize) * gridSize;
+						}
+
+						CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
 					}
-
-					CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
-		        }
-		        ImGui::EndDragDropTarget();
+					ImGui::EndDragDropTarget();
+				}
 		    }
 			
 			ImGui::SetItemAllowOverlap();
@@ -535,6 +577,7 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 			ImGui::SameLine();
+
 
 			if (ImGui::Checkbox("Snap", &m_gridSnap))
 			{
@@ -618,11 +661,14 @@ namespace mmo
 		const auto mousePos = ImGui::GetMousePos();
 		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
-		if (!widgetWasActive && button == 0 && m_hovering)
+		if (m_editMode == WorldEditMode::StaticMapEntities)
 		{
-			PerformEntitySelectionRaycast(
-				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			if (!widgetWasActive && button == 0 && m_hovering)
+			{
+				PerformEntitySelectionRaycast(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
 		}
 	}
 
@@ -835,14 +881,41 @@ namespace mmo
 
 		if (isAvailable)
 		{
-			DLOG("Page " << mainPage.GetPosition() << " is available!");
 			m_terrain->PreparePage(pos.x(), pos.y());
 			m_terrain->LoadPage(pos.x(), pos.y());
 		}
 		else
 		{
-			DLOG("Page " << mainPage.GetPosition() << " is unavailable");
 			m_terrain->UnloadPage(pos.x(), pos.y());
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedMapEntity& selectable)
+	{
+		MapEntity& mapEntity = selectable.GetEntity();
+		Entity& entity = mapEntity.GetEntity();
+
+		const MeshPtr mesh = entity.GetMesh();
+		const String meshName = mesh->GetName().data();
+
+		const String filename = Path(meshName).filename().string();
+
+		if (ImGui::BeginCombo("Mesh", filename.c_str()))
+		{
+			// TODO: Draw available mesh files from asset registry
+
+			ImGui::EndCombo();
+		}
+
+		if (ImGui::BeginDragDropTarget())
+		{
+			// We only accept mesh file drops
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+			{
+				entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
+			}
+
+			ImGui::EndDragDropTarget();
 		}
 	}
 }

@@ -28,6 +28,10 @@ namespace mmo
 		void SetScale(const Vector3& scale) const override;
 		void Duplicate() override;
 
+	public:
+		MapEntity& GetEntity() const { return m_entity; }
+		void Visit(SelectableVisitor& visitor) override;
+
 	private:
 		MapEntity& m_entity;
 		std::function<void(Selectable&)> m_duplication;

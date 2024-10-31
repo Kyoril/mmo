@@ -8,6 +8,7 @@
 #include <thread>
 #include <asio/io_service.hpp>
 
+#include "selected_map_entity.h"
 #include "paging/world_page_loader.h"
 #include "base/id_generator.h"
 #include "editors/editor_instance.h"
@@ -31,7 +32,7 @@ namespace mmo
 	class SceneNode;
 
 	/// @brief Represents a single entity on the map.
-	class MapEntity final
+	class MapEntity final : public NonCopyable
 	{
 	public:
 		typedef signal<void(const MapEntity&)> TransformChangedSignal;
@@ -48,7 +49,7 @@ namespace mmo
 		{
 		}
 
-		virtual ~MapEntity()
+		~MapEntity() override
 		{
 			m_scene.DestroyEntity(m_entity);
 			m_scene.DestroySceneNode(m_sceneNode);
@@ -76,7 +77,34 @@ namespace mmo
 
 	};
 
-	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener
+	enum class WorldEditMode : uint8
+	{
+		// Nothing, just fly through
+		None,
+
+		// Place static map entities, move them around, delete them etc.
+		StaticMapEntities,
+
+		// Paint and deform terrain
+		Terrain,
+
+		// Modify creature spawns.
+		Spawns,
+
+
+		// Counter
+		Count_
+	};
+
+	class SelectableVisitor
+	{
+	public:
+		virtual ~SelectableVisitor() = default;
+
+		virtual void Visit(SelectedMapEntity& selectable) = 0;
+	};
+
+	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor
 	{
 
 	public:
@@ -110,6 +138,8 @@ namespace mmo
 
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
+
+		void Visit(SelectedMapEntity& selectable) override;
 
 	private:
 		WorldEditor& m_editor;
@@ -163,5 +193,7 @@ namespace mmo
 		SceneNode* m_cloudsNode{ nullptr };
 		Entity* m_cloudsEntity{ nullptr };
 		Light* m_sunLight{ nullptr };
+
+		WorldEditMode m_editMode{ WorldEditMode::None };
 	};
 }
