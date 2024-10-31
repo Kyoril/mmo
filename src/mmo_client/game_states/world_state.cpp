@@ -208,6 +208,9 @@ namespace mmo
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
 
+		m_workQueue.reset();
+		m_dispatcher.reset();
+
 		m_spellProjectiles.clear();
 
 		ObjectMgr::Initialize(m_project);
