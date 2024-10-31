@@ -75,12 +75,18 @@ namespace mmo
 		m_loginConnections += m_realmConnector.CharListUpdated.connect(*this, &LoginState::OnCharListUpdated);
 
 		m_loginConnections += m_realmConnector.Disconnected.connect(*this, &LoginState::OnRealmDisconnected);
-		
+
 		// Lets setup a test command
 		Console::RegisterCommand("login", [&](const String& command, const String& args)
 			{
 				ConsoleCommand_Login(command, args);
 			}, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
+
+		if (m_realmConnector.IsConnected())
+		{
+			// TODO: Get real reason string if there is more than this one!
+			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "WORLD_SERVER_DOWN");
+		}
 	}
 
 	void LoginState::OnLeave()

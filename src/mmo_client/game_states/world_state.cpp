@@ -220,7 +220,9 @@ namespace mmo
 
 		s_inputControl = nullptr;
 		m_playerController.reset();
+		m_terrain.reset();
 		m_worldGrid.reset();
+		m_debugAxis.reset();
 		m_scene.Clear();
 
 		m_inputConnections.disconnect();

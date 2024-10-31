@@ -184,6 +184,13 @@ namespace mmo
 		}
 	}
 
+	void SceneNode::RemoveAllChildren()
+	{
+		Node::RemoveAllChildren();
+
+		m_objectsByName.clear();
+	}
+
 	void SceneNode::AttachObject(MovableObject& obj)
 	{
 		ASSERT(!obj.IsAttached());

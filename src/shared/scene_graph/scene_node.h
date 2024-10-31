@@ -55,6 +55,8 @@ namespace mmo
 
 		void UpdateBounds();
 
+		void RemoveAllChildren() override;
+
 		void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
 
 		const AABB& GetWorldAABB() const noexcept { return m_worldAABB; }

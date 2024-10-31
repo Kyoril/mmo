@@ -103,6 +103,11 @@ namespace mmo
 
 		void Page::Unload()
 		{
+			for (const auto& tile : m_Tiles)
+			{
+				tile->DetachFromParent();
+			}
+
 			m_loaded = false;
 			m_Tiles.clear();
 		}

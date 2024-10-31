@@ -41,11 +41,14 @@ namespace mmo
 
 	void Scene::Clear()
 	{
-		m_rootNode->RemoveAllChildren();
 		m_cameras.clear();
 		m_camVisibleObjectsMap.clear();
 		m_entities.clear();
 		m_manualRenderObjects.clear();
+		m_lights.clear();
+
+		m_sceneNodes.clear();
+		m_rootNode = nullptr;
 	}
 
 	Camera* Scene::CreateCamera(const String& name)
