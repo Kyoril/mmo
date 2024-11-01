@@ -136,6 +136,26 @@ namespace mmo
 			}
 		}
 
+		// Play back one shot animations
+		if (m_oneShotState)
+		{
+			if (m_oneShotState->HasEnded())
+			{
+				m_oneShotState->SetEnabled(false);
+				m_oneShotState->SetWeight(0.0f);
+				m_oneShotState = nullptr;
+			}
+		}
+
+		if (m_currentState != nullptr)
+		{
+			m_currentState->SetEnabled(m_oneShotState == nullptr);
+		}
+		if (m_targetState != nullptr)
+		{
+			m_targetState->SetEnabled(m_oneShotState == nullptr);
+		}
+
 		// Always force dead state
 		if (isDead)
 		{
@@ -143,30 +163,33 @@ namespace mmo
 		}
 
 		// Interpolate
-		if (m_targetState != m_currentState)
+		if (!m_oneShotState)
 		{
-			if (m_targetState && !m_currentState)
+			if (m_targetState != m_currentState)
 			{
-				m_currentState = m_targetState;
-				m_targetState = nullptr;
+				if (m_targetState && !m_currentState)
+				{
+					m_currentState = m_targetState;
+					m_targetState = nullptr;
 
-				m_currentState->SetWeight(1.0f);
-				m_currentState->SetEnabled(true);
+					m_currentState->SetWeight(1.0f);
+					m_currentState->SetEnabled(true);
+				}
 			}
-		}
 
-		if (m_currentState && m_targetState)
-		{
-			m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
-			m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
-
-			if (m_targetState->GetWeight() >= 1.0f)
+			if (m_currentState && m_targetState)
 			{
-				m_currentState->SetWeight(0.0f);
-				m_currentState->SetEnabled(false);
+				m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
+				m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
 
-				m_currentState = m_targetState;
-				m_targetState = nullptr;
+				if (m_targetState->GetWeight() >= 1.0f)
+				{
+					m_currentState->SetWeight(0.0f);
+					m_currentState->SetEnabled(false);
+
+					m_currentState = m_targetState;
+					m_targetState = nullptr;
+				}
 			}
 		}
 
@@ -185,6 +208,10 @@ namespace mmo
 		if (m_readyAnimState && m_readyAnimState->IsEnabled() && m_readyAnimState != m_idleAnimState)
 		{
 			m_readyAnimState->AddTime(deltaTime);
+		}
+		if (m_unarmedAttackState && m_unarmedAttackState->IsEnabled())
+		{
+			m_unarmedAttackState->AddTime(deltaTime);
 		}
 	}
 
@@ -288,6 +315,12 @@ namespace mmo
 		if (!m_readyAnimState)
 		{
 			m_readyAnimState = m_idleAnimState;
+		}
+
+		if (m_entity->HasAnimationState("UnarmedAttack01"))
+		{
+			m_unarmedAttackState = m_entity->GetAnimationState("UnarmedAttack01");
+			m_unarmedAttackState->SetLoop(false);
 		}
 
 		if (m_entity->HasAnimationState("Death"))
@@ -484,12 +517,14 @@ namespace mmo
 		// Don't do anything if the victim is already the current target
 		if (IsAttacking(victim))
 		{
+			DLOG("Already attacking unit on client");
 			return;
 		}
 
 		// We cant attack ourselves
 		if (&victim == this)
 		{
+			DLOG("Cant attack myself");
 			return;
 		}
 
@@ -497,6 +532,7 @@ namespace mmo
 		// TODO
 
 		// Send attack
+		DLOG("Sent attack!");
 		m_victim = victim.GetGuid();
 		m_netDriver.SendAttackStart(victim.GetGuid(), GetAsyncTimeMs());
 	}
@@ -509,8 +545,13 @@ namespace mmo
 		}
 
 		// Send stop attack
-		m_victim = 0;
+		NotifyAttackStopped();
 		m_netDriver.SendAttackStop(GetAsyncTimeMs());
+	}
+
+	void GameUnitC::NotifyAttackStopped()
+	{
+		m_victim = 0;
 	}
 
 	const String& GameUnitC::GetName() const
@@ -575,5 +616,13 @@ namespace mmo
 		}
 
 		m_oneShotState = animState;
+		m_oneShotState->SetEnabled(true);
+		m_oneShotState->SetWeight(1.0f);
+		m_oneShotState->SetTimePosition(0.0f);
+	}
+
+	void GameUnitC::NotifyAttackSwingEvent()
+	{
+		PlayOneShotAnimation(m_unarmedAttackState);
 	}
 }

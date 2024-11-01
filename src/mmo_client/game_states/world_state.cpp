@@ -1522,6 +1522,8 @@ namespace mmo
 		{
 			if (attackerGuid == m_playerController->GetControlledUnit()->GetGuid())
 			{
+				m_playerController->GetControlledUnit()->NotifyAttackStopped();
+
 				m_lastAttackSwingEvent = AttackSwingEvent::Unknown;
 				FrameManager::Get().TriggerLuaEvent("PLAYER_ATTACK_STOP");
 			}
@@ -1635,6 +1637,12 @@ namespace mmo
 		if (target)
 		{
 			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, (flags & damage_flags::Crit) != 0 ? 4.0f : 2.0f);
+		}
+
+		// TODO: Separate packet for this!
+		if (m_playerController && m_playerController->GetControlledUnit())
+		{
+			m_playerController->GetControlledUnit()->NotifyAttackSwingEvent();
 		}
 
 		return PacketParseResult::Pass;

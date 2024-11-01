@@ -148,6 +148,8 @@ namespace mmo
 		/// @brief Stops auto attacking.
 		void StopAttack();
 
+		void NotifyAttackStopped();
+
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
 		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
@@ -159,6 +161,8 @@ namespace mmo
 		void SetTargetAnimState(AnimationState* newTargetState);
 
 		void PlayOneShotAnimation(AnimationState* animState);
+
+		void NotifyAttackSwingEvent();
 
 	public:
 		/// @brief Returns the current movement information of this unit.
@@ -189,6 +193,7 @@ namespace mmo
 		AnimationState* m_readyAnimState{ nullptr };
 		AnimationState* m_runAnimState{ nullptr };
 		AnimationState* m_deathState{ nullptr };
+		AnimationState* m_unarmedAttackState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;

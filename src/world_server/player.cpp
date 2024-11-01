@@ -528,29 +528,8 @@ namespace mmo
 			return;
 		}
 
-
 		// Update field (update will be sent to all clients around)
-		m_character->Set(object_fields::TargetUnit, selectedObject);
-
-		if (selectedObject != 0)
-		{
-			// Try to find the selected object
-			GameObjectS* object = m_worldInstance->FindObjectByGuid(selectedObject);
-			if (!object)
-			{
-				ELOG("Failed to find selected object with guid " << log_hex_digit(selectedObject));
-				return;
-			}
-
-			if (m_character->GetVictim() && (object->GetTypeId() == ObjectTypeId::Unit || object->GetTypeId() == ObjectTypeId::Player))
-			{
-				m_character->StartAttack(std::static_pointer_cast<GameUnitS>(object->shared_from_this()));
-			}
-		}
-		else if (m_character->IsAttacking())
-		{
-			m_character->StopAttack();
-		}
+		m_character->SetTarget(selectedObject);
 	}
 
 	void Player::Kick()
