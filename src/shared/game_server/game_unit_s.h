@@ -346,6 +346,13 @@ namespace mmo
 
 		void NotifyManaUsed();
 
+	private:
+		void SetVictim(const std::shared_ptr<GameUnitS>& victim);
+
+		void VictimKilled(GameUnitS* killer);
+
+		void VictimDespawned(GameObjectS&);
+
 	public:
 		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
 
@@ -484,6 +491,7 @@ namespace mmo
 		float m_healthRegenPerTick = 0.0f;
 
 		mutable const proto::FactionTemplateEntry* m_cachedFactionTemplate = nullptr;
+		scoped_connection_container m_victimSignals;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

@@ -576,6 +576,31 @@ namespace mmo
 		m_lastManaUse = GetAsyncTimeMs();
 	}
 
+	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS>& victim)
+	{
+		m_victimSignals.disconnect();
+
+		m_victim = victim;
+
+		if (victim)
+		{
+			m_victimSignals += {
+				victim->killed.connect(this, &GameUnitS::VictimKilled),
+					victim->despawned.connect(this, &GameUnitS::VictimDespawned),
+			};
+		}
+	}
+
+	void GameUnitS::VictimKilled(GameUnitS* killer)
+	{
+		StopAttack();
+	}
+
+	void GameUnitS::VictimDespawned(GameObjectS&)
+	{
+		StopAttack();
+	}
+
 	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)
 	{
 		ASSERT(victim);
@@ -593,7 +618,7 @@ namespace mmo
 			return;
 		}
 
-		m_victim = victim;
+		SetVictim(victim);
 
 		const GameTime now = GetAsyncTimeMs();
 
@@ -621,7 +646,7 @@ namespace mmo
 	void GameUnitS::StopAttack()
 	{
 		m_attackSwingCountdown.Cancel();
-		m_victim.reset();
+		SetVictim(nullptr);
 
 		// No longer attacking
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
@@ -652,7 +677,7 @@ namespace mmo
 			GameObjectS* object = GetWorldInstance()->FindObjectByGuid(targetGuid);
 			if (object)
 			{
-				m_victim = std::dynamic_pointer_cast<GameUnitS>(object->shared_from_this());
+				SetVictim(std::dynamic_pointer_cast<GameUnitS>(object->shared_from_this()));
 			}
 			else
 			{
@@ -973,16 +998,14 @@ namespace mmo
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)
 	{
-		// TODO
-		/*if (m_victim)
+		if (std::shared_ptr<GameUnitS> victim = m_victim.lock())
 		{
 			m_lastMainHand = m_lastOffHand = GetAsyncTimeMs();
-
 			if (!m_attackSwingCountdown.IsRunning())
 			{
 				TriggerNextAutoAttack();
 			}
-		}*/
+		}
 	}
 
 	void GameUnitS::OnRegeneration()
