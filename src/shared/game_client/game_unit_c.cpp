@@ -109,7 +109,8 @@ namespace mmo
 			{
 				if (!isDead)
 				{
-					SetTargetAnimState(m_idleAnimState);
+					const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
+					SetTargetAnimState(isAttacking ? m_readyAnimState : m_idleAnimState);
 				}
 
 				m_sceneNode->SetDerivedPosition(m_movementEnd);
@@ -130,7 +131,8 @@ namespace mmo
 			}
 			else
 			{
-				SetTargetAnimState(m_idleAnimState);
+				const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
+				SetTargetAnimState(isAttacking ? m_readyAnimState : m_idleAnimState);
 			}
 		}
 
@@ -179,6 +181,10 @@ namespace mmo
 		if (m_runAnimState && m_runAnimState->IsEnabled())
 		{
 			m_runAnimState->AddTime(deltaTime);
+		}
+		if (m_readyAnimState && m_readyAnimState->IsEnabled() && m_readyAnimState != m_idleAnimState)
+		{
+			m_readyAnimState->AddTime(deltaTime);
 		}
 	}
 
@@ -272,6 +278,16 @@ namespace mmo
 		if (m_entity->HasAnimationState("Run"))
 		{
 			m_runAnimState = m_entity->GetAnimationState("Run");
+		}
+
+		if (m_entity->HasAnimationState("UnarmedReady"))
+		{
+			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");
+		}
+
+		if (!m_readyAnimState)
+		{
+			m_readyAnimState = m_idleAnimState;
 		}
 
 		if (m_entity->HasAnimationState("Death"))
@@ -543,5 +559,21 @@ namespace mmo
 			m_targetState->SetWeight(m_currentState ? (1.0f - m_currentState->GetWeight()) : 0.0f);
 			m_targetState->SetEnabled(true);
 		}
+	}
+
+	void GameUnitC::PlayOneShotAnimation(AnimationState* animState)
+	{
+		if (!animState)
+		{
+			return;
+		}
+
+		if (animState->IsLoop())
+		{
+			WLOG("One shot animation has loop flag set to true, not playing!");
+			return;
+		}
+
+		m_oneShotState = animState;
 	}
 }

@@ -158,6 +158,8 @@ namespace mmo
 
 		void SetTargetAnimState(AnimationState* newTargetState);
 
+		void PlayOneShotAnimation(AnimationState* animState);
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
@@ -184,10 +186,12 @@ namespace mmo
 	protected:
 		// Animation stuff
 		AnimationState* m_idleAnimState{ nullptr };
+		AnimationState* m_readyAnimState{ nullptr };
 		AnimationState* m_runAnimState{ nullptr };
 		AnimationState* m_deathState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;
+		AnimationState* m_oneShotState = nullptr;
 	};
 }

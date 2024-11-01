@@ -14,6 +14,8 @@ namespace mmo
 			Lootable = 0x00000002,
 
 			Looting = 0x00000004,
+
+			Attacking = 0x00000008,
 		};
 	}
 

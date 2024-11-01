@@ -611,6 +611,9 @@ namespace mmo
 				subscriber.SendPacket(packet, buffer);
 			});
 
+		// Attacking
+		AddFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
+
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
 	}
@@ -619,6 +622,9 @@ namespace mmo
 	{
 		m_attackSwingCountdown.Cancel();
 		m_victim.reset();
+
+		// No longer attacking
+		RemoveFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
 
 		const GameTime now = GetAsyncTimeMs();
 
@@ -638,7 +644,21 @@ namespace mmo
 
 	void GameUnitS::SetTarget(uint64 targetGuid)
 	{
+		auto victim = m_victim.lock();
 		Set<uint64>(object_fields::TargetUnit, targetGuid);
+
+		if (victim && victim->GetGuid() != targetGuid)
+		{
+			GameObjectS* object = GetWorldInstance()->FindObjectByGuid(targetGuid);
+			if (object)
+			{
+				m_victim = std::dynamic_pointer_cast<GameUnitS>(object->shared_from_this());
+			}
+			else
+			{
+				StopAttack();
+			}
+		}
 	}
 
 	void GameUnitS::SetInCombat(bool inCombat)
