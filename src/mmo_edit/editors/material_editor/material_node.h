@@ -514,6 +514,7 @@ namespace mmo
 			: GraphNode(material)
 	    {
 			m_valueChangedConnection = m_valueProperty.OnValueChanged.connect([this] { m_valueString = std::to_string(m_value); });
+			m_valueString = std::to_string(m_value);
 	    }
 
 		[[nodiscard]] std::string_view GetName() const override { return m_valueString; }
@@ -770,7 +771,16 @@ namespace mmo
 
 	    MaskNode(MaterialGraph& material)
 			: GraphNode(material)
-		{}
+	    {
+			m_maskedChanged += {
+				m_valueProperties[0].OnValueChanged.connect([this] { OnMaskChanged(); }),
+				m_valueProperties[1].OnValueChanged.connect([this] { OnMaskChanged(); }),
+				m_valueProperties[2].OnValueChanged.connect([this] { OnMaskChanged(); }),
+				m_valueProperties[3].OnValueChanged.connect([this] { OnMaskChanged(); })
+			};
+
+			OnMaskChanged();
+	    }
 		
 	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
 		
@@ -780,9 +790,27 @@ namespace mmo
 
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
 	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
 
 	private:
+		void OnMaskChanged()
+		{
+			std::ostringstream strm;
+			strm << "Mask ( ";
+			if (m_channels[0]) strm << "R ";
+			if (m_channels[1]) strm << "G ";
+			if (m_channels[2]) strm << "B ";
+			if (m_channels[3]) strm << "A ";
+			strm << ")";
+			m_name = strm.str();
+		}
+
+	private:
+		String m_name;
+		scoped_connection_container m_maskedChanged;
+
 		bool m_channels[4] = { true, true, false, false };
 		BoolProperty m_valueProperties[4] = {
 			BoolProperty("R", m_channels[0]),
@@ -1323,7 +1351,7 @@ namespace mmo
 
 		void SetTexture(const std::string_view texture) { m_texturePath.SetPath(texture); }
 
-		[[nodiscard]] std::string_view GetName() const override { return m_textureName; }
+		[[nodiscard]] std::string_view GetName() const override { return m_textureName.empty() ? GraphNode::GetName() : m_textureName; }
 
 		void SetName(const std::string_view name) { m_textureName = name; }
 
