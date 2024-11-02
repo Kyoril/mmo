@@ -218,6 +218,9 @@ namespace mmo
 				break;
 			}
 		}
+
+		m_lastMouse[0] = x;
+		m_lastMouse[1] = y;
 	}
 
 	void TransformWidget::OnMousePressed(uint32 buttons, float x, float y)
@@ -228,6 +231,11 @@ namespace mmo
 			{
 				m_active = true;
 
+				Ray ray = m_dummyCamera->GetCameraToViewportRay(
+					x,
+					y,
+					10000.0f);
+
 				switch (m_mode)
 				{
 				case TransformMode::Translate:
@@ -235,11 +243,6 @@ namespace mmo
 					m_translation = Vector3::Zero;
 
 					Plane plane = GetTranslatePlane(m_selectedAxis);
-					Ray ray = m_dummyCamera->GetCameraToViewportRay(
-						x,
-						y,
-						10000.0f);
-
 					auto result = ray.Intersects(plane);
 					if (result.first)
 					{
@@ -250,7 +253,36 @@ namespace mmo
 				}
 
 				case TransformMode::Rotate:
-					m_rotation = Quaternion::Identity;
+					{
+						// Determine the rotation axis
+						switch (m_selectedAxis)
+						{
+						case axis_id::X:
+							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitX;
+							break;
+						case axis_id::Y:
+							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitY;
+							break;
+						case axis_id::Z:
+							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitZ;
+							break;
+						}
+
+						// Create a plane perpendicular to the rotation axis
+						m_rotationPlane = Plane(m_rotationAxis, m_relativeWidgetPos);
+
+						// Calculate the initial intersection point
+						auto res = ray.Intersects(m_rotationPlane);
+						if (res.first)
+						{
+							m_initialPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
+							m_initialPoint = m_initialPoint - m_rotationAxis * m_rotationAxis.Dot(m_initialPoint);
+							m_initialPoint.Normalize();
+						}
+
+						m_rotation = Quaternion::Identity;
+					}
+					
 					break;
 
 				case TransformMode::Scale:
@@ -1075,13 +1107,13 @@ namespace mmo
 	{
 		if (!m_active)
 		{
-			Plane zRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
-			Plane yRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
-			Plane xRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
+			const Plane zRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitZ, m_relativeWidgetPos);
+			const Plane yRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitY, m_relativeWidgetPos);
+			const Plane xRotPlane(m_widgetNode->GetOrientation() * Vector3::UnitX, m_relativeWidgetPos);
 
-			auto zRes = ray.Intersects(zRotPlane);
-			auto yRes = ray.Intersects(yRotPlane);
-			auto xRes = ray.Intersects(xRotPlane);
+			const auto zRes = ray.Intersects(zRotPlane);
+			const auto yRes = ray.Intersects(yRotPlane);
+			const auto xRes = ray.Intersects(xRotPlane);
 
 			bool xHit = false, yHit = false, zHit = false;
 			const float bias = 0.1f;
@@ -1152,47 +1184,31 @@ namespace mmo
 		}
 		else
 		{
-			Vector3 axis(0.0f, 0.0f, 0.0f);
-			Vector<float, 2> mouse(x - m_lastMouse[0], y - m_lastMouse[1]);
-			Radian angle(-mouse[0] * 0.08f);
-			angle += Radian(mouse[1] * 0.08f);
+			// Calculate the current intersection point
+			auto res = ray.Intersects(m_rotationPlane);
+			if (res.first)
+			{
+				Vector3 currentPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
+				currentPoint = currentPoint - m_rotationAxis * m_rotationAxis.Dot(currentPoint);
+				currentPoint.Normalize();
 
-			switch (m_selectedAxis)
-			{
-			case axis_id::X:
-			{
-				axis = Vector3::UnitX;
-				if (m_camDir.x < 0)
+				// Calculate the angle between the initial and current points
+				float angle = acos(m_initialPoint.Dot(currentPoint));
+
+				// Determine the direction of rotation
+				Vector3 cross = m_initialPoint.Cross(currentPoint);
+				if (m_rotationAxis.Dot(cross) < 0)
 				{
-					angle *= -1.0f;
+					angle = -angle;
 				}
-				break;
-			}
 
-			case axis_id::Y:
-			{
-				axis = Vector3::UnitY;
-				if (m_camDir.y < 0)
-				{
-					angle *= -1.0f;
-				}
-				break;
-			}
+				// Apply the rotation
+				Quaternion rot(Radian(angle), m_rotationAxis);
+				ApplyRotation(rot);
 
-			case axis_id::Z:
-			{
-				axis = Vector3::UnitZ;
-				if (m_camDir.z < 0)
-				{
-					angle *= -1.0f;
-				}
-				break;
+				// Update the initial point for continuous rotation
+				m_initialPoint = currentPoint;
 			}
-			}
-
-			axis = m_widgetNode->GetOrientation() * axis;
-			const Quaternion rot(angle, axis);
-			ApplyRotation(rot);
 		}
 	}
 

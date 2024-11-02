@@ -177,6 +177,11 @@ namespace mmo
 		Vector3 m_lastIntersection{};
 		Vector3 m_translation{};
 		Quaternion m_rotation{};
+
+		Vector3 m_rotationAxis;     // The axis around which to rotate
+		Plane m_rotationPlane;      // Plane perpendicular to the rotation axis
+		Vector3 m_initialPoint;     // Initial point on the rotation plane
+
 		float m_scale{1.0f};
 		bool m_keyDown { false};
 		bool m_resetMouse{false};

@@ -19,7 +19,7 @@ namespace mmo
 
     void SelectedMapEntity::Rotate(const Quaternion& delta)
     {
-        m_entity.GetSceneNode().Rotate(delta, TransformSpace::Local);
+        m_entity.GetSceneNode().Rotate(delta, TransformSpace::Parent);
         rotationChanged(*this);
     }
 
