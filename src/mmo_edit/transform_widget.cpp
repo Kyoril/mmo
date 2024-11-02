@@ -271,6 +271,10 @@ namespace mmo
 						// Create a plane perpendicular to the rotation axis
 						m_rotationPlane = Plane(m_rotationAxis, m_relativeWidgetPos);
 
+						// Initialize rotation tracking variables
+						m_totalRotationAngle = 0.0f;
+						m_previousSnappedAngle = 0.0f;
+
 						// Calculate the initial intersection point
 						auto res = ray.Intersects(m_rotationPlane);
 						if (res.first)
@@ -315,12 +319,6 @@ namespace mmo
 				break;
 			}
 		}
-	}
-
-	void TransformWidget::SetSnapToGrid(bool snap, float gridSize)
-	{
-		m_snap = snap;
-		m_step = gridSize;
 	}
 
 	void TransformWidget::SetCopyMode(bool copyMode)
@@ -1184,30 +1182,72 @@ namespace mmo
 		}
 		else
 		{
-			// Calculate the current intersection point
-			auto res = ray.Intersects(m_rotationPlane);
-			if (res.first)
+			if (m_snap)
 			{
-				Vector3 currentPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
-				currentPoint = currentPoint - m_rotationAxis * m_rotationAxis.Dot(currentPoint);
-				currentPoint.Normalize();
-
-				// Calculate the angle between the initial and current points
-				float angle = acos(m_initialPoint.Dot(currentPoint));
-
-				// Determine the direction of rotation
-				Vector3 cross = m_initialPoint.Cross(currentPoint);
-				if (m_rotationAxis.Dot(cross) < 0)
+				// Calculate the current intersection point
+				auto res = ray.Intersects(m_rotationPlane);
+				if (res.first)
 				{
-					angle = -angle;
+					Vector3 currentPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
+					// Project onto the rotation plane and normalize
+					currentPoint -= m_rotationAxis * m_rotationAxis.Dot(currentPoint);
+					currentPoint.Normalize();
+
+					// Calculate the angle between the initial and current points
+					float angle = acos(Clamp(m_initialPoint.Dot(currentPoint), -1.0f, 1.0f));
+
+					// Determine the direction of rotation
+					Vector3 cross = m_initialPoint.Cross(currentPoint);
+					if (m_rotationAxis.Dot(cross) < 0)
+					{
+						angle = -angle;
+					}
+
+					// Update total rotation angle
+					m_totalRotationAngle = angle;
+
+					// Apply snapping
+					float snappedAngle = std::round(m_totalRotationAngle / m_rotationSnapAngle.GetValueRadians()) * m_rotationSnapAngle.GetValueRadians();
+
+					// Calculate the delta angle to apply
+					float deltaAngle = snappedAngle - m_previousSnappedAngle;
+
+					// Apply rotation if there's a change
+					if (fabs(deltaAngle) > std::numeric_limits<float>::epsilon())
+					{
+						Quaternion rot(Radian(deltaAngle), m_rotationAxis);
+						ApplyRotation(rot);
+						m_previousSnappedAngle = snappedAngle;
+					}
 				}
+			}
+			else
+			{
+				// Calculate the current intersection point
+				auto res = ray.Intersects(m_rotationPlane);
+				if (res.first)
+				{
+					Vector3 currentPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
+					currentPoint = currentPoint - m_rotationAxis * m_rotationAxis.Dot(currentPoint);
+					currentPoint.Normalize();
 
-				// Apply the rotation
-				Quaternion rot(Radian(angle), m_rotationAxis);
-				ApplyRotation(rot);
+					// Calculate the angle between the initial and current points
+					float angle = acos(m_initialPoint.Dot(currentPoint));
 
-				// Update the initial point for continuous rotation
-				m_initialPoint = currentPoint;
+					// Determine the direction of rotation
+					Vector3 cross = m_initialPoint.Cross(currentPoint);
+					if (m_rotationAxis.Dot(cross) < 0)
+					{
+						angle = -angle;
+					}
+
+					// Apply the rotation
+					Quaternion rot(Radian(angle), m_rotationAxis);
+					ApplyRotation(rot);
+
+					// Update the initial point for continuous rotation
+					m_initialPoint = currentPoint;
+				}
 			}
 		}
 	}

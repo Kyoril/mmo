@@ -553,7 +553,7 @@ namespace mmo
 						// Snap to grid?
 						if (m_gridSnap)
 						{
-							const float gridSize = m_gridSizes[m_currentGridSizeIndex];
+							const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
 
 							// Snap position to grid size
 							position.x = std::round(position.x / gridSize) * gridSize;
@@ -581,27 +581,68 @@ namespace mmo
 
 			if (ImGui::Checkbox("Snap", &m_gridSnap))
 			{
-				m_transformWidget->SetSnapToGrid(m_gridSnap, m_gridSizes[m_currentGridSizeIndex]);
+				m_transformWidget->SetSnapping(m_gridSnap);
 			}
 			ImGui::SameLine();
 
-			static const char* gridSizes[] = { "0.1", "0.25", "0.5", "1.0", "1.5", "2.0", "4.0" };
-			if (ImGui::BeginCombo("##gridSizes", nullptr, ImGuiComboFlags_NoPreview))
+			if (m_gridSnap)
 			{
-				for (int i = 0; i < 7; ++i)
+				static const char* s_translategridSizes[] = { "0.1", "0.25", "0.5", "1.0", "1.5", "2.0", "4.0" };
+				static const char* s_rotateSnapSizes[] = { "1", "5", "10", "15", "45", "90" };
+
+				const char* previewValue = nullptr;
+
+				switch (m_transformWidget->GetTransformMode())
 				{
-					const bool isSelected = i == m_currentGridSizeIndex;
-					if (ImGui::Selectable(gridSizes[i], isSelected))
-					{
-						m_currentGridSizeIndex = i;
-						m_transformWidget->SetSnapToGrid(m_gridSnap, m_gridSizes[m_currentGridSizeIndex]);
-					}
-					if (isSelected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
+				case TransformMode::Translate:
+				case TransformMode::Scale:
+					previewValue = s_translategridSizes[m_currentTranslateSnapSize];
+					break;
+				case TransformMode::Rotate:
+					previewValue = s_rotateSnapSizes[m_currentRotateSnapSize];
+					break;
 				}
-				ImGui::EndCombo();
+
+				ImGui::SetNextItemWidth(50.0f);
+
+				if (ImGui::BeginCombo("##snapSizes", previewValue, ImGuiComboFlags_None))
+				{
+					switch (m_transformWidget->GetTransformMode())
+					{
+					case TransformMode::Translate:
+					case TransformMode::Scale:
+						for (int i = 0; i < std::size(s_translategridSizes); ++i)
+						{
+							const bool isSelected = i == m_currentTranslateSnapSize;
+							if (ImGui::Selectable(s_translategridSizes[i], isSelected))
+							{
+								m_currentTranslateSnapSize = i;
+								m_transformWidget->SetTranslateSnapSize(m_translateSnapSizes[m_currentTranslateSnapSize]);
+							}
+							if (isSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						break;
+					case TransformMode::Rotate:
+						for (int i = 0; i < std::size(s_rotateSnapSizes); ++i)
+						{
+							const bool isSelected = i == m_currentRotateSnapSize;
+							if (ImGui::Selectable(s_rotateSnapSizes[i], isSelected))
+							{
+								m_currentRotateSnapSize = i;
+								m_transformWidget->SetRotateSnapSize(m_rotateSnapSizes[m_currentRotateSnapSize]);
+							}
+							if (isSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+					}
+
+					ImGui::EndCombo();
+				}
 			}
 		}
 		ImGui::End();

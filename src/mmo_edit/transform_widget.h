@@ -71,9 +71,15 @@ namespace mmo
 
 		void OnMouseReleased(uint32 buttons, float x, float y);
 
-		void SetSnapToGrid(bool snap, float gridSize);
+		void SetSnapping(bool snap) { m_snap = snap; }
+
+		void SetTranslateSnapSize(float snapSize) { m_step = snapSize; }
+
+		void SetRotateSnapSize(float snapSize) { m_rotationSnapAngle = Degree(snapSize); }
 
 		void SetCopyMode(bool copyMode);
+
+		TransformMode GetTransformMode() const noexcept { return m_mode; }
 
 	private:
 		void UpdateTanslationAxisLines();
@@ -181,6 +187,9 @@ namespace mmo
 		Vector3 m_rotationAxis;     // The axis around which to rotate
 		Plane m_rotationPlane;      // Plane perpendicular to the rotation axis
 		Vector3 m_initialPoint;     // Initial point on the rotation plane
+		float m_totalRotationAngle;      // Total rotation angle since rotation started
+		float m_previousSnappedAngle;    // Previous snapped angle
+		Radian m_rotationSnapAngle{ Degree(15.0f) };
 
 		float m_scale{1.0f};
 		bool m_keyDown { false};
