@@ -26,6 +26,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class MapEntry;
+	}
+
 	class WorldEditor;
 	class Entity;
 	class Camera;
@@ -96,6 +101,33 @@ namespace mmo
 		Count_
 	};
 
+	enum class TerrainEditMode : uint8
+	{
+		Select,
+
+		Deform,
+
+		Paint,
+	};
+
+	enum class TerrainDeformMode : uint8
+	{
+		Raise,
+
+		Lower,
+
+		Smooth,
+
+		Flatten
+	};
+
+	enum class TerrainPaintMode : uint8
+	{
+		Paint,
+
+		Smooth,
+	};
+
 	class SelectableVisitor
 	{
 	public:
@@ -135,6 +167,8 @@ namespace mmo
 		void OnMapEntityRemoved(MapEntity& entity);
 
 		PagePosition GetPagePositionFromCamera() const;
+
+		void SetMapEntry(proto::MapEntry* entry);
 
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
@@ -194,6 +228,15 @@ namespace mmo
 		Entity* m_cloudsEntity{ nullptr };
 		Light* m_sunLight{ nullptr };
 
+		// World edit mode
 		WorldEditMode m_editMode{ WorldEditMode::None };
+
+		// Terrain edit modes
+		TerrainEditMode m_terrainEditMode{ TerrainEditMode::Select };
+		TerrainDeformMode m_terrainDeformMode{ TerrainDeformMode::Raise };
+		TerrainPaintMode m_terrainPaintMode{ TerrainPaintMode::Paint };
+
+		// Spawn edit mode
+		proto::MapEntry* m_mapEntry { nullptr };
 	};
 }

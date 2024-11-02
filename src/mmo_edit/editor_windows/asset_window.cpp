@@ -82,7 +82,7 @@ namespace mmo
 			return;
 		}
 		
-		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow;
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
 		if (m_selectedEntry == &entry)
 		{
 			flags |= ImGuiTreeNodeFlags_Selected;

@@ -7,13 +7,15 @@
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
 	static const String WorldFileExtension = ".hwld";
 
-	WorldEditor::WorldEditor(EditorHost& host)
+	WorldEditor::WorldEditor(EditorHost& host, proto::Project& project)
 		: EditorBase(host)
+		, m_project(project)
 	{
 	}
 

@@ -869,6 +869,22 @@ namespace mmo
 
 	}
 
+	void WorldEditorInstance::SetMapEntry(proto::MapEntry* entry)
+	{
+		if (m_mapEntry == entry)
+		{
+			return;
+		}
+
+		m_mapEntry = entry;
+
+		// TODO: Udpate spawn placement objects
+
+		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
+		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
+
+	}
+
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
 	{
 		if (!m_terrain)

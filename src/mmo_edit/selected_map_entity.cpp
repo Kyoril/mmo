@@ -84,4 +84,65 @@ namespace mmo
     {
         visitor.Visit(*this);
     }
+
+    void SelectedUnitSpawn::Visit(SelectableVisitor& visitor)
+    {
+    }
+
+    void SelectedUnitSpawn::Duplicate()
+    {
+    }
+
+    void SelectedUnitSpawn::Translate(const Vector3& delta)
+    {
+		m_entry.set_positionx(m_entry.positionx() + delta.x);
+        m_entry.set_positiony(m_entry.positiony() + delta.y);
+        m_entry.set_positionz(m_entry.positionz() + delta.z);
+    }
+
+    void SelectedUnitSpawn::Rotate(const Quaternion& delta)
+    {
+    }
+
+    void SelectedUnitSpawn::Scale(const Vector3& delta)
+    {
+    }
+
+    void SelectedUnitSpawn::Remove()
+    {
+    }
+
+    void SelectedUnitSpawn::Deselect()
+    {
+    }
+
+    void SelectedUnitSpawn::SetPosition(const Vector3& position) const
+    {
+        m_entry.set_positionx(position.x);
+        m_entry.set_positiony(position.y);
+        m_entry.set_positionz(position.z);
+    }
+
+    void SelectedUnitSpawn::SetOrientation(const Quaternion& orientation) const
+    {
+    }
+
+    void SelectedUnitSpawn::SetScale(const Vector3& scale) const
+    {
+    }
+
+    Vector3 SelectedUnitSpawn::GetPosition() const
+    {
+        return Vector3(m_entry.positionx(), m_entry.positiony(), m_entry.positionz());
+    }
+
+    Quaternion SelectedUnitSpawn::GetOrientation() const
+    {
+        return Quaternion(Radian(m_entry.rotation()), Vector3::UnitY);
+    }
+
+    Vector3 SelectedUnitSpawn::GetScale() const
+    {
+        return Vector3::UnitScale;
+    }
 }

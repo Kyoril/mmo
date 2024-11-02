@@ -8,11 +8,16 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class Project;
+	}
+
 	/// @brief Implementation of the EditorBase class for being able to edit model files.
 	class WorldEditor final : public EditorBase
 	{
 	public:
-		explicit WorldEditor(EditorHost& host);
+		explicit WorldEditor(EditorHost& host, proto::Project& project);
 
 		~WorldEditor() override = default;
 
@@ -26,6 +31,7 @@ namespace mmo
 		/// @brief Adds creation items to a context menu.
 		void AddCreationContextMenuItems() override;
 
+		proto::Project& GetProject() const { return m_project; }
 	protected:
 		/// @copydoc EditorBase::DrawImpl
 		void DrawImpl() override;
@@ -41,7 +47,7 @@ namespace mmo
 		void CreateNewWorld();
 
 	private:
-
+		proto::Project& m_project;
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showWorldNameDialog { false };
 		String m_worldName;
