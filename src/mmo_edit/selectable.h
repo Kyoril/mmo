@@ -65,5 +65,13 @@ namespace mmo
 		/// Returns the scale of the selected object.
 		/// @returns Scale of the selected object.
 		virtual Vector3 GetScale() const = 0;
+
+		virtual bool SupportsTranslate() const { return true; }
+
+		virtual bool SupportsRotate() const { return true; }
+
+		virtual bool SupportsScale() const { return true; }
+
+		virtual bool SupportsDuplicate() const { return true; }
 	};
 }

@@ -10,6 +10,7 @@ namespace mmo
 {
 	namespace terrain
 	{
+		class Terrain;
 		class Page;
 
 		class Tile final
@@ -30,6 +31,8 @@ namespace mmo
 
 			[[nodiscard]] MaterialPtr GetMaterial() const override;
 
+			void SetMaterial(MaterialPtr material);
+
 			[[nodiscard]] const String& GetMovableType() const override;
 
 			[[nodiscard]] const AABB& GetBoundingBox() const override;
@@ -39,6 +42,10 @@ namespace mmo
 			void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
 
 			void PopulateRenderQueue(RenderQueue& queue) override;
+
+			Page& GetPage() const { return m_page; }
+
+			Terrain& GetTerrain() const;
 
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
@@ -67,6 +74,7 @@ namespace mmo
 			std::unique_ptr<VertexData> m_vertexData;
 			std::unique_ptr<IndexData> m_indexData;
 			VertexBufferPtr m_mainBuffer;
+			MaterialPtr m_material;
 		};
 	}
 }

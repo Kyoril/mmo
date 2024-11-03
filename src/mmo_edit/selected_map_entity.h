@@ -8,6 +8,11 @@
 
 namespace mmo
 {
+	namespace terrain
+	{
+		class Tile;
+	}
+
 	class MapEntity;
 
 	class SelectedMapEntity : public Selectable
@@ -37,6 +42,54 @@ namespace mmo
 	private:
 		MapEntity& m_entity;
 		std::function<void(Selectable&)> m_duplication;
+	};
+
+	class SelectedTerrainTile final : public Selectable
+	{
+	public:
+		SelectedTerrainTile(terrain::Tile& tile);
+
+	public:
+		// Inherited via Selectable
+		void Visit(SelectableVisitor& visitor) override;
+
+		void Translate(const Vector3& delta) override {}
+
+		void Rotate(const Quaternion& delta) override {}
+
+		void Scale(const Vector3& delta) override {}
+
+		void Remove() override {}
+
+		void Deselect() override;
+
+		Vector3 GetPosition() const override;
+
+		Quaternion GetOrientation() const override;
+
+		Vector3 GetScale() const override;
+
+		void SetPosition(const Vector3& position) const override {}
+
+		void SetOrientation(const Quaternion& orientation) const override {}
+
+		void SetScale(const Vector3& scale) const override {}
+
+		void Duplicate() override {}
+
+		bool SupportsTranslate() const override { return false; }
+
+		bool SupportsRotate() const override { return false; }
+
+		bool SupportsScale() const override { return false; }
+
+		bool SupportsDuplicate() const override { return false; }
+
+	public:
+		terrain::Tile& GetTile() const { return m_tile; }
+
+	private:
+		terrain::Tile& m_tile;
 	};
 
 	class SelectedUnitSpawn : public Selectable

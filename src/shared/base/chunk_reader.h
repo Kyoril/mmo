@@ -95,6 +95,17 @@ namespace mmo
 			{
 				m_chunkHandlers.erase(chunkHeader);
 			}
+
+			if (m_requiredChunkHandlers.contains(chunkHeader))
+			{
+				m_requiredChunkHandlers.erase(chunkHeader);
+			}
+		}
+
+		void RemoveAllChunkHandlers()
+		{
+			m_chunkHandlers.clear();
+			m_requiredChunkHandlers.clear();
 		}
 
 	protected:

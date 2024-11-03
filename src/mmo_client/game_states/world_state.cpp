@@ -398,6 +398,7 @@ namespace mmo
 		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
 
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, &m_playerController->GetCamera(), 64, 64);
+		m_terrain->SetBaseFileName("Worlds/Development/Development");
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);

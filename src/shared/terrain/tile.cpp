@@ -48,7 +48,18 @@ namespace mmo
 
 		MaterialPtr Tile::GetMaterial() const
 		{
-			return nullptr;
+			if (!m_material)
+			{
+				return GetTerrain().GetDefaultMaterial();
+			}
+
+			return m_material;
+		}
+
+		void Tile::SetMaterial(MaterialPtr material)
+		{
+			m_material = std::move(material);
+			m_page.NotifyTileMaterialChanged(m_tileX, m_tileZ);
 		}
 
 		const String& Tile::GetMovableType() const
@@ -75,6 +86,11 @@ namespace mmo
 		void Tile::PopulateRenderQueue(RenderQueue& queue)
 		{
 			queue.AddRenderable(*this, m_renderQueueId);
+		}
+
+		Terrain& Tile::GetTerrain() const
+		{
+			return m_page.GetTerrain();
 		}
 
 		void Tile::CreateVertexData(size_t startX, size_t startZ)
@@ -125,7 +141,7 @@ namespace mmo
 					vert->tangent = m_page.GetTangentAt(i, j);
 					// TODO: vert->binormal = m_page.GetTangentAt(i, j);
 					vert->binormal = Vector3::UnitX;
-					vert->color = 0xFFFFFFFF;
+					vert->color = 0x000000FF;
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 

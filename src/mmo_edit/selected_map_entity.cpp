@@ -85,6 +85,37 @@ namespace mmo
         visitor.Visit(*this);
     }
 
+    SelectedTerrainTile::SelectedTerrainTile(terrain::Tile& tile)
+	    : Selectable()
+		, m_tile(tile)
+    {
+
+    }
+
+    void SelectedTerrainTile::Visit(SelectableVisitor& visitor)
+    {
+        visitor.Visit(*this);
+    }
+
+    void SelectedTerrainTile::Deselect()
+    {
+    }
+
+    Vector3 SelectedTerrainTile::GetPosition() const
+	{
+		return Vector3::Zero;
+    }
+
+    Quaternion SelectedTerrainTile::GetOrientation() const
+	{
+		return Quaternion::Identity;
+    }
+
+    Vector3 SelectedTerrainTile::GetScale() const
+    {
+		return Vector3::UnitScale;
+    }
+
     void SelectedUnitSpawn::Visit(SelectableVisitor& visitor)
     {
     }

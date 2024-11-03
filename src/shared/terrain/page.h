@@ -10,6 +10,9 @@
 #include <unordered_map>
 #include <array>
 
+#include "base/chunk_reader.h"
+#include "base/chunk_writer.h"
+
 namespace mmo
 {
 	class SceneNode;
@@ -30,7 +33,7 @@ namespace mmo
 		typedef std::unordered_map<TextureId, LayerId> TextureLayerMap;
 		typedef std::unordered_map<LayerId, TextureId> LayerTextureMap;
 
-		class Page
+		class Page final : public ChunkReader
 		{
 		public:
 			explicit Page(Terrain& terrain, int32 x, int32 z);
@@ -44,6 +47,8 @@ namespace mmo
 			void Unload();
 
 			Tile* GetTile(uint32 x, uint32 z);
+
+			Tile* GetTileAt(float x, float z);
 
 			Terrain& GetTerrain();
 
@@ -79,10 +84,45 @@ namespace mmo
 
 			const AABB& GetBoundingBox() const;
 
+			void UpdateTileSelectionQuery();
+
+			bool IsChanged() const { return m_changed; }
+
+			bool Save();
+
+			String GetPageFilename() const;
+
+			void NotifyTileMaterialChanged(uint32 x, uint32 y);
+
+			void SetHeightAt(unsigned int x, unsigned int z, float value);
+
+		private:
+
+			bool ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCMTChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCTIChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCVTSubChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCVNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCTNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+
 		private:
 			void UpdateBoundingBox();
 
 			void UpdateMaterial();
+
+		protected:
+			bool IsValid() const noexcept override;
+
+			bool OnReadFinished() noexcept override;
 
 		private:
 			typedef Grid<std::unique_ptr<Tile>> TileGrid;
@@ -95,13 +135,14 @@ namespace mmo
 			std::vector <float> m_heightmap;
 			std::vector <Vector3> m_normals;
 			std::vector <Vector3> m_tangents;
-			std::vector <String> m_textures;
+			std::vector<MaterialPtr> m_materials;
 
 			int32 m_x;
 			int32 m_z;
 			bool m_preparing;
 			bool m_prepared;
 			bool m_loaded;
+			bool m_changed{ false };
 			AABB m_boundingBox;
 
 		};

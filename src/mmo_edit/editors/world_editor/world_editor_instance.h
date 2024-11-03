@@ -134,6 +134,8 @@ namespace mmo
 		virtual ~SelectableVisitor() = default;
 
 		virtual void Visit(SelectedMapEntity& selectable) = 0;
+
+		virtual void Visit(SelectedTerrainTile& selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor
@@ -162,6 +164,8 @@ namespace mmo
 
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
+		void PerformTerrainSelectionRaycast(float viewportX, float viewportY);
+
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 		void OnMapEntityRemoved(MapEntity& entity);
@@ -174,6 +178,7 @@ namespace mmo
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
 		void Visit(SelectedMapEntity& selectable) override;
+		void Visit(SelectedTerrainTile& selectable) override;
 
 	private:
 		WorldEditor& m_editor;

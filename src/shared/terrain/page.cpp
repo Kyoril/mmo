@@ -8,11 +8,24 @@
 #include <sstream>
 
 #include "tile.h"
+#include "assets/asset_registry.h"
+#include "base/chunk_writer.h"
+#include "base/utilities.h"
+#include "binary_io/stream_sink.h"
+#include "log/default_log_levels.h"
+#include "scene_graph/material_manager.h"
 
 namespace mmo
 {
 	namespace terrain
 	{
+		namespace constants
+		{
+			static const ChunkMagic VersionChunk = MakeChunkMagic('REVM');
+			static const ChunkMagic MaterialChunk = MakeChunkMagic('TMCM');
+			static const ChunkMagic VertexChunk = MakeChunkMagic('TVCM');
+		}
+
 		Page::Page(Terrain& terrain, int32 x, int32 z)
 			: m_terrain(terrain)
 			, m_x(x)
@@ -59,13 +72,51 @@ namespace mmo
 			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
 			m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
+			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 
-			// TODO: Read page file
+			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
+			if (AssetRegistry::HasFile(pageFileName))
+			{
+				std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(pageFileName);
+				ASSERT(file);
+
+				// Lets start fresh
+				RemoveAllChunkHandlers();
+
+				// Register chunk handler
+				AddChunkHandler(*constants::VersionChunk, true, *this, &Page::ReadMCVRChunk);
+
+				io::StreamSource source{ *file };
+				io::Reader reader{source};
+				if (!Read(reader))
+				{
+					ELOG("Failed to read page file '" << pageFileName << "'!");
+					m_preparing = false;
+					return false;
+				}
+
+				m_changed = true;
+			}
+			else
+			{
+				WLOG("Terrain page file '" << pageFileName << "' is missing, page will be initialized as blank tile");
+				m_changed = true;
+			}
 
 			m_prepared = true;
 			m_preparing = false;
 
 			return true;
+		}
+
+		bool Page::IsValid() const noexcept
+		{
+			return ChunkReader::IsValid();
+		}
+
+		bool Page::OnReadFinished() noexcept
+		{
+			return ChunkReader::OnReadFinished();
 		}
 
 		void Page::Load()
@@ -93,6 +144,14 @@ namespace mmo
 					auto& tile = m_Tiles(i, j);
 					tile = std::make_unique<Tile>(tileName, *this, i * (constants::VerticesPerTile - 1), j * (constants::VerticesPerTile - 1));
 
+					// Setup tile material assignment
+					if (const int tileIndex = i + j * constants::TilesPerPage; tileIndex < m_materials.size())
+					{
+						tile->SetMaterial(m_materials[tileIndex]);
+					}
+
+					// Ensure tile respects selection query
+					tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
 					m_pageNode->AttachObject(*tile);
 				}
 			}
@@ -120,6 +179,21 @@ namespace mmo
 			}
 
 			return m_Tiles(x, z).get();
+		}
+
+		Tile* Page::GetTileAt(float x, float z)
+		{
+			// Is the tile inside our bounds?
+			if (x <= m_boundingBox.min.x || x >= m_boundingBox.max.x ||
+				z <= m_boundingBox.min.z || z >= m_boundingBox.max.z)
+			{
+				return nullptr;
+			}
+
+			x -= m_boundingBox.min.x;
+			z -= m_boundingBox.min.z;
+
+			return GetTile(static_cast<uint32>((x / constants::PageSize) * constants::TilesPerPage), static_cast<uint32>((z / constants::PageSize) * constants::TilesPerPage));
 		}
 
 		Terrain& Page::GetTerrain()
@@ -240,10 +314,196 @@ namespace mmo
 			return m_boundingBox;
 		}
 
+		void Page::UpdateTileSelectionQuery()
+		{
+			for (const auto& tile : m_Tiles)
+			{
+				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+			}
+		}
+
+		bool Page::Save()
+		{
+			auto file = AssetRegistry::CreateNewFile(GetPageFilename());
+			if (!file)
+			{
+				ELOG("Failed to save changed tile " << m_x << "x" << m_z << ": Failed to create file!");
+				return false;
+			}
+
+			io::StreamSink sink(*file);
+			io::Writer writer(sink);
+
+			uint32 version = 0x01;
+
+			// File version chunk
+			{
+				ChunkWriter versionChunkWriter{ constants::VersionChunk, writer };
+				writer << io::write<uint32>(version);
+				versionChunkWriter.Finish();
+			}
+
+			// Materials
+			{
+				ChunkWriter materialChunkWriter{ constants::MaterialChunk, writer };
+				writer << io::write<uint16>(m_materials.size());
+				for (auto& material : m_materials)
+				{
+					if (material)
+					{
+						writer << io::write_dynamic_range<uint16>(material->GetName());
+					}
+					else
+					{
+						writer << io::write<uint16>(0);
+					}
+				}
+				materialChunkWriter.Finish();
+			}
+
+			// Heightmap
+			{
+				ChunkWriter heightmapChunk{ constants::VertexChunk, writer };
+				writer << io::write_range(m_heightmap);
+				heightmapChunk.Finish();
+			}
+
+			sink.Flush();
+			file.reset();
+
+			m_changed = false;
+			return false;
+		}
+
+		bool Page::ReadMCMTChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Read number of materials used
+			uint16 numMaterials;
+			if (!(reader >> io::read<uint16>(numMaterials)))
+			{
+				ELOG("Failed to read number of materials used in tile!");
+				return false;
+			}
+
+			m_materials.clear();
+			m_materials.reserve(numMaterials);
+
+			for (uint16 i = 0; i < numMaterials; ++i)
+			{
+				String materialName;
+				if (!(reader >> io::read_container<uint16>(materialName)))
+				{
+					ELOG("Failed to read material name from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+
+				if (materialName.empty())
+				{
+					m_materials.push_back(nullptr);
+				}
+				else
+				{
+					// Don't worry: MaterialManager has a cache system, so loading the same material multiple times is not a problem!
+					m_materials.push_back(MaterialManager::Get().Load(materialName));
+				}
+			}
+
+			return reader;
+		}
+
+		bool Page::ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Read heightmap data
+			if (!(reader >> io::read_range(m_heightmap)))
+			{
+				ELOG("Failed to read heightmap from tile " << m_x << "x" << m_z << "!");
+				return false;
+			}
+
+			return reader;
+		}
+
+		String Page::GetPageFilename() const
+		{
+			return m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
+		}
+
+		void Page::NotifyTileMaterialChanged(uint32 x, uint32 y)
+		{
+			if (x >= constants::TilesPerPage || y >= constants::TilesPerPage)
+			{
+				return;
+			}
+
+			if (!m_loaded)
+			{
+				return;
+			}
+
+			const uint32 tileIndex = x + y * constants::TilesPerPage;
+			ASSERT(tileIndex < m_materials.size());
+
+			MaterialPtr material = m_Tiles(x, y)->GetMaterial();
+			if (material == m_terrain.GetDefaultMaterial())
+			{
+				// Default terrain material does not need to be set explicitly!
+				m_materials[tileIndex] = nullptr;
+			}
+			else
+			{
+				m_materials[tileIndex] = material;
+			}
+
+			m_changed = true;
+		}
+
+		void Page::SetHeightAt(unsigned int x, unsigned int z, float value)
+		{
+			if (x >= constants::VerticesPerPage || z >= constants::VerticesPerPage)
+			{
+				return;
+			}
+
+			m_heightmap[x + z * constants::VerticesPerPage] = value;
+			m_changed = true;
+		}
+
+		bool Page::ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			uint32 version;
+			if (!(reader >> io::read<uint32>(version)))
+			{
+				ELOG("Failed to read tile format version!");
+				return false;
+			}
+
+			const uint32 expectedVersion = 0x01;
+			if (version != expectedVersion)
+			{
+				ELOG("Unsupported file format version detected (detected " << log_hex_digit(version) << ", expected " << log_hex_digit(expectedVersion) << " or lower");
+				return false;
+			}
+
+			// Register new chunk readers
+			AddChunkHandler(*constants::MaterialChunk, false, *this, &Page::ReadMCMTChunk);
+			AddChunkHandler(*constants::VertexChunk, false, *this, &Page::ReadMCVTChunk);
+
+			return reader;
+		}
+
 		void Page::UpdateBoundingBox()
 		{
-			m_boundingBox = AABB(Vector3(m_x * constants::PageSize, 0.0f, m_z * constants::PageSize),
-				Vector3(m_x * constants::PageSize + constants::PageSize, 0.0f, m_z * constants::PageSize + constants::PageSize));
+			const Vector3 offset = Vector3(
+				static_cast<float>(static_cast<double>(32 - m_x) * constants::PageSize),
+				0.0f,
+				static_cast<float>(static_cast<double>(32 - m_z) * constants::PageSize)
+			);
+
+			// Bounding box
+			m_boundingBox = AABB(
+				offset,
+				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize)
+			);
 
 			for (auto& tile : m_Tiles)
 			{

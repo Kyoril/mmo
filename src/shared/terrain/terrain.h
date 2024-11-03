@@ -8,8 +8,11 @@
 
 #include <memory>
 
+#include "graphics/material.h"
+
 namespace mmo
 {
+	struct Ray;
 	class SceneNode;
 	class Scene;
 	class Camera;
@@ -72,6 +75,10 @@ namespace mmo
 
 			const String& GetBaseFileName() const;
 
+			MaterialPtr GetDefaultMaterial() const;
+
+			void SetDefaultMaterial(MaterialPtr material);
+
 			Scene& GetScene();
 
 			SceneNode* GetNode();
@@ -79,6 +86,25 @@ namespace mmo
 			uint32 GetWidth() const;
 
 			uint32 GetHeight() const;
+
+			void SetTileSceneQueryFlags(uint32 mask);
+
+			uint32 GetTileSceneQueryFlags() const { return m_tileSceneQueryFlags; }
+
+			struct RayIntersectsResult
+			{
+				Tile* tile;
+				Vector3 position;
+			};
+
+			std::pair<bool, RayIntersectsResult> RayIntersects(const Ray& ray);
+
+
+			void Deform(int x, int z, int innerRadius, int outerRadius, float power);
+
+			void SetHeightAt(int x, int y, float height);
+
+			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
 		private:
 
@@ -93,6 +119,8 @@ namespace mmo
 			uint32 m_height;
 			int32 m_lastX;
 			int32 m_lastZ;
+			uint32 m_tileSceneQueryFlags = 0;
+			MaterialPtr m_defaultMaterial;
 		};
 	}
 

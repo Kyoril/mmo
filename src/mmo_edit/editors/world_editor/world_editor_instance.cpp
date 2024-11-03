@@ -17,6 +17,8 @@
 #include "selected_map_entity.h"
 #include "stream_sink.h"
 #include "scene_graph/mesh_manager.h"
+#include "terrain/page.h"
+#include "terrain/tile.h"
 
 namespace mmo
 {
@@ -25,6 +27,10 @@ namespace mmo
 
 	/// @brief Used for map entities.
 	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
+
+	static constexpr uint32 SceneQueryFlags_Tile = 1 << 1;
+
+	static constexpr uint32 SceneQueryFlags_Spawns = 1 << 2;
 
 	constexpr uint32 versionHeader = 'MVER';
 	constexpr uint32 meshHeader = 'MESH';
@@ -116,6 +122,12 @@ namespace mmo
 
 		// Setup terrain
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
+		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
+
+		// Replace all \ with /
+		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension()).string();
+		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		m_terrain->SetBaseFileName(baseFileName);
 
 		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
@@ -194,7 +206,6 @@ namespace mmo
 				}
 
 				meshNames.emplace_back(std::move(meshName));
-				DLOG("\tMesh name: " << meshNames.back());
 			}
 		}
 
@@ -382,6 +393,20 @@ namespace mmo
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
 		}
 
+
+		if (ImGui::IsKeyDown(ImGuiKey_F1))
+		{
+			m_editMode = WorldEditMode::None;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F2))
+		{
+			m_editMode = WorldEditMode::StaticMapEntities;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F3))
+		{
+			m_editMode = WorldEditMode::Terrain;
+		}
+
 		if (ImGui::Begin(detailsId.c_str()))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
@@ -409,6 +434,7 @@ namespace mmo
 					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
 					{
 						m_editMode = static_cast<WorldEditMode>(i);
+						m_selection.Clear();
 					}
 					ImGui::PopID();
 				}
@@ -417,6 +443,41 @@ namespace mmo
 			}
 
 			ImGui::Separator();
+
+			if (m_editMode == WorldEditMode::Terrain)
+			{
+				if (ImGui::CollapsingHeader("Terrain"))
+				{
+					static const char* s_noMaterialPreview = "<None>";
+
+					const char* previewString = s_noMaterialPreview;
+					if (m_terrain->GetDefaultMaterial())
+					{
+						previewString = m_terrain->GetDefaultMaterial()->GetName().data();
+					}
+
+					if (ImGui::BeginCombo("Terrain Default Material", previewString))
+					{
+						ImGui::EndCombo();
+					}
+
+					if (ImGui::BeginDragDropTarget())
+					{
+						// We only accept mesh file drops
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+						{
+							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						}
+
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+						{
+							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						}
+
+						ImGui::EndDragDropTarget();
+					}
+				}
+			}
 
 			if (!m_selection.IsEmpty())
 			{
@@ -427,36 +488,47 @@ namespace mmo
 					selected->Visit(*this);
 				}
 
-				if (ImGui::CollapsingHeader("Transform"))
+				if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
 				{
-					Vector3 position = selected->GetPosition();
-					Vector3 scale = selected->GetScale();
-
-					if (ImGui::InputFloat3("Position", position.Ptr()))
+					if (ImGui::CollapsingHeader("Transform"))
 					{
-						selected->SetPosition(position);
-					}
+						if (selected->SupportsTranslate())
+						{
+							Vector3 position = selected->GetPosition();
+							if (ImGui::InputFloat3("Position", position.Ptr()))
+							{
+								selected->SetPosition(position);
+							}
+						}
 
-					Rotator rotation = selected->GetOrientation().ToRotator();
+						if (selected->SupportsRotate())
+						{
+							Rotator rotation = selected->GetOrientation().ToRotator();
+							float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
+							if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
+							{
+								rotation.roll = angles[0];
+								rotation.pitch = angles[2];
+								rotation.yaw = angles[1];
 
-					float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
-					if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
-					{
-						rotation.roll = angles[0];
-						rotation.pitch = angles[2];
-						rotation.yaw = angles[1];
+								Quaternion quaternion = Quaternion::FromRotator(rotation);
+								quaternion.Normalize();
 
-						Quaternion quaternion = Quaternion::FromRotator(rotation);
-						quaternion.Normalize();
+								selected->SetOrientation(quaternion);
+							}
+						}
 
-						selected->SetOrientation(quaternion);
-					}
-
-					if (ImGui::InputFloat3("Scale", scale.Ptr()))
-					{
-						selected->SetScale(scale);
+						if (selected->SupportsScale())
+						{
+							Vector3 scale = selected->GetScale();
+							if (ImGui::InputFloat3("Scale", scale.Ptr()))
+							{
+								selected->SetScale(scale);
+							}
+						}
 					}
 				}
+
 			}
 		}
 		ImGui::End();
@@ -711,6 +783,15 @@ namespace mmo
 					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 			}
 		}
+		else if(m_editMode == WorldEditMode::Terrain)
+		{
+			if (m_terrainEditMode == TerrainEditMode::Select)
+			{
+				PerformTerrainSelectionRaycast(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
+		}
 	}
 
 	void WorldEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
@@ -808,6 +889,20 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world file " << GetAssetPath());
+
+		// Save terrain
+		for (uint32 x = 0; x < 64; ++x)
+		{
+			for (uint32 y = 0; y < 64; ++y)
+			{
+				terrain::Page* page = m_terrain->GetPage(x, y);
+				if (page && page->IsPrepared() && page->IsChanged())
+				{
+					// Page was loaded, so save any changes
+					page->Save();
+				}
+			}
+		}
 	}
 
 	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
@@ -869,6 +964,27 @@ namespace mmo
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 				}
 			}
+		}
+	}
+
+	void WorldEditorInstance::PerformTerrainSelectionRaycast(float viewportX, float viewportY)
+	{
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		const auto hitResult = m_terrain->RayIntersects(ray);
+		if (!hitResult.first)
+		{
+			return;
+		}
+
+		terrain::Tile* tile = hitResult.second.tile;
+		if (tile)
+		{
+			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
+			UpdateDebugAABB(tile->GetWorldBoundingBox());
 		}
 	}
 
@@ -973,6 +1089,54 @@ namespace mmo
 			}
 
 			ImGui::EndDragDropTarget();
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedTerrainTile& selectable)
+	{
+		static const char* s_noMaterialPreview = "<None>";
+
+		terrain::Tile& tile = selectable.GetTile();
+
+		// Get material
+		MaterialPtr material = tile.GetMaterial();
+
+		// Build preview string
+		const char* previewString = s_noMaterialPreview;
+		if (material)
+		{
+			previewString = material->GetName().data();
+		}
+
+		if (ImGui::BeginCombo("Material", previewString))
+		{
+			ImGui::EndCombo();
+		}
+
+		if (ImGui::BeginDragDropTarget())
+		{
+			// We only accept mesh file drops
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+			{
+				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+			}
+
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+			{
+				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+			}
+
+			ImGui::EndDragDropTarget();
+		}
+
+		if (ImGui::Button("Set For Page"))
+		{
+
+		}
+
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
 		}
 	}
 }
