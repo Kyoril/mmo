@@ -252,7 +252,7 @@ namespace mmo
 						}
 						else
 						{
-							//pTile->UpdateTerrain(fromX, fromZ, toX, toZ);
+							pTile->UpdateTerrain(fromX, fromZ, toX, toZ);
 						}
 					}
 				}

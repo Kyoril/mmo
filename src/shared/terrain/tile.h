@@ -47,6 +47,8 @@ namespace mmo
 
 			Terrain& GetTerrain() const;
 
+			void UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz);
+
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 

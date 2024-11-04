@@ -73,9 +73,33 @@ namespace mmo
 			m_pages(x, y)->Unload();
 		}
 
+		static void GetPageAndLocalVertex(uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
+		{
+			pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
+			localVertexIndex = vertexIndex - pageIndex * (constants::VerticesPerPage - 1);
+		}
+
 		float Terrain::GetAt(uint32 x, uint32 z)
 		{
-			return 0.0f;
+			// Validate indices
+			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= TotalVertices || z >= TotalVertices)
+			{
+				return 0.0f;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(z, pageY, localVertexY);
+
+			// Retrieve the page at (pageX, pageY)
+			Page* page = GetPage(pageX, pageY); // Implement GetPage accordingly
+
+			// Retrieve the height at the local vertex within the page
+			float height = page->GetHeightAt(localVertexX, localVertexY);
+
+			return height;
 		}
 
 		float Terrain::GetSlopeAt(uint32 x, uint32 z)
@@ -85,7 +109,7 @@ namespace mmo
 
 		float Terrain::GetHeightAt(uint32 x, uint32 z)
 		{
-			return 0.0f;
+			return GetAt(x, z);
 		}
 
 		float Terrain::GetSmoothHeightAt(float x, float z)
@@ -286,6 +310,23 @@ namespace mmo
 			return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
 		}
 
+		void Terrain::GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ)
+		{
+			// Get page coordinate from world coordinate
+			const int32 pageX = 32 - static_cast<int32>(floor(x / terrain::constants::PageSize));
+			const int32 pageY = 32 - static_cast<int32>(floor(z / terrain::constants::PageSize));
+
+			// Now calculate the offset relative to the pages origin
+			const float pageOriginX = pageX * terrain::constants::PageSize;
+			const float pageOriginZ = pageY * terrain::constants::PageSize;
+
+			// Now get the vertex scale of the page
+			const float scale = terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1);
+
+			vertexX = static_cast<int32>((x - pageOriginX) / scale) + (pageX * constants::VerticesPerPage);
+			vertexZ = static_cast<int32>((z - pageOriginZ) / scale) + (pageY * constants::VerticesPerPage);
+		}
+
 		static float GetBrushIntensity(int x, int y, int innerRadius, int outerRadius)
 		{
 			float factor = 1.0f;
@@ -310,13 +351,15 @@ namespace mmo
 
 			for (int vertX = std::max<int>(0, x); vertX < x + outerRadius * 2; vertX++)
 			{
-				if (vertX > static_cast<int>(m_width * (constants::VerticesPerPage - 1)) + 1) {
+				if (vertX > static_cast<int>(m_width * (constants::VerticesPerPage - 1)) + 1)
+				{
 					continue;
 				}
 
 				for (int vertZ = std::max<int>(0, z); vertZ < z + outerRadius * 2; vertZ++)
 				{
-					if (vertZ > static_cast<int>(m_height * (constants::VerticesPerPage - 1)) + 1) {
+					if (vertZ > static_cast<int>(m_height * (constants::VerticesPerPage - 1)) + 1)
+					{
 						continue;
 					}
 
@@ -324,7 +367,7 @@ namespace mmo
 					float height = GetHeightAt(vertX, vertZ);
 
 					// Update height
-					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
+					float factor = 1.0f;// GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
 					height += power * factor;
 
 					// Apply change
@@ -342,68 +385,68 @@ namespace mmo
 			bool isBottomEdge = (y % constants::VerticesPerPage == 0) && (y > 0);
 
 			// Determine page
-			int pageX = x / (constants::VerticesPerPage - 1);
-			int pageY = y / (constants::VerticesPerPage - 1);
-			int pageVertX = x - pageX * constants::VerticesPerPage;
-			int pageVertY = y - pageY * constants::VerticesPerPage;
+			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= TotalVertices || y >= TotalVertices)
+			{
+				return;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(y, pageY, localVertexY);
 			Page* page = GetPage(pageX, pageY);
 			if (page &&
 				page->IsPrepared())
 			{
-				page->SetHeightAt(pageVertX, pageVertY, height);
+				page->SetHeightAt(localVertexX, localVertexY, height);
 			}
 
 			// Vertex on right edge
 			if (isRightEdge)
 			{
-				pageX--;
+				pageX++;
 				page = GetPage(pageX, pageY);
 				if (page &&
 					page->IsPrepared())
 				{
-					pageVertX += constants::VerticesPerPage - 1;
-					page->SetHeightAt(pageVertX, pageVertY, height);
+					page->SetHeightAt(0, localVertexY, height);
 				}
 			}
 
 			// Vertex on bottom edge
 			if (isBottomEdge)
 			{
-				pageY--;
+				pageY++;
 				page = GetPage(pageX, pageY);
 				if (page &&
 					page->IsPrepared())
 				{
-					pageVertY += constants::VerticesPerPage;
-					page->SetHeightAt(pageVertX, pageVertY, height);
+					page->SetHeightAt(localVertexX, localVertexY, height);
 				}
 			}
 
 			// All four pages!
 			if (isRightEdge && isBottomEdge)
 			{
-				pageX++;
-				pageVertX = 0;
 				page = GetPage(pageX, pageY);
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(pageVertX, pageVertY, height);
+					page->SetHeightAt(0, 0, height);
 				}
 			}
 		}
 
 		void Terrain::UpdateTiles(int fromX, int fromZ, int toX, int toZ)
 		{
-			// Cap
-			if (fromX < 0) fromX = 0;
-			if (fromZ < 0) fromZ = 0;
+			uint32 fromPageX, fromPageZ, localVertexX, localVertexY;
+			GetPageAndLocalVertex(fromX, fromPageX, localVertexX);
+			GetPageAndLocalVertex(fromZ, fromPageZ, localVertexY);
 
-			// Convert to page coordinates
-			int fromPageX = fromX / constants::VerticesPerPage;
-			int fromPageZ = fromZ / constants::VerticesPerPage;
-			unsigned int toPageX = toX / constants::VerticesPerPage;
-			unsigned int toPageZ = toZ / constants::VerticesPerPage;
+			uint32 toPageX, toPageZ, localVertexToX, localVertexToY;
+			GetPageAndLocalVertex(toX, toPageX, localVertexX);
+			GetPageAndLocalVertex(toZ, toPageZ, localVertexY);
 
 			// Iterate through all pages in the area
 			for (unsigned int x = fromPageX; x <= toPageX; x++)
@@ -436,7 +479,7 @@ namespace mmo
 					{
 						if (pPage->IsLoaded()) 
 						{
-							pPage->UpdateTiles(pageStartX, pageStartZ, pageEndX, pageEndZ);
+							pPage->UpdateTiles(0, 0, constants::TilesPerPage * constants::VerticesPerTile, constants::TilesPerPage * constants::VerticesPerTile, false);
 						}
 					}
 				}

@@ -239,7 +239,7 @@ namespace mmo
 		WorldEditMode m_editMode{ WorldEditMode::None };
 
 		// Terrain edit modes
-		TerrainEditMode m_terrainEditMode{ TerrainEditMode::Select };
+		TerrainEditMode m_terrainEditMode{ TerrainEditMode::Deform };
 		TerrainDeformMode m_terrainDeformMode{ TerrainDeformMode::Raise };
 		TerrainPaintMode m_terrainPaintMode{ TerrainPaintMode::Paint };
 

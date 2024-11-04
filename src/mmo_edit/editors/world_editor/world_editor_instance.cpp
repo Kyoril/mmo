@@ -334,6 +334,24 @@ namespace mmo
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
 
+		// Terrain deformation
+		if (m_hovering && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+		{
+			const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
+
+			if (m_editMode == WorldEditMode::Terrain)
+			{
+				if (m_terrainEditMode == TerrainEditMode::Deform)
+				{
+					if (m_terrainDeformMode == TerrainDeformMode::Raise)
+					{
+						m_terrain->Deform(terrain::constants::VerticesPerPage * 32 + 20, terrain::constants::VerticesPerPage * 32 + 20, 
+							3, 6, 1.0f * factor * deltaTimeSeconds);
+					}
+				}
+			}
+		}
+
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
@@ -774,22 +792,25 @@ namespace mmo
 		const auto mousePos = ImGui::GetMousePos();
 		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
-		if (m_editMode == WorldEditMode::StaticMapEntities)
+		if (m_hovering)
 		{
-			if (!widgetWasActive && button == 0 && m_hovering)
+			if (m_editMode == WorldEditMode::StaticMapEntities)
 			{
-				PerformEntitySelectionRaycast(
-					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+				if (!widgetWasActive && button == 0 && m_hovering)
+				{
+					PerformEntitySelectionRaycast(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+				}
 			}
-		}
-		else if(m_editMode == WorldEditMode::Terrain)
-		{
-			if (m_terrainEditMode == TerrainEditMode::Select)
+			else if (m_editMode == WorldEditMode::Terrain)
 			{
-				PerformTerrainSelectionRaycast(
-					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+				if (m_terrainEditMode == TerrainEditMode::Select)
+				{
+					PerformTerrainSelectionRaycast(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+				}
 			}
 		}
 	}

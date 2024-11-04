@@ -99,6 +99,7 @@ namespace mmo
 
 			std::pair<bool, RayIntersectsResult> RayIntersects(const Ray& ray);
 
+			void GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ);
 
 			void Deform(int x, int z, int innerRadius, int outerRadius, float power);
 

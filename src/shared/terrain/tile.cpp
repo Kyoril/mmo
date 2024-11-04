@@ -93,6 +93,43 @@ namespace mmo
 			return m_page.GetTerrain();
 		}
 
+		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
+		{
+			const size_t endX = m_startX + constants::VerticesPerTile;
+			const size_t endZ = m_startZ + constants::VerticesPerTile;
+
+			const float scale = constants::TileSize / (constants::VerticesPerTile - 1);
+
+			struct VertexStruct
+			{
+				Vector3 position;
+				uint32 color;
+				Vector3 normal;
+				Vector3 binormal;
+				Vector3 tangent;
+				float u, v;
+			};
+
+			VertexStruct* vert = (VertexStruct*)m_mainBuffer->Map(LockOptions::Normal);
+			for (size_t j = m_startZ; j < endZ; ++j)
+			{
+				for (size_t i = m_startX; i < endX; ++i)
+				{
+					const float height = m_page.GetHeightAt(i, j);
+					vert->position = Vector3(scale * i, height, scale * j);
+					vert->normal = m_page.GetNormalAt(i, j);
+					vert->tangent = m_page.GetTangentAt(i, j);
+					vert->binormal = Vector3::UnitX;
+					vert->color = 0x000000FF;
+					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
+					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
+
+					vert++;
+				}
+			}
+			m_mainBuffer->Unmap();
+		}
+
 		void Tile::CreateVertexData(size_t startX, size_t startZ)
 		{
 			m_vertexData = std::make_unique<VertexData>();
