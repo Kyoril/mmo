@@ -245,5 +245,8 @@ namespace mmo
 
 		// Spawn edit mode
 		proto::MapEntry* m_mapEntry { nullptr };
+
+		Entity* m_debugEntity{ nullptr };
+		SceneNode* m_debugNode{ nullptr };
 	};
 }

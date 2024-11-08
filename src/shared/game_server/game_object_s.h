@@ -14,6 +14,7 @@
 
 #include "math/vector3.h"
 #include "math/angle.h"
+#include "math/degree.h"
 
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"

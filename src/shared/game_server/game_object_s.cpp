@@ -7,8 +7,6 @@
 
 #include <cmath>
 
-#include "math/degree.h"
-
 namespace mmo
 {
 	GameObjectS::GameObjectS(const proto::Project& project)

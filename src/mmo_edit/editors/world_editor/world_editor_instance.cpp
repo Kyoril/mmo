@@ -138,6 +138,11 @@ namespace mmo
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
 
+		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+		m_debugEntity = m_scene.CreateEntity("TerrainDebug", "Editor/Joint.hmsh");
+		m_debugNode->AttachObject(*m_debugEntity);
+		m_debugEntity->SetVisible(false);
+
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
 		if (!streamPtr)
@@ -999,6 +1004,7 @@ namespace mmo
 		const auto hitResult = m_terrain->RayIntersects(ray);
 		if (!hitResult.first)
 		{
+			m_debugEntity->SetVisible(false);
 			return;
 		}
 
@@ -1008,6 +1014,10 @@ namespace mmo
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
 			UpdateDebugAABB(tile->GetWorldBoundingBox());
 		}
+
+		m_debugNode->SetPosition(hitResult.second.position);
+		m_debugEntity->SetVisible(true);
+
 	}
 
 	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
