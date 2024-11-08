@@ -7,6 +7,7 @@
 #include "page.h"
 #include "tile.h"
 #include "game/constants.h"
+#include "log/default_log_levels.h"
 #include "scene_graph/scene.h"
 
 namespace mmo
@@ -139,36 +140,96 @@ namespace mmo
 
 		Tile* Terrain::GetTile(int32 x, int32 z)
 		{
-			const size_t tileCount = 16;
-
-			unsigned int pageX = (x / tileCount);
-			unsigned int pageZ = (z / tileCount);
-
-			if (pageX >= m_width || pageZ >= m_height)
+			// Can that tile possibly exist?
+			if (x < 0 || z < 0 || x >= m_width * constants::TilesPerPage || z >= m_height * constants::TilesPerPage)
 			{
 				return nullptr;
 			}
 
-			Page* page = GetPage(pageX, pageZ);
-			ASSERT(page);
+			const uint32 pageX = x / constants::TilesPerPage;
+			const uint32 pageZ = z / constants::TilesPerPage;
 
-			if (!page->IsLoaded()) {
+			// Check if page is loaded
+			Page* page = GetPage(pageX, pageZ);
+			if (!page->IsLoaded())
+			{
 				return nullptr;
 			}
 
-			unsigned int tileX = (x % tileCount);
-			unsigned int tileZ = (z % tileCount);
-
-			return page->GetTile(tileX, tileZ);
+			// Normalize tile index
+			const uint32 tileX = x % constants::TilesPerPage;
+			const uint32 tileY = z % constants::TilesPerPage;
+			return page->GetTile(tileX, tileY);
 		}
 
 		Page* Terrain::GetPage(uint32 x, uint32 z)
 		{
-			if (x >= m_width || z >= m_height) {
+			if (x >= m_width || z >= m_height)
+			{
 				return nullptr;
 			}
 
 			return m_pages(x, z).get();
+		}
+
+		bool Terrain::GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
+		{
+			const float halfWorldWidth = (m_width / 2 * constants::PageSize);
+			const float halfWorldHeight = (m_height / 2 * constants::PageSize);
+
+			const int32 px = static_cast<int32>((position.x + halfWorldWidth) / constants::PageSize);
+			const int32 py = static_cast<int32>((position.z + halfWorldHeight) / constants::PageSize);
+
+			if (px < 0 || py < 0 || px >= m_width || py >= m_height)
+			{
+				return false;
+			}
+
+			x = px;
+			y = py;
+			return true;
+		}
+
+		bool Terrain::GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
+		{
+			const float halfWorldWidth = (m_width / 2 * constants::PageSize);
+			const float halfWorldHeight = (m_height / 2 * constants::PageSize);
+
+			const int32 px = static_cast<int32>((position.x + halfWorldWidth) / constants::TileSize);
+			const int32 py = static_cast<int32>((position.z + halfWorldHeight) / constants::TileSize);
+
+			if (px < 0 || py < 0 || px >= m_width * constants::TilesPerPage || py >= m_height * constants::TilesPerPage)
+			{
+				return false;
+			}
+
+			x = px;
+			y = py;
+			return true;
+		}
+
+		bool Terrain::GetLocalTileIndexByGlobalTileIndex(int32 globalX, int32 globalY, int32& localX, int32& localY) const
+		{
+			if (globalX < 0 || globalY < 0 || globalX >= m_width * constants::TilesPerPage || globalY >= m_height * constants::TilesPerPage)
+			{
+				return false;
+			}
+
+			localX = globalX % static_cast<int32>(constants::TilesPerPage);
+			localY = globalY % static_cast<int32>(constants::TilesPerPage);
+			return true;
+		}
+
+		bool Terrain::GetPageIndexFromGlobalTileIndex(int32 globalX, int32 globalY, int32& pageX, int32& pageY) const
+		{
+			if (globalX < 0 || globalY < 0 || globalX >= m_width * constants::TilesPerPage || globalY >= m_height * constants::TilesPerPage)
+			{
+				return false;
+			}
+
+			pageX = globalX / static_cast<int32>(constants::TilesPerPage);
+			pageY = globalY / static_cast<int32>(constants::TilesPerPage);
+			return true;
 		}
 
 		void Terrain::SetBaseFileName(const String& name)
@@ -257,6 +318,8 @@ namespace mmo
 							continue;
 						}
 
+						DLOG("hit page " << x << "x" << y << ": " << res.second);
+
 						// Get the hit point
 						point = ray.GetPoint(res.second);
 
@@ -300,7 +363,15 @@ namespace mmo
 				Tile* tile = nullptr;
 				if (hitPage)
 				{
-					tile = hitPage->GetTileAt(hitPoint.x, hitPoint.z);
+					int32 globalTileX, globalTileY;
+					if (GetTileIndexByWorldPosition(hitPoint, globalTileX, globalTileY))
+					{
+						int32 localTileX, localTileY;
+						if (GetLocalTileIndexByGlobalTileIndex(globalTileX, globalTileY, localTileX, localTileY))
+						{
+							tile = hitPage->GetTile(localTileX, localTileY);
+						}
+					}
 				}
 
 				return std::make_pair(true, RayIntersectsResult(tile, hitPoint));
@@ -484,6 +555,48 @@ namespace mmo
 					}
 				}
 			}
+		}
+
+		bool Terrain::RayTriangleIntersection(const Ray& ray, const Vector3& v0, const Vector3& v1, const Vector3& v2, float& t, Vector3& intersectionPoint) const
+		{
+			const float EPSILON = 1e-6f;
+
+			Vector3 edge1 = v1 - v0;
+			Vector3 edge2 = v2 - v0;
+			Vector3 h = ray.direction.Cross(edge2);
+			float a = edge1.Dot(h);
+
+			if (std::abs(a) < EPSILON)
+			{
+				return false; // Ray is parallel to triangle
+			}
+
+			float f = 1.0f / a;
+			Vector3 s = ray.origin - v0;
+			float u = f * s.Dot(h);
+
+			if (u < 0.0f || u > 1.0f)
+			{
+				return false;
+			}
+
+			Vector3 q = s.Cross(edge1);
+			float v = f * ray.direction.Dot(q);
+
+			if (v < 0.0f || u + v > 1.0f)
+				return false;
+
+			// At this stage, we can compute t to find out where the intersection point is on the line
+			t = f * edge2.Dot(q);
+
+			if (t > EPSILON) // Ray intersection
+			{
+				intersectionPoint = ray.origin + ray.direction * t;
+				return true;
+			}
+			
+			// Line intersection but not a ray intersection
+			return false;
 		}
 	}
 }

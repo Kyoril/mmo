@@ -7,6 +7,8 @@
 
 #include <cmath>
 
+#include "math/degree.h"
+
 namespace mmo
 {
 	GameObjectS::GameObjectS(const proto::Project& project)
@@ -160,7 +162,7 @@ namespace mmo
 	bool GameObjectS::IsFacingTowards(const Vector3& position) const
 	{
 		// 120 degrees view cone in total
-		return IsInArc(position, Radian(2.0f * Pi / 3.0f));
+		return IsInArc(position, Radian(Degree(120.0f).GetValueRadians()));
 	}
 
 	bool GameObjectS::IsFacingAwayFrom(const Vector3& position) const

@@ -38,19 +38,20 @@ namespace mmo
 		{
 			s_mouseSensitivityCVar = ConsoleVarMgr::RegisterConsoleVar("MouseSensitivity", "Gets or sets the mouse sensitivity value", "0.25");
 			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "1");
-
 			s_maxCameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("MaxCameraZoom", "Gets or sets the maximum camera zoom value.", "8");
-			s_maxCameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
-			{
-				NotifyCameraZoomChanged();
-			};
-
 			s_cameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("CameraZoom", "Gets or sets the current camera zoom value.", "8");
-			s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&) 
-			{
-				NotifyCameraZoomChanged();
-			};
 		}
+
+		m_cvarConnections += {
+			s_maxCameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&)
+				{
+					NotifyCameraZoomChanged();
+				},
+				s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&)
+				{
+					NotifyCameraZoomChanged();
+				}
+		};
 
 		m_selectionSceneQuery = m_scene.CreateRayQuery(Ray());
 		m_selectionSceneQuery->SetQueryMask(0xF0000000);

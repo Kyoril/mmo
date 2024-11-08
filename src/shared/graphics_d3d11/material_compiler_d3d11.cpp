@@ -576,7 +576,6 @@ namespace mmo
 
 			for (const auto& param : scalarParams)
 			{
-				DLOG("[MAT] Add scalar parameter #" << m_material->GetScalarParameters().size() + 1 << ": " << param.name);
 				m_material->AddScalarParameter(param.name, param.value);
 				m_pixelShaderStream << "\tfloat s" << param.name << ";\n";
 			}
@@ -677,9 +676,8 @@ namespace mmo
 				<< "{\n"
 				<< "\tfloat r = (roughness + 1.0);\n"
 				<< "\tfloat k = (r*r) / 8.0;\n"
-				<< "\tfloat num   = NdotV;\n"
 				<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
-				<< "\treturn num / denom;\n"
+				<< "\treturn NdotV / denom;\n"
 				<< "}\n\n";
 
 			// GeometrySmith
@@ -922,7 +920,6 @@ namespace mmo
 		{
 			if (it->name == name)
 			{
-				DLOG("Updating texture parameter " << name << " default value");
 				it->texture = texture;
 				break;
 			}
@@ -930,7 +927,6 @@ namespace mmo
 
 		if (it == m_textureParameters.end())
 		{
-			DLOG("Adding texture parameter #" << m_textureParameters.size() + 1 << ": " << name);
 			m_textureParameters.emplace_back(String(name), String(texture));
 			paramIndex = m_textureParameters.size() - 1;
 		}
@@ -967,12 +963,10 @@ namespace mmo
 		// Ensure parameter exists
 		if (const auto it = std::find_if(m_floatParameters.begin(), m_floatParameters.end(), [&name](const auto& param) { return param.name == name; }); it == m_floatParameters.end())
 		{
-			DLOG("Adding float parameter #" << m_floatParameters.size() + 1 << ": " << name);
 			m_floatParameters.emplace_back(String(name), defaultValue);
 		}
 		else
 		{
-			DLOG("Updating float parameter " << name << " default value");
 			it->value = defaultValue;
 		}
 

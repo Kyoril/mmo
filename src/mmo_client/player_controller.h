@@ -94,6 +94,7 @@ namespace mmo
 		uint32 m_mouseDownTime = 0;
 		int32 m_x = 0, m_y = 0;
 		GameUnitC* m_hoveredUnit = nullptr;
+		scoped_connection_container m_cvarConnections;
 
 	};
 }

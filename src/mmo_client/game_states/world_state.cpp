@@ -1789,12 +1789,10 @@ namespace mmo
 			return;
 		}
 
-		const uint32 entry = std::stoul(tokens[0]);
-		if (entry == 0)
-		{
-			ELOG("Invalid spell id provided: '" << entry << "'");
-			return;
-		}
+		std::istringstream strm(tokens[0]);
+
+		uint32 entry = 0;
+		strm >> entry;
 
 		m_realmConnector.LearnSpell(entry);
 	}

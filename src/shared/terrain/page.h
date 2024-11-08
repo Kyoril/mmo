@@ -46,7 +46,7 @@ namespace mmo
 
 			void Unload();
 
-			Tile* GetTile(uint32 x, uint32 z);
+			Tile* GetTile(uint32 x, uint32 y);
 
 			Tile* GetTileAt(float x, float z);
 

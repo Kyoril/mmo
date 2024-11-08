@@ -171,14 +171,15 @@ namespace mmo
 			m_Tiles.clear();
 		}
 
-		Tile* Page::GetTile(uint32 x, uint32 z)
+		Tile* Page::GetTile(uint32 x, uint32 y)
 		{
 			if (x >= m_Tiles.width() ||
-				z >= m_Tiles.height()) {
+				y >= m_Tiles.height()) 
+			{
 				return nullptr;
 			}
 
-			return m_Tiles(x, z).get();
+			return m_Tiles(x, y).get();
 		}
 
 		Tile* Page::GetTileAt(float x, float z)

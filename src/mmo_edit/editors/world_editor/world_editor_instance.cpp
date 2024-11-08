@@ -35,6 +35,7 @@ namespace mmo
 	constexpr uint32 versionHeader = 'MVER';
 	constexpr uint32 meshHeader = 'MESH';
 	constexpr uint32 entityHeader = 'MENT';
+	constexpr uint32 terrainHeader = 'RRET';
 
 	struct MapEntityChunkContent
 	{

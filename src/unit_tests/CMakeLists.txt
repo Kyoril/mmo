@@ -16,7 +16,18 @@ target_link_libraries(unit_tests
 	hpak_v1_0
 	math
 	game
-	game_server)
+	game_server
+	graphics
+	graphics_null
+	scene_graph
+	terrain
+	tex
+	tex_v1_0
+	frame_ui)
+
+if (WIN32)
+	target_link_libraries(unit_tests graphics_d3d11)
+endif()
 	
 target_link_libraries(unit_tests ${OPENSSL_LIBRARIES})
 set_property(TARGET unit_tests PROPERTY FOLDER "tests")

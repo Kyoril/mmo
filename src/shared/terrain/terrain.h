@@ -71,6 +71,16 @@ namespace mmo
 
 			Page* GetPage(uint32 x, uint32 z);
 
+			bool GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
+
+			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
+			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
+			bool GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
+
+			bool GetLocalTileIndexByGlobalTileIndex(int32 globalX, int32 globalY, int32& localX, int32& localY) const;
+
+			bool GetPageIndexFromGlobalTileIndex(int32 globalX, int32 globalY, int32& pageX, int32& pageY) const;
+
 			void SetBaseFileName(const String& name);
 
 			const String& GetBaseFileName() const;
@@ -106,6 +116,15 @@ namespace mmo
 			void SetHeightAt(int x, int y, float height);
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
+
+		private:
+
+			// Helper methods
+			bool RayAABBIntersection(const Ray& ray, float& tmin, float& tmax) const;
+
+			bool RayTriangleIntersection(const Ray& ray, const Vector3& v0, const Vector3& v1, const Vector3& v2, float& t, Vector3& intersectionPoint) const;
+
+			float GetHeightAtGridPoint(int gridX, int gridZ) const;
 
 		private:
 
