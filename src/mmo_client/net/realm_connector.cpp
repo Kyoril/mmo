@@ -183,6 +183,8 @@ namespace mmo
 
 	PacketParseResult RealmConnector::connectionPacketReceived(game::IncomingPacket & packet)
 	{
+		DLOG("Received packet " << log_hex_digit(packet.GetId()));
+
 		return HandleIncomingPacket(packet);
 	}
 

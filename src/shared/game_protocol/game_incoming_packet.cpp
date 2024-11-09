@@ -24,6 +24,9 @@ namespace mmo
 				>> io::read<uint16>(packet.m_id)
 				>> io::read<uint32>(packet.m_size))
 			{
+				// TODO: Remove me once debugged properly!
+				ASSERT(packet.m_id < 66);
+
 				std::size_t size = source.getRest();
 				if (size < packet.m_size)
 				{

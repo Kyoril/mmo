@@ -108,6 +108,8 @@ namespace mmo
 			
 			void flush() override
 			{
+				std::scoped_lock lock(m_sendMutex);
+
 				if (m_sendBuffer.empty())
 				{
 					return;
@@ -181,6 +183,8 @@ namespace mmo
 			size_t m_decryptedUntil;
 			bool m_isReceiving;
 
+			std::mutex m_sendMutex;
+
 		private:
 			void BeginSend()
 			{
@@ -203,7 +207,11 @@ namespace mmo
 					return;
 				}
 
-				m_sending.clear();
+				{
+					std::scoped_lock lock(m_sendMutex);
+					m_sending.clear();
+				}
+				
 				flush();
 			}
 
@@ -284,29 +292,36 @@ namespace mmo
 					case receive_state::Incomplete:
 						break;
 					case receive_state::Complete:
-						if (m_listener)
 						{
-							auto result = m_listener->connectionPacketReceived(packet);
-							switch (result)
+							if (m_listener)
 							{
-							case PacketParseResult::Pass:
-								nextPacket = true;
-								break;
-							case PacketParseResult::Block:
-								nextPacket = false;
-								break;
-							case PacketParseResult::Disconnect:
-								nextPacket = false;
-								m_socket.reset();
-								if (m_listener)
+								auto result = m_listener->connectionPacketReceived(packet);
+								switch (result)
 								{
-									m_listener->connectionMalformedPacket();
-									m_listener = nullptr;
+								case PacketParseResult::Pass:
+									nextPacket = true;
+									break;
+								case PacketParseResult::Block:
+									break;
+								case PacketParseResult::Disconnect:
+									m_socket.reset();
+									if (m_listener)
+									{
+										m_listener->connectionMalformedPacket();
+										m_listener = nullptr;
+									}
+									break;
 								}
-								break;
 							}
+
+							const auto packetSize = packet.GetSize();
+							const char* const expectedPacketEnd = &m_received[0] + parsedUntil + packetSize;
+							const size_t expectedPacketReadSize = static_cast<std::size_t>(expectedPacketEnd - packetBegin) + sizeof(packet.GetId()) + sizeof(packetSize);
+							ASSERT(expectedPacketReadSize == static_cast<size_t>(source.getPosition() - source.getBegin()));
+
+							parsedUntil += expectedPacketReadSize;
 						}
-						parsedUntil += static_cast<std::size_t>(source.getPosition() - source.getBegin());
+						
 						break;
 					case receive_state::Malformed:
 						m_socket.reset();

@@ -160,7 +160,7 @@ namespace mmo
 	bool GameObjectS::IsFacingTowards(const Vector3& position) const
 	{
 		// 120 degrees view cone in total
-		return IsInArc(position, Radian(Degree(120.0f).GetValueRadians()));
+		return IsInArc(position, Radian(Pi * 2.0f / 3.0f));
 	}
 
 	bool GameObjectS::IsFacingAwayFrom(const Vector3& position) const

@@ -273,18 +273,18 @@ namespace mmo
 		// Initialize the event loop
 		EventLoop::Initialize();
 
-		// Run service
-		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime&)
-		{
-			NetWorkProc();
-			s_timerService.run_one();
-		});
-
 		// Initialize the console client which also loads the config file
 		Console::Initialize("Config/Config.cfg");
 
 		// Initialize network threads
 		NetInit();
+
+		// Run service
+		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime&)
+			{
+				NetWorkProc();
+				s_timerService.poll_one();
+			});
 
 		// Verify the connector instances have been initialized
 		ASSERT(s_loginConnector && s_realmConnector);
