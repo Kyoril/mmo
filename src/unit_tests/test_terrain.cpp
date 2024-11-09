@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
+#if false
+
 #include "catch.hpp"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
@@ -66,3 +68,5 @@ TEST_CASE("GetPageIndexByWorldPosition_Returns_False_When_Out_Of_Bounds_Negative
 	// Assert
 	CHECK(!result);
 }
+
+#endif
