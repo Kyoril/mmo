@@ -79,7 +79,7 @@ namespace mmo
 				// If the file hasn't been tracked yet, we will add it to the list
 				// with the current archive that will be used to load the file on 
 				// request
-				if (s_files.find(file) == s_files.end())
+				if (!s_files.contains(file))
 				{
 					s_files[file] = archive;
 				}

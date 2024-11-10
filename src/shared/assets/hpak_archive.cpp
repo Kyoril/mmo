@@ -81,8 +81,14 @@ namespace mmo
 		// Find file info
 		auto it = std::find_if(m_header.files.begin(), m_header.files.end(), [&filename](const hpak::v1_0::FileEntry & entry)
 		{
-			return entry.name == filename;
+			return entry.name.size() == filename.size() &&
+			std::equal(entry.name.begin(), entry.name.end(),
+				filename.begin(),
+				[](char a, char b) {
+					return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+				});
 		});
+
 		if (it == m_header.files.end())
 		{
 			return nullptr;

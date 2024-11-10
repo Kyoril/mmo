@@ -196,6 +196,10 @@ namespace mmo
 
 		SetupPacketHandler();
 
+		// TODO: Remove me. We abuse this here for preloading the font
+		WorldTextFrame frame(m_playerController->GetCamera(), Vector3::Zero, 0.0f);
+		frame.GetFont()->GetTextWidth("1");
+
 		m_worldRootNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		LoadMap("Worlds/Development/Development");
 	}
