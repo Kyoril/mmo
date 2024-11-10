@@ -257,7 +257,7 @@ namespace mmo
 			const float dx = x - position.x;
 			const float dz = z - position.z;
 
-			float ang = ::atan2(dz, dx);
+			float ang = ::atan2(-dz, dx);
 
 			ang = (ang >= 0) ? ang : 2 * Pi + ang;
 			return Radian(ang);

@@ -33,6 +33,14 @@ namespace mmo
 		m_ai = make_unique<CreatureAI>(*this, CreatureAI::Home(m_movementInfo.position));
 	}
 
+	void GameCreatureS::Relocate(const Vector3& position, const Radian& facing)
+	{
+		GameUnitS::Relocate(position, facing);
+
+		ASSERT(m_ai);
+		m_ai->OnControlledMoved();
+	}
+
 	void GameCreatureS::SetEntry(const proto::UnitEntry& entry)
 	{
 		// Setup new entry

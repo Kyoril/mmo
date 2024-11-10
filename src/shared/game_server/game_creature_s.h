@@ -70,6 +70,8 @@ namespace mmo
 			return *m_entry;
 		}
 
+		void Relocate(const Vector3& position, const Radian& facing) override;
+
 		/// Changes the creatures entry index. Remember, that the creature always has to
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);

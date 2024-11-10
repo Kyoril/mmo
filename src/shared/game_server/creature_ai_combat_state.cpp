@@ -152,6 +152,16 @@ namespace mmo
 	void CreatureAICombatState::OnControlledMoved()
 	{
 		CreatureAIState::OnControlledMoved();
+
+		GameUnitS* victim = GetControlled().GetVictim();
+		if (victim)
+		{
+			// Reached the target - stop
+			if (GetControlled().GetSquaredDistanceTo(victim->GetPosition(), true) <= 4.0f * 4.0f)
+			{
+				GetControlled().GetMover().StopMovement();
+			}
+		}
 	}
 
 	void CreatureAICombatState::AddThreat(GameUnitS& threatener, float amount)
@@ -334,7 +344,7 @@ namespace mmo
 		const float distance = (currentUnitLoc - currentLocation).GetSquaredLength();
 
 		// Check distance and whether we need to move
-		if (distance > ((combatRange * 0.5f) * (combatRange * 0.5f)))
+		if (distance > (combatRange * 0.5f) * (combatRange * 0.5f))
 		{
 			Vector3 newTargetLocation = target.GetPredictedPosition();
 			Vector3 direction = (newTargetLocation - currentLocation);
