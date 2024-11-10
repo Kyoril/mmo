@@ -197,7 +197,7 @@ namespace mmo
 		SetupPacketHandler();
 
 		m_worldRootNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
-		LoadMap("Worlds/Development/Development.hwld");
+		LoadMap("Worlds/Development/Development");
 	}
 
 	void WorldState::OnLeave()
@@ -223,7 +223,7 @@ namespace mmo
 
 		s_inputControl = nullptr;
 		m_playerController.reset();
-		m_terrain.reset();
+		m_worldInstance.reset();
 		m_worldGrid.reset();
 		m_debugAxis.reset();
 		m_scene.Clear();
@@ -396,9 +396,6 @@ namespace mmo
 		m_sunLight->SetPowerScale(1.0f);
 		m_sunLight->SetColor(Color::White);
 		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
-
-		m_terrain = std::make_unique<terrain::Terrain>(m_scene, &m_playerController->GetCamera(), 64, 64);
-		m_terrain->SetBaseFileName("Worlds/Development/Development");
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
@@ -2069,10 +2066,9 @@ namespace mmo
 	bool WorldState::LoadMap(const String& assetPath)
 	{
 		m_worldInstance.reset();
-		m_worldInstance = std::make_unique<ClientWorldInstance>(m_scene, *m_worldRootNode);
+		m_worldInstance = std::make_unique<ClientWorldInstance>(m_scene, *m_worldRootNode, assetPath);
 
-		// TODO: Load map file
-		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath);
+		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
 		{
 			ELOG("Failed to load world file '" << assetPath << "'");
@@ -2085,10 +2081,10 @@ namespace mmo
 		ClientWorldInstanceDeserializer deserializer{ *m_worldInstance };
 		if (!deserializer.Read(reader))
 		{
-			ELOG("Failed to read world '" << assetPath << "'!");
+			ELOG("Failed to read world '" << assetPath << ".hwld'!");
 			return false;
 		}
-
+		
 		return true;
 	}
 
@@ -2212,14 +2208,17 @@ namespace mmo
 		const auto& mainPage = page.GetMainPage();
 		const PagePosition& pos = mainPage.GetPosition();
 
-		if (isAvailable)
+		if (m_worldInstance->HasTerrain())
 		{
-			m_terrain->PreparePage(pos.x(), pos.y());
-			m_terrain->LoadPage(pos.x(), pos.y());
-		}
-		else
-		{
-			m_terrain->UnloadPage(pos.x(), pos.y());
+			if (isAvailable)
+			{
+				m_worldInstance->GetTerrain()->PreparePage(pos.x(), pos.y());
+				m_worldInstance->GetTerrain()->LoadPage(pos.x(), pos.y());
+			}
+			else
+			{
+				m_worldInstance->GetTerrain()->UnloadPage(pos.x(), pos.y());
+			}
 		}
 	}
 

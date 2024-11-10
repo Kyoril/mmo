@@ -5,6 +5,7 @@
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
 
@@ -13,6 +14,7 @@ namespace mmo
 	static const ChunkMagic VersionChunkMagic = MakeChunkMagic('MVER');
 	static const ChunkMagic MeshNamesChunkMagic = MakeChunkMagic('MESH');
 	static const ChunkMagic EntityChunkMagic = MakeChunkMagic('MENT');
+	static const ChunkMagic TerrainChunkMagic = MakeChunkMagic('RRET');
 
 	ClientWorldInstanceDeserializer::ClientWorldInstanceDeserializer(ClientWorldInstance& world)
 		: ChunkReader()
@@ -21,9 +23,10 @@ namespace mmo
 		AddChunkHandler(*VersionChunkMagic, true, *this, &ClientWorldInstanceDeserializer::ReadVersionChunk);
 	}
 
-	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode)
+	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name)
 		: m_scene(scene)
 		, m_rootNode(rootNode)
+		, m_name(name)
 	{
 	}
 
@@ -43,6 +46,8 @@ namespace mmo
 
 	bool ClientWorldInstanceDeserializer::ReadVersionChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)
 	{
+		ASSERT(chunkHeader == *VersionChunkMagic);
+
 		// Read version
 		uint32 version = 0;
 		reader >> io::read<uint32>(version);
@@ -50,8 +55,8 @@ namespace mmo
 		// Check if version is supported
 		if (version == world_version::Version_0_0_0_1)
 		{
-			AddChunkHandler(*MeshNamesChunkMagic, true, *this, &ClientWorldInstanceDeserializer::ReadMeshNamesChunk);
-			AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunk);
+			AddChunkHandler(*MeshNamesChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadMeshNamesChunk);
+			AddChunkHandler(*TerrainChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadTerrainChunk);
 			return true;
 		}
 
@@ -61,6 +66,11 @@ namespace mmo
 
 	bool ClientWorldInstanceDeserializer::ReadMeshNamesChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)
 	{
+		ASSERT(chunkHeader == *MeshNamesChunkMagic);
+
+		RemoveChunkHandler(*MeshNamesChunkMagic);
+		AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunk);
+
 		if (!m_meshNames.empty())
 		{
 			ELOG("Duplicate mesh names chunk detected!");
@@ -80,11 +90,13 @@ namespace mmo
 			m_meshNames.emplace_back(std::move(meshName));
 		}
 
-		return true;
+		return reader;
 	}
 
 	bool ClientWorldInstanceDeserializer::ReadEntityChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)
 	{
+		ASSERT(chunkHeader == *EntityChunkMagic);
+
 		if (m_meshNames.empty())
 		{
 			ELOG("No mesh names known, can't read entity chunks before mesh chunk!");
@@ -112,6 +124,40 @@ namespace mmo
 		}
 
 		m_world.CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
-		return true;
+		return reader;
+	}
+
+	bool ClientWorldInstanceDeserializer::ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *TerrainChunkMagic);
+
+		uint8 hasTerrain;
+		if (!(reader >> io::read<uint8>(hasTerrain)))
+		{
+			ELOG("Failed to read terrain chunk: Unexpected end of file");
+			return false;
+		}
+
+		if (hasTerrain)
+		{
+			// Ensure terrain is created
+			m_world.m_terrain = std::make_unique<terrain::Terrain>(m_world.m_scene, nullptr, 64, 64);
+			m_world.m_terrain->SetBaseFileName(m_world.m_name);
+		}
+
+		// Read terrain default material
+		String defaultMaterialName;
+		if (!(reader >> io::read_container<uint16>(defaultMaterialName)))
+		{
+			ELOG("Failed to read terrain default material name: Unexpected end of file");
+			return false;
+		}
+
+		if (hasTerrain)
+		{
+			m_world.GetTerrain()->SetDefaultMaterial(MaterialManager::Get().Load(defaultMaterialName));
+		}
+
+		return reader;
 	}
 }
