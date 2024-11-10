@@ -611,7 +611,7 @@ namespace mmo
 		}
 
 		SetTarget(victim ? victim->GetGuid() : 0);
-		if (victim->GetGuid() == GetGuid() || !UnitIsEnemy(*victim))
+		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
 		{
 			// Unit is not an enemy, so we wont attack
 			StopAttack();
