@@ -46,15 +46,18 @@ namespace mmo
 			template<class F>
 			void sendSinglePacket(F generator)
 			{
-				io::StringSink sink(getSendBuffer());
+				{
+					std::scoped_lock lock(m_sendMutex);
+					io::StringSink sink(getSendBuffer());
 
-				const size_t bufferPos = sink.Position();
+					const size_t bufferPos = sink.Position();
 
-				typename Protocol::OutgoingPacket packet(sink);
-				generator(packet);
+					typename Protocol::OutgoingPacket packet(sink);
+					generator(packet);
 
-				m_crypt.EncryptSend(reinterpret_cast<uint8*>(&m_sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
-
+					m_crypt.EncryptSend(reinterpret_cast<uint8*>(&m_sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
+				}
+				
 				flush();
 			}
 			
@@ -83,7 +86,7 @@ namespace mmo
 			{
 				return m_socket->lowest_layer().remote_endpoint().address();
 			}
-			
+
 			Buffer &getSendBuffer() override
 			{
 				return m_sendBuffer;
@@ -120,8 +123,7 @@ namespace mmo
 					return;
 				}
 
-				m_sending = m_sendBuffer;
-				m_sendBuffer.clear();
+				m_sending = std::move(m_sendBuffer);
 
 				ASSERT(m_sendBuffer.empty());
 				ASSERT(!m_sending.empty());
@@ -154,11 +156,13 @@ namespace mmo
 
 			void SendBuffer(const char *data, std::size_t size)
 			{
+				std::scoped_lock lock(m_sendMutex);
 				m_sendBuffer.append(data, data + size);
 			}
 
 			void SendBuffer(const Buffer &data)
 			{
+				std::scoped_lock lock(m_sendMutex);
 				m_sendBuffer.append(data.data(), data.size());
 			}
 

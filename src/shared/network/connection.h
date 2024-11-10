@@ -64,12 +64,13 @@ namespace mmo
 		virtual void setListener(Listener &Listener_) = 0;
 		virtual void resetListener() = 0;
 		virtual asio::ip::address getRemoteAddress() const = 0;
-		virtual Buffer &getSendBuffer() = 0;
 		virtual void startReceiving() = 0;
 		virtual void resumeParsing() = 0;
 		virtual void flush() = 0;
 		virtual void close() = 0;
+		virtual Buffer& getSendBuffer() = 0;
 
+	public:
 		template<class F>
 		void sendSinglePacket(F generator)
 		{
