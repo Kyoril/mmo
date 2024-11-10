@@ -190,6 +190,11 @@ namespace mmo
 			return true;
 		}
 
+		void Terrain::SetVisible(const bool visible) const
+		{
+			m_terrainNode->SetVisible(visible, true);
+		}
+
 		bool Terrain::GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
 		{
 			const float halfWorldWidth = (m_width / 2 * constants::PageSize);

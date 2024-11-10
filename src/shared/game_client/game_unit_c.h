@@ -98,6 +98,12 @@ namespace mmo
 
 		bool CanBeLooted() const override;
 
+		void NotifySpellCastStarted();
+
+		void NotifySpellCastCancelled();
+
+		void NotifySpellCastSucceeded();
+
 	public:
 		/// @brief Returns the current health of this unit.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
@@ -187,6 +193,8 @@ namespace mmo
 
 		CreatureInfo m_creatureInfo;
 
+		bool m_casting = false;
+
 	protected:
 		// Animation stuff
 		AnimationState* m_idleAnimState{ nullptr };
@@ -194,6 +202,8 @@ namespace mmo
 		AnimationState* m_runAnimState{ nullptr };
 		AnimationState* m_deathState{ nullptr };
 		AnimationState* m_unarmedAttackState{ nullptr };
+		AnimationState* m_castReleaseState{ nullptr };
+		AnimationState* m_castingState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;

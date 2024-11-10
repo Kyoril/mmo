@@ -1224,9 +1224,17 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			if (castTime > 0)
+			{
+				casterUnit->NotifySpellCastStarted();
+			}
+		}
+
 		if (m_playerController->GetControlledUnit())
 		{
-			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
 			{
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", spell, castTime);
 			}
@@ -1273,6 +1281,11 @@ namespace mmo
 					m_spellProjectiles.push_back(std::move(projectile));
 				}
 			}
+		}
+
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			casterUnit->NotifySpellCastSucceeded();
 		}
 
 		if (m_playerController->GetControlledUnit())
@@ -1473,6 +1486,11 @@ namespace mmo
 			>> io::read<uint8>(result)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			casterUnit->NotifySpellCastCancelled();
 		}
 
 		if (m_playerController->GetControlledUnit())

@@ -32,10 +32,10 @@ namespace mmo
 
 	static constexpr uint32 SceneQueryFlags_Spawns = 1 << 2;
 
-	constexpr uint32 versionHeader = 'MVER';
-	constexpr uint32 meshHeader = 'MESH';
-	constexpr uint32 entityHeader = 'MENT';
-	constexpr uint32 terrainHeader = 'RRET';
+	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
+	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
+	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
+	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
 
 	struct MapEntityChunkContent
 	{
@@ -151,105 +151,14 @@ namespace mmo
 			return;
 		}
 
+		AddChunkHandler(*versionChunk, true, *this, &WorldEditorInstance::ReadMVERChunk);
+
 		io::StreamSource source{ *streamPtr };
 		io::Reader reader{ source };
-
-		// Read mver chunk
-		uint32 chunkHeader, chunkSize;
-		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
+		if (!Read(reader))
 		{
-			ELOG("Failed to read world file: Unexpected end of file");
+			ELOG("Failed to read world file '" << GetAssetPath() << "'!");
 			return;
-		}
-
-		if (chunkHeader != versionHeader)
-		{
-			ELOG("Failed to read world file: Expected version header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
-			return;
-		}
-		if (chunkSize != sizeof(uint32))
-		{
-			ELOG("Failed to read world file: Invalid version header chunk size");
-			return;
-		}
-
-		uint32 version;
-		if (!(reader >> io::read<uint32>(version)))
-		{
-			ELOG("Failed to read world file: Unexpected end of file");
-			return;
-		}
-
-		if (version != 0x0001)
-		{
-			ELOG("Failed to read world file: Unsupported version '" << log_hex_digit(version) << "'");
-			return;
-		}
-
-		// Read mesh name chunk
-		if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
-		{
-			ELOG("Failed to read world file: Unexpected end of file");
-			return;
-		}
-		if (chunkHeader != meshHeader)
-		{
-			ELOG("Failed to read world file: Expected mesh header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
-			return;
-		}
-
-		std::vector<String> meshNames;
-		if (chunkSize > 0)
-		{
-			const size_t contentStart = source.position();
-			while (source.position() - contentStart < chunkSize)
-			{
-				String meshName;
-				if (!(reader >> io::read_string(meshName)))
-				{
-					ELOG("Failed to read world file: Unexpected end of file");
-					return;
-				}
-
-				meshNames.emplace_back(std::move(meshName));
-			}
-		}
-
-		// Read entities
-		while(reader)
-		{
-			if (!(reader >> io::read<uint32>(chunkHeader) >> io::read<uint32>(chunkSize)))
-			{
-				break;
-			}
-
-			if (chunkHeader != entityHeader)
-			{
-				ELOG("Failed to read world file: Expected entity header chunk, but found chunk '" << log_hex_digit(chunkHeader) << "'");
-				return;
-			}
-
-			if (chunkSize != sizeof(MapEntityChunkContent))
-			{
-				ELOG("Failed to read world file: Invalid entity header chunk size: Expected '" << sizeof(MapEntityChunkContent) << "' but got '" << chunkSize << "'");
-				return;
-			}
-
-			MapEntityChunkContent content;
-			reader.readPOD(content);
-			if (!reader)
-			{
-				ELOG("Failed to read world file: Unexpected end of file");
-				return;
-			}
-
-			if (content.meshNameIndex >= meshNames.size())
-			{
-				ELOG("Failed to read world file: Invalid mesh name index");
-				return;
-			}
-
-			CreateMapEntity(meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
 		}
 
 		ILOG("Successfully read world file!");
@@ -344,7 +253,7 @@ namespace mmo
 		if (m_hovering && ImGui::IsMouseDown(ImGuiMouseButton_Left))
 		{
 			const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
-
+			
 			if (m_editMode == WorldEditMode::Terrain)
 			{
 				if (m_terrainEditMode == TerrainEditMode::Deform)
@@ -426,7 +335,7 @@ namespace mmo
 		{
 			m_editMode = WorldEditMode::StaticMapEntities;
 		}
-		else if (ImGui::IsKeyDown(ImGuiKey_F3))
+		else if (ImGui::IsKeyDown(ImGuiKey_F3) && m_hasTerrain)
 		{
 			m_editMode = WorldEditMode::Terrain;
 		}
@@ -450,41 +359,36 @@ namespace mmo
 
 			ImGui::Separator();
 
-			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
+			if (ImGui::CollapsingHeader("World Settings", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
+				if (ImGui::Checkbox("Has Terrain", &m_hasTerrain))
 				{
-					ImGui::PushID(i);
-					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
+					m_terrain->SetVisible(m_hasTerrain);
+
+					// Ensure terrain mode is not selectable if there is no terrain
+					if (!m_hasTerrain && m_editMode == WorldEditMode::Terrain)
 					{
-						m_editMode = static_cast<WorldEditMode>(i);
-						m_selection.Clear();
+						m_editMode = WorldEditMode::None;
 					}
-					ImGui::PopID();
 				}
 
-				ImGui::EndCombo();
-			}
+				ImGui::BeginDisabled(!m_hasTerrain);
 
-			ImGui::Separator();
+				static const char* s_noMaterialPreview = "<None>";
 
-			if (m_editMode == WorldEditMode::Terrain)
-			{
-				if (ImGui::CollapsingHeader("Terrain"))
+				const char* previewString = s_noMaterialPreview;
+				if (m_terrain->GetDefaultMaterial())
 				{
-					static const char* s_noMaterialPreview = "<None>";
+					previewString = m_terrain->GetDefaultMaterial()->GetName().data();
+				}
 
-					const char* previewString = s_noMaterialPreview;
-					if (m_terrain->GetDefaultMaterial())
-					{
-						previewString = m_terrain->GetDefaultMaterial()->GetName().data();
-					}
+				if (ImGui::BeginCombo("Terrain Default Material", previewString))
+				{
+					ImGui::EndCombo();
+				}
 
-					if (ImGui::BeginCombo("Terrain Default Material", previewString))
-					{
-						ImGui::EndCombo();
-					}
-
+				if (m_hasTerrain)
+				{
 					if (ImGui::BeginDragDropTarget())
 					{
 						// We only accept mesh file drops
@@ -501,7 +405,32 @@ namespace mmo
 						ImGui::EndDragDropTarget();
 					}
 				}
+
+				ImGui::EndDisabled();
 			}
+
+			ImGui::Separator();
+
+			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
+			{
+				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
+				{
+					ImGui::PushID(i);
+
+					ImGui::BeginDisabled(i == static_cast<uint32>(WorldEditMode::Terrain) && !m_hasTerrain);
+					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
+					{
+						m_editMode = static_cast<WorldEditMode>(i);
+						m_selection.Clear();
+					}
+					ImGui::EndDisabled();
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			ImGui::Separator();
 
 			if (!m_selection.IsEmpty())
 			{
@@ -875,7 +804,7 @@ namespace mmo
 
 		// Start writing file
 		writer
-			<< io::write<uint32>(versionHeader)
+			<< io::write<uint32>(*versionChunk)
 			<< io::write<uint32>(sizeof(uint32))
 			<< io::write<uint32>(0x0001);
 
@@ -887,9 +816,24 @@ namespace mmo
 			meshSize += name.first.size() + 1;
 		}
 
+		// Write terrain settings
+		{
+			String defaultMaterialName;
+			if (m_terrain->GetDefaultMaterial())
+			{
+				defaultMaterialName = m_terrain->GetDefaultMaterial()->GetName();
+			}
+
+			ChunkWriter terrainWriter(terrainChunk, writer);
+			writer
+				<< io::write<uint8>(m_hasTerrain)
+				<< io::write_dynamic_range<uint16>(defaultMaterialName);
+			terrainWriter.Finish();
+		}
+
 		// Write mesh names
 		writer
-			<< io::write<uint32>(meshHeader)
+			<< io::write<uint32>(*meshChunk)
 			<< io::write<uint32>(meshSize);
 		for (const auto& name : sortedNames)
 		{
@@ -900,7 +844,7 @@ namespace mmo
 		for (const auto& ent : m_mapEntities)
 		{
 			writer
-				<< io::write<uint32>(entityHeader)
+				<< io::write<uint32>(*entityChunk)
 				<< io::write<uint32>(sizeof(MapEntityChunkContent));
 
 			MapEntityChunkContent content;
@@ -1170,5 +1114,126 @@ namespace mmo
 		{
 			ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
 		}
+	}
+
+	bool WorldEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *versionChunk);
+
+		// Read chunk only once
+		RemoveChunkHandler(*versionChunk);
+
+		uint32 version = 0;
+		if (!(reader >> version))
+		{
+			ELOG("Failed to read version chunk!");
+			return false;
+		}
+
+		if (version != 0x01)
+		{
+			ELOG("Detected unsuppoted file format version!");
+			return false;
+		}
+
+		AddChunkHandler(*meshChunk, false, *this, &WorldEditorInstance::ReadMeshChunk);
+		AddChunkHandler(*terrainChunk, false, *this, &WorldEditorInstance::ReadTerrainChunk);
+
+		return reader;
+	}
+
+	bool WorldEditorInstance::ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *meshChunk);
+
+		// Only when we have read mesh names we support reading entity chunks otherwise entities would refer to meshes which we don't know about!
+		AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunk);
+
+		// Read chunk only once
+		RemoveChunkHandler(*meshChunk);
+
+		m_meshNames.clear();
+		if (chunkSize > 0)
+		{
+			const size_t contentStart = reader.getSource()->position();
+			while (reader.getSource()->position() - contentStart < chunkSize)
+			{
+				String meshName;
+				if (!(reader >> io::read_string(meshName)))
+				{
+					ELOG("Failed to read world file: Unexpected end of file");
+					return false;
+				}
+
+				m_meshNames.emplace_back(std::move(meshName));
+			}
+		}
+
+		return reader;
+	}
+
+	bool WorldEditorInstance::ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *entityChunk);
+
+		if (chunkSize != sizeof(MapEntityChunkContent))
+		{
+			ELOG("Failed to read world file: Invalid entity chunk size");
+			return false;
+		}
+
+		MapEntityChunkContent content;
+		reader.readPOD(content);
+		if (!reader)
+		{
+			ELOG("Failed to read world file: Unexpected end of file");
+			return false;
+		}
+
+		if (content.meshNameIndex >= m_meshNames.size())
+		{
+			ELOG("Failed to read world file: Invalid mesh name index");
+			return false;
+		}
+
+		CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+
+		return reader;
+	}
+
+	bool WorldEditorInstance::ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *terrainChunk);
+
+		// Read chunk only once
+		RemoveChunkHandler(*terrainChunk);
+
+		String defaultTerrainMaterial;
+		reader
+			>> io::read<uint8>(m_hasTerrain)
+			>> io::read_container<uint16>(defaultTerrainMaterial);
+
+		if (!defaultTerrainMaterial.empty())
+		{
+			m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(defaultTerrainMaterial));
+			if (!m_terrain->GetDefaultMaterial())
+			{
+				WLOG("Failed to load referenced terrain default material!");
+			}
+		}
+		else if (m_hasTerrain)
+		{
+			WLOG("Terrain is enabled but terrain has no default material set!");
+		}
+
+		return reader;
+	}
+
+	bool WorldEditorInstance::OnReadFinished() noexcept
+	{
+		m_meshNames.clear();
+		RemoveAllChunkHandlers();
+
+		return ChunkReader::OnReadFinished();
 	}
 }

@@ -73,6 +73,8 @@ namespace mmo
 
 			bool GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
 
+			void SetVisible(const bool visible) const;
+
 			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
 			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
 			bool GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;

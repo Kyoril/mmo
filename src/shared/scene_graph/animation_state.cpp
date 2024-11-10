@@ -86,7 +86,7 @@ namespace mmo
 
 	void AnimationState::AddTime(const float offset)
 	{
-		SetTimePosition(m_timePos + offset);
+		SetTimePosition(m_timePos + (offset * m_playRate));
 	}
 
 	void AnimationState::SetEnabled(const bool enabled)

@@ -138,7 +138,7 @@ namespace mmo
 		virtual void Visit(SelectedTerrainTile& selectable) = 0;
 	};
 
-	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor
+	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader
 	{
 
 	public:
@@ -179,6 +179,13 @@ namespace mmo
 
 		void Visit(SelectedMapEntity& selectable) override;
 		void Visit(SelectedTerrainTile& selectable) override;
+
+	private:
+		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool OnReadFinished() noexcept override;
 
 	private:
 		WorldEditor& m_editor;
@@ -248,5 +255,8 @@ namespace mmo
 
 		Entity* m_debugEntity{ nullptr };
 		SceneNode* m_debugNode{ nullptr };
+
+		bool m_hasTerrain{ true };
+		std::vector<String> m_meshNames;
 	};
 }

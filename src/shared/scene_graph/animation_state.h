@@ -8,6 +8,8 @@
 #include <list>
 #include <memory>
 
+#include "math/clamp.h"
+
 namespace mmo
 {
 	class AnimationStateSet;
@@ -48,6 +50,10 @@ namespace mmo
         bool operator==(const AnimationState& rhs) const;
         bool operator!=(const AnimationState& rhs) const;
 
+        void SetPlayRate(const float playRate) { m_playRate = std::max(playRate, 0.0016f); }
+
+        [[nodiscard]] float GetPlayRate() const { return m_playRate; }
+
         void SetLoop(const bool loop) { m_loop = loop; }
 
         [[nodiscard]] bool IsLoop() const { return m_loop; }
@@ -87,6 +93,7 @@ namespace mmo
 		float m_timePos;
 		float m_length;
 		float m_weight;
+        float m_playRate{ 1.0f };
 		bool m_enabled;
 		bool m_loop;
 	};

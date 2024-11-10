@@ -91,7 +91,7 @@ namespace mmo
 			bool animationFinished = false;
 			if (!isDead)
 			{
-				SetTargetAnimState(m_runAnimState);
+				SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
 			}
 
 			m_movementAnimationTime += deltaTime;
@@ -110,7 +110,9 @@ namespace mmo
 				if (!isDead)
 				{
 					const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-					SetTargetAnimState(isAttacking ? m_readyAnimState : m_idleAnimState);
+
+					AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+					SetTargetAnimState(m_casting ? m_castingState : idleAnim);
 				}
 
 				m_sceneNode->SetDerivedPosition(m_movementEnd);
@@ -127,23 +129,35 @@ namespace mmo
 			// TODO: This needs to be managed differently or it will explode in complexity here!
 			if (m_movementInfo.IsMoving())
 			{
-				SetTargetAnimState(m_runAnimState);
+				SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
 			}
 			else
 			{
 				const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-				SetTargetAnimState(isAttacking ? m_readyAnimState : m_idleAnimState);
+				AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+
+				SetTargetAnimState(m_casting ? m_castingState : idleAnim);
 			}
 		}
 
 		// Play back one shot animations
 		if (m_oneShotState)
 		{
+			if (m_currentState) m_currentState->SetWeight(0.0f);
+			if (m_targetState) m_targetState->SetWeight(0.0f);
+
 			if (m_oneShotState->HasEnded())
 			{
-				m_oneShotState->SetEnabled(false);
-				m_oneShotState->SetWeight(0.0f);
-				m_oneShotState = nullptr;
+				// Transition back to current state
+				m_oneShotState->SetWeight(m_oneShotState->GetWeight() - deltaTime * 4.0f);
+				if (m_currentState) m_currentState->SetWeight(1.0f);
+
+				if (m_oneShotState->GetWeight() <= 0.0f)
+				{
+					m_oneShotState->SetEnabled(false);
+					m_oneShotState->SetWeight(0.0f);
+					m_oneShotState = nullptr;
+				}
 			}
 		}
 
@@ -193,25 +207,18 @@ namespace mmo
 			}
 		}
 
-		if (m_deathState && m_deathState->IsEnabled())
+		// Update animation states
+		if (m_currentState && m_currentState->IsEnabled())
 		{
-			m_deathState->AddTime(deltaTime);
+			m_currentState->AddTime(deltaTime);
 		}
-		if (m_idleAnimState && m_idleAnimState->IsEnabled())
+		if (m_targetState && m_targetState->IsEnabled())
 		{
-			m_idleAnimState->AddTime(deltaTime);
+			m_targetState->AddTime(deltaTime);
 		}
-		if (m_runAnimState && m_runAnimState->IsEnabled())
+		if (m_oneShotState && m_oneShotState->IsEnabled())
 		{
-			m_runAnimState->AddTime(deltaTime);
-		}
-		if (m_readyAnimState && m_readyAnimState->IsEnabled() && m_readyAnimState != m_idleAnimState)
-		{
-			m_readyAnimState->AddTime(deltaTime);
-		}
-		if (m_unarmedAttackState && m_unarmedAttackState->IsEnabled())
-		{
-			m_unarmedAttackState->AddTime(deltaTime);
+			m_oneShotState->AddTime(deltaTime);
 		}
 	}
 
@@ -315,6 +322,18 @@ namespace mmo
 		if (!m_readyAnimState)
 		{
 			m_readyAnimState = m_idleAnimState;
+		}
+
+		if (m_entity->HasAnimationState("CastLoop"))
+		{
+			m_castingState = m_entity->GetAnimationState("CastLoop");
+		}
+
+		if (m_entity->HasAnimationState("CastRelease"))
+		{
+			m_castReleaseState = m_entity->GetAnimationState("CastRelease");
+			m_castReleaseState->SetLoop(false);
+			m_castReleaseState->SetPlayRate(2.0f);
 		}
 
 		if (m_entity->HasAnimationState("UnarmedAttack01"))
@@ -478,6 +497,30 @@ namespace mmo
 		return (Get<uint32>(object_fields::Flags) & unit_flags::Lootable) != 0;
 	}
 
+	void GameUnitC::NotifySpellCastStarted()
+	{
+		m_casting = true;
+	}
+
+	void GameUnitC::NotifySpellCastCancelled()
+	{
+		// Interrupt the one shot state if there is any
+		if (m_oneShotState)
+		{
+			m_oneShotState->SetEnabled(false);
+			m_oneShotState->SetWeight(0.0f);
+			m_oneShotState = nullptr;
+		}
+
+		m_casting = false;
+	}
+
+	void GameUnitC::NotifySpellCastSucceeded()
+	{
+		PlayOneShotAnimation(m_castReleaseState);
+		m_casting = false;
+	}
+
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
 	{
 		m_targetUnit = targetUnit;
@@ -613,6 +656,12 @@ namespace mmo
 		{
 			WLOG("One shot animation has loop flag set to true, not playing!");
 			return;
+		}
+
+		if (m_oneShotState != nullptr)
+		{
+			m_oneShotState->SetEnabled(false);
+			m_oneShotState->SetWeight(0.0f);
 		}
 
 		m_oneShotState = animState;
