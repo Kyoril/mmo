@@ -150,10 +150,26 @@ namespace mmo
 			{
 				// Transition back to current state
 				m_oneShotState->SetWeight(m_oneShotState->GetWeight() - deltaTime * 4.0f);
-				if (m_currentState) m_currentState->SetWeight(1.0f);
+				if (m_targetState)
+				{
+					m_targetState->SetWeight(1.0f - m_oneShotState->GetWeight());
+				}
+				else if (m_currentState)
+				{
+					m_currentState->SetWeight(1.0f - m_oneShotState->GetWeight());
+				}
 
 				if (m_oneShotState->GetWeight() <= 0.0f)
 				{
+					if (m_targetState)
+					{
+						m_targetState->SetWeight(1.0f);
+					}
+					else if (m_currentState)
+					{
+						m_currentState->SetWeight(1.0f);
+					}
+
 					m_oneShotState->SetEnabled(false);
 					m_oneShotState->SetWeight(0.0f);
 					m_oneShotState = nullptr;
@@ -163,11 +179,11 @@ namespace mmo
 
 		if (m_currentState != nullptr)
 		{
-			m_currentState->SetEnabled(m_oneShotState == nullptr);
+			m_currentState->SetEnabled(m_oneShotState == nullptr || m_oneShotState->HasEnded());
 		}
 		if (m_targetState != nullptr)
 		{
-			m_targetState->SetEnabled(m_oneShotState == nullptr);
+			m_targetState->SetEnabled(m_oneShotState == nullptr || m_oneShotState->HasEnded());
 		}
 
 		// Always force dead state
