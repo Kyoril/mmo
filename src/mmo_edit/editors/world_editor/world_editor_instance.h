@@ -108,6 +108,8 @@ namespace mmo
 		Deform,
 
 		Paint,
+
+		Count_
 	};
 
 	enum class TerrainDeformMode : uint8
@@ -118,7 +120,10 @@ namespace mmo
 
 		Smooth,
 
-		Flatten
+		Flatten,
+
+
+		Count_
 	};
 
 	enum class TerrainPaintMode : uint8
@@ -126,6 +131,9 @@ namespace mmo
 		Paint,
 
 		Smooth,
+
+
+		Count_
 	};
 
 	class SelectableVisitor
@@ -165,6 +173,8 @@ namespace mmo
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
 		void PerformTerrainSelectionRaycast(float viewportX, float viewportY);
+
+		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
@@ -258,5 +268,7 @@ namespace mmo
 
 		bool m_hasTerrain{ true };
 		std::vector<String> m_meshNames;
+
+		Vector3 m_brushPosition{};
 	};
 }

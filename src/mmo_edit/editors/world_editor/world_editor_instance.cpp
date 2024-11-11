@@ -260,7 +260,22 @@ namespace mmo
 				{
 					if (m_terrainDeformMode == TerrainDeformMode::Raise)
 					{
-						m_terrain->Deform(terrain::constants::VerticesPerPage * 32 + 20, terrain::constants::VerticesPerPage * 32 + 20, 
+						int32 pageX, pageY;
+						m_terrain->GetPageIndexByWorldPosition(m_brushPosition, pageX, pageY);
+
+						const float pageOffsetX = pageX * terrain::constants::PageSize;
+						const float pageOffsetY = pageY * terrain::constants::PageSize;
+						const float scale = terrain::constants::PageSize / terrain::constants::VerticesPerPage;
+
+						int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
+						int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
+						int pageVertexX = globalVertexX % (terrain::constants::VerticesPerPage - 1);
+						int pageVertexY = globalVertexY % (terrain::constants::VerticesPerPage - 1);
+
+						int vX = pageX * (terrain::constants::VerticesPerPage - 1) + pageVertexX;
+						int vY = pageY * (terrain::constants::VerticesPerPage - 1) + pageVertexY;
+
+						m_terrain->Deform(vX, vY,
 							3, 6, 1.0f * factor * deltaTimeSeconds);
 					}
 				}
@@ -300,6 +315,15 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_editModeStrings) == static_cast<uint32>(WorldEditMode::Count_), "There needs to be one string per enum value to display!");
+
+	static const char* s_terrainEditModeStrings[] = {
+		"Select",
+		"Deform",
+		"Paint"
+	};
+
+	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditMode::Count_), "There needs to be one string per enum value to display!");
+
 
 	void WorldEditorInstance::Draw()
 	{
@@ -430,25 +454,43 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
+			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
+			{
+				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
+				{
+					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
+					{
+						ImGui::PushID(i);
+						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_editMode)))
+						{
+							m_terrainEditMode = static_cast<TerrainEditMode>(i);
+							m_selection.Clear();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+			}
+
 			ImGui::Separator();
 
 			if (!m_selection.IsEmpty())
 			{
 				Selectable* selected = m_selection.GetSelectedObjects().back().get();
 
-				if (ImGui::CollapsingHeader("Entity"))
+				if (ImGui::CollapsingHeader("Entity", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					selected->Visit(*this);
 				}
 
 				if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
 				{
-					if (ImGui::CollapsingHeader("Transform"))
+					if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 					{
 						if (selected->SupportsTranslate())
 						{
-							Vector3 position = selected->GetPosition();
-							if (ImGui::InputFloat3("Position", position.Ptr()))
+							if (Vector3 position = selected->GetPosition(); ImGui::InputFloat3("Position", position.Ptr()))
 							{
 								selected->SetPosition(position);
 							}
@@ -457,8 +499,7 @@ namespace mmo
 						if (selected->SupportsRotate())
 						{
 							Rotator rotation = selected->GetOrientation().ToRotator();
-							float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
-							if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
+							if (float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() }; ImGui::InputFloat3("Rotation", angles, "%.3f"))
 							{
 								rotation.roll = angles[0];
 								rotation.pitch = angles[2];
@@ -727,7 +768,7 @@ namespace mmo
 		const auto mousePos = ImGui::GetMousePos();
 		m_transformWidget->OnMouseReleased(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
-		if (m_hovering)
+		if (m_hovering && button == 0)
 		{
 			if (m_editMode == WorldEditMode::StaticMapEntities)
 			{
@@ -774,6 +815,16 @@ namespace mmo
 		m_transformWidget->OnMouseMoved(
 			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+		if (m_editMode == WorldEditMode::Terrain)
+		{
+			if (m_terrainEditMode != TerrainEditMode::Select)
+			{
+				OnTerrainMouseMoved(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
+		}
 	}
 
 	void WorldEditorInstance::Save()
@@ -952,8 +1003,7 @@ namespace mmo
 			return;
 		}
 
-		terrain::Tile* tile = hitResult.second.tile;
-		if (tile)
+		if (terrain::Tile* tile = hitResult.second.tile)
 		{
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
 			UpdateDebugAABB(tile->GetWorldBoundingBox());
@@ -961,7 +1011,26 @@ namespace mmo
 
 		m_debugNode->SetPosition(hitResult.second.position);
 		m_debugEntity->SetVisible(true);
+	}
 
+	void WorldEditorInstance::OnTerrainMouseMoved(float viewportX, float viewportY)
+	{
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		const auto hitResult = m_terrain->RayIntersects(ray);
+		if (!hitResult.first)
+		{
+			m_debugEntity->SetVisible(false);
+			return;
+		}
+
+		m_brushPosition = hitResult.second.position;
+
+		m_debugNode->SetPosition(hitResult.second.position);
+		m_debugEntity->SetVisible(true);
 	}
 
 	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)

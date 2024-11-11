@@ -50,10 +50,9 @@ namespace mmo
 		const Vector3 midPoint(nx, ny, 0.0f);
 
 		// Get ray origin and ray target on near plane in world space
-		Vector3 rayOrigin, rayTarget;
 
-		rayOrigin = inverseVP * nearPoint;
-		rayTarget = inverseVP * midPoint;
+		const Vector3 rayOrigin = inverseVP * nearPoint;
+		const Vector3 rayTarget = inverseVP * midPoint;
 
 		Vector3 rayDirection = rayTarget - rayOrigin;
 		rayDirection.Normalize();

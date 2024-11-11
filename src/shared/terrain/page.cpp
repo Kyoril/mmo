@@ -219,6 +219,11 @@ namespace mmo
 
 		float Page::GetHeightAt(size_t x, size_t y) const
 		{
+			if (!IsPrepared())
+			{
+				return 0.0f;
+			}
+
 			if (x >= constants::VerticesPerPage ||
 				y >= constants::VerticesPerPage)
 			{

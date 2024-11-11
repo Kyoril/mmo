@@ -12,9 +12,11 @@
 #include "asio/io_service.hpp"
 #include "asio/ip/tcp.hpp"
 #include "asio/write.hpp"
+#include "asio/strand.hpp"
 
 #include <functional>
 #include <cassert>
+#include <asio/bind_executor.hpp>
 
 #include "log/default_log_levels.h"
 
@@ -108,6 +110,7 @@ namespace mmo
 			, m_isClosedOnParsing(false)
 			, m_isClosedOnSend(false)
 			, m_isReceiving(false)
+			, m_strand(m_socket->get_executor())
 		{
 		}
 
@@ -254,6 +257,7 @@ namespace mmo
 		bool m_isClosedOnParsing;
 		bool m_isClosedOnSend;
 		bool m_isReceiving;
+		asio::strand<asio::any_io_executor> m_strand;
 
 		void beginSend()
 		{
@@ -265,7 +269,10 @@ namespace mmo
 			asio::async_write(
 			    *m_socket,
 			    asio::buffer(m_sending),
-			    std::bind(&Connection<P, Socket>::sent, this->shared_from_this(), std::placeholders::_1));
+				asio::bind_executor(
+					m_strand,
+					std::bind(&Connection<P, Socket>::sent, this->shared_from_this(), std::placeholders::_1))
+			);
 		}
 
 		void sent(const asio::system_error &error)
@@ -304,7 +311,10 @@ namespace mmo
 			
 			m_socket->async_read_some(
 			    asio::buffer(m_receiving.data(), m_receiving.size()),
-			    std::bind(&Connection<P, Socket>::received, this->shared_from_this(), std::placeholders::_2));
+				asio::bind_executor(
+					m_strand,
+					std::bind(&Connection<P, Socket>::received, this->shared_from_this(), std::placeholders::_2))
+			);
 		}
 
 		void received(std::size_t size)

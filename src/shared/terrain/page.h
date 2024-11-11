@@ -132,10 +132,11 @@ namespace mmo
 			MaterialPtr m_material;
 			TileGrid m_Tiles;
 
-			std::vector <float> m_heightmap;
-			std::vector <Vector3> m_normals;
-			std::vector <Vector3> m_tangents;
+			std::vector<float> m_heightmap;
+			std::vector<Vector3> m_normals;
+			std::vector<Vector3> m_tangents;
 			std::vector<MaterialPtr> m_materials;
+			std::vector<Vector4> m_layers;
 
 			int32 m_x;
 			int32 m_z;

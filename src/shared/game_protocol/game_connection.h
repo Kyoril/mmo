@@ -38,6 +38,7 @@ namespace mmo
 				, m_isClosedOnParsing(false)
 				, m_decryptedUntil(0)
 				, m_isReceiving(false)
+				, m_strand(m_socket->get_executor())
 			{
 			}
 			virtual ~EncryptedConnection() = default;
@@ -47,7 +48,6 @@ namespace mmo
 			void sendSinglePacket(F generator)
 			{
 				{
-					std::scoped_lock lock(m_sendMutex);
 					io::StringSink sink(getSendBuffer());
 
 					const size_t bufferPos = sink.Position();
@@ -111,8 +111,6 @@ namespace mmo
 			
 			void flush() override
 			{
-				std::scoped_lock lock(m_sendMutex);
-
 				if (m_sendBuffer.empty())
 				{
 					return;
@@ -156,13 +154,11 @@ namespace mmo
 
 			void SendBuffer(const char *data, std::size_t size)
 			{
-				std::scoped_lock lock(m_sendMutex);
 				m_sendBuffer.append(data, data + size);
 			}
 
 			void SendBuffer(const Buffer &data)
 			{
-				std::scoped_lock lock(m_sendMutex);
 				m_sendBuffer.append(data.data(), data.size());
 			}
 
@@ -186,8 +182,7 @@ namespace mmo
 			bool m_isClosedOnParsing;
 			size_t m_decryptedUntil;
 			bool m_isReceiving;
-
-			std::mutex m_sendMutex;
+			asio::strand<asio::any_io_executor> m_strand;
 
 		private:
 			void BeginSend()
@@ -200,7 +195,10 @@ namespace mmo
 				asio::async_write(
 					*m_socket,
 					asio::buffer(m_sending),
-					std::bind(&EncryptedConnection<P, Socket>::Sent, this->shared_from_this(), std::placeholders::_1));
+					asio::bind_executor(
+						m_strand,
+						std::bind(&EncryptedConnection<P, Socket>::Sent, this->shared_from_this(), std::placeholders::_1))
+				);
 			}
 
 			void Sent(const asio::system_error &error)
@@ -211,11 +209,7 @@ namespace mmo
 					return;
 				}
 
-				{
-					std::scoped_lock lock(m_sendMutex);
-					m_sending.clear();
-				}
-				
+				m_sending.clear();
 				flush();
 			}
 
@@ -230,7 +224,10 @@ namespace mmo
 				m_isReceiving = true;
 				m_socket->async_read_some(
 					asio::buffer(m_receiving.data(), m_receiving.size()),
-					std::bind(&EncryptedConnection<P, Socket>::Received, this->shared_from_this(), std::placeholders::_2));
+					asio::bind_executor(
+						m_strand,
+						std::bind(&EncryptedConnection<P, Socket>::Received, this->shared_from_this(), std::placeholders::_2))
+				);
 			}
 
 			void Received(std::size_t size)
@@ -333,6 +330,7 @@ namespace mmo
 						{
 							m_listener->connectionMalformedPacket();
 							m_listener = nullptr;
+							m_decryptedUntil = 0;
 						}
 						return;
 					}
@@ -344,10 +342,8 @@ namespace mmo
 
 					m_received.erase(
 						m_received.begin(),
-						m_received.begin() + static_cast<std::ptrdiff_t>(parsedUntil));
-
-					// Reset
-					m_decryptedUntil = 0;
+						m_received.begin() + parsedUntil);
+					m_decryptedUntil -= parsedUntil;
 				}
 
 				BeginReceive();
@@ -371,6 +367,7 @@ namespace mmo
 					}
 				}
 
+				m_decryptedUntil = 0;
 				m_received.clear();
 			}
 		};
