@@ -343,7 +343,7 @@ namespace mmo
 					m_received.erase(
 						m_received.begin(),
 						m_received.begin() + parsedUntil);
-					m_decryptedUntil -= parsedUntil;
+					m_decryptedUntil = 0;
 				}
 
 				BeginReceive();
