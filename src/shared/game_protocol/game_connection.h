@@ -256,6 +256,7 @@ namespace mmo
 
 				bool nextPacket;
 				std::size_t parsedUntil = 0;
+
 				do
 				{
 					if (m_isClosedOnParsing)
@@ -267,22 +268,17 @@ namespace mmo
 
 					nextPacket = false;
 
-					const size_t availableSize = (m_received.size() - parsedUntil);
-					
-					// Check if we have received a complete header
-					if (m_decryptedUntil <= parsedUntil &&
-						availableSize >= game::Crypt::CryptedReceiveLength)
+					// Check if we have received a complete header which we didn't decrypt yet
+					const size_t availableSize = m_received.size() - parsedUntil;
+					if (m_decryptedUntil <= parsedUntil && availableSize >= game::Crypt::CryptedReceiveLength)
 					{
-						m_crypt.DecryptReceive(reinterpret_cast<uint8 *>(&m_received[0] + parsedUntil), game::Crypt::CryptedReceiveLength);
-
-						// This will prevent double-decryption of the header (which would produce
-						// invalid packet sizes)
+						m_crypt.DecryptReceive(reinterpret_cast<uint8 *>(m_received.data() + parsedUntil), game::Crypt::CryptedReceiveLength);
 						m_decryptedUntil = parsedUntil + game::Crypt::CryptedReceiveLength;
 					}
 
-					const char *const packetBegin = &m_received[0] + parsedUntil;
+					// Create a new memory source which uses the received packet data relative to the position we already parsed
+					const char *const packetBegin = m_received.data() + parsedUntil;
 					const char *const streamEnd = packetBegin + availableSize;
-
 					io::MemorySource source(packetBegin, streamEnd);
 
 					typename Protocol::IncomingPacket packet;
@@ -291,12 +287,13 @@ namespace mmo
 					switch (state)
 					{
 					case receive_state::Incomplete:
+						// Do nothing here as we need to receive more data first
 						break;
 					case receive_state::Complete:
 						{
 							if (m_listener)
 							{
-								auto result = m_listener->connectionPacketReceived(packet);
+								const PacketParseResult result = m_listener->connectionPacketReceived(packet);
 								switch (result)
 								{
 								case PacketParseResult::Pass:
@@ -316,11 +313,15 @@ namespace mmo
 							}
 
 							const auto packetSize = packet.GetSize();
-							const char* const expectedPacketEnd = &m_received[0] + parsedUntil + packetSize;
-							const size_t expectedPacketReadSize = static_cast<std::size_t>(expectedPacketEnd - packetBegin) + sizeof(packet.GetId()) + sizeof(packetSize);
+							const auto packetHeaderSize = sizeof(packet.GetId()) + sizeof(packetSize);
+
+							const char* const expectedPacketEnd = packetBegin + packetHeaderSize + packetSize;
+							const size_t expectedPacketReadSize = static_cast<std::size_t>(expectedPacketEnd - packetBegin);
 							ASSERT(expectedPacketReadSize == static_cast<size_t>(source.getPosition() - source.getBegin()));
 
+							// Ensure we have parsed the whole packet
 							parsedUntil += expectedPacketReadSize;
+							ASSERT(parsedUntil <= m_received.size());
 						}
 						
 						break;
@@ -339,11 +340,15 @@ namespace mmo
 				if (parsedUntil)
 				{
 					ASSERT(parsedUntil <= m_received.size());
-
-					m_received.erase(
-						m_received.begin(),
-						m_received.begin() + parsedUntil);
-					m_decryptedUntil = 0;
+					m_received.erase(m_received.begin(), m_received.begin() + parsedUntil);
+					if (parsedUntil > m_decryptedUntil)
+					{
+						m_decryptedUntil = 0;
+					}
+					else
+					{
+						m_decryptedUntil -= parsedUntil;
+					}
 				}
 
 				BeginReceive();
