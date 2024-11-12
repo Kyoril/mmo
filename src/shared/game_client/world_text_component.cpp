@@ -7,11 +7,13 @@ namespace mmo
 		: m_font(font)
 		, m_text(text)
 	{
-		ASSERT(m_font);
+		// TODO
+		//ASSERT(m_font);
 	}
 
 	void WorldTextComponent::PrepareRenderOperation(RenderOperation& operation)
 	{
+		// TODO
 	}
 
 	const Matrix4& WorldTextComponent::GetWorldTransform() const

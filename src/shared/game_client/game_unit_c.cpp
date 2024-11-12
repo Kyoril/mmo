@@ -4,6 +4,7 @@
 #include "object_mgr.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 #include "shared/client_data/model_data.pb.h"
 
@@ -32,12 +33,34 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			int32 entryId = Get<int32>(object_fields::Entry);
+			if (entryId != -1)
+			{
+				m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+			}
 		}
 		else
 		{
 			if (!(m_fieldMap.DeserializeChanges(reader)))
 			{
 				ASSERT(false);
+			}
+
+			// Entry id changed?
+			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
+			{
+				int32 entryId = Get<int32>(object_fields::Entry);
+				if (entryId != -1)
+				{
+					m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+				}
+			}
+
+			// Display id changed?
+			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
+			{
+				OnDisplayIdChanged();
 			}
 
 			const int32 startIndex = m_fieldMap.GetFirstChangedField();
@@ -71,13 +94,6 @@ namespace mmo
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
-		}
-
-		// TODO: Get npc name
-		int32 entryId = Get<int32>(object_fields::Entry);
-		if (entryId != -1)
-		{
-			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
 		}
 	}
 
@@ -307,63 +323,13 @@ namespace mmo
 	{
 		GameObjectC::SetupSceneObjects();
 
-		// Load display id value and resolve it
-		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
-		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
-		if (!modelEntry)
-		{
-			ELOG("Unable to resolve display id " << displayId << " for unit");
-			return;
-		}
+		// Attach text component
+		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitZ * 2.0f);
+		m_nameComponent = std::make_unique<WorldTextComponent>(nullptr, GetName());
+		m_nameComponentNode->AttachObject(*m_nameComponent);
 
-		m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), modelEntry->filename());
-		m_entity->SetUserObject(this);
-		m_entityOffsetNode->AttachObject(*m_entity);
-
-		if (m_entity->HasAnimationState("Idle"))
-		{
-			m_idleAnimState = m_entity->GetAnimationState("Idle");
-		}
-
-		if (m_entity->HasAnimationState("Run"))
-		{
-			m_runAnimState = m_entity->GetAnimationState("Run");
-		}
-
-		if (m_entity->HasAnimationState("UnarmedReady"))
-		{
-			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");
-		}
-
-		if (!m_readyAnimState)
-		{
-			m_readyAnimState = m_idleAnimState;
-		}
-
-		if (m_entity->HasAnimationState("CastLoop"))
-		{
-			m_castingState = m_entity->GetAnimationState("CastLoop");
-		}
-
-		if (m_entity->HasAnimationState("CastRelease"))
-		{
-			m_castReleaseState = m_entity->GetAnimationState("CastRelease");
-			m_castReleaseState->SetLoop(false);
-			m_castReleaseState->SetPlayRate(2.0f);
-		}
-
-		if (m_entity->HasAnimationState("UnarmedAttack01"))
-		{
-			m_unarmedAttackState = m_entity->GetAnimationState("UnarmedAttack01");
-			m_unarmedAttackState->SetLoop(false);
-		}
-
-		if (m_entity->HasAnimationState("Death"))
-		{
-			m_deathState = m_entity->GetAnimationState("Death");
-			m_deathState->SetLoop(false);
-			m_deathState->SetTimePosition(0.0f);
-		}
+		// Setup object display
+		OnDisplayIdChanged();
 	}
 
 	void GameUnitC::StartMove(const bool forward)
@@ -576,14 +542,12 @@ namespace mmo
 		// Don't do anything if the victim is already the current target
 		if (IsAttacking(victim))
 		{
-			DLOG("Already attacking unit on client");
 			return;
 		}
 
 		// We cant attack ourselves
 		if (&victim == this)
 		{
-			DLOG("Cant attack myself");
 			return;
 		}
 
@@ -591,7 +555,6 @@ namespace mmo
 		// TODO
 
 		// Send attack
-		DLOG("Sent attack!");
 		m_victim = victim.GetGuid();
 		m_netDriver.SendAttackStart(victim.GetGuid(), GetAsyncTimeMs());
 	}
@@ -611,6 +574,17 @@ namespace mmo
 	void GameUnitC::NotifyAttackStopped()
 	{
 		m_victim = 0;
+	}
+
+	void GameUnitC::SetCreatureInfo(const CreatureInfo& creatureInfo)
+	{
+		m_creatureInfo = creatureInfo;
+
+		// Ensure name component is updated to display the correct name
+		if (m_nameComponent)
+		{
+			m_nameComponent->SetText(GetName());
+		}
 	}
 
 	const String& GameUnitC::GetName() const
@@ -689,5 +663,87 @@ namespace mmo
 	void GameUnitC::NotifyAttackSwingEvent()
 	{
 		PlayOneShotAnimation(m_unarmedAttackState);
+	}
+
+	void GameUnitC::OnDisplayIdChanged()
+	{
+		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
+		if (m_entity) m_entity->SetVisible(modelEntry != nullptr);
+		if (!modelEntry)
+		{
+			return;
+		}
+
+		// Reset animation states
+		m_idleAnimState = nullptr;
+		m_runAnimState = nullptr;
+		m_readyAnimState = nullptr;
+		m_castingState = nullptr;
+		m_castReleaseState = nullptr;
+		m_unarmedAttackState = nullptr;
+		m_deathState = nullptr;
+		m_targetState = nullptr;
+		m_currentState = nullptr;
+		m_oneShotState = nullptr;
+
+		// Update or create entity
+		if (!m_entity)
+		{
+			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), modelEntry->filename());
+			m_entity->SetUserObject(this);
+			m_entityOffsetNode->AttachObject(*m_entity);
+		}
+		else
+		{
+			// Just update the mesh
+			m_entity->SetMesh(MeshManager::Get().Load(modelEntry->filename()));
+		}
+
+		// Initialize animation states from new mesh
+		if (m_entity->HasAnimationState("Idle"))
+		{
+			m_idleAnimState = m_entity->GetAnimationState("Idle");
+		}
+
+		if (m_entity->HasAnimationState("Run"))
+		{
+			m_runAnimState = m_entity->GetAnimationState("Run");
+		}
+
+		if (m_entity->HasAnimationState("UnarmedReady"))
+		{
+			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");
+		}
+
+		if (!m_readyAnimState)
+		{
+			m_readyAnimState = m_idleAnimState;
+		}
+
+		if (m_entity->HasAnimationState("CastLoop"))
+		{
+			m_castingState = m_entity->GetAnimationState("CastLoop");
+		}
+
+		if (m_entity->HasAnimationState("CastRelease"))
+		{
+			m_castReleaseState = m_entity->GetAnimationState("CastRelease");
+			m_castReleaseState->SetLoop(false);
+			m_castReleaseState->SetPlayRate(2.0f);
+		}
+
+		if (m_entity->HasAnimationState("UnarmedAttack01"))
+		{
+			m_unarmedAttackState = m_entity->GetAnimationState("UnarmedAttack01");
+			m_unarmedAttackState->SetLoop(false);
+		}
+
+		if (m_entity->HasAnimationState("Death"))
+		{
+			m_deathState = m_entity->GetAnimationState("Death");
+			m_deathState->SetLoop(false);
+			m_deathState->SetTimePosition(0.0f);
+		}
 	}
 }

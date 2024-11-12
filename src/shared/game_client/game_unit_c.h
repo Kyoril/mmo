@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_object_c.h"
+#include "world_text_component.h"
 #include "game/movement_info.h"
 #include "shared/client_data/spells.pb.h"
 #include "game/creature_data.h"
@@ -160,7 +161,7 @@ namespace mmo
 
 		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
 
-		void SetCreatureInfo(const CreatureInfo& creatureInfo) { m_creatureInfo = creatureInfo; }
+		void SetCreatureInfo(const CreatureInfo& creatureInfo);
 
 		const String& GetName() const override;
 
@@ -173,6 +174,9 @@ namespace mmo
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
+
+	protected:
+		void OnDisplayIdChanged();
 
 	protected:
 		NetClient& m_netDriver;
@@ -194,6 +198,9 @@ namespace mmo
 		CreatureInfo m_creatureInfo;
 
 		bool m_casting = false;
+
+		SceneNode* m_nameComponentNode{ nullptr };
+		std::unique_ptr<WorldTextComponent> m_nameComponent;
 
 	protected:
 		// Animation stuff
