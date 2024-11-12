@@ -20,6 +20,8 @@ namespace mmo
 	public:
 		virtual ~MapData() = default;
 
+		virtual bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) = 0;
+
 		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
 	};
 
@@ -27,6 +29,8 @@ namespace mmo
 	{
 	public:
 		~SimpleMapData() override = default;
+
+		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
 
 		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override
 		{

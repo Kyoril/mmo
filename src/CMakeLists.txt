@@ -23,10 +23,10 @@ endif()
 if ((WIN32 OR APPLE) AND MMO_BUILD_LAUNCHER)
 	add_subdirectory(launcher)
 endif()
-add_subdirectory(update_compiler)
 
 if (MMO_BUILD_TOOLS)
 	add_subdirectory(hpak_tool)
+	add_subdirectory(update_compiler)
 endif()
 
 if (MMO_BUILD_TESTS)

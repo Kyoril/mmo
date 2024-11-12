@@ -173,4 +173,31 @@ namespace mmo
 			return std::make_pair<bool, float>(t >= 0, static_cast<float>(t));
 		}
 	};
+
+
+	/// Enumerates all tiles that a ray crosses.
+	template<typename Callback>
+	void ForEachTileInRayXY(const Ray& ray, float cellSize, Callback callback)
+	{
+		int32 x1 = floor(ray.origin.x / cellSize);
+		int32 y1 = floor(ray.origin.y / cellSize);
+		int32 x2 = floor(ray.destination.x / cellSize);
+		int32 y2 = floor(ray.destination.y / cellSize);
+
+		int32 dx = ::abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
+		int32 dy = -::abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
+		int32 e = dx + dy, e2;
+
+		while (true)
+		{
+			if (!callback(x1, y1))
+				return;
+
+			if (x1 == x2 && y1 == y2)
+				break;
+			e2 = 2 * e;
+			if (e2 > dy) { e += dy; x1 += sx; }
+			if (e2 < dx) { e += dx; y1 += sy; }
+		}
+	}
 }

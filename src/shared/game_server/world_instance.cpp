@@ -59,6 +59,12 @@ namespace mmo
 		out_blocks.push_back(createBlock);
 	}
 
+	bool SimpleMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
+	{
+		// TODO
+		return true;
+	}
+
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)
