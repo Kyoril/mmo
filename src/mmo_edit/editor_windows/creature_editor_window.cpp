@@ -54,11 +54,16 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
+			if (ImGui::BeginTable("table", 4, ImGuiTableFlags_None))
 			{
 				if (ImGui::TableNextColumn())
 				{
 					ImGui::InputText("Name", currentEntry.mutable_name());
+				}
+
+				if (ImGui::TableNextColumn())
+				{
+					ImGui::InputText("Subname", currentEntry.mutable_subname());
 				}
 
 				if (ImGui::TableNextColumn())
@@ -188,16 +193,21 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::PushID("Level");
 			ImGui::BeginGroupPanel("Level");
 			SLIDER_UINT32_PROP(minlevel, "Min", 1, 100);
 			SLIDER_UINT32_PROP(maxlevel, "Max", 1, 100);
 			ImGui::EndGroupPanel();
+			ImGui::PopID();
 
+			ImGui::PushID("Health");
 			ImGui::BeginGroupPanel("Health");
 			SLIDER_UINT32_PROP(minlevelhealth, "Min", 1, 200000000);
 			SLIDER_UINT32_PROP(maxlevelhealth, "Max", 1, 200000000);
 			ImGui::EndGroupPanel();
+			ImGui::PopID();
 
+			ImGui::PushID("Experience");
 			ImGui::BeginGroupPanel("Experience");
 			SLIDER_UINT32_PROP(minlevelxp, "Min Level XP", 0, 10000000);
 			SLIDER_UINT32_PROP(maxlevelxp, "Max Level XP", 0, 10000000);
@@ -208,6 +218,7 @@ namespace mmo
 				currentEntry.set_maxlevelxp((currentEntry.maxlevel() * 5 + 45) * eliteFactor);
 			}
 			ImGui::EndGroupPanel();
+			ImGui::PopID();
 
 			SLIDER_UINT32_PROP(armor, "Armor", 0, 100000);
 
