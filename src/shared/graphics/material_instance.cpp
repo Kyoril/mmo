@@ -79,6 +79,55 @@ namespace mmo
 		return std::static_pointer_cast<MaterialInstance>(shared_from_this());
 	}
 
+	void MaterialInstance::RefreshParametersFromBase()
+	{
+		MaterialPtr baseMaterial = GetBaseMaterial();
+		if (!baseMaterial)
+		{
+			return;
+		}
+
+		// Iterate through base material parameters
+		auto scalarParamsCopy = m_scalarParameters;
+		m_scalarParameters.clear();
+
+		for (auto& param : m_parent->GetScalarParameters())
+		{
+			m_scalarParameters.push_back(param);
+			if (auto it = std::find_if(scalarParamsCopy.begin(), scalarParamsCopy.end(), [&param](const ScalarParameterValue& value) { return value.name == param.name; }); it != scalarParamsCopy.end())
+			{
+				m_scalarParameters.back().value = it->value;
+			}
+		}
+
+		auto vectorParamsCopy = m_vectorParameters;
+		m_vectorParameters.clear();
+
+		for (auto& param : m_parent->GetVectorParameters())
+		{
+			m_vectorParameters.push_back(param);
+			if (auto it = std::find_if(vectorParamsCopy.begin(), vectorParamsCopy.end(), [&param](const VectorParameterValue& value) { return value.name == param.name; }); it != vectorParamsCopy.end())
+			{
+				m_vectorParameters.back().value = it->value;
+			}
+		}
+
+		auto textureParamsCopy = m_textureParameters;
+		m_textureParameters.clear();
+		m_textureParamTextures.clear();
+
+		for (auto& param : m_parent->GetTextureParameters())
+		{
+			m_textureParameters.push_back(param);
+			if (auto it = std::find_if(textureParamsCopy.begin(), textureParamsCopy.end(), [&param](const TextureParameterValue& value) { return value.name == param.name; }); it != textureParamsCopy.end())
+			{
+				m_textureParameters.back().texture = it->texture;
+			}
+
+			m_textureParamTextures[param.name] = TextureManager::Get().CreateOrRetrieve(m_textureParameters.back().texture);
+		}
+	}
+
 	void MaterialInstance::DerivePropertiesFromParent()
 	{
 		m_type = m_parent->GetType();

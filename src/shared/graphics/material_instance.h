@@ -83,6 +83,8 @@ namespace mmo
 
 		std::shared_ptr<MaterialInstance> AsShared();
 
+		void RefreshParametersFromBase();
+
 	public:
 		void DerivePropertiesFromParent();
 

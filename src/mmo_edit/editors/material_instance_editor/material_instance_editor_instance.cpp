@@ -72,6 +72,9 @@ namespace mmo
 		}
 
 		m_renderConnection = host.beforeUiUpdate.connect(this, &MaterialInstanceEditorInstance::RenderMaterialPreview);
+
+		// Ensure parameters are up to date
+		m_material->RefreshParametersFromBase();
 	}
 
 	MaterialInstanceEditorInstance::~MaterialInstanceEditorInstance()
