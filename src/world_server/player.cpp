@@ -242,6 +242,7 @@ namespace mmo
 		case game::client_realm_packet::ForceMoveSetTurnRateAck:
 		case game::client_realm_packet::ForceSetFlightSpeedAck:
 		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
+		case game::client_realm_packet::MoveTeleportAck:
 			OnClientAck(opCode, buffer.size(), reader);
 			break;
 		}
@@ -896,6 +897,9 @@ namespace mmo
 			return;
 		}
 
+		// TODO: Use home position from character
+		m_character->TeleportOnMap(Vector3::Zero, Radian(0.0f));
+
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
 		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth) / 2);
@@ -959,14 +963,14 @@ namespace mmo
 			return;
 		}
 
-		// Read movement info
+		// Read movement info if applicable
 		MovementInfo info;
 		if (!(contentReader >> info))
 		{
 			ELOG("Could not read movement info from ack packet 0x" << std::hex << opCode);
 			return;
 		}
-
+		
 		// TODO: Validate movement speed
 
 
@@ -1032,10 +1036,22 @@ namespace mmo
 				receivedSpeed /= baseSpeed;
 				break;
 			}
+
+		case game::client_realm_packet::MoveTeleportAck:
+			if (change.changeType != MovementChangeType::Teleport)
+			{
+				WLOG("Received wrong ack op-code for expected ack!");
+				Kick();
+				return;
+			}
+
+			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
+			break;
 		}
 
 		// Apply movement info
 		//m_character->ApplyMovementInfo(info);
+		m_character->Relocate(info.position, info.facing);
 
 		// Perform application - we need to do this after all checks have been made
 		switch (opCode)
@@ -1614,5 +1630,31 @@ namespace mmo
 					<< io::write<float>(speed);
 				packet.Finish();
 			});
+	}
+
+	void Player::OnTeleport(const Vector3& position, const Radian& facing)
+	{
+		const uint32 ackId = m_character->GenerateAckId();
+
+		// Generate pending movement change
+		PendingMovementChange change;
+		change.changeType = MovementChangeType::Teleport;
+		change.timestamp = GetAsyncTimeMs();
+		change.counter = ackId;
+		change.teleportInfo.x = position.x;
+		change.teleportInfo.y = position.y;
+		change.teleportInfo.z = position.z;
+		change.teleportInfo.o = facing.GetValueRadians();
+		m_character->PushPendingMovementChange(change);
+
+		// Send notification
+		SendPacket([this, ackId](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::MoveTeleportAck);
+			packet
+				<< io::write_packed_guid(this->m_character->GetGuid())
+				<< io::write<uint32>(ackId)
+				<< this->m_character->GetMovementInfo();
+			packet.Finish();
+		});
 	}
 }

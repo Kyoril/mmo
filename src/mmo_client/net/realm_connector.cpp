@@ -356,6 +356,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendMoveTeleportAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveTeleportAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::AutoStoreLootItem(uint8 lootSlot)
 	{
 		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {

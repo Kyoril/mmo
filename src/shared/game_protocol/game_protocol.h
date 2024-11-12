@@ -89,6 +89,7 @@ namespace mmo
 				ForceMoveSetTurnRateAck,
 				ForceSetFlightSpeedAck,
 				ForceSetFlightBackSpeedAck,
+				MoveTeleportAck,
 
 				AutoStoreLootItem,
 				AutoEquipItem,
@@ -214,6 +215,8 @@ namespace mmo
 				LootMoneyNotify,
 				LootItemNotify,
 				LootClearMoney,
+
+				MoveTeleportAck,
 
 				/// Counter constant
 				Count_,

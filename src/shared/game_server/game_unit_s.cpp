@@ -576,6 +576,18 @@ namespace mmo
 		m_lastManaUse = GetAsyncTimeMs();
 	}
 
+	void GameUnitS::TeleportOnMap(const Vector3& position, const Radian& facing)
+	{
+		// Update position and facing
+		Relocate(position, facing);
+
+		// Notify net watcher
+		if (m_netUnitWatcher)
+		{
+			m_netUnitWatcher->OnTeleport(position, facing);
+		}
+	}
+
 	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS>& victim)
 	{
 		m_victimSignals.disconnect();

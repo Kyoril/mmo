@@ -112,7 +112,7 @@ namespace mmo
 
 		void SetupPacketHandler();
 
-		void RemovePacketHandler() const;
+		void RemovePacketHandler();
 		
 	private:
 		//
@@ -184,6 +184,8 @@ namespace mmo
 		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket& packet);
 
 		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket& packet);
+
+		PacketParseResult OnMoveTeleport(game::IncomingPacket& packet);
 
 	private:
 
@@ -275,6 +277,8 @@ namespace mmo
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient& m_lootClient;
+
+		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
 
 	private:
 		static IInputControl* s_inputControl;

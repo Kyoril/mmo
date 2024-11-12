@@ -136,6 +136,8 @@ namespace mmo
 		virtual ~NetUnitWatcherS() = default;
 
 	public:
+		virtual void OnTeleport(const Vector3& position, const Radian& facing) = 0;
+
 		virtual void OnAttackSwingEvent(AttackSwingEvent error) = 0;
 
 		virtual void OnXpLog(uint32 amount) = 0;
@@ -345,6 +347,9 @@ namespace mmo
 		void ApplyAura(std::unique_ptr<AuraContainer>&& aura);
 
 		void NotifyManaUsed();
+
+		/// Teleports the unit to a new location on the same map.
+		void TeleportOnMap(const Vector3& position, const Radian& facing);
 
 	private:
 		void SetVictim(const std::shared_ptr<GameUnitS>& victim);

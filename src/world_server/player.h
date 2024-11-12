@@ -163,6 +163,8 @@ namespace mmo
 
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
+		void OnTeleport(const Vector3& position, const Radian& facing) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

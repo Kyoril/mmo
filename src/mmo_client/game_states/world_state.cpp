@@ -436,66 +436,66 @@ namespace mmo
 
 	void WorldState::SetupPacketHandler()
 	{
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &WorldState::OnUpdateObject);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UpdateObject, *this, &WorldState::OnUpdateObject);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
 		
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 		
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &WorldState::OnAttackSwingError);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackSwingError, *this, &WorldState::OnAttackSwingError);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::XpLog, *this, &WorldState::OnXpLog);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::XpLog, *this, &WorldState::OnXpLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &WorldState::OnQuestQueryResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &WorldState::OnQuestQueryResult);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &WorldState::OnMoveTeleport);
 
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_realmConnector.RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
 		m_lootClient.Initialize();
 
@@ -511,7 +511,7 @@ namespace mmo
 		Console::RegisterCommand("startattack", [this](const std::string& cmd, const std::string& args) { Command_StartAttack(cmd, args); }, ConsoleCommandCategory::Game, "Starts attacking the current target.");
 	}
 
-	void WorldState::RemovePacketHandler() const
+	void WorldState::RemovePacketHandler()
 	{
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::UnregisterCommand("createmonster");
@@ -524,64 +524,9 @@ namespace mmo
 		Console::UnregisterCommand("cast");
 		Console::UnregisterCommand("startattack");
 
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UpdateObject);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CompressedUpdateObject);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::DestroyObjects);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartForward);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartBackward);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStop);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartStrafeLeft);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartStrafeRight);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStopStrafe);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartTurnLeft);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStartTurnRight);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveStopTurn);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveHeartBeat);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetFacing);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ChatMessage);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NameQueryResult);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureQueryResult);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ItemQueryResult);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::QuestQueryResult);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::InitialSpells);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CreatureMove);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::LearnedSpell);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::UnlearnedSpell);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellStart);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellGo);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellFailure);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStart);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackStop);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::AttackSwingError);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::XpLog);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SpellDamageLog);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::NonSpellDamageLog);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceSetFlightSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed);
-
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetWalkSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetRunSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetSwimSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::MoveSetTurnRate);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightSpeed);
-		m_realmConnector.ClearPacketHandler(game::realm_client_packet::SetFlightBackSpeed);
-
 		m_lootClient.Shutdown();
+
+		m_worldPacketHandlers.Clear();
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -1791,6 +1736,39 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnMoveTeleport(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			ELOG("Failed to read teleported mover guid!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const std::shared_ptr<GameUnitC>& unit = m_playerController->GetControlledUnit();
+		if (!unit || unit->GetGuid() != guid)
+		{
+			WLOG("Received teleport for unknown or non-controlled unit!");
+			return PacketParseResult::Pass;
+		}
+
+		uint32 ackId;
+		MovementInfo movementInfo;
+		if (!(packet >> io::read<uint32>(ackId) >> movementInfo))
+		{
+			ELOG("Failed to read move teleport packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Teleport player
+		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
+		unit->ApplyMovementInfo(movementInfo);
+
+		// Send ack to the server
+		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		return PacketParseResult::Pass;
+	}
 
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{

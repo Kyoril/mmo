@@ -311,7 +311,6 @@ namespace mmo
 		// Instantly apply movement data for now
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
-
 	}
 
 	void GameUnitC::InitializeFieldMap()
