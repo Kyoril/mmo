@@ -19,6 +19,38 @@ namespace mmo
 		};
 	}
 
+	namespace npc_flags
+	{
+		enum Type
+		{
+			None = 0x00000000,
+
+			/// This npc wants to talk.
+			Gossip = 0x00000001,
+
+			/// This npc has a quest to accept or turn in.
+			QuestGiver = 0x00000002,
+
+			/// This npc is a trainer.
+			Trainer = 0x00000004,
+
+			/// This npc is a class trainer.
+			TrainerClass = 0x00000008,
+
+			/// This npc is a profession trainer.
+			TrainerProfession = 0x00000010,
+
+			/// This npc is a vendor.
+			Vendor = 0x00000020,
+
+			/// This npc offers repair services.
+			Repair = 0x00000040,
+
+			/// This npc is an inn keeper and offers inn services such as setting the bind location to return to.
+			InnKeeper = 0x00000080,
+		};
+	}
+
 	namespace object_update_flags
 	{
 		enum Type
@@ -138,6 +170,8 @@ namespace mmo
 			/// @brief 32 bit time
 			MinDamage,
 			MaxDamage,
+
+			NpcFlags,
 
 			UnitFieldCount = MaxDamage + 1,
 		};
