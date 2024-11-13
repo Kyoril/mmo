@@ -409,6 +409,14 @@ namespace mmo
 
 		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
 
+		void SetBinding(uint32 mapId, const Vector3& position, const Radian& facing);
+
+		uint32 GetBindMap() const { return m_bindMap; }
+
+		const Vector3& GetBindPosition() const { return m_bindPosition; }
+
+		const Radian& GetBindFacing() const { return m_bindFacing; }
+
 	protected:
 		virtual void OnKilled(GameUnitS* killer);
 
@@ -497,6 +505,10 @@ namespace mmo
 
 		mutable const proto::FactionTemplateEntry* m_cachedFactionTemplate = nullptr;
 		scoped_connection_container m_victimSignals;
+
+		uint32 m_bindMap;
+		Vector3 m_bindPosition;
+		Radian m_bindFacing;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

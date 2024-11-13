@@ -65,6 +65,9 @@ namespace mmo
 		spawned->destroy = [this]<typename TUnit>(TUnit&& destroyedUnit) { OnRemoval(std::forward<TUnit>(destroyedUnit)); };
 		m_world.AddGameObject(*spawned);
 
+		// Creates are bound to their spawn point
+		spawned->SetBinding(m_world.GetMapId(), location, Radian(o));
+
 		// Remember that creature
 		m_creatures.emplace_back(spawned);
 		++m_currentlySpawned;

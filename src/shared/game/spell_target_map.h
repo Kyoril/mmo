@@ -55,7 +55,9 @@ namespace mmo
 			TargetAlly,
 			ObjectTarget,
 			ConeEnemy,
-			TargetAny
+			TargetAny,
+
+			Count_
 		};
 	}
 

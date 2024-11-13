@@ -594,6 +594,46 @@ namespace mmo
 
 	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		uint32 targetMap;
+		Vector3 targetLocation;
+		Radian targetRotation;
+
+		switch (effect.targetb())
+		{
+		case spell_effect_targets::DatabaseLocation:
+			targetMap = m_spell.targetmap();
+			targetLocation = { m_spell.targetx(), m_spell.targety(), m_spell.targetz() };
+			targetRotation = { m_spell.targeto() };
+			break;
+		case spell_effect_targets::CasterLocation:
+			targetMap = m_cast.GetExecuter().GetWorldInstance()->GetMapId();
+			targetLocation = m_cast.GetExecuter().GetPosition();
+			targetRotation = m_cast.GetExecuter().GetFacing();
+			break;
+		case spell_effect_targets::Home:
+			targetMap = m_cast.GetExecuter().GetBindMap();
+			targetLocation = m_cast.GetExecuter().GetBindPosition();
+			targetRotation = m_cast.GetExecuter().GetBindFacing();
+			break;
+		default:
+			WLOG("Unsupported teleport target location value for spell " << m_spell.id());
+			return;
+		}
+
+		if (targetMap != m_cast.GetExecuter().GetWorldInstance()->GetMapId())
+		{
+			WLOG("TODO: Teleport to different map is not yet implemented!");
+		}
+		else
+		{
+			unitTarget->TeleportOnMap(targetLocation, targetRotation);
+		}
 	}
 
 	void SingleCastState::SpellEffectApplyAura(const proto::SpellEffect& effect)
@@ -648,6 +688,16 @@ namespace mmo
 
 	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		unitTarget->SetBinding(
+			unitTarget->GetWorldInstance()->GetMapId(),
+			unitTarget->GetPosition(),
+			unitTarget->GetFacing());
 	}
 
 	void SingleCastState::SpellEffectQuestComplete(const proto::SpellEffect& effect)

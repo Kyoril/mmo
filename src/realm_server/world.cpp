@@ -608,7 +608,10 @@ namespace mmo
 			player.Get<uint32>(object_fields::Rage), 
 			player.Get<uint32>(object_fields::Energy),
 			player.Get<uint32>(object_fields::Money),
-			player.GetInventory().GetItemData());
+			player.GetInventory().GetItemData(),
+			player.GetBindMap(),
+			player.GetBindPosition(),
+			player.GetBindFacing());
 
 		return PacketParseResult::Pass;
 	}

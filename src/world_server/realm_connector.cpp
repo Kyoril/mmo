@@ -480,6 +480,8 @@ namespace mmo
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
 
+		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
+
 		// Construct inventory data
 		for (const auto& itemData : characterData.items)
 		{

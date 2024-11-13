@@ -15,19 +15,18 @@ namespace mmo
 	struct CharacterData
 	{
 		explicit CharacterData()
-			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {}, 0, 0, 0, 1, 0, 20, 0, 0, 0)
+			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {}, 0, 0, 0, 1, 0, 20, 0, 0, 0, 0, Vector3::Zero, Radian(0.0f))
 		{
 		}
 
 		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds,
-			uint32 classId, uint32 raceId, uint8 gender, uint8 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy)
+			uint32 classId, uint32 raceId, uint8 gender, uint8 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing)
 			: characterId(characterId)
 			, name(std::move(name))
 			, mapId(mapId)
 			, instanceId(instanceId)
 			, position(position)
 			, facing(facing)
-			, spellIds(spellIds)
 			, classId(classId)
 			, raceId(raceId)
 			, gender(gender)
@@ -37,6 +36,10 @@ namespace mmo
 			, mana(mana)
 			, rage(rage)
 			, energy(energy)
+			, spellIds(spellIds)
+			, bindMap(bindMap)
+			, bindPosition(bindPosition)
+			, bindFacing(bindFacing)
 		{
 		}
 
@@ -58,6 +61,10 @@ namespace mmo
 		uint32 money;
 		std::vector<uint32> spellIds;
 		std::vector<ItemData> items;
+
+		uint32 bindMap;
+		Vector3 bindPosition;
+		Radian bindFacing;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -82,6 +89,11 @@ namespace mmo
 			>> io::read<uint32>(data.energy)
 			>> io::read<uint32>(data.money)
 			>> io::read_container<uint16>(data.items)
+			>> io::read<uint32>(data.bindMap)
+			>> io::read<float>(data.bindPosition.x)
+			>> io::read<float>(data.bindPosition.y)
+			>> io::read<float>(data.bindPosition.z)
+			>> data.bindFacing
 		;
 	}
 	
@@ -107,6 +119,11 @@ namespace mmo
 			<< io::write<uint32>(data.energy)
 			<< io::write<uint32>(data.money)
 			<< io::write_dynamic_range<uint16>(data.items)
+			<< io::write<uint32>(data.bindMap)
+			<< io::write<float>(data.bindPosition.x)
+			<< io::write<float>(data.bindPosition.y)
+			<< io::write<float>(data.bindPosition.z)
+			<< data.facing
 			;
 	}
 }

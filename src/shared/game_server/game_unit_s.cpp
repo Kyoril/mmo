@@ -986,6 +986,13 @@ namespace mmo
 		return m_cachedFactionTemplate;
 	}
 
+	void GameUnitS::SetBinding(uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		m_bindMap = mapId;
+		m_bindPosition = position;
+		m_bindFacing = facing;
+	}
+
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
 		m_spellCast->StopCast(spell_interrupt_flags::Any);
@@ -1288,6 +1295,12 @@ namespace mmo
 	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)
 	{
 		w << reinterpret_cast<GameObjectS const&>(object);
+		w
+			<< io::write<uint32>(object.m_bindMap)
+			<< io::write<float>(object.m_bindPosition.x)
+			<< io::write<float>(object.m_bindPosition.y)
+			<< io::write<float>(object.m_bindPosition.z)
+			<< io::write<float>(object.m_bindFacing.GetValueRadians());
 
 		return w;
 	}
@@ -1296,6 +1309,18 @@ namespace mmo
 	{
 		// Read values
 		r >> reinterpret_cast<GameObjectS&>(object);
+
+		float facing;
+		r
+			>> io::read<uint32>(object.m_bindMap)
+			>> io::read<float>(object.m_bindPosition.x)
+			>> io::read<float>(object.m_bindPosition.y)
+			>> io::read<float>(object.m_bindPosition.z)
+			>> io::read<float>(facing);
+		if (r)
+		{
+			object.m_bindFacing = Radian(facing);
+		}
 
 		return r;
 	}

@@ -259,7 +259,7 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -289,8 +289,17 @@ namespace mmo
 				row.GetField(index++, result.energy);
 				row.GetField(index++, result.money);
 
+				row.GetField(index++, result.bindMap);
+				row.GetField(index++, result.bindPosition.x);
+				row.GetField(index++, result.bindPosition.y);
+				row.GetField(index++, result.bindPosition.z);
+
+				float bindFacing = 0.0f;
+				row.GetField(index++, bindFacing);
+
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
+				result.bindFacing = Radian(bindFacing);
 
 				// Load character spell ids
 				if(mysql::Select spellSelect(m_connection, "SELECT spell FROM character_spells WHERE `character` = " + std::to_string(characterId)); spellSelect.Success())
@@ -389,7 +398,8 @@ namespace mmo
 	}
 
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
-		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items)
+		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing)
 	{
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
@@ -404,6 +414,11 @@ namespace mmo
 			+ ", rage = " + std::to_string(rage)
 			+ ", energy = " + std::to_string(energy)
 			+ ", money = " + std::to_string(money)
+			+ ", bind_map = " + std::to_string(bindMap)
+			+ ", bind_x = " + std::to_string(bindPosition.x)
+			+ ", bind_y = " + std::to_string(bindPosition.y)
+			+ ", bind_z = " + std::to_string(bindPosition.z)
+			+ ", bind_o = " + std::to_string(bindFacing.GetValueRadians())
 			+ " WHERE id = '" + std::to_string(characterId) + "'"))
 		{
 			PrintDatabaseError();

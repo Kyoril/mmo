@@ -140,6 +140,8 @@ namespace mmo
 		"Target Any"
 	};
 
+	static_assert(std::size(s_effectTargets) == spell_effect_targets::Count_, "One string per effect target has to exist!");
+
 	SpellEditorWindow::SpellEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.spells, name)
 		, m_host(host)
@@ -470,6 +472,12 @@ namespace mmo
 		}
 	}
 
+	static bool IsValidTeleportLocation(uint32 target)
+	{
+		return target == spell_effect_targets::Home || target == spell_effect_targets::CasterLocation || target == spell_effect_targets::DatabaseLocation;
+
+	}
+
 	void SpellEditorWindow::DrawEffectDialog(proto::SpellEntry& currentEntry, proto::SpellEffect& effect, int32 effectIndex)
 	{
 		if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
@@ -514,6 +522,31 @@ namespace mmo
 				}, nullptr, IM_ARRAYSIZE(s_effectTargets), -1))
 			{
 				effect.set_targeta(effectTarget);
+			}
+
+			switch (currentEffectType)
+			{
+				case spell_effects::TeleportUnits:
+				case spell_effects::TeleportUnitsFaceCaster:
+				{
+					int effectTarget = effect.targetb();
+					if (ImGui::Combo("Teleport Target Location", &effectTarget, [](void*, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_effectTargets))
+							{
+								return false;
+							}
+
+							*out_text = s_effectTargets[idx].c_str();
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_effectTargets), -1))
+					{
+						if (IsValidTeleportLocation(effectTarget))
+						{
+							effect.set_targetb(effectTarget);
+						}
+					}
+				}
 			}
 
 			ImGui::Text("Points");
