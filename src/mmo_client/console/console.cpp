@@ -471,7 +471,7 @@ namespace mmo
 		return !s_consoleVisible;
 	}
 
-	bool Console::KeyDown(const int32 key)
+	bool Console::KeyDown(const int32 key, bool repeat)
 	{
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)

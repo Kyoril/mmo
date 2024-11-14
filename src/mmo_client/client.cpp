@@ -178,7 +178,7 @@ namespace mmo
 			return false;
 		});
 
-		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key) {
+		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool) {
 			FrameManager::Get().NotifyKeyDown(key);
 			return true;
 		});

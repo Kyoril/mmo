@@ -283,9 +283,9 @@ namespace mmo
 		return true;
 	}
 
-	bool WorldState::OnKeyDown(const int32 key)
+	bool WorldState::OnKeyDown(const int32 key, bool repeat)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Down))
+		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down))
 		{
 			return true;
 		}

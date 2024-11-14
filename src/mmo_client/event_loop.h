@@ -42,7 +42,7 @@ namespace mmo
 		static signal<void()> Paint;
 
 		/// @brief This event is fired when the OS reports that a key has been pressed.
-		static signal<bool(int32 key)> KeyDown;
+		static signal<bool(int32 key, bool repeat)> KeyDown;
 
 		/// @brief This event is fired when the OS reports that a key has been released.
 		static signal<bool(int32 key)> KeyUp;

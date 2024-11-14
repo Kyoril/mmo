@@ -96,7 +96,7 @@ namespace mmo
 
 		bool OnMouseWheel(int32 delta);
 		
-		bool OnKeyDown(int32 key);	
+		bool OnKeyDown(int32 key, bool repeat);	
 		
 		bool OnKeyUp(int32 key);
 

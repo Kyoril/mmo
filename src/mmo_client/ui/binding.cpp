@@ -167,6 +167,9 @@ namespace mmo
 			case BindingKeyState::Down:
 				keyStateString = "DOWN";
 				break;
+			case BindingKeyState::Repeat:
+				keyStateString = "REPEAT";
+				break;
 			case BindingKeyState::Up:
 				keyStateString = "UP";
 				break;

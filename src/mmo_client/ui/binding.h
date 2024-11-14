@@ -20,6 +20,7 @@ namespace mmo
 	enum class BindingKeyState
 	{
 		Down,
+		Repeat,
 		Up
 	};
 

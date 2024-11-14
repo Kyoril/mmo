@@ -75,7 +75,7 @@ namespace mmo
 
 	private:
 		/// Executed when a key has been pressed. Repeated.
-		static bool KeyDown(int32 key);
+		static bool KeyDown(int32 key, bool repeat);
 
 		static bool KeyUp(int32 key);
 
