@@ -279,7 +279,7 @@ namespace mmo
 			m_movementInfo.facing = GetSceneNode()->GetDerivedOrientation().GetYaw();
 		}
 
-		if (m_movementInfo.IsMoving() || m_movementInfo.IsStrafing())
+		if (m_movementInfo.IsMoving())
 		{
 			Vector3 movementVector;
 

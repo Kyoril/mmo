@@ -398,7 +398,7 @@ namespace mmo
 		UpdateHeartbeat();
 
 		// When we are looting, check the distance to the looted object on movement
-		if (m_lootClient.IsLooting() && m_controlledUnit->GetMovementInfo().IsMoving())
+		if (m_lootClient.IsLooting() && m_controlledUnit->GetMovementInfo().IsChangingPosition())
 		{
 			const auto lootedObject = ObjectMgr::Get<GameObjectC>(m_lootClient.GetLootedObjectGuid());
 			if (lootedObject && !m_controlledUnit->IsWithinRange(*lootedObject, LootDistance))

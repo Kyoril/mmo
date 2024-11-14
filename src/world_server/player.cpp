@@ -557,7 +557,7 @@ namespace mmo
 			return;
 		}
 
-		if ((info.IsMoving() || info.IsTurning() || info.IsPitching()) && !m_character->IsAlive())
+		if ((info.IsStrafing() || info.IsMoving() || info.IsTurning() || info.IsPitching()) && !m_character->IsAlive())
 		{
 			ELOG("Player tried to move or rotate while not being alive anymore");
 			return;
@@ -569,6 +569,40 @@ namespace mmo
 			ELOG("Player probably tried to skip or delay an ack packet");
 			Kick();
 			return;
+		}
+
+		// Did the client try to sneak in a FALLING flag without sending a jump packet?
+		if (info.IsFalling() && !m_character->GetMovementInfo().IsFalling() && opCode != game::client_realm_packet::MoveJump)
+		{
+			ELOG("Client tried to apply FALLING flag in non-jump packet!");
+			Kick();
+			return;
+		}
+		// Did the client try to remove a FALLING flag without sending a landing packet?
+		if (!info.IsFalling() && m_character->GetMovementInfo().IsFalling() && opCode != game::client_realm_packet::MoveFallLand)
+		{
+			ELOG("Client tried to apply FALLING flag in non-jump packet!");
+			Kick();
+			return;
+		}
+
+		if (opCode == game::client_realm_packet::MoveJump)
+		{
+			if (m_character->GetMovementInfo().IsFalling() || !info.IsFalling())
+			{
+				ELOG("Jump packet did not add FALLING movement flag or was executed while already falling");
+				Kick();
+				return;
+			}
+		}
+		if (opCode == game::client_realm_packet::MoveFallLand)
+		{
+			if (!m_character->GetMovementInfo().IsFalling() || info.IsFalling())
+			{
+				ELOG("Landing packet did not remove FALLING movement flag or was executed while not falling")
+				Kick();
+				return;
+			}
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -593,7 +627,7 @@ namespace mmo
 			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
 		}
 		
-		if (!m_character->GetMovementInfo().IsMoving())
+		if (!m_character->GetMovementInfo().IsChangingPosition())
 		{
 			if (info.position != m_character->GetPosition())
 			{

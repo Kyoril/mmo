@@ -90,6 +90,9 @@ namespace mmo
 
 			/// @brief Combined list of flags which imply that the character's position is changing.
 			Moving =
+				Forward | Backward | StrafeLeft | StrafeRight,
+
+			PositionChanging =
 				Forward | Backward | Ascending | Descending | Falling | StrafeLeft | StrafeRight,
 
 			Strafing =
@@ -140,6 +143,8 @@ namespace mmo
 		float jumpXZSpeed { 0.0f };
 
 	public:
+		bool IsChangingPosition() const noexcept { return (movementFlags & movement_flags::PositionChanging) != 0; }
+
 		bool IsMoving() const noexcept { return (movementFlags & movement_flags::Moving) != 0; }
 
 		bool IsStrafing() const noexcept { return (movementFlags & movement_flags::Strafing) != 0; }
@@ -147,6 +152,8 @@ namespace mmo
 		bool IsTurning() const noexcept { return (movementFlags & movement_flags::Turning) != 0; }
 
 		bool IsPitching() const noexcept { return (movementFlags & movement_flags::Pitching) != 0; }
+
+		bool IsFalling() const noexcept { return (movementFlags & movement_flags::Falling) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)

@@ -2005,7 +2005,7 @@ namespace mmo
 
 		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)
 		{
-			if (unit->GetMovementInfo().IsMoving())
+			if (unit->GetMovementInfo().IsChangingPosition())
 			{
 				ELOG("Can't cast spell while moving");
 				return;
