@@ -469,6 +469,11 @@ namespace mmo
 
 		characterObject->Relocate(characterData.position, characterData.facing);
 
+		// Make character fall on login
+		MovementInfo info = characterObject->GetMovementInfo();
+		info.movementFlags |= movement_flags::Falling;
+		characterObject->ApplyMovementInfo(info);
+
 		characterObject->SetClass(*classEntry);
 		characterObject->SetRace(*raceEntry);
 		characterObject->SetGender(characterData.gender);

@@ -52,8 +52,11 @@ namespace mmo
 			Rooted = 1 << 10,
 
 
-			/// @brief Unit is jumping, which means the unit is still moving upwards.
+			/// @brief Unit is jumping or falling.
 			Falling = 1 << 11,
+
+			/// @brief Unit is falling.
+			FallingFar = 1 << 21,
 
 
 			/// @brief A root is pending for the unit.

@@ -231,6 +231,8 @@ namespace mmo
 		case game::client_realm_packet::MoveStopTurn:
 		case game::client_realm_packet::MoveHeartBeat:
 		case game::client_realm_packet::MoveSetFacing:
+		case game::client_realm_packet::MoveJump:
+		case game::client_realm_packet::MoveFallLand:
 			OnMovement(opCode, buffer.size(), reader);
 			break;
 
@@ -585,6 +587,8 @@ namespace mmo
 		case game::client_realm_packet::MoveStopTurn: opCode = game::realm_client_packet::MoveStopTurn; break;
 		case game::client_realm_packet::MoveHeartBeat: opCode = game::realm_client_packet::MoveHeartBeat; break;
 		case game::client_realm_packet::MoveSetFacing: opCode = game::realm_client_packet::MoveSetFacing; break;
+		case game::client_realm_packet::MoveJump: opCode = game::realm_client_packet::MoveJump; break;
+		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
 		default:
 			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
 		}

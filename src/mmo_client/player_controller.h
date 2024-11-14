@@ -73,6 +73,8 @@ namespace mmo
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override { if (set) { m_controlFlags |= flag; } else { m_controlFlags &= ~flag; } }
 
+		void Jump() override;
+
 		void OnHoveredUnitChanged(GameUnitC* previousHoveredUnit);
 
 	private:
@@ -95,6 +97,7 @@ namespace mmo
 		int32 m_x = 0, m_y = 0;
 		GameUnitC* m_hoveredUnit = nullptr;
 		scoped_connection_container m_cvarConnections;
+		float m_jumpVelocity = 0.0f;
 
 	};
 }

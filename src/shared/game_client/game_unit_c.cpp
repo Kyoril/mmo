@@ -63,6 +63,12 @@ namespace mmo
 				OnDisplayIdChanged();
 			}
 
+			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
+			{
+				const float scale = Get<float>(object_fields::Scale);
+				m_sceneNode->SetScale(Vector3(scale, scale, scale));
+			}
+
 			const int32 startIndex = m_fieldMap.GetFirstChangedField();
 			const int32 endIndex = m_fieldMap.GetLastChangedField();
 			ASSERT(endIndex >= startIndex);
@@ -258,37 +264,38 @@ namespace mmo
 	{
 		auto* playerNode = GetSceneNode();
 
-		const auto& movementInfo = GetMovementInfo();
+		UpdateCollider();
 
-		if (movementInfo.IsTurning())
+		if (m_movementInfo.IsTurning())
 		{
-			if (movementInfo.movementFlags & movement_flags::TurnLeft)
+			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
 				playerNode->Yaw(Radian(GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
 			}
-			else if (movementInfo.movementFlags & movement_flags::TurnRight)
+			else if (m_movementInfo.movementFlags & movement_flags::TurnRight)
 			{
 				playerNode->Yaw(Radian(-GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
 			}
+			m_movementInfo.facing = GetSceneNode()->GetDerivedOrientation().GetYaw();
 		}
 
-		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
+		if (m_movementInfo.IsMoving() || m_movementInfo.IsStrafing())
 		{
 			Vector3 movementVector;
 
-			if (movementInfo.movementFlags & movement_flags::Forward)
+			if (m_movementInfo.movementFlags & movement_flags::Forward)
 			{
 				movementVector.x += 1.0f;
 			}
-			if (movementInfo.movementFlags & movement_flags::Backward)
+			if (m_movementInfo.movementFlags & movement_flags::Backward)
 			{
 				movementVector.x -= 1.0f;
 			}
-			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
+			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
 				movementVector.z -= 1.0f;
 			}
-			if (movementInfo.movementFlags & movement_flags::StrafeRight)
+			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
 			{
 				movementVector.z += 1.0f;
 			}
@@ -299,8 +306,16 @@ namespace mmo
 				movementType = movement_type::Backwards;
 			}
 
-			// TODO: Apply movement speed values like run back, walk etc.
 			playerNode->Translate(movementVector.NormalizedCopy() * GetSpeed(movementType) * deltaTime, TransformSpace::Local);
+			m_movementInfo.position = playerNode->GetDerivedPosition();
+		}
+
+		if (m_movementInfo.movementFlags & movement_flags::Falling)
+		{
+			constexpr float gravity = 19.291105f;
+			m_movementInfo.jumpVelocity -= gravity * deltaTime;
+			m_movementInfo.position.y += m_movementInfo.jumpVelocity * deltaTime;
+			playerNode->SetPosition(m_movementInfo.position);
 		}
 	}
 
@@ -361,7 +376,7 @@ namespace mmo
 
 	void GameUnitC::StopMove()
 	{
-		m_movementInfo.movementFlags &= ~movement_flags::Moving;
+		m_movementInfo.movementFlags &= ~(movement_flags::Forward | movement_flags::Backward | movement_flags::StrafeLeft | movement_flags::StrafeRight );
 	}
 
 	void GameUnitC::StopStrafe()
@@ -699,6 +714,8 @@ namespace mmo
 			m_entity->SetMesh(MeshManager::Get().Load(modelEntry->filename()));
 		}
 
+		m_collider.radius = 0.5f;
+
 		// Initialize animation states from new mesh
 		if (m_entity->HasAnimationState("Idle"))
 		{
@@ -744,5 +761,18 @@ namespace mmo
 			m_deathState->SetLoop(false);
 			m_deathState->SetTimePosition(0.0f);
 		}
+	}
+
+	void GameUnitC::UpdateCollider()
+	{
+		constexpr float halfHeight = 1.0f;
+
+		m_collider.pointA = GetPosition() - Vector3(0.0f, halfHeight, 0.0f);
+		m_collider.pointA = GetPosition() + Vector3(0.0f, halfHeight, 0.0f);
+		m_collider.radius = 0.5f;
+	}
+
+	void GameUnitC::PerformGroundCheck()
+	{
 	}
 }

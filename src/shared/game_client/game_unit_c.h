@@ -1,5 +1,6 @@
 #pragma once
 
+#include "collision.h"
 #include "game_object_c.h"
 #include "world_text_component.h"
 #include "game/movement_info.h"
@@ -178,6 +179,10 @@ namespace mmo
 	protected:
 		void OnDisplayIdChanged();
 
+		void UpdateCollider();
+
+		void PerformGroundCheck();
+
 	protected:
 		NetClient& m_netDriver;
 		MovementInfo m_movementInfo;
@@ -201,6 +206,8 @@ namespace mmo
 
 		SceneNode* m_nameComponentNode{ nullptr };
 		std::unique_ptr<WorldTextComponent> m_nameComponent;
+
+		Capsule m_collider;
 
 	protected:
 		// Animation stuff

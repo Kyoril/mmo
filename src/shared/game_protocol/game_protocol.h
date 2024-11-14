@@ -104,6 +104,9 @@ namespace mmo
 				LootMoney,
 				LootRelease,
 
+				MoveJump,
+				MoveFallLand,
+
 				/// Counter constant
 				Count_,
 			};
@@ -217,6 +220,9 @@ namespace mmo
 				LootClearMoney,
 
 				MoveTeleportAck,
+
+				MoveJump,
+				MoveFallLand,
 
 				/// Counter constant
 				Count_,

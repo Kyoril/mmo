@@ -39,5 +39,7 @@ namespace mmo
 
 	public:
 		virtual void SetControlBit(ControlFlags::Type flag, bool set) = 0;
+
+		virtual void Jump() = 0;
 	};
 }

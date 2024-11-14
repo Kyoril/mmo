@@ -41,6 +41,10 @@ namespace mmo
 		m_entityOffsetNode = m_sceneNode->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);
+
+		const float scale = Get<float>(object_fields::Scale);
+		m_sceneNode->SetScale(Vector3(scale, scale, scale));
+
 	}
 
 	void GameObjectC::Update(float deltaTime)

@@ -33,6 +33,7 @@ namespace mmo
 		: m_scene(scene)
 		, m_lootClient(lootClient)
 		, m_connector(connector)
+		, m_jumpVelocity(0.0f)
 	{
 		if (!s_mouseSensitivityCVar)
 		{
@@ -216,22 +217,32 @@ namespace mmo
 
 	void PlayerController::ApplyLocalMovement(const float deltaSeconds) const
 	{
+		// Apply gravity to jump velocity
+		MovementInfo info = m_controlledUnit->GetMovementInfo();
+		if (info.movementFlags & movement_flags::Falling)
+		{
+			// TODO: Replace with check for ground collision!
+			if (info.position.y <= 0.0f && info.jumpVelocity <= 0.0f)
+			{
+				// Reset movement info
+				info.position.y = 0.0f;
+				info.movementFlags &= ~movement_flags::Falling;
+				info.jumpVelocity = 0.0f;
+				info.jumpXZSpeed = 0.0f;
+				m_controlledUnit->ApplyMovementInfo(info);
+				SendMovementUpdate(game::client_realm_packet::MoveFallLand);
+			}
+		}
 	}
 
 	void PlayerController::SendMovementUpdate(const uint16 opCode) const
 	{
 		// Build the movement data
-		MovementInfo info;
+		MovementInfo info = m_controlledUnit->GetMovementInfo();
 		info.timestamp = GetAsyncTimeMs();
 		info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
 		info.facing = m_controlledUnit->GetSceneNode()->GetDerivedOrientation().GetYaw();
 		info.pitch = Radian(0);
-		info.fallTime = 0; // TODO
-		info.jumpCosAngle = 0.0f; // TODO
-		info.jumpSinAngle = 0.0f; // TODO
-		info.jumpVelocity = 0.0f; // TODO
-		info.jumpXZSpeed = 0.0f; // TODO
-		info.movementFlags = m_controlledUnit->GetMovementInfo().movementFlags;
 		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, info);
 	}
 
@@ -289,6 +300,59 @@ namespace mmo
 		{
 			m_cameraAnchorNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
 		}
+	}
+
+	void PlayerController::Jump()
+	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
+		// Are we still falling? Then we can't jump!
+		MovementInfo movementInfo = m_controlledUnit->GetMovementInfo();
+		if ((movementInfo.movementFlags & movement_flags::Falling) || (movementInfo.movementFlags & movement_flags::FallingFar))
+		{
+			return;
+		}
+
+		// TODO
+		movementInfo.jumpVelocity = 7.98f;
+		movementInfo.movementFlags |= movement_flags::Falling;
+
+		// Calculate jump velocity
+		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
+		{
+			Vector3 movementVector;
+			if (movementInfo.movementFlags & movement_flags::Forward)
+			{
+				movementVector.x += 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::Backward)
+			{
+				movementVector.x -= 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				movementVector.z -= 1.0f;
+			}
+			if (movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				movementVector.z += 1.0f;
+			}
+
+			MovementType movementType = movement_type::Run;
+			if (movementVector.x < 0.0)
+			{
+				movementType = movement_type::Backwards;
+			}
+
+			movementInfo.jumpXZSpeed = m_controlledUnit->GetSpeed(movementType);
+		}
+
+		m_controlledUnit->ApplyMovementInfo(movementInfo);
+		SendMovementUpdate(game::client_realm_packet::MoveJump);
+		StartHeartbeatTimer();
 	}
 
 	void PlayerController::OnHoveredUnitChanged(GameUnitC* previousHoveredUnit)

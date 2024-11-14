@@ -723,6 +723,12 @@ namespace mmo
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, false);
 		}
 
+		void Script_Jump()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->Jump();
+		}
+
 		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, int32 casterLevel, int32& minBasePoints, int32& maxBasePoints)
 		{
 			if (casterLevel > spell.maxlevel() && spell.maxlevel() > 0)
@@ -1026,6 +1032,8 @@ namespace mmo
 			luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
 			luabind::def("StrafeRightStart", &Script_StrafeRightStart),
 			luabind::def("StrafeRightStop", &Script_StrafeRightStop),
+
+			luabind::def("Jump", &Script_Jump),
 
 			luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
 			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),
