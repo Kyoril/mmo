@@ -1,9 +1,9 @@
 // Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
-#include "world_editor.h"
+#include "world_model_editor.h"
 
 #include "stream_sink.h"
-#include "world_editor_instance.h"
+#include "world_model_editor_instance.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
@@ -11,15 +11,15 @@
 
 namespace mmo
 {
-	static const String WorldModelFileExtension = ".hwld";
+	static const String WorldModelFileExtension = ".wmo";
 
-	WorldEditor::WorldEditor(EditorHost& host, proto::Project& project)
+	WorldModelEditor::WorldModelEditor(EditorHost& host, proto::Project& project)
 		: EditorBase(host)
 		, m_project(project)
 	{
 	}
 
-	void WorldEditor::CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance)
+	void WorldModelEditor::CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance)
 	{
 		std::erase_if(m_instances, [&instance](const auto& item)
 		{
@@ -27,11 +27,11 @@ namespace mmo
 		});
 	}
 
-	void WorldEditor::CreateNewWorld()
+	void WorldModelEditor::CreateNewWorldModelObject()
 	{
 		auto currentPath = m_host.GetCurrentPath();
-		currentPath /= m_worldName + WorldModelFileExtension;
-		m_worldName.clear();
+		currentPath /= m_worldModelName + WorldModelFileExtension;
+		m_worldModelName.clear();
 		
 		const auto file = AssetRegistry::CreateNewFile(currentPath.string());
 		if (!file)
@@ -75,39 +75,39 @@ namespace mmo
 		m_host.assetImported(m_host.GetCurrentPath());
 	}
 
-	bool WorldEditor::CanLoadAsset(const String& extension) const
+	bool WorldModelEditor::CanLoadAsset(const String& extension) const
 	{
 		return extension == WorldModelFileExtension;
 	}
 
-	void WorldEditor::AddCreationContextMenuItems()
+	void WorldModelEditor::AddCreationContextMenuItems()
 	{
-		if (ImGui::MenuItem("Create New World"))
+		if (ImGui::MenuItem("Create New World Model Object"))
 		{
-			m_worldName.clear();
-			m_showWorldNameDialog = true;
+			m_worldModelName.clear();
+			m_showWorldModelNameDialog = true;
 		}
 	}
 
-	void WorldEditor::DrawImpl()
+	void WorldModelEditor::DrawImpl()
 	{
-		if (m_showWorldNameDialog)
+		if (m_showWorldModelNameDialog)
 		{
-			ImGui::OpenPopup("Create New World");
-			m_showWorldNameDialog = false;
+			ImGui::OpenPopup("Create New World Model");
+			m_showWorldModelNameDialog = false;
 		}
 
-		if (ImGui::BeginPopupModal("Create New World", nullptr, ImGuiWindowFlags_NoResize))
+		if (ImGui::BeginPopupModal("Create New World Model", nullptr, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::Text("Enter a name for the new world:");
 
-			ImGui::InputText("##field", &m_worldName);
+			ImGui::InputText("##field", &m_worldModelName);
 			ImGui::SameLine();
 			ImGui::Text(WorldModelFileExtension.c_str());
 			
 			if (ImGui::Button("Create"))
 			{
-				CreateNewWorld();
+				CreateNewWorldModelObject();
 				ImGui::CloseCurrentPopup();
 			}
 			
@@ -122,7 +122,7 @@ namespace mmo
 		}
 	}
 
-	std::shared_ptr<EditorInstance> WorldEditor::OpenAssetImpl(const Path& asset)
+	std::shared_ptr<EditorInstance> WorldModelEditor::OpenAssetImpl(const Path& asset)
 	{
 		const auto it = m_instances.find(asset);
 		if (it != m_instances.end())
@@ -130,10 +130,10 @@ namespace mmo
 			return it->second;
 		}
 
-		const auto instance = m_instances.emplace(asset, std::make_shared<WorldEditorInstance>(m_host, *this, asset));
+		const auto instance = m_instances.emplace(asset, std::make_shared<WorldModelEditorInstance>(m_host, *this, asset));
 		if (!instance.second)
 		{
-			ELOG("Failed to open model editor instance");
+			ELOG("Failed to open world model editor instance");
 			return nullptr;
 		}
 

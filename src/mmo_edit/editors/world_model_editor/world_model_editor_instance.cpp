@@ -1,11 +1,11 @@
 ﻿// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
-#include "world_editor_instance.h"
+#include "world_model_editor_instance.h"
 
 #include <imgui_internal.h>
 
 #include "editor_host.h"
-#include "world_editor.h"
+#include "world_model_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_layout.h"
@@ -16,22 +16,13 @@
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
+#include "editors/world_editor/world_editor_instance.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
 
 namespace mmo
 {
-	/// @brief Default value. Object will not be hit by any scene query.
-	static constexpr uint32 SceneQueryFlags_None = 0;
-
-	/// @brief Used for map entities.
-	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
-
-	static constexpr uint32 SceneQueryFlags_Tile = 1 << 1;
-
-	static constexpr uint32 SceneQueryFlags_Spawns = 1 << 2;
-
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
@@ -46,7 +37,7 @@ namespace mmo
 		Vector3 scale;
 	};
 
-	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
+	WorldModelEditorInstance::WorldModelEditorInstance(EditorHost& host, WorldModelEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
 		, m_wireFrame(false)
@@ -62,48 +53,16 @@ namespace mmo
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
-		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
+		m_worldGrid->SetQueryFlags(0);
 		m_worldGrid->SetVisible(false);
 
-		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &WorldEditorInstance::Render);
+		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &WorldModelEditorInstance::Render);
 
-		// Ensure the work queue is always busy
-		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
-
-		// Setup background loading thread
-		auto& workQueue = m_workQueue;
-		auto& dispatcher = m_dispatcher;
-		m_backgroundLoader = std::thread([&workQueue]()
-		{
-			workQueue.run();
-		});
-
-		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
-		{
-			workQueue.post(work);
-		};
-		const auto synchronize = [&dispatcher](const WorldPageLoader::Work &work)
-		{
-			dispatcher.post(work);
-		};
-
-		const PagePosition pos = GetPagePositionFromCamera();
-		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
-		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
-		
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
+		m_raySceneQuery->SetQueryMask(1);
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
 
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
-
-		PagePosition worldSize(64, 64);
-		m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
-			worldSize,
-			2,
-			pos,
-			*m_pageLoader
-			);
 
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
@@ -121,28 +80,6 @@ namespace mmo
 			}
 		};
 
-		// Setup terrain
-		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
-		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
-
-		// Replace all \ with /
-		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension()).string();
-		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
-		m_terrain->SetBaseFileName(baseFileName);
-
-		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
-		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
-		m_cloudsEntity->SetQueryFlags(0);
-		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
-		m_cloudsNode->AttachObject(*m_cloudsEntity);
-		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
-		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
-
-		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
-		m_debugEntity = m_scene.CreateEntity("TerrainDebug", "Editor/Joint.hmsh");
-		m_debugNode->AttachObject(*m_debugEntity);
-		m_debugEntity->SetVisible(false);
-
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
 		if (!streamPtr)
@@ -151,7 +88,7 @@ namespace mmo
 			return;
 		}
 
-		AddChunkHandler(*versionChunk, true, *this, &WorldEditorInstance::ReadMVERChunk);
+		AddChunkHandler(*versionChunk, true, *this, &WorldModelEditorInstance::ReadMVERChunk);
 
 		io::StreamSource source{ *streamPtr };
 		io::Reader reader{ source };
@@ -164,24 +101,16 @@ namespace mmo
 		ILOG("Successfully read world file!");
 	}
 
-	WorldEditorInstance::~WorldEditorInstance()
+	WorldModelEditorInstance::~WorldModelEditorInstance()
 	{
-		// Stop background loading thread
-		m_work.reset();
-		m_workQueue.stop();
-		m_dispatcher.stop();
-		m_backgroundLoader.join();
-
 		m_transformWidget.reset();
 		m_mapEntities.clear();
 		m_worldGrid.reset();
 		m_scene.Clear();
 	}
 
-	void WorldEditorInstance::Render()
+	void WorldModelEditorInstance::Render()
 	{
-		m_dispatcher.poll();
-
 		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
 	
 		if (ImGui::IsKeyPressed(ImGuiKey_F))
@@ -241,51 +170,9 @@ namespace mmo
 			}
 		}
 
-		if (m_cloudsNode)
-		{
-			m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
-		}
-
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
 
-		// Terrain deformation
-		if (m_hovering && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-		{
-			const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
-			
-			if (m_editMode == WorldEditMode::Terrain)
-			{
-				if (m_terrainEditMode == TerrainEditMode::Deform)
-				{
-					if (m_terrainDeformMode == TerrainDeformMode::Raise)
-					{
-						int32 pageX, pageY;
-						m_terrain->GetPageIndexByWorldPosition(m_brushPosition, pageX, pageY);
-
-						const float pageOffsetX = pageX * terrain::constants::PageSize;
-						const float pageOffsetY = pageY * terrain::constants::PageSize;
-						const float scale = terrain::constants::PageSize / terrain::constants::VerticesPerPage;
-
-						int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
-						int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
-						int pageVertexX = globalVertexX % (terrain::constants::VerticesPerPage - 1);
-						int pageVertexY = globalVertexY % (terrain::constants::VerticesPerPage - 1);
-
-						int vX = pageX * (terrain::constants::VerticesPerPage - 1) + pageVertexX;
-						int vY = pageY * (terrain::constants::VerticesPerPage - 1) + pageVertexY;
-
-						m_terrain->Deform(vX, vY,
-							3, 6, 1.0f * factor * deltaTimeSeconds);
-					}
-				}
-			}
-		}
-
-		const auto pos = GetPagePositionFromCamera();
-		m_memoryPointOfView->UpdateCenter(pos);
-		m_visibleSection->UpdateCenter(pos);
-		
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
@@ -306,35 +193,16 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	static const char* s_editModeStrings[] = {
-		"None",
-
-		"Map Entities",
-		"Terrain",
-		"Spawns"
-	};
-
-	static_assert(std::size(s_editModeStrings) == static_cast<uint32>(WorldEditMode::Count_), "There needs to be one string per enum value to display!");
-
-	static const char* s_terrainEditModeStrings[] = {
-		"Select",
-		"Deform",
-		"Paint"
-	};
-
-	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditMode::Count_), "There needs to be one string per enum value to display!");
-
-
-	void WorldEditorInstance::Draw()
+	void WorldModelEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
 
-		const auto dockspaceId = ImGui::GetID("##model_dockspace_");
+		const auto dockspaceId = ImGui::GetID("##worldmodel_dockspace_");
 		ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
-		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
+		const String worldSettingsId = "Settings##" + GetAssetPath().string();
 
 		if (ImGui::IsKeyPressed(ImGuiKey_LeftAlt, false))
 		{
@@ -348,20 +216,6 @@ namespace mmo
 		if (ImGui::IsKeyPressed(ImGuiKey_2, false))
 		{
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
-		}
-
-
-		if (ImGui::IsKeyDown(ImGuiKey_F1))
-		{
-			m_editMode = WorldEditMode::None;
-		}
-		else if (ImGui::IsKeyDown(ImGuiKey_F2))
-		{
-			m_editMode = WorldEditMode::StaticMapEntities;
-		}
-		else if (ImGui::IsKeyDown(ImGuiKey_F3) && m_hasTerrain)
-		{
-			m_editMode = WorldEditMode::Terrain;
 		}
 
 		if (ImGui::Begin(detailsId.c_str()))
@@ -383,105 +237,13 @@ namespace mmo
 
 			ImGui::Separator();
 
-			if (ImGui::CollapsingHeader("World Settings", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				if (ImGui::Checkbox("Has Terrain", &m_hasTerrain))
-				{
-					m_terrain->SetVisible(m_hasTerrain);
-
-					// Ensure terrain mode is not selectable if there is no terrain
-					if (!m_hasTerrain && m_editMode == WorldEditMode::Terrain)
-					{
-						m_editMode = WorldEditMode::None;
-					}
-				}
-
-				ImGui::BeginDisabled(!m_hasTerrain);
-
-				static const char* s_noMaterialPreview = "<None>";
-
-				const char* previewString = s_noMaterialPreview;
-				if (m_terrain->GetDefaultMaterial())
-				{
-					previewString = m_terrain->GetDefaultMaterial()->GetName().data();
-				}
-
-				if (ImGui::BeginCombo("Terrain Default Material", previewString))
-				{
-					ImGui::EndCombo();
-				}
-
-				if (m_hasTerrain)
-				{
-					if (ImGui::BeginDragDropTarget())
-					{
-						// We only accept mesh file drops
-						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
-						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
-						}
-
-						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
-						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
-						}
-
-						ImGui::EndDragDropTarget();
-					}
-				}
-
-				ImGui::EndDisabled();
-			}
-
-			ImGui::Separator();
-
-			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
-			{
-				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
-				{
-					ImGui::PushID(i);
-
-					ImGui::BeginDisabled(i == static_cast<uint32>(WorldEditMode::Terrain) && !m_hasTerrain);
-					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
-					{
-						m_editMode = static_cast<WorldEditMode>(i);
-						m_selection.Clear();
-					}
-					ImGui::EndDisabled();
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
-			}
-
-			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
-			{
-				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
-				{
-					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
-					{
-						ImGui::PushID(i);
-						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_editMode)))
-						{
-							m_terrainEditMode = static_cast<TerrainEditMode>(i);
-							m_selection.Clear();
-						}
-						ImGui::PopID();
-					}
-
-					ImGui::EndCombo();
-				}
-			}
-
-			ImGui::Separator();
-
 			if (!m_selection.IsEmpty())
 			{
 				Selectable* selected = m_selection.GetSelectedObjects().back().get();
 
 				if (ImGui::CollapsingHeader("Entity", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					selected->Visit(*this);
+					//selected->Visit(*this);
 				}
 
 				if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
@@ -591,47 +353,44 @@ namespace mmo
 				}
 			}
 
-			if (m_editMode == WorldEditMode::StaticMapEntities)
+			if (ImGui::BeginDragDropTarget())
 			{
-				if (ImGui::BeginDragDropTarget())
+				// We only accept mesh file drops
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 				{
-					// We only accept mesh file drops
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+					Vector3 position = Vector3::Zero;
+
+					const ImVec2 mousePos = ImGui::GetMousePos();
+					const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
+					const Ray ray = m_camera->GetCameraToViewportRay(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+						10000.0f);
+					const auto hit = ray.Intersects(plane);
+					if (hit.first)
 					{
-						Vector3 position = Vector3::Zero;
-
-						const ImVec2 mousePos = ImGui::GetMousePos();
-						const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
-						const Ray ray = m_camera->GetCameraToViewportRay(
-							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-							10000.0f);
-						const auto hit = ray.Intersects(plane);
-						if (hit.first)
-						{
-							position = ray.GetPoint(hit.second);
-						}
-						else
-						{
-							position = ray.GetPoint(10.0f);
-						}
-
-						// Snap to grid?
-						if (m_gridSnap)
-						{
-							const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
-
-							// Snap position to grid size
-							position.x = std::round(position.x / gridSize) * gridSize;
-							position.y = std::round(position.y / gridSize) * gridSize;
-							position.z = std::round(position.z / gridSize) * gridSize;
-						}
-
-						CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
+						position = ray.GetPoint(hit.second);
 					}
-					ImGui::EndDragDropTarget();
+					else
+					{
+						position = ray.GetPoint(10.0f);
+					}
+
+					// Snap to grid?
+					if (m_gridSnap)
+					{
+						const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
+
+						// Snap position to grid size
+						position.x = std::round(position.x / gridSize) * gridSize;
+						position.y = std::round(position.y / gridSize) * gridSize;
+						position.z = std::round(position.z / gridSize) * gridSize;
+					}
+
+					CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
 				}
-		    }
+				ImGui::EndDragDropTarget();
+			}
 			
 			ImGui::SetItemAllowOverlap();
 			ImGui::SetCursorPos(ImVec2(16, 16));
@@ -740,7 +499,7 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	void WorldEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
+	void WorldModelEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
@@ -752,7 +511,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
+	void WorldModelEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
 		const bool widgetWasActive = m_transformWidget->IsActive();
 
@@ -770,28 +529,16 @@ namespace mmo
 
 		if (m_hovering && button == 0)
 		{
-			if (m_editMode == WorldEditMode::StaticMapEntities)
+			if (!widgetWasActive && button == 0 && m_hovering)
 			{
-				if (!widgetWasActive && button == 0 && m_hovering)
-				{
-					PerformEntitySelectionRaycast(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
-				}
-			}
-			else if (m_editMode == WorldEditMode::Terrain)
-			{
-				if (m_terrainEditMode == TerrainEditMode::Select)
-				{
-					PerformTerrainSelectionRaycast(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
-				}
+				PerformEntitySelectionRaycast(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 			}
 		}
 	}
 
-	void WorldEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
+	void WorldModelEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
 	{
 		if (!m_transformWidget->IsActive())
 		{
@@ -801,7 +548,7 @@ namespace mmo
 			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != WorldEditMode::Terrain || m_terrainEditMode != TerrainEditMode::Deform)))
+			if (m_rightButtonPressed || m_leftButtonPressed)
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
@@ -815,19 +562,9 @@ namespace mmo
 		m_transformWidget->OnMouseMoved(
 			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
-
-		if (m_editMode == WorldEditMode::Terrain)
-		{
-			if (m_terrainEditMode != TerrainEditMode::Select)
-			{
-				OnTerrainMouseMoved(
-					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
-			}
-		}
 	}
 
-	void WorldEditorInstance::Save()
+	void WorldModelEditorInstance::Save()
 	{
 		// Build mesh name index map
 		std::map<String, uint32> entityNames;
@@ -867,67 +604,13 @@ namespace mmo
 			meshSize += name.first.size() + 1;
 		}
 
-		// Write terrain settings
-		{
-			String defaultMaterialName;
-			if (m_terrain->GetDefaultMaterial())
-			{
-				defaultMaterialName = m_terrain->GetDefaultMaterial()->GetName();
-			}
-
-			ChunkWriter terrainWriter(terrainChunk, writer);
-			writer
-				<< io::write<uint8>(m_hasTerrain)
-				<< io::write_dynamic_range<uint16>(defaultMaterialName);
-			terrainWriter.Finish();
-		}
-
-		// Write mesh names
-		writer
-			<< io::write<uint32>(*meshChunk)
-			<< io::write<uint32>(meshSize);
-		for (const auto& name : sortedNames)
-		{
-			writer << io::write_range(*name) << io::write<uint8>(0);
-		}
-
-		// Write entities
-		for (const auto& ent : m_mapEntities)
-		{
-			writer
-				<< io::write<uint32>(*entityChunk)
-				<< io::write<uint32>(sizeof(MapEntityChunkContent));
-
-			MapEntityChunkContent content;
-			content.meshNameIndex = entityNames[String(ent->GetEntity().GetMesh()->GetName())];
-			content.position = ent->GetSceneNode().GetDerivedPosition();
-			content.rotation = ent->GetSceneNode().GetDerivedOrientation();
-			content.scale = ent->GetSceneNode().GetDerivedScale();
-			content.uniqueId = 0;	// TODO: Unique ID
-			writer.WritePOD(content);
-		}
-		
 		// TODO
 		sink.Flush();
 
-		ILOG("Successfully saved world file " << GetAssetPath());
-
-		// Save terrain
-		for (uint32 x = 0; x < 64; ++x)
-		{
-			for (uint32 y = 0; y < 64; ++y)
-			{
-				terrain::Page* page = m_terrain->GetPage(x, y);
-				if (page && page->IsPrepared() && page->IsChanged())
-				{
-					// Page was loaded, so save any changes
-					page->Save();
-				}
-			}
-		}
+		ILOG("Successfully saved world model file " << GetAssetPath());
 	}
 
-	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
+	void WorldModelEditorInstance::UpdateDebugAABB(const AABB& aabb)
 	{
 		m_debugBoundingBox->Clear();
 
@@ -953,12 +636,12 @@ namespace mmo
 		// TODO: Missing lines (6)
 	}
 
-	void WorldEditorInstance::PerformEntitySelectionRaycast(const float viewportX, const float viewportY)
+	void WorldModelEditorInstance::PerformEntitySelectionRaycast(const float viewportX, const float viewportY)
 	{
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
 		m_raySceneQuery->SetRay(ray);
 		m_raySceneQuery->SetSortByDistance(true);
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
+		m_raySceneQuery->SetQueryMask(1);
 		m_raySceneQuery->ClearResult();
 		m_raySceneQuery->Execute();
 
@@ -989,57 +672,13 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::PerformTerrainSelectionRaycast(float viewportX, float viewportY)
-	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
-
-		m_selection.Clear();
-		m_debugBoundingBox->Clear();
-
-		const auto hitResult = m_terrain->RayIntersects(ray);
-		if (!hitResult.first)
-		{
-			m_debugEntity->SetVisible(false);
-			return;
-		}
-
-		if (terrain::Tile* tile = hitResult.second.tile)
-		{
-			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
-			UpdateDebugAABB(tile->GetWorldBoundingBox());
-		}
-
-		m_debugNode->SetPosition(hitResult.second.position);
-		m_debugEntity->SetVisible(true);
-	}
-
-	void WorldEditorInstance::OnTerrainMouseMoved(float viewportX, float viewportY)
-	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
-
-		m_selection.Clear();
-		m_debugBoundingBox->Clear();
-
-		const auto hitResult = m_terrain->RayIntersects(ray);
-		if (!hitResult.first)
-		{
-			m_debugEntity->SetVisible(false);
-			return;
-		}
-
-		m_brushPosition = hitResult.second.position;
-
-		m_debugNode->SetPosition(hitResult.second.position);
-		m_debugEntity->SetVisible(true);
-	}
-
-	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	void WorldModelEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
 	{
 		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
 		{
-			entity->SetQueryFlags(SceneQueryFlags_Entity);
+			entity->SetQueryFlags(1);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
@@ -1049,12 +688,12 @@ namespace mmo
 			node.SetScale(scale);
 
 			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
-			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+			mapEntity->remove.connect(this, &WorldModelEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
 	}
 
-	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
+	void WorldModelEditorInstance::OnMapEntityRemoved(MapEntity& entity)
 	{
 		m_mapEntities.erase(std::remove_if(m_mapEntities.begin(), m_mapEntities.end(), [&entity](const auto& mapEntity)
 		{
@@ -1062,130 +701,7 @@ namespace mmo
 		}), m_mapEntities.end());
 	}
 
-	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
-	{
-		const auto& camPos = m_camera->GetDerivedPosition();
-		return PagePosition(static_cast<uint32>(
-			32 - floor(camPos.x / terrain::constants::PageSize)),
-			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
-
-	}
-
-	void WorldEditorInstance::SetMapEntry(proto::MapEntry* entry)
-	{
-		if (m_mapEntry == entry)
-		{
-			return;
-		}
-
-		m_mapEntry = entry;
-
-		// TODO: Udpate spawn placement objects
-
-		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
-		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
-
-	}
-
-	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
-	{
-		if (!m_terrain)
-		{
-			return;
-		}
-
-		const auto &mainPage = page.GetMainPage();
-		const PagePosition &pos = mainPage.GetPosition();
-
-		if (isAvailable)
-		{
-			m_terrain->PreparePage(pos.x(), pos.y());
-			m_terrain->LoadPage(pos.x(), pos.y());
-		}
-		else
-		{
-			m_terrain->UnloadPage(pos.x(), pos.y());
-		}
-	}
-
-	void WorldEditorInstance::Visit(SelectedMapEntity& selectable)
-	{
-		MapEntity& mapEntity = selectable.GetEntity();
-		Entity& entity = mapEntity.GetEntity();
-
-		const MeshPtr mesh = entity.GetMesh();
-		const String meshName = mesh->GetName().data();
-
-		const String filename = Path(meshName).filename().string();
-
-		if (ImGui::BeginCombo("Mesh", filename.c_str()))
-		{
-			// TODO: Draw available mesh files from asset registry
-
-			ImGui::EndCombo();
-		}
-
-		if (ImGui::BeginDragDropTarget())
-		{
-			// We only accept mesh file drops
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-			{
-				entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
-			}
-
-			ImGui::EndDragDropTarget();
-		}
-	}
-
-	void WorldEditorInstance::Visit(SelectedTerrainTile& selectable)
-	{
-		static const char* s_noMaterialPreview = "<None>";
-
-		terrain::Tile& tile = selectable.GetTile();
-
-		// Get material
-		MaterialPtr material = tile.GetMaterial();
-
-		// Build preview string
-		const char* previewString = s_noMaterialPreview;
-		if (material)
-		{
-			previewString = material->GetName().data();
-		}
-
-		if (ImGui::BeginCombo("Material", previewString))
-		{
-			ImGui::EndCombo();
-		}
-
-		if (ImGui::BeginDragDropTarget())
-		{
-			// We only accept mesh file drops
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
-			{
-				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
-			}
-
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
-			{
-				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
-			}
-
-			ImGui::EndDragDropTarget();
-		}
-
-		if (ImGui::Button("Set For Page"))
-		{
-
-		}
-
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
-		}
-	}
-
-	bool WorldEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldModelEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *versionChunk);
 
@@ -1205,18 +721,17 @@ namespace mmo
 			return false;
 		}
 
-		AddChunkHandler(*meshChunk, false, *this, &WorldEditorInstance::ReadMeshChunk);
-		AddChunkHandler(*terrainChunk, false, *this, &WorldEditorInstance::ReadTerrainChunk);
+		AddChunkHandler(*meshChunk, false, *this, &WorldModelEditorInstance::ReadMeshChunk);
 
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldModelEditorInstance::ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *meshChunk);
 
 		// Only when we have read mesh names we support reading entity chunks otherwise entities would refer to meshes which we don't know about!
-		AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunk);
+		AddChunkHandler(*entityChunk, false, *this, &WorldModelEditorInstance::ReadEntityChunk);
 
 		// Read chunk only once
 		RemoveChunkHandler(*meshChunk);
@@ -1241,7 +756,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldModelEditorInstance::ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *entityChunk);
 
@@ -1270,35 +785,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
-	{
-		ASSERT(chunkHeader == *terrainChunk);
-
-		// Read chunk only once
-		RemoveChunkHandler(*terrainChunk);
-
-		String defaultTerrainMaterial;
-		reader
-			>> io::read<uint8>(m_hasTerrain)
-			>> io::read_container<uint16>(defaultTerrainMaterial);
-
-		if (!defaultTerrainMaterial.empty())
-		{
-			m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(defaultTerrainMaterial));
-			if (!m_terrain->GetDefaultMaterial())
-			{
-				WLOG("Failed to load referenced terrain default material!");
-			}
-		}
-		else if (m_hasTerrain)
-		{
-			WLOG("Terrain is enabled but terrain has no default material set!");
-		}
-
-		return reader;
-	}
-
-	bool WorldEditorInstance::OnReadFinished() noexcept
+	bool WorldModelEditorInstance::OnReadFinished() noexcept
 	{
 		m_meshNames.clear();
 		RemoveAllChunkHandlers();

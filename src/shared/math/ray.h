@@ -80,7 +80,7 @@ namespace mmo
 		/// @param c The third vertex of the triangle.
 		/// @returns A pair of true and the hit distance, if the ray intersects. Otherwise,
 		///          a pair of false and 0 is returned.
-		std::pair<bool, float> IntersectsTriangle(const Vector3& a, const Vector3& b, const Vector3& c, bool ignoreBackface = false)
+		std::pair<bool, float> IntersectsTriangle(const Vector3& a, const Vector3& b, const Vector3& c, bool ignoreBackface = false) const
 		{
 			const float upscaleFactor = 100.0f;
 
