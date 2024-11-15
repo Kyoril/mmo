@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "graphics/constant_buffer.h"
+#include "math/aabb_tree.h"
 
 namespace mmo
 {
@@ -31,6 +32,7 @@ namespace mmo
 	{
         friend class SubMesh;
 		friend class MeshSerializer;
+		friend class MeshDeserializer;
 
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
@@ -100,6 +102,8 @@ namespace mmo
 
         void InitAnimationState(AnimationStateSet& animationState);
 
+		AABBTree& GetCollisionTree() { return m_collisionTree; }
+
     protected:
 		bool m_boneAssignmentsOutOfDate { false };
 
@@ -122,6 +126,7 @@ namespace mmo
 		SkeletonPtr m_skeleton{ nullptr };
 		VertexBoneAssignmentList m_boneAssignments;
 		std::vector<Matrix4> m_boneMatrices;
+		AABBTree m_collisionTree;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

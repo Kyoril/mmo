@@ -50,6 +50,8 @@ namespace mmo
 
 		void DrawBones(const String& id);
 
+		void DrawCollision(const String& id);
+
 		void DrawViewport(const String& id);
 
 		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);

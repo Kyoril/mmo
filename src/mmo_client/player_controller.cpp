@@ -33,7 +33,6 @@ namespace mmo
 		: m_scene(scene)
 		, m_lootClient(lootClient)
 		, m_connector(connector)
-		, m_jumpVelocity(0.0f)
 	{
 		if (!s_mouseSensitivityCVar)
 		{
@@ -55,7 +54,7 @@ namespace mmo
 		};
 
 		m_selectionSceneQuery = m_scene.CreateRayQuery(Ray());
-		m_selectionSceneQuery->SetQueryMask(0xF0000000);
+		m_selectionSceneQuery->SetQueryMask(0x00000002);
 
 		SetupCamera();
 	}
@@ -219,18 +218,43 @@ namespace mmo
 	{
 		// Apply gravity to jump velocity
 		MovementInfo info = m_controlledUnit->GetMovementInfo();
-		if (info.movementFlags & movement_flags::Falling)
+
+		bool hasGroundHeight = false;
+		float groundHeight = 0.0f;
+		hasGroundHeight = m_controlledUnit->GetCollisionProvider().GetHeightAt(info.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
+
+		// Are we somehow moving at all?
+		if (info.movementFlags & movement_flags::PositionChanging)
 		{
-			// TODO: Replace with check for ground collision!
-			if (info.position.y <= 0.0f && info.jumpVelocity <= 0.0f)
+			if (info.movementFlags & movement_flags::Falling)
 			{
-				// Reset movement info
-				info.position.y = 0.0f;
-				info.movementFlags &= ~movement_flags::Falling;
-				info.jumpVelocity = 0.0f;
-				info.jumpXZSpeed = 0.0f;
-				m_controlledUnit->ApplyMovementInfo(info);
-				SendMovementUpdate(game::client_realm_packet::MoveFallLand);
+				if (info.position.y <= groundHeight && info.jumpVelocity <= 0.0f)
+				{
+					// Reset movement info
+					info.position.y = groundHeight;
+					info.movementFlags &= ~movement_flags::Falling;
+					info.jumpVelocity = 0.0f;
+					info.jumpXZSpeed = 0.0f;
+					m_controlledUnit->ApplyMovementInfo(info);
+					SendMovementUpdate(game::client_realm_packet::MoveFallLand);
+				}
+			}
+			else       // Not falling but moving somehow
+			{
+				if (!hasGroundHeight || groundHeight <= info.position.y - 0.25f)
+				{
+					// We need to start falling down!
+					info.movementFlags |= movement_flags::Falling;
+					info.jumpVelocity = -0.01f;
+					info.jumpXZSpeed = 0.0f;
+					m_controlledUnit->ApplyMovementInfo(info);
+					SendMovementUpdate(game::client_realm_packet::MoveJump);	// TODO: Use heartbeat packet for this
+				}
+				else if(hasGroundHeight)
+				{
+					info.position.y = groundHeight;
+					m_controlledUnit->ApplyMovementInfo(info);
+				}
 			}
 		}
 	}
@@ -611,7 +635,7 @@ namespace mmo
 		// Re-enable selection for previously controlled unit
 		if (m_controlledUnit)
 		{
-			m_controlledUnit->SetQueryMask(0xFFFFFFFF);
+			m_controlledUnit->SetQueryMask(0x00000002);
 		}
 
 		m_controlledUnit = controlledUnit;

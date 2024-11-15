@@ -63,6 +63,7 @@ namespace mmo
 		: public GameState
 		, public NetClient
 		, public IPageLoaderListener
+		, public ICollisionProvider
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -208,8 +209,6 @@ namespace mmo
 
 		bool LoadMap(const String& assetPath);
 
-		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
-
 		void OnChatNameQueryCallback(uint64 guid, const String& name);
 
 		void OnAttackSwingErrorTimer();
@@ -278,6 +277,8 @@ namespace mmo
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient& m_lootClient;
 
+		std::unique_ptr<RaySceneQuery> m_rayQuery;
+
 		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
 
 	private:
@@ -294,5 +295,7 @@ namespace mmo
 		void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) override;
 
 		void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) override;
+
+		bool GetHeightAt(const Vector3& position, float range, float& out_height) override;
 	};
 }

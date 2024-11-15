@@ -706,6 +706,7 @@ namespace mmo
 		{
 			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), modelEntry->filename());
 			m_entity->SetUserObject(this);
+			m_entity->SetQueryFlags(0x00000002);
 			m_entityOffsetNode->AttachObject(*m_entity);
 		}
 		else

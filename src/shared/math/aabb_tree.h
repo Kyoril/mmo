@@ -73,6 +73,8 @@ namespace mmo
 		/// @param indices Indices to build.
 		AABBTree(const std::vector<Vertex>& verts, const std::vector<Index>& indices);
 
+		void Clear();
+
 		/// 
 		/// @param verts
 		/// @param indices
@@ -91,6 +93,8 @@ namespace mmo
 		const std::vector<Node>& GetNodes() const { return m_nodes; }
 		const std::vector<Vertex>& GetVertices() const { return m_vertices; }
 		const std::vector<Index>& GetIndices() const { return m_indices; }
+
+		bool IsEmpty() const { return m_nodes.empty() && m_vertices.empty() && m_indices.empty(); }
 
 	private:
 

@@ -23,7 +23,9 @@
 #include "assimp/LogStream.hpp"
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
+#include "math/aabb_tree.h"
 #include "scene_graph/mesh_manager.h"
+#include "scene_graph/render_operation.h"
 #include "scene_graph/skeleton_serializer.h"
 
 namespace mmo
@@ -184,14 +186,24 @@ namespace mmo
 
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
+		const String collisionId = "Collision##" + GetAssetPath().string();
 		const String bonesId = "Bones##" + GetAssetPath().string();
 		const String animationsId = "Animation##" + GetAssetPath().string();
 
 		// Draw sidebar windows
 		DrawDetails(detailsId);
-		DrawBones(bonesId);
-		DrawAnimations(animationsId);
 
+		// Render these only if there is a skeleton
+		if (m_entity && m_entity->HasSkeleton())
+		{
+			DrawBones(bonesId);
+			DrawAnimations(animationsId);
+		}
+		else
+		{
+			DrawCollision(collisionId);
+		}
+		
 		// Draw viewport
 		DrawViewport(viewportId);
 
@@ -208,6 +220,7 @@ namespace mmo
 			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 			ImGui::DockBuilderDockWindow(animationsId.c_str(), sideId);
 			ImGui::DockBuilderDockWindow(bonesId.c_str(), sideId);
+			ImGui::DockBuilderDockWindow(collisionId.c_str(), sideId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 
 			m_initDockLayout = false;
@@ -484,6 +497,110 @@ namespace mmo
 					RenderBoneNode(*rootBone);
 				}
 				ImGui::EndChild();
+			}
+		}
+		ImGui::End();
+	}
+
+	void ReadVertexDataPositions(const VertexData& vertexData, std::vector<Vector3>& out_vertexPositions)
+	{
+		// Get shared vertex data
+		const auto buffer = vertexData.vertexBufferBinding->GetBuffer(0);
+
+		auto bufferData = static_cast<uint8*>(buffer->Map(LockOptions::ReadOnly));
+		ASSERT(bufferData);
+
+		for (size_t i = 0; i < vertexData.vertexCount; ++i)
+		{
+			const VertexElement* posElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
+			float* position = nullptr;
+			posElement->BaseVertexPointerToElement(bufferData, &position);
+
+			const float x = *position++;
+			const float y = *position++;
+			const float z = *position++;
+			out_vertexPositions.emplace_back(x, y, z);
+
+			bufferData += vertexData.vertexDeclaration->GetVertexSize(0);
+		}
+
+		buffer->Unmap();
+	}
+
+	void ReadIndexData(const IndexData& indexData, uint32 offset, std::vector<uint32>& out_indices)
+	{
+		if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
+		{
+			const uint16* indices = reinterpret_cast<uint16*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
+			ASSERT(indices);
+
+			for (size_t i = 0; i < indexData.indexCount; ++i)
+			{
+				out_indices.push_back((*indices++) + offset);
+			}
+		}
+		else
+		{
+			const uint32* indices = reinterpret_cast<uint32*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
+			ASSERT(indices);
+
+			for (size_t i = 0; i < indexData.indexCount; ++i)
+			{
+				out_indices.push_back((*indices++) + offset);
+			}
+		}
+
+		indexData.indexBuffer->Unmap();
+	}
+
+	void ModelEditorInstance::DrawCollision(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			if (ImGui::Button("Save"))
+			{
+				Save();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Clear"))
+			{
+				m_mesh->GetCollisionTree().Clear();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Build"))
+			{
+				// Gather all vertex data
+				if (m_mesh->sharedVertexData == nullptr)
+				{
+					std::vector<Vector3> vertices;
+					std::vector<uint32> indices;
+
+					for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
+					{
+						SubMesh& sub = m_mesh->GetSubMesh(i);
+
+						const uint32 vertexOffset = vertices.size();
+						vertices.reserve(vertices.size() + sub.vertexData->vertexCount);
+						indices.reserve(indices.size() + sub.indexData->indexCount);
+
+						ReadVertexDataPositions(*sub.vertexData, vertices);
+						ReadIndexData(*sub.indexData, vertexOffset, indices);
+					}
+
+					m_mesh->GetCollisionTree().Clear();
+					m_mesh->GetCollisionTree().Build(vertices, indices);
+				}
+				
+			}
+
+			if (ImGui::CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				const AABBTree& tree = m_mesh->GetCollisionTree();
+				ImGui::Text("Nodes: %zu", tree.GetNodes().size());
 			}
 		}
 		ImGui::End();

@@ -467,6 +467,12 @@ namespace mmo
 		characterObject->Initialize();
 		characterObject->Set(object_fields::Guid, characterData.characterId);
 
+		if (characterData.position.y < 0.0f)
+		{
+			WLOG("Player position height was too low, safeguard set it to 10");
+			characterData.position.y = 10.0f;
+		}
+
 		characterObject->Relocate(characterData.position, characterData.facing);
 
 		// Make character fall on login

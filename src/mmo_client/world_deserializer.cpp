@@ -41,7 +41,7 @@ namespace mmo
 		// Create entity
 		Entity* entity = m_scene.CreateEntity("Entity_" + std::to_string(m_entityIdGenerator.GenerateId()), meshName);
 		node->AttachObject(*entity);
-		entity->SetQueryFlags(0);
+		entity->SetQueryFlags(1);
 	}
 
 	bool ClientWorldInstanceDeserializer::ReadVersionChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)

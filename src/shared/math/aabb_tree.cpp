@@ -45,6 +45,17 @@ namespace mmo
 		Build(verts, indices);
 	}
 
+	void AABBTree::Clear()
+	{
+		m_vertices.clear();
+		m_indices.clear();
+		m_faceBounds.clear();
+		m_faceIndices.clear();
+
+		m_freeNode = 1;
+		m_nodes.clear();
+	}
+
 	void AABBTree::Build(const std::vector<Vertex>& verts, const std::vector<Index>& indices)
 	{
 		m_vertices = verts;

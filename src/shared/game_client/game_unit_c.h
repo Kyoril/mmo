@@ -39,9 +39,10 @@ namespace mmo
 	{
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
-		explicit GameUnitC(Scene& scene, NetClient& netDriver)
+		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider)
 			: GameObjectC(scene)
 			, m_netDriver(netDriver)
+			, m_collisionProvider(collisionProvider)
 		{
 		}
 
@@ -65,6 +66,8 @@ namespace mmo
 
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
+
+		ICollisionProvider& GetCollisionProvider() const noexcept { return m_collisionProvider; }
 
 	protected:
 		virtual void SetupSceneObjects() override;
@@ -222,5 +225,6 @@ namespace mmo
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;
 		AnimationState* m_oneShotState = nullptr;
+		ICollisionProvider& m_collisionProvider;
 	};
 }

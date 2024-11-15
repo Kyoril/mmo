@@ -22,6 +22,7 @@ namespace mmo
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
 	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
 	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
+	static const ChunkMagic MeshCollisionChunk = MakeChunkMagic('COLL');
 	
 	void WriteVertexData(const VertexData& vertexData, io::Writer& writer)
 	{
@@ -151,6 +152,14 @@ namespace mmo
 			skeletonChunkWriter.Finish();
 		}
 
+		// Collision tree available?
+		if (!mesh->GetCollisionTree().IsEmpty())
+		{
+			ChunkWriter collisionChunk{ MeshCollisionChunk, writer };
+			writer << mesh->GetCollisionTree();
+			collisionChunk.Finish();
+		}
+
 		// Write submesh chunks
 		uint16 submeshIndex = 0;
 		for (const auto& submesh : mesh->GetSubMeshes())
@@ -231,6 +240,7 @@ namespace mmo
 					if (version >= mesh_version::Version_0_3)
 					{
 						AddChunkHandler(*MeshSubMeshChunk, false, *this, &MeshDeserializer::ReadSubMeshChunkV3);
+						AddChunkHandler(*MeshCollisionChunk, false, *this, &MeshDeserializer::ReadCollisionChunk);
 
 						// Chunk no longer supported in V03 because there is no longer global index data
 						RemoveChunkHandler(*MeshIndexChunk);
@@ -658,6 +668,12 @@ namespace mmo
 			m_entry.boneAssignments.emplace_back(assign);
 		}
 
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadCollisionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		reader >> m_mesh.m_collisionTree;
 		return reader;
 	}
 

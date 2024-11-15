@@ -206,6 +206,8 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_rayQuery.reset();
+
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
@@ -381,6 +383,10 @@ namespace mmo
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
+
+		m_rayQuery = std::move(m_scene.CreateRayQuery(Ray()));
+		m_rayQuery->SetSortByDistance(true);
+		m_rayQuery->SetQueryMask(0xFFFFFFFF);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient);
 		s_inputControl = m_playerController.get();
@@ -674,10 +680,10 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(m_scene, *this);
+					object = std::make_shared<GameUnitC>(m_scene, *this, *this);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(m_scene, *this);
+					object = std::make_shared<GamePlayerC>(m_scene, *this, *this);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(m_scene, *this);
@@ -2072,21 +2078,6 @@ namespace mmo
 		return true;
 	}
 
-	void WorldState::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
-	{
-		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
-		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
-		if (entity)
-		{
-			auto& node = m_scene.CreateSceneNode(uniqueId);
-			m_scene.GetRootSceneNode().AddChild(node);
-			node.AttachObject(*entity);
-			node.SetPosition(position);
-			node.SetOrientation(orientation);
-			node.SetScale(scale);
-		}
-	}
-
 	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
 	{
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name);
@@ -2247,5 +2238,74 @@ namespace mmo
 					strong->NotifyItemData(data);
 				}
 			});
+	}
+
+	bool WorldState::GetHeightAt(const Vector3& position, float range, float& out_height)
+	{
+		float closestHeight = -10000.0f;
+
+		// Do check against terrain?
+		if (m_worldInstance->HasTerrain())
+		{
+			const float terrainHeight = m_worldInstance->GetTerrain()->GetSmoothHeightAt(position.x, position.z);
+			if (terrainHeight > closestHeight)
+			{
+				closestHeight = terrainHeight;
+			}
+		}
+
+		// TODO: Do raycast against world entity collision geometry instead of just assuming an invisible plane at height 0.0f
+		Ray groundDetectionRay(position, position + Vector3::NegativeUnitY * range);
+		m_rayQuery->ClearResult();
+		m_rayQuery->SetRay(groundDetectionRay);
+		m_rayQuery->SetQueryMask(1);
+		const RaySceneQueryResult& result = m_rayQuery->Execute();
+
+		if (!result.empty())
+		{
+			// Reset hit distance to the maximum range we are interested in
+			groundDetectionRay.hitDistance = range;
+			for(const auto& entry : result)
+			{
+				Entity* entity = dynamic_cast<Entity*>(entry.movable);
+				if (!entity || !entity->GetMesh())
+				{
+					continue;
+				}
+
+				const AABBTree& collisionTree = entity->GetMesh()->GetCollisionTree();
+				if (collisionTree.IsEmpty())
+				{
+					continue;
+				}
+
+				// Transform ray into local space of the entity
+				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
+				Ray transformedRay(
+					inverse * groundDetectionRay.origin,
+					inverse * groundDetectionRay.destination);
+				transformedRay.hitDistance = range;
+
+				if (collisionTree.IntersectRay(transformedRay, nullptr))
+				{
+					const Vector3 hitPoint = groundDetectionRay.origin.Lerp(groundDetectionRay.destination, transformedRay.hitDistance);
+					ASSERT(hitPoint.y <= position.y);
+
+					if (hitPoint.y > closestHeight)
+					{
+						closestHeight = hitPoint.y;
+					}
+				}
+			}
+		}
+		
+		// Did we hit something in the range we were interested in?
+		if (position.y - closestHeight > range)
+		{
+			return false;
+		}
+
+		out_height = closestHeight;
+		return true;
 	}
 }
