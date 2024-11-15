@@ -30,7 +30,7 @@ namespace mmo
 
 		// Try to load the file from the registry
 		const auto filePtr = AssetRegistry::OpenFile(filename);
-		if (!filePtr)
+		if (!filePtr || !*filePtr)
 		{
 			ELOG("Unable to load mesh file " << filename);
 			return nullptr;

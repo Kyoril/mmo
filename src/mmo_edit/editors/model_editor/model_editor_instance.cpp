@@ -66,7 +66,7 @@ namespace mmo
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
-			m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
+		m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 			
 		m_mesh = MeshManager::Get().Load(m_assetPath.string());
 		ASSERT(m_mesh);
@@ -109,6 +109,8 @@ namespace mmo
 
 		m_worldGrid.reset();
 		m_axisDisplay.reset();
+		m_selectedBoneAxis.reset();
+
 		m_scene.Clear();
 	}
 
@@ -302,74 +304,77 @@ namespace mmo
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-			if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-			{
-				if (m_entity != nullptr)
-				{
-					const auto files = AssetRegistry::ListFiles();
-
-					for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
-					{
-						ImGui::PushID(i); // Use field index as identifier.
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::AlignTextToFramePadding();
-
-						if (const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i))
-						{
-							ImGui::TableNextRow();
-							ImGui::TableSetColumnIndex(0);
-							ImGui::AlignTextToFramePadding();
-							constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-							ImGui::TreeNodeEx("Field", flags, "Material");
-
-							ImGui::TableSetColumnIndex(1);
-							ImGui::SetNextItemWidth(-FLT_MIN);
-
-							// Setup combo
-							String materialName = "(None)";
-							if (m_entity->GetSubEntity(i)->GetMaterial())
-							{
-								materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
-							}
-
-							ImGui::PushID(i);
-							if (ImGui::BeginCombo("material", materialName.c_str()))
-							{
-								// For each material
-								for (const auto& file : files)
-								{
-									if (!file.ends_with(".hmat") && !file.ends_with(".hmi")) continue;
-
-									if (ImGui::Selectable(file.c_str()))
-									{
-										m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
-										m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
-									}
-								}
-
-								ImGui::EndCombo();
-							}
-							ImGui::PopID();
-
-							ImGui::NextColumn();
-							ImGui::TreePop();
-						}
-						ImGui::PopID();
-					}
-				}
-
-				ImGui::EndTable();
-			}
-
-			ImGui::PopStyleVar();
-
-			ImGui::Separator();
-
 			if (ImGui::Button("Save"))
 			{
 				Save();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::CollapsingHeader("Sub Meshes", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+				if (ImGui::BeginTable("split", 2, ImGuiTableFlags_Resizable))
+				{
+					if (m_entity != nullptr)
+					{
+						const auto files = AssetRegistry::ListFiles();
+
+						for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+						{
+							ImGui::PushID(i); // Use field index as identifier.
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::AlignTextToFramePadding();
+
+							if (const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i))
+							{
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::AlignTextToFramePadding();
+								constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+								ImGui::TreeNodeEx("Field", flags, "Material");
+
+								ImGui::TableSetColumnIndex(1);
+								ImGui::SetNextItemWidth(-FLT_MIN);
+
+								// Setup combo
+								String materialName = "(None)";
+								if (m_entity->GetSubEntity(i)->GetMaterial())
+								{
+									materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
+								}
+
+								ImGui::PushID(i);
+								if (ImGui::BeginCombo("material", materialName.c_str()))
+								{
+									// For each material
+									for (const auto& file : files)
+									{
+										if (!file.ends_with(".hmat") && !file.ends_with(".hmi")) continue;
+
+										if (ImGui::Selectable(file.c_str()))
+										{
+											m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
+											m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
+										}
+									}
+
+									ImGui::EndCombo();
+								}
+								ImGui::PopID();
+
+								ImGui::NextColumn();
+								ImGui::TreePop();
+							}
+							ImGui::PopID();
+						}
+					}
+
+					ImGui::EndTable();
+				}
+
+				ImGui::PopStyleVar();
 			}
 		}
 		ImGui::End();

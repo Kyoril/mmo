@@ -67,6 +67,7 @@ namespace mmo
 	void MaterialPreviewProvider::RenderMaterialPreview()
 	{
 		if (!m_viewportRT) return;
+		if (!m_entity) return;
 
 		if (m_previewRenderQueue.empty()) return;
 
