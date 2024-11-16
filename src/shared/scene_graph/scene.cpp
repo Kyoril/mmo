@@ -415,8 +415,23 @@ namespace mmo
 	{
 	}
 
+	void RaySceneQuery::NotifyObjectChecked(MovableObject& obj)
+	{
+		if (!m_debugHitTests)
+		{
+			return;
+		}
+
+		m_debugHitTestResults.push_back(&obj);
+	}
+
 	const RaySceneQueryResult& RaySceneQuery::Execute()
 	{
+		if (m_debugHitTests)
+		{
+			m_debugHitTestResults.clear();
+		}
+		
 		Execute(*this);
 
 		return m_result;
@@ -428,6 +443,12 @@ namespace mmo
 
 		for (const auto& entity : m_scene.GetAllEntities())
 		{
+			// We check all
+			if (m_debugHitTests)
+			{
+				listener.NotifyObjectChecked(*entity);
+			}
+
 			// Filtered due to type flags
 			if ((entity->GetTypeFlags() & m_queryTypeMask) == 0)
 			{

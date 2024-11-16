@@ -355,6 +355,8 @@ namespace mmo
 				++i;
 			}
 		}
+
+		FrameManager::Get().TriggerLuaEvent("HEIGHTCHECK_PROFILE", m_rayQuery->GetDebugHitTestResults().size());
 	}
 	
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -386,7 +388,8 @@ namespace mmo
 
 		m_rayQuery = std::move(m_scene.CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);
-		m_rayQuery->SetQueryMask(0xFFFFFFFF);
+		m_rayQuery->SetQueryMask(1);
+		m_rayQuery->SetDebugHitTestResults(true);
 
 		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient);
 		s_inputControl = m_playerController.get();
@@ -2307,5 +2310,32 @@ namespace mmo
 
 		out_height = closestHeight;
 		return true;
+	}
+
+	void WorldState::GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities)
+	{
+		// TODO: Do check against terrain?
+
+		// TODO: Make more performant check
+		for (const Entity* entity : m_scene.GetAllEntities())
+		{
+			if ((entity->GetQueryFlags() & 1) == 0)
+			{
+				continue;
+			}
+
+			if (!entity->GetMesh() || entity->GetMesh()->GetCollisionTree().IsEmpty())
+			{
+				continue;
+			}
+
+			const AABB& entityAABB = entity->GetWorldBoundingBox(true);
+			if (!entityAABB.Intersects(aabb))
+			{
+				continue;
+			}
+
+			out_potentialEntities.push_back(entity);
+		}
 	}
 }

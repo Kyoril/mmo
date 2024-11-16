@@ -72,6 +72,8 @@ namespace mmo
 	protected:
 		virtual void SetupSceneObjects() override;
 
+		bool CanStepUp(const Vector3& collisionNormal, float penetrationDepth);
+
 	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);
@@ -179,12 +181,15 @@ namespace mmo
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
 
+		const Capsule& GetCollider() const noexcept { return m_collider; }
+
 	protected:
 		void OnDisplayIdChanged();
 
 		void UpdateCollider();
 
 		void PerformGroundCheck();
+
 
 	protected:
 		NetClient& m_netDriver;

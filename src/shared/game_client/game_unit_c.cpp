@@ -4,6 +4,7 @@
 #include "object_mgr.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "math/collision.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 #include "shared/client_data/model_data.pb.h"
@@ -264,8 +265,6 @@ namespace mmo
 	{
 		auto* playerNode = GetSceneNode();
 
-		UpdateCollider();
-
 		if (m_movementInfo.IsTurning())
 		{
 			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
@@ -308,6 +307,7 @@ namespace mmo
 
 			playerNode->Translate(movementVector.NormalizedCopy() * GetSpeed(movementType) * deltaTime, TransformSpace::Local);
 			m_movementInfo.position = playerNode->GetDerivedPosition();
+			UpdateCollider();
 		}
 
 		if (m_movementInfo.movementFlags & movement_flags::Falling)
@@ -344,6 +344,21 @@ namespace mmo
 
 		// Setup object display
 		OnDisplayIdChanged();
+	}
+
+	bool GameUnitC::CanStepUp(const Vector3& collisionNormal, float penetrationDepth)
+	{
+		// Only attempt to step up if the obstacle is in front
+		if (collisionNormal.y > 0.0f)
+		{
+			// The collision is with the ground or a slope, not a vertical obstacle
+			return false;
+		}
+
+		// TODO: Raycast up?
+
+		// No obstacle above, can attempt to step up
+		return true;
 	}
 
 	void GameUnitC::StartMove(const bool forward)
@@ -768,8 +783,8 @@ namespace mmo
 	{
 		constexpr float halfHeight = 1.0f;
 
-		m_collider.pointA = GetPosition() - Vector3(0.0f, halfHeight, 0.0f);
-		m_collider.pointA = GetPosition() + Vector3(0.0f, halfHeight, 0.0f);
+		m_collider.pointA = GetPosition() + Vector3(0.0f, 0.5f, 0.0f);
+		m_collider.pointB = GetPosition() + Vector3(0.0f, halfHeight * 2.0f, 0.0f);
 		m_collider.radius = 0.5f;
 	}
 

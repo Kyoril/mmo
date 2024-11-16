@@ -18,6 +18,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
+#include "math/collision.h"
 
 namespace mmo
 {
@@ -226,6 +227,56 @@ namespace mmo
 		// Are we somehow moving at all?
 		if (info.movementFlags & movement_flags::PositionChanging)
 		{
+			std::vector<const Entity*> potentialTrees;
+			potentialTrees.reserve(8);
+
+			// Get collider boundaries
+			const AABB colliderBounds = CapsuleToAABB(m_controlledUnit->GetCollider());
+			m_controlledUnit->GetCollisionProvider().GetCollisionTrees(colliderBounds, potentialTrees);
+
+			Vector3 totalCorrection(0, 0, 0);
+			bool collisionDetected = false;
+
+			// Iterate over potential collisions
+			for (const Entity* entity : potentialTrees)
+			{
+				const auto& tree = entity->GetMesh()->GetCollisionTree();
+				const auto matrix = entity->GetParentNodeFullTransform();
+
+				for (uint32 i = 0; i < tree.GetIndices().size(); i += 3)
+				{
+					const Vector3& v0 = matrix * tree.GetVertices()[tree.GetIndices()[i]];
+					const Vector3& v1 = matrix * tree.GetVertices()[tree.GetIndices()[i + 1]];
+					const Vector3& v2 = matrix * tree.GetVertices()[tree.GetIndices()[i + 2]];
+
+					Vector3 collisionPoint, collisionNormal;
+					float penetrationDepth;
+
+					if (CapsuleTriangleIntersection(m_controlledUnit->GetCollider(), v0, v1, v2, collisionPoint, collisionNormal, penetrationDepth))
+					{
+						if (collisionNormal.y > 0.25f)
+						{
+							continue;
+						}
+
+						collisionDetected = true;
+
+						// Accumulate corrections
+						totalCorrection += collisionNormal * penetrationDepth;
+					}
+				}
+			}
+
+			if (collisionDetected)
+			{
+				// Correct the player's position
+				m_controlledUnit->GetSceneNode()->Translate(totalCorrection, TransformSpace::World);
+
+				info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
+				m_controlledUnit->ApplyMovementInfo(info);
+			}
+
+			// Collision detection
 			if (info.movementFlags & movement_flags::Falling)
 			{
 				if (info.position.y <= groundHeight && info.jumpVelocity <= 0.0f)

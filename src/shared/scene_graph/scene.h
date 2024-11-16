@@ -161,6 +161,8 @@ namespace mmo
 		virtual ~RaySceneQueryListener() = default;
 
 	public:
+		virtual void NotifyObjectChecked(MovableObject& obj) = 0;
+
 		/// @brief Callback for when a movable object was hit by the raycast.
 		/// @param obj The object that was hit.
 		/// @param distance The distance to the origin of the ray.
@@ -195,12 +197,16 @@ namespace mmo
 		bool m_sortByDistance = false;
 		uint16_t m_maxResults = 0;
 		RaySceneQueryResult m_result;
+		bool m_debugHitTests = false;
+		std::vector<MovableObject*> m_debugHitTestResults;
 
 	public:
 		explicit RaySceneQuery(Scene& scene);
 		virtual ~RaySceneQuery() = default;
 
 	public:
+		void NotifyObjectChecked(MovableObject& obj) override;
+
 		/// @brief Sets the ray to be used by the query.
 		virtual void SetRay(const Ray& ray) { m_ray = ray; }
 
@@ -230,6 +236,13 @@ namespace mmo
 
 		/// @brief Clears the result from the last execution without an external listener.
 		void ClearResult() { m_result.clear(); }
+
+		bool IsDebuggingHitTestResults() const { return m_debugHitTests; }
+
+		void SetDebugHitTestResults(bool debug) { m_debugHitTests = debug; }
+
+		/// Gets the debug hit test results, which are objects that were tested for intersection with the ray cast.
+		const std::vector<MovableObject*>& GetDebugHitTestResults() const { return m_debugHitTestResults; }
 
 	public:
 		/// @copydoc RaySceneQueryListener::QueryResult
