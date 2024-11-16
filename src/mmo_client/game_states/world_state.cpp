@@ -356,7 +356,9 @@ namespace mmo
 			}
 		}
 
+#ifdef _DEBUG
 		FrameManager::Get().TriggerLuaEvent("HEIGHTCHECK_PROFILE", m_rayQuery->GetDebugHitTestResults().size());
+#endif
 	}
 	
 	bool WorldState::OnMouseWheel(const int32 delta)
