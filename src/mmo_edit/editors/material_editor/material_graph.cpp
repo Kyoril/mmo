@@ -54,8 +54,8 @@ namespace mmo
 			writer
 				<< io::write<uint32>(m_nodes.size())
 				<< io::write<uint32>(m_idGenerator.GetCurrentId())
-				<< io::write<uint32>(m_rootNode->GetId());
-
+				<< io::write<uint32>(m_rootNode ? m_rootNode->GetId() : 0xffffffff);
+			
 			for (const auto& node : m_nodes)
 			{
 				writer
@@ -107,13 +107,16 @@ namespace mmo
 
 		context.AddPostLoadAction([this, rootNodeId, nextNodeId]()
 		{
-			m_rootNode = FindNode(rootNodeId);
-			if (!m_rootNode)
+			if (rootNodeId != 0xffffffff)
 			{
-				ELOG("Unable to find old root node!");
-				return false;
+				m_rootNode = FindNode(rootNodeId);
+				if (!m_rootNode)
+				{
+					ELOG("Unable to find old root node!");
+					return false;
+				}
 			}
-
+			
 			m_idGenerator.Reset();
 			m_idGenerator.NotifyId(nextNodeId);
 
@@ -157,7 +160,7 @@ namespace mmo
 	    return *this;
 	}
 
-	GraphNode* MaterialGraph::CreateNode(const uint32 nodeTypeId)
+	GraphNode* MaterialGraph::CreateNode(const uint32 nodeTypeId, bool allowRootNode)
 	{
 	    if (!m_nodeRegistry)
 	    {
@@ -170,11 +173,16 @@ namespace mmo
 		    return nullptr;
 	    }
 
+		if (allowRootNode && m_rootNode == nullptr)
+		{
+			m_rootNode = node;
+		}
+
 	    m_nodes.push_back(node);
 	    return node;
 	}
 
-	GraphNode* MaterialGraph::CreateNode(const std::string_view nodeTypeName)
+	GraphNode* MaterialGraph::CreateNode(const std::string_view nodeTypeName, bool allowRootNode)
 	{
 		if (!m_nodeRegistry)
 		{
@@ -186,6 +194,11 @@ namespace mmo
 	    {
 		    return nullptr;
 	    }
+
+		if (allowRootNode && m_rootNode == nullptr)
+		{
+			m_rootNode = node;
+		}
 
 	    m_nodes.push_back(node);
 	    return node;
@@ -226,11 +239,6 @@ namespace mmo
 	    m_nodes.resize(0);
 	    m_pins.resize(0);
 	    m_idGenerator.Reset();
-
-		if (!destroy)
-		{
-			m_rootNode = CreateNode<MaterialNode>();
-		}
 	}
 
 	std::span<const GraphNode* const> MaterialGraph::GetNodes() const
@@ -337,7 +345,11 @@ namespace mmo
 			node->NotifyCompilationStarted();
 		}
 
-		ASSERT(m_rootNode);
+		if (!m_rootNode)
+		{
+			return;
+		}
+
 		m_rootNode->Compile(compiler, nullptr);
 	}
 
@@ -347,6 +359,7 @@ namespace mmo
 		{
 			return false;
 		}
+
 		return nodeId == m_rootNode->GetId();
 	}
 }

@@ -86,9 +86,9 @@ namespace mmo
 		/// @tparam T Type of the node to create.
 		/// @return The new node or nullptr if the node could not be created.
 		template <typename T>
-	    T* CreateNode()
+	    T* CreateNode(bool allowRootNode = false)
 	    {
-	        if (auto node = CreateNode(T::GetStaticTypeInfo().id))
+	        if (auto node = CreateNode(T::GetStaticTypeInfo().id, allowRootNode))
 	        {
 		        return static_cast<T*>(node);
 	        }
@@ -99,12 +99,12 @@ namespace mmo
 	    /// @brief Creates a new node by it's node type id.
 	    /// @param nodeTypeId The type id of the node to create.
 	    /// @return The new node or nullptr if the node could not be created.
-		GraphNode* CreateNode(uint32 nodeTypeId);
+		GraphNode* CreateNode(uint32 nodeTypeId, bool allowRootNode = false);
 
 	    /// @brief Creates a new node by it's type name.
 	    /// @param nodeTypeName The node's type name.
 	    /// @return The new node or nullptr if the node could not be created.
-		GraphNode* CreateNode(std::string_view nodeTypeName);
+		GraphNode* CreateNode(std::string_view nodeTypeName, bool allowRootNode = false);
 
 	    /// @brief Deletes the given node, freeing memory in advance and cutting all links.
 	    /// @param node The node to delete.

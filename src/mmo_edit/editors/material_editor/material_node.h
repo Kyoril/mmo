@@ -1381,6 +1381,38 @@ namespace mmo
 		Pin* m_outputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_rgba };
 	};
 
+	/// @brief A node which adds a material function output expression.
+	class MaterialFunctionOutputNode final : public GraphNode
+	{
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(MaterialFunctionOutputNode, "Material Function Output")
+
+		MaterialFunctionOutputNode(MaterialGraph& material)
+		: GraphNode(material)
+		, m_name("Result")
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		std::string_view GetName() const override { return m_name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		StringProperty m_nameProp{ "Name", m_name };
+		PropertyBase* m_properties[1] = { &m_nameProp };
+
+		MaterialPin m_input = { this, "" };
+		Pin* m_inputPins[1] = { &m_input };
+	};
 
 	/// @brief A node which adds a material function expression.
 	class MaterialFunctionNode final : public GraphNode

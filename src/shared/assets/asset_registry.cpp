@@ -158,7 +158,14 @@ namespace mmo
 		const auto it = s_files.find(filename);
 		if (it == s_files.end())
 		{
-			return std::make_unique<std::ifstream>(filename, std::ios::binary | std::ios::in);
+			auto filePtr = std::make_unique<std::ifstream>(filename, std::ios::binary | std::ios::in);
+			if (filePtr && *filePtr)
+			{
+				return filePtr;
+			}
+
+			// Bad file
+			return nullptr;
 		}
 
 		// Open file from archive

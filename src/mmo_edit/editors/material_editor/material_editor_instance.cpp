@@ -640,6 +640,16 @@ namespace mmo
 		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
 		m_graph = std::make_unique<MaterialGraph>();
 
+		// Ensure material root node is created
+		if (assetPath.extension() != ".hmf")
+		{
+			m_graph->CreateNode<MaterialNode>(true);
+		}
+		else
+		{
+			m_graph->CreateNode<MaterialFunctionOutputNode>(false);
+		}
+
 		ExecutableMaterialGraphLoadContext context;
 
 		MaterialDeserializer deserializer { *m_material };
@@ -649,8 +659,7 @@ namespace mmo
 			return m_graph->Deserialize(reader, context);
 		});
 
-		const auto file = AssetRegistry::OpenFile(assetPath.string());
-		if (file)
+		if (const auto file = AssetRegistry::OpenFile(assetPath.string()))
 		{
 			io::StreamSource source { *file };
 			io::Reader reader { source };

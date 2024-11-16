@@ -37,6 +37,7 @@ namespace mmo
 			TextureParameterNode::GetStaticTypeInfo(),
 			ScalarParameterNode::GetStaticTypeInfo(),
 			VectorParameterNode::GetStaticTypeInfo(),
+			MaterialFunctionOutputNode::GetStaticTypeInfo(),
 			IfNode::GetStaticTypeInfo()
 		})
 	{
