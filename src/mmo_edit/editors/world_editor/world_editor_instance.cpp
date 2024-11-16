@@ -265,7 +265,7 @@ namespace mmo
 
 						const float pageOffsetX = pageX * terrain::constants::PageSize;
 						const float pageOffsetY = pageY * terrain::constants::PageSize;
-						const float scale = terrain::constants::PageSize / terrain::constants::VerticesPerPage;
+						constexpr float scale = terrain::constants::PageSize / terrain::constants::VerticesPerPage;
 
 						int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
 						int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
@@ -383,6 +383,97 @@ namespace mmo
 
 			ImGui::Separator();
 
+			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
+			{
+				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
+				{
+					ImGui::PushID(i);
+
+					ImGui::BeginDisabled(i == static_cast<uint32>(WorldEditMode::Terrain) && !m_hasTerrain);
+					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
+					{
+						m_editMode = static_cast<WorldEditMode>(i);
+						m_selection.Clear();
+					}
+					ImGui::EndDisabled();
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
+			{
+				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
+				{
+					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
+					{
+						ImGui::PushID(i);
+						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_editMode)))
+						{
+							m_terrainEditMode = static_cast<TerrainEditMode>(i);
+							m_selection.Clear();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+			}
+
+			ImGui::Separator();
+
+			if (!m_selection.IsEmpty())
+			{
+				Selectable* selected = m_selection.GetSelectedObjects().back().get();
+
+				selected->Visit(*this);
+
+				if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
+				{
+					if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						if (selected->SupportsTranslate())
+						{
+							if (Vector3 position = selected->GetPosition(); ImGui::InputFloat3("Position", position.Ptr()))
+							{
+								selected->SetPosition(position);
+							}
+						}
+
+						if (selected->SupportsRotate())
+						{
+							Rotator rotation = selected->GetOrientation().ToRotator();
+							if (float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() }; ImGui::InputFloat3("Rotation", angles, "%.3f"))
+							{
+								rotation.roll = angles[0];
+								rotation.pitch = angles[2];
+								rotation.yaw = angles[1];
+
+								Quaternion quaternion = Quaternion::FromRotator(rotation);
+								quaternion.Normalize();
+
+								selected->SetOrientation(quaternion);
+							}
+						}
+
+						if (selected->SupportsScale())
+						{
+							Vector3 scale = selected->GetScale();
+							if (ImGui::InputFloat3("Scale", scale.Ptr()))
+							{
+								selected->SetScale(scale);
+							}
+						}
+					}
+				}
+
+			}
+		}
+		ImGui::End();
+		
+		if (ImGui::Begin(worldSettingsId.c_str()))
+		{
 			if (ImGui::CollapsingHeader("World Settings", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				if (ImGui::Checkbox("Has Terrain", &m_hasTerrain))
@@ -432,110 +523,6 @@ namespace mmo
 
 				ImGui::EndDisabled();
 			}
-
-			ImGui::Separator();
-
-			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
-			{
-				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
-				{
-					ImGui::PushID(i);
-
-					ImGui::BeginDisabled(i == static_cast<uint32>(WorldEditMode::Terrain) && !m_hasTerrain);
-					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
-					{
-						m_editMode = static_cast<WorldEditMode>(i);
-						m_selection.Clear();
-					}
-					ImGui::EndDisabled();
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
-			}
-
-			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
-			{
-				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
-				{
-					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
-					{
-						ImGui::PushID(i);
-						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_editMode)))
-						{
-							m_terrainEditMode = static_cast<TerrainEditMode>(i);
-							m_selection.Clear();
-						}
-						ImGui::PopID();
-					}
-
-					ImGui::EndCombo();
-				}
-			}
-
-			ImGui::Separator();
-
-			if (!m_selection.IsEmpty())
-			{
-				Selectable* selected = m_selection.GetSelectedObjects().back().get();
-
-				if (ImGui::CollapsingHeader("Entity", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					selected->Visit(*this);
-				}
-
-				if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
-				{
-					if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-					{
-						if (selected->SupportsTranslate())
-						{
-							if (Vector3 position = selected->GetPosition(); ImGui::InputFloat3("Position", position.Ptr()))
-							{
-								selected->SetPosition(position);
-							}
-						}
-
-						if (selected->SupportsRotate())
-						{
-							Rotator rotation = selected->GetOrientation().ToRotator();
-							if (float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() }; ImGui::InputFloat3("Rotation", angles, "%.3f"))
-							{
-								rotation.roll = angles[0];
-								rotation.pitch = angles[2];
-								rotation.yaw = angles[1];
-
-								Quaternion quaternion = Quaternion::FromRotator(rotation);
-								quaternion.Normalize();
-
-								selected->SetOrientation(quaternion);
-							}
-						}
-
-						if (selected->SupportsScale())
-						{
-							Vector3 scale = selected->GetScale();
-							if (ImGui::InputFloat3("Scale", scale.Ptr()))
-							{
-								selected->SetScale(scale);
-							}
-						}
-					}
-				}
-
-			}
-		}
-		ImGui::End();
-		
-		if (ImGui::Begin(worldSettingsId.c_str()))
-		{
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-		    if (ImGui::BeginTable("settings", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-		    {
-
-		        ImGui::EndTable();
-		    }
-		    ImGui::PopStyleVar();
 		}
 		ImGui::End();
 		
@@ -857,7 +844,7 @@ namespace mmo
 		writer
 			<< io::write<uint32>(*versionChunk)
 			<< io::write<uint32>(sizeof(uint32))
-			<< io::write<uint32>(0x0001);
+			<< io::write<uint32>(2);
 
 		uint32 meshSize = 0;
 		std::vector<const String*> sortedNames(entityNames.size());
@@ -891,12 +878,16 @@ namespace mmo
 			writer << io::write_range(*name) << io::write<uint8>(0);
 		}
 
+		struct MaterialOverride
+		{
+			uint8 materialIndex;
+			String materialName;
+		};
+
 		// Write entities
 		for (const auto& ent : m_mapEntities)
 		{
-			writer
-				<< io::write<uint32>(*entityChunk)
-				<< io::write<uint32>(sizeof(MapEntityChunkContent));
+			ChunkWriter chunkWriter(entityChunk, writer);
 
 			MapEntityChunkContent content;
 			content.meshNameIndex = entityNames[String(ent->GetEntity().GetMesh()->GetName())];
@@ -905,6 +896,31 @@ namespace mmo
 			content.scale = ent->GetSceneNode().GetDerivedScale();
 			content.uniqueId = 0;	// TODO: Unique ID
 			writer.WritePOD(content);
+
+			std::vector<MaterialOverride> materialOverrides;
+
+			// Write number of material overrides
+			for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
+			{
+				SubEntity* sub = ent->GetEntity().GetSubEntity(i);
+				ASSERT(sub);
+
+				SubMesh& submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
+				if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
+				{
+					materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
+				}
+			}
+
+			// Serialize material overrides
+			writer << io::write<uint8>(materialOverrides.size());
+			for (uint8 i = 0; i < materialOverrides.size(); ++i)
+			{
+				writer
+					<< io::write<uint8>(materialOverrides[i].materialIndex)
+					<< io::write_dynamic_range<uint16>(materialOverrides[i].materialName);
+			}
+			chunkWriter.Finish();
 		}
 		
 		// TODO
@@ -1033,7 +1049,7 @@ namespace mmo
 		m_debugEntity->SetVisible(true);
 	}
 
-	void WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
 	{
 		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
@@ -1052,6 +1068,8 @@ namespace mmo
 			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
+
+		return entity;
 	}
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
@@ -1110,78 +1128,150 @@ namespace mmo
 
 	void WorldEditorInstance::Visit(SelectedMapEntity& selectable)
 	{
+		static const char* s_noMaterialPreview = "<None>";
+
 		MapEntity& mapEntity = selectable.GetEntity();
 		Entity& entity = mapEntity.GetEntity();
 
-		const MeshPtr mesh = entity.GetMesh();
-		const String meshName = mesh->GetName().data();
-
-		const String filename = Path(meshName).filename().string();
-
-		if (ImGui::BeginCombo("Mesh", filename.c_str()))
+		if (ImGui::CollapsingHeader("Mesh"))
 		{
-			// TODO: Draw available mesh files from asset registry
+			const MeshPtr mesh = entity.GetMesh();
+			const String meshName = mesh->GetName().data();
 
-			ImGui::EndCombo();
-		}
+			const String filename = Path(meshName).filename().string();
 
-		if (ImGui::BeginDragDropTarget())
-		{
-			// We only accept mesh file drops
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+			if (ImGui::BeginCombo("Mesh", filename.c_str()))
 			{
-				entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
+				// TODO: Draw available mesh files from asset registry
+
+				ImGui::EndCombo();
 			}
 
-			ImGui::EndDragDropTarget();
+			if (ImGui::BeginDragDropTarget())
+			{
+				// We only accept mesh file drops
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+				{
+					entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
+				}
+
+				ImGui::EndDragDropTarget();
+			}
+		}
+		
+		if (ImGui::CollapsingHeader("Materials"))
+		{
+			for (uint32 i = 0; i < entity.GetNumSubEntities(); ++i)
+			{
+				SubEntity* sub = entity.GetSubEntity(i);
+				ASSERT(sub);
+
+				SubMesh& submesh = entity.GetMesh()->GetSubMesh(i);
+
+				ImGui::PushID(i);
+
+				// Get material
+				MaterialPtr material = sub->GetMaterial();
+				if (!material)
+				{
+					material = submesh.GetMaterial();
+				}
+
+				// Build preview string
+				const char* previewString = s_noMaterialPreview;
+				if (material)
+				{
+					previewString = material->GetName().data();
+				}
+
+				const String materialName = sub->GetMaterial()->GetName().data();
+				const String filename = Path(materialName).filename().string();
+
+				bool isOverridden = material != submesh.GetMaterial();
+
+				ImGui::BeginDisabled(!isOverridden);
+				if (ImGui::Checkbox("##overridden", &isOverridden))
+				{
+					sub->SetMaterial(submesh.GetMaterial());
+				}
+				ImGui::EndDisabled();
+
+				ImGui::SameLine();
+
+				if (ImGui::BeginCombo("Material", filename.c_str()))
+				{
+					ImGui::EndCombo();
+				}
+
+				if (ImGui::BeginDragDropTarget())
+				{
+					// We only accept mesh file drops
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+					{
+						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+					}
+
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+					{
+						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+					}
+
+					ImGui::EndDragDropTarget();
+				}
+
+				ImGui::PopID();
+			}
 		}
 	}
 
 	void WorldEditorInstance::Visit(SelectedTerrainTile& selectable)
 	{
-		static const char* s_noMaterialPreview = "<None>";
-
-		terrain::Tile& tile = selectable.GetTile();
-
-		// Get material
-		MaterialPtr material = tile.GetMaterial();
-
-		// Build preview string
-		const char* previewString = s_noMaterialPreview;
-		if (material)
+		if (ImGui::CollapsingHeader("Tile"))
 		{
-			previewString = material->GetName().data();
-		}
+			static const char* s_noMaterialPreview = "<None>";
 
-		if (ImGui::BeginCombo("Material", previewString))
-		{
-			ImGui::EndCombo();
-		}
+			terrain::Tile& tile = selectable.GetTile();
 
-		if (ImGui::BeginDragDropTarget())
-		{
-			// We only accept mesh file drops
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+			// Get material
+			MaterialPtr material = tile.GetMaterial();
+
+			// Build preview string
+			const char* previewString = s_noMaterialPreview;
+			if (material)
 			{
-				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+				previewString = material->GetName().data();
 			}
 
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+			if (ImGui::BeginCombo("Material", previewString))
 			{
-				tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+				ImGui::EndCombo();
 			}
 
-			ImGui::EndDragDropTarget();
-		}
+			if (ImGui::BeginDragDropTarget())
+			{
+				// We only accept mesh file drops
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+				{
+					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+				}
 
-		if (ImGui::Button("Set For Page"))
-		{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+				{
+					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+				}
 
-		}
+				ImGui::EndDragDropTarget();
+			}
 
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
+			if (ImGui::Button("Set For Page"))
+			{
+
+			}
+
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
+			}
 		}
 	}
 
@@ -1192,14 +1282,14 @@ namespace mmo
 		// Read chunk only once
 		RemoveChunkHandler(*versionChunk);
 
-		uint32 version = 0;
-		if (!(reader >> version))
+		m_worldFileVersion = 0;
+		if (!(reader >> m_worldFileVersion))
 		{
 			ELOG("Failed to read version chunk!");
 			return false;
 		}
 
-		if (version != 0x01)
+		if (m_worldFileVersion < 1 || m_worldFileVersion > 2)
 		{
 			ELOG("Detected unsuppoted file format version!");
 			return false;
@@ -1216,7 +1306,14 @@ namespace mmo
 		ASSERT(chunkHeader == *meshChunk);
 
 		// Only when we have read mesh names we support reading entity chunks otherwise entities would refer to meshes which we don't know about!
-		AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunk);
+		if (m_worldFileVersion >= 2)
+		{
+			AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunkV2);
+		}
+		else
+		{
+			AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunk);
+		}
 
 		// Read chunk only once
 		RemoveChunkHandler(*meshChunk);
@@ -1266,6 +1363,89 @@ namespace mmo
 		}
 
 		CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+
+		return reader;
+	}
+
+	bool WorldEditorInstance::ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *entityChunk);
+
+		if (m_meshNames.empty())
+		{
+			ELOG("No mesh names known, can't read entity chunks before mesh chunk!");
+			return false;
+		}
+
+		uint32 uniqueId;
+		uint32 meshNameIndex;
+		Vector3 position;
+		Quaternion rotation;
+		Vector3 scale;
+		if (!(reader
+			>> io::read<uint32>(uniqueId)
+			>> io::read<uint32>(meshNameIndex)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(rotation.w)
+			>> io::read<float>(rotation.x)
+			>> io::read<float>(rotation.y)
+			>> io::read<float>(rotation.z)
+			>> io::read<float>(scale.x)
+			>> io::read<float>(scale.y)
+			>> io::read<float>(scale.z)
+			))
+		{
+			ELOG("Failed to read map entity chunk content, unexpected end of file!");
+			return false;
+		}
+
+		if (meshNameIndex >= m_meshNames.size())
+		{
+			ELOG("Map entity chunk references unknown mesh names!");
+			return false;
+		}
+
+		struct MaterialOverride
+		{
+			uint8 materialIndex;
+			String materialName;
+		};
+
+		std::vector<MaterialOverride> materialOverrides;
+
+		uint8 numMaterialOverrides;
+		if (!(reader >> io::read<uint8>(numMaterialOverrides)))
+		{
+			ELOG("Failed to read material override count for map entity chunk, unexpected end of file!");
+			return false;
+		}
+
+		materialOverrides.resize(numMaterialOverrides);
+		for (uint8 i = 0; i < numMaterialOverrides; ++i)
+		{
+			if (!(reader >> io::read<uint8>(materialOverrides[i].materialIndex) >> io::read_container<uint16>(materialOverrides[i].materialName)))
+			{
+				ELOG("Failed to read material override for map entity chunk, unexpected end of file!");
+				return false;
+			}
+		}
+
+		if (Entity* entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale))
+		{
+			// Apply material overrides
+			for (const auto& materialOverride : materialOverrides)
+			{
+				if (materialOverride.materialIndex >= entity->GetNumSubEntities())
+				{
+					WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+					continue;
+				}
+
+				entity->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+			}
+		}
 
 		return reader;
 	}

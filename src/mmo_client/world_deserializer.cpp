@@ -30,7 +30,7 @@ namespace mmo
 	{
 	}
 
-	void ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
 	{
 		// Create scene node
 		SceneNode* node = m_rootNode.CreateChildSceneNode();
@@ -42,6 +42,8 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity("Entity_" + std::to_string(m_entityIdGenerator.GenerateId()), meshName);
 		node->AttachObject(*entity);
 		entity->SetQueryFlags(1);
+
+		return entity;
 	}
 
 	bool ClientWorldInstanceDeserializer::ReadVersionChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)
@@ -49,18 +51,18 @@ namespace mmo
 		ASSERT(chunkHeader == *VersionChunkMagic);
 
 		// Read version
-		uint32 version = 0;
-		reader >> io::read<uint32>(version);
+		m_version = 0;
+		reader >> io::read<uint32>(m_version);
 
 		// Check if version is supported
-		if (version == world_version::Version_0_0_0_1)
+		if (m_version >= world_version::Version_0_0_0_1)
 		{
 			AddChunkHandler(*MeshNamesChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadMeshNamesChunk);
 			AddChunkHandler(*TerrainChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadTerrainChunk);
 			return true;
 		}
 
-		ELOG("Unsupported world version: " << version);
+		ELOG("Unsupported world version: " << m_version);
 		return false;
 	}
 
@@ -69,7 +71,15 @@ namespace mmo
 		ASSERT(chunkHeader == *MeshNamesChunkMagic);
 
 		RemoveChunkHandler(*MeshNamesChunkMagic);
-		AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunk);
+
+		if (m_version == world_version::Version_0_0_0_1)
+		{
+			AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunk);
+		}
+		else if (m_version >= world_version::Version_0_0_0_2)
+		{
+			AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunkV2);
+		}
 
 		if (!m_meshNames.empty())
 		{
@@ -124,6 +134,93 @@ namespace mmo
 		}
 
 		m_world.CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+		return reader;
+	}
+
+	bool ClientWorldInstanceDeserializer::ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *EntityChunkMagic);
+
+		if (m_meshNames.empty())
+		{
+			ELOG("No mesh names known, can't read entity chunks before mesh chunk!");
+			return false;
+		}
+
+		uint32 uniqueId;
+		uint32 meshNameIndex;
+		Vector3 position;
+		Quaternion rotation;
+		Vector3 scale;
+		if (!(reader 
+			>> io::read<uint32>(uniqueId) 
+			>> io::read<uint32>(meshNameIndex) 
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(rotation.w)
+			>> io::read<float>(rotation.x)
+			>> io::read<float>(rotation.y)
+			>> io::read<float>(rotation.z)
+			>> io::read<float>(scale.x)
+			>> io::read<float>(scale.y)
+			>> io::read<float>(scale.z)
+			))
+		{
+			ELOG("Failed to read map entity chunk content, unexpected end of file!");
+			return false;
+		}
+
+		ASSERT(!position.IsValid());
+		ASSERT(!rotation.IsNaN());
+		ASSERT(!scale.IsValid());
+
+		if (meshNameIndex >= m_meshNames.size())
+		{
+			ELOG("Map entity chunk references unknown mesh names!");
+			return false;
+		}
+
+		struct MaterialOverride
+		{
+			uint8 materialIndex;
+			String materialName;
+		};
+
+		std::vector<MaterialOverride> materialOverrides;
+
+		uint8 numMaterialOverrides;
+		if (!(reader >> io::read<uint8>(numMaterialOverrides)))
+		{
+			ELOG("Failed to read material override count for map entity chunk, unexpected end of file!");
+			return false;
+		}
+
+		materialOverrides.resize(numMaterialOverrides);
+		for (uint8 i = 0; i < numMaterialOverrides; ++i)
+		{
+			if (!(reader >> io::read<uint8>(materialOverrides[i].materialIndex) >> io::read_container<uint16>(materialOverrides[i].materialName)))
+			{
+				ELOG("Failed to read material override for map entity chunk, unexpected end of file!");
+				return false;
+			}
+		}
+
+		if (Entity* entity = m_world.CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale))
+		{
+			// Apply material overrides
+			for (const auto& materialOverride : materialOverrides)
+			{
+				if (materialOverride.materialIndex >= entity->GetNumSubEntities())
+				{
+					WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+					continue;
+				}
+
+				entity->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+			}
+		}
+
 		return reader;
 	}
 

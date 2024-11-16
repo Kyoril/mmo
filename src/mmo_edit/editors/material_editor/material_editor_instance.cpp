@@ -477,7 +477,7 @@ namespace mmo
 
 	void CreateNodeDialog::Show(MaterialGraph& material)
 	{
-		if (!ImGui::IsPopupOpen("##create_node"))
+		if (!ImGui::IsPopupOpen("##create_node"))                                 
 		{
 			return;
 		}

@@ -176,7 +176,7 @@ namespace mmo
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
-		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 		void OnMapEntityRemoved(MapEntity& entity);
 
@@ -194,6 +194,7 @@ namespace mmo
 		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool OnReadFinished() noexcept override;
 
@@ -270,5 +271,6 @@ namespace mmo
 		std::vector<String> m_meshNames;
 
 		Vector3 m_brushPosition{};
+		uint32 m_worldFileVersion;
 	};
 }

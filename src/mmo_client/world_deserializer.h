@@ -11,6 +11,7 @@
 
 namespace mmo
 {
+	class Entity;
 	class SceneNode;
 	class Scene;
 
@@ -21,6 +22,8 @@ namespace mmo
 			Latest = -1,
 
 			Version_0_0_0_1 = 0x0001,
+
+			Version_0_0_0_2 = 0x0002,
 		};
 	}
 
@@ -39,7 +42,7 @@ namespace mmo
 		terrain::Terrain* GetTerrain() const { return m_terrain.get(); }
 
 	protected:
-		void CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
 	private:
 		String m_name;
@@ -63,6 +66,8 @@ namespace mmo
 
 		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
+		bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
@@ -76,6 +81,7 @@ namespace mmo
 			Vector3 scale;
 		};
 
+		uint32 m_version;
 		ClientWorldInstance& m_world;
 		std::vector<String> m_meshNames;
 	};
