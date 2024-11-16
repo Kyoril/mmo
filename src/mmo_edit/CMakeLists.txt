@@ -52,6 +52,7 @@ file(GLOB mat_inst_editor_src "editors/material_instance_editor/*.h" "editors/ma
 file(GLOB model_editor_src "editors/model_editor/*.h" "editors/model_editor/*.cpp")
 file(GLOB tex_editor_src "editors/texture_editor/*.h" "editors/texture_editor/*.cpp")
 file(GLOB world_editor_src "editors/world_editor/*.h" "editors/world_editor/*.cpp")
+file(GLOB world_model_editor_src "editors/world_model_editor/*.h" "editors/world_model_editor/*.cpp")
 file(GLOB import_src "import/*.h" "import/*.cpp")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -67,10 +68,11 @@ source_group(src\\editors\\material_instance_editor FILES ${mat_inst_editor_src}
 source_group(src\\editors\\model_editor FILES ${model_editor_src})
 source_group(src\\editors\\texture_editor FILES ${tex_editor_src})
 source_group(src\\editors\\world_editor FILES ${world_editor_src})
+source_group(src\\editors\\world_model_editor FILES ${world_model_editor_src})
 source_group(src\\import FILES ${import_src})
 
 # Add executable
-add_gui_exe(mmo_edit ${imgui_src} ${imgui_platform_src} ${editor_windows_src} ${preview_providers_src} ${editors_src} ${mat_editor_src} ${mat_inst_editor_src} ${model_editor_src} ${tex_editor_src} ${import_src} ${world_editor_src})
+add_gui_exe(mmo_edit ${imgui_src} ${imgui_platform_src} ${editor_windows_src} ${preview_providers_src} ${editors_src} ${mat_editor_src} ${mat_inst_editor_src} ${model_editor_src} ${tex_editor_src} ${import_src} ${world_editor_src} ${world_model_editor_src})
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_edit PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

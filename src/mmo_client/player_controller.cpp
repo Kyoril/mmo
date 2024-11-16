@@ -220,10 +220,6 @@ namespace mmo
 		// Apply gravity to jump velocity
 		MovementInfo info = m_controlledUnit->GetMovementInfo();
 
-		bool hasGroundHeight = false;
-		float groundHeight = 0.0f;
-		hasGroundHeight = m_controlledUnit->GetCollisionProvider().GetHeightAt(info.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
-
 		// Are we somehow moving at all?
 		if (info.movementFlags & movement_flags::PositionChanging)
 		{
@@ -275,6 +271,10 @@ namespace mmo
 				info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
 				m_controlledUnit->ApplyMovementInfo(info);
 			}
+
+			bool hasGroundHeight = false;
+			float groundHeight = 0.0f;
+			hasGroundHeight = m_controlledUnit->GetCollisionProvider().GetHeightAt(info.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
 
 			// Collision detection
 			if (info.movementFlags & movement_flags::Falling)

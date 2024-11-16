@@ -1160,6 +1160,11 @@ namespace mmo
 		return {};
 	}
 
+	std::string_view MaterialFunctionNode::GetName() const
+	{
+		return m_name;
+	}
+
 	ExpressionIndex MaterialFunctionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		// TODO: Add material function ref

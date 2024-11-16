@@ -3,6 +3,7 @@
 #pragma once
 
 #include <any>
+#include <filesystem>
 #include <imgui.h>
 #include <optional>
 #include <span>
@@ -1391,7 +1392,10 @@ namespace mmo
 
 		MaterialFunctionNode(MaterialGraph& material)
 		: GraphNode(material)
-		{}
+		, m_name("Material Function")
+		{
+			m_materialFunctionChanged = m_materialFunctionPathProp.OnValueChanged.connect([this] { m_name = std::filesystem::path(m_materialFunctionPath.GetPath()).filename().replace_extension().string(); });
+		}
 
 		std::span<Pin*> GetInputPins() override;
 		std::span<Pin*> GetOutputPins() override;
@@ -1402,13 +1406,17 @@ namespace mmo
 
 		void SetMaterialFunction(const std::string_view texture) { m_materialFunctionPath.SetPath(texture); }
 
+		std::string_view GetName() const override;
+
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
 	private:
+		String m_name;
 		AssetPathValue m_materialFunctionPath{ "", ".hmf" };
 		AssetPathProperty m_materialFunctionPathProp{ "Material Function", m_materialFunctionPath };
+		scoped_connection m_materialFunctionChanged;
 
 		PropertyBase* m_properties[1] = { &m_materialFunctionPathProp };
 	};
