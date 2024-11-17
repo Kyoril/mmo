@@ -4,7 +4,7 @@
 #include "game_object_c.h"
 #include "world_text_component.h"
 #include "game/movement_info.h"
-#include "shared/client_data/spells.pb.h"
+#include "shared/client_data/proto_client/spells.pb.h"
 #include "game/creature_data.h"
 
 namespace mmo

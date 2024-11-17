@@ -1,0 +1,20 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message FactionBaseRep {
+	optional uint32 racemask = 1;
+	optional uint32 classmask = 2;
+	optional int32 value = 3;
+	optional uint32 flags = 4;
+}
+
+message FactionEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional int32 replistid = 3;
+	repeated FactionBaseRep baserep = 4;
+}
+
+message Factions {
+	repeated FactionEntry entry = 1;
+}

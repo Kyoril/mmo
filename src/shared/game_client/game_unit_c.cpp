@@ -7,7 +7,7 @@
 #include "math/collision.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
-#include "shared/client_data/model_data.pb.h"
+#include "shared/client_data/proto_client/model_data.pb.h"
 
 namespace mmo
 {

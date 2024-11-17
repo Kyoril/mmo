@@ -17,13 +17,13 @@ function(PROTOBUF_GENERATE_CPP SRCS HDRS)
     get_filename_component(ABS_FIL ${FIL} ABSOLUTE)
     get_filename_component(FIL_WE ${FIL} NAME_WE)
 
-    list(APPEND ${SRCS} "${CMAKE_CURRENT_BINARY_DIR}/${FIL_WE}.pb.cc")
-    list(APPEND ${HDRS} "${CMAKE_CURRENT_BINARY_DIR}/${FIL_WE}.pb.h")
+    list(APPEND ${SRCS} "${CMAKE_CURRENT_BINARY_DIR}/proto_client/${FIL_WE}.pb.cc")
+    list(APPEND ${HDRS} "${CMAKE_CURRENT_BINARY_DIR}/proto_client/${FIL_WE}.pb.h")
 
     add_custom_command(
-      OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${FIL_WE}.pb.cc"
-             "${CMAKE_CURRENT_BINARY_DIR}/${FIL_WE}.pb.h"
-      COMMAND $<TARGET_FILE:protoc> ARGS --cpp_out ${CMAKE_CURRENT_BINARY_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FIL}
+      OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/proto_client/${FIL_WE}.pb.cc"
+             "${CMAKE_CURRENT_BINARY_DIR}/proto_client/${FIL_WE}.pb.h"
+      COMMAND $<TARGET_FILE:protoc> ARGS --cpp_out ${CMAKE_CURRENT_BINARY_DIR}/proto_client -I ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FIL}
       DEPENDS ${ABS_FIL}
       COMMENT "Running C++ protocol buffer compiler on ${FIL}"
       VERBATIM

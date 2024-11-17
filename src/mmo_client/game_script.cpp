@@ -23,8 +23,7 @@
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
-#include "shared/client_data/spells.pb.h"
-#include "shared/proto_data/spells.pb.h"
+#include "shared/client_data/proto_client/spells.pb.h"
 
 
 

@@ -7,10 +7,12 @@
 #include "virtual_dir/file_system_reader.h"
 #include "base/clock.h"
 #include "base/filesystem.h"
-#include "shared/client_data/spells.pb.h"
-#include "shared/client_data/maps.pb.h"
-#include "shared/client_data/spell_categories.pb.h"
-#include "shared/client_data/model_data.pb.h"
+#include "shared/client_data/proto_client/factions.pb.h"
+#include "shared/client_data/proto_client/faction_templates.pb.h"
+#include "shared/client_data/proto_client/spells.pb.h"
+#include "shared/client_data/proto_client/maps.pb.h"
+#include "shared/client_data/proto_client/spell_categories.pb.h"
+#include "shared/client_data/proto_client/model_data.pb.h"
 
 namespace mmo
 {
@@ -19,6 +21,8 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::Spells, mmo::proto_client::SpellEntry> SpellManager;
 		typedef TemplateManager<mmo::proto_client::SpellCategories, mmo::proto_client::SpellCategoryEntry> SpellCategoryManager;
 		typedef TemplateManager<mmo::proto_client::ModelDatas, mmo::proto_client::ModelDataEntry> ModelDataManager;
+		typedef TemplateManager<mmo::proto_client::Factions, mmo::proto_client::FactionEntry> FactionManager;
+		typedef TemplateManager<mmo::proto_client::FactionTemplates, mmo::proto_client::FactionTemplateEntry> FactionTemplateManager;
 		//typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 
 		/// This class contains contains all the static game data like item templates.
@@ -39,6 +43,8 @@ namespace mmo
 			SpellManager spells;
 			SpellCategoryManager spellCategories;
 			ModelDataManager models;
+			FactionManager factions;
+			FactionTemplateManager factionTemplates;
 
 		private:
 
@@ -86,6 +92,8 @@ namespace mmo
 				//managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
 				managers.push_back(ManagerEntry("model_data", models));
+				managers.push_back(ManagerEntry("factions", factions));
+				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 
 				if (!ClientProjectLoader::load(
 				            directory,

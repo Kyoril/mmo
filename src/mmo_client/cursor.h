@@ -21,6 +21,8 @@ namespace mmo
 		Attack,
 
 		Loot,
+
+		Gossip,
 	};
 
 	class Cursor

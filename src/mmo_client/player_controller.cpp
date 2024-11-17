@@ -440,7 +440,22 @@ namespace mmo
 			}
 			else
 			{
-				g_cursor.SetCursorType(CursorType::Attack);
+				if (m_hoveredUnit->IsAlive())
+				{
+					if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) & npc_flags::Gossip)
+					{
+						g_cursor.SetCursorType(CursorType::Gossip);
+					}
+					else
+					{
+						g_cursor.SetCursorType(CursorType::Attack);
+					}
+					
+				}
+				else
+				{
+					g_cursor.SetCursorType(CursorType::Pointer);
+				}
 			}
 		}
 		else

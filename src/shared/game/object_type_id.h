@@ -173,7 +173,7 @@ namespace mmo
 
 			NpcFlags,
 
-			UnitFieldCount = MaxDamage + 1,
+			UnitFieldCount = NpcFlags + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \
