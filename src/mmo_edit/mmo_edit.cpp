@@ -36,6 +36,8 @@
 #include "editor_windows/faction_template_editor_window.h"
 #include "editor_windows/model_editor_window.h"
 #include "editor_windows/race_editor_window.h"
+#include "editor_windows/trainer_editor_window.h"
+#include "editor_windows/vendor_editor_window.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -114,6 +116,8 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitLootEditorWindow>("Unit Loot Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::TrainerEditorWindow>("Trainer Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::VendorEditorWindow>("Vendor Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));

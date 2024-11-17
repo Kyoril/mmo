@@ -442,7 +442,7 @@ namespace mmo
 			{
 				if (m_hoveredUnit->IsAlive())
 				{
-					if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) & npc_flags::Gossip)
+					if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) != 0)
 					{
 						g_cursor.SetCursorType(CursorType::Gossip);
 					}
@@ -604,10 +604,20 @@ namespace mmo
 							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
 						}
 					}
-					else
+					else if (m_hoveredUnit->IsAlive())
 					{
-						// TODO: add other interactions
-						m_controlledUnit->Attack(*m_hoveredUnit);
+						if (m_controlledUnit->IsFriendlyTo(*m_hoveredUnit))
+						{
+							// Any npc flags set?
+							if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) != 0)
+							{
+								m_connector.GossipHello(m_hoveredUnit->GetGuid());
+							}
+						}
+						else
+						{
+							m_controlledUnit->Attack(*m_hoveredUnit);
+						}
 					}
 				}
 			}

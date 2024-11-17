@@ -225,6 +225,9 @@ namespace mmo
 		case game::client_realm_packet::LootRelease:
 			OnLootRelease(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::GossipHello:
+			OnGossipHello(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
@@ -1414,6 +1417,38 @@ namespace mmo
 		}
 
 		CloseLootDialog();
+	}
+
+	void Player::OnGossipHello(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 objectGuid;
+		if (!(contentReader >> io::read<uint64>(objectGuid)))
+		{
+			WLOG("Failed to read object guid");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(objectGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		// Is this unit a trainer?
+		const proto::UnitEntry& unitEntry = unit->GetEntry();
+		const proto::TrainerEntry* trainer = nullptr;
+		const proto::VendorEntry* vendor = nullptr;
+		if (unitEntry.trainerentry() != 0)
+		{
+			trainer = m_project.trainers.getById(unitEntry.trainerentry());
+		}
+
+		if (unitEntry.vendorentry() != 0)
+		{
+			vendor = m_project.vendors.getById(unitEntry.vendorentry());
+		}
+
+
 	}
 
 #if MMO_WITH_DEV_COMMANDS

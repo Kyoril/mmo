@@ -137,6 +137,8 @@ namespace mmo
 
 		void OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnGossipHello(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 #if MMO_WITH_DEV_COMMANDS
 		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
 

@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "game/object_type_id.h"
 #include "log/default_log_levels.h"
 
 namespace ImGui
@@ -47,6 +48,17 @@ namespace mmo
 		{ \
 			if (value >= min && value <= max) \
 				currentEntry.set_##name(value); \
+		} \
+	}
+#define CHECKBOX_FLAG_PROP(property, label, flags) \
+	{ \
+		bool value = (currentEntry.property() & static_cast<uint32>(flags)) != 0; \
+		if (ImGui::Checkbox(label, &value)) \
+		{ \
+			if (value) \
+				currentEntry.set_##property(currentEntry.property() | static_cast<uint32>(flags)); \
+			else \
+				currentEntry.set_##property(currentEntry.property() & ~static_cast<uint32>(flags)); \
 		} \
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
@@ -111,14 +123,14 @@ namespace mmo
 			}
 		}
 
-		static const char* s_factionTemplateNone = "<None>";
+		static const char* s_noneEntryString = "<None>";
 
 		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_None))
 		{
 			int32 factionTemplate = currentEntry.factiontemplate();
 
 			const auto* factionEntry = m_project.factionTemplates.getById(factionTemplate);
-			if (ImGui::BeginCombo("Faction Template", factionEntry != nullptr ? factionEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			if (ImGui::BeginCombo("Faction Template", factionEntry != nullptr ? factionEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_project.factionTemplates.count(); i++)
 				{
@@ -140,12 +152,65 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_None))
+		{
+			int32 currentTrainer = currentEntry.trainerentry();
+
+			const auto* trainerEntry = m_project.trainers.getById(currentTrainer);
+			if (ImGui::BeginCombo("Trainer", trainerEntry != nullptr ? trainerEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.trainers.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.trainers.getTemplates().entry(i).id() == currentTrainer;
+					const char* item_text = m_project.trainers.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_trainerentry(m_project.trainers.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			int32 currentVendor = currentEntry.vendorentry();
+
+			const auto* vendorEntry = m_project.vendors.getById(currentTrainer);
+			if (ImGui::BeginCombo("Vendor", vendorEntry != nullptr ? vendorEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.vendors.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.vendors.getTemplates().entry(i).id() == currentVendor;
+					const char* item_text = m_project.vendors.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_vendorentry(m_project.vendors.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			CHECKBOX_FLAG_PROP(npcflags, "Inn Keeper", npc_flags::InnKeeper);
+		}
+
 		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
 			int32 maleModel = currentEntry.malemodel();
 
 			const auto* maleModelEntry = m_project.models.getById(maleModel);
-			if (ImGui::BeginCombo("Male Model", maleModelEntry != nullptr ? maleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			if (ImGui::BeginCombo("Male Model", maleModelEntry != nullptr ? maleModelEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_project.models.count(); i++)
 				{
@@ -169,7 +234,7 @@ namespace mmo
 			int32 femaleModel = currentEntry.femalemodel();
 
 			const auto* femaleModelEntry = m_project.models.getById(femaleModel);
-			if (ImGui::BeginCombo("Female Model", femaleModelEntry != nullptr ? femaleModelEntry->name().c_str() : s_factionTemplateNone, ImGuiComboFlags_None))
+			if (ImGui::BeginCombo("Female Model", femaleModelEntry != nullptr ? femaleModelEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_project.models.count(); i++)
 				{

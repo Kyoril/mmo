@@ -46,6 +46,23 @@ namespace mmo
 		// Setup new entry
 		m_entry = &entry;
 
+		// Use base npc flags from entry
+		uint32 npcFlags = m_entry->npcflags();
+		if (m_entry->trainerentry())
+		{
+			npcFlags |= npc_flags::Trainer;
+		}
+		if (m_entry->vendorentry())
+		{
+			npcFlags |= npc_flags::Vendor;
+		}
+
+		if ((npcFlags & (npc_flags::Trainer | npc_flags::Vendor)) != 0)
+		{
+			npcFlags |= npc_flags::Gossip;
+		}
+
+		Set<uint32>(object_fields::NpcFlags, npcFlags);
 		Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth());
 		Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana());
 		Set<uint32>(object_fields::Entry, m_entry->id());

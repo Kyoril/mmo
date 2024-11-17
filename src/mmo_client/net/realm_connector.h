@@ -228,6 +228,8 @@ namespace mmo
 
 		void LootRelease(uint64 lootObjectGuid);
 
+		void GossipHello(uint64 targetGuid);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

@@ -11,7 +11,8 @@ message VendorItemEntry {
 
 message VendorEntry {
 	required uint32 id = 1;
-	repeated VendorItemEntry items = 2;
+	required string name = 2;
+	repeated VendorItemEntry items = 3;
 }
 
 message Vendors {

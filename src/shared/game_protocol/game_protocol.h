@@ -110,6 +110,8 @@ namespace mmo
 				CheatLevelUp,				// GAME MASTER
 				CheatGiveMoney,				// GAME MASTER
 
+				GossipHello,
+
 				/// Counter constant
 				Count_,
 			};

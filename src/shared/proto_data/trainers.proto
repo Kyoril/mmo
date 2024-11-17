@@ -11,16 +11,17 @@ message TrainerSpellEntry {
 
 message TrainerEntry {
 	required uint32 id = 1;
+	required string name = 2;
 	enum TrainerType {
 		CLASS_TRAINER = 0;
 		MOUNT_TRAINER = 1;
 		SKILL_TRAINER = 2;
 		PET_TRAINER = 3;
 	};
-	optional TrainerType type = 2 [default = CLASS_TRAINER];
-	optional uint32 classid = 3;
-	optional string title = 4;
-	repeated TrainerSpellEntry spells = 5;
+	optional TrainerType type = 3 [default = CLASS_TRAINER];
+	optional uint32 classid = 4;
+	optional string title = 5;
+	repeated TrainerSpellEntry spells = 6;
 }
 
 message Trainers {

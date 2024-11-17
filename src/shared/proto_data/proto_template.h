@@ -24,7 +24,7 @@ namespace mmo
 
 			T1 m_data;
 			std::map<uint32, T2 *> m_templatesById;
-			uint32 m_nextId = 0;
+			uint32 m_nextId = 1;
 
 		public:
 
@@ -35,7 +35,7 @@ namespace mmo
 				// Set byte limit to 128MB
 				const int byteLimit = 1024 * 1024 * 128;
 
-				m_nextId = 0;
+				m_nextId = 1;
 
 				google::protobuf::io::IstreamInputStream zeroCopyStream(&stream);
 				google::protobuf::io::CodedInputStream decoder(&zeroCopyStream);
