@@ -1434,6 +1434,13 @@ namespace mmo
 			return;
 		}
 
+		constexpr float interactionDistance = 5.0f;
+		if (m_character->GetSquaredDistanceTo(unit->GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			WLOG("Player tried to gossip with a creature which is too far away!");
+			return;
+		}
+
 		DLOG("Requested gossip menu from npc " << log_hex_digit(objectGuid) << " (" << unit->GetEntry().name() << ")");
 
 		// Is this unit a trainer?
@@ -1449,7 +1456,6 @@ namespace mmo
 		{
 			vendor = m_project.vendors.getById(unitEntry.vendorentry());
 		}
-
 
 	}
 
