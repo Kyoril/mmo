@@ -180,7 +180,7 @@ namespace mmo
 
 			int32 currentVendor = currentEntry.vendorentry();
 
-			const auto* vendorEntry = m_project.vendors.getById(currentTrainer);
+			const auto* vendorEntry = m_project.vendors.getById(currentVendor);
 			if (ImGui::BeginCombo("Vendor", vendorEntry != nullptr ? vendorEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_project.vendors.count(); i++)

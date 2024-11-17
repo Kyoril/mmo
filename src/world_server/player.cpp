@@ -1434,6 +1434,8 @@ namespace mmo
 			return;
 		}
 
+		DLOG("Requested gossip menu from npc " << log_hex_digit(objectGuid) << " (" << unit->GetEntry().name() << ")");
+
 		// Is this unit a trainer?
 		const proto::UnitEntry& unitEntry = unit->GetEntry();
 		const proto::TrainerEntry* trainer = nullptr;
