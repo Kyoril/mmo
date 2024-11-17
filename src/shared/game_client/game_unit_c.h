@@ -9,6 +9,12 @@
 
 namespace mmo
 {
+	namespace proto_client
+	{
+		class FactionEntry;
+		class FactionTemplateEntry;
+	}
+
 	class GameItemC;
 	class GameUnitC;
 	class GamePlayerC;
@@ -39,8 +45,8 @@ namespace mmo
 	{
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
-		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider)
-			: GameObjectC(scene)
+		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project)
+			: GameObjectC(scene, project)
 			, m_netDriver(netDriver)
 			, m_collisionProvider(collisionProvider)
 		{
@@ -73,6 +79,12 @@ namespace mmo
 		virtual void SetupSceneObjects() override;
 
 		bool CanStepUp(const Vector3& collisionNormal, float penetrationDepth);
+
+		void OnEntryChanged();
+
+		void OnScaleChanged() const;
+
+		void OnFactionTemplateChanged();
 
 	public:
 		/// @brief Starts moving the unit forward or backward.
@@ -183,13 +195,20 @@ namespace mmo
 
 		const Capsule& GetCollider() const noexcept { return m_collider; }
 
+		const proto_client::FactionEntry* GetFaction() const noexcept { return m_faction; }
+
+		const proto_client::FactionTemplateEntry* GetFactionTemplate() const noexcept { return m_factionTemplate; }
+
+		bool IsFriendlyTo(const GameUnitC& other) const;
+
+		bool IsHostileTo(const GameUnitC& other) const;
+
 	protected:
 		void OnDisplayIdChanged();
 
 		void UpdateCollider();
 
 		void PerformGroundCheck();
-
 
 	protected:
 		NetClient& m_netDriver;
@@ -216,6 +235,10 @@ namespace mmo
 		std::unique_ptr<WorldTextComponent> m_nameComponent;
 
 		Capsule m_collider;
+
+		const proto_client::FactionEntry* m_faction = nullptr;
+
+		const proto_client::FactionTemplateEntry* m_factionTemplate = nullptr;
 
 	protected:
 		// Animation stuff

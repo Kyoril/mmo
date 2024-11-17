@@ -9,7 +9,7 @@ namespace mmo
 	class GameItemC : public GameObjectC
 	{
 	public:
-		explicit GameItemC(Scene& scene, NetClient& netDriver);
+		explicit GameItemC(Scene& scene, NetClient& netDriver, const proto_client::Project& project);
 		virtual ~GameItemC() override = default;
 
 		void Deserialize(io::Reader& reader, bool complete) override;

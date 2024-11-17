@@ -685,16 +685,16 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(m_scene, *this, *this);
+					object = std::make_shared<GameUnitC>(m_scene, *this, *this, m_project);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(m_scene, *this, *this);
+					object = std::make_shared<GamePlayerC>(m_scene, *this, *this, m_project);
 					break;
 				case ObjectTypeId::Item:
-					object = std::make_shared<GameItemC>(m_scene, *this);
+					object = std::make_shared<GameItemC>(m_scene, *this, m_project);
 					break;
 				case ObjectTypeId::Container:
-					object = std::make_shared<GameBagC>(m_scene, *this);
+					object = std::make_shared<GameBagC>(m_scene, *this, m_project);
 					break;
 				default:
 					ASSERT(!! "Unknown object type");
@@ -1910,13 +1910,16 @@ namespace mmo
 
 			FriendlyUnitTarget = 1 << 0,
 			HostileUnitTarget = 1 << 1,
-			AnyUnitTarget = FriendlyUnitTarget | HostileUnitTarget,
 
 			AreaTarget = 1 << 2,
 
 			PartyMemberTarget = 1 << 3,
 			PetTarget = 1 << 4,
 			ObjectTarget = 1 << 5,
+
+			Self = 1 << 6,
+
+			AnyUnitTarget = FriendlyUnitTarget | HostileUnitTarget | Self,
 		};
 	}
 
@@ -2002,12 +2005,22 @@ namespace mmo
 
 					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
-					ELOG("No target unit selected!");
 					return;
 				}
 			}
 
-			// TODO: There is a target unit, check friend / foe requirements
+			if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0 && !unit->IsFriendlyTo(*targetUnit))
+			{
+				// Target unit is not friendly but spell requires a friendly unit - use fallback to ourself
+				targetUnit = unit;
+			}
+
+			if ((requirements & spell_target_requirements::FriendlyUnitTarget) == 0 && (requirements & spell_target_requirements::HostileUnitTarget) != 0 && unit->IsFriendlyTo(*targetUnit))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_FRIENDLY");
+				return;
+			}
 
 			// Set target unit
 			targetMap.SetTargetMap(spell_cast_target_flags::Unit);

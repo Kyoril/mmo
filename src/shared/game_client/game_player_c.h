@@ -9,8 +9,8 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider)
-			: GameUnitC(scene, netDriver, collisionProvider)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project)
+			: GameUnitC(scene, netDriver, collisionProvider, project)
 		{
 		}
 

@@ -10,8 +10,9 @@
 
 namespace mmo
 {
-	GameObjectC::GameObjectC(Scene& scene)
+	GameObjectC::GameObjectC(Scene& scene, const proto_client::Project& project)
 		: m_scene(scene)
+		, m_project(project)
 		, m_sceneNode(&m_scene.CreateSceneNode())
 	{
 	}

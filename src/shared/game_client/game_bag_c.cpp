@@ -5,8 +5,8 @@
 
 namespace mmo
 {
-	GameBagC::GameBagC(Scene& scene, NetClient& netDriver)
-		: GameItemC(scene, netDriver)
+	GameBagC::GameBagC(Scene& scene, NetClient& netDriver, const proto_client::Project& project)
+		: GameItemC(scene, netDriver, project)
 	{
 	}
 

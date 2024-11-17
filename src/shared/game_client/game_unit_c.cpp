@@ -3,10 +3,13 @@
 
 #include "object_mgr.h"
 #include "base/clock.h"
+#include "client_data/project.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
+#include "shared/client_data/proto_client/factions.pb.h"
+#include "shared/client_data/proto_client/faction_templates.pb.h"
 #include "shared/client_data/proto_client/model_data.pb.h"
 
 namespace mmo
@@ -35,11 +38,7 @@ namespace mmo
 				ASSERT(false);
 			}
 
-			int32 entryId = Get<int32>(object_fields::Entry);
-			if (entryId != -1)
-			{
-				m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
-			}
+			OnEntryChanged();
 		}
 		else
 		{
@@ -48,26 +47,14 @@ namespace mmo
 				ASSERT(false);
 			}
 
-			// Entry id changed?
-			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
-			{
-				int32 entryId = Get<int32>(object_fields::Entry);
-				if (entryId != -1)
-				{
-					m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
-				}
-			}
-
-			// Display id changed?
-			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
+			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
 			{
 				OnDisplayIdChanged();
 			}
 
-			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
+			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
 			{
-				const float scale = Get<float>(object_fields::Scale);
-				m_sceneNode->SetScale(Vector3(scale, scale, scale));
+				OnScaleChanged();
 			}
 
 			const int32 startIndex = m_fieldMap.GetFirstChangedField();
@@ -77,9 +64,19 @@ namespace mmo
 			{
 				fieldsChanged(GetGuid(), startIndex, (endIndex - startIndex) + 1);
 			}
-
-			m_fieldMap.MarkAllAsUnchanged();
 		}
+
+		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::FactionTemplate))
+		{
+			OnFactionTemplateChanged();
+		}
+
+		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
+		{
+			OnEntryChanged();
+		}
+
+		m_fieldMap.MarkAllAsUnchanged();
 
 		reader
 			>> io::read<float>(m_unitSpeed[movement_type::Walk])
@@ -359,6 +356,40 @@ namespace mmo
 
 		// No obstacle above, can attempt to step up
 		return true;
+	}
+
+	void GameUnitC::OnEntryChanged()
+	{
+		int32 entryId = Get<int32>(object_fields::Entry);
+		if (entryId != -1)
+		{
+			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+		}
+	}
+
+	void GameUnitC::OnScaleChanged() const
+	{
+		if (!m_sceneNode)
+		{
+			return;
+		}
+
+		const float scale = Get<float>(object_fields::Scale);
+		m_sceneNode->SetScale(Vector3(scale, scale, scale));
+	}
+
+	void GameUnitC::OnFactionTemplateChanged()
+	{
+		m_faction = nullptr;
+
+		const uint32 factionTemplateId = Get<uint32>(object_fields::FactionTemplate);
+		m_factionTemplate = m_project.factionTemplates.getById(factionTemplateId);
+		ASSERT(m_factionTemplate);
+
+		if (m_factionTemplate)
+		{
+			m_faction = m_project.factions.getById(m_factionTemplate->faction());
+		}
 	}
 
 	void GameUnitC::StartMove(const bool forward)
@@ -692,6 +723,36 @@ namespace mmo
 	void GameUnitC::NotifyAttackSwingEvent()
 	{
 		PlayOneShotAnimation(m_unarmedAttackState);
+	}
+
+	bool GameUnitC::IsFriendlyTo(const GameUnitC& other) const
+	{
+		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
+		{
+			return false;
+		}
+
+		if (m_faction == nullptr || other.m_faction == nullptr)
+		{
+			return false;
+		}
+
+		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId) { return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
+	}
+
+	bool GameUnitC::IsHostileTo(const GameUnitC& other) const
+	{
+		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
+		{
+			return false;
+		}
+
+		if (m_faction == nullptr || other.m_faction == nullptr)
+		{
+			return false;
+		}
+
+		return std::find_if(m_factionTemplate->enemies().begin(), m_factionTemplate->enemies().end(), [&other](uint32 factionId) { return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
 	}
 
 	void GameUnitC::OnDisplayIdChanged()

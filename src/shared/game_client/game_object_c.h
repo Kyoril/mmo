@@ -15,6 +15,11 @@ namespace io
 
 namespace mmo
 {
+	namespace proto_client
+	{
+		class Project;
+	}
+
 	class Scene;
 
 	/// @brief Represents a game object at the client.
@@ -24,7 +29,7 @@ namespace mmo
 		signal<void(uint64, uint16, uint16)> fieldsChanged;
 
 	public:
-		explicit GameObjectC(Scene& scene);
+		explicit GameObjectC(Scene& scene, const proto_client::Project& project);
 		~GameObjectC() override;
 
 		virtual ObjectTypeId GetTypeId() const
@@ -98,6 +103,7 @@ namespace mmo
 		
 	protected:
 		Scene& m_scene;
+		const proto_client::Project& m_project;
 		Entity* m_entity { nullptr };
 		SceneNode* m_sceneNode { nullptr };
 		SceneNode* m_entityOffsetNode{ nullptr };

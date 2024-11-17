@@ -448,7 +448,7 @@ namespace mmo
 					}
 					else
 					{
-						g_cursor.SetCursorType(CursorType::Attack);
+						g_cursor.SetCursorType(m_controlledUnit->IsFriendlyTo(*m_hoveredUnit) ? CursorType::Pointer : CursorType::Attack);
 					}
 					
 				}
