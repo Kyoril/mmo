@@ -90,5 +90,6 @@ namespace mmo
 
 		std::unique_ptr<AnimEvaluator> m_animEvaluator;
 
+		std::set<uint16> m_includedSubMeshes;
 	};
 }

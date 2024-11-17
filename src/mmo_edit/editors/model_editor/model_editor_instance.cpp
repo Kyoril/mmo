@@ -573,6 +573,8 @@ namespace mmo
 
 			if (ImGui::Button("Build"))
 			{
+				m_mesh->GetCollisionTree().Clear();
+
 				// Gather all vertex data
 				if (m_mesh->sharedVertexData == nullptr)
 				{
@@ -581,6 +583,11 @@ namespace mmo
 
 					for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
 					{
+						if (!m_includedSubMeshes.contains(i))
+						{
+							continue;
+						}
+
 						SubMesh& sub = m_mesh->GetSubMesh(i);
 
 						const uint32 vertexOffset = vertices.size();
@@ -594,13 +601,37 @@ namespace mmo
 					m_mesh->GetCollisionTree().Clear();
 					m_mesh->GetCollisionTree().Build(vertices, indices);
 				}
-				
 			}
 
-			if (ImGui::CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen))
+			static const char* s_noMaterial = "(No Material)";
+
+			if (ImGui::CollapsingHeader("Meshes To Include", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				const AABBTree& tree = m_mesh->GetCollisionTree();
 				ImGui::Text("Nodes: %zu", tree.GetNodes().size());
+
+				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
+				{
+					ImGui::PushID(i);
+					bool included = m_includedSubMeshes.contains(i);
+					if (ImGui::Checkbox("##include", &included))
+					{
+						if (included)
+						{
+							m_includedSubMeshes.insert(i);
+						}
+						else
+						{
+							m_includedSubMeshes.erase(i);
+						}
+					}
+					ImGui::SameLine();
+
+					const char* materialName = m_mesh->GetSubMesh(i).GetMaterial() ? m_mesh->GetSubMesh(i).GetMaterial()->GetName().data() : s_noMaterial;
+					ImGui::Text("#%u: %s", i + 1, materialName);
+					ImGui::PopID();
+				}
+				
 			}
 		}
 		ImGui::End();
