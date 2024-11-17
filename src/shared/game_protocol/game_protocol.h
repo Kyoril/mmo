@@ -107,6 +107,9 @@ namespace mmo
 				MoveJump,
 				MoveFallLand,
 
+				CheatLevelUp,				// GAME MASTER
+				CheatGiveMoney,				// GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};

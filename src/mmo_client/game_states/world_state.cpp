@@ -518,6 +518,9 @@ namespace mmo
 		Console::RegisterCommand("learnspell", [this](const std::string& cmd, const std::string& args) { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
 		Console::RegisterCommand("followme", [this](const std::string& cmd, const std::string& args) { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
 		Console::RegisterCommand("faceme", [this](const std::string& cmd, const std::string& args) { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
+		Console::RegisterCommand("level", [this](const std::string& cmd, const std::string& args) { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
+		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
+
 #endif
 
 		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
@@ -532,6 +535,8 @@ namespace mmo
 		Console::UnregisterCommand("learnspell");
 		Console::UnregisterCommand("followme");
 		Console::UnregisterCommand("faceme");
+		Console::UnregisterCommand("level");
+		Console::UnregisterCommand("money");
 #endif
 
 		Console::UnregisterCommand("cast");
@@ -1783,6 +1788,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+#ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1806,7 +1812,9 @@ namespace mmo
 
 		m_realmConnector.LearnSpell(entry);
 	}
+#endif
 
+#ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_CreateMonster(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1826,7 +1834,10 @@ namespace mmo
 		const uint32 entry = std::stoul(tokens[0]);
 		m_realmConnector.CreateMonster(entry);
 	}
+#endif
 
+
+#ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_DestroyMonster(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1850,7 +1861,7 @@ namespace mmo
 		}
 		else
 		{
-			guid = std::stoul(tokens[0]);
+			guid = std::stoull(tokens[0]);
 		}
 
 		if (guid == 0)
@@ -1861,7 +1872,10 @@ namespace mmo
 
 		m_realmConnector.DestroyMonster(guid);
 	}
+#endif
 
+
+#ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_FaceMe(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1881,7 +1895,10 @@ namespace mmo
 
 		m_realmConnector.FaceMe(guid);
 	}
+#endif
 
+
+#ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_FollowMe(const std::string& cmd, const std::string& args) const
 	{
 		std::istringstream iss(args);
@@ -1901,6 +1918,51 @@ namespace mmo
 
 		m_realmConnector.FollowMe(guid);
 	}
+#endif
+
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_LevelUp(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		uint32 level = 1;
+		if (!tokens.empty())
+		{
+			level = std::stoul(tokens[0]);
+		}
+
+		m_realmConnector.LevelUp(level);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_GiveMoney(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: money <amount>");
+			return;
+		}
+
+		const uint32 money = std::stoul(tokens[0]);
+		m_realmConnector.GiveMoney(money);
+	}
+#endif
 
 	namespace spell_target_requirements
 	{

@@ -155,23 +155,29 @@ namespace mmo
 			OnSetSelection(opCode, buffer.size(), reader);
 			break;
 
+#if MMO_WITH_DEV_COMMANDS
 		case game::client_realm_packet::CheatCreateMonster:
 			OnCheatCreateMonster(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatDestroyMonster:
 			OnCheatDestroyMonster(opCode, buffer.size(), reader);
 			break;
-
 		case game::client_realm_packet::CheatFaceMe:
 			OnCheatFaceMe(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatFollowMe:
 			OnCheatFollowMe(opCode, buffer.size(), reader);
 			break;
-
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatLevelUp:
+			OnCheatLevelUp(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatGiveMoney:
+			OnCheatGiveMoney(opCode, buffer.size(), reader);
+			break;
+#endif
 
 		case game::client_realm_packet::CastSpell:
 			OnSpellCast(opCode, buffer.size(), reader);
@@ -687,91 +693,6 @@ namespace mmo
 		});
 	}
 
-	void Player::OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const
-	{
-		uint32 entry;
-		if (!(contentReader >> io::read<uint32>(entry)))
-		{
-			ELOG("Missing entry id to create a monster");
-			return;
-		}
-
-		DLOG("Creating monster with entry " << entry);
-
-		const auto* creatureEntry = m_project.units.getById(entry);
-
-		// Spawn a new creature
-		ASSERT(m_worldInstance);
-		const auto spawned = m_worldInstance->CreateTemporaryCreature(*creatureEntry, m_character->GetPosition(), 0.0f, 50.0f);
-		spawned->ClearFieldChanges();
-		m_worldInstance->AddGameObject(*spawned);
-	}
-
-	void Player::OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader)
-	{
-		uint64 guid;
-		if (!(contentReader >> io::read<uint64>(guid)))
-		{
-			ELOG("Missing guid to destroy a monster");
-			return;
-		}
-
-		DLOG("Destroying monster with guid " << log_hex_digit(guid));
-
-		// Find creature with guid
-		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
-		if (object == nullptr)
-		{
-			ELOG("Unable to find object with guid " << log_hex_digit(guid) << " to destroy");
-			return;
-		}
-
-		if (object->GetTypeId() != ObjectTypeId::Unit)
-		{
-			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
-			return;
-		}
-
-		m_worldInstance->RemoveGameObject(*object);
-	}
-
-	void Player::OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader)
-	{
-		uint32 spellId;
-		if (!(contentReader >> io::read<uint32>(spellId)))
-		{
-			ELOG("Missing spell id to learn a spell");
-			return;
-		}
-
-		// Find spell with entry
-		const auto* spell = m_project.spells.getById(spellId);
-		if (!spell)
-		{
-			ELOG("Unable to learn spell: Unknown spell " << spellId);
-			return;
-		}
-
-		DLOG("Learning spell " << spellId << " (" << spell->name() << " [" << spell->rank() << "])");
-
-		// Check if we have a player character in target
-		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
-		if (targetGuid == 0)
-		{
-			targetGuid = m_character->GetGuid();
-		}
-
-		// Find target unit
-		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(targetGuid);
-		if (!targetObject || targetObject->GetTypeId() != ObjectTypeId::Player)
-		{
-			targetObject = m_character.get();
-		}
-
-		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
-		playerCharacter->AddSpell(spellId);
-	}
-
 	void Player::OnSpellCast(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		// Read spell cast packet
@@ -856,74 +777,6 @@ namespace mmo
 			ELOG("Failed to read client timestamp for attack stop");
 			return;
 		}
-	}
-
-	void Player::OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader)
-	{
-		uint64 guid;
-		if (!(contentReader >> io::read<uint64>(guid)))
-		{
-			ELOG("Missing guid");
-			return;
-		}
-
-		DLOG("Making Monster with guid " << log_hex_digit(guid) << " follow player");
-
-		// Find creature with guid
-		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
-		if (object == nullptr)
-		{
-			ELOG("Unable to find object with guid " << log_hex_digit(guid));
-			return;
-		}
-
-		if (object->GetTypeId() != ObjectTypeId::Unit)
-		{
-			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
-			return;
-		}
-
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
-		unit->GetMover().StopMovement();
-
-		// TODO
-		DLOG("TODO");
-	}
-
-	void Player::OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader)
-	{
-		uint64 guid;
-		if (!(contentReader >> io::read<uint64>(guid)))
-		{
-			ELOG("Missing guid");
-			return;
-		}
-
-		DLOG("Making Monster with guid " << log_hex_digit(guid) << " face player");
-
-		// Find creature with guid
-		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
-		if (object == nullptr)
-		{
-			ELOG("Unable to find object with guid " << log_hex_digit(guid));
-			return;
-		}
-
-		if (object->GetTypeId() != ObjectTypeId::Unit)
-		{
-			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
-			return;
-		}
-
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
-		unit->GetMover().StopMovement();
-
-		// TODO
-		DLOG("TODO");
-
-		
 	}
 
 	void Player::OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -1562,6 +1415,268 @@ namespace mmo
 
 		CloseLootDialog();
 	}
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const
+	{
+		uint32 entry;
+		if (!(contentReader >> io::read<uint32>(entry)))
+		{
+			ELOG("Missing entry id to create a monster");
+			return;
+		}
+
+		DLOG("Creating monster with entry " << entry);
+
+		const auto* creatureEntry = m_project.units.getById(entry);
+
+		// Spawn a new creature
+		ASSERT(m_worldInstance);
+		const auto spawned = m_worldInstance->CreateTemporaryCreature(*creatureEntry, m_character->GetPosition(), 0.0f, 50.0f);
+		spawned->ClearFieldChanges();
+		m_worldInstance->AddGameObject(*spawned);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid to destroy a monster");
+			return;
+		}
+
+		DLOG("Destroying monster with guid " << log_hex_digit(guid));
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid) << " to destroy");
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		m_worldInstance->RemoveGameObject(*object);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint32>(spellId)))
+		{
+			ELOG("Missing spell id to learn a spell");
+			return;
+		}
+
+		// Find spell with entry
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unable to learn spell: Unknown spell " << spellId);
+			return;
+		}
+
+		DLOG("Learning spell " << spellId << " (" << spell->name() << " [" << spell->rank() << "])");
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!targetObject || targetObject->GetTypeId() != ObjectTypeId::Player)
+		{
+			targetObject = m_character.get();
+		}
+
+		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
+		playerCharacter->AddSpell(spellId);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid");
+			return;
+		}
+
+		DLOG("Making Monster with guid " << log_hex_digit(guid) << " follow player");
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		// Stop movement immediately
+		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		unit->GetMover().StopMovement();
+
+		// TODO
+		DLOG("TODO");
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 guid;
+		if (!(contentReader >> io::read<uint64>(guid)))
+		{
+			ELOG("Missing guid");
+			return;
+		}
+
+		DLOG("Making Monster with guid " << log_hex_digit(guid) << " face player");
+
+		// Find creature with guid
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
+		if (object == nullptr)
+		{
+			ELOG("Unable to find object with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		if (object->GetTypeId() != ObjectTypeId::Unit)
+		{
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			return;
+		}
+
+		// Stop movement immediately
+		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		unit->GetMover().StopMovement();
+
+		// TODO
+		DLOG("TODO");
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 level;
+		if (!(contentReader >> io::read<uint8>(level)))
+		{
+			ELOG("Missing level parameter!");
+			return;
+		}
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GameUnitS* targetUnit = m_worldInstance->FindByGuid<GameUnitS>(targetGuid);
+		if (!targetUnit || targetUnit->GetTypeId() != ObjectTypeId::Player)
+		{
+			targetUnit = m_character.get();
+		}
+
+		if (!targetUnit)
+		{
+			ELOG("Unable to find target character!");
+			return;
+		}
+
+		uint32 characterLevel = targetUnit->GetLevel();
+
+		// Check for overflow
+		if (characterLevel + level >= targetUnit->Get<uint32>(object_fields::MaxLevel))
+		{
+			characterLevel = targetUnit->Get<uint32>(object_fields::MaxLevel);
+		}
+		else
+		{
+			characterLevel += level;
+		}
+
+		if (characterLevel == targetUnit->GetLevel())
+		{
+			ELOG("Character level is unchanged");
+			return;
+		}
+
+		DLOG("Setting level of target to " << characterLevel);
+		targetUnit->SetLevel(characterLevel);
+
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatGiveMoney(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 amount;
+		if (!(contentReader >> io::read<uint32>(amount)))
+		{
+			ELOG("Missing amount parameter!");
+			return;
+		}
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GamePlayerS* targetPlayer = m_worldInstance->FindByGuid<GamePlayerS>(targetGuid);
+		if (!targetPlayer)
+		{
+			targetPlayer = m_character.get();
+		}
+
+		if (!targetPlayer)
+		{
+			ELOG("Unable to find target character!");
+			return;
+		}
+
+		uint32 money = targetPlayer->Get<uint32>(object_fields::Money);
+
+		// Check for overflow
+		if (money + amount <= money)
+		{
+			money = std::numeric_limits<uint32>::max();
+		}
+		else
+		{
+			money += amount;
+		}
+
+		DLOG("Setting money of target to " << money);
+		targetPlayer->Set<uint32>(object_fields::Money, money);
+	}
+#endif
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
 	{

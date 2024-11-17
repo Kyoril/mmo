@@ -93,6 +93,12 @@ namespace mmo
 
 		GameObjectS* FindObjectByGuid(uint64 guid);
 
+		template<class T>
+		T* FindByGuid(uint64 guid)
+		{
+			return dynamic_cast<T*>(FindObjectByGuid(guid));
+		}
+
 		VisibilityGrid& GetGrid() const;
 
 		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo) const;

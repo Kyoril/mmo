@@ -105,21 +105,11 @@ namespace mmo
 
 		void OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader);
 
-		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
-
-		void OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader);
-
-		void OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
-
 		void OnSpellCast(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnAttackStop(uint16 opCode, uint32 size, io::Reader& contentReader);
-
-		void OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader);
-
-		void OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
 
@@ -146,6 +136,22 @@ namespace mmo
 		void OnLootMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+#if MMO_WITH_DEV_COMMANDS
+		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
+
+		void OnCheatDestroyMonster(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatFaceMe(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatGiveMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+#endif
 
 	private:
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);

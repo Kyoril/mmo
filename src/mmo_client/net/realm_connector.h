@@ -194,6 +194,10 @@ namespace mmo
 
 		void LearnSpell(uint32 spellId);
 
+		void LevelUp(uint8 level);
+
+		void GiveMoney(uint32 amount);
+
 		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		void SendReviveRequest();
