@@ -123,7 +123,7 @@ namespace mmo
 			<< io::write<float>(data.bindPosition.x)
 			<< io::write<float>(data.bindPosition.y)
 			<< io::write<float>(data.bindPosition.z)
-			<< data.facing
+			<< data.bindFacing
 			;
 	}
 }

@@ -935,8 +935,7 @@ namespace mmo
 			return;
 		}
 
-		// TODO: Use home position from character
-		m_character->TeleportOnMap(Vector3::Zero, Radian(0.0f));
+		m_character->TeleportOnMap(m_character->GetBindPosition(), m_character->GetBindFacing());
 
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
