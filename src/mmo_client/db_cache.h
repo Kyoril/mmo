@@ -2,10 +2,12 @@
 
 #include "base/typedefs.h"
 
+#include "binary_io/writer.h"
+#include "binary_io/reader.h"
+#include "version.h"
+
 #include <functional>
 #include <unordered_map>
-#include <optional>
-#include <vector>
 
 #include "net/realm_connector.h"
 
@@ -65,6 +67,67 @@ namespace mmo
 			}
 
 			m_pendingRequests.erase(range.first, range.second);
+		}
+
+		void Serialize(io::Writer& writer)
+		{
+			// Read file format header
+			constexpr uint32 header = 'CDBC';
+			writer << io::write<uint32>(header) << io::write<uint32>(Revision);
+
+			writer << io::write<uint32>(m_cache.size());
+			for (auto& [id, object] : m_cache)
+			{
+				writer << io::write<uint64>(id);
+				writer << object;
+			}
+		}
+
+		bool Deserialize(io::Reader& reader)
+		{
+			// Read file format header
+			uint32 header = 0;
+			if (!(reader >> io::read<uint32>(header)) || header != static_cast<uint32>('CDBC'))
+			{
+				return false;
+			}
+
+			// Read build version number
+			uint32 build = 0;
+			if (!(reader >> io::read<uint32>(build)))
+			{
+				return false;
+			}
+
+			// If cache is incompatible with our version, refuse to load it
+			if (build != Revision)
+			{
+				return false;
+			}
+
+			// Read item count
+			uint32 itemCount = 0;
+			if (!(reader >> io::read<uint32>(itemCount)))
+			{
+				return false;
+			}
+
+			// Allow for efficient reading
+			m_cache.reserve(itemCount);
+
+			for (uint32 i = 0; i < itemCount; ++i)
+			{
+				uint64 id = 0;
+				if (!(reader >> io::read<uint64>(id)))
+				{
+					return false;
+				}
+
+				// Read object entry
+				reader >> m_cache[id];
+			}
+
+			return reader;
 		}
 
 	private:

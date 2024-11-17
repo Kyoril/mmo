@@ -8,6 +8,7 @@
 #include "screen.h"
 #include "game_states/game_state.h"
 
+
 #include "base/signal.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
@@ -31,18 +32,11 @@
 #include "ui/binding.h"
 #include "ui/world_text_frame.h"
 #include "game/creature_data.h"
+#include "game/quest_info.h"
 
 namespace mmo
 {
 	class TimerQueue;
-
-	struct QuestInfo
-	{
-		uint64 id;
-		String title;
-		String summary;
-		String description;
-	};
 
 	namespace game
 	{
@@ -70,7 +64,15 @@ namespace mmo
 		/// @param gameStateManager The game state manager that this state belongs to.
 		/// @param realmConnector The connector which manages the connection to the realm server.
 		/// @param project 
-		explicit WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache);
+		explicit WorldState(
+			GameStateMgr& gameStateManager,
+			RealmConnector& realmConnector,
+			const proto_client::Project& project, 
+			TimerQueue& timers,
+			LootClient& lootClient, 
+			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
+			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
+			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache);
 
 	public:
 		/// @brief The default name of the world state
@@ -253,9 +255,9 @@ namespace mmo
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
 		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
+		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& m_creatureCache;
+		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& m_questCache;
 		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
-		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery> m_creatureCache;
-		DBCache<QuestInfo, game::client_realm_packet::QuestQuery> m_questCache;
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;

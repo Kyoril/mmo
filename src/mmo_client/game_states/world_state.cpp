@@ -126,16 +126,18 @@ namespace mmo
 
 	IInputControl* WorldState::s_inputControl = nullptr;
 
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
+		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
+		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
-		, m_lootClient(lootClient)
-		, m_playerNameCache(m_realmConnector)
-		, m_creatureCache(m_realmConnector)
 		, m_itemCache(itemCache)
-		, m_questCache(m_realmConnector)
+		, m_creatureCache(creatureCache)
+		, m_questCache(questCache)
+		, m_playerNameCache(m_realmConnector)
 		, m_project(project)
 		, m_timers(timers)
+		, m_lootClient(lootClient)
 	{
 	}
 
