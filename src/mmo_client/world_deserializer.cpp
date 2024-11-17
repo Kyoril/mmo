@@ -171,9 +171,9 @@ namespace mmo
 			return false;
 		}
 
-		ASSERT(!position.IsValid());
+		ASSERT(position.IsValid());
 		ASSERT(!rotation.IsNaN());
-		ASSERT(!scale.IsValid());
+		ASSERT(scale.IsValid());
 
 		if (meshNameIndex >= m_meshNames.size())
 		{
