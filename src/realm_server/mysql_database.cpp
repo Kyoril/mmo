@@ -217,10 +217,12 @@ namespace mmo
 
 	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy)
 	{
-		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, mana, rage, energy) VALUES (" +
+		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, bind_x, bind_y, bind_z, bind_o , mana, rage, energy) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
-			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + std::to_string(position.x) + ", " +
-			std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ", '" + std::to_string(mana) + "', '" + std::to_string(rage) + "', '" + std::to_string(energy) + "');"))
+			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + 
+			std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ", " + 
+			std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + ", " + std::to_string(orientation.GetValueRadians()) + ", " + 
+			std::to_string(mana) + ", " + std::to_string(rage) + ", " + std::to_string(energy) + ");"))
 		{
 			PrintDatabaseError();
 
