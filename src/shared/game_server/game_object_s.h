@@ -188,6 +188,11 @@ namespace mmo
 			Set<T>(index, flags & ~flag);
 		}
 
+		void Invalidate(ObjectFieldMap::FieldIndexType index)
+		{
+			m_fields.MarkAsChanged(index);
+		}
+
 		template<class OnSubscriber>
 		void ForEachSubscriberInSight(OnSubscriber callback)
 		{

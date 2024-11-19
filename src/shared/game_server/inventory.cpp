@@ -164,16 +164,16 @@ namespace mmo
 				itemInstanceUpdated(item, slot);
 				if (IsInventorySlot(slot) || IsEquipmentSlot(slot) || IsBagPackSlot(slot))
 				{
-					//m_owner.forceFieldUpdate(character_fields::InvSlotHead + ((slot & 0xFF) * 2));
-					//m_owner.forceFieldUpdate(character_fields::InvSlotHead + ((slot & 0xFF) * 2) + 1);
+					m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2));
+					m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2) + 1);
 				}
 				else if (IsBagSlot(slot))
 				{
 					auto bag = GetBagAtSlot(slot);
 					if (bag)
 					{
-						//bag->forceFieldUpdate(object_fields::Slot_1 + ((slot & 0xFF) * 2));
-						//bag->forceFieldUpdate(object_fields::Slot_1 + ((slot & 0xFF) * 2) + 1);
+						bag->Invalidate(object_fields::Slot_1 + (slot & 0xFF) * 2);
+						bag->Invalidate(object_fields::Slot_1 + (slot & 0xFF) * 2 + 1);
 						itemInstanceUpdated(bag, slot);
 					}
 				}
@@ -593,14 +593,12 @@ namespace mmo
 					// Found a free slot
 					break;
 				}
-				else
+
+				const uint32 slotTime = m_owner.Get<uint32>(object_fields::BuybackTimestamp_1 + fieldSlot);
+				if (slotTime < oldestSlotTime)
 				{
-					const uint32 slotTime = m_owner.Get<uint32>(object_fields::BuybackTimestamp_1 + fieldSlot);
-					if (slotTime < oldestSlotTime)
-					{
-						oldestSlotTime = slotTime;
-						oldestFieldSlot = slot;
-					}
+					oldestSlotTime = slotTime;
+					oldestFieldSlot = slot;
 				}
 			} while (++slot < player_buy_back_slots::End);
 
@@ -608,8 +606,7 @@ namespace mmo
 			if (slot >= player_buy_back_slots::End)
 			{
 				// No free slot available, discard the oldest one
-				auto itemInst = m_itemsBySlot[oldestFieldSlot];
-				if (itemInst)
+				if (const auto itemInst = m_itemsBySlot[oldestFieldSlot])
 				{
 					itemInstanceDestroyed(std::cref(itemInst), oldestFieldSlot);
 					m_itemsBySlot.erase(oldestFieldSlot);

@@ -479,7 +479,7 @@ namespace mmo
 					}
 
 					// Out of bag bounds?
-					if (slotId & 0xFF >= bag->Get<uint32>(object_fields::NumSlots))
+					if ((slotId & 0xFF) >= bag->Get<uint32>(object_fields::NumSlots))
 					{
 						return nullptr;
 					}
@@ -1121,8 +1121,9 @@ namespace mmo
 			// We already have an item picked up, so swap items in slots
 			if (slot != g_cursor.GetCursorItem())
 			{
-				// Check if it's in the same bag
-				if ((g_cursor.GetCursorItem() >> 8) == (slot >> 8))
+				// Check if its a bag or the player inventory
+				if ((g_cursor.GetCursorItem() >> 8) == player_inventory_slots::Bag_0 &&
+					(slot >> 8) == player_inventory_slots::Bag_0)
 				{
 					// Same bag
 					m_realmConnector.SwapInvItem(g_cursor.GetCursorItem() & 0xFF, slot & 0xFF);
