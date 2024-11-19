@@ -748,7 +748,12 @@ namespace mmo
 								}
 							}
 
-							if ((fieldIndex < object_fields::BankSlot_1 && fieldIndex + fieldCount >= object_fields::InvSlotHead))
+							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
+							{
+								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
+							}
+
+							if ((object_fields::BankSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
 							}

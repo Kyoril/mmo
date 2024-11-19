@@ -17,6 +17,7 @@
 #include "loot_client.h"
 #include "game/item.h"
 #include "game/spell.h"
+#include "game_client/game_bag_c.h"
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
@@ -444,7 +445,53 @@ namespace mmo
 					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
+				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
+					(slotId & 0xFF) >= player_inventory_slots::Start &&
+					(slotId & 0xFF) < player_inventory_slots::End)
+				{
+					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
+					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+				}
+				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
+					(slotId & 0xFF) >= player_inventory_slots::Start &&
+					(slotId & 0xFF) < player_inventory_slots::End)
+				{
+					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
+					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+				}
+				else if (static_cast<uint16>(slotId) >> 8 >= player_inventory_slots::Start &&
+					static_cast<uint16>(slotId) >> 8 < player_inventory_slots::End)
+				{
+					// Bag slots, get bag item first
+					const uint8 slotFieldOffset = (static_cast<uint16>(slotId) >> 8) * 2;
+					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 
+					if (itemGuid == 0)
+					{
+						return nullptr;
+					}
+
+					// The actual bag item
+					std::shared_ptr<GameBagC> bag = ObjectMgr::Get<GameBagC>(itemGuid);
+					if (!bag)
+					{
+						return nullptr;
+					}
+
+					// Out of bag bounds?
+					if (slotId & 0xFF >= bag->Get<uint32>(object_fields::NumSlots))
+					{
+						return nullptr;
+					}
+
+					itemGuid = bag->Get<uint64>(object_fields::Slot_1 + (slotId & 0xFF) * 2);
+					if (itemGuid == 0)
+					{
+						return nullptr;
+					}
+
+					return ObjectMgr::Get<GameItemC>(itemGuid);
+				}
 
 				if (itemGuid == 0)
 				{
@@ -452,8 +499,7 @@ namespace mmo
 				}
 
 				// Get item at the specified slot
-				std::shared_ptr<GameItemC> item = ObjectMgr::Get<GameItemC>(itemGuid);
-				return item;
+				return ObjectMgr::Get<GameItemC>(itemGuid);
 			}
 
 			return nullptr;
@@ -1045,6 +1091,7 @@ namespace mmo
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 
+			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
 			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
@@ -1074,18 +1121,18 @@ namespace mmo
 			// We already have an item picked up, so swap items in slots
 			if (slot != g_cursor.GetCursorItem())
 			{
-				// Actually a different slot: Check the target slot and if we should swap items
-				auto targetItem = GetItemFromSlot("player", slot);
-				if (targetItem)
+				// Check if it's in the same bag
+				if ((g_cursor.GetCursorItem() >> 8) == (slot >> 8))
 				{
-					// Swap source and target slot
+					// Same bag
 					m_realmConnector.SwapInvItem(g_cursor.GetCursorItem() & 0xFF, slot & 0xFF);
 				}
 				else
 				{
-					// Drop item in slot
-					m_realmConnector.SwapInvItem(g_cursor.GetCursorItem() & 0xFF, slot & 0xFF);
+					// Different bag
+					m_realmConnector.SwapItem(g_cursor.GetCursorItem() >> 8, g_cursor.GetCursorItem() & 0xFF, slot >> 8, slot & 0xFF);
 				}
+				
 			}
 
 			g_cursor.Clear();
@@ -1223,6 +1270,30 @@ namespace mmo
 	void GameScript::CloseLoot() const
 	{
 		m_lootClient.CloseLoot();
+	}
+
+	int32 GameScript::GetContainerNumSlots(int32 container) const
+	{
+		if (container < 0 || container >= player_inventory_slots::End - player_inventory_slots::Start)
+		{
+			return 0;
+		}
+
+		// Check if the container is a bag
+		uint16 slotId = (static_cast<uint16>(player_inventory_slots::Bag_0) << 8) | static_cast<uint16>(container + player_inventory_slots::Start);
+		std::shared_ptr<GameItemC> item = GetItemFromSlot("player", slotId);
+		if (!item)
+		{
+			return 0;
+		}
+
+		std::shared_ptr<GameBagC> bag = std::dynamic_pointer_cast<GameBagC>(item);
+		if (!bag)
+		{
+			return 0;
+		}
+
+		return bag->Get<uint32>(object_fields::NumSlots);
 	}
 
 	void GameScript::Script_ReviveMe() const

@@ -491,7 +491,7 @@ namespace mmo
 			case ItemClass::Consumable:	subclassStrings = &s_itemSubclassConsumableStrings; break;
 			case ItemClass::Weapon:		subclassStrings = &s_itemSubclassWeaponStrings; hasInventoryType = true; break;
 			case ItemClass::Armor:		subclassStrings = &s_itemSubclassArmorStrings; hasInventoryType = true; break;
-			case ItemClass::Container:	subclassStrings = &s_itemSubclassContainerStrings; break;
+			case ItemClass::Container:	subclassStrings = &s_itemSubclassContainerStrings; hasInventoryType = true; break;
 			case ItemClass::Gem:		subclassStrings = &s_itemSubclassGemStrings; break;
 			case ItemClass::Reagent:	break;
 			case ItemClass::Projectile:	subclassStrings = &s_itemSubclassProjectileStrings; break;

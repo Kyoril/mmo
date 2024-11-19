@@ -72,6 +72,8 @@ namespace mmo
 
 		void CloseLoot() const;
 
+		int32 GetContainerNumSlots(int32 container) const;
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
