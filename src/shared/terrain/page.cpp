@@ -207,7 +207,7 @@ namespace mmo
 			return m_x;
 		}
 
-		uint32 Page::GetZ() const
+		uint32 Page::GetY() const
 		{
 			return m_z;
 		}
@@ -275,24 +275,67 @@ namespace mmo
 			return Vector3();
 		}
 
-		const Vector3& Page::GetNormalAt(uint32 x, uint32 z)
+		Vector3 Page::GetNormalAt(uint32 x, uint32 z)
 		{
-			return Vector3::UnitY;
+			return CalculateNormalAt(x, z);
 		}
 
-		const Vector3& Page::CalculateNormalAt(uint32 x, uint32 z)
+		Vector3 Page::CalculateNormalAt(uint32 x, uint32 z)
 		{
-			return Vector3::UnitY;
+			const float scaling = constants::PageSize / static_cast<float>(constants::VerticesPerPage);
+			float flip = 1.0f;
+
+			size_t offsX = m_x * constants::VerticesPerPage;
+			size_t offsY = m_z * constants::VerticesPerPage;
+
+			Vector3 here(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z), static_cast<float>(z) * scaling);
+
+			Vector3 right(static_cast<float>(x + 1) * scaling, m_terrain.GetAt(offsX + x + 1, offsY + z), static_cast<float>(z * scaling));
+			if (x >= m_terrain.GetWidth() * constants::VerticesPerPage)
+			{
+				right.y = here.y;
+				flip = -1.0f;
+			}
+
+			Vector3 down(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z + 1), static_cast<float>(z + 1) * scaling);
+			if (z >= m_terrain.GetHeight() * constants::VerticesPerPage)
+			{
+				down.z = here.y;
+				flip = -1.0f;
+			}
+
+			down -= here;
+			here -= right;
+
+			Vector3 norm = here.Cross(down);
+			norm.y *= flip;
+			norm.Normalize();
+
+			return norm;
 		}
 
-		const Vector3& Page::GetTangentAt(uint32 x, uint32 z)
+		Vector3 Page::GetTangentAt(uint32 x, uint32 z)
 		{
-			return Vector3::UnitZ;
+			return CalculateTangentAt(x, z);
 		}
 
-		const Vector3& Page::CalculateTangentAt(uint32 x, uint32 z)
+		Vector3 Page::CalculateTangentAt(uint32 x, uint32 z)
 		{
-			return Vector3::UnitZ;
+			size_t offsX = m_x * constants::VerticesPerPage;
+			size_t offsY = m_z * constants::VerticesPerPage;
+
+			int flip = 1;
+			Vector3 here = m_terrain.GetVectorAt(x + offsX, z + offsY);
+			Vector3 left = m_terrain.GetVectorAt(x + offsX - 1, z + offsY);
+			if (left.x < 0.0f)
+			{
+				flip *= -1;
+				left = m_terrain.GetVectorAt(x + offsX + 1, z + offsY);
+			}
+
+			left -= here;
+
+			return (left * flip).NormalizedCopy();
 		}
 
 		bool Page::IsPrepared() const
@@ -513,7 +556,7 @@ namespace mmo
 
 			for (auto& tile : m_Tiles)
 			{
-				m_boundingBox.Combine(tile->GetBoundingBox());
+				m_boundingBox.Combine(tile->GetWorldBoundingBox(true));
 			}
 		}
 

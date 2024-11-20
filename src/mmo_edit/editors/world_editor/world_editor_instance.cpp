@@ -1022,7 +1022,7 @@ namespace mmo
 		if (terrain::Tile* tile = hitResult.second.tile)
 		{
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
-			UpdateDebugAABB(tile->GetWorldBoundingBox());
+			UpdateDebugAABB(tile->GetPage().GetBoundingBox());	/*GetWorldBoundingBox()*/
 		}
 
 		m_debugNode->SetPosition(hitResult.second.position);
@@ -1231,6 +1231,9 @@ namespace mmo
 			static const char* s_noMaterialPreview = "<None>";
 
 			terrain::Tile& tile = selectable.GetTile();
+
+			ImGui::Text("Tile Grid: %d x %d", tile.GetX(), tile.GetY());
+			ImGui::Text("Page Grid: %d x %d", tile.GetPage().GetX(), tile.GetPage().GetY());
 
 			// Get material
 			MaterialPtr material = tile.GetMaterial();

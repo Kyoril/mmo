@@ -54,7 +54,7 @@ namespace mmo
 
 			uint32 GetX() const;
 
-			uint32 GetZ() const;
+			uint32 GetY() const;
 
 			uint32 GetID() const;
 
@@ -66,13 +66,13 @@ namespace mmo
 
 			Vector3 GetVectorFromPoint(int x, int z);
 
-			const Vector3& GetNormalAt(uint32 x, uint32 z);
+			Vector3 GetNormalAt(uint32 x, uint32 z);
 
-			const Vector3& CalculateNormalAt(uint32 x, uint32 z);
+			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 
-			const Vector3& GetTangentAt(uint32 x, uint32 z);
+			Vector3 GetTangentAt(uint32 x, uint32 z);
 
-			const Vector3& CalculateTangentAt(uint32 x, uint32 z);
+			Vector3 CalculateTangentAt(uint32 x, uint32 z);
 
 			bool IsPrepared() const;
 

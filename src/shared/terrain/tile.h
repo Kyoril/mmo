@@ -23,6 +23,10 @@ namespace mmo
 			~Tile() override;
 
 		public:
+			int32 GetX() const { return static_cast<int32>(m_tileX); }
+
+			int32 GetY() const { return static_cast<int32>(m_tileY); }
+
 			void PrepareRenderOperation(RenderOperation& operation) override;
 
 			[[nodiscard]] const Matrix4& GetWorldTransform() const override;
@@ -69,7 +73,7 @@ namespace mmo
 		private:
 			Page& m_page;
 			AABB m_bounds;
-			size_t m_tileX, m_tileZ;
+			size_t m_tileX, m_tileY;
 			size_t m_startX, m_startZ;
 			float m_boundingRadius;
 			Vector3 m_center;

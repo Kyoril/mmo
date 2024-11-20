@@ -323,8 +323,6 @@ namespace mmo
 							continue;
 						}
 
-						DLOG("hit page " << x << "x" << y << ": " << res.second);
-
 						// Get the hit point
 						point = ray.GetPoint(res.second);
 
@@ -443,7 +441,7 @@ namespace mmo
 					float height = GetHeightAt(vertX, vertZ);
 
 					// Update height
-					float factor = 1.0f;// GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
+					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
 					height += power * factor;
 
 					// Apply change
@@ -521,8 +519,8 @@ namespace mmo
 			GetPageAndLocalVertex(fromZ, fromPageZ, localVertexY);
 
 			uint32 toPageX, toPageZ, localVertexToX, localVertexToY;
-			GetPageAndLocalVertex(toX, toPageX, localVertexX);
-			GetPageAndLocalVertex(toZ, toPageZ, localVertexY);
+			GetPageAndLocalVertex(toX, toPageX, localVertexToX);
+			GetPageAndLocalVertex(toZ, toPageZ, localVertexToY);
 
 			// Iterate through all pages in the area
 			for (unsigned int x = fromPageX; x <= toPageX; x++)

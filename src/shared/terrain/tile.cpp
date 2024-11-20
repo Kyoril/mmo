@@ -20,7 +20,7 @@ namespace mmo
 			SetRenderQueueGroup(WorldGeometry1);
 
 			m_tileX = m_startX / (constants::VerticesPerTile - 1);
-			m_tileZ = m_startZ / (constants::VerticesPerTile - 1);
+			m_tileY = m_startZ / (constants::VerticesPerTile - 1);
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0);
@@ -59,7 +59,7 @@ namespace mmo
 		void Tile::SetMaterial(MaterialPtr material)
 		{
 			m_material = std::move(material);
-			m_page.NotifyTileMaterialChanged(m_tileX, m_tileZ);
+			m_page.NotifyTileMaterialChanged(m_tileX, m_tileY);
 		}
 
 		const String& Tile::GetMovableType() const
@@ -110,16 +110,30 @@ namespace mmo
 				float u, v;
 			};
 
+			float minHeight = std::numeric_limits<float>::max();
+			float maxHeight = std::numeric_limits<float>::min();
+
 			VertexStruct* vert = (VertexStruct*)m_mainBuffer->Map(LockOptions::Normal);
 			for (size_t j = m_startZ; j < endZ; ++j)
 			{
 				for (size_t i = m_startX; i < endX; ++i)
 				{
 					const float height = m_page.GetHeightAt(i, j);
+					if (height < minHeight) minHeight = height;
+					if (height > maxHeight) maxHeight = height;
+
 					vert->position = Vector3(scale * i, height, scale * j);
 					vert->normal = m_page.GetNormalAt(i, j);
-					vert->tangent = m_page.GetTangentAt(i, j);
-					vert->binormal = Vector3::UnitX;
+
+					// Choose an arbitrary vector different from the normal
+					Vector3 arbitrary = { 1, 0, 0 };
+					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f) {
+						arbitrary = { 0, 0, 1 };
+					}
+
+					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
+					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
+
 					vert->color = 0x000000FF;
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
@@ -128,6 +142,11 @@ namespace mmo
 				}
 			}
 			m_mainBuffer->Unmap();
+
+			m_bounds.min.y = minHeight;
+			m_bounds.max.y = maxHeight;
+			m_center = m_bounds.GetCenter();
+			m_boundingRadius = (m_bounds.max - m_center).GetLength();
 		}
 
 		void Tile::CreateVertexData(size_t startX, size_t startZ)
@@ -175,9 +194,16 @@ namespace mmo
 					const float height = m_page.GetHeightAt(i, j);
 					vert->position = Vector3(scale * i, height, scale * j);
 					vert->normal = m_page.GetNormalAt(i, j);
-					vert->tangent = m_page.GetTangentAt(i, j);
-					// TODO: vert->binormal = m_page.GetTangentAt(i, j);
-					vert->binormal = Vector3::UnitX;
+
+					// Choose an arbitrary vector different from the normal
+					Vector3 arbitrary = { 1, 0, 0 };
+					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f) {
+						arbitrary = { 0, 0, 1 };
+					}
+
+					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
+					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
+
 					vert->color = 0x000000FF;
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
@@ -201,7 +227,7 @@ namespace mmo
 
 			m_bounds = AABB(
 				Vector3(scale * startX, minHeight, scale * startZ),
-				Vector3(scale * endX, maxHeight, scale * endZ));
+				Vector3(scale * (endX - 1), maxHeight, scale * (endZ - 1)));
 
 			m_center = m_bounds.GetCenter();
 
