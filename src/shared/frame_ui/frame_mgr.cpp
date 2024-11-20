@@ -393,6 +393,7 @@ namespace mmo
 	               .def("AddChild", &Frame::AddChild)
 	               .def("GetChildCount", &Frame::GetChildCount)
 	               .def("GetChild", &Frame::GetChild)
+					.def("GetParent", &Frame::GetParent)
 	               .def("SetAnchor", &Frame::SetAnchor)
 					.def("ClearAnchor", &Frame::ClearAnchor)
 					.def("ClearAnchors", &Frame::ClearAnchors)

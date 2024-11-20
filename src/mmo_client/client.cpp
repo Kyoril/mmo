@@ -266,7 +266,6 @@ namespace mmo
 		}
 
 		// Ensure the logs directory exists
-		std::filesystem::create_directories(currentPath / "Cache");
 		std::filesystem::create_directories(currentPath / "Logs");
 		std::filesystem::create_directories(currentPath / "Config");
 
