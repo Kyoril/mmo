@@ -111,7 +111,7 @@ namespace mmo
 		// Base attack time of one second
 		Set(object_fields::BaseAttackTime, 2000);
 		Set<float>(object_fields::MinDamage, 2.0f);
-		Set<float>(object_fields::MaxDamage, 4.0f);
+		Set<float>(object_fields::MaxDamage, 2.0f);
 	}
 
 	void GameUnitS::TriggerDespawnTimer(GameTime despawnDelay)

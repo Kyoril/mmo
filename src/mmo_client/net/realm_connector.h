@@ -198,6 +198,8 @@ namespace mmo
 
 		void GiveMoney(uint32 amount);
 
+		void AddItem(uint32 itemId, uint8 count);
+
 		void CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		void SendReviveRequest();

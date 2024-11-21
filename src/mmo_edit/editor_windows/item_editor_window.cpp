@@ -547,6 +547,21 @@ namespace mmo
 				SLIDER_UINT32_PROP(durability, "Durability", 0, 200);
 			}
 
+			if (currentEntry.itemclass() == ItemClass::Weapon)
+			{
+				SLIDER_UINT32_PROP(delay, "Attack Speed (ms)", 0, 100000000);
+
+				float damage[2] = { currentEntry.damage().mindmg(), currentEntry.damage().maxdmg() };
+				if (ImGui::InputFloat2("Min / Max Damage", damage))
+				{
+					if (damage[1] < damage[0] || damage[0] > damage[1]) damage[1] = damage[0];
+
+					currentEntry.mutable_damage()->set_type(0);
+					currentEntry.mutable_damage()->set_mindmg(damage[0]);
+					currentEntry.mutable_damage()->set_maxdmg(damage[1]);
+				}
+			}
+
 			// Quality
 			int currentQuality = currentEntry.quality();
 			if (ImGui::Combo("Quality", &currentQuality, [](void*, int idx, const char** out_text)
@@ -569,6 +584,17 @@ namespace mmo
 			if (currentItemClass == item_class::Weapon || currentItemClass == item_class::Armor)
 			{
 				ImGui::Text("%s", s_inventoryTypeStrings[currentEntry.inventorytype()].c_str());
+
+				if (currentItemClass == item_class::Weapon)
+				{
+					ImGui::Text("%.0f - %.0f Damage", currentEntry.damage().mindmg(), currentEntry.damage().maxdmg());
+					ImGui::SameLine();
+					ImGui::Spacing();
+					ImGui::SameLine();
+
+					ImGui::Text("Speed %.2f", currentEntry.delay() / 1000.0f);
+					ImGui::Text("(%.2f damage per second)", ((currentEntry.damage().maxdmg() - currentEntry.damage().mindmg()) * 0.5f + currentEntry.damage().mindmg()) / (currentEntry.delay() / 1000.0f));
+				}
 			}
 			if (currentEntry.armor() > 0)
 			{
@@ -594,7 +620,6 @@ namespace mmo
 				{
 					ImGui::TextColored(ImColor(1.0f, 0.0f, 0.0f, 1.0f), "-%d %s", currentEntry.stats(i).value(), s_statTypeStrings[currentEntry.stats(i).type()]);
 				}
-				
 			}
 
 			if (!currentEntry.description().empty())
@@ -630,6 +655,11 @@ namespace mmo
 				if (ImGui::Button("Add Stat"))
 				{
 					currentEntry.add_stats()->set_type(0);
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Remove All"))
+				{
+					currentEntry.clear_stats();
 				}
 				ImGui::EndDisabled();
 

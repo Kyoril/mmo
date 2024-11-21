@@ -522,7 +522,7 @@ namespace mmo
 		Console::RegisterCommand("faceme", [this](const std::string& cmd, const std::string& args) { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 		Console::RegisterCommand("level", [this](const std::string& cmd, const std::string& args) { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
 		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
-
+		Console::RegisterCommand("additem", [this](const std::string& cmd, const std::string& args) { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
 #endif
 
 		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
@@ -539,6 +539,7 @@ namespace mmo
 		Console::UnregisterCommand("faceme");
 		Console::UnregisterCommand("level");
 		Console::UnregisterCommand("money");
+		Console::UnregisterCommand("additem");
 #endif
 
 		Console::UnregisterCommand("cast");
@@ -1968,6 +1969,35 @@ namespace mmo
 
 		const uint32 money = std::stoul(tokens[0]);
 		m_realmConnector.GiveMoney(money);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_AddItem(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: additem <item_id> [<count>]");
+			return;
+		}
+
+		const uint32 itemId = std::stoul(tokens[0]);
+		uint32 count = 1;
+
+		if (tokens.size() > 1)
+		{
+			count = std::stoul(tokens[1]);
+		}
+
+		m_realmConnector.AddItem(itemId, count);
 	}
 #endif
 

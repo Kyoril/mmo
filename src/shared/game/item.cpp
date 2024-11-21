@@ -38,10 +38,7 @@ namespace mmo
 		{
 			writer.WritePOD(stat);
 		}
-		for (auto damage : itemInfo.damage)
-		{
-			writer.WritePOD(damage);
-		}
+		writer.WritePOD(itemInfo.damage);
 
 		writer
 			<< io::write<uint32>(itemInfo.armor);
@@ -122,10 +119,7 @@ namespace mmo
 		{
 			reader.readPOD(stat);
 		}
-		for (auto& damage : itemInfo.damage)
-		{
-			reader.readPOD(damage);
-		}
+		reader.readPOD(itemInfo.damage);
 
 		reader
 			>> io::read<uint32>(itemInfo.armor);

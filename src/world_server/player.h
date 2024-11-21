@@ -153,6 +153,8 @@ namespace mmo
 		void OnCheatLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnCheatGiveMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:

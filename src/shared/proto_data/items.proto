@@ -9,7 +9,7 @@ message ItemStats {
 message ItemDamage {
 	required float mindmg = 1;
 	required float maxdmg = 2;
-	required uint32 type = 3;
+	optional uint32 type = 3;
 }
 
 message ItemSpell {
@@ -57,7 +57,7 @@ message ItemEntry {
 	optional uint32 maxstack = 25;
 	optional uint32 containerslots = 26;
 	repeated ItemStats stats = 27;
-	repeated ItemDamage damage = 28;
+	optional ItemDamage damage = 28;
 	optional uint32 armor = 29;
 	optional uint32 holyres= 30;
 	optional uint32 fireres = 31;

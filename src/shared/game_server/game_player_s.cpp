@@ -311,10 +311,30 @@ namespace mmo
 
 	void GamePlayerS::UpdateDamage()
 	{
+		uint32 attackSpeed = 2000;
 		float minDamage= 1.0f;
 		float maxDamage = 2.0f;
 
-		// TODO: Derive min and max damage from wielded weapon if any
+		// Derive min and max damage from wielded weapon if any
+		std::shared_ptr<GameItemS> mainHandWeapon = m_inventory.GetWeaponByAttackType(weapon_attack::BaseAttack, true, true);
+		if (mainHandWeapon != nullptr)
+		{
+			if (mainHandWeapon->GetEntry().has_damage())
+			{
+				minDamage = mainHandWeapon->GetEntry().damage().mindmg();
+				maxDamage = mainHandWeapon->GetEntry().damage().maxdmg();
+			}
+
+			attackSpeed = mainHandWeapon->GetEntry().delay();
+			if (attackSpeed == 0)
+			{
+				WLOG("Weapon " << mainHandWeapon->GetEntry().id() << " [" << mainHandWeapon->GetEntry().name() << "] had a delay of 0, using base attack speed instead!");
+				attackSpeed = 2000;
+			}
+		}
+
+		// Update attack speed value
+		Set<uint32>(object_fields::BaseAttackTime, attackSpeed);
 
 		float baseValue = 0.0f;
 

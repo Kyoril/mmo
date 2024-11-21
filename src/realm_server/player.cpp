@@ -720,6 +720,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDestroyMonster, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGiveMoney, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAddItem, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
@@ -965,35 +966,20 @@ namespace mmo
 			}
 		}
 
-		for (int i = 0; i < 5; ++i)
-		{
-			if (i >= itemEntry->damage_size())
-			{
-				info.damage[i].type = -1;
-				info.damage[i].min = 0;
-				info.damage[i].max = 0;
-			}
-			else
-			{
-				const auto& damage = itemEntry->damage(i);
-				info.damage[i].type = damage.type();
-				info.damage[i].min = damage.mindmg();
-				info.damage[i].max = damage.maxdmg();
-			}
-		}
+		info.damage.type = itemEntry->damage().type();
+		info.damage.min = itemEntry->damage().mindmg();
+		info.damage.max = itemEntry->damage().maxdmg();
 
 		for (int i = 0; i < 5; ++i)
 		{
 			if (i >= itemEntry->spells_size())
 			{
 				info.spells[i].spellId = -1;
-				info.damage[i].type = -1;
 			}
 			else
 			{
 				const auto& spell = itemEntry->spells(i);
 				info.spells[i].spellId = spell.spell();
-				info.damage[i].type = spell.trigger();
 			}
 		}
 

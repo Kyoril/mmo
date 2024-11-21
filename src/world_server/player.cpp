@@ -177,6 +177,9 @@ namespace mmo
 		case game::client_realm_packet::CheatGiveMoney:
 			OnCheatGiveMoney(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatAddItem:
+			OnCheatAddItem(opCode, buffer.size(), reader);
+			break;
 #endif
 
 		case game::client_realm_packet::CastSpell:
@@ -212,6 +215,9 @@ namespace mmo
 		case game::client_realm_packet::DestroyItem:
 			OnDestroyItem(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::GossipHello:
+			OnGossipHello(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::Loot:
 			OnLoot(opCode, buffer.size(), reader);
@@ -224,9 +230,6 @@ namespace mmo
 			break;
 		case game::client_realm_packet::LootRelease:
 			OnLootRelease(opCode, buffer.size(), reader);
-			break;
-		case game::client_realm_packet::GossipHello:
-			OnGossipHello(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::MoveStartForward:
@@ -1718,6 +1721,53 @@ namespace mmo
 
 		DLOG("Setting money of target to " << money);
 		targetPlayer->Set<uint32>(object_fields::Money, money);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatAddItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 itemId;
+		uint8 count;
+		if (!(contentReader >> io::read<uint32>(itemId) >> io::read<uint8>(count)))
+		{
+			ELOG("Failed to read CheatAddItem packet!");
+			return;
+		}
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GamePlayerS* targetPlayer = m_worldInstance->FindByGuid<GamePlayerS>(targetGuid);
+		if (!targetPlayer)
+		{
+			targetPlayer = m_character.get();
+		}
+
+		if (!targetPlayer)
+		{
+			ELOG("Unable to find target character!");
+			return;
+		}
+
+		if (count == 0)
+		{
+			count = 1;
+		}
+
+		const auto* itemEntry = m_project.items.getById(itemId);
+		if (!itemEntry)
+		{
+			ELOG("Item with item id " << itemId << " does not exist!");
+			return;
+		}
+
+		targetPlayer->GetInventory().CreateItems(*itemEntry, count);
 	}
 #endif
 
