@@ -281,9 +281,9 @@ namespace mmo
 		switch (stat)
 		{
 		case 1:
-			return unit_mods::StatAgility;
+			return unit_mods::StatStrength;
 		case 2:
-			return unit_mods::StatStamina;
+			return unit_mods::StatAgility;
 		case 3:
 			return unit_mods::StatIntellect;
 		case 4:
@@ -293,7 +293,7 @@ namespace mmo
 			break;
 		}
 
-		return unit_mods::StatStrength;
+		return unit_mods::StatStamina;
 	}
 
 	UnitMods GameUnitS::GetUnitModByPower(PowerType power)
