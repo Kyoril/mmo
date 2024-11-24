@@ -163,6 +163,25 @@ namespace mmo
 
 	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
 	{
+		if (ImGui::Button("New Rank"))
+		{
+			if (!currentEntry.has_baseid() || currentEntry.baseid() == 0)
+			{
+				currentEntry.set_baseid(currentEntry.id());
+			}
+
+			if (!currentEntry.has_rank() || currentEntry.rank() < 1)
+			{
+				currentEntry.set_rank(1);
+			}
+
+			proto::SpellEntry* copied = m_project.spells.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+			copied->set_rank(currentEntry.rank() + 1);
+			copied->set_baseid(currentEntry.baseid());
+		}
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
@@ -242,6 +261,18 @@ namespace mmo
 				}
 
 				ImGui::EndTable();
+			}
+
+			int32 rank = currentEntry.rank();
+			if (ImGui::InputInt("Rank", &rank))
+			{
+				currentEntry.set_rank(rank);
+			}
+
+			int32 baseId = currentEntry.baseid();
+			if (ImGui::InputInt("Base Spell", &baseId))
+			{
+				currentEntry.set_baseid(baseId);
 			}
 
 			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());

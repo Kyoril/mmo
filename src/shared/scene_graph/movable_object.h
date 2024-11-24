@@ -16,6 +16,7 @@ namespace mmo
 	class SceneNode;
 	class Scene;
 	class Camera;
+	class Node;
 
 	/// Base class of an object in a scene which is movable, so it has a node which it is attached to.
 	class MovableObject
@@ -31,7 +32,7 @@ namespace mmo
 		String m_name;
 		MovableObjectFactory* m_creator;
 		Scene* m_scene;
-		SceneNode* m_parentNode;
+		Node* m_parentNode;
 		bool m_parentIsTagPoint;
 		bool m_visible;
 		bool m_debugDisplay;
@@ -70,11 +71,13 @@ namespace mmo
 
 		[[nodiscard]] virtual const String& GetMovableType() const = 0;
 
+		[[nodiscard]] virtual Node* GetParentNode() const;
+
 		[[nodiscard]] virtual SceneNode* GetParentSceneNode() const;
 
 		[[nodiscard]] virtual bool ParentIsTagPoint() const noexcept { return m_parentIsTagPoint; }
 
-		virtual void NotifyAttachmentChanged(SceneNode* parent, bool isTagPoint = false);
+		virtual void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false);
 
 		virtual bool IsAttached() const;
 

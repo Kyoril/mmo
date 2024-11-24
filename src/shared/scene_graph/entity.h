@@ -11,6 +11,7 @@
 
 namespace mmo
 {
+	class TagPoint;
 	class AnimationState;
 	class RenderQueue;
 
@@ -63,8 +64,25 @@ namespace mmo
 		template<typename T>
 		T* GetUserObject() const { return static_cast<T*>(m_userObject); }
 
+		TagPoint* AttachObjectToBone(const String& boneName,
+			MovableObject& pMovable,
+			const Quaternion& offsetOrientation = Quaternion::Identity,
+			const Vector3& offsetPosition = Vector3::Zero);
+
+		MovableObject* DetachObjectFromBone(const String& movableName);
+
+		void DetachObjectFromBone(const MovableObject& obj);
+
+		void DetachAllObjectsFromBone();
+
 	protected:
 		void UpdateAnimations();
+
+		void AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint);
+
+		void DetachObjectImpl(MovableObject& pObject) const;
+
+		void DetachAllObjectsImpl();
 
 	protected:
 		MeshPtr m_mesh{nullptr};

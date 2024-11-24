@@ -1,6 +1,8 @@
 
 #include "skeleton_instance.h"
 
+#include "tag_point.h"
+
 namespace mmo
 {
 	SkeletonInstance::SkeletonInstance(SkeletonPtr masterCopy)
@@ -53,6 +55,28 @@ namespace mmo
 	const String& SkeletonInstance::GetName() const
 	{
 		return m_skeleton->GetName();
+	}
+
+	TagPoint* SkeletonInstance::CreateTagPointOnBone(Bone& bone, const Quaternion& offsetOrientation,
+		const Vector3& offsetPosition)
+	{
+		auto& tagPoint = m_tagPoints.emplace_back(std::make_unique<TagPoint>(m_nextTagPointHandle++, *this));
+		tagPoint->SetPosition(offsetPosition);
+		tagPoint->SetOrientation(offsetOrientation);
+		tagPoint->SetScale(Vector3::UnitScale);
+		tagPoint->SetBindingPose();
+		bone.AddChild(*tagPoint);
+
+		return tagPoint.get();
+	}
+
+	void SkeletonInstance::FreeTagPoint(TagPoint& tagPoint)
+	{
+		if (const auto it = std::find_if(m_tagPoints.begin(), m_tagPoints.end(),
+		                                 [&tagPoint](const std::unique_ptr<TagPoint>& tp) { return tp.get() == &tagPoint; }); it != m_tagPoints.end())
+		{
+			m_tagPoints.erase(it);
+		}
 	}
 
 	void SkeletonInstance::CloneBoneAndChildren(const Bone* source, Bone* parent)

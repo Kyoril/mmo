@@ -6,6 +6,7 @@
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
+#include "tag_point.h"
 
 namespace mmo
 {
@@ -88,6 +89,14 @@ namespace mmo
 		if (HasSkeleton())
 		{
 			UpdateAnimations();
+
+			for (const auto& childIt : m_childObjects)
+			{
+				if (const bool visible = childIt.second->ShouldBeVisible())
+				{
+					childIt.second->PopulateRenderQueue(renderQueue);
+				}
+			}
 		}
 	}
 
@@ -96,6 +105,73 @@ namespace mmo
 		for (auto& subEntity : m_subEntities)
 		{
 			subEntity->SetMaterial(material);
+		}
+	}
+
+	TagPoint* Entity::AttachObjectToBone(const String& boneName, MovableObject& pMovable, const Quaternion& offsetOrientation, const Vector3& offsetPosition)
+	{
+		ASSERT(!m_childObjects.contains(pMovable.GetName()));
+		ASSERT(!pMovable.IsAttached());
+		ASSERT(HasSkeleton());
+
+		Bone* bone = m_skeleton->GetBone(boneName);
+		ASSERT(bone);
+
+		TagPoint* tp = m_skeleton->CreateTagPointOnBone(*bone, offsetOrientation, offsetPosition);
+		tp->SetParentEntity(this);
+		tp->SetChildObject(&pMovable);
+
+		AttachObjectImpl(pMovable, *tp);
+
+		// Trigger update of bounding box if necessary
+		if (m_parentNode)
+		{
+			m_parentNode->NeedUpdate();
+		}
+		
+		return tp;
+	}
+
+	MovableObject* Entity::DetachObjectFromBone(const String& movableName)
+	{
+		if (const auto it = m_childObjects.find(movableName); it != m_childObjects.end())
+		{
+			MovableObject* obj = it->second;
+			DetachObjectImpl(*obj);
+			m_childObjects.erase(it);
+
+			if (m_parentNode)
+			{
+				m_parentNode->NeedUpdate();
+			}
+
+			return obj;
+		}
+
+		return nullptr;
+	}
+
+	void Entity::DetachObjectFromBone(const MovableObject& obj)
+	{
+		if (const auto it = m_childObjects.find(obj.GetName()); it != m_childObjects.end())
+		{
+			DetachObjectImpl(*it->second);
+			m_childObjects.erase(it);
+
+			if (m_parentNode)
+			{
+				m_parentNode->NeedUpdate();
+			}
+		}
+	}
+
+	void Entity::DetachAllObjectsFromBone()
+	{
+		DetachAllObjectsImpl();
+
+		if (m_parentNode)
+		{
+			m_parentNode->NeedUpdate();
 		}
 	}
 
@@ -115,6 +191,33 @@ namespace mmo
 
 		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
 		m_boneMatrixBuffer->Update(m_boneMatrices.data());
+	}
+
+	void Entity::AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint)
+	{
+		assert(!m_childObjects.contains(pMovable.GetName()));
+
+		m_childObjects[pMovable.GetName()] = &pMovable;
+		pMovable.NotifyAttachmentChanged(&pAttachingPoint, true);
+	}
+
+	void Entity::DetachObjectImpl(MovableObject& pObject) const
+	{
+		auto tp = static_cast<TagPoint*>(pObject.GetParentNode());
+
+		// free the TagPoint so we can reuse it later
+		m_skeleton->FreeTagPoint(*tp);
+		pObject.NotifyAttachmentChanged(nullptr);
+	}
+
+	void Entity::DetachAllObjectsImpl()
+	{
+		for (auto& [name, obj] : m_childObjects)
+		{
+			DetachObjectImpl(*obj);
+		}
+
+		m_childObjects.clear();
 	}
 
 	void Entity::SetCurrentCamera(Camera& cam)

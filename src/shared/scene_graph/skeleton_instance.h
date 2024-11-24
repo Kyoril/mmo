@@ -4,6 +4,7 @@
 
 namespace mmo
 {
+	class TagPoint;
 	class AnimationStateSet;
 
 	class SkeletonInstance : public Skeleton
@@ -29,6 +30,10 @@ namespace mmo
 
 		const String& GetName() const override;
 
+		TagPoint* CreateTagPointOnBone(Bone& bone, const Quaternion& offsetOrientation = Quaternion::Identity, const Vector3& offsetPosition = Vector3::Zero);
+
+		void FreeTagPoint(TagPoint& tagPoint);
+
 	protected:
 		SkeletonPtr m_skeleton;
 
@@ -38,5 +43,10 @@ namespace mmo
 		void LoadImpl() override;
 
 		void UnloadImpl() override;
+
+	private:
+		std::vector<std::unique_ptr<TagPoint>> m_tagPoints;
+
+		uint16 m_nextTagPointHandle{ 0 };
 	};
 }

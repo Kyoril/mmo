@@ -236,7 +236,7 @@ namespace mmo
 		return intersects;
 	}
 
-	void Light::NotifyAttachmentChanged(SceneNode* parent, const bool isTagPoint)
+	void Light::NotifyAttachmentChanged(Node* parent, const bool isTagPoint)
 	{
 		m_derivedTransformDirty = true;
 

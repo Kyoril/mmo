@@ -111,7 +111,7 @@ namespace mmo
 		[[nodiscard]] bool IsInLightRange(const AABB& aabb) const;
 
 	public:
-		virtual void NotifyAttachmentChanged(SceneNode* parent, bool isTagPoint) override;
+		virtual void NotifyAttachmentChanged(Node* parent, bool isTagPoint) override;
 
 		virtual void NotifyMoved() override;
 

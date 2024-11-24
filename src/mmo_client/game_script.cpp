@@ -1029,6 +1029,7 @@ namespace mmo
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
 				.def_readonly("description", &proto_client::SpellEntry::description)
+				.def_readonly("rank", &proto_client::SpellEntry::rank)
 				.def_readonly("cost", &proto_client::SpellEntry::cost)
 				.def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
 				.def_readonly("powertype", &proto_client::SpellEntry::powertype)

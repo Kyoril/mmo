@@ -14,7 +14,7 @@ namespace mmo
 		{
 		}
 
-		virtual ~GamePlayerC() override = default;
+		virtual ~GamePlayerC() override;
 
 		virtual ObjectTypeId GetTypeId() const override
 		{
@@ -39,5 +39,8 @@ namespace mmo
 
 	protected:
 		String m_name;
+
+		TagPoint* m_shieldAttachment{ nullptr };
+		Entity* m_shieldEntity{ nullptr };
 	};
 }

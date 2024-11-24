@@ -5,6 +5,7 @@
 #include "scene_node.h"
 #include "render_queue.h"
 #include "scene.h"
+#include "tag_point.h"
 
 
 namespace mmo
@@ -64,21 +65,34 @@ namespace mmo
 		{
 			if (m_parentIsTagPoint)
 			{
-				// TODO
+				static_cast<TagPoint*>(m_parentNode)->GetParentEntity()->DetachObjectFromBone(*this);
 			}
 			else
 			{
-				m_parentNode->DetachObject(*this);
+				static_cast<SceneNode*>(m_parentNode)->DetachObject(*this);
 			}
 		}
 	}
 
-	SceneNode* MovableObject::GetParentSceneNode() const
+	Node* MovableObject::GetParentNode() const
 	{
 		return m_parentNode;
 	}
 
-	void MovableObject::NotifyAttachmentChanged(SceneNode* parent, const bool isTagPoint)
+	SceneNode* MovableObject::GetParentSceneNode() const
+	{
+		if (m_parentIsTagPoint)
+		{
+			TagPoint* tagPoint = static_cast<TagPoint*>(m_parentNode);
+			return tagPoint->GetParentEntity()->GetParentSceneNode();
+		}
+		else
+		{
+			return static_cast<SceneNode*>(m_parentNode);
+		}
+	}
+
+	void MovableObject::NotifyAttachmentChanged(Node* parent, const bool isTagPoint)
 	{
         const bool different = parent != m_parentNode;
 
@@ -110,27 +124,28 @@ namespace mmo
 		{
 			if (m_parentIsTagPoint)
 			{
-				// TODO
+				TagPoint* tp = static_cast<TagPoint*>(m_parentNode);
+				tp->GetParentEntity()->DetachObjectFromBone(*this);
 			}
 			else
 			{
-				m_parentNode->DetachObject(*this);
+				static_cast<SceneNode*>(m_parentNode)->DetachObject(*this);
 			}
 		}
 	}
 
 	bool MovableObject::IsInScene() const
 	{
-		if (m_parentNode != 0)
+		if (m_parentNode != nullptr)
 		{
 			if (m_parentIsTagPoint)
 			{
-				// TODO
+				TagPoint* tp = static_cast<TagPoint*>(m_parentNode);
+				return tp->GetParentEntity()->IsInScene();
 			}
-			else
-			{
-				return m_parentNode->IsInSceneGraph();
-			}
+
+			SceneNode* sn = static_cast<SceneNode*>(m_parentNode);
+			return sn->IsInSceneGraph();
 		}
 
 		return false;
