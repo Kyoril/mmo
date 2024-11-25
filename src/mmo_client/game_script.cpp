@@ -933,10 +933,11 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
+		, m_vendorClient(vendorClient)
 		, m_loginState(std::move(loginState))
 		, m_project(project)
 	{

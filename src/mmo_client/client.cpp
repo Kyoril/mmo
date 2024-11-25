@@ -335,7 +335,7 @@ namespace mmo
 
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
-		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector);
+		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
@@ -347,7 +347,7 @@ namespace mmo
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, loginState, s_project);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

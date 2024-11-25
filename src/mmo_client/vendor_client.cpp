@@ -1,12 +1,14 @@
 
 #include "vendor_client.h"
 
+#include "frame_ui/frame_mgr.h"
 #include "game/vendor.h"
 
 namespace mmo
 {
-	VendorClient::VendorClient(RealmConnector& connector)
+	VendorClient::VendorClient(RealmConnector& connector, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache)
 		: m_realmConnector(connector)
+		, m_itemCache(itemCache)
 	{
 	}
 
@@ -71,12 +73,64 @@ namespace mmo
 				break;
 			}
 
+			m_vendorGuid = 0;
+			FrameManager::Get().TriggerLuaEvent("VENDOR_CLOSED");
+
 			return PacketParseResult::Pass;
 		}
 
 		DLOG("Received vendor inventory list with " << static_cast<int32>(listCount) << " items!");
 
-		// TODO: Read item list
+		// Clear vendor item count
+		m_vendorItems.clear();
+		m_vendorItems.reserve(listCount);
+		m_vendorGuid = vendorGuid;
+		m_realmConnector.SetSelection(m_vendorGuid);
+
+		for (uint8 i = 0; i < listCount; ++i)
+		{
+			VendorItemEntry entry;
+			if (!(packet 
+				>> io::read<uint32>(entry.index)
+				>> io::read<uint32>(entry.itemId) 
+				>> io::read<uint32>(entry.displayId) 
+				>> io::read<uint32>(entry.maxCount) 
+				>> io::read<uint32>(entry.buyPrice)
+				>> io::read<uint32>(entry.durability) 
+				>> io::read<uint32>(entry.buyCount) 
+				>> io::read<uint32>(entry.extendedCost)))
+			{
+				ELOG("Failed to read vendor item entry!");
+				return PacketParseResult::Disconnect;
+			}
+
+			// Check if the item is a valid item
+			m_vendorPendingRequestCount++;
+			m_vendorItems.push_back(entry);
+
+			m_itemCache.Get(entry.itemId, [&](uint64 id, const ItemInfo& itemInfo)
+				{
+					for (auto& lootItem : m_vendorItems)
+					{
+						if (lootItem.itemId == id)
+						{
+							lootItem.itemData = &itemInfo;
+						}
+					}
+
+					if (m_vendorPendingRequestCount == 1 && m_vendorGuid != 0)
+					{
+						m_vendorPendingRequestCount = 0;
+
+						// Notify the loot frame manager
+						FrameManager::Get().TriggerLuaEvent("VENDOR_SHOW");
+					}
+					else
+					{
+						m_vendorPendingRequestCount--;
+					}
+				});
+		}
 
 		return PacketParseResult::Pass;
 	}

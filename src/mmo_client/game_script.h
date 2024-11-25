@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class VendorClient;
 	class LootClient;
 
 	namespace proto_client
@@ -45,6 +46,7 @@ namespace mmo
 			LoginConnector& loginConnector,
 			RealmConnector& realmConnector,
 			LootClient& lootClient,
+			VendorClient& vendorClient,
 			std::shared_ptr<LoginState> loginState,
 			const proto_client::Project& project);
 
@@ -83,6 +85,8 @@ namespace mmo
 		RealmConnector& m_realmConnector;
 
 		LootClient& m_lootClient;
+
+		VendorClient& m_vendorClient;
 
 		/// The current lua state.
 		LuaStatePtr m_luaState;

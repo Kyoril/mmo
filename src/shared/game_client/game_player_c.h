@@ -42,5 +42,8 @@ namespace mmo
 
 		TagPoint* m_shieldAttachment{ nullptr };
 		Entity* m_shieldEntity{ nullptr };
+
+		TagPoint* m_weaponAttachment{ nullptr };
+		Entity* m_weaponEntity{ nullptr };
 	};
 }
