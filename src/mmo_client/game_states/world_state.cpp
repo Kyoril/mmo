@@ -21,6 +21,7 @@
 
 #include "game_client/object_mgr.h"
 #include "spell_projectile.h"
+#include "vendor_client.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
 #include "base/timer_queue.h"
@@ -126,7 +127,7 @@ namespace mmo
 
 	IInputControl* WorldState::s_inputControl = nullptr;
 
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache)
 		: GameState(gameStateManager)
@@ -138,6 +139,7 @@ namespace mmo
 		, m_project(project)
 		, m_timers(timers)
 		, m_lootClient(lootClient)
+		, m_vendorClient(vendorClient)
 	{
 	}
 
@@ -513,6 +515,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
 		m_lootClient.Initialize();
+		m_vendorClient.Initialize();
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -546,6 +549,7 @@ namespace mmo
 		Console::UnregisterCommand("startattack");
 
 		m_lootClient.Shutdown();
+		m_vendorClient.Shutdown();
 
 		m_worldPacketHandlers.Clear();
 	}

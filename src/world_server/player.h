@@ -6,6 +6,7 @@
 #include "vector_sink.h"
 #include "game/character_data.h"
 #include "game/chat_type.h"
+#include "game/vendor.h"
 #include "game_server/game_object_s.h"
 #include "game_server/game_player_s.h"
 #include "game_server/tile_index.h"
@@ -18,6 +19,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class VendorEntry;
 		class Project;
 	}
 
@@ -161,6 +163,12 @@ namespace mmo
 		void OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
 		void OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
+
+		void HandleVendorGossip(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
+
+		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
+
+		void SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result);
 
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;

@@ -36,6 +36,7 @@
 
 namespace mmo
 {
+	class VendorClient;
 	class TimerQueue;
 
 	namespace game
@@ -69,7 +70,8 @@ namespace mmo
 			RealmConnector& realmConnector,
 			const proto_client::Project& project, 
 			TimerQueue& timers,
-			LootClient& lootClient, 
+			LootClient& lootClient,
+			VendorClient& vendorClient,
 			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache);
@@ -284,6 +286,7 @@ namespace mmo
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient& m_lootClient;
+		VendorClient& m_vendorClient;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 

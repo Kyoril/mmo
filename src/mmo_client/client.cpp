@@ -33,6 +33,7 @@
 #include "cursor.h"
 #include "loot_client.h"
 #include "stream_sink.h"
+#include "vendor_client.h"
 #include "game_states/world_state.h"
 #include "base/timer_queue.h"
 
@@ -239,6 +240,7 @@ namespace mmo
 	static proto_client::Project s_project;
 
 	std::unique_ptr<LootClient> s_lootClient;
+	std::unique_ptr<VendorClient> s_vendorClient;
 
 	typedef DBCache<ItemInfo, game::client_realm_packet::ItemQuery> DBItemCache;
 	typedef DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery> DBCreatureCache;
@@ -333,6 +335,7 @@ namespace mmo
 
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
+		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector);
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
@@ -340,7 +343,7 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_itemCache, *s_creatureCache, *s_questCache);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
@@ -376,6 +379,9 @@ namespace mmo
 		
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
+
+		s_vendorClient.release();
+		s_lootClient.release();
 
 		DestroyFrameUI();
 

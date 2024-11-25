@@ -14,6 +14,7 @@
 #include "game_server/game_bag_s.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
+#include "game/vendor.h"
 
 namespace mmo
 {
@@ -1437,13 +1438,6 @@ namespace mmo
 			return;
 		}
 
-		constexpr float interactionDistance = 5.0f;
-		if (m_character->GetSquaredDistanceTo(unit->GetPosition(), true) > interactionDistance * interactionDistance)
-		{
-			WLOG("Player tried to gossip with a creature which is too far away!");
-			return;
-		}
-
 		DLOG("Requested gossip menu from npc " << log_hex_digit(objectGuid) << " (" << unit->GetEntry().name() << ")");
 
 		// Is this unit a trainer?
@@ -1460,6 +1454,10 @@ namespace mmo
 			vendor = m_project.vendors.getById(unitEntry.vendorentry());
 		}
 
+		if (vendor && !trainer)
+		{
+			HandleVendorGossip(*vendor, *unit);
+		}
 	}
 
 #if MMO_WITH_DEV_COMMANDS
@@ -1789,6 +1787,83 @@ namespace mmo
 			packet << io::write<uint32>(spellEntry.id());
 			packet.Finish();
 		});
+	}
+
+	void Player::HandleVendorGossip(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit)
+	{
+		constexpr float interactionDistance = 5.0f;
+
+		if (!vendorUnit.IsAlive())
+		{
+			SendVendorInventoryError(vendorUnit.GetGuid(), vendor_result::VendorIsDead);
+		}
+		else if (vendorUnit.UnitIsEnemy(*m_character))
+		{
+			SendVendorInventoryError(vendorUnit.GetGuid(), vendor_result::VendorHostile);
+		}
+		else if (m_character->GetSquaredDistanceTo(vendorUnit.GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			SendVendorInventoryError(vendorUnit.GetGuid(), vendor_result::VendorTooFarAway);
+		}
+		else if (!m_character->IsAlive())
+		{
+			SendVendorInventoryError(vendorUnit.GetGuid(), vendor_result::CantShopWhileDead);
+		}
+		else if (vendor.items_size() == 0)
+		{
+			SendVendorInventoryError(vendorUnit.GetGuid(), vendor_result::VendorHasNoItems);
+		}
+		else
+		{
+			SendVendorInventory(vendor, vendorUnit);
+		}
+	}
+
+	void Player::SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit)
+	{
+		SendPacket([&vendor, &vendorUnit, this](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ListInventory);
+			packet
+				<< io::write<uint64>(vendorUnit.GetGuid())
+				<< io::write<uint8>(vendor.items_size());
+
+				uint32 index = 0;
+				for (const auto& listEntry : vendor.items())
+				{
+					const proto::ItemEntry* item = m_project.items.getById(listEntry.item());
+					if (!item)
+					{
+						continue;
+					}
+
+					packet
+						<< io::write<uint32>(index++)
+						<< io::write<uint32>(listEntry.item())
+						<< io::write<uint32>(item->displayid())
+						<< io::write<uint32>(listEntry.maxcount())
+						<< io::write<uint32>(item->buyprice())
+						<< io::write<uint32>(item->durability())
+						<< io::write<uint32>(item->buycount())
+						<< io::write<uint32>(listEntry.extendedcost())
+						;
+				}
+
+			packet.Finish();
+		});
+	}
+
+	void Player::SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result)
+	{
+		SendPacket([&vendorGuid, &result](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ListInventory);
+				packet
+					<< io::write<uint64>(vendorGuid)
+					<< io::write<uint8>(0)		// Inventory size is 0 which opens the door for error event handling
+					<< io::write<uint8>(result);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnAttackSwingEvent(AttackSwingEvent attackSwingEvent)

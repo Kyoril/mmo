@@ -231,6 +231,8 @@ namespace mmo
 				MoveJump,
 				MoveFallLand,
 
+				ListInventory,
+
 				/// Counter constant
 				Count_,
 			};
