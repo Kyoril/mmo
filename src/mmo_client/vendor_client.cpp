@@ -29,8 +29,7 @@ namespace mmo
 
 	uint32 VendorClient::GetNumVendorItems() const
 	{
-		// TODO
-		return 0;
+		return m_vendorItems.size();
 	}
 
 	PacketParseResult VendorClient::OnListInventory(game::IncomingPacket& packet)

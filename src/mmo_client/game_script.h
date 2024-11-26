@@ -54,6 +54,8 @@ namespace mmo
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
+		void GetVendorItemInfo(int32 slot, String& outName, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const;
+
 	private:
 		/// Registers global functions to the internal lua state.
 		void RegisterGlobalFunctions();

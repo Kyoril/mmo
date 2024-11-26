@@ -17,7 +17,7 @@ namespace mmo
 	void ButtonRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		std::string activeState = "Disabled";
-		if (m_frame->IsEnabled() && m_button)
+		if (m_frame->IsEnabled(false) && m_button)
 		{
 			switch(m_button->GetButtonState())
 			{

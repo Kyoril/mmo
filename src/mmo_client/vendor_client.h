@@ -10,24 +10,6 @@ namespace mmo
 	class VendorClient final : public NonCopyable
 	{
 	public:
-		VendorClient(RealmConnector& connector, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache);
-		~VendorClient();
-
-	public:
-		void Initialize();
-
-		void Shutdown();
-
-	private:
-		uint32 GetNumVendorItems() const;
-
-	private:
-		PacketParseResult OnListInventory(game::IncomingPacket& packet);
-
-	private:
-		RealmConnector& m_realmConnector;
-		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
-		RealmConnector::PacketHandlerHandleContainer m_packetHandlerConnections;
 
 		struct VendorItemEntry
 		{
@@ -41,6 +23,28 @@ namespace mmo
 			uint32 extendedCost;
 			const ItemInfo* itemData = nullptr;
 		};
+
+	public:
+		VendorClient(RealmConnector& connector, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache);
+		~VendorClient();
+
+	public:
+		void Initialize();
+
+		void Shutdown();
+
+	public:
+		uint32 GetNumVendorItems() const;
+
+		const std::vector<VendorItemEntry>& GetVendorItems() const { return m_vendorItems; }
+
+	private:
+		PacketParseResult OnListInventory(game::IncomingPacket& packet);
+
+	private:
+		RealmConnector& m_realmConnector;
+		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
+		RealmConnector::PacketHandlerHandleContainer m_packetHandlerConnections;
 
 		std::vector<VendorItemEntry> m_vendorItems;
 		uint32 m_vendorPendingRequestCount = 0;

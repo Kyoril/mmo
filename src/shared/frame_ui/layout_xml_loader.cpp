@@ -95,6 +95,7 @@ namespace mmo
 	static const std::string BorderComponentLeftSizeAttribute("leftSize");
 	static const std::string BorderComponentRightSizeAttribute("rightSize");
 	static const std::string BorderComponentBottomSizeAttribute("bottomSize");
+	static const std::string BorderComponentTintAttribute("tint");
 
 
 	void LoadUIFile(const std::string& filename);
@@ -859,6 +860,7 @@ namespace mmo
 		{
 			component->SetTilingMode(ImageTilingModeByName(tilingAttr));
 		}
+
 		// Apply tint
 		if (attributes.Exists(ImageComponentTintAttribute))
 		{
@@ -891,6 +893,7 @@ namespace mmo
 
 		const std::string texture(attributes.GetValueAsString(ImageComponentTextureAttribute));
 		const float borderSize = attributes.GetValueAsFloat(BorderComponentBorderSizeAttribute);
+		const std::string tint(attributes.GetValueAsString(BorderComponentTintAttribute));
 
 		// Check for texture name existance
 		if (texture.empty())
@@ -910,6 +913,19 @@ namespace mmo
 			const float right = attributes.GetValueAsInt(BorderComponentRightSizeAttribute);
 			const float bottom = attributes.GetValueAsInt(BorderComponentBottomSizeAttribute);
 			borderComponent->SetBorderSize(Rect(left, top, right, bottom));
+		}
+
+		// Apply tint
+		if (attributes.Exists(BorderComponentTintAttribute))
+		{
+			argb_t argb;
+
+			std::stringstream colorStream;
+			colorStream.str(tint);
+			colorStream.clear();
+
+			colorStream >> std::hex >> argb;
+			borderComponent->SetTint(argb);
 		}
 
 		m_component = std::move(borderComponent);

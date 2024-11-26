@@ -15,6 +15,7 @@
 
 #include "cursor.h"
 #include "loot_client.h"
+#include "vendor_client.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game_client/game_bag_c.h"
@@ -953,6 +954,29 @@ namespace mmo
 		RegisterGlobalFunctions();
 	}
 
+	void GameScript::GetVendorItemInfo(int32 slot, String& outName, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const
+	{
+		const auto& vendorItems = m_vendorClient.GetVendorItems();
+		if (slot < 0 || slot >= vendorItems.size())
+		{
+			outName.clear();
+			outIcon.clear();
+			outPrice = 0;
+			outQuantity = 0;
+			outNumAvailable = 0;
+			outUsable = false;
+			return;
+		}
+
+		ASSERT(vendorItems[slot].itemData);
+		outName = vendorItems[slot].itemData->name;
+		outIcon = vendorItems[slot].itemData->icon;
+		outPrice = vendorItems[slot].buyPrice + vendorItems[slot].extendedCost;
+		outQuantity = vendorItems[slot].buyCount;
+		outNumAvailable = vendorItems[slot].maxCount;
+		outUsable = false;
+	}
+
 	void GameScript::RegisterGlobalFunctions()
 	{
 		// Check for double initialization
@@ -1092,6 +1116,11 @@ namespace mmo
 			luabind::def("GetInventorySlotCount", &Script_GetInventorySlotCount),
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
+
+
+			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
+			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+
 
 			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),

@@ -21,6 +21,10 @@ namespace mmo
 	public:
 		inline void SetBorderSize(const Rect borderSizeRect) { m_borderSizeRect = borderSizeRect; }
 
+		void SetTint(argb_t tint);
+
+		inline argb_t GetTint() const noexcept { return m_tint; }
+
 	public:
 		virtual std::unique_ptr<FrameComponent> Copy() const override;
 
@@ -38,5 +42,7 @@ namespace mmo
 		Rect m_borderSizeRect;
 		/// Border inset.
 		float m_borderInset;
+		/// Color tint.
+		Color m_tint = Color::White;
 	};
 }

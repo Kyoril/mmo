@@ -354,6 +354,11 @@ namespace mmo
 
 	bool Frame::IsEnabled(bool localOnly) const
 	{
+		if (!m_enabled)
+		{
+			return false;
+		}
+
 		if (localOnly || m_parent == nullptr || IsRootFrame())
 		{
 			return m_enabled;
