@@ -189,8 +189,10 @@ namespace mmo
 
 	Frame::Pointer Frame::Clone()
 	{
+		static uint32 s_counter = 0;
+
 		// Duplicate list item and copy attributes over
-		auto newFrame = FrameManager::Get().Create(m_type, "", true);
+		auto newFrame = FrameManager::Get().Create(m_type, m_name + "_" + std::to_string(s_counter++), true);
 		Copy(*newFrame);
 
 		// Return new frame

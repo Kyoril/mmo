@@ -530,7 +530,7 @@ namespace mmo
 
 	FramePtr FrameManager::Create(const std::string& type, const std::string & name, bool isCopy)
 	{
-		if (!isCopy)
+		if (!name.empty())
 		{
 			const auto it = m_framesByName.find(name);
 			if (it != m_framesByName.end())
@@ -550,7 +550,7 @@ namespace mmo
 		// Create the new frame using the frame factory
 		auto newFrame = factoryIt->second(name);
 
-		if (!isCopy)
+		if (!name.empty())
 		{
 			m_framesByName[name] = newFrame;
 
