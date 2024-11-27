@@ -27,6 +27,14 @@ namespace mmo
 		m_packetHandlerConnections.Clear();
 	}
 
+	void VendorClient::SellItem(uint64 itemGuid) const
+	{
+		ASSERT(itemGuid != 0);
+		ASSERT(m_vendorGuid != 0);
+
+		m_realmConnector.SellItem(m_vendorGuid, itemGuid);
+	}
+
 	uint32 VendorClient::GetNumVendorItems() const
 	{
 		return m_vendorItems.size();

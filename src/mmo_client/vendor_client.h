@@ -34,6 +34,10 @@ namespace mmo
 		void Shutdown();
 
 	public:
+		bool HasVendor() const { return m_vendorGuid != 0; }
+
+		void SellItem(uint64 itemGuid) const;
+
 		uint32 GetNumVendorItems() const;
 
 		const std::vector<VendorItemEntry>& GetVendorItems() const { return m_vendorItems; }

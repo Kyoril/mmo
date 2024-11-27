@@ -62,6 +62,8 @@ namespace mmo
 
 		void PickupContainerItem(::uint32 slot) const;
 
+		void UseContainerItem(::uint32 slot) const;
+
 		void TargetUnit(const char* name) const;
 
 		void LootSlot(int32 slot, bool force) const;

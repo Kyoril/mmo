@@ -232,6 +232,8 @@ namespace mmo
 
 		void GossipHello(uint64 targetGuid);
 
+		void SellItem(uint64 vendorGuid, uint64 itemGuid);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

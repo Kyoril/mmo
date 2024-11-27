@@ -239,7 +239,7 @@ namespace mmo
 			BuybackPrice_1 = VendorBuybackSlot_1 + 12,
 			BuybackTimestamp_1 = BuybackPrice_1 + 12,
 
-			PlayerFieldCount = VendorBuybackSlot_1 + 24,
+			PlayerFieldCount = BuybackTimestamp_1 + 12,
 		};
 
 		enum ItemFields

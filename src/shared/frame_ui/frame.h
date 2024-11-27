@@ -271,6 +271,8 @@ namespace mmo
 
 		float GetHeight() const { return m_pixelSize.height; }
 
+		float GetTextWidth();
+
 		float GetTextHeight();
 
 		/// Clears an anchor point.
@@ -395,7 +397,7 @@ namespace mmo
 
 		virtual void OnMouseLeave();
 
-		virtual void OnClick();
+		virtual void OnClick(MouseButton button);
 
 	protected:
 		virtual void DrawSelf();

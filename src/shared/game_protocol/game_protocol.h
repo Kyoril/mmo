@@ -112,7 +112,9 @@ namespace mmo
 
 				GossipHello,
 
-				CheatAddItem,				// GAME MASTER		
+				CheatAddItem,				// GAME MASTER
+
+				SellItem,
 
 				/// Counter constant
 				Count_,

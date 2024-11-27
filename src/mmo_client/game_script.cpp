@@ -1047,7 +1047,8 @@ namespace mmo
 				.def_readonly("armor", &ItemInfo::armor)
 				.def_readonly("block", &ItemInfo::block)
 				.def_readonly("maxdurability", &ItemInfo::maxdurability)
-				.def_readonly("icon", &ItemInfo::icon)),
+				.def_readonly("icon", &ItemInfo::icon)
+				.def_readonly("sellPrice", &ItemInfo::sellPrice)),
 
 			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
@@ -1117,13 +1118,14 @@ namespace mmo
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 
-
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 
 
 			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
+
+			luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot) { this->UseContainerItem(slot); }),
 
 			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
 			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
@@ -1177,6 +1179,21 @@ namespace mmo
 			// Lock the old item slot
 		}
 
+	}
+
+	void GameScript::UseContainerItem(uint32 slot) const
+	{
+		if (m_vendorClient.HasVendor())
+		{
+			// Get item at slot
+			std::shared_ptr<GameItemC> item = GetItemFromSlot("player", slot);
+			if (!item)
+			{
+				return;
+			}
+
+			m_vendorClient.SellItem(item->GetGuid());
+		}
 	}
 
 	void GameScript::TargetUnit(const char* name) const

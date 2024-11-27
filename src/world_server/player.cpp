@@ -233,6 +233,10 @@ namespace mmo
 			OnLootRelease(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::SellItem:
+			OnSellItem(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -1458,6 +1462,51 @@ namespace mmo
 		{
 			HandleVendorGossip(*vendor, *unit);
 		}
+	}
+
+	void Player::OnSellItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 vendorGuid, itemGuid;
+		if (!(contentReader >> io::read<uint64>(vendorGuid) >> io::read<uint64>(itemGuid)))
+		{
+			WLOG("Failed to read vendor guid and item guid");
+			return;
+		}
+
+		// Find vendor
+		GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
+		if (!vendor)
+		{
+			ELOG("Can't find vendor!");
+			return;
+		}
+
+		uint16 itemSlot = 0;
+		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
+		{
+			ELOG("Can't find item!");
+			return;
+		}
+
+		// Find the item by it's guid
+		auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
+		if (!item)
+		{
+			ELOG("Can't find item at slot!");
+			return;
+		}
+
+		uint32 stack = item->GetStackCount();
+		uint32 money = stack * item->GetEntry().sellprice();
+		if (money == 0)
+		{
+			ELOG("Can't sell item!");
+			return;
+		}
+
+		// TODO: Overflow protection!
+		m_character->GetInventory().RemoveItem(itemSlot, stack, true);
+		m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + money);
 	}
 
 #if MMO_WITH_DEV_COMMANDS

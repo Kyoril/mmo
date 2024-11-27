@@ -516,6 +516,17 @@ namespace mmo
 		}
 	}
 
+	float Frame::GetTextWidth()
+	{
+		const FontPtr font = GetFont();
+		if (!font)
+		{
+			return 0.0f;
+		}
+
+		return font->GetTextWidth(m_text, 1.0f /*FrameManager::Get().GetUIScale().y*/);
+	}
+
 	float Frame::GetTextHeight()
 	{
 		const FontPtr font = GetFont();
@@ -909,13 +920,35 @@ namespace mmo
 		}
 	}
 
-	void Frame::OnClick()
+	void Frame::OnClick(MouseButton button)
 	{
+		static const char* buttonNames[] = { "LEFT", "RIGHT", "MIDDLE", "BUTTON4", "BUTTON5" };
+
 		if (m_onClick.is_valid())
 		{
 			try
 			{
-				m_onClick(this);
+				const char* buttonName = nullptr;
+				switch(button)
+				{
+				case Left:
+					buttonName = buttonNames[0];
+					break;
+				case Right:
+					buttonName = buttonNames[1];
+					break;
+				case Middle:
+					buttonName = buttonNames[2];
+					break;
+				case Button4:
+					buttonName = buttonNames[3];
+					break;
+				case Button5:
+					buttonName = buttonNames[4];
+					break;
+				}
+
+				m_onClick(this, buttonName);
 			}
 			catch(const luabind::error& e)
 			{
@@ -1205,13 +1238,10 @@ namespace mmo
 
 	void Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
-		if (button == Left)
+		if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 		{
-			if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
-			{
-				// Trigger lua clicked event handler if there is any
-				OnClick();
-			}
+			// Trigger lua clicked event handler if there is any
+			OnClick(button);
 		}
 
 		// Simply raise the signal
