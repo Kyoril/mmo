@@ -1126,6 +1126,7 @@ namespace mmo
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
 			luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot) { this->UseContainerItem(slot); }),
+			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
 
 			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
 			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
@@ -1343,6 +1344,11 @@ namespace mmo
 		}
 
 		return bag->Get<uint32>(object_fields::NumSlots);
+	}
+
+	void GameScript::BuyVendorItem(uint32 slot, uint8 count) const
+	{
+		m_vendorClient.BuyItem(slot, count);
 	}
 
 	void GameScript::Script_ReviveMe() const

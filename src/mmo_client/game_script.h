@@ -80,6 +80,8 @@ namespace mmo
 
 		int32 GetContainerNumSlots(int32 container) const;
 
+		void BuyVendorItem(uint32 slot, uint8 count) const;
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 

@@ -30,9 +30,31 @@ namespace mmo
 	void VendorClient::SellItem(uint64 itemGuid) const
 	{
 		ASSERT(itemGuid != 0);
-		ASSERT(m_vendorGuid != 0);
+
+		if (!m_vendorGuid)
+		{
+			ELOG("No vendor available right now!");
+			return;
+		}
 
 		m_realmConnector.SellItem(m_vendorGuid, itemGuid);
+	}
+
+	void VendorClient::BuyItem(uint32 index, uint8 count) const
+	{
+		if (!m_vendorGuid)
+		{
+			ELOG("No vendor available right now!");
+			return;
+		}
+
+		if (index >= m_vendorItems.size())
+		{
+			ELOG("Invalid index to buy from!");
+			return;
+		}
+
+		m_realmConnector.BuyItem(m_vendorGuid, m_vendorItems[index].itemId, count);
 	}
 
 	uint32 VendorClient::GetNumVendorItems() const

@@ -115,6 +115,7 @@ namespace mmo
 				CheatAddItem,				// GAME MASTER
 
 				SellItem,
+				BuyItem,
 
 				/// Counter constant
 				Count_,

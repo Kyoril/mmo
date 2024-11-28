@@ -38,6 +38,8 @@ namespace mmo
 
 		void SellItem(uint64 itemGuid) const;
 
+		void BuyItem(uint32 index, uint8 count) const;
+
 		uint32 GetNumVendorItems() const;
 
 		const std::vector<VendorItemEntry>& GetVendorItems() const { return m_vendorItems; }

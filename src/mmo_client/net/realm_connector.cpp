@@ -534,4 +534,17 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count)
+	{
+		sendSinglePacket([vendorGuid, itemId, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyItem);
+			packet
+				<< io::write<uint64>(vendorGuid)
+				<< io::write<uint32>(itemId)
+				<< io::write<uint8>(count)
+				;
+			packet.Finish();
+			});
+	}
 }
