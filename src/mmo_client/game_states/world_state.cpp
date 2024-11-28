@@ -758,6 +758,11 @@ namespace mmo
 								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
 							}
 
+							if ((object_fields::Money >= fieldIndex && object_fields::Money <= fieldIndex + fieldCount))
+							{
+								FrameManager::Get().TriggerLuaEvent("MONEY_CHANGED");
+							}
+
 							if ((object_fields::BankSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
