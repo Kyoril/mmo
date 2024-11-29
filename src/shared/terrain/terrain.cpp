@@ -115,7 +115,26 @@ namespace mmo
 
 		float Terrain::GetSmoothHeightAt(float x, float z)
 		{
-			return 0.0f;
+			int32 pageX, pageY;
+			if (!GetPageIndexByWorldPosition(Vector3(x, 0.0f, z), pageX, pageY))
+			{
+				// TODO
+				return 0.0f;
+			}
+
+			Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				// TODO
+				return 0.0f;
+			}
+
+			const float value = page->GetSmoothHeightAt(
+				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
+				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize)
+				);
+
+			return value;
 		}
 
 		Vector3 Terrain::GetVectorAt(uint32 x, uint32 z)

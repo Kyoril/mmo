@@ -235,7 +235,42 @@ namespace mmo
 
 		float Page::GetSmoothHeightAt(float x, float y) const
 		{
-			return 0.0f;
+			// scale down
+			float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
+			x /= scale;
+			y /= scale;
+
+			// retrieve height from heightmap via bilinear interpolation
+			size_t xi = (size_t)x, zi = (size_t)y;
+			float xpct = x - xi, zpct = y - zi;
+			if (xi == constants::VerticesPerPage - 1)
+			{
+				// one too far
+				--xi;
+				xpct = 1.0f;
+			}
+			if (zi == constants::VerticesPerPage - 1)
+			{
+				--zi;
+				zpct = 1.0f;
+			}
+
+			// retrieve heights
+			float heights[4];
+			heights[0] = GetHeightAt(xi, zi);
+			heights[1] = GetHeightAt(xi, zi + 1);
+			heights[2] = GetHeightAt(xi + 1, zi);
+			heights[3] = GetHeightAt(xi + 1, zi + 1);
+
+			// interpolate
+			float w[4];
+			w[0] = (1.0f - xpct) * (1.0f - zpct);
+			w[1] = (1.0f - xpct) * zpct;
+			w[2] = xpct * (1.0f - zpct);
+			w[3] = xpct * zpct;
+			float ipHeight = w[0] * heights[0] + w[1] * heights[1] + w[2] * heights[2] + w[3] * heights[3];
+
+			return ipHeight;
 		}
 
 		void Page::UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly)
