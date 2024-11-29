@@ -295,7 +295,7 @@ namespace mmo
 
 		uint16 Tile::GetIndex(size_t x, size_t y) const
 		{
-			return static_cast<uint16>(x + (y * constants::VerticesPerTile));
+			return static_cast<uint16>(x + y * constants::VerticesPerTile);
 		}
 
 		uint32 Tile::StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx)

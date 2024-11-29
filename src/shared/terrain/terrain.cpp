@@ -77,7 +77,7 @@ namespace mmo
 		static void GetPageAndLocalVertex(uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
 		{
 			pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
-			localVertexIndex = vertexIndex - pageIndex * (constants::VerticesPerPage - 1);
+			localVertexIndex = vertexIndex % (constants::VerticesPerPage - 1);
 		}
 
 		float Terrain::GetAt(uint32 x, uint32 z)
@@ -174,19 +174,8 @@ namespace mmo
 
 		bool Terrain::GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
 		{
-			const float halfWorldWidth = (m_width / 2 * constants::PageSize);
-			const float halfWorldHeight = (m_height / 2 * constants::PageSize);
-
-			const int32 px = static_cast<int32>((position.x + halfWorldWidth) / constants::PageSize);
-			const int32 py = static_cast<int32>((position.z + halfWorldHeight) / constants::PageSize);
-
-			if (px < 0 || py < 0 || px >= m_width || py >= m_height)
-			{
-				return false;
-			}
-
-			x = px;
-			y = py;
+			x = (m_width / 2) - floor(position.x / terrain::constants::PageSize);
+			y = (m_height / 2) - static_cast<uint32>(floor(position.z / terrain::constants::PageSize));
 			return true;
 		}
 
@@ -480,7 +469,7 @@ namespace mmo
 			if (isRightEdge)
 			{
 				pageX++;
-				page = GetPage(pageX, pageY);
+				page = GetPage(pageX + 1, pageY);
 				if (page &&
 					page->IsPrepared())
 				{
@@ -492,7 +481,7 @@ namespace mmo
 			if (isBottomEdge)
 			{
 				pageY++;
-				page = GetPage(pageX, pageY);
+				page = GetPage(pageX, pageY + 1);
 				if (page &&
 					page->IsPrepared())
 				{
@@ -503,7 +492,7 @@ namespace mmo
 			// All four pages!
 			if (isRightEdge && isBottomEdge)
 			{
-				page = GetPage(pageX, pageY);
+				page = GetPage(pageX + 1, pageY + 1);
 				if (page &&
 					page->IsPrepared())
 				{

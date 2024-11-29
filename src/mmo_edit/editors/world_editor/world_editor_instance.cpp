@@ -265,7 +265,7 @@ namespace mmo
 
 						const float pageOffsetX = pageX * terrain::constants::PageSize;
 						const float pageOffsetY = pageY * terrain::constants::PageSize;
-						constexpr float scale = terrain::constants::PageSize / terrain::constants::VerticesPerPage;
+						constexpr float scale = terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1);
 
 						int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
 						int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
@@ -1022,7 +1022,7 @@ namespace mmo
 		if (terrain::Tile* tile = hitResult.second.tile)
 		{
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
-			UpdateDebugAABB(tile->GetPage().GetBoundingBox());	/*GetWorldBoundingBox()*/
+			UpdateDebugAABB(tile->GetWorldBoundingBox());
 		}
 
 		m_debugNode->SetPosition(hitResult.second.position);
@@ -1044,6 +1044,16 @@ namespace mmo
 		}
 
 		m_brushPosition = hitResult.second.position;
+
+		if (terrain::Tile* tile = hitResult.second.tile)
+		{
+			UpdateDebugAABB(tile->GetWorldBoundingBox());
+			m_debugBoundingBox->SetVisible(true);
+		}
+		else
+		{
+			m_debugBoundingBox->SetVisible(false);
+		}
 
 		m_debugNode->SetPosition(hitResult.second.position);
 		m_debugEntity->SetVisible(true);
