@@ -14,6 +14,7 @@
 #include "loot_client.h"
 
 #include "platform.h"
+#include "vendor_client.h"
 #include "console/console.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
@@ -30,9 +31,10 @@ namespace mmo
 
 	extern Cursor g_cursor;
 
-	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient)
 		: m_scene(scene)
 		, m_lootClient(lootClient)
+		, m_vendorClient(vendorClient)
 		, m_connector(connector)
 	{
 		if (!s_mouseSensitivityCVar)
@@ -494,6 +496,15 @@ namespace mmo
 			if (lootedObject && !m_controlledUnit->IsWithinRange(*lootedObject, LootDistance))
 			{
 				m_lootClient.CloseLoot();
+			}
+		}
+
+		if (m_vendorClient.HasVendor() && m_controlledUnit->GetMovementInfo().IsChangingPosition())
+		{
+			const auto vendorObject = ObjectMgr::Get<GameObjectC>(m_vendorClient.GetVendorGuid());
+			if (vendorObject && !m_controlledUnit->IsWithinRange(*vendorObject, LootDistance))
+			{
+				m_vendorClient.CloseVendor();
 			}
 		}
 

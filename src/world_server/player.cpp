@@ -1491,6 +1491,13 @@ namespace mmo
 			return;
 		}
 
+		constexpr float interactionDistance = 5.0f;
+		if (m_character->GetSquaredDistanceTo(vendor->GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			ELOG("Vendor is too far away!");
+			return;
+		}
+
 		// Find the item by it's guid
 		auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
 		if (!item)
@@ -1561,6 +1568,13 @@ namespace mmo
 		if (m_character->UnitIsEnemy(*vendor))
 		{
 			ELOG("Vendor is enemy!");
+			return;
+		}
+
+		constexpr float interactionDistance = 5.0f;
+		if (m_character->GetSquaredDistanceTo(vendor->GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			ELOG("Vendor is too far away!");
 			return;
 		}
 

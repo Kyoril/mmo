@@ -57,6 +57,19 @@ namespace mmo
 		m_realmConnector.BuyItem(m_vendorGuid, m_vendorItems[index].itemId, count);
 	}
 
+	void VendorClient::CloseVendor()
+	{
+		if (m_vendorGuid == 0)
+		{
+			return;
+		}
+
+		m_vendorGuid = 0;
+		m_vendorItems.clear();
+
+		FrameManager::Get().TriggerLuaEvent("VENDOR_CLOSED");
+	}
+
 	uint32 VendorClient::GetNumVendorItems() const
 	{
 		return m_vendorItems.size();

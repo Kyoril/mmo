@@ -36,9 +36,13 @@ namespace mmo
 	public:
 		bool HasVendor() const { return m_vendorGuid != 0; }
 
+		uint64 GetVendorGuid() const { return m_vendorGuid; }
+
 		void SellItem(uint64 itemGuid) const;
 
 		void BuyItem(uint32 index, uint8 count) const;
+
+		void CloseVendor();
 
 		uint32 GetNumVendorItems() const;
 

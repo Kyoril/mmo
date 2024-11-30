@@ -397,7 +397,7 @@ namespace mmo
 		m_rayQuery->SetQueryMask(1);
 		m_rayQuery->SetDebugHitTestResults(true);
 
-		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient);
+		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient, m_vendorClient);
 		s_inputControl = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
