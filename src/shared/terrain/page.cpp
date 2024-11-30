@@ -552,6 +552,26 @@ namespace mmo
 			m_changed = true;
 		}
 
+		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity)
+		{
+			Paint(layer, x, y, innerRadius, outerRadius, intensity, 0.0f, 1.0f);
+		}
+
+		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity, float minSloap, float maxSloap)
+		{
+			float& value = m_layers[x + y * constants::VerticesPerPage][layer];
+			value = Clamp(value + intensity, 0.0f, 1.0f);
+
+			// TODO: Balance
+			UpdateTiles(0, 0, constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, false);
+			m_changed = true;
+		}
+
+		void Page::Balance(unsigned int x, unsigned int y, unsigned int layer, int val)
+		{
+
+		}
+
 		bool Page::ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size)
 		{
 			uint32 version;

@@ -127,7 +127,8 @@ namespace mmo
 
 					// Choose an arbitrary vector different from the normal
 					Vector3 arbitrary = { 1, 0, 0 };
-					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f) {
+					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f)
+					{
 						arbitrary = { 0, 0, 1 };
 					}
 

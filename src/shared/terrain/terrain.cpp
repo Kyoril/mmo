@@ -445,20 +445,167 @@ namespace mmo
 						continue;
 					}
 
-					// Get height at given point
 					float height = GetHeightAt(vertX, vertZ);
 
-					// Update height
 					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
 					height += power * factor;
 
-					// Apply change
 					SetHeightAt(vertX, vertZ, height);
 				}
 			}
 
-			// Update terrain
 			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+		}
+
+		void Terrain::Smooth(int x, int z, int innerRadius, int outerRadius, float power)
+		{
+			x -= outerRadius;
+			z -= outerRadius;
+
+			int areaWidth = outerRadius * 2;
+			int areaHeight = outerRadius * 2;
+
+			if (x < 0)
+			{
+				x = 0;
+			}
+
+			if (z < 0)
+			{
+				z = 0;
+			}
+
+			Grid<float> terrainHeights(areaWidth, areaHeight, 0.0f);
+
+			float sumHeight = 0.0f;
+			for (int i = x; i < x + areaWidth; ++i)
+			{
+				for (int j = z; j < z + areaHeight; ++j)
+				{
+					terrainHeights(i - x, j - z) = GetAt(i, j);
+					sumHeight += terrainHeights(i - x, j - z);
+				}
+			}
+
+			float avgHeight = sumHeight / static_cast<float>(areaWidth * areaHeight);
+
+			for (int i = 0; i < areaWidth; ++i)
+			{
+				int vertX = x + i;
+				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
+					continue;
+				}
+
+				for (int j = 0; j < areaHeight; ++j)
+				{
+					int vertZ = z + j;
+					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
+						continue;
+					}
+
+					float fHeight = terrainHeights(i, j);
+					float fDelta = fHeight - avgHeight;
+					float fShapeMask = GetBrushIntensity(i, j, innerRadius, outerRadius);
+
+					fDelta = (fDelta * fShapeMask * power);
+
+					float height = fHeight - fDelta;
+					SetHeightAt(vertX, vertZ, height);
+				}
+			}
+
+			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+		}
+
+		void Terrain::Flatten(int x, int z, int innerRadius, int outerRadius, float power, float avgHeight)
+		{
+			x -= outerRadius;
+			z -= outerRadius;
+
+			int areaWidth = outerRadius * 2;
+			int areaHeight = outerRadius * 2;
+
+			if (x < 0) x = 0;
+			if (z < 0) z = 0;
+
+			Grid terrainHeights(areaWidth, areaHeight, 0.0f);
+			for (int i = x; i < x + areaWidth; ++i)
+			{
+				for (int j = z; j < z + areaHeight; ++j)
+				{
+					terrainHeights(i - x, j - z) = GetAt(i, j);
+				}
+			}
+
+			for (int i = 0; i < areaWidth; ++i)
+			{
+				int vertX = x + i;
+
+				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
+					continue;
+				}
+
+				for (int j = 0; j < areaHeight; ++j)
+				{
+					int vertZ = z + j;
+
+					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
+						continue;
+					}
+
+					float fHeight = terrainHeights(i, j);
+					float fDelta = fHeight - avgHeight;
+					float fShapeMask = GetBrushIntensity(i, j, innerRadius, outerRadius);
+
+					fDelta = (fDelta * fShapeMask * power);
+
+					float height = fHeight - fDelta;
+					SetHeightAt(vertX, vertZ, height);
+				}
+			}
+
+			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+		}
+
+		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power)
+		{
+			Paint(layer, x, z, innerRadius, outerRadius, power, 0.0f, 1.0f);
+		}
+
+		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power, float minSloap, float maxSloap)
+		{
+			x -= outerRadius;
+			z -= outerRadius;
+
+			// Pages to paint on
+			std::unordered_map<unsigned int, Page*> pages;
+
+			for (int vertX = x; vertX < x + outerRadius * 2; vertX++)
+			{
+				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
+					continue;
+				}
+
+				for (int vertZ = z; vertZ < z + outerRadius * 2; vertZ++)
+				{
+					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
+						continue;
+					}
+
+					uint32 pageX, pageY, localVertexX, localVertexY;
+					GetPageAndLocalVertex(x, pageX, localVertexX);
+					GetPageAndLocalVertex(z, pageY, localVertexY);
+
+					// Get page
+					Page* page = GetPage(pageX, pageY);
+					if (!page || !page->IsLoaded()) {
+						continue;
+					}
+
+					// Save page for painting
+					page->Paint(layer, localVertexX, localVertexY, innerRadius, outerRadius, power, minSloap, maxSloap);
+				}
+			}
 		}
 
 		void Terrain::SetHeightAt(int x, int y, float height)

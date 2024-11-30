@@ -96,6 +96,12 @@ namespace mmo
 
 			void SetHeightAt(unsigned int x, unsigned int z, float value);
 
+			void Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity = 1.0f);
+
+			void Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity, float minSloap, float maxSloap);
+
+			void Balance(unsigned int x, unsigned int y, unsigned int layer, int val);
+
 		private:
 
 			bool ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size);

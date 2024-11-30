@@ -115,6 +115,14 @@ namespace mmo
 
 			void Deform(int x, int z, int innerRadius, int outerRadius, float power);
 
+			void Smooth(int x, int z, int innerRadius, int outerRadius, float power);
+
+			void Flatten(int x, int z, int innerRadius, int outerRadius, float power, float avgHeight);
+
+			void Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power);
+
+			void Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power, float minSloap, float maxSloap);
+
 			void SetHeightAt(int x, int y, float height);
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
