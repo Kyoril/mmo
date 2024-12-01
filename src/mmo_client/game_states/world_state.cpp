@@ -1179,7 +1179,7 @@ namespace mmo
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
 		}
 
-		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
+		FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
 
 		return PacketParseResult::Pass;
 	}
