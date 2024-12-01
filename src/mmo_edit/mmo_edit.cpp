@@ -38,6 +38,7 @@
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/trainer_editor_window.h"
 #include "editor_windows/vendor_editor_window.h"
+#include "editor_windows/quest_editor_window.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -107,6 +108,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionEditorWindow>("Faction Editor", project, mainWindow));
