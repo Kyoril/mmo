@@ -799,7 +799,33 @@ namespace mmo
 		}
 
 		m_characterData = characterData;
-		
+
+		// Add potentially missing default spells from class data
+		std::set<uint32> spellsAdded;
+		if (const proto::ClassEntry* classEntry = m_project.classes.getById(m_characterData->classId))
+		{
+			for (const auto& classSpellEntry : classEntry->spells())
+			{
+				if (m_characterData->level < classSpellEntry.level())
+				{
+					continue;
+				}
+
+				if (std::find_if(m_characterData->spellIds.begin(), m_characterData->spellIds.end(), [&classSpellEntry](const uint32 spellId)
+					{
+						return spellId == classSpellEntry.spell();
+					}) == m_characterData->spellIds.end())
+				{
+					m_characterData->spellIds.push_back(classSpellEntry.spell());
+					spellsAdded.insert(classSpellEntry.spell());
+
+					DLOG("Added new spell " << classSpellEntry.spell() << " to character because he did not yet know this spell but should have known base on class!");
+				}
+			}
+		}
+
+		// TODO: Persist added spells back in database
+
 		// Find a world node for the character's map id and instance id
 		m_world = m_worldManager.GetIdealWorldNode(characterData->mapId, characterData->instanceId);
 		

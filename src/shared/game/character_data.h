@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <set>
+
 #include "base/typedefs.h"
 #include "math/radian.h"
 #include "math/vector3.h"
