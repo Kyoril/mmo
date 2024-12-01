@@ -450,6 +450,17 @@ namespace mmo
 				}
 
 				ImGui::EndCombo();
+
+				if (ImGui::BeginDragDropTarget())
+				{
+					// We only accept mesh file drops
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".htex"))
+					{
+						currentEntry.set_icon(*static_cast<String*>(payload->Data));
+					}
+
+					ImGui::EndDragDropTarget();
+				}
 			}
 
 		}
