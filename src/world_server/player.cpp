@@ -1831,8 +1831,7 @@ namespace mmo
 		}
 
 		ASSERT(targetUnit->GetClassEntry());
-
-		DLOG("Setting level of target to " << characterLevel);
+		DLOG("Setting level of target to " << targetLevel);
 
 		// Grant experience while level is not reached
 		while(characterLevel < targetLevel)

@@ -189,16 +189,16 @@ namespace mmo
 			{
 				if (m_netUnitWatcher)
 				{
-					const auto* levelStats = &m_classEntry->levelbasevalues(GetLevel());
-					const auto* nextLevelStats = &m_classEntry->levelbasevalues(GetLevel() + 1);
+					const auto& levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
+					const auto& nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
 					m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
-						static_cast<int32>(nextLevelStats->health()) - static_cast<int32>(levelStats->health()),
-						static_cast<int32>(nextLevelStats->mana()) - static_cast<int32>(levelStats->mana()),
-						static_cast<int32>(nextLevelStats->stamina()) - static_cast<int32>(levelStats->stamina()),
-						static_cast<int32>(nextLevelStats->strength()) - static_cast<int32>(levelStats->strength()),
-						static_cast<int32>(nextLevelStats->agility()) - static_cast<int32>(levelStats->agility()),
-						static_cast<int32>(nextLevelStats->intellect()) - static_cast<int32>(levelStats->intellect()),
-						static_cast<int32>(nextLevelStats->spirit()) - static_cast<int32>(levelStats->spirit()),
+						static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
+						static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
+						static_cast<int32>(nextLevelStats.stamina()) - static_cast<int32>(levelStats.stamina()),
+						static_cast<int32>(nextLevelStats.strength()) - static_cast<int32>(levelStats.strength()),
+						static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
+						static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
+						static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
 						0	// TODO: Talent points
 					);
 				}
