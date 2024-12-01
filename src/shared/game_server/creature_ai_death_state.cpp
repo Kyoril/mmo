@@ -77,21 +77,23 @@ namespace mmo
 			{
 				if (controlled.GetLevel() > maxLevelCharacter->GetLevel())
 				{
-					uint32 levelDiff = controlled.GetLevel() - maxLevelCharacter->GetLevel();
+					float levelDiff = controlled.GetLevel() - maxLevelCharacter->GetLevel();
 					if (levelDiff > 4) 
 					{
 						levelDiff = 4;
 					}
 
-					xp *= 1 + 0.05f * levelDiff;
+					const float factor = 1.0f + 0.05f * levelDiff;
+					xp *= factor;
 				}
 				else if(controlled.GetLevel() < maxLevelCharacter->GetLevel())
 				{
 					const uint32 cutoffLevel = xp::GetExpCutoffLevel(maxLevelCharacter->GetLevel());
 					if (controlled.GetLevel() > cutoffLevel)
 					{
-						const uint32 zd = xp::GetZeroDifference(maxLevelCharacter->GetLevel());
-						xp *= 1 - (maxLevelCharacter->GetLevel() - controlled.GetLevel()) / zd;
+						const float zd = static_cast<float>(xp::GetZeroDifference(maxLevelCharacter->GetLevel()));
+						const float factor = 1.0f - static_cast<float>(maxLevelCharacter->GetLevel() - controlled.GetLevel()) / zd;
+						xp *= factor;
 					}
 					else
 					{
