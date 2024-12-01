@@ -1,18 +1,18 @@
 // Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
-#include "model_editor.h"
+#include "mesh_editor.h"
 
-#include "model_editor_instance.h"
+#include "mesh_editor_instance.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
 {
-	ModelEditor::ModelEditor(EditorHost& host)
+	MeshEditor::MeshEditor(EditorHost& host)
 		: EditorBase(host)
 	{
 	}
 
-	void ModelEditor::CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance)
+	void MeshEditor::CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance)
 	{
 		std::erase_if(m_instances, [&instance](const auto& item)
 		{
@@ -20,12 +20,12 @@ namespace mmo
 		});
 	}
 
-	bool ModelEditor::CanLoadAsset(const String& extension) const
+	bool MeshEditor::CanLoadAsset(const String& extension) const
 	{
 		return extension == ".hmsh";
 	}
 
-	std::shared_ptr<EditorInstance> ModelEditor::OpenAssetImpl(const Path& asset)
+	std::shared_ptr<EditorInstance> MeshEditor::OpenAssetImpl(const Path& asset)
 	{
 		const auto it = m_instances.find(asset);
 		if (it != m_instances.end())
@@ -33,10 +33,10 @@ namespace mmo
 			return it->second;
 		}
 
-		const auto instance = m_instances.emplace(asset, std::make_shared<ModelEditorInstance>(m_host, *this, asset));
+		const auto instance = m_instances.emplace(asset, std::make_shared<MeshEditorInstance>(m_host, *this, asset));
 		if (!instance.second)
 		{
-			ELOG("Failed to open model editor instance");
+			ELOG("Failed to open mesh editor instance");
 			return nullptr;
 		}
 

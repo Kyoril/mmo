@@ -26,7 +26,7 @@
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
 
-#include "editors/model_editor/model_editor.h"
+#include "editors/model_editor/mesh_editor.h"
 #include "editors/material_editor/material_editor.h"
 #include "editors/material_instance_editor/material_instance_editor.h"
 #include "editors/texture_editor/texture_editor.h"
@@ -125,7 +125,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));
 
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::ModelEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));

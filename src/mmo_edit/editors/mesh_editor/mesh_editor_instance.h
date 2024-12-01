@@ -16,16 +16,16 @@
 
 namespace mmo
 {
-	class ModelEditor;
+	class MeshEditor;
 	class Entity;
 	class Camera;
 	class SceneNode;
 
-	class ModelEditorInstance final : public EditorInstance
+	class MeshEditorInstance final : public EditorInstance
 	{
 	public:
-		explicit ModelEditorInstance(EditorHost& host, ModelEditor& editor, Path asset);
-		~ModelEditorInstance() override;
+		explicit MeshEditorInstance(EditorHost& host, MeshEditor& editor, Path asset);
+		~MeshEditorInstance() override;
 
 	public:
 		/// Renders the actual 3d viewport content.
@@ -59,7 +59,7 @@ namespace mmo
 		void RenderBoneNode(Bone& bone);
 
 	private:
-		ModelEditor& m_editor;
+		MeshEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;

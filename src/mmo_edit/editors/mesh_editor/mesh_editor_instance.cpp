@@ -1,11 +1,11 @@
 // Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
 
-#include "model_editor_instance.h"
+#include "mesh_editor_instance.h"
 
 #include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
-#include "model_editor.h"
+#include "mesh_editor.h"
 #include "editor_host.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
@@ -51,7 +51,7 @@ namespace mmo
 		}
 	}
 
-	ModelEditorInstance::ModelEditorInstance(EditorHost& host, ModelEditor& editor, Path asset)
+	MeshEditorInstance::MeshEditorInstance(EditorHost& host, MeshEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
 		, m_wireFrame(false)
@@ -81,7 +81,7 @@ namespace mmo
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
 		}
 
-		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &ModelEditorInstance::Render);
+		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &MeshEditorInstance::Render);
 
 		// Append axis to node
 		m_selectedBoneNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
@@ -102,7 +102,7 @@ namespace mmo
 		}
 	}
 
-	ModelEditorInstance::~ModelEditorInstance()
+	MeshEditorInstance::~MeshEditorInstance()
 	{
 		if (m_entity)
 		{
@@ -116,7 +116,7 @@ namespace mmo
 		m_scene.Clear();
 	}
 
-	void ModelEditorInstance::Render()
+	void MeshEditorInstance::Render()
 	{
 		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
@@ -149,7 +149,7 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void ModelEditorInstance::RenderBoneNode(Bone& bone)
+	void MeshEditorInstance::RenderBoneNode(Bone& bone)
 	{
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
 		if (bone.GetName() == m_selectedBoneName)
@@ -177,7 +177,7 @@ namespace mmo
 		}
 	}
 
-	void ModelEditorInstance::Draw()
+	void MeshEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
 
@@ -231,13 +231,13 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	void ModelEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
+	void MeshEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
 	}
 
-	void ModelEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
+	void MeshEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
 		if (button == 0)
 		{
@@ -253,7 +253,7 @@ namespace mmo
 		}
 	}
 
-	void ModelEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
+	void MeshEditorInstance::OnMouseMoved(const uint16 x, const uint16 y)
 	{
 		// Calculate mouse move delta
 		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
@@ -274,7 +274,7 @@ namespace mmo
 		m_lastMouseY = y;
 	}
 
-	void ModelEditorInstance::Save()
+	void MeshEditorInstance::Save()
 	{		
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
@@ -291,7 +291,7 @@ namespace mmo
 		ILOG("Successfully saved mesh");
 	}
 
-	void ModelEditorInstance::SetAnimationState(AnimationState* animState)
+	void MeshEditorInstance::SetAnimationState(AnimationState* animState)
 	{
 		if (m_animState == animState)
 		{
@@ -313,7 +313,7 @@ namespace mmo
 		}
 	}
 
-	void ModelEditorInstance::DrawDetails(const String& id)
+	void MeshEditorInstance::DrawDetails(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
@@ -394,7 +394,7 @@ namespace mmo
 
 	}
 
-	void ModelEditorInstance::DrawAnimations(const String& id)
+	void MeshEditorInstance::DrawAnimations(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
@@ -478,7 +478,7 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void ModelEditorInstance::DrawBones(const String& id)
+	void MeshEditorInstance::DrawBones(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
@@ -553,7 +553,7 @@ namespace mmo
 		indexData.indexBuffer->Unmap();
 	}
 
-	void ModelEditorInstance::DrawCollision(const String& id)
+	void MeshEditorInstance::DrawCollision(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
@@ -637,7 +637,7 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void ModelEditorInstance::DrawViewport(const String& id)
+	void MeshEditorInstance::DrawViewport(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
@@ -684,7 +684,7 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void ModelEditorInstance::ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName)
+	void MeshEditorInstance::ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName)
 	{
 		Assimp::Importer importer;
 

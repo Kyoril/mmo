@@ -9,12 +9,12 @@
 namespace mmo
 {
 	/// @brief Implementation of the EditorBase class for being able to edit model files.
-	class ModelEditor final : public EditorBase
+	class MeshEditor final : public EditorBase
 	{
 	public:
-		explicit ModelEditor(EditorHost& host);
+		explicit MeshEditor(EditorHost& host);
 
-		~ModelEditor() override = default;
+		~MeshEditor() override = default;
 
 	public:
 		[[nodiscard]] bool CanLoadAsset(const String& extension) const override;
