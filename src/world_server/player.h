@@ -187,6 +187,9 @@ namespace mmo
 
 		void OnTeleport(const Vector3& position, const Radian& facing) override;
 
+		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
+			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

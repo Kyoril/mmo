@@ -514,6 +514,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
+
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 
@@ -1801,6 +1803,30 @@ namespace mmo
 
 		// Send ack to the server
 		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket& packet)
+	{
+		uint32 newLevel;
+		int32 healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints;
+		if (!(packet
+			>> io::read<uint8>(newLevel)
+			>> io::read<int32>(healthDiff)
+			>> io::read<int32>(manaDiff)
+			>> io::read<int32>(staminaDiff)
+			>> io::read<int32>(strengthDiff)
+			>> io::read<int32>(agilityDiff)
+			>> io::read<int32>(intDiff)
+			>> io::read<int32>(spiritDiff)
+			>> io::read<int32>(talentPoints)))
+		{
+			ELOG("Failed to read levelup packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints);
 
 		return PacketParseResult::Pass;
 	}

@@ -225,9 +225,6 @@ namespace mmo
 					line.clear();
 				}
 			}
-
-			// Log it
-			DLOG("New line count: " << m_lineCache.size() << " / " << m_visibleLineCount);
 		}
 		else
 		{

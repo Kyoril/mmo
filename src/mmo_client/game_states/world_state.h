@@ -192,6 +192,8 @@ namespace mmo
 
 		PacketParseResult OnMoveTeleport(game::IncomingPacket& packet);
 
+		PacketParseResult OnLevelUp(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

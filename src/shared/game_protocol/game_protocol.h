@@ -236,6 +236,8 @@ namespace mmo
 
 				ListInventory,
 
+				LevelUp,
+
 				/// Counter constant
 				Count_,
 			};

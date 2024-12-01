@@ -147,6 +147,8 @@ namespace mmo
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
 		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
+
+		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints) = 0;
 	};
 
 	/// Enumerates possible movement changes which need to be acknowledged by the client.

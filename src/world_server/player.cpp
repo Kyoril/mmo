@@ -1803,7 +1803,7 @@ namespace mmo
 		}
 
 		// Find target unit
-		GameUnitS* targetUnit = m_worldInstance->FindByGuid<GameUnitS>(targetGuid);
+		GamePlayerS* targetUnit = m_worldInstance->FindByGuid<GamePlayerS>(targetGuid);
 		if (!targetUnit || targetUnit->GetTypeId() != ObjectTypeId::Player)
 		{
 			targetUnit = m_character.get();
@@ -1816,25 +1816,32 @@ namespace mmo
 		}
 
 		uint32 characterLevel = targetUnit->GetLevel();
+		uint32 targetLevel = characterLevel + level;
 
 		// Check for overflow
 		if (characterLevel + level >= targetUnit->Get<uint32>(object_fields::MaxLevel))
 		{
-			characterLevel = targetUnit->Get<uint32>(object_fields::MaxLevel);
-		}
-		else
-		{
-			characterLevel += level;
+			targetLevel = targetUnit->Get<uint32>(object_fields::MaxLevel);
 		}
 
-		if (characterLevel == targetUnit->GetLevel())
+		if (targetLevel == targetUnit->GetLevel())
 		{
 			ELOG("Character level is unchanged");
 			return;
 		}
 
+		ASSERT(targetUnit->GetClassEntry());
+
 		DLOG("Setting level of target to " << characterLevel);
-		targetUnit->SetLevel(characterLevel);
+
+		// Grant experience while level is not reached
+		while(characterLevel < targetLevel)
+		{
+			targetUnit->RewardExperience(targetUnit->Get<uint32>(object_fields::NextLevelXp) - targetUnit->Get<uint32>(object_fields::Xp));
+			ASSERT(targetUnit->GetLevel() > characterLevel);
+
+			characterLevel = targetUnit->GetLevel();
+		}
 
 	}
 #endif
@@ -2140,5 +2147,23 @@ namespace mmo
 				<< this->m_character->GetMovementInfo();
 			packet.Finish();
 		});
+	}
+
+	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints)
+	{
+		SendPacket([newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::LevelUp);
+			packet
+				<< io::write<uint8>(newLevel)
+				<< io::write<int32>(healthDiff)
+				<< io::write<int32>(manaDiff)
+				<< io::write<int32>(staminaDiff)
+				<< io::write<int32>(strengthDiff)
+				<< io::write<int32>(agilityDiff)
+				<< io::write<int32>(intDiff)
+				<< io::write<int32>(spiritDiff)
+				<< io::write<int32>(talentPoints);
+			packet.Finish();
+			});
 	}
 }
