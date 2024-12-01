@@ -26,7 +26,7 @@
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
 
-#include "editors/model_editor/mesh_editor.h"
+#include "editors/mesh_editor/mesh_editor.h"
 #include "editors/material_editor/material_editor.h"
 #include "editors/material_instance_editor/material_instance_editor.h"
 #include "editors/texture_editor/texture_editor.h"
