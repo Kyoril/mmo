@@ -236,6 +236,8 @@ namespace mmo
 
 		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
 
+		void AddAttributePoint(uint32 attribute);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

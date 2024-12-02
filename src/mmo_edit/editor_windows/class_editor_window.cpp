@@ -180,7 +180,7 @@ namespace mmo
 				}
 			}
 
-			if (ImGui::BeginTable("classBaseValues", 8, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			if (ImGui::BeginTable("classBaseValues", 10, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 			{
 				ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_None);
@@ -190,6 +190,8 @@ namespace mmo
 				ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_None);
 				ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_None);
 				ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_None);
+				ImGui::TableSetupColumn("Attribute Points", ImGuiTableColumnFlags_None);
+				ImGui::TableSetupColumn("Talent Points", ImGuiTableColumnFlags_None);
 				ImGui::TableHeadersRow();
 
 				int value = 0;
@@ -230,6 +232,14 @@ namespace mmo
 					ImGui::TableNextColumn();
 					value = currentEntry.mutable_levelbasevalues(index)->spirit();
 					if (ImGui::InputInt("##spirit", &value)) currentEntry.mutable_levelbasevalues(index)->set_spirit(value);
+
+					ImGui::TableNextColumn();
+					value = currentEntry.mutable_levelbasevalues(index)->attributepoints();
+					if (ImGui::InputInt("##ap", &value)) currentEntry.mutable_levelbasevalues(index)->set_attributepoints(value);
+
+					ImGui::TableNextColumn();
+					value = currentEntry.mutable_levelbasevalues(index)->talentpoints();
+					if (ImGui::InputInt("##tp", &value)) currentEntry.mutable_levelbasevalues(index)->set_talentpoints(value);
 
 					ImGui::PopID();
 				}

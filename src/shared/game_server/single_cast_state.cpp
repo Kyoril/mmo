@@ -1,6 +1,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_player_s.h"
 #include "no_cast_state.h"
 
 #include "base/utilities.h"
@@ -487,7 +488,8 @@ namespace mmo
 			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
 			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
 			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
-			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)}
+			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)},
+			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -821,6 +823,26 @@ namespace mmo
 
 	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
 	{
+	}
+
+	void SingleCastState::SpellEffectResetAttributePoints(const proto::SpellEffect& effect)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			WLOG("Unable to resolve effect unit target!");
+			return;
+		}
+
+		if (const std::shared_ptr<GamePlayerS> playerTarget = std::dynamic_pointer_cast<GamePlayerS>(unitTarget))
+		{
+			DLOG("Resetting attribute points for player!");
+			playerTarget->ResetAttributePoints();
+		}
+		else
+		{
+			WLOG("Target is not a player character!");
+		}
 	}
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)

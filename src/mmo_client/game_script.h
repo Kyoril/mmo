@@ -82,6 +82,8 @@ namespace mmo
 
 		void BuyVendorItem(uint32 slot, uint8 count) const;
 
+		void AddAttributePoint(uint32 attribute) const;
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 

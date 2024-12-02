@@ -97,7 +97,7 @@ namespace mmo
 
 		virtual void ChatMessage(uint64 characterId, uint16 type, String message) = 0;
 
-		virtual void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing) = 0;
+		virtual void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent) = 0;
 	};
 
 

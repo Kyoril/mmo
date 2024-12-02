@@ -1810,7 +1810,7 @@ namespace mmo
 	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket& packet)
 	{
 		uint32 newLevel;
-		int32 healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints;
+		int32 healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints;
 		if (!(packet
 			>> io::read<uint8>(newLevel)
 			>> io::read<int32>(healthDiff)
@@ -1820,13 +1820,14 @@ namespace mmo
 			>> io::read<int32>(agilityDiff)
 			>> io::read<int32>(intDiff)
 			>> io::read<int32>(spiritDiff)
-			>> io::read<int32>(talentPoints)))
+			>> io::read<int32>(talentPoints)
+			>> io::read<int32>(attributePoints)))
 		{
 			ELOG("Failed to read levelup packet!");
 			return PacketParseResult::Disconnect;
 		}
 
-		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints);
 
 		return PacketParseResult::Pass;
 	}

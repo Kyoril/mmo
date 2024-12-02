@@ -261,7 +261,7 @@ namespace mmo
 
 		const proto_client::SpellEntry* Script_GetSpell(uint32 index)
 		{
-			const GameUnitC* player = dynamic_cast<GameUnitC*>(ObjectMgr::GetActivePlayer().get());
+			const GameUnitC* player = ObjectMgr::GetActivePlayer().get();
 			if (!player)
 			{
 				return nullptr;
@@ -269,7 +269,6 @@ namespace mmo
 
 			return player->GetSpell(index);
 		}
-
 
 		void Script_CastSpell(uint32 index)
 		{
@@ -642,6 +641,21 @@ namespace mmo
 				out_base = unit->Get<int32>(object_fields::StatStamina + statId) - bonus;
 				out_modifier = bonus;
 			}
+		}
+
+		int32 Script_UnitNumAttributePoints(const std::string& unitName)
+		{
+			if (auto unit = Script_GetUnitByName(unitName))
+			{
+				if (unit->GetTypeId() != ObjectTypeId::Player)
+				{
+					return -1;
+				}
+
+				return unit->Get<uint32>(object_fields::AvailableAttributePoints);
+			}
+
+			return -1;
 		}
 
 		void Script_UnitArmor(const std::string& unitName, int32& out_base, int32& out_modifier)
@@ -1082,6 +1096,7 @@ namespace mmo
 			luabind::def("UnitMoney", &Script_UnitMoney),
 			luabind::def("UnitPowerType", &Script_UnitPowerType),
 			luabind::def("UnitDisplayId", &Script_UnitDisplayId),
+			luabind::def("UnitNumAttributePoints", &Script_UnitNumAttributePoints),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
 			luabind::def<std::function<void(const char*)>>("TargetUnit", [this](const char* unitName) { this->TargetUnit(unitName); }),
@@ -1121,7 +1136,7 @@ namespace mmo
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 
-
+			luabind::def<std::function<void(uint32)>>("AddAttributePoint", [this](uint32 attributeId) { return this->AddAttributePoint(attributeId); }),
 			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
@@ -1350,6 +1365,17 @@ namespace mmo
 	void GameScript::BuyVendorItem(uint32 slot, uint8 count) const
 	{
 		m_vendorClient.BuyItem(slot, count);
+	}
+
+	void GameScript::AddAttributePoint(uint32 attribute) const
+	{
+		if (attribute >= 5)
+		{
+			ELOG("AddAttributePoint: Attribute id must be in range of 0 .. 4");
+			return;
+		}
+
+		m_realmConnector.AddAttributePoint(attribute);
 	}
 
 	void GameScript::Script_ReviveMe() const

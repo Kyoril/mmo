@@ -240,6 +240,10 @@ namespace mmo
 			OnBuyItem(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::AttributePoint:
+			OnAttributePoint(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -1624,6 +1628,25 @@ namespace mmo
 		}
 	}
 
+	void Player::OnAttributePoint(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 attributeId;
+		if (!(contentReader >> io::read<uint32>(attributeId)))
+		{
+			ELOG("Failed to read AttributePoint packet!");
+			return;
+		}
+
+		if (attributeId >= 5)
+		{
+			ELOG("Invalid attribute id referenced, failed to add attribute point");
+			return;
+		}
+
+		// TODO: Add attribute point to character
+		m_character->AddAttributePoint(attributeId);
+	}
+
 #if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const
 	{
@@ -2148,9 +2171,9 @@ namespace mmo
 		});
 	}
 
-	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints)
+	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)
 	{
-		SendPacket([newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints](game::OutgoingPacket& packet) {
+		SendPacket([newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::LevelUp);
 			packet
 				<< io::write<uint8>(newLevel)
@@ -2161,7 +2184,8 @@ namespace mmo
 				<< io::write<int32>(agilityDiff)
 				<< io::write<int32>(intDiff)
 				<< io::write<int32>(spiritDiff)
-				<< io::write<int32>(talentPoints);
+				<< io::write<int32>(talentPoints)
+				<< io::write<int32>(attributePoints);
 			packet.Finish();
 			});
 	}

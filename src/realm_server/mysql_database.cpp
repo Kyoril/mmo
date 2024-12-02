@@ -261,7 +261,7 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4 FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -275,15 +275,21 @@ namespace mmo
 				uint32 index = 0;
 				row.GetField(index++, result.name);
 				row.GetField<uint8, uint16>(index++, result.level);
+
+				// Load position and rotation
 				row.GetField(index++, result.mapId);
 				row.GetField(index++, instanceId);
 				row.GetField(index++, result.position.x);
 				row.GetField(index++, result.position.y);
 				row.GetField(index++, result.position.z);
 				row.GetField(index++, facing);
+
+				// Character settings
 				row.GetField<uint8, uint16>(index++, result.gender);
 				row.GetField(index++, result.raceId);
 				row.GetField(index++, result.classId);
+
+				// Character state (attributes)
 				row.GetField(index++, result.xp);
 				row.GetField(index++, result.hp);
 				row.GetField(index++, result.mana);
@@ -291,13 +297,20 @@ namespace mmo
 				row.GetField(index++, result.energy);
 				row.GetField(index++, result.money);
 
+				// Load bind position and rotation
 				row.GetField(index++, result.bindMap);
 				row.GetField(index++, result.bindPosition.x);
 				row.GetField(index++, result.bindPosition.y);
 				row.GetField(index++, result.bindPosition.z);
-
 				float bindFacing = 0.0f;
 				row.GetField(index++, bindFacing);
+
+				// Load attribute points spent
+				row.GetField(index++, result.attributePointsSpent[0]);
+				row.GetField(index++, result.attributePointsSpent[1]);
+				row.GetField(index++, result.attributePointsSpent[2]);
+				row.GetField(index++, result.attributePointsSpent[3]);
+				row.GetField(index++, result.attributePointsSpent[4]);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -401,7 +414,7 @@ namespace mmo
 
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
 		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
-		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing)
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent)
 	{
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
@@ -421,6 +434,11 @@ namespace mmo
 			+ ", bind_y = " + std::to_string(bindPosition.y)
 			+ ", bind_z = " + std::to_string(bindPosition.z)
 			+ ", bind_o = " + std::to_string(bindFacing.GetValueRadians())
+			+ ", attr_0 = " + std::to_string(attributePointsSpent[0])
+			+ ", attr_1 = " + std::to_string(attributePointsSpent[1])
+			+ ", attr_2 = " + std::to_string(attributePointsSpent[2])
+			+ ", attr_3 = " + std::to_string(attributePointsSpent[3])
+			+ ", attr_4 = " + std::to_string(attributePointsSpent[4])
 			+ " WHERE id = '" + std::to_string(characterId) + "'"))
 		{
 			PrintDatabaseError();

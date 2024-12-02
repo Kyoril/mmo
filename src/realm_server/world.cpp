@@ -598,6 +598,12 @@ namespace mmo
 
 		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
 
+		std::array<uint32, 5> attributePoints;
+		for (uint32 i = 0; i < attributePoints.size(); ++i)
+		{
+			attributePoints[i] = player.GetAttributePointsByAttribute(i);
+		}
+		
 		// RequestHandler
 		auto handler = [](bool result) { };
 		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, 0 /*TODO!*/, player.GetMovementInfo().position,
@@ -611,7 +617,9 @@ namespace mmo
 			player.GetInventory().GetItemData(),
 			player.GetBindMap(),
 			player.GetBindPosition(),
-			player.GetBindFacing());
+			player.GetBindFacing(),
+			attributePoints
+			);
 
 		return PacketParseResult::Pass;
 	}
