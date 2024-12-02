@@ -14,11 +14,13 @@
 
 namespace mmo
 {
+	struct ItemInfo;
 	class VendorClient;
 	class LootClient;
 
 	namespace proto_client
 	{
+		class SpellEntry;
 		class Project;
 	}
 
@@ -83,6 +85,10 @@ namespace mmo
 		void BuyVendorItem(uint32 slot, uint8 count) const;
 
 		void AddAttributePoint(uint32 attribute) const;
+
+		const char* GetItemSpellTriggerType(const ItemInfo* item, int32 index);
+
+		const proto_client::SpellEntry* GetItemSpell(const ItemInfo* item, int32 index);
 
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;

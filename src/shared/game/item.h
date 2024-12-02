@@ -588,17 +588,15 @@ namespace mmo
 
 	typedef item_stat::Type ItemStat;
 
-
 	namespace item_spell_trigger
 	{
 		enum Type
 		{
-			OnUse = 0,
-			OnEquip = 1,
-			OnHitChance = 2,
-			Soulstone = 4,
-			OnUseNoDelay = 5,
-			LearnSpellId = 6
+			OnUse,
+			OnEquip,
+			OnHitChance,
+
+			Count_,
 		};
 	}
 

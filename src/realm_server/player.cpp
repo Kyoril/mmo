@@ -1004,11 +1004,13 @@ namespace mmo
 			if (i >= itemEntry->spells_size())
 			{
 				info.spells[i].spellId = -1;
+				info.spells[i].triggertype = 0;
 			}
 			else
 			{
 				const auto& spell = itemEntry->spells(i);
 				info.spells[i].spellId = spell.spell();
+				info.spells[i].triggertype = spell.trigger();
 			}
 		}
 

@@ -706,11 +706,6 @@ namespace mmo
 			return "Unknown";
 		}
 
-		void Script_ReviveMe()
-		{
-			
-		}
-
 		void Script_MoveForwardStart()
 		{
 			if (!WorldState::GetInputControl()) return;
@@ -1136,6 +1131,9 @@ namespace mmo
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 
+			luabind::def<std::function<const char* (const ItemInfo*, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo* item, int32 index) { return this->GetItemSpellTriggerType(item, index); }),
+			luabind::def<std::function<const proto_client::SpellEntry* (const ItemInfo*, int32)>>("GetItemSpell", [this](const ItemInfo* item, int32 index) { return this->GetItemSpell(item, index); }),
+
 			luabind::def<std::function<void(uint32)>>("AddAttributePoint", [this](uint32 attributeId) { return this->AddAttributePoint(attributeId); }),
 			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
@@ -1376,6 +1374,37 @@ namespace mmo
 		}
 
 		m_realmConnector.AddAttributePoint(attribute);
+	}
+
+	const char* GameScript::GetItemSpellTriggerType(const ItemInfo* item, int32 index)
+	{
+		if (item == nullptr || index < 0 || index >= std::size(item->spells))
+		{
+			return nullptr;
+		}
+
+		static const char* s_triggerTypeNames[] = {
+			"ON_USE",
+			"ON_EQUIP",
+			"HIT_CHANCE"
+		};
+
+		if (item->spells[index].triggertype > std::size(s_triggerTypeNames))
+		{
+			return nullptr;
+		}
+
+		return s_triggerTypeNames[item->spells[index].triggertype];
+	}
+
+	const proto_client::SpellEntry* GameScript::GetItemSpell(const ItemInfo* item, int32 index)
+	{
+		if (item == nullptr || index < 0 || index >= std::size(item->spells))
+		{
+			return nullptr;
+		}
+
+		return m_project.spells.getById(item->spells[index].spellId);
 	}
 
 	void GameScript::Script_ReviveMe() const

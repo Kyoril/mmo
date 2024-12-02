@@ -147,6 +147,14 @@ namespace mmo
 		"Legendary"
 	};
 
+	static String s_itemTriggerTypeStrings[] = {
+		"On Use",
+		"On Equip",
+		"Hit Chance"
+	};
+
+	static_assert(std::size(s_itemTriggerTypeStrings) == static_cast<int>(item_spell_trigger::Count_), "ItemTriggerTypeStrings size mismatch");
+
 	static const ImColor s_itemQualityColors[] = {
 		ImColor(0.62f, 0.62f, 0.62f),
 		ImColor(1.0f, 1.0f, 1.0f),
@@ -362,6 +370,16 @@ namespace mmo
 		{ \
 			if (value >= min && value <= max) \
 				currentEntry.set_##name(value); \
+		} \
+	}
+#define SLIDER_UNSIGNED_SUB_PROP(sub, name, label, datasize, min, max) \
+	{ \
+		const char* format = "%d"; \
+		uint##datasize value = currentEntry.sub.name(); \
+		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
+		{ \
+			if (value >= min && value <= max) \
+				currentEntry.sub.set_##name(value); \
 		} \
 	}
 #define CHECKBOX_BOOL_PROP(name, label) \
@@ -707,10 +725,130 @@ namespace mmo
 					ImGui::EndTable();
 				}
 			}
+		}
 
-			if (ImGui::CollapsingHeader("Spells", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Spells", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::BeginDisabled(currentEntry.spells_size() >= 5);
+			if (ImGui::Button("Add Spell"))
 			{
+				currentEntry.add_spells()->set_spell(0);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Remove All"))
+			{
+				currentEntry.clear_spells();
+			}
+			ImGui::EndDisabled();
 
+			static const char* s_spellNone = "<None>";
+
+			if (ImGui::BeginTable("spellsTabel", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Trigger", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Charges", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Proc Rate", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Category Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.spells_size(); ++index)
+				{
+					auto* mutableSpellEntry = currentEntry.mutable_spells(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int32 spell = mutableSpellEntry->spell();
+
+					const auto* spellEntry = m_project.spells.getById(spell);
+					if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_spellNone, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.spells.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
+							const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								mutableSpellEntry->set_spell(m_project.spells.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					int triggerType = mutableSpellEntry->trigger();
+					if (ImGui::Combo("##triggerType", &triggerType,
+						[](void* data, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_itemTriggerTypeStrings))
+							{
+								return false;
+							}
+
+							*out_text = s_itemTriggerTypeStrings[idx].c_str();
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_itemTriggerTypeStrings)))
+					{
+						mutableSpellEntry->set_trigger(triggerType);
+					}
+					
+					ImGui::TableNextColumn();
+
+					int charges = mutableSpellEntry->charges();
+					if (ImGui::InputInt("##charges", &charges))
+					{
+						mutableSpellEntry->set_charges(charges);
+					}
+
+					ImGui::TableNextColumn();
+
+					float procRate = mutableSpellEntry->procrate();
+					if (ImGui::InputFloat("%##procRate", &procRate))
+					{
+						mutableSpellEntry->set_procrate(procRate);
+					}
+
+					ImGui::TableNextColumn();
+
+					int cooldown = mutableSpellEntry->cooldown();
+					if (ImGui::InputInt("##cooldown", &cooldown))
+					{
+						mutableSpellEntry->set_cooldown(cooldown);
+					}
+
+					ImGui::TableNextColumn();
+
+					int category = mutableSpellEntry->category();
+					if (ImGui::InputInt("##category", &category))
+					{
+						mutableSpellEntry->set_category(category);
+					}
+
+					ImGui::TableNextColumn();
+
+					int categoryCooldown = mutableSpellEntry->categorycooldown();
+					if (ImGui::InputInt("##categoryCooldown", &categoryCooldown))
+					{
+						mutableSpellEntry->set_categorycooldown(categoryCooldown);
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
 			}
 		}
 		
