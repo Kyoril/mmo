@@ -221,6 +221,7 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
+		uint8 m_gmLevel = 0;
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 
