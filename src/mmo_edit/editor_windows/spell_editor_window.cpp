@@ -76,8 +76,11 @@ namespace mmo
 		"Tame Creature",
 		"Summon Pet",
 		"Learn Pet Spell",
-		"Weapon Damage +"
+		"Weapon Damage +",
+		"Reset Attribute Points"
 	};
+
+	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
 
 	static String s_auraTypeNames[] = {
 		"None",

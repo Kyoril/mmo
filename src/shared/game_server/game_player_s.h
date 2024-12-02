@@ -38,6 +38,10 @@ namespace mmo
 
 		uint8 GetGender() const;
 
+		void SetAttributeCost(uint32 attribute, uint8 cost);
+
+		uint8 GetAttributeCost(uint32 attribute) const;
+
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
 		/// Applies or removes item stats for this character.
@@ -50,6 +54,12 @@ namespace mmo
 
 		const proto::RaceEntry* GetRaceEntry() const { return m_raceEntry; }
 
+		bool AddAttributePoint(uint32 attribute);
+
+		void ResetAttributePoints();
+
+		static uint8 CalculateAttributeCost(uint32 pointsSpent);
+
 	public:
 		void RewardExperience(const uint32 xp);
 
@@ -61,9 +71,15 @@ namespace mmo
 
 		void UpdateArmor();
 
+		void UpdateAttributePoints();
+
+		uint32 GetAttributePointsByAttribute(const uint32 attribute) const { ASSERT(attribute < 5); return m_attributePointEnhancements[attribute]; }
+
 	protected:
 		void UpdateStat(int32 stat);
-		
+
+		void RecalculateTotalAttributePointsConsumed(const uint32 attribute);
+
 	protected:
 		void OnSpellLearned(const proto::SpellEntry& spell) override
 		{
@@ -85,11 +101,15 @@ namespace mmo
 		Inventory m_inventory;
 		const proto::ClassEntry* m_classEntry;
 		const proto::RaceEntry* m_raceEntry;
+		std::array<uint32, 5> m_attributePointEnhancements;
+		std::array<uint32, 5> m_attributePointsSpent;
+		uint32 m_totalAvailablePointsAtLevel;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);
 		friend io::Reader& operator >> (io::Reader& r, GamePlayerS& object);
 	};
+
 
 	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object);
 

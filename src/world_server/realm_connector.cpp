@@ -493,6 +493,25 @@ namespace mmo
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
+		bool pointsReset = false;
+		for (uint32 i = 0; i < 5; ++i)
+		{
+			for (uint32 j = 0; j < characterData.attributePointsSpent[i]; ++j)
+			{
+				if (!characterObject->AddAttributePoint(i))
+				{
+					WLOG("Points have been reset due to inconsistencies with points spent vs points available!");
+					pointsReset = true;
+					break;
+				}
+			}
+
+			if (pointsReset)
+			{
+				break;
+			}
+		}
+
 		// Construct inventory data
 		for (const auto& itemData : characterData.items)
 		{

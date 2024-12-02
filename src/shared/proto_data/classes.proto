@@ -9,6 +9,8 @@ message ClassBaseValues {
 	required uint32 agility = 5;
 	required uint32 intellect = 6;
 	required uint32 spirit = 7;
+	optional uint32 attributePoints = 8;
+	optional uint32 talentPoints = 9;
 }
 
 message ClassSpell {

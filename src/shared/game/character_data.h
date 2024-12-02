@@ -19,6 +19,7 @@ namespace mmo
 		explicit CharacterData()
 			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {}, 0, 0, 0, 1, 0, 20, 0, 0, 0, 0, Vector3::Zero, Radian(0.0f))
 		{
+			attributePointsSpent.fill(0);
 		}
 
 		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds,
@@ -43,6 +44,7 @@ namespace mmo
 			, bindPosition(bindPosition)
 			, bindFacing(bindFacing)
 		{
+			attributePointsSpent.fill(0);
 		}
 
 		ObjectId characterId;
@@ -63,6 +65,7 @@ namespace mmo
 		uint32 money;
 		std::vector<uint32> spellIds;
 		std::vector<ItemData> items;
+		std::array<uint32, 5> attributePointsSpent;
 
 		uint32 bindMap;
 		Vector3 bindPosition;
@@ -96,6 +99,7 @@ namespace mmo
 			>> io::read<float>(data.bindPosition.y)
 			>> io::read<float>(data.bindPosition.z)
 			>> data.bindFacing
+			>> io::read_range(data.attributePointsSpent)
 		;
 	}
 	
@@ -126,6 +130,7 @@ namespace mmo
 			<< io::write<float>(data.bindPosition.y)
 			<< io::write<float>(data.bindPosition.z)
 			<< data.bindFacing
+			<< io::write_range(data.attributePointsSpent)
 			;
 	}
 }

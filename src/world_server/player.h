@@ -145,6 +145,8 @@ namespace mmo
 
 		void OnBuyItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnAttributePoint(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 #if MMO_WITH_DEV_COMMANDS
 		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
 
@@ -188,7 +190,7 @@ namespace mmo
 		void OnTeleport(const Vector3& position, const Radian& facing) override;
 
 		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
-			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints) override;
+			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
 
 	private:
 		PlayerManager& m_manager;

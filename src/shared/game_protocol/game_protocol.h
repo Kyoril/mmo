@@ -117,6 +117,8 @@ namespace mmo
 				SellItem,
 				BuyItem,
 
+				AttributePoint,
+
 				/// Counter constant
 				Count_,
 			};

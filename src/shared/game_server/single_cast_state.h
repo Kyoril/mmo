@@ -192,6 +192,7 @@ namespace mmo
 		void SpellEffectKnockBack(const proto::SpellEffect& effect);
 		void SpellEffectSkill(const proto::SpellEffect& effect);
 		void SpellEffectTransDoor(const proto::SpellEffect& effect);
+		void SpellEffectResetAttributePoints(const proto::SpellEffect& effect);
 
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);

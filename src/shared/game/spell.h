@@ -665,6 +665,8 @@ namespace mmo
 			LearnPetSpell,
 			WeaponDamage,
 
+			ResetAttributePoints,
+
 			Count_,
 			Invalid_ = 0
 		};

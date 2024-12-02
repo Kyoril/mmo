@@ -23,6 +23,15 @@ namespace mmo
 		Set<int32>(object_fields::Xp, 0, false);
 		Set<int32>(object_fields::NextLevelXp, 400, false);
 		Set<int32>(object_fields::Level, 1, false);
+
+		m_attributePointEnhancements.fill(0);
+		m_attributePointsSpent.fill(0);
+		for (uint32 i = 0; i < 5; ++i)
+		{
+			SetAttributeCost(i, 1);
+		}
+
+		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
 	void GamePlayerS::SetClass(const proto::ClassEntry& classEntry)
@@ -64,6 +73,27 @@ namespace mmo
 	{
 		const uint32 bytes = Get<uint32>(object_fields::Bytes);
 		return bytes & 0xff; // Return only the first byte (gender)
+	}
+
+	void GamePlayerS::SetAttributeCost(uint32 attribute, uint8 cost)
+	{
+		ASSERT(attribute < 5);
+
+		uint64 attributeCostPacked = Get<uint64>(object_fields::AttributePointCost);
+
+		// Clear the 8-bit segment at the specified index and set the new cost
+		attributeCostPacked &= ~(static_cast<uint64>(0xFF) << (attribute * 8)); // Clear the 8-bit slot
+		attributeCostPacked |= static_cast<uint64>(cost) << (attribute * 8);    // Set the 8-bit value
+
+		Set<uint64>(object_fields::AttributePointCost, attributeCostPacked);
+	}
+
+	uint8 GamePlayerS::GetAttributeCost(uint32 attribute) const
+	{
+		ASSERT(attribute < 5);
+
+		const uint64 attributeCostPacked = Get<uint64>(object_fields::AttributePointCost);
+		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
 	}
 
 	void GamePlayerS::ApplyItemStats(GameItemS& item, bool apply)
@@ -171,6 +201,45 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerS::ResetAttributePoints()
+	{
+		m_attributePointEnhancements.fill(0);
+		m_attributePointsSpent.fill(0);
+		RefreshStats();
+	}
+
+	uint8 GamePlayerS::CalculateAttributeCost(uint32 pointsSpent)
+	{
+		const double a = 1.5;  // Initial growth multiplier
+		const double b = 2.0;  // Offset for smoothing
+		const double c = 0.02; // Exponential growth factor
+		const double d = 1.5;  // Exponential growth exponent
+
+		// Calculate cost with both square root and exponential components
+		double cost = a * std::sqrt(pointsSpent + b) + c * std::pow(pointsSpent, d);
+
+		// Cap the cost at 255
+		return static_cast<uint8>(std::min(cost, 255.0));
+	}
+
+	bool GamePlayerS::AddAttributePoint(uint32 attribute)
+	{
+		// First determine attribute point cost
+		const uint8 cost = CalculateAttributeCost(m_attributePointEnhancements[attribute]);
+
+		// Determine available attribute points
+		const uint32 attributePoints = Get<uint32>(object_fields::AvailableAttributePoints);
+		if (cost > attributePoints)
+		{
+			return false;
+		}
+
+		// Add point spent
+		m_attributePointEnhancements[attribute]++;
+		m_attributePointsSpent[attribute] += cost;
+		RefreshStats();
+	}
+
 	void GamePlayerS::RewardExperience(const uint32 xp)
 	{
 		// At max level we can't gain any more xp
@@ -199,7 +268,8 @@ namespace mmo
 						static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
 						static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
 						static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
-						0	// TODO: Talent points
+						nextLevelStats.talentpoints(),
+						nextLevelStats.attributepoints()
 					);
 				}
 				
@@ -224,6 +294,20 @@ namespace mmo
 
 		GameUnitS::RefreshStats();
 
+		const int32 level = Get<int32>(object_fields::Level);
+		ASSERT(level > 0);
+		ASSERT(level <= m_classEntry->levelbasevalues_size());
+
+		// Adjust stats
+		UpdateAttributePoints();
+
+		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
+		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, levelStats->stamina() + m_attributePointEnhancements[0]);
+		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, levelStats->strength() + m_attributePointEnhancements[1]);
+		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, levelStats->agility() + m_attributePointEnhancements[2]);
+		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, levelStats->intellect() + m_attributePointEnhancements[3]);
+		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, levelStats->spirit() + m_attributePointEnhancements[4]);
+
 		// Update all stats
 		for (int i = 0; i < 5; ++i)
 		{
@@ -231,13 +315,6 @@ namespace mmo
 		}
 
 		UpdateArmor();
-
-		const int32 level = Get<int32>(object_fields::Level);
-		ASSERT(level > 0);
-		ASSERT(level <= m_classEntry->levelbasevalues_size());
-
-		// Adjust stats
-		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
 
 		// TODO: Apply item stats
 		
@@ -295,14 +372,14 @@ namespace mmo
 			newLevel = Get<int32>(object_fields::MaxLevel);
 		}
 
-		// Adjust stats
-		const auto* levelStats = &m_classEntry->levelbasevalues(newLevel - 1);
-		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, levelStats->stamina());
-		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, levelStats->strength());
-		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, levelStats->agility());
-		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, levelStats->intellect());
-		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, levelStats->spirit());
+		// Calculate total attribute points available at level
+		m_totalAvailablePointsAtLevel = 0;
+		for (uint32 i = 0; i < newLevel; ++i)
+		{
+			m_totalAvailablePointsAtLevel += m_classEntry->levelbasevalues(i).attributepoints();
+		}
 
+		// Adjust stats
 		GameUnitS::SetLevel(newLevel);
 
 		// Update next level xp
@@ -409,7 +486,36 @@ namespace mmo
 		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
 		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
+	}
 
+	void GamePlayerS::UpdateAttributePoints()
+	{
+		// Calculate available attribute points
+		uint32 availableAttributePoints = m_totalAvailablePointsAtLevel;
+		for (uint32 i = 0; i < m_attributePointEnhancements.size(); ++i)
+		{
+			const uint32 realPointsSpent = m_attributePointsSpent[i];
+			if (realPointsSpent > availableAttributePoints)
+			{
+				// Points spent exceeds available points - reset everything!
+				WLOG("Points spent is bigger than points available! Resetting spent points...");
+				m_attributePointEnhancements.fill(0);
+				availableAttributePoints = m_totalAvailablePointsAtLevel;
+				break;
+			}
+
+			availableAttributePoints -= realPointsSpent;
+		}
+
+		// Update available attribute points
+		Set<uint32>(object_fields::AvailableAttributePoints, availableAttributePoints);
+
+		// Update attribute point costs
+		for (uint32 i = 0; i < m_attributePointEnhancements.size(); ++i)
+		{
+			const uint8 cost = CalculateAttributeCost(m_attributePointEnhancements[i]);
+			SetAttributeCost(i, cost);
+		}
 	}
 
 	void GamePlayerS::UpdateStat(int32 stat)
@@ -435,11 +541,24 @@ namespace mmo
 		Set<int32>(object_fields::NegStatStamina + stat, totalVal < 0 ? static_cast<int32>(totalVal) : 0);
 	}
 
+	void GamePlayerS::RecalculateTotalAttributePointsConsumed(const uint32 attribute)
+	{
+		ASSERT(attribute < 5);
+
+		m_attributePointsSpent[attribute] = 0;
+
+		for (uint32 i = 1; i <= m_attributePointEnhancements[i]; ++i)
+		{
+			m_attributePointsSpent[attribute] += CalculateAttributeCost(i - 1);
+		}
+	}
+
 	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)
 	{
 		// Write super class data
 		w << reinterpret_cast<GameUnitS const&>(object);
 		w << object.m_inventory;
+		w << io::write_range(object.m_attributePointEnhancements);
 		return w;
 	}
 
@@ -448,7 +567,13 @@ namespace mmo
 		// Read super class data
 		r >> reinterpret_cast<GameUnitS&>(object);
 		r >> object.m_inventory;
+		r >> io::read_range(object.m_attributePointEnhancements);
 
+		for (uint32 i = 0; i < 5; ++i)
+		{
+			object.RecalculateTotalAttributePointsConsumed(i);
+		}
+		
 		return r;
 	}
 }

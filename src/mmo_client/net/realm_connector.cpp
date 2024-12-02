@@ -547,4 +547,14 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::AddAttributePoint(uint32 attribute)
+	{
+		sendSinglePacket([attribute](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AttributePoint);
+			packet
+				<< io::write<uint32>(attribute);
+			packet.Finish();
+			});
+	}
 }
