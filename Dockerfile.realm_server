@@ -8,7 +8,7 @@ COPY . /app
 
 RUN mkdir -p build && \
 	cd build && \
-	cmake /app && \
+	cmake -DMMO_WITH_DEV_COMMANDS=ON /app && \
 	make -j4 realm_server
 
 

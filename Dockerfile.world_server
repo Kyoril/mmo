@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y g++ cmake git zlib1g-dev libssl-dev lib
 
 RUN mkdir -p build && \
 	cd build && \
-	cmake /app && \
+	cmake -DMMO_WITH_DEV_COMMANDS=ON /app && \
 	make -j4 world_server
 
 
