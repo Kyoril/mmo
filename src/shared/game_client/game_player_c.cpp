@@ -57,6 +57,14 @@ namespace mmo
 		return m_name;
 	}
 
+	uint8 GamePlayerC::GetAttributeCost(uint32 attribute) const
+	{
+		ASSERT(attribute < 5);
+
+		const uint64 attributeCostPacked = Get<uint64>(object_fields::AttributePointCost);
+		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
+	}
+
 	void GamePlayerC::SetupSceneObjects()
 	{
 		GameUnitC::SetupSceneObjects();

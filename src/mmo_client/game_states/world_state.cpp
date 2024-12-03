@@ -781,6 +781,11 @@ namespace mmo
 								FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_CHANGED");
 							}
 
+							if (fieldIndex <= object_fields::AvailableAttributePoints && fieldIndex + fieldCount >= object_fields::AvailableAttributePoints)
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
+							}
+
 							if ((fieldIndex <= object_fields::Health && fieldIndex + fieldCount >= object_fields::Health) ||
 								(fieldIndex <= object_fields::MaxHealth && fieldIndex + fieldCount >= object_fields::MaxHealth))
 							{

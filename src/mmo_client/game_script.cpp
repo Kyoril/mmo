@@ -311,6 +311,19 @@ namespace mmo
 			return 1;
 		}
 
+		int32 Script_UnitAttributeCost(const std::string& unitName, uint32 attribute)
+		{
+			if (const auto unit = Script_GetUnitByName(unitName))
+			{
+				if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(unit))
+				{
+					return player->GetAttributeCost(attribute);
+				}
+			}
+
+			return 0;
+		}
+
 		int32 Script_UnitPower(const std::string& unitName, int32 powerType)
 		{
 			if (powerType < 0 || powerType > power_type::Energy)
@@ -1084,6 +1097,7 @@ namespace mmo
 			luabind::def("UnitPower", &Script_UnitPower),
 			luabind::def("UnitPowerMax", &Script_UnitPowerMax),
 			luabind::def("UnitLevel", &Script_UnitLevel),
+			luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
 			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 			luabind::def("UnitName", &Script_UnitName),

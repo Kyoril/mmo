@@ -34,6 +34,8 @@ namespace mmo
 			m_name = name;
 		}
 
+		uint8 GetAttributeCost(uint32 attribute) const;
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
