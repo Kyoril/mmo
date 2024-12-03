@@ -8,13 +8,14 @@ namespace mmo
 	}
 
 	std::pair<SpellCastResult, SpellCasting*> NoCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell,
-		const SpellTargetMap& target, GameTime castTime, bool doReplacePreviousCast)
+		const SpellTargetMap& target, GameTime castTime, bool doReplacePreviousCast, uint64 itemGuid)
 	{
 		SpellCasting& casting = CastSpell(
 			cast,
 			spell,
 			std::move(target),
-			castTime
+			castTime,
+			itemGuid
 		);
 
 		return std::make_pair(spell_cast_result::CastOkay, &casting);

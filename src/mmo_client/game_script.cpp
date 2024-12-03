@@ -18,6 +18,7 @@
 #include "vendor_client.h"
 #include "game/item.h"
 #include "game/spell.h"
+#include "game/spell_target_map.h"
 #include "game_client/game_bag_c.h"
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
@@ -26,8 +27,6 @@
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
 #include "shared/client_data/proto_client/spells.pb.h"
-
-
 
 namespace luabind
 {
@@ -1198,17 +1197,55 @@ namespace mmo
 
 	void GameScript::UseContainerItem(uint32 slot) const
 	{
+		// Get item at slot
+		std::shared_ptr<GameItemC> item = GetItemFromSlot("player", slot);
+		if (!item)
+		{
+			return;
+		}
+
 		if (m_vendorClient.HasVendor())
 		{
-			// Get item at slot
-			std::shared_ptr<GameItemC> item = GetItemFromSlot("player", slot);
-			if (!item)
-			{
-				return;
-			}
-
 			m_vendorClient.SellItem(item->GetGuid());
+			return;
 		}
+
+		// Check if item has any usable spells
+		const auto* entry = item->GetEntry();
+		if (!entry)
+		{
+			ELOG("Unknown item entry!");
+			return;
+		}
+
+		if (entry->itemClass == item_class::Weapon ||
+			entry->itemClass == item_class::Armor ||
+			entry->itemClass == item_class::Container)
+		{
+			m_realmConnector.AutoEquipItem((slot >> 8) & 0xff, slot & 0xff);
+			return;
+		}
+
+		bool isUsable = false;
+		for (const ItemSpell& spell : entry->spells)
+		{
+			if (spell.triggertype == item_spell_trigger::OnUse)
+			{
+				isUsable = true;
+				break;
+			}
+		}
+
+		if (!isUsable)
+		{
+			ELOG("Item is not usable");
+			return;
+		}
+
+		SpellTargetMap targetMap;
+		// TODO: spell target
+
+		m_realmConnector.UseItem((slot >> 8) & 0xFF, slot & 0xFF, item->GetGuid(), targetMap);
 	}
 
 	void GameScript::TargetUnit(const char* name) const

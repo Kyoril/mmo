@@ -238,6 +238,8 @@ namespace mmo
 
 		void AddAttributePoint(uint32 attribute);
 
+		void UseItem(uint8 srcBag, uint8 srcSlot, uint64 itemGuid, const SpellTargetMap& targetMap);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

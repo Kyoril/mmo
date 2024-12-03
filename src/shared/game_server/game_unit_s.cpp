@@ -414,15 +414,15 @@ namespace mmo
 		}
 	}
 
-	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs)
+	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
 	{
-		if (!HasSpell(spell.id()))
+		if (itemGuid == 0 && !HasSpell(spell.id()))
 		{
-			WLOG("Player does not know spell " << spell.id());
+			WLOG("Unit does not know spell " << spell.id());
 			return spell_cast_result::FailedNotKnown;
 		}
 
-		const auto result = m_spellCast->StartCast(spell, target, castTimeMs);
+		const auto result = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
 		if (result.first == spell_cast_result::CastOkay)
 		{
 			startedCasting(spell);

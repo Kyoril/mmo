@@ -31,7 +31,8 @@ namespace mmo
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
 			GameTime castTime,
-			bool doReplacePreviousCast
+			bool doReplacePreviousCast,
+			uint64 itemGuid
 		) = 0;
 
 		virtual void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) = 0;
@@ -45,7 +46,8 @@ namespace mmo
 		SpellCast& cast,
 		const proto::SpellEntry& spell,
 		const SpellTargetMap& target,
-		GameTime castTime
+		GameTime castTime,
+		uint64 itemGuid
 	);
 
 	class SpellCast
@@ -60,7 +62,9 @@ namespace mmo
 		std::pair<SpellCastResult, SpellCasting*> StartCast(
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
-			GameTime castTime);
+			GameTime castTime,
+			bool isProc, 
+			uint64 itemGuid);
 
 		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 

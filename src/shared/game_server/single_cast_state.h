@@ -32,7 +32,8 @@ namespace mmo
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
 			GameTime castTime,
-			bool isProc = false);
+			bool isProc = false,
+			uint64 itemGuid = 0);
 
 		void Activate() override;
 
@@ -41,7 +42,8 @@ namespace mmo
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
 			GameTime castTime,
-			bool doReplacePreviousCast) override;
+			bool doReplacePreviousCast,
+			uint64 itemGuid) override;
 
 		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) override;
 
@@ -242,6 +244,7 @@ namespace mmo
 		void ExecuteMeleeAttack();	// deal damage stored in m_meleeDamage
 
 		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
+		uint64 m_itemGuid;
 
 		typedef std::function<void(const proto::SpellEffect&)> EffectHandler;
 	};

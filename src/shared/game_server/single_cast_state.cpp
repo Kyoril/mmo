@@ -1,6 +1,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_item_s.h"
 #include "game_player_s.h"
 #include "no_cast_state.h"
 
@@ -9,7 +10,7 @@
 
 namespace mmo
 {
-	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc)
+	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc, uint64 itemGuid)
 		: m_cast(cast)
 		, m_spell(spell)
 		, m_target(target)
@@ -30,6 +31,7 @@ namespace mmo
 		, m_canTrigger(false)
 		, m_instantsCast(false)
 		, m_delayedCast(false)
+		, m_itemGuid(itemGuid)
 	{
 		// Check if the executor is in the world
 		auto& executor = m_cast.GetExecuter();
@@ -139,7 +141,7 @@ namespace mmo
 		}
 	}
 
-	std::pair<SpellCastResult, SpellCasting*> SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast)
+	std::pair<SpellCastResult, SpellCasting*> SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast, uint64 itemGuid)
 	{
 		if (!m_hasFinished && !doReplacePreviousCast)
 		{
@@ -152,7 +154,8 @@ namespace mmo
 			cast,
 			spell,
 			target,
-			castTime);
+			castTime,
+			itemGuid);
 
 		return std::make_pair(spell_cast_result::CastOkay, &casting);
 	}
@@ -374,6 +377,68 @@ namespace mmo
 
 	bool SingleCastState::ConsumeItem(bool delayed)
 	{
+		if (m_tookCastItem && delayed)
+		{
+			return true;
+		}
+		
+		if (m_itemGuid != 0 && m_cast.GetExecuter().GetTypeId() == ObjectTypeId::Player)
+		{
+			auto* character = reinterpret_cast<GamePlayerS*>(&m_cast.GetExecuter());
+			auto& inv = character->GetInventory();
+
+			uint16 itemSlot = 0;
+			if (!inv.FindItemByGUID(m_itemGuid, itemSlot))
+			{
+				return false;
+			}
+
+			auto item = inv.GetItemAtSlot(itemSlot);
+			if (!item)
+			{
+				return false;
+			}
+
+			auto removeItem = [this, item, itemSlot, &inv]() {
+				if (m_tookCastItem)
+				{
+					return;
+				}
+
+				auto result = inv.RemoveItem(itemSlot, 1);
+				if (result != inventory_change_failure::Okay)
+				{
+					//inv.GetOwner().InventoryChangeFailure(result, item.get(), nullptr);
+				}
+				else
+				{
+					m_tookCastItem = true;
+				}
+			};
+
+			for (auto& spell : item->GetEntry().spells())
+			{
+				// OnUse spell cast
+				if (spell.spell() == m_spell.id() &&
+					(spell.trigger() == item_spell_trigger::OnUse))
+				{
+					// Item is removed on use
+					if (spell.charges() == static_cast<uint32>(-1))
+					{
+						if (delayed)
+						{
+							m_completedEffectsExecution[m_cast.GetExecuter().GetGuid()] = completedEffects.connect(removeItem);
+						}
+						else
+						{
+							removeItem();
+						}
+					}
+					break;
+				}
+			}
+		}
+
 		return true;
 	}
 

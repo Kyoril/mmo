@@ -557,4 +557,18 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::UseItem(uint8 srcBag, uint8 srcSlot, uint64 itemGuid, const SpellTargetMap& targetMap)
+	{
+		sendSinglePacket([srcBag, srcSlot, itemGuid, &targetMap](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::UseItem);
+			packet
+				<< io::write<uint8>(srcBag)
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint64>(itemGuid)
+				<< targetMap
+			;
+			packet.Finish();
+			});
+	}
 }

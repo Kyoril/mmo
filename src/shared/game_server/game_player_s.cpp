@@ -238,6 +238,8 @@ namespace mmo
 		m_attributePointEnhancements[attribute]++;
 		m_attributePointsSpent[attribute] += cost;
 		RefreshStats();
+
+		return true;
 	}
 
 	void GamePlayerS::RewardExperience(const uint32 xp)

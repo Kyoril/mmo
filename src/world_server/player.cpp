@@ -239,6 +239,9 @@ namespace mmo
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::UseItem:
+			OnUseItem(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::AttributePoint:
 			OnAttributePoint(opCode, buffer.size(), reader);
@@ -1645,6 +1648,80 @@ namespace mmo
 
 		// TODO: Add attribute point to character
 		m_character->AddAttributePoint(attributeId);
+	}
+
+	void Player::OnUseItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 bagId = 0, slotId = 0;
+		uint64 itemGuid = 0;
+		SpellTargetMap targetMap;
+		if (!(contentReader
+			>> io::read<uint8>(bagId)
+			>> io::read<uint8>(slotId)
+			>> io::read<uint64>(itemGuid)
+			>> targetMap))
+		{
+			ELOG("Could not read packet");
+			return;
+		}
+
+		// Get item
+		auto item = m_character->GetInventory().GetItemAtSlot(Inventory::GetAbsoluteSlot(bagId, slotId));
+		if (!item)
+		{
+			WLOG("Item not found! Bag: " << uint16(bagId) << "; Slot: " << uint16(slotId));
+			return;
+		}
+
+		if (item->GetGuid() != itemGuid)
+		{
+			WLOG("Item GUID does not match. We look for " << log_hex_digit(itemGuid) << " but found " << log_hex_digit(item->GetGuid()));
+			return;
+		}
+
+		auto& entry = item->GetEntry();
+
+		// Find all OnUse spells
+		for (int i = 0; i < entry.spells_size(); ++i)
+		{
+			const auto& spell = entry.spells(i);
+			if (!spell.spell())
+			{
+				WLOG("No spell entry");
+				continue;
+			}
+
+			// Spell effect has to be triggered "on use"
+			if (spell.trigger() != item_spell_trigger::OnUse)
+			{
+				continue;
+			}
+
+			// Look for the spell entry
+			const auto* spellEntry = m_project.spells.getById(spell.spell());
+			if (!spellEntry)
+			{
+				WLOG("Could not find spell by id " << spell.spell());
+				continue;
+			}
+
+			// Cast the spell
+			uint64 time = spellEntry->casttime();
+			SpellCastResult result = m_character->CastSpell(targetMap, *spellEntry, time, false, itemGuid);
+			if (result != spell_cast_result::CastOkay)
+			{
+				SendPacket([itemGuid, &result, &spell](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::SpellFailure);
+						packet
+							<< io::write_packed_guid(itemGuid)
+							<< io::write<uint32>(spell.spell())
+							<< io::write<GameTime>(GetAsyncTimeMs())
+							<< io::write<uint8>(result);
+						packet.Finish();
+					});
+			}
+		}
 	}
 
 #if MMO_WITH_DEV_COMMANDS

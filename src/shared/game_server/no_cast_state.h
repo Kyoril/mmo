@@ -14,7 +14,8 @@ namespace mmo
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
 			GameTime castTime,
-			bool doReplacePreviousCast
+			bool doReplacePreviousCast,
+			uint64 itemGuid
 		) override;
 
 		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) override;

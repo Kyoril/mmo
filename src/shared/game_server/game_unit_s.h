@@ -322,7 +322,7 @@ namespace mmo
 
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
 
-		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs);
+		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
 
 		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0);
 
