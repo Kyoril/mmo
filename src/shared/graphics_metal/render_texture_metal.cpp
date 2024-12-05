@@ -49,4 +49,24 @@ namespace mmo
 		m_height = height;
 		m_resizePending = true;
 	}
+
+    TexturePtr RenderTextureMetal::StoreToTexture()
+    {
+        return nullptr;
+    }
+
+    void* RenderTextureMetal::GetRawTexture() const
+    {
+        return nullptr;
+    }
+
+    void RenderTextureMetal::CopyPixelDataTo(uint8* destination)
+    {
+        
+    }
+
+    uint32 RenderTextureMetal::GetPixelDataSize() const
+    {
+        return 0;
+    }
 }

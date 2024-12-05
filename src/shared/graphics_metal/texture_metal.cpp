@@ -23,6 +23,21 @@ namespace mmo
 
 	}
 
+    uint32 TextureMetal::GetPixelDataSize() const
+    {
+        return 0;
+    }
+
+    void* TextureMetal::GetRawTexture() const
+    {
+        return nullptr;
+    }
+
+    void TextureMetal::CopyPixelDataTo(uint8* destination)
+    {
+        
+    }
+
 	uint32 TextureMetal::GetMemorySize() const
 	{
 		// For now, all textures are uncompressed RGBAs

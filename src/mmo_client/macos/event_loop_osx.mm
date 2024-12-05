@@ -15,7 +15,7 @@ namespace mmo
     // Event loop events
     signal<void(float deltaSeconds, GameTime timestamp)> EventLoop::Idle;
     signal<void()> EventLoop::Paint;
-    signal<bool(int32)> EventLoop::KeyDown;
+    signal<bool(int32, bool)> EventLoop::KeyDown;
     signal<bool(uint16)> EventLoop::KeyChar;
     signal<bool(int32)> EventLoop::KeyUp;
     signal<bool(EMouseButton, int32, int32)> EventLoop::MouseDown;

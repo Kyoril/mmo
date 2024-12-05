@@ -2,6 +2,9 @@
 
 #include "platform_osx.h"
 
+#import <Cocoa/Cocoa.h>
+#import <CoreGraphics/CoreGraphics.h>
+
 namespace mmo
 {
 	static bool s_mouseCaptured = false;
@@ -18,6 +21,11 @@ namespace mmo
 		s_mouseCaptured = true;
 	}
 
+    void PlatformOsX::ResetCursorPosition()
+    {
+        
+    }
+
 	void PlatformOsX::ReleaseMouseCapture()
 	{
 		if (!s_mouseCaptured) return;
@@ -33,8 +41,7 @@ namespace mmo
 		{
 			s_mouseCursorHiddenCount = 0;
             
-            // TODO
-            
+            [NSCursor unhide];
 		}
 	}
 
@@ -42,8 +49,39 @@ namespace mmo
 	{
 		if (++s_mouseCursorHiddenCount == 1)
 		{
-            // TODO
-            
+            [NSCursor hide];
 		}
 	}
+
+    bool PlatformOsX::IsMouseCaptured()
+    {
+        return false;
+    }
+
+    void PlatformOsX::GetCapturedMousePosition(int& x, int& y)
+    {
+        
+    }
+
+    void PlatformOsX::GetCursorPos(int& x, int& y)
+    {
+        // Get the mouse location in screen coordinates
+        NSPoint mouseLocation = [NSEvent mouseLocation];
+        
+        // Convert the NSPoint to a CGPoint (if needed)
+        x = mouseLocation.x;
+        y = mouseLocation.y;
+    }
+
+    void PlatformOsX::SetCursorPos(int x, int y)
+    {
+        // Warp the cursor to the specified position
+        CGPoint position;
+        position.x = x;
+        position.y = y;
+        CGWarpMouseCursorPosition(position);
+
+        // Optional: To reflect the new position without any inertia
+        CGAssociateMouseAndMouseCursorPosition(true);
+    }
 }

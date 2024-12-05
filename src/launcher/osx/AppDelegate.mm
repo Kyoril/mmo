@@ -151,7 +151,7 @@ namespace mmo
 		bool doUnpackArchives = false;
 		mmo::updating::OSXProgressHandler progressHandler;
 		auto source = mmo::updating::openSourceFromUrl(
-                                                       mmo::updating::UpdateURL("http://patch.mmo-dev.net")
+                                                       mmo::updating::UpdateURL("https://patch.mmo-dev.net")
 														  );
 		
         mmo::updating::PrepareParameters prepareParameters(

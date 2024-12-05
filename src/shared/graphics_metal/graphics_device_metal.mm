@@ -21,6 +21,16 @@ namespace mmo
     GraphicsDeviceMetal::~GraphicsDeviceMetal()
 	= default;
 
+    void GraphicsDeviceMetal::SetHardwareCursor(void* osCursorData)
+    {
+        // TODO
+    }
+
+    void* GraphicsDeviceMetal::GetHardwareCursor()
+    {
+        return nullptr;
+    }
+
 	Matrix4 GraphicsDeviceMetal::MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane)
 	{
 		Matrix4 dest = Matrix4::Zero;

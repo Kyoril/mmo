@@ -19,6 +19,10 @@ namespace mmo
 		~GraphicsDeviceMetal() override;
 		
 	public:
+        void SetHardwareCursor(void* osCursorData) override;
+
+        void* GetHardwareCursor() override;
+
 		// ~ Begin GraphicsDevice
 		Matrix4 MakeProjectionMatrix(const Radian& fovY, float aspect, float nearPlane, float farPlane) override;
 
