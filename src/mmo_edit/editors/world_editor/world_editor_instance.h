@@ -148,7 +148,6 @@ namespace mmo
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader
 	{
-
 	public:
 		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
 		~WorldEditorInstance() override;

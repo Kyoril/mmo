@@ -360,6 +360,27 @@ namespace mmo
 
 		void VictimDespawned(GameObjectS&);
 
+	protected:
+		float MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
+
+		float CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const;
+
+		float DodgeChance();
+
+		float ParryChance();
+
+		float BlockChance();
+
+		virtual float GetUnitMissChance() const;
+
+		virtual bool HasOffhandWeapon() const;
+
+		bool CanDualWield() const;
+
+		int32 GetMaxSkillValueForLevel(uint32 level) const;
+
+		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS& victim, WeaponAttack attackType) const;
+
 	public:
 		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
 
@@ -511,6 +532,8 @@ namespace mmo
 		uint32 m_bindMap;
 		Vector3 m_bindPosition;
 		Radian m_bindFacing;
+
+		bool m_canDualWield = false;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

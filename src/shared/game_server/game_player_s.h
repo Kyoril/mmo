@@ -60,6 +60,12 @@ namespace mmo
 
 		static uint8 CalculateAttributeCost(uint32 pointsSpent);
 
+	protected:
+
+		float GetUnitMissChance() const override;
+
+		bool HasOffhandWeapon() const override;
+
 	public:
 		void RewardExperience(const uint32 xp);
 

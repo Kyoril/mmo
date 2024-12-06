@@ -222,6 +222,21 @@ namespace mmo
 		return static_cast<uint8>(std::min(cost, 255.0));
 	}
 
+	float GamePlayerS::GetUnitMissChance() const
+	{
+		return GameUnitS::GetUnitMissChance();
+	}
+
+	bool GamePlayerS::HasOffhandWeapon() const
+	{
+		if (m_inventory.GetWeaponByAttackType(weapon_attack::OffhandAttack, false, true))
+		{
+			return true;
+		}
+
+		return GameUnitS::HasOffhandWeapon();
+	}
+
 	bool GamePlayerS::AddAttributePoint(uint32 attribute)
 	{
 		// First determine attribute point cost

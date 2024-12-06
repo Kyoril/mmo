@@ -613,6 +613,141 @@ namespace mmo
 		StopAttack();
 	}
 
+	float GameUnitS::MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const
+	{	
+		const proto::SpellEntry* spell = spellId ? m_project.spells.getById(spellId) : nullptr;
+		// TODO: Check for can't miss attribute on spell and if if it can't miss, return 0.0f
+
+		float missChance = victim.GetUnitMissChance();
+
+		// Off hand attacks have an additional 19% miss chance
+		if (!spellId && HasOffhandWeapon() && attackType != weapon_attack::RangedAttack)
+		{
+			missChance += 19.0f;
+		}
+
+		// Calculate skill diff
+		int32 diff = -skillDiff;
+		missChance += diff > 10 ? 1 + (diff - 10) * 0.4f : diff * 0.1f;
+
+		return std::min(std::max(missChance, 0.0f), 100.0f);
+	}
+
+	float GameUnitS::CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const
+	{
+		// TODO
+		return 5.0f;
+	}
+
+	float GameUnitS::DodgeChance()
+	{
+		return 5.0f;
+	}
+
+	float GameUnitS::ParryChance()
+	{
+		return 5.0f;
+	}
+
+	float GameUnitS::BlockChance()
+	{
+		return 5.0f;
+	}
+
+	float GameUnitS::GetUnitMissChance() const
+	{
+		// Base miss chance is 5%
+		float miss_chance = 5.0f;
+
+		// TODO: Maybe increase this for players based on their defense skill
+
+		return miss_chance;
+	}
+
+	bool GameUnitS::HasOffhandWeapon() const
+	{
+		return false;
+	}
+
+	bool GameUnitS::CanDualWield() const
+	{
+		return m_canDualWield;
+	}
+
+	int32 GameUnitS::GetMaxSkillValueForLevel(uint32 level) const
+	{
+		return 5 * level;
+	}
+
+	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS& victim, const WeaponAttack attackType) const
+	{
+		const int32 attackerMaxSkillValueForLevel = GetMaxSkillValueForLevel(GetLevel());
+		const int32 victimMaxSkillValueForLevel = GetMaxSkillValueForLevel(victim.GetLevel());
+
+		// TODO: Get actual skill values. For now they are considered both at maximum for the respective level
+		const int32 attackerWeaponSkill = attackerMaxSkillValueForLevel;
+		const int32 victimDefenseSkill = victimMaxSkillValueForLevel;
+
+		// Calculate miss chance
+		const float missChance = MeleeMissChance(victim, attackType, attackerWeaponSkill - victimDefenseSkill, 0);
+
+		// Calculate crit chance
+		const float critChance = CriticalHitChance(victim, attackType);
+
+		const float dodgeChance = victim.DodgeChance();
+		const float blockChance  = victim.BlockChance();
+		const float parryChance = victim.ParryChance();
+
+		// Order of checks: Miss -> Dodge -> Parry -> Glancing -> Block -> Crushing -> Crit -> Normal
+
+		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
+		std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
+		if (chanceDistribution(randomGenerator) < missChance)
+		{
+			return MeleeAttackOutcome::Miss;
+		}
+
+		if (chanceDistribution(randomGenerator) < dodgeChance)
+		{
+			return MeleeAttackOutcome::Dodge;
+		}
+
+		if (chanceDistribution(randomGenerator) < parryChance)
+		{
+			return MeleeAttackOutcome::Parry;
+		}
+
+		// Glancing check only if target is at our or higher level
+		if (GetLevel() <= victim.GetLevel())
+		{
+			// Per skill diff, 5% chance up to 40%
+			const float glancingChance = std::min((attackerWeaponSkill - victimDefenseSkill) * 5.0f, 40.0f);
+			if (chanceDistribution(randomGenerator) < glancingChance)
+			{
+				return MeleeAttackOutcome::Glancing;
+			}
+		}
+
+		// Crushing check if our level is 4 or more above the target
+		if (GetLevel() >= victim.GetLevel() + 4)
+		{
+			// Per skill diff, 2% chance
+			const float crushChance = std::min((attackerWeaponSkill - victimDefenseSkill) * 2.0f, 0.0f);
+			if (chanceDistribution(randomGenerator) < crushChance)
+			{
+				return MeleeAttackOutcome::Crushing;
+			}
+		}
+
+		// Crit check last
+		if (chanceDistribution(randomGenerator) < critChance)
+		{
+			return MeleeAttackOutcome::Crit;
+		}
+
+		return MeleeAttackOutcome::Normal;
+	}
+
 	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)
 	{
 		ASSERT(victim);
@@ -1254,25 +1389,36 @@ namespace mmo
 			return;
 		}
 
+		// Calculate melee hit outcome
+		const MeleeAttackOutcome outcome = RollMeleeOutcomeAgainst(*victim, WeaponAttack::BaseAttack);
+
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
 		uint32 totalDamage = victim->CalculateArmorReducedDamage(Get<uint32>(object_fields::Level), static_cast<uint32>(distribution(randomGenerator)));
 
-		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
-		const float critChance = 5.0f;			// 5% crit chance hard coded for now
-		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
-
-		bool isCrit = false;
-		if (critDistribution(randomGenerator) < critChance)
+		if (outcome == MeleeAttackOutcome::Crit)
 		{
-			isCrit = true;
 			totalDamage *= 2;
+		}
+		else if(outcome == melee_attack_outcome::Crushing)
+		{
+			totalDamage *= 4;
+		}
+		else if (outcome == melee_attack_outcome::Glancing)
+		{
+			totalDamage *= 0.15f;
+		}
+		else if (outcome == melee_attack_outcome::Miss ||
+			outcome == melee_attack_outcome::Parry ||
+			outcome == melee_attack_outcome::Dodge)
+		{
+			totalDamage = 0;
 		}
 
 		victim->Damage(totalDamage, spell_school::Normal, this);
 		if (m_netUnitWatcher)
 		{
-			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, isCrit ? damage_flags::Crit : damage_flags::None);
+			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, outcome == melee_attack_outcome::Crit ? damage_flags::Crit : damage_flags::None);
 		}
 
 		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)
