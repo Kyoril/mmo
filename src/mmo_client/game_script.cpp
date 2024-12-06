@@ -893,7 +893,7 @@ namespace mmo
 							if (format)
 							{
 								char buffer[128];
-								sprintf_s(buffer, format->c_str(), displayValue);
+								snprintf(buffer, 128, format->c_str(), displayValue);
 								strm << buffer;
 							}
 							else

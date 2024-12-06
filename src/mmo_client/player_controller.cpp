@@ -550,10 +550,7 @@ namespace mmo
 
 		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
-			POINT cursorPos;
-			GetCursorPos(&cursorPos);
-			m_lastMousePosition[0] = cursorPos.x;
-			m_lastMousePosition[1] = cursorPos.y;
+            Platform::GetCursorPos(m_lastMousePosition[0], m_lastMousePosition[1]);
 		}
 
 		if (button == MouseButton_Left)

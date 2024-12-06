@@ -24,6 +24,12 @@ namespace mmo
 		virtual void* GetTextureObject() const final override { return nullptr; }
 		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
 
+        uint32 GetPixelDataSize() const override;
+
+        void* GetRawTexture() const override;
+
+        void CopyPixelDataTo(uint8* destination) override;
+
 	private:
 		GraphicsDeviceMetal& m_device;
 	};

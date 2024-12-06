@@ -41,7 +41,7 @@ CREATE TABLE `characters` (
   `energy` smallint unsigned DEFAULT '100',
   PRIMARY KEY (`id`),
   UNIQUE KEY `UNIQUE_NAME` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
 DROP TABLE IF EXISTS `character_chat`;
 
@@ -65,7 +65,7 @@ CREATE TABLE `character_spells` (
   UNIQUE KEY `idx_char_spell` (`character`,`spell`),
   KEY `idx_char` (`character`),
   CONSTRAINT `fk_spell_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
 /*Table structure for table `world` */
 

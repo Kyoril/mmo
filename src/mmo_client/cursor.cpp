@@ -1,13 +1,12 @@
 
 #include "cursor.h"
 
-#include <d3d11.h>
-
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
 #ifdef WIN32
 #	include <Windows.h>
+#   include <d3d11.h>
 #	include <map>
 #	include "graphics_d3d11/graphics_device_d3d11.h"
 
