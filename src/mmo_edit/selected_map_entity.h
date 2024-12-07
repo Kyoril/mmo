@@ -126,5 +126,6 @@ namespace mmo
 
 	private:
 		proto::UnitSpawnEntry& m_entry;
+		std::function<void(Selectable&)> m_duplication;
 	};
 }

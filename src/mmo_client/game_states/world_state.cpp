@@ -2165,6 +2165,15 @@ namespace mmo
 			// Set target unit
 			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 			targetMap.SetUnitTarget(targetUnit->GetGuid());
+
+			// Can this spell target dead units, and if not, are we targeting a dead unit?
+			if ((spell->attributes(0) & spell_attributes::CanTargetDead) == 0 &&
+				(targetUnit && !targetUnit->IsAlive()))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
+				return;
+			}
 		}
 
 		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)

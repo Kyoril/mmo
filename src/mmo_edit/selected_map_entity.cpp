@@ -116,12 +116,23 @@ namespace mmo
 		return Vector3::UnitScale;
     }
 
+    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const std::function<void(Selectable&)>& duplication)
+		: Selectable()
+		, m_entry(entry)
+        , m_duplication(duplication)
+    {
+    }
+
     void SelectedUnitSpawn::Visit(SelectableVisitor& visitor)
     {
     }
 
     void SelectedUnitSpawn::Duplicate()
     {
+        if (m_duplication)
+        {
+            m_duplication(*this);
+        }
     }
 
     void SelectedUnitSpawn::Translate(const Vector3& delta)

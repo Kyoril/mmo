@@ -1421,7 +1421,8 @@ namespace mmo
 			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, outcome == melee_attack_outcome::Crit ? damage_flags::Crit : damage_flags::None);
 		}
 
-		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)
+		if (totalDamage > 0 &&
+			Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
 			const uint32 level = Get<uint32>(object_fields::Level);
 			const float C = 3.0f;

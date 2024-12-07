@@ -375,13 +375,13 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Interrupt", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Interrupt##header", ImGuiTreeNodeFlags_None))
 		{
 			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
 			CHECKBOX_FLAG_PROP(interruptflags, "Auto Attack", spell_interrupt_flags::AutoAttack);
 			CHECKBOX_FLAG_PROP(interruptflags, "Damage", spell_interrupt_flags::Damage);
 			CHECKBOX_FLAG_PROP(interruptflags, "Push Back", spell_interrupt_flags::PushBack);
-			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt", spell_interrupt_flags::Interrupt);
+			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt##flag", spell_interrupt_flags::Interrupt);
 		}
 
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
@@ -396,6 +396,7 @@ namespace mmo
 			CHECKBOX_ATTR_PROP(0, "Hidden On Client", spell_attributes::HiddenClientSide);
 			CHECKBOX_ATTR_PROP(0, "Hidden Cast Time", spell_attributes::HiddenCastTime);
 			CHECKBOX_ATTR_PROP(0, "Target MainHand Item", spell_attributes::TargetMainhandItem);
+			CHECKBOX_ATTR_PROP(0, "Can Target Dead", spell_attributes::CanTargetDead);
 			CHECKBOX_ATTR_PROP(0, "Only Daytime", spell_attributes::DaytimeOnly);
 			CHECKBOX_ATTR_PROP(0, "Only Night", spell_attributes::NightOnly);
 			CHECKBOX_ATTR_PROP(0, "Only Indoor", spell_attributes::IndoorOnly);

@@ -171,11 +171,15 @@ namespace mmo
 
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
+		void PerformSpawnSelectionRaycast(float viewportX, float viewportY);
+
 		void PerformTerrainSelectionRaycast(float viewportX, float viewportY);
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
 		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+
+		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
 
 		void OnMapEntityRemoved(MapEntity& entity);
 
@@ -242,6 +246,7 @@ namespace mmo
 
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
+		IdGenerator<uint64> m_unitSpawnIdGenerator{ 1 };
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
 		ImVec2 m_lastContentRectMin{};
@@ -268,6 +273,7 @@ namespace mmo
 
 		bool m_hasTerrain{ true };
 		std::vector<String> m_meshNames;
+
 
 		Vector3 m_brushPosition{};
 		uint32 m_worldFileVersion;

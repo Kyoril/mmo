@@ -274,6 +274,13 @@ namespace mmo
 			return false;
 		}
 
+		// Check if we are trying to cast a spell on a dead target which is not allowed
+		if (unitTarget && !unitTarget->IsAlive() && !HasAttributes(0, spell_attributes::CanTargetDead))
+		{
+			SendEndCast(spell_cast_result::FailedTargetNotDead);
+			return false;
+		}
+
 		if (unitTarget && m_spell.has_rangetype())
 		{
 			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());

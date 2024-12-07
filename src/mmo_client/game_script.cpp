@@ -620,11 +620,18 @@ namespace mmo
 			return 0;
 		}
 
-		int32 Script_GetPlayerAura(int32 id)
+		void Script_UnitAura(const std::string& unitName, uint32 id, const proto_client::SpellEntry*& out_spell, int32& out_duration)
 		{
-			// TODO: Get buff index
+			out_duration = -1;
+			out_spell = nullptr;
 
-			return -1;
+			std::shared_ptr<GameUnitC> unit = Script_GetUnitByName(unitName);
+			if (!unit)
+			{
+				return;
+			}
+
+			// TODO: Check unit auras
 		}
 
 		int32 Script_UnitPowerType(const std::string& unitName)
@@ -1082,7 +1089,8 @@ namespace mmo
 				.def_readonly("powertype", &proto_client::SpellEntry::powertype)
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
-				.def_readonly("icon", &proto_client::SpellEntry::icon)),
+				.def_readonly("icon", &proto_client::SpellEntry::icon)
+				.def_readonly("auratext", &proto_client::SpellEntry::auratext)),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -1111,7 +1119,7 @@ namespace mmo
 
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def("CastSpell", &Script_CastSpell),
-			luabind::def("GetPlayerAura", &Script_GetPlayerAura),
+			luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 

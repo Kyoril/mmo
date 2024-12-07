@@ -402,6 +402,28 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
+			if (m_editMode == WorldEditMode::Spawns)
+			{
+				static const char* s_noneMap = "<None>";
+
+				if (ImGui::BeginCombo("Map", m_mapEntry ? m_mapEntry->name().c_str() : s_noneMap, ImGuiComboFlags_None))
+				{
+					for (uint32 i = 0; i < static_cast<uint32>(m_editor.GetProject().maps.count()); ++i)
+					{
+						ImGui::PushID(i);
+						if (ImGui::Selectable(m_editor.GetProject().maps.getTemplates().entry(i).name().c_str(), m_editor.GetProject().maps.getTemplates().mutable_entry(i) == m_mapEntry))
+						{
+							m_mapEntry = m_editor.GetProject().maps.getTemplates().mutable_entry(i);
+
+							// TODO: Reload spawn objects
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+			}
+
 			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
 			{
 				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
@@ -766,6 +788,15 @@ namespace mmo
 						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 				}
 			}
+			else if (m_editMode == WorldEditMode::Spawns)
+			{
+				if (!widgetWasActive && button == 0 && m_hovering)
+				{
+					PerformSpawnSelectionRaycast(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+				}
+			}
 			else if (m_editMode == WorldEditMode::Terrain)
 			{
 				if (m_terrainEditMode == TerrainEditMode::Select)
@@ -1005,6 +1036,37 @@ namespace mmo
 		}
 	}
 
+	void WorldEditorInstance::PerformSpawnSelectionRaycast(float viewportX, float viewportY)
+	{
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+		m_raySceneQuery->SetRay(ray);
+		m_raySceneQuery->SetSortByDistance(true);
+		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Spawns);
+		m_raySceneQuery->ClearResult();
+		m_raySceneQuery->Execute();
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		const auto& hitResult = m_raySceneQuery->GetLastResult();
+		if (!hitResult.empty())
+		{
+			Entity* entity = (Entity*)hitResult[0].movable;
+			if (entity)
+			{
+				proto::UnitSpawnEntry* spawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
+				if (spawnEntry)
+				{
+					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, [this, spawnEntry](Selectable& selected)
+						{
+							// TODO: Implement
+						}));
+					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+				}
+			}
+		}
+	}
+
 	void WorldEditorInstance::PerformTerrainSelectionRaycast(float viewportX, float viewportY)
 	{
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
@@ -1077,6 +1139,56 @@ namespace mmo
 			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
 			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
+		}
+
+		return entity;
+	}
+
+	Entity* WorldEditorInstance::CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn)
+	{
+		proto::Project& project = m_editor.GetProject();
+
+		// TODO: Use different mesh file?
+		String meshFile = "Editor/Joint.hmsh";
+
+		if (const auto* unit = project.units.getById(spawn.unitentry()))
+		{
+			const uint32 modelId = unit->malemodel() ? unit->malemodel() : unit->femalemodel();
+
+			if (modelId == 0)
+			{
+				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
+				WLOG("No model id assigned!");
+			}
+			else if (const auto* model = project.models.getById(modelId))
+			{
+				meshFile = model->filename();
+			}
+			else
+			{
+				WLOG("Model " << modelId << " not found!");
+			}
+		}
+		else
+		{
+			WLOG("Spawn point of non-existant unit " << spawn.unitentry() << " found");
+		}
+
+		const String uniqueId = "UnitSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
+		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
+		if (entity)
+		{
+			entity->SetQueryFlags(SceneQueryFlags_Spawns);
+
+			auto& node = m_scene.CreateSceneNode(uniqueId);
+			m_scene.GetRootSceneNode().AddChild(node);
+			node.AttachObject(*entity);
+			node.SetPosition(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
+			node.SetOrientation(Quaternion(Radian(spawn.rotation()), Vector3::UnitY));
+			node.SetScale(Vector3::UnitScale);
+
+			// TODO: Is this safe? Does protobuf move the object around in memory?
+			entity->SetUserObject(&spawn);
 		}
 
 		return entity;
