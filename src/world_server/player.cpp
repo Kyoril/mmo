@@ -100,6 +100,8 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
 	{
+		// TODO: Collect aura packets for spawned units
+
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::UpdateObject);
@@ -110,6 +112,9 @@ namespace mmo
 			}
 			outPacket.Finish();
 		});
+
+		// TODO: Send aura update packets for spawned units
+
 	}
 
 	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const

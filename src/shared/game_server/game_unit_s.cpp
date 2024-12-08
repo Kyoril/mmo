@@ -571,6 +571,28 @@ namespace mmo
 		appliedAura->SetApplied(true);
 	}
 
+	void GameUnitS::BuildAuraPacket(io::Writer& writer) const
+	{
+		writer << io::write_packed_guid(GetGuid());
+
+		uint32 visibleAuraCount = 0;
+		const size_t countPos = writer.Sink().Position();
+		writer << io::write<uint32>(visibleAuraCount);
+
+		// Iterate through visible auras
+		for (const auto& aura : m_auras)
+		{
+			if (aura->IsVisible())
+			{
+				aura->WriteAuraUpdate(writer);
+				visibleAuraCount++;
+			}
+		}
+
+		// Write actual visible aura count
+		writer.Sink().Overwrite(countPos, reinterpret_cast<const char*>(&visibleAuraCount), sizeof(uint32));
+	}
+
 	void GameUnitS::NotifyManaUsed()
 	{
 		m_lastManaUse = GetAsyncTimeMs();

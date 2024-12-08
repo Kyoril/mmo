@@ -96,6 +96,21 @@ namespace mmo
 		return m_duration > 0 && m_expiration <= GetAsyncTimeMs();
 	}
 
+	void AuraContainer::WriteAuraUpdate(io::Writer& writer) const
+	{
+		const uint32 now = GetAsyncTimeMs();
+		writer << io::write<uint32>(m_spell.id());
+		writer << io::write<uint32>(m_expiration > now ? m_expiration - now : 0);
+		writer << io::write_packed_guid(m_casterId);
+
+		writer << io::write<uint8>(m_auras.size());
+		for (uint32 i = 0; i < m_auras.size(); ++i)
+		{
+			const auto& aura = m_auras[i];
+			writer << io::write<int32>(aura.basePoints);
+		}
+	}
+
 	uint32 AuraContainer::GetSpellId() const
 	{
 		return m_spell.id();

@@ -348,6 +348,8 @@ namespace mmo
 
 		void ApplyAura(std::unique_ptr<AuraContainer>&& aura);
 
+		void BuildAuraPacket(io::Writer& writer) const;
+
 		void NotifyManaUsed();
 
 		/// Teleports the unit to a new location on the same map.

@@ -239,6 +239,7 @@ namespace mmo
 				ListInventory,
 
 				LevelUp,
+				AuraUpdate,
 
 				/// Counter constant
 				Count_,

@@ -632,6 +632,8 @@ namespace mmo
 			}
 
 			// TODO: Check unit auras
+
+
 		}
 
 		int32 Script_UnitPowerType(const std::string& unitName)
