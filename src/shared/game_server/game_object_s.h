@@ -157,6 +157,16 @@ namespace mmo
 
 		virtual void Initialize();
 
+		bool IsUnit() const { return GetTypeId() == ObjectTypeId::Unit || IsPlayer(); }
+
+		bool IsPlayer() const { return GetTypeId() == ObjectTypeId::Player; }
+
+		bool IsItem() const { return GetTypeId() == ObjectTypeId::Item || IsContainer(); }
+
+		bool IsContainer() const { return GetTypeId() == ObjectTypeId::Container; }
+
+		bool IsCorpse() const { return GetTypeId() == ObjectTypeId::Corpse; }
+
 		template<class T>
 		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{

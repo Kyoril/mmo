@@ -27,6 +27,7 @@ namespace mmo
 	{
 	public:
 		signal<void(uint64, uint16, uint16)> fieldsChanged;
+		signal<void()> removed;
 
 	public:
 		explicit GameObjectC(Scene& scene, const proto_client::Project& project);

@@ -318,8 +318,7 @@ namespace mmo
 		});
 	}
 
-	void RealmConnector::SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize,
-		const std::vector<char>& packetContent)
+	void RealmConnector::SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent, bool flush)
 	{
 		sendSinglePacket([characterGuid, packetId, packetSize, &packetContent](auth::OutgoingPacket& outPacket)
 		{
@@ -330,7 +329,7 @@ namespace mmo
 				<< io::write<uint32>(packetSize)
 				<< io::write_dynamic_range<uint32>(packetContent);
 			outPacket.Finish();
-		});
+		}, flush);
 	}
 
 	void RealmConnector::SendCharacterData(const GamePlayerS& character)

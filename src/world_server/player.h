@@ -37,7 +37,7 @@ namespace mmo
 		/// @tparam F Type of the packet generator function.
 		/// @param generator The packet generator function.
 		template<class F>
-		void SendPacket(F generator) const
+		void SendPacket(F generator, bool flush = true) const
 		{
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
@@ -46,7 +46,7 @@ namespace mmo
 			generator(packet);
 
 			// Send the proxy packet to the realm server
-			m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer);
+			m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
 		}
 
 	public:
@@ -62,7 +62,7 @@ namespace mmo
 		void NotifyObjectsDespawned(const std::vector<GameObjectS*>& object) const override;
 
 		/// @copydoc TileSubscriber::SendPacket
-		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) override;
+		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
 
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
 

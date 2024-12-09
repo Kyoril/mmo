@@ -100,8 +100,7 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
 	{
-		// TODO: Collect aura packets for spawned units
-
+		// Send spawn packet
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::UpdateObject);
@@ -111,10 +110,33 @@ namespace mmo
 				object->WriteObjectUpdateBlock(outPacket);
 			}
 			outPacket.Finish();
-		});
+		}, true);
 
-		// TODO: Send aura update packets for spawned units
+		// Send aura update packets for spawned units
+		for (const auto& object : objects)
+		{
+			if (!object->IsUnit())
+			{
+				continue;
+			}
 
+			const GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+			if (!unit)
+			{
+				continue;
+			}
+
+			// Send initial aura update for spawned unit
+			SendPacket([unit](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::AuraUpdate);
+				unit->BuildAuraPacket(outPacket);
+				outPacket.Finish();
+			}, false);
+		}
+
+		// Flush packets
+		m_connector.flush();
 	}
 
 	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const
@@ -145,9 +167,9 @@ namespace mmo
 		});
 	}
 
-	void Player::SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer)
+	void Player::SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush)
 	{
-		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer);
+		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
 	}
 
 	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)

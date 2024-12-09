@@ -330,6 +330,41 @@ namespace mmo
 		m_fieldMap.Initialize(object_fields::UnitFieldCount);
 	}
 
+	bool GameUnitC::OnAuraUpdate(io::Reader& reader)
+	{
+		uint32 visibleAuraCount = 0;
+		if (!(reader >> io::read<uint32>(visibleAuraCount)))
+		{
+			return false;
+		}
+
+		for (uint32 i = 0; i < visibleAuraCount; ++i)
+		{
+			uint32 spellId, duration;
+			uint64 casterId;
+			uint8 auraTypeCount;
+
+			if (!(reader >> io::read<uint32>(spellId)
+				>> io::read<uint32>(duration)
+				>> io::read_packed_guid(casterId)
+				>> io::read<uint8>(auraTypeCount)))
+			{
+				ELOG("Failed to read aura data for unit " << log_hex_digit(GetGuid()));
+				return false;
+			}
+
+			std::vector<int32> basePoints;
+			basePoints.resize(auraTypeCount);
+			if (!(reader >> io::read_range(basePoints)))
+			{
+				ELOG("Failed to read aura base points");
+				return false;
+			}
+		}
+
+		return reader;
+	}
+
 	void GameUnitC::SetupSceneObjects()
 	{
 		GameObjectC::SetupSceneObjects();

@@ -194,6 +194,8 @@ namespace mmo
 
 		PacketParseResult OnLevelUp(game::IncomingPacket& packet);
 
+		PacketParseResult OnAuraUpdate(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

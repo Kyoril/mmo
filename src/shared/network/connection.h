@@ -74,12 +74,16 @@ namespace mmo
 
 	public:
 		template<class F>
-		void sendSinglePacket(F generator)
+		void sendSinglePacket(F generator, bool autoFlush = true)
 		{
 			io::StringSink sink(getSendBuffer());
 			typename Protocol::OutgoingPacket packet(sink);
 			generator(packet);
-			flush();
+
+			if (autoFlush)
+			{
+				flush();
+			}
 		}
 	};
 

@@ -28,6 +28,8 @@ namespace mmo
 		{
 			m_scene.DestroySceneNode(*m_sceneNode);	
 		}
+
+		removed();
 	}
 
 	void GameObjectC::InitializeFieldMap()

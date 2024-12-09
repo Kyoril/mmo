@@ -515,6 +515,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1833,6 +1834,31 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnAuraUpdate(game::IncomingPacket& packet)
+	{
+		uint64 unitGuid;
+		if (!(packet >> io::read_packed_guid(unitGuid)))
+		{
+			ELOG("Failed to read AuraUpdate packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Try to find unit
+		std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(unitGuid);
+		if (!unit)
+		{
+			WLOG("Unable to find unit " << log_hex_digit(unitGuid) << " for aura update!");
+			return PacketParseResult::Pass;
+		}
+
+		if (!unit->OnAuraUpdate(packet))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
 		return PacketParseResult::Pass;
 	}

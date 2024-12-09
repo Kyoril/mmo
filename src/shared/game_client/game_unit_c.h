@@ -75,6 +75,8 @@ namespace mmo
 
 		ICollisionProvider& GetCollisionProvider() const noexcept { return m_collisionProvider; }
 
+		bool OnAuraUpdate(io::Reader& reader);
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
@@ -129,6 +131,21 @@ namespace mmo
 
 		/// @brief Gets the maximum health of this unit.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
+
+		/// 
+		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
+
+		/// 
+		uint32 GetMaxLevel() const { return Get<uint32>(object_fields::MaxLevel); }
+
+		/// 
+		uint32 GetXp() const { return Get<uint32>(object_fields::Xp); }
+
+		/// 
+		uint32 GetNextLevelXp() const { return Get<uint32>(object_fields::NextLevelXp); }
+
+		/// 
+		uint32 GetAvailableAttributePoints() const { return Get<uint32>(object_fields::AvailableAttributePoints); }
 
 		/// @brief Returns whether the unit is currently alive.
 		bool IsAlive() const { return GetHealth() > 0; }

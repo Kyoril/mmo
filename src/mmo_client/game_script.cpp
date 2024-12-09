@@ -23,6 +23,7 @@
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
+#include "game_client/unit_handle.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
@@ -237,6 +238,30 @@ namespace mmo
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
+		}
+
+		std::shared_ptr<UnitHandle> Script_GetUnitHandleByName(const std::string& unitName)
+		{
+			if (unitName == "player")
+			{
+				const auto player = ObjectMgr::GetActivePlayer();
+				if (player)
+				{
+					return std::make_shared<UnitHandle>(*player);
+				}
+			}
+			else if (unitName == "target")
+			{
+				if (const auto playerObject = ObjectMgr::GetActivePlayer())
+				{
+					if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); !target)
+					{
+						return std::make_shared<UnitHandle>(*target);
+					}
+				}
+			}
+
+			return std::make_shared<UnitHandle>();
 		}
 
 		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string& unitName)
@@ -1081,6 +1106,12 @@ namespace mmo
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)),
 
 			luabind::scope(
+				luabind::class_<UnitHandle>("UnitHandle")
+				.def_readonly("health", &UnitHandle::GetHealth)
+				.def_readonly("maxHealth", &UnitHandle::GetMaxHealth)
+				.def_readonly("level", &UnitHandle::GetLevel)),
+
+			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
@@ -1093,6 +1124,8 @@ namespace mmo
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
 				.def_readonly("icon", &proto_client::SpellEntry::icon)
 				.def_readonly("auratext", &proto_client::SpellEntry::auratext)),
+
+			luabind::def("GetUnit", &Script_GetUnitHandleByName),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),

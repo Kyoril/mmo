@@ -22,6 +22,6 @@ namespace mmo
 
 		virtual void NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const = 0;
 
-		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer) = 0;
+		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) = 0;
 	};
 }
