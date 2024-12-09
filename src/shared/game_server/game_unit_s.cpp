@@ -564,6 +564,10 @@ namespace mmo
 			{
 				it = m_auras.erase(it);
 			}
+			else
+			{
+				++it;
+			}
 		}
 
 		// Apply new aura
