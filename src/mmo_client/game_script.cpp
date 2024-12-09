@@ -253,7 +253,7 @@ namespace mmo
 			{
 				if (const auto playerObject = ObjectMgr::GetActivePlayer())
 				{
-					if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); !target)
+					if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); target)
 					{
 						return std::make_shared<UnitHandle>(*target);
 					}
