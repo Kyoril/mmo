@@ -4,6 +4,7 @@
 #include "object_mgr.h"
 #include "base/clock.h"
 #include "client_data/project.h"
+#include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
 #include "scene_graph/mesh_manager.h"
@@ -14,6 +15,35 @@
 
 namespace mmo
 {
+	GameAuraC::GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, uint64 caster, GameTime expiration)
+		: m_spell(&spell)
+		, m_expiration(0)
+		, m_casterId(caster)
+		, m_targetId(owner.GetGuid())
+	{
+		if (expiration > 0)
+		{
+			m_expiration = GetAsyncTimeMs() + expiration;
+		}
+
+		m_onOwnerRemoved = owner.removed.connect([this]() { removed(); });
+	}
+
+	GameAuraC::~GameAuraC()
+	{
+		removed();
+	}
+
+	bool GameAuraC::IsExpired() const
+	{
+		if (!CanExpire())
+		{
+			return false;
+		}
+
+		return GetAsyncTimeMs() >= m_expiration;
+	}
+
 	void GameUnitC::Deserialize(io::Reader& reader, bool complete)
 	{
 		uint32 updateFlags = 0;
@@ -338,6 +368,8 @@ namespace mmo
 			return false;
 		}
 
+		m_auras.clear();
+
 		for (uint32 i = 0; i < visibleAuraCount; ++i)
 		{
 			uint32 spellId, duration;
@@ -360,6 +392,16 @@ namespace mmo
 				ELOG("Failed to read aura base points");
 				return false;
 			}
+
+			const proto_client::SpellEntry* spell = m_project.spells.getById(spellId);
+			if (!spell)
+			{
+				ELOG("Failed to find spell for aura!");
+				continue;
+			}
+
+			// Add aura
+			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration));
 		}
 
 		return reader;
@@ -596,6 +638,36 @@ namespace mmo
 	{
 		PlayOneShotAnimation(m_castReleaseState);
 		m_casting = false;
+	}
+
+	int32 GameUnitC::GetPower(const int32 powerType) const
+	{
+		if (powerType < 0 || powerType >= power_type::Health)
+		{
+			return 0;
+		}
+
+		return Get<int32>(object_fields::Mana + powerType);
+	}
+
+	int32 GameUnitC::GetMaxPower(const int32 powerType) const
+	{
+		if (powerType < 0 || powerType >= power_type::Health)
+		{
+			return 0;
+		}
+
+		return Get<int32>(object_fields::MaxMana + powerType);
+	}
+
+	GameAuraC* GameUnitC::GetAura(uint32 index) const
+	{
+		if (index < m_auras.size())
+		{
+			return m_auras[index].get();
+		}
+
+		return nullptr;
 	}
 
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)

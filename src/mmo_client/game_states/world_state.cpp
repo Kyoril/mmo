@@ -1860,6 +1860,11 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		if (unit->GetGuid() == ObjectMgr::GetActivePlayerGuid())
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_AURA_UPDATE");
+		}
+
 		return PacketParseResult::Pass;
 	}
 

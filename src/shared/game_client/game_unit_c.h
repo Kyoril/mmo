@@ -39,6 +39,36 @@ namespace mmo
 		virtual void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) = 0;
 	};
 
+	class GameAuraC final : public NonCopyable
+	{
+	public:
+		signal<void()> removed;
+
+	public:
+		explicit GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, uint64 caster, GameTime expiration);
+		~GameAuraC() override;
+
+		bool CanExpire() const { return m_expiration > 0; }
+
+		GameTime GetExpiration() const noexcept { return m_expiration; }
+
+		bool IsExpired() const;
+
+		const proto_client::SpellEntry* GetSpell() const noexcept { return m_spell; }
+
+		uint64 GetCasterId() const noexcept { return m_casterId; }
+
+		uint64 GetTargetId() const noexcept { return m_targetId; }
+
+	private:
+		const proto_client::SpellEntry* m_spell;
+		GameTime m_expiration;
+		uint64 m_casterId;
+		uint64 m_targetId;
+
+		scoped_connection m_onOwnerRemoved;
+	};
+
 	/// @brief Base class for a unit in the game client. A unit is a living object in the game world which can be interacted with,
 	///	       participate in combat and more. All player characters are also units.
 	class GameUnitC : public GameObjectC
@@ -146,6 +176,14 @@ namespace mmo
 
 		/// 
 		uint32 GetAvailableAttributePoints() const { return Get<uint32>(object_fields::AvailableAttributePoints); }
+
+		int32 GetPower(int32 powerType) const;
+
+		int32 GetMaxPower(int32 powerType) const;
+
+		uint32 GetAuraCount() const { return m_auras.size(); }
+
+		GameAuraC* GetAura(uint32 index) const;
 
 		/// @brief Returns whether the unit is currently alive.
 		bool IsAlive() const { return GetHealth() > 0; }
@@ -256,6 +294,8 @@ namespace mmo
 		const proto_client::FactionEntry* m_faction = nullptr;
 
 		const proto_client::FactionTemplateEntry* m_factionTemplate = nullptr;
+
+		std::vector<std::unique_ptr<GameAuraC>> m_auras;
 
 	protected:
 		// Animation stuff

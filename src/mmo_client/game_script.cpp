@@ -244,8 +244,7 @@ namespace mmo
 		{
 			if (unitName == "player")
 			{
-				const auto player = ObjectMgr::GetActivePlayer();
-				if (player)
+				if (const auto player = ObjectMgr::GetActivePlayer())
 				{
 					return std::make_shared<UnitHandle>(*player);
 				}
@@ -261,7 +260,7 @@ namespace mmo
 				}
 			}
 
-			return std::make_shared<UnitHandle>();
+			return nullptr;
 		}
 
 		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string& unitName)
@@ -1107,9 +1106,20 @@ namespace mmo
 
 			luabind::scope(
 				luabind::class_<UnitHandle>("UnitHandle")
-				.def_readonly("health", &UnitHandle::GetHealth)
-				.def_readonly("maxHealth", &UnitHandle::GetMaxHealth)
-				.def_readonly("level", &UnitHandle::GetLevel)),
+				.def("GetHealth", &UnitHandle::GetHealth)
+				.def("GetMaxHealth", &UnitHandle::GetMaxHealth)
+				.def("GetPower", &UnitHandle::GetPower)
+				.def("GetMaxPower", &UnitHandle::GetMaxPower)
+				.def("GetLevel", &UnitHandle::GetLevel)
+				.def("GetAuraCount", &UnitHandle::GetAuraCount)
+				.def("GetAura", &UnitHandle::GetAura)),
+
+			luabind::scope(
+				luabind::class_<AuraHandle>("AuraHandle")
+				.def("IsExpired", &AuraHandle::IsExpired)
+				.def("CanExpire", &AuraHandle::CanExpire)
+				.def("GetDuration", &AuraHandle::GetDuration)
+				.def("GetSpell", &AuraHandle::GetSpell)),
 
 			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")

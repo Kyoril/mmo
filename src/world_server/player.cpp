@@ -95,7 +95,31 @@ namespace mmo
 					object->WriteObjectUpdateBlock(outPacket, false);
 				}
 				outPacket.Finish();
-			});
+			}, false);
+
+		// Handle aura updates
+		for (auto& object : objects)
+		{
+			// Only units have auras
+			if (!object->IsUnit())
+			{
+				continue;
+			}
+
+			GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+			ASSERT(unit);
+
+			// TODO: Check if an aura update is needed and only update auras if necessary
+
+			SendPacket([unit](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::AuraUpdate);
+					unit->BuildAuraPacket(outPacket);
+					outPacket.Finish();
+				}, false);
+		}
+
+		m_connector.flush();
 	}
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
