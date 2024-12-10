@@ -111,6 +111,74 @@ namespace mmo
 		return nullptr;
 	}
 
+	const std::string& UnitHandle::GetName() const
+	{
+		static const std::string s_unnamed = "Unnamed";
+
+		if (!CheckNonNull()) return s_unnamed;
+		return Get()->GetName();
+	}
+
+	int32 UnitHandle::GetPowerType() const
+	{
+		if (!CheckNonNull()) return -1;
+		return Get()->GetPowerType();
+	}
+
+	float UnitHandle::GetMinDamage() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetMinDamage();
+	}
+
+	float UnitHandle::GetMaxDamage() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetMaxDamage();
+	}
+
+	uint32 UnitHandle::GetAttackPower() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetAttackPower();
+	}
+
+	int32 UnitHandle::GetStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetStat(statId);
+	}
+
+	int32 UnitHandle::GetPosStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetPosStat(statId);
+	}
+
+	int32 UnitHandle::GetNegStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetNegStat(statId);
+	}
+
+	int32 UnitHandle::GetArmor() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetArmor();
+	}
+
+	float UnitHandle::GetArmorReductionFactor() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetArmorReductionFactor();
+	}
+
+	int32 UnitHandle::GetAvailableAttributePoints() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetAvailableAttributePoints();
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

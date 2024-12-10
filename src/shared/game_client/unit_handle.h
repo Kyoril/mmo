@@ -48,6 +48,17 @@ namespace mmo
 		[[nodiscard]] int32 GetMaxPower(int32 powerType) const;
 		[[nodiscard]] uint32 GetAuraCount() const;
 		[[nodiscard]] std::shared_ptr<AuraHandle> GetAura(uint32 index) const;
+		[[nodiscard]] const std::string& GetName() const;
+		[[nodiscard]] int32 GetPowerType() const;
+		[[nodiscard]] float GetMinDamage() const;
+		[[nodiscard]] float GetMaxDamage() const;
+		[[nodiscard]] uint32 GetAttackPower() const;
+		[[nodiscard]] int32 GetStat(int32 statId) const;
+		[[nodiscard]] int32 GetPosStat(int32 statId) const;
+		[[nodiscard]] int32 GetNegStat(int32 statId) const;
+		[[nodiscard]] int32 GetArmor() const;
+		[[nodiscard]] float GetArmorReductionFactor() const;
+		[[nodiscard]] int32 GetAvailableAttributePoints() const;
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;

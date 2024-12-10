@@ -1112,7 +1112,17 @@ namespace mmo
 				.def("GetMaxPower", &UnitHandle::GetMaxPower)
 				.def("GetLevel", &UnitHandle::GetLevel)
 				.def("GetAuraCount", &UnitHandle::GetAuraCount)
-				.def("GetAura", &UnitHandle::GetAura)),
+				.def("GetAura", &UnitHandle::GetAura)
+				.def("GetName", &UnitHandle::GetName)
+				.def("GetPowerType", &UnitHandle::GetPowerType)
+				.def("GetMinDamage", &UnitHandle::GetMinDamage)
+				.def("GetMaxDamage", &UnitHandle::GetMaxDamage)
+				.def("GetArmor", &UnitHandle::GetArmor)
+				.def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
+				.def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)
+				.def("GetStat", &UnitHandle::GetStat)
+				.def("GetPosStat", &UnitHandle::GetPosStat)
+				.def("GetNegStat", &UnitHandle::GetNegStat)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")

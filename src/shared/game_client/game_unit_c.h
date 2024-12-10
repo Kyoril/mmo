@@ -183,6 +183,27 @@ namespace mmo
 
 		uint32 GetAuraCount() const { return m_auras.size(); }
 
+		int32 GetPowerType() const { return Get<int32>(object_fields::PowerType); }
+
+		uint32 GetAttackPower() const { return Get<uint32>(object_fields::AttackPower); }
+
+		float GetMinDamage() const { return Get<float>(object_fields::MinDamage); }
+
+		float GetMaxDamage() const { return Get<float>(object_fields::MaxDamage); }
+
+		int32 GetStat(int32 statId) const;
+
+		int32 GetPosStat(int32 statId) const;
+
+
+		int32 GetNegStat(int32 statId) const;
+
+		/// Gets the armor value of the unit.
+		int32 GetArmor() const { return Get<int32>(object_fields::Armor); }
+
+		/// This function is only used for UI display. All calculation is done on the server!
+		float GetArmorReductionFactor() const;
+
 		GameAuraC* GetAura(uint32 index) const;
 
 		/// @brief Returns whether the unit is currently alive.

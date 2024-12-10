@@ -1420,7 +1420,7 @@ namespace mmo
 
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
-		uint32 totalDamage = victim->CalculateArmorReducedDamage(Get<uint32>(object_fields::Level), static_cast<uint32>(distribution(randomGenerator)));
+		uint32 totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), static_cast<uint32>(distribution(randomGenerator)));
 
 		if (outcome == MeleeAttackOutcome::Crit)
 		{

@@ -660,6 +660,49 @@ namespace mmo
 		return Get<int32>(object_fields::MaxMana + powerType);
 	}
 
+	int32 GameUnitC::GetStat(int32 statId) const
+	{
+		if (statId < 0 || statId >= 5)
+		{
+			return 0;
+		}
+
+		return Get<int32>(object_fields::StatStamina + statId);
+	}
+
+	int32 GameUnitC::GetPosStat(int32 statId) const
+	{
+		if (statId < 0 || statId >= 5)
+		{
+			return 0;
+		}
+
+		return Get<int32>(object_fields::PosStatStamina + statId);
+	}
+
+	int32 GameUnitC::GetNegStat(int32 statId) const
+	{
+		if (statId < 0 || statId >= 5)
+		{
+			return 0;
+		}
+
+		return Get<int32>(object_fields::NegStatStamina + statId);
+	}
+
+	float GameUnitC::GetArmorReductionFactor() const
+	{
+		float armor = static_cast<float>(GetArmor());
+		if (armor < 0.0f)
+		{
+			armor = 0.0f;
+		}
+
+		// If factor is 0.6, damage is reduced by 60%
+		const float factor = armor / (armor + 400.0f + GetLevel() * 85.0f);
+		return Clamp(factor, 0.0f, 0.75f);
+	}
+
 	GameAuraC* GameUnitC::GetAura(uint32 index) const
 	{
 		if (index < m_auras.size())
