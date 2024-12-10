@@ -205,18 +205,6 @@ namespace mmo
 			Console::ExecuteCommand(cmdLine);
 		}
 		
-		const mmo::RealmData* Script_GetRealmData(const LoginConnector& connector, const int32 index)
-		{
-			const auto& realms = connector.GetRealms();
-			if (index < 0 || index >= realms.size())
-			{
-				ELOG("GetRealm: Invalid realm index provided (" << index << ")");
-				return nullptr;
-			}
-
-			return &realms[index];
-		}
-
 		const char* Script_GetConsoleVar(const std::string& name)
 		{
 			ConsoleVar* cvar = ConsoleVarMgr::FindConsoleVar(name);
@@ -315,26 +303,6 @@ namespace mmo
 			return false;
 		}
 
-		int32 Script_UnitHealth(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::Health);
-			}
-
-			return 0;
-		}
-
-		int32 Script_UnitHealthMax(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::MaxHealth);
-			}
-
-			return 1;
-		}
-
 		int32 Script_UnitAttributeCost(const std::string& unitName, uint32 attribute)
 		{
 			if (const auto unit = Script_GetUnitByName(unitName))
@@ -348,48 +316,6 @@ namespace mmo
 			return 0;
 		}
 
-		int32 Script_UnitPower(const std::string& unitName, int32 powerType)
-		{
-			if (powerType < 0 || powerType > power_type::Energy)
-			{
-				return -1;
-			}
-
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				const int32 power = unit->Get<int32>(object_fields::Mana + powerType);
-				return power;
-			}
-
-			return -1;
-		}
-
-		int32 Script_UnitPowerMax(const std::string& unitName, int32 powerType)
-		{
-			if (powerType < 0 || powerType > power_type::Energy)
-			{
-				return -1;
-			}
-
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				const int32 maxPower = unit->Get<int32>(object_fields::MaxMana + powerType);
-				return maxPower;
-			}
-
-			return -1;
-		}
-
-		int32 Script_UnitMana(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::Mana);
-			}
-
-			return 0;
-		}
-
 		int32 Script_UnitDisplayId(const std::string& unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
@@ -398,26 +324,6 @@ namespace mmo
 			}
 
 			return -1;
-		}
-
-		int32 Script_UnitManaMax(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::MaxMana);
-			}
-
-			return 1;
-		}
-
-		int32 Script_UnitLevel(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::Level);
-			}
-
-			return 1;
 		}
 
 		int32 Script_GetBackpackSlot(int32 slotId)
@@ -660,16 +566,6 @@ namespace mmo
 
 		}
 
-		int32 Script_UnitPowerType(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->Get<int32>(object_fields::PowerType);
-			}
-
-			return -1;
-		}
-
 		void Script_UnitStat(const std::string& unitName, uint32 statId, int32& out_base, int32& out_modifier)
 		{
 			out_base = -1;
@@ -686,21 +582,6 @@ namespace mmo
 				out_base = unit->Get<int32>(object_fields::StatStamina + statId) - bonus;
 				out_modifier = bonus;
 			}
-		}
-
-		int32 Script_UnitNumAttributePoints(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				if (unit->GetTypeId() != ObjectTypeId::Player)
-				{
-					return -1;
-				}
-
-				return unit->Get<uint32>(object_fields::AvailableAttributePoints);
-			}
-
-			return -1;
 		}
 
 		void Script_UnitArmor(const std::string& unitName, int32& out_base, int32& out_modifier)
@@ -739,16 +620,6 @@ namespace mmo
 			}
 
 			return 0;
-		}
-
-		std::string Script_UnitName(const std::string& unitName)
-		{
-			if (auto unit = Script_GetUnitByName(unitName))
-			{
-				return unit->GetName();
-			}
-
-			return "Unknown";
 		}
 
 		void Script_MoveForwardStart()
@@ -882,7 +753,10 @@ namespace mmo
 				return "<NULL>";
 			}
 
-			int32 level = Script_UnitLevel("player");
+			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
+			ASSERT(player);
+
+			const int32 level = player->GetLevel();
 
 			std::ostringstream strm;
 
@@ -1153,21 +1027,11 @@ namespace mmo
 			luabind::def("print", &Script_Print),
 
 			luabind::def("UnitExists", &Script_UnitExists),
-			luabind::def("UnitHealth", &Script_UnitHealth),
-			luabind::def("UnitHealthMax", &Script_UnitHealthMax),
-			luabind::def("UnitMana", &Script_UnitMana),
-			luabind::def("UnitManaMax", &Script_UnitManaMax),
-			luabind::def("UnitPower", &Script_UnitPower),
-			luabind::def("UnitPowerMax", &Script_UnitPowerMax),
-			luabind::def("UnitLevel", &Script_UnitLevel),
 			luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
 			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
-			luabind::def("UnitName", &Script_UnitName),
 			luabind::def("UnitMoney", &Script_UnitMoney),
-			luabind::def("UnitPowerType", &Script_UnitPowerType),
 			luabind::def("UnitDisplayId", &Script_UnitDisplayId),
-			luabind::def("UnitNumAttributePoints", &Script_UnitNumAttributePoints),
 			luabind::def("PlayerXp", &Script_PlayerXp),
 			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
 			luabind::def<std::function<void(const char*)>>("TargetUnit", [this](const char* unitName) { this->TargetUnit(unitName); }),
