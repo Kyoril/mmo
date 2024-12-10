@@ -42,7 +42,7 @@ namespace mmo
 		void AddAuraEffect(const proto::SpellEffect& effect, int32 basePoints);
 
 		/// Marks the aura as applied or misapplied. If set to true, this will also make the aura effective!
-		void SetApplied(bool apply);
+		void SetApplied(bool apply, bool notify = true);
 
 		/// Returns true if the aura can ever expire and is currently expired.
 		bool IsExpired() const;

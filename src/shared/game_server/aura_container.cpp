@@ -36,7 +36,7 @@ namespace mmo
 			&effect);
 	}
 
-	void AuraContainer::SetApplied(bool apply)
+	void AuraContainer::SetApplied(bool apply, bool notify)
 	{
 		if ((m_applied && apply) ||
 			(!m_applied && !apply))
@@ -55,6 +55,15 @@ namespace mmo
 		}
 
 		m_applied = apply;
+
+		if (notify && m_owner.GetWorldInstance())
+		{
+			// TODO: Flag this aura as updated so we only sync changed auras to units which already know about this unit's auras instead
+			// of having to sync ALL unit auras over and over again
+
+			// Auras changed, flag object for next update loop
+			m_owner.GetWorldInstance()->AddObjectUpdate(m_owner);
+		}
 
 		// TODO: Apply auras to the owning unit and notify others
 		for(const auto& aura : m_auras)

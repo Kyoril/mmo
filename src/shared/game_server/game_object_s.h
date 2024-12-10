@@ -289,6 +289,8 @@ namespace mmo
 
 		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const;
 
+		bool HasFieldChanges() const;
+
 		void ClearFieldChanges();
 
 		float GetSquaredDistanceTo(const Vector3& position, bool withHeight) const;

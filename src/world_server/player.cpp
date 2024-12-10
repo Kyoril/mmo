@@ -86,17 +86,39 @@ namespace mmo
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const
 	{
-		SendPacket([&objects](game::OutgoingPacket& outPacket)
-			{
-				outPacket.Start(game::realm_client_packet::UpdateObject);
-				outPacket << io::write<uint16>(objects.size());
-				for (const auto& object : objects)
-				{
-					object->WriteObjectUpdateBlock(outPacket, false);
-				}
-				outPacket.Finish();
-			}, false);
+		// Handle object field updates if any
+		{
+			// Prepare update packet
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
 
+			typename game::Protocol::OutgoingPacket packet(sink);
+			packet.Start(game::realm_client_packet::UpdateObject);
+			const size_t countPosition = sink.Position();
+			packet << io::write<uint16>(objects.size());
+
+			uint16 objectUpdateCount = objects.size();
+			for (const auto& object : objects)
+			{
+				if (!object->HasFieldChanges())
+				{
+					objectUpdateCount--;
+					continue;
+				}
+
+				object->WriteObjectUpdateBlock(packet, false);
+			}
+
+			sink.Overwrite(countPosition, reinterpret_cast<const char*>(&objectUpdateCount), sizeof(uint16));
+			packet.Finish();
+
+			if (objectUpdateCount > 0)
+			{
+				// Send the proxy packet to the realm server
+				m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, false);
+			}
+		}
+		
 		// Handle aura updates
 		for (auto& object : objects)
 		{

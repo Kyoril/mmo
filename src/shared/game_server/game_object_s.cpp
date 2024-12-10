@@ -86,6 +86,11 @@ namespace mmo
 		m_fields.SerializeChanges(writer);
 	}
 
+	bool GameObjectS::HasFieldChanges() const
+	{
+		return m_fields.HasChanges();
+	}
+
 	void GameObjectS::ClearFieldChanges()
 	{
 		m_fields.MarkAsUnchanged();
