@@ -321,6 +321,9 @@ namespace mmo
 			/// Spell can be cast on dead units. If this is not set, spells can't be cast on dead units.
 			CanTargetDead = 0x00000400,
 
+			/// Starts the first tick immediately on application.
+			StartPeriodicAtApply = 0x00000800,
+
 			/// Spell is only executable at day.
 			DaytimeOnly = 0x00001000,
 

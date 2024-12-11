@@ -241,6 +241,8 @@ namespace mmo
 				LevelUp,
 				AuraUpdate,
 
+				PeriodicAuraLog,
+
 				/// Counter constant
 				Count_,
 			};

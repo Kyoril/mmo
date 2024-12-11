@@ -676,6 +676,18 @@ namespace mmo
 
 		switch (currentAuraType)
 		{
+		case aura_type::PeriodicDamage:
+		case aura_type::PeriodicHeal:
+		case aura_type::PeriodicEnergize:
+		case aura_type::PeriodicTriggerSpell:
+		{
+			int amplitude = effect.amplitude();
+			if (ImGui::InputInt("Amplitude (ms)", &amplitude))
+			{
+				effect.set_amplitude(amplitude);
+			}
+		}
+		break;
 		case aura_type::ModStat:
 			{
 				int currentStat = effect.miscvaluea();
@@ -715,6 +727,34 @@ namespace mmo
 			}
 			}
 			break;
+		}
+
+		if (currentAuraType == aura_type::PeriodicTriggerSpell ||
+			currentAuraType == aura_type::ProcTriggerSpell)
+		{
+			static const char* s_none = "<None>";
+			int spell = effect.triggerspell();
+			const proto::SpellEntry* spellEntry = m_project.spells.getById(spell);
+			if (ImGui::BeginCombo("Trigger Spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_none, ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.spells.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
+					const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						effect.set_triggerspell(m_project.spells.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
 		}
 	}
 }

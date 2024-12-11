@@ -196,6 +196,8 @@ namespace mmo
 
 		PacketParseResult OnAuraUpdate(game::IncomingPacket& packet);
 
+		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

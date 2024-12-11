@@ -17,13 +17,91 @@ namespace mmo
 	}
 
 	class GameUnitS;
+	class AuraContainer;
 
-	struct Aura
+	class AuraEffect final : public std::enable_shared_from_this<AuraEffect>
 	{
-		AuraType type;
-		int32 basePoints;
-		GameTime tickInterval;
-		const proto::SpellEffect* effect;
+	public:
+		explicit AuraEffect(AuraContainer& container, const proto::SpellEffect& effect, TimerQueue& timers, int32 basePoints);
+
+	public:
+		AuraType GetType() const
+		{
+			return static_cast<AuraType>(m_effect.aura());
+		}
+
+		int32 GetBasePoints() const
+		{
+			return m_basePoints;
+		}
+
+		GameTime GetTickInterval() const
+		{
+			return m_tickInterval;
+		}
+
+		const proto::SpellEffect& GetEffect() const
+		{
+			return m_effect;
+		}
+
+		uint32 GetTickCount()
+		{
+			return m_tickCount;
+		}
+
+		uint32 GetMaxTickCount()
+		{
+			return m_totalTicks;
+		}
+
+		bool IsPeriodic() const
+		{
+			return m_isPeriodic;
+		}
+
+	public:
+		void HandleEffect(bool apply);
+
+	private:
+		/// Starts periodic ticks.
+		void HandlePeriodicBase();
+
+		void HandleModStat(bool apply);
+
+		void HandleModResistance(bool apply);
+
+		void HandleRunSpeedModifier(bool apply);
+
+		void HandleSwimSpeedModifier(bool apply);
+
+		void HandleFlySpeedModifier(bool apply);
+
+	private:
+		void HandlePeriodicDamage();
+
+		void HandlePeriodicHeal();
+
+		void HandlePeriodicEnergize();
+
+		void HandlePeriodicTriggerSpell();
+
+	private:
+		AuraContainer& m_container;
+		int32 m_basePoints = 0;
+		GameTime m_tickInterval = 0;
+		const proto::SpellEffect& m_effect;
+		Countdown m_tickCountdown;
+		uint32 m_totalTicks = 0;
+		uint32 m_tickCount = 0;
+		scoped_connection m_onTick;
+		bool m_isPeriodic = false;
+
+	private:
+
+		void StartPeriodicTimer();
+
+		void OnTick();
 	};
 
 	/// Holds and manages instances of auras for one unit.
@@ -105,16 +183,9 @@ namespace mmo
 		/// Returns true if an aura container should be overwritten by this aura container.
 		bool ShouldOverwriteAura(AuraContainer& other) const;
 
-	private:
-		void HandleModStat(const Aura& aura, bool apply);
+		const proto::SpellEntry& GetSpell() const { return m_spell; }
 
-		void HandleModResistance(const Aura& aura, bool apply);
-
-		void HandleRunSpeedModifier(const Aura& aura, bool apply);
-
-		void HandleSwimSpeedModifier(const Aura& aura, bool apply);
-
-		void HandleFlySpeedModifier(const Aura& aura, bool apply);
+		GameUnitS* GetCaster() const;
 
 	private:
 
@@ -124,7 +195,7 @@ namespace mmo
 
 		const proto::SpellEntry& m_spell;
 
-		std::vector<Aura> m_auras;
+		std::vector<std::shared_ptr<AuraEffect>> m_auras;
 
 		bool m_applied = false;
 
@@ -133,6 +204,8 @@ namespace mmo
 		GameTime m_expiration;
 
 		Countdown m_expirationCountdown;
+
+		mutable std::weak_ptr<GameUnitS> m_caster;
 	};
 
 }

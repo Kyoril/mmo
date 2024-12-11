@@ -26,6 +26,7 @@
 #include "base/erase_by_move.h"
 #include "base/timer_queue.h"
 #include "frame_ui/text_component.h"
+#include "game/aura.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
 #include "game/damage_school.h"
@@ -516,6 +517,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1863,6 +1865,55 @@ namespace mmo
 		if (unit->GetGuid() == ObjectMgr::GetActivePlayerGuid())
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_AURA_UPDATE");
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnPeriodicAuraLog(game::IncomingPacket& packet)
+	{
+		uint64 targetGuid;
+		uint64 casterGuid;
+		uint32 spellId;
+		uint32 auraType;
+
+		if (!(packet >> io::read_packed_guid(targetGuid)
+			>> io::read_packed_guid(casterGuid)
+			>> io::read<uint32>(spellId)
+			>> io::read<uint32>(auraType)))
+		{
+			ELOG("Failed to read PeriodicAuraLog packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (auraType == aura_type::PeriodicDamage ||
+			auraType == aura_type::PeriodicHeal)
+		{
+			Color color;
+			if (auraType == aura_type::PeriodicHeal)
+			{
+				color = Color(0.0f, 1.0f, 0.0f, 1.0f);
+			}
+			else
+			{
+				color = Color(1.0f, 1.0f, 0.0f, 1.0f);
+			}
+
+			uint32 amount;
+			if (!(packet >> io::read<uint32>(amount)))
+			{
+				ELOG("Failed to read amount from PeriodicAuraLog packet!");
+				return PacketParseResult::Disconnect;
+			}
+
+			if (casterGuid == ObjectMgr::GetActivePlayerGuid())
+			{
+				std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+				if (target)
+				{
+					AddWorldTextFrame(target->GetPosition(), std::to_string(amount), color, 2.0f);
+				}
+			}
 		}
 
 		return PacketParseResult::Pass;
