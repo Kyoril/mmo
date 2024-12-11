@@ -1285,6 +1285,8 @@ namespace mmo
 
 		for (auto& aura : m_auras)
 		{
+			if (!aura) continue;
+
 			if (!aura->IsApplied())
 			{
 				continue;
@@ -1306,6 +1308,8 @@ namespace mmo
 
 		for (auto& aura : m_auras)
 		{
+			if (!aura) continue;
+
 			if (!aura->IsApplied())
 			{
 				continue;
@@ -1327,6 +1331,8 @@ namespace mmo
 
 		for (auto& aura : m_auras)
 		{
+			if (!aura) continue;
+
 			if (!aura->IsApplied())
 			{
 				continue;
