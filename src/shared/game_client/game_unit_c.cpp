@@ -887,6 +887,17 @@ namespace mmo
 			return false;
 		}
 
+		// Same faction template should always be friendly
+		if (m_factionTemplate == other.m_factionTemplate)
+		{
+			return true;
+		}
+
+		if (m_faction == other.m_faction)
+		{
+			return true;
+		}
+
 		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId) { return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
 	}
 
@@ -898,6 +909,17 @@ namespace mmo
 		}
 
 		if (m_faction == nullptr || other.m_faction == nullptr)
+		{
+			return false;
+		}
+
+		// Same faction template should always never be hostile
+		if (m_factionTemplate == other.m_factionTemplate)
+		{
+			return false;
+		}
+
+		if (m_faction == other.m_faction)
 		{
 			return false;
 		}

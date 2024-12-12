@@ -1072,6 +1072,12 @@ namespace mmo
 			return false;
 		}
 
+		if (faction == otherFaction ||
+			faction->faction() == otherFaction->faction())
+		{
+			return false;
+		}
+
 		for (int i = 0; i < faction->enemies_size(); ++i)
 		{
 			const auto& enemy = faction->enemies(i);
@@ -1106,6 +1112,12 @@ namespace mmo
 		if (!faction || !otherFaction)
 		{
 			return false;
+		}
+
+		if (faction == otherFaction ||
+			faction->faction() == otherFaction->faction())
+		{
+			return true;
 		}
 
 		for (int i = 0; i < faction->enemies_size(); ++i)
