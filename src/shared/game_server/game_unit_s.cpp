@@ -614,6 +614,83 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::ModifySpellMod(const SpellModifier& mod, const bool apply)
+	{
+		for (uint8 eff = 0; eff < 64; ++eff)
+		{
+			const uint64 mask = static_cast<uint64>(1) << eff;
+			if (mod.mask & mask)
+			{
+				int32 val = 0;
+				for (auto it = m_spellModsByOp[mod.op].begin(); it != m_spellModsByOp[mod.op].end(); ++it)
+				{
+					if (it->type == mod.type && it->mask & mask)
+					{
+						val += it->value;
+					}
+				}
+
+				val += apply ? mod.value : -(mod.value);
+				if (m_netUnitWatcher)
+				{
+					m_netUnitWatcher->OnSpellModChanged(mod.type, eff, mod.op, val);
+				}
+			}
+		}
+
+		if (apply)
+		{
+			m_spellModsByOp[mod.op].push_back(mod);
+		}
+		else
+		{
+			for (auto it = m_spellModsByOp[mod.op].begin(); it != m_spellModsByOp[mod.op].end(); ++it)
+			{
+				if (it->mask == mod.mask &&
+					it->value == mod.value &&
+					it->type == mod.type &&
+					it->op == mod.op
+					)
+				{
+					it = m_spellModsByOp[mod.op].erase(it);
+					break;
+				}
+			}
+		}
+	}
+
+	int32 GameUnitS::GetTotalSpellMods(const SpellModType type, const SpellModOp op, const uint32 spellId) const
+	{
+		const auto* spell = GetProject().spells.getById(spellId);
+		if (!spell)
+		{
+			return 0;
+		}
+		
+		// Get spell modifier by op list
+		const auto list = m_spellModsByOp.find(op);
+		if (list == m_spellModsByOp.end())
+		{
+			return 0;
+		}
+
+		int32 total = 0;
+		for (const auto& mod : list->second)
+		{
+			if (mod.type != type)
+			{
+				continue;
+			}
+
+			if (const uint64 familyFlags = spell->familyflags(); familyFlags & mod.mask)
+			{
+				total += mod.value;
+			}
+		}
+
+		return total;
+	}
+
 	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS>& victim)
 	{
 		m_victimSignals.disconnect();

@@ -103,6 +103,9 @@ namespace mmo
 			ModSpeedAlways,
 			ModSpeedNonStacking,
 
+			AddFlatModifier,
+			AddPctModifier,
+
 			Count_,
 			Invalid_ = Count_
 		};

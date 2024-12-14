@@ -286,8 +286,13 @@ namespace mmo
 			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());
 			if (rangeType && rangeType->range() > 0.0f)
 			{
+				float range = rangeType->range();
+
+				// Modify spell range by spell mods
+				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
+
 				// If distance is too big, cancel casting. Note we use squared distance check as distance involves sqrt which is more expansive
-				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > rangeType->range() * rangeType->range())
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
 				{
 					SendEndCast(spell_cast_result::FailedOutOfRange);
 					return false;
@@ -523,6 +528,9 @@ namespace mmo
 
 		if (finalCD)
 		{
+			// Modify spell cooldown by spell mods
+			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Cooldown, m_spell.id(), finalCD);
+
 			ApplyCooldown(finalCD, spellCatCD);
 		}
 
@@ -622,7 +630,18 @@ namespace mmo
 		std::uniform_int_distribution<int> distribution(effect.basedice(), randomPoints);
 		const int32 randomValue = (effect.basedice() >= randomPoints ? effect.basedice() : distribution(randomGenerator));
 
-		return basePoints + randomValue + comboDamage;
+		int32 outBasePoints = basePoints + randomValue + comboDamage;
+
+		// Apply spell base point modifications
+		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::AllEffects, m_spell.id(), outBasePoints);
+
+		if (effect.aura() == aura_type::PeriodicDamage ||
+			effect.aura() == aura_type::PeriodicHeal)
+		{
+			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::PeriodicBasePoints, m_spell.id(), outBasePoints);
+		}
+
+		return outBasePoints;
 	}
 
 	uint32 SingleCastState::GetSpellPointsTotal(const proto::SpellEffect& effect, uint32 spellPower, uint32 bonusPct)
@@ -659,7 +678,9 @@ namespace mmo
 		}
 
 		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-		const uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+		uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), damageAmount);
+
 		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
 
 		// Log spell damage to client
@@ -935,9 +956,13 @@ namespace mmo
 		std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
 		uint32 totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, static_cast<uint32>(distribution(randomGenerator)));
 
+		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
+
 		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
-		const float critChance = 5.0f;			// 5% crit chance hard coded for now
+		float critChance = 5.0f;			// 5% crit chance hard coded for now
 		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+
+		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
 
 		bool isCrit = false;
 		if (critDistribution(randomGenerator) < critChance)
@@ -958,7 +983,10 @@ namespace mmo
 			return *m_targetAuraContainers[&target];
 		}
 
-		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, m_spell.duration()));
+		GameTime duration = m_spell.duration();
+		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Duration, m_spell.id(), duration);
+
+		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration));
 		return *container;
 	}
 

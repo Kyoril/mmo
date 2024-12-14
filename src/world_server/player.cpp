@@ -2339,4 +2339,9 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void Player::OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value)
+	{
+		// TODO
+	}
 }

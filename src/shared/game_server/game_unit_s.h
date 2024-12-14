@@ -13,6 +13,7 @@
 #include "unit_mover.h"
 #include "base/countdown.h"
 #include "game/damage_school.h"
+#include "game/spell.h"
 
 namespace mmo
 {
@@ -114,6 +115,52 @@ namespace mmo
 
 	typedef unit_mods::Type UnitMods;
 
+	namespace spell_mod_type
+	{
+		enum Type
+		{
+			/// Equals aura_type::AddFlatModifier
+			Flat,
+
+			/// Equals aura_type::AddPctModifier
+			Pct
+		};
+	}
+
+	typedef spell_mod_type::Type SpellModType;
+
+	/// Represents a spell modifier which is used to modify spells for a GameCharacter.
+	/// This is only(?) used by talents, and is thus only available for characters.
+	struct SpellModifier final
+	{
+		/// The spell modifier operation (what should be changed?)
+		SpellModOp op;
+
+		/// The modifier type (flag or percentage)
+		SpellModType type;
+
+		/// Charge count of this modifier (some are like "Increases damage of the next N casts")
+		int16 charges;
+
+		/// The modifier value.
+		int32 value;
+
+		/// Mask to determine which spells are modified.
+		uint64 mask;
+
+		/// Affected spell index.
+		uint32 spellId;
+
+		/// Index of the affected spell index.
+		uint8 effectId;
+	};
+
+	/// Contains a list of spell modifiers of a unit.
+	typedef std::list<SpellModifier> SpellModList;
+
+	/// Stores spell modifiers by it's operation.
+	typedef std::map<SpellModOp, SpellModList> SpellModsByOp;
+
 	namespace proto
 	{
 		class FactionTemplateEntry;
@@ -149,6 +196,8 @@ namespace mmo
 		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
 
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
+
+		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
 	};
 
 	/// Enumerates possible movement changes which need to be acknowledged by the client.
@@ -355,6 +404,34 @@ namespace mmo
 		/// Teleports the unit to a new location on the same map.
 		void TeleportOnMap(const Vector3& position, const Radian& facing);
 
+		/// Modifies the character spell modifiers by applying or misapplying a new mod.
+		/// @param mod The spell modifier to apply or misapply.
+		/// @param apply Whether to apply or misapply the spell mod.
+		void ModifySpellMod(const SpellModifier& mod, bool apply);
+
+		/// Gets the total amount of spell mods for one type and one spell.
+		int32 GetTotalSpellMods(SpellModType type, SpellModOp op, uint32 spellId) const;
+
+		/// Applys all matching spell mods of this character to a given value.
+		/// @param op The spell modifier operation to apply.
+		/// @param spellId Id of the spell, to know which modifiers do match.
+		/// @param ref_value Reference of the base value, which will be modified by this method.
+		/// @returns Delta value or 0 if ref_value didn't change.
+		template<class T>
+		T ApplySpellMod(SpellModOp op, uint32 spellId, T& ref_value) const
+		{
+			float totalPct = 1.0f;
+			int32 totalFlat = 0;
+
+			totalFlat += GetTotalSpellMods(spell_mod_type::Flat, op, spellId);
+			totalPct += static_cast<float>(GetTotalSpellMods(spell_mod_type::Pct, op, spellId)) * 0.01f;
+
+			const float diff = static_cast<float>(ref_value) * (totalPct - 1.0f) + static_cast<float>(totalFlat);
+			ref_value = T(static_cast<float>(ref_value) + diff);
+
+			return T(diff);
+		}
+
 	private:
 		void SetVictim(const std::shared_ptr<GameUnitS>& victim);
 
@@ -536,6 +613,7 @@ namespace mmo
 		Radian m_bindFacing;
 
 		bool m_canDualWield = false;
+		SpellModsByOp m_spellModsByOp;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

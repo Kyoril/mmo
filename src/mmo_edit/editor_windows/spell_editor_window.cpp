@@ -81,7 +81,7 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
-
+	
 	static String s_auraTypeNames[] = {
 		"None",
 		"Dummy",
@@ -90,19 +90,48 @@ namespace mmo
 		"ModDamageDone",
 		"ModDamageTaken",
 		"ModHealth",
-		"ModMana",
+		"ModMana", 
 		"ModResistance",
 		"PeriodicTriggerSpell",
 		"PeriodicEnergize",
 		"ModStat",
 		"ProcTriggerSpell",
-
+															 
 		"PeriodicDamage",
 		"ModIncreaseSpeed",
 		"ModDecreaseSpeed",
-		"ModSpeedAlways",
-		"ModSpeedNonStacking"
+		"ModSpeedAlways",	
+		"ModSpeedNonStacking",
+		"AddFlatModifier",
+		"AddPctModifier"
 	};
+
+	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
+
+	static String s_modifierNames[] = {
+		"Damage",
+		"Duration",
+		"Threat",
+		"Charges",
+		"Range",
+		"Radius",
+		"CritChance",
+		"AllEffects",
+		"PreventSpellDelay",
+		"CastTime",
+		"Cooldown",
+		"Cost",
+		"CritDamageBonus",
+		"ResistMissChance",
+		"ChanceOfSuccess",
+		"ActivationTime",
+		"GlobalCooldown",
+		"BonusDamage",
+		"PeriodicBasePoints",
+		"ResistDispelChance"
+	};
+
+	static_assert(std::size(s_modifierNames) == spell_mod_op::Count_, "Each spell mod operation must have a string representation!");
 
 	static String s_statNames[] = {
 		"Stamina",
@@ -276,6 +305,12 @@ namespace mmo
 			if (ImGui::InputInt("Base Spell", &baseId))
 			{
 				currentEntry.set_baseid(baseId);
+			}
+
+			uint64 familyFlags = currentEntry.familyflags();
+			if (ImGui::InputScalar("Family Flags", ImGuiDataType_U64, &familyFlags, nullptr, nullptr, "0x%016X"))
+			{
+				currentEntry.set_familyflags(familyFlags);
 			}
 
 			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());
@@ -727,6 +762,33 @@ namespace mmo
 			}
 			}
 			break;
+
+		case aura_type::AddFlatModifier:
+		case aura_type::AddPctModifier:
+		{
+			int modifier = effect.miscvaluea();
+			if (ImGui::Combo("Modifier", &modifier,
+				[](void* data, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_modifierNames))
+					{
+						return false;
+					}
+
+					*out_text = s_modifierNames[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_modifierNames)))
+			{
+				effect.set_miscvaluea(modifier);
+			}
+
+			uint64 affectMask = effect.affectmask();
+			if (ImGui::InputScalar("Affect Mask", ImGuiDataType_U64, &affectMask, nullptr, nullptr, "0x%016X"))
+			{
+				effect.set_affectmask(affectMask);
+			}
+		}
+		break;
 		}
 
 		if (currentAuraType == aura_type::PeriodicTriggerSpell ||

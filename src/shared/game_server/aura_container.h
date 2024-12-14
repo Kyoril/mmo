@@ -77,6 +77,8 @@ namespace mmo
 
 		void HandleFlySpeedModifier(bool apply);
 
+		void HandleAddModifier(bool apply);
+
 	private:
 		void HandlePeriodicDamage();
 

@@ -194,6 +194,8 @@ namespace mmo
 		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
 			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
 
+		void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

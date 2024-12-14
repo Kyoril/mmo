@@ -105,6 +105,75 @@ namespace mmo
 
 	typedef spell_school::Type SpellSchool;
 
+	namespace spell_mod_op
+	{
+		enum Type
+		{
+			/// Spell damage modified.
+			Damage,
+
+			/// Spell aura duration modified.
+			Duration,
+
+			/// Spell threat modified.
+			Threat,
+
+			/// Spell charges modified.
+			Charges,
+
+			/// Spell range modified.
+			Range,
+
+			/// Spell radius modified.
+			Radius,
+
+			/// Spell critical hit chance modified.
+			CritChance,
+
+			/// All effect base points modified.
+			AllEffects,
+
+			/// Amount of spell delay on hit while casting modified.
+			PreventSpellDelay,
+
+			/// Spell cast time modified (also cast time for channeled spells)
+			CastTime,
+
+			/// Spell cooldown modified.
+			Cooldown,
+
+			/// Spell cost modified.
+			Cost,
+
+			/// Critical spell damage modified.
+			CritDamageBonus,
+
+			/// Chance to miss or resist this spell modified.
+			ResistMissChance,
+
+			/// Increases the proc chance
+			ChanceOfSuccess,
+
+			ActivationTime,
+
+			/// Global cooldown modified.
+			GlobalCooldown,
+
+			/// Bonus damage modified (? we already have Damage...).
+			BonusDamage,
+
+			PeriodicBasePoints,
+
+			/// Resist dispel chance modified.
+			ResistDispelChance,
+
+			/// Since this is a bitmask, this marks the maximum number of spellmods so far
+			Count_
+		};
+	}
+
+	typedef spell_mod_op::Type SpellModOp;
+
 	namespace spell_cast_result
 	{
 		enum Type

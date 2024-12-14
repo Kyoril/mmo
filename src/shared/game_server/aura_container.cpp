@@ -61,6 +61,11 @@ namespace mmo
 			HandleFlySpeedModifier(apply);
 			break;
 
+		case AuraType::AddFlatModifier:
+		case AuraType::AddPctModifier:
+			HandleAddModifier(apply);
+			break;
+
 		case AuraType::PeriodicTriggerSpell:
 		case AuraType::PeriodicHeal:
 		case AuraType::PeriodicEnergize:
@@ -135,6 +140,31 @@ namespace mmo
 	void AuraEffect::HandleFlySpeedModifier(bool apply)
 	{
 		m_container.GetOwner().NotifySpeedChanged(movement_type::Flight);
+	}
+
+	void AuraEffect::HandleAddModifier(bool apply)
+	{
+		if (m_effect.miscvaluea() >= spell_mod_op::Count_)
+		{
+			ELOG("Invalid spell mod operation!");
+			return;
+		}
+
+		SpellModifier mod;
+		mod.op = static_cast<spell_mod_op::Type>(m_effect.miscvaluea());
+		mod.value = m_basePoints;
+		mod.type = GetType() == aura_type::AddFlatModifier ? spell_mod_type::Flat : spell_mod_type::Pct;
+		mod.spellId = m_container.GetSpellId();
+		mod.effectId = 0;	// TODO
+		mod.charges = 0;	// TODO
+		mod.mask = m_effect.affectmask();
+		if (mod.mask == 0) mod.mask = m_effect.itemtype();
+		if (mod.mask == 0)
+		{
+			WLOG("Invalid mod mask for spell " << m_container.GetSpellId());
+		}
+
+		m_container.GetOwner().ModifySpellMod(mod, apply);
 	}
 
 	void AuraEffect::HandlePeriodicDamage()
@@ -261,6 +291,12 @@ namespace mmo
 		case aura_type::PeriodicTriggerSpell:
 			HandlePeriodicTriggerSpell();
 			break;
+		}
+
+		// Start another tick
+		if (m_tickCount < m_totalTicks)
+		{
+			StartPeriodicTimer();
 		}
 	}
 
