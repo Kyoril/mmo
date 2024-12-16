@@ -14,7 +14,7 @@
 #include "math/degree.h"
 #include "proto_data/project.h"
 #include "virtual_dir/file_system_reader.h"
-
+#include <format>
 
 namespace mmo
 {
@@ -491,7 +491,37 @@ namespace mmo
 				throw mysql::Exception("Could not update character inventory data!");
 			}
 		}
+	}
 
+	std::optional<ActionButtons> MySQLDatabase::GetActionButtons(uint64 characterId)
+	{
+		mysql::Select select(m_connection,
+			std::format("SELECT `button`, `action`, `type` FROM `character_actions` WHERE `character_id`={0} LIMIT {1}"
+				, characterId, MaxActionButtons));
+		if (select.Success())
+		{
+			ActionButtons buttons;
+
+			mysql::Row row(select);
+			while (row)
+			{
+				uint8 slot = 0;
+				row.GetField<uint8, uint16>(0, slot);
+
+				ActionButton& button = buttons[slot];
+				row.GetField(1, button.action);
+				row.GetField<ActionButtonType, uint16>(2, button.type);
+
+				// Next row
+				row = mysql::Row::Next(select);
+			}
+
+			return buttons;
+		}
+
+		// There was an error
+		PrintDatabaseError();
+		return {};
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

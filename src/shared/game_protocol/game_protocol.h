@@ -118,6 +118,7 @@ namespace mmo
 				BuyItem,
 
 				AttributePoint,
+				SetActionBarButton,
 
 				/// Counter constant
 				Count_,
@@ -242,6 +243,7 @@ namespace mmo
 				AuraUpdate,
 
 				PeriodicAuraLog,
+				ActionButtons,
 
 				/// Counter constant
 				Count_,

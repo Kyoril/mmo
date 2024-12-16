@@ -11,6 +11,7 @@
 #include "game/movement_type.h"
 
 #include "asio/io_service.hpp"
+#include "game/action_button.h"
 
 
 namespace mmo
@@ -239,6 +240,8 @@ namespace mmo
 		void AddAttributePoint(uint32 attribute);
 
 		void UseItem(uint8 srcBag, uint8 srcSlot, uint64 itemGuid, const SpellTargetMap& targetMap);
+
+		void SetActionBarButton(uint8 index, const ActionButton& button);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

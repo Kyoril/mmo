@@ -574,6 +574,31 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnSetActionBarButton(game::IncomingPacket& packet)
+	{
+		uint8 slot;
+		if (!(packet >> io::read<uint8>(slot)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (slot >= MaxActionButtons)
+		{
+			ELOG("Wrong action bar button slot");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!(packet >> m_actionButtons[slot]))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// State is now changed
+		m_actionButtons[slot].state = action_button_update_state::Changed;
+
+		return PacketParseResult::Pass;
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -776,6 +801,18 @@ namespace mmo
 			;
 			outPacket.Finish();
 		});
+
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis](const std::optional<ActionButtons>& actionButtons)
+			{
+				if (const auto strongThis = weakThis.lock())
+				{
+					strongThis->OnActionButtons(*actionButtons);
+				}
+			};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons,
+			m_characterData->characterId);
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -1045,6 +1082,18 @@ namespace mmo
 					<< io::write_packed_guid(entry)
 					<< io::write<uint8>(true)
 					<< info;
+				packet.Finish();
+			});
+	}
+
+	void Player::OnActionButtons(const ActionButtons& actionButtons)
+	{
+		m_actionButtons = actionButtons;
+
+		m_connection->sendSinglePacket([&actionButtons](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ActionButtons);
+				packet << io::write_range(actionButtons);
 				packet.Finish();
 			});
 	}

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "login_connector.h"
+#include "game/action_button.h"
 #include "game/character_data.h"
 #include "game/character_view.h"
 
@@ -114,6 +115,8 @@ namespace mmo
 		void OnQueryQuest(uint64 entry);
 
 		void OnQueryItem(uint64 entry);
+
+		void OnActionButtons(const ActionButtons& actionButtons);
 
 	public:
 		struct PacketHandlerRegistrationHandle final
@@ -222,6 +225,7 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0;
+		ActionButtons m_actionButtons;
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 
@@ -259,5 +263,6 @@ namespace mmo
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 		PacketParseResult OnNameQuery(game::IncomingPacket& packet);
 		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
+		PacketParseResult OnSetActionBarButton(game::IncomingPacket& packet);
 	};
 }

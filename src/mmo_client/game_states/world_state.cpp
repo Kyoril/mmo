@@ -516,6 +516,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1906,12 +1907,21 @@ namespace mmo
 
 			if (casterGuid == ObjectMgr::GetActivePlayerGuid())
 			{
-				std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-				if (target)
+				if (const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid))
 				{
 					AddWorldTextFrame(target->GetPosition(), std::to_string(amount), color, 2.0f);
 				}
 			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnActionButtons(game::IncomingPacket& packet)
+	{
+		if (!(packet >> io::read_range(m_actionButtons)))
+		{
+			return PacketParseResult::Disconnect;
 		}
 
 		return PacketParseResult::Pass;

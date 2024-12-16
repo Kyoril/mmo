@@ -1,18 +1,20 @@
-FROM debian:stable-slim AS builder
+FROM ubuntu:latest AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y g++ cmake git zlib1g-dev libssl-dev libmariadb-dev-compat uuid-dev
+RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:ubuntu-toolchain-r/ppa && apt-get update && apt-get install -y gcc-13 g++-13 cmake git zlib1g-dev libssl-dev libmariadb-dev-compat uuid-dev
 
 COPY . /app
 
+ENV CC=gcc-13
+ENV CXX=g++-13
 RUN mkdir -p build && \
 	cd build && \
 	cmake -DMMO_WITH_DEV_COMMANDS=ON /app && \
 	make -j4 realm_server
 
 
-FROM debian:stable-slim
+FROM ubuntu:latest
 
 WORKDIR /app
 

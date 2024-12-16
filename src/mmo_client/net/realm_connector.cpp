@@ -571,4 +571,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::SetActionBarButton(uint8 index, const ActionButton& button)
+	{
+		sendSinglePacket([index, &button](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetActionBarButton);
+			packet << io::write<uint8>(index) << button;
+			packet.Finish();
+			});
+	}
 }

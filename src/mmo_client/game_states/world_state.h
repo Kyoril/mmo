@@ -22,6 +22,7 @@
 #include "world_deserializer.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
+#include "game/action_button.h"
 #include "game/auto_attack.h"
 #include "paging/loaded_page_section.h"
 #include "paging/page_loader_listener.h"
@@ -198,6 +199,8 @@ namespace mmo
 
 		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
 
+		PacketParseResult OnActionButtons(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -293,6 +296,7 @@ namespace mmo
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient& m_lootClient;
 		VendorClient& m_vendorClient;
+		ActionButtons m_actionButtons;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 
