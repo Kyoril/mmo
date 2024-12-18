@@ -23,6 +23,7 @@ namespace mmo
 		, m_pendingHeight(0)
 		, m_resizePending(false)
 		, m_fullScreen(fullScreen)
+		, m_prevFullScreenState(fullScreen)
 	{
 		// Create the window handle first
 		CreateWindowHandle();
@@ -94,6 +95,19 @@ namespace mmo
 	{
 		BOOL IsFullscreenState;
 		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&IsFullscreenState, nullptr)));
+
+		if (IsFullscreenState != m_prevFullScreenState)
+		{
+			// Apply pending resize
+			if (m_pendingWidth == 0 || m_pendingHeight == 0)
+			{
+				m_pendingWidth = m_width;
+				m_pendingHeight = m_height;
+			}
+			ApplyInternalResize();
+			m_resizePending = false;
+			m_prevFullScreenState = IsFullscreenState;
+		}
 
 		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !IsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);

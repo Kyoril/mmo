@@ -66,5 +66,7 @@ namespace mmo
 		bool m_resizePending;
 
 		bool m_fullScreen;
+
+		bool m_prevFullScreenState = false;
 	};
 }
