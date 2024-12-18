@@ -136,6 +136,7 @@ namespace mmo
 		TextureAddressMode m_addressModeW { TextureAddressMode::Wrap };
 		TextureFilter m_filter { TextureFilter::Anisotropic };
 		String m_debugName;
+		uint32 m_mipCount = 1;
 	};
 
 	/// A texture pointer object.

@@ -30,6 +30,7 @@
 #include <thread>
 #include <memory>
 
+#include "client_cache.h"
 #include "cursor.h"
 #include "loot_client.h"
 #include "stream_sink.h"
@@ -242,9 +243,6 @@ namespace mmo
 	std::unique_ptr<LootClient> s_lootClient;
 	std::unique_ptr<VendorClient> s_vendorClient;
 
-	typedef DBCache<ItemInfo, game::client_realm_packet::ItemQuery> DBItemCache;
-	typedef DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery> DBCreatureCache;
-	typedef DBCache<QuestInfo, game::client_realm_packet::QuestQuery> DBQuestCache;
 	std::unique_ptr<DBItemCache> s_itemCache;
 	std::unique_ptr<DBCreatureCache> s_creatureCache;
 	std::unique_ptr<DBQuestCache> s_questCache;

@@ -152,6 +152,7 @@ namespace mmo
 		}
 
 		td.MipLevels = actualMipLevelCount;
+		m_mipCount = actualMipLevelCount;
 
 		// Create texture object
 		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, data, &m_texture)));
@@ -175,6 +176,7 @@ namespace mmo
 		td.MipLevels = 1;
 		td.SampleDesc.Count = 1;
 		td.Usage = D3D11_USAGE_IMMUTABLE;
+		m_mipCount = 1;
 
 		// Prepare usage data
 		D3D11_SUBRESOURCE_DATA initialData;
@@ -272,7 +274,7 @@ namespace mmo
 		}
 
 		srvd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvd.Texture2D.MipLevels = 1;
+		srvd.Texture2D.MipLevels = m_mipCount;
 
 		// Create shader resource view
 		VERIFY(SUCCEEDED(dev.CreateShaderResourceView(m_texture.Get(), &srvd, &m_shaderView)));

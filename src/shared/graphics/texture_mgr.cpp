@@ -40,8 +40,8 @@ namespace mmo
 
 		// Create a new texture object
 		auto texture = GraphicsDevice::Get().CreateTexture();
-		texture->Load(file);
 		texture->SetDebugName(filename);
+		texture->Load(file);
 
 		// Add it to the list of textures
 		m_texturesByName[filename] = texture;
