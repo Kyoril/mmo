@@ -395,7 +395,7 @@ namespace mmo
 		/// Stops the regeneration countdown.
 		void StopRegeneration();
 
-		void ApplyAura(std::unique_ptr<AuraContainer>&& aura);
+		void ApplyAura(std::shared_ptr<AuraContainer>&& aura);
 
 		void BuildAuraPacket(io::Writer& writer) const;
 
@@ -592,7 +592,7 @@ namespace mmo
 		NetUnitWatcherS* m_netUnitWatcher = nullptr;
 		mutable Vector3 m_lastPosition;
 
-		std::vector<std::unique_ptr<AuraContainer>> m_auras;
+		std::vector<std::shared_ptr<AuraContainer>> m_auras;
 
 		typedef std::array<float, unit_mod_type::End> UnitModTypeArray;
 		typedef std::array<UnitModTypeArray, unit_mods::End> UnitModArray;

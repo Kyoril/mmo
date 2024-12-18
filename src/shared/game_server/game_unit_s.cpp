@@ -553,7 +553,7 @@ namespace mmo
 		m_regenCountdown.Cancel();
 	}
 
-	void GameUnitS::ApplyAura(std::unique_ptr<AuraContainer>&& aura)
+	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer>&& aura)
 	{
 		ASSERT(aura);
 

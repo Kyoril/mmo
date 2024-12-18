@@ -107,14 +107,14 @@ namespace mmo
 	};
 
 	/// Holds and manages instances of auras for one unit.
-	class AuraContainer final
+	class AuraContainer final : public NonCopyable, public std::enable_shared_from_this<AuraContainer>
 	{
 	public:
 
 		/// Initializes a new AuraContainer for a specific owner unit.
 		explicit AuraContainer(GameUnitS &owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration);
 
-		~AuraContainer();
+		~AuraContainer() override;
 
 	public:
 		/// Adds a new aura effect to the container (an Aura can have multiple different effects like a movement speed slow and a damage over time effect - these would be two aura effects).

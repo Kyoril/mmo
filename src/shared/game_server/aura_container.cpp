@@ -307,11 +307,20 @@ namespace mmo
 		, m_duration(duration)
 		, m_expirationCountdown(owner.GetTimers())
 	{
-		m_expirationCountdown.ended += [this] { SetApplied(false); };
+		std::weak_ptr<AuraContainer> weakThis = weak_from_this();
+		m_expirationCountdown.ended += [weakThis]
+		{
+			if (const auto strong = weakThis.lock())
+			{
+				strong->SetApplied(false);
+			}
+		};
 	}
 
 	AuraContainer::~AuraContainer()
 	{
+		m_expirationCountdown.Cancel();
+
 		if (m_applied)
 		{
 			SetApplied(false);
@@ -355,10 +364,6 @@ namespace mmo
 
 			// Auras changed, flag object for next update loop
 			m_owner.GetWorldInstance()->AddObjectUpdate(m_owner);
-		}
-
-		if (!m_applied)
-		{
 		}
 
 		// TODO: Apply auras to the owning unit and notify others
