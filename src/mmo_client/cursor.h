@@ -9,7 +9,10 @@ namespace mmo
 		None,
 
 		Item,
+
 		Spell,
+
+		ActionButton,
 	};
 
 	enum class CursorType
@@ -37,6 +40,10 @@ namespace mmo
 		void Clear();
 
 		void SetItem(uint32 slot);
+
+		void SetSpell(uint32 spell);
+
+		void SetActionButton(uint32 slot);
 
 		uint32 GetCursorItem() const;
 

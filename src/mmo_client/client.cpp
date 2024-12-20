@@ -41,6 +41,8 @@
 #include "base/executable_path.h"
 #include "client_data/project.h"
 
+#include "action_bar.h"
+
 
 ////////////////////////////////////////////////////////////////
 // Network handler
@@ -251,6 +253,8 @@ namespace mmo
 	static const char* const s_creatureCacheFilename = "Cache/Creatures.db";
 	static const char* const s_questCacheFilename = "Cache/Quests.db";
 
+	static std::unique_ptr<ActionBar> s_actionBar;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -335,17 +339,19 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 
+		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache);
+
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache,*s_actionBar);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

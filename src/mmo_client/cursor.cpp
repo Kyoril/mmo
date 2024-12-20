@@ -142,6 +142,18 @@ namespace mmo
 		m_itemSlot = slot;
 	}
 
+	void Cursor::SetSpell(uint32 spell)
+	{
+		m_type = CursorItemType::Spell;
+		m_itemSlot = spell;
+	}
+
+	void Cursor::SetActionButton(uint32 slot)
+	{
+		m_type = CursorItemType::ActionButton;
+		m_itemSlot = slot;
+	}
+
 	uint32 Cursor::GetCursorItem() const
 	{
 		return m_itemSlot;

@@ -64,18 +64,12 @@ namespace mmo
 		ActionButtonUpdateState state = action_button_update_state::Unchanged;
 
 		/// Default constructor.
-		ActionButton()
-			: action(0)
-			, type(action_button_type::None)
-			, state(action_button_update_state::New)
-		{
-		}
+		ActionButton() = default;
 
 		/// Custom constructor.
-		ActionButton(uint16 action_, ActionButtonType type_)
-			: action(action_)
-			, type(type_)
-			, state(action_button_update_state::New)
+		ActionButton(const uint16 action, const ActionButtonType type)
+			: action(action)
+			, type(type)
 		{
 		}
 	};

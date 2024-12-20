@@ -756,6 +756,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::CreatureQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::SetActionBarButton, *this, &Player::OnSetActionBarButton);
 		}
 		else
 		{
@@ -764,6 +765,7 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::CreatureQuery);
 			ClearPacketHandler(game::client_realm_packet::ItemQuery);
 			ClearPacketHandler(game::client_realm_packet::QuestQuery);
+			ClearPacketHandler(game::client_realm_packet::SetActionBarButton);
 		}
 	}
 

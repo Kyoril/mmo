@@ -37,6 +37,7 @@
 
 namespace mmo
 {
+	class ActionBar;
 	class VendorClient;
 	class TimerQueue;
 
@@ -75,7 +76,8 @@ namespace mmo
 			VendorClient& vendorClient,
 			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
-			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache);
+			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
+			ActionBar& actionBar);
 
 	public:
 		/// @brief The default name of the world state
@@ -296,11 +298,12 @@ namespace mmo
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient& m_lootClient;
 		VendorClient& m_vendorClient;
-		ActionButtons m_actionButtons;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 
 		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
+
+		ActionBar& m_actionBar;
 
 	private:
 		static IInputControl* s_inputControl;

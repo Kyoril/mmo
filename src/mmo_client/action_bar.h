@@ -36,10 +36,20 @@ namespace mmo
 
 		[[nodiscard]] const ItemInfo* GetActionButtonItem(int32 slot) const;
 
-		void UseActionButton(int32 slot);
+		void UseActionButton(int32 slot) const;
+
+		void PickupActionButton(int32 slot);
+
+		void OnActionButtons(io::Reader& reader);
+
+		void SetActionButton(int32 slot, const ActionButton& button);
+
+		void ClearActionButton(int32 slot);
 
 	private:
 		static bool IsValidSlot(int32 slot);
+
+		void ActionButtonChanged(int32 slot) const;
 
 	private:
 		RealmConnector& m_connector;

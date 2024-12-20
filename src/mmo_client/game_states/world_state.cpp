@@ -19,6 +19,7 @@
 
 #include <zstr/zstr.hpp>
 
+#include "action_bar.h"
 #include "game_client/object_mgr.h"
 #include "spell_projectile.h"
 #include "vendor_client.h"
@@ -128,7 +129,8 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
-		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache)
+		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
+		ActionBar& actionBar)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -139,6 +141,7 @@ namespace mmo
 		, m_timers(timers)
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
+		, m_actionBar(actionBar)
 	{
 	}
 
@@ -1919,8 +1922,12 @@ namespace mmo
 
 	PacketParseResult WorldState::OnActionButtons(game::IncomingPacket& packet)
 	{
-		if (!(packet >> io::read_range(m_actionButtons)))
+		// Read packet
+		m_actionBar.OnActionButtons(packet);
+
+		if (!packet)
 		{
+			ELOG("Failed to read ActionButtons packet!");
 			return PacketParseResult::Disconnect;
 		}
 
