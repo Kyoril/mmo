@@ -580,4 +580,21 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::CancelCast()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CancelCast);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CancelAura()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CancelAura);
+			// TODO
+			packet.Finish();
+			});
+	}
 }

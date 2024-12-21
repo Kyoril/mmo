@@ -243,6 +243,10 @@ namespace mmo
 
 		void SetActionBarButton(uint8 index, const ActionButton& button);
 
+		void CancelCast();
+
+		void CancelAura();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

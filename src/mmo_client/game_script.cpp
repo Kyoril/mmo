@@ -282,18 +282,6 @@ namespace mmo
 			return player->GetSpell(index);
 		}
 
-		void Script_CastSpell(uint32 index)
-		{
-			const auto* spell = Script_GetSpell(index);
-			if (spell == nullptr)
-			{
-				return;
-			}
-
-			// TODO: Make this more efficient than just executing a console command!
-			Console::ExecuteCommand("cast " + std::to_string(spell->id()));
-		}
-
 		bool Script_UnitExists(const std::string& unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
@@ -863,7 +851,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -871,6 +859,7 @@ namespace mmo
 		, m_loginState(std::move(loginState))
 		, m_project(project)
 		, m_actionBar(actionBar)
+		, m_spellCast(spellCast)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -1039,7 +1028,7 @@ namespace mmo
 			luabind::def<std::function<void(const char*)>>("TargetUnit", [this](const char* unitName) { this->TargetUnit(unitName); }),
 
 			luabind::def("GetSpell", &Script_GetSpell),
-			luabind::def("CastSpell", &Script_CastSpell),
+			luabind::def<std::function<void(int32)>>("CastSpell", [this](int32 spellIndex) { if (const auto* spell = Script_GetSpell(spellIndex)) m_spellCast.CastSpell(spell->id()); }),
 			luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription),

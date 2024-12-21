@@ -7,6 +7,11 @@
 
 namespace mmo
 {
+	class SpellCast;
+}
+
+namespace mmo
+{
 	struct ItemInfo;
 
 	namespace proto_client
@@ -20,7 +25,7 @@ namespace mmo
 	class ActionBar final : public NonCopyable
 	{
 	public:
-		explicit ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items);
+		explicit ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items, SpellCast& spellCast);
 		~ActionBar() override = default;
 
 	public:
@@ -56,5 +61,6 @@ namespace mmo
 		const proto_client::SpellManager& m_spells;
 		DBItemCache& m_items;
 		ActionButtons m_actionButtons;
+		SpellCast& m_spellCast;
 	};
 }

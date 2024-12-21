@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class SpellCast;
 	class ActionBar;
 	struct ItemInfo;
 	class VendorClient;
@@ -52,7 +53,8 @@ namespace mmo
 			VendorClient& vendorClient,
 			std::shared_ptr<LoginState> loginState,
 			const proto_client::Project& project,
-			ActionBar& actionBar);
+			ActionBar& actionBar,
+			SpellCast& spellCast);
 
 	public:
 		/// Gets the current lua state
@@ -115,6 +117,8 @@ namespace mmo
 		const proto_client::Project& m_project;
 
 		ActionBar& m_actionBar;
+
+		SpellCast& m_spellCast;
 
 	private:
 		void Script_ReviveMe() const;

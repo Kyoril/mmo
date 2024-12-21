@@ -35,6 +35,8 @@
 #include "game/creature_data.h"
 #include "game/quest_info.h"
 
+#include "spell_cast.h"
+
 namespace mmo
 {
 	class ActionBar;
@@ -77,7 +79,8 @@ namespace mmo
 			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
-			ActionBar& actionBar);
+			ActionBar& actionBar,
+			SpellCast& spellCast);
 
 	public:
 		/// @brief The default name of the world state
@@ -223,9 +226,6 @@ namespace mmo
 		void Command_AddItem(const std::string& cmd, const std::string& args) const;
 #endif
 
-		void Command_CastSpell(const std::string& cmd, const std::string& args);
-		void Command_StartAttack(const std::string& cmd, const std::string& args);
-
 	private:
 
 		bool LoadMap(const String& assetPath);
@@ -304,6 +304,7 @@ namespace mmo
 		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
 
 		ActionBar& m_actionBar;
+		SpellCast& m_spellCast;
 
 	private:
 		static IInputControl* s_inputControl;

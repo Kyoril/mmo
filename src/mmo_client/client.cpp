@@ -42,6 +42,7 @@
 #include "client_data/project.h"
 
 #include "action_bar.h"
+#include "spell_cast.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -254,6 +255,7 @@ namespace mmo
 	static const char* const s_questCacheFilename = "Cache/Quests.db";
 
 	static std::unique_ptr<ActionBar> s_actionBar;
+	static std::unique_ptr<SpellCast> s_spellCast;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -339,7 +341,8 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 
-		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache);
+		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
+		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
@@ -347,11 +350,11 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache,*s_actionBar);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

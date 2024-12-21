@@ -2,6 +2,7 @@
 #include "action_bar.h"
 
 #include "cursor.h"
+#include "spell_cast.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
 
@@ -9,10 +10,11 @@ namespace mmo
 {
 	extern Cursor g_cursor;
 
-	ActionBar::ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items)
+	ActionBar::ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items, SpellCast& spellCast)
 		: m_connector(realmConnector)
 		, m_spells(spells)
 		, m_items(items)
+		, m_spellCast(spellCast)
 	{
 	}
 
@@ -73,13 +75,12 @@ namespace mmo
 		const ActionButton& button = GetActionButton(slot);
 		if (button.type == action_button_type::Spell)
 		{
-			// TODO: Target map!
-			SpellTargetMap targetMap;
-			m_connector.CastSpell(button.action, targetMap);
+			// Start casting a spell
+			m_spellCast.CastSpell(button.action);
 		}
 		else if (button.type == action_button_type::Item)
 		{
-			// TODO: Use item
+			// TODO: Use item (inventory class!)
 		}
 		else
 		{

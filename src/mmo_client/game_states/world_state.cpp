@@ -130,7 +130,8 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
-		ActionBar& actionBar)
+		ActionBar& actionBar,
+		SpellCast& spellCast)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -142,6 +143,7 @@ namespace mmo
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
 		, m_actionBar(actionBar)
+		, m_spellCast(spellCast)
 	{
 	}
 
@@ -534,9 +536,6 @@ namespace mmo
 		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
 		Console::RegisterCommand("additem", [this](const std::string& cmd, const std::string& args) { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
 #endif
-
-		Console::RegisterCommand("cast", [this](const std::string& cmd, const std::string& args) { Command_CastSpell(cmd, args); }, ConsoleCommandCategory::Game, "Casts a given spell.");
-		Console::RegisterCommand("startattack", [this](const std::string& cmd, const std::string& args) { Command_StartAttack(cmd, args); }, ConsoleCommandCategory::Game, "Starts attacking the current target.");
 	}
 
 	void WorldState::RemovePacketHandler()
@@ -551,9 +550,6 @@ namespace mmo
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");
 #endif
-
-		Console::UnregisterCommand("cast");
-		Console::UnregisterCommand("startattack");
 
 		m_lootClient.Shutdown();
 		m_vendorClient.Shutdown();
@@ -1281,12 +1277,9 @@ namespace mmo
 			casterUnit->NotifySpellCastSucceeded();
 		}
 
-		if (m_playerController->GetControlledUnit())
+		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
-			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
-			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
-			}
+			m_spellCast.OnSpellGo(spellId);
 		}
 
 		return PacketParseResult::Pass;
@@ -1486,19 +1479,18 @@ namespace mmo
 			casterUnit->NotifySpellCastCancelled();
 		}
 
-		if (m_playerController->GetControlledUnit())
+		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
-			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
-			{
-				const char* errorMessage = s_unknown;
-				if (result < std::size(s_spellCastResultStrings))
-				{
-					errorMessage = s_spellCastResultStrings[result];
-				}
+			m_spellCast.OnSpellFailure(spellId);
 
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
+			const char* errorMessage = s_unknown;
+			if (result < std::size(s_spellCastResultStrings))
+			{
+				errorMessage = s_spellCastResultStrings[result];
 			}
+
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
 		}
 
 		return PacketParseResult::Pass;
@@ -2138,184 +2130,6 @@ namespace mmo
 		m_realmConnector.AddItem(itemId, count);
 	}
 #endif
-
-	namespace spell_target_requirements
-	{
-		enum Type
-		{
-			None = 0,
-
-			FriendlyUnitTarget = 1 << 0,
-			HostileUnitTarget = 1 << 1,
-
-			AreaTarget = 1 << 2,
-
-			PartyMemberTarget = 1 << 3,
-			PetTarget = 1 << 4,
-			ObjectTarget = 1 << 5,
-
-			Self = 1 << 6,
-
-			AnyUnitTarget = FriendlyUnitTarget | HostileUnitTarget | Self,
-		};
-	}
-
-	static uint64 GetSpellTargetRequirements(const proto_client::SpellEntry& spell)
-	{
-		uint64 targetRequirements = spell_target_requirements::None;
-
-		for (const auto& effect : spell.effects())
-		{
-			switch (effect.targeta())
-			{
-			case spell_effect_targets::TargetAlly:
-				targetRequirements |= spell_target_requirements::FriendlyUnitTarget;
-				continue;
-			case spell_effect_targets::TargetAny:
-				targetRequirements |= spell_target_requirements::AnyUnitTarget;
-				continue;
-			case spell_effect_targets::TargetEnemy:
-				targetRequirements |= spell_target_requirements::HostileUnitTarget;
-				continue;
-			case spell_effect_targets::ObjectTarget:
-				targetRequirements |= spell_target_requirements::ObjectTarget;
-				continue;
-			case spell_effect_targets::Pet:
-				targetRequirements |= spell_target_requirements::PetTarget;
-				continue;
-			}
-		}
-
-		return targetRequirements;
-	}
-
-	void WorldState::Command_CastSpell(const std::string& cmd, const std::string& args)
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.size() != 1)
-		{
-			ELOG("Usage: cast <spellId>");
-			return;
-		}
-
-		auto unit = m_playerController->GetControlledUnit();
-		if (!unit)
-		{
-			return;
-		}
-
-		const uint32 entry = std::stoul(tokens[0]);
-		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
-
-		SpellTargetMap targetMap{};
-
-		const auto* spell = m_project.spells.getById(entry);
-		if (!spell)
-		{
-			ELOG("Unknown spell");
-			return;
-		}
-
-		// Check if we need to provide a target unit
-		uint64 requirements = GetSpellTargetRequirements(*spell);
-		if ((requirements & spell_target_requirements::AnyUnitTarget) != 0)
-		{
-			// Validate if target unit exists
-			std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetUnitGuid);
-			if (!targetUnit)
-			{
-				// If friendly unit target is required and we have none, target ourself instead automatically
-				if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0)
-				{
-					targetUnit = unit;
-				}
-				else
-				{
-					// TODO: Instead of printing an error here we should trigger a selection mode where the user has to click on a target unit instead
-
-					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
-					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
-					return;
-				}
-			}
-
-			if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0 && !unit->IsFriendlyTo(*targetUnit))
-			{
-				// Target unit is not friendly but spell requires a friendly unit - use fallback to ourself
-				targetUnit = unit;
-			}
-
-			if ((requirements & spell_target_requirements::FriendlyUnitTarget) == 0 && (requirements & spell_target_requirements::HostileUnitTarget) != 0 && unit->IsFriendlyTo(*targetUnit))
-			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_FRIENDLY");
-				return;
-			}
-
-			// Set target unit
-			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-			targetMap.SetUnitTarget(targetUnit->GetGuid());
-
-			// Can this spell target dead units, and if not, are we targeting a dead unit?
-			if ((spell->attributes(0) & spell_attributes::CanTargetDead) == 0 &&
-				(targetUnit && !targetUnit->IsAlive()))
-			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
-				return;
-			}
-		}
-
-		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)
-		{
-			if (unit->GetMovementInfo().IsChangingPosition())
-			{
-				ELOG("Can't cast spell while moving");
-				return;
-			}
-		}
-
-		if ((spell->attributes(0) & spell_attributes::NotInCombat) != 0 &&
-			unit->IsInCombat())
-		{
-			ELOG("Spell not castable while in combat!");
-			return;
-		}
-		
-		m_realmConnector.CastSpell(entry, targetMap);
-	}
-
-	void WorldState::Command_StartAttack(const std::string& cmd, const std::string& args)
-	{
-		auto unit = m_playerController->GetControlledUnit();
-		if (!unit)
-		{
-			return;
-		}
-
-		uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit);
-		if (targetGuid == 0)
-		{
-			ELOG("No target to attack");
-			return;
-		}
-
-		auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid);
-		if (!targetUnit)
-		{
-			ELOG("Target unit not found!");
-			return;
-		}
-
-		unit->Attack(*targetUnit);
-	}
 
 	bool WorldState::LoadMap(const String& assetPath)
 	{
