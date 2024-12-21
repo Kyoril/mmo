@@ -874,7 +874,7 @@ namespace mmo
 		// TODO: Persist added spells back in database
 
 		// Find a world node for the character's map id and instance id
-		m_world = m_worldManager.GetIdealWorldNode(characterData->mapId, characterData->instanceId);
+		m_world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);
 		
 		// Check if world instance exists
 		const auto strongWorld = m_world.lock();
@@ -882,7 +882,7 @@ namespace mmo
 
 		if (!strongWorld)
 		{
-			WLOG("No world node available which is able to host map " << characterData->mapId << " and/or instance id " << characterData->instanceId);
+			WLOG("No world node available which is able to host map " << m_characterData->mapId << " and/or instance id " << m_characterData->instanceId);
 
 			OnWorldJoinFailed(game::player_login_response::NoWorldServer);
 
@@ -892,7 +892,7 @@ namespace mmo
 
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
-		strongWorld->Join(*characterData, [weakThis] (const InstanceId instanceId, const bool success)
+		strongWorld->Join(*m_characterData, [weakThis] (const InstanceId instanceId, const bool success)
 		{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)

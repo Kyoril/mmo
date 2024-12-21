@@ -1184,13 +1184,30 @@ namespace mmo
 			if ((spell->attributes(0) & spell_attributes::Passive) == 0 &&
 				(spell->attributes(0) & spell_attributes::Ability) != 0)
 			{
+				int32 emptySlot = -1;
+
 				for (int32 i = 0; i < MaxActionButtons; ++i)
 				{
-					if (!m_actionBar.IsActionButtonUsable(i))
+					// Did we find an empty slot yet?
+					if (emptySlot == -1 && !m_actionBar.IsActionButtonUsable(i))
 					{
-						m_actionBar.SetActionButton(i, { static_cast<uint16>(spellId), action_button_type::Spell });
+						// This is the first empty slot
+						emptySlot = i;
+					}
+
+					const auto* spellAtSlot = m_actionBar.GetActionButtonSpell(i);
+					if (spellAtSlot != nullptr && spellAtSlot->id() == spellId)
+					{
+						// The spell is already on the action bar, stop processing and erase potential empty slot found
+						emptySlot = -1;
 						break;
 					}
+				}
+
+				// If we should set this button to the action bar, do it
+				if (emptySlot != -1)
+				{
+					m_actionBar.SetActionButton(emptySlot, { static_cast<uint16>(spellId), action_button_type::Spell });
 				}
 			}
 		}

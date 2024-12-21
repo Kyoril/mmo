@@ -603,7 +603,15 @@ namespace mmo
 		{
 			attributePoints[i] = player.GetAttributePointsByAttribute(i);
 		}
-		
+
+		std::vector<uint32> spellIds;
+		spellIds.reserve(player.GetSpells().size());
+		for (const auto& spell : player.GetSpells())
+		{
+			if (!spell) continue;
+			spellIds.push_back(spell->id());
+		}
+
 		// RequestHandler
 		auto handler = [](bool result) { };
 		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, 0 /*TODO!*/, player.GetMovementInfo().position,
@@ -618,7 +626,8 @@ namespace mmo
 			player.GetBindMap(),
 			player.GetBindPosition(),
 			player.GetBindFacing(),
-			attributePoints
+			attributePoints,
+			spellIds
 			);
 
 		return PacketParseResult::Pass;

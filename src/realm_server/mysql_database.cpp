@@ -414,8 +414,10 @@ namespace mmo
 
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
 		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
-		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent)
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds)
 	{
+		mysql::Transaction transaction(m_connection);
+
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
 			+ ", level = '" + std::to_string(level) + "'"
@@ -491,6 +493,45 @@ namespace mmo
 				throw mysql::Exception("Could not update character inventory data!");
 			}
 		}
+
+		// Save character spells
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_spells` WHERE `character`={0};"
+			, characterId					// 0
+		)))
+		{
+			// There was an error
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character spell data!");
+		}
+
+		// Save character spells
+		if (!spellIds.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_spells` (`character`, `spell`) VALUES ";
+			bool isFirstItem = true;
+			for (auto& spellId : spellIds)
+			{
+				if (!isFirstItem) strm << ",";
+				else
+				{
+					isFirstItem = false;
+				}
+
+				strm << "(" << characterId << "," << spellId << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				// There was an error
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character spell data!");
+			}
+		}
+
+		transaction.Commit();
 	}
 
 	std::optional<ActionButtons> MySQLDatabase::GetActionButtons(uint64 characterId)
@@ -571,6 +612,18 @@ namespace mmo
 
 		}
 		transaction.Commit();
+	}
+
+	void MySQLDatabase::LearnSpell(DatabaseId characterId, uint32 spellId)
+	{
+		if (!m_connection.Execute(std::format(
+			"INSERT IGNORE INTO `character_spells` VALUES ({0}, {1});"
+			, characterId
+			, spellId
+		)))
+		{
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

@@ -576,6 +576,14 @@ namespace mmo
 		w << reinterpret_cast<GameUnitS const&>(object);
 		w << object.m_inventory;
 		w << io::write_range(object.m_attributePointEnhancements);
+
+		// Write known spell ids
+		w << io::write<uint32>(object.m_spells.size());
+		for (const auto& spell : object.m_spells)
+		{
+			w << io::write<uint32>(spell->id());
+		}
+
 		return w;
 	}
 
@@ -585,6 +593,22 @@ namespace mmo
 		r >> reinterpret_cast<GameUnitS&>(object);
 		r >> object.m_inventory;
 		r >> io::read_range(object.m_attributePointEnhancements);
+
+		// Read spells
+		uint32 spellCount;
+		r >> io::read<uint32>(spellCount);
+		object.m_spells.clear();
+		for (uint32 i = 0; i < spellCount; ++i)
+		{
+			uint32 spellId;
+			r >> io::read<uint32>(spellId);
+
+			const auto* spell = object.GetProject().spells.getById(spellId);
+			if (spell)
+			{
+				object.m_spells.emplace(spell);
+			}
+		}
 
 		for (uint32 i = 0; i < 5; ++i)
 		{
