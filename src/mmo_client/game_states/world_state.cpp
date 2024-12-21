@@ -1179,6 +1179,20 @@ namespace mmo
 		if (packet.GetId() == game::realm_client_packet::LearnedSpell)
 		{
 			m_playerController->GetControlledUnit()->LearnSpell(spell);
+
+			// Add this spell to the players action bar if there is any unassigned button in the main bar, but only if it is not a passive spell and its an ability
+			if ((spell->attributes(0) & spell_attributes::Passive) == 0 &&
+				(spell->attributes(0) & spell_attributes::Ability) != 0)
+			{
+				for (int32 i = 0; i < MaxActionButtons; ++i)
+				{
+					if (!m_actionBar.IsActionButtonUsable(i))
+					{
+						m_actionBar.SetActionButton(i, { static_cast<uint16>(spellId), action_button_type::Spell });
+						break;
+					}
+				}
+			}
 		}
 		else
 		{
