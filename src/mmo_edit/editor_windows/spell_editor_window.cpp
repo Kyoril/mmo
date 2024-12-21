@@ -410,6 +410,59 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Spell Proc", ImGuiTreeNodeFlags_None))
+		{
+			SLIDER_UINT32_PROP(procchance, "Chance %", 0, 100);
+			SLIDER_UINT32_PROP(proccharges, "Proc Charges", 0, 255);
+			SLIDER_UINT32_PROP(proccooldown, "Proc Cooldown (ms)", 0, std::numeric_limits<uint32>::max());
+
+			uint64 procFamily = currentEntry.procfamily();
+			if (ImGui::InputScalar("Proc Family", ImGuiDataType_U64, &procFamily, nullptr, nullptr, "0x%016X"))
+			{
+				currentEntry.set_procfamily(procFamily);
+			}
+
+			int currentSchool = currentEntry.procschool();
+			if (ImGui::Combo("Proc School", &currentSchool, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellSchoolNames))
+					{
+						return false;
+					}
+
+					*out_text = s_spellSchoolNames[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_spellSchoolNames), -1))
+			{
+				currentEntry.set_procschool(currentSchool);
+			}
+
+			CHECKBOX_FLAG_PROP(procflags, "When Unit Was Killed", spell_proc_flags::Killed);
+			CHECKBOX_FLAG_PROP(procflags, "When Unit Killed Other Unit", spell_proc_flags::Kill);
+			CHECKBOX_FLAG_PROP(procflags, "On Melee Attack Swing Done", spell_proc_flags::DoneMeleeAutoAttack);
+			CHECKBOX_FLAG_PROP(procflags, "On Melee Attack Swing Taken", spell_proc_flags::TakenMeleeAutoAttack);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellMeleeDmgClass", spell_proc_flags::DoneSpellMeleeDmgClass);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellMeleeDmgClass", spell_proc_flags::TakenSpellMeleeDmgClass);
+			CHECKBOX_FLAG_PROP(procflags, "DoneRangedAutoAttack", spell_proc_flags::DoneRangedAutoAttack);
+			CHECKBOX_FLAG_PROP(procflags, "TakenRangedAutoAttack", spell_proc_flags::TakenRangedAutoAttack);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellRangedDmgClass", spell_proc_flags::DoneSpellRangedDmgClass);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellRangedDmgClass", spell_proc_flags::TakenSpellRangedDmgClass);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellNoneDmgClassPos", spell_proc_flags::DoneSpellNoneDmgClassPos);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellNoneDmgClassPos", spell_proc_flags::TakenSpellNoneDmgClassPos);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellNoneDmgClassNeg", spell_proc_flags::DoneSpellNoneDmgClassNeg);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellNoneDmgClassNeg", spell_proc_flags::TakenSpellNoneDmgClassNeg);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellMagicDmgClassPos", spell_proc_flags::DoneSpellMagicDmgClassPos);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellMagicDmgClassPos", spell_proc_flags::TakenSpellMagicDmgClassPos);
+			CHECKBOX_FLAG_PROP(procflags, "DoneSpellMagicDmgClassNeg", spell_proc_flags::DoneSpellMagicDmgClassNeg);
+			CHECKBOX_FLAG_PROP(procflags, "TakenSpellMagicDmgClassNeg", spell_proc_flags::TakenSpellMagicDmgClassNeg);
+			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Done", spell_proc_flags::DonePeriodic);
+			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Taken", spell_proc_flags::TakenPeriodic);
+			CHECKBOX_FLAG_PROP(procflags, "On Damage Taken", spell_proc_flags::TakenDamage);
+			CHECKBOX_FLAG_PROP(procflags, "When Main Hand Weapon Attack Performed", spell_proc_flags::DoneMainhandAttack);
+			CHECKBOX_FLAG_PROP(procflags, "When Off Hand Weapon Attack Performed", spell_proc_flags::DoneOffhandAttack);
+			CHECKBOX_FLAG_PROP(procflags, "On Death", spell_proc_flags::Death);
+		}
+
 		if (ImGui::CollapsingHeader("Interrupt##header", ImGuiTreeNodeFlags_None))
 		{
 			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
