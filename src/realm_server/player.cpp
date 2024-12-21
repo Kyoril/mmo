@@ -58,6 +58,13 @@ namespace mmo
 
 	void Player::Destroy()
 	{
+		// Save action bar
+		if (m_pendingButtons)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
+			m_pendingButtons = false;
+		}
+
 		if (const auto strongWorld = m_world.lock())
 		{
 			if (HasCharacterGuid())
@@ -595,6 +602,7 @@ namespace mmo
 
 		// State is now changed
 		m_actionButtons[slot].state = action_button_update_state::Changed;
+		m_pendingButtons = true;
 
 		return PacketParseResult::Pass;
 	}
@@ -813,8 +821,7 @@ namespace mmo
 				}
 			};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons,
-			m_characterData->characterId);
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId);
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)

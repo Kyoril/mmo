@@ -148,6 +148,7 @@ namespace mmo
 			return;
 		}
 
+		FrameManager::Get().TriggerLuaEvent("ACTION_BAR_CHANGED");
 	}
 
 	void ActionBar::SetActionButton(int32 slot, const ActionButton& button)

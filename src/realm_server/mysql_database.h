@@ -51,6 +51,9 @@ namespace mmo
 
 		std::optional<ActionButtons> GetActionButtons(uint64 characterId) override;
 
+		// Note: Copy of ActionButtons is intended here
+		void SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons) override;
+
 	private:
 		void PrintDatabaseError();
 

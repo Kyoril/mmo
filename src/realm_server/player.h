@@ -226,6 +226,7 @@ namespace mmo
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0;
 		ActionButtons m_actionButtons;
+		bool m_pendingButtons = false;
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 

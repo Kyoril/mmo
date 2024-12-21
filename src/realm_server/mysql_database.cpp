@@ -524,6 +524,55 @@ namespace mmo
 		return {};
 	}
 
+	void MySQLDatabase::SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons)
+	{
+		// Start transaction
+		mysql::Transaction transaction(m_connection);
+		{
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `character_actions` WHERE `character_id`={0}"
+				, characterId)))
+			{
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!buttons.empty())
+			{
+				std::ostringstream fmtStrm;
+				fmtStrm << "INSERT INTO `character_actions` (`character_id`, `button`, `action`, `type`) VALUES ";
+
+				// Add actions
+				bool isFirstEntry = true;
+				int32 buttonIndex = 0;
+				for (const auto& button : buttons)
+				{
+					buttonIndex++;
+
+					if (button.type == action_button_type::None) continue;
+
+					if (isFirstEntry)
+					{
+						isFirstEntry = false;
+					}
+					else
+					{
+						fmtStrm << ",";
+					}
+
+					fmtStrm << "(" << characterId << "," << static_cast<uint32>(buttonIndex - 1) << "," << button.action << "," << static_cast<uint32>(button.type) << ")";
+				}
+
+				// Now, set all actions
+				if (!m_connection.Execute(fmtStrm.str()))
+				{
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+			}
+
+		}
+		transaction.Commit();
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());
