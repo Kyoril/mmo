@@ -367,6 +367,8 @@ namespace mmo
 
 		void RemoveSpell(uint32 spellId);
 
+		const std::set<const proto::SpellEntry*>& GetSpells() const;
+
 		void SetCooldown(uint32 spellId, GameTime cooldownTimeMs);
 
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);

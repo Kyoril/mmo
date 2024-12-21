@@ -453,6 +453,17 @@ namespace mmo
 			packet.Finish();
 		});
 
+		// Cast passive spells after spawn, so that SpellMods are sent AFTER the spawn packet
+		SpellTargetMap target;
+		target.SetTargetMap(spell_cast_target_flags::Self);
+		for (const auto& spell : m_character->GetSpells())
+		{
+			if (spell->attributes(0) & spell_attributes::Passive)
+			{
+				m_character->CastSpell(target, *spell, 0, true, 0);
+			}
+		}
+
 		// Start regeneration immediately
 		m_character->StartRegeneration();
 	}
@@ -807,11 +818,14 @@ namespace mmo
 			return;
 		}
 
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			ELOG("Tried to cast passive spell " << spellId);
+			return;
+		}
+
 		// Get the cast time of this spell
 		int64 castTime = spell->casttime();
-
-		// TODO: Apply cast time modifiers
-
 		const uint64 casterId = m_character->GetGuid();
 
 		// Spell cast logic

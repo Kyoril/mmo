@@ -37,8 +37,15 @@ namespace mmo
 		auto& executor = m_cast.GetExecuter();
 		const auto* worldInstance = executor.GetWorldInstance();
 
-		//m_castTime *= executor.Get<float>(object_fields::ModCastSpeed);
+		// Apply cast time modifier
+		executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), reinterpret_cast<int32&>(m_castTime));
 
+		// This is a hack because cast time might become actually negative by modifiers which would be bad here!
+		if (static_cast<int32>(m_castTime) < 0)
+		{
+			m_castTime = 0;
+		}
+		
 		auto const casterId = executor.GetGuid();
 
 		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)

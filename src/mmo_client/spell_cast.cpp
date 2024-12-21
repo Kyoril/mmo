@@ -117,14 +117,22 @@ namespace mmo
 
 		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
 
-		SpellTargetMap targetMap{};
-
 		// Is known spell?
 		const auto* spell = m_spells.getById(spellId);
 		if (!spell)
 		{
+			ELOG("Unknown spell " << spellId);
 			return;
 		}
+
+		// We can't cast passive spells!
+		if ((spell->attributes(0) & spell_attributes::Passive) != 0)
+		{
+			ELOG("Can't cast passive spells!");
+			return;
+		}
+
+		SpellTargetMap targetMap{};
 
 		// Check if we need to provide a target unit
 		uint64 requirements = GetSpellTargetRequirements(*spell);

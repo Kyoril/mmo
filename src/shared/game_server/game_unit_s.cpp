@@ -369,6 +369,14 @@ namespace mmo
 
 		m_spells.insert(spell);
 		OnSpellLearned(*spell);
+
+		// Activate passive spell
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			SpellTargetMap targetMap;
+			targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			CastSpell(targetMap, *spell, 0, true, 0);
+		}
 	}
 
 	void GameUnitS::RemoveSpell(const uint32 spellId)
@@ -388,6 +396,14 @@ namespace mmo
 		{
 			OnSpellUnlearned(*spell);
 		}
+
+		// TODO: Remove applied auras due to spell removal
+		
+	}
+
+	const std::set<const proto::SpellEntry*>& GameUnitS::GetSpells() const
+	{
+		return m_spells;
 	}
 
 	void GameUnitS::SetCooldown(uint32 spellId, GameTime cooldownTimeMs)
