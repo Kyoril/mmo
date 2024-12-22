@@ -17,4 +17,20 @@ namespace mmo
 			CantShopWhileDead
 		};
 	}
+
+	namespace trainer_result
+	{
+		enum Type
+		{
+			TrainerHasNoSpells,
+
+			TrainerHostile,
+
+			TrainerTooFarAway,
+
+			TrainerIsDead,
+
+			CantShopWhileDead
+		};
+	}
 }

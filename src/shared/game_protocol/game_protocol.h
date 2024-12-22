@@ -245,6 +245,9 @@ namespace mmo
 				PeriodicAuraLog,
 				ActionButtons,
 
+				TrainerList,
+				TrainerBuyError,
+
 				/// Counter constant
 				Count_,
 			};

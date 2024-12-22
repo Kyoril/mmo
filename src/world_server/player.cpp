@@ -1559,6 +1559,14 @@ namespace mmo
 		{
 			HandleVendorGossip(*vendor, *unit);
 		}
+		else if (trainer && !vendor)
+		{
+			HandleTrainerGossip(*trainer, *unit);
+		}
+		else
+		{
+			// TODO: Handle other gossip
+		}
 	}
 
 	void Player::OnSellItem(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -2219,6 +2227,59 @@ namespace mmo
 					<< io::write<uint64>(vendorGuid)
 					<< io::write<uint8>(0)		// Inventory size is 0 which opens the door for error event handling
 					<< io::write<uint8>(result);
+				packet.Finish();
+			});
+	}
+
+	void Player::HandleTrainerGossip(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit)
+	{
+		constexpr float interactionDistance = 5.0f;
+
+		if (!trainerUnit.IsAlive())
+		{
+			return;
+		}
+		if (trainerUnit.UnitIsEnemy(*m_character))
+		{
+			return;
+		}
+		if (m_character->GetSquaredDistanceTo(trainerUnit.GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			return;
+		}
+		if (!m_character->IsAlive())
+		{
+			return;
+		}
+		if (trainer.spells_size() == 0)
+		{
+			return;
+		}
+		
+		SendTrainerList(trainer, trainerUnit);
+	}
+
+	void Player::SendTrainerList(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit)
+	{
+		SendPacket([&trainer, &trainerUnit, this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::TrainerList);
+				packet
+					<< io::write<uint64>(trainerUnit.GetGuid())
+					<< io::write<uint16>(trainer.spells_size());
+
+				uint32 index = 0;
+				for (const auto& trainerSpellEntry : trainer.spells())
+				{
+					packet
+						<< io::write<uint32>(trainerSpellEntry.spell())
+						<< io::write<uint32>(trainerSpellEntry.spellcost())
+						<< io::write<uint32>(trainerSpellEntry.reqlevel())
+						<< io::write<uint32>(trainerSpellEntry.reqskill())
+						<< io::write<uint32>(trainerSpellEntry.reqskillval())
+						;
+				}
+
 				packet.Finish();
 			});
 	}

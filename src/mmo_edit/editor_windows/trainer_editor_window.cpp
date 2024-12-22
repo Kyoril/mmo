@@ -80,11 +80,11 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-#define MONEY_PROP_LABEL(name) \
+#define MONEY_PROP_LABEL(cost) \
 	{ \
-		const int32 gold = ::floor(currentEntry.name() / 10000); \
-		const int32 silver = ::floor(::fmod(currentEntry.name(), 10000) / 100);\
-		const int32 copper = ::fmod(currentEntry.name(), 100);\
+		const int32 gold = ::floor(cost / 10000); \
+		const int32 silver = ::floor(::fmod(cost, 10000) / 100);\
+		const int32 copper = ::fmod(cost, 100);\
 		if (gold > 0) \
 		{ \
 			ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.0f, 1.0f), "%d g", gold); \
@@ -119,6 +119,112 @@ namespace mmo
 			}
 		}
 
-		// TODO
+		if (ImGui::CollapsingHeader("Trainer Spells"))
+		{
+			static const char* s_itemNone = "<None>";
+
+			// Add button
+			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_spells();
+				newEntry->set_spell(0);
+				newEntry->set_spellcost(0);
+				newEntry->set_reqlevel(1);
+				newEntry->set_reqskill(0);
+				newEntry->set_reqskillval(0);
+			}
+
+			if (ImGui::BeginTable("vendorspells", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Cost", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Min Level", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Skill", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Skill Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.spells_size(); ++index)
+				{
+					auto* currentItem = currentEntry.mutable_spells(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					const uint32 spell = currentItem->spell();
+
+					const auto* spellEntry = m_project.spells.getById(spell);
+					if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_itemNone, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.spells.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
+							const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentItem->set_spell(m_project.spells.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 cost = currentItem->spellcost();
+					if (ImGui::InputInt("##spellcost", &cost))
+					{
+						currentItem->set_spellcost(cost);
+					}
+
+					ImGui::SameLine();
+
+					MONEY_PROP_LABEL(currentItem->spellcost());
+
+					ImGui::TableNextColumn();
+
+					int32 level = currentItem->reqlevel();
+					if (ImGui::InputInt("##minlevel", &level))
+					{
+						currentItem->set_reqlevel(level);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 skill = currentItem->reqskill();
+					if (ImGui::InputInt("##skill", &skill))
+					{
+						currentItem->set_reqskill(skill);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 skillval = currentItem->reqskillval();
+					if (ImGui::InputInt("##skillval", &skillval))
+					{
+						currentItem->set_reqskillval(skillval);
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_spells()->erase(currentEntry.mutable_spells()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
 	}
 }

@@ -19,6 +19,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class TrainerEntry;
 		class VendorEntry;
 		class Project;
 	}
@@ -177,6 +178,10 @@ namespace mmo
 		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
 
 		void SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result);
+
+		void HandleTrainerGossip(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
+
+		void SendTrainerList(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
 
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
