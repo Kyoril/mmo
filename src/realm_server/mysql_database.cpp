@@ -217,6 +217,8 @@ namespace mmo
 
 	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy)
 	{
+		mysql::Transaction transaction(m_connection);
+
 		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, bind_x, bind_y, bind_z, bind_o , mana, rage, energy) VALUES (" +
 			std::to_string(accountId) + ", '" + m_connection.EscapeString(characterName) + "', " + std::to_string(map) + ", " + std::to_string(level) + ", " +
 			std::to_string(race) + ", " + std::to_string(characterClass) + ", " + std::to_string(gender) + ", " + std::to_string(hp) + ", " + 
@@ -254,8 +256,26 @@ namespace mmo
 			{
 				PrintDatabaseError();
 			}
+
+			std::ostringstream actionString;
+			actionString << "INSERT INTO character_actions (`character_id`, `button`, `action`, `type`) VALUES ";
+			uint32 button = 0;
+			for (const auto spellId : spellIds)
+			{
+				actionString << "(" << characterId << ", " << button++ << ", " << spellId << ", 1),";
+			}
+			actionString.seekp(-1, std::ios_base::end);
+			actionString << ";";
+
+			// Adding spells to the character may fail but we don't cancel in this case right now
+			if (!m_connection.Execute(actionString.str()))
+			{
+				PrintDatabaseError();
+			}
 		}
-		
+
+		transaction.Commit();
+
 		return CharCreateResult::Success;
 	}
 
