@@ -680,6 +680,12 @@ namespace mmo
 			{
 				lastWordIndex = c;
 			}
+			else if(g == '\n')
+			{
+				lastWordIndex = c;
+				glyphPos.x = position.x;
+				lineCount++;
+			}
 
 			const FontGlyph* glyph = nullptr;
 			if ((glyph = GetGlyphData(g)))
