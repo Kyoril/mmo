@@ -265,8 +265,8 @@ namespace mmo
 		scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		scd.BufferDesc.Width = m_width;
 		scd.BufferDesc.Height = m_height;
-		scd.BufferDesc.RefreshRate.Numerator = 60;	// TODO: Determine monitor refresh rate in Hz and use the value here to
-		scd.BufferDesc.RefreshRate.Denominator = 1;	// support high refresh rate monitors
+		scd.BufferDesc.RefreshRate.Numerator = 60;
+		scd.BufferDesc.RefreshRate.Denominator = 1;
 		scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		scd.Flags = m_device.HasTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 		scd.OutputWindow = m_handle;

@@ -103,7 +103,10 @@ namespace mmo
 		"ModSpeedAlways",	
 		"ModSpeedNonStacking",
 		"AddFlatModifier",
-		"AddPctModifier"
+		"AddPctModifier",
+
+		"ModHealingDone",
+		"ModAttackPower",
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -213,6 +216,16 @@ namespace mmo
 			copied->set_id(newId);
 			copied->set_rank(currentEntry.rank() + 1);
 			copied->set_baseid(currentEntry.baseid());
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Duplicate Spell"))
+		{
+			proto::SpellEntry* copied = m_project.spells.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
 		}
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
@@ -584,14 +597,17 @@ namespace mmo
 					ImGui::OpenPopup("SpellEffectDetails");
 				}
 				ImGui::SameLine();
+
 				if (ImGui::Button("Remove"))
 				{
 					currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
 					effectIndex--;
 				}
-
-				DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
-
+				else
+				{
+					DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
+				}
+				
 				ImGui::PopID();
 			}
 
@@ -708,6 +724,12 @@ namespace mmo
 				if (ImGui::InputFloat("Dice per Level", &dicePerLevel))
 				{
 					currentEntry.mutable_effects(effectIndex)->set_diceperlevel(dicePerLevel);
+				}
+
+				float spellPowerScaling = currentEntry.effects(effectIndex).powerbonusfactor();
+				if (ImGui::InputFloat("Spell Power Coefficient", &spellPowerScaling))
+				{
+					currentEntry.mutable_effects(effectIndex)->set_powerbonusfactor(spellPowerScaling);
 				}
 
 				static int characterLevel = 1;

@@ -42,10 +42,18 @@ namespace mmo
 		case AuraType::ModMana:
 			break;
 		case AuraType::ModDamageDone:
+			HandleModDamageDone(apply);
+			break;
+		case AuraType::ModHealingDone:
+			HandleModHealingDone(apply);
 			break;
 		case AuraType::ModDamageTaken:
 			break;
 		case AuraType::ModAttackSpeed:
+			HandleModAttackSpeed(apply);
+			break;
+		case AuraType::ModAttackPower:
+			HandleModAttackPower(apply);
 			break;
 		case AuraType::ModResistance:
 			HandleModResistance(apply);
@@ -94,7 +102,7 @@ namespace mmo
 		}
 	}
 
-	void AuraEffect::HandleModStat(bool apply)
+	void AuraEffect::HandleModStat(const bool apply) const
 	{
 		const int32 stat = GetEffect().miscvaluea();
 
@@ -111,7 +119,39 @@ namespace mmo
 			apply);
 	}
 
-	void AuraEffect::HandleModResistance(bool apply)
+	void AuraEffect::HandleModDamageDone(const bool apply) const
+	{
+		m_container.GetOwner().UpdateModifierValue(unit_mods::SpellDamage,
+			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModHealingDone(const bool apply) const
+	{
+		m_container.GetOwner().UpdateModifierValue(unit_mods::Healing,
+			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModAttackPower(bool apply) const
+	{
+		m_container.GetOwner().UpdateModifierValue(unit_mods::AttackPower,
+			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModAttackSpeed(bool apply) const
+	{
+		m_container.GetOwner().UpdateModifierValue(unit_mods::AttackSpeed,
+			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModResistance(const bool apply) const
 	{
 		const int32 resistance = GetEffect().miscvaluea();
 
@@ -127,22 +167,22 @@ namespace mmo
 			apply);
 	}
 
-	void AuraEffect::HandleRunSpeedModifier(bool apply)
+	void AuraEffect::HandleRunSpeedModifier(bool apply) const
 	{
 		m_container.GetOwner().NotifySpeedChanged(movement_type::Run);
 	}
 
-	void AuraEffect::HandleSwimSpeedModifier(bool apply)
+	void AuraEffect::HandleSwimSpeedModifier(bool apply) const
 	{
 		m_container.GetOwner().NotifySpeedChanged(movement_type::Swim);
 	}
 
-	void AuraEffect::HandleFlySpeedModifier(bool apply)
+	void AuraEffect::HandleFlySpeedModifier(bool apply) const
 	{
 		m_container.GetOwner().NotifySpeedChanged(movement_type::Flight);
 	}
 
-	void AuraEffect::HandleAddModifier(bool apply)
+	void AuraEffect::HandleAddModifier(const bool apply) const
 	{
 		if (m_effect.miscvaluea() >= spell_mod_op::Count_)
 		{
@@ -167,7 +207,7 @@ namespace mmo
 		m_container.GetOwner().ModifySpellMod(mod, apply);
 	}
 
-	void AuraEffect::HandlePeriodicDamage()
+	void AuraEffect::HandlePeriodicDamage() const
 	{
 		const uint32 school = m_container.GetSpell().spellschool();
 		const int32 damage = m_basePoints;
@@ -198,7 +238,7 @@ namespace mmo
 		m_container.GetOwner().Damage(damage, school, m_container.GetCaster());
 	}
 
-	void AuraEffect::HandlePeriodicHeal()
+	void AuraEffect::HandlePeriodicHeal() const
 	{
 		const int32 heal = m_basePoints;
 
@@ -230,7 +270,7 @@ namespace mmo
 		// TODO
 	}
 
-	void AuraEffect::HandlePeriodicTriggerSpell()
+	void AuraEffect::HandlePeriodicTriggerSpell() const
 	{
 		SpellTargetMap targetMap;
 		if (m_effect.targeta() == spell_effect_targets::Caster)
@@ -253,7 +293,7 @@ namespace mmo
 		}
 	}
 
-	void AuraEffect::StartPeriodicTimer()
+	void AuraEffect::StartPeriodicTimer() const
 	{
 		m_tickCountdown.SetEnd(GetAsyncTimeMs() + m_tickInterval);
 	}
@@ -300,12 +340,13 @@ namespace mmo
 		}
 	}
 
-	AuraContainer::AuraContainer(GameUnitS& owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration)
+	AuraContainer::AuraContainer(GameUnitS& owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration, uint64 itemGuid)
 		: m_owner(owner)
 		, m_casterId(casterId)
 		, m_spell(spell)
 		, m_duration(duration)
 		, m_expirationCountdown(owner.GetTimers())
+		, m_itemGuid(itemGuid)
 	{
 		std::weak_ptr<AuraContainer> weakThis = weak_from_this();
 		m_expirationCountdown.ended += [weakThis]

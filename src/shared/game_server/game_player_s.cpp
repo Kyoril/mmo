@@ -180,20 +180,23 @@ namespace mmo
 			{
 				SpellTargetMap targetMap;
 				targetMap.SetUnitTarget(GetGuid());
-				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
 
 				for (auto& spell : item.GetEntry().spells())
 				{
 					// Trigger == onEquip?
 					if (spell.trigger() == item_spell_trigger::OnEquip)
 					{
-						//CastSpell(targetMap, spell.spell(), 0, item.GetGuid());
+						if (const auto* spellEntry = m_project.spells.getById(spell.spell()))
+						{
+							CastSpell(targetMap, *spellEntry, 0, true, item.GetGuid());
+						}
 					}
 				}
 			}
 			else
 			{
-				//getAuras().removeAllAurasDueToItem(item.GetGuid());
+				RemoveAllAurasDueToItem(item.GetGuid());
 			}
 
 			UpdateArmor();
@@ -419,7 +422,6 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::NextLevelXp, xpToNextLevel);
-		
 	}
 
 	void GamePlayerS::UpdateDamage()
@@ -535,7 +537,7 @@ namespace mmo
 		}
 	}
 
-	void GamePlayerS::UpdateStat(int32 stat)
+	void GamePlayerS::UpdateStat(const int32 stat)
 	{
 		// Validate stat
 		if (stat > 4)
@@ -547,12 +549,9 @@ namespace mmo
 		const UnitMods mod = GetUnitModByStat(stat);
 
 		// Calculate values
-		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue);
-		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
 		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
-		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
+		const float value = GetCalculatedModifierValue(mod);
 
-		const float value = (baseVal * basePct + totalVal) * totalPct;
 		Set<int32>(object_fields::StatStamina + stat, static_cast<int32>(value));
 		Set<int32>(object_fields::PosStatStamina + stat, totalVal > 0 ? static_cast<int32>(totalVal) : 0);
 		Set<int32>(object_fields::NegStatStamina + stat, totalVal < 0 ? static_cast<int32>(totalVal) : 0);

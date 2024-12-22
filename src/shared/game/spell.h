@@ -29,6 +29,20 @@ namespace mmo
 
 	typedef power_type::Type PowerType;
 
+	namespace spell_power_bonus_type
+	{
+		enum Type
+		{
+			None = 0,
+
+			SpellDamage = 1,
+
+			AttackPower = 2
+		};
+	}
+
+	typedef spell_power_bonus_type::Type SpellPowerBonusType;
+
 	namespace spell_cast_target_flags
 	{
 		enum Type

@@ -41,6 +41,8 @@ message SpellEffect {
 	optional int32 pointspercombopoint = 21;
 	optional uint64 affectmask = 22;
 	optional float dmgmultiplier = 23 [default = 1.0];
+	optional int32 powerbonustype = 24 [default = 0];
+	optional float powerbonusfactor = 25 [default = 0.0];
 }
 
 message SpellEntry {

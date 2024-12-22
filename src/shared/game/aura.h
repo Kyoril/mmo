@@ -106,6 +106,9 @@ namespace mmo
 			AddFlatModifier,
 			AddPctModifier,
 
+			ModHealingDone,
+			ModAttackPower,
+
 			Count_,
 			Invalid_ = Count_
 		};

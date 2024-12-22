@@ -688,6 +688,13 @@ namespace mmo
 		uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), damageAmount);
 
+		// Add spell power to damage
+		const float spellDamage = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::SpellDamage);
+		if (spellDamage > 0.0f && effect.powerbonusfactor() > 0.0f)
+		{
+			damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
+		}
+
 		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
 
 		// Log spell damage to client
@@ -993,7 +1000,7 @@ namespace mmo
 		GameTime duration = m_spell.duration();
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Duration, m_spell.id(), duration);
 
-		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration));
+		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
 		return *container;
 	}
 

@@ -67,26 +67,34 @@ namespace mmo
 		/// Starts periodic ticks.
 		void HandlePeriodicBase();
 
-		void HandleModStat(bool apply);
+		void HandleModStat(bool apply) const;
 
-		void HandleModResistance(bool apply);
+		void HandleModDamageDone(bool apply) const;
 
-		void HandleRunSpeedModifier(bool apply);
+		void HandleModHealingDone(bool apply) const;
 
-		void HandleSwimSpeedModifier(bool apply);
+		void HandleModAttackPower(bool apply) const;
 
-		void HandleFlySpeedModifier(bool apply);
+		void HandleModAttackSpeed(bool apply) const;
 
-		void HandleAddModifier(bool apply);
+		void HandleModResistance(bool apply) const;
+
+		void HandleRunSpeedModifier(bool apply) const;
+
+		void HandleSwimSpeedModifier(bool apply) const;
+
+		void HandleFlySpeedModifier(bool apply) const;
+
+		void HandleAddModifier(bool apply) const;
 
 	private:
-		void HandlePeriodicDamage();
+		void HandlePeriodicDamage() const;
 
-		void HandlePeriodicHeal();
+		void HandlePeriodicHeal() const;
 
 		void HandlePeriodicEnergize();
 
-		void HandlePeriodicTriggerSpell();
+		void HandlePeriodicTriggerSpell() const;
 
 	private:
 		AuraContainer& m_container;
@@ -101,7 +109,7 @@ namespace mmo
 
 	private:
 
-		void StartPeriodicTimer();
+		void StartPeriodicTimer() const;
 
 		void OnTick();
 	};
@@ -112,7 +120,7 @@ namespace mmo
 	public:
 
 		/// Initializes a new AuraContainer for a specific owner unit.
-		explicit AuraContainer(GameUnitS &owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration);
+		explicit AuraContainer(GameUnitS &owner, uint64 casterId, const proto::SpellEntry& spell, GameTime duration, uint64 itemGuid);
 
 		~AuraContainer() override;
 
@@ -189,6 +197,8 @@ namespace mmo
 
 		GameUnitS* GetCaster() const;
 
+		uint64 GetItemGuid() const { return m_itemGuid; }
+
 	private:
 
 		GameUnitS &m_owner;
@@ -208,6 +218,8 @@ namespace mmo
 		Countdown m_expirationCountdown;
 
 		mutable std::weak_ptr<GameUnitS> m_caster;
+
+		uint64 m_itemGuid = 0;
 	};
 
 }

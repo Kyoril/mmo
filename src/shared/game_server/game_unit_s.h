@@ -109,6 +109,10 @@ namespace mmo
 			/// Ranged weapon attack speed modifier.
 			AttackSpeedRanged,
 
+			SpellDamage,
+
+			Healing,
+
 			End
 		};
 	}
@@ -326,6 +330,8 @@ namespace mmo
 		/// Gets the specified unit modifier value.
 		float GetModifierValue(UnitMods mod, UnitModType type) const;
 
+		float GetCalculatedModifierValue(UnitMods mod) const;
+
 		/// Sets the unit modifier value to the given value.
 		void SetModifierValue(UnitMods mod, UnitModType type, float value);
 
@@ -398,6 +404,8 @@ namespace mmo
 		void StopRegeneration();
 
 		void ApplyAura(std::shared_ptr<AuraContainer>&& aura);
+
+		void RemoveAllAurasDueToItem(uint64 itemGuid);
 
 		void BuildAuraPacket(io::Writer& writer) const;
 

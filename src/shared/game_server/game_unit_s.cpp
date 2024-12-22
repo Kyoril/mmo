@@ -155,6 +155,16 @@ namespace mmo
 		return m_unitMods[mod][type];
 	}
 
+	float GameUnitS::GetCalculatedModifierValue(const UnitMods mod) const
+	{
+		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue);
+		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
+		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
+		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
+
+		return (baseVal * basePct + totalVal) * totalPct;
+	}
+
 	void GameUnitS::SetModifierValue(UnitMods mod, UnitModType type, float value)
 	{
 		m_unitMods[mod][type] = value;
@@ -589,6 +599,24 @@ namespace mmo
 		// Apply new aura
 		const auto& appliedAura = m_auras.emplace_back(std::move(aura));
 		appliedAura->SetApplied(true);
+	}
+
+	void GameUnitS::RemoveAllAurasDueToItem(const uint64 itemGuid)
+	{
+		ASSERT(itemGuid != 0);
+
+		// Remove existing auras first
+		for (auto it = m_auras.begin(); it != m_auras.end();)
+		{
+			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetItemGuid() == itemGuid)
+			{
+				it = m_auras.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
 	}
 
 	void GameUnitS::BuildAuraPacket(io::Writer& writer) const
