@@ -18,6 +18,7 @@ namespace mmo
 		, m_tickCountdown(timers)
 	{
 		m_casterSpellPower = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::SpellDamage);
+		m_casterSpellHeal = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::Healing);
 
 		m_onTick = m_tickCountdown.ended.connect(this, &AuraEffect::OnTick);
 
@@ -250,7 +251,13 @@ namespace mmo
 
 	void AuraEffect::HandlePeriodicHeal() const
 	{
-		const int32 heal = m_basePoints;
+		int32 heal = m_basePoints;
+
+		// Apply spell power bonus damage but divide it by number of ticks
+		if (m_casterSpellHeal > 0.0f && m_effect.powerbonusfactor() > 0.0f && m_totalTicks > 0)
+		{
+			heal += static_cast<int32>(m_casterSpellHeal * m_effect.powerbonusfactor() / static_cast<float>(m_totalTicks));
+		}
 
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;

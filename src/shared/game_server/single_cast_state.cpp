@@ -787,10 +787,18 @@ namespace mmo
 			return;
 		}
 
-
 		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-		const uint32 healingAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+		uint32 healingAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
+
+		// Add spell power to heal
+		const float spellHealing = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::Healing);
+		if (spellHealing > 0.0f && effect.powerbonusfactor() > 0.0f)
+		{
+			healingAmount += static_cast<uint32>(spellHealing * effect.powerbonusfactor());
+		}
+
 		unitTarget->Heal(healingAmount, &m_cast.GetExecuter());
+
 
 		// TODO: Heal log to show healing numbers at the clients
 	}

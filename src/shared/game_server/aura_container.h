@@ -108,6 +108,7 @@ namespace mmo
 		bool m_isPeriodic = false;
 
 		float m_casterSpellPower = 0.0f;
+		float m_casterSpellHeal = 0.0f;
 
 	private:
 
