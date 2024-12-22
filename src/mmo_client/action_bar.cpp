@@ -100,9 +100,8 @@ namespace mmo
 		if (g_cursor.GetItemType() == CursorItemType::None)
 		{
 			// No, so pick up the action button if there is one
-			if (m_actionButtons[slot].type != action_button_type::None)
+			if (m_actionButtons[slot].type == action_button_type::None)
 			{
-				ELOG("Cannot pickup action button " << slot << " because it is empty!");
 				return;
 			}
 

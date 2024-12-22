@@ -23,5 +23,7 @@ namespace mmo
 		static void GetCursorPos(int& x, int& y);
 
 		static void SetCursorPos(int x, int y);
+
+		static bool IsShiftKeyDown();
 	};
 }

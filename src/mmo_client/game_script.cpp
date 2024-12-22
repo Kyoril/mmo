@@ -16,6 +16,7 @@
 #include "action_bar.h"
 #include "cursor.h"
 #include "loot_client.h"
+#include "platform.h"
 #include "vendor_client.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -1016,6 +1017,8 @@ namespace mmo
 			luabind::def("GetCVar", &Script_GetConsoleVar),
 			luabind::def("EnterWorld", &Script_EnterWorld),
 			luabind::def("print", &Script_Print),
+
+			luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
 
 			luabind::def("UnitExists", &Script_UnitExists),
 			luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),

@@ -84,4 +84,9 @@ namespace mmo
 	{
 		::SetCursorPos(x, y);
 	}
+
+	bool PlatformWin::IsShiftKeyDown()
+	{
+		return (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+	}
 }
