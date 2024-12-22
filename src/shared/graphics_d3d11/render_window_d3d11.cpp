@@ -273,6 +273,40 @@ namespace mmo
 		scd.SampleDesc.Count = 1;
 		scd.SwapEffect = m_device.HasTearingSupport() ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD;
 		scd.Windowed = !m_fullScreen;
+
+		// Query the output (monitor) from the adapter
+		ComPtr<IDXGIOutput> DXGIOutput;
+		VERIFY(SUCCEEDED(DXGIAdapter->EnumOutputs(0, &DXGIOutput)));
+
+		// Get the description of the output
+		DXGI_OUTPUT_DESC outputDesc;
+		VERIFY(SUCCEEDED(DXGIOutput->GetDesc(&outputDesc)));
+
+		DXGI_RATIONAL refreshRate = { 60, 1 }; // Default to 60 Hz if no match is found
+
+		// Get the display modes supported by the output for the desired format
+		UINT numModes = 0;
+		VERIFY(SUCCEEDED(DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, nullptr)));
+
+		// Allocate memory to hold the display mode list
+		std::vector<DXGI_MODE_DESC> displayModes(numModes);
+		VERIFY(SUCCEEDED(DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, displayModes.data())));
+
+		// Find a matching display mode for the desired resolution
+		for (const auto& mode : displayModes)
+		{
+			if (mode.Width == m_width && mode.Height == m_height)
+			{
+				if (static_cast<double>(mode.RefreshRate.Numerator) / static_cast<double>(mode.RefreshRate.Denominator) > static_cast<double>(refreshRate.Numerator) / static_cast<double>(refreshRate.Denominator))
+				{
+					refreshRate = mode.RefreshRate;
+				}
+			}
+		}
+
+		// Now use the refresh rate in the swap chain description
+		scd.BufferDesc.RefreshRate = refreshRate;
+
 		VERIFY(SUCCEEDED(DXGIFactory->CreateSwapChain(&d3dDev, &scd, &m_swapChain)));
 	}
 
