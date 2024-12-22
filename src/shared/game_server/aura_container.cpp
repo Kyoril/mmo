@@ -17,6 +17,8 @@ namespace mmo
 		, m_effect(effect)
 		, m_tickCountdown(timers)
 	{
+		m_casterSpellPower = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::SpellDamage);
+
 		m_onTick = m_tickCountdown.ended.connect(this, &AuraEffect::OnTick);
 
 		if (m_effect.amplitude() > 0)
@@ -210,7 +212,15 @@ namespace mmo
 	void AuraEffect::HandlePeriodicDamage() const
 	{
 		const uint32 school = m_container.GetSpell().spellschool();
-		const int32 damage = m_basePoints;
+		int32 damage = m_basePoints;
+
+		// Apply spell power bonus damage but divide it by number of ticks
+		if (m_casterSpellPower > 0.0f && m_effect.powerbonusfactor() > 0.0f && m_totalTicks > 0)
+		{
+			damage += static_cast<int32>(m_casterSpellPower * m_effect.powerbonusfactor() / static_cast<float>(m_totalTicks));
+		}
+
+		// Apply damage bonus from casters spell power
 
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;

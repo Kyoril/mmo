@@ -107,6 +107,8 @@ namespace mmo
 		scoped_connection m_onTick;
 		bool m_isPeriodic = false;
 
+		float m_casterSpellPower = 0.0f;
+
 	private:
 
 		void StartPeriodicTimer() const;
