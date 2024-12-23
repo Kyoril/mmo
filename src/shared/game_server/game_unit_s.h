@@ -294,6 +294,23 @@ namespace mmo
 		PendingMovementChange();
 	};
 
+	namespace combat_capabilities
+	{
+		enum Type
+		{
+			None = 0,
+
+			/// The unit can block attacks.
+			CanBlock = 0x1,
+
+			/// The unit can parry attacks.
+			CanParry = 0x2,
+
+			/// The unit can dodge attacks.
+			CanDodge = 0x4
+		};
+	}
+
 	/// @brief Represents a living object (unit) in the game world.
 	class GameUnitS : public GameObjectS
 	{
@@ -381,7 +398,7 @@ namespace mmo
 
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
 
-		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0);
+		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
 
@@ -398,14 +415,16 @@ namespace mmo
 		bool IsAlive() const { return GetHealth() > 0; }
 
 		/// Starts the regeneration countdown.
-		void StartRegeneration();
+		void StartRegeneration() const;
 
 		/// Stops the regeneration countdown.
-		void StopRegeneration();
+		void StopRegeneration() const;
 
 		void ApplyAura(std::shared_ptr<AuraContainer>&& aura);
 
 		void RemoveAllAurasDueToItem(uint64 itemGuid);
+
+		void RemoveAllAurasFromCaster(uint64 casterGuid);
 
 		void BuildAuraPacket(io::Writer& writer) const;
 
@@ -450,16 +469,6 @@ namespace mmo
 		void VictimDespawned(GameObjectS&);
 
 	protected:
-		float MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
-
-		float CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const;
-
-		float DodgeChance();
-
-		float ParryChance();
-
-		float BlockChance();
-
 		virtual float GetUnitMissChance() const;
 
 		virtual bool HasOffhandWeapon() const;
@@ -471,6 +480,51 @@ namespace mmo
 		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS& victim, WeaponAttack attackType) const;
 
 	public:
+		float MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
+
+		float CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const;
+
+		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
+		float DodgeChance() const;
+
+		/// Returns the parry chance in percent, ranging from 0 to 100.0f. If the unit can't parry at all, this will always return 0.
+		float ParryChance() const;
+
+		/// Returns the block chance in percent, ranging from 0 to 100.0f. If the unit can't block at all, this will always return 0.
+		float BlockChance() const;
+
+		/// Returns true if the unit can block attacks.
+		bool CanBlock() const { return (m_combatCapabilities & combat_capabilities::CanBlock) != 0; }
+
+		/// Re-evaluates if the unit can block attacks based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit should can block attacks. This is just a performance shortcut,
+		///	so we don't iterate through spell effects if we don't need to. If this is set to false, spell effects will be checked.
+		void NotifyCanBlock(bool gainedEffect);
+
+		/// Returns true if the unit can parry melee attacks.
+		bool CanParry() const { return (m_combatCapabilities & combat_capabilities::CanParry) != 0; }
+
+		/// Re-evaluates if the unit can parry attacks based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit should can parry attacks. This is just a performance shortcut,
+		///	so we don't iterate through spell effects if we don't need to. If this is set to false, spell effects will be checked.
+		void NotifyCanParry(bool gainedEffect);
+
+		/// Returns true if the unit can dodge melee attacks.
+		bool CanDodge() const { return (m_combatCapabilities & combat_capabilities::CanDodge) != 0; }
+
+		/// Re-evaluates if the unit can dodge attacks based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit should can dodge attacks. This is just a performance shortcut,
+		///	so we don't iterate through spell effects if we don't need to. If this is set to false, spell effects will be checked.
+		void NotifyCanDodge(bool gainedEffect);
+
+		/// Returns true if the unit has an active aura effect of the given type. Don't use this too often as it's iterating through all active auras,
+		///	which is not a constant complexity operation.
+		bool HasAuraEffect(AuraType type) const;
+
+		/// Returns true if the unit has a spell with a spell effect of the given type. Don't use this too often as it's iterating through all spells the unit knows,
+		///	which is not a constant complexity operation.
+		bool HasSpellEffect(SpellEffect type) const;
+
 		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
 
 		bool IsAttacking() const { return GetVictim() != nullptr; }
@@ -624,6 +678,8 @@ namespace mmo
 
 		bool m_canDualWield = false;
 		SpellModsByOp m_spellModsByOp;
+
+		uint8 m_combatCapabilities = combat_capabilities::None;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

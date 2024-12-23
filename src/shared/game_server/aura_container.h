@@ -141,6 +141,8 @@ namespace mmo
 		/// Writes aura update data to a given writer (usually an outgoing network packet for clients).
 		void WriteAuraUpdate(io::Writer& writer) const;
 
+		bool HasEffect(AuraType type) const;
+
 	public:
 		/// Gets the owning unit of this aura (the target of the aura).
 		GameUnitS& GetOwner() const

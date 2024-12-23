@@ -7,6 +7,7 @@
 #include "virtual_dir/file_system_reader.h"
 #include "base/clock.h"
 #include "base/filesystem.h"
+#include "game/spell.h"
 #include "shared/proto_data/creature_types.pb.h"
 #include "shared/proto_data/units.pb.h"
 #include "shared/proto_data/spells.pb.h"
@@ -77,6 +78,9 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::NpcTexts, mmo::proto::NpcTextEntry> NpcTextManager;
 		typedef TemplateManager<mmo::proto::GossipMenus, mmo::proto::GossipMenuEntry> GossipMenuManager;
 		typedef TemplateManager<mmo::proto::ModelDatas, mmo::proto::ModelDataEntry> ModelDataManager;
+
+		/// Determines whether a spell entry has a certain spell effect.
+		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final

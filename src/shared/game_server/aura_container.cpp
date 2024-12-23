@@ -451,6 +451,19 @@ namespace mmo
 		}
 	}
 
+	bool AuraContainer::HasEffect(AuraType type) const
+	{
+		for (const auto& aura : m_auras)
+		{
+			if (aura->GetType() == type)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	uint32 AuraContainer::GetSpellId() const
 	{
 		return m_spell.id();

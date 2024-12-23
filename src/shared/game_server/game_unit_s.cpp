@@ -401,14 +401,30 @@ namespace mmo
 		if (m_spells.erase(spell) < 1)
 		{
 			WLOG("Unable to remove spell " << spellId << " from unit " << log_hex_digit(GetGuid()) << ": spell was not known");
-		}
-		else
-		{
-			OnSpellUnlearned(*spell);
+			return;
 		}
 
-		// TODO: Remove applied auras due to spell removal
-		
+		// Remove applied auras due to spell removal
+		RemoveAllAurasFromCaster(GetGuid());
+
+		// Parry, dodge & block update
+		for (const auto& effect : spell->effects())
+		{
+			switch(effect.type())
+			{
+			case spell_effects::Block:
+				NotifyCanBlock(false);
+				break;
+			case spell_effects::Dodge:
+				NotifyCanDodge(false);
+				break;
+			case spell_effects::Parry:
+				NotifyCanParry(false);
+				break;
+			}
+		}
+
+		OnSpellUnlearned(*spell);
 	}
 
 	const std::set<const proto::SpellEntry*>& GameUnitS::GetSpells() const
@@ -416,7 +432,7 @@ namespace mmo
 		return m_spells;
 	}
 
-	void GameUnitS::SetCooldown(uint32 spellId, GameTime cooldownTimeMs)
+	void GameUnitS::SetCooldown(const uint32 spellId, const GameTime cooldownTimeMs)
 	{
 		if (cooldownTimeMs == 0)
 		{
@@ -428,7 +444,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs)
+	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
 		if (cooldownTimeMs == 0)
 		{
@@ -476,7 +492,7 @@ namespace mmo
 		return result.first;
 	}
 
-	void GameUnitS::CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown)
+	void GameUnitS::CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown) const
 	{
 		m_spellCast->StopCast(reason, interruptCooldown);
 	}
@@ -564,7 +580,7 @@ namespace mmo
 		OnKilled(killer);
 	}
 
-	void GameUnitS::StartRegeneration()
+	void GameUnitS::StartRegeneration() const
 	{
 		if (m_regenCountdown.IsRunning())
 		{
@@ -574,7 +590,7 @@ namespace mmo
 		m_regenCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 2));
 	}
 
-	void GameUnitS::StopRegeneration()
+	void GameUnitS::StopRegeneration() const
 	{
 		m_regenCountdown.Cancel();
 	}
@@ -609,6 +625,24 @@ namespace mmo
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
 			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetItemGuid() == itemGuid)
+			{
+				it = m_auras.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
+	void GameUnitS::RemoveAllAurasFromCaster(const uint64 casterGuid)
+	{
+		ASSERT(casterGuid != 0);
+
+		// Remove existing auras first
+		for (auto it = m_auras.begin(); it != m_auras.end();)
+		{
+			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetCasterId() == casterGuid)
 			{
 				it = m_auras.erase(it);
 			}
@@ -786,19 +820,85 @@ namespace mmo
 		return 5.0f;
 	}
 
-	float GameUnitS::DodgeChance()
+	float GameUnitS::DodgeChance() const
 	{
+		if (!CanDodge()) return 0.0f;
+
 		return 5.0f;
 	}
 
-	float GameUnitS::ParryChance()
+	float GameUnitS::ParryChance() const
 	{
+		if (!CanParry()) return 0.0f;
+
 		return 5.0f;
 	}
 
-	float GameUnitS::BlockChance()
+	float GameUnitS::BlockChance() const
 	{
+		if (!CanBlock()) return 0.0f;
+
 		return 5.0f;
+	}
+
+	void GameUnitS::NotifyCanBlock(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each aura effect
+		if (gainedEffect)
+		{
+			m_combatCapabilities |= combat_capabilities::CanBlock;
+			return;
+		}
+
+		// Effect was removed: Check if there is still one effect left and if so, ensure the CanBlock flag is set. Otherwise ensure its removed.
+		if (HasSpellEffect(spell_effects::Block))
+		{
+			m_combatCapabilities |= combat_capabilities::CanBlock;
+		}
+		else
+		{
+			m_combatCapabilities &= ~combat_capabilities::CanBlock;
+		}
+	}
+
+	void GameUnitS::NotifyCanParry(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each aura effect
+		if (gainedEffect)
+		{
+			m_combatCapabilities |= combat_capabilities::CanParry;
+			return;
+		}
+
+		// Effect was removed: Check if there is still one effect left and if so, ensure the CanParry flag is set. Otherwise ensure its removed.
+		if (HasSpellEffect(spell_effects::Parry))
+		{
+			m_combatCapabilities |= combat_capabilities::CanParry;
+		}
+		else
+		{
+			m_combatCapabilities &= ~combat_capabilities::CanParry;
+		}
+	}
+
+	void GameUnitS::NotifyCanDodge(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each aura effect
+		if (gainedEffect)
+		{
+			m_combatCapabilities |= combat_capabilities::CanDodge;
+			return;
+		}
+
+		// Effect was removed: Check if there is still one effect left and if so, ensure the CanDodge flag is set. Otherwise ensure its removed.
+		if (HasSpellEffect(spell_effects::Dodge))
+		{
+			m_combatCapabilities |= combat_capabilities::CanDodge;
+		}
+		else
+		{
+			m_combatCapabilities &= ~combat_capabilities::CanDodge;
+		}
 	}
 
 	float GameUnitS::GetUnitMissChance() const
@@ -893,6 +993,37 @@ namespace mmo
 		}
 
 		return MeleeAttackOutcome::Normal;
+	}
+
+	bool GameUnitS::HasAuraEffect(const AuraType type) const
+	{
+		for (const std::shared_ptr<AuraContainer>& aura : m_auras)
+		{
+			if (!aura->IsApplied())
+			{
+				continue;
+			}
+
+			if (aura->HasEffect(type))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool GameUnitS::HasSpellEffect(const SpellEffect type) const
+	{
+		for (const auto& spell : m_spells)
+		{
+			if (SpellHasEffect(*spell, type))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)

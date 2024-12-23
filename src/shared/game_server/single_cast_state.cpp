@@ -576,7 +576,10 @@ namespace mmo
 			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
 			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
 			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)},
-			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)}
+			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)},
+			{se::Parry,					std::bind(&SingleCastState::SpellEffectParry, this, std::placeholders::_1)},
+			{se::Block,					std::bind(&SingleCastState::SpellEffectBlock, this, std::placeholders::_1)},
+			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -958,6 +961,42 @@ namespace mmo
 		{
 			WLOG("Target is not a player character!");
 		}
+	}
+
+	void SingleCastState::SpellEffectParry(const proto::SpellEffect& effect)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			WLOG("Unable to resolve effect unit target!");
+			return;
+		}
+
+		unitTarget->NotifyCanParry(true);
+	}
+
+	void SingleCastState::SpellEffectBlock(const proto::SpellEffect& effect)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			WLOG("Unable to resolve effect unit target!");
+			return;
+		}
+
+		unitTarget->NotifyCanBlock(true);
+	}
+
+	void SingleCastState::SpellEffectDodge(const proto::SpellEffect& effect)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			WLOG("Unable to resolve effect unit target!");
+			return;
+		}
+
+		unitTarget->NotifyCanDodge(true);
 	}
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
