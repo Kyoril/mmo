@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "layout_xml_loader.h"
 #include "frame_mgr.h"

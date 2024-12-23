@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "big_number.h"
 #include <openssl/ssl.h>

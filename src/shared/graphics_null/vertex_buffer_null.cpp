@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "vertex_buffer_null.h"
 #include "base/macros.h"

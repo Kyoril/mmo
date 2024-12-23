@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2024, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "item_editor_window.h"

@@ -25,8 +25,8 @@ LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,1,0,704
- PRODUCTVERSION 0,1,0,704
+ FILEVERSION 0,1,0,985
+ PRODUCTVERSION 0,1,0,985
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -43,12 +43,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Unnamed Company"
             VALUE "FileDescription", "MMORPG Launcher"
-            VALUE "FileVersion", "0.1.0.704"
+            VALUE "FileVersion", "0.1.0.985"
             VALUE "InternalName", "launcher.exe"
-            VALUE "LegalCopyright", "Copyright (C) 2019-2024, Kyoril. All rights reserved."
+            VALUE "LegalCopyright", "Copyright (C) 2019-2025, Kyoril. All rights reserved."
             VALUE "OriginalFilename", "launcher.exe"
             VALUE "ProductName", "MMORPG Launcher"
-            VALUE "ProductVersion", "0.1.0.704"
+            VALUE "ProductVersion", "0.1.0.985"
         END
     END
     BLOCK "VarFileInfo"
