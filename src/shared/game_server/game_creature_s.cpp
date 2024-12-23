@@ -12,7 +12,7 @@ namespace mmo
 		const proto::UnitEntry& entry)
 		: GameUnitS(project, timers)
 		, m_originalEntry(entry)
-		, m_entry(&m_originalEntry)
+		, m_entry(nullptr)
 	{
 	}
 
@@ -20,13 +20,8 @@ namespace mmo
 	{
 		GameUnitS::Initialize();
 
-		ASSERT(m_entry);
-
 		// Initialize creature based on unit entry values
-		Set<uint32>(object_fields::Level, m_entry->minlevel());
-		SetEntry(*m_entry);
-		Set<uint32>(object_fields::Health, m_entry->minlevelhealth());
-		Set<uint32>(object_fields::Mana, m_entry->minlevelmana());
+		Set<uint32>(object_fields::Level, m_originalEntry.minlevel());
 		ClearFieldChanges();
 
 		// Setup AI
@@ -43,8 +38,31 @@ namespace mmo
 
 	void GameCreatureS::SetEntry(const proto::UnitEntry& entry)
 	{
+		const bool firstInitialization = (m_entry == nullptr);
+
+		// Same entry? Nothing to change
+		if (m_entry == &entry)
+		{
+			return;
+		}
+		
+		if (m_entry)
+		{
+			// Remove all spells from previous entry
+			for (const auto& spell : m_entry->creaturespells())
+			{
+				RemoveSpell(spell.spellid());
+			}
+		}
+
 		// Setup new entry
 		m_entry = &entry;
+
+		// Add all creature spells
+		for (const auto& spell : m_entry->creaturespells())
+		{
+			AddSpell(spell.spellid());
+		}
 
 		// Use base npc flags from entry
 		uint32 npcFlags = m_entry->npcflags();
@@ -71,6 +89,13 @@ namespace mmo
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
 		Set<uint32>(object_fields::PowerType, power_type::Mana);	// TODO
 		RefreshStats();
+
+		if (firstInitialization)
+		{
+			Set<uint32>(object_fields::Health, m_entry->minlevelhealth());
+			Set<uint32>(object_fields::Mana, m_entry->minlevelmana());
+			ClearFieldChanges();
+		}
 	}
 
 	void GameCreatureS::AddLootRecipient(uint64 guid)

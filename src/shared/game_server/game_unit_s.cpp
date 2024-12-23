@@ -377,7 +377,13 @@ namespace mmo
 			return;
 		}
 
-		m_spells.insert(spell);
+		auto it = m_spells.insert(spell);
+		if (!it.second)
+		{
+			WLOG("Unit did already know this spell!");
+			return;
+		}
+
 		OnSpellLearned(*spell);
 
 		// Activate passive spell
@@ -689,8 +695,20 @@ namespace mmo
 
 		// Reset swing timer for main hand weapon
 		const GameTime now = GetAsyncTimeMs();
-		m_lastMainHand = now - Get<uint32>(object_fields::BaseAttackTime);
 
+		// Reduce attack time to 300 ms if it's higher
+		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
+
+		// This is the ideal time (we want to trigger the next attack swing in 0.3 seconds from now on)
+		const uint32 idealLastMainHand = now - swingTime + 300;
+
+		// If last swing was even further in the past, we don't need to adjust anything. But if it was more recent, we adjust the timing so
+		// that the next attack swing will trigger in at least 0.3 seconds
+		if (m_lastMainHand > idealLastMainHand)
+		{
+			m_lastMainHand = idealLastMainHand;
+		}
+		
 		// Do the next swing
 		TriggerNextAutoAttack();
 	}
@@ -986,7 +1004,12 @@ namespace mmo
 
 		if (victim.CanParry() && chanceDistribution(randomGenerator) < parryChance)
 		{
-			return MeleeAttackOutcome::Parry;
+			// Could be a parry. But last check: We need to be in front of the target to be parried
+			if (victim.IsFacingTowards(*this))
+			{
+				// We are in front of the target, so it's a parry
+				return MeleeAttackOutcome::Parry;
+			}
 		}
 
 		// Glancing check only if target is at our or higher level

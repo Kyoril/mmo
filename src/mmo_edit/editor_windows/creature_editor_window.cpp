@@ -292,6 +292,125 @@ namespace mmo
 			SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
 			ImGui::EndGroupPanel();
 		}
+
+		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_None))
+		{
+			static const char* s_itemNone = "<None>";
+
+			// Add button
+			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_creaturespells();
+				newEntry->set_spellid(0);
+			}
+
+			if (ImGui::BeginTable("creaturespells", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Min Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Max Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Min Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Max Cooldown", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Probability", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.creaturespells_size(); ++index)
+				{
+					auto* currentItem = currentEntry.mutable_creaturespells(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					const uint32 spell = currentItem->spellid();
+
+					const auto* spellEntry = m_project.spells.getById(spell);
+					if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_itemNone, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.spells.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
+							const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentItem->set_spellid(m_project.spells.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 priority = currentItem->priority();
+					if (ImGui::InputInt("##priority", &priority))
+					{
+						currentItem->set_priority(priority);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 mininitialcooldown = currentItem->mininitialcooldown();
+					if (ImGui::InputInt("ms##mininitialcooldown", &mininitialcooldown))
+					{
+						currentItem->set_mininitialcooldown(mininitialcooldown);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 maxinitialcooldown = currentItem->maxinitialcooldown();
+					if (ImGui::InputInt("ms##maxinitialcooldown", &maxinitialcooldown))
+					{
+						currentItem->set_maxinitialcooldown(maxinitialcooldown);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 mincooldown = currentItem->mincooldown();
+					if (ImGui::InputInt("ms##mininitialcooldown", &mincooldown))
+					{
+						currentItem->set_mincooldown(mincooldown);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 maxcooldown = currentItem->maxcooldown();
+					if (ImGui::InputInt("ms##maxinitialcooldown", &maxcooldown))
+					{
+						currentItem->set_maxcooldown(maxcooldown);
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 probability = currentItem->probability();
+					if (ImGui::InputInt("%##probability", &probability))
+					{
+						currentItem->set_probability(probability);
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_creaturespells()->erase(currentEntry.mutable_creaturespells()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 	}
 
 	void CreatureEditorWindow::OnNewEntry(proto::TemplateManager<proto::Units, proto::UnitEntry>::EntryType& entry)

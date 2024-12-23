@@ -302,7 +302,7 @@ namespace mmo
 		}
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius) const
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius)
 	{
 		// Create the unit
 		auto spawned = std::make_shared<GameCreatureS>(
@@ -315,6 +315,10 @@ namespace mmo
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
+		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
+		spawned->SetWorldInstance(this);
+		spawned->SetEntry(entry);
+		
 		return spawned;
 	}
 
