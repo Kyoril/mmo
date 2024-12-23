@@ -680,6 +680,31 @@ namespace mmo
 		m_lastManaUse = GetAsyncTimeMs();
 	}
 
+	void GameUnitS::OnParry()
+	{
+		if (!m_attackSwingCountdown.IsRunning())
+		{
+			return;
+		}
+
+		// Reset swing timer for main hand weapon
+		const GameTime now = GetAsyncTimeMs();
+		m_lastMainHand = now - Get<uint32>(object_fields::BaseAttackTime);
+
+		// Do the next swing
+		TriggerNextAutoAttack();
+	}
+
+	void GameUnitS::OnDodge()
+	{
+		// Nothing to see here
+	}
+
+	void GameUnitS::OnBlock()
+	{
+		// Nothing to see here
+	}
+
 	void GameUnitS::TeleportOnMap(const Vector3& position, const Radian& facing)
 	{
 		// Update position and facing
@@ -954,12 +979,12 @@ namespace mmo
 			return MeleeAttackOutcome::Miss;
 		}
 
-		if (chanceDistribution(randomGenerator) < dodgeChance)
+		if (victim.CanDodge() && chanceDistribution(randomGenerator) < dodgeChance)
 		{
 			return MeleeAttackOutcome::Dodge;
 		}
 
-		if (chanceDistribution(randomGenerator) < parryChance)
+		if (victim.CanParry() && chanceDistribution(randomGenerator) < parryChance)
 		{
 			return MeleeAttackOutcome::Parry;
 		}
@@ -1709,6 +1734,20 @@ namespace mmo
 			outcome == melee_attack_outcome::Dodge)
 		{
 			totalDamage = 0;
+		}
+
+		// Trigger defense events
+		if (outcome == melee_attack_outcome::Parry)
+		{
+			victim->OnParry();
+		}
+		else if (outcome == melee_attack_outcome::Block)
+		{
+			victim->OnBlock();
+		}
+		else if(outcome == melee_attack_outcome::Dodge)
+		{
+			victim->OnDodge();
 		}
 
 		victim->Damage(totalDamage, spell_school::Normal, this);

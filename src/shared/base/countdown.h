@@ -25,7 +25,10 @@ namespace mmo
 		~Countdown();
 
 	public:
+		GameTime GetEnd() const;
+
 		void SetEnd(GameTime endTime) const;
+
 		void Cancel() const;
 
 		bool IsRunning() const { return m_running; }

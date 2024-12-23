@@ -430,6 +430,15 @@ namespace mmo
 
 		void NotifyManaUsed();
 
+		/// Executed when an attack was successfully parried.
+		virtual void OnParry();
+
+		/// Executed when an attack was successfully dodged.
+		virtual void OnDodge();
+
+		/// Executed when an attack was successfully blocked.
+		virtual void OnBlock();
+
 		/// Teleports the unit to a new location on the same map.
 		void TeleportOnMap(const Vector3& position, const Radian& facing);
 

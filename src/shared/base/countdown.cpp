@@ -15,12 +15,16 @@ namespace mmo
 			: m_timers(timers)
 			, m_delayCount(0)
 			, m_countdown(&countdown)
+			, m_endTime(0)
 		{
 		}
 
-		void SetEnd(GameTime endTime)
+		GameTime GetEnd() const { return m_endTime; }
+
+		void SetEnd(const GameTime endTime)
 		{
 			++m_delayCount;
+			m_endTime = endTime;
 
 			if (m_countdown)
 			{
@@ -53,6 +57,7 @@ namespace mmo
 		TimerQueue& m_timers;
 		size_t m_delayCount;
 		Countdown* m_countdown;
+		GameTime m_endTime;
 
 	private:
 		void OnPossibleEnd(size_t delayNumber) const
@@ -82,6 +87,11 @@ namespace mmo
 	{
 		m_impl->Kill();
 		m_running = false;
+	}
+
+	GameTime Countdown::GetEnd() const
+	{
+		return m_impl->GetEnd();
 	}
 
 	void Countdown::SetEnd(GameTime endTime) const
