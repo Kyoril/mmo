@@ -25,6 +25,7 @@
 
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "scrolling_message_frame.h"
+#include "scroll_bar.h"
 #include "luabind/operator.hpp"
 
 
@@ -170,7 +171,7 @@ namespace mmo
 
 			// Read file content
 			buffer.resize(fileSize);
-			file->read(&buffer[0], buffer.size());
+			file->read(buffer.data(), buffer.size());
 			
 			// Create the xml parser
 			XML_Parser parser = XML_ParserCreate(nullptr);
@@ -450,6 +451,7 @@ namespace mmo
 		// Register frame factories
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		s_frameMgr->RegisterFrameFactory("ScrollBar", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollBar>("ScrollBar", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });

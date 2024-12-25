@@ -406,7 +406,8 @@ namespace mmo
 	{
 		if (m_hasAreaTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected Frame element!");
+			ELOG("Unexpected Frame element in file " << m_filename);
+			return;
 		}
 
 		// Get the name of the frame to create
@@ -443,7 +444,8 @@ namespace mmo
 		const FramePtr frame = FrameManager::Get().Create(type, name);
 		if (!frame)
 		{
-			throw std::runtime_error("Could not create frame named!");
+			ELOG("Failed to create Frame named '" << name << "' of type '" << type << "' in file " << m_filename);
+			return;
 		}
 
 		// Copy properties over
@@ -466,7 +468,7 @@ namespace mmo
 			parentFrame = FrameManager::Get().Find(parent);
 			if (parentFrame == nullptr)
 			{
-				throw std::runtime_error("Parent frame named " + parent + " doesn't exist!");
+				ELOG("Unable to find parant frame by name " << parent << " - failed to set parent of frame " << name << " in file " << m_filename);
 			}
 		}
 		else
@@ -510,7 +512,8 @@ namespace mmo
 	{
 		if (m_hasAreaTag || m_frames.empty())
 		{
-			throw std::runtime_error("Unexpected Area element!");
+			ELOG("Unexpected Area element in file " << m_filename);
+			return;
 		}
 
 		m_hasAreaTag = true;
@@ -525,7 +528,8 @@ namespace mmo
 	{
 		if (m_hasSizeTag || m_hasPositionTag || !m_hasAreaTag || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected Size element!");
+			ELOG("Unexpected Size element in file " << m_filename);
+			return;
 		}
 
 		m_hasSizeTag = true;
@@ -540,7 +544,7 @@ namespace mmo
 	{
 		if (m_hasPositionTag || m_hasSizeTag || !m_hasAreaTag || m_scriptTag)
 		{
-			ELOG("Unexpected Position element!");
+			ELOG("Unexpected Position element in file " << m_filename);
 			return;
 		}
 
@@ -556,7 +560,7 @@ namespace mmo
 	{
 		if (!m_hasSizeTag && !m_hasPositionTag || m_scriptTag)
 		{
-			ELOG("Unexpected AbsDimension element!");
+			ELOG("Unexpected AbsDimension element in file " << m_filename);
 			return;
 		}
 
@@ -587,7 +591,7 @@ namespace mmo
 	{
 		if (!m_hasAreaTag || m_scriptTag)
 		{
-			ELOG("Unexpected Anchor element!");
+			ELOG("Unexpected Anchor element in file " << m_filename);
 			return;
 		}
 
@@ -605,7 +609,8 @@ namespace mmo
 		AnchorPoint point = AnchorPointByName(pointAttr);
 		if (point == anchor_point::None)
 		{
-			throw std::runtime_error("Anchor has no valid point specified!");
+			ELOG("Anchor point '" << pointAttr << "' is an invalid value (in file " << m_filename << ")");
+			return;
 		}
 
 		// Evaluate relative point. If invalid, use point as relative point
@@ -619,7 +624,7 @@ namespace mmo
 			relativeTo = FrameManager::Get().Find(relativeToAttr);
 			if (relativeTo == nullptr)
 			{
-				ELOG("Anchor specified relative target frame '" + relativeToAttr + "' which doesn't exist!");
+				ELOG("Anchor specified relative target frame '" + relativeToAttr + "' which doesn't exist (in file " << m_filename << ")");
 			}
 		}
 
@@ -635,14 +640,15 @@ namespace mmo
 	{
 		if (m_scriptTag)
 		{
-			ELOG("Unexpected " << ScriptElement << " tag");
+			ELOG("Unexpected " << ScriptElement << " tag in file " << m_filename);
 			return;
 		}
 
 		const std::string file(attributes.GetValueAsString(ScriptFileAttribute));
 		if (file.empty())
 		{
-			throw std::runtime_error("Script element requires a valid file attribute!");
+			ELOG("Script element requires a valid file attribute, but has none or was empty in file " << m_filename);
+			return;
 		}
 
 		// Retrieve the full file name and add it to the list of scripts to load later.
@@ -655,7 +661,7 @@ namespace mmo
 		// the current design where only one instance of the xml loader is present).
 		if (!f.has_extension() || _stricmp(f.extension().generic_string().c_str(), ".lua") != 0)
 		{
-			ELOG("Script file names have to have the *.lua extension!");
+			ELOG("Script file names have to have the *.lua extension, but file name was '" << f << "' in file " << m_filename);
 			return;
 		}
 
@@ -672,7 +678,7 @@ namespace mmo
 		// Style has to be a top-level element
 		if (m_frames.empty() || m_hasAreaTag || m_hasSizeTag || m_hasVisualTag || m_scriptTag)
 		{
-			ELOG("Unexpected Visual element!");
+			ELOG("Unexpected Visual element in file " << m_filename);
 			return;
 		}
 
@@ -689,7 +695,7 @@ namespace mmo
 		// Ensure that the element may appear at this location
 		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected ImagerySection element!");
+			ELOG("Unexpected ImagerySection element in file " << m_filename);
 			return;
 		}
 
@@ -697,14 +703,14 @@ namespace mmo
 		const std::string name(attributes.GetValueAsString(ImagerySectionNameAttribute));
 		if (name.empty())
 		{
-			ELOG("ImagerySection element has to have a valid name!");
+			ELOG("ImagerySection element has to have a valid name in file " << m_filename);
 			return;
 		}
 
 		// Ensure that such a section doesn't already exist
 		if (m_frames.top()->GetImagerySectionByName(name) != nullptr)
 		{
-			ELOG("ImagerySection with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+			ELOG("ImagerySection with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "' in file " << m_filename);
 			return;
 		}
 
@@ -724,20 +730,23 @@ namespace mmo
 		// Ensure that the element may appear at this location
 		if (!m_hasVisualTag || m_section != nullptr || m_stateImagery != nullptr || m_scriptTag)
 		{
-			throw std::runtime_error("Unexpected StateImagery element!");
+			ELOG("Unexpected StateImagery element in file " << m_filename);
+			return;
 		}
 
 		// Parse attributes
 		const std::string name(attributes.GetValueAsString(StateImageryNameAttribute));
 		if (name.empty())
 		{
-			throw std::runtime_error("StateImagery element has to have a valid name!");
+			ELOG("StateImagery element has to have a valid name but none was provided in file " << m_filename);
+			return;
 		}
 
 		// Ensure that such a state imagery doesn't already exist
 		if (m_frames.top()->GetStateImageryByName(name) != nullptr)
 		{
-			throw std::runtime_error("StateImagery with the name '" + name + "' already exists in frame '" + m_frames.top()->GetName() + "'!");
+			ELOG("StateImagery with the name '" << name << "' already exists in frame '" << m_frames.top()->GetName() << "'!");
+			return;
 		}
 
 		// Add new imagery section
@@ -754,7 +763,7 @@ namespace mmo
 	{
 		if (m_layer != nullptr || m_stateImagery == nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected " << LayerElement << " element!");
+			ELOG("Unexpected " << LayerElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -773,7 +782,7 @@ namespace mmo
 		// Ensure that the element may appear at this location
 		if (m_layer == nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected " << SectionElement << " element!");
+			ELOG("Unexpected " << SectionElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -781,7 +790,7 @@ namespace mmo
 		const std::string section(attributes.GetValueAsString(SectionSectionAttribute));
 		if (section.empty())
 		{
-			ELOG("Section element needs to have a section name specified!");
+			ELOG("Section element needs to have a section name specified in file " << m_filename);
 			return;
 		}
 
@@ -806,7 +815,7 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected " << TextComponentElement << " element!");
+			ELOG("Unexpected " << TextComponentElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -843,7 +852,7 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected " << ImageComponentElement << " element!");
+			ELOG("Unexpected " << ImageComponentElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -887,7 +896,7 @@ namespace mmo
 	{
 		if (m_component != nullptr || m_section == nullptr || m_scriptTag)
 		{
-			ELOG("Unexpected " << BorderComponentElement << " element!");
+			ELOG("Unexpected " << BorderComponentElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -898,7 +907,7 @@ namespace mmo
 		// Check for texture name existance
 		if (texture.empty())
 		{
-			ELOG("BorderComponent needs a texture filename!");
+			ELOG("BorderComponent needs a texture filename but none was given in file " << m_filename);
 			return;
 		}
 
@@ -940,7 +949,7 @@ namespace mmo
 	{
 		if (m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
 		{
-			ELOG("Unexpected " << PropertyElement << " element!");
+			ELOG("Unexpected " << PropertyElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -951,7 +960,7 @@ namespace mmo
 		// Verify attributes
 		if (name.empty())
 		{
-			ELOG("Property needs to have a name!");
+			ELOG("Property needs to have a name but none was given in file " << m_filename);
 			return;
 		}
 
@@ -977,7 +986,7 @@ namespace mmo
 	{
 		if (m_hasEventsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
 		{
-			ELOG("Unexpected " << EventsElement << " element!");
+			ELOG("Unexpected " << EventsElement << " element in file " << m_filename);
 			return;
 		}
 
@@ -993,7 +1002,7 @@ namespace mmo
 	{
 		if (!m_hasAreaTag || !m_component || m_scriptTag)
 		{
-			ELOG("Unexpected " + InsetElement + " element!");
+			ELOG("Unexpected " + InsetElement + " element in file " << m_filename);
 			return;
 		}
 
@@ -1022,7 +1031,8 @@ namespace mmo
 		// Font may not be defined inside frames
 		if (!m_frames.empty())
 		{
-			throw std::runtime_error("Unexpected " + FontElement + " element!");
+			ELOG("Unexpected " << FontElement << " element in file " << m_filename);
+			return;
 		}
 
 		const std::string name(attributes.GetValueAsString(FontNameAttribute));

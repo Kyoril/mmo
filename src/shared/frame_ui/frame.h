@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "base/non_copyable.h"
 #include "geometry_buffer.h"
 #include "rect.h"
 #include "anchor_point.h"
@@ -57,6 +58,7 @@ namespace mmo
 	/// This is the base class to represent a simple frame.
 	class Frame
 		: public std::enable_shared_from_this<Frame>
+		, public NonCopyable
 	{
 	public:
 		typedef std::shared_ptr<Frame> Pointer;
@@ -87,7 +89,7 @@ namespace mmo
 
 	public:
 		Frame(const std::string& type, const std::string& name);
-		virtual ~Frame() = default;
+		virtual ~Frame() override = default;
 
 	public:
 		/// Called to copy this frame's properties over to another frame.
