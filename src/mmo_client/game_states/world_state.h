@@ -55,6 +55,7 @@ namespace mmo
 	class SceneNode;
 
 	class LootClient;
+	class TrainerClient;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -80,7 +81,8 @@ namespace mmo
 			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 			ActionBar& actionBar,
-			SpellCast& spellCast);
+			SpellCast& spellCast,
+			TrainerClient& trainerClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -305,6 +307,7 @@ namespace mmo
 
 		ActionBar& m_actionBar;
 		SpellCast& m_spellCast;
+		TrainerClient& m_trainerClient;
 
 	private:
 		static IInputControl* s_inputControl;

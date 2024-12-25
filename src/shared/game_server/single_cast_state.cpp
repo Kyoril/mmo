@@ -770,6 +770,12 @@ namespace mmo
 			return;
 		}
 
+		// Threaten target on aura application if the target is not ourself
+		if (unitTarget && unitTarget->GetGuid() != m_cast.GetExecuter().GetGuid())
+		{
+			unitTarget->threatened(m_cast.GetExecuter(), 0.0f);
+		}
+
 		auto& container = GetOrCreateAuraContainer(*unitTarget);
 		container.AddAuraEffect(effect, CalculateEffectBasePoints(effect));
 	}

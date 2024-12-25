@@ -43,6 +43,7 @@
 
 #include "action_bar.h"
 #include "spell_cast.h"
+#include "trainer_client.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -245,6 +246,7 @@ namespace mmo
 
 	std::unique_ptr<LootClient> s_lootClient;
 	std::unique_ptr<VendorClient> s_vendorClient;
+	std::unique_ptr<TrainerClient> s_trainerClient;
 
 	std::unique_ptr<DBItemCache> s_itemCache;
 	std::unique_ptr<DBCreatureCache> s_creatureCache;
@@ -340,6 +342,7 @@ namespace mmo
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
+		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
@@ -350,7 +353,7 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast, *s_trainerClient);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance

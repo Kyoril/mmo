@@ -22,15 +22,9 @@ namespace mmo
 	{
 		enum Type
 		{
-			TrainerHasNoSpells,
+			FailedLevelTooLow,
 
-			TrainerHostile,
-
-			TrainerTooFarAway,
-
-			TrainerIsDead,
-
-			CantShopWhileDead
+			FailedNotEnoughMoney
 		};
 	}
 }
