@@ -704,14 +704,20 @@ namespace mmo
 		if (m_topFrame != nullptr)
 		{
 			// Find the child frame at the given position (this may also return the top frame itself).
-			auto targetFrame = m_topFrame->GetChildFrameAt(position, true);
+			const auto targetFrame = m_topFrame->GetChildFrameAt(position, true);
 			if (targetFrame != nullptr)
 			{
-				if (targetFrame->IsEnabled(false))
+				Frame* clickableFrame = targetFrame.get();
+				while(clickableFrame && !clickableFrame->IsClickable())
 				{
-					m_mouseDownFrames[button] = targetFrame;
+					clickableFrame = clickableFrame->GetParent();
+				}
+
+				if (clickableFrame && clickableFrame->IsClickable() && clickableFrame->IsEnabled(false))
+				{
+					m_mouseDownFrames[button] = clickableFrame->shared_from_this();
 					m_pressedButtons |= static_cast<int32>(button);
-					targetFrame->OnMouseDown(button, m_pressedButtons, position);
+					clickableFrame->OnMouseDown(button, m_pressedButtons, position);
 				}
 			}
 		}
@@ -719,7 +725,7 @@ namespace mmo
 
 	void FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
-		// For mouse button up, we want to notify the same frame that received the coresponding
+		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
 		const auto it = m_mouseDownFrames.find(button);

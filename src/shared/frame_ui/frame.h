@@ -350,7 +350,6 @@ namespace mmo
 		/// 
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position);
 
-
 		/// 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
 
@@ -390,6 +389,10 @@ namespace mmo
 		void SetOnHide(const luabind::object& func) { m_onHide = func; }
 
 		void SetOnClick(const luabind::object& func);
+
+		void SetClickable(const bool clickable) { m_clickable = clickable; }
+
+		bool IsClickable() const { return m_clickable; }
 
 		virtual void OnShow();
 
@@ -442,6 +445,8 @@ namespace mmo
 		void OnFontPropertyChanged(const Property& property);
 
 		void OnColorPropertyChanged(const Property& property);
+
+		void OnClickablePropertyChanged(const Property& property);
 
 	protected:
 		typedef std::vector<Pointer> ChildList;
@@ -520,6 +525,8 @@ namespace mmo
 		float m_opacity{ 1.0f };
 
 		Color m_color { Color::White };
+
+		bool m_clickable = true;
 
 	protected:
 		scoped_connection_container m_propConnections;

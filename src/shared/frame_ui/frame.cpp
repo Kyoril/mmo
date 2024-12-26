@@ -31,6 +31,7 @@ namespace mmo
 		m_propConnections += AddProperty("Visible").Changed.connect(this, &Frame::OnVisiblePropertyChanged);
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
 		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
+		m_propConnections += AddProperty("Clickable").Changed.connect(this, &Frame::OnClickablePropertyChanged);
 	}
 
 	void Frame::Copy(Frame & other)
@@ -61,6 +62,7 @@ namespace mmo
 		other.m_onClick = m_onClick;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
+		other.m_clickable = m_clickable;
 		other.RemoveAllChildren();
 		
 		// Set all properties
@@ -1212,6 +1214,11 @@ namespace mmo
 		m_color = argb;
 
 		Invalidate(false);
+	}
+
+	void Frame::OnClickablePropertyChanged(const Property& property)
+	{
+		m_clickable = property.GetBoolValue();
 	}
 
 	GeometryBuffer & Frame::GetGeometryBuffer()

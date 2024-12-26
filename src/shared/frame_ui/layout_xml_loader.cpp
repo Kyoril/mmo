@@ -773,6 +773,11 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementLayerEnd()
 	{
+		if (!m_layer)
+		{
+			return;
+		}
+
 		m_stateImagery->AddLayer(*m_layer);
 		m_layer.reset();
 	}
