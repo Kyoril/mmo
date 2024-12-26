@@ -674,6 +674,10 @@ namespace mmo
 		{
 			// Connection error!
 			ELOG("Could not connect to the realm server.");
+
+			// Clear packet handlers
+			ClearPacketHandlers();
+			QueueReconnect();
 		}
 		
 		return true;

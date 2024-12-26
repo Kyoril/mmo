@@ -20,6 +20,11 @@ namespace mmo
 
 		m_connections += m_waitCountdown.ended.connect(*this, &CreatureAIIdleState::OnWaitCountdownExpired);
 		m_connections += GetAI().GetControlled().GetMover().targetReached.connect(*this, &CreatureAIIdleState::OnTargetReached);
+		m_connections += GetAI().GetControlled().threatened.connect([ai = &GetAI()]<typename T0, typename T1>(T0&& instigator, T1&& threat)
+		{
+			ai->OnThreatened(std::forward<T0>(instigator), std::forward<T1>(threat));
+		});
+
 
 		const auto& location = GetControlled().GetPosition();
 
