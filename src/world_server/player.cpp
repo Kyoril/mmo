@@ -1880,15 +1880,15 @@ namespace mmo
 					return;
 				}
 
-				if (!m_character->HasMoney(trainerSpellEntry.spellcost()))
-				{
-					SendTrainerBuyError(trainerGuid, trainer_result::FailedNotEnoughMoney);
-					return;
-				}
-
 				if (m_character->GetLevel() < trainerSpellEntry.reqlevel())
 				{
 					SendTrainerBuyError(trainerGuid, trainer_result::FailedLevelTooLow);
+					return;
+				}
+
+				if (!m_character->ConsumeMoney(trainerSpellEntry.spellcost()))
+				{
+					SendTrainerBuyError(trainerGuid, trainer_result::FailedNotEnoughMoney);
 					return;
 				}
 
