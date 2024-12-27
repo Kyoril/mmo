@@ -213,6 +213,126 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(npcflags, "Inn Keeper", npc_flags::InnKeeper);
 		}
 
+		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("Offers Quests");
+
+			// Add button
+			if (ImGui::Button("Add Offered Quest", ImVec2(-1, 0)))
+			{
+				currentEntry.add_quests(0);
+			}
+
+			if (ImGui::BeginTable("offeredQuests", 1, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Quest", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableHeadersRow();
+
+				int index = 0;
+				for (auto& quest : currentEntry.quests())
+				{
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+
+					ImGui::PushID(index);
+
+					const auto* questEntry = m_project.quests.getById(quest);
+					if (ImGui::BeginCombo("##quest", questEntry != nullptr ? questEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.quests.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.quests.getTemplates().entry(i).id() == quest;
+							const char* item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentEntry.mutable_quests()->Set(index, m_project.quests.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_quests()->erase(currentEntry.mutable_quests()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+					index++;
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::Text("Completes Quests");
+
+			// Add button
+			if (ImGui::Button("Add Completed Quest", ImVec2(-1, 0)))
+			{
+				currentEntry.add_end_quests(0);
+			}
+
+			if (ImGui::BeginTable("endedQuests", 1, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Quest", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableHeadersRow();
+
+				int index = 0;
+				for (auto& quest : currentEntry.end_quests())
+				{
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+
+					ImGui::PushID(index);
+
+					const auto* questEntry = m_project.quests.getById(quest);
+					if (ImGui::BeginCombo("##end_quests", questEntry != nullptr ? questEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.quests.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.quests.getTemplates().entry(i).id() == quest;
+							const char* item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentEntry.mutable_end_quests()->Set(index, m_project.quests.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_end_quests()->erase(currentEntry.mutable_end_quests()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+					index++;
+				}
+
+				ImGui::EndTable();
+			}
+
+		}
+
 		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
 			int32 maleModel = currentEntry.malemodel();
