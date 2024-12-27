@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class TrainerClient;
 	class SpellCast;
 	class ActionBar;
 	struct ItemInfo;
@@ -54,13 +55,16 @@ namespace mmo
 			std::shared_ptr<LoginState> loginState,
 			const proto_client::Project& project,
 			ActionBar& actionBar,
-			SpellCast& spellCast);
+			SpellCast& spellCast,
+			TrainerClient& trainerClient);
 
 	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
 		void GetVendorItemInfo(int32 slot, String& outName, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const;
+
+		void GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice) const;
 
 	private:
 		/// Registers global functions to the internal lua state.
@@ -119,6 +123,8 @@ namespace mmo
 		ActionBar& m_actionBar;
 
 		SpellCast& m_spellCast;
+
+		TrainerClient& m_trainerClient;
 
 	private:
 		void Script_ReviveMe() const;

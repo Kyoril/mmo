@@ -112,7 +112,10 @@ namespace mmo
 
 	int32 SpellCast::CalculatePowerCost(const proto::SpellEntry& spell) const
 	{
-		// TODO
-		return spell.cost();
+		int32 cost = spell.cost();
+
+		m_executor.ApplySpellMod(spell_mod_op::Cost, spell.id(), cost);
+
+		return std::max(0, cost);
 	}
 }

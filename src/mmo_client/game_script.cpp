@@ -17,6 +17,7 @@
 #include "cursor.h"
 #include "loot_client.h"
 #include "platform.h"
+#include "trainer_client.h"
 #include "vendor_client.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -852,7 +853,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -861,6 +862,7 @@ namespace mmo
 		, m_project(project)
 		, m_actionBar(actionBar)
 		, m_spellCast(spellCast)
+		, m_trainerClient(trainerClient)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -895,6 +897,25 @@ namespace mmo
 		outQuantity = vendorItems[slot].buyCount;
 		outNumAvailable = vendorItems[slot].maxCount;
 		outUsable = false;
+	}
+
+	void GameScript::GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice) const
+	{
+		const auto& trainerSpells = m_trainerClient.GetTrainerSpells();
+		if (slot < 0 || slot >= trainerSpells.size())
+		{
+			outSpellId = -1;
+			outName.clear();
+			outIcon.clear();
+			outPrice = 0;
+			return;
+		}
+
+		ASSERT(trainerSpells[slot].spell);
+		outSpellId = trainerSpells[slot].spell->id();
+		outName = trainerSpells[slot].spell->name();
+		outIcon = trainerSpells[slot].spell->icon();
+		outPrice = trainerSpells[slot].cost;
 	}
 
 	void GameScript::RegisterGlobalFunctions()
@@ -1076,6 +1097,9 @@ namespace mmo
 
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+
+			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
+			luabind::def<std::function<void(int32, int32&, String&, String&, int32&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 
 			luabind::def<std::function<const char* (const ItemInfo*, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo* item, int32 index) { return this->GetItemSpellTriggerType(item, index); }),
 			luabind::def<std::function<const proto_client::SpellEntry* (const ItemInfo*, int32)>>("GetItemSpell", [this](const ItemInfo* item, int32 index) { return this->GetItemSpell(item, index); }),

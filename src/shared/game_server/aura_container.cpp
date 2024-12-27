@@ -538,11 +538,11 @@ namespace mmo
 		const bool sameSpellId = other.GetSpellId() == GetSpellId();
 		const bool onlyOneStackTotal = (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
 		const bool sameCaster = other.GetCasterId() == GetCasterId();
-		const bool sameItem = false;
+		const bool sameItem = other.GetItemGuid() == GetItemGuid();
 
 		// Right now, same caster and same spell id means we overwrite the old aura with this one
 		// TODO: maybe add some settings here to explicitly allow stacking?
-		if (sameCaster && sameSpellId)
+		if (sameCaster && sameSpellId && sameItem)
 		{
 			return true;
 		}

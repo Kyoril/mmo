@@ -645,12 +645,21 @@ namespace mmo
 		// Apply spell base point modifications
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::AllEffects, m_spell.id(), outBasePoints);
 
-		if (effect.aura() == aura_type::PeriodicDamage ||
-			effect.aura() == aura_type::PeriodicHeal)
+		if (effect.type() == spell_effects::ApplyAura)
 		{
-			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::PeriodicBasePoints, m_spell.id(), outBasePoints);
-		}
+			if (effect.aura() == aura_type::PeriodicDamage ||
+				effect.aura() == aura_type::PeriodicHeal)
+			{
+				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::PeriodicBasePoints, m_spell.id(), outBasePoints);
 
+				// Also apply damage done bonus for now
+				if (effect.aura() == aura_type::PeriodicDamage)
+				{
+					m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), outBasePoints);
+				}
+			}
+		}
+		
 		return outBasePoints;
 	}
 
