@@ -362,6 +362,14 @@ namespace mmo
 
 	void ItemEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
+		if (ImGui::Button("Duplicate Item"))
+		{
+			proto::ItemEntry* copied = m_project.items.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+		}
+
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \

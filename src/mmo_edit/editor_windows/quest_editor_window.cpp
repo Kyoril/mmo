@@ -21,6 +21,14 @@ namespace mmo
 
 	void QuestEditorWindow::DrawDetailsImpl(proto::QuestEntry& currentEntry)
 	{
+		if (ImGui::Button("Duplicate Quest"))
+		{
+			proto::QuestEntry* copied = m_project.quests.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+		}
+
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \
@@ -76,11 +84,16 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
+			if (ImGui::BeginTable("table", 3, ImGuiTableFlags_None))
 			{
 				if (ImGui::TableNextColumn())
 				{
-					ImGui::InputText("Name", currentEntry.mutable_name());
+					ImGui::InputText("Internal Name", currentEntry.mutable_internalname());
+				}
+
+				if (ImGui::TableNextColumn())
+				{
+					ImGui::InputText("Quest Title", currentEntry.mutable_name());
 				}
 
 				if (ImGui::TableNextColumn())
@@ -94,11 +107,119 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
-			SLIDER_UINT32_PROP(minlevel, "Min Level", 0, 255);
 			SLIDER_UINT32_PROP(questlevel, "Quest Level", 0, 255);
+			SLIDER_UINT32_PROP(minlevel, "Min Level", 0, 255);
+			SLIDER_UINT32_PROP(maxlevel, "Max Level", 0, 255);
+
+			ImGui::Text("Quest Type");
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Turn In", currentEntry.type() == 0))
+			{
+				currentEntry.set_type(0);
+			}
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Task", currentEntry.type() == 1))
+			{
+				currentEntry.set_type(1);
+			}
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Quest", currentEntry.type() == 2))
+			{
+				currentEntry.set_type(2);
+			}
+
+			uint32 sourceItemId = currentEntry.srcitemid();
+
+			const auto* itemEntry = m_project.items.getById(sourceItemId);
+			if (ImGui::BeginCombo("Initial Quest Item", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
+			{
+				ImGui::PushID(0);
+				if (ImGui::Selectable("None"))
+				{
+					currentEntry.set_srcitemid(0);
+					sourceItemId = 0;
+				}
+				ImGui::PopID();
+			
+				for (int i = 0; i < m_project.items.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.items.getTemplates().entry(i).id() == sourceItemId;
+					const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_srcitemid(m_project.items.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			if (sourceItemId != 0)
+			{
+				SLIDER_UINT32_PROP(srcitemcount, "Number of source item to give", 1, 255);
+			}
 		}
 
-		if (ImGui::CollapsingHeader("Texts", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("If none are checked, all races / classes are allowed.");
+
+			ImGui::Text("Required Races");
+
+			if (ImGui::BeginTable("requiredRaces", 4, ImGuiTableFlags_None))
+			{
+				for (uint32 i = 0; i < 32; ++i)
+				{
+					if (proto::RaceEntry* race = m_project.races.getById(i))
+					{
+						ImGui::TableNextColumn();
+
+						bool raceIncluded = (currentEntry.requiredraces() & (1 << (i - 1))) != 0;
+						if (ImGui::Checkbox(race->name().c_str(), &raceIncluded))
+						{
+							if (raceIncluded)
+								currentEntry.set_requiredraces(currentEntry.requiredraces() | (1 << (i - 1)));
+							else
+								currentEntry.set_requiredraces(currentEntry.requiredraces() & ~(1 << (i - 1)));
+						}
+					}
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::Text("Required Classes");
+
+			if (ImGui::BeginTable("requiredClasses", 4, ImGuiTableFlags_None))
+			{
+				for (uint32 i = 0; i < 32; ++i)
+				{
+					if (proto::ClassEntry* classEntry = m_project.classes.getById(i))
+					{
+						ImGui::TableNextColumn();
+
+						bool classIncluded = (currentEntry.requiredclasses() & (1 << (i - 1))) != 0;
+						if (ImGui::Checkbox(classEntry->name().c_str(), &classIncluded))
+						{
+							if (classIncluded)
+								currentEntry.set_requiredclasses(currentEntry.requiredclasses() | (1 << (i - 1)));
+							else
+								currentEntry.set_requiredclasses(currentEntry.requiredclasses() & ~(1 << (i - 1)));
+						}
+					}
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Quest Text", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::InputTextMultiline("Details", currentEntry.mutable_detailstext());
 			ImGui::InputTextMultiline("Objectives", currentEntry.mutable_objectivestext());
@@ -107,9 +228,166 @@ namespace mmo
 			ImGui::InputTextMultiline("End", currentEntry.mutable_endtext());
 		}
 
+		if (ImGui::CollapsingHeader("Completion Criteria", ImGuiTreeNodeFlags_None))
+		{
+			// Add button
+			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_requirements();
+			}
+
+			if (ImGui::BeginTable("questRequirements", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Item Count", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Creature", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Creature Count", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Custom Text", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.requirements_size(); ++index)
+				{
+					auto* currentItem = currentEntry.mutable_requirements(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					uint32 item = currentItem->itemid();
+					const auto* itemEntry = m_project.items.getById(item);
+					if (ImGui::BeginCombo("##item", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						if (ImGui::Selectable("None"))
+						{
+							currentItem->set_itemid(0);
+						}
+						else
+						{
+							for (int i = 0; i < m_project.items.count(); i++)
+							{
+								ImGui::PushID(i);
+								const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
+								const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+								if (ImGui::Selectable(item_text, item_selected))
+								{
+									currentItem->set_itemid(m_project.items.getTemplates().entry(i).id());
+									if (currentItem->itemcount() == 0)
+									{
+										currentItem->set_itemcount(1);
+									}
+
+									// Reset other requirements back to 0
+									currentItem->set_creatureid(0);
+									currentItem->set_objectid(0);
+									currentItem->set_spellcast(0);
+								}
+								if (item_selected)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+								ImGui::PopID();
+							}
+						}
+						
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					ImGui::BeginDisabled(currentItem->itemid() == 0);
+					int32 count = currentItem->itemcount();
+					if (ImGui::InputInt("##item_count", &count))
+					{
+						if (count < 1) count = 1;
+						currentItem->set_itemcount(count);
+					}
+					ImGui::EndDisabled();
+
+					ImGui::TableNextColumn();
+
+					uint32 creature = currentItem->creatureid();
+					const auto* creatureEntry = m_project.units.getById(creature);
+					if (ImGui::BeginCombo("##creature", creatureEntry != nullptr ? creatureEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						if (ImGui::Selectable("None"))
+						{
+							currentItem->set_creatureid(0);
+						}
+						else
+						{
+							for (int i = 0; i < m_project.units.count(); i++)
+							{
+								ImGui::PushID(i);
+								const bool item_selected = m_project.units.getTemplates().entry(i).id() == creature;
+								const char* item_text = m_project.units.getTemplates().entry(i).name().c_str();
+								if (ImGui::Selectable(item_text, item_selected))
+								{
+									currentItem->set_creatureid(m_project.units.getTemplates().entry(i).id());
+									if (currentItem->creaturecount() == 0)
+									{
+										currentItem->set_creaturecount(1);
+									}
+
+									// Reset other requirements back to 0
+									currentItem->set_itemid(0);
+									currentItem->set_objectid(0);
+									currentItem->set_spellcast(0);
+								}
+								if (item_selected)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+								ImGui::PopID();
+							}
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					ImGui::BeginDisabled(currentItem->creatureid() == 0);
+					count = currentItem->creaturecount();
+					if (ImGui::InputInt("##creature_count", &count))
+					{
+						if (count < 1) count = 1;
+						currentItem->set_creaturecount(count);
+					}
+					ImGui::EndDisabled();
+
+					ImGui::TableNextColumn();
+
+					ImGui::InputText("##custom_text", currentItem->mutable_text());
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_requirements()->erase(currentEntry.mutable_requirements()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Rewards", ImGuiTreeNodeFlags_None))
 		{
+			SLIDER_UINT32_PROP(rewardxp, "Rewarded Xp", 0, 255);
 			SLIDER_UINT32_PROP(rewardmoney, "Rewarded Money", 0, 255);
+
+
 		}
+	}
+
+	void QuestEditorWindow::OnNewEntry(proto::TemplateManager<proto::Quests, proto::QuestEntry>::EntryType& entry)
+	{
+		EditorEntryWindowBase<proto::Quests, proto::QuestEntry>::OnNewEntry(entry);
+
+		entry.set_type(2);
 	}
 }

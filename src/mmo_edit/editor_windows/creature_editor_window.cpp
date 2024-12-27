@@ -31,6 +31,14 @@ namespace mmo
 
 	void CreatureEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
+		if (ImGui::Button("Duplicate Creature"))
+		{
+			proto::UnitEntry* copied = m_project.units.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+		}
+
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \

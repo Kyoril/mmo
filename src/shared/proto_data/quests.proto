@@ -87,6 +87,9 @@ message QuestEntry {
 	repeated uint32 starttriggers = 50;
 	repeated uint32 failtriggers = 51;
 	repeated uint32 rewardtriggers = 52;
+	optional uint32 rewardxp = 53;
+	optional string internalname = 54;
+	optional uint32 maxlevel = 55 [default = 0];
 }
 
 message Quests {

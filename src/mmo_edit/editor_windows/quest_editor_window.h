@@ -24,6 +24,8 @@ namespace mmo
 	private:
 		void DrawDetailsImpl(proto::QuestEntry& currentEntry) override;
 
+		void OnNewEntry(proto::TemplateManager<proto::Quests, proto::QuestEntry>::EntryType& entry) override;
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 
