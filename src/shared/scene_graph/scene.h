@@ -288,7 +288,11 @@ namespace mmo
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
 		/// @returns Pointer to the camera or nullptr if the camera does not exist.
-		Camera* GetCamera(const String& name);
+		[[nodiscard]] Camera* GetCamera(const String& name);
+
+		[[nodiscard]] Camera* GetCamera(uint32 index) const;
+
+		[[nodiscard]] uint32 GetCameraCount() const { return m_cameras.size(); }
 		
 		bool HasCamera(const String& name);
 

@@ -37,6 +37,7 @@
 #include "game_client/game_item_c.h"
 #include "ui/world_text_frame.h"
 #include "game/loot.h"
+#include "game/quest.h"
 #include "game_client/game_bag_c.h"
 
 namespace mmo
@@ -524,6 +525,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverStatus, *this, &WorldState::OnQuestGiverStatus);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -731,6 +733,15 @@ namespace mmo
 				}
 
 				ObjectMgr::AddObject(object);
+
+				// Ensure we update the quest status of quest givers
+				if (object->GetTypeId() == ObjectTypeId::Unit)
+				{
+					if (object->Get<uint32>(object_fields::NpcFlags) & npc_flags::QuestGiver)
+					{
+						m_realmConnector.UpdateQuestStatus(object->GetGuid());
+					}
+				}
 
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
@@ -1957,6 +1968,31 @@ namespace mmo
 			ELOG("Failed to read ActionButtons packet!");
 			return PacketParseResult::Disconnect;
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnQuestGiverStatus(game::IncomingPacket& packet)
+	{
+		// Read packet
+		uint64 questgiverGuid;
+		QuestgiverStatus status;
+		if (!(packet >> io::read<uint64>(questgiverGuid) >> io::read<uint8>(status)))
+		{
+			ELOG("Failed to read QuestGiverStatus packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check on status
+		ASSERT(questgiverGuid != 0);
+		ASSERT(status < questgiver_status::Count_);
+
+		// Find unit
+		std::shared_ptr<GameUnitC> questgiverUnit = ObjectMgr::Get<GameUnitC>(questgiverGuid);
+		ASSERT(questgiverUnit);
+
+		DLOG("Received questgiver status for unit " << log_hex_digit(questgiverGuid) << ": " << log_hex_digit(status));
+		questgiverUnit->SetQuestgiverStatus(status);
 
 		return PacketParseResult::Pass;
 	}

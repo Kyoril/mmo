@@ -75,6 +75,12 @@ namespace mmo
 			npcFlags |= npc_flags::Vendor;
 		}
 
+		// Creature offers or accepts quests (potentially)
+		if (m_entry->quests_size() > 0 || m_entry->end_quests_size() > 0)
+		{
+			npcFlags |= npc_flags::QuestGiver;
+		}
+
 		if ((npcFlags & (npc_flags::Trainer | npc_flags::Vendor)) != 0)
 		{
 			npcFlags |= npc_flags::Gossip;
@@ -108,7 +114,7 @@ namespace mmo
 		m_lootRecipients.clear();
 	}
 
-	bool GameCreatureS::IsLootRecipient(GamePlayerS& character) const
+	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
 	{
 		return m_lootRecipients.contains(character.GetGuid());
 	}
@@ -126,6 +132,35 @@ namespace mmo
 		{
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
 		}
+	}
+
+	QuestgiverStatus GameCreatureS::GetQuestGiverStatus(const GamePlayerS& player) const
+	{
+		QuestgiverStatus result = questgiver_status::None;
+		for (const auto& quest : GetEntry().end_quests())
+		{
+			if (const QuestStatus questStatus = player.GetQuestStatus(quest); questStatus == quest_status::Complete)
+			{
+				return questgiver_status::Reward;
+			}
+			else if (questStatus == quest_status::Incomplete)
+			{
+				result = questgiver_status::Incomplete;
+			}
+		}
+
+		for (const auto& quest : GetEntry().quests())
+		{
+			if (const QuestStatus questStatus = player.GetQuestStatus(quest); questStatus == quest_status::Available)
+			{
+				if (const proto::QuestEntry* entry = GetProject().quests.getById(quest))
+				{
+					return questgiver_status::Available;
+				}
+			}
+		}
+
+		return result;
 	}
 
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)

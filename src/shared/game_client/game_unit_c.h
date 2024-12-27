@@ -6,6 +6,7 @@
 #include "game/movement_info.h"
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "game/creature_data.h"
+#include "game/quest.h"
 
 namespace mmo
 {
@@ -106,6 +107,8 @@ namespace mmo
 		ICollisionProvider& GetCollisionProvider() const noexcept { return m_collisionProvider; }
 
 		bool OnAuraUpdate(io::Reader& reader);
+
+		void SetQuestgiverStatus(QuestgiverStatus status);
 
 	protected:
 		virtual void SetupSceneObjects() override;
@@ -332,5 +335,8 @@ namespace mmo
 		AnimationState* m_currentState = nullptr;
 		AnimationState* m_oneShotState = nullptr;
 		ICollisionProvider& m_collisionProvider;
+
+		SceneNode* m_questGiverNode = nullptr;
+		Entity* m_questGiverEntity = nullptr;
 	};
 }

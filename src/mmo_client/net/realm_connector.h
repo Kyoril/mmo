@@ -249,6 +249,8 @@ namespace mmo
 
 		void TrainerBuySpell(uint64 trainerGuid, uint32 spellId);
 
+		void UpdateQuestStatus(uint64 questgiverGuid);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

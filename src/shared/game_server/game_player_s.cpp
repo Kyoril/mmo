@@ -241,6 +241,149 @@ namespace mmo
 		return true;
 	}
 
+	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
+	{
+		// Check if we have a cached quest state
+		auto it = m_quests.find(quest);
+		if (it != m_quests.end())
+		{
+			if (it->second.status != quest_status::Available &&
+				it->second.status != quest_status::Unavailable) 
+			{
+				return it->second.status;
+			}
+		}
+
+		// We don't have that quest cached, make a lookup
+		const auto* entry = GetProject().quests.getById(quest);
+		if (!entry)
+		{
+			WLOG("Could not find quest " << quest);
+			return quest_status::Unavailable;
+		}
+
+		// Check if the quest is available for us
+		if (entry->minlevel() > 0 && GetLevel() < entry->minlevel())
+		{
+			return quest_status::Unavailable;
+		}
+
+		if (entry->maxlevel() > 0 && GetLevel() > entry->maxlevel())
+		{
+			return quest_status::Unavailable;
+		}
+
+		// TODO: Check skill
+		
+		// Race/Class check
+		ASSERT(m_raceEntry);
+		ASSERT(m_classEntry);
+
+		const uint32 charRaceBit = 1 << (m_raceEntry->id() - 1);
+		const uint32 charClassBit = 1 << (m_classEntry->id() - 1);
+		if (entry->requiredraces() && (entry->requiredraces() & charRaceBit) == 0)
+		{
+			return quest_status::Unavailable;
+		}
+
+		if (entry->requiredclasses() && (entry->requiredclasses() & charClassBit) == 0)
+		{
+			return quest_status::Unavailable;
+		}
+
+		// Quest chain checks
+		if (entry->prevquestid())
+		{
+			if (GetQuestStatus(entry->prevquestid()) != quest_status::Rewarded)
+			{
+				return quest_status::Unavailable;
+			}
+		}
+
+		return quest_status::Available;
+	}
+
+	bool GamePlayerS::AcceptQuest(uint32 quest)
+	{
+		// TODO
+
+		return false;
+	}
+
+	bool GamePlayerS::AbandonQuest(uint32 quest)
+	{
+		// TODO
+
+		return false;
+	}
+
+	bool GamePlayerS::CompleteQuest(uint32 quest)
+	{
+		// TODO
+
+		return false;
+	}
+
+	bool GamePlayerS::FailQuest(uint32 quest)
+	{
+		// TODO
+
+		return false;
+	}
+
+	bool GamePlayerS::RewardQuest(uint32 quest, uint8 rewardChoice, std::function<void(uint32)> callback)
+	{
+		// TODO
+
+		return false;
+	}
+
+	void GamePlayerS::OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry)
+	{
+		// TODO
+	}
+
+	bool GamePlayerS::FulfillsQuestRequirements(const proto::QuestEntry& entry) const
+	{
+		// TODO
+
+		return false;
+	}
+
+	bool GamePlayerS::IsQuestlogFull() const
+	{
+		// TODO
+
+		return false;
+	}
+
+	void GamePlayerS::OnQuestExploration(uint32 questId)
+	{
+		// TODO
+	}
+
+	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry& entry, uint32 amount)
+	{
+		// TODO
+	}
+
+	void GamePlayerS::OnQuestItemRemovedCredit(const proto::ItemEntry& entry, uint32 amount)
+	{
+		// TODO
+	}
+
+	void GamePlayerS::OnQuestSpellCastCredit(uint32 spellId, GameObjectS& target)
+	{
+		// TODO
+	}
+
+	bool GamePlayerS::NeedsQuestItem(uint32 itemId) const
+	{
+		// TODO
+
+		return false;
+	}
+
 	float GamePlayerS::GetUnitMissChance() const
 	{
 		return GameUnitS::GetUnitMissChance();

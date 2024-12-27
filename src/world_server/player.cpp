@@ -323,6 +323,10 @@ namespace mmo
 			OnTrainerBuySpell(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::QuestGiverStatusQuery:
+			OnQuestGiverStatusQuery(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -1897,6 +1901,34 @@ namespace mmo
 				return;
 			}
 		}
+	}
+
+	void Player::OnQuestGiverStatusQuery(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 questGiverGuid;
+		if (!(contentReader >> io::read<uint64>(questGiverGuid)))
+		{
+			ELOG("Failed to read QuestGiverStatusQuery packet!");
+			return;
+		}
+
+		// Find quest giver
+		GameCreatureS* questGiver = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(questGiverGuid);
+		if (!questGiver)
+		{
+			ELOG("Unable to find quest giver!");
+			return;
+		}
+
+		DLOG("Requested quest giver status query for npc " << log_hex_digit(questGiverGuid) << " (" << questGiver->GetEntry().name() << ")");
+
+		QuestgiverStatus status = questGiver->GetQuestGiverStatus(*m_character);
+		SendPacket([questGiverGuid, status](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestGiverStatus);
+				packet << io::write<uint64>(questGiverGuid) << io::write<uint8>(status);
+				packet.Finish();
+			});
 	}
 
 #if MMO_WITH_DEV_COMMANDS

@@ -70,4 +70,39 @@ namespace mmo
 	}
 
 	typedef quest_flags::Type QuestFlags;
+
+	namespace quest_status
+	{
+		enum Type
+		{
+			/// Used if the player has been rewarded for completing the quest. This means,
+			/// that this quest is no longer available (does not appear in quest log) and that
+			/// the next quest in the quest chain is available (if any, and all other requirements
+			/// are fulfilled).
+			Rewarded = 0,
+
+			/// The quest is completed, but is still in the players quest log (has not yet been
+			/// rewarded).
+			Complete = 1,
+
+			/// This quest is unavailable, because some requirements do not match.
+			Unavailable = 2,
+
+			/// This quest is in in the players quest log, but has not yet been completed.
+			Incomplete = 3,
+
+			/// This quest is available, but the player has not yet accepted it.
+			Available = 4,
+
+			/// This quest is in the players quest log, but the player failed, which prevents this quest
+			/// from being completed (possible on time out or special requirements like "may not die").
+			Failed = 5,
+
+			/// Maximum number of quest status flags
+			Count_ = 6
+		};
+	}
+
+	typedef quest_status::Type QuestStatus;
+
 }

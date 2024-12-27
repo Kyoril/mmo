@@ -118,6 +118,20 @@ namespace mmo
 		return cameraIt->second.get();
 	}
 
+	Camera* Scene::GetCamera(uint32 index) const
+	{
+		if (index > m_cameras.size())
+		{
+			return nullptr;
+		}
+
+		auto it = m_cameras.begin();
+		std::advance(it, index);
+
+		ASSERT(it != m_cameras.end());
+		return it->second.get();
+	}
+
 	bool Scene::HasCamera(const String& name)
 	{
 		return m_cameras.find(name) != m_cameras.end();

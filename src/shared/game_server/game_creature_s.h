@@ -7,6 +7,7 @@
 #include "loot_instance.h"
 #include "world_instance.h"
 #include "base/linear_set.h"
+#include "game/quest.h"
 
 namespace mmo
 {
@@ -83,7 +84,7 @@ namespace mmo
 		void RemoveLootRecipients();
 
 		/// Determines whether a specific character is allowed to loot this creature.
-		bool IsLootRecipient(GamePlayerS& character) const;
+		bool IsLootRecipient(const GamePlayerS& character) const;
 
 		/// Determines whether this creature is tagged by a player or group.
 		bool IsTagged() const { return !m_lootRecipients.empty(); }
@@ -95,6 +96,8 @@ namespace mmo
 
 		/// Gets the number of loot recipients.
 		uint32 GetLootRecipientCount() const { return m_lootRecipients.size(); }
+
+		QuestgiverStatus GetQuestGiverStatus(const GamePlayerS& player) const;
 
 		/// Executes a callback function for every valid loot recipient.
 		template<typename OnRecipient>

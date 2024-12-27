@@ -121,6 +121,8 @@ namespace mmo
 				SetActionBarButton,
 				TrainerBuySpell,
 
+				QuestGiverStatusQuery,
+
 				/// Counter constant
 				Count_,
 			};
@@ -249,6 +251,8 @@ namespace mmo
 				TrainerList,
 				TrainerBuyError,
 				TrainerBuySucceeded,
+
+				QuestGiverStatus,
 
 				/// Counter constant
 				Count_,

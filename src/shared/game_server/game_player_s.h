@@ -1,9 +1,11 @@
 #pragma once
 
 #include <set>
+#include <vector>
 
 #include "game_unit_s.h"
 #include "inventory.h"
+#include "game/quest.h"
 
 namespace mmo
 {
@@ -11,9 +13,33 @@ namespace mmo
 
 	namespace proto
 	{
+		class QuestEntry;
 		class RaceEntry;
 		class ClassEntry;
 	}
+
+	struct QuestStatusData
+	{
+		QuestStatus status;
+
+		// May be 0 if completed.
+		GameTime expiration;
+
+		// What is this for?
+		bool explored;
+
+		std::vector<uint16> creatures;
+
+		// Recomputed on inventory changes.
+		std::vector<uint16> items;
+
+		QuestStatusData()
+			: status(QuestStatus::Available)
+			, expiration(0)
+			, explored(false)
+		{
+		}
+	};
 
 	/// @brief Represents a playable character in the game world.
 	class GamePlayerS final : public GameUnitS
@@ -63,6 +89,54 @@ namespace mmo
 		bool HasMoney(uint32 amount) const;
 
 		bool ConsumeMoney(uint32 amount);
+
+	public:
+
+		/// Gets the current status of a given quest by its id.
+		/// @returns Quest status.
+		QuestStatus GetQuestStatus(uint32 quest) const;
+
+		/// Accepts a new quest.
+		/// @returns false if this wasn't possible (maybe questlog was full or not all requirements are met).
+		bool AcceptQuest(uint32 quest);
+
+		/// Abandons the specified quest.
+		/// @returns false if this wasn't possible (maybe because the quest wasn't in the players quest log).
+		bool AbandonQuest(uint32 quest);
+
+		/// Updates the status of a specified quest to "completed". This does not work for quests that require
+		/// a certain item.
+		bool CompleteQuest(uint32 quest);
+
+		/// Makes a certain quest fail.
+		bool FailQuest(uint32 quest);
+
+		/// Rewards the given quest (gives items, xp and saves quest status).
+		bool RewardQuest(uint32 quest, uint8 rewardChoice, std::function<void(uint32)> callback);
+
+		/// Called when a quest-related creature was killed.
+		void OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry);
+
+		/// Determines whether the character fulfulls all requirements of the given quests.
+		bool FulfillsQuestRequirements(const proto::QuestEntry& entry) const;
+
+		/// Determines whether the players questlog is full.
+		bool IsQuestlogFull() const;
+
+		/// Called when an exploration area trigger was raised.
+		void OnQuestExploration(uint32 questId);
+
+		/// Called when a quest item was added to the inventory.
+		void OnQuestItemAddedCredit(const proto::ItemEntry& entry, uint32 amount);
+
+		/// Called when a quest item was removed from the inventory.
+		void OnQuestItemRemovedCredit(const proto::ItemEntry& entry, uint32 amount);
+
+		/// Called when a quest item was removed from the inventory.
+		void OnQuestSpellCastCredit(uint32 spellId, GameObjectS& target);
+
+		/// Determines if the player needs a specific item for a quest.
+		bool NeedsQuestItem(uint32 itemId) const;
 
 	protected:
 
@@ -114,6 +188,7 @@ namespace mmo
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
+		std::map<uint32, QuestStatusData> m_quests;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

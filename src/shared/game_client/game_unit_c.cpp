@@ -15,7 +15,7 @@
 
 namespace mmo
 {
-	GameAuraC::GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, uint64 caster, GameTime expiration)
+	GameAuraC::GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, const uint64 caster, const GameTime expiration)
 		: m_spell(&spell)
 		, m_expiration(0)
 		, m_casterId(caster)
@@ -44,7 +44,7 @@ namespace mmo
 		return GetAsyncTimeMs() >= m_expiration;
 	}
 
-	void GameUnitC::Deserialize(io::Reader& reader, bool complete)
+	void GameUnitC::Deserialize(io::Reader& reader, const bool complete)
 	{
 		uint32 updateFlags = 0;
 		if (!(reader >> io::read<uint32>(updateFlags)))
@@ -131,9 +131,20 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::Update(float deltaTime)
+	void GameUnitC::Update(const float deltaTime)
 	{
 		GameObjectC::Update(deltaTime);
+
+		if (m_questGiverNode != nullptr)
+		{
+			// TODO: Get rotation to the current camera and yaw the icon to face it!
+			Camera* cam = m_scene.GetCamera(0);
+			if (cam)
+			{
+				m_questGiverNode->SetFixedYawAxis(true);
+				m_questGiverNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World);
+			}
+		}
 
 		const bool isDead = GetHealth() <= 0;
 		if (m_movementAnimation)
@@ -288,7 +299,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::ApplyLocalMovement(float deltaTime)
+	void GameUnitC::ApplyLocalMovement(const float deltaTime)
 	{
 		auto* playerNode = GetSceneNode();
 
@@ -358,6 +369,51 @@ namespace mmo
 	void GameUnitC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::UnitFieldCount);
+	}
+
+	void GameUnitC::SetQuestgiverStatus(const QuestgiverStatus status)
+	{
+		if (status == questgiver_status::None ||
+			status == questgiver_status::Unavailable)
+		{
+			if (m_questGiverEntity)
+			{
+				m_scene.DestroyEntity(*m_questGiverEntity);
+				m_questGiverEntity = nullptr;
+			}
+
+			if (m_questGiverNode)
+			{
+				m_scene.DestroySceneNode(*m_questGiverNode);
+				m_questGiverNode = nullptr;
+			}
+
+			return;
+		}
+
+		switch(status)
+		{
+		case questgiver_status::Available:
+			m_questGiverEntity = m_scene.CreateEntity(GetSceneNode()->GetName() + "_QuestStatus", "Models/QuestExclamationMark.hmsh");
+			ASSERT(m_questGiverEntity);
+
+			// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
+			// so that for very big models its not just that tiny icon floating in the sky above some giant head or something of that
+			float height = 2.0f;
+			float scale = 1.0f;
+			if (m_entity)
+			{
+				height = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
+				scale = height / 2.0f;
+			}
+
+			m_questGiverNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * height);
+			ASSERT(m_questGiverNode);
+
+			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
+			m_questGiverNode->AttachObject(*m_questGiverEntity);
+			break;
+		}
 	}
 
 	bool GameUnitC::OnAuraUpdate(io::Reader& reader)

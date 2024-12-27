@@ -208,6 +208,8 @@ namespace mmo
 
 		PacketParseResult OnActionButtons(game::IncomingPacket& packet);
 
+		PacketParseResult OnQuestGiverStatus(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

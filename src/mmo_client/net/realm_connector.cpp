@@ -606,4 +606,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::UpdateQuestStatus(const uint64 questgiverGuid)
+	{
+		sendSinglePacket([questgiverGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverStatusQuery);
+			packet << io::write<uint64>(questgiverGuid);
+			packet.Finish();
+			});
+	}
 }
