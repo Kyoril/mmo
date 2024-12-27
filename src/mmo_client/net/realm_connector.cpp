@@ -597,4 +597,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::TrainerBuySpell(uint64 trainerGuid, uint32 spellId)
+	{
+		sendSinglePacket([trainerGuid, spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TrainerBuySpell);
+			packet << io::write<uint64>(trainerGuid) << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
 }

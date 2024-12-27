@@ -319,6 +319,9 @@ namespace mmo
 		case game::client_realm_packet::AttributePoint:
 			OnAttributePoint(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::TrainerBuySpell:
+			OnTrainerBuySpell(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
@@ -650,6 +653,26 @@ namespace mmo
 	{
 		m_worldInstance->RemoveGameObject(*m_character);
 		m_character.reset();
+	}
+
+	void Player::SendTrainerBuyError(uint64 trainerGuid, trainer_result::Type result) const
+	{
+		SendPacket([trainerGuid, result](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::TrainerBuyError);
+				packet << io::write<uint64>(trainerGuid) << io::write<uint8>(result);
+				packet.Finish();
+			});
+	}
+
+	void Player::SendTrainerBuySucceeded(uint64 trainerGuid, uint32 spellId) const
+	{
+		SendPacket([trainerGuid, spellId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::TrainerBuySucceeded);
+				packet << io::write<uint64>(trainerGuid) << io::write<uint32>(spellId);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -1586,17 +1609,16 @@ namespace mmo
 			return;
 		}
 
+		// Check basic interaction
+		if (!vendor->IsInteractable(*m_character))
+		{
+			return;
+		}
+
 		uint16 itemSlot = 0;
 		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
 		{
 			ELOG("Can't find item!");
-			return;
-		}
-
-		constexpr float interactionDistance = 5.0f;
-		if (m_character->GetSquaredDistanceTo(vendor->GetPosition(), true) > interactionDistance * interactionDistance)
-		{
-			ELOG("Vendor is too far away!");
 			return;
 		}
 
@@ -1661,22 +1683,9 @@ namespace mmo
 			return;
 		}
 
-		if (!vendor->IsAlive())
+		// Check basic interaction
+		if (!vendor->IsInteractable(*m_character))
 		{
-			ELOG("Vendor is dead!");
-			return;
-		}
-
-		if (m_character->UnitIsEnemy(*vendor))
-		{
-			ELOG("Vendor is enemy!");
-			return;
-		}
-
-		constexpr float interactionDistance = 5.0f;
-		if (m_character->GetSquaredDistanceTo(vendor->GetPosition(), true) > interactionDistance * interactionDistance)
-		{
-			ELOG("Vendor is too far away!");
 			return;
 		}
 
@@ -1815,6 +1824,77 @@ namespace mmo
 							<< io::write<uint8>(result);
 						packet.Finish();
 					});
+			}
+		}
+	}
+
+	void Player::OnTrainerBuySpell(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 trainerGuid;
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint64>(trainerGuid) >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read TrainerBuySpell packet!");
+			return;
+		}
+
+		DLOG("Player wants to buy trainer spell " << spellId << " from trainer " << log_hex_digit(trainerGuid));
+
+		ASSERT(m_character);
+		ASSERT(m_character->GetWorldInstance());
+
+		if (m_character->HasSpell(spellId))
+		{
+			ELOG("Player already knows that spell!");
+			return;
+		}
+
+		GameCreatureS* trainerNpc = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(trainerGuid);
+		if (!trainerNpc)
+		{
+			ELOG("Unable to find trainer npc!");
+			return;
+		}
+
+		const auto* trainerEntry = m_project.trainers.getById(trainerNpc->GetEntry().trainerentry());
+		if (!trainerEntry)
+		{
+			ELOG("Trainer npc does not seem to be an actual trainer!");
+			return;
+		}
+
+		// Check basic interaction
+		if (!trainerNpc->IsInteractable(*m_character))
+		{
+			return;
+		}
+
+		for (const auto& trainerSpellEntry : trainerEntry->spells())
+		{
+			if (trainerSpellEntry.spell() == spellId)
+			{
+				const proto::SpellEntry* spellEntry = m_project.spells.getById(spellId);
+				if (!spellEntry)
+				{
+					ELOG("Unknown spell " << spellId << " offered by trainer id " << log_hex_digit(trainerEntry->id()) << ", can't buy spell!");
+					return;
+				}
+
+				if (!m_character->HasMoney(trainerSpellEntry.spellcost()))
+				{
+					SendTrainerBuyError(trainerGuid, trainer_result::FailedNotEnoughMoney);
+					return;
+				}
+
+				if (m_character->GetLevel() < trainerSpellEntry.reqlevel())
+				{
+					SendTrainerBuyError(trainerGuid, trainer_result::FailedLevelTooLow);
+					return;
+				}
+
+				m_character->AddSpell(spellId);
+				SendTrainerBuySucceeded(trainerGuid, spellId);
+				return;
 			}
 		}
 	}

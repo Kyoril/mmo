@@ -1095,11 +1095,17 @@ namespace mmo
 			luabind::def<std::function<const proto_client::SpellEntry*(int32)>>("GetActionButtonSpell", [this](int32 slot) { return this->m_actionBar.GetActionButtonSpell(slot); }),
 			luabind::def<std::function<const ItemInfo*(int32)>>("GetActionButtonItem", [this](int32 slot) { return this->m_actionBar.GetActionButtonItem(slot); }),
 
+			// Vendor
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
+			luabind::def<std::function<void()>>("CloseVendor", [this]() { this->m_vendorClient.CloseVendor(); }),
 
+			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
 			luabind::def<std::function<void(int32, int32&, String&, String&, int32&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
+			luabind::def<std::function<void(uint32)>>("BuyTrainerSpell", [this](uint32 slot) { this->m_trainerClient.BuySpell(slot); }),
+			luabind::def<std::function<void()>>("CloseTrainer", [this]() { this->m_trainerClient.CloseTrainer(); }),
 
 			luabind::def<std::function<const char* (const ItemInfo*, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo* item, int32 index) { return this->GetItemSpellTriggerType(item, index); }),
 			luabind::def<std::function<const proto_client::SpellEntry* (const ItemInfo*, int32)>>("GetItemSpell", [this](const ItemInfo* item, int32 index) { return this->GetItemSpell(item, index); }),
@@ -1109,8 +1115,6 @@ namespace mmo
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
 			luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot) { this->UseContainerItem(slot); }),
-			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
-			luabind::def<std::function<void()>>("CloseVendor", [this]() { this->m_vendorClient.CloseVendor(); }),
 
 			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
 			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),

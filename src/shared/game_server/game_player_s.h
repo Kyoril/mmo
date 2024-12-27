@@ -60,6 +60,10 @@ namespace mmo
 
 		static uint8 CalculateAttributeCost(uint32 pointsSpent);
 
+		bool HasMoney(uint32 amount) const;
+
+		bool ConsumeMoney(uint32 amount);
+
 	protected:
 
 		float GetUnitMissChance() const override;

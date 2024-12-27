@@ -99,6 +99,10 @@ namespace mmo
 
 		void Kick();
 
+		void SendTrainerBuyError(uint64 trainerGuid, trainer_result::Type result) const;
+
+		void SendTrainerBuySucceeded(uint64 trainerGuid, uint32 spellId) const;
+
 	public:
 		/// @brief Gets the character guid.
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
@@ -149,6 +153,8 @@ namespace mmo
 		void OnAttributePoint(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnUseItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnTrainerBuySpell(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 #if MMO_WITH_DEV_COMMANDS
 		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;

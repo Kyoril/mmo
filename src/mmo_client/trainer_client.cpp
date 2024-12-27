@@ -22,6 +22,7 @@ namespace mmo
 
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TrainerList, *this, &TrainerClient::OnTrainerList);
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TrainerBuyError, *this, &TrainerClient::OnTrainerBuyError);
+		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TrainerBuySucceeded, *this, &TrainerClient::OnTrainerBuySucceeded);
 	}
 
 	void TrainerClient::Shutdown()
@@ -83,8 +84,8 @@ namespace mmo
 
 		// TODO: Skill requirements checks
 
-		// TODO: Send buy packet
-		//m_realmConnector.BuySpell(m_trainerGuid, m_trainerSpells[index].spell->id);
+		// Send buy packet
+		m_realmConnector.TrainerBuySpell(m_trainerGuid, m_trainerSpells[index].spell->id());
 	}
 
 	PacketParseResult TrainerClient::OnTrainerList(game::IncomingPacket& packet)
@@ -162,6 +163,24 @@ namespace mmo
 		default:
 			ASSERT(false && "Unknown trainer buy result op code received!");
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult TrainerClient::OnTrainerBuySucceeded(game::IncomingPacket& packet)
+	{
+		uint64 trainerGuid;
+		uint32 spellId;
+		if (!(packet >> io::read<uint64>(trainerGuid) >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read trainer buy succeeded packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		ASSERT(trainerGuid == m_trainerGuid);
+
+		// Notify the loot frame manager
+		FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_SUCCEEDED", spellId);
 
 		return PacketParseResult::Pass;
 	}

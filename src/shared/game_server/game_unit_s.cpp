@@ -238,6 +238,47 @@ namespace mmo
 		return (timeout <= now);
 	}
 
+	bool GameUnitS::IsInteractable(const GameUnitS& interactor) const
+	{
+		if (!interactor.IsAlive())
+		{
+			WLOG("Can't interact while dead");
+			return false;
+		}
+
+		if (!IsAlive())
+		{
+			WLOG("Npc is dead and thus can't be interacted with");
+			return false;
+		}
+
+		if (IsInCombat())
+		{
+			WLOG("Npc is in combat and thus can't be interacted with");
+			return false;
+		}
+
+		if (interactor.UnitIsEnemy(*this))
+		{
+			WLOG("Npc is enemy and thus can't be interacted with");
+			return false;
+		}
+
+		const float interactionDistance = interactor.GetInteractionDistance();
+		if (GetSquaredDistanceTo(interactor.GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			WLOG("Too far away from npc to interact with");
+			return false;
+		}
+
+		return true;
+	}
+
+	float GameUnitS::GetInteractionDistance() const
+	{
+		return 5.0f;
+	}
+
 	void GameUnitS::SetLevel(uint32 newLevel)
 	{
 		Set(object_fields::Level, newLevel);

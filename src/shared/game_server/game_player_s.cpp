@@ -225,6 +225,22 @@ namespace mmo
 		return static_cast<uint8>(std::min(cost, 255.0));
 	}
 
+	bool GamePlayerS::HasMoney(uint32 amount) const
+	{
+		return Get<uint32>(object_fields::Money) >= amount;
+	}
+
+	bool GamePlayerS::ConsumeMoney(uint32 amount)
+	{
+		if (!HasMoney(amount))
+		{
+			return false;
+		}
+
+		Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) - amount);
+		return true;
+	}
+
 	float GamePlayerS::GetUnitMissChance() const
 	{
 		return GameUnitS::GetUnitMissChance();

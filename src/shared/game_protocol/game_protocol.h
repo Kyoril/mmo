@@ -119,6 +119,7 @@ namespace mmo
 
 				AttributePoint,
 				SetActionBarButton,
+				TrainerBuySpell,
 
 				/// Counter constant
 				Count_,
@@ -247,6 +248,7 @@ namespace mmo
 
 				TrainerList,
 				TrainerBuyError,
+				TrainerBuySucceeded,
 
 				/// Counter constant
 				Count_,

@@ -47,6 +47,8 @@ namespace mmo
 
 		PacketParseResult OnTrainerBuyError(game::IncomingPacket& packet);
 
+		PacketParseResult OnTrainerBuySucceeded(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_realmConnector;
 		const proto_client::SpellManager& m_spells;
