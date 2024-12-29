@@ -98,7 +98,54 @@ namespace mmo
 
 	void Player::OnAcceptQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
-		
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0;
+		if (!(contentReader >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read AcceptQuest packet!");
+			return;
+		}
+
+		// Check if the quest exists
+		const proto::QuestEntry* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			WLOG("Tried to accept unknown quest id");
+			return;
+		}
+
+		// Check if that object exists and provides the requested quest
+		ASSERT(m_worldInstance);
+		GameObjectS* questGiver = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
+		if (!questGiver || !questGiver->ProvidesQuest(questId))
+		{
+			return;
+		}
+
+		// We need this check since the quest can fail for various other reasons
+		if (m_character->IsQuestlogFull())
+		{
+			SendPacket([this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestLogFull);
+				packet.Finish();
+			});
+			return;
+		}
+
+		// Accept that quest
+		if (!m_character->AcceptQuest(questId))
+		{
+			ELOG("Failed to accept quest " << questId);
+			return;
+		}
+
+		// Ensure that the gossip menu is closed
+		SendPacket([questGiverGuid, questId, this](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::GossipComplete);
+			packet.Finish();
+		});
 	}
 
 	void Player::OnQuestGiverQueryQuest(uint16 opCode, uint32 size, io::Reader& contentReader)

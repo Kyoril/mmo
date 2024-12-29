@@ -225,6 +225,8 @@ namespace mmo
 		mutable std::weak_ptr<GameUnitS> m_caster;
 
 		uint64 m_itemGuid = 0;
+
+		scoped_connection m_expiredConnection;
 	};
 
 }

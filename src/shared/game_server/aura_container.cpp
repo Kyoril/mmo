@@ -365,14 +365,6 @@ namespace mmo
 		, m_expirationCountdown(owner.GetTimers())
 		, m_itemGuid(itemGuid)
 	{
-		std::weak_ptr<AuraContainer> weakThis = weak_from_this();
-		m_expirationCountdown.ended += [weakThis]
-		{
-			if (const auto strong = weakThis.lock())
-			{
-				strong->SetApplied(false);
-			}
-		};
 	}
 
 	AuraContainer::~AuraContainer()
@@ -408,6 +400,19 @@ namespace mmo
 		{
 			if (m_duration > 0)
 			{
+				if (!m_expiredConnection)
+				{
+					std::weak_ptr<AuraContainer> weakThis = weak_from_this();
+					m_expiredConnection = m_expirationCountdown.ended += [weakThis]()
+						{
+							if (const auto strong = weakThis.lock())
+							{
+								strong->SetApplied(false);
+								strong->m_owner.RemoveAura(strong);
+							}
+						};
+				}
+
 				m_expiration = GetAsyncTimeMs() + m_duration;
 				m_expirationCountdown.SetEnd(m_expiration);
 			}

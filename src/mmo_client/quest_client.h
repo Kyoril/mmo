@@ -92,6 +92,8 @@ namespace mmo
 
 		PacketParseResult OnQuestLogFull(game::IncomingPacket& packet);
 
+		PacketParseResult OnGossipComplete(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_connector;
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlers;

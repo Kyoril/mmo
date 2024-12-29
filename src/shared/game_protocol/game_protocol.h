@@ -270,6 +270,8 @@ namespace mmo
 				QuestUpdateAddKill,
 				QuestUpdateAddItem,
 
+				GossipComplete,
+
 				/// Counter constant
 				Count_,
 			};

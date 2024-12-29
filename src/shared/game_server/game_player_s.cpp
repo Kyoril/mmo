@@ -307,7 +307,7 @@ namespace mmo
 	{
 		// TODO
 
-		return false;
+		return true;
 	}
 
 	bool GamePlayerS::AbandonQuest(uint32 quest)

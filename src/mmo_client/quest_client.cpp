@@ -23,6 +23,7 @@ namespace mmo
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestUpdateAddKill, *this, &QuestClient::OnQuestUpdate);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestUpdateComplete, *this, &QuestClient::OnQuestUpdate);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestLogFull, *this, &QuestClient::OnQuestLogFull);
+		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GossipComplete, *this, &QuestClient::OnGossipComplete);
 	}
 
 	void QuestClient::Shutdown()
@@ -38,6 +39,9 @@ namespace mmo
 		m_questDetails.Clear();
 		m_greetingText.clear();
 		m_questList.clear();
+
+		// Raise UI event to show the quest list window to the user
+		FrameManager::Get().TriggerLuaEvent("QUEST_FINISHED");
 	}
 
 	const String& QuestClient::GetGreetingText() const
@@ -219,6 +223,13 @@ namespace mmo
 	{
 		// Add a UI event to display an error message
 		FrameManager::Get().TriggerLuaEvent("GERR_QUEST_LOG_FULL");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult QuestClient::OnGossipComplete(game::IncomingPacket& packet)
+	{
+		CloseQuest();
 
 		return PacketParseResult::Pass;
 	}

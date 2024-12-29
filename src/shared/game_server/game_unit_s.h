@@ -430,6 +430,8 @@ namespace mmo
 
 		void RemoveAllAurasFromCaster(uint64 casterGuid);
 
+		void RemoveAura(const std::shared_ptr<AuraContainer>& aura);
+
 		void BuildAuraPacket(io::Writer& writer) const;
 
 		void NotifyManaUsed();

@@ -700,6 +700,25 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::RemoveAura(const std::shared_ptr<AuraContainer>& aura)
+	{
+		ASSERT(aura);
+
+		// Remove existing auras first
+		for (auto it = m_auras.begin(); it != m_auras.end();)
+		{
+			if (auto& existingAura = *it; existingAura == aura)
+			{
+				it = m_auras.erase(it);
+				return;
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
 	void GameUnitS::BuildAuraPacket(io::Writer& writer) const
 	{
 		writer << io::write_packed_guid(GetGuid());
