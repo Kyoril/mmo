@@ -278,6 +278,13 @@ namespace mmo
 			return Radian(ang);
 		}
 
+		/// Returns true if this object acts as a quest giver and provides the given quest.
+		virtual bool ProvidesQuest(uint32 questId) const
+		{
+			// By default, objects do not provide quests
+			return false;
+		}
+
 		/// @brief Gets the movement info.
 		[[nodiscard]] MovementInfo GetMovementInfo() { return m_movementInfo; }
 

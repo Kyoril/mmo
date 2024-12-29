@@ -127,6 +127,9 @@ namespace mmo
 				TrainerMenu,
 				ListInventory,
 
+				AcceptQuest,
+				QuestGiverQueryQuest,
+
 				/// Counter constant
 				Count_,
 			};

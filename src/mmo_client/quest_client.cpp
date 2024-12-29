@@ -5,9 +5,10 @@
 
 namespace mmo
 {
-	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache)
+	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells)
 		: m_connector(connector)
 		, m_questCache(questCache)
+		, m_spells(spells)
 	{
 	}
 
@@ -27,15 +28,40 @@ namespace mmo
 	void QuestClient::Shutdown()
 	{
 		m_packetHandlers.Clear();
+
+		CloseQuest();
 	}
 
 	void QuestClient::CloseQuest()
 	{
+		m_questGiverGuid = 0;
+		m_questDetails.Clear();
+		m_greetingText.clear();
+		m_questList.clear();
 	}
 
 	const String& QuestClient::GetGreetingText() const
 	{
+		ASSERT(HasQuestGiver());
+
 		return m_greetingText;
+	}
+
+	void QuestClient::QueryQuestDetails(uint32 questId)
+	{
+		ASSERT(questId != 0);
+		ASSERT(HasQuestGiver());
+
+		m_connector.QuestGiverQueryQuest(m_questGiverGuid, questId);
+	}
+
+	void QuestClient::AcceptQuest(uint32 questId)
+	{
+		ASSERT(questId != 0);
+		ASSERT(HasQuestGiver());
+		ASSERT(HasQuest());
+
+		m_connector.AcceptQuest(m_questGiverGuid, questId);
 	}
 
 	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
@@ -83,7 +109,75 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnQuestGiverQuestDetails(game::IncomingPacket& packet)
 	{
+		m_questDetails.Clear();
 
+		if (!(packet >> io::read<uint64>(m_questGiverGuid) >> io::read<uint32>(m_questDetails.questId)))
+		{
+			ELOG("Failed to read QuestGiverQuestDetails packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!(packet 
+				>> io::read_container<uint8>(m_questDetails.questTitle)
+				>> io::read_container<uint16>(m_questDetails.questDetails, 512)
+				>> io::read_container<uint16>(m_questDetails.questObjectives, 512)))
+		{
+			ELOG("Failed to read QuestGiverQuestDetails packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		uint32 rewardItemsChoiceCount;
+		uint32 rewardItemsCount;
+
+		if (!(packet >> io::read<uint32>(rewardItemsChoiceCount)))
+		{
+			ELOG("Failed to read QuestGiverQuestDetails packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (rewardItemsChoiceCount > 0)
+		{
+			// TODO: Read reward
+			/*packet
+				<< io::write<uint32>(reward.itemid())
+				<< io::write<uint32>(reward.count());
+			const auto* item = m_project.items.getById(reward.itemid());
+			packet
+				<< io::write<uint32>(item ? item->displayid() : 0);*/
+		}
+
+		if (!(packet >> io::read<uint32>(rewardItemsCount)))
+		{
+			ELOG("Failed to read QuestGiverQuestDetails packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (rewardItemsCount > 0)
+		{
+			// TODO: Read reward
+			/*packet
+				<< io::write<uint32>(reward.itemid())
+				<< io::write<uint32>(reward.count());
+			const auto* item = m_project.items.getById(reward.itemid());
+			packet
+				<< io::write<uint32>(item ? item->displayid() : 0);*/
+		}
+
+		uint32 rewardSpellId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(rewardSpellId)))
+		{
+			ELOG("Failed to read QuestGiverQuestDetails packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Resolve reward spell
+		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+
+		// Ensure we have the quest in the cache
+		m_questCache.Get(m_questDetails.questId);
+
+		// Raise UI event to show the quest list window to the user
+		FrameManager::Get().TriggerLuaEvent("QUEST_DETAIL");
 
 		return PacketParseResult::Pass;
 	}

@@ -645,4 +645,22 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::AcceptQuest(uint64 questGiverGuid, uint32 questId)
+	{
+		sendSinglePacket([questGiverGuid, questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AcceptQuest);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::QuestGiverQueryQuest(uint64 questGiverGuid, uint32 questId)
+	{
+		sendSinglePacket([questGiverGuid, questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverQueryQuest);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
 }

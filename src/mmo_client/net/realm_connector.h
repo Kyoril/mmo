@@ -359,6 +359,16 @@ namespace mmo
 		///	@param questGiverGuid The guid of the npc to update the quest status for.
 		void UpdateQuestStatus(uint64 questGiverGuid);
 
+		/// Sends a packet to the server to accept a quest from a specified quest giver object.
+		///	@param questGiverGuid The guid quest giver object. Must be a valid object guid.
+		/// @param questId The id of the quest to accept. Must be a valid quest id offered by the quest giver object.
+		void AcceptQuest(uint64 questGiverGuid, uint32 questId);
+
+		/// Sends a packet to the server to ask for quest details from a quest giver object for a specific quest offered by that quest giver.
+		///	@param questGiverGuid The guid of the quest giver object. Must be a valid object guid.
+		///	@param questId The id of the quest to query details for. Must be a valid quest id offered by the quest giver object.
+		void QuestGiverQueryQuest(uint64 questGiverGuid, uint32 questId);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

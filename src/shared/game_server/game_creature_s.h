@@ -99,6 +99,8 @@ namespace mmo
 
 		QuestgiverStatus GetQuestGiverStatus(const GamePlayerS& player) const;
 
+		bool ProvidesQuest(uint32 questId) const override;
+
 		/// Executes a callback function for every valid loot recipient.
 		template<typename OnRecipient>
 		void ForEachLootRecipient(OnRecipient callback)
