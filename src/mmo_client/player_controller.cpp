@@ -616,10 +616,27 @@ namespace mmo
 					{
 						if (m_controlledUnit->IsFriendlyTo(*m_hoveredUnit))
 						{
-							// Any npc flags set?
-							if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) != 0)
+							const uint32 npcFlags = m_hoveredUnit->Get<uint32>(object_fields::NpcFlags);
+
+							// Check for explicit flags so we can ask the server for a specific action
+							switch(npcFlags)
 							{
-								m_connector.GossipHello(m_hoveredUnit->GetGuid());
+							case npc_flags::QuestGiver:
+								m_connector.QuestGiverHello(m_hoveredUnit->GetGuid());
+								break;
+							case npc_flags::Trainer:
+								m_connector.TrainerMenu(m_hoveredUnit->GetGuid());
+								break;
+							case npc_flags::Vendor:
+								m_connector.ListInventory(m_hoveredUnit->GetGuid());
+								break;
+							default:
+								// No specific npc flag set, so ask for the gossip dialog
+								if (npcFlags != 0)
+								{
+									m_connector.GossipHello(m_hoveredUnit->GetGuid());
+								}
+								break;
 							}
 						}
 						else

@@ -65,7 +65,7 @@ namespace mmo
 		}
 
 		// Use base npc flags from entry
-		uint32 npcFlags = m_entry->npcflags();
+		uint32 npcFlags = npc_flags::None;
 		if (m_entry->trainerentry())
 		{
 			npcFlags |= npc_flags::Trainer;
@@ -79,11 +79,6 @@ namespace mmo
 		if (m_entry->quests_size() > 0 || m_entry->end_quests_size() > 0)
 		{
 			npcFlags |= npc_flags::QuestGiver;
-		}
-
-		if ((npcFlags & (npc_flags::Trainer | npc_flags::Vendor)) != 0)
-		{
-			npcFlags |= npc_flags::Gossip;
 		}
 
 		Set<uint32>(object_fields::NpcFlags, npcFlags);

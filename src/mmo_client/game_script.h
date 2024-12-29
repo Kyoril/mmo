@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class QuestClient;
 	class TrainerClient;
 	class SpellCast;
 	class ActionBar;
@@ -56,7 +57,8 @@ namespace mmo
 			const proto_client::Project& project,
 			ActionBar& actionBar,
 			SpellCast& spellCast,
-			TrainerClient& trainerClient);
+			TrainerClient& trainerClient,
+			QuestClient& questClient);
 
 	public:
 		/// Gets the current lua state
@@ -125,6 +127,8 @@ namespace mmo
 		SpellCast& m_spellCast;
 
 		TrainerClient& m_trainerClient;
+
+		QuestClient& m_questClient;
 
 	private:
 		void Script_ReviveMe() const;

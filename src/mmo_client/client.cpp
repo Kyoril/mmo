@@ -44,6 +44,7 @@
 #include "action_bar.h"
 #include "spell_cast.h"
 #include "trainer_client.h"
+#include "quest_client.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -258,6 +259,7 @@ namespace mmo
 
 	static std::unique_ptr<ActionBar> s_actionBar;
 	static std::unique_ptr<SpellCast> s_spellCast;
+	static std::unique_ptr<QuestClient> s_questClient;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -343,6 +345,7 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
+		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
@@ -353,11 +356,11 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast, *s_trainerClient);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

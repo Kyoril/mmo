@@ -327,6 +327,16 @@ namespace mmo
 			OnQuestGiverStatusQuery(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::TrainerMenu:
+			OnTrainerMenu(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::ListInventory:
+			OnListInventory(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::QuestGiverHello:
+			OnQuestGiverHello(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -1929,6 +1939,153 @@ namespace mmo
 				packet << io::write<uint64>(questGiverGuid) << io::write<uint8>(status);
 				packet.Finish();
 			});
+	}
+
+	void Player::OnTrainerMenu(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 trainerGuid;
+		if (!(contentReader >> io::read<uint64>(trainerGuid)))
+		{
+			ELOG("Failed to read TrainerMenu packet!");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(trainerGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		DLOG("Requested trainer menu from npc " << log_hex_digit(trainerGuid) << " (" << unit->GetEntry().name() << ")");
+
+		// Is this unit a trainer?
+		const proto::UnitEntry& unitEntry = unit->GetEntry();
+		const proto::TrainerEntry* trainer = nullptr;
+		if (unitEntry.trainerentry() != 0)
+		{
+			trainer = m_project.trainers.getById(unitEntry.trainerentry());
+		}
+
+		if (!trainer)
+		{
+			return;
+		}
+
+		HandleTrainerGossip(*trainer, *unit);
+	}
+
+	void Player::OnListInventory(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 vendorGuid;
+		if (!(contentReader >> io::read<uint64>(vendorGuid)))
+		{
+			ELOG("Failed to read ListInventory packet!");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		DLOG("Requested vendor inventory from npc " << log_hex_digit(vendorGuid) << " (" << unit->GetEntry().name() << ")");
+
+		// Is this unit a trainer?
+		const proto::UnitEntry& unitEntry = unit->GetEntry();
+		const proto::VendorEntry* vendor = nullptr;
+		if (unitEntry.vendorentry() != 0)
+		{
+			vendor = m_project.vendors.getById(unitEntry.vendorentry());
+		}
+
+		if (!vendor)
+		{
+			return;
+		}
+
+		HandleVendorGossip(*vendor, *unit);
+	}
+
+	namespace
+	{
+		void WriteQuestMenuEntry(const proto::QuestEntry& quest, QuestgiverStatus status, io::Writer& writer)
+		{
+			writer
+				<< io::write<uint32>(quest.id())
+				<< io::write<uint32>(status)
+				<< io::write<int32>(quest.questlevel())
+				<< io::write_dynamic_range<uint8>(quest.name());
+		}
+	}
+
+	void Player::OnQuestGiverHello(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 questGiverGuid;
+		if (!(contentReader >> io::read<uint64>(questGiverGuid)))
+		{
+			ELOG("Failed to read QuestGiverHello packet!");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(questGiverGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		DLOG("Quest Giver Hello on npc " << log_hex_digit(questGiverGuid) << " (" << unit->GetEntry().name() << ")");
+
+		// Is this unit a quest giver?
+		if (unit->GetEntry().quests_size() == 0 && unit->GetEntry().end_quests_size() == 0)
+		{
+			WLOG("Unit " << log_hex_digit(questGiverGuid) << " has no quests to offer or turn in!");
+			return;
+		}
+
+		// Send the quest list to the client
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		typename game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::QuestGiverQuestList);
+		packet << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(unit->GetEntry().greeting_text());	// TODO: 512 cap
+
+		const size_t questCountPos = sink.Position();
+
+		uint8 questCount = 0;
+		packet << io::write<uint8>(0); // Placeholder for real quest count
+
+		for (const auto& questId : unit->GetEntry().end_quests())
+		{
+			auto questStatus = m_character->GetQuestStatus(questId);
+			if (questStatus == quest_status::Incomplete || questStatus == quest_status::Complete)
+			{
+				if (const auto* quest = m_project.quests.getById(questId))
+				{
+					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::RewardRep, packet);
+					questCount++;
+				}
+			}
+		}
+		for (const auto& questId : unit->GetEntry().quests())
+		{
+			auto questStatus = m_character->GetQuestStatus(questId);
+			if (questStatus == quest_status::Available)
+			{
+				if (const auto* quest = m_project.quests.getById(questId))
+				{
+					WriteQuestMenuEntry(*quest, questgiver_status::Chat, packet);
+					questCount++;
+				}
+			}
+		}
+
+		// Overwrite real quest count in menu before finish
+		sink.Overwrite(questCountPos, reinterpret_cast<const char*>(&questCount), sizeof(questCount));
+		packet.Finish();
+
+		// Send proxy packet
+		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer);
 	}
 
 #if MMO_WITH_DEV_COMMANDS

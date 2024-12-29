@@ -571,14 +571,21 @@ namespace mmo
 		// Ensure we have a frame on the stack to work with
 		ASSERT(!m_frames.empty());
 
-		// Set the size or position property of the top frame on the stack
-		if (m_hasSizeTag)
+		if (m_imageComponent)
 		{
-			m_frames.top()->SetPixelSize(Size(x, y));
+			m_imageComponent->SetSize(static_cast<uint16>(x), static_cast<uint16>(y));
 		}
-		else
+		else if (!m_component)
 		{
-			m_frames.top()->SetPosition(Point(x, y));
+			// Set the size or position property of the top frame on the stack
+			if (m_hasSizeTag)
+			{
+				m_frames.top()->SetPixelSize(Size(x, y));
+			}
+			else
+			{
+				m_frames.top()->SetPosition(Point(x, y));
+			}
 		}
 	}
 
@@ -830,10 +837,30 @@ namespace mmo
 
 		// Setup component and add it to the current section
 		auto component = std::make_unique<TextComponent>(*m_frames.top());
-		component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
-		component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
 
-		if (attributes.Exists(TextComponentColorAttribute))
+		if (horzAlignAttr.starts_with('$'))
+		{
+			component->SetHorzAlignmentPropertyName(horzAlignAttr.substr(1));
+		}
+		else
+		{
+			component->SetHorizontalAlignment(HorizontalAlignmentByName(horzAlignAttr));
+		}
+
+		if (vertAlignAttr.starts_with('$'))
+		{
+			component->SetVertAlignmentPropertyName(vertAlignAttr.substr(1));
+		}
+		else
+		{
+			component->SetVerticalAlignment(VerticalAlignmentByName(vertAlignAttr));
+		}
+
+		if (color.starts_with('$'))
+		{
+			component->SetColorPropertyName(color.substr(1));
+		}
+		else if(attributes.Exists(TextComponentColorAttribute))
 		{
 			argb_t argb;
 
@@ -844,7 +871,7 @@ namespace mmo
 			colorStream >> std::hex >> argb;
 			component->SetColor(argb);
 		}
-
+		
 		m_component = std::move(component);
 	}
 

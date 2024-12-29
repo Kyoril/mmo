@@ -28,6 +28,9 @@ namespace mmo
 		copy->SetHorizontalAlignment(m_horzAlignment);
 		copy->SetVerticalAlignment(m_vertAlignment);
 		copy->SetColor(m_color);
+		copy->SetHorzAlignmentPropertyName(m_horzAlignPropertyName);
+		copy->SetVertAlignmentPropertyName(m_vertAlignPropertyName);
+		copy->SetColorPropertyName(m_colorPropertyName);
 		return copy;
 	}
 
@@ -44,6 +47,134 @@ namespace mmo
 	void TextComponent::SetColor(const Color & color)
 	{
 		m_color = color;
+	}
+
+	void TextComponent::SetHorzAlignmentPropertyName(std::string propertyName)
+	{
+		m_horzAlignPropertyConnection.disconnect();
+
+		m_horzAlignPropertyName = std::move(propertyName);
+		if (m_horzAlignPropertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_horzAlignPropertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_horzAlignPropertyName);
+			return;
+		}
+
+		auto handler = [&](const Property& changedProperty)
+			{
+				if (changedProperty.GetValue() == "LEFT")
+				{
+					SetHorizontalAlignment(HorizontalAlignment::Left);
+				}
+				else if (changedProperty.GetValue() == "CENTER")
+				{
+					SetHorizontalAlignment(HorizontalAlignment::Center);
+				}
+				else if (changedProperty.GetValue() == "RIGHT")
+				{
+					SetHorizontalAlignment(HorizontalAlignment::Right);
+				}
+
+				m_frame->Invalidate();
+			};
+
+		m_horzAlignPropertyConnection = observedProperty->Changed += handler;
+
+		// Trigger handler to initialize the property value
+		handler(*observedProperty);
+	}
+
+	void TextComponent::SetVertAlignmentPropertyName(std::string propertyName)
+	{
+		m_vertAlignPropertyConnection.disconnect();
+
+		m_vertAlignPropertyName = std::move(propertyName);
+		if (m_vertAlignPropertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_vertAlignPropertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_vertAlignPropertyName);
+			return;
+		}
+
+		auto handler = [&](const Property& changedProperty)
+			{
+				if (changedProperty.GetValue() == "TOP")
+				{
+					SetVerticalAlignment(VerticalAlignment::Top);
+				}
+				else if (changedProperty.GetValue() == "CENTER")
+				{
+					SetVerticalAlignment(VerticalAlignment::Center);
+				}
+				else if (changedProperty.GetValue() == "BOTTOM")
+				{
+					SetVerticalAlignment(VerticalAlignment::Bottom);
+				}
+
+				m_frame->Invalidate();
+			};
+
+		m_vertAlignPropertyConnection = observedProperty->Changed += handler;
+
+		// Trigger handler to initialize the property value
+		handler(*observedProperty);
+	}
+
+	void TextComponent::SetColorPropertyName(std::string propertyName)
+	{
+		m_colorPropertyConnection.disconnect();
+
+		m_colorPropertyName = std::move(propertyName);
+		if (m_colorPropertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_colorPropertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_colorPropertyName);
+			return;
+		}
+
+		auto handler = [&](const Property& changedProperty)
+			{
+				argb_t argb;
+
+				std::stringstream colorStream;
+				colorStream.str(changedProperty.GetValue());
+				colorStream.clear();
+				colorStream >> std::hex >> argb;
+				SetColor(Color(argb));
+
+				m_frame->Invalidate(false);
+			};
+
+		m_colorPropertyConnection = observedProperty->Changed += handler;
+
+		// Trigger handler to initialize the property value
+		handler(*observedProperty);
+	}
+
+	void TextComponent::OnFrameChanged()
+	{
+		FrameComponent::OnFrameChanged();
+
+		// Refresh property values
+		SetColorPropertyName(m_colorPropertyName);
+		SetHorzAlignmentPropertyName(m_horzAlignPropertyName);
+		SetVertAlignmentPropertyName(m_vertAlignPropertyName);
 	}
 
 	void TextComponent::CacheText(const Rect& area)

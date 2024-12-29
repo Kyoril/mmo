@@ -28,12 +28,11 @@ namespace mmo
 		}
 
 	public:
-		void Get(uint64 guid, QueryCallback&& callback)
+		void Get(uint64 guid)
 		{
 			auto it = m_cache.find(guid);
 			if (it != m_cache.end())
 			{
-				callback(guid, it->second);
 				return;
 			}
 
@@ -50,9 +49,20 @@ namespace mmo
 						packet.Finish();
 					});
 			}
+		}
+
+		void Get(uint64 guid, QueryCallback&& callback)
+		{
+			auto it = m_cache.find(guid);
+			if (it != m_cache.end())
+			{
+				callback(guid, it->second);
+				return;
+			}
+
+			Get(guid);
 
 			m_pendingRequests.insert(std::pair{ guid, callback });
-
 		}
 
 		void NotifyObjectResponse(uint64 guid, const T& object)

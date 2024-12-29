@@ -123,6 +123,10 @@ namespace mmo
 
 				QuestGiverStatusQuery,
 
+				QuestGiverHello,
+				TrainerMenu,
+				ListInventory,
+
 				/// Counter constant
 				Count_,
 			};
@@ -253,6 +257,15 @@ namespace mmo
 				TrainerBuySucceeded,
 
 				QuestGiverStatus,
+				QuestGiverQuestList,
+				QuestGiverQuestDetails,
+				QuestGiverRequestItems,
+				QuestGiverOfferReward,
+				QuestGiverQuestComplete,
+				QuestLogFull,
+				QuestUpdateComplete,
+				QuestUpdateAddKill,
+				QuestUpdateAddItem,
 
 				/// Counter constant
 				Count_,

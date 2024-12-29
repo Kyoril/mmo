@@ -4,6 +4,7 @@
 
 #include "frame_component.h"
 #include "font.h"
+#include "base/signal.h"
 
 #include "base/typedefs.h"
 
@@ -56,18 +57,32 @@ namespace mmo
 	public:
 		/// Gets the horizontal text alignment.
 		inline HorizontalAlignment GetHorizontalAlignment() const { return m_horzAlignment; }
+
 		/// Sets the horizontal text alignment.
 		void SetHorizontalAlignment(HorizontalAlignment alignment);
+
 		/// Gets the vertical text alignment.
 		inline VerticalAlignment GetVerticalAlignment() const { return m_vertAlignment; }
+
 		/// Sets the vertical text alignment.
 		void SetVerticalAlignment(VerticalAlignment alignment);
+
 		/// Gets the global text color.
 		inline const Color& GetColor() const { return m_color; }
+
 		/// Sets the global text color.
 		void SetColor(const Color& color);
+
 		/// Determines the number of lines.
 		inline uint32 GetLineCount() const noexcept { return m_lineCache.size(); }
+
+		void SetHorzAlignmentPropertyName(std::string propertyName);
+
+		void SetVertAlignmentPropertyName(std::string propertyName);
+
+		void SetColorPropertyName(std::string propertyName);
+
+		void OnFrameChanged() override;
 
 	private:
 		/// This function caches some values required for rendering the text using this component's properites.
@@ -88,5 +103,17 @@ namespace mmo
 		VerticalAlignment m_vertAlignment = VerticalAlignment::Top;
 		/// A cache for text lines with wrapping applied.
 		std::vector<std::string> m_lineCache;
+
+		std::string m_horzAlignPropertyName;
+
+		std::string m_vertAlignPropertyName;
+
+		std::string m_colorPropertyName;
+
+		scoped_connection m_horzAlignPropertyConnection;
+
+		scoped_connection m_vertAlignPropertyConnection;
+
+		scoped_connection m_colorPropertyConnection;
 	};
 }

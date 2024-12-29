@@ -158,6 +158,12 @@ namespace mmo
 
 		void OnQuestGiverStatusQuery(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnTrainerMenu(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnListInventory(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnQuestGiverHello(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 #if MMO_WITH_DEV_COMMANDS
 		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
 

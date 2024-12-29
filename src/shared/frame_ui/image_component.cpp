@@ -4,6 +4,7 @@
 #include "geometry_buffer.h"
 #include "geometry_helper.h"
 #include "frame.h"
+#include "frame_mgr.h"
 #include "base/macros.h"
 #include "graphics/texture_mgr.h"
 
@@ -32,6 +33,8 @@ namespace mmo
 		copy->m_filename = m_filename;
 		copy->m_texture = m_texture;
 		copy->m_propertyName = m_propertyName;
+		copy->m_width = m_width;
+		copy->m_height = m_height;
 
 		return copy;
 	}
@@ -169,6 +172,17 @@ namespace mmo
 		};
 	}
 
+	void ImageComponent::SetSize(uint16 width, uint16 height)
+	{
+		m_width = width;
+		m_height = height;
+
+		if (m_frame)
+		{
+			m_frame->Invalidate();
+		}
+	}
+
 	Size ImageComponent::GetSize() const
 	{
 		uint16 realWidth = m_width;
@@ -178,6 +192,21 @@ namespace mmo
 		if (realHeight == 0) realHeight = m_texture->GetHeight();
 
 		return Size(realWidth, realHeight);
+	}
+
+	Rect ImageComponent::GetArea(const Rect& area) const
+	{
+		Rect baseArea = FrameComponent::GetArea(area);
+
+		if (m_width != 0 || m_height != 0)
+		{
+			const auto scale = FrameManager::Get().GetUIScale();
+
+			const auto size = GetSize();
+			baseArea.SetSize(Size(size.width * scale.x, size.height * scale.y));
+		}
+		
+		return baseArea;
 	}
 
 	ImageTilingMode ImageTilingModeByName(const std::string & name)

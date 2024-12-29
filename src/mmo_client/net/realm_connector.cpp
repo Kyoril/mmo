@@ -524,6 +524,36 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::QuestGiverHello(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverHello);
+			packet
+				<< io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::TrainerMenu(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TrainerMenu);
+			packet
+				<< io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::ListInventory(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::ListInventory);
+			packet
+				<< io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::SellItem(uint64 vendorGuid, uint64 itemGuid)
 	{
 		sendSinglePacket([vendorGuid, itemGuid](game::OutgoingPacket& packet) {
@@ -607,11 +637,11 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::UpdateQuestStatus(const uint64 questgiverGuid)
+	void RealmConnector::UpdateQuestStatus(const uint64 questGiverGuid)
 	{
-		sendSinglePacket([questgiverGuid](game::OutgoingPacket& packet) {
+		sendSinglePacket([questGiverGuid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::QuestGiverStatusQuery);
-			packet << io::write<uint64>(questgiverGuid);
+			packet << io::write<uint64>(questGiverGuid);
 			packet.Finish();
 			});
 	}

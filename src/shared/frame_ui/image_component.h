@@ -54,9 +54,12 @@ namespace mmo
 		void SetImageFile(const std::string& filename);
 		void SetImagePropertyName(std::string propertyName);
 
+		void SetSize(uint16 width, uint16 height);
+
 	public:
 		// ~Begin FrameComponent
 		Size GetSize() const override;
+		Rect GetArea(const Rect& area) const override;
 		// ~End FrameComponent
 
 	private:

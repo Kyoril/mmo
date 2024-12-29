@@ -39,6 +39,7 @@
 
 namespace mmo
 {
+	class QuestClient;
 	class ActionBar;
 	class VendorClient;
 	class TimerQueue;
@@ -82,7 +83,8 @@ namespace mmo
 			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 			ActionBar& actionBar,
 			SpellCast& spellCast,
-			TrainerClient& trainerClient);
+			TrainerClient& trainerClient,
+			QuestClient& questClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -310,6 +312,7 @@ namespace mmo
 		ActionBar& m_actionBar;
 		SpellCast& m_spellCast;
 		TrainerClient& m_trainerClient;
+		QuestClient& m_questClient;
 
 	private:
 		static IInputControl* s_inputControl;

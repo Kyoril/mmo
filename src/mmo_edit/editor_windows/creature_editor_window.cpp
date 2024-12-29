@@ -215,6 +215,8 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::InputTextMultiline("Greeting Text", currentEntry.mutable_greeting_text());
+
 			ImGui::Text("Offers Quests");
 
 			// Add button

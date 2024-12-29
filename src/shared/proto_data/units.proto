@@ -74,6 +74,7 @@ message UnitEntry {
 	repeated uint32 variables = 55;
 	optional uint32 killcredit = 56;
 	optional uint32 gossip_menu = 59;
+	optional string greeting_text = 60;
 }
 
 message Units {

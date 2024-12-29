@@ -20,6 +20,7 @@
 #include <zstr/zstr.hpp>
 
 #include "action_bar.h"
+#include "quest_client.h"
 #include "game_client/object_mgr.h"
 #include "spell_projectile.h"
 #include "trainer_client.h"
@@ -133,7 +134,7 @@ namespace mmo
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 		ActionBar& actionBar,
-		SpellCast& spellCast, TrainerClient& trainerClient)
+		SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -147,6 +148,7 @@ namespace mmo
 		, m_actionBar(actionBar)
 		, m_spellCast(spellCast)
 		, m_trainerClient(trainerClient)
+		, m_questClient(questClient)
 	{
 	}
 
@@ -530,6 +532,7 @@ namespace mmo
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
+		m_questClient.Initialize();
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -556,6 +559,7 @@ namespace mmo
 		Console::UnregisterCommand("additem");
 #endif
 
+		m_questClient.Shutdown();
 		m_trainerClient.Shutdown();
 		m_lootClient.Shutdown();
 		m_vendorClient.Shutdown();

@@ -17,6 +17,7 @@
 #include "cursor.h"
 #include "loot_client.h"
 #include "platform.h"
+#include "quest_client.h"
 #include "trainer_client.h"
 #include "vendor_client.h"
 #include "game/item.h"
@@ -853,7 +854,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -863,6 +864,7 @@ namespace mmo
 		, m_actionBar(actionBar)
 		, m_spellCast(spellCast)
 		, m_trainerClient(trainerClient)
+		, m_questClient(questClient)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -992,6 +994,12 @@ namespace mmo
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)),
 
 			luabind::scope(
+				luabind::class_<QuestListEntry>("QuestListEntry")
+				.def_readonly("id", &QuestListEntry::questId)
+				.def_readonly("title", &QuestListEntry::questTitle)
+				.def_readonly("icon", &QuestListEntry::menuIcon)),
+
+			luabind::scope(
 				luabind::class_<UnitHandle>("UnitHandle")
 				.def("GetHealth", &UnitHandle::GetHealth)
 				.def("GetMaxHealth", &UnitHandle::GetMaxHealth)
@@ -1082,6 +1090,11 @@ namespace mmo
 			luabind::def("GetInventorySlotCount", &Script_GetInventorySlotCount),
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
+
+			// Quest
+			luabind::def<std::function<String()>>("GetGreetingText", [this]() { return m_questClient.GetGreetingText(); }),
+			luabind::def<std::function<int32()>>("GetNumAvailableQuests", [this]() { return m_questClient.GetNumAvailableQuests(); }),
+			luabind::def<std::function<const QuestListEntry*(uint32)>>("GetAvailableQuest", [this](uint32 index) { return m_questClient.GetAvailableQuest(index); }),
 
 			// Spellbook
 			luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell) { g_cursor.SetSpell(spell); }),
