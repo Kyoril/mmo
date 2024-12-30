@@ -1,5 +1,7 @@
 #pragma once
+
 #include "item.h"
+#include "quest.h"
 
 namespace mmo
 {
@@ -243,7 +245,11 @@ namespace mmo
 			BuybackPrice_1 = VendorBuybackSlot_1 + 12,
 			BuybackTimestamp_1 = BuybackPrice_1 + 12,
 
-			PlayerFieldCount = BuybackTimestamp_1 + 12,
+			// Questlog
+			QuestLogSlot_1 = BuybackTimestamp_1 + 12,
+
+			// Field count
+			PlayerFieldCount = QuestLogSlot_1 + sizeof(QuestField) * MaxQuestLogSize,
 		};
 
 		enum ItemFields

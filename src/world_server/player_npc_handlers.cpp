@@ -140,8 +140,10 @@ namespace mmo
 			return;
 		}
 
+		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
+
 		// Ensure that the gossip menu is closed
-		SendPacket([questGiverGuid, questId, this](game::OutgoingPacket& packet)
+		SendPacket([](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::GossipComplete);
 			packet.Finish();

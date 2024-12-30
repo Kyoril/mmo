@@ -105,4 +105,18 @@ namespace mmo
 
 	typedef quest_status::Type QuestStatus;
 
+	constexpr uint32 MaxQuestLogSize = 20;
+
+	struct QuestField
+	{
+		uint32 questId = 0;
+		uint32 status = quest_status::Rewarded;
+		uint8 counters[4] = { 0, 0, 0, 0};
+		uint32 questTimer = 0;
+	};
+
+	inline bool operator==(const QuestField& lhs, const QuestField& rhs)
+	{
+		return lhs.questId == rhs.questId && lhs.status == rhs.status && lhs.questTimer == rhs.questTimer;
+	}
 }

@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "log/default_log_levels.h"
+#include "math/clamp.h"
 
 namespace mmo
 {
@@ -231,10 +232,16 @@ namespace mmo
 		if (ImGui::CollapsingHeader("Completion Criteria", ImGuiTreeNodeFlags_None))
 		{
 			// Add button
+			ImGui::BeginDisabled(currentEntry.requirements_size() >= 4);
 			if (ImGui::Button("Add", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_requirements();
 			}
+			if (currentEntry.requirements_size() >= 4)
+			{
+				ImGui::Text("Up to 4 requirements per quest with a counter of up to 255 elements each are currently allowed due to the way we sync quest progress to the client.");
+			}
+			ImGui::EndDisabled();
 
 			if (ImGui::BeginTable("questRequirements", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 			{
@@ -299,7 +306,7 @@ namespace mmo
 					int32 count = currentItem->itemcount();
 					if (ImGui::InputInt("##item_count", &count))
 					{
-						if (count < 1) count = 1;
+						count = Clamp(count, 1, 255);
 						currentItem->set_itemcount(count);
 					}
 					ImGui::EndDisabled();
@@ -351,7 +358,7 @@ namespace mmo
 					count = currentItem->creaturecount();
 					if (ImGui::InputInt("##creature_count", &count))
 					{
-						if (count < 1) count = 1;
+						count = Clamp(count, 1, 255);
 						currentItem->set_creaturecount(count);
 					}
 					ImGui::EndDisabled();

@@ -505,7 +505,7 @@ namespace mmo
 
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
 	{
-		if (itemGuid == 0 && !HasSpell(spell.id()))
+		if (!isProc && itemGuid == 0 && !HasSpell(spell.id()))
 		{
 			WLOG("Unit does not know spell " << spell.id());
 			return spell_cast_result::FailedNotKnown;

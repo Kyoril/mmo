@@ -46,6 +46,36 @@ namespace mmo
 		
 		virtual void InitializeFieldMap();
 
+		/// Determines whether an object field in the synchronized field map was marked as changed. Useful in fieldsChanged callbacks or
+		///	mirror handler connections created with the RegisterMirrorHandler method to check if a specific field was changed.
+		[[nodiscard]] bool WasChanged(const FieldMap<uint32>::FieldIndexType field) const
+		{
+			return m_fieldMap.IsFieldMarkedAsChanged(field);
+		}
+
+		/// Registers a callback handler that is called when some object field values change.
+		template <class Instance, class Class, class... Args1>
+		connection RegisterMirrorHandler(uint32 field, uint32 fieldCount, Instance& object, void(Class::* method)(Args1...))
+		{
+			const auto handler = [&object, method](Args1... args)
+				{
+					(object.*method)(args...);
+				};
+
+			return fieldsChanged.connect([monitoredField = field, monitoredFieldCount = fieldCount, handler](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
+				{
+					const bool rangesOverlap =
+						fieldIndex + fieldCount - 1 >= monitoredField &&
+						fieldIndex <= monitoredField + monitoredFieldCount;
+					if (rangesOverlap)
+					{
+						// The monitored field has changed, so we need to update the mirror field.
+						// This will trigger the handler.
+						handler(guid);
+					}
+				});
+		}
+
 	public:
 		[[nodiscard]] const Vector3& GetPosition() const
 		{

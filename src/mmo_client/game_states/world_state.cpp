@@ -270,6 +270,47 @@ namespace mmo
 		return Name;
 	}
 
+	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+
+		m_targetObservers.disconnect();
+
+		if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)))
+		{
+			targetUnit->fieldsChanged.connect([this](uint64, uint16, uint16)
+				{
+					FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+				});
+		}
+	}
+
+	void WorldState::OnMoneyChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("MONEY_CHANGED");
+	}
+
+	void WorldState::OnExperiencePointsChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_XP_CHANGED");
+	}
+
+	void WorldState::OnLevelChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_CHANGED");
+	}
+
+	void WorldState::OnQuestLogChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+
+		// TODO: Handle quest log updates
+	}
+
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
@@ -753,36 +794,17 @@ namespace mmo
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
 					// Register player observers
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::TargetUnit, 2, *this, &WorldState::OnTargetSelectionChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Money, 1, *this, &WorldState::OnMoneyChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Xp, 2, *this, &WorldState::OnExperiencePointsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Level, 1, *this, &WorldState::OnLevelChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::QuestLogSlot_1, sizeof(QuestField) * MaxQuestLogSize, *this, &WorldState::OnQuestLogChanged);
+
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 						{
-							// Watch for target unit change
-							if (fieldIndex <= object_fields::TargetUnit &&
-								fieldIndex + fieldCount >= object_fields::TargetUnit + 1)
-							{
-								if (ObjectMgr::GetActivePlayerGuid() == guid)
-								{
-									FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
-
-									m_targetObservers.disconnect();
-
-									if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)))
-									{
-										targetUnit->fieldsChanged.connect([this](uint64, uint16, uint16)
-											{
-												FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
-											});
-									}
-								}
-							}
-
 							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
-							}
-
-							if ((object_fields::Money >= fieldIndex && object_fields::Money <= fieldIndex + fieldCount))
-							{
-								FrameManager::Get().TriggerLuaEvent("MONEY_CHANGED");
 							}
 
 							if ((object_fields::BankSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
@@ -790,18 +812,12 @@ namespace mmo
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
 							}
 
-							if ((fieldIndex <= object_fields::Xp && fieldIndex + fieldCount >= object_fields::Xp) ||
-								(fieldIndex <= object_fields::NextLevelXp && fieldIndex + fieldCount >= object_fields::NextLevelXp))
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_XP_CHANGED");
-							}
-
-							if (fieldIndex <= object_fields::Level && fieldIndex + fieldCount >= object_fields::Level)
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_CHANGED");
-							}
-
 							if (fieldIndex <= object_fields::AvailableAttributePoints && fieldIndex + fieldCount >= object_fields::AvailableAttributePoints)
+							{
+								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
+							}
+
+							if (fieldIndex <= object_fields::QuestLogSlot_1 && fieldIndex + fieldCount >= object_fields::QuestLogSlot_1)
 							{
 								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 							}

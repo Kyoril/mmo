@@ -82,6 +82,8 @@ namespace mmo
 		/// Determines whether the given field is marked as changed.
 		[[nodiscard]] bool IsFieldMarkedAsChanged(const FieldIndexType index) const { return m_changes[index]; }
 
+		[[nodiscard]] size_t GetFieldCount() const { return m_data.size(); }
+
 		int32 GetFirstChangedField() const
 		{
 			for (uint32 i = 0; i < m_data.size(); ++i)

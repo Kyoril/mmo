@@ -305,9 +305,101 @@ namespace mmo
 
 	bool GamePlayerS::AcceptQuest(uint32 quest)
 	{
-		// TODO
+		if (const QuestStatus status = GetQuestStatus(quest); status != quest_status::Available)
+		{
+			// We can't take that quest, maybe because we already completed it or already have it
+			return false;
+		}
 
-		return true;
+		const auto* questEntry = GetProject().quests.getById(quest);
+		if (!questEntry)
+		{
+			return false;
+		}
+
+		const proto::ItemEntry* srcItem = nullptr;
+		if (questEntry->srcitemid())
+		{
+			if ((srcItem = GetProject().items.getById(questEntry->srcitemid())) == nullptr)
+			{
+				return false;
+			}
+		}
+
+		// Find next free quest log
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			auto questLogField = Get<QuestField>(object_fields::QuestLogSlot_1);
+			if (questLogField.questId == 0 || questLogField.questId == quest)
+			{
+				// Grant quest source item if possible
+				if (srcItem)
+				{
+					std::map<uint16, uint16> addedBySlot;
+					if (auto result = m_inventory.CreateItems(*srcItem, questEntry->srcitemcount(), &addedBySlot); result != inventory_change_failure::Okay)
+					{
+						//inventoryChangeFailure(result, nullptr, nullptr);
+						return false;
+					}
+
+					// Notify the player about this
+					for (auto& pair : addedBySlot)
+					{
+						//itemAdded(pair.first, pair.second, false, false);
+					}
+				}
+
+				// Take that quest
+				auto& data = m_quests[quest];
+				data.status = quest_status::Incomplete;
+
+				if (questEntry->srcspell())
+				{
+					if (const auto* spell = GetProject().spells.getById(questEntry->srcspell()))
+					{
+						// TODO: Maybe we should make the quest giver cast the spell, if it's a unit
+						SpellTargetMap targetMap;
+						targetMap.SetTargetMap(spell_cast_target_flags::Self | spell_cast_target_flags::Unit);
+						targetMap.SetUnitTarget(GetGuid());
+						CastSpell(targetMap, *spell, 0, true);
+					}
+				}
+
+				// Quest timer
+				uint32 questTimer = 0;
+				if (questEntry->timelimit() > 0)
+				{
+					questTimer = GetAsyncTimeMs() + questEntry->timelimit();
+					data.expiration = questTimer;
+				}
+
+				if (questEntry->timelimit() > 0)
+				{
+
+				}
+
+				// Set quest log
+				QuestField field;
+				field.questId = quest;
+				field.status = quest_status::Complete;
+				field.questTimer = questTimer;
+
+				// Complete if no requirements
+				if (FulfillsQuestRequirements(*questEntry))
+				{
+					data.status = quest_status::Complete;
+					field.status = data.status;
+				}
+
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * sizeof(QuestField), field);
+				//questDataChanged(quest, data);
+
+				return true;
+			}
+		}
+
+		// No free quest slot found
+		return false;
 	}
 
 	bool GamePlayerS::AbandonQuest(uint32 quest)

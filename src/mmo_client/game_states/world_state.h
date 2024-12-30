@@ -101,6 +101,17 @@ namespace mmo
 		[[nodiscard]] std::string_view GetName() const override;
 
 	private:
+		void OnTargetSelectionChanged(uint64 monitoredGuid);
+
+		void OnMoneyChanged(uint64 monitoredGuid);
+
+		void OnExperiencePointsChanged(uint64 monitoredGuid);
+
+		void OnLevelChanged(uint64 monitoredGuid);
+
+		void OnQuestLogChanged(uint64 monitoredGuid);
+
+	private:
 		// EventLoop connections
 		
 		bool OnMouseDown(MouseButton button, int32 x, int32 y);
