@@ -277,12 +277,18 @@ namespace mmo
 
 		m_targetObservers.disconnect();
 
-		if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)))
+		// Do we have a new target to select?
+		const uint64 targetGuid = ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
 		{
-			targetUnit->fieldsChanged.connect([this](uint64, uint16, uint16)
-				{
-					FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
-				});
+			// No - do not register any field observers
+			return;
+		}
+
+		if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
+		{
+			// Yes, register field observers
+			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnTargetHealthChanged);
 		}
 	}
 
@@ -309,6 +315,25 @@ namespace mmo
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
 		// TODO: Handle quest log updates
+	}
+
+	void WorldState::OnPlayerPowerChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+	}
+
+	void WorldState::OnPlayerHealthChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
+
+		if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
+		}
 	}
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -793,13 +818,16 @@ namespace mmo
 				{
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
-					// Register player observers
+					// Register player field change observers
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TargetUnit, 2, *this, &WorldState::OnTargetSelectionChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Money, 1, *this, &WorldState::OnMoneyChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Xp, 2, *this, &WorldState::OnExperiencePointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Level, 1, *this, &WorldState::OnLevelChanged);
-					m_playerObservers += object->RegisterMirrorHandler(object_fields::QuestLogSlot_1, sizeof(QuestField) * MaxQuestLogSize, *this, &WorldState::OnQuestLogChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::QuestLogSlot_1, (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize, *this, &WorldState::OnQuestLogChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 
+					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 						{
 							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
@@ -815,28 +843,6 @@ namespace mmo
 							if (fieldIndex <= object_fields::AvailableAttributePoints && fieldIndex + fieldCount >= object_fields::AvailableAttributePoints)
 							{
 								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
-							}
-
-							if (fieldIndex <= object_fields::QuestLogSlot_1 && fieldIndex + fieldCount >= object_fields::QuestLogSlot_1)
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
-							}
-
-							if ((fieldIndex <= object_fields::Health && fieldIndex + fieldCount >= object_fields::Health) ||
-								(fieldIndex <= object_fields::MaxHealth && fieldIndex + fieldCount >= object_fields::MaxHealth))
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
-
-								if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
-								{
-									FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
-								}
-							}
-
-							if ((fieldIndex <= object_fields::Energy && fieldIndex + fieldCount >= object_fields::Mana) ||
-								(fieldIndex <= object_fields::MaxEnergy && fieldIndex + fieldCount >= object_fields::MaxMana))
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
 							}
 						});
 
@@ -2374,6 +2380,11 @@ namespace mmo
 		return PagePosition(static_cast<uint32>(
 			32 - floor(camPos.x / terrain::constants::PageSize)),
 			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
+	}
+
+	void WorldState::OnTargetHealthChanged(uint64 monitoredGuid)
+	{
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

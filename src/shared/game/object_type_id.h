@@ -249,7 +249,7 @@ namespace mmo
 			QuestLogSlot_1 = BuybackTimestamp_1 + 12,
 
 			// Field count
-			PlayerFieldCount = QuestLogSlot_1 + sizeof(QuestField) * MaxQuestLogSize,
+			PlayerFieldCount = QuestLogSlot_1 + (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize + 1,
 		};
 
 		enum ItemFields

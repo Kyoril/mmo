@@ -101,6 +101,8 @@ namespace mmo
 		[[nodiscard]] std::string_view GetName() const override;
 
 	private:
+		// Player Mirror Handlers (called when certain field map values of the controlled player character were changed by the server)
+
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
 		void OnMoneyChanged(uint64 monitoredGuid);
@@ -110,6 +112,15 @@ namespace mmo
 		void OnLevelChanged(uint64 monitoredGuid);
 
 		void OnQuestLogChanged(uint64 monitoredGuid);
+
+		void OnPlayerPowerChanged(uint64 monitoredGuid);
+
+		void OnPlayerHealthChanged(uint64 monitoredGuid);
+
+	private:
+		// Selected Target Mirror Handlers (called when certain field map values of the selected target object were changed by the server)
+
+		void OnTargetHealthChanged(uint64 monitoredGuid);
 
 	private:
 		// EventLoop connections

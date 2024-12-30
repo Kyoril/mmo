@@ -57,6 +57,10 @@ namespace mmo
 		template <class Instance, class Class, class... Args1>
 		connection RegisterMirrorHandler(uint32 field, uint32 fieldCount, Instance& object, void(Class::* method)(Args1...))
 		{
+			ASSERT(field < m_fieldMap.GetFieldCount());
+			ASSERT(fieldCount > 0);
+			ASSERT(field + fieldCount < m_fieldMap.GetFieldCount());
+
 			const auto handler = [&object, method](Args1... args)
 				{
 					(object.*method)(args...);
@@ -64,10 +68,9 @@ namespace mmo
 
 			return fieldsChanged.connect([monitoredField = field, monitoredFieldCount = fieldCount, handler](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 				{
-					const bool rangesOverlap =
+					if (const bool rangesOverlap =
 						fieldIndex + fieldCount - 1 >= monitoredField &&
-						fieldIndex <= monitoredField + monitoredFieldCount;
-					if (rangesOverlap)
+						fieldIndex <= monitoredField + monitoredFieldCount)
 					{
 						// The monitored field has changed, so we need to update the mirror field.
 						// This will trigger the handler.
