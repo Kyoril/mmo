@@ -10,8 +10,8 @@ namespace mmo
 	{
 		writer << io::write<uint64>(itemInfo.id)
 			<< io::write_dynamic_range<uint8>(itemInfo.title)
-			<< io::write_dynamic_range<uint8>(itemInfo.summary)
-			<< io::write_dynamic_range<uint8>(itemInfo.description);
+			<< io::write_dynamic_range<uint16>(itemInfo.summary)
+			<< io::write_dynamic_range<uint16>(itemInfo.description);
 
 		return writer;
 	}
@@ -20,8 +20,8 @@ namespace mmo
 	{
 		reader >> io::read<uint64>(outItemInfo.id)
 			>> io::read_container<uint8>(outItemInfo.title)
-			>> io::read_container<uint8>(outItemInfo.summary)
-			>> io::read_container<uint8>(outItemInfo.description);
+			>> io::read_container<uint16>(outItemInfo.summary)
+			>> io::read_container<uint16>(outItemInfo.description);
 
 		return reader;
 	}

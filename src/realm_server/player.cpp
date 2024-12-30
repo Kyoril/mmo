@@ -19,6 +19,7 @@
 
 #include "base/utilities.h"
 #include "game/chat_type.h"
+#include "game/quest_info.h"
 #include "game_server/game_player_s.h"
 
 
@@ -974,13 +975,34 @@ namespace mmo
 	{
 		DLOG("Querying for quest " << log_hex_digit(entry) << "...");
 
-		// TODO
-		m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+		// Check for existing quest entry
+		const proto::QuestEntry* questEntry = m_project.quests.getById(entry);
+		if (!questEntry)
+		{
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::QuestQueryResult);
+					packet
+						<< io::write_packed_guid(entry)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+		}
+
+		// Map quest info
+		QuestInfo quest;
+		quest.id = questEntry->id();
+		quest.title = questEntry->name();
+		quest.description = questEntry->detailstext();
+		quest.summary = questEntry->objectivestext();
+
+		m_connection->sendSinglePacket([entry, &quest](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::QuestQueryResult);
 				packet
 					<< io::write_packed_guid(entry)
-					<< io::write<uint8>(false);
+					<< io::write<uint8>(true)
+					<< quest;
 				packet.Finish();
 			});
 	}

@@ -433,11 +433,13 @@ namespace mmo
 			templateFrame = FrameManager::Get().Find(inherits);
 			if (templateFrame == nullptr)
 			{
-				ELOG("Unable to find template frame '" << inherits << "'");
+				ELOG("Unable to find template frame '" << inherits << "' when trying to create new frame named " << name << " in file " << m_filename);
 			}
-
-			// Override frame type to be used
-			type = templateFrame->GetType();
+			else
+			{
+				// Override frame type to be used
+				type = templateFrame->GetType();
+			}
 		}
 
 		// Attempt to create the frame

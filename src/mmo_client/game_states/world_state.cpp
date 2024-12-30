@@ -313,8 +313,7 @@ namespace mmo
 	void WorldState::OnQuestLogChanged(uint64 monitoredGuid)
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
-
-		// TODO: Handle quest log updates
+		FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 	}
 
 	void WorldState::OnPlayerPowerChanged(uint64 monitoredGuid)
@@ -334,6 +333,12 @@ namespace mmo
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
 		}
+	}
+
+	void WorldState::OnPlayerAttributePointsChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 	}
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -826,6 +831,7 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::QuestLogSlot_1, (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize, *this, &WorldState::OnQuestLogChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
 
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
@@ -838,11 +844,6 @@ namespace mmo
 							if ((object_fields::BankSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
-							}
-
-							if (fieldIndex <= object_fields::AvailableAttributePoints && fieldIndex + fieldCount >= object_fields::AvailableAttributePoints)
-							{
-								FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 							}
 						});
 
@@ -1078,6 +1079,11 @@ namespace mmo
 		}
 
 		QuestInfo entry{ id };
+		if (!(packet >> entry))
+		{
+			ELOG("Failed to read quest data");
+			return PacketParseResult::Disconnect;
+		}
 
 		m_questCache.NotifyObjectResponse(id, std::move(entry));
 		return PacketParseResult::Pass;
