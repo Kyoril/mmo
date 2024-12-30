@@ -3,6 +3,7 @@
 
 #include "frame_ui/frame_mgr.h"
 #include "game/vendor.h"
+#include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 
 namespace mmo
@@ -65,7 +66,7 @@ namespace mmo
 		// Note: The checks below are also done on the server. However, in order to provide a better user experience by making responses
 		// faster and also to protect the server a bit from useless requests we do the checks here on the client side as well. Just remember
 		// we can't trust the checks here. The server is the authority.
-		const std::shared_ptr<GameUnitC>& player = ObjectMgr::GetActivePlayer();
+		const std::shared_ptr<GamePlayerC>& player = ObjectMgr::GetActivePlayer();
 		ASSERT(player);
 
 		// Check level

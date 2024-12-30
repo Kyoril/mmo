@@ -26,7 +26,7 @@ namespace mmo
 
 	/// @brief This class represents the connection to a player on a realm server that this
 	///	       world node is connected to.
-	class Player final : public TileSubscriber, public NetUnitWatcherS
+	class Player final : public TileSubscriber, public NetUnitWatcherS, public NetPlayerWatcher
 	{
 	public:
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
@@ -375,6 +375,10 @@ namespace mmo
 			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
 
 		void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) override;
+
+		void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) override;
+
+		void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) override;
 
 	private:
 		PlayerManager& m_manager;

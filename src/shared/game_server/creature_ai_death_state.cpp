@@ -58,7 +58,10 @@ namespace mmo
 			// Reward all recipients
 			for (const auto& recipient : lootRecipients)
 			{
-				//recipient->onQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());
+				if (const auto strongPlayer = recipient.lock())
+				{
+					strongPlayer->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());
+				}
 			}
 
 			// Reward the killer with experience points

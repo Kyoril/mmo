@@ -34,6 +34,11 @@ namespace mmo
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
+	void GamePlayerS::SetPlayerWatcher(NetPlayerWatcher* watcher)
+	{
+		m_netPlayerWatcher = watcher;
+	}
+
 	void GamePlayerS::SetClass(const proto::ClassEntry& classEntry)
 	{
 		m_classEntry = &classEntry;
@@ -265,6 +270,11 @@ namespace mmo
 		// Check if the quest is available for us
 		if (entry->minlevel() > 0 && GetLevel() < entry->minlevel())
 		{
+			if (GetLevel() == entry->minlevel() - 1)
+			{
+				return quest_status::AvailableNextLevel;
+			}
+
 			return quest_status::Unavailable;
 		}
 
@@ -329,7 +339,7 @@ namespace mmo
 		// Find next free quest log
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
 		{
-			auto questLogField = Get<QuestField>(object_fields::QuestLogSlot_1);
+			auto questLogField = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
 			if (questLogField.questId == 0 || questLogField.questId == quest)
 			{
 				// Grant quest source item if possible
@@ -373,15 +383,10 @@ namespace mmo
 					data.expiration = questTimer;
 				}
 
-				if (questEntry->timelimit() > 0)
-				{
-
-				}
-
 				// Set quest log
 				QuestField field;
 				field.questId = quest;
-				field.status = quest_status::Complete;
+				field.status = quest_status::Incomplete;
 				field.questTimer = questTimer;
 
 				// Complete if no requirements
@@ -391,7 +396,8 @@ namespace mmo
 					field.status = data.status;
 				}
 
-				Set<QuestField>(object_fields::QuestLogSlot_1 + i * sizeof(QuestField), field);
+				// Update quest log field value
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
 				//questDataChanged(quest, data);
 
 				return true;
@@ -432,21 +438,134 @@ namespace mmo
 
 	void GamePlayerS::OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry)
 	{
-		// TODO
+		const uint32 creditEntry = (entry.killcredit() != 0) ? entry.killcredit() : entry.id();
+
+		// Check all quests in the quest log
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0) 
+			{
+				continue;
+			}
+
+			// Verify quest state
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end()) 
+			{
+				continue;
+			}
+
+			if (it->second.status != quest_status::Incomplete) 
+			{
+				continue;
+			}
+
+			// Find quest
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest) 
+			{
+				continue;
+			}
+
+			// Counter needed so that the right field is used
+			uint8 reqIndex = 0;
+			for (const auto& req : quest->requirements())
+			{
+				if (req.creatureid() == creditEntry)
+				{
+					// Get current counter
+					uint8 counter = field.counters[reqIndex];
+					if (counter < req.creaturecount())
+					{
+						// Increment and update counter
+						field.counters[reqIndex] = ++counter;
+						it->second.creatures[reqIndex]++;
+
+						// Fire signal to update UI
+						if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestKillCredit(*quest, unitGuid, creditEntry, it->second.creatures[reqIndex], req.creaturecount());
+
+						// Check if this completed the quest
+						if (FulfillsQuestRequirements(*quest))
+						{
+							// Complete quest
+							it->second.status = quest_status::Complete;
+							field.status = quest_status::Complete;
+						}
+
+						// Save quest progress
+						Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+						if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+					}
+
+					// Continue with next quest, as multiple quests could require the same
+					// creature kill credit
+					continue;
+				}
+
+				reqIndex++;
+			}
+		}
 	}
 
 	bool GamePlayerS::FulfillsQuestRequirements(const proto::QuestEntry& entry) const
 	{
-		// TODO
+		// Check if the character has this quest entry
+		auto it = m_quests.find(entry.id());
+		if (it == m_quests.end())
+		{
+			return false;
+		}
 
-		return false;
+		// Now check for quest requirements
+		if (entry.requirements_size() == 0)
+		{
+			return true;
+		}
+
+		// Now check all available quest requirements
+		uint32 counter = 0;
+		for (const auto& req : entry.requirements())
+		{
+			// Creature kill / spell cast required
+			if (req.creatureid() != 0)
+			{
+				if (it->second.creatures[counter] < req.creaturecount()) {
+					return false;
+				}
+			}
+
+			// Item required
+			if (req.itemid() != 0)
+			{
+				// Not enough items? (Don't worry, getItemCount is fast as it uses a cached value)
+				if (const auto itemCount = m_inventory.GetItemCount(req.itemid()); itemCount < req.itemcount())
+				{
+					return false;
+				}
+			}
+
+			// Increase counter
+			counter++;
+		}
+
+		return true;
 	}
 
 	bool GamePlayerS::IsQuestlogFull() const
 	{
-		// TODO
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			// If this quest log slot is empty, we can stop as there is at least one
+			// free quest slot available
+			if (Get<uint32>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32))) == 0)
+			{
+				return false;
+			}
+		}
 
-		return false;
+		// No free quest slots found
+		return true;
 	}
 
 	void GamePlayerS::OnQuestExploration(uint32 questId)

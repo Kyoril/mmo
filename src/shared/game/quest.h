@@ -98,8 +98,10 @@ namespace mmo
 			/// from being completed (possible on time out or special requirements like "may not die").
 			Failed = 5,
 
+			AvailableNextLevel,
+
 			/// Maximum number of quest status flags
-			Count_ = 6
+			Count_
 		};
 	}
 
@@ -111,12 +113,17 @@ namespace mmo
 	{
 		uint32 questId = 0;
 		uint32 status = quest_status::Rewarded;
-		uint8 counters[4] = { 0, 0, 0, 0};
+		union
+		{
+			uint32 counterField = 0;
+			uint8 counters[4];
+		};
+		
 		uint32 questTimer = 0;
 	};
 
 	inline bool operator==(const QuestField& lhs, const QuestField& rhs)
 	{
-		return lhs.questId == rhs.questId && lhs.status == rhs.status && lhs.questTimer == rhs.questTimer;
+		return lhs.questId == rhs.questId && lhs.status == rhs.status && lhs.questTimer == rhs.questTimer && lhs.counterField == rhs.counterField;
 	}
 }

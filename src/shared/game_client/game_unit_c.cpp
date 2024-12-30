@@ -7,6 +7,7 @@
 #include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 #include "shared/client_data/proto_client/factions.pb.h"
@@ -405,8 +406,7 @@ namespace mmo
 
 	void GameUnitC::SetQuestgiverStatus(const QuestgiverStatus status)
 	{
-		if (status == questgiver_status::None ||
-			status == questgiver_status::Unavailable)
+		if (status == questgiver_status::None)
 		{
 			if (m_questGiverEntity)
 			{
@@ -423,27 +423,35 @@ namespace mmo
 			return;
 		}
 
+		const String exclamationMesh = "Models/QuestExclamationMark.hmsh";
+		const String rewardMesh = "Models/QuestCompleteMark.hmsh";
+
 		switch(status)
 		{
+		case questgiver_status::Unavailable:
+			SetQuestGiverMesh(exclamationMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestInactive_Inst.hmi"));
+			break;
 		case questgiver_status::Available:
-			m_questGiverEntity = m_scene.CreateEntity(GetSceneNode()->GetName() + "_QuestStatus", "Models/QuestExclamationMark.hmsh");
-			ASSERT(m_questGiverEntity);
-
-			// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
-			// so that for very big models its not just that tiny icon floating in the sky above some giant head or something of that
-			float height = 2.0f;
-			float scale = 1.0f;
-			if (m_entity)
-			{
-				height = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
-				scale = height / 2.0f;
-			}
-
-			m_questGiverNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * height);
-			ASSERT(m_questGiverNode);
-
-			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
-			m_questGiverNode->AttachObject(*m_questGiverEntity);
+			SetQuestGiverMesh(exclamationMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestMaterialBase.hmat"));
+			break;
+		case questgiver_status::AvailableRep:
+			SetQuestGiverMesh(exclamationMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestRepeatable_Inst.hmat"));
+			break;
+		case questgiver_status::Incomplete:
+			SetQuestGiverMesh(rewardMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestInactive_Inst.hmi"));
+			break;
+		case questgiver_status::Reward:
+		case questgiver_status::RewardNoDot:
+			SetQuestGiverMesh(rewardMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestMaterialBase.hmat"));
+			break;
+		case questgiver_status::RewardRep:
+			SetQuestGiverMesh(rewardMesh);
+			m_questGiverEntity->SetMaterial(MaterialManager::Get().Load("Models/QuestRepeatable_Inst.hmat"));
 			break;
 		}
 	}
@@ -554,6 +562,43 @@ namespace mmo
 		if (m_factionTemplate)
 		{
 			m_faction = m_project.factions.getById(m_factionTemplate->faction());
+		}
+	}
+
+	void GameUnitC::SetQuestGiverMesh(const String& meshName)
+	{
+		if (!m_questGiverEntity)
+		{
+			m_questGiverEntity = m_scene.CreateEntity(GetSceneNode()->GetName() + "_QuestStatus", meshName);
+			ASSERT(m_questGiverEntity);
+		}
+		else
+		{
+			m_questGiverEntity->SetMesh(MeshManager::Get().Load(meshName));
+		}
+
+		// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
+		// so that for very big models its not just that tiny icon floating in the sky above some giant head or something of that
+		float height = 2.0f;
+		float scale = 1.0f;
+		if (m_entity)
+		{
+			height = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
+			scale = height / 2.0f;
+		}
+
+		if (!m_questGiverNode)
+		{
+			m_questGiverNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * height);
+			ASSERT(m_questGiverNode);
+
+			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
+			m_questGiverNode->AttachObject(*m_questGiverEntity);
+		}
+		else
+		{
+			m_questGiverNode->SetPosition(Vector3::UnitY * height);
+			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
 		}
 	}
 

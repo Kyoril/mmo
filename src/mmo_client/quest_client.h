@@ -3,10 +3,13 @@
 #include "client_cache.h"
 #include "spell_cast.h"
 #include "base/non_copyable.h"
+#include "game/quest.h"
 #include "net/realm_connector.h"
 
 namespace mmo
 {
+	class GamePlayerC;
+
 	namespace proto_client
 	{
 		class SpellEntry;
@@ -45,6 +48,14 @@ namespace mmo
 		}
 	};
 
+	struct QuestLogEntry
+	{
+		uint32 questId = 0;
+		const QuestInfo* quest = nullptr;
+		QuestStatus status = QuestStatus::Incomplete;
+		uint8 counters[4] = { 0, 0, 0, 0 };
+	};
+
 	/// This class handles quest op codes and interaction for the client with the game server.
 	class QuestClient final : public NonCopyable
 	{
@@ -77,6 +88,14 @@ namespace mmo
 
 		void AcceptQuest(uint32 questId);
 
+		void UpdateQuestLog(const GamePlayerC& player);
+
+		[[nodiscard]] uint32 GetNumQuestLogEntries() const { return m_questLogQuests.size(); }
+
+		const QuestLogEntry* GetQuestLogEntry(uint32 index) const;
+
+		void RefreshQuestGiverStatus();
+
 	private:
 		void ProcessQuestText(String& questText);
 
@@ -107,6 +126,8 @@ namespace mmo
 		uint64 m_questGiverGuid = 0;
 		String m_greetingText;
 		QuestDetails m_questDetails;
-		
+
+		std::array<QuestLogEntry, MaxQuestLogSize> m_questLog;
+		std::vector<uint32> m_questLogQuests;
 	};
 }

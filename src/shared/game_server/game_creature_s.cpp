@@ -132,6 +132,7 @@ namespace mmo
 	QuestgiverStatus GameCreatureS::GetQuestGiverStatus(const GamePlayerS& player) const
 	{
 		QuestgiverStatus result = questgiver_status::None;
+
 		for (const auto& quest : GetEntry().end_quests())
 		{
 			if (const QuestStatus questStatus = player.GetQuestStatus(quest); questStatus == quest_status::Complete)
@@ -144,15 +145,28 @@ namespace mmo
 			}
 		}
 
+		bool hasQuestAvailableNextLevel = false;
+
 		for (const auto& quest : GetEntry().quests())
 		{
-			if (const QuestStatus questStatus = player.GetQuestStatus(quest); questStatus == quest_status::Available)
+			const QuestStatus questStatus = player.GetQuestStatus(quest);
+			if (questStatus == quest_status::Available)
 			{
 				if (const proto::QuestEntry* entry = GetProject().quests.getById(quest))
 				{
 					return questgiver_status::Available;
 				}
 			}
+			else if (questStatus == quest_status::AvailableNextLevel)
+			{
+				hasQuestAvailableNextLevel = true;
+			}
+		}
+
+		// Check if there will be quests available next level
+		if (result == questgiver_status::None && hasQuestAvailableNextLevel)
+		{
+			result = questgiver_status::Unavailable;
 		}
 
 		return result;

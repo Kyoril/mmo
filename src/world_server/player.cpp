@@ -26,6 +26,7 @@ namespace mmo
 		, m_project(project)
 	{
 		m_character->SetNetUnitWatcher(this);
+		m_character->SetPlayerWatcher(this);
 
 		// Inventory change signals
 		auto& inventory = m_character->GetInventory();
@@ -1418,5 +1419,35 @@ namespace mmo
 	void Player::OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value)
 	{
 		// TODO
+	}
+
+	void Player::OnQuestKillCredit(const proto::QuestEntry& quest, uint64 guid, uint32 entry, uint32 count, uint32 maxCount)
+	{
+		SendPacket([&quest, guid, entry, count, maxCount](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::QuestUpdateAddKill);
+			packet
+				<< io::write<uint32>(quest.id())
+				<< io::write<uint32>(entry)
+				<< io::write<uint32>(count)
+				<< io::write<uint32>(maxCount)
+				<< io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
+	{
+		// TODO: Send quest data packet to realm server so that it will be persisted in the database
+
+		// Notify client about completed quest
+		if (data.status == quest_status::Complete)
+		{
+			SendPacket([&questId](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::QuestUpdateComplete);
+				packet
+					<< io::write<uint32>(questId);
+				packet.Finish();
+				});
+		}
 	}
 }

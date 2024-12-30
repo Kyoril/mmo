@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "game_client/game_object_c.h"
-#include "game_client/game_unit_c.h"
+#include "game_client/game_player_c.h"
 
 namespace mmo
 {
@@ -46,9 +46,21 @@ namespace mmo
 
 		static uint64 GetActivePlayerGuid();
 
-		static std::shared_ptr<GameUnitC> GetActivePlayer();
+		static std::shared_ptr<GamePlayerC> GetActivePlayer();
 
 		static const proto_client::ModelDataEntry* GetModelData(uint32 displayId);
+
+		template<typename U, typename T>
+		static void ForEachObject(T callback)
+		{
+			for (const auto& [guid, object] : ms_objectyByGuid)
+			{
+				if (std::shared_ptr<U> unit = std::dynamic_pointer_cast<U>(object))
+				{
+					callback(unit);
+				}
+			}
+		}
 
 	private:
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;

@@ -308,12 +308,13 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_CHANGED");
+		m_questClient.RefreshQuestGiverStatus();
 	}
 
 	void WorldState::OnQuestLogChanged(uint64 monitoredGuid)
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
-		FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+		m_questClient.UpdateQuestLog(*ObjectMgr::GetActivePlayer());
 	}
 
 	void WorldState::OnPlayerPowerChanged(uint64 monitoredGuid)

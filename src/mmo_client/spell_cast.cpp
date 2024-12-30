@@ -4,6 +4,7 @@
 
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
+#include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 #include "net/realm_connector.h"
 
@@ -109,7 +110,7 @@ namespace mmo
 			return;
 		}
 
-		std::shared_ptr<GameUnitC> unit = ObjectMgr::GetActivePlayer();
+		std::shared_ptr<GamePlayerC> unit = ObjectMgr::GetActivePlayer();
 		if (!unit)
 		{
 			return;

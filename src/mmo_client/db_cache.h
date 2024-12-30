@@ -28,12 +28,12 @@ namespace mmo
 		}
 
 	public:
-		void Get(uint64 guid)
+		const T* Get(uint64 guid)
 		{
 			auto it = m_cache.find(guid);
 			if (it != m_cache.end())
 			{
-				return;
+				return &it->second;
 			}
 
 			// Enqueue pending request callback
@@ -49,6 +49,8 @@ namespace mmo
 						packet.Finish();
 					});
 			}
+
+			return nullptr;
 		}
 
 		void Get(uint64 guid, QueryCallback&& callback)

@@ -28,17 +28,26 @@ namespace mmo
 		// What is this for?
 		bool explored;
 
-		std::vector<uint16> creatures;
-
-		// Recomputed on inventory changes.
-		std::vector<uint16> items;
+		std::array<uint16, 4> creatures;
 
 		QuestStatusData()
 			: status(QuestStatus::Available)
 			, expiration(0)
 			, explored(false)
 		{
+			creatures.fill(0);
 		}
+	};
+
+	class NetPlayerWatcher : public NonCopyable
+	{
+	public:
+		virtual ~NetPlayerWatcher() = default;
+
+	public:
+		virtual void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
+
+		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) = 0;
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -55,6 +64,8 @@ namespace mmo
 		~GamePlayerS() override = default;
 
 		virtual void Initialize() override;
+
+		void SetPlayerWatcher(NetPlayerWatcher* watcher);
 
 		void SetClass(const proto::ClassEntry& classEntry);
 
@@ -189,6 +200,7 @@ namespace mmo
 		std::array<uint32, 5> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
+		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

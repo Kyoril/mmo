@@ -70,6 +70,60 @@ namespace mmo
 		m_connector.AcceptQuest(m_questGiverGuid, questId);
 	}
 
+	void QuestClient::UpdateQuestLog(const GamePlayerC& player)
+	{
+		m_questLogQuests.clear();
+
+		for (uint32 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			const QuestField field = player.Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+
+			// Quest id changed?
+			if (field.questId != m_questLog[i].questId)
+			{
+				m_questLog[i].questId = field.questId;
+				m_questLog[i].quest = nullptr;
+				m_questLog[i].status = static_cast<QuestStatus>(field.status);
+				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+				if (m_questLog[i].questId != 0)
+				{
+					m_questCache.Get(m_questLog[i].questId, [this, i](uint64 entry, const QuestInfo& info)
+					{
+						if (m_questLog[i].questId == entry)
+						{
+							m_questLog[i].quest = &info;
+						}
+					});
+				}
+			}
+			else if (field.questId != 0)
+			{
+				// Update counters
+				m_questLog[i].status = static_cast<QuestStatus>(field.status);
+				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+			}
+
+			if(field.questId != 0)
+			{
+				m_questLogQuests.push_back(i);
+			}
+		}
+
+		RefreshQuestGiverStatus();
+
+		FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+	}
+
+	const QuestLogEntry* QuestClient::GetQuestLogEntry(uint32 index) const
+	{
+		if (index >= m_questLogQuests.size())
+		{
+			return nullptr;
+		}
+
+		return m_questLog.data() + m_questLogQuests[index];
+	}
+
 	void QuestClient::ProcessQuestText(String& questText)
 	{
 		std::shared_ptr<GamePlayerC> player = std::static_pointer_cast<GamePlayerC, GameUnitC>(ObjectMgr::GetActivePlayer());
@@ -127,6 +181,22 @@ namespace mmo
 				break;
 			}
 		}
+	}
+
+	void QuestClient::RefreshQuestGiverStatus()
+	{
+		ObjectMgr::ForEachObject<GameUnitC>([this](const std::shared_ptr<GameUnitC>& unit)
+			{
+				if (!unit)
+				{
+					return;
+				}
+
+				if (unit->Get<uint32>(object_fields::NpcFlags) & npc_flags::QuestGiver)
+				{
+					m_connector.UpdateQuestStatus(unit->GetGuid());
+				}
+			});
 	}
 
 	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
@@ -270,13 +340,41 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnQuestUpdate(game::IncomingPacket& packet)
 	{
+		uint32 questId;
+		if (!(packet >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read QuestUpdate packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Get quest data
+		const QuestInfo* quest = m_questCache.Get(questId);
+		if (!quest)
+		{
+			ELOG("Received quest event for unknown quest " << questId);
+			return PacketParseResult::Pass;
+		}
+
 		switch(packet.GetId())
 		{
 		case game::realm_client_packet::QuestUpdateAddItem:
+
 			break;
 		case game::realm_client_packet::QuestUpdateAddKill:
+		{
+			uint32 entry, count, maxCount;
+			uint64 guid;
+			if (!(packet >> io::read<uint32>(entry) >> io::read<uint32>(count) >> io::read<uint32>(maxCount) >> io::read<uint64>(guid)))
+			{
+				ELOG("Failed to read QuestUpdateAddKill packet");
+				return PacketParseResult::Disconnect;
+			}
+			ILOG("Quest progress: Unit killed " << count << "/" << maxCount);
+		}
 			break;
 		case game::realm_client_packet::QuestUpdateComplete:
+			ILOG("Completed quest " << quest->title);
+			RefreshQuestGiverStatus();
 			break;
 		default:
 			ELOG("Unhandled packet op code in " << __FUNCTION__);

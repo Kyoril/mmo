@@ -121,6 +121,8 @@ namespace mmo
 
 		void OnFactionTemplateChanged();
 
+		void SetQuestGiverMesh(const String& meshName);
+
 	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);

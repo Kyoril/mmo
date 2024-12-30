@@ -51,14 +51,14 @@ namespace mmo
 		return ms_activePlayerGuid;
 	}
 
-	std::shared_ptr<GameUnitC> ObjectMgr::GetActivePlayer()
+	std::shared_ptr<GamePlayerC> ObjectMgr::GetActivePlayer()
 	{
 		if (ms_activePlayerGuid == 0)
 		{
 			return nullptr;
 		}
 
-		return Get<GameUnitC>(ms_activePlayerGuid);
+		return Get<GamePlayerC>(ms_activePlayerGuid);
 	}
 
 	const proto_client::ModelDataEntry* ObjectMgr::GetModelData(const uint32 displayId)
