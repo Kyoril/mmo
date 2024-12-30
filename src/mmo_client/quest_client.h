@@ -78,6 +78,9 @@ namespace mmo
 		void AcceptQuest(uint32 questId);
 
 	private:
+		void ProcessQuestText(String& questText);
+
+	private:
 		PacketParseResult OnQuestGiverQuestList(game::IncomingPacket& packet);
 
 		PacketParseResult OnQuestGiverQuestDetails(game::IncomingPacket& packet);

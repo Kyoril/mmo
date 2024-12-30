@@ -2,6 +2,8 @@
 #include "quest_client.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game_client/game_player_c.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -68,6 +70,65 @@ namespace mmo
 		m_connector.AcceptQuest(m_questGiverGuid, questId);
 	}
 
+	void QuestClient::ProcessQuestText(String& questText)
+	{
+		std::shared_ptr<GamePlayerC> player = std::static_pointer_cast<GamePlayerC, GameUnitC>(ObjectMgr::GetActivePlayer());
+		ASSERT(player);
+
+		// TODO: Make class string data driven
+		static const String s_classNames[] = { "Mage", "Warrior", "Cleric", "Shadowmancer" };
+
+		// Iterate over quest text until we find a '$' character. Take the special character after it and replace it with a dynamic value
+		for (auto it = questText.begin(); it != questText.end();)
+		{
+			// Search for the first occurence of '$'
+			if (*it != '$')
+			{
+				++it;
+				continue;
+			}
+
+			// Remove the '$' character first
+			it = questText.erase(it);
+
+			// We found it, now check the next character
+			if (it == questText.end())
+			{
+				break;
+			}
+
+			// Get next character and erase it as well
+			const char command = *it;
+			it = questText.erase(it);
+
+			switch (command)
+			{
+			case 'n':
+			case 'N':
+				it = questText.insert(it, player->GetName().begin(), player->GetName().end());
+				break;
+			case 'c':
+			case 'C':
+				{
+					const uint32 classId = player->Get<uint32>(object_fields::Class);
+					ASSERT(classId < std::size(s_classNames));
+					it = questText.insert(it, s_classNames[classId].begin(), s_classNames[classId].end());
+				}
+				break;
+			case 'r':
+			case 'R':
+				{
+					// TODO: Use real race data driven instead of hard coded
+					static const String s_raceName = "Human";
+					it = questText.insert(it, s_raceName.begin(), s_raceName.end());
+				}
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
 	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
 	{
 		m_questList.clear();
@@ -82,6 +143,8 @@ namespace mmo
 			ELOG("Failed to read QuestGiverQuestList packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		ProcessQuestText(m_greetingText);
 
 		for (uint8 i = 0; i < numQuests; ++i)
 		{
@@ -129,6 +192,10 @@ namespace mmo
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Process quest text
+		ProcessQuestText(m_questDetails.questDetails);
+		ProcessQuestText(m_questDetails.questObjectives);
 
 		uint32 rewardItemsChoiceCount;
 		uint32 rewardItemsCount;
