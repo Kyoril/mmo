@@ -575,12 +575,144 @@ namespace mmo
 
 	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry& entry, uint32 amount)
 	{
-		// TODO
+		// If this is set to true, all nearby objects will be updated
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			// Check if the player really has accepted that quest
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				continue;
+			}
+
+			// Check if the quest was already completed
+			if (it->second.status != quest_status::Incomplete) 
+			{
+				continue;
+			}
+
+			// Get quest template entry
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+			{
+				continue;
+			}
+
+			// If this is set to true, all requirements of this quest will be reevaluated, which costs
+			// some time. So this variable is only updated, if a quest requirement status changed between
+			// Completed and Uncomplete to save performance.
+			bool validateQuest = false;
+
+			// Check every quest entry requirement
+			for (const auto& req : quest->requirements())
+			{
+				if (req.itemid() == entry.id())
+				{
+					if (m_inventory.GetItemCount(entry.id()) >= req.itemcount())
+					{
+						validateQuest = true;
+					}
+				}
+				else if (req.sourceid() == entry.id())
+				{
+					if (m_inventory.GetItemCount(entry.id()) >= req.sourcecount())
+					{
+						validateQuest = true;
+					}
+				}
+			}
+
+			// Check if the quest requirements need to be reevaluated
+			if (validateQuest)
+			{
+				// Quest is fulfilled now
+				if (FulfillsQuestRequirements(*quest))
+				{
+					it->second.status = quest_status::Complete;
+					field.status = quest_status::Complete;
+					if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+				}
+
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+			}
+		}
 	}
 
 	void GamePlayerS::OnQuestItemRemovedCredit(const proto::ItemEntry& entry, uint32 amount)
 	{
-		// TODO
+		// If this is set to true, all nearby objects will be updated
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			// Check if the player really has accepted that quest
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				continue;
+			}
+
+			// Check if the quest was already completed
+			if (it->second.status != quest_status::Incomplete)
+			{
+				continue;
+			}
+
+			// Get quest template entry
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+			{
+				continue;
+			}
+
+			// If this is set to true, all requirements of this quest will be reevaluated, which costs
+			// some time. So this variable is only updated, if a quest requirement status changed between
+			// Completed and Uncomplete to save performance.
+			bool validateQuest = false;
+
+			// Check every quest entry requirement
+			for (const auto& req : quest->requirements())
+			{
+				if (req.itemid() == entry.id())
+				{
+					if (m_inventory.GetItemCount(entry.id()) < req.itemcount())
+					{
+						validateQuest = true;
+					}
+				}
+				else if (req.sourceid() == entry.id())
+				{
+					if (m_inventory.GetItemCount(entry.id()) < req.sourcecount())
+					{
+						validateQuest = true;
+					}
+				}
+			}
+
+			// Check if the quest requirements need to be reevaluated
+			if (validateQuest)
+			{
+				// Quest is fulfilled now
+				if (!FulfillsQuestRequirements(*quest))
+				{
+					it->second.status = quest_status::Incomplete;
+					field.status = quest_status::Incomplete;
+					if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+				}
+
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+			}
+		}
 	}
 
 	void GamePlayerS::OnQuestSpellCastCredit(uint32 spellId, GameObjectS& target)

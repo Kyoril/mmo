@@ -300,7 +300,7 @@ namespace mmo
 		}
 
 		// Quest check
-		//m_owner.onQuestItemAddedCredit(entry, amount);
+		m_owner.OnQuestItemAddedCredit(entry, amount);
 
 		// Everything okay
 		return inventory_change_failure::Okay;
@@ -628,7 +628,7 @@ namespace mmo
 		}
 
 		// Quest check
-		//m_owner.onQuestItemRemovedCredit(item->getEntry(), stacks);
+		m_owner.OnQuestItemRemovedCredit(item->GetEntry(), stacks);
 
 		return inventory_change_failure::Okay;
 	}
