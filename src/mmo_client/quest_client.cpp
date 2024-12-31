@@ -74,6 +74,8 @@ namespace mmo
 	{
 		m_questLogQuests.clear();
 
+		bool relevantQuestChanges = false;
+
 		for (uint32 i = 0; i < MaxQuestLogSize; ++i)
 		{
 			const QuestField field = player.Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
@@ -81,6 +83,8 @@ namespace mmo
 			// Quest id changed?
 			if (field.questId != m_questLog[i].questId)
 			{
+				relevantQuestChanges = true;
+
 				m_questLog[i].questId = field.questId;
 				m_questLog[i].quest = nullptr;
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
@@ -98,6 +102,12 @@ namespace mmo
 			}
 			else if (field.questId != 0)
 			{
+				// Did the quest status change?
+				if (m_questLog[i].status != field.status)
+				{
+					relevantQuestChanges = true;
+				}
+
 				// Update counters
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
@@ -109,7 +119,11 @@ namespace mmo
 			}
 		}
 
-		RefreshQuestGiverStatus();
+		// Either we got new quests, abandoned old ones or the status of a quest changed
+		if (relevantQuestChanges)
+		{
+			RefreshQuestGiverStatus();
+		}
 
 		FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 	}
@@ -197,6 +211,21 @@ namespace mmo
 					m_connector.UpdateQuestStatus(unit->GetGuid());
 				}
 			});
+	}
+
+	void QuestClient::AbandonQuest(uint32 questId)
+	{
+		// Check if we know that quest
+		if (const auto it = std::find_if(m_questLog.begin(), m_questLog.end(), [questId](const QuestLogEntry& entry)
+		{
+			return entry.questId == questId;
+		}); it == m_questLog.end())
+		{
+			ELOG("Unable to abandon quest " << questId << ": Quest not in quest log");
+			return;
+		}
+
+		m_connector.AbandonQuest(questId);
 	}
 
 	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)

@@ -150,6 +150,21 @@ namespace mmo
 		});
 	}
 
+	void Player::OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 questId = 0;
+		if (!(contentReader >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read AbandonQuest packet!");
+			return;
+		}
+
+		if (!m_character->AbandonQuest(questId))
+		{
+			ELOG("Failed to abandon quest " << questId);
+		}
+	}
+
 	void Player::OnQuestGiverQueryQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 questGiverGuid = 0;

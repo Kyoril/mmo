@@ -282,6 +282,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnAcceptQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to abandon a quest from his quest log. This will also make the player loose progress of that quest.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to query a quest giver for an offered quest.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.

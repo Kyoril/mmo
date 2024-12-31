@@ -96,6 +96,8 @@ namespace mmo
 
 		void RefreshQuestGiverStatus();
 
+		void AbandonQuest(uint32 questId);
+
 	private:
 		void ProcessQuestText(String& questText);
 

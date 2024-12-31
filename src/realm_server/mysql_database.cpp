@@ -708,20 +708,33 @@ namespace mmo
 
 	void MySQLDatabase::SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data)
 	{
-		const String query = std::format(
-			"INSERT INTO `character_quests` (`character_id`, `quest`, `status`, `explored`, `timer`, `unit_kills`) VALUES "
-			"({0}, {1}, {2}, {3}, {4}, JSON_ARRAY({5}, {6}, {7}, {8})) "
-			"ON DUPLICATE KEY UPDATE `status`={2}, `explored`={3}, `timer`={4}, `unit_kills`=JSON_ARRAY({5}, {6}, {7}, {8})"
-			, characterId
-			, questId
-			, static_cast<uint32>(data.status)
-			, (data.explored ? 1 : 0)
-			, data.expiration
-			, data.creatures[0]
-			, data.creatures[1]
-			, data.creatures[2]
-			, data.creatures[3]
-		);
+		// Was the quest abandoned?
+		String query;
+		if (data.status == quest_status::Available)
+		{
+			query = std::format(
+				"DELETE FROM `character_quests` WHERE `character_id` = {0} AND `quest` = {1} LIMIT 1"
+				, characterId
+				, questId
+			);
+		}
+		else
+		{
+			query = std::format(
+				"INSERT INTO `character_quests` (`character_id`, `quest`, `status`, `explored`, `timer`, `unit_kills`) VALUES "
+				"({0}, {1}, {2}, {3}, {4}, JSON_ARRAY({5}, {6}, {7}, {8})) "
+				"ON DUPLICATE KEY UPDATE `status`={2}, `explored`={3}, `timer`={4}, `unit_kills`=JSON_ARRAY({5}, {6}, {7}, {8})"
+				, characterId
+				, questId
+				, static_cast<uint32>(data.status)
+				, (data.explored ? 1 : 0)
+				, data.expiration
+				, data.creatures[0]
+				, data.creatures[1]
+				, data.creatures[2]
+				, data.creatures[3]
+			);
+		}
 
 		if (!m_connection.Execute(query))
 		{

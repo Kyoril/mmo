@@ -663,4 +663,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::AbandonQuest(uint32 questId)
+	{
+		sendSinglePacket([questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AbandonQuest);
+			packet << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
 }

@@ -341,6 +341,9 @@ namespace mmo
 		case game::client_realm_packet::AcceptQuest:
 			OnAcceptQuest(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::AbandonQuest:
+			OnAbandonQuest(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::QuestGiverQueryQuest:
 			OnQuestGiverQueryQuest(opCode, buffer.size(), reader);
 			break;

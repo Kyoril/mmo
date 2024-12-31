@@ -435,7 +435,21 @@ namespace mmo
 
 	bool GamePlayerS::AbandonQuest(uint32 quest)
 	{
-		// TODO
+		// Find next free quest log
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			auto questLogField = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (questLogField.questId == quest)
+			{
+				m_quests.erase(quest);
+
+				// Reset quest log
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
+				if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, QuestStatusData());
+
+				return true;
+			}
+		}
 
 		return false;
 	}

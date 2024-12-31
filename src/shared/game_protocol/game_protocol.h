@@ -129,6 +129,7 @@ namespace mmo
 
 				AcceptQuest,
 				QuestGiverQueryQuest,
+				AbandonQuest,
 
 				/// Counter constant
 				Count_,

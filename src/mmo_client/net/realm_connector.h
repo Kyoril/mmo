@@ -369,6 +369,11 @@ namespace mmo
 		///	@param questId The id of the quest to query details for. Must be a valid quest id offered by the quest giver object.
 		void QuestGiverQueryQuest(uint64 questGiverGuid, uint32 questId);
 
+		/// Sends a packet to the server to abandon a specific quest. The quest must be in the player's quest log which means he must have accepted it
+		///	and not been rewarded for it yet.
+		///	@param questId The id of the quest to abandon.
+		void AbandonQuest(uint32 questId);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

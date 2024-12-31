@@ -855,6 +855,8 @@ namespace mmo
 					{
 						FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
 					}
+
+					m_questClient.UpdateQuestLog(*std::static_pointer_cast<GamePlayerC>(object));
 				}
 			}
 			else
