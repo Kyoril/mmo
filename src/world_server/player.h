@@ -4,7 +4,7 @@
 
 #include "realm_connector.h"
 #include "vector_sink.h"
-#include "game/character_data.h"
+#include "game_server/character_data.h"
 #include "game/chat_type.h"
 #include "game/vendor.h"
 #include "game_server/game_object_s.h"

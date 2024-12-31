@@ -150,6 +150,8 @@ namespace mmo
 				ProxyPacket = 0x08,
 
 				CharacterData,
+
+				QuestData,
 			};
 		}
 

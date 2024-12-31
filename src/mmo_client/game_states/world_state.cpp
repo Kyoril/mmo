@@ -2024,9 +2024,7 @@ namespace mmo
 		std::shared_ptr<GameUnitC> questgiverUnit = ObjectMgr::Get<GameUnitC>(questgiverGuid);
 		ASSERT(questgiverUnit);
 
-		DLOG("Received questgiver status for unit " << log_hex_digit(questgiverGuid) << ": " << log_hex_digit(status));
 		questgiverUnit->SetQuestgiverStatus(status);
-
 		return PacketParseResult::Pass;
 	}
 

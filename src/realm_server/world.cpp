@@ -291,6 +291,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceDestroyed, *strongThis, &World::OnInstanceDestroyed);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::ProxyPacket, *strongThis, &World::OnProxyPacket);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterData, *strongThis, &World::OnCharacterData);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::QuestData, *strongThis, &World::OnQuestData);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -629,6 +630,40 @@ namespace mmo
 			attributePoints,
 			spellIds
 			);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnQuestData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint32 questId = 0;
+		QuestStatusData questData;
+
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(questId)
+			>> questData
+			))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received quest data for character " << log_hex_digit(characterGuid) << ", persisting quest data...");
+
+		// RequestHandler
+		auto handler = [characterGuid](bool result)
+		{
+			if (!result)
+			{
+				WLOG("Failed to persist quest data for character " << log_hex_digit(characterGuid));
+			}
+			else
+			{
+				DLOG("Saved quest data");
+			}
+		};
+		m_database.asyncRequest(std::move(handler), &IDatabase::SetQuestData, characterGuid, questId, questData);
 
 		return PacketParseResult::Pass;
 	}

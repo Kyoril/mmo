@@ -9,6 +9,7 @@
 
 namespace mmo
 {
+	struct QuestStatusData;
 	class GameItemS;
 
 	namespace proto
@@ -17,27 +18,6 @@ namespace mmo
 		class RaceEntry;
 		class ClassEntry;
 	}
-
-	struct QuestStatusData
-	{
-		QuestStatus status;
-
-		// May be 0 if completed.
-		GameTime expiration;
-
-		// What is this for?
-		bool explored;
-
-		std::array<uint16, 4> creatures;
-
-		QuestStatusData()
-			: status(QuestStatus::Available)
-			, expiration(0)
-			, explored(false)
-		{
-			creatures.fill(0);
-		}
-	};
 
 	class NetPlayerWatcher : public NonCopyable
 	{
@@ -149,6 +129,10 @@ namespace mmo
 		/// Determines if the player needs a specific item for a quest.
 		bool NeedsQuestItem(uint32 itemId) const;
 
+		void NotifyQuestRewarded(uint32 questId);
+
+		void SetQuestData(uint32 questId, const QuestStatusData& data);
+
 	protected:
 
 		float GetUnitMissChance() const override;
@@ -200,6 +184,7 @@ namespace mmo
 		std::array<uint32, 5> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
+		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
 
 	private:

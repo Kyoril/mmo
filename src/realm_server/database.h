@@ -14,12 +14,13 @@
 #include <vector>
 
 #include "game/action_button.h"
-#include "game/character_data.h"
+#include "game_server/character_data.h"
 #include "math/angle.h"
 
 
 namespace mmo
 {
+	struct QuestStatusData;
 	class Degree;
 	class Vector3;
 
@@ -105,6 +106,8 @@ namespace mmo
 		virtual void SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons) = 0;
 		
 		virtual void LearnSpell(DatabaseId characterId, uint32 spellId) = 0;
+
+		virtual void SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data) = 0;
 	};
 
 

@@ -2,15 +2,14 @@
 
 #pragma once
 
-#include <set>
-
 #include "base/typedefs.h"
 #include "math/radian.h"
 #include "math/vector3.h"
-#include "game.h"
+#include "game/game.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 #include "game_server/inventory.h"
+#include "game_server/quest_status_data.h"
 
 namespace mmo
 {
@@ -67,6 +66,9 @@ namespace mmo
 		std::vector<ItemData> items;
 		std::array<uint32, 5> attributePointsSpent;
 
+		std::vector<uint32> rewardedQuestIds;
+		std::map<uint32, QuestStatusData> questStatus;
+
 		uint32 bindMap;
 		Vector3 bindPosition;
 		Radian bindFacing;
@@ -74,7 +76,7 @@ namespace mmo
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
 	{
-		return reader
+		if (!(reader
 			>> io::read_packed_guid(data.characterId)
 			>> io::read<MapId>(data.mapId)
 			>> io::read_container<uint8>(data.name)
@@ -100,12 +102,35 @@ namespace mmo
 			>> io::read<float>(data.bindPosition.z)
 			>> data.bindFacing
 			>> io::read_range(data.attributePointsSpent)
-		;
+			>> io::read_container<uint16>(data.rewardedQuestIds)))
+		{
+			return reader;
+		}
+
+		uint16 numQuestData;
+		if (!(reader >> io::read<uint16>(numQuestData)))
+		{
+			return reader;
+		}
+
+		for (uint16 i = 0; i < numQuestData; ++i)
+		{
+			uint32 questId;
+			QuestStatusData questData;
+			if (!(reader >> io::read<uint32>(questId) >> questData))
+			{
+				return reader;
+			}
+
+			data.questStatus[questId] = questData;
+		}
+
+		return reader;
 	}
 	
-	inline io::Writer& operator<<(io::Writer& reader, const CharacterData& data)
+	inline io::Writer& operator<<(io::Writer& writer, const CharacterData& data)
 	{
-		return reader
+		writer
 			<< io::write_packed_guid(data.characterId)
 			<< io::write<MapId>(data.mapId)
 			<< io::write_dynamic_range<uint8>(data.name)
@@ -131,6 +156,16 @@ namespace mmo
 			<< io::write<float>(data.bindPosition.z)
 			<< data.bindFacing
 			<< io::write_range(data.attributePointsSpent)
-			;
+			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds);
+
+		writer << io::write<uint16>(data.questStatus.size());
+		for (auto const& [questId, questData] : data.questStatus)
+		{
+			writer
+				<< io::write<uint32>(questId)
+				<< questData;
+		}
+
+		return writer;
 	}
 }

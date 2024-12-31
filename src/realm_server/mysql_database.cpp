@@ -16,6 +16,9 @@
 #include "virtual_dir/file_system_reader.h"
 #include <format>
 
+#include "game_server/character_data.h"
+#include "game_server/game_player_s.h"
+
 namespace mmo
 {
 	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project)
@@ -281,6 +284,8 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
+		const GameTime startTime = GetAsyncTimeMs();
+
 		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4 FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
@@ -386,6 +391,61 @@ namespace mmo
 						itemRow = mmo::mysql::Row::Next(itemSelect);
 					}
 				}
+
+				// Load quest data
+				mysql::Select questSelect(m_connection,
+					"SELECT `quest`, `status`, `explored`, `timer`, "
+					"JSON_EXTRACT(`unit_kills`, '$[0]') AS `kill_count_0`, "
+					"JSON_EXTRACT(`unit_kills`, '$[1]') AS `kill_count_1`, "
+					"JSON_EXTRACT(`unit_kills`, '$[2]') AS `kill_count_2`, "
+					"JSON_EXTRACT(`unit_kills`, '$[3]') AS `kill_count_3` "
+					"FROM `character_quests` WHERE `character_id`=" + std::to_string(characterId));
+				if (questSelect.Success())
+				{
+					mysql::Row questRow(questSelect);
+					while (questRow)
+					{
+						// Read item data
+						uint32 questId = 0;
+						QuestStatusData data;
+						questRow.GetField(0, questId);
+
+						uint8 status = 0;
+						questRow.GetField<uint8, uint16>(1, status);
+						data.status = static_cast<QuestStatus>(status);
+
+						questRow.GetField(2, data.explored);
+						questRow.GetField(3, data.expiration);
+
+						for (uint32 i = 0; i < 4; ++i)
+						{
+							uint16 counter = 0;
+							questRow.GetField(4 + i, counter);
+							data.creatures[i] = static_cast<uint8>(counter);
+						}
+
+						if (data.status == quest_status::Rewarded)
+						{
+							result.rewardedQuestIds.push_back(questId);
+						}
+						else
+						{
+							result.questStatus[questId] = data;
+						}
+
+						// Next row
+						questRow = mysql::Row::Next(questSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character quests");
+				}
+
+
+				const GameTime endTime = GetAsyncTimeMs();
+				DLOG("Character data loaded in " << endTime - startTime << " ms");
 
 				return result;
 			}
@@ -641,6 +701,29 @@ namespace mmo
 			, characterId
 			, spellId
 		)))
+		{
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data)
+	{
+		const String query = std::format(
+			"INSERT INTO `character_quests` (`character_id`, `quest`, `status`, `explored`, `timer`, `unit_kills`) VALUES "
+			"({0}, {1}, {2}, {3}, {4}, JSON_ARRAY({5}, {6}, {7}, {8})) "
+			"ON DUPLICATE KEY UPDATE `status`={2}, `explored`={3}, `timer`={4}, `unit_kills`=JSON_ARRAY({5}, {6}, {7}, {8})"
+			, characterId
+			, questId
+			, static_cast<uint32>(data.status)
+			, (data.explored ? 1 : 0)
+			, data.expiration
+			, data.creatures[0]
+			, data.creatures[1]
+			, data.creatures[2]
+			, data.creatures[3]
+		);
+
+		if (!m_connection.Execute(query))
 		{
 			throw mysql::Exception(m_connection.GetErrorMessage());
 		}

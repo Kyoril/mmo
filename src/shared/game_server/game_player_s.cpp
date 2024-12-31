@@ -3,11 +3,31 @@
 #include "game_player_s.h"
 
 #include "game_item_s.h"
+#include "quest_status_data.h"
 #include "proto_data/project.h"
 #include "game/item.h"
 
 namespace mmo
 {
+	io::Writer& operator<<(io::Writer& w, const QuestStatusData& object)
+	{
+		return w
+			<< io::write<uint8>(object.status)
+			<< io::write<uint8>(object.explored)
+			<< io::write<uint32>(object.expiration)
+			<< io::write_range(object.creatures);
+
+	}
+
+	io::Reader& operator>>(io::Reader& r, QuestStatusData& object)
+	{
+		return r
+			>> io::read<uint8>(object.status)
+			>> io::read<uint8>(object.explored)
+			>> io::read<uint32>(object.expiration)
+			>> io::read_range(object.creatures);
+	}
+
 	GamePlayerS::GamePlayerS(const proto::Project& project, TimerQueue& timerQueue)
 		: GameUnitS(project, timerQueue)
 		, m_inventory(*this)
@@ -248,9 +268,14 @@ namespace mmo
 
 	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
 	{
+		// Shortcut: rewarded quests are only stored with their id as we are not interested in anything else
+		if (m_rewardedQuestIds.contains(quest))
+		{
+			return quest_status::Rewarded;
+		}
+
 		// Check if we have a cached quest state
-		auto it = m_quests.find(quest);
-		if (it != m_quests.end())
+		if (const auto it = m_quests.find(quest); it != m_quests.end())
 		{
 			if (it->second.status != quest_status::Available &&
 				it->second.status != quest_status::Unavailable) 
@@ -398,7 +423,7 @@ namespace mmo
 
 				// Update quest log field value
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
-				//questDataChanged(quest, data);
+				if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, data);
 
 				return true;
 			}
@@ -740,6 +765,47 @@ namespace mmo
 		}
 
 		return GameUnitS::HasOffhandWeapon();
+	}
+
+	void GamePlayerS::NotifyQuestRewarded(uint32 questId)
+	{
+		ASSERT(!m_rewardedQuestIds.contains(questId));
+
+		// Add to the list of completed quest ids
+		m_rewardedQuestIds.insert(questId);
+
+		// Remove from quest log
+		if (auto it = m_quests.find(questId); it != m_quests.end())
+		{
+			it = m_quests.erase(it);
+		}
+
+		// Persist in database
+		QuestStatusData completed;
+		completed.status = quest_status::Rewarded;
+		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(questId, completed);
+	}
+
+	void GamePlayerS::SetQuestData(uint32 questId, const QuestStatusData& data)
+	{
+		m_quests[questId] = data;
+
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0 || field.questId == questId)
+			{
+				field.questId = questId;
+				field.status = data.status;
+				field.questTimer = data.expiration;
+				for (uint8 j = 0; j < 4; ++j)
+				{
+					field.counters[j] = data.creatures[j];
+				}
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field, false);
+				break;
+			}
+		}
 	}
 
 	bool GamePlayerS::AddAttributePoint(uint32 attribute)

@@ -12,7 +12,7 @@
 #include "base/clock.h"
 #include "base/constants.h"
 #include "base/timer_queue.h"
-#include "game/character_data.h"
+#include "game_server/character_data.h"
 #include "game/chat_type.h"
 #include "game_server/game_player_s.h"
 #include "game_protocol/game_protocol.h"
@@ -344,6 +344,19 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData)
+	{
+		sendSinglePacket([characterGuid, questId, &questData](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::QuestData);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint32>(questId)
+					<< questData;
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);
@@ -489,6 +502,18 @@ namespace mmo
 		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
+
+		// Mark rewarded quests
+		for (const uint32& questId : characterData.rewardedQuestIds)
+		{
+			characterObject->NotifyQuestRewarded(questId);
+		}
+
+		// Set quest status data
+		for (const auto& questData : characterData.questStatus)
+		{
+			characterObject->SetQuestData(questData.first, questData.second);
+		}
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 

@@ -19,7 +19,7 @@
 
 #include "login_connector.h"
 #include "game/action_button.h"
-#include "game/character_data.h"
+#include "game_server/character_data.h"
 #include "game/character_view.h"
 
 

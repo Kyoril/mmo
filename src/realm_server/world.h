@@ -17,7 +17,7 @@
 #include <cassert>
 
 #include "base/signal.h"
-#include "game/character_data.h"
+#include "game_server/character_data.h"
 #include "game/chat_type.h"
 
 
@@ -181,6 +181,8 @@ namespace mmo
 		PacketParseResult OnProxyPacket(auth::IncomingPacket& packet);
 
 		PacketParseResult OnCharacterData(auth::IncomingPacket& packet);
+
+		PacketParseResult OnQuestData(auth::IncomingPacket& packet);
 	};
 
 }

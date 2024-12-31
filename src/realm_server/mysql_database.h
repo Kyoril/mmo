@@ -56,6 +56,8 @@ namespace mmo
 
 		void LearnSpell(DatabaseId characterId, uint32 spellId) override;
 
+		void SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data) override;
+
 	private:
 		void PrintDatabaseError();
 

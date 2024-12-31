@@ -1437,7 +1437,8 @@ namespace mmo
 
 	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
 	{
-		// TODO: Send quest data packet to realm server so that it will be persisted in the database
+		// Send quest data packet to realm server so that it will be persisted in the database
+		m_connector.SendQuestData(m_character->GetGuid(), questId, data);
 
 		// Notify client about completed quest
 		if (data.status == quest_status::Complete)
