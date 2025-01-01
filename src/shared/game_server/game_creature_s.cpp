@@ -177,6 +177,11 @@ namespace mmo
 		return std::find_if(GetEntry().quests().begin(), GetEntry().quests().end(), [questId](uint32 id) { return id == questId; }) != GetEntry().quests().end();
 	}
 
+	bool GameCreatureS::EndsQuest(uint32 questId) const
+	{
+		return std::find_if(GetEntry().end_quests().begin(), GetEntry().end_quests().end(), [questId](uint32 id) { return id == questId; }) != GetEntry().end_quests().end();
+	}
+
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)
 	{
 		m_combatParticipantGuids.insert(unit.GetGuid());

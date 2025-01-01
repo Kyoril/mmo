@@ -28,6 +28,8 @@ namespace mmo
 		virtual void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
 
 		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) = 0;
+
+		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -103,7 +105,7 @@ namespace mmo
 		bool FailQuest(uint32 quest);
 
 		/// Rewards the given quest (gives items, xp and saves quest status).
-		bool RewardQuest(uint32 quest, uint8 rewardChoice, std::function<void(uint32)> callback);
+		bool RewardQuest(uint64 questgiverGuid, uint32 quest, uint8 rewardChoice);
 
 		/// Called when a quest-related creature was killed.
 		void OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry);

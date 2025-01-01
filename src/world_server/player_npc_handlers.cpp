@@ -70,7 +70,7 @@ namespace mmo
 			{
 				if (const auto* quest = m_project.quests.getById(questId))
 				{
-					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::RewardRep, packet);
+					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, packet);
 					questCount++;
 				}
 			}
@@ -82,7 +82,7 @@ namespace mmo
 			{
 				if (const auto* quest = m_project.quests.getById(questId))
 				{
-					WriteQuestMenuEntry(*quest, questgiver_status::Chat, packet);
+					WriteQuestMenuEntry(*quest, questgiver_status::Available, packet);
 					questCount++;
 				}
 			}
@@ -194,55 +194,75 @@ namespace mmo
 			return;
 		}
 
-		SendPacket([questGiverGuid, quest, this](game::OutgoingPacket& packet)
+		SendQuestDetails(questGiverGuid, *quest);
+	}
+
+	void Player::QuestGiverChooseQuestReward(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0, rewardChoice = 0;
+		if (!(contentReader >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId) >> io::read<uint32>(rewardChoice)))
+		{
+			ELOG("Failed to read QuestGiverChooseQuestReward packet!");
+			return;
+		}
+
+		// Find quest giver
+		GameCreatureS* questGiver = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(questGiverGuid);
+		if (!questGiver)
+		{
+			ELOG("Unable to find quest giver!");
+			return;
+		}
+
+		const auto* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			return;
+		}
+
+		ASSERT(m_worldInstance);
+
+		GameObjectS* questGiverObject = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
+		if (!questGiverObject)
+		{
+			return;
+		}
+
+		if (!questGiverObject->EndsQuest(questId))
+		{
+			return;
+		}
+
+		DLOG("Players " << log_hex_digit(GetCharacterGuid()) << " wants to get quest reward for quest " << questId);
+
+		// Reward this quest
+		if (bool result = m_character->RewardQuest(questGiverGuid, questId, rewardChoice))
+		{
+			// If the quest should perform a spell cast on the players character, we will do so now
+			if (quest->rewardspellcast())
 			{
-				packet.Start(game::realm_client_packet::QuestGiverQuestDetails);
-				packet
-					<< io::write<uint64>(questGiverGuid)
-					<< io::write<uint32>(quest->id())
-					<< io::write_dynamic_range<uint8>(quest->name())
-					<< io::write_dynamic_range<uint16>(quest->detailstext())
-					<< io::write_dynamic_range<uint16>(quest->objectivestext())
-					<< io::write<uint32>(quest->suggestedplayers());
-
-				if (quest->flags() & quest_flags::HiddenRewards)
+				if (const auto* rewardSpell = m_project.spells.getById(quest->rewardspellcast()))
 				{
-					packet
-						<< io::write<uint32>(0) << io::write<uint32>(0) << io::write<uint32>(0);
+					// Prepare the spell cast target map
+					SpellTargetMap targetMap;
+					targetMap.SetTargetMap(spell_cast_target_flags::Self);
+					targetMap.SetUnitTarget(m_character->GetGuid());
+					m_character->CastSpell(targetMap, *rewardSpell, 0, true);
 				}
-				else
+			}
+
+			// Try to find next quest and if there is one, send quest details
+			if (uint32 nextQuestId = quest->nextchainquestid(); nextQuestId &&
+				questGiverObject->ProvidesQuest(nextQuestId) &&
+				m_character->GetQuestStatus(nextQuestId) == quest_status::Available)
+			{
+				if (const auto* nextQuestEntry = m_project.quests.getById(nextQuestId))
 				{
-					packet
-						<< io::write<uint32>(quest->rewarditemschoice_size());
-					for (const auto& reward : quest->rewarditemschoice())
-					{
-						packet
-							<< io::write<uint32>(reward.itemid())
-							<< io::write<uint32>(reward.count());
-						const auto* item = m_project.items.getById(reward.itemid());
-						packet
-							<< io::write<uint32>(item ? item->displayid() : 0);
-					}
-
-					packet
-						<< io::write<uint32>(quest->rewarditems_size());
-					for (const auto& reward : quest->rewarditems())
-					{
-						packet
-							<< io::write<uint32>(reward.itemid())
-							<< io::write<uint32>(reward.count());
-						const auto* item = m_project.items.getById(reward.itemid());
-						packet
-							<< io::write<uint32>(item ? item->displayid() : 0);
-					}
-
-					packet
-						<< io::write<uint32>(quest->rewardmoney());
+					SendQuestDetails(questGiverGuid, *nextQuestEntry);
 				}
-
-				packet << io::write<uint32>(quest->rewardspell());
-				packet.Finish();
-			});
+			}
+		}
 	}
 
 	void Player::OnQuestGiverStatusQuery(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -271,6 +291,82 @@ namespace mmo
 				packet << io::write<uint64>(questGiverGuid) << io::write<uint8>(status);
 				packet.Finish();
 			});
+	}
+
+	void Player::OnQuestGiverCompleteQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0;
+		if (!(contentReader >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read AcceptQuest packet!");
+			return;
+		}
+
+		const auto* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			ELOG("Tried to complete unknown quest " << questId);
+			return;
+		}
+
+		ASSERT(m_worldInstance);
+
+		GameObjectS* questGiverObject = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
+		if (!questGiverObject)
+		{
+			ELOG("Unable to find questgiver object " << log_hex_digit(questGiverGuid) << " while trying to complete quest " << questId);
+			return;
+		}
+
+		if (!questGiverObject->EndsQuest(questId))
+		{
+			ELOG("Quest " << questId << " is not ended by questgiver " << log_hex_digit(questGiverGuid));
+			return;
+		}
+
+		// Check the quest status
+		const QuestStatus questStatus = m_character->GetQuestStatus(questId);
+		if (questStatus != quest_status::Complete)
+		{
+			DLOG("Sending requestItems page")
+			SendPacket([questGiverGuid, quest, this, questStatus](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::QuestGiverRequestItems);
+					packet
+						<< io::write<uint64>(questGiverGuid)
+						<< io::write<uint32>(quest->id())
+						<< io::write_dynamic_range<uint8>(quest->name())
+						<< io::write_dynamic_range<uint16>(quest->requestitemstext());
+
+					const size_t itemCountPos = packet.Sink().Position();
+					uint16 itemCount = 0;
+					packet << io::write<uint16>(itemCount);
+
+					for (const auto& request : quest->requirements())
+					{
+						if (request.itemid() == 0)
+						{
+							continue;
+						}
+
+						itemCount++;
+						packet
+							<< io::write<uint32>(request.itemid())
+							<< io::write<uint32>(request.itemcount());
+						const auto* item = m_project.items.getById(request.itemid());
+						packet
+							<< io::write<uint32>(item ? item->displayid() : 0);
+					}
+
+					packet.Sink().Overwrite(itemCountPos, reinterpret_cast<const char*>(&itemCount), sizeof(itemCount));
+					packet.Finish();
+				});
+			return;
+		}
+
+		DLOG("Sending quest reward...");
+		SendQuestReward(questGiverGuid, *quest);
 	}
 
 	void Player::OnTrainerBuySpell(uint16 opCode, uint32 size, io::Reader& contentReader)

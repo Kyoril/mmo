@@ -285,6 +285,13 @@ namespace mmo
 			return false;
 		}
 
+		/// Returns true if this object acts as a quest giver and ends the given quest.
+		virtual bool EndsQuest(uint32 questId) const
+		{
+			// By default, objects do not provide quests
+			return false;
+		}
+
 		/// @brief Gets the movement info.
 		[[nodiscard]] MovementInfo GetMovementInfo() { return m_movementInfo; }
 

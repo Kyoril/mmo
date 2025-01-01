@@ -21,6 +21,7 @@ namespace mmo
 		uint32 menuIcon;
 		int32 questLevel;
 		String questTitle;
+		bool isActive;
 	};
 
 	struct QuestDetails
@@ -29,6 +30,8 @@ namespace mmo
 		String questTitle;
 		String questDetails;
 		String questObjectives;
+		String questRequestItemsText;
+		String questOfferRewardText;
 		uint32 suggestedPlayerCount = 0;
 		// TODO: Rewarded item count
 		uint32 rewardXp = 0;
@@ -97,6 +100,8 @@ namespace mmo
 		void RefreshQuestGiverStatus();
 
 		void AbandonQuest(uint32 questId);
+
+		void GetQuestReward(uint32 rewardChoice) const;
 
 	private:
 		void ProcessQuestText(String& questText);

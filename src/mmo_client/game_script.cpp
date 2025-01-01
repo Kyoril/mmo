@@ -997,7 +997,8 @@ namespace mmo
 				luabind::class_<QuestListEntry>("QuestListEntry")
 				.def_readonly("id", &QuestListEntry::questId)
 				.def_readonly("title", &QuestListEntry::questTitle)
-				.def_readonly("icon", &QuestListEntry::menuIcon)),
+				.def_readonly("icon", &QuestListEntry::menuIcon)
+				.def_readonly("isActive", &QuestListEntry::isActive)),
 
 			luabind::scope(
 				luabind::class_<QuestInfo>("Quest")
@@ -1018,6 +1019,8 @@ namespace mmo
 				.def_readonly("title", &QuestDetails::questTitle)
 				.def_readonly("details", &QuestDetails::questDetails)
 				.def_readonly("objectives", &QuestDetails::questObjectives)
+				.def_readonly("offerReward", &QuestDetails::questOfferRewardText)
+				.def_readonly("requestItems", &QuestDetails::questRequestItemsText)
 				.def_readonly("rewardedXp", &QuestDetails::rewardXp)
 				.def_readonly("rewardedMoney", &QuestDetails::rewardMoney)
 				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)),
@@ -1124,7 +1127,8 @@ namespace mmo
 			luabind::def<std::function<uint32()>>("GetNumQuestLogEntries", [this]() { return m_questClient.GetNumQuestLogEntries(); }),
 			luabind::def<std::function<const QuestLogEntry*(uint32)>>("GetQuestLogEntry", [this](uint32 index) { return m_questClient.GetQuestLogEntry(index); }),
 			luabind::def<std::function<void(uint32)>>("AbandonQuest", [this](uint32 questId) { m_questClient.AbandonQuest(questId); }),
-
+			luabind::def<std::function<void(uint32)>>("GetQuestReward", [this](uint32 rewardChoice) { m_questClient.GetQuestReward(rewardChoice); }),
+			
 			// Spellbook
 			luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell) { g_cursor.SetSpell(spell); }),
 

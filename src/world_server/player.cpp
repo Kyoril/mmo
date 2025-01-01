@@ -347,6 +347,12 @@ namespace mmo
 		case game::client_realm_packet::QuestGiverQueryQuest:
 			OnQuestGiverQueryQuest(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::QuestGiverCompleteQuest:
+			OnQuestGiverCompleteQuest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::QuestGiverChooseQuestReward:
+			QuestGiverChooseQuestReward(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
@@ -696,6 +702,105 @@ namespace mmo
 			{
 				packet.Start(game::realm_client_packet::TrainerBuySucceeded);
 				packet << io::write<uint64>(trainerGuid) << io::write<uint32>(spellId);
+				packet.Finish();
+			});
+	}
+
+	void Player::SendQuestDetails(uint64 questgiverGuid, const proto::QuestEntry& quest)
+	{
+		SendPacket([questgiverGuid, quest, this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestGiverQuestDetails);
+				packet
+					<< io::write<uint64>(questgiverGuid)
+					<< io::write<uint32>(quest.id())
+					<< io::write_dynamic_range<uint8>(quest.name())
+					<< io::write_dynamic_range<uint16>(quest.detailstext())
+					<< io::write_dynamic_range<uint16>(quest.objectivestext())
+					<< io::write<uint32>(quest.suggestedplayers());
+
+				if (quest.flags() & quest_flags::HiddenRewards)
+				{
+					packet
+						<< io::write<uint32>(0) << io::write<uint32>(0) << io::write<uint32>(0);
+				}
+				else
+				{
+					packet
+						<< io::write<uint32>(quest.rewarditemschoice_size());
+					for (const auto& reward : quest.rewarditemschoice())
+					{
+						packet
+							<< io::write<uint32>(reward.itemid())
+							<< io::write<uint32>(reward.count());
+						const auto* item = m_project.items.getById(reward.itemid());
+						packet
+							<< io::write<uint32>(item ? item->displayid() : 0);
+					}
+
+					packet
+						<< io::write<uint32>(quest.rewarditems_size());
+					for (const auto& reward : quest.rewarditems())
+					{
+						packet
+							<< io::write<uint32>(reward.itemid())
+							<< io::write<uint32>(reward.count());
+						const auto* item = m_project.items.getById(reward.itemid());
+						packet
+							<< io::write<uint32>(item ? item->displayid() : 0);
+					}
+
+					packet
+						<< io::write<uint32>(quest.rewardmoney());
+				}
+
+				packet << io::write<uint32>(quest.rewardspell());
+				packet.Finish();
+			});
+	}
+
+	void Player::SendQuestReward(uint64 questgiverGuid, const proto::QuestEntry& quest)
+	{
+		// Quest is completed, offer the rewards to the player
+		SendPacket([questgiverGuid, quest, this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestGiverOfferReward);
+				packet
+					<< io::write<uint64>(questgiverGuid)
+					<< io::write<uint32>(quest.id())
+					<< io::write_dynamic_range<uint8>(quest.name())
+					<< io::write_dynamic_range<uint16>(quest.offerrewardtext());
+
+				packet
+					<< io::write<uint32>(quest.rewarditemschoice_size());
+				for (const auto& reward : quest.rewarditemschoice())
+				{
+					packet
+						<< io::write<uint32>(reward.itemid())
+						<< io::write<uint32>(reward.count());
+					const auto* item = m_project.items.getById(reward.itemid());
+					packet
+						<< io::write<uint32>(item ? item->displayid() : 0);
+				}
+
+				packet
+					<< io::write<uint32>(quest.rewarditems_size());
+				for (const auto& reward : quest.rewarditems())
+				{
+					packet
+						<< io::write<uint32>(reward.itemid())
+						<< io::write<uint32>(reward.count());
+					const auto* item = m_project.items.getById(reward.itemid());
+					packet
+						<< io::write<uint32>(item ? item->displayid() : 0);
+				}
+
+				packet
+					<< io::write<uint32>(quest.rewardmoney());
+
+				packet
+					<< io::write<uint32>(quest.rewardxp())
+					<< io::write<uint32>(quest.rewardspell());
 				packet.Finish();
 			});
 	}
@@ -1453,5 +1558,18 @@ namespace mmo
 				packet.Finish();
 				});
 		}
+	}
+
+	void Player::OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney)
+	{
+		SendPacket([&questgiverGuid, questId, rewardedXp, rewardMoney](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::QuestGiverQuestComplete);
+			packet
+				<< io::write<uint64>(questgiverGuid)
+				<< io::write<uint32>(questId)
+				<< io::write<uint32>(rewardedXp)
+				<< io::write<uint32>(rewardMoney);
+			packet.Finish();
+			});
 	}
 }

@@ -387,7 +387,83 @@ namespace mmo
 			SLIDER_UINT32_PROP(rewardxp, "Rewarded Xp", 0, 255);
 			SLIDER_UINT32_PROP(rewardmoney, "Rewarded Money", 0, 255);
 
+			// Add button
+			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_rewarditems();
+			}
 
+			if (ImGui::BeginTable("rewardItems", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Item Count", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.rewarditems_size(); ++index)
+				{
+					auto* currentItem = currentEntry.mutable_rewarditems(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					uint32 item = currentItem->itemid();
+					const auto* itemEntry = m_project.items.getById(item);
+					if (ImGui::BeginCombo("##rewardItem", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						if (ImGui::Selectable("None"))
+						{
+							currentItem->set_itemid(0);
+						}
+						else
+						{
+							for (int i = 0; i < m_project.items.count(); i++)
+							{
+								ImGui::PushID(i);
+								const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
+								const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+								if (ImGui::Selectable(item_text, item_selected))
+								{
+									currentItem->set_itemid(m_project.items.getTemplates().entry(i).id());
+									if (currentItem->count() == 0)
+									{
+										currentItem->set_count(1);
+									}
+								}
+								if (item_selected)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+								ImGui::PopID();
+							}
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::TableNextColumn();
+
+					int32 count = currentItem->count();
+					if (ImGui::InputInt("##reward_item_count", &count))
+					{
+						count = Clamp(count, 1, 255);
+						currentItem->set_count(count);
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_rewarditems()->erase(currentEntry.mutable_rewarditems()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
 		}
 	}
 

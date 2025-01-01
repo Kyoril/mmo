@@ -130,6 +130,8 @@ namespace mmo
 				AcceptQuest,
 				QuestGiverQueryQuest,
 				AbandonQuest,
+				QuestGiverCompleteQuest,
+				QuestGiverChooseQuestReward,
 
 				/// Counter constant
 				Count_,

@@ -103,6 +103,10 @@ namespace mmo
 
 		void SendTrainerBuySucceeded(uint64 trainerGuid, uint32 spellId) const;
 
+		void SendQuestDetails(uint64 questgiverGuid, const proto::QuestEntry& quest);
+
+		void SendQuestReward(uint64 questgiverGuid, const proto::QuestEntry& quest);
+
 	public:
 		/// @brief Gets the character guid.
 		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
@@ -258,6 +262,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnQuestGiverStatusQuery(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// 
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnQuestGiverCompleteQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to ask for an npc's trainer menu. This is expected to be sent when the npc is just a trainer and nothing more.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -293,6 +303,12 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnQuestGiverQueryQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to query a quest giver for an offered quest.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void QuestGiverChooseQuestReward(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 	private:
 		// Implemented in player_dev_handlers.cpp
@@ -385,6 +401,8 @@ namespace mmo
 		void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) override;
 
 		void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) override;
+
+		void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) override;
 
 	private:
 		PlayerManager& m_manager;

@@ -468,11 +468,164 @@ namespace mmo
 		return false;
 	}
 
-	bool GamePlayerS::RewardQuest(uint32 quest, uint8 rewardChoice, std::function<void(uint32)> callback)
+	bool GamePlayerS::RewardQuest(uint64 questgiverGuid, uint32 quest, uint8 rewardChoice)
 	{
-		// TODO
+		// Reward experience
+		const auto* entry = m_project.quests.getById(quest);
+		if (!entry)
+		{
+			return false;
+		}
 
-		return false;
+		auto it = m_quests.find(quest);
+		if (it == m_quests.end())
+		{
+			return false;
+		}
+		if (it->second.status != quest_status::Complete)
+		{
+			return false;
+		}
+
+		// Gather all rewarded items
+		std::map<const proto::ItemEntry*, uint16> rewardedItems;
+		{
+			if (entry->rewarditemschoice_size() > 0)
+			{
+				// Validate reward index
+				if (rewardChoice >= entry->rewarditemschoice_size())
+				{
+					return false;
+				}
+
+				const auto* item = GetProject().items.getById(
+					entry->rewarditemschoice(rewardChoice).itemid());
+				if (!item)
+				{
+					return false;
+				}
+
+				// Check if the player can store the item
+				rewardedItems[item] += entry->rewarditemschoice(rewardChoice).count();
+			}
+			for (auto& rew : entry->rewarditems())
+			{
+				const auto* item = GetProject().items.getById(rew.itemid());
+				if (!item)
+				{
+					return false;
+				}
+
+				rewardedItems[item] += rew.count();
+			}
+		}
+
+		// First loop to check if the items can be stored
+		for (auto& pair : rewardedItems)
+		{
+			auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
+			if (result != inventory_change_failure::Okay)
+			{
+				//inventoryChangeFailure(result, nullptr, nullptr);
+				return false;
+			}
+		}
+
+		// Try to remove all required quest items
+		for (const auto& req : entry->requirements())
+		{
+			if (req.itemid())
+			{
+				const auto* itemEntry = m_project.items.getById(req.itemid());
+				if (!itemEntry)
+				{
+					return false;
+				}
+
+				auto result = m_inventory.RemoveItems(*itemEntry, req.itemcount());
+				if (result != inventory_change_failure::Okay)
+				{
+					//inventoryChangeFailure(result, nullptr, nullptr);
+					return false;
+				}
+			}
+		}
+
+		// Second loop needed to actually create the items
+		for (auto& pair : rewardedItems)
+		{
+			auto result = m_inventory.CreateItems(*pair.first, pair.second);
+			if (result != inventory_change_failure::Okay)
+			{
+				//inventoryChangeFailure(result, nullptr, nullptr);
+				return false;
+			}
+		}
+
+		float xpFactor = 1.0f;
+		const uint32 playerLevel = GetLevel();
+		if (playerLevel <= entry->questlevel() + 5) {
+			xpFactor = 1.0f;
+		}
+		else if (playerLevel == entry->questlevel() + 6) {
+			xpFactor = 0.8f;
+		}
+		else if (playerLevel == entry->questlevel() + 7) {
+			xpFactor = 0.6f;
+		}
+		else if (playerLevel == entry->questlevel() + 8) {
+			xpFactor = 0.4f;
+		}
+		else if (playerLevel == entry->questlevel() + 9) {
+			xpFactor = 0.2f;
+		}
+		else {
+			xpFactor = 0.1f;
+		}
+
+		const uint32 rewardXp = static_cast<uint32>(static_cast<float>(entry->rewardxp()) * xpFactor);
+		if (rewardXp > 0)
+		{
+			RewardExperience(rewardXp);
+		}
+		
+		uint32 money = entry->rewardmoney();
+		if (money > 0)
+		{
+			Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) + money);
+		}
+
+		// Remove source items of this quest (if any)
+		if (entry->srcitemid())
+		{
+			const auto* itemEntry = GetProject().items.getById(entry->srcitemid());
+			if (itemEntry)
+			{
+				// 0 means: remove ALL of this item
+				m_inventory.RemoveItems(*itemEntry, 0);
+			}
+		}
+
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			const QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == entry->id())
+			{
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
+				break;
+			}
+		}
+
+		// Quest was rewarded
+		it->second.status = quest_status::Rewarded;
+		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+
+		m_rewardedQuestIds.insert(entry->id());
+		it = m_quests.erase(it);
+
+		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestCompleted(questgiverGuid, quest, rewardXp, money);
+
+		return true;
 	}
 
 	void GamePlayerS::OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry)

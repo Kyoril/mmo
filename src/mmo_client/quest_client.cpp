@@ -58,7 +58,24 @@ namespace mmo
 		ASSERT(questId != 0);
 		ASSERT(HasQuestGiver());
 
-		m_connector.QuestGiverQueryQuest(m_questGiverGuid, questId);
+		const auto it = std::find_if(m_questList.begin(), m_questList.end(), [questId](const QuestListEntry& entry)
+		{
+			return entry.questId == questId;
+		});
+		if (it == m_questList.end())
+		{
+			ELOG("Unable to query quest details for quest " << questId << ": Quest not in quest list");
+			return;
+		}
+
+		if (it->isActive)
+		{
+			m_connector.QuestGiverCompleteQuest(m_questGiverGuid, questId);
+		}
+		else
+		{
+			m_connector.QuestGiverQueryQuest(m_questGiverGuid, questId);
+		}
 	}
 
 	void QuestClient::AcceptQuest(uint32 questId)
@@ -228,6 +245,14 @@ namespace mmo
 		m_connector.AbandonQuest(questId);
 	}
 
+	void QuestClient::GetQuestReward(const uint32 rewardChoice) const
+	{
+		ASSERT(HasQuestGiver());
+		ASSERT(HasQuest());
+
+		m_connector.QuestGiverChooseQuestReward(m_questGiverGuid, m_questDetails.questId, rewardChoice);
+	}
+
 	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
 	{
 		m_questList.clear();
@@ -259,6 +284,16 @@ namespace mmo
 				ELOG("Failed to read QuestList entry");
 				return PacketParseResult::Disconnect;
 			}
+
+			auto questLogIt = std::find_if(m_questLog.begin(), m_questLog.end(), [this, &entry](const QuestLogEntry& logEntry)
+				{
+					if (logEntry.questId == entry.questId)
+					{
+						return true;
+					}
+					return false;
+				});
+			entry.isActive = questLogIt != m_questLog.end();
 
 			// Ensure we have the quest in the cache
 			m_questCache.Get(entry.questId);
@@ -354,16 +389,89 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnQuestGiverQuestComplete(game::IncomingPacket& packet)
 	{
+		m_questDetails.Clear();
+
+		if (!(packet >> io::read<uint64>(m_questGiverGuid) >> io::read<uint32>(m_questDetails.questId)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		uint32 rewardXp, rewardMoney;
+		if (!(packet >> io::read<uint32>(rewardXp) >> io::read<uint32>(rewardMoney)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		const QuestInfo* quest = m_questCache.Get(m_questDetails.questId);
+		if (!quest)
+		{
+			ELOG("Unknown quest completed: " << m_questDetails.questId);
+		}
+		else
+		{
+			// Trigger event
+			FrameManager::Get().TriggerLuaEvent("QUEST_REWARDED", quest->title, rewardXp, rewardMoney);
+		}
+
+		// Quest done
+		CloseQuest();
+
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult QuestClient::OnQuestGiverOfferReward(game::IncomingPacket& packet)
 	{
+		m_questDetails.Clear();
+
+		if (!(packet >> io::read<uint64>(m_questGiverGuid) >> io::read<uint32>(m_questDetails.questId)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!(packet
+			>> io::read_container<uint8>(m_questDetails.questTitle)
+			>> io::read_container<uint16>(m_questDetails.questOfferRewardText, 512)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Process quest text
+		ProcessQuestText(m_questDetails.questOfferRewardText);
+
+		// Raise UI event to show the quest list window to the user
+		FrameManager::Get().TriggerLuaEvent("QUEST_OFFER_REWARDS");
+
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult QuestClient::OnQuestGiverRequestItems(game::IncomingPacket& packet)
 	{
+		m_questDetails.Clear();
+
+		if (!(packet >> io::read<uint64>(m_questGiverGuid) >> io::read<uint32>(m_questDetails.questId)))
+		{
+			ELOG("Failed to read QuestGiverRequestItems packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!(packet
+			>> io::read_container<uint8>(m_questDetails.questTitle)
+			>> io::read_container<uint16>(m_questDetails.questRequestItemsText, 512)))
+		{
+			ELOG("Failed to read QuestGiverRequestItems packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Process quest text
+		ProcessQuestText(m_questDetails.questRequestItemsText);
+
+		// Raise UI event to show the quest list window to the user
+		FrameManager::Get().TriggerLuaEvent("QUEST_REQUEST_ITEMS");
+
 		return PacketParseResult::Pass;
 	}
 
