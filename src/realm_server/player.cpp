@@ -999,6 +999,32 @@ namespace mmo
 		quest.description = questEntry->detailstext();
 		quest.summary = questEntry->objectivestext();
 
+		quest.questLevel = questEntry->questlevel();
+		quest.rewardMoney = questEntry->rewardmoney();
+		quest.rewardXp = questEntry->rewardxp();
+
+		for (const auto& requirement : questEntry->requirements())
+		{
+			if (requirement.itemid() != 0)
+			{
+				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount());
+			}
+			else if(requirement.creatureid() != 0)
+			{
+				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount());
+			}
+		}
+
+		for (const auto& reward : questEntry->rewarditems())
+		{
+			quest.rewardItems.emplace_back(reward.itemid(), reward.count());
+		}
+
+		for (const auto& reward : questEntry->rewarditemschoice())
+		{
+			quest.optionalItems.emplace_back(reward.itemid(), reward.count());
+		}
+
 		m_connection->sendSinglePacket([entry, &quest](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::QuestQueryResult);

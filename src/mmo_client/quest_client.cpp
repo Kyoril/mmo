@@ -7,10 +7,12 @@
 
 namespace mmo
 {
-	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells)
+	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache)
 		: m_connector(connector)
 		, m_questCache(questCache)
 		, m_spells(spells)
+		, m_itemCache(itemCache)
+		, m_creatureCache(creatureCache)
 	{
 	}
 
@@ -26,6 +28,7 @@ namespace mmo
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestUpdateComplete, *this, &QuestClient::OnQuestUpdate);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestLogFull, *this, &QuestClient::OnQuestLogFull);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GossipComplete, *this, &QuestClient::OnGossipComplete);
+		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &QuestClient::OnQuestQueryResult);
 	}
 
 	void QuestClient::Shutdown()
@@ -342,13 +345,17 @@ namespace mmo
 
 		if (rewardItemsChoiceCount > 0)
 		{
-			// TODO: Read reward
-			/*packet
-				<< io::write<uint32>(reward.itemid())
-				<< io::write<uint32>(reward.count());
-			const auto* item = m_project.items.getById(reward.itemid());
-			packet
-				<< io::write<uint32>(item ? item->displayid() : 0);*/
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverQuestDetails packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
 		}
 
 		if (!(packet >> io::read<uint32>(rewardItemsCount)))
@@ -359,13 +366,17 @@ namespace mmo
 
 		if (rewardItemsCount > 0)
 		{
-			// TODO: Read reward
-			/*packet
-				<< io::write<uint32>(reward.itemid())
-				<< io::write<uint32>(reward.count());
-			const auto* item = m_project.items.getById(reward.itemid());
-			packet
-				<< io::write<uint32>(item ? item->displayid() : 0);*/
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverQuestDetails packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
 		}
 
 		uint32 rewardSpellId = 0;
@@ -533,6 +544,54 @@ namespace mmo
 	{
 		CloseQuest();
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult QuestClient::OnQuestQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 id;
+		bool succeeded;
+		if (!(packet
+			>> io::read_packed_guid(id)
+			>> io::read<uint8>(succeeded)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!succeeded)
+		{
+			ELOG("Quest query for id " << log_hex_digit(id) << " failed");
+			return PacketParseResult::Pass;
+		}
+
+		QuestInfo entry{ id };
+		if (!(packet >> entry))
+		{
+			ELOG("Failed to read quest data");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Ensure items are known
+		for (auto& item : entry.requiredItems)
+		{
+			m_itemCache.Get(item.itemId);
+		}
+		for (auto& item : entry.rewardItems)
+		{
+			m_itemCache.Get(item.itemId);
+		}
+		for (auto& item : entry.optionalItems)
+		{
+			m_itemCache.Get(item.itemId);
+		}
+
+		// Ensure creatures are known
+		for (auto& creature : entry.requiredCreatures)
+		{
+			m_creatureCache.Get(creature.creatureId);
+		}
+
+		m_questCache.NotifyObjectResponse(id, std::move(entry));
 		return PacketParseResult::Pass;
 	}
 }

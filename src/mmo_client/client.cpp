@@ -345,7 +345,7 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
-		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells);
+		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);

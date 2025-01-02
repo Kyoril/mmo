@@ -534,6 +534,11 @@ namespace mmo
 
 				iterations = 4;
 			}
+			else if (g == '\n')
+			{
+				advWidth = 0.0f;
+				continue;
+			}
 
 			// Get the glyph data
 			const FontGlyph* glyph = GetGlyphData(g);
@@ -544,8 +549,10 @@ namespace mmo
 				for (size_t i = 0; i < iterations; ++i)
 				{
 					if (advWidth + width > curWidth)
+					{
 						curWidth = advWidth + width;
-
+					}
+					
 					advWidth += glyph->GetAdvance(scale);
 				}
 			}
@@ -578,7 +585,7 @@ namespace mmo
 
 	void Font::DrawText(const std::string & text, const Point & position, GeometryBuffer& buffer, float scale, argb_t color)
 	{
-		const float baseY = position.y + GetBaseline(scale);
+		float baseY = position.y + GetBaseline(scale);
 		Point glyphPos(position);
 
 		for (size_t c = 0; c < text.length(); ++c)
@@ -590,6 +597,12 @@ namespace mmo
 			{
 				g = ' ';
 				iterations = 4;
+			}
+			else if (g == '\n')
+			{
+				glyphPos.x = position.x;
+				baseY += GetHeight(scale);
+				continue;
 			}
 
 			const FontGlyph* glyph = nullptr;
@@ -629,6 +642,13 @@ namespace mmo
 				g = ' ';
 				iterations = 4;
 			}
+			else if(g == '\n')
+			{
+				++lineCount;
+				glyphPos.x = position.x;
+				baseY += height;
+				continue;
+			}
 
 			const FontGlyph* glyph = nullptr;
 			if ((glyph = GetGlyphData(g)))
@@ -656,13 +676,8 @@ namespace mmo
 	{
 		int lineCount = 1;
 
-		const float height = GetHeight(scale);
-		const float baseline = GetBaseline(scale);
 		const Point position = area.GetPosition();
-
-		float baseY = position.y + baseline;
 		Point glyphPos(position);
-
 		size_t lastWordIndex = 0;
 		
 		for (size_t c = 0; c < text.length(); ++c)
@@ -685,25 +700,22 @@ namespace mmo
 				lastWordIndex = c;
 				glyphPos.x = position.x;
 				lineCount++;
+				continue;
 			}
 
-			const FontGlyph* glyph = nullptr;
-			if ((glyph = GetGlyphData(g)))
+			if (const FontGlyph* glyph; (glyph = GetGlyphData(g)))
 			{
-				const FontImage* const image = glyph->GetImage();
-				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 
-				if (glyphPos.x >= area.right)
+				if (glyphPos.x > area.right)
 				{
 					glyphPos.x = position.x;
-					baseY += height;
 
 					++lineCount;
 
 					if (wordWrap)
 					{
-						c = lastWordIndex + 1;
+						c = lastWordIndex;
 					}
 				}
 			}

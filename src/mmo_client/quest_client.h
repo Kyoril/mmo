@@ -63,7 +63,7 @@ namespace mmo
 	class QuestClient final : public NonCopyable
 	{
 	public:
-		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells);
+		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache);
 		~QuestClient() override = default;
 
 	public:
@@ -103,7 +103,6 @@ namespace mmo
 
 		void GetQuestReward(uint32 rewardChoice) const;
 
-	private:
 		void ProcessQuestText(String& questText);
 
 	private:
@@ -123,11 +122,15 @@ namespace mmo
 
 		PacketParseResult OnGossipComplete(game::IncomingPacket& packet);
 
+		PacketParseResult OnQuestQueryResult(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_connector;
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlers;
 		DBQuestCache& m_questCache;
 		const proto_client::SpellManager& m_spells;
+		DBItemCache& m_itemCache;
+		DBCreatureCache& m_creatureCache;
 
 		std::vector<QuestListEntry> m_questList;
 		uint64 m_questGiverGuid = 0;

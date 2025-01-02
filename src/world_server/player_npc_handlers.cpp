@@ -42,8 +42,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Quest Giver Hello on npc " << log_hex_digit(questGiverGuid) << " (" << unit->GetEntry().name() << ")");
-
 		// Is this unit a quest giver?
 		if (unit->GetEntry().quests_size() == 0 && unit->GetEntry().end_quests_size() == 0)
 		{
@@ -234,8 +232,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Players " << log_hex_digit(GetCharacterGuid()) << " wants to get quest reward for quest " << questId);
-
 		// Reward this quest
 		if (bool result = m_character->RewardQuest(questGiverGuid, questId, rewardChoice))
 		{
@@ -282,8 +278,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Requested quest giver status query for npc " << log_hex_digit(questGiverGuid) << " (" << questGiver->GetEntry().name() << ")");
-
 		QuestgiverStatus status = questGiver->GetQuestGiverStatus(*m_character);
 		SendPacket([questGiverGuid, status](game::OutgoingPacket& packet)
 			{
@@ -329,7 +323,6 @@ namespace mmo
 		const QuestStatus questStatus = m_character->GetQuestStatus(questId);
 		if (questStatus != quest_status::Complete)
 		{
-			DLOG("Sending requestItems page")
 			SendPacket([questGiverGuid, quest, this, questStatus](game::OutgoingPacket& packet)
 				{
 					packet.Start(game::realm_client_packet::QuestGiverRequestItems);
@@ -365,7 +358,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Sending quest reward...");
 		SendQuestReward(questGiverGuid, *quest);
 	}
 

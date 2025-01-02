@@ -1003,9 +1003,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<QuestInfo>("Quest")
 				.def_readonly("id", &QuestInfo::id)
-				.def_readonly("title", &QuestInfo::title)
-				.def_readonly("details", &QuestInfo::description)
-				.def_readonly("objectives", &QuestInfo::summary)),
+				.def_readonly("title", &QuestInfo::title)),
 
 			luabind::scope(
 				luabind::class_<QuestLogEntry>("QuestLogEntry")
@@ -1128,7 +1126,10 @@ namespace mmo
 			luabind::def<std::function<const QuestLogEntry*(uint32)>>("GetQuestLogEntry", [this](uint32 index) { return m_questClient.GetQuestLogEntry(index); }),
 			luabind::def<std::function<void(uint32)>>("AbandonQuest", [this](uint32 questId) { m_questClient.AbandonQuest(questId); }),
 			luabind::def<std::function<void(uint32)>>("GetQuestReward", [this](uint32 rewardChoice) { m_questClient.GetQuestReward(rewardChoice); }),
-			
+
+			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; m_questClient.ProcessQuestText(questText); return questText; }),
+			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; m_questClient.ProcessQuestText(questText); return questText; }),
+
 			// Spellbook
 			luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell) { g_cursor.SetSpell(spell); }),
 

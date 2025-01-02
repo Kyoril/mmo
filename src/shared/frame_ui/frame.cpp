@@ -421,7 +421,12 @@ namespace mmo
 
 		// TODO: Register this frame for the new renderer
 	}
-	
+
+	bool Frame::IsClippedByParent() const
+	{
+		return m_clippedByParent;
+	}
+
 	void Frame::SetClippedByParent(bool clipped)
 	{
 		if (m_clippedByParent != clipped)
@@ -733,6 +738,10 @@ namespace mmo
 			if (child->IsClippedByParent())
 			{
 				hasClipRectSet = true;
+
+				// Set clip rect
+				const Rect clipRect = GetAbsoluteFrameRect();
+				gx.SetClipRect(clipRect.left, clipRect.top, clipRect.right - clipRect.left, clipRect.bottom - clipRect.top);
 			}
 			else if (hasClipRectSet)
 			{
@@ -743,6 +752,11 @@ namespace mmo
 
 			// Render child frame
 			child->Render();
+		}
+
+		if (hasClipRectSet)
+		{
+			gx.ResetClipRect();
 		}
 	}
 

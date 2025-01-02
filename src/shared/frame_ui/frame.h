@@ -219,7 +219,7 @@ namespace mmo
 		inline const FrameRenderer* GetRenderer() const { return m_renderer.get(); }
 
 		/// Determines whether this frame is clipped by the parent frame.
-		inline bool IsClippedByParent() const { return m_clippedByParent; }
+		inline bool IsClippedByParent() const;
 
 		/// Sets whether this frame is clipped by it's parent frame.
 		void SetClippedByParent(bool clipped);

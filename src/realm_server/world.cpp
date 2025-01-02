@@ -649,18 +649,12 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("Received quest data for character " << log_hex_digit(characterGuid) << ", persisting quest data...");
-
 		// RequestHandler
 		auto handler = [characterGuid](bool result)
 		{
 			if (!result)
 			{
 				WLOG("Failed to persist quest data for character " << log_hex_digit(characterGuid));
-			}
-			else
-			{
-				DLOG("Saved quest data");
 			}
 		};
 		m_database.asyncRequest(std::move(handler), &IDatabase::SetQuestData, characterGuid, questId, questData);

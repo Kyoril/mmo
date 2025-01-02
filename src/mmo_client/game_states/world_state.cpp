@@ -574,7 +574,6 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &WorldState::OnQuestQueryResult);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
@@ -1061,34 +1060,6 @@ namespace mmo
 		}
 
 		m_itemCache.NotifyObjectResponse(id, entry);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnQuestQueryResult(game::IncomingPacket& packet)
-	{
-		uint64 id;
-		bool succeeded;
-		if (!(packet
-			>> io::read_packed_guid(id)
-			>> io::read<uint8>(succeeded)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		if (!succeeded)
-		{
-			ELOG("Quest query for id " << log_hex_digit(id) << " failed");
-			return PacketParseResult::Pass;
-		}
-
-		QuestInfo entry{ id };
-		if (!(packet >> entry))
-		{
-			ELOG("Failed to read quest data");
-			return PacketParseResult::Disconnect;
-		}
-
-		m_questCache.NotifyObjectResponse(id, std::move(entry));
 		return PacketParseResult::Pass;
 	}
 
