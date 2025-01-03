@@ -98,8 +98,10 @@ namespace mmo
 	public:
 		/// Adds a property definition to this frame.
 		Property& AddProperty(const std::string& name, std::string defaultValue = "");
+
 		/// Tries to get a property by name.
 		Property* GetProperty(const std::string& name);
+
 		/// Removes a property from the frame.
 		bool RemoveProperty(const std::string& name);
 
@@ -140,7 +142,7 @@ namespace mmo
 
 		void SetOnUpdate(const luabind::object& fn);
 
-		void OnLoad();
+		virtual void OnLoad();
 
 	public:
 		/// Adds a new state imagery.
@@ -307,6 +309,8 @@ namespace mmo
 
 		void SetProperty(const std::string& name, const std::string& value);
 
+		const char* GetPropertyValue(const std::string& name);
+
 		bool IsChildOf(Frame& parent) const;
 
 		Pointer FindChild(const std::string& name);
@@ -352,6 +356,8 @@ namespace mmo
 
 		/// 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
+
+		virtual void OnMouseMoved(const Point& position, const Point& delta) {}
 
 		/// 
 		virtual void OnKeyDown(Key key) {}

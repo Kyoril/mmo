@@ -81,6 +81,7 @@ namespace mmo
 	public:
 		/// Applies this anchor point's logic to an absolute rect that is passed.
 		void ApplyToAbsRect(Rect& rect, const Rect& parentRect, bool hasOppositeAnchor);
+
 		/// 
 		float GetValueByPoint(const Rect& absRect, AnchorPoint point);
 
@@ -89,6 +90,7 @@ namespace mmo
 		inline AnchorPoint GetRelativePoint() const { return m_relativePoint; }
 		inline std::shared_ptr<Frame> GetRelativeTo() const { return m_relativeTo; }
 		inline float GetOffset() const { return m_offset; }
+		void SetOffset(float offset) { m_offset = offset; }
 
 	private:
 		AnchorPoint m_point;

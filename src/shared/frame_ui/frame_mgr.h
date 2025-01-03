@@ -214,5 +214,7 @@ namespace mmo
 		const Localization& m_localization;
 		Size m_nativeResolution { 3840.0f, 2160.0f };
 		Point m_uiScale { 1.0f, 1.0f };
+
+		Point m_mousePos;
 	};
 }

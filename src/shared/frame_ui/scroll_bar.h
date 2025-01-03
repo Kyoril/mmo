@@ -25,6 +25,8 @@ namespace mmo
 	public:
 		virtual void Copy(Frame& other) override;
 
+		virtual void OnLoad() override;
+
 	public:
 		/// Sets the orientation of the scroll bar.
 		void SetOrientation(const ScrollBarOrientation orientation) { m_orientation = orientation; Invalidate(); }
@@ -61,5 +63,9 @@ namespace mmo
 		float m_maximum = 100.0f;
 		float m_step = 1.0f;
 		float m_value = 0.0f;
+
+		Frame* m_upFrame = nullptr;
+		Frame* m_downFrame = nullptr;
+		Frame* m_thumbFrame = nullptr;
 	};
 }

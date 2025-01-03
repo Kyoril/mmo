@@ -26,6 +26,7 @@
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "scrolling_message_frame.h"
 #include "scroll_bar.h"
+#include "thumb.h"
 #include "luabind/operator.hpp"
 
 
@@ -416,6 +417,7 @@ namespace mmo
 					.def("HasInputCaptured", &Frame::HasInputCaptured)
 					.def("ReleaseInput", &Frame::ReleaseInput)
 					.def("SetProperty", &Frame::SetProperty)
+					.def("GetProperty", &Frame::GetPropertyValue)
 					.property("userData", &Frame::GetUserData, &Frame::SetUserData)
 					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
@@ -434,9 +436,23 @@ namespace mmo
 					.def("GetButtonState", &Button::GetButtonState)),
 
 			luabind::scope(
+				luabind::class_<Thumb, Button>("Thumb")),
+
+			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
 					.def("SetProgress", &ProgressBar::SetProgress)
 					.def("GetProgress", &ProgressBar::GetProgress)),
+
+				luabind::scope(
+					luabind::class_<ScrollBar, Frame>("ScrollBar")
+					.def("SetMinimum", &ScrollBar::SetMinimumValue)
+					.def("SetMaximum", &ScrollBar::SetMaximumValue)
+					.def("SetValue", &ScrollBar::SetValue)
+					.def("GetValue", &ScrollBar::GetValue)
+					.def("GetMinimum", &ScrollBar::GetMinimumValue)
+					.def("GetMaximum", &ScrollBar::GetMaximumValue)
+					.def("GetStep", &ScrollBar::GetStep)
+					.def("SetStep", &ScrollBar::SetStep)),
 
 			luabind::scope(
 				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
@@ -456,6 +472,7 @@ namespace mmo
 		// Register frame factories
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		s_frameMgr->RegisterFrameFactory("Thumb", [](const std::string& name) -> FramePtr { return std::make_shared<Thumb>("Thumb", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollBar", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollBar>("ScrollBar", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
@@ -668,6 +685,18 @@ namespace mmo
 		{
 			// Find the frame at the lowest level for the given point
 			FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
+
+			const Point delta = position - m_mousePos;
+			m_mousePos = position;
+
+			// Trigger mouse moved events
+			Frame* frame = hoverFrame.get();
+			while (frame)
+			{
+				frame->OnMouseMoved(m_mousePos, delta);
+				frame = frame->GetParent();
+			}
+
 			if (hoverFrame != m_hoverFrame)
 			{
 				auto prevFrame = m_hoverFrame;

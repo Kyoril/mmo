@@ -644,12 +644,32 @@ namespace mmo
 				ELOG("Failed to read QuestUpdateAddKill packet");
 				return PacketParseResult::Disconnect;
 			}
-			ILOG("Quest progress: Unit killed " << count << "/" << maxCount);
+
+			ASSERT(entry);
+
+			static const String s_monsterKilledFormat = "QUEST_MONSTERS_KILLED";
+			const String* format = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
+			if (!format) format = &s_monsterKilledFormat;
+
+			const CreatureInfo* creature = m_creatureCache.Get(entry);
+
+			char buffer[512];
+			snprintf(buffer, 512, format->c_str(), creature ? creature->name.c_str() : "UNKNOWN", count, maxCount);
+			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
 		}
 			break;
 		case game::realm_client_packet::QuestUpdateComplete:
-			ILOG("Completed quest " << quest->title);
+			{
+			static const String s_monsterKilledFormat = "QUEST_REWARDED_TITLE";
+			const String* format = m_localization.FindStringById("QUEST_REWARDED_TITLE");
+			if (!format) format = &s_monsterKilledFormat;
+
+			char buffer[512];
+			snprintf(buffer, 512, format->c_str(), quest->title.c_str());
+			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
+
 			RefreshQuestGiverStatus();
+		}
 			break;
 		default:
 			ELOG("Unhandled packet op code in " << __FUNCTION__);

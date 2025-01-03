@@ -9,6 +9,8 @@ namespace mmo
 		, m_orientation(ScrollBarOrientation::Vertical)
 	{
 		m_propConnections += AddProperty("Orientation").Changed.connect(this, &ScrollBar::OnOrientationPropertyChanged);
+
+		
 	}
 
 	void ScrollBar::Copy(Frame& other)
@@ -20,6 +22,16 @@ namespace mmo
 		{
 			otherScrollBar->m_orientation = m_orientation;
 		}
+	}
+
+	void ScrollBar::OnLoad()
+	{
+		Frame::OnLoad();
+
+		// Setup child frames
+		m_upFrame = GetChild(0);
+		m_downFrame = GetChild(1);
+		m_thumbFrame = GetChild(2);
 	}
 
 	void ScrollBar::SetMinimumValue(const float minimum)

@@ -669,6 +669,17 @@ namespace mmo
 		}
 	}
 
+	const char* Frame::GetPropertyValue(const std::string& name)
+	{
+		const Property* prop = GetProperty(name);
+		if (prop)
+		{
+			return prop->GetValue().c_str();
+		}
+
+		return nullptr;
+	}
+
 	bool Frame::IsChildOf(Frame& parent) const
 	{
 		if (m_parent == &parent)
