@@ -96,10 +96,16 @@ namespace mmo
 		m_questLogQuests.clear();
 
 		bool relevantQuestChanges = false;
+		bool selectedQuestExisted = false;
 
 		for (uint32 i = 0; i < MaxQuestLogSize; ++i)
 		{
 			const QuestField field = player.Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+
+			if (!selectedQuestExisted && m_selectedQuestLogQuest != 0 && field.questId == m_selectedQuestLogQuest)
+			{
+				selectedQuestExisted = true;
+			}
 
 			// Quest id changed?
 			if (field.questId != m_questLog[i].questId)
@@ -138,6 +144,16 @@ namespace mmo
 			{
 				m_questLogQuests.push_back(i);
 			}
+		}
+
+		if (!selectedQuestExisted)
+		{
+			m_selectedQuestLogQuest = 0;
+		}
+		else
+		{
+			// Refresh objective text caches
+			QuestLogSelectQuest(m_selectedQuestLogQuest);
 		}
 
 		// Either we got new quests, abandoned old ones or the status of a quest changed
@@ -242,6 +258,8 @@ namespace mmo
 			return;
 		}
 
+		m_selectedQuestLogQuest = questId;
+
 		const String* monstersKilledFormat = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
 		const String* itemsGatheredFormat = m_localization.FindStringById("QUEST_ITEMS_NEEDED");
 		const String* complete = m_localization.FindStringById("COMPLETE");
@@ -293,6 +311,11 @@ namespace mmo
 
 			m_questObjectiveTexts.emplace_back(buffer);
 		}
+	}
+
+	uint32 QuestClient::GetSelectedQuestLogQuest() const
+	{
+		return m_selectedQuestLogQuest;
 	}
 
 	uint32 QuestClient::GetQuestObjectiveCount() const

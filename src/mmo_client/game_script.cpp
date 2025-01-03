@@ -1127,6 +1127,7 @@ namespace mmo
 			luabind::def<std::function<void(uint32)>>("AbandonQuest", [this](uint32 questId) { m_questClient.AbandonQuest(questId); }),
 			luabind::def<std::function<void(uint32)>>("GetQuestReward", [this](uint32 rewardChoice) { m_questClient.GetQuestReward(rewardChoice); }),
 			luabind::def<std::function<void(uint32)>>("QuestLogSelectQuest", [this](uint32 questId) { m_questClient.QuestLogSelectQuest(questId); }),
+			luabind::def<std::function<uint32()>>("GetQuestLogSelection", [this]() { return m_questClient.GetSelectedQuestLogQuest(); }),
 			luabind::def<std::function<uint32()>>("GetQuestObjectiveCount", [this]() { return m_questClient.GetQuestObjectiveCount(); }),
 			luabind::def<std::function<const char*(uint32)>>("GetQuestObjectiveText", [this](uint32 index) { return m_questClient.GetQuestObjectiveText(index); }),
 

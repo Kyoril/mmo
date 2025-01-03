@@ -990,6 +990,7 @@ namespace mmo
 						<< io::write<uint8>(false);
 					packet.Finish();
 				});
+			return;
 		}
 
 		// Map quest info

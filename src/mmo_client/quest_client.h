@@ -112,6 +112,8 @@ namespace mmo
 
 		void QuestLogSelectQuest(uint32 questId);
 
+		uint32 GetSelectedQuestLogQuest() const;
+
 		uint32 GetQuestObjectiveCount() const;
 
 		const char* GetQuestObjectiveText(uint32 i);
@@ -155,5 +157,6 @@ namespace mmo
 		std::array<QuestLogEntry, MaxQuestLogSize> m_questLog;
 		std::vector<uint32> m_questLogQuests;
 		std::vector<String> m_questObjectiveTexts;
+		uint32 m_selectedQuestLogQuest = 0;
 	};
 }
