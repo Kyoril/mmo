@@ -1003,7 +1003,8 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<QuestInfo>("Quest")
 				.def_readonly("id", &QuestInfo::id)
-				.def_readonly("title", &QuestInfo::title)),
+				.def_readonly("title", &QuestInfo::title)
+				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)),
 
 			luabind::scope(
 				luabind::class_<QuestLogEntry>("QuestLogEntry")

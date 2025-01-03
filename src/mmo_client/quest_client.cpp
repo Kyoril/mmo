@@ -451,7 +451,8 @@ namespace mmo
 		if (!(packet 
 				>> io::read_container<uint8>(m_questDetails.questTitle)
 				>> io::read_container<uint16>(m_questDetails.questDetails, 512)
-				>> io::read_container<uint16>(m_questDetails.questObjectives, 512)))
+				>> io::read_container<uint16>(m_questDetails.questObjectives, 512)
+				>> io::read<uint32>(m_questDetails.suggestedPlayerCount)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;

@@ -47,5 +47,7 @@ namespace mmo
 		const proto_client::SpellManager& m_spells;
 
 		uint32 m_spellCastId = 0;
+
+
 	};
 }
