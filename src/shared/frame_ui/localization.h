@@ -30,7 +30,7 @@ namespace mmo
 		/// Loads the localization data from a given file.
 		bool LoadFromFile();
 
-		void AddToLuaScript(lua_State* state);
+		void AddToLuaScript(lua_State* state) const;
 
 	private:
 		typedef std::unordered_map<std::string, std::string> TranslationsById;

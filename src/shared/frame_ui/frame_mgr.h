@@ -42,10 +42,10 @@ namespace mmo
 		std::map<std::string, std::vector<std::weak_ptr<Frame>>> m_eventFrames;
 
 	private:
-		friend std::unique_ptr<FrameManager> std::make_unique<FrameManager>();
+		friend std::unique_ptr<FrameManager> std::make_unique<FrameManager, const Localization&>(const Localization&);
 		
 		/// Private destructor to avoid instancing.
-		FrameManager() = default;
+		FrameManager(const Localization& localization);
 
 	public:
 		/// Singleton getter method.
@@ -53,7 +53,7 @@ namespace mmo
 
 	public:
 		/// Initializes the frame manager by registering default frame factories.
-		static void Initialize(lua_State* state);
+		static void Initialize(lua_State* state, const Localization& localization);
 
 		/// Deinitilaizes the frame manager, reverting everything done in Initialize().
 		static void Destroy();
@@ -211,7 +211,7 @@ namespace mmo
 		/// setting fonts in xml easier.
 		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
 		/// The localization data.
-		Localization m_localization;
+		const Localization& m_localization;
 		Size m_nativeResolution { 3840.0f, 2160.0f };
 		Point m_uiScale { 1.0f, 1.0f };
 	};

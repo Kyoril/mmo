@@ -88,45 +88,7 @@ namespace mmo
 				OnScaleChanged();
 			}
 
-			uint32 fieldStartIndex = 0;
-			uint32 fieldCount = 0;
-
-			// Iterate through field map and search for changed field blocks
-			for (size_t i = 0; i < m_fieldMap.GetFieldCount(); ++i)
-			{
-				// This field was changed?
-				if (m_fieldMap.IsFieldMarkedAsChanged(i))
-				{
-					// Check if it is the start of a block of consecutive changed fields
-					if (fieldCount == 0)
-					{
-						// It is, mark this as the start of the block.
-						fieldStartIndex = i;
-						fieldCount = 1;
-					}
-					else
-					{
-						// Not the start, but another element in a sequence of changed fields
-						++fieldCount;
-					}
-				}
-				else
-				{
-					// Check if we had a changed field before and if so, trigger the end of the block
-					if (fieldCount > 0)
-					{
-						fieldsChanged(GetGuid(), fieldStartIndex, fieldCount);
-						fieldCount = 0;
-					}
-				}
-			}
-
-			// One last time: Could be that the last field was changed so we need to check if thats the case and trigger again
-			if (fieldCount > 0)
-			{
-				fieldsChanged(GetGuid(), fieldStartIndex, fieldCount);
-				fieldCount = 0;
-			}
+			HandleFieldMapChanges();
 		}
 
 		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::FactionTemplate))

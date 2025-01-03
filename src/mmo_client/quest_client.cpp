@@ -7,12 +7,13 @@
 
 namespace mmo
 {
-	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache)
+	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization)
 		: m_connector(connector)
 		, m_questCache(questCache)
 		, m_spells(spells)
 		, m_itemCache(itemCache)
 		, m_creatureCache(creatureCache)
+		, m_localization(localization)
 	{
 	}
 
@@ -81,7 +82,7 @@ namespace mmo
 		}
 	}
 
-	void QuestClient::AcceptQuest(uint32 questId)
+	void QuestClient::AcceptQuest(const uint32 questId)
 	{
 		ASSERT(questId != 0);
 		ASSERT(HasQuestGiver());
@@ -215,6 +216,109 @@ namespace mmo
 				break;
 			}
 		}
+	}
+
+	void QuestClient::QuestLogSelectQuest(uint32 questId)
+	{
+		m_questObjectiveTexts.clear();
+
+		// Check if we know this quest
+		const auto questLogEntryIt = std::find_if(m_questLog.begin(), m_questLog.end(), [questId](const QuestLogEntry& entry)
+			{
+				return entry.questId == questId;
+			});
+
+		if (questLogEntryIt == m_questLog.end())
+		{
+			ELOG("Quest " << questId << "is not in quest log");
+			return;
+		}
+
+		// Check for quest details
+		const QuestInfo* quest = m_questCache.Get(questId);
+		if (!quest)
+		{
+			ELOG("Unknown quest " << questId);
+			return;
+		}
+
+		const String* monstersKilledFormat = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
+		const String* itemsGatheredFormat = m_localization.FindStringById("QUEST_ITEMS_NEEDED");
+		const String* complete = m_localization.FindStringById("COMPLETE");
+
+		char buffer[512];
+
+		// Check for required creatures
+		int counter = 0;
+		for (const auto& creature : quest->requiredCreatures)
+		{
+			const CreatureInfo* creatureEntry = m_creatureCache.Get(creature.creatureId);
+			if (!creatureEntry)
+			{
+				ELOG("Unknown creature " << creature.creatureId);
+				continue;
+			}
+
+			if (monstersKilledFormat)
+			{
+				ASSERT(counter < 4);
+				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter++], creature.count);
+			}
+			else
+			{
+				snprintf(buffer, 512, "QUEST_MONSTERS_KILLED");
+			}
+
+			m_questObjectiveTexts.emplace_back(buffer);
+		}
+
+		for (const auto& item : quest->requiredItems)
+		{
+			const ItemInfo* itemEntry = m_itemCache.Get(item.itemId);
+			if (!itemEntry)
+			{
+				ELOG("Unknown item " << item.itemId);
+				continue;
+			}
+
+			if (itemsGatheredFormat)
+			{
+				const uint32 itemCount = std::min(item.count, ObjectMgr::GetItemCount(item.itemId));
+				snprintf(buffer, 512, itemsGatheredFormat->c_str(), itemEntry->name.c_str(), itemCount, item.count);
+			}
+			else
+			{
+				snprintf(buffer, 512, "QUEST_ITEMS_NEEDED");
+			}
+
+			m_questObjectiveTexts.emplace_back(buffer);
+		}
+	}
+
+	uint32 QuestClient::GetQuestObjectiveCount() const
+	{
+		return m_questObjectiveTexts.size();
+	}
+
+	const char* QuestClient::GetQuestObjectiveText(uint32 i)
+	{
+		if (i >= m_questObjectiveTexts.size())
+		{
+			return nullptr;
+		}
+
+		return m_questObjectiveTexts[i].c_str();
+	}
+
+	bool QuestClient::HasQuestInQuestLog(uint32 questId)
+	{
+		// Check if we know that quest
+		const auto it = std::find_if(m_questLog.begin(), m_questLog.end(), [questId](const QuestLogEntry& entry)
+			{
+				return entry.questId == questId;
+			});
+
+		return it != m_questLog.end();
 	}
 
 	void QuestClient::RefreshQuestGiverStatus()

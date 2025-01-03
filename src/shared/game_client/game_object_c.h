@@ -54,6 +54,27 @@ namespace mmo
 		}
 
 		/// Registers a callback handler that is called when some object field values change.
+		template <class Handler>
+		connection RegisterMirrorHandler(uint32 field, uint32 fieldCount, Handler handler)
+		{
+			ASSERT(field < m_fieldMap.GetFieldCount());
+			ASSERT(fieldCount > 0);
+			ASSERT(field + fieldCount < m_fieldMap.GetFieldCount());
+
+			return fieldsChanged.connect([monitoredField = field, monitoredFieldCount = fieldCount, handler](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
+				{
+					if (const bool rangesOverlap =
+						fieldIndex + fieldCount - 1 >= monitoredField &&
+						fieldIndex <= monitoredField + monitoredFieldCount)
+					{
+						// The monitored field has changed, so we need to update the mirror field.
+						// This will trigger the handler.
+						handler(guid);
+					}
+				});
+		}
+
+		/// Registers a callback handler that is called when some object field values change.
 		template <class Instance, class Class, class... Args1>
 		connection RegisterMirrorHandler(uint32 field, uint32 fieldCount, Instance& object, void(Class::* method)(Args1...))
 		{
@@ -78,6 +99,9 @@ namespace mmo
 					}
 				});
 		}
+
+	protected:
+		void HandleFieldMapChanges();
 
 	public:
 		[[nodiscard]] const Vector3& GetPosition() const

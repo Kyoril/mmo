@@ -81,7 +81,7 @@ namespace mmo
 		return true;
 	}
 
-	void Localization::AddToLuaScript(lua_State* state)
+	void Localization::AddToLuaScript(lua_State* state) const
 	{
 		luabind::object globals = luabind::globals(state);
 

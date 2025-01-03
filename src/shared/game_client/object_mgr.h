@@ -46,9 +46,16 @@ namespace mmo
 
 		static uint64 GetActivePlayerGuid();
 
+		static uint32 GetItemCount(uint32 itemId);
+
 		static std::shared_ptr<GamePlayerC> GetActivePlayer();
 
 		static const proto_client::ModelDataEntry* GetModelData(uint32 displayId);
+
+	private:
+		static void OnItemStackCountChanged(uint64 itemGuid);
+
+	public:
 
 		template<typename U, typename T>
 		static void ForEachObject(T callback)
@@ -66,5 +73,8 @@ namespace mmo
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
 		static uint64 ms_activePlayerGuid;
 		static const proto_client::Project* ms_project;
+
+		static std::map<uint32, uint32> ms_itemCount;
+		static std::map<uint64, scoped_connection> ms_itemConnections;
 	};
 }

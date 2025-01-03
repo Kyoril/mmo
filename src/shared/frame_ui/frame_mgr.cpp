@@ -312,7 +312,12 @@ namespace mmo
 	}
 
 	static std::unique_ptr<FrameManager> s_frameMgr;
-	
+
+	FrameManager::FrameManager(const Localization& localization)
+		: m_localization(localization)
+	{
+	}
+
 	FrameManager& FrameManager::Get()
 	{
 		ASSERT(s_frameMgr);
@@ -339,11 +344,11 @@ namespace mmo
 
 
 
-	void FrameManager::Initialize(lua_State* luaState)
+	void FrameManager::Initialize(lua_State* luaState, const Localization& localization)
 	{
 		ASSERT(!s_frameMgr);
-		s_frameMgr = std::make_unique<FrameManager>();
-		
+		s_frameMgr = std::make_unique<FrameManager>(localization);
+
 		// Verify and register lua state
 		ASSERT(luaState);
 		s_frameMgr->m_luaState = luaState;
@@ -457,12 +462,7 @@ namespace mmo
 		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
 
 		// Load localization
-		if (!s_frameMgr->m_localization.LoadFromFile())
-		{
-			ELOG("Failed to load localization data!");
-		}
-
-		s_frameMgr->m_localization.AddToLuaScript(s_frameMgr->m_luaState);
+		localization.AddToLuaScript(s_frameMgr->m_luaState);
 	}
 
 	void FrameManager::Destroy()

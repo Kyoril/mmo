@@ -8,6 +8,11 @@
 
 namespace mmo
 {
+	class Localization;
+}
+
+namespace mmo
+{
 	class GamePlayerC;
 
 	namespace proto_client
@@ -63,7 +68,7 @@ namespace mmo
 	class QuestClient final : public NonCopyable
 	{
 	public:
-		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache);
+		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization);
 		~QuestClient() override = default;
 
 	public:
@@ -105,6 +110,15 @@ namespace mmo
 
 		void ProcessQuestText(String& questText);
 
+		void QuestLogSelectQuest(uint32 questId);
+
+		uint32 GetQuestObjectiveCount() const;
+
+		const char* GetQuestObjectiveText(uint32 i);
+
+	private:
+		bool HasQuestInQuestLog(uint32 questId);
+
 	private:
 		PacketParseResult OnQuestGiverQuestList(game::IncomingPacket& packet);
 
@@ -131,6 +145,7 @@ namespace mmo
 		const proto_client::SpellManager& m_spells;
 		DBItemCache& m_itemCache;
 		DBCreatureCache& m_creatureCache;
+		const Localization& m_localization;
 
 		std::vector<QuestListEntry> m_questList;
 		uint64 m_questGiverGuid = 0;
@@ -139,5 +154,6 @@ namespace mmo
 
 		std::array<QuestLogEntry, MaxQuestLogSize> m_questLog;
 		std::vector<uint32> m_questLogQuests;
+		std::vector<String> m_questObjectiveTexts;
 	};
 }

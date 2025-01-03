@@ -130,6 +130,7 @@ namespace mmo
 {
 	static scoped_connection_container s_frameUiConnections;
 	static std::unique_ptr<GameScript> s_gameScript;
+	static Localization s_localization;
 
 	extern Cursor g_cursor;
 
@@ -145,8 +146,13 @@ namespace mmo
 			});
 		}
 
+		if (!s_localization.LoadFromFile())
+		{
+			ELOG("Failed to initialize localization!");
+		}
+
 		// Initialize the frame manager
-		FrameManager::Initialize(&s_gameScript->GetLuaState());
+		FrameManager::Initialize(&s_gameScript->GetLuaState(), s_localization);
 
 		// Register model renderer
 		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string& name)
@@ -345,7 +351,7 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
-		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache);
+		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache, s_localization);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);

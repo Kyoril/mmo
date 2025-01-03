@@ -53,18 +53,19 @@ namespace mmo
 			return nullptr;
 		}
 
-		void Get(uint64 guid, QueryCallback&& callback)
+		const T* Get(uint64 guid, QueryCallback&& callback)
 		{
 			auto it = m_cache.find(guid);
 			if (it != m_cache.end())
 			{
 				callback(guid, it->second);
-				return;
+				return &it->second;
 			}
 
 			Get(guid);
 
 			m_pendingRequests.insert(std::pair{ guid, callback });
+			return nullptr;
 		}
 
 		void NotifyObjectResponse(uint64 guid, const T& object)
