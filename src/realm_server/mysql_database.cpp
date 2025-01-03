@@ -566,11 +566,14 @@ namespace mmo
 			}
 			strm << ";";
 
-			if (!m_connection.Execute(strm.str()))
+			if (!isFirstItem)
 			{
-				// There was an error
-				PrintDatabaseError();
-				throw mysql::Exception("Could not update character inventory data!");
+				if (!m_connection.Execute(strm.str()))
+				{
+					// There was an error
+					PrintDatabaseError();
+					throw mysql::Exception("Could not update character inventory data!");
+				}
 			}
 		}
 
