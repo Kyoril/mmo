@@ -1756,7 +1756,6 @@ namespace mmo
 		auto victim = m_victim.lock();
 		if (!victim)
 		{
-			OnAttackSwingEvent(AttackSwingEvent::CantAttack);
 			return;
 		}
 
