@@ -507,7 +507,7 @@ namespace mmo
 	{
 		m_pixelSize.width = width;
 		
-		if (!AnchorsSatisfySize())
+		if (!AnchorsSatisfyWidth())
 		{
 			Invalidate();	
 		}
@@ -517,10 +517,30 @@ namespace mmo
 	{
 		m_pixelSize.height = height;
 
-		if (!AnchorsSatisfySize())
+		if (!AnchorsSatisfyHeight())
 		{
 			Invalidate();	
 		}
+	}
+
+	float Frame::GetWidth() const
+	{
+		if (!AnchorsSatisfyWidth())
+		{
+			return m_pixelSize.width;
+		}
+
+		return m_absRectCache.GetWidth();
+	}
+
+	float Frame::GetHeight() const
+	{
+		if (!AnchorsSatisfyHeight())
+		{
+			return m_pixelSize.height;
+		}
+
+		return m_absRectCache.GetHeight();
 	}
 
 	float Frame::GetTextWidth()
@@ -1052,7 +1072,11 @@ namespace mmo
 		
 		// Add parent rect offset to the relative rect
 		m_absRectCache.Offset(parentRect.GetPosition());
-		m_absRectCache.Offset(m_position * FrameManager::Get().GetUIScale());
+
+		if (!AnchorsSatisfyPosition())
+		{
+			m_absRectCache.Offset(m_position * FrameManager::Get().GetUIScale());
+		}
 
 		// Apply anchor points
 		for (const auto& anchor : m_anchors)

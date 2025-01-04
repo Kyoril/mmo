@@ -281,9 +281,9 @@ namespace mmo
 		/// Sets the height for this frame.
 		void SetHeight(float height);
 		
-		float GetWidth() const { return m_pixelSize.width; }
+		float GetWidth() const;
 
-		float GetHeight() const { return m_pixelSize.height; }
+		float GetHeight() const;
 
 		float GetTextWidth();
 

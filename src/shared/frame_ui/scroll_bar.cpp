@@ -135,12 +135,6 @@ namespace mmo
 			return;
 		}
 
-		if (step > GetMaximumValue() - GetMinimumValue())
-		{
-			ELOG("Step value cannot be greater than the difference between maximum and minimum values for scroll bar " << GetName());
-			return;
-		}
-
 		if (step <= 0.0f)
 		{
 			ELOG("Step value must be greater than zero for scroll bar " << GetName());
