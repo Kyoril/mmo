@@ -93,10 +93,11 @@ namespace mmo
 
 	void RenderWindowD3D11::Update()
 	{
-		BOOL IsFullscreenState;
-		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&IsFullscreenState, nullptr)));
+		BOOL dxgiIsFullscreenState;
+		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&dxgiIsFullscreenState, nullptr)));
 
-		if (IsFullscreenState != m_prevFullScreenState)
+		const bool isFullScreenState = (dxgiIsFullscreenState == TRUE);
+		if (isFullScreenState != m_prevFullScreenState)
 		{
 			// Apply pending resize
 			if (m_pendingWidth == 0 || m_pendingHeight == 0)
@@ -106,10 +107,10 @@ namespace mmo
 			}
 			ApplyInternalResize();
 			m_resizePending = false;
-			m_prevFullScreenState = IsFullscreenState;
+			m_prevFullScreenState = isFullScreenState;
 		}
 
-		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !IsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
+		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !dxgiIsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);
 
 		// Apply pending resize

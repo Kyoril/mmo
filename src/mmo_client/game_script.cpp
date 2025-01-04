@@ -354,7 +354,7 @@ namespace mmo
 			return (static_cast<uint16>(player_inventory_slots::Start + bagIndex - 1) << 8) | static_cast<uint16>(slotId);
 		}
 
-		std::shared_ptr<GameItemC> GetItemFromSlot(const char* unitName, int32 slotId)
+		std::shared_ptr<GameItemC> GetItemFromSlot(const char* unitName, uint32 slotId)
 		{
 			if (const auto unit = Script_GetUnitByName(unitName))
 			{
@@ -1325,7 +1325,7 @@ namespace mmo
 		return m_lootClient.GetNumLootSlots();
 	}
 
-	bool GameScript::LootSlotIsItem(const int32 slot) const
+	bool GameScript::LootSlotIsItem(const uint32 slot) const
 	{
 		if (slot < 1)
 		{
@@ -1345,7 +1345,7 @@ namespace mmo
 		return slot <= m_lootClient.GetNumLootItems();
 	}
 
-	bool GameScript::LootSlotIsCoin(const int32 slot) const
+	bool GameScript::LootSlotIsCoin(const uint32 slot) const
 	{
 		if (slot < 1)
 		{
@@ -1360,7 +1360,7 @@ namespace mmo
 		return true;
 	}
 
-	void GameScript::GetLootSlotInfo(int32 slot, String& out_icon, String& out_text, int32& out_count) const
+	void GameScript::GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const
 	{
 		if (slot < 1 || slot > m_lootClient.GetNumLootSlots())
 		{

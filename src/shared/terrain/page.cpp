@@ -317,7 +317,7 @@ namespace mmo
 
 		Vector3 Page::CalculateNormalAt(uint32 x, uint32 z)
 		{
-			const float scaling = constants::PageSize / static_cast<float>(constants::VerticesPerPage);
+			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage));
 			float flip = 1.0f;
 
 			size_t offsX = m_x * constants::VerticesPerPage;

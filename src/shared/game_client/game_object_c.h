@@ -63,8 +63,10 @@ namespace mmo
 
 			return fieldsChanged.connect([monitoredField = field, monitoredFieldCount = fieldCount, handler](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 				{
+					ASSERT(fieldCount > 0);
+
 					if (const bool rangesOverlap =
-						fieldIndex + fieldCount - 1 >= monitoredField &&
+						static_cast<int32>(fieldIndex + fieldCount - 1) >= static_cast<int32>(monitoredField) &&
 						fieldIndex <= monitoredField + monitoredFieldCount)
 					{
 						// The monitored field has changed, so we need to update the mirror field.
@@ -89,8 +91,10 @@ namespace mmo
 
 			return fieldsChanged.connect([monitoredField = field, monitoredFieldCount = fieldCount, handler](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 				{
+					ASSERT(fieldCount > 0);
+
 					if (const bool rangesOverlap =
-						fieldIndex + fieldCount - 1 >= monitoredField &&
+						static_cast<int32>(fieldIndex + fieldCount - 1) >= static_cast<int32>(monitoredField) &&
 						fieldIndex <= monitoredField + monitoredFieldCount)
 					{
 						// The monitored field has changed, so we need to update the mirror field.

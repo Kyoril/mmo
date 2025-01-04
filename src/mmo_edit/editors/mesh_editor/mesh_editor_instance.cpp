@@ -709,7 +709,7 @@ namespace mmo
 		SetAnimationState(nullptr);
 
 		DLOG("Scene has " << scene->mNumAnimations << " animations");
-		for (int i = 0; i < scene->mNumAnimations; ++i)
+		for (uint32 i = 0; i < scene->mNumAnimations; ++i)
 		{
 			const aiAnimation* anim = scene->mAnimations[i];
 			DLOG("Animation " << i << ": " << anim->mName.C_Str() << " with " << anim->mNumChannels << " channels");
@@ -730,7 +730,7 @@ namespace mmo
 			animation.SetUseBaseKeyFrame(false, 0.0f, "");
 			animation.SetInterpolationMode(Animation::InterpolationMode::Linear);
 
-			for (int channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
+			for (uint32 channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
 			{
 				aiNodeAnim* nodeAnim = anim->mChannels[channelIndex];
 
