@@ -3,6 +3,7 @@
 #pragma once
 
 #include "database.h"
+#include "base/countdown.h"
 #include "mysql_wrapper/mysql_connection.h"
 
 namespace mmo
@@ -12,24 +13,35 @@ namespace mmo
 		: public IDatabase
 	{
 	public:
-		explicit MySQLDatabase(const mysql::DatabaseInfo &connectionInfo);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue);
+		~MySQLDatabase() override = default;
 
 		/// Tries to establish a connection to the MySQL server.
 		bool Load();
 
+	private:
+		void SetNextPingTimer() const;
+
 	public:
-		std::optional<AccountData> getAccountDataByName(std::string name) override;
-		std::optional<RealmAuthData> getRealmAuthData(std::string name) override;
-		std::optional<std::pair<uint64, std::string>> getAccountSessionKey(std::string accountName) override;
-		void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) override;
-		void playerLoginFailed(uint64 accountId, const std::string& ip) override;
-		void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) override;
-		std::optional<AccountCreationResult> accountCreate(const std::string& id, const std::string& s, const std::string& v) override;
-		std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) override;
+		std::optional<AccountData> GetAccountDataByName(std::string name) override;
 
-		void banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) override;
+		std::optional<RealmAuthData> GetRealmAuthData(std::string name) override;
 
-		void unbanAccountByName(const std::string& accountName, const std::string& reason) override;
+		std::optional<std::pair<uint64, std::string>> GetAccountSessionKey(std::string accountName) override;
+
+		void PlayerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) override;
+
+		void PlayerLoginFailed(uint64 accountId, const std::string& ip) override;
+
+		void RealmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) override;
+
+		std::optional<AccountCreationResult> AccountCreate(const std::string& id, const std::string& s, const std::string& v) override;
+
+		std::optional<RealmCreationResult> RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) override;
+
+		void BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) override;
+
+		void UnbanAccountByName(const std::string& accountName, const std::string& reason) override;
 
 	private:
 		void PrintDatabaseError();
@@ -37,5 +49,8 @@ namespace mmo
 	private:
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
+		TimerQueue& m_timerQueue;
+		Countdown m_pingCountdown;
+		scoped_connection m_pingConnection;
 	};
 }

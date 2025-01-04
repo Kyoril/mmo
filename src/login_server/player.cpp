@@ -271,7 +271,7 @@ namespace mmo
 		};
 
 		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::getAccountDataByName, std::cref(m_accountName));
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountDataByName, std::cref(m_accountName));
 		return PacketParseResult::Pass;
 	}
 
@@ -398,7 +398,7 @@ namespace mmo
 
 			// Store session key in account database
 			m_database.asyncRequest<void>(
-				std::bind(&IDatabase::playerLogin, std::placeholders::_1, m_accountId, K.asHexStr(), m_address),
+				std::bind(&IDatabase::PlayerLogin, std::placeholders::_1, m_accountId, K.asHexStr(), m_address),
 				std::move(handler));
 
 			// Stop here since we wait for the database callback
@@ -419,7 +419,7 @@ namespace mmo
 
 		// Store session key in account database
 		m_database.asyncRequest<void>(
-			[this, address = std::cref(m_address)](auto&& database) { database->playerLoginFailed(m_accountId, address); },
+			[this, address = std::cref(m_address)](auto&& database) { database->PlayerLoginFailed(m_accountId, address); },
 			std::move(loginFailedDbHandler));
 
 		return PacketParseResult::Pass;

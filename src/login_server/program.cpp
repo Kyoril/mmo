@@ -29,6 +29,7 @@
 #include <thread>
 
 #include "base/filesystem.h"
+#include "base/timer_queue.h"
 
 namespace mmo
 {
@@ -66,7 +67,7 @@ namespace mmo
 		// Keep the database service alive / busy until this object is alive
 		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
-
+		TimerQueue timerQueue(dbService);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
@@ -112,14 +113,14 @@ namespace mmo
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		auto database = std::make_unique<MySQLDatabase>(mmo::mysql::DatabaseInfo{
+		auto database = std::make_unique<MySQLDatabase>(mysql::DatabaseInfo{
 			config.mysqlHost, 
 			config.mysqlPort,
 			config.mysqlUser, 
 			config.mysqlPassword, 
 			config.mysqlDatabase,
 			config.mysqlUpdatePath
-		});
+		}, timerQueue);
 		if (!database->Load())
 		{
 			ELOG("Could not load the database");

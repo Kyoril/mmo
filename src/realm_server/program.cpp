@@ -77,7 +77,7 @@ namespace mmo
 		// Keep the database service alive / busy until this object is alive
 		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
-
+		TimerQueue dbTimerQueue(dbService);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
@@ -137,7 +137,7 @@ namespace mmo
 			config.mysqlPassword,
 			config.mysqlDatabase,
 			config.mysqlUpdatePath
-			}, project);
+			}, project, dbTimerQueue);
 		if (!database->Load())
 		{
 			ELOG("Could not load the database");

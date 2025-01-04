@@ -21,10 +21,21 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project, TimerQueue& timerQueue)
 		: m_project(project)
 		, m_connectionInfo(std::move(connectionInfo))
+		, m_timerQueue(timerQueue)
+		, m_pingCountdown(m_timerQueue)
 	{
+		m_pingConnection = m_pingCountdown.ended += [this]()
+			{
+				if (!m_connection.KeepAlive())
+				{
+					ELOG("MySQL Connection PING failed");
+				}
+
+				SetNextPingTimer();
+			};
 	}
 
 	bool MySQLDatabase::Load()
@@ -109,9 +120,17 @@ namespace mmo
 			ELOG(m_connection.GetErrorMessage());
 			return false;
 		}
+
+		SetNextPingTimer();
+
 		ILOG("Database is ready!");
 
 		return true;
+	}
+
+	void MySQLDatabase::SetNextPingTimer() const
+	{
+		m_pingCountdown.SetEnd(GetAsyncTimeMs() + 30000);
 	}
 
 	std::optional<std::vector<CharacterView>> MySQLDatabase::GetCharacterViewsByAccountId(uint64 accountId)

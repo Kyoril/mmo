@@ -259,7 +259,7 @@ namespace mmo
 		};
 
 		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::getRealmAuthData, std::cref(m_realmName));
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetRealmAuthData, std::cref(m_realmName));
 		return PacketParseResult::Pass;
 	}
 
@@ -399,7 +399,7 @@ namespace mmo
 
 			// Store session key in account database
 			m_database.asyncRequest<void>(
-				std::bind(&IDatabase::realmLogin, std::placeholders::_1, m_realmId, K.asHexStr(), m_address, versionBuilder.str()),
+				std::bind(&IDatabase::RealmLogin, std::placeholders::_1, m_realmId, K.asHexStr(), m_address, versionBuilder.str()),
 				std::move(handler));
 
 			// Stop here since we wait for the database callback
@@ -480,7 +480,7 @@ namespace mmo
 		};
 
 		// Now do a database request by account name to retrieve the session key
-		m_database.asyncRequest(std::move(handler), &IDatabase::getAccountSessionKey, std::move(accountName));
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountSessionKey, std::move(accountName));
 
 		return PacketParseResult::Pass;
 	}

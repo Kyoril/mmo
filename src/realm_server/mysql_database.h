@@ -4,6 +4,7 @@
 
 #include "database.h"
 #include "mysql_wrapper/mysql_connection.h"
+#include "base/countdown.h"
 
 
 namespace mmo
@@ -18,10 +19,13 @@ namespace mmo
 		: public IDatabase
 	{
 	public:
-		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project, TimerQueue& timerQueue);
 
 		/// Tries to establish a connection to the MySQL server.
 		bool Load();
+
+	private:
+		void SetNextPingTimer() const;
 
 	public:
 		/// @copydoc IDatabase::GetCharacterViewsByAccountId
@@ -65,5 +69,8 @@ namespace mmo
 		const proto::Project& m_project;
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
+		TimerQueue& m_timerQueue;
+		Countdown m_pingCountdown;
+		scoped_connection m_pingConnection;
 	};
 }

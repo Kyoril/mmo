@@ -164,7 +164,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 		
 		// Execute
-		const auto result = m_service.GetDatabase().accountCreate(id, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().AccountCreate(id, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
@@ -230,7 +230,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		const auto result = m_service.GetDatabase().realmCreate(id, address, port, s.asHexStr(), v.asHexStr());
+		const auto result = m_service.GetDatabase().RealmCreate(id, address, port, s.asHexStr(), v.asHexStr());
 		if (result)
 		{
 			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
@@ -298,7 +298,7 @@ namespace mmo
 
 		try
 		{
-			std::optional<AccountData> account = m_service.GetDatabase().getAccountDataByName(name);
+			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
 			if (!account)
 			{
 				response.setStatus(net::http::OutgoingAnswer::NotFound);
@@ -313,7 +313,7 @@ namespace mmo
 				return;
 			}
 
-			m_service.GetDatabase().banAccountByName(name, expiration, reason);
+			m_service.GetDatabase().BanAccountByName(name, expiration, reason);
 			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
 
 			// Notify subscribers
@@ -352,7 +352,7 @@ namespace mmo
 
 		try
 		{
-			m_service.GetDatabase().unbanAccountByName(name, reason);
+			m_service.GetDatabase().UnbanAccountByName(name, reason);
 			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
 		}
 		catch (...)

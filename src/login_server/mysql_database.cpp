@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "mysql_database.h"
+
+#include "base/timer_queue.h"
 #include "mysql_wrapper/mysql_row.h"
 #include "mysql_wrapper/mysql_select.h"
 #include "mysql_wrapper/mysql_statement.h"
@@ -10,9 +12,20 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(const mysql::DatabaseInfo &connectionInfo)
-		: m_connectionInfo(connectionInfo)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue)
+		: m_connectionInfo(std::move(connectionInfo))
+		, m_timerQueue(timerQueue)
+		, m_pingCountdown(timerQueue)
 	{
+		m_pingConnection = m_pingCountdown.ended += [this]()
+			{
+				if (!m_connection.KeepAlive())
+				{
+					ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
+				}
+
+				SetNextPingTimer();
+			};
 	}
 
 	bool MySQLDatabase::Load()
@@ -100,12 +113,20 @@ namespace mmo
 			return false;
 		}
 
+		SetNextPingTimer();
+
 		ILOG("Database is ready!");
 
 		return true;
 	}
 
-	std::optional<AccountData> MySQLDatabase::getAccountDataByName(std::string name)
+	void MySQLDatabase::SetNextPingTimer() const
+	{
+		// Ping every 30 seconds
+		m_pingCountdown.SetEnd(GetAsyncTimeMs() + 30000);
+	}
+
+	std::optional<AccountData> MySQLDatabase::GetAccountDataByName(std::string name)
 	{
 		mysql::Select select(m_connection, "SELECT id,username,s,v,"
 			"CASE "
@@ -138,7 +159,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<RealmAuthData> MySQLDatabase::getRealmAuthData(std::string name)
+	std::optional<RealmAuthData> MySQLDatabase::GetRealmAuthData(std::string name)
 	{
 		mysql::Select select(m_connection, "SELECT id,name,s,v,address,port FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
@@ -166,7 +187,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<std::pair<uint64, std::string>> MySQLDatabase::getAccountSessionKey(std::string accountName)
+	std::optional<std::pair<uint64, std::string>> MySQLDatabase::GetAccountSessionKey(std::string accountName)
 	{
 		mysql::Select select(m_connection, "SELECT id,k FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
 		if (select.Success())
@@ -186,7 +207,7 @@ namespace mmo
 		return {};
 	}
 
-	void MySQLDatabase::playerLogin(const uint64 accountId, const std::string& sessionKey, const std::string& ip)
+	void MySQLDatabase::PlayerLogin(const uint64 accountId, const std::string& sessionKey, const std::string& ip)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -210,7 +231,7 @@ namespace mmo
 		transaction.Commit();
 	}
 
-	void MySQLDatabase::playerLoginFailed(const uint64 accountId, const std::string& ip)
+	void MySQLDatabase::PlayerLoginFailed(const uint64 accountId, const std::string& ip)
 	{
 		if (!m_connection.Execute("INSERT INTO account_login (account_id, timestamp, ip_address, succeeded) VALUES (" + 
 			std::to_string(accountId) + ", NOW(), '" + ip + "', 0)"))
@@ -220,7 +241,7 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::realmLogin(const uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
+	void MySQLDatabase::RealmLogin(const uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
 	{
 		if (!m_connection.Execute("UPDATE realm SET k = '"
 			+ m_connection.EscapeString(sessionKey)
@@ -235,7 +256,7 @@ namespace mmo
 		}
 	}
 
-	std::optional<AccountCreationResult> MySQLDatabase::accountCreate(const std::string& id, const std::string& s,
+	std::optional<AccountCreationResult> MySQLDatabase::AccountCreate(const std::string& id, const std::string& s,
 		const std::string& v)
 	{
 		if (!m_connection.Execute("INSERT INTO account (username, s, v) VALUES ('"
@@ -257,7 +278,7 @@ namespace mmo
 		return AccountCreationResult::Success;
 	}
 
-	std::optional<RealmCreationResult> MySQLDatabase::realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v)
+	std::optional<RealmCreationResult> MySQLDatabase::RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v)
 	{
 		if (!m_connection.Execute("INSERT INTO realm (name, address, port, s, v) VALUES ('"
 			+ m_connection.EscapeString(name) + "', '" 
@@ -281,7 +302,7 @@ namespace mmo
 		return RealmCreationResult::Success;
 	}
 
-	void MySQLDatabase::banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason)
+	void MySQLDatabase::BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -313,7 +334,7 @@ namespace mmo
 		transaction.Commit();
 	}
 
-	void MySQLDatabase::unbanAccountByName(const std::string& accountName, const std::string& reason)
+	void MySQLDatabase::UnbanAccountByName(const std::string& accountName, const std::string& reason)
 	{
 		mysql::Transaction transaction(m_connection);
 

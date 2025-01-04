@@ -76,42 +76,42 @@ namespace mmo
 
 		/// Gets the account data by a given name.
 		/// @param name Name of the account.
-		virtual std::optional<AccountData> getAccountDataByName(std::string name) = 0;
+		virtual std::optional<AccountData> GetAccountDataByName(std::string name) = 0;
 
 		/// Obtains realm data by it's id.
 		/// @param name Name of the realm.
-		virtual std::optional<RealmAuthData> getRealmAuthData(std::string name) = 0;
+		virtual std::optional<RealmAuthData> GetRealmAuthData(std::string name) = 0;
 
 		/// Retrieves the session key and the account id by name.
 		/// @param accountName Name of the account.
-		virtual std::optional<std::pair<uint64, std::string>> getAccountSessionKey(std::string accountName) = 0;
+		virtual std::optional<std::pair<uint64, std::string>> GetAccountSessionKey(std::string accountName) = 0;
 
 		/// Writes player session and login data to the database. This also writes the current timestamp
 		/// to the last_login field.
 		/// @param accountId ID of the account to modify.
 		/// @param sessionKey The new session key (hex str).
 		/// @param ip The current ip of the player.
-		virtual void playerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
+		virtual void PlayerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
 
 		/// @brief 
 		/// @param accountId 
 		/// @param ip 
-		virtual void playerLoginFailed(uint64 accountId, const std::string& ip) = 0;
+		virtual void PlayerLoginFailed(uint64 accountId, const std::string& ip) = 0;
 
 		/// @brief 
 		/// @param realmId 
 		/// @param sessionKey 
 		/// @param ip 
 		/// @param build 
-		virtual void realmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
+		virtual void RealmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
 
-		virtual std::optional<AccountCreationResult> accountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
+		virtual std::optional<AccountCreationResult> AccountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
 
-		virtual std::optional<RealmCreationResult> realmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
+		virtual std::optional<RealmCreationResult> RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
 
-		virtual void banAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) = 0;
+		virtual void BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) = 0;
 
-		virtual void unbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
+		virtual void UnbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
 	};
 
 
