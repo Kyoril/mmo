@@ -24,6 +24,7 @@ namespace mmo
 
 	public:
 		StateImagery() = default;
+
 		/// Initializes the StateImagery class, assigning it a name. This name is equal to a
 		/// control's state, as it is defined by the frame's renderer.
 		StateImagery(std::string name);
@@ -32,8 +33,10 @@ namespace mmo
 		/// Adds a new layer to the state imagery.
 		/// @param layer The layer to add.
 		void AddLayer(FrameLayer& layer);
+
 		/// Removes a layer by index.
 		void RemoveLayer(uint32 index);
+
 		/// Removes all layers.
 		void RemoveAllLayers();
 

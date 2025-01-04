@@ -1079,6 +1079,8 @@ namespace mmo
 		// Move rectangle
 		m_needsLayout = false;
 
+		OnAreaChanged(m_absRectCache);
+
 		// Return the current rect
 		return m_absRectCache;
 	}

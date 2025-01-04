@@ -17,6 +17,28 @@ namespace mmo
 		Thumb(const std::string& type, const std::string& name);
 		virtual ~Thumb() override = default;
 
+		void SetVerticalRange(float min, float max) { ASSERT(max > min); m_vertMin = min; m_vertMax = max; }
+
+		void SetHorizontalRange(float min, float max) { ASSERT(max > min); m_horizontalMin = min; m_horizontalMax = max; }
+
+		void SetVerticalMovement(const bool verticalMovement) { m_verticalMovement = verticalMovement; }
+
+		void SetHorizontalMovement(const bool horizontalMovement) { m_horizontalMovement = horizontalMovement; }
+
+		[[nodiscard]] float GetVerticalMin() const { return m_vertMin; }
+
+		[[nodiscard]] float GetVerticalMax() const { return m_vertMax; }
+
+		[[nodiscard]] float GetHorizontalMin() const { return m_horizontalMin; }
+
+		[[nodiscard]] float GetHorizontalMax() const { return m_horizontalMax; }
+
+		[[nodiscard]] bool IsVerticalMovement() const { return m_verticalMovement; }
+
+		[[nodiscard]] bool IsHorizontalMovement() const { return m_horizontalMovement; }
+
+		[[nodiscard]] bool IsRealTimeTracking() const { return m_realTimeTracking; }
+
 	protected:
 		virtual void OnThumbPositionChanged();
 

@@ -452,7 +452,8 @@ namespace mmo
 					.def("GetMinimum", &ScrollBar::GetMinimumValue)
 					.def("GetMaximum", &ScrollBar::GetMaximumValue)
 					.def("GetStep", &ScrollBar::GetStep)
-					.def("SetStep", &ScrollBar::SetStep)),
+					.def("SetStep", &ScrollBar::SetStep)
+					.def("SetOnValueChangedHandler", &ScrollBar::SetOnValueChangedHandler)),
 
 			luabind::scope(
 				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")

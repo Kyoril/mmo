@@ -2,6 +2,8 @@
 
 #include "scroll_bar.h"
 
+#include "thumb.h"
+
 namespace mmo
 {
 	ScrollBar::ScrollBar(const std::string& type, const std::string& name)
@@ -9,8 +11,6 @@ namespace mmo
 		, m_orientation(ScrollBarOrientation::Vertical)
 	{
 		m_propConnections += AddProperty("Orientation").Changed.connect(this, &ScrollBar::OnOrientationPropertyChanged);
-
-		
 	}
 
 	void ScrollBar::Copy(Frame& other)
@@ -21,6 +21,7 @@ namespace mmo
 		if (const auto otherScrollBar = dynamic_cast<ScrollBar*>(&other))
 		{
 			otherScrollBar->m_orientation = m_orientation;
+			otherScrollBar->m_onValueChanged = m_onValueChanged;
 		}
 	}
 
@@ -29,9 +30,23 @@ namespace mmo
 		Frame::OnLoad();
 
 		// Setup child frames
-		m_upFrame = GetChild(0);
-		m_downFrame = GetChild(1);
-		m_thumbFrame = GetChild(2);
+		m_upFrame = dynamic_cast<Button*>(GetChild(0));
+		if (m_upFrame)
+		{
+			m_upFrame->Clicked.connect(this, &ScrollBar::OnUpButtonClicked);
+		}
+
+		m_downFrame = dynamic_cast<Button*>(GetChild(1));
+		if (m_downFrame)
+		{
+			m_downFrame->Clicked.connect(this, &ScrollBar::OnDownButtonClicked);
+		}
+
+		m_thumbFrame = dynamic_cast<Thumb*>(GetChild(2));
+		if (m_thumbFrame)
+		{
+			m_onThumbPositionChanged = m_thumbFrame->thumbPositionChanged.connect(this, &ScrollBar::OnThumbPositionChanged);
+		}
 	}
 
 	void ScrollBar::SetMinimumValue(const float minimum)
@@ -48,15 +63,11 @@ namespace mmo
 		}
 
 		m_minimum = minimum;
+		UpdateScrollButtons();
 
 		if (GetValue() < minimum)
 		{
 			SetValue(minimum);
-		}
-
-		if (m_step > m_maximum - m_minimum)
-		{
-			SetStep(m_maximum - m_minimum);
 		}
 
 		Invalidate();
@@ -76,21 +87,17 @@ namespace mmo
 		}
 
 		m_maximum = maximum;
+		UpdateScrollButtons();
 
-		if (GetValue() < maximum)
+		if (GetValue() > maximum)
 		{
 			SetValue(maximum);
-		}
-
-		if (m_step > m_maximum - m_minimum)
-		{
-			SetStep(m_maximum - m_minimum);
 		}
 
 		Invalidate();
 	}
 
-	void ScrollBar::SetValue(const float value)
+	void ScrollBar::SetValue(float value)
 	{
 		if (m_value == value)
 		{
@@ -99,18 +106,26 @@ namespace mmo
 
 		if (value > GetMaximumValue())
 		{
-			m_value = GetMaximumValue();
+			value = GetMaximumValue();
 		}
 		else if (value < GetMinimumValue())
 		{
-			m_value = GetMinimumValue();
-		}
-		else
-		{
-			m_value = value;
+			value = GetMinimumValue();
 		}
 
-		Invalidate();
+		if (m_value != value)
+		{
+			m_value = value;
+
+			UpdateScrollButtons();
+
+			if (m_onValueChanged.is_valid())
+			{
+				m_onValueChanged(this, m_value);
+			}
+
+			Invalidate();
+		}
 	}
 
 	void ScrollBar::SetStep(const float step)
@@ -133,6 +148,48 @@ namespace mmo
 		}
 
 		m_step = step;
+	}
+
+	Thumb* ScrollBar::GetThumb() const
+	{
+		return m_thumbFrame;
+	}
+
+	float ScrollBar::GetValueFromThumb() const
+	{
+		Thumb* thumb = GetThumb();
+		if (!thumb)
+		{
+			return 0.0f;
+		}
+
+		// Check the area of the thumb
+		const float y = thumb->GetY();
+		if (y <= thumb->GetVerticalMin())
+		{
+			return 0.0f;
+		}
+
+		if (y >= thumb->GetVerticalMax())
+		{
+			return 1.0f;
+		}
+
+		return (y - thumb->GetVerticalMin()) / (thumb->GetVerticalMax() - thumb->GetVerticalMin());
+	}
+
+	void ScrollBar::OnAreaChanged(const Rect& newArea)
+	{
+		Thumb* thumb = GetThumb();
+		if (!thumb)
+		{
+			return;
+		}
+
+		thumb->SetVerticalRange(newArea.top, newArea.bottom);
+		thumb->SetVerticalMovement(true);
+
+		// TODO: Limit thumb position and set it to the current value
 	}
 
 	void ScrollBar::OnOrientationPropertyChanged(const Property& property)
@@ -189,5 +246,54 @@ namespace mmo
 		strm >> value;
 
 		SetStep(value);
+	}
+
+	void ScrollBar::OnThumbPositionChanged(Thumb& thumb)
+	{
+		// Derive value from thumb position
+
+		
+
+		if (m_onValueChanged.is_valid())
+		{
+			m_onValueChanged(this, m_value);
+		}
+	}
+
+	void ScrollBar::OnUpButtonClicked()
+	{
+		SetValue(GetValue() - GetStep());
+	}
+
+	void ScrollBar::OnDownButtonClicked()
+	{
+		SetValue(GetValue() + GetStep());
+	}
+
+	void ScrollBar::UpdateScrollButtons()
+	{
+		if (m_upFrame)
+		{
+			if (m_value == GetMinimumValue())
+			{
+				m_upFrame->Disable();
+			}
+			else
+			{
+				m_upFrame->Enable();
+			}
+		}
+
+		if (m_downFrame)
+		{
+			if (m_value == GetMaximumValue())
+			{
+				m_downFrame->Disable();
+			}
+			else
+			{
+				m_downFrame->Enable();
+			}
+		}
 	}
 }

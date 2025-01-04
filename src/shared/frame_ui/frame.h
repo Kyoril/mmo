@@ -66,18 +66,25 @@ namespace mmo
 	public:
 		/// Fired when rendering of the frame began.
 		signal<void()> RenderingStarted;
+
 		/// Fired when rendering of the frame ended.
 		signal<void()> RenderingEnded;
+
 		/// Fired when the text of this frame was changed.
 		signal<void()> TextChanged;
+
 		/// Fired when the enabled state of this frame was changed.
 		signal<void()> EnabledStateChanged;
+
 		/// Fired when the frame's visibility changed.
 		signal<void()> VisibilityChanged;
+
 		/// Fired when the mouse button was pressed on this frame.
 		signal<void(const MouseEventArgs& args)> MouseDown;
+
 		/// Fired when the mouse button was released after being pressed on this frame.
 		signal<void(const MouseEventArgs& args)> MouseUp;
+
 		/// Triggered when the button was clicked.
 		signal<void()> Clicked;
 
@@ -108,8 +115,11 @@ namespace mmo
 	public:
 		// Lua wrappers
 		bool Lua_IsVisible() const;
+
 		inline void SetUserData(const luabind::object& data) { m_userData = data; }
+
 		inline const luabind::object& GetUserData() const { return m_userData; }
+
 		Pointer Clone();
 
 	public:
@@ -284,26 +294,37 @@ namespace mmo
 
 		/// Gets the parent frame.
 		inline Frame* GetParent() const { return m_parent; }
+
 		/// Determines whether the frame is currently hovered.
 		bool IsHovered() const;
+
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
 		void Invalidate(bool includeLayout = true) noexcept;
+
 		/// Tries to retrieve a child frame at the given position.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
+
 		/// Makes this frame capture input events.
 		void CaptureInput();
+
 		/// Stops this frame from receiving input events.
 		void ReleaseInput();
+
 		/// Determines whether this frame currently received input events.
 		bool HasInputCaptured() const;
+
 		/// Called when the input was captured.
 		virtual void OnInputCaptured() {}
+
 		/// Called when the input was released.
 		virtual void OnInputReleased() {}
+
 		/// Whether this frame can receive the input focus.
 		inline bool IsFocusable() const noexcept { return m_focusable; }
+
 		/// Invalidates all children.
 		void InvalidateChildren(bool recursive = true);
+
 		/// Calculates the intrinsic frame size.
 		Size GetIntrinsicSize();
 
@@ -430,6 +451,8 @@ namespace mmo
 		void OnEnterPressed();
 
 		void SetOpacity(float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
+
+		virtual void OnAreaChanged(const Rect& newArea) { }
 
 	private:
 		/// Executed when the clippedByParent property was changed.

@@ -5,6 +5,8 @@
 
 namespace mmo
 {
+	class Thumb;
+
 	/// Enumerates possible scroll bar orientation values.
 	enum class ScrollBarOrientation : uint8
 	{
@@ -50,12 +52,32 @@ namespace mmo
 
 		void SetStep(const float step);
 
+		Thumb* GetThumb() const;
+
+		float GetValueFromThumb() const;
+
+		void UpdateThumb();
+
+		void SetOnValueChangedHandler(const luabind::object& handler) { m_onValueChanged = handler; }
+
+	protected:
+		void OnAreaChanged(const Rect& newArea) override;
+
 	protected:
 		void OnOrientationPropertyChanged(const Property& property);
 		void OnMinimumPropertyChanged(const Property& property);
 		void OnMaximumPropertyChanged(const Property& property);
 		void OnValuePropertyChanged(const Property& property);
 		void OnStepPropertyChanged(const Property& property);
+
+	private:
+		void OnThumbPositionChanged(Thumb& thumb);
+
+		void OnUpButtonClicked();
+
+		void OnDownButtonClicked();
+
+		void UpdateScrollButtons();
 
 	private:
 		ScrollBarOrientation m_orientation;
@@ -66,6 +88,10 @@ namespace mmo
 
 		Frame* m_upFrame = nullptr;
 		Frame* m_downFrame = nullptr;
-		Frame* m_thumbFrame = nullptr;
+		Thumb* m_thumbFrame = nullptr;
+
+		scoped_connection m_onThumbPositionChanged;
+
+		luabind::object m_onValueChanged{};
 	};
 }
