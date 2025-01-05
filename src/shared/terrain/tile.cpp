@@ -93,6 +93,16 @@ namespace mmo
 			return m_page.GetTerrain();
 		}
 
+		uint32 CalculateARGB(const Vector4& val) noexcept
+		{
+			return (
+				static_cast<uint32>(val.w * 255) << 24 |
+				static_cast<uint32>(val.z * 255) << 16 |
+				static_cast<uint32>(val.y * 255) << 8 |
+				static_cast<uint32>(val.x * 255)
+				);
+		}
+
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
 		{
 			const size_t endX = m_startX + constants::VerticesPerTile;
@@ -135,7 +145,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = 0x000000FF;
+					vert->color = CalculateARGB(m_page.GetLayersAt(i, j));
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 
@@ -205,7 +215,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = 0x000000FF;
+					vert->color = CalculateARGB(m_page.GetLayersAt(i, j));
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 

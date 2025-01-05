@@ -114,9 +114,7 @@ namespace mmo
 
 	enum class TerrainDeformMode : uint8
 	{
-		Raise,
-
-		Lower,
+		Sculpt,
 
 		Smooth,
 
@@ -262,7 +260,7 @@ namespace mmo
 
 		// Terrain edit modes
 		TerrainEditMode m_terrainEditMode{ TerrainEditMode::Select };
-		TerrainDeformMode m_terrainDeformMode{ TerrainDeformMode::Raise };
+		TerrainDeformMode m_terrainDeformMode{ TerrainDeformMode::Sculpt };
 		TerrainPaintMode m_terrainPaintMode{ TerrainPaintMode::Paint };
 
 		// Spawn edit mode
@@ -274,8 +272,14 @@ namespace mmo
 		bool m_hasTerrain{ true };
 		std::vector<String> m_meshNames;
 
-
 		Vector3 m_brushPosition{};
 		uint32 m_worldFileVersion;
+
+		float m_deformFlattenHeight = 0.0f;
+
+		int32 m_terrainBrushSize = 6;
+		float m_terrainBrushHardness = 0.5f;
+		float m_terrainBrushPower = 10.0f;
+		uint8 m_terrainPaintLayer = 0;
 	};
 }

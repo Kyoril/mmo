@@ -73,6 +73,7 @@ namespace mmo
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
 			m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
+			m_layers.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -231,6 +232,26 @@ namespace mmo
 			}
 
 			return m_heightmap[x + y * constants::VerticesPerPage];
+		}
+
+		const Vector4& Page::GetLayersAt(size_t x, size_t y) const
+		{
+			static Vector4 s_none;
+
+			if (!IsPrepared())
+			{
+				return s_none;
+			}
+
+			if (x >= constants::VerticesPerPage ||
+				y >= constants::VerticesPerPage)
+			{
+				return s_none;
+			}
+
+			const size_t index = x + y * constants::VerticesPerPage;
+			ASSERT(index < m_layers.size());
+			return m_layers[index];
 		}
 
 		float Page::GetSmoothHeightAt(float x, float y) const
@@ -560,6 +581,58 @@ namespace mmo
 			m_changed = true;
 		}
 
+		void Page::SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value)
+		{
+			if (x >= constants::VerticesPerPage || z >= constants::VerticesPerPage)
+			{
+				return;
+			}
+
+			Vector4& layers = m_layers[x + z * constants::VerticesPerPage];
+
+			// 1. Record the old sum (for informational purposes, or checks).
+			float oldSum = layers.x + layers.y + layers.z + layers.w;
+
+			// 2. Set the chosen channel to newValue
+			switch (layer)
+			{
+			case 0: layers.x = value; break;
+			case 1: layers.y = value; break;
+			case 2: layers.z = value; break;
+			case 3: layers.w = value; break;
+			default:
+				// Handle error, unknown channel
+				return;
+			}
+
+			// 3. Compute the sum of all four *after* setting the chosen channel
+			float sumAfter = layers.x + layers.y + layers.z + layers.w;
+
+			// 4. If the sum is 0 (or extremely close to 0), we can’t scale. 
+			//    Handle that case gracefully.
+			if (std::fabs(sumAfter) < 1e-6f)
+			{
+				// e.g. just set everything else to 0, or choose a fallback strategy.
+				// We'll do a simple fallback here:
+				layers.x = (layer == 0) ? value : 0.f;
+				layers.y = (layer == 1) ? value : 0.f;
+				layers.z = (layer == 2) ? value : 0.f;
+				layers.w = (layer == 3) ? value : 0.f;
+				return;
+			}
+
+			// 5. We want the total to be exactly 1. So we figure out the scale factor:
+			float scale = 1.0f / sumAfter;
+
+			// 6. Multiply the entire vector by this scale to force sum == 1
+			layers.x *= scale;
+			layers.y *= scale;
+			layers.z *= scale;
+			layers.w *= scale;
+
+			m_changed = true;
+		}
+
 		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity)
 		{
 			Paint(layer, x, y, innerRadius, outerRadius, intensity, 0.0f, 1.0f);
@@ -567,12 +640,6 @@ namespace mmo
 
 		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity, float minSloap, float maxSloap)
 		{
-			float& value = m_layers[x + y * constants::VerticesPerPage][layer];
-			value = Clamp(value + intensity, 0.0f, 1.0f);
-
-			// TODO: Balance
-			UpdateTiles(0, 0, constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, false);
-			m_changed = true;
 		}
 
 		void Page::Balance(unsigned int x, unsigned int y, unsigned int layer, int val)

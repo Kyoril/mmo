@@ -113,6 +113,89 @@ namespace mmo
 			return GetAt(x, z);
 		}
 
+		const Vector4& Terrain::GetLayersAt(uint32 x, uint32 z)
+		{
+			static Vector4 empty;
+
+			// Validate indices
+			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= TotalVertices || z >= TotalVertices)
+			{
+				return empty;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(z, pageY, localVertexY);
+
+			// Retrieve the page at (pageX, pageY)
+			Page* page = GetPage(pageX, pageY); // Implement GetPage accordingly
+
+			// Retrieve the height at the local vertex within the page
+			return page->GetLayersAt(localVertexX, localVertexY);
+		}
+
+		void Terrain::SetLayerAt(uint32 x, uint32 y, uint8 layer, float value)
+		{
+			ASSERT(layer < 4);
+
+			// Determine page
+			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= TotalVertices || y >= TotalVertices)
+			{
+				return;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(y, pageY, localVertexY);
+
+			const bool isLeftEdge = localVertexX == 0 && pageX > 0;
+			const bool isTopEdge = localVertexY == 0 && pageY > 0;
+
+			Page* page = GetPage(pageX, pageY);
+			if (page &&
+				page->IsPrepared())
+			{
+				page->SetLayerAt(localVertexX, localVertexY, layer, value);
+			}
+
+			// Vertex on left edge
+			if (isLeftEdge)
+			{
+				page = GetPage(pageX - 1, pageY);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetLayerAt(constants::VerticesPerPage - 1, localVertexY, layer, value);
+				}
+			}
+
+			// Vertex on top edge
+			if (isTopEdge)
+			{
+				page = GetPage(pageX, pageY - 1);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetLayerAt(localVertexX, constants::VerticesPerPage - 1, layer, value);
+				}
+			}
+
+			// All four pages!
+			if (isLeftEdge && isTopEdge)
+			{
+				page = GetPage(pageX - 1, pageY - 1);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetLayerAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, layer, value);
+				}
+			}
+		}
+
 		float Terrain::GetSmoothHeightAt(float x, float z)
 		{
 			int32 pageX, pageY;
@@ -574,38 +657,37 @@ namespace mmo
 
 		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power, float minSloap, float maxSloap)
 		{
+			ASSERT(layer < 4);
+
 			x -= outerRadius;
 			z -= outerRadius;
 
-			// Pages to paint on
-			std::unordered_map<unsigned int, Page*> pages;
-
-			for (int vertX = x; vertX < x + outerRadius * 2; vertX++)
+			for (int vertX = std::max<int>(0, x); vertX < x + outerRadius * 2; vertX++)
 			{
-				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
+				if (vertX > static_cast<int>(m_width * (constants::VerticesPerPage - 1)) + 1)
+				{
 					continue;
 				}
 
-				for (int vertZ = z; vertZ < z + outerRadius * 2; vertZ++)
+				for (int vertZ = std::max<int>(0, z); vertZ < z + outerRadius * 2; vertZ++)
 				{
-					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
+					if (vertZ > static_cast<int>(m_height * (constants::VerticesPerPage - 1)) + 1)
+					{
 						continue;
 					}
 
-					uint32 pageX, pageY, localVertexX, localVertexY;
-					GetPageAndLocalVertex(x, pageX, localVertexX);
-					GetPageAndLocalVertex(z, pageY, localVertexY);
+					const auto& layers = GetLayersAt(vertX, vertZ);
 
-					// Get page
-					Page* page = GetPage(pageX, pageY);
-					if (!page || !page->IsLoaded()) {
-						continue;
-					}
+					float value = layers[layer];
 
-					// Save page for painting
-					page->Paint(layer, localVertexX, localVertexY, innerRadius, outerRadius, power, minSloap, maxSloap);
+					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
+					value += power * factor;
+
+					SetLayerAt(vertX, vertZ, layer, Clamp(value, 0.0f, 1.0f));
 				}
 			}
+
+			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
 		}
 
 		void Terrain::SetHeightAt(int x, int y, float height)

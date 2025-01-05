@@ -60,6 +60,8 @@ namespace mmo
 
 			float GetHeightAt(size_t x, size_t y) const;
 
+			const Vector4& GetLayersAt(size_t x, size_t y) const;
+
 			float GetSmoothHeightAt(float x, float y) const;
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly = false);
@@ -95,6 +97,8 @@ namespace mmo
 			void NotifyTileMaterialChanged(uint32 x, uint32 y);
 
 			void SetHeightAt(unsigned int x, unsigned int z, float value);
+
+			void SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value);
 
 			void Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity = 1.0f);
 

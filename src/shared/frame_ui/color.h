@@ -42,6 +42,7 @@ namespace mmo
 			}
 			return m_argb;
 		}
+
 		inline float GetAlpha() const noexcept { return m_alpha; }
 		inline float GetRed() const noexcept { return m_red; }
 		inline float GetGreen() const noexcept { return m_green; }

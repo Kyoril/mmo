@@ -24,7 +24,7 @@ namespace mmo
 
 		namespace constants
 		{
-			constexpr uint32 VerticesPerTile = 9;
+			constexpr uint32 VerticesPerTile = 18;
 			constexpr uint32 TilesPerPage = 16;
 			constexpr uint32 VerticesPerPage = (VerticesPerTile - 1) * TilesPerPage + 1;
 			constexpr uint32 MaxPages = 64;
@@ -56,6 +56,10 @@ namespace mmo
 			float GetSlopeAt(uint32 x, uint32 z);
 
 			float GetHeightAt(uint32 x, uint32 z);
+
+			const Vector4& GetLayersAt(uint32 x, uint32 z);
+
+			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value);
 
 			float GetSmoothHeightAt(float x, float z);
 

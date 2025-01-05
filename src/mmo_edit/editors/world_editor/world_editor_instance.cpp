@@ -256,28 +256,56 @@ namespace mmo
 			
 			if (m_editMode == WorldEditMode::Terrain)
 			{
+				int32 pageX, pageY;
+				m_terrain->GetPageIndexByWorldPosition(m_brushPosition, pageX, pageY);
+
+				const float pageOffsetX = pageX * terrain::constants::PageSize;
+				const float pageOffsetY = pageY * terrain::constants::PageSize;
+				constexpr float scale = static_cast<float>(terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1));
+
+				int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
+				int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
+				int pageVertexX = globalVertexX % (terrain::constants::VerticesPerPage - 1);
+				int pageVertexY = globalVertexY % (terrain::constants::VerticesPerPage - 1);
+
+				int vX = pageX * (terrain::constants::VerticesPerPage - 1) + pageVertexX;
+				int vY = pageY * (terrain::constants::VerticesPerPage - 1) + pageVertexY;
+
+				const int32 outerRadius = m_terrainBrushSize;
+				const int32 innerRadius = std::max(1, static_cast<int32>(static_cast<float>(m_terrainBrushSize) * m_terrainBrushHardness));
+
 				if (m_terrainEditMode == TerrainEditMode::Deform)
 				{
-					if (m_terrainDeformMode == TerrainDeformMode::Raise)
+					if (m_terrainDeformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
 					{
-						int32 pageX, pageY;
-						m_terrain->GetPageIndexByWorldPosition(m_brushPosition, pageX, pageY);
-
-						const float pageOffsetX = pageX * terrain::constants::PageSize;
-						const float pageOffsetY = pageY * terrain::constants::PageSize;
-						constexpr float scale = terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1);
-
-						int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
-						int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
-						int pageVertexX = globalVertexX % (terrain::constants::VerticesPerPage - 1);
-						int pageVertexY = globalVertexY % (terrain::constants::VerticesPerPage - 1);
-
-						int vX = pageX * (terrain::constants::VerticesPerPage - 1) + pageVertexX;
-						int vY = pageY * (terrain::constants::VerticesPerPage - 1) + pageVertexY;
-
-						m_terrain->Deform(vX, vY,
-							3, 6, 1.0f * factor * deltaTimeSeconds);
+						m_deformFlattenHeight = m_terrain->GetHeightAt(vX, vY);
 					}
+					else
+					{
+						switch (m_terrainDeformMode)
+						{
+						case TerrainDeformMode::Sculpt:
+						{
+							m_terrain->Deform(vX, vY,
+								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
+						} break;
+						case TerrainDeformMode::Smooth:
+						{
+							m_terrain->Smooth(vX, vY,
+								innerRadius, outerRadius, m_terrainBrushPower* factor * deltaTimeSeconds);
+						} break;
+						case TerrainDeformMode::Flatten:
+						{
+							m_terrain->Flatten(vX, vY,
+								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds, m_deformFlattenHeight);
+						} break;
+						}
+					}
+				}
+				else if (m_terrainEditMode == TerrainEditMode::Paint)
+				{
+					m_terrain->Paint(m_terrainPaintLayer, vX, vY,
+						innerRadius, outerRadius, m_terrainBrushPower * factor* deltaTimeSeconds);
 				}
 			}
 		}
@@ -323,6 +351,14 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditMode::Count_), "There needs to be one string per enum value to display!");
+
+	static const char* s_terrainDeformModeStrings[] = {
+		"Sculpt",
+		"Smooth",
+		"Flatten"
+	};
+
+	static_assert(std::size(s_terrainDeformModeStrings) == static_cast<uint32>(TerrainDeformMode::Count_), "There needs to be one string per enum value to display!");
 
 
 	void WorldEditorInstance::Draw()
@@ -431,7 +467,7 @@ namespace mmo
 					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
 					{
 						ImGui::PushID(i);
-						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_editMode)))
+						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_terrainEditMode)))
 						{
 							m_terrainEditMode = static_cast<TerrainEditMode>(i);
 							m_selection.Clear();
@@ -441,6 +477,48 @@ namespace mmo
 
 					ImGui::EndCombo();
 				}
+
+				if (m_terrainEditMode == TerrainEditMode::Deform && m_hasTerrain)
+				{
+					if (ImGui::BeginCombo("Deform Mode", s_terrainDeformModeStrings[static_cast<uint32>(m_terrainDeformMode)], ImGuiComboFlags_None))
+					{
+						for (uint32 i = 0; i < static_cast<uint32>(TerrainDeformMode::Count_); ++i)
+						{
+							ImGui::PushID(i);
+							if (ImGui::Selectable(s_terrainDeformModeStrings[i], i == static_cast<uint32>(m_terrainDeformMode)))
+							{
+								m_terrainDeformMode = static_cast<TerrainDeformMode>(i);
+								m_selection.Clear();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+				}
+				else if (m_terrainEditMode == TerrainEditMode::Paint && m_hasTerrain)
+				{
+					static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+
+					if (ImGui::BeginCombo("Layer", s_layerNames[m_terrainPaintLayer]))
+					{
+						for (uint32 i = 0; i < std::size(s_layerNames); ++i)
+						{
+							ImGui::PushID(i);
+							if (ImGui::Selectable(s_layerNames[i], i == m_terrainPaintLayer))
+							{
+								m_terrainPaintLayer = i;
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+				}
+
+				ImGui::SliderInt("Brush Radius", &m_terrainBrushSize, 1, terrain::constants::VerticesPerTile);
+				ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
+				ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
 			}
 
 			ImGui::Separator();
@@ -819,7 +897,8 @@ namespace mmo
 			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != WorldEditMode::Terrain || m_terrainEditMode != TerrainEditMode::Deform)))
+			// TODO: This shit needs to be changed so that each tool has it's own camera controls or something like that
+			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != WorldEditMode::Terrain || (m_terrainEditMode != TerrainEditMode::Deform && m_terrainEditMode != TerrainEditMode::Paint))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
