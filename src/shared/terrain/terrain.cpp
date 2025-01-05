@@ -77,7 +77,7 @@ namespace mmo
 		static void GetPageAndLocalVertex(uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
 		{
 			pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
-			localVertexIndex = vertexIndex % (constants::VerticesPerPage - 1);
+			localVertexIndex = (vertexIndex - (pageIndex * (constants::VerticesPerPage - 1))) % constants::VerticesPerPage;
 		}
 
 		float Terrain::GetAt(uint32 x, uint32 z)
@@ -332,7 +332,7 @@ namespace mmo
 						}
 
 						// Get the hit point
-						point = ray.GetPoint(res.second);
+						point = ray.GetPoint(res.second + FLT_EPSILON);
 
 						while (true)
 						{
@@ -610,9 +610,6 @@ namespace mmo
 
 		void Terrain::SetHeightAt(int x, int y, float height)
 		{
-			bool isRightEdge = (x % constants::VerticesPerPage == 0) && (x > 0);
-			bool isBottomEdge = (y % constants::VerticesPerPage == 0) && (y > 0);
-
 			// Determine page
 			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
 			if (x >= TotalVertices || y >= TotalVertices)
@@ -624,6 +621,10 @@ namespace mmo
 			uint32 pageX, pageY, localVertexX, localVertexY;
 			GetPageAndLocalVertex(x, pageX, localVertexX);
 			GetPageAndLocalVertex(y, pageY, localVertexY);
+
+			const bool isLeftEdge = localVertexX == 0 && pageX > 0;
+			const bool isTopEdge = localVertexY == 0 && pageY > 0;
+
 			Page* page = GetPage(pageX, pageY);
 			if (page &&
 				page->IsPrepared())
@@ -631,38 +632,36 @@ namespace mmo
 				page->SetHeightAt(localVertexX, localVertexY, height);
 			}
 
-			// Vertex on right edge
-			if (isRightEdge)
+			// Vertex on left edge
+			if (isLeftEdge)
 			{
-				pageX++;
-				page = GetPage(pageX + 1, pageY);
+				page = GetPage(pageX - 1, pageY);
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(0, localVertexY, height);
+					page->SetHeightAt(constants::VerticesPerPage - 1, localVertexY, height);
 				}
 			}
 
-			// Vertex on bottom edge
-			if (isBottomEdge)
+			// Vertex on top edge
+			if (isTopEdge)
 			{
-				pageY++;
-				page = GetPage(pageX, pageY + 1);
+				page = GetPage(pageX, pageY - 1);
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(localVertexX, localVertexY, height);
+					page->SetHeightAt(localVertexX, constants::VerticesPerPage - 1, height);
 				}
 			}
 
 			// All four pages!
-			if (isRightEdge && isBottomEdge)
+			if (isLeftEdge && isTopEdge)
 			{
-				page = GetPage(pageX + 1, pageY + 1);
+				page = GetPage(pageX - 1, pageY - 1);
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(0, 0, height);
+					page->SetHeightAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, height);
 				}
 			}
 		}

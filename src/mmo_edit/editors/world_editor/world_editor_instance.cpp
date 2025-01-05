@@ -1084,7 +1084,7 @@ namespace mmo
 		if (terrain::Tile* tile = hitResult.second.tile)
 		{
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
-			UpdateDebugAABB(tile->GetWorldBoundingBox());
+			UpdateDebugAABB(tile->GetPage().GetBoundingBox());
 		}
 
 		m_debugNode->SetPosition(hitResult.second.position);

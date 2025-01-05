@@ -156,7 +156,7 @@ namespace mmo
 				return std::make_pair(false, 0.0f);
 			}
 
-			return std::make_pair(true, tmin / GetLength());
+			return std::make_pair(true, tmin);
 		}
 
 		std::pair<bool, float> Intersects(const Plane& p) const
