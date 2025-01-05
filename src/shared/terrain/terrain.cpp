@@ -193,8 +193,8 @@ namespace mmo
 
 		bool Terrain::GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
 		{
-			x = (m_width / 2) - floor(position.x / terrain::constants::PageSize);
-			y = (m_height / 2) - static_cast<uint32>(floor(position.z / terrain::constants::PageSize));
+			x = floor(position.x / terrain::constants::PageSize) + (m_width / 2);
+			y = static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + (m_height / 2);
 			return true;
 		}
 

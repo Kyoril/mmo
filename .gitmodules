@@ -14,3 +14,6 @@
 [submodule "deps/glfw"]
 	path = deps/glfw
 	url = https://github.com/glfw/glfw
+[submodule "deps/recastnavigation"]
+	path = deps/recastnavigation
+	url = https://github.com/recastnavigation/recastnavigation.git

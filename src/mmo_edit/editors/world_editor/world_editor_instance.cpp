@@ -1205,10 +1205,12 @@ namespace mmo
 	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
 	{
 		const auto& camPos = m_camera->GetDerivedPosition();
-		return PagePosition(static_cast<uint32>(
-			32 - floor(camPos.x / terrain::constants::PageSize)),
-			32 - static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)));
 
+		const auto pagePos = PagePosition(
+			static_cast<uint32>(floor(camPos.x / terrain::constants::PageSize)) + 32,
+			static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+
+		return pagePos;
 	}
 
 	void WorldEditorInstance::SetMapEntry(proto::MapEntry* entry)
@@ -1220,7 +1222,7 @@ namespace mmo
 
 		m_mapEntry = entry;
 
-		// TODO: Udpate spawn placement objects
+		// TODO: Update spawn placement objects
 
 		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
 		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!

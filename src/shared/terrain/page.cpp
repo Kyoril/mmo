@@ -35,9 +35,9 @@ namespace mmo
 			, m_loaded(false)
 		{
 			const Vector3 offset = Vector3(
-				static_cast<float>(static_cast<double>(32 - m_x) * constants::PageSize),
+				static_cast<float>(static_cast<double>(m_x - 32) * constants::PageSize),
 				0.0f,
-				static_cast<float>(static_cast<double>(32 - m_z) * constants::PageSize)
+				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize)
 			);
 
 			// Bounding box
@@ -320,20 +320,20 @@ namespace mmo
 			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage));
 			float flip = 1.0f;
 
-			size_t offsX = m_x * constants::VerticesPerPage;
-			size_t offsY = m_z * constants::VerticesPerPage;
+			size_t offsX = m_x * (constants::VerticesPerPage - 1);
+			size_t offsY = m_z * (constants::VerticesPerPage - 1);
 
 			Vector3 here(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z), static_cast<float>(z) * scaling);
 
 			Vector3 right(static_cast<float>(x + 1) * scaling, m_terrain.GetAt(offsX + x + 1, offsY + z), static_cast<float>(z * scaling));
-			if (x >= m_terrain.GetWidth() * constants::VerticesPerPage)
+			if (x >= m_terrain.GetWidth() * (constants::VerticesPerPage - 1) + 1)
 			{
 				right.y = here.y;
 				flip = -1.0f;
 			}
 
 			Vector3 down(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z + 1), static_cast<float>(z + 1) * scaling);
-			if (z >= m_terrain.GetHeight() * constants::VerticesPerPage)
+			if (z >= m_terrain.GetHeight() * (constants::VerticesPerPage - 1) + 1)
 			{
 				down.z = here.y;
 				flip = -1.0f;
@@ -356,8 +356,8 @@ namespace mmo
 
 		Vector3 Page::CalculateTangentAt(uint32 x, uint32 z)
 		{
-			size_t offsX = m_x * constants::VerticesPerPage;
-			size_t offsY = m_z * constants::VerticesPerPage;
+			size_t offsX = m_x * (constants::VerticesPerPage - 1);
+			size_t offsY = m_z * (constants::VerticesPerPage - 1);
 
 			int flip = 1;
 			Vector3 here = m_terrain.GetVectorAt(x + offsX, z + offsY);
