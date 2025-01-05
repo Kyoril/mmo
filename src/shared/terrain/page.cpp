@@ -280,6 +280,14 @@ namespace mmo
 			unsigned int toTileX = toX / (constants::VerticesPerTile - 1);
 			unsigned int toTileZ = toZ / (constants::VerticesPerTile - 1);
 
+			if (fromTileX >= constants::TilesPerPage || fromTileZ >= constants::TilesPerPage)
+			{
+				return;
+			}
+
+			if (toTileX >= constants::TilesPerPage) toTileX = constants::TilesPerPage - 1;
+			if (toTileZ >= constants::TilesPerPage) toTileZ = constants::TilesPerPage - 1;
+
 			for (unsigned int x = fromTileX; x <= toTileX; x++)
 			{
 				for (unsigned int z = fromTileZ; z <= toTileZ; z++)

@@ -686,8 +686,8 @@ namespace mmo
 				}
 
 				// Get page start vertex (X)
-				unsigned int pageStartX = std::max<int>(fromX - x * constants::VerticesPerPage, 0);
-				unsigned int pageEndX = toX - x * constants::VerticesPerPage;
+				unsigned int pageStartX = std::max<int>(fromX - x * (constants::VerticesPerPage - 1), 0);
+				unsigned int pageEndX = toX - x * (constants::VerticesPerPage - 1);
 
 				for (unsigned int z = fromPageZ; z <= toPageZ; z++)
 				{
@@ -698,8 +698,8 @@ namespace mmo
 					}
 
 					// Get page start vertex (Z)
-					unsigned int pageStartZ = std::max<int>(fromZ - z * constants::VerticesPerPage, 0);
-					unsigned int pageEndZ = toZ - z * constants::VerticesPerPage;
+					unsigned int pageStartZ = std::max<int>(fromZ - z * (constants::VerticesPerPage - 1), 0);
+					unsigned int pageEndZ = toZ - z * (constants::VerticesPerPage - 1);
 
 					// Update the tiles if necessary
 					Page* pPage = GetPage(x, z);
@@ -707,7 +707,7 @@ namespace mmo
 					{
 						if (pPage->IsLoaded()) 
 						{
-							pPage->UpdateTiles(0, 0, constants::TilesPerPage * constants::VerticesPerTile, constants::TilesPerPage * constants::VerticesPerTile, false);
+							pPage->UpdateTiles(pageStartX, pageStartZ, pageEndX, pageEndZ, false);
 						}
 					}
 				}
