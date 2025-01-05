@@ -282,10 +282,14 @@ namespace mmo
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 		
-		device.GetAutoCreatedWindow()->Closed.connect([]() {
+		device.GetAutoCreatedWindow()->Closed.connect([]() 
+		{
 			EventLoop::Terminate(0);
 		});
-		device.GetAutoCreatedWindow()->Resized.connect([](uint16 width, uint16 height) {
+
+		device.GetAutoCreatedWindow()->Resized.connect([](uint16 width, uint16 height) 
+		{
+			FrameManager::Get().NotifyScreenSizeChanged(width, height);
 			if (auto topFrame = FrameManager::Get().GetTopFrame(); topFrame)
 			{
 				topFrame->Invalidate();

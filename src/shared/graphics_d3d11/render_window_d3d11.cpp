@@ -201,6 +201,11 @@ namespace mmo
 		// Recreate size dependent resources
 		CreateSizeDependantResources();
 
+		// Hacky way to reset the viewport size
+		float minZ, maxZ;
+		m_device.GetViewport(nullptr, nullptr, nullptr, nullptr, &minZ, &maxZ);
+		m_device.SetViewport(0, 0, m_width, m_height, minZ, maxZ);
+
 		// No longer resize pending
 		m_pendingWidth = 0;
 		m_pendingHeight = 0;
