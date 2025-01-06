@@ -256,21 +256,6 @@ namespace mmo
 			
 			if (m_editMode == WorldEditMode::Terrain)
 			{
-				int32 pageX, pageY;
-				m_terrain->GetPageIndexByWorldPosition(m_brushPosition, pageX, pageY);
-
-				const float pageOffsetX = pageX * terrain::constants::PageSize;
-				const float pageOffsetY = pageY * terrain::constants::PageSize;
-				constexpr float scale = static_cast<float>(terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1));
-
-				int globalVertexX = static_cast<int>((m_brushPosition.x + pageOffsetX) / scale);
-				int globalVertexY = static_cast<int>((m_brushPosition.z + pageOffsetY) / scale);
-				int pageVertexX = globalVertexX % (terrain::constants::VerticesPerPage - 1);
-				int pageVertexY = globalVertexY % (terrain::constants::VerticesPerPage - 1);
-
-				int vX = pageX * (terrain::constants::VerticesPerPage - 1) + pageVertexX;
-				int vY = pageY * (terrain::constants::VerticesPerPage - 1) + pageVertexY;
-
 				const int32 outerRadius = m_terrainBrushSize;
 				const int32 innerRadius = std::max(1, static_cast<int32>(static_cast<float>(m_terrainBrushSize) * m_terrainBrushHardness));
 
@@ -278,7 +263,7 @@ namespace mmo
 				{
 					if (m_terrainDeformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
 					{
-						m_deformFlattenHeight = m_terrain->GetHeightAt(vX, vY);
+						m_deformFlattenHeight = m_terrain->GetSmoothHeightAt(m_brushPosition.x, m_brushPosition.z);
 					}
 					else
 					{
@@ -286,17 +271,17 @@ namespace mmo
 						{
 						case TerrainDeformMode::Sculpt:
 						{
-							m_terrain->Deform(vX, vY,
+							m_terrain->Deform(m_brushPosition.x, m_brushPosition.z,
 								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
 						} break;
 						case TerrainDeformMode::Smooth:
 						{
-							m_terrain->Smooth(vX, vY,
+							m_terrain->Smooth(m_brushPosition.x, m_brushPosition.z,
 								innerRadius, outerRadius, m_terrainBrushPower* factor * deltaTimeSeconds);
 						} break;
 						case TerrainDeformMode::Flatten:
 						{
-							m_terrain->Flatten(vX, vY,
+							m_terrain->Flatten(m_brushPosition.x, m_brushPosition.z,
 								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds, m_deformFlattenHeight);
 						} break;
 						}
@@ -304,8 +289,8 @@ namespace mmo
 				}
 				else if (m_terrainEditMode == TerrainEditMode::Paint)
 				{
-					m_terrain->Paint(m_terrainPaintLayer, vX, vY,
-						innerRadius, outerRadius, m_terrainBrushPower * factor* deltaTimeSeconds);
+					/*m_terrain->Paint(m_terrainPaintLayer, vX, vY,
+						innerRadius, outerRadius, m_terrainBrushPower * factor* deltaTimeSeconds);*/
 				}
 			}
 		}

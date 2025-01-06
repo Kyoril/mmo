@@ -37,4 +37,15 @@ namespace mmo
 		// Linear interpolation
 		return min + (max - min) * t;
 	}
+
+	// We store three int8_t for the X/Y/Z components.
+	struct EncodedNormal8
+	{
+		int8_t x;
+		int8_t y;
+		int8_t z;
+	};
+
+	EncodedNormal8 EncodeNormalSNorm8(float nx, float ny, float nz);
+	void DecodeNormalSNorm8(const EncodedNormal8& enc, float& nx, float& ny, float& nz);
 }

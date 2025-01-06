@@ -117,11 +117,11 @@ namespace mmo
 
 			void GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ);
 
-			void Deform(int x, int z, int innerRadius, int outerRadius, float power);
+			void Deform(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
 
-			void Smooth(int x, int z, int innerRadius, int outerRadius, float power);
+			void Smooth(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
 
-			void Flatten(int x, int z, int innerRadius, int outerRadius, float power, float avgHeight);
+			void Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight);
 
 			void Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power);
 
@@ -132,6 +132,66 @@ namespace mmo
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
 		private:
+
+			template<typename GetBrushIntensity, typename VertexFunction>
+			void TerrainVertexBrush(const float brushCenterX, const float brushCenterZ, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity& getBrushIntensity, const VertexFunction& vertexFunction)
+			{
+				// Convert brush center from world space to *global* vertex indices
+				// We'll do it by shifting the range so that x=0 => left edge of the terrain
+				// and x = m_width*(VerticesPerPage-1)*scale => right edge.
+
+				const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+				const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+				// scale = pageSize / (VerticesPerPage - 1)
+				constexpr float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
+
+				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
+				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
+				float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+
+				// Compute min/max vertex indices in global index space (floor, ceil, clamp)
+				int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
+				int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+				minVertX = std::max(0, minVertX);
+				maxVertX = std::min<int>(maxVertX, m_width * (constants::VerticesPerPage - 1));
+
+				int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
+				int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+				minVertZ = std::max(0, minVertZ);
+				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::VerticesPerPage - 1));
+
+				// Loop over each vertex that could be within the outer radius
+				for (int vx = minVertX; vx <= maxVertX; vx++)
+				{
+					for (int vz = minVertZ; vz <= maxVertZ; vz++)
+					{
+						// Convert these vertex indices back to world positions
+						float worldX, worldZ;
+						GetGlobalVertexWorldPosition(vx, vz, &worldX, &worldZ);
+
+						// Compute distance from brush center
+						float dx = worldX - brushCenterX;
+						float dz = worldZ - brushCenterZ;
+						float dist = sqrt(dx * dx + dz * dz);
+
+						// Determine if this vertex is within the brush area
+						if (dist <= outerRadius)
+						{
+							// Compute a weight factor for the current terrain vertex based on the brush center, inner and outer radius and so on
+							const float factor = getBrushIntensity(dist, innerRadius, outerRadius);
+							vertexFunction(vx, vz, factor);
+						}
+					}
+				}
+
+				if (updateTiles)
+				{
+					UpdateTiles(minVertX, minVertZ, maxVertX, maxVertZ);
+				}
+			}
+
+			void GetGlobalVertexWorldPosition(int x, int y, float* out_x = nullptr, float* out_z = nullptr) const;
 
 			// Helper methods
 			bool RayAABBIntersection(const Ray& ray, float& tmin, float& tmax) const;

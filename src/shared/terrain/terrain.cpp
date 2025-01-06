@@ -492,6 +492,25 @@ namespace mmo
 			vertexZ = static_cast<int32>((z - pageOriginZ) / scale) + (pageY * constants::VerticesPerPage);
 		}
 
+		namespace
+		{
+			float GetBrushIntensityLinear(float dist, float innerRadius, float outerRadius)
+			{
+				// If the distance is beyond the outer radius, intensity is zero
+				if (dist >= outerRadius)
+					return 0.0f;
+
+				// If the distance is within the inner radius, intensity is maximum (1.0)
+				if (dist <= innerRadius)
+					return 1.0f;
+
+				// Otherwise, linearly interpolate between [innerRadius, outerRadius]
+				// so that dist = innerRadius => 1.0, dist = outerRadius => 0.0
+				float t = (dist - innerRadius) / (outerRadius - innerRadius);
+				return 1.0f - t;
+			}
+		}
+		
 		static float GetBrushIntensity(int x, int y, int innerRadius, int outerRadius)
 		{
 			float factor = 1.0f;
@@ -509,145 +528,47 @@ namespace mmo
 			return factor;
 		}
 
-		void Terrain::Deform(int x, int z, int innerRadius, int outerRadius, float power)
+		void Terrain::Deform(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
-			x -= outerRadius;
-			z -= outerRadius;
-
-			for (int vertX = std::max<int>(0, x); vertX < x + outerRadius * 2; vertX++)
-			{
-				if (vertX > static_cast<int>(m_width * (constants::VerticesPerPage - 1)) + 1)
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
 				{
-					continue;
-				}
-
-				for (int vertZ = std::max<int>(0, z); vertZ < z + outerRadius * 2; vertZ++)
-				{
-					if (vertZ > static_cast<int>(m_height * (constants::VerticesPerPage - 1)) + 1)
-					{
-						continue;
-					}
-
-					float height = GetHeightAt(vertX, vertZ);
-
-					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
-					height += power * factor;
-
-					SetHeightAt(vertX, vertZ, height);
-				}
-			}
-
-			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+					float height = GetHeightAt(vx, vy);
+					height += (power * factor);
+					SetHeightAt(vx, vy, height);
+				});
 		}
 
-		void Terrain::Smooth(int x, int z, int innerRadius, int outerRadius, float power)
+		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
-			x -= outerRadius;
-			z -= outerRadius;
-
-			int areaWidth = outerRadius * 2;
-			int areaHeight = outerRadius * 2;
-
-			if (x < 0)
-			{
-				x = 0;
-			}
-
-			if (z < 0)
-			{
-				z = 0;
-			}
-
-			Grid<float> terrainHeights(areaWidth, areaHeight, 0.0f);
-
+			// First collect average height value
 			float sumHeight = 0.0f;
-			for (int i = x; i < x + areaWidth; ++i)
-			{
-				for (int j = z; j < z + areaHeight; ++j)
+			uint32 heightCount = 0;
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
 				{
-					terrainHeights(i - x, j - z) = GetAt(i, j);
-					sumHeight += terrainHeights(i - x, j - z);
-				}
-			}
+					float height = GetHeightAt(vx, vy);
+					sumHeight += height;
+					heightCount++;
+				});
 
-			float avgHeight = sumHeight / static_cast<float>(areaWidth * areaHeight);
-
-			for (int i = 0; i < areaWidth; ++i)
-			{
-				int vertX = x + i;
-				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
-					continue;
-				}
-
-				for (int j = 0; j < areaHeight; ++j)
+			const float avgHeight = sumHeight / static_cast<float>(heightCount);
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
-					int vertZ = z + j;
-					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
-						continue;
-					}
-
-					float fHeight = terrainHeights(i, j);
-					float fDelta = fHeight - avgHeight;
-					float fShapeMask = GetBrushIntensity(i, j, innerRadius, outerRadius);
-
-					fDelta = (fDelta * fShapeMask * power);
-
-					float height = fHeight - fDelta;
-					SetHeightAt(vertX, vertZ, height);
-				}
-			}
-
-			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+					const float height = GetHeightAt(vx, vy);
+					float delta = height - avgHeight;
+					delta *= factor * power;
+					SetHeightAt(vx, vy, height - delta);
+				});
 		}
 
-		void Terrain::Flatten(int x, int z, int innerRadius, int outerRadius, float power, float avgHeight)
+		void Terrain::Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight)
 		{
-			x -= outerRadius;
-			z -= outerRadius;
-
-			int areaWidth = outerRadius * 2;
-			int areaHeight = outerRadius * 2;
-
-			if (x < 0) x = 0;
-			if (z < 0) z = 0;
-
-			Grid terrainHeights(areaWidth, areaHeight, 0.0f);
-			for (int i = x; i < x + areaWidth; ++i)
-			{
-				for (int j = z; j < z + areaHeight; ++j)
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
-					terrainHeights(i - x, j - z) = GetAt(i, j);
-				}
-			}
-
-			for (int i = 0; i < areaWidth; ++i)
-			{
-				int vertX = x + i;
-
-				if (vertX < 0 || vertX > static_cast<int>(m_width * constants::VerticesPerPage)) {
-					continue;
-				}
-
-				for (int j = 0; j < areaHeight; ++j)
-				{
-					int vertZ = z + j;
-
-					if (vertZ < 0 || vertZ > static_cast<int>(m_height * constants::VerticesPerPage)) {
-						continue;
-					}
-
-					float fHeight = terrainHeights(i, j);
-					float fDelta = fHeight - avgHeight;
-					float fShapeMask = GetBrushIntensity(i, j, innerRadius, outerRadius);
-
-					fDelta = (fDelta * fShapeMask * power);
-
-					float height = fHeight - fDelta;
-					SetHeightAt(vertX, vertZ, height);
-				}
-			}
-
-			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+					const float height = GetHeightAt(vx, vy);
+					float delta = height - targetHeight;
+					delta *= factor * power;
+					SetHeightAt(vx, vy, height - delta);
+				});
 		}
 
 		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power)
@@ -793,6 +714,23 @@ namespace mmo
 						}
 					}
 				}
+			}
+		}
+
+		void Terrain::GetGlobalVertexWorldPosition(int x, int y, float* out_x, float* out_z) const
+		{
+			constexpr float scale = constants::PageSize / (constants::VerticesPerPage - 1);
+
+			if (out_x)
+			{
+				const float worldCenterX = static_cast<double>(m_width) / 2.0 * constants::PageSize;
+				*out_x = static_cast<float>(x) * scale - worldCenterX;
+			}
+
+			if (out_z)
+			{
+				const float worldCenterY = static_cast<double>(m_height) / 2.0 * constants::PageSize;
+				*out_z = static_cast<float>(y) * scale - worldCenterY;
 			}
 		}
 

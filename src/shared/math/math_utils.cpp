@@ -7,6 +7,7 @@
 #include "vector3.h"
 
 #include <cmath>
+#include <algorithm>
 
 
 namespace mmo
@@ -43,5 +44,47 @@ namespace mmo
 		viewMatrix[2][3] = trans.z;
 
 		return viewMatrix;
+	}
+
+	EncodedNormal8 EncodeNormalSNorm8(float nx, float ny, float nz)
+	{
+		EncodedNormal8 out;
+
+		// clamp input to [-1, +1]
+		nx = std::fmax(-1.0f, std::fmin(1.0f, nx));
+		ny = std::fmax(-1.0f, std::fmin(1.0f, ny));
+		nz = std::fmax(-1.0f, std::fmin(1.0f, nz));
+
+		// map to [-128..127], rounding to nearest
+		// note that -1 maps to -128, +1 maps to +127
+		float fx = std::round(nx * 127.0f);
+		float fy = std::round(ny * 127.0f);
+		float fz = std::round(nz * 127.0f);
+
+		// convert to int
+		int ix = (int)fx;
+		int iy = (int)fy;
+		int iz = (int)fz;
+
+		// clamp to [-128..127]
+		ix = std::max(-128, std::min(127, ix));
+		iy = std::max(-128, std::min(127, iy));
+		iz = std::max(-128, std::min(127, iz));
+
+		out.x = (int8_t)ix;
+		out.y = (int8_t)iy;
+		out.z = (int8_t)iz;
+		return out;
+	}
+
+	void DecodeNormalSNorm8(const EncodedNormal8& enc, float& nx, float& ny, float& nz)
+	{
+		// convert from [-128..127] into [-1..+1], except that -128 => -1, +127 => ~+0.992
+		// If you want symmetrical extremes, you might do:
+		// nx = (enc.x == -128) ? -1.0f : (float)enc.x / 127.0f;
+		// But let's keep it simpler:
+		nx = (float)enc.x / 127.0f;
+		ny = (float)enc.y / 127.0f;
+		nz = (float)enc.z / 127.0f;
 	}
 }

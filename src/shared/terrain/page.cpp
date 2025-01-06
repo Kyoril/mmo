@@ -24,6 +24,7 @@ namespace mmo
 			static const ChunkMagic VersionChunk = MakeChunkMagic('REVM');
 			static const ChunkMagic MaterialChunk = MakeChunkMagic('TMCM');
 			static const ChunkMagic VertexChunk = MakeChunkMagic('TVCM');
+			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
 		}
 
 		Page::Page(Terrain& terrain, int32 x, int32 z)
@@ -71,7 +72,7 @@ namespace mmo
 
 			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
-			m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
+			//m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
 
@@ -296,6 +297,11 @@ namespace mmo
 
 		void Page::UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly)
 		{
+			if (!m_loaded)
+			{
+				return;
+			}
+
 			unsigned int fromTileX = fromX / (constants::VerticesPerTile - 1);
 			unsigned int fromTileZ = fromZ / (constants::VerticesPerTile - 1);
 			unsigned int toTileX = toX / (constants::VerticesPerTile - 1);
@@ -339,9 +345,10 @@ namespace mmo
 			return Vector3();
 		}
 
-		Vector3 Page::GetNormalAt(uint32 x, uint32 z)
+		const Vector3& Page::GetNormalAt(uint32 x, uint32 z)
 		{
-			return CalculateNormalAt(x, z);
+			ASSERT(x < constants::VerticesPerPage && z < constants::VerticesPerPage);
+			return m_normals[x + z * constants::VerticesPerPage];
 		}
 
 		Vector3 Page::CalculateNormalAt(uint32 x, uint32 z)
@@ -374,6 +381,8 @@ namespace mmo
 			Vector3 norm = here.Cross(down);
 			norm.y *= flip;
 			norm.Normalize();
+
+			m_normals[x + z * constants::VerticesPerPage] = norm;
 
 			return norm;
 		}
@@ -481,6 +490,17 @@ namespace mmo
 				heightmapChunk.Finish();
 			}
 
+			// (Encoded) Normals
+			{
+				ChunkWriter normalChunk{ constants::NormalChunk, writer };
+				for (const auto& normal : m_normals)
+				{
+					auto encodedNormal = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
+					writer.WritePOD(encodedNormal);
+				}
+				normalChunk.Finish();
+			}
+
 			sink.Flush();
 			file.reset();
 
@@ -531,6 +551,26 @@ namespace mmo
 			{
 				ELOG("Failed to read heightmap from tile " << m_x << "x" << m_z << "!");
 				return false;
+			}
+
+			return reader;
+		}
+
+		bool Page::ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Read heightmap data
+			for (auto& normal : m_normals)
+			{
+				EncodedNormal8 encodedNormal;
+				reader.readPOD(encodedNormal);
+
+				if (!reader)
+				{
+					ELOG("Failed to read normal from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+
+				DecodeNormalSNorm8(encodedNormal, normal.x, normal.y, normal.z);
 			}
 
 			return reader;
@@ -666,6 +706,7 @@ namespace mmo
 			// Register new chunk readers
 			AddChunkHandler(*constants::MaterialChunk, false, *this, &Page::ReadMCMTChunk);
 			AddChunkHandler(*constants::VertexChunk, false, *this, &Page::ReadMCVTChunk);
+			AddChunkHandler(*constants::NormalChunk, false, *this, &Page::ReadMCNMChunk);
 
 			return reader;
 		}

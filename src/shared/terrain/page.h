@@ -68,7 +68,7 @@ namespace mmo
 
 			Vector3 GetVectorFromPoint(int x, int z);
 
-			Vector3 GetNormalAt(uint32 x, uint32 z);
+			const Vector3& GetNormalAt(uint32 x, uint32 z);
 
 			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 
@@ -113,6 +113,8 @@ namespace mmo
 			bool ReadMCMTChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size);
 

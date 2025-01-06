@@ -133,7 +133,7 @@ namespace mmo
 					if (height > maxHeight) maxHeight = height;
 
 					vert->position = Vector3(scale * i, height, scale * j);
-					vert->normal = m_page.GetNormalAt(i, j);
+					vert->normal = m_page.CalculateNormalAt(i, j);
 
 					// Choose an arbitrary vector different from the normal
 					Vector3 arbitrary = { 1, 0, 0 };
