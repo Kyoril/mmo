@@ -12,21 +12,21 @@ namespace mmo
 	class PageNeighborhood
 	{
 	public:
-		explicit PageNeighborhood(Page &mainPage);
+		explicit PageNeighborhood(SerializableNavPage &mainPage);
 
 		/// @brief 
 		/// @param position
 		/// @param page 
-		void SetPageByRelativePosition(const PagePosition &position, Page *page);
+		void SetPageByRelativePosition(const PagePosition &position, SerializableNavPage *page);
 
 		/// @brief 
 		/// @param position 
 		/// @returns 
-		Page *GetPageByRelativePosition(const PagePosition &position) const;
+		SerializableNavPage *GetPageByRelativePosition(const PagePosition &position) const;
 
 		/// @brief Gets a reference to the main page.
 		/// @returns Reference to the main page.
-		Page &GetMainPage() const;
+		SerializableNavPage &GetMainPage() const;
 
 	private:
 
@@ -36,6 +36,6 @@ namespace mmo
 		static std::size_t ToIndex(const PagePosition &position);
 
 	private:
-		std::array<Page *, 4> m_pages{};
+		std::array<SerializableNavPage *, 4> m_pages{};
 	};
 }

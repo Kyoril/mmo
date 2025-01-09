@@ -21,10 +21,10 @@ namespace mmo
 		{
 			if (isVisible)
 			{
-				const auto strongPage = std::make_shared<Page>(page);
+				const auto strongPage = std::make_shared<SerializableNavPage>(page);
 				m_pages[page] = strongPage;
 
-				const std::weak_ptr<Page> weakPage = strongPage;
+				const std::weak_ptr<SerializableNavPage> weakPage = strongPage;
 				m_dispatchWork([this, weakPage]()
 				{
 					this->AsyncPerformLoadOperation(weakPage);
@@ -48,7 +48,7 @@ namespace mmo
 		}
 	}
 	
-	void WorldPageLoader::AsyncPerformLoadOperation(const std::weak_ptr<Page>& page)
+	void WorldPageLoader::AsyncPerformLoadOperation(const std::weak_ptr<SerializableNavPage>& page)
 	{
 		const auto strongPage = page.lock();
 		if (!strongPage)

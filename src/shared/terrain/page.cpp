@@ -35,7 +35,7 @@ namespace mmo
 			, m_prepared(false)
 			, m_loaded(false)
 		{
-			const Vector3 offset = Vector3(
+			const auto offset = Vector3(
 				static_cast<float>(static_cast<double>(m_x - 32) * constants::PageSize),
 				0.0f,
 				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize)
@@ -64,7 +64,8 @@ namespace mmo
 
 		bool Page::Prepare()
 		{
-			if (IsPrepared() || IsPreparing()) {
+			if (IsPrepared() || IsPreparing())
+			{
 				return true;
 			}
 
@@ -72,7 +73,6 @@ namespace mmo
 
 			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
-			//m_tangents.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitZ);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
 

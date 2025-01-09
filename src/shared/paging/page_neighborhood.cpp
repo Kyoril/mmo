@@ -6,13 +6,13 @@
 
 namespace mmo
 {
-	PageNeighborhood::PageNeighborhood(Page &mainPage)
+	PageNeighborhood::PageNeighborhood(SerializableNavPage &mainPage)
 	{
 		m_pages.fill(nullptr);
 		SetPageByRelativePosition(PagePosition(0, 0), &mainPage);
 	}
 
-	void PageNeighborhood::SetPageByRelativePosition(const PagePosition &position, Page *page)
+	void PageNeighborhood::SetPageByRelativePosition(const PagePosition &position, SerializableNavPage *page)
 	{
 		const std::size_t index = ToIndex(position);
 		ASSERT(index < m_pages.size() && "Index out of range");
@@ -20,12 +20,12 @@ namespace mmo
 		m_pages[ToIndex(position)] = page;
 	}
 
-	Page * PageNeighborhood::GetPageByRelativePosition(const PagePosition &position) const
+	SerializableNavPage * PageNeighborhood::GetPageByRelativePosition(const PagePosition &position) const
 	{
 		return m_pages[ToIndex(position)];
 	}
 
-	Page & PageNeighborhood::GetMainPage() const
+	SerializableNavPage & PageNeighborhood::GetMainPage() const
 	{
 		return *GetPageByRelativePosition(PagePosition(0, 0));
 	}

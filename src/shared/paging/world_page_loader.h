@@ -23,11 +23,11 @@ namespace mmo
 		virtual void OnPageVisibilityChanged(const PagePosition& page, bool isVisible) override;
 
 	protected:
-		void AsyncPerformLoadOperation(const std::weak_ptr<Page>& page);
+		void AsyncPerformLoadOperation(const std::weak_ptr<SerializableNavPage>& page);
 
 	protected:
 		IPageLoaderListener& m_resultListener;
-		std::map<PagePosition, std::shared_ptr<Page>> m_pages;
+		std::map<PagePosition, std::shared_ptr<SerializableNavPage>> m_pages;
 		const DispatchWork m_dispatchWork;
 		const DispatchWork m_synchronize;
 	};

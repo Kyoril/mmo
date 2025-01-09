@@ -24,7 +24,7 @@ namespace mmo
 
 	private:
 
-		typedef std::unordered_map<Page *, PageNeighborhood> PageMap;
+		typedef std::unordered_map<SerializableNavPage *, PageNeighborhood> PageMap;
 
 		/// @copydoc IPageLoaderListener::OnPageAvailabilityChanged
 		virtual void OnPageAvailabilityChanged(const PageNeighborhood &pages, bool isAvailable) override;

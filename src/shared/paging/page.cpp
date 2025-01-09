@@ -3,12 +3,12 @@
 
 namespace mmo
 {
-	Page::Page(const PagePosition &position)
+	SerializableNavPage::SerializableNavPage(const PagePosition &position)
 		: m_position(position)
 	{
 	}
 
-	const PagePosition & Page::GetPosition() const
+	const PagePosition & SerializableNavPage::GetPosition() const
 	{
 		return m_position;
 	}

@@ -57,23 +57,23 @@ namespace mmo
 
 		// map to [-128..127], rounding to nearest
 		// note that -1 maps to -128, +1 maps to +127
-		float fx = std::round(nx * 127.0f);
-		float fy = std::round(ny * 127.0f);
-		float fz = std::round(nz * 127.0f);
+		const float fx = std::round(nx * 127.0f);
+		const float fy = std::round(ny * 127.0f);
+		const float fz = std::round(nz * 127.0f);
 
 		// convert to int
-		int ix = (int)fx;
-		int iy = (int)fy;
-		int iz = (int)fz;
+		int ix = static_cast<int>(fx);
+		int iy = static_cast<int>(fy);
+		int iz = static_cast<int>(fz);
 
 		// clamp to [-128..127]
 		ix = std::max(-128, std::min(127, ix));
 		iy = std::max(-128, std::min(127, iy));
 		iz = std::max(-128, std::min(127, iz));
 
-		out.x = (int8_t)ix;
-		out.y = (int8_t)iy;
-		out.z = (int8_t)iz;
+		out.x = static_cast<int8_t>(ix);
+		out.y = static_cast<int8_t>(iy);
+		out.z = static_cast<int8_t>(iz);
 		return out;
 	}
 
@@ -83,8 +83,8 @@ namespace mmo
 		// If you want symmetrical extremes, you might do:
 		// nx = (enc.x == -128) ? -1.0f : (float)enc.x / 127.0f;
 		// But let's keep it simpler:
-		nx = (float)enc.x / 127.0f;
-		ny = (float)enc.y / 127.0f;
-		nz = (float)enc.z / 127.0f;
+		nx = static_cast<float>(enc.x) / 127.0f;
+		ny = static_cast<float>(enc.y) / 127.0f;
+		nz = static_cast<float>(enc.z) / 127.0f;
 	}
 }

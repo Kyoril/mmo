@@ -8,10 +8,10 @@ namespace mmo
 	typedef Vector<std::size_t, 2> PagePosition;
 
 	/// @brief Base class of a page.
-	class Page
+	class SerializableNavPage
 	{
 	public:
-		explicit Page(const PagePosition &position);
+		explicit SerializableNavPage(const PagePosition &position);
 
 		/// @brief 
 		/// @returns
