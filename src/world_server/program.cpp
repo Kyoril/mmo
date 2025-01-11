@@ -26,6 +26,7 @@
 #include "base/timer_queue.h"
 #include "game_server/universe.h"
 #include "proto_data/project.h"
+#include "assets/asset_registry.h"
 
 namespace mmo
 {
@@ -111,6 +112,9 @@ namespace mmo
 		}
 
 		PlayerManager playerManager;
+
+		// Initialize asset registry
+		AssetRegistry::Initialize(config.mapFolder, {});
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup

@@ -6,6 +6,7 @@
 #include "terrain/constants.h"
 #include "base/filesystem.h"
 #include "math/ray.h"
+#include "tile.h"
 
 #include "DetourNavMeshQuery.h"
 
@@ -24,8 +25,6 @@ struct std::hash<std::pair<int, int>>
 
 namespace mmo::nav
 {
-	class Tile;
-
 #pragma pack(push, 1)
 	struct MapHeader
 	{
@@ -96,10 +95,10 @@ namespace mmo::nav
 		static constexpr int MaxPathHops = 4096;
 
 		// this is false when the map is based on a global world object
-		bool m_hasPages;
+		bool m_hasPages = false;
 
-		bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages];
-		bool m_loadedPage[terrain::constants::MaxPages][terrain::constants::MaxPages];
+		bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages]{};
+		bool m_loadedPage[terrain::constants::MaxPages][terrain::constants::MaxPages]{};
 
 		const std::filesystem::path m_dataPath;
 		const std::string m_mapName;

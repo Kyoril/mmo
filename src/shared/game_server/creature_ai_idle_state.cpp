@@ -135,11 +135,14 @@ namespace mmo
 		// Make random movement
 		UnitMover& mover = GetAI().GetControlled().GetMover();
 
-		// Generate a random position around 0,0,0 in a x and z radius of 10
-		const float x = (rand() % 20) - 10;
-		const float z = (rand() % 20) - 10;
+		Vector3 position;
 
-		const Vector3 position = GetAI().GetHome().position + Vector3(x, 0.0f, z);
-		mover.MoveTo(position);
+		auto* map = GetAI().GetControlled().GetWorldInstance()->GetMapData();
+		ASSERT(map);
+
+		if (map->FindRandomPointAroundCircle(GetAI().GetHome().position, 4.0f, position))
+		{
+			mover.MoveTo(position);
+		}
 	}
 }

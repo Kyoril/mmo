@@ -66,6 +66,9 @@ namespace mmo
 			}
 		}
 
+		ILOG("Saving map...");
+		builder->SaveMap();
+
 		ILOG("Finished");
 		
 		// Wait for network threads to finish execution

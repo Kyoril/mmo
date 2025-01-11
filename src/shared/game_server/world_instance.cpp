@@ -65,6 +65,31 @@ namespace mmo
 		return true;
 	}
 
+	NavMapData::NavMapData(const proto::MapEntry& mapEntry)
+	{
+		m_map = std::make_shared<nav::Map>(mapEntry.directory());
+
+		// Load all map pages
+		DLOG("Loading nav map pages...");
+		m_map->LoadAllPages();
+	}
+
+	bool NavMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
+	{
+		// TODO
+		return true;
+	}
+
+	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
+	{
+		return m_map->FindPath(start, destination, out_path, true);
+	}
+
+	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
+	{
+		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
+	}
+
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)
@@ -84,7 +109,7 @@ namespace mmo
 			return;
 		}
 
-		m_mapData = std::make_unique<SimpleMapData>();
+		m_mapData = std::make_unique<NavMapData>(*m_mapEntry);
 
 		// Add creature spawners
 		for (int i = 0; i < m_mapEntry->unitspawns_size(); ++i)

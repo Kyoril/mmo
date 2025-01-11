@@ -65,6 +65,8 @@ namespace mmo
 
         void UnloadPage(int32 x, int32 y);
 
+		void Serialize(io::Writer& writer) const;
+
     private:
         bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages];
         bool m_hasTerrain;

@@ -13,6 +13,8 @@
 #include "base/id_generator.h"
 #include "shared/proto_data/maps.pb.h"
 
+#include "nav_mesh/map.h"
+
 namespace mmo
 {
 	class MapData
@@ -23,6 +25,8 @@ namespace mmo
 		virtual bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) = 0;
 
 		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
+
+		virtual bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const = 0;
 	};
 
 	class SimpleMapData final : public MapData
@@ -38,6 +42,31 @@ namespace mmo
 			out_path.push_back(destination);
 			return true;
 		}
+
+		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override
+		{
+			const float x = fmod(rand(), (radius * 2)) - radius;
+			const float z = fmod(rand(), (radius * 2)) - radius;
+
+			randomPoint = centerPosition + Vector3(x, 0.0f, z);
+
+			return true;
+		}
+	};
+
+	class NavMapData final : public MapData
+	{
+	public:
+		explicit NavMapData(const proto::MapEntry& mapEntry);
+
+		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
+
+		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override;
+
+		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override;
+
+	private:
+		std::shared_ptr<nav::Map> m_map;
 	};
 
 	class Universe;

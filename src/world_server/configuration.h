@@ -58,6 +58,7 @@ namespace mmo
 		String realmServerPassword;
 
 		String dataFolder;
+		String mapFolder;
 		bool watchDataForChanges;
 
 		explicit Configuration();

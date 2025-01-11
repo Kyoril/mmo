@@ -171,66 +171,10 @@ namespace mmo
                     }
                 }
             }
-            /*// otherwise, if they are from doodads, clear steep
-            else if (areaFlags & PolyFlags::Doodad)
-                rcClearUnwalkableTriangles(
-                    &ctx, slope, &rastVert[0], static_cast<int>(vertices.size()),
-                    &indices[0], static_cast<int>(indices.size() / 3), &areas[0]);*/
 
             return rcRasterizeTriangles(
                 &ctx, recastVertices.data(), static_cast<int>(vertices.size()), indices.data(),
                 areas.data(), static_cast<int>(indices.size() / 3), heightField, -1);
-        }
-
-        void SerializeHeightField(const rcHeightfield& solid, io::Writer& out)
-        {
-            out << io::write<int32>(solid.width)
-                << io::write<int32>(solid.height);
-
-			out << io::write<float>(solid.bmin[0])
-				<< io::write<float>(solid.bmin[1])
-				<< io::write<float>(solid.bmin[2]);
-            out << io::write<float>(solid.bmax[0])
-                << io::write<float>(solid.bmax[1])
-                << io::write<float>(solid.bmax[2]);
-
-			out << io::write<float>(solid.cs)
-				<< io::write<float>(solid.ch);
-
-            for (auto i = 0; i < solid.width * solid.height; ++i)
-            {
-                auto const columnSize = out.Sink().Position();
-                out << io::write<uint32>(0);
-
-                auto count = 0;
-                for (const rcSpan* s = solid.spans[i]; !!s; s = s->next)
-                {
-                    out << io::write<uint32>(s->smin)
-                        << io::write<uint32>(s->smax)
-                        << io::write<uint32>(s->area);
-                    ++count;
-                }
-
-                auto const height = (out.Sink().Position() - columnSize + sizeof(uint32)) / (3 * sizeof(uint32));
-				out.Sink().Overwrite(columnSize, reinterpret_cast<const char*>(&height), sizeof(uint32));
-            }
-        }
-
-        void SerializeTileQuadHeight(const TerrainChunk* chunk, int tileX, int tileY, io::Writer& out)
-        {
-            // how many quads are on this tile
-            auto constexpr width = 8;
-
-            // the '1' signifies that quad height data follows
-            out << static_cast<std::uint8_t>(1);
-
-            out << chunk->m_zoneId;
-            out << chunk->m_areaId;
-
-            auto const startX = tileX * width;
-            auto const startY = tileY * width;
-
-            out.WritePOD(chunk->m_heights);
         }
 
         bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out)
@@ -346,12 +290,11 @@ namespace mmo
         }
 	}
 
-	void SerializableNavPage::AddTile(int32 x, int32 y, std::vector<char>&& quadHeights, std::vector<char>&& heightField)
+	void SerializableNavPage::AddTile(int32 x, int32 y, std::vector<char>&& heightField)
 	{
         std::lock_guard guard(m_mutex);
 
         m_tiles[{x, y}] = std::move(heightField);
-        m_quadHeights[{x, y}] = std::move(quadHeights);
 	}
 
     MeshBuilder::MeshBuilder(String outputPath, String worldName)
@@ -481,7 +424,7 @@ namespace mmo
         config.bmax[0] += config.borderSize * config.cs;
         config.bmax[2] += config.borderSize * config.cs;
 
-        RecastContext ctx(RC_LOG_PROGRESS);
+        RecastContext ctx(RC_LOG_WARNING);
 
         SmartHeightFieldPtr solid(rcAllocHeightfield(), rcFreeHeightField);
 
@@ -498,11 +441,6 @@ namespace mmo
             {
                 return false;
             }
-
-            // TODO: Liquids
-
-            // TODO: Meshes
-
         }
 
     	// we don't want to filter ledge spans from terrain. this will restore
@@ -538,13 +476,6 @@ namespace mmo
 		std::vector<char> heightFieldData;
 		io::VectorSink heightFieldSink{ heightFieldData };
         io::Writer heightFieldWriter{ heightFieldSink };
-        SerializeHeightField(*solid, heightFieldWriter);
-
-        // serialize terrain vertex height
-        std::vector<char> quadHeightData;
-        io::VectorSink quadHeightSink{ quadHeightData };
-        io::Writer quadHeightWriter{ quadHeightSink };
-        SerializeTileQuadHeight(tileChunk, tile.x, tile.y, quadHeightWriter);
 
         // Placeholder for mesh size
         const size_t meshSizePos = heightFieldSink.Position();
@@ -568,7 +499,7 @@ namespace mmo
             auto const localTileY = tile.y % terrain::constants::TilesPerPage;
 
             SerializableNavPage* page = GetInProgressPage(pageX, pageY);
-            page->AddTile(localTileX, localTileY, std::move(quadHeightData), std::move(heightFieldData));
+            page->AddTile(localTileX, localTileY, std::move(heightFieldData));
 
             if (page->IsComplete())
             {
@@ -601,6 +532,17 @@ namespace mmo
         }
 
         return true;
+	}
+
+	void MeshBuilder::SaveMap() const
+	{
+		const String path = (std::filesystem::path(m_outputPath) / "nav" / m_map->Name).string() + ".map";
+        std::ofstream of(path, std::ofstream::binary | std::ofstream::trunc);
+
+		io::StreamSink sink{ of };
+		io::Writer writer{ sink };
+
+        m_map->Serialize(writer);
 	}
 
 	void MeshBuilder::AddChunkReference(const int32 chunkX, const int32 chunkY)

@@ -1,7 +1,7 @@
 
 # Add shared graphics library
 add_lib(game_server)
-target_link_libraries(game_server base log game proto_data)
+target_link_libraries(game_server base log game proto_data nav_mesh)
 
 if (APPLE)
     target_link_libraries(game_server "-framework CoreFoundation")

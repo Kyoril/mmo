@@ -23,7 +23,7 @@ namespace mmo::nav
 	class Tile final : public NonCopyable
 	{
 	public:
-		explicit Tile(Map& map, io::Reader& reader, const std::filesystem::path& navPath, bool loadHeightfield = false);
+		explicit Tile(Map& map, io::Reader& reader, const std::filesystem::path& navPath, bool loadHeightfield = true);
 		~Tile() override;
 
 		int32 GetX() const { return m_x; }
@@ -32,12 +32,12 @@ namespace mmo::nav
 	public:
         dtTileRef m_ref { 0 };
 
-        AABB m_bounds {};
+        //AABB m_bounds {};
 
         uint32 m_zoneId = 0;
         uint32 m_areaId = 0;
 
-        std::vector<float> m_quadHeights;
+        //std::vector<float> m_quadHeights;
 
 	private:
         Map& m_map;
@@ -49,8 +49,8 @@ namespace mmo::nav
         std::vector<uint8> m_tileData;
 
         // store this for possible delayed load of the data
-        size_t m_heightFieldSpanStart = 0;
-        rcHeightfield m_heightField;
+        //size_t m_heightFieldSpanStart = 0;
+        //rcHeightfield m_heightField;
 
         void LoadHeightField(io::Reader& in);
         void LoadHeightField();

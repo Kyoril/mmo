@@ -34,9 +34,6 @@ namespace mmo
 		// Serialized heightfield and finalized mesh data, mapped by global tile id
 		std::map<std::pair<int32, int32>, std::vector<char>> m_tiles;
 
-		// Serialized data for page quad heights, mapped by global tile id within the page
-		std::map<std::pair<int32, int32>, std::vector<char>> m_quadHeights;
-
 		/// Mutex used to lock adding tiles to the page, as this is done from multiple threads.
 		mutable std::mutex m_mutex;
 
@@ -44,9 +41,8 @@ namespace mmo
 		/// Adds a tile to the page. If there was already tile data for the given tile, it is replaced.
 		///	@param x The global x coordinate of the tile.
 		///	@param y The global y coordinate of the tile.
-		///	@param quadHeights The serialized quad height data for the tile.
 		///	@param heightField The serialized height field and finalized tile buffer for the tile.
-		void AddTile(int32 x, int32 y, std::vector<char>&& quadHeights, std::vector<char>&& heightField);
+		void AddTile(int32 x, int32 y, std::vector<char>&& heightField);
 
 		/// Determines whether all page tiles have been added.
 		///	@returns True if all tiles have been added, false otherwise.
@@ -76,11 +72,15 @@ namespace mmo
 		///	@param writer The io Writer to use for serialization. This abstracts the writing process.
 		void Serialize(io::Writer& writer) const
 		{
+			constexpr uint32 FileSignature = 'NAVM';
+			constexpr uint32 FileVersion = '0001';
+			constexpr uint32 FilePage = 'PAGE';
+
 			// Write header
 			writer
-				<< io::write<uint32>(0)
-				<< io::write<uint32>(0)
-				<< io::write<uint32>(0);
+				<< io::write<uint32>(FileSignature)
+				<< io::write<uint32>(FileVersion)
+				<< io::write<uint32>(FilePage);
 
 			// Write global coordinates
 			writer
@@ -100,7 +100,7 @@ namespace mmo
 				writer << io::write<uint32>(x) << io::write<uint32>(y);
 
 				// append terrain quad height data
-				writer << io::write_range(m_quadHeights.at(tile.first));
+				//writer << io::write_range(m_quadHeights.at(tile.first));
 
 				// height field and finalized tile buffer
 				writer << io::write_range(tile.second);
@@ -144,6 +144,8 @@ namespace mmo
 		///	@param tile The tile index to build and serialize. Should be obtained by GetNextTile.
 		///	@returns True if the tile was successfully built and serialized, false otherwise.
 		[[nodiscard]] bool BuildAndSerializeTerrainTile(const TileIndex& tile);
+
+		void SaveMap() const;
 
 	private:
 

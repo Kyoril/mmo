@@ -33,10 +33,6 @@ namespace mmo
 	Scene::Scene()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
-
-		// Create default material
-		m_defaultMaterial = MaterialManager::Get().Load("Models/Default.hmat");
-		ASSERT(m_defaultMaterial);
 	}
 
 	void Scene::Clear()
@@ -192,6 +188,13 @@ namespace mmo
 	void Scene::InitRenderQueue()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
+
+		// Create default material
+		if (!m_defaultMaterial)
+		{
+			m_defaultMaterial = MaterialManager::Get().Load("Models/Default.hmat");
+			ASSERT(m_defaultMaterial);
+		}
 
 		// TODO: Maybe initialize some properties for special render queues
 	}

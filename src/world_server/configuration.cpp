@@ -36,6 +36,7 @@ namespace mmo
 		, realmServerAuthName("WorldNode01")
 		, realmServerPassword("")
 		, dataFolder("data")
+		, mapFolder("nav")
 		, watchDataForChanges(true)
 	{
 	}
@@ -148,6 +149,7 @@ namespace mmo
 			if (const Table* const folders = global.getTable("folders"))
 			{
 				dataFolder = folders->getString("data", dataFolder);
+				mapFolder = folders->getString("maps", mapFolder);
 				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
 
@@ -243,6 +245,15 @@ namespace mmo
 			playerManager.Finish();
 		}
 
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> folders(global, "folders", sff::write::MultiLine);
+			folders.addKey("data", dataFolder);
+			folders.addKey("maps", mapFolder);
+			folders.addKey("watchDataForChanges", watchDataForChanges);
+			folders.Finish();
+		}
 		
 		global.writer.newLine();
 

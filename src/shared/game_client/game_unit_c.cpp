@@ -161,6 +161,14 @@ namespace mmo
 			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
+			float groundHeight = 0.0f;
+			if(GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 5.0f, groundHeight))
+			{
+				Vector3 newPosition = m_sceneNode->GetDerivedPosition();
+				newPosition.y = groundHeight;
+				m_sceneNode->SetDerivedPosition(newPosition);
+			}
+
 			if (animationFinished)
 			{
 				if (!isDead)
@@ -649,6 +657,13 @@ namespace mmo
 		Vector3 prevPosition = m_sceneNode->GetDerivedPosition();
 		m_movementStart = prevPosition;
 
+		float groundHeight = 0.0f;
+		if (GetCollisionProvider().GetHeightAt(m_movementStart + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
+		{
+			m_movementStart.y = groundHeight;
+			prevPosition.y = groundHeight;
+		}
+
 		const Vector3 targetPos = points.back();
 		const Radian targetAngle = GetAngle(targetPos.x, targetPos.z);
 
@@ -661,8 +676,13 @@ namespace mmo
 		keyFrameTimes.push_back(0.0f);
 		float totalDuration = 0.0f;
 
-		for (const auto& point : points)
+		for (auto point : points)
 		{
+			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
+			{
+				point.y = groundHeight;
+			}
+
 			Vector3 diff = point - prevPosition;
 			const float distance = diff.GetLength();
 			const float duration = distance / m_unitSpeed[movement_type::Run];
@@ -685,6 +705,11 @@ namespace mmo
 		}
 
 		m_movementEnd = prevPosition;
+
+		if (GetCollisionProvider().GetHeightAt(m_movementEnd + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
+		{
+			m_movementEnd.y = groundHeight;
+		}
 	}
 
 	static void SetQueryMask(SceneNode* node, const uint32 mask)

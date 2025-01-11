@@ -9,11 +9,13 @@
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 
+#include "DetourNavMesh.h"
+
 namespace mmo::nav
 {
 	static constexpr uint32 FileSignature = 'NAVM';
 	static constexpr uint32 FileVersion = '0001';
-	static constexpr uint32 FilePage = 'ADT\0';
+	static constexpr uint32 FilePage = 'PAGE';
 	static constexpr uint32 FileMap = 'MAP1';
 
 	bool MapHeader::Verify() const
@@ -40,14 +42,84 @@ namespace mmo::nav
 	}
 
 	Map::Map(const std::string& mapName)
+		: m_mapName(mapName)
 	{
-		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile("Worlds/" + mapName + "/" + mapName + ".map");
+		const String filename = mapName + ".map";
+
+		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(filename);
 		if (!file)
 		{
-			throw std::runtime_error("Failed to open map file");
+			ELOG("Failed to open map " << filename);
+			return;
 		}
 
-		
+		io::StreamSource source{ *file };
+		io::Reader reader{ source };
+
+		uint32 magic;
+		if (!(reader >> io::read<uint32>(magic)))
+		{
+			ELOG("Failed to read map magic");
+			return;
+		}
+
+		if (magic != FileMap)
+		{
+			ELOG("Invalid or corrupted map file!");
+			return;
+		}
+
+		uint8 hasTerrain;
+		if (!(reader >> io::read<uint8>(hasTerrain)))
+		{
+			ELOG("Failed to read map terrain flag");
+			return;
+		}
+
+		if (hasTerrain)
+		{
+			m_hasPages = true;
+
+			std::uint8_t hasPages[terrain::constants::MaxPages * terrain::constants::MaxPages / 8];
+			reader.readPOD(hasPages);
+
+			// Extract bitmap
+			for (auto y = 0; y < terrain::constants::MaxPages; ++y)
+			{
+				for (auto x = 0; x < terrain::constants::MaxPages; ++x)
+				{
+					auto const offset = y * terrain::constants::MaxPages + x;
+					auto const byte_offset = offset / 8;
+					auto const bit_offset = offset % 8;
+
+					m_hasPage[x][y] = (hasPages[byte_offset] & (1 << bit_offset)) != 0;
+				}
+			}
+
+			dtNavMeshParams params;
+
+			constexpr float mapOrigin = -32.f * terrain::constants::PageSize;
+			constexpr int maxTiles = terrain::constants::MaxPages * terrain::constants::TilesPerPage * terrain::constants::MaxPages * terrain::constants::TilesPerPage;
+
+			params.orig[0] = mapOrigin;
+			params.orig[1] = 0.f;
+			params.orig[2] = mapOrigin;
+			params.tileHeight = params.tileWidth = terrain::constants::TileSize;
+			params.maxTiles = maxTiles;
+			params.maxPolys = 1 << DT_POLY_BITS;
+
+			auto const result = m_navMesh.init(&params);
+			assert(result == DT_SUCCESS);
+		}
+		else
+		{
+			m_hasPages = false;
+		}
+
+		if (dtStatus result = m_navQuery.init(&m_navMesh, 65535); result != DT_SUCCESS)
+		{
+			ELOG("Failed to initialize navigation mesh query: " << result);
+		}
 	}
 
 	bool Map::HasPage(const int32 x, const int32 y) const
@@ -68,7 +140,7 @@ namespace mmo::nav
 
 	bool Map::LoadPage(int32 x, int32 y)
 	{
-		if (!IsPageLoaded(x, y))
+		if (IsPageLoaded(x, y))
 		{
 			return true;
 		}
@@ -81,7 +153,7 @@ namespace mmo::nav
 		std::stringstream strm;
 		strm << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".nav";
 
-		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile("Worlds/" + m_mapName + "/" + m_mapName + "/" + strm.str());
+		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(m_mapName + "/" + strm.str());
 		if (!file)
 		{
 			return false;
@@ -99,6 +171,7 @@ namespace mmo::nav
 
 		if (!header.Verify())
 		{
+			ELOG("Failed to verify page header!");
 			return false;
 		}
 
@@ -115,6 +188,7 @@ namespace mmo::nav
 			m_tiles[{tile->GetX(), tile->GetY()}] = std::move(tile);
 		}
 
+		DLOG("Loaded page " << x << "x" << y);
 		m_loadedPage[x][y] = true;
 
 		return true;
@@ -151,7 +225,7 @@ namespace mmo::nav
 		{
 			for (auto x = 0; x < terrain::constants::MaxPages; ++x)
 			{
-				if (m_hasPage[x][y] && LoadPage(x, y))
+				if (LoadPage(x, y))
 				{
 					++result;
 				}
@@ -163,7 +237,7 @@ namespace mmo::nav
 
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
-		constexpr float extents[] = { 5.f, 5.f, 5.f };
+		constexpr float extents[] = { 5., 5.f, 5.f };
 
 		float recastStart[3] = { start.x, start.y, start.z };
 		float recastEnd[3] = { end.x, end.y, end.z };
@@ -196,9 +270,7 @@ namespace mmo::nav
 		dtPolyRef polyRefBuffer[MaxPathHops];
 
 		int pathLength;
-		auto const findPathResult = m_navQuery.findPath(
-			startPolyRef, endPolyRef, recastStart, recastEnd, &m_queryFilter,
-			polyRefBuffer, &pathLength, MaxPathHops);
+		auto const findPathResult = m_navQuery.findPath(startPolyRef, endPolyRef, recastStart, recastEnd, &m_queryFilter, polyRefBuffer, &pathLength, MaxPathHops);
 		if (!(findPathResult & DT_SUCCESS) ||
 			(!allowPartial && !!(findPathResult & DT_PARTIAL_RESULT)))
 		{
@@ -206,9 +278,7 @@ namespace mmo::nav
 		}
 
 		float pathBuffer[MaxPathHops * 3];
-		auto const findStraightPathResult = m_navQuery.findStraightPath(
-			recastStart, recastEnd, polyRefBuffer, pathLength, pathBuffer, nullptr,
-			nullptr, &pathLength, MaxPathHops);
+		auto const findStraightPathResult = m_navQuery.findStraightPath(recastStart, recastEnd, polyRefBuffer, pathLength, pathBuffer, nullptr, nullptr, &pathLength, MaxPathHops);
 		if (!(findStraightPathResult & DT_SUCCESS) ||
 			(!allowPartial && !!(findStraightPathResult & DT_PARTIAL_RESULT)))
 		{
