@@ -63,6 +63,7 @@ include_directories(deps)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/deps/zlib)
 include_directories(src)
 
+add_definitions("-DDT_POLYREF64")
 add_definitions("-DXML_STATIC")
 add_definitions("-DUUID_SYSTEM_GENERATOR")
 
