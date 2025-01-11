@@ -8,6 +8,7 @@
 
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 
 namespace mmo
@@ -17,7 +18,43 @@ namespace mmo
         return static_cast<uint16>(x + y * terrain::constants::VerticesPerTile);
     }
 
-	TerrainPage::TerrainPage(const Map* map, int x, int y)
+    MapEntity::MapEntity(const std::string& path)
+    {
+    }
+
+    MapEntityInstance::MapEntityInstance(const MapEntity* entity, const AABB& bounds, const Matrix4& transformMatrix)
+		: TransformMatrix(transformMatrix)
+		, Bounds(bounds)
+		, Model(entity)
+    {
+        std::vector<Vector3> vertices;
+        std::vector<int32> indices;
+
+        BuildTriangles(vertices, indices);
+    }
+
+    Vector3 MapEntityInstance::TransformVertex(const Vector3& vertex) const
+	{
+		return TransformMatrix * vertex;
+    }
+
+    void MapEntityInstance::BuildTriangles(std::vector<Vector3>& vertices, std::vector<int32>& indices) const
+    {
+        vertices.clear();
+        vertices.reserve(Model->Vertices.size());
+
+        indices.clear();
+        indices.resize(Model->Indices.size());
+
+        std::copy(Model->Indices.cbegin(), Model->Indices.cend(), indices.begin());
+
+        for (auto& vertex : Model->Vertices)
+        {
+            vertices.push_back(TransformVertex(vertex));
+        }
+    }
+
+    TerrainPage::TerrainPage(const Map* map, int x, int y)
         : map(map)
         , X(x)
         , Y(y)

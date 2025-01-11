@@ -40,6 +40,7 @@
 #include "game/loot.h"
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
+#include "terrain/page.h"
 
 namespace mmo
 {
@@ -2337,14 +2338,20 @@ namespace mmo
 
 		if (m_worldInstance->HasTerrain())
 		{
+			auto* page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
+			if (!page)
+			{
+				return;
+			}
+
 			if (isAvailable)
 			{
-				m_worldInstance->GetTerrain()->PreparePage(pos.x(), pos.y());
-				m_worldInstance->GetTerrain()->LoadPage(pos.x(), pos.y());
+				page->Prepare();
+				EnsurePageIsLoaded(pos);
 			}
 			else
 			{
-				m_worldInstance->GetTerrain()->UnloadPage(pos.x(), pos.y());
+				page->Unload();
 			}
 		}
 	}
@@ -2357,6 +2364,25 @@ namespace mmo
 		return PagePosition(static_cast<uint32>(
 			floor(camPos.x / terrain::constants::PageSize)) + 32,
 			static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+	}
+
+	void WorldState::EnsurePageIsLoaded(PagePosition pos)
+	{
+		auto* page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
+		if (!page || !page->IsLoadable())
+		{
+			// Page not known, already loaded or not loadable yet
+			return;
+		}
+
+		const bool loaded = page->Load();
+		if (!loaded)
+		{
+			m_dispatcher.post([pos, this]()
+				{
+					EnsurePageIsLoaded(pos);
+				});
+		}
 	}
 
 	void WorldState::OnTargetHealthChanged(uint64 monitoredGuid)

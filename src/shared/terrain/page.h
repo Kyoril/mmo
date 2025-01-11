@@ -42,9 +42,11 @@ namespace mmo
 		public:
 			bool Prepare();
 
-			void Load();
+			bool Load();
 
 			void Unload();
+
+			void Destroy();
 
 			Tile* GetTile(uint32 x, uint32 y);
 
@@ -156,6 +158,7 @@ namespace mmo
 			bool m_prepared;
 			bool m_loaded;
 			bool m_changed{ false };
+			bool m_unloadRequested = false;
 			AABB m_boundingBox;
 
 		};

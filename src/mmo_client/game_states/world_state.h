@@ -279,6 +279,8 @@ namespace mmo
 
 		PagePosition GetPagePositionFromCamera() const;
 
+		void EnsurePageIsLoaded(PagePosition position);
+
 	private:
 		RealmConnector& m_realmConnector;
 		ScreenLayerIt m_paintLayer;

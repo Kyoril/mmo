@@ -1303,14 +1303,37 @@ namespace mmo
 		const auto &mainPage = page.GetMainPage();
 		const PagePosition &pos = mainPage.GetPosition();
 
+		auto* terrainPage = m_terrain->GetPage(pos.x(), pos.y());
+		if (!terrainPage)
+		{
+			return;
+		}
+
 		if (isAvailable)
 		{
-			m_terrain->PreparePage(pos.x(), pos.y());
-			m_terrain->LoadPage(pos.x(), pos.y());
+			terrainPage->Prepare();
+			EnsurePageIsLoaded(pos);
 		}
 		else
 		{
-			m_terrain->UnloadPage(pos.x(), pos.y());
+			terrainPage->Unload();
+		}
+	}
+
+	void WorldEditorInstance::EnsurePageIsLoaded(PagePosition pos)
+	{
+		auto* page = m_terrain->GetPage(pos.x(), pos.y());
+		if (!page || !page->IsLoadable())
+		{
+			return;
+		}
+
+		if (!page->Load())
+		{
+			m_dispatcher.post([this, pos]()
+				{
+					EnsurePageIsLoaded(pos);
+				});
 		}
 	}
 

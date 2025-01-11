@@ -121,11 +121,17 @@ namespace mmo
 			return ChunkReader::OnReadFinished();
 		}
 
-		void Page::Load()
+		bool Page::Load()
 		{
+			if (m_unloadRequested)
+			{
+				m_unloadRequested = false;
+				return true;
+			}
+
 			if (!IsLoadable())
 			{
-				return;
+				return m_loaded;
 			}
 
 			// Build file name
@@ -136,14 +142,28 @@ namespace mmo
 			const String filename = stream.str();
 
 			String pageBaseName = "Page_" + std::to_string(m_x) + "_" + std::to_string(m_z);
+			if (m_Tiles.empty())
+			{
+				m_Tiles = TileGrid(constants::TilesPerPage, constants::TilesPerPage);
+			}
 
-			m_Tiles = TileGrid(constants::TilesPerPage, constants::TilesPerPage);
+			bool allTilesLoaded = true;
+			bool loadedNewTile = false;
+
+			// Ensure we call load as many times as needed
 			for (unsigned int i = 0; i < constants::TilesPerPage; i++)
 			{
 				for (unsigned int j = 0; j < constants::TilesPerPage; j++)
 				{
 					String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
 					auto& tile = m_Tiles(i, j);
+
+					// Tile already loaded?
+					if (tile)
+					{
+						continue;
+					}
+
 					tile = std::make_unique<Tile>(tileName, *this, i * (constants::VerticesPerTile - 1), j * (constants::VerticesPerTile - 1));
 
 					// Setup tile material assignment
@@ -155,22 +175,68 @@ namespace mmo
 					// Ensure tile respects selection query
 					tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
 					m_pageNode->AttachObject(*tile);
+
+					allTilesLoaded = false;
+					loadedNewTile = true;
+					break;
+				}
+
+				if (loadedNewTile)
+				{
+					break;
 				}
 			}
 
-			m_loaded = true;
+			if (allTilesLoaded)
+			{
+				m_loaded = true;
+			}
+			
 			UpdateBoundingBox();
+			return m_loaded;
 		}
 
 		void Page::Unload()
 		{
+			if (!m_loaded)
+			{
+				m_unloadRequested = true;
+			}
+
 			for (const auto& tile : m_Tiles)
 			{
+				if (!tile)
+				{
+					continue;
+				}
+
 				tile->DetachFromParent();
 			}
 
 			m_loaded = false;
 			m_Tiles.clear();
+		}
+
+		void Page::Destroy()
+		{
+			if (IsPreparing())
+			{
+				return;
+			}
+
+			if (IsLoaded())
+			{
+				Unload();
+			}
+
+			// Unload all loaded data so we will have to reload it again later
+			m_heightmap.clear();
+			m_normals.clear();
+			m_materials.clear();
+			m_layers.clear();
+
+			m_prepared = false;
+			m_preparing = false;
 		}
 
 		Tile* Page::GetTile(uint32 x, uint32 y)
@@ -727,6 +793,11 @@ namespace mmo
 
 			for (auto& tile : m_Tiles)
 			{
+				if (!tile)
+				{
+					continue;
+				}
+
 				const auto tileBounds = tile->GetWorldBoundingBox(true);
 				m_boundingBox.Combine(tileBounds);
 			}

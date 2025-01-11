@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
@@ -9,9 +11,28 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <set>
 
 namespace mmo
 {
+#pragma pack(push, 1)
+    struct PageChunkLocation
+    {
+        uint8 PageX;
+        uint8 PageY;
+        uint8 ChunkX;
+        uint8 ChunkY;
+
+        bool operator<(const PageChunkLocation& other) const
+        {
+            return *reinterpret_cast<const uint32*>(this) <
+                *reinterpret_cast<const uint32*>(&other);
+        }
+    };
+#pragma pack(pop)
+
+    static_assert(sizeof(PageChunkLocation) == 4, "Unexpected packing of PageChunkLocation");
+
     struct TerrainChunk
     {
         float m_heights[terrain::constants::VerticesPerTile * terrain::constants::VerticesPerTile];
@@ -27,6 +48,35 @@ namespace mmo
 
         float m_minY;
         float m_maxY;
+    };
+
+    struct MapEntity
+    {
+        uint32 RootId;
+        std::vector<Vector3> Vertices;
+        std::vector<int32> Indices;
+
+        MapEntity(const std::string& path);
+    };
+
+
+    class MapEntityInstance
+    {
+    public:
+        const Matrix4 TransformMatrix;
+        AABB Bounds;
+
+        const MapEntity* const Model;
+
+        std::set<PageChunkLocation> PageChunks;
+
+        MapEntityInstance(const MapEntity* entity,
+            const AABB& bounds,
+            const Matrix4& transformMatrix);
+
+        Vector3 TransformVertex(const Vector3& vertex) const;
+
+        void BuildTriangles(std::vector<Vector3>& vertices, std::vector<int32>& indices) const;
     };
 
     class Map;
@@ -73,6 +123,10 @@ namespace mmo
 
         mutable std::mutex m_pageMutex;
         std::unique_ptr<TerrainPage> m_pages[terrain::constants::MaxPages][terrain::constants::MaxPages];
+
+        mutable std::mutex m_mapEntityMutex;
+        std::vector<std::unique_ptr<const MapEntity>> m_loadedMapEntities;
+        std::map<uint32, std::unique_ptr<const MapEntityInstance>> m_loadedMapEntityInstances;
 
         friend TerrainPage::TerrainPage(const Map*, int, int);
 

@@ -188,6 +188,8 @@ namespace mmo
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
+		void EnsurePageIsLoaded(PagePosition pos);
+
 		void Visit(SelectedMapEntity& selectable) override;
 		void Visit(SelectedTerrainTile& selectable) override;
 
