@@ -31,9 +31,9 @@ services:
   data-service:
     image: kyoril/mmo_data:latest
     volumes:
-      - data-volume:/data
+      - data-volume:/server_data
     # This service doesn't need to stay running; it just provides the data
-    command: ["true"]
+    command: ["/bin/sh", "-c", "mkdir -p /server_data/data; mkdir -p /server_data/nav; cp -r /data/* /server_data/data; cp -r /nav/* /server_data/nav; true"]
     
   login_server:
     image: kyoril/mmo_login_server:latest
@@ -63,7 +63,7 @@ services:
     image: kyoril/mmo_realm_server:latest
     hostname: mmo-dev-realm-01
     volumes:
-      - data-volume:/data
+      - data-volume:/server-data
     environment:
       - LOGIN_HOST_NAME=mmo-dev-login
       - LOGIN_REALM_NAME=REALM_NAME
@@ -74,7 +74,7 @@ services:
       - MYSQL_USER_NAME=MYSQL_USER
       - WEB_API_PASSWORD=test
       - WEB_API_USER=mmo-dev
-      - DATA_DIR=/data
+      - DATA_DIR=/server-data/data
     expose:
       - 6280
       - 8092
@@ -92,7 +92,7 @@ services:
     image: kyoril/mmo_world_server:latest
     hostname: mmo-dev-node-01
     volumes:
-      - data-volume:/data
+      - data-volume:/server-data
     environment:
       - MYSQL_DATABASE=mmo_world_01
       - MYSQL_HOST_NAME=host.docker.internal
@@ -102,8 +102,8 @@ services:
       - REALM_WORLD_PORT=6280
       - REALM_WORLD_NAME=WORLD_NODE_NAME
       - REALM_WORLD_PASSWORD_HASH=WORLD_PASSWORD_HASH_SHA1
-      - DATA_DIR=/data
-      - NAV_DIR=/nav
+      - DATA_DIR=/server-data/data
+      - NAV_DIR=/server-data/nav
     extra_hosts:
       host.docker.internal: "172.17.0.1"
     networks:
