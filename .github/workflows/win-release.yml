@@ -60,6 +60,7 @@ jobs:
           copy bin\Release\update_compiler.exe tools\
           copy bin\Release\hpak_tool.exe tools\
           copy bin\Release\mmo_edit.exe tools\
+          copy bin\Release\nav_builder.exe tools\
           xcopy data\client tools\Data /E
           xcopy data\editor\data tools\Project /E
           Copy-Item "deps\assimp\Windows\VS2022\bin\assimp-*-mt.dll" tools\

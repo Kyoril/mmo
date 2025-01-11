@@ -38,6 +38,7 @@ playerManager =
 folders = 
 (
 	data = "${DATA_DIR}"
+	maps = "${NAV_DIR}"
 )
 
 log = 

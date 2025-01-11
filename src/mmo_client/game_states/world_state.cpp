@@ -931,7 +931,6 @@ namespace mmo
 				m_playerController->SetControlledUnit(nullptr);
 			}
 			
-			DLOG("Despawning object " << log_hex_digit(id));
 			ObjectMgr::RemoveObject(id);
 		}
 		
