@@ -10,16 +10,58 @@
 #include <sstream>
 #include <algorithm>
 
+#include "base/utilities.h"
+#include "log/default_log_levels.h"
+#include "scene_graph/mesh_serializer.h"
+
 
 namespace mmo
 {
+    static const ChunkMagic VersionChunkMagic = MakeChunkMagic('MVER');
+    static const ChunkMagic MeshNamesChunkMagic = MakeChunkMagic('MESH');
+    static const ChunkMagic EntityChunkMagic = MakeChunkMagic('MENT');
+    static const ChunkMagic TerrainChunkMagic = MakeChunkMagic('RRET');
+
     uint16 GetIndex(size_t x, size_t y)
     {
         return static_cast<uint16>(x + y * terrain::constants::VerticesPerTile);
     }
 
     MapEntity::MapEntity(const std::string& path)
+		: Filename(path)
     {
+        auto file = AssetRegistry::OpenFile(path);
+        if (!file)
+        {
+            ELOG("Failed to load entity file " << path << ": File does not exist");
+            return;
+        }
+
+        io::StreamSource source{ *file };
+		io::Reader reader{ source };
+
+        MeshPtr mesh = std::make_shared<Mesh>(path);
+        MeshDeserializer deserializer(*mesh);
+        deserializer.Read(reader);
+
+        RootId = 0; // Hrm
+
+        const AABBTree& collisionTree = mesh->GetCollisionTree();
+        if (collisionTree.IsEmpty())
+        {
+            DLOG("Mesh " << path << " has no collision - ignoring it!");
+            return;
+        }
+
+        // Copy collision data
+        Vertices = collisionTree.GetVertices();
+        Indices.reserve(collisionTree.GetIndices().size());
+		for (auto& index : collisionTree.GetIndices())
+		{
+			Indices.push_back(static_cast<int32>(index));
+		}
+
+		Bounds = collisionTree.GetBoundingBox();
     }
 
     MapEntityInstance::MapEntityInstance(const MapEntity* entity, const AABB& bounds, const Matrix4& transformMatrix)
@@ -149,6 +191,9 @@ namespace mmo
                 {
 					ASSERT(index < m_chunks[y][x]->m_terrainVertices.size());
                 }
+
+                // TODO: Calculate chunk bounds and use these instead of page bounds, but whatever
+                map->GetMapEntityInstancesInArea(Bounds, m_chunks[y][x]->m_mapEntityInstances);
             }
         }
     }
@@ -157,20 +202,33 @@ namespace mmo
         : Name(std::move(mapName))
         , Id(0)
     {
-        // TODO: Load map file (hwld)
+		auto file = AssetRegistry::OpenFile("Worlds/" + Name + "/" + Name + ".hwld");
+		if (!file)
+		{
+			ELOG("Failed to load map file " << Name << ": File does not exist");
+			return;
+		}
 
-        for (uint32 y = 0; y < terrain::constants::MaxPages; ++y)
+        AddChunkHandler(*VersionChunkMagic, true, *this, &Map::ReadVersionChunk);
+
+        // Read the world file
+		io::StreamSource source{ *file };
+		io::Reader reader{ source };
+        if (!Read(reader))
         {
-            for (uint32 x = 0; x < terrain::constants::MaxPages; ++x)
-            {
-                std::stringstream strm;
-                strm << "Worlds/" << Name << "/" << Name << "/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
-                m_hasPage[x][y] = AssetRegistry::HasFile(strm.str());
+            ELOG("Failed to read world file!");
+            return;
+        }
 
-                // TODO: Load m_hasTerrain from hwld file
-                if (m_hasPage[x][y])
+        if (m_hasTerrain)
+        {
+            for (uint32 y = 0; y < terrain::constants::MaxPages; ++y)
+            {
+                for (uint32 x = 0; x < terrain::constants::MaxPages; ++x)
                 {
-                    m_hasTerrain = true;
+                    std::stringstream strm;
+                    strm << "Worlds/" << Name << "/" << Name << "/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
+                    m_hasPage[x][y] = AssetRegistry::HasFile(strm.str());
                 }
             }
         }
@@ -204,6 +262,53 @@ namespace mmo
         m_pages[x][y].reset();
     }
 
+    const MapEntity* Map::GetMapEntity(const std::string& name)
+    {
+        std::lock_guard guard(m_mapEntityMutex);
+
+        for (auto const& entity : m_loadedMapEntities)
+        {
+        	if (entity->Filename == name)
+            {
+                return entity.get();
+            }
+		}
+
+        DLOG("Loading map entity " << name << "...");
+
+        auto ret = std::make_unique<MapEntity>(name);
+		m_loadedMapEntities.push_back(std::move(ret));
+
+        return m_loadedMapEntities.back().get();
+    }
+
+    void Map::InsertMapEntityInstance(unsigned int uniqueId, std::unique_ptr<MapEntityInstance> instance)
+    {
+        std::lock_guard guard(m_mapEntityMutex);
+        m_loadedMapEntityInstances[uniqueId] = std::move(instance);
+    }
+
+    const MapEntityInstance* Map::GetMapEntityInstance(unsigned int uniqueId) const
+    {
+        std::lock_guard guard(m_mapEntityMutex);
+
+        auto const itr = m_loadedMapEntityInstances.find(uniqueId);
+        return itr == m_loadedMapEntityInstances.end() ? nullptr : itr->second.get();
+    }
+
+    void Map::GetMapEntityInstancesInArea(const AABB& bounds, std::vector<uint32>& out_instanceIds) const
+    {
+		std::lock_guard guard(m_mapEntityMutex);
+
+		for (auto const& [uniqueId, instance] : m_loadedMapEntityInstances)
+		{
+			if (bounds.Intersects(instance->Bounds))
+			{
+				out_instanceIds.push_back(uniqueId);
+			}
+		}
+    }
+
     void Map::Serialize(io::Writer& writer) const
     {
         writer << io::write<uint32>('MAP1');
@@ -232,5 +337,227 @@ namespace mmo
 
             writer.WritePOD(hasPageMap);
         }
+    }
+
+    bool Map::ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *VersionChunkMagic);
+
+        // Read version
+        m_version = 0;
+        reader >> io::read<uint32>(m_version);
+
+        // Check if version is supported
+        if (m_version >= world_version::Version_0_0_0_1)
+        {
+            AddChunkHandler(*MeshNamesChunkMagic, false, *this, &Map::ReadMeshNamesChunk);
+            AddChunkHandler(*TerrainChunkMagic, false, *this, &Map::ReadTerrainChunk);
+            return true;
+        }
+
+        ELOG("Unsupported world version: " << m_version);
+        return false;
+    }
+
+    bool Map::ReadMeshNamesChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *MeshNamesChunkMagic);
+
+        RemoveChunkHandler(*MeshNamesChunkMagic);
+
+        if (m_version == world_version::Version_0_0_0_1)
+        {
+            AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunk);
+        }
+        else if (m_version >= world_version::Version_0_0_0_2)
+        {
+            AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunkV2);
+        }
+
+        if (!m_meshNames.empty())
+        {
+            ELOG("Duplicate mesh names chunk detected!");
+            return false;
+        }
+
+        const size_t contentStart = reader.getSource()->position();
+        while (reader.getSource()->position() - contentStart < chunkSize)
+        {
+            String meshName;
+            if (!(reader >> io::read_string(meshName)))
+            {
+                ELOG("Failed to read world file: Unexpected end of file");
+                return false;
+            }
+
+            m_meshNames.emplace_back(std::move(meshName));
+        }
+
+        return reader;
+    }
+
+    bool Map::ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *EntityChunkMagic);
+
+        if (m_meshNames.empty())
+        {
+            ELOG("No mesh names known, can't read entity chunks before mesh chunk!");
+            return false;
+        }
+
+        if (chunkSize != sizeof(MapEntityChunkContent))
+        {
+            ELOG("Entity chunk has incorrect chunk size, found " << log_hex_digit(chunkSize) << " bytes, expected " << log_hex_digit(sizeof(MapEntityChunkContent)) << " bytes");
+            return false;
+        }
+
+        MapEntityChunkContent content;
+        reader.readPOD(content);
+        if (!reader)
+        {
+            ELOG("Failed to read map entity chunk content, unexpected end of file!");
+            return false;
+        }
+
+        if (content.meshNameIndex >= m_meshNames.size())
+        {
+            ELOG("Map entity chunk references unknown mesh names!");
+            return false;
+        }
+
+        if (GetMapEntityInstance(content.uniqueId) != nullptr)
+        {
+            WLOG("Duplicate entity id found: " << content.uniqueId);
+            return reader;
+        }
+
+        const MapEntity* entity = GetMapEntity(m_meshNames[content.meshNameIndex]);
+        ASSERT(entity);
+
+        Matrix4 transform;
+        transform.MakeTransform(content.position, content.scale, content.rotation);
+
+        AABB bounds = entity->Bounds;
+        bounds.Transform(transform);
+
+        InsertMapEntityInstance(content.uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+
+        return reader;
+    }
+
+    bool Map::ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *EntityChunkMagic);
+
+        if (m_meshNames.empty())
+        {
+            ELOG("No mesh names known, can't read entity chunks before mesh chunk!");
+            return false;
+        }
+
+        uint32 uniqueId;
+        uint32 meshNameIndex;
+        Vector3 position;
+        Quaternion rotation;
+        Vector3 scale;
+        if (!(reader
+            >> io::read<uint32>(uniqueId)
+            >> io::read<uint32>(meshNameIndex)
+            >> io::read<float>(position.x)
+            >> io::read<float>(position.y)
+            >> io::read<float>(position.z)
+            >> io::read<float>(rotation.w)
+            >> io::read<float>(rotation.x)
+            >> io::read<float>(rotation.y)
+            >> io::read<float>(rotation.z)
+            >> io::read<float>(scale.x)
+            >> io::read<float>(scale.y)
+            >> io::read<float>(scale.z)
+            ))
+        {
+            ELOG("Failed to read map entity chunk content, unexpected end of file!");
+            return false;
+        }
+
+        ASSERT(position.IsValid());
+        ASSERT(!rotation.IsNaN());
+        ASSERT(scale.IsValid());
+
+        if (meshNameIndex >= m_meshNames.size())
+        {
+            ELOG("Map entity chunk references unknown mesh names!");
+            return false;
+        }
+
+        struct MaterialOverride
+        {
+            uint8 materialIndex;
+            String materialName;
+        };
+
+        uint8 numMaterialOverrides;
+        if (!(reader >> io::read<uint8>(numMaterialOverrides)))
+        {
+            ELOG("Failed to read material override count for map entity chunk, unexpected end of file!");
+            return false;
+        }
+
+        for (uint8 i = 0; i < numMaterialOverrides; ++i)
+        {
+            MaterialOverride materialOverride;
+            if (!(reader >> io::read<uint8>(materialOverride.materialIndex) >> io::read_container<uint16>(materialOverride.materialName)))
+            {
+                ELOG("Failed to read material override for map entity chunk, unexpected end of file!");
+                return false;
+            }
+        }
+
+        if (GetMapEntityInstance(uniqueId) != nullptr)
+        {
+            WLOG("Duplicate entity id found: " << uniqueId);
+            return reader;
+        }
+
+		const MapEntity* entity = GetMapEntity(m_meshNames[meshNameIndex]);
+        ASSERT(entity);
+
+        Matrix4 transform;
+        transform.MakeTransform(position, scale, rotation);
+
+        AABB bounds = entity->Bounds;
+		bounds.Transform(transform);
+
+        InsertMapEntityInstance(uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+
+        return reader;
+    }
+
+    bool Map::ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *TerrainChunkMagic);
+
+        uint8 hasTerrain;
+        if (!(reader >> io::read<uint8>(hasTerrain)))
+        {
+            ELOG("Failed to read terrain chunk: Unexpected end of file");
+            return false;
+        }
+
+        if (hasTerrain)
+        {
+            // Ensure terrain is created
+            m_hasTerrain = true;
+        }
+
+        // Read terrain default material
+        String defaultMaterialName;
+        if (!(reader >> io::read_container<uint16>(defaultMaterialName)))
+        {
+            ELOG("Failed to read terrain default material name: Unexpected end of file");
+            return false;
+        }
+
+        return reader;
     }
 }

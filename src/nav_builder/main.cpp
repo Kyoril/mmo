@@ -8,6 +8,7 @@
 #include "log/log_std_stream.h"
 
 #include "cxxopts/cxxopts.hpp"
+#include "graphics/graphics_device.h"
 #include "nav_build/mesh_builder.h"
 
 namespace mmo
@@ -102,6 +103,11 @@ int main(int argc, char* argv[])
 
 	// Per default, use all available threads
 	size_t concurrentThreads = std::thread::hardware_concurrency();
+
+	// TODO: This is ugly! Let's remove this dependency. Right now this is needed because we deserialize Mesh Files which will also try to load
+	// materials, which in turn will try to load referenced textures and shaders and stuff. So by initializing the NullGraphicsDevice, we prevent
+	// this from crashing and not actually load textures and shaders and stuff.
+	mmo::GraphicsDevice::CreateNull({});
 
 	// Prepare available command line options
 	cxxopts::Options options("Navigation Builder, available options");

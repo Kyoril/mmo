@@ -674,7 +674,9 @@ namespace mmo
 
 	void WorldModelEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
 	{
-		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
+		uint32 objectId = m_objectIdGenerator.GenerateId();
+
+		const String uniqueId = "Entity_" + std::to_string(objectId);
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
 		{
@@ -687,7 +689,7 @@ namespace mmo
 			node.SetOrientation(orientation);
 			node.SetScale(scale);
 
-			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
 			mapEntity->remove.connect(this, &WorldModelEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}

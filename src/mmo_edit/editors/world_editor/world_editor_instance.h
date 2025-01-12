@@ -47,10 +47,11 @@ namespace mmo
 		RemoveSignal remove;
 
 	public:
-		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity)
+		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity, uint32 uniqueId)
 			: m_scene(scene)
 			, m_sceneNode(sceneNode)
 			, m_entity(entity)
+			, m_uniqueId(uniqueId)
 		{
 		}
 
@@ -71,10 +72,16 @@ namespace mmo
 			return m_entity;
 		}
 
+		uint32 GetUniqueId() const
+		{
+			return m_uniqueId;
+		}
+
 	private:
 		Scene& m_scene;
 		SceneNode& m_sceneNode;
 		Entity& m_entity;
+		uint32 m_uniqueId;
 	};
 
 	struct WorldPage
@@ -175,7 +182,7 @@ namespace mmo
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
-		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId);
 
 		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
 

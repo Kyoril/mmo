@@ -699,7 +699,7 @@ namespace mmo
 							position.z = std::round(position.z / gridSize) * gridSize;
 						}
 
-						CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
+						CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale, m_objectIdGenerator.GenerateId());
 					}
 					ImGui::EndDragDropTarget();
 				}
@@ -989,7 +989,7 @@ namespace mmo
 			content.position = ent->GetSceneNode().GetDerivedPosition();
 			content.rotation = ent->GetSceneNode().GetDerivedOrientation();
 			content.scale = ent->GetSceneNode().GetDerivedScale();
-			content.uniqueId = 0;	// TODO: Unique ID
+			content.uniqueId = ent->GetUniqueId();
 			writer.WritePOD(content);
 
 			std::vector<MaterialOverride> materialOverrides;
@@ -1092,7 +1092,7 @@ namespace mmo
 					String asset = entity->GetMesh()->GetName().data();
 					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
 					{
-						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale());
+						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), m_objectIdGenerator.GenerateId());
 					}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 				}
@@ -1185,9 +1185,9 @@ namespace mmo
 		m_debugEntity->SetVisible(true);
 	}
 
-	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId)
 	{
-		const String uniqueId = "Entity_" + std::to_string(m_objectIdGenerator.GenerateId());
+		const String uniqueId = "Entity_" + std::to_string(objectId);
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
 		{
@@ -1200,7 +1200,7 @@ namespace mmo
 			node.SetOrientation(orientation);
 			node.SetScale(scale);
 
-			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity));
+			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
 			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
@@ -1576,7 +1576,16 @@ namespace mmo
 			return false;
 		}
 
-		CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+		if (content.uniqueId == 0)
+		{
+			content.uniqueId = m_objectIdGenerator.GenerateId();
+		}
+		else
+		{
+			m_objectIdGenerator.NotifyId(content.uniqueId);
+		}
+
+		CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale, content.uniqueId);
 
 		return reader;
 	}
@@ -1646,7 +1655,16 @@ namespace mmo
 			}
 		}
 
-		if (Entity* entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale))
+		if (uniqueId == 0)
+		{
+			uniqueId = m_objectIdGenerator.GenerateId();
+		}
+		else
+		{
+			m_objectIdGenerator.NotifyId(uniqueId);
+		}
+
+		if (Entity* entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale, uniqueId))
 		{
 			// Apply material overrides
 			for (const auto& materialOverride : materialOverrides)

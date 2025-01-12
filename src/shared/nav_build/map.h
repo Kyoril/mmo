@@ -13,6 +13,8 @@
 #include <mutex>
 #include <set>
 
+#include "base/chunk_reader.h"
+
 namespace mmo
 {
 #pragma pack(push, 1)
@@ -43,6 +45,8 @@ namespace mmo
         std::vector<Vector3> m_liquidVertices;
         std::vector<int32> m_liquidIndices;
 
+        std::vector<uint32> m_mapEntityInstances;
+
         uint32 m_areaId = 0;
         uint32 m_zoneId = 0;
 
@@ -55,6 +59,8 @@ namespace mmo
         uint32 RootId;
         std::vector<Vector3> Vertices;
         std::vector<int32> Indices;
+        String Filename;
+        AABB Bounds;
 
         MapEntity(const std::string& path);
     };
@@ -98,7 +104,21 @@ namespace mmo
         const TerrainChunk* GetChunk(int chunkX, int chunkY) const { return m_chunks[chunkY][chunkX].get(); }
     };
 
-	class Map final : public NonCopyable
+    namespace world_version
+    {
+        enum Type
+        {
+            Latest = -1,
+
+            Version_0_0_0_1 = 0x0001,
+
+            Version_0_0_0_2 = 0x0002,
+        };
+    }
+
+    typedef world_version::Type WorldVersion;
+	class Map final
+		: public ChunkReader
     {
     public:
         const std::string Name;
@@ -115,11 +135,45 @@ namespace mmo
 
         void UnloadPage(int32 x, int32 y);
 
+        const MapEntity* GetMapEntity(const std::string& name);
+
+        void InsertMapEntityInstance(unsigned int uniqueId, std::unique_ptr<MapEntityInstance> instance);
+
+        const MapEntityInstance* GetMapEntityInstance(unsigned int uniqueId) const;
+
+        void GetMapEntityInstancesInArea(const AABB& bounds, std::vector<uint32>& out_instanceIds) const;
+
+		bool HasTerrain() const { return m_hasTerrain; }
+
 		void Serialize(io::Writer& writer) const;
 
+	private:
+        bool ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+        bool ReadMeshNamesChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+        bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+        bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+        bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
     private:
+        uint32 m_version = 0;
+
+        struct MapEntityChunkContent
+        {
+            uint32 uniqueId;
+            uint32 meshNameIndex;
+            Vector3 position;
+            Quaternion rotation;
+            Vector3 scale;
+        };
+
+        std::vector<String> m_meshNames;
+
         bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages];
-        bool m_hasTerrain;
+        bool m_hasTerrain = false;
 
         mutable std::mutex m_pageMutex;
         std::unique_ptr<TerrainPage> m_pages[terrain::constants::MaxPages][terrain::constants::MaxPages];
