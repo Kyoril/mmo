@@ -1,6 +1,8 @@
 
 #include "mesh_builder.h"
 
+#include <unordered_set>
+
 #include "DetourNavMeshBuilder.h"
 
 #include "common.h"
@@ -23,13 +25,13 @@ namespace mmo
         static constexpr float WalkableHeight = 1.6f; // agent height in world units (units)
         static constexpr float WalkableRadius = 0.3f; // narrowest allowable hallway in world units (units)
         static constexpr float WalkableSlope = 50.f; // maximum walkable slope, in degrees
-        static constexpr float WalkableClimb = 1.f; // maximum 'step' height for which slope is ignored (units)
-        static constexpr float DetailSampleDistance = 3.f; // heightfield detail mesh sample distance (units)
+        static constexpr float WalkableClimb = 0.35f; // maximum 'step' height for which slope is ignored (units)
+        static constexpr float DetailSampleDistance = 2.0f; // heightfield detail mesh sample distance (units)
         static constexpr float DetailSampleMaxError = 0.25f; // maximum distance detail mesh surface should deviate from heightfield (units)
 
 		// NOTE: If Recast warns "Walk towards polygon center failed to reach
 		// center", try lowering this value
-        static constexpr float MaxSimplificationError = 0.5f;
+        static constexpr float MaxSimplificationError = 0.75f;
 
         static constexpr int MinRegionSize = 1600;
         static constexpr int MergeRegionSize = 400;
@@ -112,7 +114,7 @@ namespace mmo
             config.mergeRegionArea = settings::MergeRegionSize;
             config.maxVertsPerPoly = settings::VerticesPerPolygon;
             config.tileSize = settings::TileVoxelSize;
-            config.borderSize = config.walkableRadius + 3;
+            config.borderSize = config.walkableRadius + 6;
             config.width = config.tileSize + config.borderSize * 2;
             config.height = config.tileSize + config.borderSize * 2;
             config.detailSampleDist = settings::DetailSampleDistance;
@@ -150,7 +152,7 @@ namespace mmo
             std::vector areas(indices.size() / 3, areaFlags);
 
             // if these triangles are terrain, mark steep
-            if (areaFlags & Ground)
+            /*if (areaFlags & poly_flags::Ground)
             {
                 rcMarkWalkableTriangles(
                     &ctx, slope, recastVertices.data(), static_cast<int>(vertices.size()),
@@ -167,10 +169,10 @@ namespace mmo
                     }
                     else
                     {
-                        a = areaFlags | PolyFlags::Steep;
+                        a = areaFlags | poly_flags::Steep;
                     }
                 }
-            }
+            }*/
 
             return rcRasterizeTriangles(
                 &ctx, recastVertices.data(), static_cast<int>(vertices.size()), indices.data(),
@@ -433,41 +435,39 @@ namespace mmo
             return false;
         }
 
+        std::unordered_set<std::uint32_t> rasterizedEntities;
+
         // incrementally rasterize mesh geometry into the height field, setting poly flags as appropriate
         for (auto const& chunk : chunks)
         {
             // Terrain
-            if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle, chunk->m_terrainVertices, chunk->m_terrainIndices, Ground))
+            if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle, chunk->m_terrainVertices, chunk->m_terrainIndices, poly_flags::Ground))
             {
                 return false;
             }
-        }
 
-    	// we don't want to filter ledge spans from terrain. this will restore
-		// the area for these spans, which we are using for flags
-        {
-            std::vector<std::pair<rcSpan*, unsigned int>> groundSpanAreas;
-
-            groundSpanAreas.reserve(solid->width * solid->height);
-
-            for (auto i = 0; i < solid->width * solid->height; ++i)
+            // Map Entities
+            for (auto const& wmoId : chunk->m_mapEntityInstances)
             {
-                for (rcSpan* s = solid->spans[i]; s; s = s->next)
-                {
-                    if (s->area & PolyFlags::Ground)
-                    {
-                        groundSpanAreas.push_back(std::pair<rcSpan*, unsigned int>(s, static_cast<unsigned int>(s->area)));
-                    }
-                }
-            }
+                if (rasterizedEntities.contains(wmoId))
+                    continue;
 
-            rcFilterLedgeSpans(&ctx, config.walkableHeight, config.walkableClimb, *solid);
+                auto const entityInstance = m_map->GetMapEntityInstance(wmoId);
+                ASSERT(entityInstance);
 
-            for (const auto p : groundSpanAreas)
-            {
-                p.first->area = p.second;
+                std::vector<Vector3> vertices;
+                std::vector<int32> indices;
+
+                entityInstance->BuildTriangles(vertices, indices);
+                if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle,
+                    vertices, indices, poly_flags::Entity))
+                    return false;
+
+                rasterizedEntities.insert(wmoId);
             }
         }
+
+    	rcFilterLedgeSpans(&ctx, config.walkableHeight, config.walkableClimb, *solid);
 
         rcFilterWalkableLowHeightSpans(&ctx, config.walkableHeight, *solid);
         rcFilterLowHangingWalkableObstacles(&ctx, config.walkableClimb, *solid);

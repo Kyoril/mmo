@@ -571,7 +571,7 @@ namespace mmo
 
 			ImGui::SameLine();
 
-			if (ImGui::Button("Build"))
+			if (ImGui::Button("Build Complex"))
 			{
 				m_mesh->GetCollisionTree().Clear();
 

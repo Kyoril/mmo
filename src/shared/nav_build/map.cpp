@@ -87,7 +87,6 @@ namespace mmo
 
         indices.clear();
         indices.resize(Model->Indices.size());
-
         std::copy(Model->Indices.cbegin(), Model->Indices.cend(), indices.begin());
 
         for (auto& vertex : Model->Vertices)

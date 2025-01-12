@@ -8,6 +8,7 @@
 #include <thread>
 #include <asio/io_service.hpp>
 
+#include "detour_debug_drawer.h"
 #include "selected_map_entity.h"
 #include "paging/world_page_loader.h"
 #include "base/id_generator.h"
@@ -22,6 +23,7 @@
 #include "scene_graph/world_grid.h"
 #include "transform_widget.h"
 #include "selection.h"
+#include "nav_mesh/map.h"
 #include "terrain/terrain.h"
 
 namespace mmo
@@ -290,5 +292,10 @@ namespace mmo
 		float m_terrainBrushHardness = 0.5f;
 		float m_terrainBrushPower = 10.0f;
 		uint8 m_terrainPaintLayer = 0;
+
+		std::unique_ptr<DetourDebugDraw> m_detourDebugDraw;
+		std::unique_ptr<nav::Map> m_navMap;
+
+		SceneNode* m_navDebugNode{ nullptr };
 	};
 }

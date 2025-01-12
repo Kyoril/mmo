@@ -108,7 +108,10 @@ target_link_libraries(mmo_edit
 	sql_wrapper
 	mysql_wrapper
 	terrain)
-	
+
+# Link recast, detour and detour debug libraries as we need them to load and visualize navigation data in the world editor	
+target_link_libraries(mmo_edit nav_mesh Recast Detour DebugUtils)
+
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)
 	target_link_libraries(mmo_edit graphics_d3d11)

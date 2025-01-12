@@ -4,14 +4,17 @@
 
 namespace mmo
 {
-    enum PolyFlags : uint8
+    namespace poly_flags
     {
-        Ground = 1 << 0,
+        enum Type : uint8
+        {
+            Ground = 1 << 0,
 
-        Steep = 1 << 1,
+            Steep = 1 << 1,
 
-        Liquid = 1 << 2,
+            Liquid = 1 << 2,
 
-        Entity = 1 << 3,
-    };
+            Entity = 1 << 3,
+        };
+    }
 }

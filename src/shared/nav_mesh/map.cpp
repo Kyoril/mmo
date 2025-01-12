@@ -278,7 +278,7 @@ namespace mmo::nav
 		}
 
 		float pathBuffer[MaxPathHops * 3];
-		auto const findStraightPathResult = m_navQuery.findStraightPath(recastStart, recastEnd, polyRefBuffer, pathLength, pathBuffer, nullptr, nullptr, &pathLength, MaxPathHops);
+		auto const findStraightPathResult = m_navQuery.findStraightPath(recastStart, recastEnd, polyRefBuffer, pathLength, pathBuffer, nullptr, nullptr, &pathLength, MaxPathHops, DT_STRAIGHTPATH_ALL_CROSSINGS);
 		if (!(findStraightPathResult & DT_SUCCESS) ||
 			(!allowPartial && !!(findStraightPathResult & DT_PARTIAL_RESULT)))
 		{

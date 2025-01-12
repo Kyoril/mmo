@@ -2,6 +2,7 @@
 
 #include "world_editor_instance.h"
 
+#include <DetourDebugDraw.h>
 #include <imgui_internal.h>
 
 #include "editor_host.h"
@@ -16,6 +17,7 @@
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
+#include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
@@ -45,6 +47,35 @@ namespace mmo
 		Quaternion rotation;
 		Vector3 scale;
 	};
+
+	namespace
+	{
+		void duDebugDrawNavMeshPolysWithoutFlags(struct duDebugDraw* dd,
+			const dtNavMesh& mesh,
+			const unsigned short polyFlags,
+			const unsigned int col)
+		{
+			if (!dd)
+				return;
+
+			for (int i = 0; i < mesh.getMaxTiles(); ++i)
+			{
+				const dtMeshTile* tile = mesh.getTile(i);
+				if (!tile->header)
+					continue;
+				dtPolyRef base = mesh.getPolyRefBase(tile);
+
+				for (int j = 0; j < tile->header->polyCount; ++j)
+				{
+					const dtPoly* p = &tile->polys[j];
+					if ((p->flags & polyFlags) != 0)
+						continue;
+					duDebugDrawNavMeshPoly(dd, mesh, base | (dtPolyRef)j, col);
+				}
+			}
+		}
+	}
+	
 
 	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
@@ -143,6 +174,13 @@ namespace mmo
 		m_debugNode->AttachObject(*m_debugEntity);
 		m_debugEntity->SetVisible(false);
 
+		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
+		// Setup debug draw
+		//m_detourDebugDraw = std::make_unique<DetourDebugDraw>(m_scene, MaterialManager::Get().Load("Models/Engine/DetourDebug.hmat"));
+		//m_navMap = std::make_unique<nav::Map>("Development");
+		//m_navMap->LoadPage(32, 32);
+		//duDebugDrawNavMesh(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), DU_DRAWNAVMESH_COLOR_TILES);
+
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
 		if (!streamPtr)
@@ -171,6 +209,9 @@ namespace mmo
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
+
+		m_navMap.reset();
+		m_detourDebugDraw.reset();
 
 		m_transformWidget.reset();
 		m_mapEntities.clear();
