@@ -181,7 +181,8 @@ namespace mmo
 		D3D11_DEPTH_STENCIL_VIEW_DESC dsvd;
 		ZeroMemory(&dsvd, sizeof(dsvd));
 		dsvd.Format = DXGI_FORMAT_D32_FLOAT;
-		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+
 		VERIFY(SUCCEEDED(d3dDev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
 

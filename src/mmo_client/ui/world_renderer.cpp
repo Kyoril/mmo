@@ -67,10 +67,11 @@ namespace mmo
 		// Activate render target
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
-		
+
 		// Render world scene
 		if (m_camera)
 		{
+			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
 			m_worldScene.Render(*m_camera);
 		}
 

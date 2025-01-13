@@ -478,7 +478,6 @@ namespace mmo
 
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
-		m_defaultCamera->SetAspectRatio(static_cast<float>(w) / static_cast<float>(h));
 		m_defaultCamera->InvalidateView();
 
 		MovePlayer();

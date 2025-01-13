@@ -107,6 +107,7 @@ namespace mmo
 		textureDesc.ArraySize = 1;
 		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;	// TODO: expose format
 		textureDesc.SampleDesc.Count = 1;
+		textureDesc.SampleDesc.Quality = 0;
 		textureDesc.Usage = D3D11_USAGE_DEFAULT;
 		textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 		textureDesc.CPUAccessFlags = 0;
@@ -118,7 +119,7 @@ namespace mmo
 		// Setup the description of the render target view.
 		D3D11_RENDER_TARGET_VIEW_DESC renderTargetViewDesc;
 		renderTargetViewDesc.Format = textureDesc.Format;
-		renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
 		renderTargetViewDesc.Texture2D.MipSlice = 0;
 		VERIFY(SUCCEEDED(d3d_dev.CreateRenderTargetView(m_renderTargetTex.Get(), &renderTargetViewDesc, &m_renderTargetView)));
 
@@ -147,7 +148,7 @@ namespace mmo
 		D3D11_DEPTH_STENCIL_VIEW_DESC dsvd;
 		ZeroMemory(&dsvd, sizeof(dsvd));
 		dsvd.Format = DXGI_FORMAT_D32_FLOAT;
-		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+		dsvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
 		VERIFY(SUCCEEDED(d3d_dev.CreateDepthStencilView(depthBuffer.Get(), &dsvd, &m_depthStencilView)));
 	}
 

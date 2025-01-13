@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "render_texture_d3d11.h"
+#include "log/default_log_levels.h"
 
 
 namespace mmo
