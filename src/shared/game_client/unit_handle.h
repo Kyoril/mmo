@@ -52,7 +52,8 @@ namespace mmo
 		[[nodiscard]] int32 GetPowerType() const;
 		[[nodiscard]] float GetMinDamage() const;
 		[[nodiscard]] float GetMaxDamage() const;
-		[[nodiscard]] uint32 GetAttackPower() const;
+		[[nodiscard]] uint32 GetAttackTime() const;
+		[[nodiscard]] float GetAttackPower() const;
 		[[nodiscard]] int32 GetStat(int32 statId) const;
 		[[nodiscard]] int32 GetPosStat(int32 statId) const;
 		[[nodiscard]] int32 GetNegStat(int32 statId) const;

@@ -190,11 +190,13 @@ namespace mmo
 
 		int32 GetPowerType() const { return Get<int32>(object_fields::PowerType); }
 
-		uint32 GetAttackPower() const { return Get<uint32>(object_fields::AttackPower); }
+		float GetAttackPower() const { return Get<float>(object_fields::AttackPower); }
 
 		float GetMinDamage() const { return Get<float>(object_fields::MinDamage); }
 
 		float GetMaxDamage() const { return Get<float>(object_fields::MaxDamage); }
+
+		uint32 GetAttackTime() const { return Get<uint32>(object_fields::BaseAttackTime); }
 
 		int32 GetStat(int32 statId) const;
 

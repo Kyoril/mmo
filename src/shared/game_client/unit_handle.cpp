@@ -137,9 +137,15 @@ namespace mmo
 		return Get()->GetMaxDamage();
 	}
 
-	uint32 UnitHandle::GetAttackPower() const
+	uint32 UnitHandle::GetAttackTime() const
 	{
 		if (!CheckNonNull()) return 0;
+		return Get()->GetAttackTime();
+	}
+
+	float UnitHandle::GetAttackPower() const
+	{
+		if (!CheckNonNull()) return 0.0f;
 		return Get()->GetAttackPower();
 	}
 

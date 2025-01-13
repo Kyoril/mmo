@@ -563,6 +563,12 @@ namespace mmo
 			m_matrixDirty = false;
 		}
 
+		// Reset bound texture slots
+		for (size_t i = 0; i < std::size(m_textureSlots); ++i)
+		{
+			m_textureSlots[i] = nullptr;
+		}
+
 		// Set the constant buffers
 		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
 		m_immContext->VSSetConstantBuffers(0, 1, Buffers);
@@ -793,6 +799,12 @@ namespace mmo
 
 		m_matrixDirty = true;
 		m_samplerDescChanged = true;
+
+		// Invalidate texture slot cache
+		for (size_t i = 0; i < std::size(m_textureSlots); ++i)
+		{
+			m_textureSlots[i] = nullptr;
+		}
 	}
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(const TransformType type, Matrix4 const & matrix)
@@ -815,7 +827,16 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::BindTexture(const TexturePtr texture, const ShaderType shader, const uint32 slot)
 	{
+		ASSERT(slot < std::size(m_textureSlots));
+
 		if (!texture)
+		{
+			m_textureSlots[slot] = nullptr;
+			return;
+		}
+
+		// Texture already bound to slot? Then nothing to do here
+		if (m_textureSlots[slot] == texture.get())
 		{
 			return;
 		}

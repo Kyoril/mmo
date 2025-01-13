@@ -1037,6 +1037,8 @@ namespace mmo
 				.def("GetPowerType", &UnitHandle::GetPowerType)
 				.def("GetMinDamage", &UnitHandle::GetMinDamage)
 				.def("GetMaxDamage", &UnitHandle::GetMaxDamage)
+				.def("GetAttackTime", &UnitHandle::GetAttackTime)
+				.def("GetAttackPower", &UnitHandle::GetAttackPower)
 				.def("GetArmor", &UnitHandle::GetArmor)
 				.def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
 				.def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)

@@ -24,8 +24,6 @@ namespace mmo
 		, m_projectileEnd(0)
 		, m_connectedMeleeSignal(false)
 		, m_delayCounter(0)
-		, m_tookCastItem(false)
-		, m_tookReagents(false)
 		, m_attackerProc(0)
 		, m_victimProc(0)
 		, m_canTrigger(false)
@@ -846,6 +844,33 @@ namespace mmo
 
 	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
 	{
+		// Get item entry
+		const auto* item = m_cast.GetExecuter().GetProject().items.getById(effect.itemtype());
+		if (!item)
+		{
+			ELOG("Could not find item by id " << effect.itemtype());
+			return;
+		}
+
+		if (!m_cast.GetExecuter().IsPlayer())
+		{
+			WLOG("Caster of spell " << m_spell.id() << " is not a player, so items can't be created as npcs dont have an inventory");
+			return;
+		}
+
+		const int32 itemCount = CalculateEffectBasePoints(effect);
+		if (itemCount <= 0)
+		{
+			WLOG("Effect base points of spell " << m_spell.id() << " resulted in <= 0, so no items could be created");
+			return;
+		}
+
+		const InventoryChangeFailure result = dynamic_cast<GamePlayerS&>(m_cast.GetExecuter()).GetInventory().CreateItems(*item, itemCount);
+		if (result != inventory_change_failure::Okay)
+		{
+			ELOG("Failed to add item: " << result);
+			return;
+		}
 	}
 
 	void SingleCastState::SpellEffectEnergize(const proto::SpellEffect& effect)
@@ -928,6 +953,25 @@ namespace mmo
 
 	void SingleCastState::SpellEffectLearnSpell(const proto::SpellEffect& effect)
 	{
+		uint32 spellId = effect.triggerspell();
+		if (!spellId)
+		{
+			ELOG("No spell index to learn set for spell id " << m_spell.id());
+			return;
+		}
+
+		// Look for spell
+		const auto* spell = m_cast.GetExecuter().GetProject().spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unknown spell index to learn set for spell id " << m_spell.id() << ": " << spellId);
+			return;
+		}
+
+		if (const auto unit = GetEffectUnitTarget(effect))
+		{
+			unit->AddSpell(spellId);
+		}
 	}
 
 	void SingleCastState::SpellEffectScriptEffect(const proto::SpellEffect& effect)

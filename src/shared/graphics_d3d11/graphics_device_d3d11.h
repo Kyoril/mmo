@@ -208,5 +208,9 @@ namespace mmo
 		Matrix4 m_restoreInverseView;
 
 		HCURSOR m_hardwareCursor = nullptr;
+
+		Texture* m_textureSlots[16]{ };
+		ShaderBase* m_vertexShader { nullptr };
+		ShaderBase* m_pixelShader { nullptr };
 	};
 }

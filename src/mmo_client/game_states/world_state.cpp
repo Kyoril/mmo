@@ -343,6 +343,12 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 	}
 
+	void WorldState::OnPlayerStatsChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
+	}
+
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
@@ -833,6 +839,13 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
+
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::AttackPower, 1, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Armor, 1, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::StatStamina, 15, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::BaseAttackTime, 3, *this, &WorldState::OnPlayerStatsChanged);
+					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)

@@ -229,8 +229,8 @@ namespace mmo
 		bool m_connectedMeleeSignal;
 		uint32 m_delayCounter;
 		std::set<std::weak_ptr<GameObjectS>, std::owner_less<std::weak_ptr<GameObjectS>>> m_affectedTargets;
-		bool m_tookCastItem;
-		bool m_tookReagents;
+		bool m_tookCastItem { false };
+		bool m_tookReagents { false };
 		uint32 m_attackerProc;
 		uint32 m_victimProc;
 		bool m_canTrigger;
