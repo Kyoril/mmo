@@ -20,6 +20,12 @@ namespace mmo
 
 		const ItemInfo* GetEntry() const { return m_info; }
 
+		[[nodiscard]] int32 GetStackCount() const { return Get<int32>(object_fields::StackCount); }
+
+		[[nodiscard]] bool IsBag() const { return GetTypeId() == ObjectTypeId::Container; }
+
+		[[nodiscard]] int32 GetBagSlots() const { return IsBag() ? Get<int32>(object_fields::NumSlots) : 0; }
+
 	public:
 		virtual void InitializeFieldMap() override;
 

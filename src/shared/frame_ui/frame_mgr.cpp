@@ -422,6 +422,8 @@ namespace mmo
 					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
 					.def("SetOnLeaveHandler", &Frame::SetOnLeave)
+					.def("SetOpacity", &Frame::SetOpacity)
+					.def("GetOpacity", &Frame::GetOpacity)
 					.def("__eq", &Frame::IsEqualTo)
 				),
 

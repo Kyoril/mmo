@@ -431,6 +431,10 @@ namespace mmo
 
 		virtual void OnClick(MouseButton button);
 
+		void SetOpacity(const float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
+
+		[[nodiscard]] float GetOpacity() const { return m_opacity; }
+
 	protected:
 		virtual void DrawSelf();
 
@@ -449,8 +453,6 @@ namespace mmo
 		void OnTabPressed();
 
 		void OnEnterPressed();
-
-		void SetOpacity(float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
 
 		virtual void OnAreaChanged(const Rect& newArea) { }
 

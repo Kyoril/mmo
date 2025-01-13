@@ -63,6 +63,7 @@ namespace mmo
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.m_clickable = m_clickable;
+		other.m_opacity = m_opacity;
 		other.RemoveAllChildren();
 		
 		// Set all properties

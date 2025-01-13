@@ -1118,6 +1118,8 @@ namespace mmo
 			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
 			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 
+			luabind::def("GetTime", &GetAsyncTimeMs),
+
 			// Quest
 			luabind::def<std::function<String()>>("GetGreetingText", [this]() { return m_questClient.GetGreetingText(); }),
 			luabind::def<std::function<int32()>>("GetNumAvailableQuests", [this]() { return m_questClient.GetNumAvailableQuests(); }),
