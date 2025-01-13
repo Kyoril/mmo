@@ -91,6 +91,8 @@ namespace mmo
 		std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() override;
 
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
+
+		uint64 GetBatchCount() const override { return 0; }
 		// ~ End GraphicsDevice
         
     public:

@@ -107,6 +107,8 @@ namespace mmo
 		void SetHardwareCursor(void* osCursorData) override;
 
 		void* GetHardwareCursor() override;
+
+		uint64 GetBatchCount() const override { return m_lastFrameBatchCount; }
 		// ~ End GraphicsDevice
 
 	public:
@@ -212,5 +214,9 @@ namespace mmo
 		Texture* m_textureSlots[16]{ };
 		ShaderBase* m_vertexShader { nullptr };
 		ShaderBase* m_pixelShader { nullptr };
+
+		ID3D11InputLayout* m_lastInputLayout{ nullptr };
+		uint64 m_batchCount = 0;
+		uint64 m_lastFrameBatchCount = 0;
 	};
 }

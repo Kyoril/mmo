@@ -89,6 +89,8 @@ namespace mmo
 		void SetHardwareCursor(void* osCursorData) override;
 
 		void* GetHardwareCursor() override;
+
+		uint64 GetBatchCount() const override { return 0; }
 		// ~ End GraphicsDevice
 	};
 }

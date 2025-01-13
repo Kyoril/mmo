@@ -62,6 +62,8 @@ namespace mmo
 	/// Enumerates possible blend modes.
 	enum class BlendMode
 	{
+		Undefined,
+
 		/// Opaque rendering. Most performant, default mode.
 		Opaque,
 
@@ -73,6 +75,8 @@ namespace mmo
 	/// Enumerates primitive topology types.
 	enum class TopologyType
 	{
+		Undefined,
+
 		PointList,
 		LineList,
 		LineStrip,
@@ -286,6 +290,8 @@ namespace mmo
 		virtual VertexBufferBinding* CreateVertexBufferBinding();
 
 		virtual void DestroyVertexBufferBinding(VertexBufferBinding& binding);
+
+		virtual uint64 GetBatchCount() const = 0;
 
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }

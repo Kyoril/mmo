@@ -86,6 +86,7 @@ namespace mmo
 		ConsoleVar* s_gxWindowedCVar = nullptr;
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
+		ConsoleVar* s_gxPerfCVar = nullptr;
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -105,6 +106,8 @@ namespace mmo
 			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
 			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar,		nullptr },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar,			nullptr },
+
+			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar, nullptr },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
@@ -605,17 +608,30 @@ namespace mmo
 	
 	void Console::Paint()
 	{
-		if (!s_consoleVisible)
+		auto& gx = GraphicsDevice::Get();
+
+		const bool showPerf = s_gxPerfCVar->GetBoolValue();
+
+		// Nothing to show here
+		if (!showPerf && !s_consoleVisible)
 		{
-			return;	
+			return;
 		}
 
-		auto& gx = GraphicsDevice::Get();
+		if (showPerf || s_consoleTextDirty)
+		{
+			s_consoleTextGeom->Reset();
+		}
+
+		if (showPerf)
+		{
+			std::stringstream strm;
+			strm << "Batch count: " << gx.GetBatchCount();
+			s_consoleFont->DrawText(strm.str(), Point(0.0f, 0.0f), *s_consoleTextGeom, 1.0f);
+		}
 
 		if (s_consoleTextDirty)
 		{
-			s_consoleTextGeom->Reset();
-			
 			// Calculate start point
 			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) - s_consoleFont->GetHeight() };
 			

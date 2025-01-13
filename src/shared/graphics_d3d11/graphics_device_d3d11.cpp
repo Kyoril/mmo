@@ -549,8 +549,12 @@ namespace mmo
 		m_immContext->ClearState();
 
 		m_vertexFormat = VertexFormat::Last;
-		m_blendMode = BlendMode::Opaque;
-		m_topologyType = TopologyType::TriangleList;
+		m_blendMode = BlendMode::Undefined;
+		m_topologyType = TopologyType::Undefined;
+		m_lastInputLayout = nullptr;
+
+		m_lastFrameBatchCount = m_batchCount;
+		m_batchCount = 0;
 
 		// Update the constant buffer
 		if (m_matrixDirty)
@@ -689,6 +693,7 @@ namespace mmo
 		
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
+		m_batchCount++;
 	}
 
 	void GraphicsDeviceD3D11::DrawIndexed(const uint32 startIndex, const uint32 endIndex)
@@ -707,6 +712,7 @@ namespace mmo
 		
 		// Execute draw command
 		m_immContext->DrawIndexed(endIndex == 0 ? m_indexCount - startIndex : endIndex - startIndex, startIndex, 0);
+		m_batchCount++;
 	}
 
 	namespace
@@ -735,6 +741,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetTopologyType(const TopologyType type)
 	{
+		if (m_topologyType == type)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetTopologyType(type);
 
 		const D3D11_PRIMITIVE_TOPOLOGY topology = D3DTopologyType(type);
@@ -745,26 +756,37 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetVertexFormat(const VertexFormat format)
 	{
+		m_vertexFormat = format;
+
 		const auto it = InputLayouts.find(format);
 		ASSERT(it != InputLayouts.end());
 
-		m_immContext->IASetInputLayout(it->second.Get());
-
-		const auto vertexShaderIt = VertexShaders.find(format);
-		if (vertexShaderIt != VertexShaders.end())
+		if (m_lastInputLayout != it->second.Get())
 		{
-			vertexShaderIt->second->Set();
-		}
+			m_lastInputLayout = it->second.Get();
+			m_immContext->IASetInputLayout(it->second.Get());
 
-		const auto pixelShaderIt = PixelShaders.find(format);
-		if (pixelShaderIt != PixelShaders.end())
-		{
-			pixelShaderIt->second->Set();
+			const auto vertexShaderIt = VertexShaders.find(format);
+			if (vertexShaderIt != VertexShaders.end())
+			{
+				vertexShaderIt->second->Set();
+			}
+
+			const auto pixelShaderIt = PixelShaders.find(format);
+			if (pixelShaderIt != PixelShaders.end())
+			{
+				pixelShaderIt->second->Set();
+			}
 		}
 	}
 
 	void GraphicsDeviceD3D11::SetBlendMode(const BlendMode blendMode)
 	{
+		if (m_blendMode == blendMode)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetBlendMode(blendMode);
 
 		ID3D11BlendState* blendState = nullptr;
@@ -799,6 +821,7 @@ namespace mmo
 
 		m_matrixDirty = true;
 		m_samplerDescChanged = true;
+		m_lastInputLayout = nullptr;
 
 		// Invalidate texture slot cache
 		for (size_t i = 0; i < std::size(m_textureSlots); ++i)
