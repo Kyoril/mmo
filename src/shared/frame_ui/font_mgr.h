@@ -34,11 +34,11 @@ namespace mmo
 		/// @param filename Filename of the font to load.
 		/// @param size Font size in points.
 		/// @param outline Outline width in pixels.
-		FontPtr CreateOrRetrieve(const std::string& filename, float size, float outline = 0.0f);
+		FontPtr CreateOrRetrieve(const std::string& filename, float size, float outline = 0.0f, float shadowX = 0.0f, float shadowY = 0.0f);
 
 	private:
 		/// Determines whether the given font is already loaded using the given font size.
-		FontPtr FindCachedFont(const std::string& filename, float size, float outline) const;
+		FontPtr FindCachedFont(const std::string& filename, float size, float outline, float shadowX, float shadowY) const;
 
 	private:
 		typedef std::map<float, FontPtr> FontPtrByOutline;

@@ -1244,7 +1244,7 @@ namespace mmo
 		}
 
 		// Try to load font
-		m_font = FontManager::Get().CreateOrRetrieve(fontMap->FontFile, fontMap->Size, fontMap->Outline);
+		m_font = FontManager::Get().CreateOrRetrieve(fontMap->FontFile, fontMap->Size, fontMap->Outline, fontMap->ShadowX, fontMap->ShadowY);
 
 		// Invalidate
 		m_needsRedraw = true;

@@ -88,6 +88,8 @@ namespace mmo
 			std::string FontFile;
 			float Size;
 			float Outline;
+			float ShadowX;
+			float ShadowY;
 		};
 
 	public:

@@ -34,6 +34,8 @@ namespace mmo
 	static const std::string FontFileAttribute("file");
 	static const std::string FontSizeAttribute("size");
 	static const std::string FontOutlineAttribute("outline");
+	static const std::string FontShadowXAttribute("shadowX");
+	static const std::string FontShadowYAttribute("shadowY");
 	static const std::string AreaElement("Area");
 	static const std::string InsetElement("Inset");
 	static const std::string InsetLeftAttribute("left");
@@ -1074,6 +1076,9 @@ namespace mmo
 		const float size = attributes.GetValueAsFloat(FontSizeAttribute);
 		const float outline = attributes.GetValueAsFloat(FontOutlineAttribute);
 
+		const float shadowX = attributes.GetValueAsFloat(FontShadowXAttribute, 0.0f);
+		const float shadowY = attributes.GetValueAsFloat(FontShadowYAttribute, 0.0f);
+
 		// Check parameters
 		if (size <= 0.0f || file.empty() || name.empty())
 		{
@@ -1086,6 +1091,8 @@ namespace mmo
 		map.FontFile = file;
 		map.Size = size;
 		map.Outline = outline;
+		map.ShadowX = shadowX;
+		map.ShadowY = shadowY;
 		FrameManager::Get().AddFontMap(name, map);
 	}
 

@@ -92,14 +92,17 @@ namespace mmo
 	private:
 		/// Performs internal initialization.
 		bool InitializeInternal();
+
 		/// Calculates the required texture size to display the given glyphs.
 		/// @param start The start codepoint.
 		/// @param end The end codepoint.
 		/// @return The required texture size (textures are expected to be squared, so width == height).
 		uint32 GetTextureSize(GlyphMap::const_iterator start, GlyphMap::const_iterator end) const;
+
 		/// Sets the maximum supported codepoint and calculates the maximum page count.
 		/// @param codepoint The maximum codepoint value.
 		void SetMaxCodepoint(uint32 codepoint);
+
 		/// Rasterizes the given codepoints, which means that textures will be generated if that
 		/// didn't happen already.
 		/// @param startCodepoint The start codepoint.
@@ -117,9 +120,11 @@ namespace mmo
 	public:
 		/// Calculates the width in pixels of a given text.
 		float GetTextWidth(const std::string& text, float scale = 1.0f);
+
 		/// Tries to get glyph data of a certain codepoint. This eventually performs rasterization.
 		/// @return nullptr if the data isn't available in this font.
 		const FontGlyph* GetGlyphData(uint32 codepoint);
+
 		/// Draws a given text by appending geometry to a given GeometryBuffer object.
 		/// @param text The text to be drawn.
 		/// @param position The position (in pixels) where to draw the text on screen.
@@ -132,13 +137,21 @@ namespace mmo
 
 		int GetLineCount(const std::string& text, const Rect& area, float scale = 1.0f, bool wordWrap = true);
 
+		void SetShadow(float x, float y) { m_shadowX = x; m_shadowY = y; }
+
+		float GetShadowX() const { return m_shadowX; }
+
+		float GetShadowY() const { return m_shadowY; }
+
 	public:
 		/// Gets the default spacing between two lines of text in pixels.
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.
 		inline float GetLineSpacing(float scale = 1.0f) const { return m_height * scale; }
+
 		/// Gets the height of a whole line of text that is rendered using this font.
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.
 		inline float GetHeight(float scale = 1.0f) const { return (m_ascender - m_descender) * scale; }
+
 		/// Gets the height of the baseline for text rendered using this font.
 		/// @param scale A scaling factor. Keep in mind that upscaling will result in a loss of quality.
 		inline float GetBaseline(float scale = 1.0f) const { return m_ascender * scale; }
@@ -172,6 +185,11 @@ namespace mmo
 		float m_height;
 		/// The width of the outline of this font in pixels.
 		float m_outlineWidth;
+
+		float m_shadowX = 0.0f;
+
+		float m_shadowY = 0.0f;
+
 		/// A map of loaded glyph data.
 		GlyphMap m_glyphMap;
 		/// The maximum supported codepoint of this font.

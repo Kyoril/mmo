@@ -35,8 +35,8 @@ namespace mmo
 		, m_ascender(0)
 		, m_descender(0)
 		, m_height(0)
-		, m_maxCodepoint(0)
 		, m_outlineWidth(0.0f)
+		, m_maxCodepoint(0)
 	{
 		// Initializes the free type library if not already done and also increase
 		// the reference counter.
@@ -611,6 +611,12 @@ namespace mmo
 				const FontImage* const image = glyph->GetImage();
 				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 
+				// Draw drop shadow?
+				if (m_shadowX != 0.0f || m_shadowY != 0.0f)
+				{
+					image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, buffer, 0xFF000000);
+				}
+
 				image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, buffer, color);
 
 				for (size_t i = 0; i < iterations; ++i)
@@ -656,7 +662,16 @@ namespace mmo
 				const FontImage* const image = glyph->GetImage();
 				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
 
-				if (buffer) image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
+				if (buffer) 
+				{
+					// Draw drop shadow?
+					if (m_shadowX != 0.0f || m_shadowY != 0.0f)
+					{
+						image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, *buffer, 0xFF000000);
+					}
+
+					image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
+				}
 
 				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 

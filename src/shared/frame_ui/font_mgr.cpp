@@ -14,9 +14,9 @@ namespace mmo
 		return instance;
 	}
 
-	FontPtr FontManager::CreateOrRetrieve(const std::string & filename, float size, float outline)
+	FontPtr FontManager::CreateOrRetrieve(const std::string & filename, float size, float outline, float shadowX, float shadowY)
 	{
-		auto font = FindCachedFont(filename, size, outline);
+		auto font = FindCachedFont(filename, size, outline, shadowX, shadowY);
 		if (font != nullptr)
 		{
 			return font;
@@ -25,12 +25,14 @@ namespace mmo
 		font = std::make_shared<Font>();
 		VERIFY(font->Initialize(filename, size, outline));
 
+		font->SetShadow(shadowX, shadowY);
+
 		m_fontCache[filename][size][outline] = font;
 
 		return font;
 	}
 
-	FontPtr FontManager::FindCachedFont(const std::string & filename, float size, float outline) const
+	FontPtr FontManager::FindCachedFont(const std::string & filename, float size, float outline, float shadowX, float shadowY) const
 	{
 		const auto cacheIt = m_fontCache.find(filename);
 		if (cacheIt != m_fontCache.end())
