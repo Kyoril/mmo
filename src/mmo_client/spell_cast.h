@@ -28,6 +28,8 @@ namespace mmo
 
 		void OnLeftWorld();
 
+		void OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime);
+
 		void OnSpellGo(uint32 spellId);
 
 		void OnSpellFailure(uint32 spellId);

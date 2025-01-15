@@ -79,6 +79,13 @@ namespace mmo
 		m_spellCastId = 0;
 	}
 
+	void SpellCast::OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime)
+	{
+		m_spellCastId = spell.id();
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);
+	}
+
 	void SpellCast::OnSpellGo(uint32 spellId)
 	{
 		if (GetCastingSpellId() != spellId)

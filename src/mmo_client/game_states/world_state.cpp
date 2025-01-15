@@ -1290,7 +1290,7 @@ namespace mmo
 		{
 			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", spell, castTime);
+				m_spellCast.OnSpellStart(*spell, castTime);
 			}
 		}
 
