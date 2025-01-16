@@ -12,6 +12,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "loot_client.h"
+#include "trainer_client.h"
 
 #include "platform.h"
 #include "vendor_client.h"
@@ -31,10 +32,11 @@ namespace mmo
 
 	extern Cursor g_cursor;
 
-	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient)
 		: m_scene(scene)
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
+		, m_trainerClient(trainerClient)
 		, m_connector(connector)
 	{
 		if (!s_mouseSensitivityCVar)
@@ -520,12 +522,23 @@ namespace mmo
 			}
 		}
 
-		if (m_vendorClient.HasVendor() && m_controlledUnit->GetMovementInfo().IsChangingPosition())
+		if (m_controlledUnit->GetMovementInfo().IsChangingPosition())
 		{
-			const auto vendorObject = ObjectMgr::Get<GameObjectC>(m_vendorClient.GetVendorGuid());
-			if (vendorObject && !m_controlledUnit->IsWithinRange(*vendorObject, LootDistance))
+			if (m_vendorClient.HasVendor())
 			{
-				m_vendorClient.CloseVendor();
+				const auto vendorObject = ObjectMgr::Get<GameObjectC>(m_vendorClient.GetVendorGuid());
+				if (vendorObject && !m_controlledUnit->IsWithinRange(*vendorObject, LootDistance))
+				{
+					m_vendorClient.CloseVendor();
+				}
+			}
+			else if(m_trainerClient.HasTrainer())
+			{
+				const auto trainerObject = ObjectMgr::Get<GameObjectC>(m_trainerClient.GetTrainerGuid());
+				if (trainerObject && !m_controlledUnit->IsWithinRange(*trainerObject, LootDistance))
+				{
+					m_trainerClient.CloseTrainer();
+				}
 			}
 		}
 
