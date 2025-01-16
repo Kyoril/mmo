@@ -106,7 +106,8 @@ namespace mmo
 			--movementDirection;
 		}
 
-		if (m_controlFlags & ControlFlags::MoveAndTurnPlayer)
+		// If both flags are set, we also move the player forward (equal to holding both mouse buttons down at the same time)
+		if ((m_controlFlags & ControlFlags::MoveAndTurnPlayer) == ControlFlags::MoveAndTurnPlayer)
 		{
 			++movementDirection;
 		}

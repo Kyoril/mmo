@@ -29,7 +29,7 @@ namespace mmo
 			PitchSent = 1 << 15,
 
 			MovePlayer = MoveForwardKey | MoveBackwardKey | StrafeLeftKey | StrafeRightKey,
-			MoveAndTurnPlayer = TurnPlayer | MovePlayerOrTurnCamera
+			MoveAndTurnPlayer = TurnPlayer | TurnCamera
 		};
 	}
 
