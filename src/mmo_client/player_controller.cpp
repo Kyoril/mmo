@@ -391,12 +391,19 @@ namespace mmo
 	{
 		if (set)
 		{
+			m_controlFlags |= flag;
+
 			if ((flag & ControlFlags::MovePlayer) != 0)
 			{
 				m_controlFlags &= ~ControlFlags::Autorun;
 			}
 
-			m_controlFlags |= flag;
+			// If any relevant flag was added and we are moving using both mouse buttons now, remove auto run flag
+			if (((flag & ControlFlags::MoveAndTurnPlayer) != 0) &&
+				(m_controlFlags & ControlFlags::MoveAndTurnPlayer) == ControlFlags::MoveAndTurnPlayer)
+			{
+				m_controlFlags &= ~ControlFlags::Autorun;
+			}
 		}
 		else
 		{
@@ -590,11 +597,11 @@ namespace mmo
 
 		if (button == MouseButton_Left)
 		{
-			m_controlFlags |= ControlFlags::TurnCamera;
+			SetControlBit(ControlFlags::TurnCamera, true);
 		}
 		else if (button == MouseButton_Right)
 		{
-			m_controlFlags |= ControlFlags::TurnPlayer;
+			SetControlBit(ControlFlags::TurnPlayer, true);
 		}
 
 		if (button == MouseButton_Left || button == MouseButton_Right)
@@ -615,11 +622,11 @@ namespace mmo
 
 		if (button == MouseButton_Left)
 		{
-			m_controlFlags &= ~ControlFlags::TurnCamera;
+			SetControlBit(ControlFlags::TurnCamera, false);
 		}
 		else if (button == MouseButton_Right)
 		{
-			m_controlFlags &= ~ControlFlags::TurnPlayer;
+			SetControlBit(ControlFlags::TurnPlayer, false);
 		}
 
 		if (m_mouseMoved <= 16)
@@ -690,8 +697,8 @@ namespace mmo
 			}
 		}
 
-		if (button == MouseButton_Left || button == MouseButton_Right && 
-			(m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
+		if ((button == MouseButton_Left || button == MouseButton_Right) && 
+			(m_controlFlags & (ControlFlags::MoveAndTurnPlayer)) == 0)
 		{
 			Platform::ReleaseMouseCapture();
 		}
