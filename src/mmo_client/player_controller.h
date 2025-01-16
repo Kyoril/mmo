@@ -72,7 +72,9 @@ namespace mmo
 		void ClampCameraPitch();
 
 	public:
-		void SetControlBit(const ControlFlags::Type flag, bool set) override { if (set) { m_controlFlags |= flag; } else { m_controlFlags &= ~flag; } }
+		void SetControlBit(const ControlFlags::Type flag, bool set) override;
+
+		void ToggleControlBit(const ControlFlags::Type flag) override { if (m_controlFlags & flag) { m_controlFlags &= ~flag; } else { m_controlFlags |= flag; } }
 
 		void Jump() override;
 

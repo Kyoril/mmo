@@ -27,7 +27,8 @@ namespace mmo
 			StrafeSent = 1 << 13,
 			TurnSent = 1 << 14,
 			PitchSent = 1 << 15,
-			
+
+			MovePlayer = MoveForwardKey | MoveBackwardKey | StrafeLeftKey | StrafeRightKey,
 			MoveAndTurnPlayer = TurnPlayer | MovePlayerOrTurnCamera
 		};
 	}
@@ -39,6 +40,8 @@ namespace mmo
 
 	public:
 		virtual void SetControlBit(ControlFlags::Type flag, bool set) = 0;
+
+		virtual void ToggleControlBit(const ControlFlags::Type flag) = 0;
 
 		virtual void Jump() = 0;
 	};

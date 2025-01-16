@@ -104,6 +104,11 @@ namespace mmo
 			--movementDirection;
 		}
 
+		if (m_controlFlags & ControlFlags::MoveAndTurnPlayer)
+		{
+			++movementDirection;
+		}
+
 		if (!m_controlledUnit->IsAlive())
 		{
 			movementDirection = 0;
@@ -376,6 +381,23 @@ namespace mmo
 		if (pitch > Degree(clampDegree))
 		{
 			m_cameraAnchorNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
+		}
+	}
+
+	void PlayerController::SetControlBit(const ControlFlags::Type flag, bool set)
+	{
+		if (set)
+		{
+			if ((flag & ControlFlags::MovePlayer) != 0)
+			{
+				m_controlFlags &= ~ControlFlags::Autorun;
+			}
+
+			m_controlFlags |= flag;
+		}
+		else
+		{
+			m_controlFlags &= ~flag;
 		}
 	}
 
