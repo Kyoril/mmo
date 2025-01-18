@@ -84,6 +84,12 @@ namespace mmo
 				pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
 				localVertexIndex = (vertexIndex - (pageIndex * (constants::VerticesPerPage - 1))) % constants::VerticesPerPage;
 			}
+
+			void GetPageAndLocalPixel(const uint32 pixelIndex, uint32& pageIndex, uint32& localPixelIndex)
+			{
+				pageIndex = std::min(pixelIndex / (constants::PixelsPerPage - 1), 63u);
+				localPixelIndex = (pixelIndex - (pageIndex * (constants::PixelsPerPage - 1))) % constants::PixelsPerPage;
+			}
 		}
 
 		float Terrain::GetAt(const uint32 x, const uint32 z)
@@ -125,7 +131,7 @@ namespace mmo
 			static Vector4 empty;
 
 			// Validate indices
-			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 TotalVertices = m_width * (constants::PixelsPerPage - 1) + 1;
 			if (x >= TotalVertices || z >= TotalVertices)
 			{
 				return empty;
@@ -133,8 +139,8 @@ namespace mmo
 
 			// Compute page and local vertex indices
 			uint32 pageX, pageY, localVertexX, localVertexY;
-			GetPageAndLocalVertex(x, pageX, localVertexX);
-			GetPageAndLocalVertex(z, pageY, localVertexY);
+			GetPageAndLocalPixel(x, pageX, localVertexX);
+			GetPageAndLocalPixel(z, pageY, localVertexY);
 
 			// Retrieve the page at (pageX, pageY)
 			Page* page = GetPage(pageX, pageY); // Implement GetPage accordingly
@@ -148,25 +154,25 @@ namespace mmo
 			ASSERT(layer < 4);
 
 			// Determine page
-			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 TotalVertices = m_width * (constants::PixelsPerPage - 1) + 1;
 			if (x >= TotalVertices || y >= TotalVertices)
 			{
 				return;
 			}
 
 			// Compute page and local vertex indices
-			uint32 pageX, pageY, localVertexX, localVertexY;
-			GetPageAndLocalVertex(x, pageX, localVertexX);
-			GetPageAndLocalVertex(y, pageY, localVertexY);
+			uint32 pageX, pageY, localPixelX, localPixelY;
+			GetPageAndLocalPixel(x, pageX, localPixelX);
+			GetPageAndLocalPixel(y, pageY, localPixelY);
 
-			const bool isLeftEdge = localVertexX == 0 && pageX > 0;
-			const bool isTopEdge = localVertexY == 0 && pageY > 0;
+			const bool isLeftEdge = localPixelX == 0 && pageX > 0;
+			const bool isTopEdge = localPixelY == 0 && pageY > 0;
 
 			Page* page = GetPage(pageX, pageY);
 			if (page &&
 				page->IsPrepared())
 			{
-				page->SetLayerAt(localVertexX, localVertexY, layer, value);
+				page->SetLayerAt(localPixelX, localPixelY, layer, value);
 			}
 
 			// Vertex on left edge
@@ -176,7 +182,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetLayerAt(constants::VerticesPerPage - 1, localVertexY, layer, value);
+					page->SetLayerAt(constants::PixelsPerPage - 1, localPixelY, layer, value);
 				}
 			}
 
@@ -187,7 +193,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetLayerAt(localVertexX, constants::VerticesPerPage - 1, layer, value);
+					page->SetLayerAt(localPixelX, constants::PixelsPerPage - 1, layer, value);
 				}
 			}
 
@@ -198,7 +204,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetLayerAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, layer, value);
+					page->SetLayerAt(constants::PixelsPerPage - 1, constants::PixelsPerPage - 1, layer, value);
 				}
 			}
 		}
@@ -585,9 +591,8 @@ namespace mmo
 
 		void Terrain::Paint(uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float minSloap, float maxSloap)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
+			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
 				{
-					// TODO: Apply paint on real tiles coverage maps
 					const auto& layers = GetLayersAt(vx, vy);
 					float value = layers[layer];
 					value += power * factor;
@@ -695,6 +700,53 @@ namespace mmo
 						if (pPage->IsLoaded()) 
 						{
 							pPage->UpdateTiles(pageStartX, pageStartZ, pageEndX, pageEndZ, false);
+						}
+					}
+				}
+			}
+		}
+
+		void Terrain::UpdateTileCoverage(const int fromX, const int fromZ, const int toX, const int toZ)
+		{
+			uint32 fromPageX, fromPageZ, localVertexX, localVertexY;
+			GetPageAndLocalPixel(fromX, fromPageX, localVertexX);
+			GetPageAndLocalPixel(fromZ, fromPageZ, localVertexY);
+
+			uint32 toPageX, toPageZ, localVertexToX, localVertexToY;
+			GetPageAndLocalPixel(toX, toPageX, localVertexToX);
+			GetPageAndLocalPixel(toZ, toPageZ, localVertexToY);
+
+			// Iterate through all pages in the area
+			for (unsigned int x = fromPageX; x <= toPageX; x++)
+			{
+				// Invalid page
+				if (x >= m_width)
+				{
+					continue;
+				}
+
+				// Get page start vertex (X)
+				unsigned int pageStartX = std::max<int>(fromX - x * (constants::PixelsPerPage - 1), 0);
+				unsigned int pageEndX = toX - x * (constants::PixelsPerPage - 1);
+
+				for (unsigned int z = fromPageZ; z <= toPageZ; z++)
+				{
+					// Invalid page
+					if (z >= m_height)
+					{
+						continue;
+					}
+
+					// Get page start vertex (Z)
+					unsigned int pageStartZ = std::max<int>(fromZ - z * (constants::PixelsPerPage - 1), 0);
+					unsigned int pageEndZ = toZ - z * (constants::PixelsPerPage - 1);
+
+					// Update the tiles if necessary
+					if (Page* pPage = GetPage(x, z); pPage != nullptr)
+					{
+						if (pPage->IsLoaded())
+						{
+							pPage->UpdateTileCoverage(pageStartX, pageStartZ, pageEndX, pageEndZ);
 						}
 					}
 				}

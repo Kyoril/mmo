@@ -18,6 +18,8 @@ namespace mmo
 	public:
 		void Initialize();
 
+
+
 	private:
 		String m_name;
 		TexturePtr m_texture;

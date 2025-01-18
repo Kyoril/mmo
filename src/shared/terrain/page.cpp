@@ -27,7 +27,7 @@ namespace mmo
 			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
 		}
 
-		Page::Page(Terrain& terrain, int32 x, int32 z)
+		Page::Page(Terrain& terrain, const int32 x, const int32 z)
 			: m_terrain(terrain)
 			, m_x(x)
 			, m_z(z)
@@ -74,7 +74,7 @@ namespace mmo
 			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
-			m_layers.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
+			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -239,7 +239,7 @@ namespace mmo
 			m_preparing = false;
 		}
 
-		Tile* Page::GetTile(uint32 x, uint32 y)
+		Tile* Page::GetTile(const uint32 x, const uint32 y)
 		{
 			if (x >= m_Tiles.width() ||
 				y >= m_Tiles.height()) 
@@ -285,7 +285,7 @@ namespace mmo
 			return m_x + m_z * m_terrain.GetWidth();
 		}
 
-		float Page::GetHeightAt(size_t x, size_t y) const
+		float Page::GetHeightAt(const size_t x, const size_t y) const
 		{
 			if (!IsPrepared())
 			{
@@ -301,7 +301,7 @@ namespace mmo
 			return m_heightmap[x + y * constants::VerticesPerPage];
 		}
 
-		const Vector4& Page::GetLayersAt(size_t x, size_t y) const
+		const Vector4& Page::GetLayersAt(const size_t x, const size_t y) const
 		{
 			static Vector4 s_none;
 
@@ -310,13 +310,13 @@ namespace mmo
 				return s_none;
 			}
 
-			if (x >= constants::VerticesPerPage ||
-				y >= constants::VerticesPerPage)
+			if (x >= constants::PixelsPerPage ||
+				y >= constants::PixelsPerPage)
 			{
 				return s_none;
 			}
 
-			const size_t index = x + y * constants::VerticesPerPage;
+			const size_t index = x + y * constants::PixelsPerPage;
 			ASSERT(index < m_layers.size());
 			return m_layers[index];
 		}
@@ -361,7 +361,7 @@ namespace mmo
 			return ipHeight;
 		}
 
-		void Page::UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly)
+		void Page::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ, const bool normalsOnly)
 		{
 			if (!m_loaded)
 			{
@@ -406,18 +406,46 @@ namespace mmo
 			}
 		}
 
-		Vector3 Page::GetVectorFromPoint(int x, int z)
+		void Page::UpdateTileCoverage(const int fromX, const int fromZ, const int toX, const int toZ)
 		{
-			return Vector3();
+			if (!m_loaded)
+			{
+				return;
+			}
+
+			unsigned int fromTileX = fromX / (constants::PixelsPerTile - 1);
+			unsigned int fromTileZ = fromZ / (constants::PixelsPerTile - 1);
+			unsigned int toTileX = toX / (constants::PixelsPerTile - 1);
+			unsigned int toTileZ = toZ / (constants::PixelsPerTile - 1);
+
+			if (fromTileX >= constants::TilesPerPage || fromTileZ >= constants::TilesPerPage)
+			{
+				return;
+			}
+
+			if (toTileX >= constants::TilesPerPage) toTileX = constants::TilesPerPage - 1;
+			if (toTileZ >= constants::TilesPerPage) toTileZ = constants::TilesPerPage - 1;
+
+			for (unsigned int x = fromTileX; x <= toTileX; x++)
+			{
+				for (unsigned int z = fromTileZ; z <= toTileZ; z++)
+				{
+					Tile* pTile = GetTile(x, z);
+					if (pTile != nullptr)
+					{
+						pTile->UpdateCoverageMap();
+					}
+				}
+			}
 		}
 
-		const Vector3& Page::GetNormalAt(uint32 x, uint32 z)
+		const Vector3& Page::GetNormalAt(const uint32 x, const uint32 z)
 		{
 			ASSERT(x < constants::VerticesPerPage && z < constants::VerticesPerPage);
 			return m_normals[x + z * constants::VerticesPerPage];
 		}
 
-		Vector3 Page::CalculateNormalAt(uint32 x, uint32 z)
+		Vector3 Page::CalculateNormalAt(const uint32 x, const uint32 z)
 		{
 			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage));
 			float flip = 1.0f;
@@ -453,12 +481,12 @@ namespace mmo
 			return norm;
 		}
 
-		Vector3 Page::GetTangentAt(uint32 x, uint32 z)
+		Vector3 Page::GetTangentAt(const uint32 x, const uint32 z)
 		{
 			return CalculateTangentAt(x, z);
 		}
 
-		Vector3 Page::CalculateTangentAt(uint32 x, uint32 z)
+		Vector3 Page::CalculateTangentAt(const uint32 x, const uint32 z)
 		{
 			size_t offsX = m_x * (constants::VerticesPerPage - 1);
 			size_t offsY = m_z * (constants::VerticesPerPage - 1);
@@ -647,7 +675,7 @@ namespace mmo
 			return m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 		}
 
-		void Page::NotifyTileMaterialChanged(uint32 x, uint32 y)
+		void Page::NotifyTileMaterialChanged(const uint32 x, const uint32 y)
 		{
 			if (x >= constants::TilesPerPage || y >= constants::TilesPerPage)
 			{
@@ -676,7 +704,7 @@ namespace mmo
 			m_changed = true;
 		}
 
-		void Page::SetHeightAt(unsigned int x, unsigned int z, float value)
+		void Page::SetHeightAt(const unsigned int x, const unsigned int z, const float value)
 		{
 			if (x >= constants::VerticesPerPage || z >= constants::VerticesPerPage)
 			{
@@ -687,14 +715,14 @@ namespace mmo
 			m_changed = true;
 		}
 
-		void Page::SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value)
+		void Page::SetLayerAt(const unsigned int x, const unsigned int z, const uint8 layer, const float value)
 		{
-			if (x >= constants::VerticesPerPage || z >= constants::VerticesPerPage)
+			if (x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
 			{
 				return;
 			}
 
-			Vector4& layers = m_layers[x + z * constants::VerticesPerPage];
+			Vector4& layers = m_layers[x + z * constants::PixelsPerPage];
 
 			// 1. Record the old sum (for informational purposes, or checks).
 			float oldSum = layers.x + layers.y + layers.z + layers.w;
@@ -737,20 +765,6 @@ namespace mmo
 			layers.w *= scale;
 
 			m_changed = true;
-		}
-
-		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity)
-		{
-			Paint(layer, x, y, innerRadius, outerRadius, intensity, 0.0f, 1.0f);
-		}
-
-		void Page::Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity, float minSloap, float maxSloap)
-		{
-		}
-
-		void Page::Balance(unsigned int x, unsigned int y, unsigned int layer, int val)
-		{
-
 		}
 
 		bool Page::ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size)

@@ -330,8 +330,8 @@ namespace mmo
 				}
 				else if (m_terrainEditMode == TerrainEditMode::Paint)
 				{
-					/*m_terrain->Paint(m_terrainPaintLayer, vX, vY,
-						innerRadius, outerRadius, m_terrainBrushPower * factor* deltaTimeSeconds);*/
+					m_terrain->Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
+						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
 				}
 			}
 		}

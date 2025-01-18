@@ -69,7 +69,7 @@ namespace mmo
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly = false);
 
-			Vector3 GetVectorFromPoint(int x, int z);
+			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
 
 			const Vector3& GetNormalAt(uint32 x, uint32 z);
 
@@ -102,12 +102,6 @@ namespace mmo
 			void SetHeightAt(unsigned int x, unsigned int z, float value);
 
 			void SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value);
-
-			void Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity = 1.0f);
-
-			void Paint(uint8 layer, int x, int y, unsigned int innerRadius, unsigned int outerRadius, float intensity, float minSloap, float maxSloap);
-
-			void Balance(unsigned int x, unsigned int y, unsigned int layer, int val);
 
 		private:
 

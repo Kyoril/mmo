@@ -121,6 +121,8 @@ namespace mmo
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
+			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
+
 		private:
 
 			template<typename GetBrushIntensity, typename VertexFunction>
@@ -216,7 +218,7 @@ namespace mmo
 					{
 						// Convert these vertex indices back to world positions
 						float worldX, worldZ;
-						GetGlobalVertexWorldPosition(vx, vz, &worldX, &worldZ);
+						GetGlobalPixelWorldPosition(vx, vz, &worldX, &worldZ);
 
 						// Compute distance from brush center
 						float dx = worldX - brushCenterX;
@@ -235,7 +237,7 @@ namespace mmo
 
 				if (updateTiles)
 				{
-					UpdateTiles(minVertX, minVertZ, maxVertX, maxVertZ);
+					UpdateTileCoverage(minVertX, minVertZ, maxVertX, maxVertZ);
 				}
 			}
 

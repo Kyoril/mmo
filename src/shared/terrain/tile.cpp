@@ -6,11 +6,25 @@
 #include "scene_graph/scene_node.h"
 #include "terrain.h"
 #include "graphics/material_instance.h"
+#include "graphics/texture_mgr.h"
 
 namespace mmo
 {
 	namespace terrain
 	{
+		namespace
+		{
+			inline uint32 CalculateARGB(const Vector4& val) noexcept
+			{
+				return (
+					static_cast<uint32>(val.w * 255) << 24 |
+					static_cast<uint32>(val.z * 255) << 16 |
+					static_cast<uint32>(val.y * 255) << 8 |
+					static_cast<uint32>(val.x * 255)
+					);
+			}
+		}
+
 		Tile::Tile(const String& name, Page& page, size_t startX, size_t startZ)
 			: MovableObject(name)
 			, Renderable()
@@ -26,8 +40,29 @@ namespace mmo
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0);
 
-			m_coverageMap = std::make_unique<mmo::CoverageMap>(m_name);
-			m_coverageMap->Initialize();
+			m_coverageTexture = TextureManager::Get().CreateManual(m_name, constants::PixelsPerTile, constants::PixelsPerTile, R8G8B8A8, BufferUsage::StaticWriteOnly);
+			ASSERT(m_coverageTexture);
+
+			std::vector<uint32> buffer(constants::PixelsPerTile * constants::PixelsPerTile);
+
+			const size_t pixelStartX = m_tileX * (constants::PixelsPerTile - 1);
+			const size_t pixelEndX = pixelStartX + constants::PixelsPerTile;
+			const size_t pixelStartY = m_tileY * (constants::PixelsPerTile - 1);
+			const size_t pixelEndY = pixelStartY + constants::PixelsPerTile;
+
+			for (size_t x = pixelStartX; x < pixelEndX; ++x)
+			{
+				for (size_t y = pixelStartY; y < pixelEndY; ++y)
+				{
+					const Vector4 layers = m_page.GetLayersAt(x, y);
+
+					const size_t localX = x - pixelStartX;
+					const size_t localY = y - pixelStartY;
+					buffer[localY + localX * constants::PixelsPerTile] = CalculateARGB(layers);
+				}
+			}
+
+			m_coverageTexture->LoadRaw(buffer.data(), CoverageMapSize * CoverageMapSize * 4);
 
 			m_materialInstance = std::make_shared<MaterialInstance>(m_name, page.GetTerrain().GetDefaultMaterial());
 			m_materialInstance->SetTextureParameter("Splatting", m_name);
@@ -107,16 +142,6 @@ namespace mmo
 			return m_page.GetTerrain();
 		}
 
-		uint32 CalculateARGB(const Vector4& val) noexcept
-		{
-			return (
-				static_cast<uint32>(val.w * 255) << 24 |
-				static_cast<uint32>(val.z * 255) << 16 |
-				static_cast<uint32>(val.y * 255) << 8 |
-				static_cast<uint32>(val.x * 255)
-				);
-		}
-
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
 		{
 			const size_t endX = m_startX + constants::VerticesPerTile;
@@ -160,8 +185,8 @@ namespace mmo
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = 0xFFFFFFFF;
-					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
-					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
+					vert->v = static_cast<float>(i - m_startX) / static_cast<float>(constants::VerticesPerTile);
+					vert->u = static_cast<float>(j - m_startZ) / static_cast<float>(constants::VerticesPerTile);
 
 					vert++;
 				}
@@ -172,6 +197,32 @@ namespace mmo
 			m_bounds.max.y = maxHeight;
 			m_center = m_bounds.GetCenter();
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
+		}
+
+		void Tile::UpdateCoverageMap()
+		{
+			ASSERT(m_coverageTexture);
+
+			std::vector<uint32> buffer(constants::PixelsPerTile * constants::PixelsPerTile);
+
+			const size_t pixelStartX = m_tileX * (constants::PixelsPerTile - 1);
+			const size_t pixelEndX = pixelStartX + constants::PixelsPerTile;
+			const size_t pixelStartY = m_tileY * (constants::PixelsPerTile - 1);
+			const size_t pixelEndY = pixelStartY + constants::PixelsPerTile;
+
+			for (size_t x = pixelStartX; x < pixelEndX; ++x)
+			{
+				for (size_t y = pixelStartY; y < pixelEndY; ++y)
+				{
+					const Vector4 layers = m_page.GetLayersAt(x, y);
+					const size_t localX = x - pixelStartX;
+					const size_t localY = y - pixelStartY;
+					buffer[localY + localX * constants::PixelsPerTile] = CalculateARGB(layers);
+				}
+			}
+
+			// Update texture
+			m_coverageTexture->UpdateFromMemory(buffer.data(), buffer.size() * 4);
 		}
 
 		void Tile::CreateVertexData(size_t startX, size_t startZ)
@@ -197,7 +248,7 @@ namespace mmo
 			float minHeight = m_page.GetHeightAt(0, 0);
 			float maxHeight = minHeight;
 
-			const float scale = constants::TileSize / (constants::VerticesPerTile - 1);
+			constexpr float scale = constants::TileSize / (constants::VerticesPerTile - 1);
 
 			struct VertexStruct
 			{
@@ -230,8 +281,8 @@ namespace mmo
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = 0xFFFFFFFF;
-					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
-					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
+					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile);
+					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile);
 
 					if (height < minHeight) {
 						minHeight = height;

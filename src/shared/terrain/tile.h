@@ -56,6 +56,8 @@ namespace mmo
 
 			void UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz);
 
+			void UpdateCoverageMap();
+
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 
@@ -84,7 +86,7 @@ namespace mmo
 			std::unique_ptr<IndexData> m_indexData;
 			VertexBufferPtr m_mainBuffer;
 			std::shared_ptr<MaterialInstance> m_materialInstance;
-			std::unique_ptr<CoverageMap> m_coverageMap;
+			TexturePtr m_coverageTexture;
 		};
 	}
 }

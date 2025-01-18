@@ -137,7 +137,7 @@ namespace mmo
                 const size_t endX = startX + terrain::constants::VerticesPerTile;
                 const size_t endZ = startZ + terrain::constants::VerticesPerTile;
 
-                const float scale = terrain::constants::TileSize / (terrain::constants::VerticesPerTile - 1);
+                constexpr float scale = terrain::constants::TileSize / (terrain::constants::VerticesPerTile - 1);
 
                 for (size_t j = startZ; j < endZ; ++j)
                 {
