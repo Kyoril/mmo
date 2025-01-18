@@ -208,6 +208,8 @@ namespace mmo
 			return;
 		}
 
+        m_ignoreUnhandledChunks = true;
+
         AddChunkHandler(*VersionChunkMagic, true, *this, &Map::ReadVersionChunk);
 
         // Read the world file
