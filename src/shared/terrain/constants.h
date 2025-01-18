@@ -10,9 +10,11 @@ namespace mmo
 	{
 		namespace constants
 		{
+			constexpr uint32 PixelsPerTile = 65;
 			constexpr uint32 VerticesPerTile = 18;
 			constexpr uint32 TilesPerPage = 16;
 			constexpr uint32 VerticesPerPage = (VerticesPerTile - 1) * TilesPerPage + 1;
+			constexpr uint32 PixelsPerPage = (PixelsPerTile - 1) * TilesPerPage + 1;
 			constexpr uint32 MaxPages = 64;
 			constexpr uint32 MaxPagesSquared = MaxPages * MaxPages;
 			constexpr double TileSize = 33.33333f;

@@ -14,7 +14,7 @@ namespace mmo
 {
 	namespace terrain
 	{
-		Terrain::Terrain(Scene& scene, Camera* camera, uint32 width, uint32 height)
+		Terrain::Terrain(Scene& scene, Camera* camera, const uint32 width, const uint32 height)
 			: m_pages(width, height)
 			, m_scene(scene)
 			, m_terrainNode(nullptr)
@@ -41,22 +41,24 @@ namespace mmo
 			m_scene.DestroySceneNode(*m_terrainNode);
 		}
 
-		void Terrain::PreparePage(uint32 x, uint32 y)
+		void Terrain::PreparePage(const uint32 pageX, const uint32 pageY)
 		{
-			if (!(x < m_width) || !(y < m_height)) {
+			if (pageX >= m_width || pageY >= m_height) 
+			{
 				return;
 			}
 
-			m_pages(x, y)->Prepare();
+			m_pages(pageX, pageY)->Prepare();
 		}
 
-		void Terrain::LoadPage(uint32 x, uint32 y)
+		void Terrain::LoadPage(const uint32 pageX, const uint32 pageY)
 		{
-			if (!(x < m_width) || !(y < m_height)) {
+			if (pageX >= m_width || pageY >= m_height)
+			{
 				return;
 			}
 
-			Page* const page = m_pages(x, y).get();
+			Page* const page = m_pages(pageX, pageY).get();
 			if (!page->IsPrepared())
 			{
 				return;
@@ -65,26 +67,30 @@ namespace mmo
 			page->Load();
 		}
 
-		void Terrain::UnloadPage(uint32 x, uint32 y)
+		void Terrain::UnloadPage(const uint32 pageX, const uint32 pageY)
 		{
-			if (!(x < m_width) || !(y < m_height)) {
+			if (pageX >= m_width || pageY >= m_height)
+			{
 				return;
 			}
 
-			m_pages(x, y)->Unload();
+			m_pages(pageX, pageY)->Unload();
 		}
 
-		static void GetPageAndLocalVertex(uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
+		namespace
 		{
-			pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
-			localVertexIndex = (vertexIndex - (pageIndex * (constants::VerticesPerPage - 1))) % constants::VerticesPerPage;
+			void GetPageAndLocalVertex(const uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
+			{
+				pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
+				localVertexIndex = (vertexIndex - (pageIndex * (constants::VerticesPerPage - 1))) % constants::VerticesPerPage;
+			}
 		}
 
-		float Terrain::GetAt(uint32 x, uint32 z)
+		float Terrain::GetAt(const uint32 x, const uint32 z)
 		{
 			// Validate indices
-			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
-			if (x >= TotalVertices || z >= TotalVertices)
+			const uint32 totalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= totalVertices || z >= totalVertices)
 			{
 				return 0.0f;
 			}
@@ -105,15 +111,16 @@ namespace mmo
 
 		float Terrain::GetSlopeAt(uint32 x, uint32 z)
 		{
+			// TODO!
 			return 0.0f;
 		}
 
-		float Terrain::GetHeightAt(uint32 x, uint32 z)
+		float Terrain::GetHeightAt(const uint32 x, const uint32 z)
 		{
 			return GetAt(x, z);
 		}
 
-		const Vector4& Terrain::GetLayersAt(uint32 x, uint32 z)
+		const Vector4& Terrain::GetLayersAt(const uint32 x, const uint32 z)
 		{
 			static Vector4 empty;
 
@@ -136,7 +143,7 @@ namespace mmo
 			return page->GetLayersAt(localVertexX, localVertexY);
 		}
 
-		void Terrain::SetLayerAt(uint32 x, uint32 y, uint8 layer, float value)
+		void Terrain::SetLayerAt(const uint32 x, const uint32 y, const uint8 layer, const float value)
 		{
 			ASSERT(layer < 4);
 
@@ -196,7 +203,7 @@ namespace mmo
 			}
 		}
 
-		float Terrain::GetSmoothHeightAt(float x, float z)
+		float Terrain::GetSmoothHeightAt(const float x, const float z)
 		{
 			int32 pageX, pageY;
 			if (!GetPageIndexByWorldPosition(Vector3(x, 0.0f, z), pageX, pageY))
@@ -240,7 +247,7 @@ namespace mmo
 			return Vector3();
 		}
 
-		Tile* Terrain::GetTile(int32 x, int32 z)
+		Tile* Terrain::GetTile(const int32 x, const int32 z)
 		{
 			// Can that tile possibly exist?
 			if (x < 0 || z < 0 || x >= m_width * constants::TilesPerPage || z >= m_height * constants::TilesPerPage)
@@ -264,7 +271,7 @@ namespace mmo
 			return page->GetTile(tileX, tileY);
 		}
 
-		Page* Terrain::GetPage(uint32 x, uint32 z)
+		Page* Terrain::GetPage(const uint32 x, const uint32 z)
 		{
 			if (x >= m_width || z >= m_height)
 			{
@@ -304,7 +311,7 @@ namespace mmo
 			return true;
 		}
 
-		bool Terrain::GetLocalTileIndexByGlobalTileIndex(int32 globalX, int32 globalY, int32& localX, int32& localY) const
+		bool Terrain::GetLocalTileIndexByGlobalTileIndex(const int32 globalX, const int32 globalY, int32& localX, int32& localY) const
 		{
 			if (globalX < 0 || globalY < 0 || globalX >= m_width * constants::TilesPerPage || globalY >= m_height * constants::TilesPerPage)
 			{
@@ -316,7 +323,7 @@ namespace mmo
 			return true;
 		}
 
-		bool Terrain::GetPageIndexFromGlobalTileIndex(int32 globalX, int32 globalY, int32& pageX, int32& pageY) const
+		bool Terrain::GetPageIndexFromGlobalTileIndex(const int32 globalX, const int32 globalY, int32& pageX, int32& pageY) const
 		{
 			if (globalX < 0 || globalY < 0 || globalX >= m_width * constants::TilesPerPage || globalY >= m_height * constants::TilesPerPage)
 			{
@@ -369,7 +376,7 @@ namespace mmo
 			return m_height;
 		}
 
-		void Terrain::SetTileSceneQueryFlags(uint32 mask)
+		void Terrain::SetTileSceneQueryFlags(const uint32 mask)
 		{
 			m_tileSceneQueryFlags = mask;
 
@@ -475,7 +482,7 @@ namespace mmo
 			return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
 		}
 
-		void Terrain::GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ)
+		void Terrain::GetTerrainVertex(const float x, const float z, uint32& vertexX, uint32& vertexZ)
 		{
 			// Get page coordinate from world coordinate
 			const int32 pageX = 32 - static_cast<int32>(floor(x / terrain::constants::PageSize));
@@ -494,7 +501,7 @@ namespace mmo
 
 		namespace
 		{
-			float GetBrushIntensityLinear(float dist, float innerRadius, float outerRadius)
+			float GetBrushIntensityLinear(const float dist, const float innerRadius, const float outerRadius)
 			{
 				// If the distance is beyond the outer radius, intensity is zero
 				if (dist >= outerRadius)
@@ -511,7 +518,7 @@ namespace mmo
 			}
 		}
 		
-		static float GetBrushIntensity(int x, int y, int innerRadius, int outerRadius)
+		static float GetBrushIntensity(const int x, const int y, const int innerRadius, const int outerRadius)
 		{
 			float factor = 1.0f;
 			float dist = ::sqrt(
@@ -560,7 +567,7 @@ namespace mmo
 				});
 		}
 
-		void Terrain::Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight)
+		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
@@ -571,47 +578,24 @@ namespace mmo
 				});
 		}
 
-		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power)
+		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
 		{
-			Paint(layer, x, z, innerRadius, outerRadius, power, 0.0f, 1.0f);
+			Paint(layer, brushCenterX, brushCenterZ, innerRadius, outerRadius, power, 0.0f, 1.0f);
 		}
 
-		void Terrain::Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power, float minSloap, float maxSloap)
+		void Terrain::Paint(uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float minSloap, float maxSloap)
 		{
-			ASSERT(layer < 4);
-
-			x -= outerRadius;
-			z -= outerRadius;
-
-			for (int vertX = std::max<int>(0, x); vertX < x + outerRadius * 2; vertX++)
-			{
-				if (vertX > static_cast<int>(m_width * (constants::VerticesPerPage - 1)) + 1)
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
 				{
-					continue;
-				}
-
-				for (int vertZ = std::max<int>(0, z); vertZ < z + outerRadius * 2; vertZ++)
-				{
-					if (vertZ > static_cast<int>(m_height * (constants::VerticesPerPage - 1)) + 1)
-					{
-						continue;
-					}
-
-					const auto& layers = GetLayersAt(vertX, vertZ);
-
+					// TODO: Apply paint on real tiles coverage maps
+					const auto& layers = GetLayersAt(vx, vy);
 					float value = layers[layer];
-
-					float factor = GetBrushIntensity(vertX - x, vertZ - z, innerRadius, outerRadius);
 					value += power * factor;
-
-					SetLayerAt(vertX, vertZ, layer, Clamp(value, 0.0f, 1.0f));
-				}
-			}
-
-			UpdateTiles(x, z, x + outerRadius * 2, z + outerRadius * 2);
+					SetLayerAt(vx, vy, layer, Clamp(value, 0.0f, 1.0f));
+				});
 		}
 
-		void Terrain::SetHeightAt(int x, int y, float height)
+		void Terrain::SetHeightAt(const int x, const int y, const float height)
 		{
 			// Determine page
 			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
@@ -669,7 +653,7 @@ namespace mmo
 			}
 		}
 
-		void Terrain::UpdateTiles(int fromX, int fromZ, int toX, int toZ)
+		void Terrain::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ)
 		{
 			uint32 fromPageX, fromPageZ, localVertexX, localVertexY;
 			GetPageAndLocalVertex(fromX, fromPageX, localVertexX);
@@ -717,7 +701,24 @@ namespace mmo
 			}
 		}
 
-		void Terrain::GetGlobalVertexWorldPosition(int x, int y, float* out_x, float* out_z) const
+		void Terrain::GetGlobalPixelWorldPosition(const int x, const int y, float* out_x, float* out_z) const
+		{
+			constexpr float scale = constants::PageSize / (constants::PixelsPerPage - 1);
+
+			if (out_x)
+			{
+				const float worldCenterX = static_cast<double>(m_width) / 2.0 * constants::PageSize;
+				*out_x = static_cast<float>(x) * scale - worldCenterX;
+			}
+
+			if (out_z)
+			{
+				const float worldCenterY = static_cast<double>(m_height) / 2.0 * constants::PageSize;
+				*out_z = static_cast<float>(y) * scale - worldCenterY;
+			}
+		}
+
+		void Terrain::GetGlobalVertexWorldPosition(const int x, const int y, float* out_x, float* out_z) const
 		{
 			constexpr float scale = constants::PageSize / (constants::VerticesPerPage - 1);
 

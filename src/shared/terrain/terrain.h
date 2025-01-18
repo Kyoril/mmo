@@ -35,11 +35,11 @@ namespace mmo
 
 		public:
 
-			void PreparePage(uint32 tileX, uint32 tileZ);
+			void PreparePage(uint32 pageX, uint32 pageY);
 
-			void LoadPage(uint32 x, uint32 y);
+			void LoadPage(uint32 pageX, uint32 pageY);
 
-			void UnloadPage(uint32 x, uint32 y);
+			void UnloadPage(uint32 pageX, uint32 pageY);
 
 			float GetAt(uint32 x, uint32 z);
 
@@ -113,9 +113,9 @@ namespace mmo
 
 			void Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight);
 
-			void Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power);
+			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
 
-			void Paint(uint8 layer, int x, int z, int innerRadius, int outerRadius, float power, float minSloap, float maxSloap);
+			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float minSloap, float maxSloap);
 
 			void SetHeightAt(int x, int y, float height);
 
@@ -180,6 +180,66 @@ namespace mmo
 					UpdateTiles(minVertX, minVertZ, maxVertX, maxVertZ);
 				}
 			}
+
+			template<typename GetBrushIntensity, typename PixelFunction>
+			void TerrainPixelBrush(const float brushCenterX, const float brushCenterZ, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity& getBrushIntensity, const PixelFunction& pixelFunction)
+			{
+				// Convert brush center from world space to *global* vertex indices
+				// We'll do it by shifting the range so that x=0 => left edge of the terrain
+				// and x = m_width*(PixelsPerPage-1)*scale => right edge.
+
+				const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+				const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+				// scale = pageSize / (PixelsPerPage - 1)
+				constexpr float scale = constants::PageSize / static_cast<float>(constants::PixelsPerPage - 1);
+
+				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
+				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
+				float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+
+				// Compute min/max vertex indices in global index space (floor, ceil, clamp)
+				int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
+				int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+				minVertX = std::max(0, minVertX);
+				maxVertX = std::min<int>(maxVertX, m_width * (constants::PixelsPerPage - 1));
+
+				int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
+				int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+				minVertZ = std::max(0, minVertZ);
+				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::PixelsPerPage - 1));
+
+				// Loop over each vertex that could be within the outer radius
+				for (int vx = minVertX; vx <= maxVertX; vx++)
+				{
+					for (int vz = minVertZ; vz <= maxVertZ; vz++)
+					{
+						// Convert these vertex indices back to world positions
+						float worldX, worldZ;
+						GetGlobalVertexWorldPosition(vx, vz, &worldX, &worldZ);
+
+						// Compute distance from brush center
+						float dx = worldX - brushCenterX;
+						float dz = worldZ - brushCenterZ;
+						float dist = sqrt(dx * dx + dz * dz);
+
+						// Determine if this vertex is within the brush area
+						if (dist <= outerRadius)
+						{
+							// Compute a weight factor for the current terrain vertex based on the brush center, inner and outer radius and so on
+							const float factor = getBrushIntensity(dist, innerRadius, outerRadius);
+							pixelFunction(vx, vz, factor);
+						}
+					}
+				}
+
+				if (updateTiles)
+				{
+					UpdateTiles(minVertX, minVertZ, maxVertX, maxVertZ);
+				}
+			}
+
+			void GetGlobalPixelWorldPosition(int x, int y, float* out_x = nullptr, float* out_z = nullptr) const;
 
 			void GetGlobalVertexWorldPosition(int x, int y, float* out_x = nullptr, float* out_z = nullptr) const;
 

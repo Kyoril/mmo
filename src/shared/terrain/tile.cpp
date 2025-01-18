@@ -159,7 +159,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = CalculateARGB(m_page.GetLayersAt(i, j));
+					vert->color = 0xFFFFFFFF;
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 
@@ -229,7 +229,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = CalculateARGB(m_page.GetLayersAt(i, j));
+					vert->color = 0xFFFFFFFF;
 					vert->u = static_cast<float>(i) / static_cast<float>(constants::VerticesPerPage);
 					vert->v = static_cast<float>(j) / static_cast<float>(constants::VerticesPerPage);
 
