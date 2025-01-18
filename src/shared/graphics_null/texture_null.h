@@ -17,15 +17,16 @@ namespace mmo
 		TextureNull(GraphicsDeviceNull& device, uint16 width, uint16 height);
 
 	public:
-		virtual void Load(std::unique_ptr<std::istream>& stream) final override;
-		virtual void LoadRaw(void* data, size_t dataSize) final override;
+		void Load(std::unique_ptr<std::istream>& stream) override;
+		void LoadRaw(void* data, size_t dataSize) override;
 		/// Gets the memory usage of this texture in bytes on the gpu.
-		virtual uint32 GetMemorySize() const override;
-		virtual void* GetTextureObject() const final override { return nullptr; }
-		virtual void* GetRawTexture() const final override { return nullptr; }
-		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
+		[[nodiscard]] uint32 GetMemorySize() const override;
+		[[nodiscard]] void* GetTextureObject() const override { return nullptr; }
+		[[nodiscard]] void* GetRawTexture() const override { return nullptr; }
+		void Bind(ShaderType shader, uint32 slot = 0) override;
 		void CopyPixelDataTo(uint8* destination) override;
-		uint32 GetPixelDataSize() const override;
+		[[nodiscard]] uint32 GetPixelDataSize() const override;
+		void UpdateFromMemory(void* data, size_t dataSize) override;
 
 	private:
 		GraphicsDeviceNull& m_device;

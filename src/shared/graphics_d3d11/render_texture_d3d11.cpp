@@ -28,9 +28,13 @@ namespace mmo
 		//m_clearColorFloat[3] = 1.0f;
 	}
 
+	RenderTextureD3D11::~RenderTextureD3D11()
+	{
+	}
+
 	TexturePtr RenderTextureD3D11::StoreToTexture()
 	{
-		auto texture = std::make_shared<TextureD3D11>(m_device, m_width, m_height);
+		auto texture = std::make_shared<TextureD3D11>(m_device, m_width, m_height, BufferUsage::Static);
 		texture->FromRenderTexture(*this);
 
 		return texture;
@@ -193,5 +197,10 @@ namespace mmo
 	uint32 RenderTextureD3D11::GetPixelDataSize() const
 	{
 		return m_width * m_height * 4;
+	}
+
+	void RenderTextureD3D11::UpdateFromMemory(void* data, size_t dataSize)
+	{
+		UNREACHABLE();
 	}
 }

@@ -12,13 +12,15 @@ namespace mmo
 	class CoverageMap final : public NonCopyable
 	{
 	public:
-		explicit CoverageMap() = default;
+		explicit CoverageMap(String name);
 		~CoverageMap() override = default;
 
 	public:
 		void Initialize();
 
 	private:
+		String m_name;
 		TexturePtr m_texture;
+		std::vector<uint32> m_buffer;
 	};
 }

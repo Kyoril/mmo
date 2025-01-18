@@ -577,7 +577,8 @@ namespace mmo
 			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)},
 			{se::Parry,					std::bind(&SingleCastState::SpellEffectParry, this, std::placeholders::_1)},
 			{se::Block,					std::bind(&SingleCastState::SpellEffectBlock, this, std::placeholders::_1)},
-			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)}
+			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)},
+			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1058,6 +1059,30 @@ namespace mmo
 		unitTarget->NotifyCanDodge(true);
 	}
 
+	void SingleCastState::SpellEffectHealPct(const proto::SpellEffect& effect)
+	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+		int32 basePoints = CalculateEffectBasePoints(effect);
+		if (basePoints <= 0 || basePoints > 100)
+		{
+			WLOG("Spell " << m_spell.id() << " has invalid base points for spell Effect HealPct: " << basePoints << ". Will be clamped to 1-100.");
+			return;
+		}
+
+		basePoints = Clamp(basePoints, 1, 100);
+
+		const uint32 healAmount = static_cast<uint32>(floor(static_cast<float>(unitTarget->GetMaxHealth()) * (static_cast<float>(basePoints) / 100.0f)));
+		unitTarget->Heal(healAmount, &m_cast.GetExecuter());
+
+		// TODO: Heal log to show healing numbers at the clients
+	}
+
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
 	{
 		auto unitTarget = GetEffectUnitTarget(effect);
@@ -1074,7 +1099,13 @@ namespace mmo
 
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-		uint32 totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, static_cast<uint32>(distribution(randomGenerator)));
+		uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+
+		// Physical damage is reduced by armor
+		if (school == spell_school::Normal)
+		{
+			totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
+		}
 
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
 

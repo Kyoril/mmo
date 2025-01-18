@@ -756,6 +756,8 @@ namespace mmo
 
 			ResetAttributePoints,
 
+			HealPct,
+
 			Count_,
 			Invalid_ = 0
 		};

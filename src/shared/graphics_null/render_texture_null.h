@@ -16,7 +16,7 @@ namespace mmo
 	{
 	public:
 		RenderTextureNull(GraphicsDeviceNull& device, std::string name, uint16 width, uint16 height);
-		virtual ~RenderTextureNull() = default;
+		~RenderTextureNull() override = default;
 
 	public:
 		virtual void LoadRaw(void* data, size_t dataSize) final override;
@@ -30,6 +30,7 @@ namespace mmo
 		TexturePtr StoreToTexture() override;
 		void CopyPixelDataTo(uint8* destination) override;
 		uint32 GetPixelDataSize() const override;
+		void UpdateFromMemory(void* data, size_t dataSize) override;
 
 	private:
 		bool m_resizePending;

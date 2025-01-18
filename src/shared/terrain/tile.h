@@ -6,6 +6,9 @@
 
 #include <memory>
 
+#include "coverage_map.h"
+#include "graphics/material_instance.h"
+
 namespace mmo
 {
 	namespace terrain
@@ -80,7 +83,8 @@ namespace mmo
 			std::unique_ptr<VertexData> m_vertexData;
 			std::unique_ptr<IndexData> m_indexData;
 			VertexBufferPtr m_mainBuffer;
-			MaterialPtr m_material;
+			std::shared_ptr<MaterialInstance> m_materialInstance;
+			std::unique_ptr<CoverageMap> m_coverageMap;
 		};
 	}
 }

@@ -64,11 +64,11 @@ namespace mmo
 	};
 	
 	/// This is the base class of a texture.
-	class Texture
+	class Texture : public NonCopyable
 	{
 	public:
 		/// Virtual default destructor because of inheritance.
-		virtual ~Texture() = default;
+		virtual ~Texture() override = default;
 
 	protected:
 		/// Default constructor. Protected, so this class can't be constructed directly.
@@ -99,6 +99,8 @@ namespace mmo
 		virtual void* GetTextureObject() const = 0;
 
 		virtual void* GetRawTexture() const = 0;
+
+		virtual void UpdateFromMemory(void* data, size_t dataSize) = 0;
 
 		virtual void CopyPixelDataTo(uint8* destination) = 0;
 

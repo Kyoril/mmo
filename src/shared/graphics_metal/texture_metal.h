@@ -30,6 +30,8 @@ namespace mmo
 
         void CopyPixelDataTo(uint8* destination) override;
 
+		void UpdateFromMemory(void* data, size_t dataSize) override;
+		
 	private:
 		GraphicsDeviceMetal& m_device;
 	};

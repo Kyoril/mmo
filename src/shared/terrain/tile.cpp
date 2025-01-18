@@ -5,6 +5,7 @@
 #include "scene_graph/render_operation.h"
 #include "scene_graph/scene_node.h"
 #include "terrain.h"
+#include "graphics/material_instance.h"
 
 namespace mmo
 {
@@ -24,6 +25,12 @@ namespace mmo
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0);
+
+			m_coverageMap = std::make_unique<mmo::CoverageMap>(m_name);
+			m_coverageMap->Initialize();
+
+			m_materialInstance = std::make_shared<MaterialInstance>(m_name, page.GetTerrain().GetDefaultMaterial());
+			m_materialInstance->SetTextureParameter("Splatting", m_name);
 		}
 
 		Tile::~Tile() = default;
@@ -48,17 +55,24 @@ namespace mmo
 
 		MaterialPtr Tile::GetMaterial() const
 		{
-			if (!m_material)
+			if (!m_materialInstance)
 			{
 				return GetTerrain().GetDefaultMaterial();
 			}
 
-			return m_material;
+			return m_materialInstance;
 		}
 
 		void Tile::SetMaterial(MaterialPtr material)
 		{
-			m_material = std::move(material);
+			if (!material)
+			{
+				return;
+			}
+
+			m_materialInstance = std::make_shared<MaterialInstance>(GetName(), material);
+			m_materialInstance->SetTextureParameter("Splatting", m_name);
+
 			m_page.NotifyTileMaterialChanged(m_tileX, m_tileY);
 		}
 

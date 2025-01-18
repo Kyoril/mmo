@@ -77,7 +77,8 @@ namespace mmo
 		"Summon Pet",
 		"Learn Pet Spell",
 		"Weapon Damage +",
-		"Reset Attribute Points"
+		"Reset Attribute Points",
+		"Heal Percentage"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");

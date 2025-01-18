@@ -843,9 +843,9 @@ namespace mmo
 		m_matrixDirty = true;
 	}
 
-	TexturePtr GraphicsDeviceD3D11::CreateTexture(uint16 width, uint16 height)
+	TexturePtr GraphicsDeviceD3D11::CreateTexture(uint16 width, uint16 height, BufferUsage usage)
 	{
-		return std::make_shared<TextureD3D11>(*this, width, height);
+		return std::make_shared<TextureD3D11>(*this, width, height, usage);
 	}
 
 	void GraphicsDeviceD3D11::BindTexture(const TexturePtr texture, const ShaderType shader, const uint32 slot)

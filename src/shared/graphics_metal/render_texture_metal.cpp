@@ -69,4 +69,9 @@ namespace mmo
     {
         return 0;
     }
+
+	void RenderTextureMetal::UpdateFromMemory(void* data, size_t dataSize)
+	{
+		UNREACHABLE();
+	}
 }

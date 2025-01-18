@@ -52,7 +52,7 @@ namespace mmo
 
 		void SetTransformMatrix(TransformType type, Matrix4 const& matrix) override;
 
-		TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0) override;
+		TexturePtr CreateTexture(uint16 width = 0, uint16 height = 0, BufferUsage usage = BufferUsage::Static) override;
 
 		void BindTexture(TexturePtr texture, ShaderType shader, uint32 slot) override;
 

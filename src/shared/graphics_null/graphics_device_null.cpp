@@ -163,7 +163,7 @@ namespace mmo
 		GraphicsDevice::SetTransformMatrix(type, matrix);
 	}
 
-	TexturePtr GraphicsDeviceNull::CreateTexture(uint16 width, uint16 height)
+	TexturePtr GraphicsDeviceNull::CreateTexture(uint16 width, uint16 height, BufferUsage usage)
 	{
 		return std::make_shared<TextureNull>(*this, width, height);
 	}

@@ -19,34 +19,37 @@ namespace mmo
 	{
 	public:
 		/// Initializes a new instance of the TextureD3D11 class.
-		TextureD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height);
+		TextureD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height, BufferUsage usage);
 
 	public:
 		void FromRenderTexture(RenderTextureD3D11& renderTexture);
 
-		virtual void Load(std::unique_ptr<std::istream>& stream) final override;
+		void Load(std::unique_ptr<std::istream>& stream) override;
 
-		virtual void LoadRaw(void* data, size_t dataSize) final override;
+		void LoadRaw(void* data, size_t dataSize) override;
+
+		void UpdateFromMemory(void* data, size_t dataSize) override;
 
 		/// Gets the memory usage of this texture in bytes on the gpu.
-		virtual uint32 GetMemorySize() const;
+		[[nodiscard]] uint32 GetMemorySize() const override;
 
-		virtual void* GetTextureObject() const final override { return m_shaderView.Get(); }
+		[[nodiscard]] void* GetTextureObject() const override { return m_shaderView.Get(); }
 
-		virtual void* GetRawTexture() const final override { return m_texture.Get(); }
+		[[nodiscard]] void* GetRawTexture() const override { return m_texture.Get(); }
 
-		virtual void CopyPixelDataTo(uint8* destination) override;
+		void CopyPixelDataTo(uint8* destination) override;
 
-		virtual uint32 GetPixelDataSize() const override;
+		[[nodiscard]] uint32 GetPixelDataSize() const override;
 
 	private:
 		void CreateShaderResourceView();
 
 	public:
-		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
+		void Bind(ShaderType shader, uint32 slot = 0) final override;
 
 	private:
 		GraphicsDeviceD3D11& m_device;
+		BufferUsage m_usage;
 		ComPtr<ID3D11Texture2D> m_texture;
 		ComPtr<ID3D11ShaderResourceView> m_shaderView;
 	};

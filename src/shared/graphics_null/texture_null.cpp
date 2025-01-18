@@ -51,4 +51,8 @@ namespace mmo
 	{
 		return 0;
 	}
+
+	void TextureNull::UpdateFromMemory(void* data, size_t dataSize)
+	{
+	}
 }

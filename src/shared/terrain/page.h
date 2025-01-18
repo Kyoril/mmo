@@ -33,6 +33,7 @@ namespace mmo
 		typedef std::unordered_map<TextureId, LayerId> TextureLayerMap;
 		typedef std::unordered_map<LayerId, TextureId> LayerTextureMap;
 
+
 		class Page final : public ChunkReader
 		{
 		public:

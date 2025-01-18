@@ -57,4 +57,10 @@ namespace mmo
 		m_device.SetTextureAddressMode(GetTextureAddressModeU(), GetTextureAddressModeV(), GetTextureAddressModeW());
 		m_device.SetTextureFilter(GetTextureFilter());
 	}
+
+	void TextureMetal::UpdateFromMemory(void* data, size_t dataSize)
+	{
+
+	}
+
 }

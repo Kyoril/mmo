@@ -34,7 +34,9 @@ namespace mmo
         void CopyPixelDataTo(uint8* destination) override;
 
         uint32 GetPixelDataSize() const override;
-        
+    
+		void UpdateFromMemory(void* data, size_t dataSize) override;
+
 	private:
 		bool m_resizePending;
 	};

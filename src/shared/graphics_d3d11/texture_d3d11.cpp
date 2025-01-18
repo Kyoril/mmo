@@ -13,8 +13,9 @@
 
 namespace mmo
 {
-	TextureD3D11::TextureD3D11(GraphicsDeviceD3D11 & device, uint16 width, uint16 height)
+	TextureD3D11::TextureD3D11(GraphicsDeviceD3D11 & device, uint16 width, uint16 height, BufferUsage usage)
 		: m_device(device)
+		, m_usage(usage)
 	{
 		m_header.width = width;
 		m_header.height = height;
@@ -176,7 +177,24 @@ namespace mmo
 		td.Width = m_header.width;
 		td.MipLevels = 1;
 		td.SampleDesc.Count = 1;
-		td.Usage = D3D11_USAGE_IMMUTABLE;
+		td.Usage = D3D11_USAGE_DEFAULT;
+		td.CPUAccessFlags = 0;
+		if (static_cast<uint32>(m_usage) & static_cast<uint32>(static_cast<uint32>(BufferUsage::Discardable) | static_cast<uint32>(BufferUsage::Dynamic) | static_cast<uint32>(BufferUsage::WriteOnly)))
+		{
+			td.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		}
+
+		switch(m_usage)
+		{
+		case BufferUsage::Static:
+			td.Usage = D3D11_USAGE_IMMUTABLE;
+			break;
+		case BufferUsage::Dynamic:
+		case BufferUsage::StaticWriteOnly:
+			td.Usage = D3D11_USAGE_DYNAMIC;
+			break;
+		}
+
 		m_mipCount = 1;
 
 		// Prepare usage data
@@ -189,6 +207,20 @@ namespace mmo
 		VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, &initialData, &m_texture)));
 
 		CreateShaderResourceView();
+	}
+
+	void TextureD3D11::UpdateFromMemory(void* data, size_t dataSize)
+	{
+		ASSERT(data);
+		ASSERT(dataSize);
+		ASSERT(m_usage == BufferUsage::Dynamic || m_usage == BufferUsage::StaticWriteOnly);
+
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+
+		ID3D11DeviceContext& context = m_device;
+		VERIFY(SUCCEEDED(context.Map(m_texture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource)));
+		memcpy(mappedResource.pData, data, dataSize);
+		context.Unmap(m_texture.Get(), 0);
 	}
 
 	uint32 TextureD3D11::GetMemorySize() const

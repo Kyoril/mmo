@@ -58,6 +58,23 @@ namespace mmo
 		return texture;
 	}
 
+	TexturePtr TextureManager::CreateManual(const std::string& name, uint16 width, uint16 height, PixelFormat format, BufferUsage usage)
+	{
+		// Try to find the texture by name and see if it is still loaded
+		auto it = m_texturesByName.find(name);
+		if (it != m_texturesByName.end())
+		{
+			return it->second;
+		}
+
+		auto texture = GraphicsDevice::Get().CreateTexture(width, height, usage);
+		texture->SetDebugName(name);
+
+		m_texturesByName[name] = texture;
+
+		return texture;
+	}
+
 	void TextureManager::EnsureMemoryBudget()
 	{
 		if (m_memoryUsage < m_memoryBudget)

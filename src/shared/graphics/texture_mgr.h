@@ -10,6 +10,8 @@
 #include <string>
 #include <map>
 
+#include "buffer_base.h"
+
 
 namespace mmo
 {
@@ -34,6 +36,8 @@ namespace mmo
 		/// name should be relative to the asset repository.
 		/// @param filename The filename of the texture.
 		TexturePtr CreateOrRetrieve(const std::string& filename);
+
+		TexturePtr CreateManual(const std::string& name, uint16 width, uint16 height, PixelFormat format, BufferUsage usage);
 
 	private:
 		/// Checks if the memory budget is exceeded and if so, tries to free some memory
