@@ -63,6 +63,8 @@ namespace mmo
 			}
 
 			m_coverageTexture->LoadRaw(buffer.data(), CoverageMapSize * CoverageMapSize * 4);
+			m_coverageTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
+			m_coverageTexture->SetFilter(TextureFilter::Anisotropic);
 
 			m_materialInstance = std::make_shared<MaterialInstance>(m_name, page.GetTerrain().GetDefaultMaterial());
 			m_materialInstance->SetTextureParameter("Splatting", m_name);
