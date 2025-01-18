@@ -38,6 +38,8 @@ namespace mmo
 
 			[[nodiscard]] MaterialPtr GetMaterial() const override;
 
+			[[nodiscard]] MaterialPtr GetBaseMaterial() const;
+
 			void SetMaterial(MaterialPtr material);
 
 			[[nodiscard]] const String& GetMovableType() const override;

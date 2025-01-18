@@ -47,7 +47,7 @@ namespace mmo
 
 			float GetHeightAt(uint32 x, uint32 z);
 
-			const Vector4& GetLayersAt(uint32 x, uint32 z);
+			const uint32 GetLayersAt(uint32 x, uint32 z);
 
 			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value);
 

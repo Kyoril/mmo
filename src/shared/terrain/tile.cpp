@@ -12,19 +12,6 @@ namespace mmo
 {
 	namespace terrain
 	{
-		namespace
-		{
-			inline uint32 CalculateARGB(const Vector4& val) noexcept
-			{
-				return (
-					static_cast<uint32>(val.w * 255) << 24 |
-					static_cast<uint32>(val.z * 255) << 16 |
-					static_cast<uint32>(val.y * 255) << 8 |
-					static_cast<uint32>(val.x * 255)
-					);
-			}
-		}
-
 		Tile::Tile(const String& name, Page& page, size_t startX, size_t startZ)
 			: MovableObject(name)
 			, Renderable()
@@ -54,11 +41,10 @@ namespace mmo
 			{
 				for (size_t y = pixelStartY; y < pixelEndY; ++y)
 				{
-					const Vector4 layers = m_page.GetLayersAt(x, y);
-
+					const uint32 layers = m_page.GetLayersAt(x, y);
 					const size_t localX = x - pixelStartX;
 					const size_t localY = y - pixelStartY;
-					buffer[localY + localX * constants::PixelsPerTile] = CalculateARGB(layers);
+					buffer[localY + localX * constants::PixelsPerTile] = layers;
 				}
 			}
 
@@ -98,6 +84,16 @@ namespace mmo
 			}
 
 			return m_materialInstance;
+		}
+
+		MaterialPtr Tile::GetBaseMaterial() const
+		{
+			if (!m_materialInstance)
+			{
+				return GetTerrain().GetDefaultMaterial();
+			}
+
+			return m_materialInstance->GetParent();
 		}
 
 		void Tile::SetMaterial(MaterialPtr material)
@@ -216,10 +212,10 @@ namespace mmo
 			{
 				for (size_t y = pixelStartY; y < pixelEndY; ++y)
 				{
-					const Vector4 layers = m_page.GetLayersAt(x, y);
+					const uint32 layers = m_page.GetLayersAt(x, y);
 					const size_t localX = x - pixelStartX;
 					const size_t localY = y - pixelStartY;
-					buffer[localY + localX * constants::PixelsPerTile] = CalculateARGB(layers);
+					buffer[localY + localX * constants::PixelsPerTile] = layers;
 				}
 			}
 

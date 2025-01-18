@@ -15,6 +15,7 @@
 #include "clamp.h"
 #include "math_utils.h"
 #include "radian.h"
+#include "vector3.h"
 
 
 namespace mmo
@@ -23,7 +24,7 @@ namespace mmo
 	class Vector4
 	{
 	public:
-		static Vector3 Zero;
+		static Vector4 Zero;
 
 	public:
 		float x, y, z, w;

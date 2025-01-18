@@ -63,7 +63,7 @@ namespace mmo
 
 			float GetHeightAt(size_t x, size_t y) const;
 
-			const Vector4& GetLayersAt(size_t x, size_t y) const;
+			uint32 GetLayersAt(size_t x, size_t y) const;
 
 			float GetSmoothHeightAt(float x, float y) const;
 
@@ -145,7 +145,7 @@ namespace mmo
 			std::vector<Vector3> m_normals;
 			std::vector<Vector3> m_tangents;
 			std::vector<MaterialPtr> m_materials;
-			std::vector<Vector4> m_layers;
+			std::vector<uint32> m_layers;
 
 			int32 m_x;
 			int32 m_z;

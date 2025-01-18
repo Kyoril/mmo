@@ -126,15 +126,13 @@ namespace mmo
 			return GetAt(x, z);
 		}
 
-		const Vector4& Terrain::GetLayersAt(const uint32 x, const uint32 z)
+		const uint32 Terrain::GetLayersAt(const uint32 x, const uint32 z)
 		{
-			static Vector4 empty;
-
 			// Validate indices
 			const uint32 TotalVertices = m_width * (constants::PixelsPerPage - 1) + 1;
 			if (x >= TotalVertices || z >= TotalVertices)
 			{
-				return empty;
+				return 0;
 			}
 
 			// Compute page and local vertex indices
@@ -593,9 +591,17 @@ namespace mmo
 		{
 			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
 				{
-					const auto& layers = GetLayersAt(vx, vy);
-					float value = layers[layer];
+					const uint32 layers = GetLayersAt(vx, vy);
+
+					Vector4 v;
+					v.x = ((layers >> 0) & 0xFF) / 255.0f;
+					v.y = ((layers >> 8) & 0xFF) / 255.0f;
+					v.z = ((layers >> 16) & 0xFF) / 255.0f;
+					v.w = ((layers >> 24) & 0xFF) / 255.0f;
+
+					float value = v[layer];
 					value += power * factor;
+
 					SetLayerAt(vx, vy, layer, Clamp(value, 0.0f, 1.0f));
 				});
 		}

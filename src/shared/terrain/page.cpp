@@ -25,8 +25,21 @@ namespace mmo
 			static const ChunkMagic MaterialChunk = MakeChunkMagic('TMCM');
 			static const ChunkMagic VertexChunk = MakeChunkMagic('TVCM');
 			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
+			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
 		}
 
+		namespace
+		{
+			inline uint32 CalculateARGB(const Vector4& val) noexcept
+			{
+				return (
+					static_cast<uint32>(val.w * 255) << 24 |
+					static_cast<uint32>(val.z * 255) << 16 |
+					static_cast<uint32>(val.y * 255) << 8 |
+					static_cast<uint32>(val.x * 255)
+					);
+			}
+		}
 		Page::Page(Terrain& terrain, const int32 x, const int32 z)
 			: m_terrain(terrain)
 			, m_x(x)
@@ -74,7 +87,7 @@ namespace mmo
 			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
-			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, Vector4(1.0f, 0.0f, 0.0f, 0.0f));
+			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -301,19 +314,17 @@ namespace mmo
 			return m_heightmap[x + y * constants::VerticesPerPage];
 		}
 
-		const Vector4& Page::GetLayersAt(const size_t x, const size_t y) const
+		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
 		{
-			static Vector4 s_none;
-
 			if (!IsPrepared())
 			{
-				return s_none;
+				return 0;
 			}
 
 			if (x >= constants::PixelsPerPage ||
 				y >= constants::PixelsPerPage)
 			{
-				return s_none;
+				return 0;
 			}
 
 			const size_t index = x + y * constants::PixelsPerPage;
@@ -595,6 +606,13 @@ namespace mmo
 				normalChunk.Finish();
 			}
 
+			// Layers
+			{
+				ChunkWriter layerChunk{ constants::LayerChunk, writer };
+				writer << io::write_range(m_layers);
+				layerChunk.Finish();
+			}
+
 			sink.Flush();
 			file.reset();
 
@@ -670,6 +688,13 @@ namespace mmo
 			return reader;
 		}
 
+		bool Page::ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Read heightmap data
+			reader >> io::read_range(m_layers);
+			return reader;
+		}
+
 		String Page::GetPageFilename() const
 		{
 			return m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
@@ -690,7 +715,7 @@ namespace mmo
 			const uint32 tileIndex = x + y * constants::TilesPerPage;
 			ASSERT(tileIndex < m_materials.size());
 
-			MaterialPtr material = m_Tiles(x, y)->GetMaterial();
+			MaterialPtr material = m_Tiles(x, y)->GetBaseMaterial();
 			if (material == m_terrain.GetDefaultMaterial())
 			{
 				// Default terrain material does not need to be set explicitly!
@@ -722,47 +747,56 @@ namespace mmo
 				return;
 			}
 
-			Vector4& layers = m_layers[x + z * constants::PixelsPerPage];
+			uint32& layers = m_layers[x + z * constants::PixelsPerPage];
 
-			// 1. Record the old sum (for informational purposes, or checks).
-			float oldSum = layers.x + layers.y + layers.z + layers.w;
+			Vector4 v;
+			v.x = ((layers >> 0) & 0xFF) / 255.0f; 
+			v.y = ((layers >> 8) & 0xFF) / 255.0f;
+			v.z = ((layers >> 16) & 0xFF) / 255.0f;
+			v.w = ((layers >> 24) & 0xFF) / 255.0f;
 
-			// 2. Set the chosen channel to newValue
+			// Record the old sum (for informational purposes, or checks).
+			float oldSum = v.x + v.y + v.z + v.w;
+
+			// Set the chosen channel to newValue
 			switch (layer)
 			{
-			case 0: layers.x = value; break;
-			case 1: layers.y = value; break;
-			case 2: layers.z = value; break;
-			case 3: layers.w = value; break;
+			case 0: v.x = value; break;
+			case 1: v.y = value; break;
+			case 2: v.z = value; break;
+			case 3: v.w = value; break;
 			default:
 				// Handle error, unknown channel
 				return;
 			}
 
-			// 3. Compute the sum of all four *after* setting the chosen channel
-			float sumAfter = layers.x + layers.y + layers.z + layers.w;
+			// Compute the sum of all four *after* setting the chosen channel
+			const float sumAfter = v.x + v.y + v.z + v.w;
 
-			// 4. If the sum is 0 (or extremely close to 0), we can’t scale. 
-			//    Handle that case gracefully.
+			// If the sum is 0 (or extremely close to 0), we can’t scale. 
+			// Handle that case gracefully.
 			if (std::fabs(sumAfter) < 1e-6f)
 			{
 				// e.g. just set everything else to 0, or choose a fallback strategy.
 				// We'll do a simple fallback here:
-				layers.x = (layer == 0) ? value : 0.f;
-				layers.y = (layer == 1) ? value : 0.f;
-				layers.z = (layer == 2) ? value : 0.f;
-				layers.w = (layer == 3) ? value : 0.f;
+				v.x = (layer == 0) ? value : 0.f;
+				v.y = (layer == 1) ? value : 0.f;
+				v.z = (layer == 2) ? value : 0.f;
+				v.w = (layer == 3) ? value : 0.f;
+
+				layers = CalculateARGB(v);
 				return;
 			}
 
-			// 5. We want the total to be exactly 1. So we figure out the scale factor:
-			float scale = 1.0f / sumAfter;
+			// We want the total to be exactly 1. So we figure out the scale factor:
+			const float scale = 1.0f / sumAfter;
 
-			// 6. Multiply the entire vector by this scale to force sum == 1
-			layers.x *= scale;
-			layers.y *= scale;
-			layers.z *= scale;
-			layers.w *= scale;
+			// Multiply the entire vector by this scale to force sum == 1
+			v.x *= scale;
+			v.y *= scale;
+			v.z *= scale;
+			v.w *= scale;
+			layers = CalculateARGB(v);
 
 			m_changed = true;
 		}
@@ -783,10 +817,13 @@ namespace mmo
 				return false;
 			}
 
+			m_ignoreUnhandledChunks = true;
+
 			// Register new chunk readers
 			AddChunkHandler(*constants::MaterialChunk, false, *this, &Page::ReadMCMTChunk);
 			AddChunkHandler(*constants::VertexChunk, false, *this, &Page::ReadMCVTChunk);
 			AddChunkHandler(*constants::NormalChunk, false, *this, &Page::ReadMCNMChunk);
+			AddChunkHandler(*constants::LayerChunk, false, *this, &Page::ReadMCLYChunk);
 
 			return reader;
 		}
