@@ -1799,6 +1799,7 @@ namespace mmo
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
 		uint32 totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), static_cast<uint32>(distribution(randomGenerator)));
 
+		bool hit = true;
 		if (outcome == MeleeAttackOutcome::Crit)
 		{
 			totalDamage *= 2;
@@ -1815,6 +1816,7 @@ namespace mmo
 			outcome == melee_attack_outcome::Parry ||
 			outcome == melee_attack_outcome::Dodge)
 		{
+			hit = false;
 			totalDamage = 0;
 		}
 
@@ -1854,6 +1856,12 @@ namespace mmo
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
 		OnAttackSwingEvent(AttackSwingEvent::Success);
 		TriggerNextAutoAttack();
+
+		// Trigger proc events (potentially)
+		if (hit)
+		{
+			meleeAttackDone(*victim);
+		}
 	}
 
 	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)

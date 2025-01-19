@@ -578,7 +578,8 @@ namespace mmo
 			{se::Parry,					std::bind(&SingleCastState::SpellEffectParry, this, std::placeholders::_1)},
 			{se::Block,					std::bind(&SingleCastState::SpellEffectBlock, this, std::placeholders::_1)},
 			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)},
-			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)}
+			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)},
+			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1081,6 +1082,21 @@ namespace mmo
 		unitTarget->Heal(healAmount, &m_cast.GetExecuter());
 
 		// TODO: Heal log to show healing numbers at the clients
+	}
+
+	void SingleCastState::SpellEffectAddExtraAttacks(const proto::SpellEffect& effect)
+	{
+		const int32 numAttacks = CalculateEffectBasePoints(effect);
+		if (numAttacks <= 0)
+		{
+			WLOG("Unable to perform extra attacks, because base points of spell " << m_spell.id() << " rolled for " << numAttacks << " but have to be >= 1");
+			return;
+		}
+
+		for (int32 i = 0; i < numAttacks; ++i)
+		{
+			m_cast.GetExecuter().OnAttackSwing();
+		}
 	}
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)

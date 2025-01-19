@@ -323,6 +323,8 @@ namespace mmo
 		signal<void(GameUnitS*, uint32)> takenDamage;
 		signal<void(const proto::SpellEntry&)> startedCasting;
 
+		signal<void(GameUnitS&)> meleeAttackDone;
+
 	public:
 		GameUnitS(const proto::Project& project, TimerQueue& timers);
 
@@ -624,6 +626,8 @@ namespace mmo
 
 		float GetTotalMultiplier(AuraType type) const;
 
+		void OnAttackSwing();
+
 	protected:
 		virtual void PrepareFieldMap() override
 		{
@@ -636,8 +640,6 @@ namespace mmo
 		void OnDespawnTimer();
 
 		void TriggerNextAutoAttack();
-
-		void OnAttackSwing();
 
 	public:
 		TimerQueue& GetTimers() const { return m_timers; }

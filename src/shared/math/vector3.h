@@ -97,6 +97,8 @@ namespace mmo
 		}
 		inline Vector3& operator/=(float scalar)
 		{
+			ASSERT(scalar != 0.0f);
+
 			x /= scalar;
 			y /= scalar;
 			z /= scalar;

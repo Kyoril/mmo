@@ -199,6 +199,7 @@ namespace mmo
 		void SpellEffectBlock(const proto::SpellEffect& effect);
 		void SpellEffectDodge(const proto::SpellEffect& effect);
 		void SpellEffectHealPct(const proto::SpellEffect& effect);
+		void SpellEffectAddExtraAttacks(const proto::SpellEffect& effect);
 
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);

@@ -4,6 +4,7 @@
 #include "game_unit_s.h"
 #include "spell_cast.h"
 #include "base/clock.h"
+#include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
@@ -43,6 +44,9 @@ namespace mmo
 		case AuraType::ModHealth:
 			break;
 		case AuraType::ModMana:
+			break;
+		case AuraType::ProcTriggerSpell:
+			HandleProcTriggerSpell(apply);
 			break;
 		case AuraType::ModDamageDone:
 			HandleModDamageDone(apply);
@@ -120,6 +124,40 @@ namespace mmo
 			unit_mod_type::TotalValue,
 			GetBasePoints(),
 			apply);
+	}
+
+	void AuraEffect::HandleProcTriggerSpell(const bool apply)
+	{
+		if (!apply)
+		{
+			m_procEffects.disconnect();
+			return;
+		}
+
+		const proto::SpellEntry& spell = m_container.GetSpell();
+		const proto::SpellEntry* procSpell = m_container.GetOwner().GetProject().spells.getById(m_effect.triggerspell());
+		if (!procSpell)
+		{
+			ELOG("Unable to find proc trigger spell " << procSpell->id() << "!");
+			return;
+		}
+
+		const uint32 procChance = spell.procchance();
+
+		if (spell.procflags() & spell_proc_flags::DoneMeleeAutoAttack)
+		{
+			m_procEffects += m_container.GetOwner().meleeAttackDone.connect([this, procSpell, procChance](GameUnitS& victim)
+				{
+					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
+					if (chanceDistribution(randomGenerator) < procChance)
+					{
+						SpellTargetMap targetMap;
+						targetMap.SetUnitTarget(victim.GetGuid());
+						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+						m_container.GetOwner().CastSpell(targetMap, *procSpell, 0, true, 0);
+					}
+				});
+		}
 	}
 
 	void AuraEffect::HandleModDamageDone(const bool apply) const

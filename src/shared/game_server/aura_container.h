@@ -69,6 +69,8 @@ namespace mmo
 
 		void HandleModStat(bool apply) const;
 
+		void HandleProcTriggerSpell(bool apply);
+
 		void HandleModDamageDone(bool apply) const;
 
 		void HandleModHealingDone(bool apply) const;
@@ -109,6 +111,8 @@ namespace mmo
 
 		float m_casterSpellPower = 0.0f;
 		float m_casterSpellHeal = 0.0f;
+
+		scoped_connection_container m_procEffects;
 
 	private:
 
