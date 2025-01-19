@@ -116,10 +116,11 @@ namespace mmo
 		return Vector3::UnitScale;
     }
 
-    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const std::function<void(Selectable&)>& duplication)
+    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, SceneNode& node, const std::function<void(Selectable&)>& duplication)
 		: Selectable()
 		, m_entry(entry)
-        , m_duplication(duplication)
+        , m_node(node)
+		, m_duplication(duplication)
     {
     }
 
@@ -137,21 +138,32 @@ namespace mmo
 
     void SelectedUnitSpawn::Translate(const Vector3& delta)
     {
+        m_node.Translate(delta, TransformSpace::World);
+
 		m_entry.set_positionx(m_entry.positionx() + delta.x);
         m_entry.set_positiony(m_entry.positiony() + delta.y);
         m_entry.set_positionz(m_entry.positionz() + delta.z);
+        positionChanged(*this);
     }
 
     void SelectedUnitSpawn::Rotate(const Quaternion& delta)
     {
+        m_node.Rotate(delta, TransformSpace::Parent);
+
+	    auto rot = Quaternion(Radian(m_entry.rotation()), Vector3::UnitY);
+        rot = rot * delta;
+		m_entry.set_rotation(rot.GetYaw().GetValueRadians());
+        rotationChanged(*this);
     }
 
     void SelectedUnitSpawn::Scale(const Vector3& delta)
     {
+        
     }
 
     void SelectedUnitSpawn::Remove()
     {
+
     }
 
     void SelectedUnitSpawn::Deselect()
@@ -160,13 +172,18 @@ namespace mmo
 
     void SelectedUnitSpawn::SetPosition(const Vector3& position) const
     {
+        m_node.SetPosition(position);
         m_entry.set_positionx(position.x);
         m_entry.set_positiony(position.y);
         m_entry.set_positionz(position.z);
+        positionChanged(*this);
     }
 
     void SelectedUnitSpawn::SetOrientation(const Quaternion& orientation) const
     {
+        m_node.SetOrientation(orientation);
+        m_entry.set_rotation(orientation.GetYaw().GetValueRadians());
+        rotationChanged(*this);
     }
 
     void SelectedUnitSpawn::SetScale(const Vector3& scale) const

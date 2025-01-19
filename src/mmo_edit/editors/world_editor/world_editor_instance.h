@@ -151,6 +151,8 @@ namespace mmo
 		virtual void Visit(SelectedMapEntity& selectable) = 0;
 
 		virtual void Visit(SelectedTerrainTile& selectable) = 0;
+
+		virtual void Visit(SelectedUnitSpawn& selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader
@@ -207,6 +209,8 @@ namespace mmo
 
 		void Visit(SelectedTerrainTile& selectable) override;
 
+		void Visit(SelectedUnitSpawn& selectable) override;
+
 	private:
 		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
@@ -219,6 +223,7 @@ namespace mmo
 		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool OnReadFinished() noexcept override;
+
 
 	private:
 		WorldEditor& m_editor;

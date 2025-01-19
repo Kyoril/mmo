@@ -416,15 +416,23 @@ namespace mmo
 		if (ImGui::IsKeyDown(ImGuiKey_F1))
 		{
 			m_editMode = WorldEditMode::None;
+			RemoveAllUnitSpawns();
 		}
 		else if (ImGui::IsKeyDown(ImGuiKey_F2))
 		{
 			m_editMode = WorldEditMode::StaticMapEntities;
+			RemoveAllUnitSpawns();
 		}
 		else if (ImGui::IsKeyDown(ImGuiKey_F3) && m_hasTerrain)
 		{
 			m_editMode = WorldEditMode::Terrain;
+			RemoveAllUnitSpawns();
 		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F4))
+		{
+			m_editMode = WorldEditMode::Spawns;
+		}
+
 
 		if (ImGui::Begin(detailsId.c_str()))
 		{
@@ -455,6 +463,10 @@ namespace mmo
 					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
 					{
 						m_editMode = static_cast<WorldEditMode>(i);
+						if (m_editMode != WorldEditMode::Spawns)
+						{
+							RemoveAllUnitSpawns();
+						}
 						m_selection.Clear();
 					}
 					ImGui::EndDisabled();
@@ -1181,7 +1193,8 @@ namespace mmo
 				proto::UnitSpawnEntry* spawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
 				if (spawnEntry)
 				{
-					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, [this, spawnEntry](Selectable& selected)
+					// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
+					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, *entity->GetParentSceneNode()->GetParentSceneNode(), [this, spawnEntry](Selectable& selected)
 						{
 							// TODO: Implement
 						}));
@@ -1376,6 +1389,7 @@ namespace mmo
 		ASSERT(entity);
 
 		entity->SetUserObject(&spawn);
+		entity->SetQueryFlags(SceneQueryFlags_Spawns);
 		m_spawnEntities.push_back(entity);
 
 		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
@@ -1607,6 +1621,12 @@ namespace mmo
 				ImGui::SetTooltip("Sets the selected material for all tiles on the whole page");
 			}
 		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedUnitSpawn& selectable)
+	{
+		// TODO
+		ImGui::Text("Selected a unit spawn :)");
 	}
 
 	bool WorldEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)

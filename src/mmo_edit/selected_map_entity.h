@@ -8,6 +8,8 @@
 
 namespace mmo
 {
+	class SceneNode;
+
 	namespace terrain
 	{
 		class Tile;
@@ -92,11 +94,11 @@ namespace mmo
 		terrain::Tile& m_tile;
 	};
 
-	class SelectedUnitSpawn : public Selectable
+	class SelectedUnitSpawn final : public Selectable
 	{
 	public:
 
-		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const std::function<void(Selectable&)>& duplication);
+		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, SceneNode& node, const std::function<void(Selectable&)>& duplication);
 
 		void Visit(SelectableVisitor& visitor) override;
 
@@ -124,8 +126,11 @@ namespace mmo
 
 		Vector3 GetScale() const override;
 
+		bool SupportsScale() const override { return false; }
+
 	private:
 		proto::UnitSpawnEntry& m_entry;
+		SceneNode& m_node;
 		std::function<void(Selectable&)> m_duplication;
 	};
 }
