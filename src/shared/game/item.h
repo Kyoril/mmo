@@ -674,6 +674,7 @@ namespace mmo
 		uint32 containerslots;
 		ItemStats stats[10];
 		ItemDamage damage;
+		uint32 attackTime;
 		uint32 armor;
 		uint32 resistance[6];
 		uint32 ammotype;

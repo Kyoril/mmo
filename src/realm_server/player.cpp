@@ -1053,6 +1053,7 @@ namespace mmo
 						<< io::write<uint8>(false);
 					packet.Finish();
 				});
+			return;
 		}
 
 		// Map item entry
@@ -1103,6 +1104,7 @@ namespace mmo
 		info.damage.type = itemEntry->damage().type();
 		info.damage.min = itemEntry->damage().mindmg();
 		info.damage.max = itemEntry->damage().maxdmg();
+		info.attackTime = itemEntry->delay();
 
 		for (int i = 0; i < 5; ++i)
 		{

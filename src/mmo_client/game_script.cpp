@@ -27,6 +27,7 @@
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
+#include "game_client/item_handle.h"
 #include "game_client/unit_handle.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
@@ -42,159 +43,6 @@ namespace luabind
 
 namespace mmo
 {
-	static const char* s_itemClassStrings[] = {
-		"CONSUMABLE",
-		"CONTAINER",
-		"WEAPON",
-		"GEM",
-		"ARMOR",
-		"REAGENT",
-		"PROJECTILE",
-		"TRADEGOODS",
-		"GENERIC",
-		"RECIPE",
-		"MONEY",
-		"QUIVER",
-		"QUEST",
-		"KEY",
-		"PERMANENT",
-		"JUNK"
-	};
-
-	static_assert(std::size(s_itemClassStrings) == item_class::Count_, "Item class strings array size mismatch");
-
-	static const char* s_consumableSubclassStrings[] = {
-		"CONSUMABLE",
-		"POTION",
-		"ELIXIR",
-		"FLASK",
-		"SCROLL",
-		"FOOD",
-		"ITEM_ENHANCEMENT",
-		"BANDAGE"
-	};
-
-	static_assert(std::size(s_consumableSubclassStrings) == item_subclass_consumable::Count_, "Consumable subclass strings array size mismatch");
-
-	static const char* s_containerSubclassStrings[] = {
-		"CONTAINER"
-	};
-
-	static_assert(std::size(s_containerSubclassStrings) == item_subclass_container::Count_, "Container subclass strings array size mismatch");
-
-	static const char* s_weaponSubclassStrings[] = {
-		"ONE_HANDED_AXE",
-		"TWO_HANDED_AXE",
-		"BOW",
-		"GUN",
-		"ONE_HANDED_MACE",
-		"TWO_HANDED_MACE",
-		"POLEARM",
-		"ONE_HANDED_SWORD",
-		"TWO_HANDED_SWORD",
-		"STAFF",
-		"FIST",
-		"DAGGER",
-		"THROWN",
-		"SPEAR",
-		"CROSS_BOW",
-		"WAND",
-		"FISHING_POLE"
-	};
-
-	static_assert(std::size(s_weaponSubclassStrings) == item_subclass_weapon::Count_, "Weapon subclass strings array size mismatch");
-
-	static const char* s_gemSubclassStrings[] = {
-		"RED",
-		"BLUE",
-		"YELLOW",
-		"PURPLE",
-		"GREEN",
-		"ORANGE",
-		"PRISMATIC"
-	};
-
-	static_assert(std::size(s_gemSubclassStrings) == item_subclass_gem::Count_, "Gem subclass strings array size mismatch");
-
-	static const char* s_armorSubclassStrings[] = {
-		"MISC",
-		"CLOTH",
-		"LEATHER",
-		"MAIL",
-		"PLATE",
-		"BUCKLER",
-		"SHIELD",
-		"LIBRAM",
-		"IDOL",
-		"TOTEM"
-	};
-
-	static_assert(std::size(s_armorSubclassStrings) == item_subclass_armor::Count_, "Armor subclass strings array size mismatch");
-
-	static const char* s_projectileSubclassStrings[] = {
-		"WAND",
-		"BOLT",
-		"ARROW",
-		"BULLET",
-		"THROWN"
-	};
-
-	static_assert(std::size(s_projectileSubclassStrings) == item_subclass_projectile::Count_, "Projectile subclass strings array size mismatch");
-
-	static const char* s_tradeGoodsSubclassStrings[] = {
-		"TRADE_GOODS",
-		"PARTS",
-		"EXPLOSIVES",
-		"DEVICES",
-		"JEWELCRAFTING",
-		"CLOTH",
-		"LEATHER",
-		"METAL_STONE",
-		"MEAT",
-		"HERB",
-		"ELEMENTAL",
-		"TRADE_GOODS_OTHER",
-		"ENCHANTING",
-		"MATERIAL"
-	};
-
-	static_assert(std::size(s_tradeGoodsSubclassStrings) == item_subclass_trade_goods::Count_, "Trade goods subclass strings array size mismatch");
-
-	static const char* s_inventoryTypeStrings[] = {
-		"NON_EQUIP",
-		"HEAD",
-		"NECK",
-		"SHOULDERS",
-		"BODY",
-		"CHEST",
-		"WAIST",
-		"LEGS",
-		"FEET",
-		"WRISTS",
-		"HANDS",
-		"FINGER",
-		"TRINKET",
-		"WEAPON",
-		"SHIELD",
-		"RANGED",
-		"CLOAK",
-		"TWO_HANDED_WEAPON",
-		"BAG",
-		"TABARD",
-		"ROBE",
-		"MAIN_HAND_WEAPON",
-		"OFF_HAND_WEAPON",
-		"HOLDABLE",
-		"AMMO",
-		"THROWN",
-		"RANGED_RIGHT",
-		"QUIVER",
-		"RELIC",
-	};
-
-	static_assert(std::size(s_inventoryTypeStrings) == inventory_type::Count_, "Inventory type strings array size mismatch");
-
-
 	CharacterView s_selectedCharacter;
 
 	Cursor g_cursor;
@@ -437,99 +285,6 @@ namespace mmo
 			}
 
 			return nullptr;
-		}
-
-		void Script_GetInventorySlotType(const char* unitName, int32 slotId, const char*& out_class, const char*& out_subclass, const char*& out_inventoryType)
-		{
-			out_class = nullptr;
-			out_subclass = nullptr;
-			out_inventoryType = nullptr;
-
-			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
-			if (!item)
-			{
-				return;
-			}
-
-			if (!item->GetEntry())
-			{
-				return;
-			}
-
-			const uint32 itemClass = item->GetEntry()->itemClass;
-			const uint32 itemSubclass = item->GetEntry()->itemSubclass;
-
-			if (itemClass < std::size(s_itemClassStrings))
-			{
-				out_class = s_itemClassStrings[itemClass];
-			}
-
-			switch (itemClass)
-			{
-			case item_class::Consumable:	out_subclass = s_consumableSubclassStrings[itemSubclass]; break;
-			case item_class::Container:		out_subclass = s_containerSubclassStrings[itemSubclass]; break;
-			case item_class::Weapon:		out_subclass = s_weaponSubclassStrings[itemSubclass]; break;
-			case item_class::Gem:			out_subclass = s_gemSubclassStrings[itemSubclass]; break;
-			case item_class::Armor:			out_subclass = s_armorSubclassStrings[itemSubclass]; break;
-			case item_class::Projectile:	out_subclass = s_projectileSubclassStrings[itemSubclass]; break;
-			case item_class::TradeGoods:	out_subclass = s_tradeGoodsSubclassStrings[itemSubclass]; break;
-			}
-
-			const uint32 inventoryType = item->GetEntry()->inventoryType;
-			out_inventoryType = s_inventoryTypeStrings[inventoryType];
-		}
-
-		const ItemInfo* Script_GetInventorySlotItem(const char* unitName, int32 slotId)
-		{
-			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
-			if (!item)
-			{
-				return nullptr;
-			}
-
-			return item->GetEntry();
-		}
-
-		const char* Script_GetInventorySlotIcon(const char* unitName, int32 slotId)
-		{
-			static const String s_defaultItemIcon = "Interface\\Icons\\Spells\\S_Attack.htex";
-
-			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
-			if (!item)
-			{
-				return nullptr;
-			}
-
-			const ItemInfo* itemEntry = item->GetEntry();
-			if (itemEntry && !itemEntry->icon.empty())
-			{
-				return itemEntry->icon.c_str();
-			}
-
-			return s_defaultItemIcon.c_str();
-		}
-
-		int32 Script_GetInventorySlotCount(const char* unitName, int32 slotId)
-		{
-			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
-			if (!item)
-			{
-				return -1;
-			}
-
-			return item->Get<uint32>(object_fields::StackCount);
-		}
-
-		int32 Script_GetInventorySlotQuality(const char* unitName, int32 slotId)
-		{
-			std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
-			if (!item)
-			{
-				return -1;
-			}
-
-			const auto* itemEntry = item->GetEntry();
-			return itemEntry ? itemEntry->quality : -1;
 		}
 
 		int32 Script_PlayerXp()
@@ -1058,6 +813,33 @@ namespace mmo
 				.def("CanExpire", &AuraHandle::CanExpire)
 				.def("GetDuration", &AuraHandle::GetDuration)
 				.def("GetSpell", &AuraHandle::GetSpell)),
+				
+			luabind::scope(
+				luabind::class_<ItemHandle>("ItemHandle")
+				.def("GetName", &ItemHandle::GetName)
+				.def("GetDescription", &ItemHandle::GetDescription)
+				.def("GetClass", &ItemHandle::GetItemClass)
+				.def("GetInventoryType", &ItemHandle::GetInventoryType)
+				.def("GetSubClass", &ItemHandle::GetItemSubClass)
+				.def("GetStackCount", &ItemHandle::GetStackCount)
+				.def("GetBagSlots", &ItemHandle::GetBagSlots)
+				.def("GetMinDamage", &ItemHandle::GetMinDamage)
+				.def("GetMaxDamage", &ItemHandle::GetMaxDamage)
+				.def("GetAttackSpeed", &ItemHandle::GetAttackSpeed)
+				.def("GetDps", &ItemHandle::GetDps)
+				.def("GetQuality", &ItemHandle::GetQuality)
+				.def("GetArmor", &ItemHandle::GetArmor)
+				.def("GetBlock", &ItemHandle::GetBlock)
+				.def("GetDurability", &ItemHandle::GetDurability)
+				.def("GetMaxDurability", &ItemHandle::GetMaxDurability)
+				.def("GetSellPrice", &ItemHandle::GetSellPrice)
+				.def("GetIcon", &ItemHandle::GetIcon)
+				.def("GetEntry", &ItemHandle::GetEntry)
+				.def("GetSpell", &ItemHandle::GetSpell)
+				.def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
+				.def("GetStatType", &ItemHandle::GetStatType)
+				.def("GetStatValue", &ItemHandle::GetStatValue)
+			),
 
 			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
@@ -1118,12 +900,16 @@ namespace mmo
 			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),
 			luabind::def("GetBagSlot", &Script_GetBagSlot),
 
-			luabind::def("GetInventorySlotItem", &Script_GetInventorySlotItem),
+			luabind::def<std::function<std::shared_ptr<ItemHandle>(const char*, int32)>>("GetInventorySlotItem", [this](const char* unitName, int32 slotId)
+			{
+				const std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
+				if (!item)
+				{
+					return std::shared_ptr<ItemHandle>();
+				}
 
-			luabind::def("GetInventorySlotIcon", &Script_GetInventorySlotIcon),
-			luabind::def("GetInventorySlotCount", &Script_GetInventorySlotCount),
-			luabind::def("GetInventorySlotQuality", &Script_GetInventorySlotQuality),
-			luabind::def("GetInventorySlotType", &Script_GetInventorySlotType, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
+				return std::make_shared<ItemHandle>(*item, m_project.spells);
+			}),
 
 			luabind::def("GetTime", &GetAsyncTimeMs),
 

@@ -39,6 +39,7 @@ namespace mmo
 			writer.WritePOD(stat);
 		}
 		writer.WritePOD(itemInfo.damage);
+		writer << io::write<uint32>(itemInfo.attackTime);
 
 		writer
 			<< io::write<uint32>(itemInfo.armor);
@@ -120,6 +121,7 @@ namespace mmo
 			reader.readPOD(stat);
 		}
 		reader.readPOD(itemInfo.damage);
+		reader >> io::read<uint32>(itemInfo.attackTime);
 
 		reader
 			>> io::read<uint32>(itemInfo.armor);
