@@ -194,20 +194,30 @@ namespace mmo
 
 		void SetMapEntry(proto::MapEntry* entry);
 
+		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select);
+
+		void RemoveAllUnitSpawns();
+
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
 		void EnsurePageIsLoaded(PagePosition pos);
 
 		void Visit(SelectedMapEntity& selectable) override;
+
 		void Visit(SelectedTerrainTile& selectable) override;
 
 	private:
 		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool OnReadFinished() noexcept override;
 
 	private:
@@ -247,6 +257,9 @@ namespace mmo
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		std::unique_ptr<RaySceneQuery> m_raySceneQuery;
+
+		std::vector<SceneNode*> m_spawnNodes;
+		std::vector<Entity*> m_spawnEntities;
 			
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;

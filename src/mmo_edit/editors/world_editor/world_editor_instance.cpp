@@ -475,9 +475,22 @@ namespace mmo
 						ImGui::PushID(i);
 						if (ImGui::Selectable(m_editor.GetProject().maps.getTemplates().entry(i).name().c_str(), m_editor.GetProject().maps.getTemplates().mutable_entry(i) == m_mapEntry))
 						{
-							m_mapEntry = m_editor.GetProject().maps.getTemplates().mutable_entry(i);
+							proto::MapEntry* entry = m_editor.GetProject().maps.getTemplates().mutable_entry(i);
+							if (m_mapEntry != entry)
+							{
+								m_mapEntry = entry;
+								RemoveAllUnitSpawns();
 
-							// TODO: Reload spawn objects
+								if (m_mapEntry)
+								{
+									// For each unit spawn on the map
+									for (auto& unitSpawn : *m_mapEntry->mutable_unitspawns())
+									{
+										AddUnitSpawn(unitSpawn, false);
+									}
+								}
+							}
+							
 						}
 						ImGui::PopID();
 					}
@@ -548,6 +561,12 @@ namespace mmo
 			}
 
 			ImGui::Separator();
+
+			if (m_editMode == WorldEditMode::Spawns)
+			{
+				// Render a list of all units
+				
+			}
 
 			if (!m_selection.IsEmpty())
 			{
@@ -1332,6 +1351,66 @@ namespace mmo
 		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
 		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
 
+	}
+
+	void WorldEditorInstance::AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select)
+	{
+		const auto* unit = m_editor.GetProject().units.getById(spawn.unitentry());
+		if (!unit)
+		{
+			WLOG("Spawn point of non-existant unit " << spawn.unitentry() << " found");
+			return;
+		}
+		ASSERT(unit);
+
+		// Load the model
+		const auto* model = m_editor.GetProject().models.getById(unit->malemodel() ? unit->malemodel() : unit->femalemodel());
+		if (!model)
+		{
+			WLOG("Spawn has no model");
+			return;
+		}
+
+		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
+		Entity* entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), model->filename());
+		ASSERT(entity);
+
+		entity->SetUserObject(&spawn);
+		m_spawnEntities.push_back(entity);
+
+		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
+		node->SetOrientation(Quaternion(Radian(spawn.rotation()), Vector3::UnitY));
+		if (unit->scale() != 0.0f)
+		{
+			node->SetScale(Vector3::UnitScale * unit->scale());
+		}
+
+		Quaternion rotationOffset;
+		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
+		SceneNode* entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
+		entityOffsetNode->AttachObject(*entity);
+		m_spawnNodes.push_back(entityOffsetNode);
+		m_spawnNodes.push_back(node);
+	}
+
+	void WorldEditorInstance::RemoveAllUnitSpawns()
+	{
+		for (auto* entity : m_spawnEntities)
+		{
+			m_scene.DestroyEntity(*entity);
+		}
+
+		m_spawnEntities.clear();
+
+		for (auto* node : m_spawnNodes)
+		{
+			m_scene.GetRootSceneNode().RemoveChild(*node);
+			m_scene.DestroySceneNode(*node);
+		}
+
+		m_spawnNodes.clear();
+
+		m_unitSpawnIdGenerator.Reset();
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
