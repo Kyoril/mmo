@@ -88,6 +88,8 @@ namespace mmo
 
 		void GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const;
 
+		const ItemInfo* GetLootSlotItem(uint32 slot) const;
+
 		void CloseLoot() const;
 
 		int32 GetContainerNumSlots(int32 container) const;

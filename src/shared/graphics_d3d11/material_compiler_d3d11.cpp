@@ -649,6 +649,16 @@ namespace mmo
 
 		if (m_lit)
 		{
+			m_pixelShaderStream
+				<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
+				<< "{\n"
+				<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
+				<< "\tfloat3 n = tangentSpaceNormal * 2.0f - 1.0f;\n\n"
+				<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
+				<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
+				<< "\treturn worldNormal;\n"
+				<< "}\n\n";
+
 			// fresnelSchlick
 			m_pixelShaderStream
 				<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
@@ -735,15 +745,15 @@ namespace mmo
 				const auto expression = GetExpressionType(m_normalExpression);
 				if (expression == ExpressionType::Float_4)
 				{
-					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ".rgb * 2.0 - 1.0;\n\n";
+					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ".rgb;\n\n";
 				}
 				else
 				{
-					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << " * 2.0 - 1.0;\n\n";
+					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ";\n\n";
 				}
 				
 				m_pixelShaderStream
-					<< "\tN = normalize(mul(N, TBN));\n";
+					<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
 			}
 			
 			// Roughness
@@ -862,7 +872,7 @@ namespace mmo
 				<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
 				<< "\tkD = float3(1.0, 1.0, 1.0) - kS;\n"
 				<< "\tkD *= 1.0 - metallic;\n"
-				<< "\tfloat3 irradiance = float3(0.0, 0.29, 0.58);\n"
+				<< "\tfloat3 irradiance = float3(0.2f, 0.25f, 0.3f);\n"
 				<< "\tfloat3 diffuse = irradiance * baseColor;\n"
 				<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
 
@@ -873,7 +883,6 @@ namespace mmo
 				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
 				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
 		}
-
 
 		m_pixelShaderStream
 			<< "\tclip( opacity < 0.01f ? -1:1 );\n";

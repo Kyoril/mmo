@@ -969,6 +969,7 @@ namespace mmo
 			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
 			luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot) { return this->LootSlotIsCoin(slot); }),
 			luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot) { return this->LootSlotIsItem(slot); }),
+			luabind::def<std::function<const ItemInfo*(int32)>>("GetLootSlotItem", [this](int32 slot) { return this->GetLootSlotItem(slot); }),
 			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&)>>("GetLootSlotInfo", [this](int32 slot, String& out_icon, String& out_text, int32& out_count) { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
@@ -1190,6 +1191,30 @@ namespace mmo
 		out_icon = item->itemInfo->icon;
 		out_text = item->itemInfo->name;
 		out_count = item->count;
+	}
+
+	const ItemInfo* GameScript::GetLootSlotItem(uint32 slot) const
+	{
+		if (slot < 1 || slot > m_lootClient.GetNumLootSlots())
+		{
+			return nullptr;
+		}
+
+		if (m_lootClient.HasMoney() && slot == 1)
+		{
+			return nullptr;
+		}
+
+		// Get item from slot
+		if (m_lootClient.HasMoney()) slot--;
+
+		LootClient::LootItem* item = m_lootClient.GetLootItem(slot - 1);
+		if (!item || !item->itemInfo)
+		{
+			return nullptr;
+		}
+
+		return item->itemInfo;
 	}
 
 	void GameScript::CloseLoot() const
