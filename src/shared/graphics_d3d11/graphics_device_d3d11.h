@@ -184,7 +184,7 @@ namespace mmo
 		std::map<VertexFormat, ShaderPtr> PixelShaders;
 		VertexFormat m_vertexFormat;
 		/// The best supported feature level.
-		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_9_1;
+		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_11_0;
 		/// Whether the device supports GSync displays.
 		bool m_tearingSupport = false;
 		bool m_matrixDirty = false;

@@ -110,6 +110,10 @@ namespace mmo
 			m_prevFullScreenState = isFullScreenState;
 		}
 
+		// Unbind render target before present
+		ID3D11DeviceContext& d3dCtx = m_device;
+		d3dCtx.OMSetRenderTargets(0, nullptr, nullptr);
+
 		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !dxgiIsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);
 

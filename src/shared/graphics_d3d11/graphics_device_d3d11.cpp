@@ -490,10 +490,25 @@ namespace mmo
 
 	GraphicsDeviceD3D11::~GraphicsDeviceD3D11()
 	{
+		InputLayouts.clear();
+		VertexShaders.clear();
+		PixelShaders.clear();
+		m_renderTarget.reset();
+
+		m_matrixBuffer.Reset();
+		m_rasterizerStates.clear();
+		m_samplerStates.clear();
+		m_depthStencilStates.clear();
+
+		m_alphaBlendState.Reset();
+		m_opaqueBlendState.Reset();
+		m_immContext.Reset();
+		m_device.Reset();
+
 #ifdef _DEBUG
 		if (m_d3dDebug)
 		{
-			m_d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+			m_d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_IGNORE_INTERNAL);
 		}
 #endif
 	}

@@ -15,7 +15,7 @@ namespace mmo
 	{
 	public:
 		RenderTexture(std::string name, uint16 width, uint16 height) noexcept;
-		virtual ~RenderTexture() noexcept = default;
+		~RenderTexture() noexcept override = default;
 
 	public:
 		virtual TexturePtr StoreToTexture() = 0;
