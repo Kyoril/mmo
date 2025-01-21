@@ -876,7 +876,7 @@ namespace mmo
 			
 			m_pixelShaderStream
 				<< "\tfloat3 kS = F;\n"
-				<< "\tfloat3 kD = float3(1.0, 1.0, 1.0) - kS;\n"
+				<< "\tfloat3 kD = 1.0f.xxx - kS;\n"
 				<< "\tkD *= 1.0 - metallic;\n";
 			
 			m_pixelShaderStream
@@ -900,8 +900,8 @@ namespace mmo
 				<< "\tfloat3 color = ambient + Lo;\n";
 
 			m_pixelShaderStream
-				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
-				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
+				<< "\tcolor = color / (color + 1.0f.xxx);\n"
+				<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
 		}
 
 		// Combining it
