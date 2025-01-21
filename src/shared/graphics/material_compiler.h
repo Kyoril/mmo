@@ -113,6 +113,11 @@ namespace mmo
 		/// @param expression Index of the roughness expression to use or IndexNone to not use a roughness expression at all.
 		virtual void SetRoughnessExpression(ExpressionIndex expression);
 
+		/// @brief Sets the index of the material's roughness expression or IndexNone to not use a custom specular
+		///	       expression at all.
+		/// @param expression Index of the specular expression to use or IndexNone to not use a specular expression at all.
+		virtual void SetSpecularExpression(ExpressionIndex expression);
+
 		/// @brief Sets the index of the material's normal expression or IndexNone to not use a custom normal
 		///	       expression at all.
 		/// @param expression Index of the normal expression to use or IndexNone to not use a normal expression at all.
@@ -278,6 +283,7 @@ namespace mmo
 		ExpressionIndex m_baseColorExpression { IndexNone };			// Float3
 		ExpressionIndex m_normalExpression { IndexNone };				// Float3 (Tangent Space)
 		ExpressionIndex m_roughnessExpression { IndexNone };			// Float1 (0-1)
+		ExpressionIndex m_specularExpression{ IndexNone };			// Float1 (0-1)
 		ExpressionIndex m_ambientOcclusionExpression { IndexNone };	// Float3
 		ExpressionIndex m_metallicExpression { IndexNone };			// Float1 (0-1)
 		ExpressionIndex m_opacityExpression{ IndexNone };			// Float1 (0-1)

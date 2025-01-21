@@ -755,18 +755,36 @@ namespace mmo
 				m_pixelShaderStream
 					<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
 			}
-			
+
+			// Specular
+			if (m_specularExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_specularExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ");\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ".r);\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat specular = 0.5;\n\n";
+			}
+
 			// Roughness
 			if (m_roughnessExpression != IndexNone)
 			{
 				const auto expression = GetExpressionType(m_roughnessExpression);
 				if (expression == ExpressionType::Float_1)
 				{
-					m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ";\n\n";
+					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ");\n\n";
 				}
 				else
 				{
-					m_pixelShaderStream << "\tfloat roughness = expr_" << m_roughnessExpression << ".r;\n\n";
+					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ".r);\n\n";
 				}
 			}
 			else
@@ -780,11 +798,11 @@ namespace mmo
 				const auto expression = GetExpressionType(m_metallicExpression);
 				if (expression == ExpressionType::Float_1)
 				{
-					m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ";\n\n";
+					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ");\n\n";
 				}
 				else
 				{
-					m_pixelShaderStream << "\tfloat metallic = expr_" << m_metallicExpression << ".r;\n\n";
+					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ".r);\n\n";
 				}
 			}
 			else
@@ -799,11 +817,11 @@ namespace mmo
 			const auto expression = GetExpressionType(m_opacityExpression);
 			if (expression == ExpressionType::Float_1)
 			{
-				m_pixelShaderStream << "\tfloat opacity = expr_" << m_opacityExpression << ";\n\n";
+				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat opacity = expr_" << m_opacityExpression << ".r;\n\n";
+				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ".r);\n\n";
 			}
 		}
 		else
@@ -833,6 +851,9 @@ namespace mmo
 			}
 		}
 
+		m_pixelShaderStream
+			<< "\tif (opacity < 0.3333) { clip(-1); }\n";
+
 		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
 		m_pixelShaderStream
 			<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
@@ -844,7 +865,7 @@ namespace mmo
 				<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
 
 			m_pixelShaderStream
-				<< "\tfloat3 L = normalize(-float3(1.0, -0.5, 1.0));\n"	// LightDir
+				<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
 				<< "\tfloat3 H = normalize(V + L);\n"				
 				<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
 			
@@ -861,18 +882,17 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tfloat3 numerator    = NDF * G * F;\n"
 				<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
-				<< "\tfloat3 specular     = numerator / denominator;\n";
+				<< "\tfloat3 specularity     = numerator / denominator;\n";
 
 			m_pixelShaderStream
 				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-				<< "\tfloat3 Lo = (kD * baseColor / PI + specular) * radiance * NdotL;\n";
-
+				<< "\tfloat3 Lo = (kD * baseColor / PI + specularity) * radiance * NdotL;\n";
 
 			m_pixelShaderStream
 				<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
-				<< "\tkD = float3(1.0, 1.0, 1.0) - kS;\n"
+				<< "\tkD = 1.0f.xxx - kS;\n"
 				<< "\tkD *= 1.0 - metallic;\n"
-				<< "\tfloat3 irradiance = float3(0.2f, 0.25f, 0.3f);\n"
+				<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
 				<< "\tfloat3 diffuse = irradiance * baseColor;\n"
 				<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
 
@@ -883,9 +903,6 @@ namespace mmo
 				<< "\tcolor = color / (color + float3(1.0, 1.0, 1.0));\n"
 				<< "\tcolor = pow(color, float3(1.0/2.2, 1.0/2.2, 1.0/2.2));\n";
 		}
-
-		m_pixelShaderStream
-			<< "\tclip( opacity < 0.01f ? -1:1 );\n";
 
 		// Combining it
 		if (m_lit)

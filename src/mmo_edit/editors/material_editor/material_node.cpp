@@ -501,6 +501,12 @@ namespace mmo
 			compiler.SetNormalExpression(normalExpression);
 		}
 
+		if (m_specular.IsLinked())
+		{
+			const ExpressionIndex specularExpression = m_specular.GetLink()->GetNode()->Compile(compiler, m_specular.GetLink());
+			compiler.SetSpecularExpression(specularExpression);
+		}
+
 		if (m_roughness.IsLinked())
 		{
 			const ExpressionIndex roughnessExpression = m_roughness.GetLink()->GetNode()->Compile(compiler, m_roughness.GetLink());

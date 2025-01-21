@@ -116,6 +116,11 @@ namespace mmo
 		m_roughnessExpression = expression;
 	}
 
+	void MaterialCompiler::SetSpecularExpression(ExpressionIndex expression)
+	{
+		m_specularExpression = expression;
+	}
+
 	void MaterialCompiler::SetNormalExpression(ExpressionIndex expression)
 	{
 		m_normalExpression = expression;
