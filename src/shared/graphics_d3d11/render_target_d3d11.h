@@ -35,4 +35,20 @@ namespace mmo
 		ComPtr<ID3D11DepthStencilView> m_depthStencilView;
 		FLOAT m_clearColorFloat[4];
 	};
+
+	class MultiRenderTargetD3D11 : public MultiRenderTarget
+	{
+	public:
+		explicit MultiRenderTargetD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height, PixelFormat format) noexcept;
+		~MultiRenderTargetD3D11() noexcept override = default;
+
+	public:
+		void Clear(ClearFlags flags) override;
+
+		void Resize(uint16 width, uint16 height) override;
+
+		void Activate() override;
+
+		void Update() override;
+	};
 }

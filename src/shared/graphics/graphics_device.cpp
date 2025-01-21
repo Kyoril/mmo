@@ -147,7 +147,7 @@ namespace mmo
 		}
 
 		// Restore blend mode
-		if (m_blendMode != m_restoreBlendMode)
+		if (m_restoreBlendMode != BlendMode::Undefined && m_blendMode != m_restoreBlendMode)
 		{
 			SetBlendMode(m_restoreBlendMode);
 		}
@@ -197,7 +197,7 @@ namespace mmo
 			SetTextureFilter(m_restoreTexFilter);
 		}
 
-		if (m_topologyType != m_captureTopologyType)
+		if (m_captureTopologyType != TopologyType::Undefined && m_topologyType != m_captureTopologyType)
 		{
 			SetTopologyType(m_captureTopologyType);
 		}

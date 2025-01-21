@@ -17,6 +17,10 @@ namespace mmo
 	std::unique_ptr<Scene> g_scene;
 	Camera* g_camera = nullptr;
 	SceneNode* g_cameraNode = nullptr;
+
+	SceneNode* g_boarNode = nullptr;
+	Entity* g_boarEntity = nullptr;
+
 	RenderTexturePtr g_sceneRenderTarget = nullptr;
 	VertexBufferPtr g_fullScreenQuadBuffer = nullptr;
 
@@ -50,9 +54,9 @@ namespace mmo
 		GraphicsDevice& gx = GraphicsDevice::Get();
 
 		// Render our full screen quad with the scene render target assigned to it
-		gx.SetTransformMatrix(TransformType::World, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
-		gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(View, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, Matrix4::Identity);
 		gx.SetVertexFormat(VertexFormat::PosColorTex1);
 		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetTextureFilter(TextureFilter::None);
@@ -72,19 +76,26 @@ namespace mmo
 		g_camera = g_scene->CreateCamera("MainCamera");
 		g_cameraNode = &g_scene->CreateSceneNode("MainCameraNode");
 		g_cameraNode->AttachObject(*g_camera);
-		g_cameraNode->SetPosition(Vector3(0.0f, 2.0f, -2.0f));
-		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::World);
+		g_cameraNode->SetPosition(Vector3(0.0f, 1.5f, 5.0f));
+		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::Parent);
+		g_camera->SetAspectRatio(1280.0f / 800.0f);
+
+		g_boarNode = g_scene->GetRootSceneNode().CreateChildSceneNode("BoarNode");
+		ASSERT(g_boarNode);
+		g_boarEntity = g_scene->CreateEntity("Boar", "Models/Creatures/Boar/Boar.hmsh");
+		ASSERT(g_boarEntity);
+		g_boarNode->AttachObject(*g_boarEntity);
 
 		// Create the render target for our scene
 		g_sceneRenderTarget = GraphicsDevice::Get().CreateRenderTexture("Scene", 1280, 800);
 
 		const POS_COL_TEX_VERTEX vertices[6] = {
 			{ Vector3(-1.0f, -1.0f, 0.0f), Color::White, {0.0f, 1.0f}},
+			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}},
 			{ Vector3(-1.0f, 1.0f, 0.0f), Color::White, {0.0f, 0.0f}},
-			{ Vector3(1.0f, 1.0f, 0.0f), Color::White, {1.0f, 0.0f}},
-			{ Vector3(-1.0f, -1.0f, 0.0f), Color::White, {0.0f, 1.0f}},
-			{ Vector3(1.0f, 1.0f, 0.0f), Color::White, {1.0f, 0.0f}},
-			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}}
+			{ Vector3(-1.0f, 1.0f, 0.0f), Color::White, {0.0f, 0.0f}},
+			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}},
+			{ Vector3(1.0f, 1.0f, 0.0f), Color::White, {1.0f, 0.0f}}
 		};
 
 		g_fullScreenQuadBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::Static, vertices);
@@ -94,6 +105,30 @@ namespace mmo
 
 	void Destroy()
 	{
+		if (g_boarNode)
+		{
+			g_scene->DestroySceneNode(*g_boarNode);
+			g_boarNode = nullptr;
+		}
+		
+		if (g_boarEntity)
+		{
+			g_scene->DestroyEntity(*g_boarEntity);
+			g_boarEntity = nullptr;
+		}
+		
+		if (g_cameraNode)
+		{
+			g_scene->DestroySceneNode(*g_cameraNode);
+			g_cameraNode = nullptr;
+		}
+
+		if (g_camera)
+		{
+			g_scene->DestroyCamera(*g_camera);
+			g_camera = nullptr;
+		}
+		
 		g_sceneRenderTarget.reset();
 		g_scene.reset();
 	}
