@@ -21,11 +21,6 @@ namespace mmo
 		ASSERT(height > 0);
 		
 		CreateResources();
-
-		m_clearColorFloat[0] = 1.0f;
-		//m_clearColorFloat[1] = 1.0f;
-		//m_clearColorFloat[2] = 1.0f;
-		m_clearColorFloat[3] = 1.0f;
 	}
 
 	RenderTextureD3D11::~RenderTextureD3D11()

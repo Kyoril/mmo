@@ -6,6 +6,7 @@
 
 #include "graphics/graphics_device.h"
 #include "event_loop.h"
+#include "assets/asset_registry.h"
 #include "scene_graph/scene.h"
 #include "graphics/texture.h"
 #include "graphics/render_target.h"
@@ -38,6 +39,8 @@ namespace mmo
 
 	void OnIdle(float elapsedTime, GameTime time)
 	{
+		// Update scene objects and stuff
+
 	}
 
 	void OnPaint()
@@ -115,6 +118,9 @@ namespace mmo
 		// Shutdown event loop when window is closed
 		window->SetTitle("MMO Graphics Test");
 		signals += window->Closed.connect([]() { EventLoop::Terminate(0); });
+
+		// Initialize asset registry in working directory
+		AssetRegistry::Initialize(".", {});
 
 		// Setup event loop
 		EventLoop::Initialize();
