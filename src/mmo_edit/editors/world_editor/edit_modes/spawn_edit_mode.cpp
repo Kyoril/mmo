@@ -8,8 +8,9 @@
 
 namespace mmo
 {
-	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor)
+	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps)
 		: WorldEditMode(worldEditor)
+		, m_maps(maps)
 	{
 	}
 
@@ -23,26 +24,25 @@ namespace mmo
 	{
 		static const char* s_noneMap = "<None>";
 
-#if 0
 		if (ImGui::BeginCombo("Map", m_mapEntry ? m_mapEntry->name().c_str() : s_noneMap, ImGuiComboFlags_None))
 		{
-			for (::uint32 i = 0; i < static_cast<uint32>(m_editor.GetProject().maps.count()); ++i)
+			for (::uint32 i = 0; i < static_cast<uint32>(m_maps.count()); ++i)
 			{
 				ImGui::PushID(i);
-				if (ImGui::Selectable(m_editor.GetProject().maps.getTemplates().entry(i).name().c_str(), m_editor.GetProject().maps.getTemplates().mutable_entry(i) == m_mapEntry))
+				if (ImGui::Selectable(m_maps.getTemplates().entry(i).name().c_str(), m_maps.getTemplates().mutable_entry(i) == m_mapEntry))
 				{
-					proto::MapEntry* entry = m_editor.GetProject().maps.getTemplates().mutable_entry(i);
+					proto::MapEntry* entry = m_maps.getTemplates().mutable_entry(i);
 					if (m_mapEntry != entry)
 					{
 						m_mapEntry = entry;
-						RemoveAllUnitSpawns();
+						m_worldEditor.RemoveAllUnitSpawns();
 
 						if (m_mapEntry)
 						{
 							// For each unit spawn on the map
 							for (auto& unitSpawn : *m_mapEntry->mutable_unitspawns())
 							{
-								AddUnitSpawn(unitSpawn, false);
+								m_worldEditor.AddUnitSpawn(unitSpawn, false);
 							}
 						}
 					}
@@ -53,7 +53,13 @@ namespace mmo
 
 			ImGui::EndCombo();
 		}
-#endif
+	}
 
+	void SpawnEditMode::OnDeactivate()
+	{
+		WorldEditMode::OnDeactivate();
+
+		m_worldEditor.RemoveAllUnitSpawns();
+		m_worldEditor.ClearSelection();
 	}
 }

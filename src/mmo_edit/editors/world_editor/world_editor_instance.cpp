@@ -177,7 +177,7 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
-		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this);
+		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps);
 		m_editMode = nullptr;
 
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
@@ -793,8 +793,8 @@ namespace mmo
 			// TODO: Move this into edit modes handling of OnMouseMoved
 			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform && m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint))))
 			{
-				m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
-				m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
+				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
+				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
 			}
 
 			m_lastMouseX = x;

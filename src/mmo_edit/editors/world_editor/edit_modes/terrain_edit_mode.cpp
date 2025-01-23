@@ -94,7 +94,14 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 		}
-		else if (m_type == TerrainEditType::Area)
+
+		ImGui::SliderInt("Brush Radius", &m_terrainBrushSize, 1, terrain::constants::VerticesPerTile);
+		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
+		ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
+
+		ImGui::Separator();
+
+		if (m_type == TerrainEditType::Area)
 		{
 			// Render a list of all zones
 			if (ImGui::BeginListBox("##areas"))
@@ -117,10 +124,6 @@ namespace mmo
 				ImGui::EndListBox();
 			}
 		}
-
-		ImGui::SliderInt("Brush Radius", &m_terrainBrushSize, 1, terrain::constants::VerticesPerTile);
-		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
-		ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
 	}
 
 	void TerrainEditMode::OnMouseHold(const float deltaSeconds)

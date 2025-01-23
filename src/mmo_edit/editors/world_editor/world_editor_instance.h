@@ -147,10 +147,6 @@ namespace mmo
 
 		void SetMapEntry(proto::MapEntry* entry);
 
-		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select);
-
-		void RemoveAllUnitSpawns();
-
 	public:
 		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
 
@@ -179,6 +175,10 @@ namespace mmo
 
 	public:
 		void ClearSelection() override;
+
+		void RemoveAllUnitSpawns() override;
+
+		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) override;
 
 	private:
 		WorldEditor& m_editor;

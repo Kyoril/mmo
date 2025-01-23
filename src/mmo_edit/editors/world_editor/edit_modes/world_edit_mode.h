@@ -6,6 +6,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class UnitSpawnEntry;
+	}
+
 	class IWorldEditor
 	{
 	public:
@@ -14,6 +19,9 @@ namespace mmo
 	public:
 		virtual void ClearSelection() = 0;
 
+		virtual void RemoveAllUnitSpawns() = 0;
+
+		virtual void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

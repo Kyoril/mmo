@@ -3,18 +3,27 @@
 #pragma once
 
 #include "world_edit_mode.h"
+#include "editor_windows/editor_entry_window_base.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
 	class SpawnEditMode final : public WorldEditMode
 	{
 	public:
-		explicit SpawnEditMode(IWorldEditor& worldEditor);
+		explicit SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps);
 		~SpawnEditMode() override = default;
 
 	public:
 		const char* GetName() const override;
 
 		void DrawDetails() override;
+
+		void OnDeactivate() override;
+
+	private:
+		proto::MapManager& m_maps;
+
+		proto::MapEntry* m_mapEntry = nullptr;
 	};
 }
