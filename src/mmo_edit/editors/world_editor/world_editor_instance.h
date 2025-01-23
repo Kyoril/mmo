@@ -25,6 +25,9 @@
 #include "selection.h"
 #include "nav_mesh/map.h"
 #include "terrain/terrain.h"
+#include "edit_modes/terrain_edit_mode.h"
+#include "edit_modes/spawn_edit_mode.h"
+#include "edit_modes/entity_edit_mode.h"
 
 namespace mmo
 {
@@ -91,60 +94,6 @@ namespace mmo
 
 	};
 
-	enum class WorldEditMode : uint8
-	{
-		// Nothing, just fly through
-		None,
-
-		// Place static map entities, move them around, delete them etc.
-		StaticMapEntities,
-
-		// Paint and deform terrain
-		Terrain,
-
-		// Modify creature spawns.
-		Spawns,
-
-
-		// Counter
-		Count_
-	};
-
-	enum class TerrainEditMode : uint8
-	{
-		Select,
-
-		Deform,
-
-		Paint,
-
-		Area,
-
-		Count_
-	};
-
-	enum class TerrainDeformMode : uint8
-	{
-		Sculpt,
-
-		Smooth,
-
-		Flatten,
-
-
-		Count_
-	};
-
-	enum class TerrainPaintMode : uint8
-	{
-		Paint,
-
-		Smooth,
-
-
-		Count_
-	};
-
 	class SelectableVisitor
 	{
 	public:
@@ -157,7 +106,7 @@ namespace mmo
 		virtual void Visit(SelectedUnitSpawn& selectable) = 0;
 	};
 
-	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader
+	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
 	{
 	public:
 		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
@@ -226,6 +175,10 @@ namespace mmo
 
 		bool OnReadFinished() noexcept override;
 
+		void SetEditMode(WorldEditMode* editMode);
+
+	public:
+		void ClearSelection() override;
 
 	private:
 		WorldEditor& m_editor;
@@ -286,13 +239,10 @@ namespace mmo
 		Entity* m_cloudsEntity{ nullptr };
 		Light* m_sunLight{ nullptr };
 
-		// World edit mode
-		WorldEditMode m_editMode{ WorldEditMode::None };
-
-		// Terrain edit modes
-		TerrainEditMode m_terrainEditMode{ TerrainEditMode::Select };
-		TerrainDeformMode m_terrainDeformMode{ TerrainDeformMode::Sculpt };
-		TerrainPaintMode m_terrainPaintMode{ TerrainPaintMode::Paint };
+		std::unique_ptr<TerrainEditMode> m_terrainEditMode;
+		std::unique_ptr<EntityEditMode> m_entityEditMode;
+		std::unique_ptr<SpawnEditMode> m_spawnEditMode;
+		WorldEditMode* m_editMode{ nullptr };
 
 		// Spawn edit mode
 		proto::MapEntry* m_mapEntry { nullptr };
@@ -303,21 +253,11 @@ namespace mmo
 		bool m_hasTerrain{ true };
 		std::vector<String> m_meshNames;
 
-		Vector3 m_brushPosition{};
 		uint32 m_worldFileVersion;
-
-		float m_deformFlattenHeight = 0.0f;
-
-		int32 m_terrainBrushSize = 6;
-		float m_terrainBrushHardness = 0.5f;
-		float m_terrainBrushPower = 10.0f;
-		uint8 m_terrainPaintLayer = 0;
 
 		std::unique_ptr<DetourDebugDraw> m_detourDebugDraw;
 		std::unique_ptr<nav::Map> m_navMap;
 
 		SceneNode* m_navDebugNode{ nullptr };
-
-		uint32 m_selectedArea = 0;
 	};
 }

@@ -174,6 +174,12 @@ namespace mmo
 		m_debugNode->AttachObject(*m_debugEntity);
 		m_debugEntity->SetVisible(false);
 
+		// Setup edit modes
+		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
+		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
+		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this);
+		m_editMode = nullptr;
+
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
 		// Setup debug draw
 		//m_detourDebugDraw = std::make_unique<DetourDebugDraw>(m_scene, MaterialManager::Get().Load("Models/Engine/DetourDebug.hmat"));
@@ -293,51 +299,7 @@ namespace mmo
 		// Terrain deformation
 		if (m_hovering && ImGui::IsMouseDown(ImGuiMouseButton_Left))
 		{
-			const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
-			
-			if (m_editMode == WorldEditMode::Terrain)
-			{
-				const int32 outerRadius = m_terrainBrushSize;
-				const int32 innerRadius = std::max(1, static_cast<int32>(static_cast<float>(m_terrainBrushSize) * m_terrainBrushHardness));
-
-				if (m_terrainEditMode == TerrainEditMode::Deform)
-				{
-					if (m_terrainDeformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
-					{
-						m_deformFlattenHeight = m_terrain->GetSmoothHeightAt(m_brushPosition.x, m_brushPosition.z);
-					}
-					else
-					{
-						switch (m_terrainDeformMode)
-						{
-						case TerrainDeformMode::Sculpt:
-						{
-							m_terrain->Deform(m_brushPosition.x, m_brushPosition.z,
-								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
-						} break;
-						case TerrainDeformMode::Smooth:
-						{
-							m_terrain->Smooth(m_brushPosition.x, m_brushPosition.z,
-								innerRadius, outerRadius, m_terrainBrushPower* factor * deltaTimeSeconds);
-						} break;
-						case TerrainDeformMode::Flatten:
-						{
-							m_terrain->Flatten(m_brushPosition.x, m_brushPosition.z,
-								innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds, m_deformFlattenHeight);
-						} break;
-						}
-					}
-				}
-				else if (m_terrainEditMode == TerrainEditMode::Paint)
-				{
-					m_terrain->Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
-						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
-				}
-				else if (m_terrainEditMode == TerrainEditMode::Area)
-				{
-					m_terrain->SetArea(m_brushPosition, m_selectedArea);
-				}
-			}
+			if (m_editMode) m_editMode->OnMouseHold(deltaTimeSeconds);
 		}
 
 		const auto pos = GetPagePositionFromCamera();
@@ -364,34 +326,6 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	static const char* s_editModeStrings[] = {
-		"None",
-
-		"Map Entities",
-		"Terrain",
-		"Spawns"
-	};
-
-	static_assert(std::size(s_editModeStrings) == static_cast<uint32>(WorldEditMode::Count_), "There needs to be one string per enum value to display!");
-
-	static const char* s_terrainEditModeStrings[] = {
-		"Select",
-		"Deform",
-		"Paint",
-		"Area"
-	};
-
-	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditMode::Count_), "There needs to be one string per enum value to display!");
-
-	static const char* s_terrainDeformModeStrings[] = {
-		"Sculpt",
-		"Smooth",
-		"Flatten"
-	};
-
-	static_assert(std::size(s_terrainDeformModeStrings) == static_cast<uint32>(TerrainDeformMode::Count_), "There needs to be one string per enum value to display!");
-
-
 	void WorldEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
@@ -417,28 +351,25 @@ namespace mmo
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
 		}
 
-
+		// Hotkeys to change active edit mode
 		if (ImGui::IsKeyDown(ImGuiKey_F1))
 		{
-			m_editMode = WorldEditMode::None;
-			RemoveAllUnitSpawns();
+			SetEditMode(nullptr);
 		}
 		else if (ImGui::IsKeyDown(ImGuiKey_F2))
 		{
-			m_editMode = WorldEditMode::StaticMapEntities;
-			RemoveAllUnitSpawns();
+			SetEditMode(m_entityEditMode.get());
 		}
 		else if (ImGui::IsKeyDown(ImGuiKey_F3) && m_hasTerrain)
 		{
-			m_editMode = WorldEditMode::Terrain;
-			RemoveAllUnitSpawns();
+			SetEditMode(m_terrainEditMode.get());
 		}
 		else if (ImGui::IsKeyDown(ImGuiKey_F4))
 		{
-			m_editMode = WorldEditMode::Spawns;
+			SetEditMode(m_spawnEditMode.get());
 		}
 
-
+		// Render details
 		if (ImGui::Begin(detailsId.c_str()))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
@@ -458,156 +389,26 @@ namespace mmo
 
 			ImGui::Separator();
 
-			if (ImGui::BeginCombo("Mode", s_editModeStrings[static_cast<uint32>(m_editMode)], ImGuiComboFlags_None))
+			const char* editModePreview = "None";
+			if (ImGui::BeginCombo("Mode", m_editMode ? m_editMode->GetName() : editModePreview, ImGuiComboFlags_None))
 			{
-				for (uint32 i = 0; i < static_cast<uint32>(WorldEditMode::Count_); ++i)
-				{
-					ImGui::PushID(i);
+				if (ImGui::Selectable("None", m_editMode == nullptr)) SetEditMode(nullptr);
 
-					ImGui::BeginDisabled(i == static_cast<uint32>(WorldEditMode::Terrain) && !m_hasTerrain);
-					if (ImGui::Selectable(s_editModeStrings[i], i == static_cast<uint32>(m_editMode)))
-					{
-						m_editMode = static_cast<WorldEditMode>(i);
-						if (m_editMode != WorldEditMode::Spawns)
-						{
-							RemoveAllUnitSpawns();
-						}
-						m_selection.Clear();
-					}
-					ImGui::EndDisabled();
-					ImGui::PopID();
+				WorldEditMode* modes[] = { m_entityEditMode.get(), m_terrainEditMode.get(), m_spawnEditMode.get() };
+				for (size_t i = 0; i < std::size(modes); ++i)
+				{
+					if (ImGui::Selectable(modes[i]->GetName(), m_editMode == modes[i])) SetEditMode(modes[i]);
 				}
 
 				ImGui::EndCombo();
 			}
 
-			if (m_editMode == WorldEditMode::Spawns)
+			if (m_editMode)
 			{
-				static const char* s_noneMap = "<None>";
-
-				if (ImGui::BeginCombo("Map", m_mapEntry ? m_mapEntry->name().c_str() : s_noneMap, ImGuiComboFlags_None))
-				{
-					for (uint32 i = 0; i < static_cast<uint32>(m_editor.GetProject().maps.count()); ++i)
-					{
-						ImGui::PushID(i);
-						if (ImGui::Selectable(m_editor.GetProject().maps.getTemplates().entry(i).name().c_str(), m_editor.GetProject().maps.getTemplates().mutable_entry(i) == m_mapEntry))
-						{
-							proto::MapEntry* entry = m_editor.GetProject().maps.getTemplates().mutable_entry(i);
-							if (m_mapEntry != entry)
-							{
-								m_mapEntry = entry;
-								RemoveAllUnitSpawns();
-
-								if (m_mapEntry)
-								{
-									// For each unit spawn on the map
-									for (auto& unitSpawn : *m_mapEntry->mutable_unitspawns())
-									{
-										AddUnitSpawn(unitSpawn, false);
-									}
-								}
-							}
-							
-						}
-						ImGui::PopID();
-					}
-
-					ImGui::EndCombo();
-				}
-			}
-
-			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
-			{
-				if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_terrainEditMode)], ImGuiComboFlags_None))
-				{
-					for (uint32 i = 0; i < static_cast<uint32>(TerrainEditMode::Count_); ++i)
-					{
-						ImGui::PushID(i);
-						if (ImGui::Selectable(s_terrainEditModeStrings[i], i == static_cast<uint32>(m_terrainEditMode)))
-						{
-							m_terrainEditMode = static_cast<TerrainEditMode>(i);
-							m_selection.Clear();
-						}
-						ImGui::PopID();
-					}
-
-					ImGui::EndCombo();
-				}
-
-				if (m_terrainEditMode == TerrainEditMode::Deform && m_hasTerrain)
-				{
-					if (ImGui::BeginCombo("Deform Mode", s_terrainDeformModeStrings[static_cast<uint32>(m_terrainDeformMode)], ImGuiComboFlags_None))
-					{
-						for (uint32 i = 0; i < static_cast<uint32>(TerrainDeformMode::Count_); ++i)
-						{
-							ImGui::PushID(i);
-							if (ImGui::Selectable(s_terrainDeformModeStrings[i], i == static_cast<uint32>(m_terrainDeformMode)))
-							{
-								m_terrainDeformMode = static_cast<TerrainDeformMode>(i);
-								m_selection.Clear();
-							}
-							ImGui::PopID();
-						}
-
-						ImGui::EndCombo();
-					}
-				}
-				else if (m_terrainEditMode == TerrainEditMode::Paint && m_hasTerrain)
-				{
-					static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
-
-					if (ImGui::BeginCombo("Layer", s_layerNames[m_terrainPaintLayer]))
-					{
-						for (uint32 i = 0; i < std::size(s_layerNames); ++i)
-						{
-							ImGui::PushID(i);
-							if (ImGui::Selectable(s_layerNames[i], i == m_terrainPaintLayer))
-							{
-								m_terrainPaintLayer = i;
-							}
-							ImGui::PopID();
-						}
-
-						ImGui::EndCombo();
-					}
-				}
-
-				ImGui::SliderInt("Brush Radius", &m_terrainBrushSize, 1, terrain::constants::VerticesPerTile);
-				ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
-				ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
+				m_editMode->DrawDetails();
 			}
 
 			ImGui::Separator();
-
-			if (m_editMode == WorldEditMode::Spawns)
-			{
-				// Render a list of all units
-				
-			}
-
-			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
-			{
-				// Render a list of all zones
-				if (ImGui::BeginListBox("##areas"))
-				{
-					if (ImGui::Selectable("(None)", 0 == m_selectedArea))
-					{
-						m_selectedArea = 0;
-					}
-
-					for (const auto& zone : m_editor.GetProject().zones.getTemplates().entry())
-					{
-						ImGui::PushID(zone.id());
-						if (ImGui::Selectable(zone.name().c_str(), zone.id() == m_selectedArea))
-						{
-							m_selectedArea = zone.id();
-						}
-						ImGui::PopID();
-					}
-
-					ImGui::EndListBox();
-				}
-			}
 
 			if (!m_selection.IsEmpty())
 			{
@@ -667,9 +468,9 @@ namespace mmo
 					m_terrain->SetVisible(m_hasTerrain);
 
 					// Ensure terrain mode is not selectable if there is no terrain
-					if (!m_hasTerrain && m_editMode == WorldEditMode::Terrain)
+					if (!m_hasTerrain && m_editMode == m_terrainEditMode.get())
 					{
-						m_editMode = WorldEditMode::None;
+						SetEditMode(nullptr);
 					}
 				}
 
@@ -764,7 +565,7 @@ namespace mmo
 				}
 			}
 
-			if (m_editMode == WorldEditMode::StaticMapEntities)
+			if (m_editMode == m_entityEditMode.get())
 			{
 				if (ImGui::BeginDragDropTarget())
 				{
@@ -943,7 +744,13 @@ namespace mmo
 
 		if (m_hovering && button == 0)
 		{
-			if (m_editMode == WorldEditMode::StaticMapEntities)
+			if (m_editMode)
+			{
+				m_editMode->OnMouseUp((mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
+
+			// TODO: Move this into the edit modes handling of OnMouseUp
+			if (m_editMode == m_entityEditMode.get())
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
@@ -952,7 +759,7 @@ namespace mmo
 						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 				}
 			}
-			else if (m_editMode == WorldEditMode::Spawns)
+			else if (m_editMode == m_spawnEditMode.get())
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
@@ -961,9 +768,9 @@ namespace mmo
 						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 				}
 			}
-			else if (m_editMode == WorldEditMode::Terrain)
+			else if (m_editMode == m_terrainEditMode.get())
 			{
-				if (m_terrainEditMode == TerrainEditMode::Select)
+				if (m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Select)
 				{
 					PerformTerrainSelectionRaycast(
 						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
@@ -983,8 +790,8 @@ namespace mmo
 			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
-			// TODO: This shit needs to be changed so that each tool has it's own camera controls or something like that
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != WorldEditMode::Terrain || (m_terrainEditMode != TerrainEditMode::Deform && m_terrainEditMode != TerrainEditMode::Paint))))
+			// TODO: Move this into edit modes handling of OnMouseMoved
+			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform && m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX * 90.0f * deltaTimeSeconds), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY * 90.0f * deltaTimeSeconds), TransformSpace::Local);
@@ -999,9 +806,9 @@ namespace mmo
 			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 
-		if (m_editMode == WorldEditMode::Terrain)
+		if (m_editMode == m_terrainEditMode.get())
 		{
-			if (m_terrainEditMode != TerrainEditMode::Select)
+			if (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Select)
 			{
 				OnTerrainMouseMoved(
 					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
@@ -1257,7 +1064,7 @@ namespace mmo
 		m_debugEntity->SetVisible(true);
 	}
 
-	void WorldEditorInstance::OnTerrainMouseMoved(float viewportX, float viewportY)
+	void WorldEditorInstance::OnTerrainMouseMoved(const float viewportX, const float viewportY)
 	{
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
 
@@ -1271,8 +1078,8 @@ namespace mmo
 			return;
 		}
 
-		m_brushPosition = hitResult.second.position;
-
+		// TODO: Move this whole method into the terrain edit mode3
+		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
 		if (terrain::Tile* tile = hitResult.second.tile)
 		{
 			UpdateDebugAABB(tile->GetWorldBoundingBox());
@@ -1885,5 +1692,31 @@ namespace mmo
 		RemoveAllChunkHandlers();
 
 		return ChunkReader::OnReadFinished();
+	}
+
+	void WorldEditorInstance::SetEditMode(WorldEditMode* editMode)
+	{
+		if (editMode == m_editMode)
+		{
+			return;
+		}
+
+		if (m_editMode)
+		{
+			m_editMode->OnDeactivate();
+		}
+
+		m_editMode = editMode;
+
+		if (m_editMode)
+		{
+			m_editMode->OnActivate();
+		}
+	}
+
+	void WorldEditorInstance::ClearSelection()
+	{
+		m_debugBoundingBox->SetVisible(false);
+		m_selection.Clear();
 	}
 }
