@@ -26,6 +26,7 @@ namespace mmo
 			static const ChunkMagic VertexChunk = MakeChunkMagic('TVCM');
 			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
 			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
+			static const ChunkMagic AreaChunk = MakeChunkMagic('RACM');
 		}
 
 		namespace
@@ -88,6 +89,7 @@ namespace mmo
 			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
+			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -613,6 +615,13 @@ namespace mmo
 				layerChunk.Finish();
 			}
 
+			// Zones
+			{
+				ChunkWriter areaChunk{ constants::AreaChunk, writer };
+				writer << io::write_range(m_tileZones);
+				areaChunk.Finish();
+			}
+
 			sink.Flush();
 			file.reset();
 
@@ -801,6 +810,32 @@ namespace mmo
 			m_changed = true;
 		}
 
+		uint32 Page::GetArea(uint32 localTileX, uint32 localTileY) const
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return 0;
+			}
+
+			return m_tileZones[localTileX + localTileY * constants::TilesPerPage];
+		}
+
+		void Page::SetArea(uint32 localTileX, uint32 localTileY, uint32 area)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return;
+			}
+
+			if (GetArea(localTileX, localTileY) == area)
+			{
+				return;
+			}
+
+			m_tileZones[localTileX + localTileY * constants::TilesPerPage] = area;
+			m_changed = true;
+		}
+
 		bool Page::ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size)
 		{
 			uint32 version;
@@ -824,6 +859,15 @@ namespace mmo
 			AddChunkHandler(*constants::VertexChunk, false, *this, &Page::ReadMCVTChunk);
 			AddChunkHandler(*constants::NormalChunk, false, *this, &Page::ReadMCNMChunk);
 			AddChunkHandler(*constants::LayerChunk, false, *this, &Page::ReadMCLYChunk);
+			AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
+
+			return reader;
+		}
+
+		bool Page::ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Read tile zones
+			reader >> io::read_range(m_tileZones);
 
 			return reader;
 		}

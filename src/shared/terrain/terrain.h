@@ -63,7 +63,7 @@ namespace mmo
 
 			Tile* GetTile(int32 x, int32 z);
 
-			Page* GetPage(uint32 x, uint32 z);
+			Page* GetPage(uint32 x, uint32 z) const;
 
 			bool GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
 
@@ -122,6 +122,14 @@ namespace mmo
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
 			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
+
+			void SetArea(const Vector3& position, uint32 area);
+
+			void SetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 area);
+
+			uint32 GetArea(const Vector3& position) const;
+
+			uint32 GetAreaForTile(uint32 globalTileX, uint32 globalTileY) const;
 
 		private:
 

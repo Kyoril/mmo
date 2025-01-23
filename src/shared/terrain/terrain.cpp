@@ -275,7 +275,7 @@ namespace mmo
 			return page->GetTile(tileX, tileY);
 		}
 
-		Page* Terrain::GetPage(const uint32 x, const uint32 z)
+		Page* Terrain::GetPage(const uint32 x, const uint32 z) const
 		{
 			if (x >= m_width || z >= m_height)
 			{
@@ -757,6 +757,66 @@ namespace mmo
 					}
 				}
 			}
+		}
+
+		void Terrain::SetArea(const Vector3& position, uint32 area)
+		{
+			// Calculate tile position from world position
+			int32 tileX, tileY;
+			if (!GetTileIndexByWorldPosition(position, tileX, tileY))
+			{
+				return;
+			}
+
+			SetAreaForTile(tileX, tileY, area);
+		}
+
+		void Terrain::SetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 area)
+		{
+			ASSERT(globalTileX < m_width * constants::TilesPerPage && globalTileY < m_height * constants::TilesPerPage);
+
+			// Determine page from tile
+			const uint32 pageX = globalTileX / constants::TilesPerPage;
+			const uint32 pageY = globalTileY / constants::TilesPerPage;
+
+			Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				return;
+			}
+
+			// Now lets set the actual tile area
+			page->SetArea(globalTileX % constants::TilesPerPage, globalTileY % constants::TilesPerPage, area);
+		}
+
+		uint32 Terrain::GetArea(const Vector3& position) const
+		{
+			// Calculate tile position from world position
+			int32 tileX, tileY;
+			if (!GetTileIndexByWorldPosition(position, tileX, tileY))
+			{
+				return 0;
+			}
+
+			return GetAreaForTile(tileX, tileY);
+		}
+
+		uint32 Terrain::GetAreaForTile(const uint32 globalTileX, const uint32 globalTileY) const
+		{
+			ASSERT(globalTileX < m_width * constants::TilesPerPage && globalTileY < m_height * constants::TilesPerPage);
+
+			// Determine page from tile
+			const uint32 pageX = globalTileX / constants::TilesPerPage;
+			const uint32 pageY = globalTileX / constants::TilesPerPage;
+
+			const Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				return 0;
+			}
+
+			// Now lets get the actual tile area
+			return page->GetArea(globalTileX % constants::TilesPerPage, globalTileY % constants::TilesPerPage);
 		}
 
 		void Terrain::GetGlobalPixelWorldPosition(const int x, const int y, float* out_x, float* out_z) const

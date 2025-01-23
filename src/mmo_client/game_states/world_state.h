@@ -146,6 +146,8 @@ namespace mmo
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
 
+		void CheckForZoneUpdate();
+
 	private:
 		// Setup stuff
 

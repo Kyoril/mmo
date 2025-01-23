@@ -47,6 +47,8 @@ namespace mmo
 
 	Cursor g_cursor;
 
+	extern std::string s_zoneName;
+
 	// Static script methods
 	namespace
 	{
@@ -66,6 +68,11 @@ namespace mmo
 			}
 
 			return cvar->GetStringValue().c_str();
+		}
+
+		const char* Script_GetZoneName()
+		{
+			return s_zoneName.c_str();
 		}
 
 		void Script_EnterWorld(const CharacterView& characterView)
@@ -895,6 +902,8 @@ namespace mmo
 			luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
 			
 			luabind::def("Jump", &Script_Jump),
+
+			luabind::def("GetZoneText", &Script_GetZoneName),
 
 			luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
 			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),

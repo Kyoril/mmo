@@ -103,6 +103,10 @@ namespace mmo
 
 			void SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value);
 
+			uint32 GetArea(uint32 localTileX, uint32 localTileY) const;
+
+			void SetArea(uint32 localTileX, uint32 localTileY, uint32 area);
+
 		private:
 
 			bool ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size);
@@ -122,6 +126,8 @@ namespace mmo
 			bool ReadMCVNSubChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCTNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+
+			bool ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size);
 
 		private:
 			void UpdateBoundingBox();
@@ -146,6 +152,7 @@ namespace mmo
 			std::vector<Vector3> m_tangents;
 			std::vector<MaterialPtr> m_materials;
 			std::vector<uint32> m_layers;
+			std::vector<uint32> m_tileZones;
 
 			int32 m_x;
 			int32 m_z;

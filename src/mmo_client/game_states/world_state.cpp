@@ -46,6 +46,9 @@ namespace mmo
 {
 	const std::string WorldState::Name = "world";
 
+	std::string s_zoneName = "Unknown";
+	std::string s_subZoneName = "";
+
 	extern CharacterView s_selectedCharacter;
 
 	// Console command names
@@ -432,6 +435,8 @@ namespace mmo
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
 
+		CheckForZoneUpdate();
+
 		// Update world text frames
 		for (size_t i = 0; i < m_worldTextFrames.size(); )
 		{
@@ -467,6 +472,42 @@ namespace mmo
 		for(const auto& textFrame : m_worldTextFrames)
 		{
 			textFrame->Render();
+		}
+	}
+
+	void WorldState::CheckForZoneUpdate()
+	{
+		const auto unit = m_playerController->GetControlledUnit();
+		if (!unit)
+		{
+			return;
+		}
+
+		ASSERT(m_worldInstance);
+		if (!m_worldInstance->HasTerrain())
+		{
+			return;
+		}
+
+		static uint32 s_zoneId = 0;
+
+		const auto pos = unit->GetPosition();
+		const uint32 zoneId = m_worldInstance->GetTerrain()->GetArea(pos);
+		if (zoneId != s_zoneId)
+		{
+			s_zoneId = zoneId;
+
+			const proto_client::ZoneEntry* zone = m_project.zones.getById(s_zoneId);
+			if (zone)
+			{
+				s_zoneName = zone->name();
+			}
+			else
+			{
+				s_zoneName = "Unknown";
+			}
+
+			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
 	}
 

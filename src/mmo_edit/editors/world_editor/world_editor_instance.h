@@ -118,6 +118,8 @@ namespace mmo
 
 		Paint,
 
+		Area,
+
 		Count_
 	};
 
@@ -315,5 +317,7 @@ namespace mmo
 		std::unique_ptr<nav::Map> m_navMap;
 
 		SceneNode* m_navDebugNode{ nullptr };
+
+		uint32 m_selectedArea = 0;
 	};
 }

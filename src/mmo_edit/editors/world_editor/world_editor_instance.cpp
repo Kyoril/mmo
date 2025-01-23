@@ -333,6 +333,10 @@ namespace mmo
 					m_terrain->Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
 						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaTimeSeconds);
 				}
+				else if (m_terrainEditMode == TerrainEditMode::Area)
+				{
+					m_terrain->SetArea(m_brushPosition, m_selectedArea);
+				}
 			}
 		}
 
@@ -373,7 +377,8 @@ namespace mmo
 	static const char* s_terrainEditModeStrings[] = {
 		"Select",
 		"Deform",
-		"Paint"
+		"Paint",
+		"Area"
 	};
 
 	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditMode::Count_), "There needs to be one string per enum value to display!");
@@ -578,6 +583,30 @@ namespace mmo
 			{
 				// Render a list of all units
 				
+			}
+
+			if (m_editMode == WorldEditMode::Terrain && m_hasTerrain)
+			{
+				// Render a list of all zones
+				if (ImGui::BeginListBox("##areas"))
+				{
+					if (ImGui::Selectable("(None)", 0 == m_selectedArea))
+					{
+						m_selectedArea = 0;
+					}
+
+					for (const auto& zone : m_editor.GetProject().zones.getTemplates().entry())
+					{
+						ImGui::PushID(zone.id());
+						if (ImGui::Selectable(zone.name().c_str(), zone.id() == m_selectedArea))
+						{
+							m_selectedArea = zone.id();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndListBox();
+				}
 			}
 
 			if (!m_selection.IsEmpty())
