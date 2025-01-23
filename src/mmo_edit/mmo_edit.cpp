@@ -22,6 +22,14 @@
 #include "editor_windows/range_type_editor_window.h"
 #include "editor_windows/item_editor_window.h"
 #include "editor_windows/unit_loot_editor_window.h"
+#include "editor_windows/faction_editor_window.h"
+#include "editor_windows/faction_template_editor_window.h"
+#include "editor_windows/model_editor_window.h"
+#include "editor_windows/race_editor_window.h"
+#include "editor_windows/trainer_editor_window.h"
+#include "editor_windows/vendor_editor_window.h"
+#include "editor_windows/quest_editor_window.h"
+#include "editor_windows/zone_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -32,13 +40,6 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_model_editor/world_model_editor.h"
-#include "editor_windows/faction_editor_window.h"
-#include "editor_windows/faction_template_editor_window.h"
-#include "editor_windows/model_editor_window.h"
-#include "editor_windows/race_editor_window.h"
-#include "editor_windows/trainer_editor_window.h"
-#include "editor_windows/vendor_editor_window.h"
-#include "editor_windows/quest_editor_window.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -120,6 +121,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitLootEditorWindow>("Unit Loot Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TrainerEditorWindow>("Trainer Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VendorEditorWindow>("Vendor Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ZoneEditorWindow>("Zone Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));
