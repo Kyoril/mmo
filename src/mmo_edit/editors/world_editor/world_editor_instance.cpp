@@ -177,7 +177,7 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
-		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps);
+		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units);
 		m_editMode = nullptr;
 
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!

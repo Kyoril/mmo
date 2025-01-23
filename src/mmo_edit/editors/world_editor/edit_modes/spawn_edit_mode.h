@@ -11,7 +11,7 @@ namespace mmo
 	class SpawnEditMode final : public WorldEditMode
 	{
 	public:
-		explicit SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps);
+		explicit SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps, proto::UnitManager& units);
 		~SpawnEditMode() override = default;
 
 	public:
@@ -24,6 +24,10 @@ namespace mmo
 	private:
 		proto::MapManager& m_maps;
 
+		proto::UnitManager& m_units;
+
 		proto::MapEntry* m_mapEntry = nullptr;
+
+		const proto::UnitEntry* m_selectedUnit = nullptr;
 	};
 }

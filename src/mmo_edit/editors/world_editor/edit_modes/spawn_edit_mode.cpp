@@ -8,9 +8,10 @@
 
 namespace mmo
 {
-	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps)
+	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps, proto::UnitManager& units)
 		: WorldEditMode(worldEditor)
 		, m_maps(maps)
+		, m_units(units)
 	{
 	}
 
@@ -52,6 +53,29 @@ namespace mmo
 			}
 
 			ImGui::EndCombo();
+		}
+
+		ImGui::Separator();
+
+		// Render a list of all zones
+		if (ImGui::BeginListBox("##units", ImVec2(0, -1)))
+		{
+			if (ImGui::Selectable("(None)", nullptr == m_selectedUnit))
+			{
+				m_selectedUnit = nullptr;
+			}
+
+			for (const auto& unit : m_units.getTemplates().entry())
+			{
+				ImGui::PushID(unit.id());
+				if (ImGui::Selectable(unit.name().c_str(), &unit == m_selectedUnit))
+				{
+					m_selectedUnit = &unit;
+				}
+				ImGui::PopID();
+			}
+
+			ImGui::EndListBox();
 		}
 	}
 
