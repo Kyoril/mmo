@@ -328,6 +328,7 @@ namespace mmo
 			}
 
 			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());
+			ImGui::InputTextMultiline("Aura Text", currentEntry.mutable_auratext());
 
 			int currentSchool = currentEntry.spellschool();
 			if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)

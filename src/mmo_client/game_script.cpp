@@ -137,7 +137,7 @@ namespace mmo
 				return nullptr;
 			}
 
-			return player->GetSpell(index);
+			return player->GetVisibleSpell(index);
 		}
 
 		bool Script_UnitExists(const std::string& unitName)
@@ -506,74 +506,67 @@ namespace mmo
 			max = std::abs(maxPoints);
 		}
 
-		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)
+		std::string FormatSpellText(const std::string& text, const proto_client::SpellEntry* spell)
 		{
-			if (spell == nullptr)
-			{
-				return "<NULL>";
-			}
-
 			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
 			ASSERT(player);
 
 			const int32 level = player->GetLevel();
 
 			std::ostringstream strm;
-
 			int min = 0, max = 0, effectIndex = 0;
 
-			const String& desc = spell->description();
-			for (int i = 0; i < desc.size(); ++i)
+			for (int i = 0; i < text.size(); ++i)
 			{
-				if (desc[i] == '$' && i < desc.size() - 1)
+				if (text[i] == '$' && i < text.size() - 1)
 				{
 					i++;
 
-					char token = desc[i];
-					switch(token)
+					const char token = text[i];
+					switch (token)
 					{
 					case 'd':
 					case 'D':
+					{
+						// Default display value is seconds
+						double displayValue = static_cast<double>(spell->duration()) / 1000.0;
+						String formatTemplate = "FORMAT_DURATION_SECONDS";
+
+						if (spell->duration() >= 60000 * 60)
 						{
-							// Default display value is seconds
-							double displayValue = static_cast<double>(spell->duration()) / 1000.0;
-							String formatTemplate = "FORMAT_DURATION_SECONDS";
-
-							if (spell->duration() >= 60000 * 60)
-							{
-								// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
-								displayValue /= 3600.0;
-								formatTemplate = "FORMAT_DURATION_HOURS";
-							}
-							else if (spell->duration() >= 60000)
-							{
-								displayValue /= 60.0;
-								formatTemplate = "FORMAT_DURATION_MINUTES";
-							}
-
-							if (token == 'd')
-							{
-								formatTemplate += "_PRECISE";
-							}
-
-							auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
-							if (format)
-							{
-								char buffer[128];
-								snprintf(buffer, 128, format->c_str(), displayValue);
-								strm << buffer;
-							}
-							else
-							{
-								strm << formatTemplate;
-							}
+							// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
+							displayValue /= 3600.0;
+							formatTemplate = "FORMAT_DURATION_HOURS";
 						}
-						break;
+						else if (spell->duration() >= 60000)
+						{
+							displayValue /= 60.0;
+							formatTemplate = "FORMAT_DURATION_MINUTES";
+						}
+
+						if (token == 'd')
+						{
+							formatTemplate += "_PRECISE";
+						}
+
+						auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
+						if (format)
+						{
+							char buffer[128];
+							snprintf(buffer, 128, format->c_str(), displayValue);
+							strm << buffer;
+						}
+						else
+						{
+							strm << formatTemplate;
+						}
+					}
+					break;
 
 					case 'm':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						if (i < text.size() - 1 && text[i + 1] != ' ')
 						{
-							effectIndex = desc[i + 1] - '0';
+							effectIndex = text[i + 1] - '0';
 							i++;
 						}
 
@@ -582,9 +575,9 @@ namespace mmo
 						break;
 
 					case 'M':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						if (i < text.size() - 1 && text[i + 1] != ' ')
 						{
-							effectIndex = desc[i + 1] - '0';
+							effectIndex = text[i + 1] - '0';
 							i++;
 						}
 						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
@@ -593,9 +586,9 @@ namespace mmo
 
 					case 's':
 					case 'S':
-						if (i < desc.size() - 1 && desc[i + 1] != ' ')
+						if (i < text.size() - 1 && text[i + 1] != ' ')
 						{
-							effectIndex = desc[i + 1] - '0';
+							effectIndex = text[i + 1] - '0';
 							i++;
 						}
 
@@ -613,11 +606,36 @@ namespace mmo
 				}
 				else
 				{
-					strm << desc[i];
+					strm << text[i];
 				}
 			}
 
 			return strm.str();
+		}
+
+		std::string Script_GetSpellAuraText(const proto_client::SpellEntry* spell)
+		{
+			if (spell == nullptr)
+			{
+				return "<NULL>";
+			}
+
+			return FormatSpellText(spell->auratext(), spell);
+		}
+
+		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)
+		{
+			if (spell == nullptr)
+			{
+				return "<NULL>";
+			}
+
+			return FormatSpellText(spell->description(), spell);
+		}
+
+		bool Script_IsPassiveSpell(const proto_client::SpellEntry* spell)
+		{
+			return (spell->attributes(0) & spell_attributes::Passive) != 0;
 		}
 	}
 
@@ -852,15 +870,13 @@ namespace mmo
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
-				.def_readonly("description", &proto_client::SpellEntry::description)
 				.def_readonly("rank", &proto_client::SpellEntry::rank)
 				.def_readonly("cost", &proto_client::SpellEntry::cost)
 				.def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
 				.def_readonly("powertype", &proto_client::SpellEntry::powertype)
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
-				.def_readonly("icon", &proto_client::SpellEntry::icon)
-				.def_readonly("auratext", &proto_client::SpellEntry::auratext)),
+				.def_readonly("icon", &proto_client::SpellEntry::icon)),
 
 			luabind::def("GetUnit", &Script_GetUnitHandleByName),
 
@@ -886,6 +902,8 @@ namespace mmo
 			luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
+			luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
+			luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
 
 			luabind::def("MoveForwardStart", &Script_MoveForwardStart),
 			luabind::def("MoveForwardStop", &Script_MoveForwardStop),

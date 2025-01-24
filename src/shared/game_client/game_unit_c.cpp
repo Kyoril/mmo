@@ -833,6 +833,15 @@ namespace mmo
 	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spells)
 	{
 		m_spells = spells;
+
+		m_spellBookSpells.clear();
+		for (const auto* spell : m_spells)
+		{
+			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			{
+				m_spellBookSpells.push_back(spell);
+			}
+		}
 	}
 
 	void GameUnitC::LearnSpell(const proto_client::SpellEntry* spell)
@@ -841,12 +850,19 @@ namespace mmo
 		if (it == m_spells.end())
 		{
 			m_spells.push_back(spell);
+
+			// Visible?
+			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			{
+				m_spellBookSpells.push_back(spell);
+			}
 		}
 	}
 
 	void GameUnitC::UnlearnSpell(const uint32 spellId)
 	{
 		std::erase_if(m_spells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
+		std::erase_if(m_spellBookSpells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
 	}
 
 	const proto_client::SpellEntry* GameUnitC::GetSpell(uint32 index) const
@@ -854,6 +870,16 @@ namespace mmo
 		if (index < m_spells.size())
 		{
 			return m_spells[index];
+		}
+
+		return nullptr;
+	}
+
+	const proto_client::SpellEntry* GameUnitC::GetVisibleSpell(uint32 index) const
+	{
+		if (index < m_spellBookSpells.size())
+		{
+			return m_spellBookSpells[index];
 		}
 
 		return nullptr;

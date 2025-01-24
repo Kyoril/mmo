@@ -234,6 +234,9 @@ namespace mmo
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
 		const proto_client::SpellEntry* GetSpell(uint32 index) const;
 
+		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
+		const proto_client::SpellEntry* GetVisibleSpell(uint32 index) const;
+
 		/// @brief Returns the number of known spells of this unit.
 		uint32 GetSpellCount() const noexcept { return static_cast<uint32>(m_spells.size()); }
 
@@ -303,6 +306,7 @@ namespace mmo
 		Quaternion m_movementStartRot;
 		Vector3 m_movementEnd;
 		std::vector<const proto_client::SpellEntry*> m_spells;
+		std::vector<const proto_client::SpellEntry*> m_spellBookSpells;
 
 		uint64 m_victim = 0;
 
