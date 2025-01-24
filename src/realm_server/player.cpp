@@ -369,19 +369,34 @@ namespace mmo
 		const uint32 rage = 0;
 		const uint32 energy = player.Get<uint32>(object_fields::MaxEnergy);
 
+		std::map<uint8, ActionButton> actionButtons;
+
 		std::vector<uint32> spellIds;
 		spellIds.reserve(classInstance->spells().size());
 		for(const auto& spell : classInstance->spells())
 		{
+			const proto::SpellEntry* spellEntry = m_project.spells.getById(spell.spell());
+			if (spellEntry && actionButtons.size() < 12)
+			{
+				// Not a passive, not hidden and an ability? Put it in the action bar!
+				if ((spellEntry->attributes(0) & spell_attributes::Passive) == 0 &&
+					(spellEntry->attributes(0) & spell_attributes::HiddenClientSide) == 0 &&
+					(spellEntry->attributes(0) & spell_attributes::Ability) != 0)
+				{
+					actionButtons[actionButtons.size()] = ActionButton{ static_cast<uint16>(spell.spell()), action_button_type::Spell };
+				}
+			}
+
 			if (spell.level() <= level)
 			{
 				spellIds.push_back(spell.spell());
 			}
 		}
 
+		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
-			spellIds, mana, rage, energy);
+			spellIds, mana, rage, energy, actionButtons);
 		
 		return PacketParseResult::Pass;
 	}

@@ -237,7 +237,7 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -279,20 +279,22 @@ namespace mmo
 				PrintDatabaseError();
 			}
 
-			std::ostringstream actionString;
-			actionString << "INSERT INTO character_actions (`character_id`, `button`, `action`, `type`) VALUES ";
-			uint32 button = 0;
-			for (const auto spellId : spellIds)
+			if (!actionButtons.empty())
 			{
-				actionString << "(" << characterId << ", " << button++ << ", " << spellId << ", 1),";
-			}
-			actionString.seekp(-1, std::ios_base::end);
-			actionString << ";";
+				std::ostringstream actionString;
+				actionString << "INSERT INTO character_actions (`character_id`, `button`, `action`, `type`) VALUES ";
+				for (const auto& actionBarBinding : actionButtons)
+				{
+					actionString << "(" << characterId << ", " << static_cast<uint16>(actionBarBinding.first) << ", " << actionBarBinding.second.action << ", " << static_cast<uint16>(actionBarBinding.second.type) << "),";
+				}
+				actionString.seekp(-1, std::ios_base::end);
+				actionString << ";";
 
-			// Adding spells to the character may fail but we don't cancel in this case right now
-			if (!m_connection.Execute(actionString.str()))
-			{
-				PrintDatabaseError();
+				// Adding spells to the character may fail but we don't cancel in this case right now
+				if (!m_connection.Execute(actionString.str()))
+				{
+					PrintDatabaseError();
+				}
 			}
 		}
 

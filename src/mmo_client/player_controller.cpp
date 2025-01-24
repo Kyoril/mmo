@@ -620,6 +620,13 @@ namespace mmo
 			return;
 		}
 
+		// TODO: Drop items we are dragging
+		if (g_cursor.GetItemType() == CursorItemType::Item)
+		{
+			// Drop the item entirely
+
+		}
+
 		if (button == MouseButton_Left)
 		{
 			SetControlBit(ControlFlags::TurnCamera, false);
