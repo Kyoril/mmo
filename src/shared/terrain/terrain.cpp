@@ -299,11 +299,11 @@ namespace mmo
 
 		bool Terrain::GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
 		{
-			const float halfWorldWidth = (m_width / 2 * constants::PageSize);
-			const float halfWorldHeight = (m_height / 2 * constants::PageSize);
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
-			const int32 px = static_cast<int32>((position.x + halfWorldWidth) / constants::TileSize);
-			const int32 py = static_cast<int32>((position.z + halfWorldHeight) / constants::TileSize);
+			const int32 px = static_cast<int32>((position.x + halfTerrainWidth) / constants::TileSize);
+			const int32 py = static_cast<int32>((position.z + halfTerrainHeight) / constants::TileSize);
 
 			if (px < 0 || py < 0 || px >= m_width * constants::TilesPerPage || py >= m_height * constants::TilesPerPage)
 			{
@@ -807,7 +807,7 @@ namespace mmo
 
 			// Determine page from tile
 			const uint32 pageX = globalTileX / constants::TilesPerPage;
-			const uint32 pageY = globalTileX / constants::TilesPerPage;
+			const uint32 pageY = globalTileY / constants::TilesPerPage;
 
 			const Page* page = GetPage(pageX, pageY);
 			if (!page || !page->IsPrepared())
