@@ -4,6 +4,8 @@
 
 #include "editors/editor_base.h"
 
+#include <map>
+
 namespace mmo
 {
 	class TextureEditor : public EditorBase
@@ -21,5 +23,9 @@ namespace mmo
 	protected:
 		std::shared_ptr<EditorInstance> OpenAssetImpl(const Path& asset) override;
 		void CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance) override;
+
+	private:
+
+		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 	};
 }

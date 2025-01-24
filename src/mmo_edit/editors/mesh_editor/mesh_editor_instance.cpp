@@ -275,7 +275,7 @@ namespace mmo
 	}
 
 	void MeshEditorInstance::Save()
-	{		
+	{
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
