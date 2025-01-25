@@ -16,6 +16,7 @@
 
 #include "platform.h"
 #include "vendor_client.h"
+#include "base/profiler.h"
 #include "console/console.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
@@ -227,6 +228,8 @@ namespace mmo
 
 	void PlayerController::ApplyLocalMovement(const float deltaSeconds) const
 	{
+		PROFILE_SCOPE("Local Player Collision");
+
 		// Apply gravity to jump velocity
 		MovementInfo info = m_controlledUnit->GetMovementInfo();
 

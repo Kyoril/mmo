@@ -8,6 +8,8 @@
 #include "frame_ui/color.h"
 #include "frame_ui/geometry_helper.h"
 
+#include "base/profiler.h"
+
 namespace mmo
 {
 	WorldRenderer::WorldRenderer(const std::string & name, Scene& worldScene)
@@ -26,7 +28,7 @@ namespace mmo
 		{
 			return;
 		}
-		
+
 		// Grab the graphics device instance
 		auto& gx = GraphicsDevice::Get();
 

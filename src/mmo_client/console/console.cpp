@@ -19,6 +19,7 @@
 #include <mutex>
 
 #include "loading_screen.h"
+#include "base/profiler.h"
 
 
 namespace mmo
@@ -74,6 +75,8 @@ namespace mmo
 
 	static std::string s_consoleInput;
 
+	static scoped_connection s_perfChanged;
+
 	namespace
 	{
 		ConsoleVar* s_dataPathCVar = nullptr;
@@ -95,19 +98,18 @@ namespace mmo
 			std::string description;
 			std::string defaultValue;
 			ConsoleVar** outputVar = nullptr;
-			std::function<ConsoleVar::ChangedSignal::signature_type> changedHandler = nullptr;
 		};
 
 		/// A list of automatically registered and unregistered console variables that are also
 		/// serialized when the games config file is serialized.
 		const std::vector<GxCVarHelper> s_gxCVars = 
 		{
-			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar,			nullptr },
-			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar,	nullptr },
-			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar,		nullptr },
-			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar,			nullptr },
+			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar },
+			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar },
+			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar },
+			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 
-			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar, nullptr },
+			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
@@ -125,17 +127,21 @@ namespace mmo
 			// Register console variables from the table
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
-				
+
 				if (x.outputVar != nullptr)
 				{
 					*x.outputVar = output;
 				}
 			});
+
+			s_perfChanged = s_gxPerfCVar->Changed.connect([](ConsoleVar& var, const std::string&) { Profiler::GetInstance().SetEnabled(var.GetBoolValue()); });
 		}
 
 		/// Unregisters the automatically managed gx cvars from the table above.
 		void UnregisterGraphicsCVars()
 		{
+			s_perfChanged.disconnect();
+
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVarMgr::UnregisterConsoleVar(x.name);
 			});
@@ -626,7 +632,14 @@ namespace mmo
 		if (showPerf)
 		{
 			std::stringstream strm;
-			strm << "Batch count: " << gx.GetBatchCount();
+			strm << "Batch count: " << gx.GetBatchCount() << "\n";
+
+			auto& metrics = Profiler::GetInstance().GetMetrics();
+			for (auto& m : metrics)
+			{
+				strm << m.name << " " << std::setprecision(2) << m.totalTimeMs << " ms (" << m.callCount << " calls)\n";
+			}
+
 			s_consoleFont->DrawText(strm.str(), Point(0.0f, 0.0f), *s_consoleTextGeom, 1.0f);
 		}
 

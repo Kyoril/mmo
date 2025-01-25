@@ -27,6 +27,7 @@
 #include "vendor_client.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
+#include "base/profiler.h"
 #include "base/timer_queue.h"
 #include "frame_ui/text_component.h"
 #include "game/aura.h"
@@ -402,6 +403,8 @@ namespace mmo
 
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
+		PROFILE_BEGIN_FRAME();
+
 		m_dispatcher.poll();
 
 		m_playerController->Update(deltaSeconds);
@@ -452,10 +455,6 @@ namespace mmo
 				++i;
 			}
 		}
-
-#ifdef _DEBUG
-		FrameManager::Get().TriggerLuaEvent("HEIGHTCHECK_PROFILE", m_rayQuery->GetDebugHitTestResults().size());
-#endif
 	}
 	
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -473,6 +472,8 @@ namespace mmo
 		{
 			textFrame->Render();
 		}
+
+		PROFILE_END_FRAME();
 	}
 
 	void WorldState::CheckForZoneUpdate()
