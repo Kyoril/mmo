@@ -775,9 +775,21 @@ namespace mmo
 				.def_readonly("quality", &ItemInfo::quality)
 				.def_readonly("armor", &ItemInfo::armor)
 				.def_readonly("block", &ItemInfo::block)
-				.def_readonly("maxdurability", &ItemInfo::maxdurability)
+				.def_readonly("minDamage", &ItemInfo::GetMinDamage)
+				.def_readonly("maxDamage", &ItemInfo::GetMaxDamage)
+				.def_readonly("dps", &ItemInfo::GetDps)
+				.def_readonly("attackTime", &ItemInfo::attackTime)
+				.def_readonly("bagSlots", &ItemInfo::containerslots)
+				.def_readonly("maxDurability", &ItemInfo::maxdurability)
+				.def_readonly("class", &ItemInfo::GetItemClassName)
+				.def_readonly("subClass", &ItemInfo::GetItemSubClassName)
+				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 				.def_readonly("icon", &ItemInfo::icon)
-				.def_readonly("sellPrice", &ItemInfo::sellPrice)),
+				.def_readonly("sellPrice", &ItemInfo::sellPrice)
+				.def("GetStatType", &ItemInfo::GetStatType)
+				.def("GetStatValue", &ItemInfo::GetStatValue)
+				.def("GetSpellId", &ItemInfo::GetSpellId)
+				.def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)),
 
 			luabind::scope(
 				luabind::class_<QuestListEntry>("QuestListEntry")

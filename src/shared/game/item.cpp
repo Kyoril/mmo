@@ -1,10 +1,296 @@
 
 #include "item.h"
+
+#include "base/macros.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
 namespace mmo
 {
+	const char* ItemInfo::GetItemClassName() const
+	{
+		static const char* s_itemClassStrings[] = {
+			"CONSUMABLE",
+			"CONTAINER",
+			"WEAPON",
+			"GEM",
+			"ARMOR",
+			"REAGENT",
+			"PROJECTILE",
+			"TRADEGOODS",
+			"GENERIC",
+			"RECIPE",
+			"MONEY",
+			"QUIVER",
+			"QUEST",
+			"KEY",
+			"PERMANENT",
+			"JUNK",
+		};
+
+		static_assert(std::size(s_itemClassStrings) == item_class::Count_, "Item class strings mismatch");
+
+		ASSERT(itemClass < item_class::Count_);
+		return s_itemClassStrings[itemClass];
+	}
+
+	const char* ItemInfo::GetItemSubClassName() const
+	{
+		static const char* s_consumableSubclassStrings[] = {
+			"CONSUMABLE",
+			"POTION",
+			"ELIXIR",
+			"FLASK",
+			"SCROLL",
+			"FOOD",
+			"ITEM_ENHANCEMENT",
+			"BANDAGE"
+		};
+
+		static_assert(std::size(s_consumableSubclassStrings) == item_subclass_consumable::Count_, "Consumable subclass strings array size mismatch");
+
+		static const char* s_containerSubclassStrings[] = {
+			"CONTAINER"
+		};
+
+		static_assert(std::size(s_containerSubclassStrings) == item_subclass_container::Count_, "Container subclass strings array size mismatch");
+
+		static const char* s_weaponSubclassStrings[] = {
+			"ONE_HANDED_AXE",
+			"TWO_HANDED_AXE",
+			"BOW",
+			"GUN",
+			"ONE_HANDED_MACE",
+			"TWO_HANDED_MACE",
+			"POLEARM",
+			"ONE_HANDED_SWORD",
+			"TWO_HANDED_SWORD",
+			"STAFF",
+			"FIST",
+			"DAGGER",
+			"THROWN",
+			"SPEAR",
+			"CROSS_BOW",
+			"WAND",
+			"FISHING_POLE"
+		};
+
+		static_assert(std::size(s_weaponSubclassStrings) == item_subclass_weapon::Count_, "Weapon subclass strings array size mismatch");
+
+		static const char* s_gemSubclassStrings[] = {
+			"RED",
+			"BLUE",
+			"YELLOW",
+			"PURPLE",
+			"GREEN",
+			"ORANGE",
+			"PRISMATIC"
+		};
+
+		static_assert(std::size(s_gemSubclassStrings) == item_subclass_gem::Count_, "Gem subclass strings array size mismatch");
+
+		static const char* s_armorSubclassStrings[] = {
+			"MISC",
+			"CLOTH",
+			"LEATHER",
+			"MAIL",
+			"PLATE",
+			"BUCKLER",
+			"SHIELD",
+			"LIBRAM",
+			"IDOL",
+			"TOTEM"
+		};
+
+		static_assert(std::size(s_armorSubclassStrings) == item_subclass_armor::Count_, "Armor subclass strings array size mismatch");
+
+		static const char* s_projectileSubclassStrings[] = {
+			"WAND",
+			"BOLT",
+			"ARROW",
+			"BULLET",
+			"THROWN"
+		};
+
+		static_assert(std::size(s_projectileSubclassStrings) == item_subclass_projectile::Count_, "Projectile subclass strings array size mismatch");
+
+		static const char* s_tradeGoodsSubclassStrings[] = {
+			"TRADE_GOODS",
+			"PARTS",
+			"EXPLOSIVES",
+			"DEVICES",
+			"JEWELCRAFTING",
+			"CLOTH",
+			"LEATHER",
+			"METAL_STONE",
+			"MEAT",
+			"HERB",
+			"ELEMENTAL",
+			"TRADE_GOODS_OTHER",
+			"ENCHANTING",
+			"MATERIAL"
+		};
+
+		static_assert(std::size(s_tradeGoodsSubclassStrings) == item_subclass_trade_goods::Count_, "Trade goods subclass strings array size mismatch");
+
+		switch (itemClass)
+		{
+		case item_class::Consumable:	return s_consumableSubclassStrings[itemSubclass];
+		case item_class::Container:		return s_containerSubclassStrings[itemSubclass];
+		case item_class::Weapon:		return s_weaponSubclassStrings[itemSubclass];
+		case item_class::Gem:			return s_gemSubclassStrings[itemSubclass];
+		case item_class::Armor:			return s_armorSubclassStrings[itemSubclass];
+		case item_class::Projectile:	return s_projectileSubclassStrings[itemSubclass];
+		case item_class::TradeGoods:	return s_tradeGoodsSubclassStrings[itemSubclass];
+		}
+
+		return nullptr;
+	}
+
+	const char* ItemInfo::GetItemInventoryTypeName() const
+	{
+		static const char* s_inventoryTypeStrings[] = {
+			"NON_EQUIP",
+			"HEAD",
+			"NECK",
+			"SHOULDERS",
+			"BODY",
+			"CHEST",
+			"WAIST",
+			"LEGS",
+			"FEET",
+			"WRISTS",
+			"HANDS",
+			"FINGER",
+			"TRINKET",
+			"WEAPON",
+			"SHIELD",
+			"RANGED",
+			"CLOAK",
+			"TWO_HANDED_WEAPON",
+			"BAG",
+			"TABARD",
+			"ROBE",
+			"MAIN_HAND_WEAPON",
+			"OFF_HAND_WEAPON",
+			"HOLDABLE",
+			"AMMO",
+			"THROWN",
+			"RANGED_RIGHT",
+			"QUIVER",
+			"RELIC",
+		};
+
+		static_assert(std::size(s_inventoryTypeStrings) == inventory_type::Count_, "InventoryType strings mismatch");
+
+		ASSERT(inventoryType < inventory_type::Count_);
+		return s_inventoryTypeStrings[inventoryType];
+	}
+
+	float ItemInfo::GetMinDamage() const
+	{
+		return damage.min;
+	}
+
+	float ItemInfo::GetMaxDamage() const
+	{
+		return damage.max;
+	}
+
+	float ItemInfo::GetDps() const
+	{
+		return (damage.min + damage.max) / 2.0f / (static_cast<float>(attackTime) / 1000.0f);
+	}
+
+	const char* ItemInfo::GetStatType(int32 index) const
+	{
+		if (index < 0 || index >= static_cast<int32>(std::size(stats)))
+		{
+			return nullptr;
+		}
+
+		static const char* s_statTypeStrings[] = {
+			"MANA",
+			"HEALTH",
+			"AGILITY",
+			"STRENGTH",
+			"INTELLECT",
+			"SPIRIT",
+			"STAMINA",
+			"DEFENSE",
+			"DODGE",
+			"PARRY",
+			"BLOCK",
+			"HIT_MELEE",
+			"HIT_RANGED",
+			"HIT_SPELL",
+			"CRIT_MELEE",
+			"CRIT_RANGED",
+			"CRIT_SPELL",
+			"HIT_TAKEN_MELEE",
+			"HIT_TAKEN_RANGED",
+			"HIT_TAKEN_SPELL",
+			"CRIT_TAKEN_MELEE",
+			"CRIT_TAKEN_RANGED",
+			"CRIT_TAKEN_SPELL",
+			"HASTE_MELEE",
+			"HASTE_RANGED",
+			"HASTE_SPELL",
+			"HIT",
+			"CRIT",
+			"HIT_TAKEN",
+			"CRIT_TAKEN",
+			"HASTE",
+			"EXPERTISE"
+		};
+
+		if (stats[index].type >= std::size(s_statTypeStrings))
+		{
+			return nullptr;
+		}
+
+		return s_statTypeStrings[stats[index].type];
+	}
+
+	int32 ItemInfo::GetStatValue(int32 index) const
+	{
+		if (index < 0 || index >= static_cast<int32>(std::size(stats)))
+		{
+			return 0;
+		}
+
+		return static_cast<int32>(stats[index].value);
+	}
+
+	uint32 ItemInfo::GetSpellId(int32 index) const
+	{
+		if (index < 0 || index >= static_cast<int32>(std::size(spells)))
+		{
+			return 0;
+		}
+
+		return spells[index].spellId;
+	}
+
+	const char* ItemInfo::GetSpellTriggerType(int32 index) const
+	{
+		if (index < 0 || index >= std::size(spells))
+		{
+			return nullptr;
+		}
+
+		static const char* s_spellTriggerTypes[] = {
+			"ON_USE",
+			"ON_EQUIP",
+			"HIT_CHANCE",
+		};
+
+		static_assert(std::size(s_spellTriggerTypes) == item_spell_trigger::Count_, "Spell trigger type strings mismatch");
+
+		ASSERT(spells[index].triggertype < item_spell_trigger::Count_);
+		return s_spellTriggerTypes[spells[index].triggertype];
+	}
+
 	io::Writer& operator<<(io::Writer& writer, const ItemInfo& itemInfo)
 	{
 		writer

@@ -703,6 +703,26 @@ namespace mmo
 		float rangedrangepercent;
 		uint32 skill;
 		String icon;
+
+		const char* GetItemClassName() const;
+
+		const char* GetItemSubClassName() const;
+
+		const char* GetItemInventoryTypeName() const;
+
+		float GetMinDamage() const;
+
+		float GetMaxDamage() const;
+
+		float GetDps() const;
+
+		const char* GetStatType(int32 index) const;
+
+		int32 GetStatValue(int32 index) const;
+
+		uint32 GetSpellId(int32 index) const;
+
+		const char* GetSpellTriggerType(int32 index) const;
 	};
 
 	io::Writer& operator<<(io::Writer& writer, const ItemInfo& itemInfo);
