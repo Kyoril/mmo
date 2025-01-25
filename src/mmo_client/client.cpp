@@ -25,6 +25,8 @@
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 
+#include "fmod_audio.h"
+
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -251,6 +253,8 @@ namespace mmo
 
 	static proto_client::Project s_project;
 
+	static std::unique_ptr<IAudio> s_audio;
+
 	std::unique_ptr<LootClient> s_lootClient;
 	std::unique_ptr<VendorClient> s_vendorClient;
 	std::unique_ptr<TrainerClient> s_trainerClient;
@@ -304,6 +308,9 @@ namespace mmo
 
 		// Initialize network threads
 		NetInit();
+
+		s_audio = std::make_unique<FMODAudio>();
+		s_audio->Create();
 
 		// Run service
 		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime&)
@@ -395,7 +402,7 @@ namespace mmo
 	void DestroyGlobal()
 	{
 		s_timerConnection.disconnect();
-		
+
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
@@ -429,6 +436,8 @@ namespace mmo
 			io::Writer writer(sink);
 			s_questCache->Serialize(writer);
 		}
+
+		s_audio.reset();
 
 		// Destroy the graphics device object
 		Console::Destroy();
