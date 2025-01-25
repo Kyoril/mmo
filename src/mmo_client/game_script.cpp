@@ -664,12 +664,12 @@ namespace mmo
 		RegisterGlobalFunctions();
 	}
 
-	void GameScript::GetVendorItemInfo(int32 slot, String& outName, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const
+	void GameScript::GetVendorItemInfo(int32 slot, const ItemInfo*& outItem, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const
 	{
 		const auto& vendorItems = m_vendorClient.GetVendorItems();
 		if (slot < 0 || slot >= vendorItems.size())
 		{
-			outName.clear();
+			outItem = nullptr;
 			outIcon.clear();
 			outPrice = 0;
 			outQuantity = 0;
@@ -679,7 +679,7 @@ namespace mmo
 		}
 
 		ASSERT(vendorItems[slot].itemData);
-		outName = vendorItems[slot].itemData->name;
+		outItem = vendorItems[slot].itemData;
 		outIcon = vendorItems[slot].itemData->icon;
 		outPrice = vendorItems[slot].buyPrice + vendorItems[slot].extendedCost;
 		outQuantity = vendorItems[slot].buyCount;
@@ -985,7 +985,7 @@ namespace mmo
 
 			// Vendor
 			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
-			luabind::def<std::function<void(int32, String&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, String& out_name, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_name, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+			luabind::def<std::function<void(int32, const ItemInfo*&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo*& out_item, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
 			luabind::def<std::function<void()>>("CloseVendor", [this]() { this->m_vendorClient.CloseVendor(); }),
 

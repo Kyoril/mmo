@@ -64,7 +64,7 @@ namespace mmo
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
-		void GetVendorItemInfo(int32 slot, String& outName, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const;
+		void GetVendorItemInfo(int32 slot, const ItemInfo*& outItem, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const;
 
 		void GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice) const;
 
