@@ -341,7 +341,7 @@ namespace mmo
 		for (vectorIndex = 0; vectorIndex < vectorCapacity; vectorIndex++)
 		{
 			const FMODSoundInstance &instance = m_soundInstanceVector[vectorIndex];
-			if ((type == instance.GetType()) /*&& (fileName == instance.GetFileName())*/)
+			if ((type == instance.GetType()) && (fileName == instance.GetFileName()))
 			{
 				return vectorIndex;
 			}

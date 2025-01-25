@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "audio.h"
 #include "connection.h"
 #include "db_cache.h"
 #include "player_controller.h"
@@ -36,6 +37,11 @@
 #include "game/quest_info.h"
 
 #include "spell_cast.h"
+
+namespace mmo
+{
+	class IAudio;
+}
 
 namespace mmo
 {
@@ -84,7 +90,8 @@ namespace mmo
 			ActionBar& actionBar,
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
-			QuestClient& questClient);
+			QuestClient& questClient,
+			IAudio& audio);
 
 	public:
 		/// @brief The default name of the world state
@@ -295,6 +302,8 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		IdGenerator<uint64> m_objectIdGenerator{ 1 };
+		IAudio& m_audio;
+
 
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
@@ -341,6 +350,12 @@ namespace mmo
 		SpellCast& m_spellCast;
 		TrainerClient& m_trainerClient;
 		QuestClient& m_questClient;
+
+		SoundIndex m_backgroundMusicSound{ InvalidSound };
+		ChannelIndex m_backgroundMusicChannel{ InvalidChannel };
+
+		SoundIndex m_ambienceSound{ InvalidSound };
+		ChannelIndex m_ambienceChannel{ InvalidChannel };
 
 	private:
 		static IInputControl* s_inputControl;

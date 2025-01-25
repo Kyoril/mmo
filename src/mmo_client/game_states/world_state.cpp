@@ -43,6 +43,8 @@
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
 
+#include "audio.h"
+
 namespace mmo
 {
 	const std::string WorldState::Name = "world";
@@ -139,7 +141,7 @@ namespace mmo
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 		ActionBar& actionBar,
-		SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient)
+		SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -154,6 +156,7 @@ namespace mmo
 		, m_spellCast(spellCast)
 		, m_trainerClient(trainerClient)
 		, m_questClient(questClient)
+		, m_audio(audio)
 	{
 	}
 
@@ -220,10 +223,26 @@ namespace mmo
 
 		m_worldRootNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		LoadMap("Worlds/Development/Development");
+
+		// Play background music
+		m_backgroundMusicSound = m_audio.CreateLoopedStream("Sound/Music/Gethsemane.ogg");
+		m_audio.PlaySound(m_backgroundMusicSound, &m_backgroundMusicChannel);
+
+		// Play ambience
+		m_ambienceSound = m_audio.CreateSound("Sound/Ambience/ZoneAmbience/ForestNormalDay.wav", SoundType::SoundLooped2D);
+		m_audio.PlaySound(m_ambienceSound, &m_ambienceChannel);
 	}
 
 	void WorldState::OnLeave()
 	{
+		m_audio.StopSound(&m_backgroundMusicChannel);
+		m_backgroundMusicChannel = InvalidChannel;
+		m_backgroundMusicSound = InvalidSound;
+
+		m_audio.StopSound(&m_ambienceChannel);
+		m_ambienceChannel = InvalidChannel;
+		m_ambienceSound = InvalidSound;
+
 		m_rayQuery.reset();
 
 		// Stop background loading thread
@@ -407,6 +426,12 @@ namespace mmo
 
 		m_dispatcher.poll();
 
+		// Update audio component to simulate 3d audio correctly from the player position
+		if (m_playerController->GetControlledUnit())
+		{
+			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+		}
+		
 		m_playerController->Update(deltaSeconds);
 
 		ObjectMgr::UpdateObjects(deltaSeconds);
