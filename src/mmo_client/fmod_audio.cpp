@@ -226,7 +226,7 @@ namespace mmo
 			break;
 
 		case SoundType::Sound2D:
-			result = m_system->createStream((const char *)newSoundInstance, FMOD_DEFAULT, 0, &sound);
+			result = m_system->createSound((const char *)newSoundInstance, FMOD_DEFAULT, 0, &sound);
 			break;
 
 		case SoundType::SoundLooped2D:

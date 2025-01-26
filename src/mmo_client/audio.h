@@ -9,10 +9,14 @@ namespace mmo
 	enum class SoundType
 	{
 		Invalid,
+
 		Sound3D,
+
 		SoundLooped3D,
+
 		Sound2D,
-		SoundLooped2D
+
+		SoundLooped2D,
 	};
 
 	typedef int32 SoundIndex;

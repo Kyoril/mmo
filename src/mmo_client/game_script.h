@@ -21,6 +21,7 @@ namespace mmo
 	struct ItemInfo;
 	class VendorClient;
 	class LootClient;
+	class IAudio;
 
 	namespace proto_client
 	{
@@ -58,7 +59,8 @@ namespace mmo
 			ActionBar& actionBar,
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
-			QuestClient& questClient);
+			QuestClient& questClient,
+			IAudio& audio);
 
 	public:
 		/// Gets the current lua state
@@ -102,6 +104,8 @@ namespace mmo
 
 		const proto_client::SpellEntry* GetItemSpell(const ItemInfo* item, int32 index);
 
+		void PlaySound(const char* sound) const;
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
@@ -131,6 +135,8 @@ namespace mmo
 		TrainerClient& m_trainerClient;
 
 		QuestClient& m_questClient;
+
+		IAudio& m_audio;
 
 	private:
 		void Script_ReviveMe() const;

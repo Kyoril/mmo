@@ -640,7 +640,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -651,6 +651,7 @@ namespace mmo
 		, m_spellCast(spellCast)
 		, m_trainerClient(trainerClient)
 		, m_questClient(questClient)
+		, m_audio(audio)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -1012,7 +1013,9 @@ namespace mmo
 			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&)>>("GetLootSlotInfo", [this](int32 slot, String& out_icon, String& out_text, int32& out_count) { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
-			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); })
+			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); }),
+			
+			luabind::def<std::function<void(const char*)>>("PlaySound", [this](const char* sound) { PlaySound(sound); })
 		];
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
@@ -1330,6 +1333,21 @@ namespace mmo
 		}
 
 		return m_project.spells.getById(item->spells[index].spellId);
+	}
+
+	void GameScript::PlaySound(const char* sound) const
+	{
+		if (!sound || !*sound)
+		{
+			ELOG("Usage: PlaySound(\"soundFile\")");
+			return;
+		}
+
+		if (const SoundIndex index = m_audio.CreateSound(sound, SoundType::Sound2D); index != InvalidSound)
+		{
+			ChannelIndex channel;
+			m_audio.PlaySound(index, &channel);
+		}
 	}
 
 	void GameScript::Script_ReviveMe() const
