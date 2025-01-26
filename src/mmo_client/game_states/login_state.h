@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "audio.h"
 #include "connection.h"
 #include "game_states/game_state.h"
 
@@ -25,7 +26,7 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio);
 
 	public:
 		/// The default name of the login state
@@ -78,5 +79,9 @@ namespace mmo
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_loginConnections;
 		TimerQueue& m_timers;
+		IAudio& m_audio;
+
+		SoundIndex m_musicSound = InvalidSound;
+		ChannelIndex m_musicChannel = InvalidChannel;
 	};
 }

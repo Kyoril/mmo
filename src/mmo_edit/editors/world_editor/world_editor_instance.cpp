@@ -565,47 +565,18 @@ namespace mmo
 				}
 			}
 
-			if (m_editMode == m_entityEditMode.get())
+			if (m_editMode && m_editMode->SupportsViewportDrop())
 			{
 				if (ImGui::BeginDragDropTarget())
 				{
-					// We only accept mesh file drops
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-					{
-						Vector3 position = Vector3::Zero;
+					const ImVec2 mousePos = ImGui::GetMousePos();
+					const float x = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
+					const float y = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
+					m_editMode->OnViewportDrop(x, y);
 
-						const ImVec2 mousePos = ImGui::GetMousePos();
-						const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
-						const Ray ray = m_camera->GetCameraToViewportRay(
-							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-							10000.0f);
-						const auto hit = ray.Intersects(plane);
-						if (hit.first)
-						{
-							position = ray.GetPoint(hit.second);
-						}
-						else
-						{
-							position = ray.GetPoint(10.0f);
-						}
-
-						// Snap to grid?
-						if (m_gridSnap)
-						{
-							const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
-
-							// Snap position to grid size
-							position.x = std::round(position.x / gridSize) * gridSize;
-							position.y = std::round(position.y / gridSize) * gridSize;
-							position.z = std::round(position.z / gridSize) * gridSize;
-						}
-
-						CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale, m_objectIdGenerator.GenerateId());
-					}
 					ImGui::EndDragDropTarget();
 				}
-		    }
+			}
 			
 			ImGui::SetItemAllowOverlap();
 			ImGui::SetCursorPos(ImVec2(16, 16));
@@ -1030,7 +1001,7 @@ namespace mmo
 				if (spawnEntry)
 				{
 					// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
-					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, *entity->GetParentSceneNode()->GetParentSceneNode(), [this, spawnEntry](Selectable& selected)
+					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, spawnEntry](Selectable& selected)
 						{
 							// TODO: Implement
 						}));
@@ -1096,6 +1067,11 @@ namespace mmo
 
 	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId)
 	{
+		if (objectId == 0)
+		{
+			objectId = m_objectIdGenerator.GenerateId();
+		}
+
 		const String uniqueId = "Entity_" + std::to_string(objectId);
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
@@ -1241,6 +1217,12 @@ namespace mmo
 		entityOffsetNode->AttachObject(*entity);
 		m_spawnNodes.push_back(entityOffsetNode);
 		m_spawnNodes.push_back(node);
+	}
+
+	Camera& WorldEditorInstance::GetCamera() const
+	{
+		ASSERT(m_camera);
+		return *m_camera;
 	}
 
 	void WorldEditorInstance::RemoveAllUnitSpawns()
@@ -1461,8 +1443,65 @@ namespace mmo
 
 	void WorldEditorInstance::Visit(SelectedUnitSpawn& selectable)
 	{
-		// TODO
-		ImGui::Text("Selected a unit spawn :)");
+		if (ImGui::CollapsingHeader("Spawn"))
+		{
+			proto::UnitEntry* selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
+			if (ImGui::BeginCombo("Unit", selectedUnit ? selectedUnit->name().c_str() : "(None)"))
+			{
+				for (const auto& unit : m_editor.GetProject().units.getTemplates().entry())
+				{
+					ImGui::PushID(unit.id());
+					if (ImGui::Selectable(unit.name().c_str(), &unit == selectedUnit))
+					{
+						selectable.GetEntry().set_unitentry(unit.id());
+						selectable.RefreshEntity();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			bool isActive = selectable.GetEntry().isactive();
+			if (ImGui::Checkbox("Is Active", &isActive))
+			{
+				selectable.GetEntry().set_isactive(isActive);
+			}
+
+			bool respawn = selectable.GetEntry().respawn();
+			if (ImGui::Checkbox("Is Active", &respawn))
+			{
+				selectable.GetEntry().set_respawn(respawn);
+			}
+
+			uint64 respawnDelay = selectable.GetEntry().respawndelay();
+			if (ImGui::InputScalar("Respawn Delay (ms)", ImGuiDataType_U64, &respawnDelay))
+			{
+				selectable.GetEntry().set_respawndelay(respawnDelay);
+			}
+
+			static const char* s_movementModeStrings[] = {
+				"Stationary",
+				"Patrol",
+				"Route"
+			};
+
+			if (ImGui::BeginCombo("Movement", s_movementModeStrings[selectable.GetEntry().movement()]))
+			{
+				uint32 index = 0;
+				for (const auto& mode : s_movementModeStrings)
+				{
+					if (ImGui::Selectable(mode, selectable.GetEntry().movement() == index))
+					{
+						selectable.GetEntry().set_movement(static_cast<proto::UnitSpawnEntry_MovementType>(index));
+					}
+
+					index++;
+				}
+
+				ImGui::EndCombo();
+			}
+		}
 	}
 
 	bool WorldEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)

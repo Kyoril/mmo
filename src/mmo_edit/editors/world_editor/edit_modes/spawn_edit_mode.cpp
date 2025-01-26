@@ -5,6 +5,10 @@
 #include <imgui.h>
 
 #include "base/typedefs.h"
+#include "base/utilities.h"
+#include "math/plane.h"
+#include "math/ray.h"
+#include "scene_graph/camera.h"
 
 namespace mmo
 {
@@ -55,28 +59,47 @@ namespace mmo
 			ImGui::EndCombo();
 		}
 
-		ImGui::Separator();
-
-		// Render a list of all zones
-		if (ImGui::BeginListBox("##units", ImVec2(0, -1)))
+		if (ImGui::CollapsingHeader("Units"))
 		{
-			if (ImGui::Selectable("(None)", nullptr == m_selectedUnit))
+			// Render a list of all zones
+			if (ImGui::BeginListBox("##units"))
 			{
-				m_selectedUnit = nullptr;
-			}
-
-			for (const auto& unit : m_units.getTemplates().entry())
-			{
-				ImGui::PushID(unit.id());
-				if (ImGui::Selectable(unit.name().c_str(), &unit == m_selectedUnit))
+				/*if (ImGui::Selectable("(None)", nullptr == m_selectedUnit))
 				{
-					m_selectedUnit = &unit;
-				}
-				ImGui::PopID();
-			}
+					m_selectedUnit = nullptr;
+				}*/
 
-			ImGui::EndListBox();
+				for (const auto& unit : m_units.getTemplates().entry())
+				{
+					ImGui::PushID(unit.id());
+					if (ImGui::Selectable(unit.name().c_str(), &unit == m_selectedUnit))
+					{
+						m_selectedUnit = &unit;
+					}
+
+					ImGuiDragDropFlags src_flags = 0;
+					src_flags |= ImGuiDragDropFlags_SourceNoDisableHover;     // Keep the source displayed as hovered
+					src_flags |= ImGuiDragDropFlags_SourceNoHoldToOpenOthers; // Because our dragging is local, we disable the feature of opening foreign treenodes/tabs while dragging
+					//src_flags |= ImGuiDragDropFlags_SourceNoPreviewTooltip; // Hide the tooltip
+					if (ImGui::BeginDragDropSource(src_flags))
+					{
+						if (!(src_flags & ImGuiDragDropFlags_SourceNoPreviewTooltip))
+						{
+							ImGui::Selectable(unit.name().c_str(), &unit == m_selectedUnit);
+						}
+
+						uint32 unitId = unit.id();
+						ImGui::SetDragDropPayload("UnitSpawn", &unitId, sizeof(unitId));
+						ImGui::EndDragDropSource();
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndListBox();
+			}
 		}
+		
 	}
 
 	void SpawnEditMode::OnDeactivate()
@@ -85,5 +108,63 @@ namespace mmo
 
 		m_worldEditor.RemoveAllUnitSpawns();
 		m_worldEditor.ClearSelection();
+	}
+
+	void SpawnEditMode::OnViewportDrop(float x, float y)
+	{
+		ASSERT(m_mapEntry);
+
+		WorldEditMode::OnViewportDrop(x, y);
+
+		// We only accept unitEntry drops
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("UnitSpawn", ImGuiDragDropFlags_None))
+		{
+			Vector3 position;
+
+			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+
+			const auto hit = ray.Intersects(plane);
+			if (hit.first)
+			{
+				position = ray.GetPoint(hit.second);
+			}
+			else
+			{
+				position = ray.GetPoint(10.0f);
+			}
+
+			// Snap to grid?
+			if (m_worldEditor.IsGridSnapEnabled())
+			{
+				const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
+
+				// Snap position to grid size
+				position.x = std::round(position.x / gridSize) * gridSize;
+				position.y = std::round(position.y / gridSize) * gridSize;
+				position.z = std::round(position.z / gridSize) * gridSize;
+			}
+
+			const uint32 unitId = *static_cast<uint32*>(payload->Data);
+			ASSERT(unitId != 0);
+
+			// Create unit spawn entity
+			proto::UnitSpawnEntry* entry = m_mapEntry->mutable_unitspawns()->Add();
+			entry->set_unitentry(unitId);
+			entry->set_positionx(position.x);
+			entry->set_positiony(position.y);
+			entry->set_positionz(position.z);
+
+			std::uniform_real_distribution rotationDistribution(0.0f, 2 * Pi);
+			entry->set_rotation(rotationDistribution(randomGenerator));
+
+			entry->set_respawn(true);
+			entry->set_respawndelay(30000);
+			entry->set_maxcount(1);
+			entry->set_movement(proto::UnitSpawnEntry_MovementType_PATROL);
+			entry->set_isactive(true);
+
+			m_worldEditor.AddUnitSpawn(*entry, false);
+		}
 	}
 }

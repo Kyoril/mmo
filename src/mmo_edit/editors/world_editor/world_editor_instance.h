@@ -137,7 +137,7 @@ namespace mmo
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
-		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId);
+		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId) override;
 
 		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
 
@@ -179,6 +179,16 @@ namespace mmo
 		void RemoveAllUnitSpawns() override;
 
 		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) override;
+
+		Camera& GetCamera() const override;
+
+		bool IsGridSnapEnabled() const override { return m_gridSnap; }
+
+		float GetTranslateGridSnapSize() const override { return m_translateSnapSizes[m_currentTranslateSnapSize]; }
+
+		bool HasTerrain() const override { return m_hasTerrain; }
+
+		terrain::Terrain* GetTerrain() const override { return m_terrain.get(); }
 
 	private:
 		WorldEditor& m_editor;

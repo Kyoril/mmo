@@ -2,6 +2,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
 #include "editors/world_editor/world_editor_instance.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {
@@ -116,16 +117,20 @@ namespace mmo
 		return Vector3::UnitScale;
     }
 
-    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, SceneNode& node, const std::function<void(Selectable&)>& duplication)
+    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication)
 		: Selectable()
 		, m_entry(entry)
+		, m_units(units)
+		, m_models(models)
         , m_node(node)
+		, m_entity(entity)
 		, m_duplication(duplication)
     {
     }
 
     void SelectedUnitSpawn::Visit(SelectableVisitor& visitor)
     {
+		visitor.Visit(*this);
     }
 
     void SelectedUnitSpawn::Duplicate()
@@ -203,5 +208,35 @@ namespace mmo
     Vector3 SelectedUnitSpawn::GetScale() const
     {
         return Vector3::UnitScale;
+    }
+
+    void SelectedUnitSpawn::RefreshEntity()
+    {
+        // Get unit entry
+        const proto::UnitEntry* unit = m_units.getById(m_entry.unitentry());
+        if (!unit)
+        {
+            return;
+        }
+
+        const uint32 modelId = unit->malemodel() ? unit->malemodel() : unit->femalemodel();
+        if (modelId == 0)
+        {
+            return;
+        }
+
+		const proto::ModelDataEntry* model = m_models.getById(modelId);
+        if (!model)
+        {
+            return;
+        }
+
+        MeshPtr mesh = MeshManager::Get().Load(model->filename());
+        if (!mesh)
+        {
+            return;
+        }
+
+        m_entity.SetMesh(mesh);
     }
 }

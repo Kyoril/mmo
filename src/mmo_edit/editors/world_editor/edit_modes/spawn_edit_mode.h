@@ -21,6 +21,10 @@ namespace mmo
 
 		void OnDeactivate() override;
 
+		bool SupportsViewportDrop() const override { return m_mapEntry != nullptr; }
+
+		void OnViewportDrop(float x, float y) override;
+
 	private:
 		proto::MapManager& m_maps;
 

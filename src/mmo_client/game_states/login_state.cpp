@@ -40,11 +40,12 @@ namespace mmo
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_timers(timers)
+		, m_audio(audio)
 	{
 	}
 
@@ -87,10 +88,18 @@ namespace mmo
 			// TODO: Get real reason string if there is more than this one!
 			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "WORLD_SERVER_DOWN");
 		}
+
+		// Play background music
+		m_musicSound = m_audio.CreateLoopedStream("Sound/Music/Genesis.ogg");
+		m_audio.PlaySound(m_musicSound, &m_musicChannel);
 	}
 
 	void LoginState::OnLeave()
 	{
+		m_audio.StopSound(&m_musicChannel);
+		m_musicChannel = InvalidChannel;
+		m_musicSound = InvalidSound;
+
 		Console::UnregisterCommand("login");
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);

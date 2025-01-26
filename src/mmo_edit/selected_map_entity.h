@@ -8,6 +8,7 @@
 
 namespace mmo
 {
+	class Entity;
 	class SceneNode;
 
 	namespace terrain
@@ -98,7 +99,7 @@ namespace mmo
 	{
 	public:
 
-		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, SceneNode& node, const std::function<void(Selectable&)>& duplication);
+		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication);
 
 		void Visit(SelectableVisitor& visitor) override;
 
@@ -128,9 +129,16 @@ namespace mmo
 
 		bool SupportsScale() const override { return false; }
 
+		void RefreshEntity();
+
+		proto::UnitSpawnEntry& GetEntry() const { return m_entry; }
+
 	private:
 		proto::UnitSpawnEntry& m_entry;
+		const proto::UnitManager& m_units;
+		const proto::ModelDataManager& m_models;
 		SceneNode& m_node;
+		Entity& m_entity;
 		std::function<void(Selectable&)> m_duplication;
 	};
 }

@@ -17,5 +17,9 @@ namespace mmo
 
 		void DrawDetails() override;
 
+		bool SupportsViewportDrop() const override { return true; }
+
+		void OnViewportDrop(float x, float y) override;
+		
 	};
 }
