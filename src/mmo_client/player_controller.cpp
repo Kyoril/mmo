@@ -769,12 +769,11 @@ namespace mmo
 			ClampCameraPitch();
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive())
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved())
 		{
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
-			m_cameraAnchorNode->SetOrientation(
-				Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(false), Vector3::UnitX));
+			m_cameraAnchorNode->SetOrientation(Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(false), Vector3::UnitX));
 
 			m_controlledUnit->SetFacing(facing);
 			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
