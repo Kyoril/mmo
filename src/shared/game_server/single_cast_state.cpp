@@ -579,7 +579,8 @@ namespace mmo
 			{se::Block,					std::bind(&SingleCastState::SpellEffectBlock, this, std::placeholders::_1)},
 			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)},
 			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)},
-			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)}
+			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)},
+			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -877,6 +878,48 @@ namespace mmo
 
 	void SingleCastState::SpellEffectEnergize(const proto::SpellEffect& effect)
 	{
+		int32 powerType = effect.miscvaluea();
+		if (powerType < 0 || powerType > 2) 
+		{
+			return;
+		}
+
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		uint32 power = CalculateEffectBasePoints(effect);
+
+		uint32 curPower = unitTarget->Get<uint32>(object_fields::Mana + powerType);
+		uint32 maxPower = unitTarget->Get<uint32>(object_fields::MaxMana + powerType);
+		if (curPower + power > maxPower)
+		{
+			power = maxPower - curPower;
+			curPower = maxPower;
+		}
+		else
+		{
+			curPower += power;
+		}
+
+		unitTarget->Set<uint32>(object_fields::Mana + powerType, curPower);
+
+		GameUnitS& caster = m_cast.GetExecuter();
+		const uint32 spellId = m_spell.id();
+		SendPacketFromCaster(m_cast.GetExecuter(),
+			[unitTarget, &caster, spellId, powerType, power](game::OutgoingPacket& out_packet)
+			{
+				out_packet.Start(game::realm_client_packet::SpellEnergizeLog);
+				out_packet
+					<< io::write_packed_guid(unitTarget->GetGuid())
+					<< io::write_packed_guid(caster.GetGuid())
+					<< io::write<uint32>(spellId)
+					<< io::write<uint32>(powerType)
+					<< io::write<uint32>(power);
+				out_packet.Finish();
+			});
 	}
 
 	void SingleCastState::SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect)
@@ -934,6 +977,18 @@ namespace mmo
 
 	void SingleCastState::SpellEffectCharge(const proto::SpellEffect& effect)
 	{
+		auto unitTarget = GetEffectUnitTarget(effect);
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		auto& mover = m_cast.GetExecuter().GetMover();
+
+		const Radian orientation = unitTarget->GetAngle(m_cast.GetExecuter());
+
+		const Vector3 target = unitTarget->GetMover().GetCurrentLocation().GetRelativePosition(orientation.GetValueRadians(), m_cast.GetExecuter().GetMeleeReach() * 0.5f);
+		mover.MoveTo(target, 35.0f);
 	}
 
 	void SingleCastState::SpellEffectAttackMe(const proto::SpellEffect& effect)

@@ -133,6 +133,8 @@ namespace mmo
 				QuestGiverCompleteQuest,
 				QuestGiverChooseQuestReward,
 
+				MoveEnded,
+
 				/// Counter constant
 				Count_,
 			};
@@ -274,6 +276,9 @@ namespace mmo
 				QuestUpdateAddItem,
 
 				GossipComplete,
+
+				SpellEnergizeLog,
+				MoveEnded,
 
 				/// Counter constant
 				Count_,

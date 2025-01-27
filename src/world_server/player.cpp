@@ -367,6 +367,7 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing:
 		case game::client_realm_packet::MoveJump:
 		case game::client_realm_packet::MoveFallLand:
+		case game::client_realm_packet::MoveEnded:
 			OnMovement(opCode, buffer.size(), reader);
 			break;
 
@@ -843,7 +844,7 @@ namespace mmo
 			return;
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
-		if (!info.IsFalling() && m_character->GetMovementInfo().IsFalling() && opCode != game::client_realm_packet::MoveFallLand)
+		if (!info.IsFalling() && m_character->GetMovementInfo().IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
 		{
 			ELOG("Client tried to apply FALLING flag in non-jump packet!");
 			Kick();
@@ -859,7 +860,7 @@ namespace mmo
 				return;
 			}
 		}
-		if (opCode == game::client_realm_packet::MoveFallLand)
+		else if (opCode == game::client_realm_packet::MoveFallLand)
 		{
 			if (!m_character->GetMovementInfo().IsFalling() || info.IsFalling())
 			{
@@ -887,11 +888,22 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing: opCode = game::realm_client_packet::MoveSetFacing; break;
 		case game::client_realm_packet::MoveJump: opCode = game::realm_client_packet::MoveJump; break;
 		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
+		case game::client_realm_packet::MoveEnded: opCode = game::realm_client_packet::MoveEnded; break;
 		default:
 			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
 		}
-		
-		if (!m_character->GetMovementInfo().IsChangingPosition())
+
+		if (opCode == game::realm_client_packet::MoveEnded)
+		{
+			// Height diff of 3.1 is to be expected as difference between nav mesh and real ground due to nav mesh simplification so we will tolerate it here
+			const Vector3 target = m_character->GetMover().GetTarget();
+			if (std::abs(target.x - info.position.x) > FLT_EPSILON || std::abs(target.z - info.position.z) > FLT_EPSILON || std::abs(target.y - info.position.y) > 3.1f)
+			{
+				ELOG("Player ended movement but target position was different from expected location: Received " << info.position << ", expected " << m_character->GetMover().GetTarget());
+				return;
+			}
+		}
+		else if (!m_character->GetMovementInfo().IsChangingPosition())
 		{
 			if (info.position != m_character->GetPosition())
 			{

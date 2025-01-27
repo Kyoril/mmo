@@ -161,6 +161,10 @@ namespace mmo
 			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
+			// Update movement info
+			m_movementInfo.position = m_sceneNode->GetDerivedPosition();
+			m_movementInfo.movementFlags = 0;
+
 			if (animationFinished)
 			{
 				if (!isDead)
@@ -172,6 +176,13 @@ namespace mmo
 				}
 
 				m_sceneNode->SetDerivedPosition(m_movementEnd);
+
+				// Reset movement info
+				m_movementInfo.position = m_movementEnd;
+				m_movementInfo.timestamp = GetAsyncTimeMs();
+				m_movementInfo.movementFlags = 0;
+
+				movementEnded(*this, m_movementInfo);
 
 				// End animation
 				m_movementAnimation.reset();
@@ -631,12 +642,17 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points)
+	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime)
 	{
 		m_movementAnimationTime = 0.0f;
 		m_movementAnimation.reset();
 
 		if (points.empty())
+		{
+			return;
+		}
+
+		if (moveTime == 0)
 		{
 			return;
 		}
@@ -666,8 +682,9 @@ namespace mmo
 		// First point
 		positions.emplace_back(0.0f, 0.0f, 0.0f);
 		keyFrameTimes.push_back(0.0f);
-		float totalDuration = 0.0f;
 
+		const float totalDuration = static_cast<float>(moveTime) / 1000.0f;
+		float totalDistance = 0.0f;
 		for (auto point : points)
 		{
 			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
@@ -677,15 +694,25 @@ namespace mmo
 
 			Vector3 diff = point - prevPosition;
 			const float distance = diff.GetLength();
-			const float duration = distance / m_unitSpeed[movement_type::Run];
+			totalDistance += distance;
 
+			const float duration = distance / m_unitSpeed[movement_type::Run];
 			positions.push_back(point - m_movementStart);
-			keyFrameTimes.push_back(totalDuration + duration);
-			totalDuration += duration;
+
+			keyFrameTimes.push_back(totalDistance);
 			prevPosition = point;
 		}
 
 		ASSERT(positions.size() == keyFrameTimes.size());
+
+		for (auto& time : keyFrameTimes)
+		{
+			// Convert to percentage first
+			time /= totalDistance;
+
+			// Now multiply with total time in seconds
+			time *= totalDuration;
+		}
 
 		m_movementAnimation = std::make_unique<Animation>("Movement", totalDuration);
 		NodeAnimationTrack* track = m_movementAnimation->CreateNodeTrack(0, m_sceneNode);

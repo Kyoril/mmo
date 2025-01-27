@@ -78,7 +78,8 @@ namespace mmo
 		"Learn Pet Spell",
 		"Weapon Damage +",
 		"Reset Attribute Points",
-		"Heal Percentage"
+		"Heal Percentage",
+		"Charge"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -700,25 +701,41 @@ namespace mmo
 				}
 				break;
 			case spell_effects::CreateItem:
-				const uint32 item = effect.itemtype();
-
-				const auto* itemEntry = m_project.items.getById(item);
-				if (ImGui::BeginCombo("Item Type", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
 				{
-					for (int i = 0; i < m_project.items.count(); i++)
+					const uint32 item = effect.itemtype();
+
+					const auto* itemEntry = m_project.items.getById(item);
+					if (ImGui::BeginCombo("Item Type", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
 					{
-						ImGui::PushID(i);
-						const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
-						const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
-						if (ImGui::Selectable(item_text, item_selected))
+						for (int i = 0; i < m_project.items.count(); i++)
 						{
-							effect.set_itemtype(m_project.items.getTemplates().entry(i).id());
+							ImGui::PushID(i);
+							const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
+							const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								effect.set_itemtype(m_project.items.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
 						}
-						if (item_selected)
+
+						ImGui::EndCombo();
+					}
+					break;
+				}
+			case spell_effects::Energize:
+				if (ImGui::BeginCombo("Power Type", s_powerTypes[effect.miscvaluea()].c_str(), ImGuiComboFlags_None))
+				{
+					for (size_t i = 0; i < std::size(s_powerTypes); ++i)
+					{
+						if (ImGui::Selectable(s_powerTypes[i].c_str(), effect.miscvaluea() == i))
 						{
-							ImGui::SetItemDefaultFocus();
+							effect.set_miscvaluea(i);
 						}
-						ImGui::PopID();
 					}
 
 					ImGui::EndCombo();

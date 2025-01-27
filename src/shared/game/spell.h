@@ -758,6 +758,8 @@ namespace mmo
 
 			HealPct,
 
+			Charge,
+
 			Count_,
 			Invalid_ = 0
 		};

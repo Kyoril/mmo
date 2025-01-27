@@ -224,6 +224,22 @@ namespace mmo
 			return sqrtf(GetSquaredLength());
 		}
 
+		Vector3 GetRelativePosition(float orientation, float forwardDist = 0.0f, float rightDist = 0.0f, float upDist = 0.0f) const
+		{
+			const float converted = orientation;
+			const float x_coef = ::cos(converted);
+			const float y_coef = ::sin(converted);
+
+			const float x_range_add = ::cos(orientation) * forwardDist;
+			const float y_range_add = -::sin(orientation) * forwardDist;
+
+			return Vector3(
+				x + x_coef * rightDist + x_range_add,
+				y + upDist,
+				z + y_coef * rightDist + y_range_add
+			);
+		}
+
 		/// Gets the squared length of this vector (more performant than GetLength, so
 		/// it should be used instead of GetLength wherever possible).
 		[[nodiscard]] float GetSquaredLength() const

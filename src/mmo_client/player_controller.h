@@ -72,6 +72,8 @@ namespace mmo
 
 		void ClampCameraPitch();
 
+		void OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo);
+
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override;
 
@@ -103,6 +105,6 @@ namespace mmo
 		int32 m_x = 0, m_y = 0;
 		GameUnitC* m_hoveredUnit = nullptr;
 		scoped_connection_container m_cvarConnections;
-
+		scoped_connection m_moveCompleted;
 	};
 }

@@ -70,6 +70,10 @@ namespace mmo
 						if (const auto strongUnit = weakUnit.lock())
 						{
 							strongUnit->Relocate(target, o);
+
+							auto info = strongUnit->GetMovementInfo();
+							info.movementFlags = movement_flags::None;
+							strongUnit->ApplyMovementInfo(info);
 						}
 					});
 			});
@@ -101,7 +105,8 @@ namespace mmo
 		uint64 guid,
 		const Vector3& oldPosition,
 		const std::vector<Vector3>& path,
-		GameTime time
+		GameTime startTime,
+		GameTime endTime
 	)
 	{
 		ASSERT(!path.empty());
@@ -113,7 +118,8 @@ namespace mmo
 			<< io::write<float>(oldPosition.x)
 			<< io::write<float>(oldPosition.y)
 			<< io::write<float>(oldPosition.z)
-			<< io::write<uint32>(time)
+			<< io::write<uint32>(startTime)	// Start time
+			<< io::write<uint32>(endTime)	// End time
 			<< io::write<uint32>(path.size() - 1);
 
 		// Write destination point (this counts as the first point)
@@ -192,6 +198,7 @@ namespace mmo
 		std::vector<Vector3> path;
 		if (!map->CalculatePath(currentLoc, target, path))
 		{
+			ELOG("Failed to calculate path from " << currentLoc << " to " << target);
 			return false;
 		}
 
@@ -237,7 +244,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, GetAsyncTimeMs());
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, m_moveStart, m_moveEnd);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -300,11 +307,13 @@ namespace mmo
 		TileIndex2D tile;
 		if (moved.GetTileIndex(tile))
 		{
+			GameTime now = GetAsyncTimeMs();
+
 			// TODO: Maybe, player characters need another movement packet for this...
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, GetAsyncTimeMs());
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, now, now);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -361,7 +370,7 @@ namespace mmo
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
 		game::Protocol::OutgoingPacket packet(sink);
-		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, m_moveEnd - now);
+		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, now, m_moveEnd);
 		subscriber.SendPacket(packet, buffer);
 	}
 }

@@ -228,6 +228,11 @@ namespace mmo
 
 	void PlayerController::ApplyLocalMovement(const float deltaSeconds) const
 	{
+		if (m_controlledUnit->IsBeingMoved())
+		{
+			return;
+		}
+
 		PROFILE_SCOPE("Local Player Collision");
 
 		// Apply gravity to jump velocity
@@ -390,6 +395,11 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo)
+	{
+		SendMovementUpdate(game::client_realm_packet::MoveEnded);
+	}
+
 	void PlayerController::SetControlBit(const ControlFlags::Type flag, bool set)
 	{
 		if (set)
@@ -515,13 +525,16 @@ namespace mmo
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->InvalidateView();
 
-		MovePlayer();
-		StrafePlayer();
+		if (!m_controlledUnit->IsBeingMoved())
+		{
+			MovePlayer();
+			StrafePlayer();
 
-		TurnPlayer();
-		
-		ApplyLocalMovement(deltaSeconds);
-		UpdateHeartbeat();
+			TurnPlayer();
+
+			ApplyLocalMovement(deltaSeconds);
+			UpdateHeartbeat();
+		}
 
 		// When we are looting, check the distance to the looted object on movement
 		if (m_lootClient.IsLooting() && m_controlledUnit->GetMovementInfo().IsChangingPosition())
@@ -783,8 +796,9 @@ namespace mmo
 		
 	void PlayerController::SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit)
 	{
+		m_moveCompleted.disconnect();
 		m_cameraOffsetNode->RemoveFromParent();
-
+		
 		// Re-enable selection for previously controlled unit
 		if (m_controlledUnit)
 		{
@@ -800,6 +814,8 @@ namespace mmo
 
 			// Not selectable via clicking when controlled
 			m_controlledUnit->SetQueryMask(0);
+
+			m_moveCompleted = m_controlledUnit->movementEnded.connect(this, &PlayerController::OnMovementCompleted);
 		}
 	}
 

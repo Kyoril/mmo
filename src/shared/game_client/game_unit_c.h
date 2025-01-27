@@ -75,6 +75,9 @@ namespace mmo
 	class GameUnitC : public GameObjectC
 	{
 	public:
+		signal<void(GameUnitC&, const MovementInfo&)> movementEnded;
+
+	public:
 		/// @brief Creates a instance of the GameUnitC class.
 		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project)
 			: GameObjectC(scene, project)
@@ -109,6 +112,8 @@ namespace mmo
 		bool OnAuraUpdate(io::Reader& reader);
 
 		void SetQuestgiverStatus(QuestgiverStatus status);
+
+		bool IsBeingMoved() const { return m_movementAnimation != nullptr; }
 
 	protected:
 		virtual void SetupSceneObjects() override;
@@ -146,7 +151,7 @@ namespace mmo
 		void SetFacing(const Radian& facing);
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3>& points);
+		void SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 

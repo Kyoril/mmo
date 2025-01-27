@@ -245,6 +245,8 @@ namespace mmo
 
 		PacketParseResult OnQuestGiverStatus(game::IncomingPacket& packet);
 
+		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

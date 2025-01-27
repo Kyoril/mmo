@@ -623,6 +623,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
@@ -673,6 +674,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverStatus, *this, &WorldState::OnQuestGiverStatus);
+
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellEnergizeLog, *this, &WorldState::OnSpellEnergizeLog);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1210,7 +1213,8 @@ namespace mmo
 		uint64 guid;
 		Vector3 startPosition;
 		Vector3 endPosition;
-		GameTime timestamp;
+		GameTime startTime;
+		GameTime endTime;
 		uint32 pathSize;
 
 		if (!(packet 
@@ -1218,7 +1222,8 @@ namespace mmo
 			>> io::read<float>(startPosition.x)
 			>> io::read<float>(startPosition.y)
 			>> io::read<float>(startPosition.z)
-			>> io::read<uint32>(timestamp)
+			>> io::read<uint32>(startTime)
+			>> io::read<uint32>(endTime)
 			>> io::read<uint32>(pathSize)
 			>> io::read<float>(endPosition.x)
 			>> io::read<float>(endPosition.y)
@@ -1235,6 +1240,9 @@ namespace mmo
 			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
 			return PacketParseResult::Pass;
 		}
+
+		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
+		(void)isPlayer;
 
 		// Ensure we are at the start position
 		unitPtr->GetSceneNode()->SetPosition(startPosition);
@@ -1256,7 +1264,7 @@ namespace mmo
 		}
 
 		path.push_back(endPosition);
-		unitPtr->SetMovementPath(path);
+		unitPtr->SetMovementPath(path, endTime - startTime);
 
 		return PacketParseResult::Pass;
 	}
@@ -2078,6 +2086,25 @@ namespace mmo
 		ASSERT(questgiverUnit);
 
 		questgiverUnit->SetQuestgiverStatus(status);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellEnergizeLog(game::IncomingPacket& packet)
+	{
+		uint64 targetGuid, casterGuid;
+		uint32 spellId, powerType, power;
+		if (!(packet >> io::read_packed_guid(targetGuid)
+			>> io::read_packed_guid(casterGuid)
+			>> io::read<uint32>(spellId)
+			>> io::read<uint32>(powerType)
+			>> io::read<uint32>(power)))
+		{
+			ELOG("Failed to read SpellEnergizeLog packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: Combat log event
+
 		return PacketParseResult::Pass;
 	}
 
