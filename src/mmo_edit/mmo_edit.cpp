@@ -18,6 +18,7 @@
 #include "editor_windows/spell_editor_window.h"
 #include "editor_windows/map_editor_window.h"
 #include "editor_windows/creature_editor_window.h"
+#include "editor_windows/object_editor_window.h"
 #include "editor_windows/class_editor_window.h"
 #include "editor_windows/range_type_editor_window.h"
 #include "editor_windows/item_editor_window.h"
@@ -112,6 +113,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ObjectEditorWindow>("Object Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionEditorWindow>("Faction Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionTemplateEditorWindow>("Faction Template Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));

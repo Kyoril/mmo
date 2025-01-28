@@ -65,7 +65,7 @@ message ObjectSpawnEntry {
 	required uint32 objectentry = 8;
 	optional bool isactive = 9 [default = true];
 
-	repeated ObjectSpawnLocation locations = 10;
+	required ObjectSpawnLocation location = 10;
 }
 
 message MapEntry {

@@ -177,7 +177,7 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
-		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units);
+		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_editMode = nullptr;
 
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
@@ -1143,6 +1143,58 @@ namespace mmo
 		return entity;
 	}
 
+	Entity* WorldEditorInstance::CreateObjectSpawnEntity(proto::ObjectSpawnEntry& spawn)
+	{
+		proto::Project& project = m_editor.GetProject();
+
+		// TODO: Use different mesh file?
+		String meshFile = "Editor/Joint.hmsh";
+
+		if (const auto* object = project.objects.getById(spawn.objectentry()))
+		{
+			const uint32 modelId = object->displayid();
+
+			if (modelId == 0)
+			{
+				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
+				WLOG("No model id assigned!");
+			}
+			else if (const auto* model = project.models.getById(modelId))
+			{
+				meshFile = model->filename();
+			}
+			else
+			{
+				WLOG("Model " << modelId << " not found!");
+			}
+		}
+		else
+		{
+			WLOG("Spawn point of non-existant object " << spawn.objectentry() << " found");
+		}
+
+		const String uniqueId = "ObjectSpawn_" + std::to_string(m_objectSpawnIdGenerator.GenerateId());
+		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
+		if (entity)
+		{
+			entity->SetQueryFlags(SceneQueryFlags_Spawns);
+
+			auto& node = m_scene.CreateSceneNode(uniqueId);
+			m_scene.GetRootSceneNode().AddChild(node);
+			node.AttachObject(*entity);
+
+			
+			node.SetPosition(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
+			node.SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
+			node.SetScale(Vector3::UnitScale);
+
+			// TODO: Is this safe? Does protobuf move the object around in memory?
+			entity->SetUserObject(&spawn);
+		}
+
+		return entity;
+	}
+
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
 	{
 		m_mapEntities.erase(std::remove_if(m_mapEntities.begin(), m_mapEntities.end(), [&entity](const auto& mapEntity)
@@ -1219,6 +1271,47 @@ namespace mmo
 		m_spawnNodes.push_back(node);
 	}
 
+	void WorldEditorInstance::AddObjectSpawn(proto::ObjectSpawnEntry& spawn)
+	{
+		const auto* object = m_editor.GetProject().objects.getById(spawn.objectentry());
+		if (!object)
+		{
+			WLOG("Spawn point of non-existant unit " << spawn.objectentry() << " found");
+			return;
+		}
+		ASSERT(object);
+
+		// Load the model
+		const auto* model = m_editor.GetProject().models.getById(object->displayid());
+		if (!model)
+		{
+			WLOG("ObjectSpawn has no model");
+			return;
+		}
+
+		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
+		Entity* entity = m_scene.CreateEntity("ObjectSpawn_" + std::to_string(guid), model->filename());
+		ASSERT(entity);
+
+		entity->SetUserObject(&spawn);
+		entity->SetQueryFlags(SceneQueryFlags_Spawns);
+		m_spawnEntities.push_back(entity);
+
+		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
+		node->SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
+		if (object->scale() != 0.0f)
+		{
+			node->SetScale(Vector3::UnitScale * object->scale());
+		}
+
+		Quaternion rotationOffset;
+		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
+		SceneNode* entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
+		entityOffsetNode->AttachObject(*entity);
+		m_spawnNodes.push_back(entityOffsetNode);
+		m_spawnNodes.push_back(node);
+	}
+
 	Camera& WorldEditorInstance::GetCamera() const
 	{
 		ASSERT(m_camera);
@@ -1243,6 +1336,7 @@ namespace mmo
 		m_spawnNodes.clear();
 
 		m_unitSpawnIdGenerator.Reset();
+		m_objectSpawnIdGenerator.Reset();
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)

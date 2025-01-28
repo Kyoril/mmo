@@ -141,6 +141,8 @@ namespace mmo
 
 		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
 
+		Entity* CreateObjectSpawnEntity(proto::ObjectSpawnEntry& spawn);
+
 		void OnMapEntityRemoved(MapEntity& entity);
 
 		PagePosition GetPagePositionFromCamera() const;
@@ -179,6 +181,8 @@ namespace mmo
 		void RemoveAllUnitSpawns() override;
 
 		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) override;
+
+		void AddObjectSpawn(proto::ObjectSpawnEntry& spawn) override;
 
 		Camera& GetCamera() const override;
 
@@ -239,6 +243,7 @@ namespace mmo
 		float m_cameraSpeed { 20.0f };
 		IdGenerator<uint64> m_objectIdGenerator { 1 };
 		IdGenerator<uint64> m_unitSpawnIdGenerator{ 1 };
+		IdGenerator<uint64> m_objectSpawnIdGenerator{ 1 };
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
 		ImVec2 m_lastContentRectMin{};

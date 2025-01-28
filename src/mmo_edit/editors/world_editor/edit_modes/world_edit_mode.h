@@ -19,6 +19,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class ObjectSpawnEntry;
 		class UnitSpawnEntry;
 	}
 
@@ -33,6 +34,8 @@ namespace mmo
 		virtual void RemoveAllUnitSpawns() = 0;
 
 		virtual void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) = 0;
+
+		virtual void AddObjectSpawn(proto::ObjectSpawnEntry& spawn) = 0;
 
 		virtual Camera& GetCamera() const = 0;
 

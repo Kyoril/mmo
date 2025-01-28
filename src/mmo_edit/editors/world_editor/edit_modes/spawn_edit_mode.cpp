@@ -12,10 +12,11 @@
 
 namespace mmo
 {
-	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps, proto::UnitManager& units)
+	SpawnEditMode::SpawnEditMode(IWorldEditor& worldEditor, proto::MapManager& maps, proto::UnitManager& units, proto::ObjectManager& objects)
 		: WorldEditMode(worldEditor)
 		, m_maps(maps)
 		, m_units(units)
+		, m_objects(objects)
 	{
 	}
 
@@ -49,6 +50,12 @@ namespace mmo
 							{
 								m_worldEditor.AddUnitSpawn(unitSpawn, false);
 							}
+
+							// For each object spawn on the map
+							for (auto& objectSpawn : *m_mapEntry->mutable_objectspawns())
+							{
+								m_worldEditor.AddObjectSpawn(objectSpawn);
+							}
 						}
 					}
 
@@ -64,11 +71,6 @@ namespace mmo
 			// Render a list of all zones
 			if (ImGui::BeginListBox("##units"))
 			{
-				/*if (ImGui::Selectable("(None)", nullptr == m_selectedUnit))
-				{
-					m_selectedUnit = nullptr;
-				}*/
-
 				for (const auto& unit : m_units.getTemplates().entry())
 				{
 					ImGui::PushID(unit.id());
@@ -99,7 +101,38 @@ namespace mmo
 				ImGui::EndListBox();
 			}
 		}
-		
+		if (ImGui::CollapsingHeader("Objects"))
+		{
+			// Render a list of all zones
+			if (ImGui::BeginListBox("##objects"))
+			{
+				for (const auto& object : m_objects.getTemplates().entry())
+				{
+					ImGui::PushID(object.id());
+					ImGui::Selectable(object.name().c_str());
+
+					ImGuiDragDropFlags src_flags = 0;
+					src_flags |= ImGuiDragDropFlags_SourceNoDisableHover;     // Keep the source displayed as hovered
+					src_flags |= ImGuiDragDropFlags_SourceNoHoldToOpenOthers; // Because our dragging is local, we disable the feature of opening foreign treenodes/tabs while dragging
+					//src_flags |= ImGuiDragDropFlags_SourceNoPreviewTooltip; // Hide the tooltip
+					if (ImGui::BeginDragDropSource(src_flags))
+					{
+						if (!(src_flags & ImGuiDragDropFlags_SourceNoPreviewTooltip))
+						{
+							ImGui::Selectable(object.name().c_str());
+						}
+
+						uint32 objectId = object.id();
+						ImGui::SetDragDropPayload("ObjectSpawn", &objectId, sizeof(objectId));
+						ImGui::EndDragDropSource();
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndListBox();
+			}
+		}
 	}
 
 	void SpawnEditMode::OnDeactivate()
@@ -165,6 +198,58 @@ namespace mmo
 			entry->set_isactive(true);
 
 			m_worldEditor.AddUnitSpawn(*entry, false);
+		}
+		else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ObjectSpawn", ImGuiDragDropFlags_None))
+		{
+			Vector3 position;
+
+			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+
+			const auto hit = ray.Intersects(plane);
+			if (hit.first)
+			{
+				position = ray.GetPoint(hit.second);
+			}
+			else
+			{
+				position = ray.GetPoint(10.0f);
+			}
+
+			// Snap to grid?
+			if (m_worldEditor.IsGridSnapEnabled())
+			{
+				const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
+
+				// Snap position to grid size
+				position.x = std::round(position.x / gridSize) * gridSize;
+				position.y = std::round(position.y / gridSize) * gridSize;
+				position.z = std::round(position.z / gridSize) * gridSize;
+			}
+
+			const uint32 objectId = *static_cast<uint32*>(payload->Data);
+			ASSERT(objectId != 0);
+
+			// Create unit spawn entity
+			proto::ObjectSpawnEntry* entry = m_mapEntry->mutable_objectspawns()->Add();
+			entry->set_objectentry(objectId);
+			entry->mutable_location()->set_positionx(position.x);
+			entry->mutable_location()->set_positiony(position.y);
+			entry->mutable_location()->set_positionz(position.z);
+
+			Quaternion rotation = Quaternion::Identity;
+			entry->mutable_location()->set_rotationw(rotation.w);
+			entry->mutable_location()->set_rotationx(rotation.x);
+			entry->mutable_location()->set_rotationy(rotation.y);
+			entry->mutable_location()->set_rotationz(rotation.z);
+
+			entry->set_respawn(true);
+			entry->set_respawndelay(30000);
+			entry->set_maxcount(1);
+			entry->set_state(0);
+			entry->set_isactive(true);
+
+			m_worldEditor.AddObjectSpawn(*entry);
 		}
 	}
 }
