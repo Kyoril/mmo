@@ -167,6 +167,8 @@ namespace mmo
 
 		bool IsCorpse() const { return GetTypeId() == ObjectTypeId::Corpse; }
 
+		bool IsWorldObject() const { return GetTypeId() == ObjectTypeId::Object; }
+
 		template<class T>
 		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{

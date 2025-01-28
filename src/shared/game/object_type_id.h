@@ -5,6 +5,16 @@
 
 namespace mmo
 {
+	namespace game_world_object_type
+	{
+		enum Type
+		{
+			Chest = 0,
+		};
+	}
+
+	typedef game_world_object_type::Type GameWorldObjectType;
+
 	namespace unit_flags
 	{
 		enum Type
@@ -68,16 +78,22 @@ namespace mmo
 	{
 		/// Default type. Generic object.
 		Object = 0,
+
 		/// The object is an item.
 		Item = 1,
+
 		/// An item container object.
 		Container = 2,
+
 		/// A living unit with health etc.
 		Unit = 3,
+
 		/// A player character, which is also a unit.
 		Player = 4,
+
 		/// A dynamic object which is temporarily spawned.
 		DynamicObject = 5,
+
 		/// A player corpse.
 		Corpse = 6
 	};
@@ -298,6 +314,13 @@ namespace mmo
 			Slot_1,
 
 			BagFieldCount = Slot_1 + (36 * 2),
+		};
+
+		enum WorldObjectFields
+		{
+
+
+			WorldObjectFieldCount = ObjectFieldCount,
 		};
 	}
 }

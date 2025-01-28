@@ -23,7 +23,6 @@ message ObjectSpawnLocation {
 	optional float rotationx = 5;
 	optional float rotationy = 6;
 	optional float rotationz = 7;
-	optional float rotation = 8;
 }
 
 message UnitSpawnEntry {
@@ -59,26 +58,14 @@ message ObjectSpawnEntry {
 	optional bool respawn = 2 [default = true];
 	optional uint64 respawndelay = 3;
 
-	// Obsolete: Will be removed soon
-	required float positionx = 4;
-	required float positiony = 5;
-	required float positionz = 6;
-	optional float rotationw = 7;
-	optional float rotationx = 8;
-	optional float rotationy = 9;
-	optional float rotationz = 10;
+	optional float radius = 4;
+	optional uint32 animProgress = 5 [default = 100];
+	optional uint32 state = 6 [default = 1];
+	optional uint32 maxcount = 7 [default = 1];
+	required uint32 objectentry = 8;
+	optional bool isactive = 9 [default = true];
 
-	optional float radius = 11;
-	optional uint32 animProgress = 12 [default = 100];
-	optional uint32 state = 13 [default = 1];
-	optional uint32 maxcount = 14 [default = 1];
-	required uint32 objectentry = 15;
-	optional bool isactive = 16 [default = true];
-
-	// Obsolete: Will be removed soon
-	optional float orientation = 17;
-
-	repeated ObjectSpawnLocation locations = 18;
+	repeated ObjectSpawnLocation locations = 10;
 }
 
 message MapEntry {
