@@ -155,6 +155,20 @@ namespace mmo
 			return v;
 		}
 
+		inline bool operator < (const Vector3& rhs) const
+		{
+			if (x < rhs.x && y < rhs.y && z < rhs.z)
+				return true;
+			return false;
+		}
+
+		inline bool operator > (const Vector3& rhs) const
+		{
+			if (x > rhs.x && y > rhs.y && z > rhs.z)
+				return true;
+			return false;
+		}
+
 		// Comparison
 		inline bool operator==(Vector3 const& other) const
 		{
@@ -198,7 +212,16 @@ namespace mmo
 				z * b.z
 			};
 		}
-			
+
+		inline Vector3 MidPoint(const Vector3& vec) const
+		{
+			return {
+				(x + vec.x) * 0.5f,
+				(y + vec.y) * 0.5f,
+				(z + vec.z) * 0.5f
+			};
+		}
+
 	public:
 
 		/// Calculates the dot product of this vector and another one.

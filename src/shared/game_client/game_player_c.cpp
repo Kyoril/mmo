@@ -10,6 +10,7 @@ namespace mmo
 {
 	GamePlayerC::~GamePlayerC()
 	{
+		/*
 		if (m_shieldEntity)
 		{
 			m_entity->DetachObjectFromBone(*m_shieldEntity);
@@ -28,6 +29,7 @@ namespace mmo
 			m_scene.DestroyEntity(*m_weaponEntity);
 			m_weaponEntity = nullptr;
 		}
+		*/
 	}
 
 	void GamePlayerC::Deserialize(io::Reader& reader, bool complete)
@@ -72,6 +74,7 @@ namespace mmo
 		// TODO: For now we attach a shield to all player characters. This should be done based on the player's equipment though.
 		ASSERT(m_entity);
 
+		/*
 		if (m_shieldEntity)
 		{
 			m_entity->DetachObjectFromBone(*m_shieldEntity);
@@ -94,5 +97,6 @@ namespace mmo
 			m_weaponAttachment = m_entity->AttachObjectToBone("Hip_L", *m_weaponEntity);
 			m_weaponAttachment->SetScale(Vector3::UnitScale * 1.0f);
 		}
+		*/
 	}
 }

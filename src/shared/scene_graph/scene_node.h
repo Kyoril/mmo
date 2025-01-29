@@ -22,7 +22,7 @@ namespace mmo
 	/// movable objects together and move them around in a scene.
 	/// Each scene has exactly one root node, which can have one or multiple
 	/// child nodes and/or attached movable objects to it.
-	class SceneNode final
+	class SceneNode
 		: public NonCopyable
 		, public Node
 	{
