@@ -129,7 +129,7 @@ namespace mmo
 			int x, y, z;
 			octant.GetChildIndices(bx, &x, &y, &z);
 
-			if (octant.m_children[x][y][z])
+			if (!octant.m_children[x][y][z])
 			{
 				octant.m_children[x][y][z] = std::make_unique<Octree>(&octant);
 

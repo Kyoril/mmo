@@ -299,7 +299,7 @@ namespace mmo
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
 		scoped_connection_container m_inputConnections;
-		Scene m_scene;
+		std::unique_ptr<Scene> m_scene;
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;

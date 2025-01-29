@@ -44,6 +44,7 @@
 #include "terrain/page.h"
 
 #include "audio.h"
+#include "scene_graph/octree_scene.h"
 
 namespace mmo
 {
@@ -169,7 +170,7 @@ namespace mmo
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
 			{
-				return std::make_unique<WorldRenderer>(name, std::ref(m_scene));
+				return std::make_unique<WorldRenderer>(name, *m_scene);
 			});
 
 		// Register world frame type
@@ -221,7 +222,7 @@ namespace mmo
 		WorldTextFrame frame(m_playerController->GetCamera(), Vector3::Zero, 0.0f);
 		frame.GetFont()->GetTextWidth("1");
 
-		m_worldRootNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
 		LoadMap("Worlds/Development/Development");
 
 		// Play background music
@@ -269,7 +270,7 @@ namespace mmo
 		m_worldInstance.reset();
 		m_worldGrid.reset();
 		m_debugAxis.reset();
-		m_scene.Clear();
+		m_scene->Clear();
 
 		m_inputConnections.disconnect();
 		m_realmConnections.disconnect();
@@ -287,6 +288,8 @@ namespace mmo
 		// Remove bindings
 		m_bindings.Unload();
 		m_bindings.Shutdown();
+
+		m_scene.reset();
 	}
 
 	std::string_view WorldState::GetName() const
@@ -539,37 +542,39 @@ namespace mmo
 
 	void WorldState::SetupWorldScene()
 	{
-		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
+		m_scene = std::make_unique<OctreeScene>();
+
+		m_cloudsEntity = m_scene->CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
 		m_cloudsEntity->SetQueryFlags(0);
-		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
+		m_cloudsNode = &m_scene->CreateSceneNode("Clouds");
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
-		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
+		m_scene->GetRootSceneNode().AddChild(*m_cloudsNode);
 
-		m_rayQuery = std::move(m_scene.CreateRayQuery(Ray()));
+		m_rayQuery = std::move(m_scene->CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);
 		m_rayQuery->SetQueryMask(1);
 		m_rayQuery->SetDebugHitTestResults(true);
 
-		m_playerController = std::make_unique<PlayerController>(m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient);
+		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient);
 		s_inputControl = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
-		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
+		m_worldGrid = std::make_unique<WorldGrid>(*m_scene, "WorldGrid");
 		m_worldGrid->SetVisible(false);
 
 		// Debug axis object
-		m_debugAxis = std::make_unique<AxisDisplay>(m_scene, "WorldDebugAxis");
-		m_scene.GetRootSceneNode().AddChild(m_debugAxis->GetSceneNode());
+		m_debugAxis = std::make_unique<AxisDisplay>(*m_scene, "WorldDebugAxis");
+		m_scene->GetRootSceneNode().AddChild(m_debugAxis->GetSceneNode());
 		m_debugAxis->SetVisible(false);
 
 		// Setup sun light
-		m_sunLight = &m_scene.CreateLight("SunLight", LightType::Directional);
+		m_sunLight = &m_scene->CreateLight("SunLight", LightType::Directional);
 		m_sunLight->SetDirection(Vector3(1.0f, -0.5f, 1.0f).NormalizedCopy());
 		m_sunLight->SetPowerScale(1.0f);
 		m_sunLight->SetColor(Color::White);
-		m_scene.GetRootSceneNode().AttachObject(*m_sunLight);
+		m_scene->GetRootSceneNode().AttachObject(*m_sunLight);
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
@@ -764,8 +769,8 @@ namespace mmo
 				m_playerController->GetCamera().InvalidateView();
 
 				// Toggle culling freeze and log current culling state
-				m_scene.FreezeRendering(!m_scene.IsRenderingFrozen());
-				ILOG(m_scene.IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
+				m_scene->FreezeRendering(!m_scene->IsRenderingFrozen());
+				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
 			}, ConsoleCommandCategory::Debug, "Toggles culling.");
 
 	}
@@ -858,16 +863,16 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(m_scene, *this, *this, m_project);
+					object = std::make_shared<GameUnitC>(*m_scene, *this, *this, m_project);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(m_scene, *this, *this, m_project);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, *this, m_project);
 					break;
 				case ObjectTypeId::Item:
-					object = std::make_shared<GameItemC>(m_scene, *this, m_project);
+					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);
 					break;
 				case ObjectTypeId::Container:
-					object = std::make_shared<GameBagC>(m_scene, *this, m_project);
+					object = std::make_shared<GameBagC>(*m_scene, *this, m_project);
 					break;
 				default:
 					ASSERT(!! "Unknown object type");
@@ -1406,7 +1411,7 @@ namespace mmo
 				if (casterUnit && targetUnit)
 				{
 					// Spawn projectile
-					auto projectile = std::make_unique<SpellProjectile>(m_scene, *spell, casterUnit->GetSceneNode()->GetDerivedPosition(), targetUnit);
+					auto projectile = std::make_unique<SpellProjectile>(*m_scene, *spell, casterUnit->GetSceneNode()->GetDerivedPosition(), targetUnit);
 					m_spellProjectiles.push_back(std::move(projectile));
 				}
 			}
@@ -2316,7 +2321,7 @@ namespace mmo
 	bool WorldState::LoadMap(const String& assetPath)
 	{
 		m_worldInstance.reset();
-		m_worldInstance = std::make_unique<ClientWorldInstance>(m_scene, *m_worldRootNode, assetPath);
+		m_worldInstance = std::make_unique<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
@@ -2604,7 +2609,7 @@ namespace mmo
 		// TODO: Do check against terrain?
 
 		// TODO: Make more performant check
-		for (const Entity* entity : m_scene.GetAllEntities())
+		for (const Entity* entity : m_scene->GetAllEntities())
 		{
 			if ((entity->GetQueryFlags() & 1) == 0)
 			{
