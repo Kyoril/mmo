@@ -338,7 +338,7 @@ namespace mmo
 
 	SceneNode& Scene::CreateSceneNode()
 	{
-		auto sceneNode = std::make_unique<SceneNode>(*this);
+		auto sceneNode = CreateSceneNodeImpl();
 		SceneNode* rawNode = sceneNode.get();
 
 		ASSERT(m_sceneNodes.find(rawNode->GetName()) == m_sceneNodes.end());
@@ -351,7 +351,7 @@ namespace mmo
 	{
 		ASSERT(m_sceneNodes.find(name) == m_sceneNodes.end());
 		
-		auto sceneNode = std::make_unique<SceneNode>(*this, name);
+		auto sceneNode = CreateSceneNodeImpl(name);
 		m_sceneNodes[name] = std::move(sceneNode);
 		return *m_sceneNodes[name];
 	}
@@ -425,6 +425,16 @@ namespace mmo
 		query->SetRay(ray);
 
 		return std::move(query);
+	}
+
+	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()
+	{
+		return std::make_unique<SceneNode>(*this);
+	}
+
+	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl(const String& name)
+	{
+		return std::make_unique<SceneNode>(*this, name);
 	}
 
 	RaySceneQuery::RaySceneQuery(Scene& scene)

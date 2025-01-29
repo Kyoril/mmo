@@ -250,7 +250,7 @@ namespace mmo
 	};
 
 	/// This class contains all objects of a scene that can be rendered.
-	class Scene final
+	class Scene
 		: public NonCopyable
 	{
 	public:
@@ -260,8 +260,10 @@ namespace mmo
 	public:
 		Scene();
 
+		virtual ~Scene() override = default;
+
 		/// Removes everything from the scene, completely wiping it.
-		void Clear();
+		virtual void Clear();
 
 	public:
 		// Camera management
@@ -319,6 +321,11 @@ namespace mmo
 
 		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
+	protected:
+		virtual std::unique_ptr<SceneNode> CreateSceneNodeImpl();
+
+		virtual std::unique_ptr<SceneNode> CreateSceneNodeImpl(const String& name);
+
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera);
@@ -348,14 +355,14 @@ namespace mmo
 		/// @brief Determines whether rendering is currently frozen.
 		bool IsRenderingFrozen() const { return m_frozen; }
 
-	private:
+	protected:
 		void RenderVisibleObjects();
 		
 		void InitRenderQueue();
 
 		void PrepareRenderQueue();
 
-		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
+		virtual void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
 
 		void RenderObjects(const QueuedRenderableCollection& objects);
 

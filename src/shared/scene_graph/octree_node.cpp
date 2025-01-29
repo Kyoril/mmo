@@ -2,6 +2,7 @@
 #include "octree_node.h"
 
 #include "movable_object.h"
+#include "octree_scene.h"
 
 namespace mmo
 {
@@ -18,7 +19,7 @@ namespace mmo
 	OctreeNode::~OctreeNode()
 	= default;
 
-	Node* OctreeNode::RemoveChild(uint32 index)
+	Node* OctreeNode::RemoveChild(const uint32 index)
 	{
 		auto on = static_cast<OctreeNode*>(SceneNode::RemoveChild(index));
 		on->RemoveNodeAndChildren();
@@ -69,6 +70,19 @@ namespace mmo
 		return nodeSize < octreeSize;
 	}
 
+
+	void OctreeNode::AddToRenderQueue(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& boundsInfo, bool onlyShadowCasters)
+	{
+		auto mit = m_objectsByName.begin();
+		while (mit != m_objectsByName.end())
+		{
+			MovableObject* mo = mit->second;
+			renderQueue.ProcessVisibleObject(*mo, camera, boundsInfo);
+
+			++mit;
+		}
+	}
+
 	void OctreeNode::UpdateBounds()
 	{
 		m_worldAABB.SetNull();
@@ -88,13 +102,13 @@ namespace mmo
 
 		if (!m_worldAABB.IsNull() && m_isInSceneGraph)
 		{
-			//static_cast <OctreeScene&>(m_scene)->UpdateOctreeNode(*this);
+			static_cast <OctreeScene&>(m_scene).UpdateOctreeNode(*this);
 		}
 	}
 
 	void OctreeNode::RemoveNodeAndChildren()
 	{
-		//static_cast<OctreeScene&>(m_scene)->RemoveOctreeNode(this);
+		static_cast<OctreeScene&>(m_scene).RemoveOctreeNode(*this);
 
 		auto it = m_children.begin();
 		while (it != m_children.end())

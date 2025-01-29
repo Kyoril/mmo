@@ -25,7 +25,7 @@ namespace mmo
 
 		void RemoveAllChildren() override;
 
-		Octree* GetOctant() { return m_octant; }
+		Octree* GetOctant() const { return m_octant; }
 
 		void SetOctant(Octree* octant) { m_octant = octant; }
 
@@ -33,9 +33,11 @@ namespace mmo
 
 		AABB& GetLocalAABB() { return m_localBounds; }
 
+		void AddToRenderQueue(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& boundsInfo, bool onlyShadowCasters);
+
 	protected:
 
-		void UpdateBounds();
+		void UpdateBounds() override;
 
 		void RemoveNodeAndChildren();
 

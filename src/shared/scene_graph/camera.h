@@ -23,6 +23,18 @@ namespace mmo
 	constexpr uint8 FrustumPlaneTop = 4;
 	constexpr uint8 FrustumPlaneBottom = 5;
 
+	namespace aabb_visibility
+	{
+		enum Type
+		{
+			None,
+			Partial,
+			Full
+		};
+	}
+
+	typedef aabb_visibility::Type AABBVisibility;
+
 	/// This class represents a camera inside of a scene. A camera is a special type
 	/// of movable object, which allows to collect all renderable objects inside of it's
 	/// view frustum.
@@ -52,6 +64,8 @@ namespace mmo
 
 		void GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const;
 
+		AABBVisibility GetVisibility(const AABB& bound) const;
+		
 	protected:
 		void UpdateFrustum() const;
 

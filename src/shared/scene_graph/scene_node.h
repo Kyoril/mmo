@@ -28,8 +28,10 @@ namespace mmo
 	{
 	public:
 		explicit SceneNode(Scene& scene);
+
 		explicit SceneNode(Scene& scene, const String& name);
-		~SceneNode() override;
+
+		virtual ~SceneNode() override;
 
 	public:
 
@@ -53,11 +55,11 @@ namespace mmo
 
 		void Update(bool updateChildren, bool parentHasChanged) override;
 
-		void UpdateBounds();
+		virtual void UpdateBounds();
 
-		void RemoveAllChildren() override;
+		virtual void RemoveAllChildren() override;
 
-		void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
+		virtual void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
 
 		const AABB& GetWorldAABB() const noexcept { return m_worldAABB; }
 

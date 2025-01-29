@@ -69,10 +69,46 @@ namespace mmo
 		const Vector4 positionCameraSpace = viewMatrix * Vector4(worldPosition, 1.0f);
 		const Vector4 clipSpace = projMatrix * positionCameraSpace;
 
-		const Vector3 screenPos = Vector3(clipSpace.x / clipSpace.w, clipSpace.y / clipSpace.w, clipSpace.z / clipSpace.w);
+		const auto screenPos = Vector3(clipSpace.x / clipSpace.w, clipSpace.y / clipSpace.w, clipSpace.z / clipSpace.w);
 		
 		x = (screenPos.x + 1.0f) * 0.5f;
 		y = (screenPos.y + 1.0f) * 0.5f;
+	}
+
+	AABBVisibility Camera::GetVisibility(const AABB& bound) const
+	{
+		if (bound.IsNull())
+		{
+			return aabb_visibility::None;
+		}
+
+		// Get center of the box
+		const Vector3 center = bound.GetCenter();
+
+		// Get the half-size of the box
+		const Vector3 halfSize = bound.GetExtents();
+
+		bool allInside = true;
+
+		for (const auto& plane : m_frustumPlanes)
+		{
+			// This updates frustum planes and deals with cull frustum
+			const Plane::Side side = plane.GetSide(center, halfSize);
+			if (side == Plane::NegativeSide) return aabb_visibility::None;
+
+			// We can't return now as the box could be later on the negative side of a plane.
+			if (side == Plane::BothSides)
+			{
+				allInside = false;
+			}
+		}
+
+		if (allInside)
+		{
+			return aabb_visibility::Full;
+		}
+
+		return aabb_visibility::Partial;
 	}
 
 	void Camera::UpdateFrustum() const
