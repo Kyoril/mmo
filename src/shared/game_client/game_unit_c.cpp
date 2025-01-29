@@ -161,6 +161,14 @@ namespace mmo
 			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
+			// Stick to ground
+			float groundHeight = 0.0f;
+			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 3.5f, groundHeight);
+			if (hasGroundHeight)
+			{
+				m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
+			}
+
 			// Update movement info
 			m_movementInfo.position = m_sceneNode->GetDerivedPosition();
 			m_movementInfo.movementFlags = 0;
