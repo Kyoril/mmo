@@ -120,8 +120,6 @@ namespace mmo
 
 	void FMODAudio::Update(const Vector3& listenerPos, float time)
 	{
-		ChannelIndex channelIndex;
-		FMOD::Channel *nextChannel;
 		FMOD_VECTOR listenerPosition;
 		FMOD_VECTOR listenerForward;
 		FMOD_VECTOR listenerUp;
@@ -256,8 +254,6 @@ namespace mmo
 		}
 
 		int channelIndexTemp;
-		FMOD_RESULT result;
-		FMOD_VECTOR initialPosition;
 		FMOD::Channel* channel;
 
 		if (channelIndex)
@@ -272,7 +268,7 @@ namespace mmo
 		assert((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.capacity()));
 
 		FMODSoundInstance &instance = m_soundInstanceVector[sound];
-		result = m_system->playSound(instance.GetFMODSound(), nullptr, true, &channel);
+		FMOD_RESULT result = m_system->playSound(instance.GetFMODSound(), nullptr, true, &channel);
 		if (result != FMOD_OK)
 		{
 			ELOG("Could not play sound (" << result << "): " << FMOD_ErrorString(result));
@@ -285,9 +281,8 @@ namespace mmo
 		}
 
 		channel->getIndex(&channelIndexTemp);
-
-		result = channel->setVolume(1.0);
-		result = channel->setPaused(false);
+		channel->setVolume(1.0);
+		channel->setPaused(false);
 
 		if (channelIndex)
 		{
