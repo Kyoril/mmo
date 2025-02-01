@@ -20,6 +20,8 @@ namespace mmo
 
 		auto& controlled = GetControlled();
 
+		controlled.RemoveLootRecipients();
+
 		// Enter idle mode when home point was reached
 		m_onHomeReached = controlled.GetMover().targetReached.connect([this]() {
 			auto& ai = GetAI();
