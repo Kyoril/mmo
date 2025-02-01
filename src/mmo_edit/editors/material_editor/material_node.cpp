@@ -24,6 +24,11 @@ namespace mmo
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 MaterialFunctionOutputNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 MaterialFunctionNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 SineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 CosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 TangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcTangent2Node::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 FracNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -533,6 +538,104 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddExpression(std::to_string(m_value), ExpressionType::Float_1);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SineNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for sine node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("sin(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex CosineNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for cosine node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("cos(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex TangentNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for tangent node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("tan(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ArcTangent2Node::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex xExpression = m_xPin.GetLink()->GetNode()->Compile(compiler, m_xPin.GetLink());
+			if (xExpression == IndexNone)
+			{
+				ELOG("Missing input x for arctan2 node!");
+				return IndexNone;
+			}
+
+			const ExpressionIndex yExpression = m_yPin.GetLink()->GetNode()->Compile(compiler, m_yPin.GetLink());
+			if (yExpression == IndexNone)
+			{
+				ELOG("Missing input y for arctan2 node!");
+				return IndexNone;
+			}
+
+			if (compiler.GetExpressionType(xExpression) != compiler.GetExpressionType(yExpression))
+			{
+				ELOG("Input x and y for arctan2 node must be the same!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("atan2(expr_" + std::to_string(yExpression) + ", expr_" + std::to_string(xExpression) + ")", compiler.GetExpressionType(xExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex FracNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for frac node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("frac(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
 		}
 
 		return m_compiledExpressionId;

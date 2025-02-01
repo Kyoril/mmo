@@ -38,7 +38,12 @@ namespace mmo
 			ScalarParameterNode::GetStaticTypeInfo(),
 			VectorParameterNode::GetStaticTypeInfo(),
 			MaterialFunctionOutputNode::GetStaticTypeInfo(),
-			IfNode::GetStaticTypeInfo()
+			IfNode::GetStaticTypeInfo(),
+			SineNode::GetStaticTypeInfo(),
+			CosineNode::GetStaticTypeInfo(),
+			TangentNode::GetStaticTypeInfo(),
+			ArcTangent2Node::GetStaticTypeInfo(),
+			FracNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

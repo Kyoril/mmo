@@ -237,13 +237,11 @@ namespace mmo
 			return IndexNone;
 		}
 		
-		const ExpressionType targetType = GetExpressionType(first);
-
 		std::ostringstream outputStream;
 		outputStream << "dot(expr_" << first << ", expr_" << second << ")";
 		outputStream.flush();
 
-		return AddExpression(outputStream.str(), targetType);
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 		
 	ExpressionIndex MaterialCompilerD3D11::AddClamp(const ExpressionIndex value, const ExpressionIndex min, const ExpressionIndex max)
@@ -852,7 +850,7 @@ namespace mmo
 		}
 
 		m_pixelShaderStream
-			<< "\tif (opacity < 0.3333) { clip(-1); }\n";
+			<< "\tif (opacity <= 0) { clip(-1); }\n";
 
 		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
 		m_pixelShaderStream
