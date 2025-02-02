@@ -161,10 +161,9 @@ namespace mmo
 			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
-			// Stick to ground
 			float groundHeight = 0.0f;
 			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 3.5f, groundHeight);
-			if (hasGroundHeight)
+			if (hasGroundHeight && m_sceneNode->GetDerivedPosition().y <= groundHeight + 0.05f)
 			{
 				m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
 			}
@@ -368,6 +367,14 @@ namespace mmo
 			m_movementInfo.jumpVelocity -= gravity * deltaTime;
 			m_movementInfo.position.y += m_movementInfo.jumpVelocity * deltaTime;
 			playerNode->SetPosition(m_movementInfo.position);
+		}
+
+		// Stick to ground
+		float groundHeight = 0.0f;
+		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(playerNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 3.5f, groundHeight);
+		if(hasGroundHeight && playerNode->GetDerivedPosition().y <= groundHeight + 0.05f)
+		{
+			playerNode->SetPosition(Vector3(playerNode->GetDerivedPosition().x, groundHeight, playerNode->GetDerivedPosition().z));
 		}
 	}
 

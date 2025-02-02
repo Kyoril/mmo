@@ -27,7 +27,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::ModelDatas, mmo::proto_client::ModelDataEntry> ModelDataManager;
 		typedef TemplateManager<mmo::proto_client::Factions, mmo::proto_client::FactionEntry> FactionManager;
 		typedef TemplateManager<mmo::proto_client::FactionTemplates, mmo::proto_client::FactionTemplateEntry> FactionTemplateManager;
-		//typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
+		typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -43,7 +43,7 @@ namespace mmo
 
 			// Data managers
 
-			//MapManager maps;
+			MapManager maps;
 			ZoneManager zones;
 			SpellManager spells;
 			SpellCategoryManager spellCategories;
@@ -94,7 +94,7 @@ namespace mmo
 
 				ClientProjectLoader::Managers managers;
 				managers.push_back(ManagerEntry("spells", spells));
-				//managers.push_back(ManagerEntry("maps", maps));
+				managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
 				managers.push_back(ManagerEntry("model_data", models));
 				managers.push_back(ManagerEntry("factions", factions));
@@ -132,7 +132,7 @@ namespace mmo
 
 				ClientProjectSaver::Managers managers;
 				managers.emplace_back("spells", "spells", spells);
-				//managers.emplace_back("maps", "maps", maps);
+				managers.emplace_back("maps", "maps", maps);
 				managers.emplace_back("spell_categories", "spell_categories", spellCategories);
 				managers.emplace_back("model_data", "model_data", models);
 				managers.emplace_back("zones", "zones", zones);

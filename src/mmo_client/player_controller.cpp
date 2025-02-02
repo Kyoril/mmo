@@ -300,7 +300,7 @@ namespace mmo
 		// Collision detection
 		if (info.movementFlags & movement_flags::Falling)
 		{
-			if (info.position.y <= groundHeight && info.jumpVelocity <= 0.0f)
+			if (hasGroundHeight && info.position.y <= groundHeight && info.jumpVelocity <= 0.0f)
 			{
 				// Reset movement info
 				info.position.y = groundHeight;
