@@ -96,7 +96,7 @@ namespace mmo
 
 		ShaderPtr& GetPixelShader() noexcept override { return m_parent->GetPixelShader(); }
 
-		void Apply(GraphicsDevice& device) override;
+		void Apply(GraphicsDevice& device, MaterialDomain domain) override;
 
 		ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) override;
 

@@ -12,6 +12,7 @@
 
 #include "base/chunk_reader.h"
 #include "base/chunk_writer.h"
+#include "scene_graph/mesh.h"
 
 namespace mmo
 {
@@ -107,6 +108,8 @@ namespace mmo
 
 			void SetArea(uint32 localTileX, uint32 localTileY, uint32 area);
 
+			SceneNode* GetSceneNode() const { return m_pageNode; }
+
 		private:
 
 			bool ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size);
@@ -162,7 +165,6 @@ namespace mmo
 			bool m_changed{ false };
 			bool m_unloadRequested = false;
 			AABB m_boundingBox;
-
 		};
 	}
 }

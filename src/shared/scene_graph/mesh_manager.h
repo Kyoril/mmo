@@ -28,6 +28,8 @@ namespace mmo
 	public:
 		/// Loads a mesh from file or retrieves it from the cache.
 		MeshPtr Load(const std::string& filename);
+
+		MeshPtr Find(const std::string& name);
 		
 		/// Creates a mesh manually.
 		MeshPtr CreateManual(const std::string& name);

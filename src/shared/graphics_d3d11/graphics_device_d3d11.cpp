@@ -1044,7 +1044,7 @@ namespace mmo
 		//SetVertexFormat(operation.vertexFormat);
 
 		// Apply material
-		operation.material->Apply(*this);
+		operation.material->Apply(*this, MaterialDomain::Surface);
 
 		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
 		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();

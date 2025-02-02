@@ -265,6 +265,8 @@ namespace mmo
 
 		void SetTwoSided(const bool enable) noexcept { m_twoSided = enable; }
 
+		void SetIsUserInterface(const bool enable) noexcept { m_userInterface = enable; }
+
 	protected:
 		/// @brief Called to generate the vertex shader code.
 		virtual void GenerateVertexShaderCode(VertexShaderType type) = 0;
@@ -299,6 +301,7 @@ namespace mmo
 		bool m_depthWrite { true };
 		bool m_translucent{ false };
 		bool m_twoSided { false };
+		bool m_userInterface{ false };
 
 	};
 }

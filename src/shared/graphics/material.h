@@ -37,6 +37,15 @@ namespace mmo
 
 		/// @brief The material is lit and translucent (support for non-binary alpha channel).
 		Translucent,
+
+		UserInterface,
+	};
+
+	enum class MaterialDomain : uint8_t
+	{
+		Surface,
+
+		UserInterface,
 	};
 
 	enum class VertexShaderType : uint8_t
@@ -95,7 +104,7 @@ namespace mmo
 
 		virtual ShaderPtr& GetPixelShader() noexcept = 0;
 
-		virtual void Apply(GraphicsDevice& device) = 0;
+		virtual void Apply(GraphicsDevice& device, MaterialDomain domain) = 0;
 
 		virtual ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) = 0;
 
@@ -278,7 +287,7 @@ namespace mmo
 
 		ShaderPtr& GetPixelShader() noexcept override { return m_pixelShader; }
 
-		void Apply(GraphicsDevice& device) override;
+		void Apply(GraphicsDevice& device, MaterialDomain domain) override;
 
 		/// @brief Compiles the material.
 		/// @param compiler The compiler to use for compiling the material.

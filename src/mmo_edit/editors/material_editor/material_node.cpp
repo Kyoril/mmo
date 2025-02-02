@@ -486,6 +486,11 @@ namespace mmo
 		return {};
 	}
 
+	std::span<Pin*> MaterialNode::GetInputPins()
+	{
+		return m_surfaceInputPins;
+	}
+
 	ExpressionIndex MaterialNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		compiler.SetLit(m_lit);
@@ -493,6 +498,7 @@ namespace mmo
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
 		compiler.SetTwoSided(m_isTwoSided);
+		compiler.SetIsUserInterface(m_userInterface);
 		
 		if (m_baseColor.IsLinked())
 		{
@@ -531,6 +537,16 @@ namespace mmo
 		}
 
 		return IndexNone;
+	}
+
+	std::span<PropertyBase*> MaterialNode::GetProperties()
+	{
+		if (m_userInterface)
+		{
+			return m_userInterfaceProperties;
+		}
+
+		return m_surfaceProperties;
 	}
 
 	ExpressionIndex ConstFloatNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)

@@ -28,6 +28,7 @@
 #include "edit_modes/terrain_edit_mode.h"
 #include "edit_modes/spawn_edit_mode.h"
 #include "edit_modes/entity_edit_mode.h"
+#include "scene_graph/octree_scene.h"
 
 namespace mmo
 {
@@ -200,7 +201,7 @@ namespace mmo
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;
 		bool m_wireFrame;
-		Scene m_scene;
+		OctreeScene m_scene;
 		SceneNode* m_cameraAnchor { nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		Entity* m_entity { nullptr };

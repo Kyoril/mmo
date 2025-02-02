@@ -333,7 +333,7 @@ namespace mmo
 		return true;
 	}
 
-	void Material::Apply(GraphicsDevice& device)
+	void Material::Apply(GraphicsDevice& device, MaterialDomain domain)
 	{
 		// TODO: Determine what vertex shader type we need to bind based on the rendering context or from outside
 		BindShaders(device);

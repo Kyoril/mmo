@@ -177,6 +177,18 @@ namespace mmo
 		GetRootSceneNode().Update(true, false);
 	}
 
+	MaterialPtr Scene::GetDefaultMaterial()
+	{
+		// Create default material
+		if (!m_defaultMaterial)
+		{
+			m_defaultMaterial = MaterialManager::Get().Load("Models/Default.hmat");
+			ASSERT(m_defaultMaterial);
+		}
+
+		return m_defaultMaterial;
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
@@ -190,11 +202,7 @@ namespace mmo
 		m_renderQueue = std::make_unique<RenderQueue>();
 
 		// Create default material
-		if (!m_defaultMaterial)
-		{
-			m_defaultMaterial = MaterialManager::Get().Load("Models/Default.hmat");
-			ASSERT(m_defaultMaterial);
-		}
+		(void)GetDefaultMaterial();
 
 		// TODO: Maybe initialize some properties for special render queues
 	}

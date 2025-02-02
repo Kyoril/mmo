@@ -57,6 +57,17 @@ namespace mmo
 		return mesh;
 	}
 
+	MeshPtr MeshManager::Find(const std::string& name)
+	{
+		const auto it = m_meshes.find(name);
+		if (it != m_meshes.end())
+		{
+			return it->second;
+		}
+
+		return nullptr;
+	}
+
 	MeshPtr MeshManager::CreateManual(const std::string& name)
 	{
 		const auto it = m_meshes.find(name);

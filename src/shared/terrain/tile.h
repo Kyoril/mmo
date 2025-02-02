@@ -8,6 +8,12 @@
 
 #include "coverage_map.h"
 #include "graphics/material_instance.h"
+#include "scene_graph/mesh.h"
+
+namespace mmo
+{
+	class Entity;
+}
 
 namespace mmo
 {

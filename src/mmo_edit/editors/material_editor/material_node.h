@@ -453,13 +453,13 @@ namespace mmo
 			: GraphNode(material)
 		{}
 		
-	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetInputPins() override;
 		
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 		
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
-		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+		std::span<PropertyBase*> GetProperties() override;
 
 		const MaterialPin& GetBaseColorPin() const noexcept { return m_baseColor; }
 		const MaterialPin& GetMetallicPin() const noexcept { return m_metallic; }
@@ -478,6 +478,7 @@ namespace mmo
 		bool m_depthWrite { true };
 		bool m_lit { true };
 		bool m_translucent { false };
+		bool m_userInterface{ false };
 		
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
@@ -486,9 +487,11 @@ namespace mmo
 		BoolProperty m_depthTestProp { "Depth Test", m_depthTest };
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
 		BoolProperty m_translucentProperty { "Translucent", m_translucent };
+		BoolProperty m_userInterfaceProp { "User Interface", m_userInterface };
 
-		PropertyBase* m_properties[7] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty };
+		PropertyBase* m_surfaceProperties[8] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp };
+		PropertyBase* m_userInterfaceProperties[1] = { &m_userInterfaceProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
 	    MaterialPin m_metallic = { this, "Metallic" };
@@ -499,7 +502,7 @@ namespace mmo
 		MaterialPin m_opacityMask = { this, "Opacity Mask" };
 		MaterialPin m_normal = { this, "Normal" };
 
-	    Pin* m_inputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
+	    Pin* m_surfaceInputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
 	};
 
 	/// @brief A node which adds a constant float expression.

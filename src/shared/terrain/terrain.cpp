@@ -8,6 +8,7 @@
 #include "tile.h"
 #include "game/constants.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 
 namespace mmo
@@ -25,6 +26,9 @@ namespace mmo
 			, m_lastZ(255)
 		{
 			m_terrainNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
+
+			m_defaultMaterial = m_scene.GetDefaultMaterial();
+			ASSERT(m_defaultMaterial);
 
 			for (unsigned int i = 0; i < width; i++)
 			{

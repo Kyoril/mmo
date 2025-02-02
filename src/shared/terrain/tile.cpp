@@ -7,6 +7,8 @@
 #include "terrain.h"
 #include "graphics/material_instance.h"
 #include "graphics/texture_mgr.h"
+#include "scene_graph/mesh_manager.h"
+#include "scene_graph/scene.h"
 
 namespace mmo
 {
@@ -37,6 +39,7 @@ namespace mmo
 			const size_t pixelStartY = m_tileY * (constants::PixelsPerTile - 1);
 			const size_t pixelEndY = pixelStartY + constants::PixelsPerTile;
 
+			auto& scene = m_page.GetTerrain().GetScene();
 			for (size_t x = pixelStartX; x < pixelEndX; ++x)
 			{
 				for (size_t y = pixelStartY; y < pixelEndY; ++y)
@@ -279,8 +282,8 @@ namespace mmo
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = 0xFFFFFFFF;
-					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile);
-					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile);
+					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile - 1);
+					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile - 1);
 
 					if (height < minHeight) {
 						minHeight = height;

@@ -355,6 +355,8 @@ namespace mmo
 		/// @brief Determines whether rendering is currently frozen.
 		bool IsRenderingFrozen() const { return m_frozen; }
 
+		MaterialPtr GetDefaultMaterial();
+
 	protected:
 		void RenderVisibleObjects();
 		

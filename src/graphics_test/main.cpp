@@ -11,6 +11,7 @@
 #include "graphics/texture.h"
 #include "graphics/render_target.h"
 #include "graphics/render_texture.h"
+#include "scene_graph/octree_scene.h"
 
 namespace mmo
 {
@@ -70,7 +71,7 @@ namespace mmo
 	bool Setup()
 	{
 		// Setup scene
-		g_scene = std::make_unique<Scene>();
+		g_scene = std::make_unique<OctreeScene>();
 
 		// Create a camera
 		g_camera = g_scene->CreateCamera("MainCamera");

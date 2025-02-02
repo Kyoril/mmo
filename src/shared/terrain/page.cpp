@@ -14,6 +14,7 @@
 #include "binary_io/stream_sink.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {
@@ -337,7 +338,7 @@ namespace mmo
 		float Page::GetSmoothHeightAt(float x, float y) const
 		{
 			// scale down
-			float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
+			const float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
 			x /= scale;
 			y /= scale;
 

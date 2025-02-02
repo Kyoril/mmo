@@ -25,13 +25,20 @@ namespace mmo
 		m_material = &material;
 		m_material->ClearParameters();
 
-		if (m_lit)
+		if (m_userInterface)
 		{
-			material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
+			material.SetType(MaterialType::UserInterface);
 		}
 		else
 		{
-			material.SetType(MaterialType::Unlit);
+			if (m_lit)
+			{
+				material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
+			}
+			else
+			{
+				material.SetType(MaterialType::Unlit);
+			}
 		}
 
 		material.SetDepthWriteEnabled(m_depthWrite);

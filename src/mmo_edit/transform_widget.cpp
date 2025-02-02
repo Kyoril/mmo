@@ -12,6 +12,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 #include "math/intersects.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {
@@ -966,6 +967,11 @@ namespace mmo
 
 	void TransformWidget::CreatePlaneMesh()
 	{
+		if (m_translateAxisPlanes = MeshManager::Get().Find("AxisPlane"); m_translateAxisPlanes)
+		{
+			return;
+		}
+
 		ManualRenderObject* planeObject = m_scene.CreateManualRenderObject("__AxisPlane__");
 		planeObject->SetRenderQueueGroupAndPriority(Overlay, 1000);
 

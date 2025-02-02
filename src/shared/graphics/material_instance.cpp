@@ -143,7 +143,7 @@ namespace mmo
 		m_parent->Update();
 	}
 
-	void MaterialInstance::Apply(GraphicsDevice& device)
+	void MaterialInstance::Apply(GraphicsDevice& device, MaterialDomain domain)
 	{
 		// Bind shaders from the material
 		if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
