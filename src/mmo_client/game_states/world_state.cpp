@@ -53,6 +53,8 @@ namespace mmo
 	std::string s_zoneName = "Unknown";
 	std::string s_subZoneName = "";
 
+	extern uint32 g_mapId;
+
 	extern CharacterView s_selectedCharacter;
 
 	// Console command names
@@ -198,8 +200,23 @@ namespace mmo
 			m_realmConnector.Disconnected.connect(*this, &WorldState::OnRealmDisconnected)
 		};
 
+		g_mapId = s_selectedCharacter.GetMapId();
+
 		// Send enter world request to server
 		m_realmConnector.EnterWorld(s_selectedCharacter);
+		m_realmConnector.VerifyNewWorld += [this](uint32 mapId, Vector3 position, float facing)
+			{
+				if (mapId != g_mapId)
+				{
+					WLOG("Received different map id from server! Reloading world...");
+					g_mapId = mapId;
+					LoadMap();
+				}
+				else
+				{
+					DLOG("Map " << mapId << " verified");
+				}
+			};
 
 		// Register drawing of the game ui
 		m_paintLayer = Screen::AddLayer([this] { OnPaint(); }, 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -223,7 +240,7 @@ namespace mmo
 		frame.GetFont()->GetTextWidth("1");
 
 		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
-		LoadMap("Worlds/Development/Development");
+		LoadMap();
 
 		// Play background music
 		m_backgroundMusicSound = m_audio.CreateLoopedStream("Sound/Music/Gethsemane.ogg");
@@ -2318,9 +2335,16 @@ namespace mmo
 	}
 #endif
 
-	bool WorldState::LoadMap(const String& assetPath)
+	bool WorldState::LoadMap()
 	{
 		m_worldInstance.reset();
+
+		const proto_client::MapEntry* map = m_project.maps.getById(g_mapId);
+		ASSERT(map);
+
+		const std::string assetPath = "Worlds/" + map->directory() + "/" + map->directory();
+		DLOG("Loading map " << assetPath << ".hwld...");
+
 		m_worldInstance = std::make_unique<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");

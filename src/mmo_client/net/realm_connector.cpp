@@ -126,6 +126,22 @@ namespace mmo
 	{
 		DLOG("New world packet received");
 
+		uint32 mapId;
+		Vector3 position;
+		float facing;
+
+		if (!(packet >> io::read<uint32>(mapId)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(facing)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO: We might need to do another world load here because the map id might be different from the map id we expected when logging in?
+		VerifyNewWorld(mapId, position, facing);
+
 		return PacketParseResult::Pass;
 	}
 	

@@ -12,6 +12,7 @@
 
 #include "asio/io_service.hpp"
 #include "game/action_button.h"
+#include "math/vector3.h"
 
 
 namespace mmo
@@ -33,6 +34,8 @@ namespace mmo
 		signal<void()> Disconnected;
 		/// Signal that is fired when the client failed to enter a world with a specific error reason.
 		signal<void(game::player_login_response::Type)> EnterWorldFailed;
+
+		signal<void(uint32, Vector3, float)> VerifyNewWorld;
 
 	private:
 		// Internal io service

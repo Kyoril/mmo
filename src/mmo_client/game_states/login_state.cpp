@@ -20,6 +20,8 @@ namespace mmo
 {
 	extern ConsoleVar* s_lastRealmVar;
 
+	uint32 g_mapId = 0;
+
 	const std::string LoginState::Name = "login";
 	
 	/// This command will try to connect to the login server and make a login attempt using the
@@ -125,10 +127,9 @@ namespace mmo
 	{
 		// TODO: Load data
 		LoadingScreen::Show();
-		
+
 		// Send packet
 		m_realmConnector.EnterWorld(character);
-		
 		GameStateMgr::Get().SetGameState(WorldState::Name);
 	}
 

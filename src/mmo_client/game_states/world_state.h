@@ -269,7 +269,7 @@ namespace mmo
 
 	private:
 
-		bool LoadMap(const String& assetPath);
+		bool LoadMap();
 
 		void OnChatNameQueryCallback(uint64 guid, const String& name);
 
