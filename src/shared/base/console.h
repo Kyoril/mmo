@@ -10,7 +10,6 @@ namespace mmo
 	class Console final
 	{
 	public:
-
 		/// Enumerates possible console color values used as foreground
 		/// and background color.
 		enum Color
@@ -38,12 +37,15 @@ namespace mmo
 		/// Gets the active foreground color of the console, if the
 		/// operating system supports this.
 		static Color getTextColor();
+
 		/// Gets the active background color of the console, if the
 		/// operating system supports this.
 		static Color getBackgroundColor();
+
 		/// Sets the active foreground color of the console, if the
 		/// operating system supports this.
 		static void setTextColor(Color id);
+
 		/// Sets the active background color of the console, if the
 		/// operating system supports this.
 		static void setBackgroundColor(Color id);

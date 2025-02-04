@@ -4,6 +4,7 @@ enable_testing()
 add_exe(unit_tests)
 target_link_libraries(unit_tests 
 	base 
+	base64 
 	log 
 	simple_file_format_hdrs 
 	binary_io_hdrs 

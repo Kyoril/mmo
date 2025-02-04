@@ -13,6 +13,11 @@ namespace mmo
 		typename std::vector<T>::iterator position
 	)
 	{
+		if (position == vector.end())
+		{
+			return vector.end(); // Return end() as there are no more elements to process
+		}
+
 		if (position + 1 == vector.end())
 		{
 			// If the element to remove is the last element, just pop it

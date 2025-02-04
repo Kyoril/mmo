@@ -105,7 +105,6 @@ namespace mmo
 		os << ", ";
 		os << right.maximum;
 		os << ")";
-		os << right[i];
 		return os;
 	}
 
