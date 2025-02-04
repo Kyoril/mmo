@@ -183,9 +183,10 @@ namespace mmo
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
 		// Setup debug draw
 		//m_detourDebugDraw = std::make_unique<DetourDebugDraw>(m_scene, MaterialManager::Get().Load("Models/Engine/DetourDebug.hmat"));
-		//m_navMap = std::make_unique<nav::Map>("Development");
-		//m_navMap->LoadPage(32, 32);
-		//duDebugDrawNavMesh(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), DU_DRAWNAVMESH_COLOR_TILES);
+		//m_navMap = std::make_unique<nav::Map>("Test");
+		//m_navMap->LoadPage(31, 31);
+		//m_navMap->LoadPage(31, 32);
+		//duDebugDrawNavMesh(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), 0);
 
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
@@ -1389,6 +1390,9 @@ namespace mmo
 
 		MapEntity& mapEntity = selectable.GetEntity();
 		Entity& entity = mapEntity.GetEntity();
+
+
+		ImGui::Text("Unique Id: %u", mapEntity.GetUniqueId());
 
 		if (ImGui::CollapsingHeader("Mesh"))
 		{

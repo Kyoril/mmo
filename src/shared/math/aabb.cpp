@@ -74,7 +74,22 @@ namespace mmo
 		if (min.z > b2.max.z) return false;
 			
 		return true;
+	}
 
+	bool AABB::IntersectsXZ(const AABB& b2) const
+	{
+		if (IsNull() || b2.IsNull())
+		{
+			return false;
+		}
+
+		// Use up to 4 separating planes
+		if (max.x < b2.min.x) return false;
+		if (max.z < b2.min.z) return false;
+		if (min.x > b2.max.x) return false;
+		if (min.z > b2.max.z) return false;
+
+		return true;
 	}
 
 	bool AABB::Intersects(const Vector3& v) const

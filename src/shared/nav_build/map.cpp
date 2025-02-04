@@ -151,11 +151,13 @@ namespace mmo
                         position.x += Bounds.min.x;
                         position.z += Bounds.min.z;
 
-                        if (height < m_chunks[y][x]->m_minY) {
+                        if (height < m_chunks[y][x]->m_minY)
+                        {
                             m_chunks[y][x]->m_minY = height;
                         }
 
-                        if (height > m_chunks[y][x]->m_maxY) {
+                        if (height > m_chunks[y][x]->m_maxY)
+                        {
                             m_chunks[y][x]->m_maxY = height;
                         }
 
@@ -192,7 +194,28 @@ namespace mmo
                 }
 
                 // TODO: Calculate chunk bounds and use these instead of page bounds, but whatever
-                map->GetMapEntityInstancesInArea(Bounds, m_chunks[y][x]->m_mapEntityInstances);
+                AABB tileBounds = Bounds;
+                tileBounds.min.y = FLT_MIN;
+                tileBounds.max.y = FLT_MAX;
+                map->GetMapEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_mapEntityInstances);
+
+                // Adjust min and max Y values based on map entities
+                for (auto& uniqueId : m_chunks[y][x]->m_mapEntityInstances)
+                {
+                    const auto* instance = map->GetMapEntityInstance(uniqueId);
+
+                    const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
+                    const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
+
+                    if (m_chunks[y][x]->m_minY > minY)
+                    {
+						m_chunks[y][x]->m_minY = minY;
+                    }
+                    if (m_chunks[y][x]->m_maxY < maxY)
+                    {
+                        m_chunks[y][x]->m_maxY = maxY;
+                    }
+                }
             }
         }
     }

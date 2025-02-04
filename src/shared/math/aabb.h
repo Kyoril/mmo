@@ -81,6 +81,8 @@ namespace mmo
 
 		bool Intersects(const AABB& b2) const;
 
+		bool IntersectsXZ(const AABB& b2) const;
+
 		bool Intersects(const Vector3& v) const;
 
 	public:

@@ -114,7 +114,7 @@ namespace mmo
             config.mergeRegionArea = settings::MergeRegionSize;
             config.maxVertsPerPoly = settings::VerticesPerPolygon;
             config.tileSize = settings::TileVoxelSize;
-            config.borderSize = config.walkableRadius + 6;
+            config.borderSize = config.walkableRadius + 1;
             config.width = config.tileSize + config.borderSize * 2;
             config.height = config.tileSize + config.borderSize * 2;
             config.detailSampleDist = settings::DetailSampleDistance;
@@ -414,6 +414,12 @@ namespace mmo
         config.bmax[0] = (tile.x + 1) * settings::TileSize - 32.f * terrain::constants::PageSize;
         config.bmax[1] = maxY;
         config.bmax[2] = (tile.y + 1) * settings::TileSize - 32.f * terrain::constants::PageSize;
+
+		if (minY > maxY)
+		{
+			WLOG("Tile " << tile.x << ", " << tile.y << " has higher minY value than maxY value!");
+			return false;
+		}
 
         // bounding box of tile for culling world meshes
         const AABB tileBounds(
