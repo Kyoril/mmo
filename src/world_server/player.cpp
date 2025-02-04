@@ -846,7 +846,7 @@ namespace mmo
 		// Did the client try to remove a FALLING flag without sending a landing packet?
 		if (!info.IsFalling() && m_character->GetMovementInfo().IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
 		{
-			ELOG("Client tried to apply FALLING flag in non-jump packet!");
+			ELOG("Client tried to remove FALLING flag in non-jump packet!");
 			Kick();
 			return;
 		}
@@ -900,7 +900,7 @@ namespace mmo
 			if (std::abs(target.x - info.position.x) > FLT_EPSILON || std::abs(target.z - info.position.z) > FLT_EPSILON || std::abs(target.y - info.position.y) > 3.1f)
 			{
 				ELOG("Player ended movement but target position was different from expected location: Received " << info.position << ", expected " << m_character->GetMover().GetTarget());
-				return;
+				//return;
 			}
 		}
 		else if (!m_character->GetMovementInfo().IsChangingPosition())
@@ -908,7 +908,7 @@ namespace mmo
 			if (info.position != m_character->GetPosition())
 			{
 				ELOG("User position changed on client while it should not be able to do so based on server info")
-				return;
+				//return;
 			}
 		}
 
