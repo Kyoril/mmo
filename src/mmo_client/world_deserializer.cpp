@@ -23,6 +23,20 @@ namespace mmo
 		AddChunkHandler(*VersionChunkMagic, true, *this, &ClientWorldInstanceDeserializer::ReadVersionChunk);
 	}
 
+	ClientWorldInstance::~ClientWorldInstance()
+	{
+		for (auto* entity : m_entities)
+		{
+			entity->DetachFromParent();
+			m_scene.DestroyEntity(*entity);
+		}
+		for (auto* node : m_sceneNodes)
+		{
+			node->RemoveFromParent();
+			m_scene.DestroySceneNode(*node);
+		}
+	}
+
 	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name)
 		: m_scene(scene)
 		, m_rootNode(rootNode)
@@ -37,11 +51,13 @@ namespace mmo
 		node->SetPosition(position);
 		node->SetOrientation(orientation);
 		node->SetScale(scale);
+		m_sceneNodes.push_back(node);
 
 		// Create entity
 		Entity* entity = m_scene.CreateEntity("Entity_" + std::to_string(m_entityIdGenerator.GenerateId()), meshName);
 		node->AttachObject(*entity);
 		entity->SetQueryFlags(1);
+		m_entities.push_back(entity);
 
 		return entity;
 	}

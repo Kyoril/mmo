@@ -738,6 +738,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverStatus, *this, &WorldState::OnQuestGiverStatus);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellEnergizeLog, *this, &WorldState::OnSpellEnergizeLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TransferPending, *this, &WorldState::OnTransferPending);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -777,6 +778,7 @@ namespace mmo
 		m_vendorClient.Shutdown();
 
 		m_worldPacketHandlers.Clear();
+		m_worldChangeHandlers.Clear();
 	}
 
 	void WorldState::OnRealmDisconnected()
@@ -2169,6 +2171,44 @@ namespace mmo
 		}
 
 		// TODO: Combat log event
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnTransferPending(game::IncomingPacket& packet)
+	{
+		uint32 mapId;
+		if (!(packet >> io::read<uint32>(mapId)))
+		{
+			ELOG("Failed to read TransferPending packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		ILOG("Transfer pending to map " << mapId << "...");
+		if (g_mapId == mapId)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		g_mapId = mapId;
+
+		m_worldChangeHandlers.Clear();
+		m_worldChangeHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NewWorld, *this, &WorldState::OnNewWorld);
+
+		// Remove all objects at once
+		m_playerController->SetControlledUnit(nullptr);
+		ObjectMgr::RemoveAllObjects();
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnNewWorld(game::IncomingPacket& packet)
+	{
+		// Load new map
+		LoadMap();
+
+		// Acknowledge the new world
+		m_realmConnector.SendMoveWorldPortAck();
 
 		return PacketParseResult::Pass;
 	}

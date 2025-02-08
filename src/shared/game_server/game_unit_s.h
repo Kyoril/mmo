@@ -450,6 +450,8 @@ namespace mmo
 		/// Teleports the unit to a new location on the same map.
 		void TeleportOnMap(const Vector3& position, const Radian& facing);
 
+		virtual void Teleport(uint32 mapId, const Vector3& position, const Radian& facing);
+
 		/// Modifies the character spell modifiers by applying or misapplying a new mod.
 		/// @param mod The spell modifier to apply or misapply.
 		/// @param apply Whether to apply or misapply the spell mod.

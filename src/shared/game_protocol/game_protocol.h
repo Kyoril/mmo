@@ -137,6 +137,8 @@ namespace mmo
 
 				CheatWorldPort,				// GAME MASTER
 
+				MoveWorldPortAck,
+
 				/// Counter constant
 				Count_,
 			};
@@ -284,6 +286,9 @@ namespace mmo
 
 				TransferPending,
 
+				NewWorld,
+				TransferAborted,
+
 				/// Counter constant
 				Count_,
 			};
@@ -356,5 +361,28 @@ namespace mmo
 		}
 
 		typedef char_create_result::Type CharCreateResult;
+
+
+		namespace transfer_abort_reason
+		{
+			enum Type
+			{
+				None,
+
+				/// Transfer Aborted: instance is full
+				MaxPlayers,
+
+				/// Transfer aborted: instance not found
+				NotFound,
+
+				/// You have entered too many instances recently.
+				TooManyInstances,
+
+				/// Unable to zone in while an encounter is in progress.
+				ZoneInCombat
+			};
+		}
+
+		typedef transfer_abort_reason::Type TransferAbortReason;
 	}
 }

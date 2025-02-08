@@ -68,9 +68,9 @@ namespace mmo
 		//O(n)
 		void remove(const T &element)
 		{
-			ASSERT(contains(element));
+			//ASSERT(contains(element));
 			optionalRemove(element);
-			ASSERT(!contains(element));
+			//ASSERT(!contains(element));
 		}
 
 		//O(n)

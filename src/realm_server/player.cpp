@@ -631,7 +631,60 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	bool Player::InitializeTransfer(uint32 map, Vector3 location, float o, bool shouldLeaveNode)
+	PacketParseResult Player::OnMoveWorldPortAck(game::IncomingPacket& packet)
+	{
+		DLOG("Received MoveWorldPortAck from player " << log_hex_digit(m_characterData->characterId));
+
+		ASSERT(!m_newWorldAckHandler.IsEmpty());
+		m_newWorldAckHandler.Clear();
+
+		m_characterData->mapId = m_transferMap;
+		m_characterData->position = m_transferPosition;
+		m_characterData->facing = m_transferFacing;
+
+		// Find a new world node
+		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, InstanceId());
+		if (!world)
+		{
+			// World does not exist
+			WLOG("Player login failed: Could not find world server for map " << m_transferMap);
+			OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
+			return PacketParseResult::Pass;
+		}
+
+		std::weak_ptr weakThis = shared_from_this();
+		std::weak_ptr weakWorld = world;
+		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+			{
+				const auto strongThis = weakThis.lock();
+				if (!strongThis)
+				{
+					return;
+				}
+
+				// World server still connected?
+				auto strongWorld = weakWorld.lock();
+				if (!strongWorld)
+				{
+					strongThis->OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
+					return;
+				}
+
+				if (success)
+				{
+					strongThis->OnWorldChanged(strongWorld, instanceId);
+				}
+				else
+				{
+					// TODO: Get exact reason
+					strongThis->OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
+				}
+			});
+
+		return PacketParseResult::Pass;
+	}
+
+	bool Player::InitializeTransfer(uint32 map, const Vector3& location, const float o, bool shouldLeaveNode)
 	{
 		const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(m_instanceId);
 		if (shouldLeaveNode && !world)
@@ -659,6 +712,20 @@ namespace mmo
 
 	void Player::CommitTransfer()
 	{
+		ILOG("Committing pending world transfer...");
+
+		if (!m_newWorldAckHandler.IsEmpty())
+		{
+			ELOG("Failed to commit transfer because a pending transfer seems to exist!");
+			return;
+		}
+
+		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::NewWorld);
+			packet.Finish();
+			});
+
+		m_newWorldAckHandler += RegisterAutoPacketHandler(game::client_realm_packet::MoveWorldPortAck, *this, &Player::OnMoveWorldPortAck);
 	}
 
 	void Player::SendAuthChallenge()
@@ -894,6 +961,18 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId);
 	}
 
+	void Player::OnWorldChanged(const std::shared_ptr<World>& world, const InstanceId instanceId)
+	{
+		DLOG("World change succeeded on instance id " << instanceId);
+
+		m_world = world;
+		m_instanceId = instanceId;
+		NotifyWorldNodeChanged(world.get());
+
+		ASSERT(m_characterData);
+		m_characterData->instanceId = instanceId;
+	}
+
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
 	{
 		ELOG("World join failed");
@@ -905,6 +984,20 @@ namespace mmo
 			outPacket << io::write<uint8>(response);
 			outPacket.Finish();
 		});
+	}
+
+	void Player::OnWorldTransferAborted(const game::TransferAbortReason reason)
+	{
+		ELOG("World transfer aborted: " << reason);
+
+		m_connection->sendSinglePacket([this, reason](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::TransferAborted);
+				outPacket
+					<< io::write<uint32>(m_transferMap)
+					<< io::write<uint8>(reason);
+				outPacket.Finish();
+			});
 	}
 
 	void Player::OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason)
@@ -1020,7 +1113,6 @@ namespace mmo
 				strongThis->OnWorldJoinFailed(game::player_login_response::NoWorldServer);
 			}
 		});
-	
 	}
 
 	void Player::OnWorldDestroyed(World& world)

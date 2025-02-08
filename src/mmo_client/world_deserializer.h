@@ -36,6 +36,7 @@ namespace mmo
 
 	public:
 		explicit ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name);
+		~ClientWorldInstance();
 
 		bool HasTerrain() const { return m_terrain != nullptr; }
 
@@ -50,6 +51,9 @@ namespace mmo
 		SceneNode& m_rootNode;
 		IdGenerator<uint64> m_entityIdGenerator{ 1 };
 		std::unique_ptr<terrain::Terrain> m_terrain;
+
+		std::vector<Entity*> m_entities;
+		std::vector<SceneNode*> m_sceneNodes;
 	};
 
 	/// @brief Supports deserializing a world from a file.

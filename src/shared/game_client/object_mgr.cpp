@@ -87,6 +87,14 @@ namespace mmo
 		}
 	}
 
+	void ObjectMgr::RemoveAllObjects()
+	{
+		ms_itemCount.clear();
+		ms_itemConnections.clear();
+		ms_objectyByGuid.clear();
+		ms_activePlayerGuid = 0;
+	}
+
 	void ObjectMgr::SetActivePlayer(uint64 guid)
 	{
 		ms_activePlayerGuid = guid;

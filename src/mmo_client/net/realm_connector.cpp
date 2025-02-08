@@ -717,4 +717,12 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::SendMoveWorldPortAck()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveWorldPortAck);
+			packet.Finish();
+			});
+	}
 }

@@ -83,7 +83,7 @@ namespace mmo
 		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
 
 		// Inititalizes a character transfer to a new map.
-		bool InitializeTransfer(uint32 map, Vector3 location, float o, bool shouldLeaveNode = false);
+		bool InitializeTransfer(uint32 map, const Vector3& location, float o, bool shouldLeaveNode = false);
 
 		/// Commits an initialized transfer (if any).
 		void CommitTransfer();
@@ -113,7 +113,11 @@ namespace mmo
 
 		void OnWorldJoined(const std::shared_ptr<World>& world, const InstanceId instanceId);
 
+		void OnWorldChanged(const std::shared_ptr<World>& world, const InstanceId instanceId);
+
 		void OnWorldJoinFailed(const game::player_login_response::Type response);
+
+		void OnWorldTransferAborted(const game::TransferAbortReason reason);
 
 		void OnCharacterData(std::optional<CharacterData> characterData);
 
@@ -252,6 +256,7 @@ namespace mmo
 
 		std::optional<CharacterData> m_characterData;
 		scoped_connection m_worldDestroyed;
+		PacketHandlerHandleContainer m_newWorldAckHandler;
 
 	private:
 		/// Closes the connection if still connected.
@@ -280,5 +285,7 @@ namespace mmo
 		PacketParseResult OnNameQuery(game::IncomingPacket& packet);
 		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
 		PacketParseResult OnSetActionBarButton(game::IncomingPacket& packet);
+		PacketParseResult OnMoveWorldPortAck(game::IncomingPacket& packet);
 	};
+
 }

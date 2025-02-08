@@ -212,7 +212,6 @@ namespace mmo
 		}
 
 		DLOG("Removing object " << log_hex_digit(remove.GetGuid()) << " from world instance ...");
-
 		m_objectsByGuid.erase(it);
 
 		// Clear update
@@ -226,8 +225,7 @@ namespace mmo
 		}
 
 		// No need for visibility updates for item objects
-		if (remove.GetTypeId() != ObjectTypeId::Item &&
-			remove.GetTypeId() != ObjectTypeId::Container)
+		if (!remove.IsItem() && !remove.IsContainer())
 		{
 			TileIndex2D gridIndex;
 			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
@@ -245,6 +243,9 @@ namespace mmo
 
 			tile->GetGameObjects().remove(&remove);
 
+			remove.SetWorldInstance(nullptr);
+			remove.despawned(remove);
+
 			ForEachTileInSight(
 				*m_visibilityGrid,
 				tile->GetPosition(),
@@ -257,9 +258,6 @@ namespace mmo
 					}
 				});
 		}
-
-		remove.SetWorldInstance(nullptr);
-		remove.despawned(remove);
 
 		if (remove.destroy)
 		{

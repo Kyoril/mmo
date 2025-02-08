@@ -341,14 +341,7 @@ namespace mmo
 		}
 
 		// Teleport the player
-		if (mapId == m_worldInstance->GetMapId())
-		{
-			m_character->TeleportOnMap(position, Radian(facingRadianVal));
-		}
-		else
-		{
-			// TODO: Teleport across maps
-		}
+		m_character->Teleport(mapId, position, Radian(facingRadianVal));
 	}
 #endif
 

@@ -45,6 +45,12 @@ namespace mmo
 		return GetAsyncTimeMs() >= m_expiration;
 	}
 
+	GameUnitC::~GameUnitC()
+	{
+		// Ensure quest giver status is removed
+		SetQuestgiverStatus(questgiver_status::None);
+	}
+
 	void GameUnitC::Deserialize(io::Reader& reader, const bool complete)
 	{
 		uint32 updateFlags = 0;

@@ -292,6 +292,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::ProxyPacket, *strongThis, &World::OnProxyPacket);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterData, *strongThis, &World::OnCharacterData);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::QuestData, *strongThis, &World::OnQuestData);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::TeleportRequest, *strongThis, &World::OnTeleportRequest);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -658,6 +659,37 @@ namespace mmo
 			}
 		};
 		m_database.asyncRequest(std::move(handler), &IDatabase::SetQuestData, characterGuid, questId, questData);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnTeleportRequest(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint32 mapId;
+		Vector3 position;
+		float facingRadianVal;
+		if (!(packet >> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(mapId)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(facingRadianVal)
+			))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find the player using this character
+		auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			ELOG("Can't find player by character id - transfer failed");
+			return PacketParseResult::Pass;
+		}
+
+		ILOG("Initializing transfer of player " << log_hex_digit(characterGuid) << " to: " << mapId << " - " << position);
+		player->InitializeTransfer(mapId, position, facingRadianVal);
 
 		return PacketParseResult::Pass;
 	}

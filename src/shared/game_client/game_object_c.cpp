@@ -21,12 +21,14 @@ namespace mmo
 	{
 		if (m_entity)
 		{
-			m_scene.DestroyEntity(*m_entity);	
+			m_scene.DestroyEntity(*m_entity);
+			m_entity = nullptr;
 		}
 
 		if (m_sceneNode)
 		{
-			m_scene.DestroySceneNode(*m_sceneNode);	
+			m_scene.DestroySceneNode(*m_sceneNode);
+			m_sceneNode = nullptr;
 		}
 
 		removed();

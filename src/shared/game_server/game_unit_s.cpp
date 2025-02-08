@@ -798,6 +798,25 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::Teleport(uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		if (mapId == m_worldInstance->GetMapId())
+		{
+			TeleportOnMap(position, facing);
+			return;
+		}
+
+		// Teleport to different map
+		if (m_netUnitWatcher)
+		{
+			m_netUnitWatcher->OnTeleport(mapId, position, facing);
+		}
+		else
+		{
+			WLOG("Unit can not be teleported to different map!");
+		}
+	}
+
 	void GameUnitS::ModifySpellMod(const SpellModifier& mod, const bool apply)
 	{
 		for (uint8 eff = 0; eff < 64; ++eff)

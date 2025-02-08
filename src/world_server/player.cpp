@@ -510,7 +510,15 @@ namespace mmo
 
 	void Player::OnDespawned(GameObjectS& object)
 	{
+		// No longer watch for network events
+		m_character->SetNetUnitWatcher(nullptr);
+
 		SaveCharacterData();
+
+		// Find our tile
+		TileIndex2D tileIndex = GetTileIndex();
+		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(tileIndex);
+		tile.GetWatchers().remove(this);
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
@@ -1543,14 +1551,19 @@ namespace mmo
 				});
 
 			// Initialize teleport request at realm
-			m_connector.SendTeleportRequest(m_character->GetGuid(), mapId, position, facing);
+			const uint64 guid = m_character->GetGuid();
+			m_connector.SendTeleportRequest(guid, mapId, position, facing);
+
+			// No longer watch tile
+			VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+			tile.GetWatchers().remove(this);
 
 			// Remove the character from the world (this will save the character)
 			m_worldInstance->RemoveGameObject(*m_character);
 			m_character.reset();
 
 			// Notify realm that our character left this world instance (this will commit the pending teleport request)
-			m_connector.NotifyWorldInstanceLeft(m_character->GetGuid(), auth::world_left_reason::Teleport);
+			m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
 
 			// Destroy player instance
 			m_manager.RemovePlayer(shared_from_this());

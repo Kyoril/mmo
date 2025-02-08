@@ -90,13 +90,14 @@ namespace mmo
 		{
 		}
 
+		/// @brief Destroys the instance of the GameUnitC class.
+		virtual ~GameUnitC() override;
+
+	public:
 		virtual ObjectTypeId GetTypeId() const override
 		{
 			return ObjectTypeId::Unit;
 		}
-
-		/// @brief Destroys the instance of the GameUnitC class.
-		virtual ~GameUnitC() override = default;
 
 		/// @brief Deserializes the unit from the given reader.
 		virtual void Deserialize(io::Reader& reader, bool complete) override;

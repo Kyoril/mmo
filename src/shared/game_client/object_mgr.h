@@ -43,6 +43,8 @@ namespace mmo
 
 		static void RemoveObject(uint64 guid);
 
+		static void RemoveAllObjects();
+
 		static void SetActivePlayer(uint64 guid);
 
 		static uint64 GetActivePlayerGuid();

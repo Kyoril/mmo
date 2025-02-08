@@ -183,6 +183,7 @@ namespace mmo
 		PacketParseResult OnCharacterData(auth::IncomingPacket& packet);
 
 		PacketParseResult OnQuestData(auth::IncomingPacket& packet);
-	};
 
+		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
+	};
 }

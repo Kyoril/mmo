@@ -389,6 +389,8 @@ namespace mmo
 		///	@param questId The id of the quest to query details for. Must be a valid quest id offered by the quest giver object.
 		void QuestGiverChooseQuestReward(uint64 questGiverGuid, uint32 questId, uint32 rewardChoice);
 
+		void SendMoveWorldPortAck();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

@@ -249,6 +249,10 @@ namespace mmo
 
 		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket& packet);
 
+		PacketParseResult OnTransferPending(game::IncomingPacket& packet);
+
+		PacketParseResult OnNewWorld(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -351,6 +355,7 @@ namespace mmo
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 
 		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
+		RealmConnector::PacketHandlerHandleContainer m_worldChangeHandlers;
 
 		ActionBar& m_actionBar;
 		SpellCast& m_spellCast;
@@ -386,4 +391,5 @@ namespace mmo
 
 		void OnMoveFall(GameUnitC& unit) override;
 	};
+
 }
