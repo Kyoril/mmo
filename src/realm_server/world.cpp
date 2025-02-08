@@ -418,12 +418,12 @@ namespace mmo
 		});
 	}
 
-	void World::Leave(ObjectGuid characterGuid)
+	void World::Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason)
 	{
-		GetConnection().sendSinglePacket([characterGuid](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterGuid, reason](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::realm_world_packet::PlayerCharacterLeave);
-			outPacket << io::write_packed_guid(characterGuid);
+			outPacket << io::write<uint64>(characterGuid) << io::write<uint8>(reason);
 			outPacket.Finish();
 		});
 	}
@@ -664,14 +664,27 @@ namespace mmo
 
 	PacketParseResult World::OnPlayerCharacterLeft(auth::IncomingPacket& packet)
 	{
+		auth::WorldLeftReason reason;
 		uint64 playerGuid = 0;
-		if (!(packet >> io::read_packed_guid(playerGuid)))
+		if (!(packet >> io::read<uint64>(playerGuid) >> io::read<uint8>(reason)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 		
 		DLOG("Player character " << log_hex_digit(playerGuid) << " left world instance!");
-		
+
+		// Notify player about this
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(playerGuid);
+		if (!player)
+		{
+			WLOG("Could not find player with character id " << log_hex_digit(playerGuid));
+			return PacketParseResult::Pass;
+		}
+
+		// Send world instance data
+		const auto strong = shared_from_this();
+		player->OnWorldLeft(strong, reason);
+
 		return PacketParseResult::Pass;
 	}
 }

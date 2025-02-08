@@ -245,6 +245,8 @@ namespace mmo
 
 		void AddItem(uint32 itemId, uint8 count);
 
+		void WorldPort(uint32 mapId, const Vector3& position, const Radian& facing);
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.

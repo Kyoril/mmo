@@ -135,6 +135,8 @@ namespace mmo
 
 				MoveEnded,
 
+				CheatWorldPort,				// GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};
@@ -279,6 +281,8 @@ namespace mmo
 
 				SpellEnergizeLog,
 				MoveEnded,
+
+				TransferPending,
 
 				/// Counter constant
 				Count_,

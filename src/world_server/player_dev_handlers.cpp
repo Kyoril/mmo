@@ -328,4 +328,28 @@ namespace mmo
 	}
 #endif
 
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 mapId;
+		Vector3 position;
+		float facingRadianVal;
+		if (!(contentReader >> io::read<uint32>(mapId) >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z) >> io::read<float>(facingRadianVal)))
+		{
+			ELOG("Failed to read CheatWorldPort packet!");
+			return;
+		}
+
+		// Teleport the player
+		if (mapId == m_worldInstance->GetMapId())
+		{
+			m_character->TeleportOnMap(position, Radian(facingRadianVal));
+		}
+		else
+		{
+			// TODO: Teleport across maps
+		}
+	}
+#endif
+
 }

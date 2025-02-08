@@ -15,6 +15,8 @@
 
 namespace mmo
 {
+	class Radian;
+	class Vector3;
 	struct QuestStatusData;
 	class GamePlayerS;
 
@@ -70,6 +72,10 @@ namespace mmo
 		void SendCharacterData(const GamePlayerS& character);
 
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
+
+		void SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing);
+
+		void NotifyWorldInstanceLeft(uint64 characterGuid, auth::WorldLeftReason reason);
 
 	private:
 		/// Perform client-side srp6-a calculations after we received server values

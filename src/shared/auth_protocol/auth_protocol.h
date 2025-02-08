@@ -152,6 +152,8 @@ namespace mmo
 				CharacterData,
 
 				QuestData,
+
+				TeleportRequest,
 			};
 		}
 
@@ -232,6 +234,26 @@ namespace mmo
 			/// Portuguese (Brazil)
 			ptBR = 0x0C
 		};
+
+		namespace world_left_reason
+		{
+			enum Type
+			{
+				/// The player wants to log out and return to the character screen.
+				Logout,
+
+				/// The player was teleported away and thus needs to be transferred to another world instance.
+				Teleport,
+
+				/// The player disconnected.
+				Disconnect,
+
+				/// Unknown reason (placeholder for more reasons...)
+				Unknown
+			};
+		}
+
+		typedef world_left_reason::Type WorldLeftReason;
 
 		inline io::Reader& operator>>(io::Reader& reader, AuthLocale& out_locale)
 		{

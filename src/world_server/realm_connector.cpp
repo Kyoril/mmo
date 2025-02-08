@@ -357,6 +357,34 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		sendSinglePacket([characterGuid, mapId, &position, &facing](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::TeleportRequest);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint32>(mapId)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(facing.GetValueRadians());
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::NotifyWorldInstanceLeft(uint64 characterGuid, auth::WorldLeftReason reason)
+	{
+		sendSinglePacket([characterGuid, reason](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::PlayerCharacterLeft);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint8>(static_cast<uint8>(reason));
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);
@@ -565,11 +593,14 @@ namespace mmo
 	PacketParseResult RealmConnector::OnPlayerCharacterLeave(auth::IncomingPacket& packet)
 	{
 		ObjectGuid characterGuid;
-		if (!(packet >> io::read_packed_guid(characterGuid)))
+		auth::WorldLeftReason reason;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint8>(reason)))
 		{
 			ELOG("Failed to read PLAYER_CHARACTER_LEAVE packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		DLOG("Received PLAYER_CHARACTER_LEAVE packet for character " << log_hex_digit(characterGuid) << " from realm due to reason " << reason);
 
 		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
 		if (!player)

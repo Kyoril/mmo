@@ -267,6 +267,8 @@ namespace mmo
 		void Command_GiveMoney(const std::string& cmd, const std::string& args) const;
 
 		void Command_AddItem(const std::string& cmd, const std::string& args) const;
+
+		void Command_WorldPort(const std::string& cmd, const std::string& args) const;
 #endif
 
 	private:

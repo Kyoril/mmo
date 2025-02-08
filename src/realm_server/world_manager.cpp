@@ -47,7 +47,7 @@ namespace mmo
 		m_worlds.push_back(added);
 	}
 
-	std::weak_ptr<World> WorldManager::GetIdealWorldNode(MapId mapId, InstanceId instanceId)
+	std::shared_ptr<World> WorldManager::GetIdealWorldNode(MapId mapId, InstanceId instanceId)
 	{
 		std::scoped_lock lock{ m_worldsMutex };
 
@@ -75,9 +75,27 @@ namespace mmo
 
 		if (mapIt == m_worlds.end())
 		{
-			return std::weak_ptr<World>();
+			return nullptr;
 		}
 
 		return *mapIt;
+	}
+
+	std::shared_ptr<World> WorldManager::GetWorldByInstanceId(InstanceId instanceId)
+	{
+		const auto w = std::find_if(
+			m_worlds.begin(),
+			m_worlds.end(),
+			[instanceId](const std::shared_ptr<World>& w)
+			{
+				return w->IsHostingInstanceId(instanceId);
+			});
+
+		if (w != m_worlds.end())
+		{
+			return *w;
+		}
+
+		return nullptr;
 	}
 }

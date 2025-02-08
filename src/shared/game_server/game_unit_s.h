@@ -187,7 +187,7 @@ namespace mmo
 		virtual ~NetUnitWatcherS() = default;
 
 	public:
-		virtual void OnTeleport(const Vector3& position, const Radian& facing) = 0;
+		virtual void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) = 0;
 
 		virtual void OnAttackSwingEvent(AttackSwingEvent error) = 0;
 

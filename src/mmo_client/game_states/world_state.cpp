@@ -753,6 +753,7 @@ namespace mmo
 		Console::RegisterCommand("level", [this](const std::string& cmd, const std::string& args) { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
 		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
 		Console::RegisterCommand("additem", [this](const std::string& cmd, const std::string& args) { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
+		Console::RegisterCommand("worldport", [this](const std::string& cmd, const std::string& args) { Command_WorldPort(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports the player to the given map, optionally also changing the position.");
 #endif
 	}
 
@@ -767,6 +768,7 @@ namespace mmo
 		Console::UnregisterCommand("level");
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");
+		Console::UnregisterCommand("worldport");
 #endif
 
 		m_questClient.Shutdown();
@@ -960,6 +962,7 @@ namespace mmo
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
+					DLOG("Setting player controlled object " << log_hex_digit(object->GetGuid()));
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
 					// Register player field change observers
@@ -2372,6 +2375,53 @@ namespace mmo
 		}
 
 		m_realmConnector.AddItem(itemId, count);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_WorldPort(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: worldport <map_id> [<x>] [<y>] [<z>] [<facing degree>]");
+			return;
+		}
+
+		Vector3 position = m_playerController->GetControlledUnit()->GetPosition();
+		Radian facing = m_playerController->GetControlledUnit()->GetFacing();
+
+		const uint32 mapId = std::stoul(tokens[0]);
+
+		// Parse optional position
+		if (tokens.size() > 1)
+		{
+			position.x = std::stof(tokens[1]);
+		}
+		if (tokens.size() > 2)
+		{
+			position.y = std::stof(tokens[2]);
+		}
+		if (tokens.size() > 3)
+		{
+			position.z = std::stof(tokens[3]);
+		}
+
+		if (tokens.size() > 4)
+		{
+			// Convert facing degree to radian
+			const Degree facingDegree(std::stof(tokens[4]));
+			facing = facingDegree;
+		}
+
+		m_realmConnector.WorldPort(mapId, position, facing);
 	}
 #endif
 

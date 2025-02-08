@@ -788,10 +788,13 @@ namespace mmo
 		// Update position and facing
 		Relocate(position, facing);
 
+		// We want to be sure the unit is falling
+		m_movementInfo.movementFlags |= movement_flags::Falling;
+
 		// Notify net watcher
 		if (m_netUnitWatcher)
 		{
-			m_netUnitWatcher->OnTeleport(position, facing);
+			m_netUnitWatcher->OnTeleport(m_worldInstance->GetMapId(), position, facing);
 		}
 	}
 

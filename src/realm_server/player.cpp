@@ -70,7 +70,7 @@ namespace mmo
 		{
 			if (HasCharacterGuid())
 			{
-				strongWorld->Leave(GetCharacterGuid());
+				strongWorld->Leave(GetCharacterGuid(), auth::world_left_reason::Disconnect);
 			}
 		}
 
@@ -137,6 +137,13 @@ namespace mmo
 	void Player::connectionMalformedPacket()
 	{
 		ILOG("Client " << m_address << " sent malformed packet");
+
+		// Remove player character from the world node
+		if (auto strongWorld = m_world.lock(); strongWorld && m_characterData)
+		{
+			strongWorld->Leave(m_characterData->characterId, auth::world_left_reason::Disconnect);
+		}
+
 		Destroy();
 	}
 
@@ -449,6 +456,7 @@ namespace mmo
 		const auto strongWorld = m_world.lock();
 		if (!strongWorld)
 		{
+			WLOG("Received proxy packet from character without a world!");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -623,6 +631,36 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	bool Player::InitializeTransfer(uint32 map, Vector3 location, float o, bool shouldLeaveNode)
+	{
+		const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(m_instanceId);
+		if (shouldLeaveNode && !world)
+		{
+			return false;
+		}
+
+		m_transferMap = map;
+		m_transferPosition = location;
+		m_transferFacing = o;
+
+		if (shouldLeaveNode)
+		{
+			// Send transfer pending state. This will show up the loading screen at the client side
+			m_connection->sendSinglePacket([map](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::TransferPending);
+				packet << io::write<uint32>(map);
+				packet.Finish();
+				});
+			world->Leave(m_characterData->characterId, auth::world_left_reason::Teleport);
+		}
+
+		return true;
+	}
+
+	void Player::CommitTransfer()
+	{
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -784,6 +822,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGiveMoney, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAddItem, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatWorldPort, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
@@ -817,9 +856,13 @@ namespace mmo
 		}
 	}
 
-	void Player::OnWorldJoined(const InstanceId instanceId)
+	void Player::OnWorldJoined(const std::shared_ptr<World>& world, const InstanceId instanceId)
 	{
 		DLOG("World join succeeded on instance id " << instanceId);
+
+		m_world = world;
+		m_instanceId = instanceId;
+		NotifyWorldNodeChanged(world.get());
 
 		EnableProxyPackets(true);
 
@@ -864,6 +907,43 @@ namespace mmo
 		});
 	}
 
+	void Player::OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason)
+	{
+		// We no longer care about the world node
+		m_worldDestroyed.disconnect();
+		m_world.reset();
+
+		// Save action bar
+		if (m_characterData && m_pendingButtons)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
+			m_pendingButtons = false;
+		}
+
+		switch (reason)
+		{
+		case auth::world_left_reason::Logout:
+			DLOG("TODO!");
+			break;
+
+		case auth::world_left_reason::Teleport:
+			// We were removed from the old world node - now we can move on to the new one
+			CommitTransfer();
+			break;
+
+		case auth::world_left_reason::Disconnect:
+			// Finally destroy this instance
+			ILOG("Left world instance because of a disconnect");
+			Destroy();
+			break;
+
+		default:
+			// Unknown reason?
+			WLOG("Player left world instance for unknown reason...");
+			break;
+		}
+	}
+
 	void Player::OnCharacterData(const std::optional<CharacterData> characterData)
 	{
 		if (!characterData)
@@ -901,13 +981,8 @@ namespace mmo
 		// TODO: Persist added spells back in database
 
 		// Find a world node for the character's map id and instance id
-		m_world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);
-		
-		// Check if world instance exists
-		const auto strongWorld = m_world.lock();
-		NotifyWorldNodeChanged(strongWorld.get());
-
-		if (!strongWorld)
+		auto world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);
+		if (!world)
 		{
 			WLOG("No world node available which is able to host map " << m_characterData->mapId << " and/or instance id " << m_characterData->instanceId);
 
@@ -919,17 +994,26 @@ namespace mmo
 
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
-		strongWorld->Join(*m_characterData, [weakThis] (const InstanceId instanceId, const bool success)
+		std::weak_ptr weakWorld = world;
+		world->Join(*m_characterData, [weakThis, weakWorld] (const InstanceId instanceId, const bool success)
 		{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
 			{
 				return;
 			}
-			
+
+			// World server still connected?
+			auto strongWorld = weakWorld.lock();
+			if (!strongWorld)
+			{
+				strongThis->OnWorldJoinFailed(game::player_login_response::NoWorldServer);
+				return;
+			}
+
 			if (success)
 			{
-				strongThis->OnWorldJoined(instanceId);
+				strongThis->OnWorldJoined(strongWorld, instanceId);
 			}
 			else
 			{

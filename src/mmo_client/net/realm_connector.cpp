@@ -360,6 +360,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::WorldPort(uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		sendSinglePacket([mapId, &position, &facing](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatWorldPort);
+			packet << io::write<uint32>(mapId) << io::write<float>(position.x) << io::write<float>(position.y) << io::write<float>(position.z) << io::write<float>(facing.GetValueRadians());
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
 	{
 		sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet) {

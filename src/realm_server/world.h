@@ -73,7 +73,7 @@ namespace mmo
 
 		void Join(CharacterData characterData, JoinWorldCallback callback);
 
-		void Leave(ObjectGuid characterGuid);
+		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);
 
 	public:
 		/// Registers a packet handler.

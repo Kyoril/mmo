@@ -255,6 +255,9 @@ namespace mmo
 		case game::client_realm_packet::CheatAddItem:
 			OnCheatAddItem(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatWorldPort:
+			OnCheatWorldPort(opCode, buffer.size(), reader);
+			break;
 #endif
 
 		case game::client_realm_packet::CastSpell:
@@ -456,6 +459,8 @@ namespace mmo
 
 	void Player::OnSpawned(WorldInstance& instance)
 	{
+		DLOG("Player spawned on map " << instance.GetMapId() << ", instance " << instance.GetId() << "...");
+
 		m_worldInstance = &instance;
 
 		// Self spawn
@@ -1210,13 +1215,18 @@ namespace mmo
 				return;
 			}
 
+			if (!(info.movementFlags & movement_flags::Falling))
+			{
+				WLOG("Teleport ack received but player is not falling while it should be!");
+			}
+
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
 			break;
 		}
 
 		// Apply movement info
-		//m_character->ApplyMovementInfo(info);
-		m_character->Relocate(info.position, info.facing);
+		m_character->ApplyMovementInfo(info);
+		//m_character->Relocate(info.position, info.facing);
 
 		// Perform application - we need to do this after all checks have been made
 		switch (opCode)
@@ -1493,30 +1503,58 @@ namespace mmo
 			});
 	}
 
-	void Player::OnTeleport(const Vector3& position, const Radian& facing)
+	void Player::OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing)
 	{
-		const uint32 ackId = m_character->GenerateAckId();
+		ASSERT(m_worldInstance);
 
-		// Generate pending movement change
-		PendingMovementChange change;
-		change.changeType = MovementChangeType::Teleport;
-		change.timestamp = GetAsyncTimeMs();
-		change.counter = ackId;
-		change.teleportInfo.x = position.x;
-		change.teleportInfo.y = position.y;
-		change.teleportInfo.z = position.z;
-		change.teleportInfo.o = facing.GetValueRadians();
-		m_character->PushPendingMovementChange(change);
+		if (mapId == m_worldInstance->GetMapId())
+		{
+			const uint32 ackId = m_character->GenerateAckId();
 
-		// Send notification
-		SendPacket([this, ackId](game::OutgoingPacket& packet) {
-			packet.Start(game::realm_client_packet::MoveTeleportAck);
-			packet
-				<< io::write_packed_guid(this->m_character->GetGuid())
-				<< io::write<uint32>(ackId)
-				<< this->m_character->GetMovementInfo();
-			packet.Finish();
-		});
+			// Generate pending movement change
+			PendingMovementChange change;
+			change.changeType = MovementChangeType::Teleport;
+			change.timestamp = GetAsyncTimeMs();
+			change.counter = ackId;
+			change.teleportInfo.x = position.x;
+			change.teleportInfo.y = position.y;
+			change.teleportInfo.z = position.z;
+			change.teleportInfo.o = facing.GetValueRadians();
+			m_character->PushPendingMovementChange(change);
+
+			// Send notification
+			SendPacket([this, ackId](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::MoveTeleportAck);
+				packet
+					<< io::write_packed_guid(this->m_character->GetGuid())
+					<< io::write<uint32>(ackId)
+					<< this->m_character->GetMovementInfo();
+				packet.Finish();
+				});
+		}
+		else
+		{
+			// Send transfer pending state. This will show up the loading screen at the client side and will
+			// tell the realm where our character should be sent to
+			SendPacket([mapId](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::TransferPending);
+				packet << io::write<uint32>(mapId);
+				packet.Finish();
+				});
+
+			// Initialize teleport request at realm
+			m_connector.SendTeleportRequest(m_character->GetGuid(), mapId, position, facing);
+
+			// Remove the character from the world (this will save the character)
+			m_worldInstance->RemoveGameObject(*m_character);
+			m_character.reset();
+
+			// Notify realm that our character left this world instance (this will commit the pending teleport request)
+			m_connector.NotifyWorldInstanceLeft(m_character->GetGuid(), auth::world_left_reason::Teleport);
+
+			// Destroy player instance
+			m_manager.RemovePlayer(shared_from_this());
+		}
 	}
 
 	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)

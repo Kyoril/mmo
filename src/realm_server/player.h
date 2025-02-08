@@ -82,6 +82,15 @@ namespace mmo
 
 		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
 
+		// Inititalizes a character transfer to a new map.
+		bool InitializeTransfer(uint32 map, Vector3 location, float o, bool shouldLeaveNode = false);
+
+		/// Commits an initialized transfer (if any).
+		void CommitTransfer();
+
+		/// 
+		const InstanceId& GetWorldInstanceId() const { return m_instanceId; }
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
@@ -92,6 +101,8 @@ namespace mmo
 		
 		void SendProxyPacket(uint16 packetId, const std::vector<char> &buffer);
 
+		void OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason);
+
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
@@ -100,7 +111,7 @@ namespace mmo
 
 		void JoinWorld() const;
 
-		void OnWorldJoined(const InstanceId instanceId);
+		void OnWorldJoined(const std::shared_ptr<World>& world, const InstanceId instanceId);
 
 		void OnWorldJoinFailed(const game::player_login_response::Type response);
 
@@ -227,6 +238,10 @@ namespace mmo
 		uint8 m_gmLevel = 0;
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;
+		InstanceId m_instanceId{};
+		uint32 m_transferMap = 0;
+		Vector3 m_transferPosition{};
+		float m_transferFacing = 0.0f;
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 

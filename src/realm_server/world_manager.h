@@ -44,7 +44,9 @@ namespace mmo
 
 		/// Tries to find a world node which is capable of hosting the given map id and, if provided,
 		///	is also hosting the given instance id.
-		std::weak_ptr<World> GetIdealWorldNode(MapId mapId, InstanceId instanceId);
+		std::shared_ptr<World> GetIdealWorldNode(MapId mapId, InstanceId instanceId);
+
+		std::shared_ptr<World> GetWorldByInstanceId(InstanceId instanceId);
 
 	private:
 

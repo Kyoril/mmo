@@ -26,7 +26,7 @@ namespace mmo
 
 	/// @brief This class represents the connection to a player on a realm server that this
 	///	       world node is connected to.
-	class Player final : public TileSubscriber, public NetUnitWatcherS, public NetPlayerWatcher
+	class Player final : public TileSubscriber, public NetUnitWatcherS, public NetPlayerWatcher, public std::enable_shared_from_this<Player>
 	{
 	public:
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
@@ -363,6 +363,8 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:
@@ -391,7 +393,7 @@ namespace mmo
 
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
-		void OnTeleport(const Vector3& position, const Radian& facing) override;
+		void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) override;
 
 		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
 			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
