@@ -907,7 +907,9 @@ namespace mmo
 		{
 			if (info.position != m_character->GetPosition())
 			{
-				ELOG("User position changed on client while it should not be able to do so based on server info")
+				ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
+				ELOG("\tS: " << m_character->GetPosition());
+				ELOG("\tC: " << info.position);
 				//return;
 			}
 		}

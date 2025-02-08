@@ -361,20 +361,101 @@ namespace mmo
 			UpdateCollider();
 		}
 
+		float groundHeight = 0.0f;
+		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
+
 		if (m_movementInfo.movementFlags & movement_flags::Falling)
 		{
 			constexpr float gravity = 19.291105f;
 			m_movementInfo.jumpVelocity -= gravity * deltaTime;
 			m_movementInfo.position.y += m_movementInfo.jumpVelocity * deltaTime;
-			playerNode->SetPosition(m_movementInfo.position);
+
+			if (hasGroundHeight && m_movementInfo.position.y <= groundHeight && m_movementInfo.jumpVelocity <= 0.0f)
+			{
+				// Reset movement info
+				m_movementInfo.position.y = groundHeight;
+				m_movementInfo.movementFlags &= ~movement_flags::Falling;
+				m_movementInfo.jumpVelocity = 0.0f;
+				m_movementInfo.jumpXZSpeed = 0.0f;
+				playerNode->SetPosition(m_movementInfo.position);
+				m_netDriver.OnMoveFallLand(*this);
+			}
+			else
+			{
+				playerNode->SetPosition(m_movementInfo.position);
+			}
+
+			UpdateCollider();
+		}
+		else if (m_movementInfo.movementFlags & movement_flags::PositionChanging)
+		{
+			if (!hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f)
+			{
+				// We need to start falling down!
+				m_movementInfo.movementFlags |= movement_flags::Falling;
+				m_movementInfo.jumpVelocity = -0.01f;
+				m_movementInfo.jumpXZSpeed = 0.0f;
+				playerNode->SetPosition(m_movementInfo.position);
+				m_netDriver.OnMoveFall(*this);
+			}
+			else if (hasGroundHeight)
+			{
+				m_movementInfo.position.y = groundHeight;
+				playerNode->SetPosition(m_movementInfo.position);
+				UpdateCollider();
+			}
 		}
 
-		// Stick to ground
-		float groundHeight = 0.0f;
-		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(playerNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 3.5f, groundHeight);
-		if(hasGroundHeight && playerNode->GetDerivedPosition().y <= groundHeight + 0.05f)
+		if (m_movementInfo.movementFlags & movement_flags::PositionChanging)
 		{
-			playerNode->SetPosition(Vector3(playerNode->GetDerivedPosition().x, groundHeight, playerNode->GetDerivedPosition().z));
+			std::vector<const Entity*> potentialTrees;
+			potentialTrees.reserve(8);
+
+			// Get collider boundaries
+			const AABB colliderBounds = CapsuleToAABB(GetCollider());
+			GetCollisionProvider().GetCollisionTrees(colliderBounds, potentialTrees);
+
+			Vector3 totalCorrection(0, 0, 0);
+			bool collisionDetected = false;
+
+			// Iterate over potential collisions
+			for (const Entity* entity : potentialTrees)
+			{
+				const auto& tree = entity->GetMesh()->GetCollisionTree();
+				const auto matrix = entity->GetParentNodeFullTransform();
+
+				for (uint32 i = 0; i < tree.GetIndices().size(); i += 3)
+				{
+					const Vector3& v0 = matrix * tree.GetVertices()[tree.GetIndices()[i]];
+					const Vector3& v1 = matrix * tree.GetVertices()[tree.GetIndices()[i + 1]];
+					const Vector3& v2 = matrix * tree.GetVertices()[tree.GetIndices()[i + 2]];
+
+					Vector3 collisionPoint, collisionNormal;
+					float penetrationDepth;
+
+					if (CapsuleTriangleIntersection(GetCollider(), v0, v1, v2, collisionPoint, collisionNormal, penetrationDepth))
+					{
+						float upDot = collisionNormal.Dot(Vector3::UnitY);
+						if (upDot > 0.9f)
+						{
+							continue;
+						}
+
+						// Accumulate corrections
+						collisionDetected = true;
+						totalCorrection += collisionNormal * penetrationDepth;
+					}
+				}
+			}
+
+			if (collisionDetected)
+			{
+				// Correct the player's position
+				GetSceneNode()->Translate(totalCorrection, TransformSpace::World);
+
+				m_movementInfo.position = GetSceneNode()->GetDerivedPosition();
+				UpdateCollider();
+			}
 		}
 	}
 
@@ -385,6 +466,8 @@ namespace mmo
 		// Instantly apply movement data for now
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+
+		UpdateCollider();
 	}
 
 	void GameUnitC::InitializeFieldMap()
@@ -1196,7 +1279,7 @@ namespace mmo
 	{
 		constexpr float halfHeight = 1.0f;
 
-		m_collider.pointA = GetPosition() + Vector3(0.0f, 0.5f, 0.0f);
+		m_collider.pointA = GetPosition() + Vector3(0.0f, 1.0f, 0.0f);
 		m_collider.pointB = GetPosition() + Vector3(0.0f, halfHeight * 2.0f, 0.0f);
 		m_collider.radius = 0.5f;
 	}

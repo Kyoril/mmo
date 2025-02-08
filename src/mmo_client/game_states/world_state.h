@@ -128,6 +128,8 @@ namespace mmo
 
 		void OnPlayerStatsChanged(uint64 monitoredGuid);
 
+		void MovementIdleMoveUnits();
+
 	private:
 		// Selected Target Mirror Handlers (called when certain field map values of the selected target object were changed by the server)
 
@@ -378,5 +380,8 @@ namespace mmo
 
 		void GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities) override;
 
+		void OnMoveFallLand(GameUnitC& unit) override;
+
+		void OnMoveFall(GameUnitC& unit) override;
 	};
 }

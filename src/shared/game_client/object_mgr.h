@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "movement.h"
 #include "game_client/game_object_c.h"
 #include "game_client/game_player_c.h"
 
@@ -52,6 +53,8 @@ namespace mmo
 
 		static const proto_client::ModelDataEntry* GetModelData(uint32 displayId);
 
+		static MovementGlobals& GetMovementGlobals() { return ms_movementGlobals; }
+
 	private:
 		static void OnItemStackCountChanged(uint64 itemGuid);
 
@@ -76,5 +79,7 @@ namespace mmo
 
 		static std::map<uint32, uint32> ms_itemCount;
 		static std::map<uint64, scoped_connection> ms_itemConnections;
+
+		static MovementGlobals ms_movementGlobals;
 	};
 }

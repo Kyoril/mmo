@@ -38,6 +38,10 @@ namespace mmo
 		virtual void GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature) = 0;
 
 		virtual void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) = 0;
+
+		virtual void OnMoveFallLand(GameUnitC& unit) = 0;
+
+		virtual void OnMoveFall(GameUnitC& unit) = 0;
 	};
 
 	class GameAuraC final : public NonCopyable

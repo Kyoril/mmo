@@ -209,10 +209,12 @@ namespace mmo
 
                     if (m_chunks[y][x]->m_minY > minY)
                     {
+                        //DLOG("Adjusted minY to " << minY << " because " << instance->Model->Filename);
 						m_chunks[y][x]->m_minY = minY;
                     }
                     if (m_chunks[y][x]->m_maxY < maxY)
                     {
+                        //DLOG("Adjusted maxY to " << minY << " because " << instance->Model->Filename);
                         m_chunks[y][x]->m_maxY = maxY;
                     }
                 }

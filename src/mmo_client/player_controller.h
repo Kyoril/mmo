@@ -4,7 +4,6 @@
 
 #include "frame_ui/mouse_event_args.h"
 #include "game_client/game_unit_c.h"
-#include "game/movement.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/scene.h"
 #include "input_control.h"
@@ -46,6 +45,10 @@ namespace mmo
 		[[nodiscard]] Camera& GetCamera() const { ASSERT(m_defaultCamera); return *m_defaultCamera;}
 
 		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledUnit ? m_controlledUnit->GetSceneNode() : nullptr; }
+
+		void OnMoveFallLand();
+
+		void OnMoveFall();
 
 	private:
 		void SetupCamera();
@@ -106,5 +109,6 @@ namespace mmo
 		GameUnitC* m_hoveredUnit = nullptr;
 		scoped_connection_container m_cvarConnections;
 		scoped_connection m_moveCompleted;
+		GameTime m_nextSetFacing = 0;
 	};
 }

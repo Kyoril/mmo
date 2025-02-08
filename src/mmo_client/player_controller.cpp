@@ -244,90 +244,6 @@ namespace mmo
 			return;
 		}
 
-		std::vector<const Entity*> potentialTrees;
-		potentialTrees.reserve(8);
-
-		// Get collider boundaries
-		const AABB colliderBounds = CapsuleToAABB(m_controlledUnit->GetCollider());
-		m_controlledUnit->GetCollisionProvider().GetCollisionTrees(colliderBounds, potentialTrees);
-
-		Vector3 totalCorrection(0, 0, 0);
-		bool collisionDetected = false;
-
-		// Iterate over potential collisions
-		for (const Entity* entity : potentialTrees)
-		{
-			const auto& tree = entity->GetMesh()->GetCollisionTree();
-			const auto matrix = entity->GetParentNodeFullTransform();
-
-			for (uint32 i = 0; i < tree.GetIndices().size(); i += 3)
-			{
-				const Vector3& v0 = matrix * tree.GetVertices()[tree.GetIndices()[i]];
-				const Vector3& v1 = matrix * tree.GetVertices()[tree.GetIndices()[i + 1]];
-				const Vector3& v2 = matrix * tree.GetVertices()[tree.GetIndices()[i + 2]];
-
-				Vector3 collisionPoint, collisionNormal;
-				float penetrationDepth;
-
-				if (CapsuleTriangleIntersection(m_controlledUnit->GetCollider(), v0, v1, v2, collisionPoint, collisionNormal, penetrationDepth))
-				{
-					if (collisionNormal.y > 0.25f)
-					{
-						continue;
-					}
-
-					collisionDetected = true;
-
-					// Accumulate corrections
-					totalCorrection += collisionNormal * penetrationDepth;
-				}
-			}
-		}
-
-		if (collisionDetected)
-		{
-			// Correct the player's position
-			m_controlledUnit->GetSceneNode()->Translate(totalCorrection, TransformSpace::World);
-
-			info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
-			m_controlledUnit->ApplyMovementInfo(info);
-		}
-
-		bool hasGroundHeight = false;
-		float groundHeight = 0.0f;
-		hasGroundHeight = m_controlledUnit->GetCollisionProvider().GetHeightAt(info.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
-
-		// Collision detection
-		if (info.movementFlags & movement_flags::Falling)
-		{
-			if (hasGroundHeight && info.position.y <= groundHeight && info.jumpVelocity <= 0.0f)
-			{
-				// Reset movement info
-				info.position.y = groundHeight;
-				info.movementFlags &= ~movement_flags::Falling;
-				info.jumpVelocity = 0.0f;
-				info.jumpXZSpeed = 0.0f;
-				m_controlledUnit->ApplyMovementInfo(info);
-				SendMovementUpdate(game::client_realm_packet::MoveFallLand);
-			}
-		}
-		else       // Not falling but moving somehow
-		{
-			if (!hasGroundHeight || groundHeight <= info.position.y - 0.25f)
-			{
-				// We need to start falling down!
-				info.movementFlags |= movement_flags::Falling;
-				info.jumpVelocity = -0.01f;
-				info.jumpXZSpeed = 0.0f;
-				m_controlledUnit->ApplyMovementInfo(info);
-				SendMovementUpdate(game::client_realm_packet::MoveJump);	// TODO: Use heartbeat packet for this
-			}
-			else if(hasGroundHeight)
-			{
-				info.position.y = groundHeight;
-				m_controlledUnit->ApplyMovementInfo(info);
-			}
-		}
 	}
 
 	void PlayerController::SendMovementUpdate(const uint16 opCode) const
@@ -778,7 +694,14 @@ namespace mmo
 			m_cameraAnchorNode->SetOrientation(Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(false), Vector3::UnitX));
 
 			m_controlledUnit->SetFacing(facing);
-			SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+
+			// Limit to 10 per second
+			if (GetAsyncTimeMs() >= m_nextSetFacing)
+			{
+				SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+				m_nextSetFacing = GetAsyncTimeMs() + 100;
+			}
+			
 		}
 	}
 
@@ -818,6 +741,21 @@ namespace mmo
 
 			m_moveCompleted = m_controlledUnit->movementEnded.connect(this, &PlayerController::OnMovementCompleted);
 		}
+	}
+
+	void PlayerController::OnMoveFallLand()
+	{
+		SendMovementUpdate(game::client_realm_packet::MoveFallLand);
+
+		if ((m_controlFlags & ControlFlags::MoveSent) == 0)
+		{
+			StopHeartbeatTimer();
+		}
+	}
+
+	void PlayerController::OnMoveFall()
+	{
+		SendMovementUpdate(game::client_realm_packet::MoveJump);
 	}
 
 	void PlayerController::SetupCamera()

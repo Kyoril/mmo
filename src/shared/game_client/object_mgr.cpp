@@ -7,6 +7,7 @@
 
 namespace mmo
 {
+	MovementGlobals ObjectMgr::ms_movementGlobals;
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
 	const proto_client::Project* ObjectMgr::ms_project = nullptr;

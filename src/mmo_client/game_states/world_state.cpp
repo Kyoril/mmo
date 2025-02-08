@@ -392,6 +392,46 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 	}
 
+	void WorldState::MovementIdleMoveUnits()
+	{
+		const GameTime timeNow = GetAsyncTimeMs();
+
+		MovementGlobals& globals = ObjectMgr::GetMovementGlobals();
+		GameTime timeDiff = timeNow - globals.m_lastUpdateTime;
+
+		// If local mover is set or any movers on the list
+		if (true)
+		{
+			ASSERT(timeDiff > 0);
+
+			// Move units in steps of 1000 ms
+			do
+			{
+				GameTime v14 = globals.m_lastUpdateTime;
+				if (timeDiff <= 1000)
+				{
+					timeDiff = 0;
+					Movement::MoveUnits();
+				}
+				else
+				{
+					globals.m_lastUpdateTime = v14 + 1000;
+					timeDiff -= 1000;
+				}
+
+				//if (globals.m_localMover)
+				{
+					// MoveLocalPlayer();
+				}
+			} while (timeDiff > 0);
+		}
+		else
+		{
+			// We just processed the update right now
+			globals.m_lastUpdateTime = timeNow;
+		}
+	}
+
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
@@ -2645,7 +2685,7 @@ namespace mmo
 				continue;
 			}
 
-			const AABB& entityAABB = entity->GetWorldBoundingBox(true);
+			const AABB& entityAABB = entity->GetWorldBoundingBox();
 			if (!entityAABB.Intersects(aabb))
 			{
 				continue;
@@ -2653,5 +2693,29 @@ namespace mmo
 
 			out_potentialEntities.push_back(entity);
 		}
+	}
+
+	void WorldState::OnMoveFallLand(GameUnitC& unit)
+	{
+		ASSERT(m_playerController);
+
+		if (&unit != m_playerController->GetControlledUnit().get())
+		{
+			return;
+		}
+
+		m_playerController->OnMoveFallLand();
+	}
+
+	void WorldState::OnMoveFall(GameUnitC& unit)
+	{
+		ASSERT(m_playerController);
+
+		if (&unit != m_playerController->GetControlledUnit().get())
+		{
+			return;
+		}
+
+		m_playerController->OnMoveFall();
 	}
 }
