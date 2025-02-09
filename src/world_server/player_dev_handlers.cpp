@@ -344,5 +344,4 @@ namespace mmo
 		m_character->Teleport(mapId, position, Radian(facingRadianVal));
 	}
 #endif
-
 }

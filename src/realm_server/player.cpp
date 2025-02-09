@@ -684,6 +684,80 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+#ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Resolve player by name
+		Player* player = m_manager.GetPlayerByCharacterName(playerName);
+		if (!player)
+		{
+			// We could not find a player currently online with the given name, so we ask the database and teleport to the location the character logged out
+			std::weak_ptr weakThis{ shared_from_this() };
+			auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& result) {
+				if (auto strongThis = weakThis.lock())
+				{
+					if (!result)
+					{
+						WLOG("Failed to teleport to player because no character named '" << playerName << "' exists!");
+						return;
+					}
+
+					strongThis->SendTeleportRequest(result->map, result->position, result->facing);
+				}
+			};
+
+			// Execute
+			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		// Player is currently connected, so we need to get the players location data first by asking the world node the player is currently connected to
+		std::weak_ptr weakThis{ shared_from_this() };
+		player->FetchCharacterLocationAsync([weakThis](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
+			{
+				auto strongThis = weakThis.lock();
+				if (!strongThis)
+				{
+					return;
+				}
+
+				if (!succeeded)
+				{
+					ELOG("Failed to fetch player position from world node, world node reported an error");
+					return;
+				}
+
+				// Teleport player to the location
+				DLOG("Teleporting player to map " << mapId << ", location " << position << "...");
+				strongThis->SendTeleportRequest(mapId, position, facing);
+			});
+
+		return PacketParseResult::Pass;
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatSummon(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find player character by name
+
+
+		return PacketParseResult::Pass;
+	}
+#endif
+
 	bool Player::InitializeTransfer(uint32 map, const Vector3& location, const float o, bool shouldLeaveNode)
 	{
 		const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(m_instanceId);
@@ -882,8 +956,6 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AcceptQuest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::QuestGiverQueryQuest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AbandonQuest, *this, &Player::OnProxyPacket);
-			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::QuestGiverCompleteQuest, *this, &Player::OnProxyPacket);
-			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::QuestGiverChooseQuestReward, *this, &Player::OnProxyPacket);
 
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
@@ -896,6 +968,9 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGiveMoney, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAddItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatWorldPort, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSpeed, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
@@ -904,6 +979,11 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::SetActionBarButton, *this, &Player::OnSetActionBarButton);
+
+#if MMO_WITH_DEV_COMMANDS
+			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
+			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
+#endif
 		}
 		else
 		{
@@ -913,6 +993,11 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::ItemQuery);
 			ClearPacketHandler(game::client_realm_packet::QuestQuery);
 			ClearPacketHandler(game::client_realm_packet::SetActionBarButton);
+
+#if MMO_WITH_DEV_COMMANDS
+			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
+			ClearPacketHandler(game::client_realm_packet::CheatSummon);
+#endif
 		}
 	}
 
@@ -1364,6 +1449,52 @@ namespace mmo
 				packet << io::write_range(actionButtons);
 				packet.Finish();
 			});
+	}
+
+	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback&& callback)
+	{
+		// Check if we are currently connected to a world node
+		std::shared_ptr<World> world = m_world.lock();
+		if (!world)
+		{
+			callback(false, 0, Vector3::Zero, Radian());
+			return;
+		}
+
+		// Send a request to the world node to get the character's location data
+		const uint64 ackId = m_callbackIdGenerator.GenerateId();
+		ASSERT(!m_characterLocationCallbacks.contains(ackId));
+		m_characterLocationCallbacks.emplace(ackId, std::move(callback));
+
+		world->SendFetchLocationRequestAsync(m_characterData->characterId, ackId);
+	}
+
+	void Player::CharacterLocationResponseNotification(const bool succeeded, const uint64 ackId, const uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		// Check if we have a callback
+		const auto it = m_characterLocationCallbacks.find(ackId);
+		if (it == m_characterLocationCallbacks.end())
+		{
+			ELOG("Received character location response for unknown ack id " << ackId);
+			return;
+		}
+
+		// Execute callback
+		it->second(succeeded, mapId, position, facing);
+		m_characterLocationCallbacks.erase(it);
+	}
+
+	void Player::SendTeleportRequest(uint32 mapId, const Vector3& position, const Radian& facing) const
+	{
+		// Check if we are currently connected to a world node
+		std::shared_ptr<World> world = m_world.lock();
+		if (!world)
+		{
+			return;
+		}
+
+		// Send a request to the world node to teleport the character
+		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing);
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

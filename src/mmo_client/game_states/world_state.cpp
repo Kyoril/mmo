@@ -755,6 +755,9 @@ namespace mmo
 		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
 		Console::RegisterCommand("additem", [this](const std::string& cmd, const std::string& args) { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
 		Console::RegisterCommand("worldport", [this](const std::string& cmd, const std::string& args) { Command_WorldPort(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports the player to the given map, optionally also changing the position.");
+		Console::RegisterCommand("port", [this](const std::string& cmd, const std::string& args) { Command_Port(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports you to the named player if he exists.");
+		Console::RegisterCommand("summon", [this](const std::string& cmd, const std::string& args) { Command_Summon(cmd, args); }, ConsoleCommandCategory::Gm, "Summons the named player to your location if such a player exists.");
+		Console::RegisterCommand("speed", [this](const std::string& cmd, const std::string& args) { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
 #endif
 	}
 
@@ -770,6 +773,9 @@ namespace mmo
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");
 		Console::UnregisterCommand("worldport");
+		Console::UnregisterCommand("port");
+		Console::UnregisterCommand("summon");
+		Console::UnregisterCommand("speed");
 #endif
 
 		m_questClient.Shutdown();
@@ -2496,6 +2502,88 @@ namespace mmo
 		}
 
 		m_realmConnector.WorldPort(mapId, position, facing);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_Speed(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: speed <speed>");
+			return;
+		}
+
+		const float speed = std::min(50.0f, std::stof(tokens[0]));
+		if (speed <= 0.0f)
+		{
+			ELOG("Speed must be greater than 0!");
+			return;
+		}
+
+		m_realmConnector.SetSpeed(speed);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_Summon(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: summon <playername>");
+			return;
+		}
+
+		if (tokens[0].empty())
+		{
+			ELOG("Player name cannot be empty!");
+			return;
+		}
+
+		m_realmConnector.SummonPlayer(tokens[0]);
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_Port(const std::string& cmd, const std::string& args) const
+	{
+		std::istringstream iss(args);
+		std::vector<std::string> tokens;
+		std::string token;
+		while (iss >> token)
+		{
+			tokens.push_back(token);
+		}
+
+		if (tokens.empty())
+		{
+			ELOG("Usage: port <playername>");
+			return;
+		}
+
+		if (tokens[0].empty())
+		{
+			ELOG("Player name cannot be empty!");
+			return;
+		}
+
+		m_realmConnector.TeleportToPlayer(tokens[0]);
 	}
 #endif
 

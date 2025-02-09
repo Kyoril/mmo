@@ -107,6 +107,10 @@ namespace mmo
 		/// Sends a local chat message to the world on behalf of a player.
 		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
 
+		void SendFetchLocationRequestAsync(uint64 characterId, uint64 ackId);
+
+		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
@@ -185,5 +189,7 @@ namespace mmo
 		PacketParseResult OnQuestData(auth::IncomingPacket& packet);
 
 		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
+
+		PacketParseResult OnCharacterLocationResponse(auth::IncomingPacket& packet);
 	};
 }

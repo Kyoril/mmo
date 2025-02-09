@@ -14,7 +14,7 @@ namespace mmo
 		virtual ~TileSubscriber() = default;
 
 	public:
-		virtual const GameUnitS& GetGameUnit() const = 0;
+		virtual GameUnitS& GetGameUnit() const = 0;
 
 		virtual void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const = 0;
 

@@ -118,6 +118,10 @@ namespace mmo
 				ProxyPacket = 0x04,
 
 				LocalChatMessage = 0x05,
+
+				FetchCharacterLocation,
+
+				TeleportRequest,
 			};
 		}
 
@@ -154,6 +158,8 @@ namespace mmo
 				QuestData,
 
 				TeleportRequest,
+
+				CharacterLocationResponse,
 			};
 		}
 

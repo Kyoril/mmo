@@ -293,6 +293,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterData, *strongThis, &World::OnCharacterData);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::QuestData, *strongThis, &World::OnQuestData);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::TeleportRequest, *strongThis, &World::OnTeleportRequest);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterLocationResponse, *strongThis, &World::OnCharacterLocationResponse);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -484,6 +485,34 @@ namespace mmo
 					<< io::write_packed_guid(playerGuid)
 					<< io::write<uint8>(chatType)
 					<< io::write_dynamic_range<uint16>(message);
+				outPacket.Finish();
+			});
+	}
+
+	void World::SendFetchLocationRequestAsync(uint64 characterId, uint64 ackId)
+	{
+		GetConnection().sendSinglePacket([characterId, ackId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::FetchCharacterLocation);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint64>(ackId);
+				outPacket.Finish();
+			});
+	}
+
+	void World::SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		GetConnection().sendSinglePacket([characterId, mapId, &position, &facing](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::TeleportRequest);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint32>(mapId)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(facing.GetValueRadians());
 				outPacket.Finish();
 			});
 	}
@@ -695,6 +724,51 @@ namespace mmo
 		ILOG("Initializing transfer of player " << log_hex_digit(characterGuid) << " to: " << mapId << " - " << position);
 		player->InitializeTransfer(mapId, position, facingRadianVal);
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnCharacterLocationResponse(auth::IncomingPacket& packet)
+	{
+		bool result;
+		uint64 characterId;
+		uint64 ackId;
+		Vector3 position;
+		Radian facing;
+		uint32 mapId;
+		if (!(packet >> io::read<uint64>(characterId)
+			>> io::read<uint64>(ackId)
+			>> io::read<uint8>(result)))
+		{
+			ELOG("Failed to read CharacterLocationResponse");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received player location response for character " << log_hex_digit(characterId) << " with result " << result);
+		if (result)
+		{
+			if (!(packet
+				>> io::read<uint32>(mapId)
+				>> io::read<float>(position.x)
+				>> io::read<float>(position.y)
+				>> io::read<float>(position.z)
+				>> io::read<float>(facing)
+				))
+			{
+				ELOG("Failed to read CharacterLocationResponse");
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		// Character found and location data received
+		Player* player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Received player location response for character which seems to be no longer connected!");
+			return PacketParseResult::Pass;
+		}
+
+		// Trigger ack
+		player->CharacterLocationResponseNotification(result, ackId, mapId, position, facing);
 		return PacketParseResult::Pass;
 	}
 

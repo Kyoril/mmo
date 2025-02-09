@@ -26,6 +26,16 @@ namespace mmo
 		PrepareFieldMap();
 	}
 
+	uint32 GameObjectS::GetMapId() const
+	{
+		if (!m_worldInstance)
+		{
+			return 0;
+		}
+
+		return m_worldInstance->GetMapId();
+	}
+
 	Vector3 GameObjectS::GetPredictedPosition()
 	{
 		Vector3 position = m_movementInfo.position;

@@ -273,6 +273,12 @@ namespace mmo
 		void Command_AddItem(const std::string& cmd, const std::string& args) const;
 
 		void Command_WorldPort(const std::string& cmd, const std::string& args) const;
+
+		void Command_Speed(const std::string& cmd, const std::string& args) const;
+
+		void Command_Summon(const std::string& cmd, const std::string& args) const;
+
+		void Command_Port(const std::string& cmd, const std::string& args) const;
 #endif
 
 	private:

@@ -766,6 +766,56 @@ namespace mmo
 		}
 	}
 
+	std::optional<CharacterLocationData> MySQLDatabase::GetCharacterLocationDataByName(String characterName)
+	{
+		mysql::Select select(m_connection, std::format("SELECT id, map, x, y, z, o FROM characters WHERE name = '{0}' LIMIT 1",
+			m_connection.EscapeString(characterName)));
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				// Create the structure and fill it with data
+				CharacterLocationData data{};
+				row.GetField(0, data.characterId);
+				row.GetField(1, data.map);
+				row.GetField(2, data.position.x);
+				row.GetField(3, data.position.y);
+				row.GetField(4, data.position.z);
+
+				float facingRadianValue;
+				row.GetField(5, facingRadianValue);
+				data.facing = Radian(facingRadianValue);
+
+				return std::optional<CharacterLocationData>(data);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	void MySQLDatabase::TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation)
+	{
+		if (!m_connection.Execute(std::format(
+			"UPDATE `characters` SET map = '{0}', x = '{1}', y = '{2}', z = '{3}', o = '{4}' WHERE name = '{5}' LIMIT 1"
+			, map
+			, position.x
+			, position.y
+			, position.z
+			, orientation.GetValueRadians()
+			, m_connection.EscapeString(characterName)
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());

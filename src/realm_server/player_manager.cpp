@@ -122,4 +122,24 @@ namespace mmo
 
 		return nullptr;
 	}
+
+	Player* PlayerManager::GetPlayerByCharacterName(const String& characterName)
+	{
+		std::scoped_lock playerLock{ m_playerMutex };
+
+		const auto p = std::find_if(
+			m_players.begin(),
+			m_players.end(),
+			[&characterName](const std::shared_ptr<Player>& p)
+			{
+				return (p->HasCharacterGuid() && characterName == p->GetCharacterName());
+			});
+
+		if (p != m_players.end())
+		{
+			return (*p).get();
+		}
+
+		return nullptr;
+	}
 }

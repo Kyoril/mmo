@@ -103,6 +103,8 @@ namespace mmo
 
 		void OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason);
 
+		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3& position, const Radian& facing);
+
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
@@ -132,6 +134,12 @@ namespace mmo
 		void OnQueryItem(uint64 entry);
 
 		void OnActionButtons(const ActionButtons& actionButtons);
+
+		typedef std::function<void(bool succeeded, uint32 mapId, Vector3 position, Radian facing)> CharacterLocationAsyncCallback;
+
+		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback&& callback);
+
+		void SendTeleportRequest(uint32 mapId, const Vector3& position, const Radian& facing) const;
 
 	public:
 		struct PacketHandlerRegistrationHandle final
@@ -258,6 +266,9 @@ namespace mmo
 		scoped_connection m_worldDestroyed;
 		PacketHandlerHandleContainer m_newWorldAckHandler;
 
+		IdGenerator<uint64> m_callbackIdGenerator;
+		std::map<uint64, CharacterLocationAsyncCallback> m_characterLocationCallbacks;
+
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
@@ -286,6 +297,10 @@ namespace mmo
 		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
 		PacketParseResult OnSetActionBarButton(game::IncomingPacket& packet);
 		PacketParseResult OnMoveWorldPortAck(game::IncomingPacket& packet);
-	};
 
+#ifdef MMO_WITH_DEV_COMMANDS
+		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);
+		PacketParseResult OnCheatSummon(game::IncomingPacket& packet);
+#endif
+	};
 }

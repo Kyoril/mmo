@@ -52,7 +52,7 @@ namespace mmo
 
 	public:
 		/// @copydoc TileSubscriber::GetGameUnit
-		const GameUnitS& GetGameUnit() const override { return *m_character; }
+		GameUnitS& GetGameUnit() const override { return *m_character; }
 
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const override;
 
@@ -365,6 +365,7 @@ namespace mmo
 		void OnCheatAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 #endif
 
 	private:

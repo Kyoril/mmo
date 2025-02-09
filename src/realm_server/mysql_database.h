@@ -62,6 +62,10 @@ namespace mmo
 
 		void SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data) override;
 
+		std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) override;
+
+		void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) override;
+
 	private:
 		void PrintDatabaseError();
 

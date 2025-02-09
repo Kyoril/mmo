@@ -53,6 +53,17 @@ namespace mmo
 		Error
 	};
 
+	struct CharacterLocationData
+	{
+		DatabaseId characterId{0 };
+
+		uint32 map{0};
+
+		Vector3 position{};
+
+		Radian facing{0.0f};
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -108,6 +119,10 @@ namespace mmo
 		virtual void LearnSpell(DatabaseId characterId, uint32 spellId) = 0;
 
 		virtual void SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data) = 0;
+
+		virtual std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) = 0;
+
+		virtual void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) = 0;
 	};
 
 

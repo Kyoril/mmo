@@ -139,6 +139,10 @@ namespace mmo
 
 				MoveWorldPortAck,
 
+				CheatSpeed,					// GAME MASTER
+				CheatSummon,				// GAME MASTER
+				CheatTeleportToPlayer,		// GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};

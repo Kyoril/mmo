@@ -410,6 +410,8 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::PlayerCharacterLeave, *this, &RealmConnector::OnPlayerCharacterLeave);
 				RegisterPacketHandler(auth::realm_world_packet::ProxyPacket, *this, &RealmConnector::OnProxyPacket);
 				RegisterPacketHandler(auth::realm_world_packet::LocalChatMessage, *this, &RealmConnector::OnLocalChatMessage);
+				RegisterPacketHandler(auth::realm_world_packet::FetchCharacterLocation, *this, &RealmConnector::OnFetchCharacterLocation);
+				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				
 				PropagateHostedMapIds();
 			}
@@ -691,6 +693,81 @@ namespace mmo
 			ELOG("Unsupported chat type received: " << log_hex_digit(static_cast<uint16>(chatType)));
 			return PacketParseResult::Pass;
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnFetchCharacterLocation(auth::IncomingPacket& packet)
+	{
+		uint64 characterId, ackId;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(ackId)))
+		{
+			ELOG("Failed to read CHARACTER_LOCATION_REQUEST packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			// Send error response
+			WLOG("Received character location request for character " << log_hex_digit(characterId) << ", but such a character is not currently connected!");
+			sendSinglePacket([characterId, ackId](auth::OutgoingPacket& packet)
+				{
+					packet.Start(auth::world_realm_packet::CharacterLocationResponse);
+					packet << io::write<uint64>(characterId) << io::write<uint64>(ackId) << io::write<uint8>(false);
+					packet.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		const GameUnitS& unit = player->GetGameUnit();
+		const uint32 mapId = unit.GetMapId();
+		const Vector3 position = unit.GetPosition();
+		const Radian facing = unit.GetFacing();
+
+		DLOG("Character location request for character " << log_hex_digit(characterId) << " received (Map Id: " << mapId << "; Loc: " << position << ")");
+		sendSinglePacket([characterId, ackId, mapId, &position, &facing](auth::OutgoingPacket& packet)
+			{
+				packet.Start(auth::world_realm_packet::CharacterLocationResponse);
+				packet << io::write<uint64>(characterId) << io::write<uint64>(ackId) << io::write<uint8>(true)
+					<< io::write<uint32>(mapId)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(facing.GetValueRadians());
+				packet.Finish();
+			});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnTeleportRequest(auth::IncomingPacket& packet)
+	{
+		uint64 characterId;
+		uint32 mapId;
+		Vector3 position;
+		float facingRadianValue;
+
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint32>(mapId)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(facingRadianValue)))
+		{
+			ELOG("Failed to read CHARACTER_LOCATION_REQUEST packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find player
+		std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Received teleport request for non-connected player character " << log_hex_digit(characterId));
+			return PacketParseResult::Pass;
+		}
+
+		// Teleport the player
+		player->GetGameUnit().Teleport(mapId, position, Radian(facingRadianValue));
 
 		return PacketParseResult::Pass;
 	}

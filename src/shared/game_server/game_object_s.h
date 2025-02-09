@@ -237,6 +237,8 @@ namespace mmo
 		/// Gets the facing of this object.
 		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
 
+		uint32 GetMapId() const;
+
 		virtual void Relocate(const Vector3& position, const Radian& facing)
 		{
 			const MovementInfo oldInfo = m_movementInfo;

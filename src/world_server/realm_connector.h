@@ -108,6 +108,10 @@ namespace mmo
 
 		PacketParseResult OnLocalChatMessage(auth::IncomingPacket& packet);
 
+		PacketParseResult OnFetchCharacterLocation(auth::IncomingPacket& packet);
+
+		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
+		
 		/// Resets this instance to an unauthenticated state.
 		void Reset();
 

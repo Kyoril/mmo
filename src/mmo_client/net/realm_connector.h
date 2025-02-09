@@ -247,6 +247,12 @@ namespace mmo
 
 		void WorldPort(uint32 mapId, const Vector3& position, const Radian& facing);
 
+		void SummonPlayer(const String& playerName);
+
+		void TeleportToPlayer(const String& playerName);
+
+		void SetSpeed(float speed);
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.
