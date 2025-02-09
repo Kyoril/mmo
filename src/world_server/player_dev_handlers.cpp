@@ -344,4 +344,26 @@ namespace mmo
 		m_character->Teleport(mapId, position, Radian(facingRadianVal));
 	}
 #endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatSpeed(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		float speed;
+		if (!(contentReader >> io::read<float>(speed)))
+		{
+			ELOG("Failed to read CheatSpeed packet!");
+			return;
+		}
+
+		if (speed <= 0.0f || speed > 50.0f)
+		{
+			ELOG("Invalid speed value " << speed);
+			return;
+		}
+
+		// TODO: Different movement types as well?
+		DLOG("Setting base movement speed of player " << m_characterData.name << " to " << speed);
+		m_character->SetBaseSpeed(movement_type::Run, speed);
+	}
+#endif
 }

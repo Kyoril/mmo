@@ -1274,8 +1274,13 @@ namespace mmo
 		SetInCombat(false);
 	}
 
-	float GameUnitS::GetBaseSpeed(const MovementType type)
+	float GameUnitS::GetBaseSpeed(const MovementType type) const
 	{
+		if (const auto it = m_baseSpeeds.find(static_cast<uint8>(type)); it != m_baseSpeeds.end())
+		{
+			return it->second;
+		}
+
 		switch (type)
 		{
 		case movement_type::Walk:
@@ -1299,12 +1304,17 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetBaseSpeed(const MovementType type, float speed)
+	{
+		m_baseSpeeds[type] = speed;
+		NotifySpeedChanged(type);
+	}
+
 	float GameUnitS::GetSpeed(const MovementType type) const
 	{
 		const float baseSpeed = GetBaseSpeed(type);
 		return baseSpeed * m_speedBonus[type];
 	}
-
 
 	void GameUnitS::NotifySpeedChanged(MovementType type, bool initial)
 	{
@@ -1355,7 +1365,7 @@ namespace mmo
 			}
 		}
 
-		if (oldBonus != speed)
+		//if (oldBonus != speed)
 		{
 			// If there is a watcher, we need to notify him about this change first, and he needs
 			// to send an ack packet before we finally apply the speed change. If there is no

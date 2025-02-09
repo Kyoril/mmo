@@ -366,6 +366,7 @@ namespace mmo
 
 		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnCheatSpeed(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:

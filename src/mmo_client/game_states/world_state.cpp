@@ -1932,6 +1932,7 @@ namespace mmo
 		}
 
 		unit->SetSpeed(type, speed);
+
 		return PacketParseResult::Pass;
 	}
 
@@ -1940,34 +1941,35 @@ namespace mmo
 		const std::shared_ptr<GameUnitC>& unit = m_playerController->GetControlledUnit();
 		if (!unit)
 		{
+			WLOG("No controlled unit found!");
 			return PacketParseResult::Pass;
 		}
 
 		MovementType type = movement_type::Run;
 		switch (packet.GetId())
 		{
-		case game::realm_client_packet::MoveSetWalkSpeed:
+		case game::realm_client_packet::ForceMoveSetWalkSpeed:
 			type = movement_type::Walk;
 			break;
-		case game::realm_client_packet::MoveSetRunSpeed:
+		case game::realm_client_packet::ForceMoveSetRunSpeed:
 			type = movement_type::Run;
 			break;
-		case game::realm_client_packet::MoveSetRunBackSpeed:
+		case game::realm_client_packet::ForceMoveSetRunBackSpeed:
 			type = movement_type::Backwards;
 			break;
-		case game::realm_client_packet::MoveSetSwimSpeed:
+		case game::realm_client_packet::ForceMoveSetSwimSpeed:
 			type = movement_type::Swim;
 			break;
-		case game::realm_client_packet::MoveSetSwimBackSpeed:
+		case game::realm_client_packet::ForceMoveSetSwimBackSpeed:
 			type = movement_type::SwimBackwards;
 			break;
-		case game::realm_client_packet::MoveSetTurnRate:
+		case game::realm_client_packet::ForceMoveSetTurnRate:
 			type = movement_type::Turn;
 			break;
-		case game::realm_client_packet::SetFlightSpeed:
+		case game::realm_client_packet::ForceSetFlightSpeed:
 			type = movement_type::Flight;
 			break;
-		case game::realm_client_packet::SetFlightBackSpeed:
+		case game::realm_client_packet::ForceSetFlightBackSpeed:
 			type = movement_type::FlightBackwards;
 			break;
 		}
@@ -1978,6 +1980,7 @@ namespace mmo
 		if (!(packet >> io::read<uint32>(ackId)
 			>> io::read<float>(speed)))
 		{
+			WLOG("Failed to read force movement speed change packet!");
 			return PacketParseResult::Disconnect;
 		}
 

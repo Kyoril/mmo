@@ -568,7 +568,9 @@ namespace mmo
 
 		void RemoveAllAttackingUnits();
 
-		static float GetBaseSpeed(const MovementType type);
+		float GetBaseSpeed(const MovementType type) const;
+
+		void SetBaseSpeed(const MovementType type, float speed);
 
 		float GetSpeed(const MovementType type) const;
 
@@ -699,6 +701,8 @@ namespace mmo
 		SpellModsByOp m_spellModsByOp;
 
 		uint8 m_combatCapabilities = combat_capabilities::None;
+
+		std::map<uint8, float> m_baseSpeeds;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);
