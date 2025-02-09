@@ -722,6 +722,12 @@ namespace mmo
 
 		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::NewWorld);
+			packet
+				<< io::write<uint32>(m_transferMap)
+				<< io::write<float>(m_transferPosition.x)
+				<< io::write<float>(m_transferPosition.y)
+				<< io::write<float>(m_transferPosition.z)
+				<< io::write<float>(m_transferFacing);
 			packet.Finish();
 			});
 

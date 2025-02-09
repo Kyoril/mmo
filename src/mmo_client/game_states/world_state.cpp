@@ -2204,8 +2204,42 @@ namespace mmo
 
 	PacketParseResult WorldState::OnNewWorld(game::IncomingPacket& packet)
 	{
+		uint32 mapId;
+		Vector3 position;
+		float facingRadianVal;
+		if (!(packet >> io::read<uint32>(mapId)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(facingRadianVal)))
+		{
+			ELOG("Failed to read NewWorld packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		ILOG("Transfer to map " << mapId << " completed! Loading map...");
+		g_mapId = mapId;
+
 		// Load new map
 		LoadMap();
+
+
+		// Ensure terrain is properly reloaded
+		PagePosition worldSize(64, 64);
+		const auto pagePos = PagePosition(static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32, static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32);
+		ForEachPageInSquare(
+			worldSize, pagePos, 1, [this](const PagePosition& page)
+			{
+				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
+				if (terrainPage)
+				{
+					if (terrainPage->Prepare())
+					{
+						while (!terrainPage->Load());
+					}
+				}
+			}
+		);
 
 		// Acknowledge the new world
 		m_realmConnector.SendMoveWorldPortAck();
@@ -2493,7 +2527,7 @@ namespace mmo
 			ELOG("Failed to read world '" << assetPath << ".hwld'!");
 			return false;
 		}
-		
+
 		return true;
 	}
 

@@ -4,32 +4,6 @@
 
 namespace mmo
 {
-	template <class F>
-	void ForEachPageInSquare(
-		const PagePosition &terrainSize,
-		const PagePosition &center,
-		const std::size_t radius,
-		const F &pageHandler
-		)
-	{
-		const PagePosition begin(
-			std::max(center[0], radius) - radius,
-			std::max(center[1], radius) - radius
-			);
-		const PagePosition end(
-			std::min(center[0] + radius + 1, terrainSize[0]),
-			std::min(center[1] + radius + 1, terrainSize[1])
-			);
-
-		for (size_t y = begin[1]; y < end[1]; ++y)
-		{
-			for (size_t x = begin[0]; x < end[0]; ++x)
-			{
-				pageHandler(PagePosition(x, y));
-			}
-		}
-	}
-
 	size_t Distance(size_t first, size_t second)
 	{
 		if (first < second)
