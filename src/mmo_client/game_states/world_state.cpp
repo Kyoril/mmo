@@ -2207,7 +2207,8 @@ namespace mmo
 		uint32 mapId;
 		Vector3 position;
 		float facingRadianVal;
-		if (!(packet >> io::read<uint32>(mapId)
+		if (!(packet
+			>> io::read<uint32>(mapId)
 			>> io::read<float>(position.x)
 			>> io::read<float>(position.y)
 			>> io::read<float>(position.z)
@@ -2222,7 +2223,6 @@ namespace mmo
 
 		// Load new map
 		LoadMap();
-
 
 		// Ensure terrain is properly reloaded
 		PagePosition worldSize(64, 64);

@@ -1348,7 +1348,7 @@ namespace mmo
 		{
 			object.RecalculateTotalAttributePointsConsumed(i);
 		}
-		
+
 		return r;
 	}
 }

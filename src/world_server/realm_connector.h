@@ -69,7 +69,7 @@ namespace mmo
 		/// @param packetContent 
 		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent, bool flush = true);
 
-		void SendCharacterData(const GamePlayerS& character);
+		void SendCharacterData(uint32 mapId, const InstanceId& instanceId, const GamePlayerS& character);
 
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
 

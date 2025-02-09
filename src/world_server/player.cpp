@@ -592,7 +592,7 @@ namespace mmo
 			return;
 		}
 
-		m_connector.SendCharacterData(*m_character);
+		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), *m_character);
 	}
 
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)
@@ -1076,8 +1076,6 @@ namespace mmo
 			return;
 		}
 
-		m_character->TeleportOnMap(m_character->GetBindPosition(), m_character->GetBindFacing());
-
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
 		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth) / 2);
@@ -1087,6 +1085,8 @@ namespace mmo
 		}
 
 		m_character->StartRegeneration();
+
+		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
 	}
 
 	bool ValidateSpeedAck(const PendingMovementChange& change, float receivedSpeed, MovementType& outMoveTypeSent)

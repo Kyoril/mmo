@@ -586,12 +586,16 @@ namespace mmo
 	PacketParseResult World::OnCharacterData(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;
+		uint32 mapId = 0;
+		InstanceId instanceId;
 
 		GamePlayerS player(m_project, m_timerQueue);
 		player.Initialize();
 
 		if (!(packet
 			>> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(mapId)
+			>> instanceId
 			>> player
 			))
 		{
@@ -616,7 +620,7 @@ namespace mmo
 
 		// RequestHandler
 		auto handler = [](bool result) { };
-		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, 0 /*TODO!*/, player.GetMovementInfo().position,
+		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
 			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
 			player.Get<uint32>(object_fields::Xp), 
 			player.Get<uint32>(object_fields::Health), 

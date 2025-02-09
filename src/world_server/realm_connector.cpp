@@ -332,13 +332,15 @@ namespace mmo
 		}, flush);
 	}
 
-	void RealmConnector::SendCharacterData(const GamePlayerS& character)
+	void RealmConnector::SendCharacterData(uint32 mapId, const InstanceId& instanceId, const GamePlayerS& character)
 	{
-		sendSinglePacket([&character](auth::OutgoingPacket & outPacket)
+		sendSinglePacket([&character, mapId, &instanceId](auth::OutgoingPacket & outPacket)
 		{
 			outPacket.Start(auth::world_realm_packet::CharacterData);
 			outPacket
 				<< io::write<uint64>(character.GetGuid())
+				<< io::write<uint32>(mapId)
+				<< instanceId
 				<< character;
 			outPacket.Finish();
 		});
