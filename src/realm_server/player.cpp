@@ -751,8 +751,38 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Find player character by name
+		std::weak_ptr weakThis{ shared_from_this() };
+		FetchCharacterLocationAsync([weakThis, playerName](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
+			{
+				std::shared_ptr<Player> strongThis = weakThis.lock();
+				if (!strongThis)
+				{
+					return;
+				}
 
+				// Resolve player by name
+				Player* player = strongThis->m_manager.GetPlayerByCharacterName(playerName);
+				if (!player)
+				{
+					// We could not find a player currently online with the given name, so we just teleport him in the database so that when he logs back in, he will be at the new location
+					auto handler = [weakThis, playerName](bool succeeded) {
+						if (auto strongThis = weakThis.lock())
+						{
+							if (!succeeded)
+							{
+								WLOG("Failed to summon player '" << playerName << "' in database because no such character exists");
+							}
+						}
+						};
+
+					// Execute
+					strongThis->m_database.asyncRequest(std::move(handler), &IDatabase::TeleportCharacterByName, playerName, mapId, position, facing);
+					return;
+				}
+
+				// Send teleport request
+				player->SendTeleportRequest(mapId, position, facing);
+			});
 
 		return PacketParseResult::Pass;
 	}
