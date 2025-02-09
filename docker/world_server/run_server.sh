@@ -19,7 +19,7 @@ worldConfig =
 	realmServerPort = ${REALM_WORLD_PORT}
 	realmServerAuthName = "${REALM_WORLD_NAME}"
 	realmServerPassword = "${REALM_WORLD_PASSWORD_HASH}"
-	hostedMaps = {0}
+	hostedMaps = {${HOSTED_MAP_IDS}}
 )
 
 webServer = 

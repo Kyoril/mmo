@@ -102,6 +102,7 @@ services:
       - REALM_WORLD_PORT=6280
       - REALM_WORLD_NAME=WORLD_NODE_NAME
       - REALM_WORLD_PASSWORD_HASH=WORLD_PASSWORD_HASH_SHA1
+      - HOSTED_MAP_IDS=0,1
       - DATA_DIR=/server-data/data
       - NAV_DIR=/server-data/nav
     extra_hosts:
