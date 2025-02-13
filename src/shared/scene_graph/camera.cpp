@@ -72,7 +72,7 @@ namespace mmo
 		const auto screenPos = Vector3(clipSpace.x / clipSpace.w, clipSpace.y / clipSpace.w, clipSpace.z / clipSpace.w);
 		
 		x = (screenPos.x + 1.0f) * 0.5f;
-		y = (screenPos.y + 1.0f) * 0.5f;
+		y = 1.0f - (screenPos.y + 1.0f) * 0.5f;
 	}
 
 	AABBVisibility Camera::GetVisibility(const AABB& bound) const
