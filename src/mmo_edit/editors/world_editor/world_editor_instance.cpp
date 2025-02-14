@@ -1005,6 +1005,21 @@ namespace mmo
 					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, spawnEntry](Selectable& selected)
 						{
 							// TODO: Implement
+						}, [this](const proto::UnitSpawnEntry& spawn)
+						{
+							auto* map = m_spawnEditMode->GetMapEntry();
+							if (map)
+							{
+								const auto it = std::find_if(map->mutable_unitspawns()->begin(), map->mutable_unitspawns()->end(), [&spawn](const proto::UnitSpawnEntry& entry)
+									{
+										return &entry == &spawn;
+									});
+								if (it != map->mutable_unitspawns()->end())
+								{	
+									map->mutable_unitspawns()->erase(it);
+								}
+								
+							}
 						}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 				}
@@ -1567,7 +1582,7 @@ namespace mmo
 			}
 
 			bool respawn = selectable.GetEntry().respawn();
-			if (ImGui::Checkbox("Is Active", &respawn))
+			if (ImGui::Checkbox("Respawn", &respawn))
 			{
 				selectable.GetEntry().set_respawn(respawn);
 			}

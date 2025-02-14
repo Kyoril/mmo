@@ -25,6 +25,9 @@ namespace mmo
 
 		void OnViewportDrop(float x, float y) override;
 
+	public:
+		proto::MapEntry* GetMapEntry() const { return m_mapEntry; }
+
 	private:
 		proto::MapManager& m_maps;
 

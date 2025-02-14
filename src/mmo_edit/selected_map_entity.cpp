@@ -117,7 +117,8 @@ namespace mmo
 		return Vector3::UnitScale;
     }
 
-    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication)
+    SelectedUnitSpawn::SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication,
+        const std::function<void(const proto::UnitSpawnEntry&)>& removal)
 		: Selectable()
 		, m_entry(entry)
 		, m_units(units)
@@ -125,6 +126,7 @@ namespace mmo
         , m_node(node)
 		, m_entity(entity)
 		, m_duplication(duplication)
+		, m_removal(removal)
     {
     }
 
@@ -168,7 +170,7 @@ namespace mmo
 
     void SelectedUnitSpawn::Remove()
     {
-
+        m_removal(m_entry);
     }
 
     void SelectedUnitSpawn::Deselect()

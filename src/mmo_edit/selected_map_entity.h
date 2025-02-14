@@ -98,8 +98,8 @@ namespace mmo
 	class SelectedUnitSpawn final : public Selectable
 	{
 	public:
-
-		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication);
+		SelectedUnitSpawn(proto::UnitSpawnEntry& entry, const proto::UnitManager& units, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, 
+			const std::function<void(Selectable&)>& duplication, const std::function<void(const proto::UnitSpawnEntry&)>& removal);
 
 		void Visit(SelectableVisitor& visitor) override;
 
@@ -140,5 +140,6 @@ namespace mmo
 		SceneNode& m_node;
 		Entity& m_entity;
 		std::function<void(Selectable&)> m_duplication;
+		std::function<void(const proto::UnitSpawnEntry&)> m_removal;
 	};
 }
