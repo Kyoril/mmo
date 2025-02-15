@@ -253,6 +253,10 @@ namespace mmo
 
 		PacketParseResult OnNewWorld(game::IncomingPacket& packet);
 
+		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
+
+		PacketParseResult OnPartyCommandResult(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

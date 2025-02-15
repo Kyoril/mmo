@@ -44,6 +44,7 @@
 #include "terrain/page.h"
 
 #include "audio.h"
+#include "game/group.h"
 #include "scene_graph/octree_scene.h"
 
 namespace mmo
@@ -739,6 +740,9 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellEnergizeLog, *this, &WorldState::OnSpellEnergizeLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TransferPending, *this, &WorldState::OnTransferPending);
+
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -2252,6 +2256,89 @@ namespace mmo
 
 		// Acknowledge the new world
 		m_realmConnector.SendMoveWorldPortAck();
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnGroupInvite(game::IncomingPacket& packet)
+	{
+		String inviterName;
+		if (!(packet >> io::read_container<uint8>(inviterName)))
+		{
+			ELOG("Failed to read GroupInvite packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Notify group invitation
+		FrameManager::Get().TriggerLuaEvent("PARTY_INVITE_REQUEST", inviterName);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnPartyCommandResult(game::IncomingPacket& packet)
+	{
+		PartyOperation command;
+		PartyResult result;
+		String playerName;
+		if (!(packet
+			>> io::read<uint8>(command)
+			>> io::read_container<uint8>(playerName)
+			>> io::read<uint8>(result)))
+		{
+			ELOG("Failed to read PartyCommandResult packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Was it an error?
+		if (result != party_result::Ok)
+		{
+			switch (result)
+			{
+			case party_result::AlreadyInGroup:
+				ELOG(playerName << " is already in a group.");
+				break;
+			case party_result::CantInviteYourself:
+				ELOG("You cannot invite yourself.");
+				break;
+			case party_result::CantFindTarget:
+				ELOG("Cannot find '" << playerName << "'.");
+				break;
+			case party_result::NotInYourParty:
+				ELOG(playerName << " is not in your party.");
+				break;
+			case party_result::NotInYourInstance:
+				ELOG("Cannot find '" << playerName << "'.");
+				break;
+			case party_result::PartyFull:
+				ELOG("Your party is full.");
+				break;
+			case party_result::YouNotInGroup:
+				ELOG("You aren't in a party.");
+				break;
+			case party_result::YouNotLeader:
+				ELOG("You are not the party leader.");
+				break;
+			case party_result::TargetUnfriendly:
+				ELOG("Target is not part of your alliance.");
+				break;
+			case party_result::TargetIgnoreYou:
+				ELOG(playerName << " is ignoring you.");
+				break;
+			}
+		}
+		else
+		{
+			if (command == party_operation::Invite)
+			{
+				// TODO: Display invite
+				ILOG("You have invited " << playerName << " to join your group.");
+			}
+			else if (command == party_operation::Leave)
+			{
+				// TODO: Remove all party UI
+				ILOG("You leave the group.");
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}

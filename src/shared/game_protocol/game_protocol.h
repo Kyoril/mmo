@@ -143,6 +143,11 @@ namespace mmo
 				CheatSummon,				// GAME MASTER
 				CheatTeleportToPlayer,		// GAME MASTER
 
+				GroupInvite,
+				GroupUninvite,
+				GroupAccept,
+				GroupDecline,
+
 				/// Counter constant
 				Count_,
 			};
@@ -292,6 +297,17 @@ namespace mmo
 
 				NewWorld,
 				TransferAborted,
+
+				PartyCommandResult,
+				PartyMemberStats,
+
+				GroupInvite,
+				GroupCancel,
+				GroupDecline,
+				GroupUninvite,
+				GroupSetLeader,
+				GroupDestroyed,
+				GroupList,
 
 				/// Counter constant
 				Count_,

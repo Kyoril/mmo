@@ -17,6 +17,7 @@
 
 #include <functional>
 
+#include "player_group.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
 #include "game/quest_info.h"
@@ -33,13 +34,15 @@ namespace mmo
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection,
 		String address,
-		const proto::Project& project)
+		const proto::Project& project,
+		IdGenerator<uint64>& groupIdGenerator)
 		: m_timerQueue(timerQueue)
 		, m_manager(playerManager)
 		, m_worldManager(worldManager)
 		, m_loginConnector(loginConnector)
 		, m_database(database)
 		, m_project(project)
+		, m_groupIdGenerator(groupIdGenerator)
 		, m_connection(std::move(connection))
 		, m_address(std::move(address))
 		, m_accountId(0)
@@ -684,6 +687,91 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnGroupInvite(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Try to find that player
+		auto player = m_manager.GetPlayerByCharacterName(playerName);
+		if (!player)
+		{
+			WLOG("Unable to invite player: Player " << playerName << " not found (may be offline)");
+			SendPartyOperationResult(party_operation::Invite, party_result::CantFindTarget, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		if (player == this)
+		{
+			WLOG("Player wants to invite himself");
+			SendPartyOperationResult(party_operation::Invite, party_result::CantInviteYourself, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		if (player->GetGroup() != nullptr)
+		{
+			WLOG("Unable to invite player: Player " << playerName << " is already a member of a group");
+			SendPartyOperationResult(party_operation::Invite, party_result::AlreadyInGroup, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		// Are we already in a group?
+		if (!m_group)
+		{
+			// Not yet in a group - create a new one!
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database);
+			m_group->Create(m_characterData->characterId);
+
+			// TODO: Notify the world node
+		}
+		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
+		{
+			WLOG("Unable to invite player: Player has no right to invite other players");
+			SendPartyOperationResult(party_operation::Invite, party_result::YouNotLeader, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		const auto result = m_group->AddInvite(player->GetCharacterGuid());
+		if (result != party_result::Ok)
+		{
+			SendPartyOperationResult(party_operation::Invite, result, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		player->SetGroup(m_group);
+		player->SendPartyInvite(m_characterData->name);
+
+		SendPartyOperationResult(party_operation::Invite, party_result::Ok, playerName);
+		m_group->SendUpdate();
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupUninvite(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupAccept(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupDecline(game::IncomingPacket& packet)
+	{
+		return PacketParseResult::Pass;
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
 	{
@@ -836,6 +924,16 @@ namespace mmo
 			});
 
 		m_newWorldAckHandler += RegisterAutoPacketHandler(game::client_realm_packet::MoveWorldPortAck, *this, &Player::OnMoveWorldPortAck);
+	}
+
+	void Player::SendPartyInvite(const String& inviterName)
+	{
+		m_connection->sendSinglePacket([&inviterName](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GroupInvite);
+				packet << io::write_dynamic_range<uint8>(inviterName);
+				packet.Finish();
+			});
 	}
 
 	void Player::SendAuthChallenge()
@@ -1009,6 +1107,10 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::SetActionBarButton, *this, &Player::OnSetActionBarButton);
+			RegisterPacketHandler(game::client_realm_packet::GroupInvite, *this, &Player::OnGroupInvite);
+			RegisterPacketHandler(game::client_realm_packet::GroupUninvite, *this, &Player::OnGroupUninvite);
+			RegisterPacketHandler(game::client_realm_packet::GroupAccept, *this, &Player::OnGroupAccept);
+			RegisterPacketHandler(game::client_realm_packet::GroupDecline, *this, &Player::OnGroupDecline);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -1023,6 +1125,10 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::ItemQuery);
 			ClearPacketHandler(game::client_realm_packet::QuestQuery);
 			ClearPacketHandler(game::client_realm_packet::SetActionBarButton);
+			ClearPacketHandler(game::client_realm_packet::GroupInvite);
+			ClearPacketHandler(game::client_realm_packet::GroupUninvite);
+			ClearPacketHandler(game::client_realm_packet::GroupAccept);
+			ClearPacketHandler(game::client_realm_packet::GroupDecline);
 
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
@@ -1525,6 +1631,19 @@ namespace mmo
 
 		// Send a request to the world node to teleport the character
 		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing);
+	}
+
+	void Player::SendPartyOperationResult(PartyOperation operation, PartyResult result, const String& playerName)
+	{
+		m_connection->sendSinglePacket([operation, result, playerName](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::PartyCommandResult);
+				packet
+					<< io::write<uint8>(operation)
+					<< io::write_dynamic_range<uint8>(playerName)
+					<< io::write<uint8>(result);
+				packet.Finish();
+			});
 	}
 
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)

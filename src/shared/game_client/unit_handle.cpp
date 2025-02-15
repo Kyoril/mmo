@@ -185,6 +185,12 @@ namespace mmo
 		return Get()->GetAvailableAttributePoints();
 	}
 
+	bool UnitHandle::IsAlive() const
+	{
+		if (!CheckNonNull()) return false;
+		return Get()->IsAlive();
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

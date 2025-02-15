@@ -64,6 +64,16 @@ namespace mmo
 		Radian facing{0.0f};
 	};
 
+	/// Represents data of a player group.
+	struct GroupData
+	{
+		/// Guid of the group leader.
+		uint64 leaderGuid;
+
+		/// Vector of guids of all group members, including the leader.
+		std::vector<uint64> memberGuids;
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{

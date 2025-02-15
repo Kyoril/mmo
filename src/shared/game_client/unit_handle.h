@@ -60,6 +60,7 @@ namespace mmo
 		[[nodiscard]] int32 GetArmor() const;
 		[[nodiscard]] float GetArmorReductionFactor() const;
 		[[nodiscard]] int32 GetAvailableAttributePoints() const;
+		[[nodiscard]] bool IsAlive() const;
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;

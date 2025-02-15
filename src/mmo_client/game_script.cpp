@@ -843,7 +843,8 @@ namespace mmo
 				.def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)
 				.def("GetStat", &UnitHandle::GetStat)
 				.def("GetPosStat", &UnitHandle::GetPosStat)
-				.def("GetNegStat", &UnitHandle::GetNegStat)),
+				.def("GetNegStat", &UnitHandle::GetNegStat)
+				.def("IsAlive", &UnitHandle::IsAlive)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")
@@ -1015,7 +1016,12 @@ namespace mmo
 
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); }),
 			
-			luabind::def<std::function<void(const char*)>>("PlaySound", [this](const char* sound) { PlaySound(sound); })
+			luabind::def<std::function<void(const char*)>>("PlaySound", [this](const char* sound) { PlaySound(sound); }),
+
+			luabind::def<std::function<void()>>("AcceptGroup", [this]() { m_realmConnector.AcceptGroup(); }),
+			luabind::def<std::function<void()>>("DeclineGroup", [this]() { m_realmConnector.DeclineGroup(); }),
+			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),
+			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); })
 		];
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;

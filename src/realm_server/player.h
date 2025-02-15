@@ -21,6 +21,7 @@
 #include "game/action_button.h"
 #include "game_server/character_data.h"
 #include "game/character_view.h"
+#include "game/group.h"
 
 
 namespace mmo
@@ -34,6 +35,7 @@ namespace mmo
 	class LoginConnector;
 	class WorldManager;
 	class World;
+	class PlayerGroup;
 
 	/// This class represents a player connction on the login server.
 	class Player final
@@ -54,7 +56,8 @@ namespace mmo
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
 			std::string address,
-			const proto::Project& project);
+			const proto::Project& project,
+			IdGenerator<uint64>& groupIdGenerator);
 
 		void Kick();
 
@@ -90,6 +93,12 @@ namespace mmo
 
 		/// 
 		const InstanceId& GetWorldInstanceId() const { return m_instanceId; }
+
+		std::shared_ptr<PlayerGroup> GetGroup() const { return m_group; }
+
+		void SetGroup(std::shared_ptr<PlayerGroup> group) { m_group = std::move(group); }
+
+		void SendPartyInvite(const String& inviterName);
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -140,6 +149,8 @@ namespace mmo
 		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback&& callback);
 
 		void SendTeleportRequest(uint32 mapId, const Vector3& position, const Radian& facing) const;
+
+		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String& playerName);
 
 	public:
 		struct PacketHandlerRegistrationHandle final
@@ -235,6 +246,7 @@ namespace mmo
 		LoginConnector &m_loginConnector;
 		AsyncDatabase &m_database;
 		const proto::Project& m_project;
+		IdGenerator<uint64>& m_groupIdGenerator;
 		std::shared_ptr<Client> m_connection;
 		std::string m_address;						// IP address in string format
 		std::string m_accountName;					// Account name in uppercase letters
@@ -254,6 +266,7 @@ namespace mmo
 		uint32 m_transferMap = 0;
 		Vector3 m_transferPosition{};
 		float m_transferFacing = 0.0f;
+		std::shared_ptr<PlayerGroup> m_group;
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 
@@ -297,6 +310,10 @@ namespace mmo
 		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
 		PacketParseResult OnSetActionBarButton(game::IncomingPacket& packet);
 		PacketParseResult OnMoveWorldPortAck(game::IncomingPacket& packet);
+		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
+		PacketParseResult OnGroupUninvite(game::IncomingPacket& packet);
+		PacketParseResult OnGroupAccept(game::IncomingPacket& packet);
+		PacketParseResult OnGroupDecline(game::IncomingPacket& packet);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);

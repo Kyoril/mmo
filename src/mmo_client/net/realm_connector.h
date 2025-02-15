@@ -397,6 +397,14 @@ namespace mmo
 
 		void SendMoveWorldPortAck();
 
+		void InviteByName(const String& playerName);
+
+		void UninviteByName(const String& playerName);
+
+		void AcceptGroup();
+
+		void DeclineGroup();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 
