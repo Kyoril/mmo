@@ -2,6 +2,19 @@
 # which will result in blurry madness on high dpi monitors
 cmake_minimum_required(VERSION 3.16)
 
+IF(APPLE)
+    INCLUDE_DIRECTORIES ( /System/Library/Frameworks )
+    FIND_LIBRARY(COCOA_LIBRARY Cocoa)
+    FIND_LIBRARY(METAL_LIBRARY Metal)
+    MARK_AS_ADVANCED (COCOA_LIBRARY)
+    SET(EXTRA_LIBS ${COCOA_LIBRARY} ${METAL_LIBRARY})
+    
+    # these are the OS X Interface Builder Files
+    SET (Client_XIBS
+        MainMenu
+    )
+ENDIF(APPLE)
+
 # Add executable
 file(GLOB srcFiles "*.cpp" "*.h")
 
@@ -82,6 +95,8 @@ IF(APPLE)
             COMMENT "Compiling ${CMAKE_CURRENT_SOURCE_DIR}/macos/${xib}.xib")
     ENDFOREACH()
 ENDIF(APPLE)
+
+target_link_libraries(graphics_test ${EXTRA_LIBS})
 
 # Add project to a solution folder for better organization
 set_property(TARGET graphics_test PROPERTY FOLDER "client")

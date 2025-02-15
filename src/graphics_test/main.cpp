@@ -68,8 +68,40 @@ namespace mmo
 		gx.Draw(6);
 	}
 
-	bool Setup()
+    scoped_connection_container signals;
+
+	bool InitializeGlobal()
 	{
+        // Describe our graphics device
+        GraphicsDeviceDesc desc {};
+        desc.width = 1280;
+        desc.height = 800;
+        desc.windowed = true;
+        desc.vsync = true;
+#ifdef _WIN32
+        GraphicsDevice::CreateD3D11(desc);
+#elif defined(__APPLE__)
+        GraphicsDevice::CreateMetal(desc);
+#endif
+
+        const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow();
+        ASSERT(window);
+
+        // Shutdown event loop when window is closed
+        window->SetTitle("MMO Graphics Test");
+        signals += window->Closed.connect([]() { EventLoop::Terminate(0); });
+
+        // Initialize asset registry in working directory
+        AssetRegistry::Initialize(".", {});
+
+        // Setup event loop
+        EventLoop::Initialize();
+        signals += EventLoop::Idle.connect(OnIdle);
+        signals += EventLoop::Paint.connect(OnPaint);
+
+        // Terminate application when escape was pressed
+        signals += EventLoop::KeyDown.connect([](const int32 key, bool repeat) { if (key == 0x1B) { EventLoop::Terminate(0); } return true; });
+
 		// Setup scene
 		g_scene = std::make_unique<OctreeScene>();
 
@@ -104,7 +136,7 @@ namespace mmo
 		return true;
 	}
 
-	void Destroy()
+	void DestroyGlobal()
 	{
 		if (g_boarNode)
 		{
@@ -136,45 +168,15 @@ namespace mmo
 
 	int CommonMain()
 	{
-		// Describe our graphics device
-		GraphicsDeviceDesc desc {};
-		desc.width = 1280;
-		desc.height = 800;
-		desc.windowed = true;
-		desc.vsync = true;
-#ifdef _WIN32
-		GraphicsDevice::CreateD3D11(desc);
-#endif
-
-		const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow();
-		ASSERT(window);
-
-		scoped_connection_container signals;
-
-		// Shutdown event loop when window is closed
-		window->SetTitle("MMO Graphics Test");
-		signals += window->Closed.connect([]() { EventLoop::Terminate(0); });
-
-		// Initialize asset registry in working directory
-		AssetRegistry::Initialize(".", {});
-
-		// Setup event loop
-		EventLoop::Initialize();
-		signals += EventLoop::Idle.connect(OnIdle);
-		signals += EventLoop::Paint.connect(OnPaint);
-
-		// Terminate application when escape was pressed
-		signals += EventLoop::KeyDown.connect([](const int32 key, bool repeat) { if (key == 0x1B) { EventLoop::Terminate(0); } return true; });
-
 		// Setup scene and everything
-		if (Setup())
+		if (InitializeGlobal())
 		{
 			// Run event loop
 			EventLoop::Run();
 		}
 
 		// Destroy everything
-		Destroy();
+		DestroyGlobal();
 
 		// Cut all connected signals
 		signals.disconnect();
@@ -186,11 +188,19 @@ namespace mmo
 	}
 }
 
+#ifdef __APPLE__
+int main_osx(int argc, char* argv[]);
+#endif
+
 #ifdef _WIN32
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 #else
-int main(int argc, char** argv[])
+int main(int argc, char** argv)
 #endif
 {
+#ifdef __APPLE__
+    return main_osx(argc, argv);
+#else
 	return mmo::CommonMain();
+#endif
 }

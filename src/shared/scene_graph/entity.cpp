@@ -247,6 +247,11 @@ namespace mmo
 		{
 			return;
 		}
+        
+        if (!m_mesh)
+        {
+            return;
+        }
 
 		m_boneMatrices.clear();
 
