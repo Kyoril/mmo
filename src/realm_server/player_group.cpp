@@ -1,6 +1,7 @@
 
 #include "player_group.h"
 
+#include "database.h"
 #include "log/log_exception.h"
 
 namespace mmo

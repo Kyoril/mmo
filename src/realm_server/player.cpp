@@ -69,6 +69,12 @@ namespace mmo
 			m_pendingButtons = false;
 		}
 
+		// Decline group invite if any
+		if (m_inviterGuid != 0)
+		{
+			DeclineGroupInvite();
+		}
+
 		if (const auto strongWorld = m_world.lock())
 		{
 			if (HasCharacterGuid())
@@ -742,6 +748,7 @@ namespace mmo
 		}
 
 		player->SetGroup(m_group);
+		player->SetInviterGuid(m_characterData->characterId);
 		player->SendPartyInvite(m_characterData->name);
 
 		SendPartyOperationResult(party_operation::Invite, party_result::Ok, playerName);
@@ -764,11 +771,31 @@ namespace mmo
 
 	PacketParseResult Player::OnGroupAccept(game::IncomingPacket& packet)
 	{
+		if (!m_group || m_inviterGuid == 0)
+		{
+			ELOG("Player tried to accept group invite with no pending group invite");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player accepted group invite");
+
+		auto result = m_group->AddMember(m_characterData->characterId, m_characterData->name);
+		if (result != party_result::Ok)
+		{
+			ELOG("Failed to add player to group: " << result);
+			DeclineGroupInvite();
+			return PacketParseResult::Pass;
+		}
+
+		m_inviterGuid = 0;
+
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult Player::OnGroupDecline(game::IncomingPacket& packet)
 	{
+		DeclineGroupInvite();
+
 		return PacketParseResult::Pass;
 	}
 
@@ -926,6 +953,11 @@ namespace mmo
 		m_newWorldAckHandler += RegisterAutoPacketHandler(game::client_realm_packet::MoveWorldPortAck, *this, &Player::OnMoveWorldPortAck);
 	}
 
+	void Player::SetInviterGuid(uint64 inviter)
+	{
+		m_inviterGuid = inviter;
+	}
+
 	void Player::SendPartyInvite(const String& inviterName)
 	{
 		m_connection->sendSinglePacket([&inviterName](game::OutgoingPacket& packet)
@@ -934,6 +966,44 @@ namespace mmo
 				packet << io::write_dynamic_range<uint8>(inviterName);
 				packet.Finish();
 			});
+	}
+
+	void Player::DeclineGroupInvite()
+	{
+		if (m_inviterGuid == 0)
+		{
+			return;
+		}
+
+		ASSERT(m_characterData);
+		ASSERT(m_group);
+
+		DLOG("Pending group invite from " << log_hex_digit(m_inviterGuid) << " declined by player " << log_hex_digit(m_characterData->characterId));
+
+		// Find the group leader
+		if (!m_group->RemoveInvite(m_characterData->characterId))
+		{
+			return;
+		}
+
+		// We are no longer a member of this group
+		m_group.reset();
+
+		// Notify the inviter if possible
+		const auto player = m_manager.GetPlayerByCharacterGuid(m_inviterGuid);
+		m_inviterGuid = 0;
+		if (player)
+		{
+			const String& inviterName = GetCharacterName();
+			player->SendPacket(
+				[&inviterName](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GroupDecline);
+					packet << io::write_dynamic_range<uint8>(inviterName);
+					packet.Finish();
+				}
+			);
+		}
 	}
 
 	void Player::SendAuthChallenge()

@@ -743,6 +743,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -2272,6 +2273,20 @@ namespace mmo
 		// Notify group invitation
 		FrameManager::Get().TriggerLuaEvent("PARTY_INVITE_REQUEST", inviterName);
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnGroupDecline(game::IncomingPacket& packet)
+	{
+		String inviterName;
+		if (!(packet >> io::read_container<uint8>(inviterName)))
+		{
+			ELOG("Failed to read GroupInvite packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// TODO
+		ELOG(inviterName << " declines your group invitation.");
 		return PacketParseResult::Pass;
 	}
 

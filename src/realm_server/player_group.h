@@ -137,7 +137,7 @@ namespace mmo
 
 				if (auto player = m_playerManager.GetPlayerByCharacterGuid(member.first))
 				{
-					player->sendPacket(creator);
+					player->SendPacket(creator);
 				}
 			}
 		}

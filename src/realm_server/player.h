@@ -96,9 +96,14 @@ namespace mmo
 
 		std::shared_ptr<PlayerGroup> GetGroup() const { return m_group; }
 
+		void SetInviterGuid(uint64 inviter);
+
 		void SetGroup(std::shared_ptr<PlayerGroup> group) { m_group = std::move(group); }
 
 		void SendPartyInvite(const String& inviterName);
+
+		/// Declines a pending group invite (if available).
+		void DeclineGroupInvite();
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -239,6 +244,29 @@ namespace mmo
 		/// Clears a packet handler so that the opcode is no longer handled.
 		void ClearPacketHandler(uint16 opCode);
 
+		/// Sends an encrypted packet to the game client
+		/// @param generator Packet writer function pointer.
+		template<class F>
+		void SendPacket(F generator)
+		{
+			// Write native packet
+			Buffer& sendBuffer = m_connection->getSendBuffer();
+			io::StringSink sink(sendBuffer);
+
+			// Get the end of the buffer (needed for encryption)
+			size_t bufferPos = sink.Position();
+
+			typename game::Protocol::OutgoingPacket packet(sink);
+			generator(packet);
+
+			// Crypt packet header
+			game::Connection* cryptCon = m_connection.get();
+			cryptCon->GetCrypt().EncryptSend(reinterpret_cast<uint8*>(&sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
+
+			// Flush buffers
+			m_connection->flush();
+		}
+
 	private:
 		TimerQueue& m_timerQueue;
 		PlayerManager &m_manager;
@@ -281,6 +309,7 @@ namespace mmo
 
 		IdGenerator<uint64> m_callbackIdGenerator;
 		std::map<uint64, CharacterLocationAsyncCallback> m_characterLocationCallbacks;
+		uint64 m_inviterGuid = 0;
 
 	private:
 		/// Closes the connection if still connected.

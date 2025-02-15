@@ -255,6 +255,8 @@ namespace mmo
 
 		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
 
+		PacketParseResult OnGroupDecline(game::IncomingPacket& packet);
+
 		PacketParseResult OnPartyCommandResult(game::IncomingPacket& packet);
 
 	private:
