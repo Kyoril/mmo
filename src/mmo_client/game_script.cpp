@@ -20,6 +20,7 @@
 #include "quest_client.h"
 #include "trainer_client.h"
 #include "vendor_client.h"
+#include "party_info.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
@@ -85,29 +86,6 @@ namespace mmo
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
-		}
-
-		std::shared_ptr<UnitHandle> Script_GetUnitHandleByName(const std::string& unitName)
-		{
-			if (unitName == "player")
-			{
-				if (const auto player = ObjectMgr::GetActivePlayer())
-				{
-					return std::make_shared<UnitHandle>(*player);
-				}
-			}
-			else if (unitName == "target")
-			{
-				if (const auto playerObject = ObjectMgr::GetActivePlayer())
-				{
-					if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); target)
-					{
-						return std::make_shared<UnitHandle>(*target);
-					}
-				}
-			}
-
-			return nullptr;
 		}
 
 		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string& unitName)
@@ -640,7 +618,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -652,6 +630,7 @@ namespace mmo
 		, m_trainerClient(trainerClient)
 		, m_questClient(questClient)
 		, m_audio(audio)
+		, m_partyInfo(partyInfo)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -891,8 +870,9 @@ namespace mmo
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
 				.def_readonly("icon", &proto_client::SpellEntry::icon)),
-
-			luabind::def("GetUnit", &Script_GetUnitHandleByName),
+				
+			luabind::def<std::function<std::shared_ptr<UnitHandle>(const String&)>>("GetUnit", [this](const String& unitName) { return GetUnitHandleByName(unitName); }),
+			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -1354,6 +1334,50 @@ namespace mmo
 			ChannelIndex channel;
 			m_audio.PlaySound(index, &channel);
 		}
+	}
+
+	std::shared_ptr<UnitHandle> GameScript::GetUnitHandleByName(const std::string& unitName)
+	{
+		if (unitName == "player")
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				return std::make_shared<UnitHandle>(*player);
+			}
+		}
+		else if (unitName == "target")
+		{
+			if (const auto playerObject = ObjectMgr::GetActivePlayer())
+			{
+				if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); target)
+				{
+					return std::make_shared<UnitHandle>(*target);
+				}
+			}
+		}
+		else if (unitName.starts_with("party"))
+		{
+			// Read party member index from string and parse it to integer
+			const int32 partyIndex = std::stoi(unitName.substr(5));
+			if (partyIndex <= 0 || partyIndex > 4)
+			{
+				ELOG("Wrong party index, allowed unit is party1-4!");
+				return nullptr;
+			}
+
+			uint64 memberGuid = m_partyInfo.GetMemberGuid(partyIndex - 1);
+			if (memberGuid == 0)
+			{
+				return nullptr;
+			}
+
+			if (const auto partyMember = ObjectMgr::Get<GamePlayerC>(memberGuid); partyMember)
+			{
+				return std::make_shared<UnitHandle>(*partyMember);
+			}
+		}
+
+		return nullptr;
 	}
 
 	void GameScript::Script_ReviveMe() const

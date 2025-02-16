@@ -1,8 +1,9 @@
 #pragma once
 
+#include "base/typedefs.h"
+
 namespace mmo
 {
-
 	namespace roll_vote
 	{
 		enum Type
@@ -22,6 +23,7 @@ namespace mmo
 	{
 		enum Type
 		{
+			None,
 			Normal,
 			Raid,
 		};

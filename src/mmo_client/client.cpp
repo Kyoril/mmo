@@ -47,6 +47,7 @@
 #include "spell_cast.h"
 #include "trainer_client.h"
 #include "quest_client.h"
+#include "party_info.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -263,6 +264,7 @@ namespace mmo
 	std::unique_ptr<DBCreatureCache> s_creatureCache;
 	std::unique_ptr<DBQuestCache> s_questCache;
 
+
 	static const char* const s_itemCacheFilename = "Cache/Items.db";
 	static const char* const s_creatureCacheFilename = "Cache/Creatures.db";
 	static const char* const s_questCacheFilename = "Cache/Quests.db";
@@ -270,6 +272,7 @@ namespace mmo
 	static std::unique_ptr<ActionBar> s_actionBar;
 	static std::unique_ptr<SpellCast> s_spellCast;
 	static std::unique_ptr<QuestClient> s_questClient;
+	static std::unique_ptr<PartyInfo> s_partyInfo;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -359,6 +362,7 @@ namespace mmo
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
 		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache, s_localization);
+		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
@@ -369,11 +373,11 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

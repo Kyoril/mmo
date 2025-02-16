@@ -7,9 +7,9 @@
 namespace mmo
 {
 	// Implementation. Will store all available player group instances by their id.
-	std::map<uint64, std::shared_ptr<PlayerGroup>> PlayerGroup::GroupsById;
+	std::map<uint64, std::shared_ptr<PlayerGroup>> PlayerGroup::ms_groupsById;
 
-	PlayerGroup::PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database)
+	PlayerGroup::PlayerGroup(const uint64 id, PlayerManager& playerManager, AsyncDatabase& database)
 		: m_id(id)
 		, m_playerManager(playerManager)
 		, m_database(database)
@@ -61,7 +61,7 @@ namespace mmo
 #endif
 	}
 
-	void PlayerGroup::Create(uint64 leaderGuid)
+	void PlayerGroup::Create(const uint64 leaderGuid)
 	{
 		// Already created once
 		if (m_leaderGUID != 0)
@@ -83,27 +83,27 @@ namespace mmo
 		//leader.modifyGroupUpdateFlags(group_update_flags::Full, true);
 
 		// Save group
-		GroupsById[m_id] = shared_from_this();
+		ms_groupsById[m_id] = shared_from_this();
 		//m_database.createGroup(m_id, m_leaderGUID);
 	}
 
-	void PlayerGroup::SetLootMethod(LootMethod method, uint64 lootMaster, uint32 lootTreshold)
+	void PlayerGroup::SetLootMethod(const LootMethod method, const uint64 lootMaster, const uint32 lootThreshold)
 	{
 		m_lootMethod = method;
-		m_lootTreshold = lootTreshold;
+		m_lootTreshold = lootThreshold;
 		m_lootMaster = lootMaster;
 	}
 
-	bool PlayerGroup::IsMember(uint64 guid) const
+	bool PlayerGroup::IsMember(const uint64 guid) const
 	{
 		auto it = m_members.find(guid);
 		return (it != m_members.end());
 	}
 
-	void PlayerGroup::SetLeader(uint64 guid)
+	void PlayerGroup::SetLeader(const uint64 guid)
 	{
 		// New character has to be a member of this group
-		auto it = m_members.find(guid);
+		const auto it = m_members.find(guid);
 		if (it == m_members.end())
 		{
 			return;
@@ -118,7 +118,7 @@ namespace mmo
 		//m_database.setGroupLeader(m_id, m_leaderGUID);
 	}
 
-	PartyResult PlayerGroup::AddMember(uint64 memberGuid, const String& memberName)
+	PartyResult PlayerGroup::AddMember(const uint64 memberGuid, const String& memberName)
 	{
 		if (!m_invited.contains(memberGuid))
 		{
@@ -146,23 +146,23 @@ namespace mmo
 		SendUpdate();
 
 		// Make sure that all group members know about us
-		for (auto& it : m_members)
+		for (const auto& it : m_members)
 		{
-			auto player = m_playerManager.GetPlayerByCharacterGuid(it.first);
+			const auto player = m_playerManager.GetPlayerByCharacterGuid(it.first);
 			if (!player)
 			{
 				// TODO
 				continue;
 			}
 
-			for (auto& it2 : m_members)
+			for (const auto& it2 : m_members)
 			{
 				if (it2.first == it.first)
 				{
 					continue;
 				}
 
-				auto player2 = m_playerManager.GetPlayerByCharacterGuid(it2.first);
+				const auto player2 = m_playerManager.GetPlayerByCharacterGuid(it2.first);
 				if (!player2)
 				{
 					// TODO
@@ -192,9 +192,9 @@ namespace mmo
 		return party_result::Ok;
 	}
 
-	void PlayerGroup::RemoveMember(uint64 guid)
+	void PlayerGroup::RemoveMember(const uint64 guid)
 	{
-		auto it = m_members.find(guid);
+		const auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
 			if (m_members.size() <= 2)
@@ -204,7 +204,7 @@ namespace mmo
 			}
 			else
 			{
-				auto player = m_playerManager.GetPlayerByCharacterGuid(guid);
+				const auto player = m_playerManager.GetPlayerByCharacterGuid(guid);
 				if (player)
 				{
 					//auto* node = player->GetWorldNode();
@@ -224,7 +224,7 @@ namespace mmo
 
 				if (m_leaderGUID == guid && !m_members.empty())
 				{
-					auto firstMember = m_members.begin();
+					const auto firstMember = m_members.begin();
 					if (firstMember != m_members.end())
 					{
 						SetLeader(firstMember->first);
@@ -239,7 +239,7 @@ namespace mmo
 		}
 	}
 
-	bool PlayerGroup::RemoveInvite(uint64 guid)
+	bool PlayerGroup::RemoveInvite(const uint64 guid)
 	{
 		if (!m_invited.contains(guid))
 		{
@@ -262,7 +262,7 @@ namespace mmo
 		// Update member status
 		for (auto& member : m_members)
 		{
-			auto player = m_playerManager.GetPlayerByCharacterGuid(member.first);
+			const auto player = m_playerManager.GetPlayerByCharacterGuid(member.first);
 			if (!player)
 			{
 				member.second.status = group_member_status::Offline;
@@ -272,6 +272,8 @@ namespace mmo
 				member.second.status = group_member_status::Online;
 			}
 		}
+
+		ASSERT(!m_members.empty());
 
 		// Send to every group member
 		for (auto& member : m_members)
@@ -283,35 +285,56 @@ namespace mmo
 			}
 
 			// Send packet
-			//player->sendPacket(
-			//	std::bind(game::server_write::groupList, std::placeholders::_1,
-			//		member.first,
-			//		m_type,
-			//		false,
-			//		member.second.group,
-			//		member.second.assistant ? 1 : 0,
-			//		0x50000000FFFFFFFELL,
-			//		std::cref(m_members),
-			//		m_leaderGUID,
-			//		m_lootMethod,
-			//		m_lootMaster,
-			//		m_lootTreshold,
-			//		0));
+			player->SendPacket([this, &member, &player](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GroupList);
+					packet
+						<< io::write<uint8>(m_type)
+						<< io::write<uint8>(member.second.assistant ? 1 : 0)
+						<< io::write<uint8>(m_members.size() - 1);
+					for (const auto& memberToSend : m_members)
+					{
+						// Skip receiving member itself
+						if (memberToSend.first == member.first)
+						{
+							continue;
+						}
+
+						packet
+							<< io::write_dynamic_range<uint8>(memberToSend.second.name)
+							<< io::write<uint64>(memberToSend.first)
+							<< io::write<uint8>(memberToSend.second.status)
+							<< io::write<uint8>(memberToSend.second.group)
+							<< io::write<uint8>(memberToSend.second.assistant ? 1 : 0);
+					}
+					packet << io::write<uint64>(m_leaderGUID);
+					if (m_members.size() > 1)
+					{
+						packet
+							<< io::write<uint8>(m_lootMethod)
+							<< io::write<uint64>(m_lootMaster)
+							<< io::write<uint8>(m_lootTreshold);
+					}
+					packet.Finish();
+				});
 		}
 	}
 
-	void PlayerGroup::Disband(bool silent)
+	void PlayerGroup::Disband(const bool silent)
 	{
 		if (!silent)
 		{
-			//BroadcastPacket(
-			//	std::bind(game::server_write::groupDestroyed, std::placeholders::_1));
+			BroadcastPacket([](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GroupDestroyed);
+					packet.Finish();
+				});
 		}
 
-		auto memberList = m_members;
+		const auto memberList = m_members;
 		for (auto& it : memberList)
 		{
-			auto player = m_playerManager.GetPlayerByCharacterGuid(it.first);
+			const auto player = m_playerManager.GetPlayerByCharacterGuid(it.first);
 			if (player)
 			{
 				//auto* node = player->getWorldNode();
@@ -331,11 +354,14 @@ namespace mmo
 		//m_database.disbandGroup(m_id);
 
 		// Erase group from the global list of all groups
-		auto it = GroupsById.find(m_id);
-		if (it != GroupsById.end()) GroupsById.erase(it);
+		const auto it = ms_groupsById.find(m_id);
+		if (it != ms_groupsById.end())
+		{
+			ms_groupsById.erase(it);
+		}
 	}
 
-	uint64 PlayerGroup::GetMemberGuid(const String& name)
+	uint64 PlayerGroup::GetMemberGuid(const String& name) const
 	{
 		for (auto& member : m_members)
 		{
@@ -348,9 +374,9 @@ namespace mmo
 		return 0;
 	}
 
-	InstanceId PlayerGroup::InstanceBindingForMap(uint32 map)
+	InstanceId PlayerGroup::InstanceBindingForMap(const uint32 map)
 	{
-		auto it = m_instances.find(map);
+		const auto it = m_instances.find(map);
 		if (it != m_instances.end())
 		{
 			return it->second;
@@ -359,9 +385,9 @@ namespace mmo
 		return {};
 	}
 
-	bool PlayerGroup::AddInstanceBinding(InstanceId instance, uint32 map)
+	bool PlayerGroup::AddInstanceBinding(const InstanceId instance, const uint32 map)
 	{
-		auto it = m_instances.find(map);
+		const auto it = m_instances.find(map);
 		if (it != m_instances.end())
 		{
 			return false;
@@ -382,7 +408,7 @@ namespace mmo
 		SendUpdate();
 	}
 
-	void PlayerGroup::SetAssistant(uint64 guid, uint8 flags)
+	void PlayerGroup::SetAssistant(const uint64 guid, const uint8 flags)
 	{
 		auto it = m_members.find(guid);
 		if (it != m_members.end())
@@ -392,9 +418,9 @@ namespace mmo
 		}
 	}
 
-	bool PlayerGroup::IsLeaderOrAssistant(uint64 guid) const
+	bool PlayerGroup::IsLeaderOrAssistant(const uint64 guid) const
 	{
-		auto it = m_members.find(guid);
+		const auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
 			return (it->first == m_leaderGUID || it->second.assistant);
@@ -403,12 +429,11 @@ namespace mmo
 		return false;
 	}
 
-	bool PlayerGroup::AddOfflineMember(uint64 guid)
+	bool PlayerGroup::AddOfflineMember(const uint64 guid)
 	{
 		try
 		{
 			//game::CharEntry entry = m_database.getCharacterById(guid);
-
 			if (guid == m_leaderGUID)
 			{
 				//m_leaderName = entry.name;

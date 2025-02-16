@@ -63,6 +63,7 @@ namespace mmo
 
 	class LootClient;
 	class TrainerClient;
+	class PartyInfo;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -91,7 +92,8 @@ namespace mmo
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
 			QuestClient& questClient,
-			IAudio& audio);
+			IAudio& audio,
+			PartyInfo& partyInfo);
 
 	public:
 		/// @brief The default name of the world state
@@ -373,6 +375,7 @@ namespace mmo
 		SpellCast& m_spellCast;
 		TrainerClient& m_trainerClient;
 		QuestClient& m_questClient;
+		PartyInfo& m_partyInfo;
 
 		SoundIndex m_backgroundMusicSound{ InvalidSound };
 		ChannelIndex m_backgroundMusicChannel{ InvalidChannel };

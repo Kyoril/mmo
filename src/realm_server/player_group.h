@@ -22,7 +22,7 @@ namespace mmo
 	{
 	public:
 
-		static std::map<uint64, std::shared_ptr<PlayerGroup>> GroupsById;
+		static std::map<uint64, std::shared_ptr<PlayerGroup>> ms_groupsById;
 
 	public:
 
@@ -44,7 +44,7 @@ namespace mmo
 		void Create(uint64 leaderGuid);
 
 		/// Changes the loot method.
-		void SetLootMethod(LootMethod method, uint64 lootMaster, uint32 lootTreshold);
+		void SetLootMethod(LootMethod method, uint64 lootMaster, uint32 lootThreshold);
 
 		/// Sets a new group leader. The new leader has to be a member of this group.
 		void SetLeader(uint64 guid);
@@ -59,7 +59,7 @@ namespace mmo
 		PartyResult AddMember(uint64 memberGuid, const String& memberName);
 
 		/// 
-		uint64 GetMemberGuid(const String& name);
+		uint64 GetMemberGuid(const String& name) const;
 
 		/// 
 		void RemoveMember(uint64 guid);
@@ -157,7 +157,7 @@ namespace mmo
 		MembersByGUID m_members;	// This is the map of actual party members.
 		InvitedMembers m_invited;	// This is a list of pending member invites
 		LootMethod m_lootMethod;
-		uint32 m_lootTreshold;
+		uint8 m_lootTreshold;
 		uint64 m_lootMaster;
 		InstancesByMap m_instances;
 	};

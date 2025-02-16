@@ -44,6 +44,7 @@
 #include "terrain/page.h"
 
 #include "audio.h"
+#include "party_info.h"
 #include "game/group.h"
 #include "scene_graph/octree_scene.h"
 
@@ -144,8 +145,7 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
-		ActionBar& actionBar,
-		SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio)
+		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -161,6 +161,7 @@ namespace mmo
 		, m_trainerClient(trainerClient)
 		, m_questClient(questClient)
 		, m_audio(audio)
+		, m_partyInfo(partyInfo)
 	{
 	}
 
@@ -749,6 +750,7 @@ namespace mmo
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
 		m_questClient.Initialize();
+		m_partyInfo.Initialize();
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -783,6 +785,7 @@ namespace mmo
 		Console::UnregisterCommand("speed");
 #endif
 
+		m_partyInfo.Shutdown();
 		m_questClient.Shutdown();
 		m_trainerClient.Shutdown();
 		m_lootClient.Shutdown();
@@ -1163,6 +1166,19 @@ namespace mmo
 		}
 
 		m_playerNameCache.NotifyObjectResponse(guid, name);
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (guid == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				FrameManager::Get().TriggerLuaEvent("UNIT_NAME_UPDATE", "player");
+			}
+			if (guid == m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit))
+			{
+				FrameManager::Get().TriggerLuaEvent("UNIT_NAME_UPDATE", "target");
+			}
+		}
+
 		return PacketParseResult::Pass;
 	}
 

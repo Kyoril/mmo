@@ -14,6 +14,12 @@
 
 namespace mmo
 {
+	class UnitHandle;
+	class PartyInfo;
+}
+
+namespace mmo
+{
 	class QuestClient;
 	class TrainerClient;
 	class SpellCast;
@@ -60,7 +66,8 @@ namespace mmo
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
 			QuestClient& questClient,
-			IAudio& audio);
+			IAudio& audio,
+			PartyInfo& partyInfo);
 
 	public:
 		/// Gets the current lua state
@@ -106,6 +113,8 @@ namespace mmo
 
 		void PlaySound(const char* sound) const;
 
+		std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
@@ -137,6 +146,8 @@ namespace mmo
 		QuestClient& m_questClient;
 
 		IAudio& m_audio;
+
+		PartyInfo& m_partyInfo;
 
 	private:
 		void Script_ReviveMe() const;
