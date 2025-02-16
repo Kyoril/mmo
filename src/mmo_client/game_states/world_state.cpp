@@ -1177,6 +1177,14 @@ namespace mmo
 			{
 				FrameManager::Get().TriggerLuaEvent("UNIT_NAME_UPDATE", "target");
 			}
+
+			for (uint32 i = 0; i < m_partyInfo.GetMemberCount(); ++i)
+			{
+				if (guid == m_partyInfo.GetMemberGuid(i))
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_NAME_UPDATE", "party" + std::to_string(i + 1));
+				}
+			}
 		}
 
 		return PacketParseResult::Pass;
