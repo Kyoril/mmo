@@ -307,7 +307,7 @@ namespace mmo
 	{
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4 FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -357,6 +357,8 @@ namespace mmo
 				row.GetField(index++, result.attributePointsSpent[2]);
 				row.GetField(index++, result.attributePointsSpent[3]);
 				row.GetField(index++, result.attributePointsSpent[4]);
+
+				row.GetField(index++, result.groupId);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -814,6 +816,171 @@ namespace mmo
 			PrintDatabaseError();
 			throw mysql::Exception(m_connection.GetErrorMessage());
 		}
+	}
+
+	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid)
+	{
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `group` (`id`, `leader`) VALUES ('{0}', '{1}')"
+			, id
+			, leaderGuid
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::SetGroupLeader(uint64 groupId, uint64 leaderGuid)
+	{
+		if (!m_connection.Execute(std::format(
+			"UPDATE `group` SET `leader` = '{0}' WHERE `id` = '{1}' LIMIT 1"
+			, leaderGuid
+			, groupId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::AddGroupMember(uint64 groupId, uint64 memberGuid)
+	{
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `group_members` (`group`, `guid`) VALUES ('{0}', '{1}')"
+			, groupId
+			, memberGuid
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::RemoveGroupMember(uint64 groupId, uint64 memberGuid)
+	{
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `group_members` WHERE `group` = '{0}' AND `guid` = '{1}' LIMIT 1"
+			, groupId
+			, memberGuid
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::DisbandGroup(uint64 groupId)
+	{
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `group` WHERE `id` = '{0}' LIMIT 1"
+			, groupId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	std::optional<std::vector<uint64>> MySQLDatabase::ListGroups()
+	{
+		mysql::Select select(m_connection, "SELECT `id` FROM `group`");
+		if (select.Success())
+		{
+			std::vector<uint64> result;
+			mysql::Row row(select);
+			while (row)
+			{
+				uint64 groupId = 0;
+				row.GetField(0, groupId);
+				result.push_back(groupId);
+				// Next row
+				row = mysql::Row::Next(select);
+			}
+
+			return result;
+		}
+
+		// There was an error
+		PrintDatabaseError();
+		return {};
+	}
+
+	std::optional<GroupData> MySQLDatabase::LoadGroup(uint64 groupId)
+	{
+		// Load group data
+		mysql::Select groupSelect(m_connection, std::format(
+			"SELECT `leader`, `name` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
+			, groupId
+		));
+		if (groupSelect.Success())
+		{
+			mysql::Row groupRow(groupSelect);
+			if (groupRow)
+			{
+				GroupData groupData;
+				groupRow.GetField(0, groupData.leaderGuid);
+				groupRow.GetField(1, groupData.leaderName);
+
+				// Load group members
+				mysql::Select memberSelect(m_connection, std::format(
+					"SELECT `guid`, `name` FROM `group_members` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`guid` WHERE `g`.`group` = '{0}' LIMIT 40"
+					, groupId
+				));
+
+				if (memberSelect.Success())
+				{
+					mysql::Row memberRow(memberSelect);
+					while (memberRow)
+					{
+						uint64 memberGuid = 0;
+						String name;
+						memberRow.GetField(0, memberGuid);
+						memberRow.GetField(1, name);
+						groupData.members.emplace_back(memberGuid, name);
+
+						// Next row
+						memberRow = mysql::Row::Next(memberSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load group members");
+				}
+				return groupData;
+			}
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	std::optional<String> MySQLDatabase::GetCharacterNameById(uint64 characterId)
+	{
+		mysql::Select select(m_connection, std::format("SELECT `name` FROM `characters` WHERE `id` = '{0}' LIMIT 1", characterId));
+		if (select.Success())
+		{
+			std::vector<uint64> result;
+			mysql::Row row(select);
+			if (row)
+			{
+				String name;
+				row.GetField(0, name);
+				return name;
+			}
+			else
+			{
+				return {};
+			}
+		}
+
+		// There was an error
+		PrintDatabaseError();
+		return {};
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

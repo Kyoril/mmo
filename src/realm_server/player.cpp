@@ -137,6 +137,14 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
 	}
 
+	void Player::OnGroupLoaded(PlayerGroup& group)
+	{
+		m_onGroupLoaded.disconnect();
+
+		ASSERT(group.IsLoaded());
+		group.SendUpdate();
+	}
+
 	void Player::connectionLost()
 	{
 		ILOG("Client " << m_address << " disconnected");
@@ -265,15 +273,13 @@ namespace mmo
 		std::weak_ptr weakThis = shared_from_this();
 		auto handler = [weakThis](const std::optional<CharacterData>& characterData)
 		{
-			const auto strongThis = weakThis.lock();
-			if (strongThis)
+			if (const auto strongThis = weakThis.lock())
 			{
 				strongThis->OnCharacterData(characterData);
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld,
-			guid, m_accountId);
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, guid, m_accountId);
 		
 		return PacketParseResult::Pass;
 	}
@@ -571,14 +577,27 @@ namespace mmo
 		}
 		else
 		{
-			m_connection->sendSinglePacket([guid](game::OutgoingPacket& packet)
+			// We have to look up the player name in the database
+			std::weak_ptr weakThis = shared_from_this();
+			auto handler = [weakThis, guid](std::optional<String>& playerName) {
+				if (const auto strongThis = weakThis.lock())
 				{
-					packet.Start(game::realm_client_packet::NameQueryResult);
-					packet
-						<< io::write_packed_guid(guid)
-						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					strongThis->m_connection->sendSinglePacket([guid, &playerName](game::OutgoingPacket& packet)
+						{
+							packet.Start(game::realm_client_packet::NameQueryResult);
+							packet
+								<< io::write_packed_guid(guid)
+								<< io::write<uint8>(playerName ? true : false);
+								if (playerName)
+								{
+									packet
+										<< io::write_range(*playerName) << io::write<uint8>(0);
+								}
+							packet.Finish();
+						});
+				}
+			};
+			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterNameById, guid);
 		}
 
 		return PacketParseResult::Pass;
@@ -729,7 +748,7 @@ namespace mmo
 		{
 			// Not yet in a group - create a new one!
 			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database);
-			m_group->Create(m_characterData->characterId);
+			m_group->Create(m_characterData->characterId, m_characterData->name);
 			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
 		}
 		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
@@ -1249,6 +1268,19 @@ namespace mmo
 			outPacket.Finish();
 		});
 
+		// If we have a group, either it is already loaded (in which case we just send the group data to all members) or we wait for it to load
+		if (m_group)
+		{
+			if (m_group->IsLoaded())
+			{
+				m_group->SendUpdate();
+			}
+			else
+			{
+				m_onGroupLoaded = m_group->loaded.connect(this, &Player::OnGroupLoaded);
+			}
+		}
+
 		std::weak_ptr weakThis = shared_from_this();
 		auto handler = [weakThis](const std::optional<ActionButtons>& actionButtons)
 			{
@@ -1346,6 +1378,21 @@ namespace mmo
 		}
 
 		m_characterData = characterData;
+
+		if (m_characterData->groupId != 0)
+		{
+			auto groupIt = PlayerGroup::ms_groupsById.find(m_characterData->groupId);
+			if (groupIt != PlayerGroup::ms_groupsById.end())
+			{
+				m_group = groupIt->second;
+				m_group->CreateFromDatabase();
+			}
+			else
+			{
+				ELOG("Failed to restore character group: Group does not seem to exist!");
+				m_characterData->groupId = 0;
+			}
+		}
 
 		// Add potentially missing default spells from class data
 		std::set<uint32> spellsAdded;

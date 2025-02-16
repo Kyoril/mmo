@@ -64,14 +64,23 @@ namespace mmo
 		Radian facing{0.0f};
 	};
 
+	struct GroupMemberData
+	{
+		uint64 guid;
+
+		String name;
+	};
+
 	/// Represents data of a player group.
 	struct GroupData
 	{
 		/// Guid of the group leader.
 		uint64 leaderGuid;
 
+		String leaderName;
+
 		/// Vector of guids of all group members, including the leader.
-		std::vector<uint64> memberGuids;
+		std::vector<GroupMemberData> members;
 	};
 
 	/// Basic interface for a database system used by the login server.
@@ -133,6 +142,22 @@ namespace mmo
 		virtual std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) = 0;
 
 		virtual void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) = 0;
+
+		virtual void CreateGroup(uint64 id, uint64 leaderGuid) = 0;
+
+		virtual void SetGroupLeader(uint64 groupId, uint64 leaderGuid) = 0;
+
+		virtual void AddGroupMember(uint64 groupId, uint64 memberGuid) = 0;
+
+		virtual void RemoveGroupMember(uint64 groupId, uint64 memberGuid) = 0;
+
+		virtual void DisbandGroup(uint64 groupId) = 0;
+
+		virtual std::optional<std::vector<uint64>> ListGroups() = 0;
+
+		virtual std::optional<GroupData> LoadGroup(uint64 groupId) = 0;
+
+		virtual std::optional<String> GetCharacterNameById(uint64 characterId) = 0;
 	};
 
 

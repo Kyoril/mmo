@@ -1,4 +1,5 @@
 #pragma once
+#include "client_cache.h"
 #include "base/non_copyable.h"
 #include "game/group.h"
 #include "net/realm_connector.h"
@@ -17,7 +18,7 @@ namespace mmo
 	class PartyInfo final : public NonCopyable
 	{
 	public:
-		explicit PartyInfo(RealmConnector& realmConnector);
+		explicit PartyInfo(RealmConnector& realmConnector, DBNameCache& nameCache);
 
 	public:
 		void Initialize();
@@ -47,6 +48,7 @@ namespace mmo
 	private:
 		RealmConnector& m_realmConnector;
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlerHandles;
+		DBNameCache& m_nameCache;
 
 		GroupType m_type;
 		uint64 m_leaderGuid = 0;

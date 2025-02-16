@@ -35,6 +35,7 @@
 #include <mutex>
 #include <thread>
 
+#include "player_group.h"
 #include "proto_data/project.h"
 
 
@@ -148,6 +149,7 @@ namespace mmo
 		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
 		AsyncDatabase asyncDatabase{ *database, async, sync };
 
+		IdGenerator<uint64> groupIdGenerator{ 1 };
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -155,6 +157,30 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		
 		PlayerManager playerManager{ config.maxPlayers };
+
+		// Restore groups
+		const auto startTime = GetAsyncTimeMs();
+		ILOG("Loading player groups...");
+		if (auto groupIds = database->ListGroups())
+		{
+			for (auto& groupId : *groupIds)
+			{
+				// Create a new group
+				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, asyncDatabase);
+				group->Preload();
+
+				// Notify the generator about the new group id to avoid overlaps
+				groupIdGenerator.NotifyId(groupId);
+			}
+
+			const auto endTime = GetAsyncTimeMs();
+			ILOG("Successfully loaded " << groupIds->size() << " player groups in " << (endTime - startTime) << " ms");
+		}
+		else
+		{
+			ELOG("Could not restore group ids!");
+			return 1;
+		}
 
 		WorldManager worldManager{ config.maxWorlds };
 
@@ -210,8 +236,6 @@ namespace mmo
 		{
 			return 1;
 		}
-
-		IdGenerator<uint64> groupIdGenerator{ 1 };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the player service

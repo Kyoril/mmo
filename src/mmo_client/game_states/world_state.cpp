@@ -145,13 +145,14 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
+		DBNameCache& nameCache,
 		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
 		, m_creatureCache(creatureCache)
 		, m_questCache(questCache)
-		, m_playerNameCache(m_realmConnector)
+		, m_playerNameCache(nameCache)
 		, m_project(project)
 		, m_timers(timers)
 		, m_lootClient(lootClient)
@@ -1153,8 +1154,7 @@ namespace mmo
 		String name;
 		if (!(packet
 			>> io::read_packed_guid(guid)
-			>> io::read<uint8>(succeeded)
-			>> io::read_string(name)))
+			>> io::read<uint8>(succeeded)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1163,6 +1163,12 @@ namespace mmo
 		{
 			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
 			return PacketParseResult::Pass;
+		}
+
+		if (!(packet
+			>> io::read_string(name)))
+		{
+			return PacketParseResult::Disconnect;
 		}
 
 		m_playerNameCache.NotifyObjectResponse(guid, name);

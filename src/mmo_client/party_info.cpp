@@ -5,8 +5,9 @@
 
 namespace mmo
 {
-	PartyInfo::PartyInfo(RealmConnector& realmConnector)
+	PartyInfo::PartyInfo(RealmConnector& realmConnector, DBNameCache& nameCache)
 		: m_realmConnector(realmConnector)
+		, m_nameCache(nameCache)
 	{
 	}
 
@@ -117,6 +118,9 @@ namespace mmo
 
 			if (!wasInGroup)
 			{
+				// Ensure we know the name
+				m_nameCache.Get(newMember.guid);
+
 				ILOG(newMember.name << " has joined the group.");
 				m_members.push_back(newMember);
 			}

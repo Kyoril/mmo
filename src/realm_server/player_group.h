@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	struct GroupData;
 	class Player;
 	struct IDatabase;
 	class PlayerManager;
@@ -21,7 +22,9 @@ namespace mmo
 	class PlayerGroup final : public std::enable_shared_from_this<PlayerGroup>
 	{
 	public:
+		signal<void(PlayerGroup&)> loaded;
 
+	public:
 		static std::map<uint64, std::shared_ptr<PlayerGroup>> ms_groupsById;
 
 	public:
@@ -30,18 +33,18 @@ namespace mmo
 		typedef LinearSet<uint64> InvitedMembers;
 		typedef std::map<uint32, InstanceId> InstancesByMap;
 
-
 	public:
-
 		/// Creates a new instance of a player group. Note that a group has to be
 		/// created using the create method before it will be valid.
 		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database);
+
+		void Preload();
 
 		/// Restores the group from the database.
 		bool CreateFromDatabase();
 
 		/// Creates the group and setup a leader.
-		void Create(uint64 leaderGuid);
+		void Create(uint64 leaderGuid, const String& leaderName);
 
 		/// Changes the loot method.
 		void SetLootMethod(LootMethod method, uint64 lootMaster, uint32 lootThreshold);
@@ -101,13 +104,15 @@ namespace mmo
 		bool IsFull() const { return (m_type == group_type::Normal ? m_members.size() >= 5 : m_members.size() >= 40); }
 
 		/// Gets the groups loot method.
-		LootMethod getLootMethod() const { return m_lootMethod; }
+		LootMethod GetLootMethod() const { return m_lootMethod; }
 
 		/// Gets the group leaders GUID.
 		uint64 GetLeader() const { return m_leaderGUID; }
 
 		/// Gets the group id.
 		uint64 GetId() const { return m_id; }
+
+		bool IsLoaded() const { return m_leaderGUID != 0 && !m_loading; }
 
 		/// Broadcasts a network packet to all party mambers.
 		/// @param creator Function pointer to the network packet writer method.
@@ -143,14 +148,14 @@ namespace mmo
 		}
 
 	private:
-
-		bool AddOfflineMember(uint64 guid);
+		void OnLoad(const GroupData& groupData);
 
 	private:
 
 		uint64 m_id;
 		PlayerManager& m_playerManager;
 		AsyncDatabase& m_database;
+		bool m_loading = false;
 		uint64 m_leaderGUID;
 		String m_leaderName;
 		GroupType m_type;

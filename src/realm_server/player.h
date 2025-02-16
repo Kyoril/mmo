@@ -315,11 +315,15 @@ namespace mmo
 		std::map<uint64, CharacterLocationAsyncCallback> m_characterLocationCallbacks;
 		uint64 m_inviterGuid = 0;
 
+		scoped_connection m_onGroupLoaded;
+
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
 		/// Requests the current character list from the database and notifies the client.
 		void DoCharEnum();
+
+		void OnGroupLoaded(PlayerGroup& group);
 	
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()

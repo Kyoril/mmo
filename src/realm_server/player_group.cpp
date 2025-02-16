@@ -22,57 +22,59 @@ namespace mmo
 	{
 	}
 
+	void PlayerGroup::Preload()
+	{
+		ASSERT(!IsLoaded());
+
+		// Save group for later user
+		ms_groupsById[m_id] = shared_from_this();
+	}
+
 	bool PlayerGroup::CreateFromDatabase()
 	{
 		// Already created once
-		if (m_leaderGUID != 0)
+		if (m_leaderGUID != 0 || m_loading)
 		{
 			return true;
 		}
-		
-		//auto groupData = m_database.loadGroup(m_id);
-		//if (!groupData)
+
+		m_loading = true;
+
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis](const std::optional<GroupData>& groupData)
 		{
-			// The group will automatically be deleted and not stored when not saved in GroupsById
-			ELOG("Could not load group from database");
-			return false;
-		}
+			auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
 
-#if 0
-		// Save leader information
-		m_leaderGUID = groupData->leaderGuid;
+			if (groupData)
+			{
+				strongThis->OnLoad(*groupData);
+			}
+			else
+			{
+				ELOG("Failed to load group data from database!");
+			}
+		};
 
-		// Add the leader first
-		if (!AddOfflineMember(groupData->leaderGuid))
-		{
-			// Leader no longer exists?
-			ELOG("Could not add group leader");
-			return false;
-		}
+		m_database.asyncRequest(std::move(handler), &IDatabase::LoadGroup, m_id);
 
-		// Same for members
-		for (auto& memberGuid : groupData->memberGuids)
-		{
-			AddOfflineMember(memberGuid);
-		}
-
-		// Save group for later user
-		GroupsById[m_id] = shared_from_this();
 		return true;
-#endif
 	}
 
-	void PlayerGroup::Create(const uint64 leaderGuid)
+	void PlayerGroup::Create(const uint64 leaderGuid, const String& leaderName)
 	{
 		// Already created once
-		if (m_leaderGUID != 0)
+		if (m_leaderGUID != 0 || m_loading)
 		{
 			return;
 		}
 		
 		// Save group leader values
 		m_leaderGUID = leaderGuid;
-		m_leaderName = "UNKNOWN";
+		m_leaderName = leaderName;
 
 		// Add the leader as a group member
 		auto& newMember = m_members[m_leaderGUID];
@@ -80,16 +82,17 @@ namespace mmo
 		newMember.group = 0;
 		newMember.assistant = false;
 
-		// Other checks have already been done in addInvite method, so we are good to go here
-		//leader.modifyGroupUpdateFlags(group_update_flags::Full, true);
-
 		// Save group
 		ms_groupsById[m_id] = shared_from_this();
-		//m_database.createGroup(m_id, m_leaderGUID);
+
+		auto handler = [](bool success){ };
+		m_database.asyncRequest(std::move(handler), &IDatabase::CreateGroup, m_id, m_leaderGUID);
 	}
 
 	void PlayerGroup::SetLootMethod(const LootMethod method, const uint64 lootMaster, const uint32 lootThreshold)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		m_lootMethod = method;
 		m_lootTreshold = lootThreshold;
 		m_lootMaster = lootMaster;
@@ -97,7 +100,11 @@ namespace mmo
 
 	bool PlayerGroup::IsMember(const uint64 guid) const
 	{
-		auto it = m_members.find(guid);
+		ASSERT(m_leaderGUID != 0);
+
+		if (m_leaderGUID == guid) return true;
+
+		const auto it = m_members.find(guid);
 		return (it != m_members.end());
 	}
 
@@ -107,20 +114,28 @@ namespace mmo
 		const auto it = m_members.find(guid);
 		if (it == m_members.end())
 		{
+			WLOG("Trying to set a non-member as group leader!");
 			return;
 		}
 
 		m_leaderGUID = it->first;
 		m_leaderName = it->second.name;
 
-		//BroadcastPacket(
-		//	std::bind(game::server_write::groupSetLeader, std::placeholders::_1, std::cref(m_leaderName)));
+		BroadcastPacket([&](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::GroupSetLeader);
+			packet << io::write<uint64>(m_leaderGUID);
+			packet.Finish();
+		});
 
-		//m_database.setGroupLeader(m_id, m_leaderGUID);
+		auto handler = [](bool success) {};
+		m_database.asyncRequest(std::move(handler), &IDatabase::SetGroupLeader, m_id, m_leaderGUID);
 	}
 
 	PartyResult PlayerGroup::AddMember(const uint64 memberGuid, const String& memberName)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		if (!m_invited.contains(memberGuid))
 		{
 			return party_result::NotInYourParty;
@@ -141,7 +156,6 @@ namespace mmo
 		newMember.name = memberName;
 		newMember.group = 0;
 		newMember.assistant = false;
-		//member.modifyGroupUpdateFlags(group_update_flags::Full, true);
 
 		// Update group list
 		SendUpdate();
@@ -177,12 +191,16 @@ namespace mmo
 		}
 
 		// Update database
-		//m_database.addGroupMember(m_id, memberGuid);
+		auto handler = [](bool success) {};
+		m_database.asyncRequest(std::move(handler), &IDatabase::AddGroupMember, m_id, memberGuid);
+
 		return party_result::Ok;
 	}
 
 	PartyResult PlayerGroup::AddInvite(uint64 inviteGuid)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		// Can't invite any more members since this group is full already.
 		if (IsFull())
 		{
@@ -195,6 +213,8 @@ namespace mmo
 
 	void PlayerGroup::RemoveMember(const uint64 guid)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		const auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
@@ -232,15 +252,19 @@ namespace mmo
 				SendUpdate();
 
 				// Remove from database
-				//m_database.removeGroupMember(m_id, guid);
+				auto handler = [](bool success) {};
+				m_database.asyncRequest(std::move(handler), &IDatabase::RemoveGroupMember, m_id, guid);
 			}
 		}
 	}
 
 	bool PlayerGroup::RemoveInvite(const uint64 guid)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		if (!m_invited.contains(guid))
 		{
+			WLOG("Trying to remove a non-invited member from the invite list!");
 			return false;
 		}
 
@@ -257,6 +281,8 @@ namespace mmo
 
 	void PlayerGroup::SendUpdate()
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		// Update member status
 		for (auto& member : m_members)
 		{
@@ -320,6 +346,8 @@ namespace mmo
 
 	void PlayerGroup::Disband(const bool silent)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		if (!silent)
 		{
 			BroadcastPacket([](game::OutgoingPacket& packet)
@@ -349,7 +377,8 @@ namespace mmo
 		}
 
 		// Remove from database
-		//m_database.disbandGroup(m_id);
+		auto handler = [](bool success) {};
+		m_database.asyncRequest(std::move(handler), &IDatabase::DisbandGroup, m_id);
 
 		// Erase group from the global list of all groups
 		const auto it = ms_groupsById.find(m_id);
@@ -361,6 +390,8 @@ namespace mmo
 
 	uint64 PlayerGroup::GetMemberGuid(const String& name) const
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		for (auto& member : m_members)
 		{
 			if (member.second.name == name)
@@ -374,6 +405,8 @@ namespace mmo
 
 	InstanceId PlayerGroup::InstanceBindingForMap(const uint32 map)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		const auto it = m_instances.find(map);
 		if (it != m_instances.end())
 		{
@@ -385,6 +418,8 @@ namespace mmo
 
 	bool PlayerGroup::AddInstanceBinding(const InstanceId instance, const uint32 map)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		const auto it = m_instances.find(map);
 		if (it != m_instances.end())
 		{
@@ -397,6 +432,8 @@ namespace mmo
 
 	void PlayerGroup::ConvertToRaidGroup()
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		if (m_type == group_type::Raid)
 		{
 			return;
@@ -408,6 +445,8 @@ namespace mmo
 
 	void PlayerGroup::SetAssistant(const uint64 guid, const uint8 flags)
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
@@ -418,6 +457,8 @@ namespace mmo
 
 	bool PlayerGroup::IsLeaderOrAssistant(const uint64 guid) const
 	{
+		ASSERT(m_leaderGUID != 0);
+
 		const auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
@@ -427,30 +468,40 @@ namespace mmo
 		return false;
 	}
 
-	bool PlayerGroup::AddOfflineMember(const uint64 guid)
+	void PlayerGroup::OnLoad(const GroupData& groupData)
 	{
-		try
-		{
-			//game::CharEntry entry = m_database.getCharacterById(guid);
-			if (guid == m_leaderGUID)
-			{
-				//m_leaderName = entry.name;
-			}
+		ASSERT(m_loading);
 
+		m_leaderGUID = groupData.leaderGuid;
+		m_leaderName = groupData.leaderName;
+		m_loading = false;
+
+		// Add the leader as a group member
+		auto& leaderMember = m_members[m_leaderGUID];
+		leaderMember.name = m_leaderName;
+		leaderMember.group = 0;
+		leaderMember.assistant = false;
+		leaderMember.status = group_member_status::Offline;
+
+		if (m_playerManager.GetPlayerByCharacterGuid(m_leaderGUID))
+		{
+			leaderMember.status = group_member_status::Online;
+		}
+
+		for (const auto& member : groupData.members)
+		{
 			// Add group member
-			auto& newMember = m_members[guid];
-			newMember.name = "UNKNOWN"; // entry.name;
+			auto& newMember = m_members[member.guid];
+			newMember.name = member.name;
 			newMember.group = 0;
 			newMember.assistant = false;
 			newMember.status = group_member_status::Offline;
-			return true;
-		}
-		catch (const std::exception& ex)
-		{
-			defaultLogException(ex);
+			if (m_playerManager.GetPlayerByCharacterGuid(m_leaderGUID))
+			{
+				leaderMember.status = group_member_status::Online;
+			}
 		}
 
-		return false;
+		loaded(*this);
 	}
-	
 }

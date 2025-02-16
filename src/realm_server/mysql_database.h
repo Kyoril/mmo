@@ -66,6 +66,22 @@ namespace mmo
 
 		void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) override;
 
+		void CreateGroup(uint64 id, uint64 leaderGuid) override;
+
+		void SetGroupLeader(uint64 groupId, uint64 leaderGuid) override;
+
+		void AddGroupMember(uint64 groupId, uint64 memberGuid) override;
+
+		void RemoveGroupMember(uint64 groupId, uint64 memberGuid) override;
+
+		void DisbandGroup(uint64 groupId) override;
+
+		std::optional<std::vector<uint64>> ListGroups() override;
+
+		std::optional<GroupData> LoadGroup(uint64 groupId) override;
+
+		std::optional<String> GetCharacterNameById(uint64 characterId) override;
+
 	private:
 		void PrintDatabaseError();
 

@@ -85,11 +85,6 @@ namespace mmo
 				m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
 			});
 
-		// Trigger group change to start synchronizing group data
-		if (characterData.groupId != 0)
-		{
-			UpdateCharacterGroup(characterData.groupId);
-		}
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
 	}
@@ -593,6 +588,12 @@ namespace mmo
 
 		// Start regeneration immediately
 		m_character->StartRegeneration();
+
+		// Trigger group change to start synchronizing group data
+		if (m_characterData.groupId != 0)
+		{
+			UpdateCharacterGroup(m_characterData.groupId);
+		}
 	}
 
 	void Player::OnDespawned(GameObjectS& object)

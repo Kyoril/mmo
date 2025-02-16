@@ -3,6 +3,7 @@
 #pragma once
 
 #include "audio.h"
+#include "client_cache.h"
 #include "connection.h"
 #include "db_cache.h"
 #include "player_controller.h"
@@ -88,6 +89,7 @@ namespace mmo
 			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
 			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
+			DBNameCache& nameCache,
 			ActionBar& actionBar,
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
@@ -339,7 +341,7 @@ namespace mmo
 		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& m_creatureCache;
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& m_questCache;
-		DBCache<String, game::client_realm_packet::NameQuery> m_playerNameCache;
+		DBNameCache& m_playerNameCache;
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;
