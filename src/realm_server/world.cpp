@@ -294,6 +294,7 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::QuestData, *strongThis, &World::OnQuestData);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::TeleportRequest, *strongThis, &World::OnTeleportRequest);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterLocationResponse, *strongThis, &World::OnCharacterLocationResponse);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerGroupUpdate, *strongThis, &World::OnPlayerGroupUpdate);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -513,6 +514,18 @@ namespace mmo
 					<< io::write<float>(position.y)
 					<< io::write<float>(position.z)
 					<< io::write<float>(facing.GetValueRadians());
+				outPacket.Finish();
+			});
+	}
+
+	void World::NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId)
+	{
+		GetConnection().sendSinglePacket([characterId, groupId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerGroupChanged);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint64>(groupId);
 				outPacket.Finish();
 			});
 	}
@@ -770,6 +783,24 @@ namespace mmo
 		// Trigger ack
 		player->CharacterLocationResponseNotification(result, ackId, mapId, position, facing);
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnPlayerGroupUpdate(auth::IncomingPacket& packet)
+	{
+		uint64 characterId;
+		if (!(packet >> io::read<uint64>(characterId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Couldn't find player by character id for group update");
+			return PacketParseResult::Pass;
+		}
+
+		return player->OnGroupUpdate(packet);
 	}
 
 	PacketParseResult World::OnPlayerCharacterLeft(auth::IncomingPacket& packet)

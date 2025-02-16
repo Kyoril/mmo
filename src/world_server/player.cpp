@@ -15,15 +15,17 @@
 #include "proto_data/project.h"
 #include "game/loot.h"
 #include "game/vendor.h"
+#include "game_server/universe.h"
 
 namespace mmo
 {
-	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project)
+	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project, WorldInstance& instance)
 		: m_manager(playerManager)
 		, m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 		, m_characterData(std::move(characterData))
 		, m_project(project)
+		, m_groupUpdate(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -48,6 +50,46 @@ namespace mmo
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
 			inventory.itemInstanceDestroyed.connect(this, &Player::OnItemDestroyed),
 		};
+
+		// Group update signal
+		m_groupUpdate.ended.connect([&]()
+			{
+				const Vector3 location(m_character->GetPosition());
+
+				// Get group id
+				auto groupId = m_character->GetGroupId();
+				std::vector<uint64> nearbyMembers;
+
+				// Determine nearby party members
+				instance.GetUnitFinder().FindUnits(Circle(location.x, location.y, 100.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
+					{
+						// Only characters
+						if (!unit.IsPlayer())
+						{
+							return true;
+						}
+
+						// Check characters group
+						GamePlayerS* character = static_cast<GamePlayerS*>(&unit);
+						if (character->GetGroupId() == groupId &&
+							character->GetGuid() != GetCharacterGuid())
+						{
+							nearbyMembers.push_back(character->GetGuid());
+						}
+
+						return true;
+					});
+
+				// Send packet to world node
+				m_connector.SendCharacterGroupUpdate(*m_character, nearbyMembers);
+				m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+			});
+
+		// Trigger group change to start synchronizing group data
+		if (characterData.groupId != 0)
+		{
+			UpdateCharacterGroup(characterData.groupId);
+		}
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
 	}
@@ -83,6 +125,48 @@ namespace mmo
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsDespawned(objects);
+	}
+
+	void Player::UpdateCharacterGroup(uint64 groupId)
+	{
+		if (m_character)
+		{
+			uint64 oldGroup = m_character->GetGroupId();
+			m_character->SetGroupId(groupId);
+
+			m_character->Invalidate(object_fields::Health);
+			m_character->Invalidate(object_fields::MaxHealth);
+
+			// For every group member in range, also update health fields
+			TileIndex2D tileIndex;
+			m_character->GetTileIndex(tileIndex);
+			ForEachSubscriberInSight(
+				m_character->GetWorldInstance()->GetGrid(),
+				tileIndex,
+				[oldGroup, groupId](TileSubscriber& subscriber)
+				{
+					if (auto* player = dynamic_cast<GamePlayerS*>(&subscriber.GetGameUnit()))
+					{
+						if ((oldGroup != 0 && player->GetGroupId() == oldGroup) ||
+							(groupId != 0 && player->GetGroupId() == groupId))
+						{
+							player->Invalidate(object_fields::Health);
+							player->Invalidate(object_fields::MaxHealth);
+						}
+					}
+				});
+		}
+
+		if (groupId != 0)
+		{
+			// Trigger next group member update
+			m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+		}
+		else
+		{
+			// Stop group member update
+			m_groupUpdate.Cancel();
+		}
 	}
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const

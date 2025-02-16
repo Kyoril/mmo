@@ -30,7 +30,7 @@ namespace mmo
 	{
 	public:
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
-		                CharacterData characterData, const proto::Project& project);
+		                CharacterData characterData, const proto::Project& project, WorldInstance& instance);
 		~Player() override;
 
 	public:
@@ -82,6 +82,8 @@ namespace mmo
 		void OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot);
 
 		void OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot);
+
+		void UpdateCharacterGroup(uint64 groupId);
 
 	public:
 		TileIndex2D GetTileIndex() const;
@@ -422,6 +424,8 @@ namespace mmo
 
 		scoped_connection_container m_lootSignals;
 		scoped_connection m_onLootSourceDespawned;
+
+		Countdown m_groupUpdate;
 	};
 
 }

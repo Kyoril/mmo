@@ -77,27 +77,75 @@ namespace mmo
 		}
 
 		ASSERT(memberCount <= 4);
-		m_members.resize(memberCount);
+
+		// Read group member info
+		std::vector<PartyMember> members;
+		members.resize(memberCount);
 
 		// Do we have any group members?
 		for (uint8 i = 0; i < memberCount; ++i)
 		{
 			packet
-				>> io::read_container<uint8>(m_members[i].name)
-				>> io::read<uint64>(m_members[i].guid)
-				>> io::read<uint8>(m_members[i].status)
-				>> io::read<uint8>(m_members[i].group)
-				>> io::read<uint8>(m_members[i].assistant);
+				>> io::read_container<uint8>(members[i].name)
+				>> io::read<uint64>(members[i].guid)
+				>> io::read<uint8>(members[i].status)
+				>> io::read<uint8>(members[i].group)
+				>> io::read<uint8>(members[i].assistant);
 		}
 
 		packet >> io::read<uint64>(m_leaderGuid);
-		if (m_members.size() > 1)
+		if (members.size() > 1)
 		{
 			packet
 				>> io::read<uint8>(m_lootMethod)
 				>> io::read<uint64>(m_lootMaster)
 				>> io::read<uint8>(m_lootThreshold);
 		}
+
+		// Now we need to determine which members are new, which ones are gone and so on
+		for (const auto& newMember : members)
+		{
+			bool wasInGroup = false;
+			for (const auto& oldMember : m_members)
+			{
+				if (newMember.guid == oldMember.guid)
+				{
+					wasInGroup = true;
+					break;
+				}
+			}
+
+			if (!wasInGroup)
+			{
+				ILOG(newMember.name << " has joined the group.");
+				m_members.push_back(newMember);
+			}
+		}
+
+		for (auto it = m_members.begin(); it != m_members.end();)
+		{
+			bool isInGroup = false;
+			for (const auto& newMember : members)
+			{
+				if (it->guid == newMember.guid)
+				{
+					isInGroup = true;
+					break;
+				}
+			}
+
+			if (!isInGroup)
+			{
+				ILOG(it->name << " has left the group.");
+				it = m_members.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		ASSERT(m_members.size() <= 4);
 
 		FrameManager::Get().TriggerLuaEvent("PARTY_MEMBERS_CHANGED");
 

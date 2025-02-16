@@ -122,6 +122,8 @@ namespace mmo
 				FetchCharacterLocation,
 
 				TeleportRequest,
+
+				PlayerGroupChanged,
 			};
 		}
 
@@ -160,6 +162,8 @@ namespace mmo
 				TeleportRequest,
 
 				CharacterLocationResponse,
+
+				PlayerGroupUpdate
 			};
 		}
 

@@ -72,6 +72,8 @@ namespace mmo
 		uint32 bindMap;
 		Vector3 bindPosition;
 		Radian bindFacing;
+
+		uint64 groupId = 0;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -102,7 +104,8 @@ namespace mmo
 			>> io::read<float>(data.bindPosition.z)
 			>> data.bindFacing
 			>> io::read_range(data.attributePointsSpent)
-			>> io::read_container<uint16>(data.rewardedQuestIds)))
+			>> io::read_container<uint16>(data.rewardedQuestIds)
+			>> io::read<uint64>(data.groupId)))
 		{
 			return reader;
 		}
@@ -156,7 +159,8 @@ namespace mmo
 			<< io::write<float>(data.bindPosition.z)
 			<< data.bindFacing
 			<< io::write_range(data.attributePointsSpent)
-			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds);
+			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds)
+			<< io::write<uint64>(data.groupId);
 
 		writer << io::write<uint16>(data.questStatus.size());
 		for (auto const& [questId, questData] : data.questStatus)

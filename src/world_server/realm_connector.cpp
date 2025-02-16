@@ -287,6 +287,32 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::SendCharacterGroupUpdate(GamePlayerS& character, const std::vector<uint64>& nearbyMembers)
+	{
+		sendSinglePacket([&character, &nearbyMembers](auth::OutgoingPacket& outPacket)
+			{
+				const Vector3 location(character.GetPosition());
+				const uint32 powerType = character.Get<uint32>(object_fields::PowerType);
+
+				outPacket.Start(auth::world_realm_packet::PlayerGroupUpdate);
+				outPacket
+					<< io::write<uint64>(character.GetGuid())
+					<< io::write_dynamic_range<uint8>(nearbyMembers)
+					<< io::write<uint32>(character.Get<uint32>(object_fields::Health))
+					<< io::write<uint32>(character.Get<uint32>(object_fields::MaxHealth))
+					<< io::write<uint8>(powerType)
+					<< io::write<uint32>(character.Get<uint32>(object_fields::Mana + powerType))
+					<< io::write<uint32>(character.Get<uint32>(object_fields::MaxMana + powerType))
+					<< io::write<uint8>(character.GetLevel())
+					<< io::write<uint32>(character.GetWorldInstance()->GetMapId())
+					<< io::write<uint32>(0) // Zone
+					<< io::write<float>(location.x)
+					<< io::write<float>(location.y)
+					<< io::write<float>(location.z);
+				outPacket.Finish();
+			});
+	}
+
 	void RealmConnector::UpdateHostedMapList(const std::set<uint64>& mapIds)
 	{
 		m_hostedMapIds.clear();
@@ -412,6 +438,7 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::LocalChatMessage, *this, &RealmConnector::OnLocalChatMessage);
 				RegisterPacketHandler(auth::realm_world_packet::FetchCharacterLocation, *this, &RealmConnector::OnFetchCharacterLocation);
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
 				
 				PropagateHostedMapIds();
 			}
@@ -577,7 +604,7 @@ namespace mmo
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object
-		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project);
+		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance);
 		m_playerManager.AddPlayer(player);
 
 		// Enter the world using the character object
@@ -769,6 +796,29 @@ namespace mmo
 		// Teleport the player
 		player->GetGameUnit().Teleport(mapId, position, Radian(facingRadianValue));
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerGroupChanged(auth::IncomingPacket& packet)
+	{
+		uint64 characterId, groupId;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(groupId)))
+		{
+			ELOG("Failed to read PLAYER_GROUP_CHANGED packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player " << log_hex_digit(characterId) << " is now a member of group " << log_hex_digit(groupId));
+
+		// Try to find character
+		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Could not find character by guid " << log_hex_digit(characterId));
+			return PacketParseResult::Pass;
+		}
+
+		player->UpdateCharacterGroup(groupId);
 		return PacketParseResult::Pass;
 	}
 

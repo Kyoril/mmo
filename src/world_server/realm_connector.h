@@ -77,6 +77,9 @@ namespace mmo
 
 		void NotifyWorldInstanceLeft(uint64 characterGuid, auth::WorldLeftReason reason);
 
+		/// Sends a group update to the realm.
+		void SendCharacterGroupUpdate(GamePlayerS& character, const std::vector<uint64>& nearbyMembers);
+
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
@@ -111,6 +114,8 @@ namespace mmo
 		PacketParseResult OnFetchCharacterLocation(auth::IncomingPacket& packet);
 
 		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
+
+		PacketParseResult OnPlayerGroupChanged(auth::IncomingPacket& packet);
 		
 		/// Resets this instance to an unauthenticated state.
 		void Reset();

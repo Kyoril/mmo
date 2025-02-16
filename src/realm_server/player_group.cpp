@@ -2,6 +2,7 @@
 #include "player_group.h"
 
 #include "database.h"
+#include "world.h"
 #include "log/log_exception.h"
 
 namespace mmo
@@ -204,15 +205,12 @@ namespace mmo
 			}
 			else
 			{
-				const auto player = m_playerManager.GetPlayerByCharacterGuid(guid);
-				if (player)
+				if (const auto player = m_playerManager.GetPlayerByCharacterGuid(guid))
 				{
-					//auto* node = player->GetWorldNode();
-					//if (node)
-					//{
-						//player->getGameCharacter()->setGroupId(0);
-						//node->characterGroupChanged(guid, 0);
-					//}
+					if (const auto node = player->GetWorld())
+					{
+						node->NotifyPlayerGroupChanged(guid, 0);
+					}
 
 					// Send packet
 					//player->sendPacket(
@@ -337,11 +335,11 @@ namespace mmo
 			const auto player = m_playerManager.GetPlayerByCharacterGuid(it.first);
 			if (player)
 			{
-				//auto* node = player->getWorldNode();
-				//if (node)
-				//{
-				//	node->characterGroupChanged(it.first, 0);
-				//}
+				auto node = player->GetWorld();
+				if (node)
+				{
+					node->NotifyPlayerGroupChanged(it.first, 0);
+				}
 
 				// If the group is reset for every player, the group will be deleted!
 				//player->sendPacket(

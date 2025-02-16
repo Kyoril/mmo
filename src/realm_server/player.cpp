@@ -730,8 +730,7 @@ namespace mmo
 			// Not yet in a group - create a new one!
 			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database);
 			m_group->Create(m_characterData->characterId);
-
-			// TODO: Notify the world node
+			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
 		}
 		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
 		{
@@ -788,6 +787,10 @@ namespace mmo
 		}
 
 		m_inviterGuid = 0;
+
+		const auto world = GetWorld();
+		ASSERT(world);
+		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
 
 		return PacketParseResult::Pass;
 	}
@@ -1688,6 +1691,46 @@ namespace mmo
 		// Execute callback
 		it->second(succeeded, mapId, position, facing);
 		m_characterLocationCallbacks.erase(it);
+	}
+
+	PacketParseResult Player::OnGroupUpdate(auth::IncomingPacket& packet)
+	{
+		std::vector<uint64> nearbyMembers;
+		uint32 health, maxHealth, power, maxPower, mapId, zoneId;
+		uint8 powerType, level;
+		Vector3 location;
+
+		if (!(packet 
+			>> io::read_container<uint8>(nearbyMembers)
+			>> io::read<uint32>(health)
+			>> io::read<uint32>(maxHealth)
+			>> io::read<uint8>(powerType)
+			>> io::read<uint32>(power)
+			>> io::read<uint32>(maxPower)
+			>> io::read<uint8>(level)
+			>> io::read<uint32>(mapId)
+			>> io::read<uint32>(zoneId)
+			>> io::read<float>(location.x)
+			>> io::read<float>(location.y)
+			>> io::read<float>(location.z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!m_group)
+		{
+			WLOG("Received group update packet without being in a group!");
+			return PacketParseResult::Pass;
+		}
+
+		// Broadcast to far members
+		//m_group->BroadcastPacket([](game::OutgoingPacket& packet)
+		//{
+		//	// TODO: Serialize update packet
+		//
+		//}, &nearbyMembers);
+
+		return PacketParseResult::Pass;
 	}
 
 	void Player::SendTeleportRequest(uint32 mapId, const Vector3& position, const Radian& facing) const

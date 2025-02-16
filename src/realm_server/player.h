@@ -105,6 +105,8 @@ namespace mmo
 		/// Declines a pending group invite (if available).
 		void DeclineGroupInvite();
 
+		std::shared_ptr<World> GetWorld() const { return m_world.lock(); }
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
@@ -118,6 +120,8 @@ namespace mmo
 		void OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason);
 
 		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3& position, const Radian& facing);
+
+		PacketParseResult OnGroupUpdate(auth::IncomingPacket& packet);
 
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.

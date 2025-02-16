@@ -83,6 +83,12 @@ namespace mmo
 
 		bool ConsumeMoney(uint32 amount);
 
+		/// Gets the characters group id.
+		uint64 GetGroupId() const { return m_groupId; }
+
+		/// Sets the characters group id.
+		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
+
 	public:
 
 		/// Gets the current status of a given quest by its id.
@@ -188,6 +194,7 @@ namespace mmo
 		std::map<uint32, QuestStatusData> m_quests;
 		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
+		uint64 m_groupId = 0;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

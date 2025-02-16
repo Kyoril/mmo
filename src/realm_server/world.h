@@ -111,6 +111,8 @@ namespace mmo
 
 		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
 
+		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId);
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
@@ -191,5 +193,8 @@ namespace mmo
 		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
 
 		PacketParseResult OnCharacterLocationResponse(auth::IncomingPacket& packet);
+
+		PacketParseResult OnPlayerGroupUpdate(auth::IncomingPacket& packet);
 	};
+
 }
