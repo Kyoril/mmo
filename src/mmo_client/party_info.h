@@ -2,6 +2,7 @@
 #include "client_cache.h"
 #include "base/non_copyable.h"
 #include "game/group.h"
+#include "game/spell.h"
 #include "net/realm_connector.h"
 
 namespace mmo
@@ -13,6 +14,13 @@ namespace mmo
 		uint8 group;
 		bool assistant;
 		uint32 status;
+
+		uint32 level = 1;
+		uint32 health = 0;
+		uint32 maxHealth = 1;
+		uint32 powerType = power_type::Mana;
+		uint32 power = 0;
+		uint32 maxPower = 1;
 	};
 
 	class PartyInfo final : public NonCopyable
@@ -40,6 +48,8 @@ namespace mmo
 		bool IsAssistant() const;
 
 		uint8 GetLootThreshold() const { return m_lootThreshold; }
+
+		const PartyMember* GetMember(int32 index) const;
 
 	private:
 		PacketParseResult OnGroupDestroyed(game::IncomingPacket& packet);

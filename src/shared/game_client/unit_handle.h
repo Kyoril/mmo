@@ -41,26 +41,26 @@ namespace mmo
 		virtual ~UnitHandle() override = default;
 
 	public:
-		[[nodiscard]] int32 GetHealth() const;
-		[[nodiscard]] int32 GetMaxHealth() const;
-		[[nodiscard]] int32 GetLevel() const;
-		[[nodiscard]] int32 GetPower(int32 powerType) const;
-		[[nodiscard]] int32 GetMaxPower(int32 powerType) const;
-		[[nodiscard]] uint32 GetAuraCount() const;
-		[[nodiscard]] std::shared_ptr<AuraHandle> GetAura(uint32 index) const;
-		[[nodiscard]] const std::string& GetName() const;
-		[[nodiscard]] int32 GetPowerType() const;
-		[[nodiscard]] float GetMinDamage() const;
-		[[nodiscard]] float GetMaxDamage() const;
-		[[nodiscard]] uint32 GetAttackTime() const;
-		[[nodiscard]] float GetAttackPower() const;
-		[[nodiscard]] int32 GetStat(int32 statId) const;
-		[[nodiscard]] int32 GetPosStat(int32 statId) const;
-		[[nodiscard]] int32 GetNegStat(int32 statId) const;
-		[[nodiscard]] int32 GetArmor() const;
-		[[nodiscard]] float GetArmorReductionFactor() const;
-		[[nodiscard]] int32 GetAvailableAttributePoints() const;
-		[[nodiscard]] bool IsAlive() const;
+		[[nodiscard]] virtual int32 GetHealth() const;
+		[[nodiscard]] virtual int32 GetMaxHealth() const;
+		[[nodiscard]] virtual int32 GetLevel() const;
+		[[nodiscard]] virtual int32 GetPower(int32 powerType) const;
+		[[nodiscard]] virtual int32 GetMaxPower(int32 powerType) const;
+		[[nodiscard]] virtual uint32 GetAuraCount() const;
+		[[nodiscard]] virtual std::shared_ptr<AuraHandle> GetAura(uint32 index) const;
+		[[nodiscard]] virtual const std::string& GetName() const;
+		[[nodiscard]] virtual int32 GetPowerType() const;
+		[[nodiscard]] virtual float GetMinDamage() const;
+		[[nodiscard]] virtual float GetMaxDamage() const;
+		[[nodiscard]] virtual uint32 GetAttackTime() const;
+		[[nodiscard]] virtual float GetAttackPower() const;
+		[[nodiscard]] virtual int32 GetStat(int32 statId) const;
+		[[nodiscard]] virtual int32 GetPosStat(int32 statId) const;
+		[[nodiscard]] virtual int32 GetNegStat(int32 statId) const;
+		[[nodiscard]] virtual int32 GetArmor() const;
+		[[nodiscard]] virtual float GetArmorReductionFactor() const;
+		[[nodiscard]] virtual int32 GetAvailableAttributePoints() const;
+		[[nodiscard]] virtual bool IsAlive() const;
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;

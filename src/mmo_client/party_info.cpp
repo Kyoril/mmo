@@ -58,6 +58,16 @@ namespace mmo
 		return m_assistant;
 	}
 
+	const PartyMember* PartyInfo::GetMember(int32 index) const
+	{
+		if (index < 0 || index > m_members.size())
+		{
+			return nullptr;
+		}
+
+		return &m_members[index];
+	}
+
 	PacketParseResult PartyInfo::OnGroupDestroyed(game::IncomingPacket& packet)
 	{
 		DLOG("Your group has been disbanded.");

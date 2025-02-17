@@ -21,6 +21,7 @@
 #include "trainer_client.h"
 #include "vendor_client.h"
 #include "party_info.h"
+#include "party_unit_handle.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
@@ -1373,8 +1374,10 @@ namespace mmo
 
 			if (const auto partyMember = ObjectMgr::Get<GamePlayerC>(memberGuid); partyMember)
 			{
-				return std::make_shared<UnitHandle>(*partyMember);
+				return std::make_shared<PartyUnitHandle>(m_partyInfo, *partyMember, partyIndex - 1);
 			}
+
+			return std::make_shared<PartyUnitHandle>(m_partyInfo, partyIndex - 1);
 		}
 
 		return nullptr;
