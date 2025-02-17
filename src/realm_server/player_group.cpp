@@ -232,9 +232,17 @@ namespace mmo
 						node->NotifyPlayerGroupChanged(guid, 0);
 					}
 
-					// Send packet
-					//player->sendPacket(
-					//	std::bind(game::server_write::groupListRemoved, std::placeholders::_1));
+					// Send new group list notification with empty group data
+					player->SendPacket([](game::OutgoingPacket& packet)
+						{
+							packet.Start(game::realm_client_packet::GroupList);
+							packet
+								<< io::write<uint8>(0)
+								<< io::write<uint8>(0)
+								<< io::write<uint8>(0)
+								<< io::write<uint64>(0);
+							packet.Finish();
+						});
 					player->SetGroup(nullptr);
 				}
 

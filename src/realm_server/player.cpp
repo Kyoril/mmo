@@ -783,6 +783,40 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		if (!m_group)
+		{
+			WLOG("Player tried to uninvite player from group without being in a group");
+			SendPartyOperationResult(party_operation::Leave, party_result::YouNotInGroup, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		ASSERT(m_characterData);
+		if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
+		{
+			WLOG("Player tried to uninvite player from group without being the leader or assistant");
+			SendPartyOperationResult(party_operation::Leave, party_result::YouNotLeader, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		const uint64 guid = m_group->GetMemberGuid(playerName);
+		if (guid == 0)
+		{
+			WLOG("Player tried to uninvite player " << playerName << " from group who is not in the group");
+			SendPartyOperationResult(party_operation::Leave, party_result::NotInYourParty, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		// Assistants may not kick the leader
+		if (m_group->GetLeader() != m_characterData->characterId &&
+			m_group->GetLeader() == guid)
+		{
+			WLOG("Player tried to uninvite player " << playerName << " from group who is the leader");
+			SendPartyOperationResult(party_operation::Leave, party_result::YouNotLeader, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		DLOG("Player wants to kick player " << playerName << " from group");
+		m_group->RemoveMember(guid);
 
 		return PacketParseResult::Pass;
 	}

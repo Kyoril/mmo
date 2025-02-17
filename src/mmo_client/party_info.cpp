@@ -17,7 +17,6 @@ namespace mmo
 
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &PartyInfo::OnGroupDestroyed);
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupList, *this, &PartyInfo::OnGroupList);
-
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyMemberStats, *this, &PartyInfo::OnPartyMemberStats);
 	}
 
@@ -73,6 +72,18 @@ namespace mmo
 	PacketParseResult PartyInfo::OnGroupDestroyed(game::IncomingPacket& packet)
 	{
 		DLOG("Your group has been disbanded.");
+
+		// Reset everything
+		m_type = group_type::None;
+		m_assistant = false;
+		m_lootMaster = 0;
+		m_leaderGuid = 0;
+		m_members.clear();
+		m_lootMethod = loot_method::GroupLoot;
+		m_lootThreshold = 2;
+
+		FrameManager::Get().TriggerLuaEvent("PARTY_MEMBERS_CHANGED");
+
 		return PacketParseResult::Pass;
 	}
 

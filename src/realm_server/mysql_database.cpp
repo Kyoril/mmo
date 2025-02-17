@@ -820,14 +820,36 @@ namespace mmo
 
 	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid)
 	{
-		if (!m_connection.Execute(std::format(
-			"INSERT INTO `group` (`id`, `leader`) VALUES ('{0}', '{1}')"
-			, id
-			, leaderGuid
-		)))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception(m_connection.GetErrorMessage());
+			mysql::Transaction transaction(m_connection);
+
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `group` (`id`, `leader`) VALUES ('{0}', '{1}')"
+				, id
+				, leaderGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!m_connection.Execute(std::format(
+				"UPDATE `characters` SET `last_group` = '{0}' WHERE `id` = '{1}' LIMIT 1"
+				, id
+				, leaderGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not create group: " << e.what());
+			throw;
 		}
 	}
 
@@ -846,39 +868,103 @@ namespace mmo
 
 	void MySQLDatabase::AddGroupMember(uint64 groupId, uint64 memberGuid)
 	{
-		if (!m_connection.Execute(std::format(
-			"INSERT INTO `group_members` (`group`, `guid`) VALUES ('{0}', '{1}')"
-			, groupId
-			, memberGuid
-		)))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception(m_connection.GetErrorMessage());
+			mysql::Transaction transaction(m_connection);
+
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `group_members` (`group`, `guid`) VALUES ('{0}', '{1}')"
+				, groupId
+				, memberGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!m_connection.Execute(std::format(
+				"UPDATE `characters` SET `last_group` = '{0}' WHERE `id` = '{1}' LIMIT 1"
+				, groupId
+				, memberGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not add group member: " << e.what());
+			throw;
 		}
 	}
 
 	void MySQLDatabase::RemoveGroupMember(uint64 groupId, uint64 memberGuid)
 	{
-		if (!m_connection.Execute(std::format(
-			"DELETE FROM `group_members` WHERE `group` = '{0}' AND `guid` = '{1}' LIMIT 1"
-			, groupId
-			, memberGuid
-		)))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception(m_connection.GetErrorMessage());
+			mysql::Transaction transaction(m_connection);
+
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `group_members` WHERE `group` = '{0}' AND `guid` = '{1}' LIMIT 1"
+				, groupId
+				, memberGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!m_connection.Execute(std::format(
+				"UPDATE `characters` SET `last_group` = NULL WHERE `id` = '{0}' LIMIT 1"
+				, memberGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not remove group member: " << e.what());
+			throw;
 		}
 	}
 
 	void MySQLDatabase::DisbandGroup(uint64 groupId)
 	{
-		if (!m_connection.Execute(std::format(
-			"DELETE FROM `group` WHERE `id` = '{0}' LIMIT 1"
-			, groupId
-		)))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception(m_connection.GetErrorMessage());
+			mysql::Transaction transaction(m_connection);
+
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `group` WHERE `id` = '{0}' LIMIT 1"
+				, groupId
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!m_connection.Execute(std::format(
+				"UPDATE `characters` SET `last_group` = NULL WHERE `last_group` = '{0}' LIMIT 40"
+				, groupId
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not create group: " << e.what());
+			throw;
 		}
 	}
 
