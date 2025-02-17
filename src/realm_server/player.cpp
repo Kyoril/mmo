@@ -1028,6 +1028,77 @@ namespace mmo
 		}
 	}
 
+	void Player::BuildPartyMemberStatsPacket(game::OutgoingPacket& packet, const uint32 groupUpdateFlags) const
+	{
+		packet.Start(game::realm_client_packet::PartyMemberStats);
+		packet
+			<< io::write_packed_guid(m_characterData->characterId)
+			<< io::write<uint32>(groupUpdateFlags);
+
+		if (groupUpdateFlags & group_update_flags::Status)
+		{
+			uint16 flags = 0;
+			flags = group_member_status::Online;
+			packet << io::write<uint16>(flags);
+		}
+
+		if (groupUpdateFlags & group_update_flags::CurrentHP)
+		{
+			packet << io::write<uint16>(m_characterData->hp);
+		}
+
+		if (groupUpdateFlags & group_update_flags::MaxHP)
+		{
+			packet << io::write<uint16>(m_characterData->maxHp);
+		}
+
+		const uint32 powerType = m_characterData->powerType;
+		if (groupUpdateFlags & group_update_flags::PowerType)
+		{
+			packet << io::write<uint8>(powerType);
+		}
+
+		if (groupUpdateFlags & group_update_flags::CurrentPower)
+		{
+			switch (powerType)
+			{
+			case power_type::Mana: packet << io::write<uint16>(m_characterData->mana); break;
+			case power_type::Rage: packet << io::write<uint16>(m_characterData->rage); break;
+			case power_type::Energy: packet << io::write<uint16>(m_characterData->energy); break;
+			default: packet << io::write<uint16>(0); break;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::MaxPower)
+		{
+			switch (powerType)
+			{
+			case power_type::Mana: packet << io::write<uint16>(m_characterData->maxMana); break;
+			case power_type::Rage: packet << io::write<uint16>(m_characterData->maxRage); break;
+			case power_type::Energy: packet << io::write<uint16>(m_characterData->maxEnergy); break;
+			default: packet << io::write<uint16>(0); break;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::Level)
+		{
+			packet << io::write<uint16>(m_characterData->level);
+		}
+
+		if (groupUpdateFlags & group_update_flags::Zone)
+		{
+			packet << io::write<uint16>(0);
+		}
+
+		if (groupUpdateFlags & group_update_flags::Position)
+		{
+			const Vector3 location(m_characterData->position);
+			packet << io::write<float>(location.x) << io::write<float>(location.y) << io::write<float>(location.z);
+		}
+
+		packet.Finish();
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -1770,12 +1841,28 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		m_characterData->hp = health;
+		m_characterData->maxHp = maxHealth;
+		m_characterData->powerType = powerType;
+
+		switch (powerType)
+		{
+		case power_type::Mana:		m_characterData->mana = power; m_characterData->maxMana = maxPower;		break;
+		case power_type::Rage:		m_characterData->rage = power; m_characterData->maxRage = maxPower;		break;
+		case power_type::Energy:	m_characterData->energy = power; m_characterData->maxEnergy= maxPower;	break;
+		}
+
+		m_characterData->level = level;
+		m_characterData->position = location;
+		m_characterData->mapId = mapId;
+
+		nearbyMembers.push_back(m_characterData->characterId);
+
 		// Broadcast to far members
-		//m_group->BroadcastPacket([](game::OutgoingPacket& packet)
-		//{
-		//	// TODO: Serialize update packet
-		//
-		//}, &nearbyMembers);
+		m_group->BroadcastPacket([&](game::OutgoingPacket& packet)
+		{
+			BuildPartyMemberStatsPacket(packet, group_update_flags::Full);
+		}, &nearbyMembers, m_characterData->characterId);
 
 		return PacketParseResult::Pass;
 	}

@@ -17,6 +17,8 @@ namespace mmo
 
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &PartyInfo::OnGroupDestroyed);
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupList, *this, &PartyInfo::OnGroupList);
+
+		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyMemberStats, *this, &PartyInfo::OnPartyMemberStats);
 	}
 
 	void PartyInfo::Shutdown()
@@ -160,6 +162,103 @@ namespace mmo
 		}
 
 		ASSERT(m_members.size() <= 4);
+
+		FrameManager::Get().TriggerLuaEvent("PARTY_MEMBERS_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult PartyInfo::OnPartyMemberStats(game::IncomingPacket& packet)
+	{
+		uint64 playerGuid;
+		uint32 groupUpdateFlags;
+		if (!(packet
+			>> io::read_packed_guid(playerGuid)
+			>> io::read<uint32>(groupUpdateFlags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Get group member
+		const auto it = std::find_if(m_members.begin(), m_members.end(), [playerGuid](const PartyMember& member) { return member.guid == playerGuid; });
+		if (it == m_members.end())
+		{
+			WLOG("Unable to find party member by guid for party member stats update");
+			return PacketParseResult::Pass;
+		}
+
+		if (groupUpdateFlags & group_update_flags::Status)
+		{
+			if (!(packet >> io::read<uint16>(it->status)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::CurrentHP)
+		{
+			if (!(packet >> io::read<uint16>(it->health)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::MaxHP)
+		{
+			if (!(packet >> io::read<uint16>(it->maxHealth)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::PowerType)
+		{
+			if (!(packet >> io::read<uint8>(it->powerType)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::CurrentPower)
+		{
+			if (!(packet >> io::read<uint16>(it->power)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::MaxPower)
+		{
+			if (!(packet >> io::read<uint16>(it->maxPower)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::Level)
+		{
+			if (!(packet >> io::read<uint16>(it->level)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::Zone)
+		{
+			if (!(packet >> io::skip<uint16>()))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (groupUpdateFlags & group_update_flags::Position)
+		{
+			Vector3 location;
+			if (!(packet >> io::read<float>(location.x) >> io::read<float>(location.y) >> io::read<float>(location.z)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
 
 		FrameManager::Get().TriggerLuaEvent("PARTY_MEMBERS_CHANGED");
 

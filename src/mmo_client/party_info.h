@@ -54,6 +54,7 @@ namespace mmo
 	private:
 		PacketParseResult OnGroupDestroyed(game::IncomingPacket& packet);
 		PacketParseResult OnGroupList(game::IncomingPacket& packet);
+		PacketParseResult OnPartyMemberStats(game::IncomingPacket& packet);
 
 	private:
 		RealmConnector& m_realmConnector;

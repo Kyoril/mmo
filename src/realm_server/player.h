@@ -107,6 +107,8 @@ namespace mmo
 
 		std::shared_ptr<World> GetWorld() const { return m_world.lock(); }
 
+		void BuildPartyMemberStatsPacket(game::OutgoingPacket& packet, uint32 groupUpdateFlags) const;
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();

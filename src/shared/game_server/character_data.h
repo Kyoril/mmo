@@ -8,6 +8,7 @@
 #include "game/game.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
+#include "game/spell.h"
 #include "game_server/inventory.h"
 #include "game_server/quest_status_data.h"
 
@@ -58,9 +59,14 @@ namespace mmo
 		uint8 level;
 		uint32 xp;
 		uint32 hp;
-		uint32 mana;
-		uint32 rage;
-		uint32 energy;
+		uint32 maxHp = 1;	// Temp
+		uint32 mana = 0;
+		uint32 maxMana = 1;	// Temp
+		uint32 rage = 0;
+		uint32 maxRage = 100;	// Temp
+		uint32 energy = 0;
+		uint32 maxEnergy = 100;	// Temp
+		uint8 powerType = power_type::Mana;	// Temp
 		uint32 money;
 		std::vector<uint32> spellIds;
 		std::vector<ItemData> items;
