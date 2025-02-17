@@ -63,6 +63,12 @@ namespace mmo
 
 	UnitHandle::UnitHandle() = default;
 
+	uint64 UnitHandle::GetGuid() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetGuid();
+	}
+
 	int32 UnitHandle::GetHealth() const
 	{
 		if (!CheckNonNull()) return 0;

@@ -10,6 +10,7 @@ namespace mmo
 	MovementGlobals ObjectMgr::ms_movementGlobals;
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
+	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
 	const proto_client::Project* ObjectMgr::ms_project = nullptr;
 
 	std::map<uint32, uint32> ObjectMgr::ms_itemCount;
@@ -20,6 +21,7 @@ namespace mmo
 		ms_project = &project;
 		ms_objectyByGuid.clear();
 		ms_activePlayerGuid = 0;
+		ms_selectedObjectGuid = 0;
 		ms_itemCount.clear();
 	}
 
@@ -103,6 +105,16 @@ namespace mmo
 	uint64 ObjectMgr::GetActivePlayerGuid()
 	{
 		return ms_activePlayerGuid;
+	}
+
+	uint64 ObjectMgr::GetSelectedObjectGuid()
+	{
+		return ms_selectedObjectGuid;
+	}
+
+	void ObjectMgr::SetSelectedObjectGuid(uint64 guid)
+	{
+		ms_selectedObjectGuid = guid;
 	}
 
 	uint32 ObjectMgr::GetItemCount(const uint32 itemId)

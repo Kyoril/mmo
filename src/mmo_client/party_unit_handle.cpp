@@ -16,10 +16,26 @@ namespace mmo
 		, m_partyInfo(party)
 		, m_partyIndex(partyIndex)
 	{
+		m_realUnit = std::static_pointer_cast<GameUnitC>(unit.shared_from_this());
 	}
 
 	PartyUnitHandle::~PartyUnitHandle()
 	{
+	}
+
+	uint64 PartyUnitHandle::GetGuid() const
+	{
+		if (auto unit = GetRealUnit(); unit)
+		{
+			return unit->GetGuid();
+		}
+
+		if (auto member = GetPartyMember(); member)
+		{
+			return member->guid;
+		}
+
+		return 0;
 	}
 
 	int32 PartyUnitHandle::GetHealth() const
@@ -131,6 +147,16 @@ namespace mmo
 	bool PartyUnitHandle::IsAlive() const
 	{
 		return GetHealth() > 0;
+	}
+
+	uint32 PartyUnitHandle::GetAuraCount() const
+	{
+		if (const auto unit = GetRealUnit(); unit)
+		{
+			return unit->GetAuraCount();
+		}
+
+		return 0;
 	}
 
 	std::shared_ptr<GameUnitC> PartyUnitHandle::GetRealUnit() const

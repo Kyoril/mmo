@@ -139,6 +139,10 @@ namespace mmo
 
 		void OnTargetHealthChanged(uint64 monitoredGuid);
 
+		void OnTargetPowerChanged(uint64 monitoredGuid);
+
+		void OnTargetLevelChanged(uint64 monitoredGuid);
+
 	private:
 		// EventLoop connections
 		

@@ -49,6 +49,10 @@ namespace mmo
 
 		static uint64 GetActivePlayerGuid();
 
+		static uint64 GetSelectedObjectGuid();
+
+		static void SetSelectedObjectGuid(uint64 guid);
+
 		static uint32 GetItemCount(uint32 itemId);
 
 		static std::shared_ptr<GamePlayerC> GetActivePlayer();
@@ -77,6 +81,7 @@ namespace mmo
 	private:
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
 		static uint64 ms_activePlayerGuid;
+		static uint64 ms_selectedObjectGuid;
 		static const proto_client::Project* ms_project;
 
 		static std::map<uint32, uint32> ms_itemCount;

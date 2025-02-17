@@ -320,12 +320,15 @@ namespace mmo
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
-		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
 
 		m_targetObservers.disconnect();
 
 		// Do we have a new target to select?
 		const uint64 targetGuid = ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit);
+		ObjectMgr::SetSelectedObjectGuid(targetGuid);
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+
 		if (targetGuid == 0)
 		{
 			// No - do not register any field observers
@@ -335,7 +338,9 @@ namespace mmo
 		if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
 		{
 			// Yes, register field observers
-			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnTargetHealthChanged);
+			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::MaxHealth, 2, *this, &WorldState::OnTargetHealthChanged);
+			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnTargetPowerChanged);
+			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Level, 2, *this, &WorldState::OnTargetLevelChanged);
 		}
 	}
 
@@ -976,6 +981,11 @@ namespace mmo
 					}
 				}
 
+				if (object->GetTypeId() == ObjectTypeId::Player)
+				{
+					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC&>(*object));
+				}
+
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
@@ -1089,7 +1099,9 @@ namespace mmo
 			{
 				return PacketParseResult::Disconnect;
 			}
-			
+
+			m_partyInfo.OnPlayerDespawned(id);
+
 			if (m_playerController->GetControlledUnit() &&
 				m_playerController->GetControlledUnit()->GetGuid() == id)
 			{
@@ -2910,7 +2922,17 @@ namespace mmo
 
 	void WorldState::OnTargetHealthChanged(uint64 monitoredGuid)
 	{
-		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+		FrameManager::Get().TriggerLuaEvent("UNIT_HEALTH_UPDATED", "target");
+	}
+
+	void WorldState::OnTargetPowerChanged(uint64 monitoredGuid)
+	{
+		FrameManager::Get().TriggerLuaEvent("UNIT_POWER_UPDATED", "target");
+	}
+
+	void WorldState::OnTargetLevelChanged(uint64 monitoredGuid)
+	{
+		FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

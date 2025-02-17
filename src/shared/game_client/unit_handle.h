@@ -41,6 +41,7 @@ namespace mmo
 		virtual ~UnitHandle() override = default;
 
 	public:
+		[[nodiscard]] virtual uint64 GetGuid() const;
 		[[nodiscard]] virtual int32 GetHealth() const;
 		[[nodiscard]] virtual int32 GetMaxHealth() const;
 		[[nodiscard]] virtual int32 GetLevel() const;

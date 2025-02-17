@@ -113,7 +113,7 @@ namespace mmo
 
 		void PlaySound(const char* sound) const;
 
-		std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
+		std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName) const;
 
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;

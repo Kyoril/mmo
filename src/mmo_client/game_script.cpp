@@ -1116,14 +1116,14 @@ namespace mmo
 			return;
 		}
 
-		auto target = Script_GetUnitByName(name);
-		if (!target)
+		auto targetHandle = GetUnitHandleByName(name);
+		if (!targetHandle)
 		{
 			ELOG("Unable to find target unit " << name);
 			return;
 		}
 
-		m_realmConnector.SetSelection(target->GetGuid());
+		m_realmConnector.SetSelection(targetHandle->GetGuid());
 	}
 
 	void GameScript::LootSlot(int32 slot, bool force) const
@@ -1337,7 +1337,7 @@ namespace mmo
 		}
 	}
 
-	std::shared_ptr<UnitHandle> GameScript::GetUnitHandleByName(const std::string& unitName)
+	std::shared_ptr<UnitHandle> GameScript::GetUnitHandleByName(const std::string& unitName) const
 	{
 		if (unitName == "player")
 		{
@@ -1350,9 +1350,15 @@ namespace mmo
 		{
 			if (const auto playerObject = ObjectMgr::GetActivePlayer())
 			{
-				if (const auto target = ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit)); target)
+				const uint64 targetGuid = playerObject->Get<uint64>(object_fields::TargetUnit);
+				if (const auto target = ObjectMgr::Get<GameUnitC>(targetGuid); target)
 				{
 					return std::make_shared<UnitHandle>(*target);
+				}
+
+				if (int32 index = m_partyInfo.GetMemberIndexByGuid(targetGuid); index >= 0)
+				{
+					return std::make_shared<PartyUnitHandle>(m_partyInfo, index);
 				}
 			}
 		}
@@ -1366,7 +1372,7 @@ namespace mmo
 				return nullptr;
 			}
 
-			uint64 memberGuid = m_partyInfo.GetMemberGuid(partyIndex - 1);
+			const uint64 memberGuid = m_partyInfo.GetMemberGuid(partyIndex - 1);
 			if (memberGuid == 0)
 			{
 				return nullptr;

@@ -22,6 +22,7 @@ namespace mmo
 		~PartyUnitHandle() override;
 
 	public:
+		[[nodiscard]] virtual uint64 GetGuid() const override;
 		[[nodiscard]] virtual int32 GetHealth() const override;
 		[[nodiscard]] virtual int32 GetMaxHealth() const override;
 		[[nodiscard]] virtual int32 GetLevel() const override;
@@ -30,6 +31,7 @@ namespace mmo
 		[[nodiscard]] virtual const std::string& GetName() const override;
 		[[nodiscard]] virtual int32 GetPowerType() const override;
 		[[nodiscard]] virtual bool IsAlive() const override;
+		[[nodiscard]] virtual uint32 GetAuraCount() const override;
 
 	private:
 		std::shared_ptr<GameUnitC> GetRealUnit() const;

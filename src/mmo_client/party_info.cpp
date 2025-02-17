@@ -2,6 +2,7 @@
 #include "party_info.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -23,6 +24,42 @@ namespace mmo
 	void PartyInfo::Shutdown()
 	{
 		m_packetHandlerHandles.Clear();
+	}
+
+	bool PartyInfo::IsGroupMember(uint64 memberGuid) const
+	{
+		if (m_type == group_type::None)
+		{
+			return false;
+		}
+
+		if (memberGuid == m_leaderGuid)
+		{
+			return true;
+		}
+
+		return std::find_if(m_members.begin(), m_members.end(), [memberGuid](const PartyMember& member) { return memberGuid == member.guid; }) != m_members.end();
+	}
+
+	int32 PartyInfo::GetMemberIndexByGuid(uint64 memberGuid) const
+	{
+		if (m_type == group_type::None)
+		{
+			return -1;
+		}
+
+		int32 index = 0;
+		for (const auto& member : m_members)
+		{
+			if (memberGuid == member.guid)
+			{
+				return index;
+			}
+
+			index++;
+		}
+
+		return -1;
 	}
 
 	uint64 PartyInfo::GetMemberGuid(int32 index) const
@@ -69,6 +106,80 @@ namespace mmo
 		return &m_members[index];
 	}
 
+	void PartyInfo::OnPlayerSpawned(GamePlayerC& player)
+	{
+		// Check if player is a group member
+		if (!IsGroupMember(player.GetGuid()))
+		{
+			return;
+		}
+
+		RegisterPlayerMirrorHandlers(player);
+	}
+
+	void PartyInfo::OnPlayerDespawned(uint64 guid)
+	{
+		// Check if player is a group member
+		if (!IsGroupMember(guid))
+		{
+			return;
+		}
+
+		if (auto it = m_memberObservers.find(guid); it != m_memberObservers.end())
+		{
+			it = m_memberObservers.erase(it);
+		}
+	}
+
+	void PartyInfo::RegisterPlayerMirrorHandlers(GamePlayerC& player)
+	{
+		scoped_connection_container& memberObservers = m_memberObservers[player.GetGuid()];
+		memberObservers.disconnect();
+
+		memberObservers += player.RegisterMirrorHandler(object_fields::MaxHealth, 2, *this, &PartyInfo::OnMemberHealthChanged);
+		memberObservers += player.RegisterMirrorHandler(object_fields::Mana, 7, *this, &PartyInfo::OnMemberPowerChanged);
+		memberObservers += player.RegisterMirrorHandler(object_fields::Level, 2, *this, &PartyInfo::OnMemberLevelChanged);
+	}
+
+	void PartyInfo::OnMemberHealthChanged(uint64 monitoredGuid)
+	{
+		ForMemberIndex(monitoredGuid, [monitoredGuid](int32 index)
+			{
+				FrameManager::Get().TriggerLuaEvent("UNIT_HEALTH_UPDATED", "party" + std::to_string(index + 1));
+
+				if (monitoredGuid == ObjectMgr::GetSelectedObjectGuid())
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_HEALTH_UPDATED", "target");
+				}
+			});
+	}
+
+	void PartyInfo::OnMemberPowerChanged(uint64 monitoredGuid)
+	{
+		ForMemberIndex(monitoredGuid, [monitoredGuid](int32 index)
+			{
+				FrameManager::Get().TriggerLuaEvent("UNIT_POWER_UPDATED", "party" + std::to_string(index + 1));
+
+				if (monitoredGuid == ObjectMgr::GetSelectedObjectGuid())
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_POWER_UPDATED", "target");
+				}
+			});
+	}
+
+	void PartyInfo::OnMemberLevelChanged(uint64 monitoredGuid)
+	{
+		ForMemberIndex(monitoredGuid, [monitoredGuid](int32 index)
+			{
+				FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "party" + std::to_string(index + 1));
+
+				if (monitoredGuid == ObjectMgr::GetSelectedObjectGuid())
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
+				}
+			});
+	}
+
 	PacketParseResult PartyInfo::OnGroupDestroyed(game::IncomingPacket& packet)
 	{
 		DLOG("Your group has been disbanded.");
@@ -89,6 +200,8 @@ namespace mmo
 
 	PacketParseResult PartyInfo::OnGroupList(game::IncomingPacket& packet)
 	{
+		m_memberObservers.clear();
+
 		uint8 memberCount = 0;
 		if (!(packet 
 			>> io::read<uint8>(m_type)
@@ -168,6 +281,12 @@ namespace mmo
 			}
 			else
 			{
+				// Monitor player (again)
+				if (auto player = ObjectMgr::Get<GamePlayerC>(it->guid))
+				{
+					RegisterPlayerMirrorHandlers(*player);
+				}
+
 				++it;
 			}
 		}
@@ -271,7 +390,40 @@ namespace mmo
 			}
 		}
 
-		FrameManager::Get().TriggerLuaEvent("PARTY_MEMBERS_CHANGED");
+		ForMemberIndex(playerGuid, [playerGuid, groupUpdateFlags](int32 index)
+			{
+				String unitName = "party" + std::to_string(index + 1);
+
+				if (groupUpdateFlags & (group_update_flags::MaxHP | group_update_flags::CurrentHP))
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_HEALTH_UPDATED", unitName);
+
+					if (playerGuid == ObjectMgr::GetSelectedObjectGuid())
+					{
+						FrameManager::Get().TriggerLuaEvent("UNIT_HEALTH_UPDATED", "target");
+					}
+				}
+
+				if (groupUpdateFlags & (group_update_flags::PowerType | group_update_flags::MaxPower | group_update_flags::CurrentPower))
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_POWER_UPDATED", unitName);
+
+					if (playerGuid == ObjectMgr::GetSelectedObjectGuid())
+					{
+						FrameManager::Get().TriggerLuaEvent("UNIT_POWER_UPDATED", "target");
+					}
+				}
+
+				if (groupUpdateFlags & group_update_flags::Level)
+				{
+					FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", unitName);
+
+					if (playerGuid == ObjectMgr::GetSelectedObjectGuid())
+					{
+						FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
+					}
+				}
+			});
 
 		return PacketParseResult::Pass;
 	}
