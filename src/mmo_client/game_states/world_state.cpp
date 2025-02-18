@@ -752,6 +752,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
+
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
@@ -2396,6 +2398,24 @@ namespace mmo
 				ILOG("You leave the group.");
 			}
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnRandomRollResult(game::IncomingPacket& packet)
+	{
+		uint64 playerGuid;
+		int32 min, max, result;
+		if (!(packet >> io::read<uint64>(playerGuid) >> io::read<int32>(min) >> io::read<int32>(max) >> io::read<int32>(result)))
+		{
+			ELOG("Failed to read RandomRollResult packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_playerNameCache.Get(playerGuid, [result, min, max](uint64 guid, const String& playerName)
+			{
+				FrameManager::Get().TriggerLuaEvent("RANDOM_ROLL_RESULT", playerName.c_str(), min, max, result);
+			});
 
 		return PacketParseResult::Pass;
 	}

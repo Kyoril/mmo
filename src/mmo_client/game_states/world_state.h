@@ -267,6 +267,8 @@ namespace mmo
 
 		PacketParseResult OnPartyCommandResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnRandomRollResult(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

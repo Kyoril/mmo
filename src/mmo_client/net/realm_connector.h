@@ -405,6 +405,8 @@ namespace mmo
 
 		void DeclineGroup();
 
+		void RandomRoll(int32 min, int32 max);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

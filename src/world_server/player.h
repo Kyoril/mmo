@@ -312,6 +312,8 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void QuestGiverChooseQuestReward(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnRandomRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		// Implemented in player_dev_handlers.cpp
 

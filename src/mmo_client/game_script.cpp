@@ -999,6 +999,8 @@ namespace mmo
 			
 			luabind::def<std::function<void(const char*)>>("PlaySound", [this](const char* sound) { PlaySound(sound); }),
 
+			luabind::def<std::function<void(int32, int32)>>("RandomRoll", [this](int32 min, int32 max) { m_realmConnector.RandomRoll(min, max); }),
+
 			luabind::def<std::function<void()>>("AcceptGroup", [this]() { m_realmConnector.AcceptGroup(); }),
 			luabind::def<std::function<void()>>("DeclineGroup", [this]() { m_realmConnector.DeclineGroup(); }),
 			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),

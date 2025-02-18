@@ -308,6 +308,9 @@ namespace mmo
 		case game::client_realm_packet::SetSelection:
 			OnSetSelection(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::RandomRoll:
+			OnRandomRoll(opCode, buffer.size(), reader);
+			break;
 
 #if MMO_WITH_DEV_COMMANDS
 		case game::client_realm_packet::CheatCreateMonster:
@@ -1175,6 +1178,45 @@ namespace mmo
 		m_character->StartRegeneration();
 
 		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
+	}
+
+	void Player::OnRandomRoll(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		int32 min, max;
+		if (!(contentReader >> io::read<int32>(min) >> io::read<int32>(max)))
+		{
+			ELOG("Failed to read RandomRoll packet!");
+			return;
+		}
+
+		// Ensure its correctly ordered
+		const int32 tmp = min;
+		min = std::min(min, max);
+		max = std::max(tmp, max);
+
+		// Roll
+		std::uniform_int_distribution distribution(min, max);
+		const int32 roll = min == max ? min : distribution(randomGenerator);
+
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		game::OutgoingPacket packet{ sink };
+		packet.Start(game::realm_client_packet::RandomRollResult);
+		packet
+			<< io::write<uint64>(m_character->GetGuid())
+			<< io::write<int32>(min)
+			<< io::write<int32>(max)
+			<< io::write<int32>(roll);
+		packet.Finish();
+
+		// Send result to all nearby units including the player
+		TileIndex2D center;
+		m_character->GetTileIndex(center);
+		ForEachSubscriberInSight(m_character->GetWorldInstance()->GetGrid(),
+			center, [&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer, true);
+			});
 	}
 
 	bool ValidateSpeedAck(const PendingMovementChange& change, float receivedSpeed, MovementType& outMoveTypeSent)

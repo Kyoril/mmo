@@ -148,6 +148,8 @@ namespace mmo
 				GroupAccept,
 				GroupDecline,
 
+				RandomRoll,
+
 				/// Counter constant
 				Count_,
 			};
@@ -308,6 +310,8 @@ namespace mmo
 				GroupSetLeader,
 				GroupDestroyed,
 				GroupList,
+
+				RandomRollResult,
 
 				/// Counter constant
 				Count_,

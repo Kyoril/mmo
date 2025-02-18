@@ -786,4 +786,13 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::RandomRoll(int32 min, int32 max)
+	{
+		sendSinglePacket([min, max](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::RandomRoll);
+			packet << io::write<int32>(std::min(min, max)) << io::write<int32>(std::max(min, max));
+			packet.Finish();
+			});
+	}
 }
