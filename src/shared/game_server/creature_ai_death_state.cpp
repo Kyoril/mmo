@@ -37,7 +37,7 @@ namespace mmo
 			uint32 sumLevel = 0;
 
 			GamePlayerS* maxLevelCharacter = nullptr;
-			std::vector<std::weak_ptr<GamePlayerS>> lootRecipients;
+			std::map<uint64, std::shared_ptr<GamePlayerS>> lootRecipients;
 			controlled.ForEachLootRecipient([&controlled, &lootRecipients, &sumLevel, &maxLevelCharacter](const std::shared_ptr<GamePlayerS>& character)
 				{
 					const uint32 characterLevel = character->GetLevel();
@@ -52,16 +52,45 @@ namespace mmo
 						}
 					}
 
-					lootRecipients.push_back(character);
+					lootRecipients[character->GetGuid()] = character;
 				});
+
+			// Now for each loot recipient, check their groups as well and add nearby members as loot recipients
+			for (const auto& recipient : lootRecipients)
+			{
+				if (auto groupId = recipient.second->GetGroupId(); groupId != 0)
+				{
+					const Vector3 location(controlled.GetPosition());
+
+					// Find nearby group members and make them loot recipients, too
+					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.y, 200.0f), [&lootRecipients, &controlled, groupId](GameUnitS& unit) -> bool
+						{
+							if (!unit.IsPlayer())
+							{
+								return true;
+							}
+
+							if (lootRecipients.contains(unit.GetGuid()))
+							{
+								return true;
+							}
+
+							// Check characters group
+							const auto player = std::static_pointer_cast<GamePlayerS>(unit.shared_from_this());
+							if (player->GetGroupId() == groupId)
+							{
+								lootRecipients[player->GetGuid()] = player;
+							}
+
+							return true;
+						});
+				}
+			}
 
 			// Reward all recipients
 			for (const auto& recipient : lootRecipients)
 			{
-				if (const auto strongPlayer = recipient.lock())
-				{
-					strongPlayer->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());
-				}
+				recipient.second->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());
 			}
 
 			// Reward the killer with experience points
@@ -109,24 +138,18 @@ namespace mmo
 			const float groupModifier = xp::GetGroupXpRate(lootRecipients.size(), false);
 			for (const auto& character : lootRecipients)
 			{
-				const auto strongCharacter = character.lock();
-				if (!strongCharacter)
+				if (!character.second->IsAlive())
 				{
 					continue;
 				}
 
-				if (!strongCharacter->IsAlive())
-				{
-					continue;
-				}
-
-				const uint32 cutoffLevel = xp::GetExpCutoffLevel(strongCharacter->GetLevel());
+				const uint32 cutoffLevel = xp::GetExpCutoffLevel(character.second->GetLevel());
 				if (controlled.GetLevel() <= cutoffLevel) {
 					continue;
 				}
 
-				const float rate = groupModifier * static_cast<float>(strongCharacter->GetLevel()) / sumLevel;
-				strongCharacter->RewardExperience(xp * rate);
+				const float rate = groupModifier * static_cast<float>(character.second->GetLevel()) / sumLevel;
+				character.second->RewardExperience(xp * rate);
 			}
 
 			const auto* lootEntry = controlled.GetProject().unitLoot.getById(entry.unitlootentry());
@@ -134,7 +157,13 @@ namespace mmo
 			if (lootEntry)
 			{
 				// Generate loot
-				auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), lootRecipients);
+				std::vector<std::weak_ptr<GamePlayerS>> weakRecipients;
+				for (const auto& recipient : lootRecipients)
+				{
+					weakRecipients.push_back(recipient.second);
+				}
+
+				auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), weakRecipients);
 
 				// 3 Minutes of despawn delay if creature still has loot
 				despawnDelay = constants::OneMinute * 3;
