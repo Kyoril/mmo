@@ -8,7 +8,7 @@ namespace mmo
 	OctreeScene::OctreeScene()
 	{
 		const AABB bounds({ -17100.0f, -17100.0f, -17100.0f }, { 17100.0f, 17100.0f, 17100.0f });
-		constexpr size_t maxDepth = 16;
+		constexpr size_t maxDepth = 8;
 
 		Init(bounds, maxDepth);
 	}

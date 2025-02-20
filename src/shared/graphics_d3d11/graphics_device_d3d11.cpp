@@ -294,9 +294,10 @@ namespace mmo
 
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
-		cbd.Usage = D3D11_USAGE_DEFAULT;
+		cbd.Usage = D3D11_USAGE_DYNAMIC;
 		cbd.ByteWidth = sizeof(Matrix4) * 4;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 		D3D11_SUBRESOURCE_DATA sd;
 		ZeroMemory(&sd, sizeof(sd));
@@ -462,6 +463,22 @@ namespace mmo
 		return result;
 	}
 
+	void GraphicsDeviceD3D11::UpdateMatrixBuffer()
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+		const HRESULT hr = m_immContext->Map(m_matrixBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+		if (SUCCEEDED(hr))
+		{
+			memcpy(mappedResource.pData, m_transform, sizeof(m_transform));
+			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform), &m_inverseView, sizeof(m_inverseView));
+			m_immContext->Unmap(m_matrixBuffer.Get(), 0);
+		}
+		else
+		{
+			ASSERT(false);
+		}
+	}
+
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options)
 	{
 		switch(options)
@@ -578,7 +595,7 @@ namespace mmo
 			m_transform[0] = Matrix4::Identity;
 			m_transform[1] = Matrix4::Identity;
 			m_transform[2] = Matrix4::Identity;
-			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, &m_transform, 0, 0);
+			UpdateMatrixBuffer();
 			m_matrixDirty = false;
 		}
 
@@ -699,11 +716,9 @@ namespace mmo
 
 		if (m_matrixDirty)
 		{
-			const Matrix4 matrices[4] = { m_transform[0], m_transform[1], m_transform[2], m_inverseView };
-				
 			// Update the constant buffer
 			m_matrixDirty = false;
-			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, matrices, 0, 0);
+			UpdateMatrixBuffer();
 		}
 		
 		// Execute draw command
@@ -718,11 +733,9 @@ namespace mmo
 		
 		if (m_matrixDirty)
 		{
-			const Matrix4 matrices[4] = { m_transform[0], m_transform[1], m_transform[2], m_inverseView };
-				
 			// Update the constant buffer
 			m_matrixDirty = false;
-			m_immContext->UpdateSubresource(m_matrixBuffer.Get(), 0, nullptr, matrices, 0, 0);
+			UpdateMatrixBuffer();
 		}
 		
 		// Execute draw command
@@ -834,9 +847,9 @@ namespace mmo
 		
 		m_inverseView = m_restoreInverseView;
 
-		m_matrixDirty = true;
 		m_samplerDescChanged = true;
 		m_lastInputLayout = nullptr;
+		m_matrixDirty = true;
 
 		// Invalidate texture slot cache
 		for (size_t i = 0; i < std::size(m_textureSlots); ++i)
@@ -847,6 +860,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(const TransformType type, Matrix4 const & matrix)
 	{
+		if (GetTransformMatrix(type) == matrix)
+		{
+			return;
+		}
+
 		// Change the transform values
 		GraphicsDevice::SetTransformMatrix(type, matrix);
 
@@ -935,6 +953,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetFillMode(const FillMode mode)
 	{
+		if (m_fillMode == mode)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetFillMode(mode);
 
 		m_rasterizerDesc.FillMode = D3D11FillMode(mode);
@@ -943,6 +966,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetFaceCullMode(const FaceCullMode mode)
 	{
+		if (m_cullMode == mode)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetFaceCullMode(mode);
 
 		m_rasterizerDesc.CullMode = D3D11CullMode(mode);

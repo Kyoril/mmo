@@ -17,9 +17,9 @@ namespace mmo
 		D3D11_BUFFER_DESC desc;
 		desc.ByteWidth = static_cast<uint32>(size);
 		desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-		desc.CPUAccessFlags = 0;
+		desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 		desc.MiscFlags = 0;
-		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.Usage = D3D11_USAGE_DYNAMIC;
 		desc.StructureByteStride = 0;
 
 		D3D11_SUBRESOURCE_DATA data;
@@ -69,6 +69,18 @@ namespace mmo
 
 	void ConstantBufferD3D11::Update(void* data)
 	{
-		m_context.UpdateSubresource(m_buffer.Get(), 0, nullptr, data, 0, 0);
+        D3D11_MAPPED_SUBRESOURCE mappedResource;
+        HRESULT hr = m_context.Map(m_buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+        if (SUCCEEDED(hr))
+        {
+            memcpy(mappedResource.pData, data, m_size);
+            m_context.Unmap(m_buffer.Get(), 0);
+        }
+        else
+        {
+            // Handle the error (e.g., log it)
+        }
+
+		//m_context.UpdateSubresource(m_buffer.Get(), 0, nullptr, data, 0, 0);
 	}
 }

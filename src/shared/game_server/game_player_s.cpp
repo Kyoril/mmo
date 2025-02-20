@@ -77,7 +77,7 @@ namespace mmo
 		Set<uint32>(object_fields::FactionTemplate, raceEntry.factiontemplate());
 	}
 
-	void GamePlayerS::SetGender(uint8 gender)
+	void GamePlayerS::SetGender(const uint8 gender)
 	{
 		uint32 bytes = Get<uint32>(object_fields::Bytes);
 
@@ -100,7 +100,7 @@ namespace mmo
 		return bytes & 0xff; // Return only the first byte (gender)
 	}
 
-	void GamePlayerS::SetAttributeCost(uint32 attribute, uint8 cost)
+	void GamePlayerS::SetAttributeCost(const uint32 attribute, const uint8 cost)
 	{
 		ASSERT(attribute < 5);
 
@@ -121,7 +121,7 @@ namespace mmo
 		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
 	}
 
-	void GamePlayerS::ApplyItemStats(GameItemS& item, bool apply)
+	void GamePlayerS::ApplyItemStats(const GameItemS& item, const bool apply)
 	{
 		const auto& itemEntry = item.GetEntry();
 
@@ -236,7 +236,7 @@ namespace mmo
 		RefreshStats();
 	}
 
-	uint8 GamePlayerS::CalculateAttributeCost(uint32 pointsSpent)
+	uint8 GamePlayerS::CalculateAttributeCost(const uint32 pointsSpent)
 	{
 		const double a = 1.5;  // Initial growth multiplier
 		const double b = 2.0;  // Offset for smoothing
@@ -250,12 +250,12 @@ namespace mmo
 		return static_cast<uint8>(std::min(cost, 255.0));
 	}
 
-	bool GamePlayerS::HasMoney(uint32 amount) const
+	bool GamePlayerS::HasMoney(const uint32 amount) const
 	{
 		return Get<uint32>(object_fields::Money) >= amount;
 	}
 
-	bool GamePlayerS::ConsumeMoney(uint32 amount)
+	bool GamePlayerS::ConsumeMoney(const uint32 amount)
 	{
 		if (!HasMoney(amount))
 		{
@@ -338,7 +338,7 @@ namespace mmo
 		return quest_status::Available;
 	}
 
-	bool GamePlayerS::AcceptQuest(uint32 quest)
+	bool GamePlayerS::AcceptQuest(const uint32 quest)
 	{
 		if (const QuestStatus status = GetQuestStatus(quest); status != quest_status::Available)
 		{
@@ -433,7 +433,7 @@ namespace mmo
 		return false;
 	}
 
-	bool GamePlayerS::AbandonQuest(uint32 quest)
+	bool GamePlayerS::AbandonQuest(const uint32 quest)
 	{
 		// Find next free quest log
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
@@ -523,7 +523,7 @@ namespace mmo
 		// First loop to check if the items can be stored
 		for (auto& pair : rewardedItems)
 		{
-			auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
+			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
 			if (result != inventory_change_failure::Okay)
 			{
 				//inventoryChangeFailure(result, nullptr, nullptr);
@@ -542,7 +542,7 @@ namespace mmo
 					return false;
 				}
 
-				auto result = m_inventory.RemoveItems(*itemEntry, req.itemcount());
+				const auto result = m_inventory.RemoveItems(*itemEntry, req.itemcount());
 				if (result != inventory_change_failure::Okay)
 				{
 					//inventoryChangeFailure(result, nullptr, nullptr);
@@ -562,8 +562,8 @@ namespace mmo
 			}
 		}
 
-		float xpFactor = 1.0f;
-		const uint32 playerLevel = GetLevel();
+		float xpFactor;
+		const int32 playerLevel = static_cast<int32>(GetLevel());
 		if (playerLevel <= entry->questlevel() + 5) {
 			xpFactor = 1.0f;
 		}
@@ -598,8 +598,7 @@ namespace mmo
 		// Remove source items of this quest (if any)
 		if (entry->srcitemid())
 		{
-			const auto* itemEntry = GetProject().items.getById(entry->srcitemid());
-			if (itemEntry)
+			if (const auto* itemEntry = GetProject().items.getById(entry->srcitemid()))
 			{
 				// 0 means: remove ALL of this item
 				m_inventory.RemoveItems(*itemEntry, 0);
@@ -628,7 +627,7 @@ namespace mmo
 		return true;
 	}
 
-	void GamePlayerS::OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry)
+	void GamePlayerS::OnQuestKillCredit(const uint64 unitGuid, const proto::UnitEntry& entry)
 	{
 		const uint32 creditEntry = (entry.killcredit() != 0) ? entry.killcredit() : entry.id();
 
@@ -934,7 +933,7 @@ namespace mmo
 		return GameUnitS::HasOffhandWeapon();
 	}
 
-	void GamePlayerS::NotifyQuestRewarded(uint32 questId)
+	void GamePlayerS::NotifyQuestRewarded(const uint32 questId)
 	{
 		ASSERT(!m_rewardedQuestIds.contains(questId));
 
@@ -975,7 +974,7 @@ namespace mmo
 		}
 	}
 
-	bool GamePlayerS::AddAttributePoint(uint32 attribute)
+	bool GamePlayerS::AddAttributePoint(const uint32 attribute)
 	{
 		// First determine attribute point cost
 		const uint8 cost = CalculateAttributeCost(m_attributePointEnhancements[attribute]);
@@ -1096,17 +1095,23 @@ namespace mmo
 
 		if (m_classEntry->spiritperhealthregen() != 0.0f)
 		{
-			m_healthRegenPerTick = (Get<uint32>(object_fields::StatSpirit) / m_classEntry->spiritperhealthregen());
+			m_healthRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / m_classEntry->spiritperhealthregen());
 		}
 		m_healthRegenPerTick += m_classEntry->healthregenpertick();
-		if (m_healthRegenPerTick < 0.0f) m_healthRegenPerTick = 0.0f;
+		if (m_healthRegenPerTick < 0.0f)
+		{
+			m_healthRegenPerTick = 0.0f;
+		}
 		
 		if (m_classEntry->spiritpermanaregen() != 0.0f)
 		{
-			m_manaRegenPerTick = (Get<uint32>(object_fields::StatSpirit) / m_classEntry->spiritpermanaregen());
+			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / m_classEntry->spiritpermanaregen());
 		}
 		m_manaRegenPerTick += m_classEntry->basemanaregenpertick();
-		if (m_manaRegenPerTick < 0.0f) m_manaRegenPerTick = 0.0f;
+		if (m_manaRegenPerTick < 0.0f)
+		{
+			m_manaRegenPerTick = 0.0f;
+		}
 
 		UpdateDamage();
 	}
@@ -1122,10 +1127,7 @@ namespace mmo
 		ASSERT(m_classEntry);
 
 		// Exceed max level?
-		if (newLevel > Get<int32>(object_fields::MaxLevel))
-		{
-			newLevel = Get<int32>(object_fields::MaxLevel);
-		}
+		newLevel = std::min(newLevel, Get<uint32>(object_fields::MaxLevel));
 
 		// Calculate total attribute points available at level
 		m_totalAvailablePointsAtLevel = 0;
@@ -1139,7 +1141,7 @@ namespace mmo
 
 		// Update next level xp
 		uint32 xpToNextLevel = 400 * newLevel;		// Dummy default value
-		if (newLevel - 1 >= m_classEntry->xptonextlevel_size())
+		if (static_cast<int32>(newLevel) - 1 < m_classEntry->xptonextlevel_size())
 		{
 			if (m_classEntry->xptonextlevel_size() == 0)
 			{
@@ -1153,7 +1155,7 @@ namespace mmo
 		}
 		else
 		{
-			xpToNextLevel = m_classEntry->xptonextlevel(newLevel - 1);
+			xpToNextLevel = m_classEntry->xptonextlevel(static_cast<int32>(newLevel) - 1);
 		}
 
 		Set<uint32>(object_fields::NextLevelXp, xpToNextLevel);

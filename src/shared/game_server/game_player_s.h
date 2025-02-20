@@ -64,7 +64,7 @@ namespace mmo
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
 		/// Applies or removes item stats for this character.
-		void ApplyItemStats(GameItemS& item, bool apply);
+		void ApplyItemStats(const GameItemS& item, bool apply);
 
 		/// Gets a reference to the characters inventory component.
 		Inventory& GetInventory() { return m_inventory; }

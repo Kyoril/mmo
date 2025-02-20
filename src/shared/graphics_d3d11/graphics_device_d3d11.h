@@ -162,6 +162,8 @@ namespace mmo
 		
 		ID3D11SamplerState* GetCurrentSamplerState();
 
+		void UpdateMatrixBuffer();
+
 	private:
 		/// The d3d11 device object.
 		ComPtr<ID3D11Device> m_device;

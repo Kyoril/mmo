@@ -485,7 +485,7 @@ namespace mmo
 			else
 			{
 				int32 currentPower = m_cast.GetExecuter().Get<uint32>(object_fields::Mana + m_spell.powertype());
-				if (totalCost > 0 && currentPower < uint32(totalCost))
+				if (totalCost > 0 && currentPower < totalCost)
 				{
 					SendEndCast(spell_cast_result::FailedNoPower);
 					m_hasFinished = true;
