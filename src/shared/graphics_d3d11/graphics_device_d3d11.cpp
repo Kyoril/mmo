@@ -147,7 +147,7 @@ namespace mmo
 			&m_featureLevel,
 			&m_immContext)));
 
-#ifdef MMO_GPU_DEBUG
+#if MMO_GPU_DEBUG
 		m_device->QueryInterface(__uuidof(ID3D11Debug), &m_d3dDebug);
 #endif
 		
