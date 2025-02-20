@@ -14,29 +14,22 @@ namespace mmo
 	}
 	void AABB::Transform(const Matrix4 & matrix)
 	{
-		float minVal = std::numeric_limits<float>::lowest();
-		float maxVal = std::numeric_limits<float>::max();
+		const Vector3 c = (min + max) * 0.5f;
+		const Vector3 e = (max - min) * 0.5f;
 
-		Vector3 corners[8] = {
-			Vector3{ min.x, min.y, min.z },
-			Vector3{ max.x, min.y, min.z },
-			Vector3{ max.x, max.y, min.z },
-			Vector3{ min.x, max.y, min.z },
-			Vector3{ min.x, min.y, max.z },
-			Vector3{ max.x, min.y, max.z },
-			Vector3{ max.x, max.y, max.z },
-			Vector3{ min.x, max.y, max.z }
-		};
+		const Vector3 newCenter = matrix * c;
 
-		min = Vector3{ maxVal, maxVal, maxVal };
-		max = Vector3{ minVal, minVal, minVal };
-
-		for (auto& v : corners)
+		Vector3 newExt;
+		for (int i = 0; i < 3; ++i)
 		{
-			v = matrix * v;
-			min = TakeMinimum(min, v);
-			max = TakeMaximum(max, v);
+			const float abs0 = fabsf(matrix[i][0]);
+			const float abs1 = fabsf(matrix[i][1]);
+			const float abs2 = fabsf(matrix[i][2]);
+			newExt[i] = e.x * abs0 + e.y * abs1 + e.z * abs2;
 		}
+
+		min = newCenter - newExt;
+		max = newCenter + newExt;
 	}
 	
 	void AABB::Combine(const Vector3& v)
