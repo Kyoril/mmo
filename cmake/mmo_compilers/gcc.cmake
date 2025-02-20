@@ -11,6 +11,8 @@ set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 list(APPEND CMAKE_CXX_FLAGS "-std=c++2a -pthread")
 
+add_compile_options(-msse2)
+
 if(UNIX)
 	link_libraries("uuid")
 endif()

@@ -364,8 +364,8 @@ namespace mmo
 			Vector3 axis;
 			Radian angle;
 			kf->GetRotation().ToAngleAxis(angle, axis);
-			if (constexpr float tolerance = 1e-3f; !trans.IsCloseTo(Vector3::Zero, tolerance) ||
-				!scale.IsCloseTo(Vector3::UnitScale, tolerance) ||
+			if (constexpr float tolerance = 1e-3f; !trans.IsNearlyEqual(Vector3::Zero, tolerance) ||
+				!scale.IsNearlyEqual(Vector3::UnitScale, tolerance) ||
 				!FloatEqual(angle.GetValueRadians(), 0.0f, tolerance))
 			{
 				return true;
@@ -400,8 +400,8 @@ namespace mmo
 			// Ignore first keyframe; now include the last keyframe as we eliminate
 			// only k-2 in a group of 5 to ensure we only eliminate middle keys
 			if (Quaternion newOrientation = kf->GetRotation(); i != m_keyFrames.begin() &&
-				newTranslate.IsCloseTo(lastTranslate) &&
-				newScale.IsCloseTo(lastScale) &&
+				newTranslate.IsNearlyEqual(lastTranslate) &&
+				newScale.IsNearlyEqual(lastScale) &&
 				newOrientation.Equals(lastOrientation, rotationTolerance))
 			{
 				++dupKfCount;

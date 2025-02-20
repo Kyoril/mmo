@@ -14,10 +14,11 @@
 #include "quaternion.h"
 #include "vector4.h"
 
+#include <immintrin.h> // AVX
 
 namespace mmo
 {
-	class Matrix4
+	class alignas(16) Matrix4
 	{
 	protected:
 		/// The matrix entries, indexed by [row][col].
@@ -128,28 +129,33 @@ namespace mmo
 			return m[iRow];
 		}
 
-		Matrix4 Concatenate(const Matrix4 &m2) const
+		Matrix4 Concatenate(const Matrix4& m2) const
 		{
 			Matrix4 r;
-			r.m[0][0] = m[0][0] * m2.m[0][0] + m[0][1] * m2.m[1][0] + m[0][2] * m2.m[2][0] + m[0][3] * m2.m[3][0];
-			r.m[0][1] = m[0][0] * m2.m[0][1] + m[0][1] * m2.m[1][1] + m[0][2] * m2.m[2][1] + m[0][3] * m2.m[3][1];
-			r.m[0][2] = m[0][0] * m2.m[0][2] + m[0][1] * m2.m[1][2] + m[0][2] * m2.m[2][2] + m[0][3] * m2.m[3][2];
-			r.m[0][3] = m[0][0] * m2.m[0][3] + m[0][1] * m2.m[1][3] + m[0][2] * m2.m[2][3] + m[0][3] * m2.m[3][3];
 
-			r.m[1][0] = m[1][0] * m2.m[0][0] + m[1][1] * m2.m[1][0] + m[1][2] * m2.m[2][0] + m[1][3] * m2.m[3][0];
-			r.m[1][1] = m[1][0] * m2.m[0][1] + m[1][1] * m2.m[1][1] + m[1][2] * m2.m[2][1] + m[1][3] * m2.m[3][1];
-			r.m[1][2] = m[1][0] * m2.m[0][2] + m[1][1] * m2.m[1][2] + m[1][2] * m2.m[2][2] + m[1][3] * m2.m[3][2];
-			r.m[1][3] = m[1][0] * m2.m[0][3] + m[1][1] * m2.m[1][3] + m[1][2] * m2.m[2][3] + m[1][3] * m2.m[3][3];
+			for (int i = 0; i < 4; ++i) 
+			{
+				// Load the row of the first matrix into SSE registers
+				__m128 row = _mm_load_ps(m[i]);
 
-			r.m[2][0] = m[2][0] * m2.m[0][0] + m[2][1] * m2.m[1][0] + m[2][2] * m2.m[2][0] + m[2][3] * m2.m[3][0];
-			r.m[2][1] = m[2][0] * m2.m[0][1] + m[2][1] * m2.m[1][1] + m[2][2] * m2.m[2][1] + m[2][3] * m2.m[3][1];
-			r.m[2][2] = m[2][0] * m2.m[0][2] + m[2][1] * m2.m[1][2] + m[2][2] * m2.m[2][2] + m[2][3] * m2.m[3][2];
-			r.m[2][3] = m[2][0] * m2.m[0][3] + m[2][1] * m2.m[1][3] + m[2][2] * m2.m[2][3] + m[2][3] * m2.m[3][3];
+				for (int j = 0; j < 4; ++j) 
+				{
+					// Broadcast each element of the second matrix column
+					__m128 m2_col0 = _mm_set1_ps(m2.m[0][j]);
+					__m128 m2_col1 = _mm_set1_ps(m2.m[1][j]);
+					__m128 m2_col2 = _mm_set1_ps(m2.m[2][j]);
+					__m128 m2_col3 = _mm_set1_ps(m2.m[3][j]);
 
-			r.m[3][0] = m[3][0] * m2.m[0][0] + m[3][1] * m2.m[1][0] + m[3][2] * m2.m[2][0] + m[3][3] * m2.m[3][0];
-			r.m[3][1] = m[3][0] * m2.m[0][1] + m[3][1] * m2.m[1][1] + m[3][2] * m2.m[2][1] + m[3][3] * m2.m[3][1];
-			r.m[3][2] = m[3][0] * m2.m[0][2] + m[3][1] * m2.m[1][2] + m[3][2] * m2.m[2][2] + m[3][3] * m2.m[3][2];
-			r.m[3][3] = m[3][0] * m2.m[0][3] + m[3][1] * m2.m[1][3] + m[3][2] * m2.m[2][3] + m[3][3] * m2.m[3][3];
+					// Perform element-wise multiplication
+					__m128 res = _mm_mul_ps(row, m2_col0);
+					res = _mm_add_ps(res, _mm_mul_ps(_mm_load_ps(m[i] + 1), m2_col1));
+					res = _mm_add_ps(res, _mm_mul_ps(_mm_load_ps(m[i] + 2), m2_col2));
+					res = _mm_add_ps(res, _mm_mul_ps(_mm_load_ps(m[i] + 3), m2_col3));
+
+					// Store the result back
+					r.m[i][j] = _mm_cvtss_f32(res);
+				}
+			}
 
 			return r;
 		}
@@ -159,27 +165,75 @@ namespace mmo
 			return Concatenate(m2);
 		}
 
-		Vector3 operator * (const Vector3 &v) const
+		Vector3 operator * (const Vector3& v) const
 		{
 			Vector3 r;
 
-			float fInvW = 1.0f / (m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3]);
+			// Load vector (x, y, z, 1.0) into an SSE register
+			__m128 vec = _mm_set_ps(1.0f, v.z, v.y, v.x);
 
-			r.x = (m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3]) * fInvW;
-			r.y = (m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3]) * fInvW;
-			r.z = (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]) * fInvW;
+			// Compute w' = dot(m[3], vec)
+			__m128 row3 = _mm_load_ps(m[3]);   // Load m[3][0], m[3][1], m[3][2], m[3][3]
+			__m128 w_vec = _mm_dp_ps(row3, vec, 0xF1); // Dot product, only storing the lowest float
+
+			// Compute x' = dot(m[0], vec)
+			__m128 row0 = _mm_load_ps(m[0]);
+			__m128 x_vec = _mm_dp_ps(row0, vec, 0xF1);
+
+			// Compute y' = dot(m[1], vec)
+			__m128 row1 = _mm_load_ps(m[1]);
+			__m128 y_vec = _mm_dp_ps(row1, vec, 0xF1);
+
+			// Compute z' = dot(m[2], vec)
+			__m128 row2 = _mm_load_ps(m[2]);
+			__m128 z_vec = _mm_dp_ps(row2, vec, 0xF1);
+
+			// Invert w'
+			__m128 inv_w = _mm_rcp_ps(w_vec);  // Fast reciprocal approximation
+
+			// Multiply results by 1/w
+			x_vec = _mm_mul_ps(x_vec, inv_w);
+			y_vec = _mm_mul_ps(y_vec, inv_w);
+			z_vec = _mm_mul_ps(z_vec, inv_w);
+
+			// Store results
+			r.x = _mm_cvtss_f32(x_vec);
+			r.y = _mm_cvtss_f32(y_vec);
+			r.z = _mm_cvtss_f32(z_vec);
 
 			return r;
 		}
 
-		inline Vector4 operator * (const Vector4& v) const
+		inline Vector4 operator*(const Vector4& v) const
 		{
-			return Vector4(
-				m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
-				m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3] * v.w,
-				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
-				m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3] * v.w
-			);
+			// Load the input Vector4 into an SSE register
+			// The order is (x, y, z, w) in memory, so _mm_loadu_ps is fine.
+			// If 'v' is 16-byte aligned, you can use _mm_load_ps instead.
+			__m128 vec = _mm_set_ps(v.w, v.z, v.y, v.x);
+
+			float out[4];
+
+			// For each row in the matrix:
+			for (int i = 0; i < 4; ++i)
+			{
+				// Load the row as __m128 (m[i][0], m[i][1], m[i][2], m[i][3])
+				__m128 row = _mm_load_ps(m[i]);
+
+				// Element-wise multiply row and vec
+				__m128 mul = _mm_mul_ps(row, vec);
+
+				// Horizontal add to sum up (x + y + z + w)
+				// 1st hadd: (x+y, z+w, x+y, z+w)
+				// 2nd hadd: ( (x+y)+(z+w), ... , ... , ... )
+				__m128 sum = _mm_hadd_ps(mul, mul);
+				sum = _mm_hadd_ps(sum, sum);
+
+				// Store the single float result to out[i]
+				out[i] = _mm_cvtss_f32(sum);
+			}
+
+			// Construct and return the resulting Vector4
+			return Vector4(out[0], out[1], out[2], out[3]);
 		}
 
 		/*inline Plane operator * (const Plane& p) const

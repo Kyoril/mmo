@@ -27,6 +27,10 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
+#ifndef MMO_GPU_DEBUG
+#	define MMO_GPU_DEBUG 0
+#endif
+
 namespace mmo
 {
 	namespace
@@ -125,7 +129,7 @@ namespace mmo
 		// Setup device flags
 		UINT deviceCreationFlags = 0;
 
-#if defined(_DEBUG)
+#if MMO_GPU_DEBUG
 		// If the project is in a debug build, enable the debug layer.
 		deviceCreationFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -143,7 +147,7 @@ namespace mmo
 			&m_featureLevel,
 			&m_immContext)));
 
-#ifdef _DEBUG
+#ifdef MMO_GPU_DEBUG
 		m_device->QueryInterface(__uuidof(ID3D11Debug), &m_d3dDebug);
 #endif
 		
@@ -522,7 +526,7 @@ namespace mmo
 		m_immContext.Reset();
 		m_device.Reset();
 
-#ifdef _DEBUG
+#if MMO_GPU_DEBUG
 		if (m_d3dDebug)
 		{
 			m_d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_IGNORE_INTERNAL);

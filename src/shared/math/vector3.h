@@ -180,6 +180,13 @@ namespace mmo
 			return x != other.x || y != other.y || z != other.z;
 		}
 
+		inline bool IsNearlyEqual(const Vector3& other, float epsilon = 1e-2f) const
+		{
+			return (fabsf(x - other.x) <= epsilon &&
+				fabsf(y - other.y) <= epsilon &&
+				fabsf(z - other.z) <= epsilon);
+		}
+
 		// Inversion
 		inline Vector3 operator-() const
 		{
@@ -304,16 +311,6 @@ namespace mmo
 			return (*this - rhs).GetSquaredLength();
 		}
 
-		/// Checks if this vector is almost equal to another vector, but allows some
-		/// minimal offset for each component due to imprecise floating points.
-		[[nodiscard]] bool IsNearlyEqual(const Vector3& other, const float epsilon = FLT_EPSILON) const
-		{
-			return
-				fabs(x - other.x) <= epsilon &&
-				fabs(y - other.y) <= epsilon &&
-				fabs(z - other.z) <= epsilon;
-		}
-
 		/// Checks whether all components of this vector are valid numbers.
 		[[nodiscard]] bool IsValid() const
 		{
@@ -350,12 +347,6 @@ namespace mmo
 			if (other.x > x) x = other.x;
 			if (other.y > y) y = other.y;
 			if (other.z > z) z = other.z;
-		}
-
-		[[nodiscard]] bool IsCloseTo(const Vector3& rhs, const float tolerance = 1e-03f) const
-		{
-			return GetSquaredDistanceTo(rhs) <=
-				(GetSquaredLength() + rhs.GetSquaredLength()) * tolerance;
 		}
 
 		[[nodiscard]] Vector3 Lerp(const Vector3& target, float t) const

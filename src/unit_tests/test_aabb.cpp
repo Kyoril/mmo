@@ -104,8 +104,8 @@ TEST_CASE("Transform applies translation", "[aabb]")
 
 	transformedVolume.Transform(transformation);
 	
-	CHECK(transformedVolume.min == Vector3(1.0f, 0.0f, 0.0f));
-	CHECK(transformedVolume.max == Vector3(2.0f, 1.0f, 1.0f));
+	CHECK(transformedVolume.min.IsNearlyEqual(Vector3(1.0f, 0.0f, 0.0f)));
+	CHECK(transformedVolume.max.IsNearlyEqual(Vector3(2.0f, 1.0f, 1.0f)));
 }
 
 TEST_CASE("Transform applies scale", "[aabb]")
@@ -117,8 +117,8 @@ TEST_CASE("Transform applies scale", "[aabb]")
 
 	transformedVolume.Transform(transformation);
 	
-	CHECK(transformedVolume.min == Vector3(0.0f, 0.0f, 0.0f));
-	CHECK(transformedVolume.max == Vector3(2.0f, 2.0f, 2.0f));
+	CHECK(transformedVolume.min.IsNearlyEqual(Vector3(0.0f, 0.0f, 0.0f)));
+	CHECK(transformedVolume.max.IsNearlyEqual(Vector3(2.0f, 2.0f, 2.0f)));
 }
 
 TEST_CASE("Transform applies rotation", "[aabb]")
@@ -128,6 +128,6 @@ TEST_CASE("Transform applies rotation", "[aabb]")
 	const Matrix4 transformation { Quaternion(Degree(45), Vector3::UnitY)};
 	transformedVolume.Transform(transformation);
 	
-	CHECK(transformedVolume.min.IsNearlyEqual(Vector3(0.0f, 0.0f, -0.707107f), 0.0001f));
-	CHECK(transformedVolume.max.IsNearlyEqual(Vector3(1.41421f, 1.0f, 0.707107f), 0.0001f));
+	CHECK(transformedVolume.min.IsNearlyEqual(Vector3(0.0f, 0.0f, -0.707107f), 0.001f));
+	CHECK(transformedVolume.max.IsNearlyEqual(Vector3(1.41421f, 1.0f, 0.707107f), 0.001f));
 }

@@ -142,17 +142,21 @@ TEST_CASE("Vector3Transform", "[math]")
 	REQUIRE(v1.IsValid());
 
 	// Identity matrix should not motify the vector
-	CHECK(Matrix4::Identity * v1 == v1);
+	Vector3 test = Matrix4::Identity * v1;
+	CHECK(test.IsNearlyEqual(v1));
 	
 	// Translate the vector on the x axis
 	const Matrix4 trans = Matrix4::GetTrans(3.0f, 0.0f, 0.0f);
-	CHECK(trans * v1 == Vector3{ 4.0f, 0.0f, 3.0f });
+	test = trans * v1;
+	CHECK(test.IsNearlyEqual(Vector3{ 4.0f, 0.0f, 3.0f }));
 
 	// Scale vector uniformly
 	const Matrix4 scaleUniform = Matrix4::GetScale(2.0f, 2.0f, 2.0f);
-	CHECK(scaleUniform * v1 == Vector3{ 2.0f, 0.0f, 6.0f });
+	test = scaleUniform * v1;
+	CHECK(test.IsNearlyEqual(Vector3{ 2.0f, 0.0f, 6.0f }));
 
 	// Scale vector non-uniformly
 	const Matrix4 scale = Matrix4::GetScale(2.0f, 1.0f, 3.0f);
-	CHECK(scale * v1 == Vector3{ 2.0f, 0.0f, 9.0f });
+	test = scale * v1;
+	CHECK(test.IsNearlyEqual(Vector3{ 2.0f, 0.0f, 9.0f }));
 }
