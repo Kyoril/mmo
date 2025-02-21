@@ -55,6 +55,8 @@ namespace mmo
 		other.m_needsRedraw = true;
 		other.m_onEnterPressed = m_onEnterPressed;
 		other.m_onTabPressed = m_onTabPressed;
+		other.m_onSpacePressed = m_onSpacePressed;
+		other.m_onEscapePressed = m_onEscapePressed;
 		other.m_onEnter = m_onEnter;
 		other.m_onLeave = m_onLeave;
 		other.m_onShow = m_onShow;
@@ -867,6 +869,14 @@ namespace mmo
 		{
 			OnEnterPressed();
 		}
+		else if (key == 0x20)
+		{
+			OnSpacePressed();
+		}
+		else if (key == 0x1B)
+		{
+			OnEscapePressed();
+		}
 
 	}
 
@@ -884,6 +894,24 @@ namespace mmo
 		if (m_onEnterPressed.is_valid())
 		{
 			m_onEnterPressed(this);
+			abort_emission();
+		}
+	}
+
+	void Frame::OnSpacePressed()
+	{
+		if (m_onSpacePressed.is_valid())
+		{
+			m_onSpacePressed(this);
+			abort_emission();
+		}
+	}
+
+	void Frame::OnEscapePressed()
+	{
+		if (m_onEscapePressed.is_valid())
+		{
+			m_onEscapePressed(this);
 			abort_emission();
 		}
 	}

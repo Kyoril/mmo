@@ -407,6 +407,10 @@ namespace mmo
 
 		void SetOnEnterPressed(const luabind::object& func) { m_onEnterPressed = func; }
 
+		void SetOnEscapePressed(const luabind::object& func) { m_onEscapePressed = func; }
+
+		void SetOnSpacePressed(const luabind::object& func) { m_onSpacePressed = func; }
+
 		void SetOnEnter(const luabind::object& func) { m_onEnter = func; }
 
 		void SetOnLeave(const luabind::object& func) { m_onLeave = func; }
@@ -453,6 +457,10 @@ namespace mmo
 		void OnTabPressed();
 
 		void OnEnterPressed();
+
+		void OnSpacePressed();
+
+		void OnEscapePressed();
 
 		virtual void OnAreaChanged(const Rect& newArea) { }
 
@@ -544,6 +552,10 @@ namespace mmo
 		luabind::object m_onEnterPressed;
 
 		luabind::object m_onTabPressed;
+
+		luabind::object m_onSpacePressed;
+
+		luabind::object m_onEscapePressed;
 
 		luabind::object m_onEnter;
 

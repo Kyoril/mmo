@@ -128,7 +128,7 @@ namespace mmo
 
 	private:
 		/// Checks support for GSync displays.
-		void CheckTearingSupport();
+		void CheckTearingSupport() noexcept;
 
 		/// Creates the d3d11 device objects.
 		void CreateD3D11();

@@ -12,6 +12,7 @@
 
 #include "asio/io_service.hpp"
 #include "game/action_button.h"
+#include "game/chat_type.h"
 #include "math/vector3.h"
 
 
@@ -406,6 +407,8 @@ namespace mmo
 		void DeclineGroup();
 
 		void RandomRoll(int32 min, int32 max);
+
+		void SendChatMessage(const String& message, ChatType chatType, const String& target);
 
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }

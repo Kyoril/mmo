@@ -110,7 +110,8 @@ namespace mmo
 			}
 
 			// Draw the text
-			font->DrawText(text, position, m_frame->GetGeometryBuffer(), textScale);
+			font->DrawText(text, position, m_frame->GetGeometryBuffer(), textScale, 
+				textField->IsEnabled(false) ? textField->GetEnabledTextColor() : textField->GetDisabledTextColor());
 		}
 
 		// If the frame has captured user input...

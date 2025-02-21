@@ -63,6 +63,8 @@ namespace mmo
 	static const std::string OnUpdateElement("OnUpdate");
 	static const std::string OnTabPressedElement("OnTabPressed");
 	static const std::string OnEnterPressedElement("OnEnterPressed");
+	static const std::string OnSpacePressedElement("OnSpacePressed");
+	static const std::string OnEscapePressedElement("OnEscapePressed");
 	static const std::string OnShowElement("OnShow");
 	static const std::string OnHideElement("OnHide");
 	static const std::string OnEnterElement("OnEnter");
@@ -256,6 +258,14 @@ namespace mmo
 			{
 				ElementOnEnterPressedStart(attributes);
 			}
+			else if (element == OnSpacePressedElement)
+			{
+				ElementOnSpacePressedStart(attributes);
+			}
+			else if (element == OnEscapePressedElement)
+			{
+				ElementOnEscapePressedStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -382,6 +392,14 @@ namespace mmo
 			else if (element == OnEnterPressedElement)
 			{
 				ElementOnEnterPressedEnd();
+			}
+			else if (element == OnSpacePressedElement)
+			{
+				ElementOnSpacePressedEnd();
+			}
+			else if (element == OnEscapePressedElement)
+			{
+				ElementOnEscapePressedEnd();
 			}
 			else if (element == OnShowElement)
 			{
@@ -1246,6 +1264,46 @@ namespace mmo
 			{
 				const luabind::object onEnterPressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEnterPressed", script);
 				frame->SetOnEnterPressed(onEnterPressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnSpacePressedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnSpacePressedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnSpacePressedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onSpacePressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnSpacePressed", script);
+				frame->SetOnSpacePressed(onSpacePressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnEscapePressedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnEscapePressedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnEscapePressedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onEscapePressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEscapePressed", script);
+				frame->SetOnEscapePressed(onEscapePressed);
 			});
 	}
 

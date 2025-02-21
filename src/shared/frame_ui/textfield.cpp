@@ -10,7 +10,7 @@
 
 namespace mmo
 {
-	TextField::TextField(const std::string & type, const std::string & name)
+	TextField::TextField(const std::string& type, const std::string& name)
 		: Frame(type, name)
 		, m_masked(false)
 		, m_maskCodePoint('*')
@@ -20,10 +20,14 @@ namespace mmo
 		, m_vertAlign(VerticalAlignment::Center)
 		, m_textAreaOffset(Point(10.0f, 10.0f), Size())
 		, m_acceptsTab(false)
+		, m_enabledColor(1.0f, 1.0f, 1.0f)
+		, m_disabledColor(0.5f, 0.5f, 0.5f)
 	{
 		// Add the masked property
 		m_propConnections += AddProperty("Masked", "false").Changed.connect(this, &TextField::OnMaskedPropChanged);
 		m_propConnections += AddProperty("AcceptsTab", "false").Changed.connect(this, &TextField::OnAcceptTabChanged);
+		m_propConnections += AddProperty("EnabledTextColor", "FFFFFFFF").Changed.connect(this, &TextField::OnEnabledTextColorChanged);
+		m_propConnections += AddProperty("DisabledTextColor", "FF808080").Changed.connect(this, &TextField::OnDisabledTextColorChanged);
 
 		// Text fields are focusable by default
 		m_focusable = true;
@@ -32,6 +36,21 @@ namespace mmo
 	void TextField::Copy(Frame & other)
 	{
 		Frame::Copy(other);
+
+		const auto otherTextField = dynamic_cast<TextField*>(&other);
+		if (!otherTextField)
+		{
+			return;
+		}
+
+		otherTextField->m_textAreaOffset = m_textAreaOffset;
+		otherTextField->m_cursor = m_cursor;
+		otherTextField->m_masked = m_masked;
+		otherTextField->m_vertAlign = m_vertAlign;
+		otherTextField->m_horzAlign = m_horzAlign;
+		otherTextField->m_acceptsTab = m_acceptsTab;
+		otherTextField->m_enabledColor = m_enabledColor;
+		otherTextField->m_disabledColor = m_disabledColor;
 	}
 
 	void TextField::SetTextMasked(bool value)
@@ -338,5 +357,33 @@ namespace mmo
 	void TextField::OnAcceptTabChanged(const Property& property)
 	{
 		SetAcceptsTab(property.GetBoolValue());
+	}
+
+	void TextField::OnEnabledTextColorChanged(const Property& property)
+	{
+		argb_t argb;
+
+		std::stringstream colorStream;
+		colorStream.str(property.GetValue());
+		colorStream.clear();
+		colorStream >> std::hex >> argb;
+
+		m_enabledColor = argb;
+
+		Invalidate(false);
+	}
+
+	void TextField::OnDisabledTextColorChanged(const Property& property)
+	{
+		argb_t argb;
+
+		std::stringstream colorStream;
+		colorStream.str(property.GetValue());
+		colorStream.clear();
+		colorStream >> std::hex >> argb;
+
+		m_disabledColor = argb;
+
+		Invalidate(false);
 	}
 }

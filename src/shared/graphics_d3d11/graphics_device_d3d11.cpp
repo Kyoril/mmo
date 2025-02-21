@@ -95,7 +95,7 @@ namespace mmo
 	}
 
 	
-	void GraphicsDeviceD3D11::CheckTearingSupport()
+	void GraphicsDeviceD3D11::CheckTearingSupport() noexcept
 	{
 		// Rather than create the 1.5 factory interface directly, we create the 1.4
 		// interface and query for the 1.5 interface. This will enable the graphics

@@ -1001,6 +1001,9 @@ namespace mmo
 
 			luabind::def<std::function<void(int32, int32)>>("RandomRoll", [this](int32 min, int32 max) { m_realmConnector.RandomRoll(min, max); }),
 
+			luabind::def<std::function<void(const char*, const char*)>>("SendChatMessage", [this](const char* message, const char* type) { SendChatMessage(message, type, nullptr); }),
+			luabind::def<std::function<void(const char*, const char*, const char*)>>("SendChatMessage", [this](const char* message, const char* type, const char* target) { SendChatMessage(message, type, target); }),
+
 			luabind::def<std::function<void()>>("AcceptGroup", [this]() { m_realmConnector.AcceptGroup(); }),
 			luabind::def<std::function<void()>>("DeclineGroup", [this]() { m_realmConnector.DeclineGroup(); }),
 			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),
@@ -1014,6 +1017,71 @@ namespace mmo
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;
+	}
+
+	void GameScript::SendChatMessage(const char* message, const char* type, const char* target) const
+	{
+		static const String s_emptyTarget;
+
+		if (!message || !*message)
+		{
+			ELOG("No message given to SendChatMessage function!");
+			return;
+		}
+
+		if (!type || !*type)
+		{
+			ELOG("No type given to SendChatMessage function!");
+			return;
+		}
+
+		struct ChatMessageTypeString
+		{
+			std::string typeString;
+			ChatType type;
+		};
+
+		static const ChatMessageTypeString s_typeStrings[] = {
+			{ "WHISPER", ChatType::Whisper },
+			{ "SAY", ChatType::Say },
+			{ "YELL", ChatType::Yell },
+			{ "PARTY", ChatType::Group },
+			{ "WHISPER", ChatType::Whisper },
+			{ "GUILD", ChatType::Guild },
+			{ "CHANNEL", ChatType::Channel },
+			{ "EMOTE", ChatType::Emote }
+		};
+
+		const String typeString = type;
+		ChatType chatType = ChatType::Unknown;
+		for (const auto& element : s_typeStrings)
+		{
+			if (element.typeString == typeString)
+			{
+				chatType = element.type;
+				break;
+			}
+		}
+
+		if (chatType == ChatType::Unknown)
+		{
+			ELOG("Unknown chat type '" << typeString << "'!");
+			return;
+		}
+
+		if (chatType == ChatType::Whisper && (!target || !*target))
+		{
+			ELOG("No target given to whisper message!");
+			return;
+		}
+
+		if (chatType == ChatType::Channel && (!target || !*target))
+		{
+			ELOG("No channel given to channel message!");
+			return;
+		}
+
+		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
 	}
 
 	void GameScript::PickupContainerItem(uint32 slot) const

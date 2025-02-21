@@ -65,7 +65,6 @@ namespace mmo
 		static const char* s_toggleAxis = "ToggleAxis";
 		static const char* s_toggleGrid = "ToggleGrid";
 		static const char* s_toggleWire = "ToggleWire";
-		static const char* s_sendChatMessage = "SendChatMessage";
 		static const char* s_freezeCulling = "ToggleCullingFreeze";
 	}
 
@@ -834,18 +833,6 @@ namespace mmo
 			ToggleWireframe();
 		}, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
 
-		Console::RegisterCommand(command_names::s_sendChatMessage, [this](const std::string& command, const std::string& args)
-		{
-			m_realmConnector.sendSinglePacket([this, &args](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::client_realm_packet::ChatMessage);
-				packet
-					<< io::write<uint8>(ChatType::Say)
-					<< io::write_range(args) << io::write<uint8>(0);
-				packet.Finish();
-			});
-		}, ConsoleCommandCategory::Debug, "Sends an ingame chat message.");
-
 		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string&, const std::string&)
 			{
 				// Ensure that the frustum planes are recalculated to immediately see the effect
@@ -864,7 +851,6 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
-			command_names::s_sendChatMessage,
 			command_names::s_freezeCulling
 		};
 
@@ -1155,7 +1141,18 @@ namespace mmo
 
 		m_playerNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
 		{
-			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name, message);
+			String chatMessageType = "SAY";
+			switch (type)
+			{
+			case ChatType::Channel: chatMessageType = "CHANNEL"; break;
+			case ChatType::Yell: chatMessageType = "YELL"; break;
+			case ChatType::Group: chatMessageType = "PARTY"; break;
+			case ChatType::Guild: chatMessageType = "GUILD"; break;
+			case ChatType::Whisper: chatMessageType = "WHISPER"; break;
+			case ChatType::Raid: chatMessageType = "RAID"; break;
+			}
+
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, name, message);
 		});
 
 		return PacketParseResult::Pass;

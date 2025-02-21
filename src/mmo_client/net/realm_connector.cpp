@@ -795,4 +795,20 @@ namespace mmo
 			packet.Finish();
 			});
 	}
+
+	void RealmConnector::SendChatMessage(const String& message, ChatType chatType, const String& target)
+	{
+		sendSinglePacket([&message, chatType, &target](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ChatMessage);
+				packet
+					<< io::write<uint8>(chatType)
+					<< io::write_range(message) << io::write<uint8>(0);
+				if (chatType == ChatType::Whisper || chatType == ChatType::Channel)
+				{
+					packet << io::write_dynamic_range<uint8>(target);
+				}
+				packet.Finish();
+			});
+	}
 }

@@ -525,7 +525,22 @@ namespace mmo
 			break;
 
 		case ChatType::Group:
-			WLOG("Group chat is not implemented yet!");
+			if (!m_group || !m_group->IsMember(m_characterData->characterId))
+			{
+				WLOG("Player tried to send group chat message without being in a group!");
+				break;
+			}
+			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(m_characterData->characterId)
+						<< io::write<uint8>(chatType)
+						<< io::write_range(message)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish();
+				});
 			break;
 
 		case ChatType::Guild:

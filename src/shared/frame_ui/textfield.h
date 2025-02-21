@@ -73,6 +73,8 @@ namespace mmo
 		/// 
 		void OnMaskedPropChanged(const Property& property);
 		void OnAcceptTabChanged(const Property& property);
+		void OnEnabledTextColorChanged(const Property& property);
+		void OnDisabledTextColorChanged(const Property& property);
 
 	private:
 		/// Whether the text of this textfield should be masked.

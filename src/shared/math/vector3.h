@@ -180,7 +180,7 @@ namespace mmo
 			return x != other.x || y != other.y || z != other.z;
 		}
 
-		inline bool IsNearlyEqual(const Vector3& other, float epsilon = 1e-2f) const
+		inline bool IsNearlyEqual(const Vector3& other, float epsilon = 1e-4f) const
 		{
 			return (fabsf(x - other.x) <= epsilon &&
 				fabsf(y - other.y) <= epsilon &&
