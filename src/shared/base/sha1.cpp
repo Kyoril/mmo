@@ -8,11 +8,35 @@
 
 #include <openssl/sha.h>
 
+#if OPENSSL_VERSION_MAJOR >= 3
+#	include <openssl/types.h>
+#	include <openssl/evp.h>
+#endif
+
 namespace mmo
 {
+#if OPENSSL_VERSION_MAJOR < 3
 	struct HashGeneratorSha1::Context : SHA_CTX
 	{
 	};
+#else
+	struct HashGeneratorSha1::Context
+	{
+		EVP_MD_CTX* md_ctx = nullptr;
+
+		Context()
+		{
+			md_ctx = EVP_MD_CTX_new();
+		}
+		~Context()
+		{
+			if (md_ctx)
+			{
+				EVP_MD_CTX_free(md_ctx);
+			}
+		}
+	};
+#endif
 
 	SHA1Hash sha1(std::istream & source)
 	{
@@ -143,10 +167,15 @@ namespace mmo
 		if (!m_context)
 		{
 			m_context = std::make_shared<Context>();
+
+#if OPENSSL_VERSION_MAJOR < 3
 			if (!SHA1_Init(m_context.get()))
 			{
 				throw std::runtime_error("SHA1_Init failed");
 			}
+#else
+			EVP_DigestInit(m_context->md_ctx, EVP_sha1());
+#endif
 		}
 	}
 
@@ -154,10 +183,14 @@ namespace mmo
 	{
 		ensureContextCreated();
 
+#if OPENSSL_VERSION_MAJOR < 3
 		if (!(SHA1_Update(m_context.get(), data, len)))
 		{
 			throw std::runtime_error("SHA1_Update failed");
 		}
+#else
+		EVP_DigestUpdate(m_context->md_ctx, data, len);
+#endif
 	}
 
 	SHA1Hash HashGeneratorSha1::finalize()
@@ -165,10 +198,14 @@ namespace mmo
 		ensureContextCreated();
 
 		SHA1Hash digest;
+#if OPENSSL_VERSION_MAJOR < 3
 		if (!SHA1_Final(digest.data(), m_context.get()))
 		{
 			throw std::runtime_error("SHA1_Final failed");
 		}
+#else
+		EVP_DigestFinal(m_context->md_ctx, digest.data(), nullptr);
+#endif
 
 		m_context.reset();
 		return digest;
