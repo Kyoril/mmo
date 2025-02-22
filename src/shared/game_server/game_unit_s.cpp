@@ -1831,23 +1831,42 @@ namespace mmo
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
 		uint32 totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), static_cast<uint32>(distribution(randomGenerator)));
 
+		uint32 hitInfo = HitInfo::NormalSwing;
+		uint32 victimState = VictimState::Normal;
+
 		bool hit = true;
 		if (outcome == MeleeAttackOutcome::Crit)
 		{
+			hitInfo |= hit_info::CriticalHit;
 			totalDamage *= 2;
 		}
 		else if(outcome == melee_attack_outcome::Crushing)
 		{
+			hitInfo |= hit_info::Crushing;
 			totalDamage *= 4;
 		}
 		else if (outcome == melee_attack_outcome::Glancing)
 		{
-			totalDamage *= 0.15f;
+			hitInfo |= hit_info::Glancing;
+			totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) * 0.15f);
 		}
 		else if (outcome == melee_attack_outcome::Miss ||
 			outcome == melee_attack_outcome::Parry ||
 			outcome == melee_attack_outcome::Dodge)
 		{
+			if (outcome == melee_attack_outcome::Miss)
+			{
+				hitInfo |= hit_info::Miss;
+			}
+			else if (outcome == melee_attack_outcome::Parry)
+			{
+				victimState = victim_state::Parry;
+			}
+			else if (outcome == melee_attack_outcome::Block)
+			{
+				victimState = victim_state::Blocks;
+			}
+
 			hit = false;
 			totalDamage = 0;
 		}
@@ -1867,10 +1886,28 @@ namespace mmo
 		}
 
 		victim->Damage(totalDamage, spell_school::Normal, this);
-		if (m_netUnitWatcher)
-		{
-			m_netUnitWatcher->OnNonSpellDamageLog(victim->GetGuid(), totalDamage, outcome == melee_attack_outcome::Crit ? damage_flags::Crit : damage_flags::None);
-		}
+
+		// Notify all subscribers
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::AttackerStateUpdate);
+		packet
+			<< io::write_packed_guid(GetGuid())
+			<< io::write_packed_guid(victim->GetGuid())
+			<< io::write<uint32>(hitInfo)
+			<< io::write<uint32>(victimState)
+			<< io::write<uint32>(totalDamage)
+			<< io::write<uint32>(spell_school::Normal)
+			<< io::write<uint32>(0)	// Absorbed damage
+			<< io::write<uint32>(0)	// Resisted damage
+			<< io::write<uint32>(0);	// Blocked damage
+		packet.Finish();
+		ForEachSubscriberInSight(
+			[&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
 
 		if (totalDamage > 0 &&
 			Get<uint32>(object_fields::PowerType) == power_type::Rage)
@@ -1889,7 +1926,7 @@ namespace mmo
 		OnAttackSwingEvent(AttackSwingEvent::Success);
 		TriggerNextAutoAttack();
 
-		// Trigger proc events (potentially)
+		// Trigger proc events
 		if (hit)
 		{
 			meleeAttackDone(*victim);

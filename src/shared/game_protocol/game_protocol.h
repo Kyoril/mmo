@@ -313,6 +313,8 @@ namespace mmo
 
 				RandomRollResult,
 
+				AttackerStateUpdate,
+
 				/// Counter constant
 				Count_,
 			};

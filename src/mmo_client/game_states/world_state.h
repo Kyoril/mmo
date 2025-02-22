@@ -237,6 +237,8 @@ namespace mmo
 
 		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
 
+		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket& packet);
+
 		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket& packet);
 
 		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket& packet);
@@ -414,5 +416,4 @@ namespace mmo
 
 		void OnMoveFall(GameUnitC& unit) override;
 	};
-
 }

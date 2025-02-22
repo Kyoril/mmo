@@ -752,6 +752,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1906,6 +1907,70 @@ namespace mmo
 		if (m_playerController && m_playerController->GetControlledUnit())
 		{
 			m_playerController->GetControlledUnit()->NotifyAttackSwingEvent();
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid, attackedGuid;
+		uint32 totalDamage, school, absorbedDamage, resistedDamage, blockedDamage;
+		VictimState victimState;
+		HitInfo hitInfo;
+		if (!(packet
+			>> io::read_packed_guid(attackerGuid)
+			>> io::read_packed_guid(attackedGuid)
+			>> io::read<uint32>(hitInfo)
+			>> io::read<uint32>(victimState)
+			>> io::read<uint32>(totalDamage)
+			>> io::read<uint32>(school)
+			>> io::read<uint32>(absorbedDamage)
+			>> io::read<uint32>(resistedDamage)
+			>> io::read<uint32>(blockedDamage)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::shared_ptr<GameUnitC> attacker = ObjectMgr::Get<GameUnitC>(attackerGuid);
+		if (attacker)
+		{
+			attacker->NotifyAttackSwingEvent();
+		}
+
+		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
+		if (attacked)
+		{
+			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid)
+			{
+				String damageText;
+				if (hitInfo & hit_info::Miss)
+				{
+					damageText = "MISSED";	// Localize
+				}
+				else if (victimState == victim_state::Parry)
+				{
+					damageText = "PARRIED";
+				}
+				else if (victimState == victim_state::Dodge)
+				{
+					damageText = "DODGED";
+				}
+				else if (victimState == victim_state::Blocks)
+				{
+					damageText = "BLOCKED";
+				}
+				else
+				{
+					damageText = std::to_string(totalDamage);
+				}
+
+				AddWorldTextFrame(attacked->GetPosition(), damageText, Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
+			}
+			else if (ObjectMgr::GetActivePlayerGuid() == attackedGuid)
+			{
+				// TODO: Notify about damage event
+			}
 		}
 
 		return PacketParseResult::Pass;

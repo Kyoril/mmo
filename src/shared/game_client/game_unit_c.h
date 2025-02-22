@@ -285,6 +285,8 @@ namespace mmo
 
 		void NotifyAttackSwingEvent();
 
+		void NotifyHitEvent();
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
@@ -348,6 +350,7 @@ namespace mmo
 		AnimationState* m_unarmedAttackState{ nullptr };
 		AnimationState* m_castReleaseState{ nullptr };
 		AnimationState* m_castingState{ nullptr };
+		AnimationState* m_damageHitState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;

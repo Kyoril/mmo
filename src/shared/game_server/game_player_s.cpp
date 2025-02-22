@@ -1141,7 +1141,7 @@ namespace mmo
 
 		// Update next level xp
 		uint32 xpToNextLevel = 400 * newLevel;		// Dummy default value
-		if (static_cast<int32>(newLevel) - 1 < m_classEntry->xptonextlevel_size())
+		if (static_cast<int32>(newLevel) - 1 >= m_classEntry->xptonextlevel_size())
 		{
 			if (m_classEntry->xptonextlevel_size() == 0)
 			{

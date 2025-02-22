@@ -1144,6 +1144,11 @@ namespace mmo
 		PlayOneShotAnimation(m_unarmedAttackState);
 	}
 
+	void GameUnitC::NotifyHitEvent()
+	{
+		PlayOneShotAnimation(m_damageHitState);
+	}
+
 	bool GameUnitC::IsFriendlyTo(const GameUnitC& other) const
 	{
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
@@ -1278,6 +1283,13 @@ namespace mmo
 			m_deathState = m_entity->GetAnimationState("Death");
 			m_deathState->SetLoop(false);
 			m_deathState->SetTimePosition(0.0f);
+		}
+
+		if (m_entity->HasAnimationState("Hit"))
+		{
+			m_damageHitState = m_entity->GetAnimationState("Hit");
+			m_damageHitState->SetLoop(false);
+			m_damageHitState->SetTimePosition(0.0f);
 		}
 	}
 
