@@ -176,23 +176,29 @@ namespace mmo
 		Invalidate();
 	}
 
+	void TextField::SetTextAreaOffset(const Rect& offset)
+	{
+		m_textAreaOffset = offset;
+		Invalidate();
+	}
+
 	float TextField::GetCursorOffset() const
 	{
-		if (m_cursor <= 0)
-		{
-			return m_textAreaOffset.left;
-		}
-		
 		const float textScale = FrameManager::Get().GetUIScale().y;
 
+		if (m_cursor <= 0)
+		{
+			return m_textAreaOffset.left * textScale;
+		}
+		
 		// Check for font
 		const auto font = GetFont();
 		if (!font)
 		{
-			return m_textAreaOffset.left;
+			return m_textAreaOffset.left * textScale;
 		}
 
-		float x = m_textAreaOffset.left;
+		float x = m_textAreaOffset.left * textScale;
 
 		int index = 0;
 

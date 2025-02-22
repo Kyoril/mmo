@@ -66,14 +66,16 @@ namespace mmo
 			// Get the text field
 		const auto* textField = dynamic_cast<TextField*>(m_frame);
 
-		const auto& textAreaOffsets = textField->GetTextAreaOffsets();
+		const auto& textAreaOffsets = textField->GetTextAreaOffset();
 
 		// Get the frame rectangle
 		auto frameRect = m_frame->GetAbsoluteFrameRect();
-		frameRect.left += textAreaOffsets.left;
-		frameRect.top += textAreaOffsets.top;
-		frameRect.right -= textAreaOffsets.right;
-		frameRect.bottom -= textAreaOffsets.bottom;
+
+		auto scale = FrameManager::Get().GetUIScaleSize();
+		frameRect.left += textAreaOffsets.left * scale.height;
+		frameRect.top += textAreaOffsets.top * scale.height;
+		frameRect.right -= textAreaOffsets.right * scale.height;
+		frameRect.bottom -= textAreaOffsets.bottom * scale.height;
 
 		// Retrieve the font
 		const FontPtr font = m_frame->GetFont();
@@ -122,7 +124,7 @@ namespace mmo
 			if (caretImagery)
 			{
 				Rect caretRect{ 0.0f, 0.0f, 2.0f, frameRect.GetHeight()};
-				caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() + Point(textField->GetCursorOffset(), textField->GetTextAreaOffsets().top));
+				caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() + Point(textField->GetCursorOffset(), textField->GetTextAreaOffset().top * scale.height));
 				caretImagery->Render(caretRect, Color(1.0f, 1.0f, 1.0f, 0.75f));
 			}
 		}

@@ -33,7 +33,7 @@ namespace mmo
 		void SetAcceptsTab(bool value) { m_acceptsTab = value; }
 
 		/// Determines whether the text field accepts tabs as text input.
-		bool AcceptsTab() const noexcept { return m_acceptsTab; }
+		bool AcceptsTab() const { return m_acceptsTab; }
 
 		/// Sets the mask code point to use when rendering the text masked.
 		void SetMaskCodePoint(std::string::value_type value);
@@ -52,7 +52,8 @@ namespace mmo
 		void SetVertAlignment(VerticalAlignment value) noexcept;
 		void SetEnabledTextColor(const Color& value) noexcept;
 		void SetDisabledTextColor(const Color& value) noexcept;
-		inline Rect GetTextAreaOffsets() const noexcept { return m_textAreaOffset; }
+		void SetTextAreaOffset(const Rect& offset);
+		const Rect& GetTextAreaOffset() const { return m_textAreaOffset; }
 		float GetCursorOffset() const;
 
 

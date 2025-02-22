@@ -438,6 +438,23 @@ namespace mmo
 					.def("GetButtonState", &Button::GetButtonState)),
 
 			luabind::scope(
+				luabind::class_<Rect>("Rect")
+					.def(luabind::constructor())
+					.def(luabind::constructor<float, float, float, float>())
+					.property("bottom", &Rect::bottom, &Rect::bottom)
+					.property("left", &Rect::left, &Rect::left)
+					.property("top", &Rect::top, &Rect::top)
+					.property("right", &Rect::right, &Rect::right)),
+
+			luabind::scope(
+				luabind::class_<TextField, Frame>("TextField")
+					.def("SetAcceptsTab", &TextField::SetAcceptsTab)
+					.def("AcceptsTab", &TextField::AcceptsTab)
+					.def("SetTextMasked", &TextField::SetTextMasked)
+					.def("SetTextAreaOffset", &TextField::SetTextAreaOffset)
+					.def("GetTextAreaOffset", &TextField::GetTextAreaOffset)),
+
+			luabind::scope(
 				luabind::class_<Thumb, Button>("Thumb")),
 
 			luabind::scope(
@@ -445,17 +462,17 @@ namespace mmo
 					.def("SetProgress", &ProgressBar::SetProgress)
 					.def("GetProgress", &ProgressBar::GetProgress)),
 
-				luabind::scope(
-					luabind::class_<ScrollBar, Frame>("ScrollBar")
-					.def("SetMinimum", &ScrollBar::SetMinimumValue)
-					.def("SetMaximum", &ScrollBar::SetMaximumValue)
-					.def("SetValue", &ScrollBar::SetValue)
-					.def("GetValue", &ScrollBar::GetValue)
-					.def("GetMinimum", &ScrollBar::GetMinimumValue)
-					.def("GetMaximum", &ScrollBar::GetMaximumValue)
-					.def("GetStep", &ScrollBar::GetStep)
-					.def("SetStep", &ScrollBar::SetStep)
-					.def("SetOnValueChangedHandler", &ScrollBar::SetOnValueChangedHandler)),
+			luabind::scope(
+				luabind::class_<ScrollBar, Frame>("ScrollBar")
+				.def("SetMinimum", &ScrollBar::SetMinimumValue)
+				.def("SetMaximum", &ScrollBar::SetMaximumValue)
+				.def("SetValue", &ScrollBar::SetValue)
+				.def("GetValue", &ScrollBar::GetValue)
+				.def("GetMinimum", &ScrollBar::GetMinimumValue)
+				.def("GetMaximum", &ScrollBar::GetMaximumValue)
+				.def("GetStep", &ScrollBar::GetStep)
+				.def("SetStep", &ScrollBar::SetStep)
+				.def("SetOnValueChangedHandler", &ScrollBar::SetOnValueChangedHandler)),
 
 			luabind::scope(
 				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
