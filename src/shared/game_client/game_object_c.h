@@ -33,6 +33,14 @@ namespace mmo
 		explicit GameObjectC(Scene& scene, const proto_client::Project& project);
 		~GameObjectC() override;
 
+		[[nodiscard]] bool IsPlayer() const noexcept { return GetTypeId() == ObjectTypeId::Player; }
+
+		[[nodiscard]] bool IsUnit() const noexcept { return IsPlayer() || GetTypeId() == ObjectTypeId::Unit; }
+
+		[[nodiscard]] bool IsItem() const noexcept { return IsContainer() || GetTypeId() == ObjectTypeId::Item; }
+
+		[[nodiscard]] bool IsContainer() const noexcept { return GetTypeId() == ObjectTypeId::Container; }
+
 		virtual ObjectTypeId GetTypeId() const
 		{
 			return ObjectTypeId::Object;

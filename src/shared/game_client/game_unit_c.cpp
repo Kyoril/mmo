@@ -206,6 +206,13 @@ namespace mmo
 		{
 			ApplyLocalMovement(deltaTime);
 
+			// Check if we should track a target
+			if (auto target = m_targetUnit.lock(); !IsPlayer() && target)
+			{
+				GetSceneNode()->SetFixedYawAxis(true);
+				GetSceneNode()->LookAt(target->GetSceneNode()->GetDerivedPosition(), TransformSpace::World, Vector3::UnitX);
+			}
+
 			// TODO: This needs to be managed differently or it will explode in complexity here!
 			if (m_movementInfo.IsMoving())
 			{
