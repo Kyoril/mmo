@@ -39,7 +39,7 @@ namespace mmo
 			/// The attacker missed the target (hit chance was too low). 100% of the damage are missed.
             Miss,
 
-            /// THe target dodged the attack (dodge chance was high enough). 100% of the damage are dodged.
+            /// The target dodged the attack (dodge chance was high enough). 100% of the damage are dodged.
             Dodge,
 
 			/// The target blocked the attack (block chance was high enough). Damage is reduced by the block value.

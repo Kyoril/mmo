@@ -1862,6 +1862,10 @@ namespace mmo
 			{
 				victimState = victim_state::Parry;
 			}
+			else if (outcome == melee_attack_outcome::Dodge)
+			{
+				victimState = victim_state::Dodge;
+			}
 			else if (outcome == melee_attack_outcome::Block)
 			{
 				victimState = victim_state::Blocks;
