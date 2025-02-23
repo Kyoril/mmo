@@ -767,6 +767,7 @@ namespace mmo
 				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 				.def_readonly("icon", &ItemInfo::icon)
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)
+				.def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
 				.def("GetStatType", &ItemInfo::GetStatType)
 				.def("GetStatValue", &ItemInfo::GetStatValue)
 				.def("GetSpellId", &ItemInfo::GetSpellId)

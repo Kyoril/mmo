@@ -197,9 +197,14 @@ namespace mmo
 		return damage.max;
 	}
 
+	float ItemInfo::GetAttackSpeed() const
+	{
+		return static_cast<float>(attackTime) / 1000.0f;
+	}
+
 	float ItemInfo::GetDps() const
 	{
-		return (damage.min + damage.max) / 2.0f / (static_cast<float>(attackTime) / 1000.0f);
+		return (damage.min + damage.max) / 2.0f / GetAttackSpeed();
 	}
 
 	const char* ItemInfo::GetStatType(int32 index) const

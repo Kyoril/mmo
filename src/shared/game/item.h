@@ -714,6 +714,8 @@ namespace mmo
 
 		float GetMaxDamage() const;
 
+		float GetAttackSpeed() const;
+
 		float GetDps() const;
 
 		const char* GetStatType(int32 index) const;
