@@ -138,7 +138,7 @@ namespace mmo
 		const proto::SpellEntry* procSpell = m_container.GetOwner().GetProject().spells.getById(m_effect.triggerspell());
 		if (!procSpell)
 		{
-			ELOG("Unable to find proc trigger spell " << procSpell->id() << "!");
+			ELOG("Unable to find proc trigger spell " << m_effect.triggerspell() << "!");
 			return;
 		}
 
