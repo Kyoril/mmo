@@ -46,6 +46,8 @@ namespace mmo
 
 		uint64 GetLootMasterGuid() const;
 
+		int32 GetLeaderIndex() const;
+
 		LootMethod GetLootMethod() const;
 
 		GroupType GetGroupType() const;

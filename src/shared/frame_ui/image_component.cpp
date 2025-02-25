@@ -170,6 +170,8 @@ namespace mmo
 		{
 			SetImageFile(changedProperty.GetValue());
 		};
+
+		SetImageFile(observedProperty->GetValue());
 	}
 
 	void ImageComponent::SetSize(uint16 width, uint16 height)

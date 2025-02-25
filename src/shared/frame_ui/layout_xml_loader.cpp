@@ -750,7 +750,10 @@ namespace mmo
 	void LayoutXmlLoader::ElementImagerySectionEnd()
 	{
 		// Reset ImagerySection element
-		m_frames.top()->AddImagerySection(*m_section);
+		if (m_section)
+		{
+			m_frames.top()->AddImagerySection(*m_section);
+		}
 		m_section.reset();
 	}
 
@@ -784,7 +787,10 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementImageryEnd()
 	{
-		m_frames.top()->AddStateImagery(*m_stateImagery);
+		if (m_stateImagery)
+		{
+			m_frames.top()->AddStateImagery(*m_stateImagery);
+		}
 		m_stateImagery.reset();
 	}
 
@@ -916,6 +922,7 @@ namespace mmo
 		
 		// Setup component and add it to the current section
 		auto component = std::make_unique<ImageComponent>(*m_frames.top(), texture);
+		ASSERT(component);
 		m_imageComponent = component.get();
 
 		// Apply tiling mode if set
@@ -938,12 +945,18 @@ namespace mmo
 		}
 
 		m_component = std::move(component);
+		ASSERT(m_component);
 	}
 
 	void LayoutXmlLoader::ElementImageComponentEnd()
 	{
-		m_section->AddComponent(std::move(m_component));
+		if (m_section && m_component)
+		{
+			m_section->AddComponent(std::move(m_component));
+		}
+
 		m_imageComponent = nullptr;
+		m_component.reset();
 	}
 
 	void LayoutXmlLoader::ElementBorderComponentStart(const XmlAttributes & attributes)

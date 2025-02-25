@@ -81,6 +81,19 @@ namespace mmo
 		return m_lootMaster;
 	}
 
+	int32 PartyInfo::GetLeaderIndex() const
+	{
+		for (int32 i = 0; i < m_members.size(); ++i)
+		{
+			if (m_members[i].guid == m_leaderGuid)
+			{
+				return i + 1;
+			}
+		}
+
+		return 0;
+	}
+
 	LootMethod PartyInfo::GetLootMethod() const
 	{
 		return m_lootMethod;
