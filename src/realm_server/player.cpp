@@ -75,6 +75,12 @@ namespace mmo
 			DeclineGroupInvite();
 		}
 
+		// Notify the group that the player is leaving
+		if (m_group && m_characterData)
+		{
+			m_group->NotifyMemberDisconnected(m_characterData->characterId);
+		}
+
 		if (const auto strongWorld = m_world.lock())
 		{
 			if (HasCharacterGuid())
@@ -762,7 +768,7 @@ namespace mmo
 		if (!m_group)
 		{
 			// Not yet in a group - create a new one!
-			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database);
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
 			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
 		}

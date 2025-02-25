@@ -166,7 +166,7 @@ namespace mmo
 			for (auto& groupId : *groupIds)
 			{
 				// Create a new group
-				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, asyncDatabase);
+				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, asyncDatabase, timerQueue);
 				group->Preload();
 
 				// Notify the generator about the new group id to avoid overlaps

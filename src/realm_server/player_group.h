@@ -8,6 +8,7 @@
 
 #include "player.h"
 #include "player_manager.h"
+#include "base/countdown.h"
 #include "base/linear_set.h"
 #include "game/game.h"
 
@@ -36,7 +37,7 @@ namespace mmo
 	public:
 		/// Creates a new instance of a player group. Note that a group has to be
 		/// created using the create method before it will be valid.
-		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database);
+		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers);
 
 		void Preload();
 
@@ -45,6 +46,8 @@ namespace mmo
 
 		/// Creates the group and setup a leader.
 		void Create(uint64 leaderGuid, const String& leaderName);
+
+		void NotifyMemberDisconnected(uint64 memberGuid);
 
 		/// Changes the loot method.
 		void SetLootMethod(LootMethod method, uint64 lootMaster, uint32 lootThreshold);
@@ -150,11 +153,17 @@ namespace mmo
 	private:
 		void OnLoad(const GroupData& groupData);
 
+		/// This method should be called after a certain amount after the group leader has disconnected. It will
+		/// check if the group leader is still disconnected and if so, it will choose a new group leader who is
+		/// currently online. Does nothing if the group leader is online again while this is being called.
+		void OnLeaderDisconnectedCallback();
+
 	private:
 
 		uint64 m_id;
 		PlayerManager& m_playerManager;
 		AsyncDatabase& m_database;
+		TimerQueue& m_timers;
 		bool m_loading = false;
 		uint64 m_leaderGUID;
 		String m_leaderName;
@@ -165,5 +174,7 @@ namespace mmo
 		uint8 m_lootTreshold;
 		uint64 m_lootMaster;
 		InstancesByMap m_instances;
+		Countdown m_leaderDisconnectedCountdown;
+		scoped_connection m_leaderDisconnected;
 	};
 }

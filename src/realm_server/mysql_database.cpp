@@ -835,6 +835,16 @@ namespace mmo
 			}
 
 			if (!m_connection.Execute(std::format(
+				"INSERT INTO `group_members` (`group`, `guid`) VALUES ('{0}', '{1}')"
+				, id
+				, leaderGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			if (!m_connection.Execute(std::format(
 				"UPDATE `characters` SET `last_group` = '{0}' WHERE `id` = '{1}' LIMIT 1"
 				, id
 				, leaderGuid

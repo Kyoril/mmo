@@ -10,16 +10,19 @@ namespace mmo
 	// Implementation. Will store all available player group instances by their id.
 	std::map<uint64, std::shared_ptr<PlayerGroup>> PlayerGroup::ms_groupsById;
 
-	PlayerGroup::PlayerGroup(const uint64 id, PlayerManager& playerManager, AsyncDatabase& database)
+	PlayerGroup::PlayerGroup(const uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers)
 		: m_id(id)
 		, m_playerManager(playerManager)
 		, m_database(database)
+		, m_timers(timers)
 		, m_leaderGUID(0)
 		, m_type(group_type::Normal)
 		, m_lootMethod(loot_method::GroupLoot)
 		, m_lootTreshold(2)
 		, m_lootMaster(0)
+		, m_leaderDisconnectedCountdown(m_timers)
 	{
+		m_leaderDisconnected = m_leaderDisconnectedCountdown.ended.connect(this, &PlayerGroup::OnLeaderDisconnectedCallback);
 	}
 
 	void PlayerGroup::Preload()
@@ -89,6 +92,20 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateGroup, m_id, m_leaderGUID);
 	}
 
+	void PlayerGroup::NotifyMemberDisconnected(uint64 memberGuid)
+	{
+		// Called whenever a member disconnected
+
+		// Was this the leader?
+		if (memberGuid == m_leaderGUID)
+		{
+			ILOG("Party leader disconnected, starting countdown to set new leader");
+
+			// Trigger leader callback countdown after 1 minute
+			m_leaderDisconnectedCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
+		}
+	}
+
 	void PlayerGroup::SetLootMethod(const LootMethod method, const uint64 lootMaster, const uint32 lootThreshold)
 	{
 		ASSERT(m_leaderGUID != 0);
@@ -120,6 +137,7 @@ namespace mmo
 
 		m_leaderGUID = it->first;
 		m_leaderName = it->second.name;
+		DLOG("Changed group leader to " << m_leaderName);
 
 		BroadcastPacket([&](game::OutgoingPacket& packet)
 		{
@@ -484,17 +502,7 @@ namespace mmo
 		m_leaderName = groupData.leaderName;
 		m_loading = false;
 
-		// Add the leader as a group member
-		auto& leaderMember = m_members[m_leaderGUID];
-		leaderMember.name = m_leaderName;
-		leaderMember.group = 0;
-		leaderMember.assistant = false;
-		leaderMember.status = group_member_status::Offline;
-
-		if (m_playerManager.GetPlayerByCharacterGuid(m_leaderGUID))
-		{
-			leaderMember.status = group_member_status::Online;
-		}
+		bool leaderIsOnline = false;
 
 		for (const auto& member : groupData.members)
 		{
@@ -504,12 +512,42 @@ namespace mmo
 			newMember.group = 0;
 			newMember.assistant = false;
 			newMember.status = group_member_status::Offline;
-			if (m_playerManager.GetPlayerByCharacterGuid(m_leaderGUID))
+			if (m_playerManager.GetPlayerByCharacterGuid(member.guid))
 			{
-				leaderMember.status = group_member_status::Online;
+				newMember.status = group_member_status::Online;
+				if (member.guid == m_leaderGUID)
+				{
+					leaderIsOnline = true;
+				}
 			}
 		}
 
+		if (!leaderIsOnline)
+		{
+			WLOG("Group leader is offline, starting countdown to set new leader");
+			m_leaderDisconnectedCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
+		}
+
 		loaded(*this);
+	}
+
+	void PlayerGroup::OnLeaderDisconnectedCallback()
+	{
+		// Check if the leader is currently offline
+		if (m_playerManager.GetPlayerByCharacterGuid(m_leaderGUID))
+		{
+			// Leader is online - we can ignore this callback
+			return;
+		}
+
+		// Time to determine a new group leader
+		for (const auto& member : m_members)
+		{
+			if (member.first != m_leaderGUID)
+			{
+				SetLeader(member.first);
+				break;
+			}
+		}
 	}
 }

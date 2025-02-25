@@ -66,6 +66,7 @@ namespace mmo
 		PacketParseResult OnGroupDestroyed(game::IncomingPacket& packet);
 		PacketParseResult OnGroupList(game::IncomingPacket& packet);
 		PacketParseResult OnPartyMemberStats(game::IncomingPacket& packet);
+		PacketParseResult OnGroupSetLeader(game::IncomingPacket& packet);
 
 	private:
 		void RegisterPlayerMirrorHandlers(GamePlayerC& player);

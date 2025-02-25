@@ -19,6 +19,7 @@ namespace mmo
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &PartyInfo::OnGroupDestroyed);
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupList, *this, &PartyInfo::OnGroupList);
 		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyMemberStats, *this, &PartyInfo::OnPartyMemberStats);
+		m_packetHandlerHandles += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &PartyInfo::OnGroupSetLeader);
 	}
 
 	void PartyInfo::Shutdown()
@@ -437,6 +438,25 @@ namespace mmo
 					}
 				}
 			});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult PartyInfo::OnGroupSetLeader(game::IncomingPacket& packet)
+	{
+		uint64 leaderGuid;
+		if (!(packet >> io::read<uint64>(leaderGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_leaderGuid = leaderGuid;
+
+		// Ask for the group leader name
+		m_nameCache.Get(leaderGuid, [](uint64 guid, const String& name)
+		{
+			FrameManager::Get().TriggerLuaEvent("PARTY_LEADER_CHANGED", name);
+		});
 
 		return PacketParseResult::Pass;
 	}
