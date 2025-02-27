@@ -32,7 +32,9 @@ namespace mmo
 
 	static constexpr uint32 SceneQueryFlags_Tile = 1 << 1;
 
-	static constexpr uint32 SceneQueryFlags_Spawns = 1 << 2;
+	static constexpr uint32 SceneQueryFlags_UnitSpawns = 1 << 2;
+
+	static constexpr uint32 SceneQueryFlags_ObjectSpawns = 1 << 3;
 
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
@@ -985,7 +987,7 @@ namespace mmo
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
 		m_raySceneQuery->SetRay(ray);
 		m_raySceneQuery->SetSortByDistance(true);
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Spawns);
+		m_raySceneQuery->SetQueryMask(SceneQueryFlags_UnitSpawns);
 		m_raySceneQuery->ClearResult();
 		m_raySceneQuery->Execute();
 
@@ -1143,7 +1145,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
-			entity->SetQueryFlags(SceneQueryFlags_Spawns);
+			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
@@ -1193,7 +1195,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
-			entity->SetQueryFlags(SceneQueryFlags_Spawns);
+			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
@@ -1269,7 +1271,7 @@ namespace mmo
 		ASSERT(entity);
 
 		entity->SetUserObject(&spawn);
-		entity->SetQueryFlags(SceneQueryFlags_Spawns);
+		entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 		m_spawnEntities.push_back(entity);
 
 		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
@@ -1310,7 +1312,7 @@ namespace mmo
 		ASSERT(entity);
 
 		entity->SetUserObject(&spawn);
-		entity->SetQueryFlags(SceneQueryFlags_Spawns);
+		entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
 		m_spawnEntities.push_back(entity);
 
 		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));

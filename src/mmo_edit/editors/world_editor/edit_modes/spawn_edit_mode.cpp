@@ -9,6 +9,7 @@
 #include "math/plane.h"
 #include "math/ray.h"
 #include "scene_graph/camera.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
@@ -157,14 +158,22 @@ namespace mmo
 			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
 			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
 
-			const auto hit = ray.Intersects(plane);
-			if (hit.first)
+			const auto hitResult = m_worldEditor.GetTerrain()->RayIntersects(ray);
+			if (hitResult.first)
 			{
-				position = ray.GetPoint(hit.second);
+				position = hitResult.second.position;
 			}
 			else
 			{
-				position = ray.GetPoint(10.0f);
+				const auto hit = ray.Intersects(plane);
+				if (hit.first)
+				{
+					position = ray.GetPoint(hit.second);
+				}
+				else
+				{
+					position = ray.GetPoint(10.0f);
+				}
 			}
 
 			// Snap to grid?
@@ -206,14 +215,22 @@ namespace mmo
 			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
 			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
 
-			const auto hit = ray.Intersects(plane);
-			if (hit.first)
+			const auto hitResult = m_worldEditor.GetTerrain()->RayIntersects(ray);
+			if (hitResult.first)
 			{
-				position = ray.GetPoint(hit.second);
+				position = hitResult.second.position;
 			}
 			else
 			{
-				position = ray.GetPoint(10.0f);
+				const auto hit = ray.Intersects(plane);
+				if (hit.first)
+				{
+					position = ray.GetPoint(hit.second);
+				}
+				else
+				{
+					position = ray.GetPoint(10.0f);
+				}
 			}
 
 			// Snap to grid?
