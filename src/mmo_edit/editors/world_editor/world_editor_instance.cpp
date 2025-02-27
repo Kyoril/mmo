@@ -1558,7 +1558,7 @@ namespace mmo
 
 	void WorldEditorInstance::Visit(SelectedUnitSpawn& selectable)
 	{
-		if (ImGui::CollapsingHeader("Spawn"))
+		if (ImGui::CollapsingHeader("Unit Spawn"))
 		{
 			proto::UnitEntry* selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
 			if (ImGui::BeginCombo("Unit", selectedUnit ? selectedUnit->name().c_str() : "(None)"))
@@ -1615,6 +1615,47 @@ namespace mmo
 				}
 
 				ImGui::EndCombo();
+			}
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedObjectSpawn& selectable)
+	{
+		if (ImGui::CollapsingHeader("Object Spawn"))
+		{
+			proto::ObjectEntry* selectedObject = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
+			if (ImGui::BeginCombo("Object", selectedObject ? selectedObject->name().c_str() : "(None)"))
+			{
+				for (const auto& object : m_editor.GetProject().objects.getTemplates().entry())
+				{
+					ImGui::PushID(object.id());
+					if (ImGui::Selectable(object.name().c_str(), &object == selectedObject))
+					{
+						selectable.GetEntry().set_objectentry(object.id());
+						selectable.RefreshEntity();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			bool isActive = selectable.GetEntry().isactive();
+			if (ImGui::Checkbox("Is Active", &isActive))
+			{
+				selectable.GetEntry().set_isactive(isActive);
+			}
+
+			bool respawn = selectable.GetEntry().respawn();
+			if (ImGui::Checkbox("Respawn", &respawn))
+			{
+				selectable.GetEntry().set_respawn(respawn);
+			}
+
+			uint64 respawnDelay = selectable.GetEntry().respawndelay();
+			if (ImGui::InputScalar("Respawn Delay (ms)", ImGuiDataType_U64, &respawnDelay))
+			{
+				selectable.GetEntry().set_respawndelay(respawnDelay);
 			}
 		}
 	}

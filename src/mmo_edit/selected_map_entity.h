@@ -142,4 +142,53 @@ namespace mmo
 		std::function<void(Selectable&)> m_duplication;
 		std::function<void(const proto::UnitSpawnEntry&)> m_removal;
 	};
+
+
+	class SelectedObjectSpawn final : public Selectable
+	{
+	public:
+		SelectedObjectSpawn(proto::ObjectSpawnEntry& entry, const proto::ObjectManager& objects, const proto::ModelDataManager& models, SceneNode& node, Entity& entity,
+			const std::function<void(Selectable&)>& duplication, const std::function<void(const proto::ObjectSpawnEntry&)>& removal);
+
+		void Visit(SelectableVisitor& visitor) override;
+
+		void Duplicate() override;
+
+		void Translate(const Vector3& delta) override;
+
+		void Rotate(const Quaternion& delta) override;
+
+		void Scale(const Vector3& delta) override;
+
+		void Remove() override;
+
+		void Deselect() override;
+
+		void SetPosition(const Vector3& position) const override;
+
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		void SetScale(const Vector3& scale) const override;
+
+		Vector3 GetPosition() const override;
+
+		Quaternion GetOrientation() const override;
+
+		Vector3 GetScale() const override;
+
+		bool SupportsScale() const override { return false; }
+
+		void RefreshEntity();
+
+		proto::ObjectSpawnEntry& GetEntry() const { return m_entry; }
+
+	private:
+		proto::ObjectSpawnEntry& m_entry;
+		const proto::ObjectManager& m_units;
+		const proto::ModelDataManager& m_models;
+		SceneNode& m_node;
+		Entity& m_entity;
+		std::function<void(Selectable&)> m_duplication;
+		std::function<void(const proto::ObjectSpawnEntry&)> m_removal;
+	};
 }
