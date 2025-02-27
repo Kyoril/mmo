@@ -3,6 +3,7 @@
 #pragma once
 
 #include "world_edit_mode.h"
+#include "scene_graph/scene.h"
 
 namespace mmo
 {
@@ -20,6 +21,8 @@ namespace mmo
 		bool SupportsViewportDrop() const override { return true; }
 
 		void OnViewportDrop(float x, float y) override;
-		
+
+	private:
+		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 	};
 }

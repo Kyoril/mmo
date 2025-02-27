@@ -8,12 +8,15 @@
 #include "math/ray.h"
 #include "math/vector3.h"
 #include "scene_graph/camera.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
 	EntityEditMode::EntityEditMode(IWorldEditor& worldEditor)
 		: WorldEditMode(worldEditor)
 	{
+		m_selectionSceneQuery = m_worldEditor.GetCamera().GetScene()->CreateRayQuery(Ray());
+		m_selectionSceneQuery->SetQueryMask(1 << 0);
 	}
 
 	const char* EntityEditMode::GetName() const
@@ -36,18 +39,52 @@ namespace mmo
 			Vector3 position;
 
 			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
-			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
 
-			const auto hit = ray.Intersects(plane);
-			if (hit.first)
+			bool hasHit = false;
+
+			// First select other entities
+			m_selectionSceneQuery->ClearResult();
+			m_selectionSceneQuery->SetSortByDistance(true);
+			m_selectionSceneQuery->SetRay(ray);
+			if (const auto result = m_selectionSceneQuery->Execute(); !result.empty())
 			{
-				position = ray.GetPoint(hit.second);
-			}
-			else
-			{
-				position = ray.GetPoint(10.0f);
+				for (const auto& hit : result)
+				{
+					if (const auto entity = static_cast<Entity*>(hit.movable))
+					{
+						AABBTree& tree = entity->GetMesh()->GetCollisionTree();
+						if (tree.IntersectRay(ray, nullptr, raycast_flags::EarlyExit))
+						{
+							position = ray.GetPoint(ray.hitDistance);
+							hasHit = true;
+							break;
+						}
+					}
+				}
 			}
 
+			if (!hasHit)
+			{
+				const auto hitResult = m_worldEditor.GetTerrain()->RayIntersects(ray);
+				if (hitResult.first)
+				{
+					position = hitResult.second.position;
+				}
+				else
+				{
+					const auto hit = ray.Intersects(plane);
+					if (hit.first)
+					{
+						position = ray.GetPoint(hit.second);
+					}
+					else
+					{
+						position = ray.GetPoint(10.0f);
+					}
+				}
+			}
+			
 			// Snap to grid?
 			if (m_worldEditor.IsGridSnapEnabled())
 			{
