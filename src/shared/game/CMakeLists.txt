@@ -1,6 +1,6 @@
 
 # Add shared graphics library
-add_lib(game)
+add_lib_recurse(game)
 
 if (APPLE)
     target_link_libraries(game "-framework CoreFoundation")

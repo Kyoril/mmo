@@ -58,6 +58,44 @@ macro(add_lib name)
 	endif()
 endmacro()
 
+macro(add_lib_recurse name)
+    # Recursively gather source files
+    file(GLOB_RECURSE sources
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.m"
+    )
+
+    # Recursively gather header files
+    file(GLOB_RECURSE headers
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+    )
+
+    if(MMO_UNITY_BUILD)
+        message(STATUS "Unity build enabled for ${name}")
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+        enable_unity_build(${name} sources)
+    endif()
+
+    add_library(${name} ${headers} ${sources})
+
+    # This tells CMake to preserve the folder structure you have on disk
+    source_group(
+        TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES ${headers} ${sources}
+    )
+
+    # Example linking on GNU
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+        target_link_libraries(${name} stdc++fs)
+        target_link_libraries(${name} ${OPENSSL_LIBRARIES})
+    endif()
+endmacro()
+
 macro(add_exe name)
 	file(GLOB sources "*.cpp" "*.mm" "*.m")
 	file(GLOB headers "*.h" "*.hpp")
