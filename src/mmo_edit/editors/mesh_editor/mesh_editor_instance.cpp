@@ -340,12 +340,30 @@ namespace mmo
 							ImGui::TableSetColumnIndex(0);
 							ImGui::AlignTextToFramePadding();
 
-							if (const bool nodeOpen = ImGui::TreeNode("Object", "SubEntity %zu", i))
+							String name = "SubMesh " + std::to_string(i);
+							m_entity->GetMesh()->GetSubMeshName(i, name);
+
+							if (const bool nodeOpen = ImGui::TreeNode("Object", name.c_str()))
 							{
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::AlignTextToFramePadding();
 								constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+								ImGui::TreeNodeEx("Field", flags, "Name");
+
+								ImGui::TableSetColumnIndex(1);
+								ImGui::SetNextItemWidth(-FLT_MIN);
+
+								if (ImGui::InputText("##name", &name))
+								{
+									m_entity->GetMesh()->NameSubMesh(i, name);
+								}
+
+								ImGui::NextColumn();
+
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::AlignTextToFramePadding();
 								ImGui::TreeNodeEx("Field", flags, "Material");
 
 								ImGui::TableSetColumnIndex(1);
@@ -391,7 +409,6 @@ namespace mmo
 			}
 		}
 		ImGui::End();
-
 	}
 
 	void MeshEditorInstance::DrawAnimations(const String& id)

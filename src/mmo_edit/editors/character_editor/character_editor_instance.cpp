@@ -41,10 +41,29 @@ namespace mmo
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
+		m_worldGrid->SetGridSize(1.0f);
+		m_worldGrid->SetLargeGridInterval(5);
+		m_worldGrid->SetRowCount(20);
+		m_worldGrid->SetColumnCount(20);
+
 		m_axisDisplay = std::make_unique<AxisDisplay>(m_scene, "DebugAxis");
 		m_scene.GetRootSceneNode().AddChild(m_axisDisplay->GetSceneNode());
 		
 		// TODO: Load
+		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(m_assetPath.string());
+		ASSERT(file);
+
+		// Ensure file is loaded successfully
+		io::StreamSource source{ *file };
+		io::Reader reader{ source };
+		m_avatarDefinition = std::make_shared<CustomizableAvatarDefinition>();
+		if (!m_avatarDefinition->Read(reader))
+		{
+			ELOG("Failed to read customizable avatar definition from file " << asset);
+		}
+
+		// Load the mesh and entity to render
+		UpdateBaseMesh();
 
 		m_renderConnection = m_editor.GetHost().beforeUiUpdate.connect(this, &CharacterEditorInstance::Render);
 	}
@@ -162,7 +181,7 @@ namespace mmo
 
 		if (m_middleButtonPressed)
 		{
-			m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
+			m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::World);
 		}
 
 		m_lastMouseX = x;
@@ -188,6 +207,11 @@ namespace mmo
 
 	void CharacterEditorInstance::DrawDetails(const String& id)
 	{
+		if (!m_avatarDefinition)
+		{
+			return;
+		}
+
 		if (ImGui::Begin(id.c_str()))
 		{
 			if (ImGui::Button("Save"))
@@ -197,9 +221,380 @@ namespace mmo
 
 			ImGui::Separator();
 
+			if (ImGui::BeginCombo("Mesh", m_avatarDefinition->GetBaseMesh().c_str()))
+			{
+				if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+				{
+					ImGui::SetKeyboardFocusHere(0);
+				}
+				m_assetFilter.Draw("##asset_filter");
+
+				const auto files = AssetRegistry::ListFiles();
+				for (auto& file : files)
+				{
+					if (!file.ends_with(".hmsh"))
+					{
+						continue;
+					}
+
+					if (m_assetFilter.IsActive())
+					{
+						if (!m_assetFilter.PassFilter(file.c_str()))
+						{
+							continue;
+						}
+					}
+
+					ImGui::PushID(file.c_str());
+					if (ImGui::Selectable(Path(file).filename().string().c_str()))
+					{
+						m_avatarDefinition->SetBaseMesh(file);
+						UpdateBaseMesh();
+
+						m_assetFilter.Clear();
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			if (ImGui::BeginDragDropTarget())
+			{
+				// We only accept mesh file drops
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+				{
+					m_avatarDefinition->SetBaseMesh(*static_cast<String*>(payload->Data));
+					UpdateBaseMesh();
+				}
+
+				ImGui::EndDragDropTarget();
+			}
+
+			// TODO: Draw properties
+			if (ImGui::Button("Add Property"))
+			{
+				ImGui::OpenPopup("AddPropertyPopup");
+			}
+
+			if (ImGui::BeginPopup("AddPropertyPopup"))
+			{
+				static int selectedType = 0; // or store it in your class
+				const char* typeLabels[] = { "MaterialOverride", "VisibilitySet", "ScalarParameter" };
+				ImGui::Combo("Property Type", &selectedType, typeLabels, IM_ARRAYSIZE(typeLabels));
+
+				// Possibly let the user choose an initial property name
+				static char newPropName[64] = "New Property";
+				ImGui::InputText("Name", newPropName, IM_ARRAYSIZE(newPropName));
+
+				if (ImGui::Button("Create"))
+				{
+					std::unique_ptr<CustomizationPropertyGroup> newProp;
+					switch (selectedType)
+					{
+					case 0: // MaterialOverride
+						newProp = std::make_unique<MaterialOverridePropertyGroup>(newPropName);
+						break;
+					case 1: // VisibilitySet
+						newProp = std::make_unique<VisibilitySetPropertyGroup>(newPropName);
+						break;
+					case 2: // ScalarParameter
+						newProp = std::make_unique<ScalarParameterPropertyGroup>(newPropName);
+						break;
+					}
+
+					m_avatarDefinition->AddProperty(std::move(newProp));
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::EndPopup();
+			}
+
+			int indexToRemove = -1;
+
+			size_t counter = 0;
+			for (auto& property : *m_avatarDefinition)
+			{
+				ImGui::PushID(static_cast<int>(counter));
+
+				if (ImGui::CollapsingHeader(property->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					// Show a rename input
+					char nameBuffer[64];
+					std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", property->GetName().c_str());
+					if (ImGui::InputText("Property Name", nameBuffer, IM_ARRAYSIZE(nameBuffer)))
+					{
+						property->SetName(nameBuffer);
+					}
+
+					// Show a "Remove" button
+					if (ImGui::Button("Remove Property"))
+					{
+						indexToRemove = (int)counter;
+					}
+
+					// Now show type-specific fields
+					DrawPropertyGroupDetails(*property);
+				}
+
+				ImGui::PopID();
+				counter++;
+			}
+
+			if (indexToRemove != -1)
+			{
+				// remove outside the loop
+				m_avatarDefinition->RemovePropertyByIndex(indexToRemove);
+			}
 		}
 		ImGui::End();
+	}
 
+	void CharacterEditorInstance::DrawPropertyGroupDetails(VisibilitySetPropertyGroup& visProp)
+	{
+		// Edit the "subEntityTag" if you have one
+		char tagBuffer[64];
+		std::snprintf(tagBuffer, sizeof(tagBuffer), "%s", visProp.subEntityTag.c_str());
+		if (ImGui::InputText("Sub-Entity Tag", tagBuffer, IM_ARRAYSIZE(tagBuffer)))
+		{
+			visProp.subEntityTag = tagBuffer;
+		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("Possible Values:");
+
+		// A button to add a new value
+		if (ImGui::Button("Add Value"))
+		{
+			VisibilitySetValue newVal;
+			newVal.valueId = "NewValue";  // default name
+			newVal.visibleSubEntities = {};
+			visProp.possibleValues.push_back(std::move(newVal));
+		}
+
+		// We need an index to remove an item if user clicks "Remove"
+		int indexToRemove = -1;
+
+		// Iterate possible values
+		for (int i = 0; i < (int)visProp.possibleValues.size(); ++i)
+		{
+			auto& val = visProp.possibleValues[i];
+
+			// Make a TreeNode so we can expand/collapse each value
+			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s", i, val.valueId.c_str()))
+			{
+				// Edit the valueId
+				char idBuffer[64];
+				std::snprintf(idBuffer, sizeof(idBuffer), "%s", val.valueId.c_str());
+				if (ImGui::InputText("Value ID", idBuffer, IM_ARRAYSIZE(idBuffer)))
+				{
+					val.valueId = idBuffer;
+				}
+
+				// Edit the list of visibleSubEntities
+				DrawVisibleSubEntityList(val.visibleSubEntities);
+
+				// A remove button
+				if (ImGui::Button("Remove This Value"))
+				{
+					indexToRemove = i;
+				}
+
+				ImGui::TreePop();
+			}
+		}
+
+		// After the loop, if user clicked Remove, do it here
+		if (indexToRemove >= 0)
+		{
+			visProp.possibleValues.erase(visProp.possibleValues.begin() + indexToRemove);
+		}
+	}
+
+	void CharacterEditorInstance::DrawVisibleSubEntityList(std::vector<std::string>& visibleSubEntities)
+	{
+		// Let’s show each sub-entity in a list
+		int removeIndex = -1;
+
+		for (int j = 0; j < (int)visibleSubEntities.size(); ++j)
+		{
+			ImGui::PushID(j);
+			// Show the sub-entity name in an InputText
+			char buf[64];
+			std::snprintf(buf, sizeof(buf), "%s", visibleSubEntities[j].c_str());
+			if (ImGui::InputText("Sub Entity", buf, IM_ARRAYSIZE(buf)))
+			{
+				visibleSubEntities[j] = buf;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Remove"))
+			{
+				removeIndex = j;
+			}
+			ImGui::PopID();
+		}
+
+		if (removeIndex >= 0)
+		{
+			visibleSubEntities.erase(visibleSubEntities.begin() + removeIndex);
+		}
+
+		// Button to add a new sub-entity name
+		if (ImGui::Button("Add SubEntity"))
+		{
+			visibleSubEntities.push_back("NewSubEntity");
+		}
+	}
+
+	void CharacterEditorInstance::DrawPropertyGroupDetails(MaterialOverridePropertyGroup& matProp)
+	{
+		ImGui::TextUnformatted("Material Override Values:");
+
+		if (ImGui::Button("Add Value"))
+		{
+			MaterialOverrideValue newVal;
+			newVal.valueId = "NewSkinColor"; // or something
+			matProp.possibleValues.push_back(std::move(newVal));
+		}
+
+		int indexToRemove = -1;
+		for (int i = 0; i < (int)matProp.possibleValues.size(); ++i)
+		{
+			auto& val = matProp.possibleValues[i];
+			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s", i, val.valueId.c_str()))
+			{
+				// Edit the valueId
+				char valBuf[64];
+				std::snprintf(valBuf, sizeof(valBuf), "%s", val.valueId.c_str());
+				if (ImGui::InputText("Value ID", valBuf, IM_ARRAYSIZE(valBuf)))
+				{
+					val.valueId = valBuf;
+				}
+
+				// Now show the subEntity->material pairs
+				DrawMaterialMap(val.subEntityToMaterial);
+
+				if (ImGui::Button("Remove Value"))
+				{
+					indexToRemove = i;
+				}
+
+				ImGui::TreePop();
+			}
+		}
+
+		if (indexToRemove >= 0)
+		{
+			matProp.possibleValues.erase(matProp.possibleValues.begin() + indexToRemove);
+		}
+	}
+
+	void CharacterEditorInstance::DrawMaterialMap(std::unordered_map<std::string, std::string>& subEntityToMaterial)
+	{
+		// We'll just iterate a stable copy of keys. If you want to allow removing them,
+		// you can do a separate approach with an ordered container or gather removal in a separate array.
+
+		// For iteration, we can do:
+		std::vector<std::string> keys;
+		keys.reserve(subEntityToMaterial.size());
+		for (const auto& kv : subEntityToMaterial)
+			keys.push_back(kv.first);
+
+		// Let’s also store which key to remove if requested
+		std::string keyToRemove;
+
+		for (auto& key : keys)
+		{
+			std::string& matRef = subEntityToMaterial[key];
+
+			ImGui::Separator();
+			ImGui::Text("Sub-entity: %s", key.c_str());
+
+			// We can let user rename the material reference
+			char matBuf[128];
+			std::snprintf(matBuf, sizeof(matBuf), "%s", matRef.c_str());
+			if (ImGui::InputText("Material", matBuf, IM_ARRAYSIZE(matBuf)))
+			{
+				matRef = matBuf;
+			}
+
+			// Optionally let user rename the sub-entity key too,
+			// but be careful about re-inserting. This can be tricky with a map.
+			if (ImGui::Button("Remove Pair"))
+			{
+				keyToRemove = key;
+			}
+		}
+
+		if (!keyToRemove.empty())
+		{
+			subEntityToMaterial.erase(keyToRemove);
+		}
+
+		// Button to add a new sub-entity -> material pair
+		if (ImGui::Button("Add Pair"))
+		{
+			// For example, we insert a default pair
+			subEntityToMaterial["NewSubEntity"] = "Materials/Path/Default.hmi";
+		}
+	}
+
+	void CharacterEditorInstance::UpdateBaseMesh()
+	{
+		if (m_entity)
+		{
+			m_scene.DestroyEntity(*m_entity);
+			m_entity = nullptr;
+		}
+
+		if (!m_avatarDefinition->GetBaseMesh().empty())
+		{
+			m_entity = m_scene.CreateEntity(m_assetPath.string(), m_avatarDefinition->GetBaseMesh());
+			m_scene.GetRootSceneNode().AttachObject(*m_entity);
+
+			m_cameraAnchor->SetPosition(Vector3::UnitY * m_entity->GetBoundingRadius() * 0.5f);
+			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius());
+		}
+		else
+		{
+			WLOG("Avatar definition does not have a base mesh set up!");
+			m_cameraNode->SetPosition(Vector3::UnitZ * 1.0f);
+		}
+	}
+
+	void CharacterEditorInstance::DrawPropertyGroupDetails(CustomizationPropertyGroup& propertyGroup)
+	{
+		switch (propertyGroup.GetType())
+		{
+		case CharacterCustomizationPropertyType::MaterialOverride:
+		{
+			auto& matProp = static_cast<MaterialOverridePropertyGroup&>(propertyGroup);
+			// Show fields that are relevant to material override:
+			// Possibly a list of sub-entity -> material pairs, or any other data
+			DrawPropertyGroupDetails(matProp);
+
+			break;
+		}
+		case CharacterCustomizationPropertyType::VisibilitySet:
+		{
+			auto& visProp = static_cast<VisibilitySetPropertyGroup&>(propertyGroup);
+
+			// Possibly show multiple "values" if it's discrete. For each value in
+			// visProp.possibleValues, show a sub-UI, etc.
+			DrawPropertyGroupDetails(visProp);
+			break;
+		}
+		case CharacterCustomizationPropertyType::ScalarParameter:
+		{
+			auto& scalarProp = static_cast<ScalarParameterPropertyGroup&>(propertyGroup);
+			// Example: show min/max
+			ImGui::DragFloat("Min", &scalarProp.minValue, 0.01f, -100.f, 100.f);
+			ImGui::DragFloat("Max", &scalarProp.maxValue, 0.01f, -100.f, 100.f);
+			break;
+		}
+		}
 	}
 
 	void CharacterEditorInstance::DrawViewport(const String& id)

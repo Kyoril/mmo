@@ -31,6 +31,16 @@ namespace mmo
 
 	void Mesh::NameSubMesh(const uint16 index, const std::string & name)
 	{
+		// Remove existing submesh name for this index
+		for (auto it = m_subMeshNames.begin(); it != m_subMeshNames.end(); ++it)
+		{
+			if (it->second == index)
+			{
+				m_subMeshNames.erase(it);
+				break;
+			}
+		}
+
 		m_subMeshNames[name] = index;
 	}
 
@@ -105,7 +115,18 @@ namespace mmo
 		m_aabb = bounds;
 		m_boundRadius = GetBoundingRadiusFromAABB(m_aabb);
 	}
-	
+
+	int32 Mesh::GetSubMeshIndex(const String& name) const
+	{
+		const auto i = m_subMeshNames.find(name);
+		if (i == m_subMeshNames.end())
+		{
+			return -1;
+		}
+
+		return i->second;
+	}
+
 	void Mesh::SetSkeletonName(const String& skeletonName)
 	{
 		if (m_skeletonName == skeletonName)

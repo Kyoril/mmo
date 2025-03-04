@@ -9,10 +9,11 @@ namespace mmo
 
 	void CustomizableAvatarDefinition::Apply(CharacterCustomizationPropertyVisitor& visitor) const
 	{
-		for (auto& property : m_properties)
-		{
-			property->Accept(visitor);
-		}
+	}
+
+	void CustomizableAvatarDefinition::AddProperty(std::unique_ptr<CustomizationPropertyGroup> property)
+	{
+		m_properties.push_back(std::move(property));
 	}
 
 	bool CustomizableAvatarDefinition::OnReadFinished() noexcept

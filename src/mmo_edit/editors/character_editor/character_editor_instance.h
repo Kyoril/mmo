@@ -7,6 +7,7 @@
 #include <imgui.h>
 
 #include "editors/editor_instance.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
@@ -45,6 +46,18 @@ namespace mmo
 
 		void DrawViewport(const String& id);
 
+		void DrawPropertyGroupDetails(CustomizationPropertyGroup& propertyGroup);
+
+		void DrawVisibleSubEntityList(std::vector<std::string>& visibleSubEntities);
+
+		void DrawPropertyGroupDetails(VisibilitySetPropertyGroup& visProp);
+
+		void DrawPropertyGroupDetails(MaterialOverridePropertyGroup& matProp);
+
+		void DrawMaterialMap(std::unordered_map<std::string, std::string>& subEntityToMaterial);
+
+		void UpdateBaseMesh();
+
 	private:
 		CharacterEditor& m_editor;
 		scoped_connection m_renderConnection;
@@ -71,5 +84,8 @@ namespace mmo
 		String m_animationImportPath;
 
 		std::set<uint16> m_includedSubMeshes;
+
+		ImGuiTextFilter m_assetFilter;
+		std::shared_ptr<CustomizableAvatarDefinition> m_avatarDefinition;
 	};
 }

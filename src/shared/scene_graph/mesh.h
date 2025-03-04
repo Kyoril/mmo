@@ -65,7 +65,9 @@ namespace mmo
 
 		void SetBounds(const AABB& bounds);
 
-		/// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
+		int32 GetSubMeshIndex(const String& name) const;
+
+        /// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
 		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
 
 		void SetSkeletonName(const String& skeletonName);
