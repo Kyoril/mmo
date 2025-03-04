@@ -21,7 +21,7 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
-	class CharacterEditorInstance final : public EditorInstance
+	class CharacterEditorInstance final : public EditorInstance, public CustomizationPropertyGroupApplier
 	{
 	public:
 		explicit CharacterEditorInstance(EditorHost& host, CharacterEditor& editor, Path asset);
@@ -56,7 +56,18 @@ namespace mmo
 
 		void DrawMaterialMap(std::unordered_map<std::string, std::string>& subEntityToMaterial);
 
+		void DrawPreview(const String& id);
+
 		void UpdateBaseMesh();
+
+		void UpdatePreview();
+
+	public:
+		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
+
+		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
+
+		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
 
 	private:
 		CharacterEditor& m_editor;
@@ -87,5 +98,7 @@ namespace mmo
 
 		ImGuiTextFilter m_assetFilter;
 		std::shared_ptr<CustomizableAvatarDefinition> m_avatarDefinition;
+		AvatarConfiguration m_configuration;
+		std::map<String, String> m_propertyValues;
 	};
 }

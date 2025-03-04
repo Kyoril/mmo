@@ -59,7 +59,7 @@ namespace mmo
 		m_avatarDefinition = std::make_shared<CustomizableAvatarDefinition>();
 		if (!m_avatarDefinition->Read(reader))
 		{
-			ELOG("Failed to read customizable avatar definition from file " << asset);
+			ELOG("Failed to read customizable avatar definition from file " << m_assetPath);
 		}
 
 		// Load the mesh and entity to render
@@ -117,9 +117,12 @@ namespace mmo
 
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
+		const String previewId = "Preview##" + GetAssetPath().string();
 
 		// Draw sidebar windows
 		DrawDetails(detailsId);
+
+		DrawPreview(previewId);
 
 		// Draw viewport
 		DrawViewport(viewportId);
@@ -136,6 +139,7 @@ namespace mmo
 			
 			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
+			ImGui::DockBuilderDockWindow(previewId.c_str(), sideId);
 
 			m_initDockLayout = false;
 		}
@@ -199,8 +203,7 @@ namespace mmo
 
 		io::StreamSink sink { *file };
 		io::Writer writer { sink };
-
-		// TODO: Save
+		m_avatarDefinition->Serialize(writer);
 
 		ILOG("Successfully saved character data");
 	}
@@ -541,6 +544,77 @@ namespace mmo
 		}
 	}
 
+	void CharacterEditorInstance::DrawPreview(const String& id)
+	{
+		if (!m_avatarDefinition)
+		{
+			return;
+		}
+
+		if (ImGui::Begin(id.c_str()))
+		{
+			// For each property group, show a dropdown to select the value
+			for (const auto& property : *m_avatarDefinition)
+			{
+
+				// Draw the property name
+				switch (property->GetType())
+				{
+				case CharacterCustomizationPropertyType::VisibilitySet:
+				{
+					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
+					const auto visibilityProp = static_cast<VisibilitySetPropertyGroup*>(property.get());
+					if (ImGui::BeginCombo(property->GetName().c_str(), it == m_configuration.chosenOptionPerGroup.end() ? "(None)" : it->second.c_str()))
+					{
+						for (const auto& value : visibilityProp->possibleValues)
+						{
+							if (ImGui::Selectable(value.valueId.c_str()))
+							{
+								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
+
+								// Apply the visibility set
+								// For each sub-entity in value.visibleSubEntities, set visibility
+								// to true or false based on the value
+								UpdatePreview();
+							}
+						}
+						ImGui::EndCombo();
+					}
+					break;
+				}
+				case CharacterCustomizationPropertyType::MaterialOverride:
+				{
+					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
+					const auto materialProp = static_cast<MaterialOverridePropertyGroup*>(property.get());
+
+					if (ImGui::BeginCombo(property->GetName().c_str(), it == m_configuration.chosenOptionPerGroup.end() ? "(None)" : it->second.c_str()))
+					{
+						for (const auto& value : materialProp->possibleValues)
+						{
+							if (ImGui::Selectable(value.valueId.c_str()))
+							{
+								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
+
+								// Apply the visibility set
+								// For each sub-entity in value.visibleSubEntities, set visibility
+								// to true or false based on the value
+								UpdatePreview();
+							}
+						}
+						ImGui::EndCombo();
+					}
+					break;
+				}
+				case CharacterCustomizationPropertyType::ScalarParameter:
+					// TODO :)
+					break;
+				}
+			}
+		}
+
+		ImGui::End();
+	}
+
 	void CharacterEditorInstance::UpdateBaseMesh()
 	{
 		if (m_entity)
@@ -562,6 +636,65 @@ namespace mmo
 			WLOG("Avatar definition does not have a base mesh set up!");
 			m_cameraNode->SetPosition(Vector3::UnitZ * 1.0f);
 		}
+	}
+
+	void CharacterEditorInstance::UpdatePreview()
+	{
+		// Iterate through each property
+		for (const auto& property : *m_avatarDefinition)
+		{
+			// Does this property has a value
+			auto it = m_propertyValues.find(property->GetName());
+			if (it == m_propertyValues.end())
+			{
+				continue;
+			}
+
+			// Alright, implement the value
+			m_configuration.Apply(*this, *m_avatarDefinition);
+		}
+	}
+
+	void CharacterEditorInstance::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+		// First, hide all sub entities with the given visibility set tag
+		if (!group.subEntityTag.empty())
+		{
+			// TODO
+
+		}
+
+		auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		if (it == configuration.chosenOptionPerGroup.end())
+		{
+			// Nothing to do here because we have no value set
+			return;
+		}
+
+		// Now make each referenced sub entity visible
+		for (const auto& value : group.possibleValues)
+		{
+			if (value.valueId == it->second)
+			{
+				for (const auto& subEntityName : value.visibleSubEntities)
+				{
+					if (SubEntity* subEntity = m_entity->GetSubEntity(subEntityName)) 
+					{
+						subEntity->SetVisible(true);
+					}
+				}
+			}
+		}
+	}
+
+	void CharacterEditorInstance::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+		// TODO
+	}
+
+	void CharacterEditorInstance::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+		// TODO
 	}
 
 	void CharacterEditorInstance::DrawPropertyGroupDetails(CustomizationPropertyGroup& propertyGroup)

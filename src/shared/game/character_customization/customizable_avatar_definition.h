@@ -11,6 +11,11 @@
 
 namespace mmo
 {
+	class AvatarConfiguration;
+	class VisibilitySetPropertyGroup;
+	class MaterialOverridePropertyGroup;
+	class ScalarParameterPropertyGroup;
+
 	struct VisibilitySetValue
 	{
 		std::string valueId;                // e.g. "LongHair", "ShortHair", etc.
@@ -26,65 +31,93 @@ namespace mmo
 		std::unordered_map<std::string, std::string> subEntityToMaterial;
 	};
 
+	class CustomizationPropertyGroupApplier
+	{
+	public:
+		virtual ~CustomizationPropertyGroupApplier() = default;
+
+	public:
+		virtual void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) = 0;
+
+		virtual void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) = 0;
+
+		virtual void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) = 0;
+	};
+
 	class CustomizationPropertyGroup
 	{
 	public:
-		CustomizationPropertyGroup(const std::string& name) : m_name(name) {}
+		explicit CustomizationPropertyGroup(const std::string& name) : m_name(name) {}
 		virtual ~CustomizationPropertyGroup() = default;
 
-		virtual CharacterCustomizationPropertyType GetType() const = 0;
+	public:
+		[[nodiscard]] virtual CharacterCustomizationPropertyType GetType() const = 0;
 
-		const std::string& GetName() const { return m_name; }
+		[[nodiscard]] const std::string& GetName() const { return m_name; }
+
 		void SetName(const std::string& newName) { m_name = newName; }
+
+		virtual void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) = 0;
 
 	protected:
 		std::string m_name;
 	};
 
 	// One derived type
-	class VisibilitySetPropertyGroup : public CustomizationPropertyGroup
+	class VisibilitySetPropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		VisibilitySetPropertyGroup(const std::string& name)
+		explicit VisibilitySetPropertyGroup(const std::string& name)
 			: CustomizationPropertyGroup(name)
 		{
 		}
 
-		virtual CharacterCustomizationPropertyType GetType() const override
+		[[nodiscard]] CharacterCustomizationPropertyType GetType() const override
 		{
 			return CharacterCustomizationPropertyType::VisibilitySet;
 		}
 
-		// Example data: A “tag” plus a list of possible sub-entity sets
+		void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) override
+		{
+			applier.Apply(*this, configuration);
+		}
+
+	public:
 		std::string subEntityTag;
 
-		// The list of discrete values
 		std::vector<VisibilitySetValue> possibleValues;
 	};
 
 	// Another derived type
-	class MaterialOverridePropertyGroup : public CustomizationPropertyGroup
+	class MaterialOverridePropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		MaterialOverridePropertyGroup(const std::string& name)
+		explicit MaterialOverridePropertyGroup(const std::string& name)
 			: CustomizationPropertyGroup(name)
 		{
 		}
 
-		virtual CharacterCustomizationPropertyType GetType() const override
+		[[nodiscard]] CharacterCustomizationPropertyType GetType() const override
 		{
 			return CharacterCustomizationPropertyType::MaterialOverride;
 		}
 
+		void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) override
+		{
+			applier.Apply(*this, configuration);
+		}
+
+	public:
 		std::vector<MaterialOverrideValue> possibleValues;
 	};
 
 	// Another derived type
-	class ScalarParameterPropertyGroup : public CustomizationPropertyGroup
+	class ScalarParameterPropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		ScalarParameterPropertyGroup(const std::string& name)
-			: CustomizationPropertyGroup(name), minValue(0.0f), maxValue(1.0f) {
+		explicit ScalarParameterPropertyGroup(const std::string& name)
+			: CustomizationPropertyGroup(name), minValue(0.0f), maxValue(1.0f)
+		{
 		}
 
 		virtual CharacterCustomizationPropertyType GetType() const override
@@ -92,12 +125,15 @@ namespace mmo
 			return CharacterCustomizationPropertyType::ScalarParameter;
 		}
 
+		void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) override
+		{
+			applier.Apply(*this, configuration);
+		}
+
+	public:
 		float minValue;
 		float maxValue;
-		// Possibly discrete or continuous...
-		// ...
 	};
-
 
 	/// Definition of a customizable avatar.
 	class CustomizableAvatarDefinition final
@@ -111,14 +147,12 @@ namespace mmo
 	public:
 		explicit CustomizableAvatarDefinition(String baseMesh);
 
-		explicit CustomizableAvatarDefinition() = default;
+		explicit CustomizableAvatarDefinition();
 
 		~CustomizableAvatarDefinition() override = default;
 
 	public:
 		/// Apply all properties to the visitor.
-		void Apply(CharacterCustomizationPropertyVisitor& visitor) const;
-
 		void AddProperty(std::unique_ptr<CustomizationPropertyGroup> property);
 
 		void RemovePropertyByIndex(const size_t index)
@@ -128,6 +162,15 @@ namespace mmo
 
 			m_properties.erase(it);
 		}
+
+		void Serialize(io::Writer& writer) const;
+
+	protected:
+		bool ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadAvatarDefinitionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool ReadPropertyGroupChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	public:
 		[[nodiscard]] ConstPropertyIterator begin() const
@@ -160,12 +203,37 @@ namespace mmo
 			m_baseMesh = std::move(baseMesh);
 		}
 
-	protected:
-		bool OnReadFinished() noexcept override;
-
 	private:
 		String m_baseMesh;
 
 		Properties m_properties;
+	};
+
+	class AvatarConfiguration
+	{
+	public:
+		void Apply(CustomizationPropertyGroupApplier& applier, const CustomizableAvatarDefinition& definition)
+		{
+			for (const auto& group : definition)
+			{
+				// If it's a "scalar" group, read config.scalarValues[group.groupName]
+				// If it's a "visibility" or "material" group, we look up which valueId 
+				// is chosen in config.chosenOptionPerGroup[group.groupName]
+				// Then find that value in group.possibleValues, 
+				// apply it via your visitor or switch logic.
+
+				group->Apply(applier, *this);
+			}
+		}
+
+
+	public:
+		// For each property group that is a "dropdown" (VisibilitySet or MaterialOverride),
+		// store the chosen "valueId"
+		std::unordered_map<std::string, std::string> chosenOptionPerGroup;
+
+		// For each property group that is a scalar (like Height),
+		// store the chosen float 
+		std::unordered_map<std::string, float> scalarValues;
 	};
 }

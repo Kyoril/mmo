@@ -39,10 +39,14 @@ namespace mmo
 		/// @param material The material to use for rendering or nullptr to use a default material.
 		void SetMaterial(const MaterialPtr& material) noexcept { m_material = material; }
 
+		void SetVisible(bool visible) { m_visible = visible; }
+
+		[[nodiscard]] bool IsVisible() const noexcept { return m_visible; }
+
 	private:
 		Entity& m_parent;
 		SubMesh& m_subMesh;
-		bool m_visible { false };
+		bool m_visible { true };
 
 		uint8 m_renderQueueId { 0 };
 		bool m_renderQueueIdSet { false };

@@ -90,6 +90,11 @@ namespace mmo
 	{
 		for (const auto& subEntity : m_subEntities)
 		{
+			if (!subEntity->IsVisible())
+			{
+				continue;
+			}
+
 			renderQueue.AddRenderable(*subEntity, GetRenderQueueGroup());
 		}
 
