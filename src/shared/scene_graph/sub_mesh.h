@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <set>
+
 #include "graphics/graphics_device.h"
 #include "graphics/material.h"
 #include "graphics/vertex_buffer.h"
@@ -49,6 +51,20 @@ namespace mmo
 
 		bool BoneAssignmentsOutOfDate() const { return m_boneAssignmentsOutOfDate; }
 
+		bool HasTag(const String& tag) const;
+
+		void AddTag(const String& tag);
+
+		void RemoveTag(const String& tag);
+
+		void ClearTags();
+
+		bool HasTags() const { return !m_tags.empty(); }
+
+		uint16 TagCount() const { return static_cast<uint16>(m_tags.size()); }
+
+		const String& GetTag(uint16 index) const;
+
 	public:
 		Mesh& parent;
 
@@ -65,5 +81,7 @@ namespace mmo
 		bool m_boneAssignmentsOutOfDate { false };
 		TopologyType m_topologyType = TopologyType::TriangleList;
 		VertexBoneAssignmentList m_boneAssignments {};
+		std::set<String> m_tags;
+
 	};
 }

@@ -19,6 +19,8 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+
+#include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/skeleton_serializer.h"
@@ -513,7 +515,14 @@ namespace mmo
 			std::string& matRef = subEntityToMaterial[key];
 
 			ImGui::Separator();
-			ImGui::Text("Sub-entity: %s", key.c_str());
+
+			char keyBuf[256];
+			std::snprintf(keyBuf, sizeof(keyBuf), "%s", key.c_str());
+			if (ImGui::InputText("Sub Entity", keyBuf, IM_ARRAYSIZE(keyBuf)))
+			{
+				keyToRemove = key;
+				subEntityToMaterial[keyBuf] = matRef;
+			}
 
 			// We can let user rename the material reference
 			char matBuf[128];
@@ -522,6 +531,22 @@ namespace mmo
 			{
 				matRef = matBuf;
 			}
+
+			if (ImGui::BeginDragDropTarget())
+			{
+				// We only accept mesh file drops
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+				{
+					matRef = *static_cast<String*>(payload->Data);
+				}
+				else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+				{
+					matRef = *static_cast<String*>(payload->Data);
+				}
+
+				ImGui::EndDragDropTarget();
+			}
+
 
 			// Optionally let user rename the sub-entity key too,
 			// but be careful about re-inserting. This can be tricky with a map.
@@ -643,13 +668,6 @@ namespace mmo
 		// Iterate through each property
 		for (const auto& property : *m_avatarDefinition)
 		{
-			// Does this property has a value
-			auto it = m_propertyValues.find(property->GetName());
-			if (it == m_propertyValues.end())
-			{
-				continue;
-			}
-
 			// Alright, implement the value
 			m_configuration.Apply(*this, *m_avatarDefinition);
 		}
@@ -660,11 +678,22 @@ namespace mmo
 		// First, hide all sub entities with the given visibility set tag
 		if (!group.subEntityTag.empty())
 		{
-			// TODO
+			for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+			{
+				ASSERT(m_entity->GetMesh()->GetSubMeshCount() == m_entity->GetNumSubEntities());
 
+				SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(i);
+				if (subMesh.HasTag(group.subEntityTag))
+				{
+					SubEntity* subEntity = m_entity->GetSubEntity(i);
+					ASSERT(subEntity);
+					subEntity->SetVisible(false);
+				}
+			}
+			
 		}
 
-		auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
 			// Nothing to do here because we have no value set
@@ -689,7 +718,31 @@ namespace mmo
 
 	void CharacterEditorInstance::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
 	{
-		// TODO
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		if (it == configuration.chosenOptionPerGroup.end())
+		{
+			// Nothing to do here because we have no value set
+			return;
+		}
+
+		// Now make each referenced sub entity visible
+		for (const auto& value : group.possibleValues)
+		{
+			if (value.valueId == it->second)
+			{
+				for (const auto& pair : value.subEntityToMaterial)
+				{
+					if (SubEntity* subEntity = m_entity->GetSubEntity(pair.first))
+					{
+						MaterialPtr material = MaterialManager::Get().Load(pair.second);
+						if (material)
+						{
+							subEntity->SetMaterial(material);
+						}						
+					}
+				}
+			}
+		}
 	}
 
 	void CharacterEditorInstance::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)

@@ -148,7 +148,7 @@ namespace mmo
 			const size_t endX = m_startX + constants::VerticesPerTile;
 			const size_t endZ = m_startZ + constants::VerticesPerTile;
 
-			const float scale = constants::TileSize / (constants::VerticesPerTile - 1);
+			const float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
 
 			struct VertexStruct
 			{
@@ -249,7 +249,7 @@ namespace mmo
 			float minHeight = m_page.GetHeightAt(0, 0);
 			float maxHeight = minHeight;
 
-			constexpr float scale = constants::TileSize / (constants::VerticesPerTile - 1);
+			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
 
 			struct VertexStruct
 			{

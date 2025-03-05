@@ -20,6 +20,7 @@ namespace mmo
 	static const ChunkMagic MeshVertexChunk= { {'V', 'E', 'R', 'T'} };
 	static const ChunkMagic MeshIndexChunk= { {'I', 'N', 'D', 'X'} };
 	static const ChunkMagic MeshSubMeshChunk = { {'S', 'U', 'B', 'M'} };
+	static const ChunkMagic TagsChunk = { {'T', 'A', 'G', 'S'} };
 	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
 	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	static const ChunkMagic MeshCollisionChunk = MakeChunkMagic('COLL');
@@ -161,9 +162,12 @@ namespace mmo
 		}
 
 		// Write submesh chunks
+		bool hasTags = false;
 		uint16 submeshIndex = 0;
 		for (const auto& submesh : mesh->GetSubMeshes())
 		{
+			hasTags = hasTags || submesh->HasTags();
+
 			ChunkWriter submeshChunkWriter{ MeshSubMeshChunk, writer };
 			{
 				// Try to get name of the submesh
@@ -201,6 +205,39 @@ namespace mmo
 				}
 			}
 			submeshChunkWriter.Finish();
+		}
+
+		// For each sub mesh, now write the tags
+		if (hasTags)
+		{
+			ChunkWriter tagsChunk{ TagsChunk, writer };
+			{
+				const size_t entityCountPos = writer.Sink().Position();
+
+				uint16 entityCount = 0;
+				writer << io::write<uint16>(entityCount);
+				
+				for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+				{
+					const auto& submesh = mesh->GetSubMesh(i);
+					if (submesh.HasTags())
+					{
+						entityCount++;
+
+						writer << io::write<uint16>(i);
+						writer << io::write<uint8>(submesh.TagCount());
+
+						for (uint8 tagIndex = 0; tagIndex < submesh.TagCount(); ++tagIndex)
+						{
+							writer << io::write_dynamic_range<uint8>(submesh.GetTag(tagIndex));
+						}
+					}
+				}
+
+				// Overwrite real entity count
+				writer.Sink().Overwrite(entityCountPos, reinterpret_cast<const char*>(&entityCount), sizeof(entityCount));
+			}
+			tagsChunk.Finish();
 		}
 	}
 
@@ -241,6 +278,7 @@ namespace mmo
 					{
 						AddChunkHandler(*MeshSubMeshChunk, false, *this, &MeshDeserializer::ReadSubMeshChunkV3);
 						AddChunkHandler(*MeshCollisionChunk, false, *this, &MeshDeserializer::ReadCollisionChunk);
+						AddChunkHandler(*TagsChunk, false, *this, &MeshDeserializer::ReadTagsChunk);
 
 						// Chunk no longer supported in V03 because there is no longer global index data
 						RemoveChunkHandler(*MeshIndexChunk);
@@ -674,6 +712,40 @@ namespace mmo
 	bool MeshDeserializer::ReadCollisionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		reader >> m_mesh.m_collisionTree;
+		return reader;
+	}
+
+	bool MeshDeserializer::ReadTagsChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 entityCount;
+		if ((reader >> io::read<uint16>(entityCount)) && entityCount > 0)
+		{
+			for (uint16 i = 0; i < entityCount; ++i)
+			{
+				uint16 index;
+				if (reader >> io::read<uint16>(index))
+				{
+					if (index >= m_mesh.GetSubMeshCount())
+					{
+						ELOG("Invalid submesh index in tags chunk");
+						return false;
+					}
+
+					uint8 tagCount;
+					if ((reader >> io::read<uint8>(tagCount)) && tagCount > 0)
+					{
+						for (uint8 i = 0; i < tagCount; ++i)
+						{
+							if (String tag; reader >> io::read_container<uint8>(tag))
+							{
+								m_mesh.GetSubMesh(index).AddTag(tag);
+							}
+						}
+					}
+				}
+			}
+		}
+
 		return reader;
 	}
 

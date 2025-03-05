@@ -501,7 +501,7 @@ namespace mmo
 			const float pageOriginZ = pageY * terrain::constants::PageSize;
 
 			// Now get the vertex scale of the page
-			const float scale = terrain::constants::PageSize / (terrain::constants::VerticesPerPage - 1);
+			const float scale = static_cast<float>(terrain::constants::PageSize / static_cast<double>(terrain::constants::VerticesPerPage - 1));
 
 			vertexX = static_cast<int32>((x - pageOriginX) / scale) + (pageX * constants::VerticesPerPage);
 			vertexZ = static_cast<int32>((z - pageOriginZ) / scale) + (pageY * constants::VerticesPerPage);
@@ -825,7 +825,7 @@ namespace mmo
 
 		void Terrain::GetGlobalPixelWorldPosition(const int x, const int y, float* out_x, float* out_z) const
 		{
-			constexpr float scale = constants::PageSize / (constants::PixelsPerPage - 1);
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::PixelsPerPage - 1));
 
 			if (out_x)
 			{
@@ -842,17 +842,17 @@ namespace mmo
 
 		void Terrain::GetGlobalVertexWorldPosition(const int x, const int y, float* out_x, float* out_z) const
 		{
-			constexpr float scale = constants::PageSize / (constants::VerticesPerPage - 1);
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
 
 			if (out_x)
 			{
-				const float worldCenterX = static_cast<double>(m_width) / 2.0 * constants::PageSize;
+				const float worldCenterX = static_cast<float>(static_cast<double>(m_width) / 2.0 * constants::PageSize);
 				*out_x = static_cast<float>(x) * scale - worldCenterX;
 			}
 
 			if (out_z)
 			{
-				const float worldCenterY = static_cast<double>(m_height) / 2.0 * constants::PageSize;
+				const float worldCenterY = static_cast<float>(static_cast<double>(m_height) / 2.0 * constants::PageSize);
 				*out_z = static_cast<float>(y) * scale - worldCenterY;
 			}
 		}

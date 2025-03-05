@@ -36,7 +36,7 @@ namespace mmo
 
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
-		typedef std::map<std::string, uint16> SubMeshNameMap;
+		typedef std::unordered_map<std::string, uint16> SubMeshNameMap;
 		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
 		typedef std::vector<uint16> IndexMap;
 

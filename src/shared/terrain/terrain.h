@@ -144,7 +144,7 @@ namespace mmo
 				const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
 				// scale = pageSize / (VerticesPerPage - 1)
-				constexpr float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
+				constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
 
 				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
 				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
@@ -202,7 +202,7 @@ namespace mmo
 				const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
 				// scale = pageSize / (PixelsPerPage - 1)
-				constexpr float scale = constants::PageSize / static_cast<float>(constants::PixelsPerPage - 1);
+				constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::PixelsPerPage - 1));
 
 				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
 				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;

@@ -59,6 +59,35 @@ namespace mmo
 		m_boneAssignmentsOutOfDate = false;
 	}
 
+	bool SubMesh::HasTag(const String& tag) const
+	{
+		return m_tags.contains(tag);
+	}
+
+	void SubMesh::AddTag(const String& tag)
+	{
+		m_tags.insert(tag);
+	}
+
+	void SubMesh::RemoveTag(const String& tag)
+	{
+		m_tags.erase(tag);
+	}
+
+	void SubMesh::ClearTags()
+	{
+		m_tags.clear();
+	}
+
+	const String& SubMesh::GetTag(uint16 index) const
+	{
+		ASSERT(index < m_tags.size());
+
+		auto it = m_tags.begin();
+		std::advance(it, index);
+		return *it;
+	}
+
 	void SubMesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
 	{
 		ASSERT(!useSharedVertices);

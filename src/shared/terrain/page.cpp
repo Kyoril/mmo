@@ -338,7 +338,7 @@ namespace mmo
 		float Page::GetSmoothHeightAt(float x, float y) const
 		{
 			// scale down
-			const float scale = constants::PageSize / static_cast<float>(constants::VerticesPerPage - 1);
+			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
 			x /= scale;
 			y /= scale;
 

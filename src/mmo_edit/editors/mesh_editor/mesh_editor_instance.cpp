@@ -343,13 +343,13 @@ namespace mmo
 							String name = "SubMesh " + std::to_string(i);
 							m_entity->GetMesh()->GetSubMeshName(i, name);
 
-							if (const bool nodeOpen = ImGui::TreeNode("Object", name.c_str()))
+							if (ImGui::TreeNode("Object", name.c_str()))
 							{
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::AlignTextToFramePadding();
 								constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-								ImGui::TreeNodeEx("Field", flags, "Name");
+								ImGui::TreeNodeEx("Field_Name", flags, "Name");
 
 								ImGui::TableSetColumnIndex(1);
 								ImGui::SetNextItemWidth(-FLT_MIN);
@@ -364,7 +364,7 @@ namespace mmo
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::AlignTextToFramePadding();
-								ImGui::TreeNodeEx("Field", flags, "Material");
+								ImGui::TreeNodeEx("Field_Material", flags, "Material");
 
 								ImGui::TableSetColumnIndex(1);
 								ImGui::SetNextItemWidth(-FLT_MIN);
@@ -396,6 +396,55 @@ namespace mmo
 								ImGui::PopID();
 
 								ImGui::NextColumn();
+
+								ImGui::TableNextRow();
+
+								ImGui::TableSetColumnIndex(0);
+								ImGui::AlignTextToFramePadding();
+								if (ImGui::TreeNode("Field_Tags", "Tags"))
+								{
+									ImGui::TableSetColumnIndex(1);
+
+									if (ImGui::Button("Add Tag"))
+									{
+										m_entity->GetMesh()->GetSubMesh(i).AddTag("New Tag");
+									}
+
+									ImGui::NextColumn();
+
+									for (uint8 tagIndex = 0; tagIndex < m_entity->GetMesh()->GetSubMesh(i).TagCount(); ++tagIndex)
+									{
+										ImGui::PushID(tagIndex);
+										ImGui::TableNextRow();
+										ImGui::TableSetColumnIndex(0);
+										ImGui::AlignTextToFramePadding();
+										ImGui::TreeNodeEx("Field", flags, "Tag");
+										ImGui::TableSetColumnIndex(1);
+										ImGui::SetNextItemWidth(-FLT_MIN);
+
+										String tag = m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex);
+										const bool tagChanged = ImGui::InputText("##tag", &tag, ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_EnterReturnsTrue);
+										ImGui::NextColumn();
+										ImGui::PopID();
+
+										if (tagChanged)
+										{
+											m_entity->GetMesh()->GetSubMesh(i).RemoveTag(m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex));
+											m_entity->GetMesh()->GetSubMesh(i).AddTag(tag);
+
+											// We break here because the tag list has changed and thus the index might no longer be valid
+											break;
+										}
+									}
+
+									ImGui::TreePop();
+								}
+
+								ImGui::TableSetColumnIndex(1);
+								ImGui::SetNextItemWidth(-FLT_MIN);
+
+								ImGui::NextColumn();
+
 								ImGui::TreePop();
 							}
 							ImGui::PopID();
