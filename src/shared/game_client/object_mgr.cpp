@@ -9,6 +9,7 @@ namespace mmo
 {
 	MovementGlobals ObjectMgr::ms_movementGlobals;
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
+	std::unordered_map<String, std::unique_ptr<CustomizableAvatarDefinition>> ObjectMgr::ms_charDefinitions;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
 	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
 	const proto_client::Project* ObjectMgr::ms_project = nullptr;
@@ -23,6 +24,7 @@ namespace mmo
 		ms_activePlayerGuid = 0;
 		ms_selectedObjectGuid = 0;
 		ms_itemCount.clear();
+		ms_charDefinitions.clear();
 	}
 
 	void ObjectMgr::UpdateObjects(float deltaTime)
@@ -145,6 +147,34 @@ namespace mmo
 		}
 
 		return ms_project->models.getById(displayId);
+	}
+
+	CustomizableAvatarDefinition* ObjectMgr::GetCharDefinition(const String& filename)
+	{
+		if (const auto it = ms_charDefinitions.find(filename); it != ms_charDefinitions.end())
+		{
+			return it->second.get();
+		}
+
+		auto definition = std::make_unique<CustomizableAvatarDefinition>(filename);
+
+		const auto file = AssetRegistry::OpenFile(filename);
+		if (!file)
+		{
+			ELOG("Failed to open character definition file " << filename);
+			return nullptr;
+		}
+
+		io::StreamSource source{ *file };
+		io::Reader reader(source);
+		if (!definition->Read(reader))
+		{
+			ELOG("Failed to read character definition file " << filename);
+			return nullptr;
+		}
+
+		ms_charDefinitions[filename] = std::move(definition);
+		return ms_charDefinitions[filename].get();
 	}
 
 	void ObjectMgr::OnItemStackCountChanged(uint64 itemGuid)

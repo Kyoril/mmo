@@ -46,7 +46,7 @@ namespace mmo
 		MeshDeserializer deserializer { *mesh };
 		if (!deserializer.Read(reader))
 		{
-			ELOG("Failed to load mesh!");
+			ELOG("Failed to load mesh '" << filename << "'");
 			return nullptr;
 		}
 		

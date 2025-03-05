@@ -26,6 +26,10 @@ namespace mmo
 
 		void OnNewEntry(proto::TemplateManager<proto::ModelDatas, proto::ModelDataEntry>::EntryType& entry) override;
 
+		void OnAssetImported(const Path& path);
+
+		void ReloadModelList();
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 
@@ -34,5 +38,6 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		std::vector<String> m_modelFiles;
+		scoped_connection m_assetImported;
 	};
 }

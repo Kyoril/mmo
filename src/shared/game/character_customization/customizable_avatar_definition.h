@@ -11,6 +11,18 @@
 
 namespace mmo
 {
+	namespace model_data_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			IsCustomizable = 1 << 0,
+
+			IsPlayerCharacter = 1 << 1,
+		};
+	}
+
 	class AvatarConfiguration;
 	class VisibilitySetPropertyGroup;
 	class MaterialOverridePropertyGroup;

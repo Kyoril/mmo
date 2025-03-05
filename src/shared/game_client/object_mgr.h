@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "movement.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "game_client/game_object_c.h"
 #include "game_client/game_player_c.h"
 
@@ -61,6 +62,8 @@ namespace mmo
 
 		static MovementGlobals& GetMovementGlobals() { return ms_movementGlobals; }
 
+		static CustomizableAvatarDefinition* GetCharDefinition(const String& filename);
+
 	private:
 		static void OnItemStackCountChanged(uint64 itemGuid);
 
@@ -79,6 +82,7 @@ namespace mmo
 		}
 
 	private:
+		static std::unordered_map<String, std::unique_ptr<CustomizableAvatarDefinition>> ms_charDefinitions;
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
 		static uint64 ms_activePlayerGuid;
 		static uint64 ms_selectedObjectGuid;

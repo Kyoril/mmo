@@ -309,11 +309,13 @@ namespace mmo
 
 	const AABB& Entity::GetBoundingBox() const
 	{
+		ASSERT(m_mesh);
 		return m_mesh->GetBounds();
 	}
 
 	float Entity::GetBoundingRadius() const
 	{
+		ASSERT(m_mesh);
 		return m_mesh->GetBoundRadius();
 	}
 

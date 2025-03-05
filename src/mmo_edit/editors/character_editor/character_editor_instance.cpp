@@ -104,7 +104,7 @@ namespace mmo
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-
+				
 		m_scene.Render(*m_camera);
 		
 		m_viewportRT->Update();
@@ -646,6 +646,7 @@ namespace mmo
 		if (m_entity)
 		{
 			m_scene.DestroyEntity(*m_entity);
+			m_animState = nullptr;
 			m_entity = nullptr;
 		}
 
@@ -653,6 +654,14 @@ namespace mmo
 		{
 			m_entity = m_scene.CreateEntity(m_assetPath.string(), m_avatarDefinition->GetBaseMesh());
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
+
+			m_animState = m_entity->GetAnimationState("Idle");
+			if (m_animState)
+			{
+				m_animState->SetLoop(true);
+				m_animState->SetEnabled(true);
+				m_animState->SetWeight(1.0f);
+			}
 
 			m_cameraAnchor->SetPosition(Vector3::UnitY * m_entity->GetBoundingRadius() * 0.5f);
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius());

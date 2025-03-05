@@ -1230,10 +1230,25 @@ namespace mmo
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
 
+		CustomizableAvatarDefinition* definition = nullptr;
+		String meshFile = modelEntry->filename();
+		if (modelEntry->flags() & model_data_flags::IsCustomizable)
+		{
+			// Check if the model is a mesh file or a .char file
+			definition = ObjectMgr::GetCharDefinition(modelEntry->filename());
+			if (!definition)
+			{
+				ELOG("Failed to find customizable avatar definition for " << modelEntry->filename());
+				return;
+			}
+
+			meshFile = definition->GetBaseMesh();
+		}
+
 		// Update or create entity
 		if (!m_entity)
 		{
-			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), modelEntry->filename());
+			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), meshFile);
 			m_entity->SetUserObject(this);
 			m_entity->SetQueryFlags(0x00000002);
 			m_entityOffsetNode->AttachObject(*m_entity);
@@ -1241,7 +1256,13 @@ namespace mmo
 		else
 		{
 			// Just update the mesh
-			m_entity->SetMesh(MeshManager::Get().Load(modelEntry->filename()));
+			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
+		}
+
+		if (definition)
+		{
+			// TODO: Apply preconfigured configuration
+
 		}
 
 		m_collider.radius = 0.5f;

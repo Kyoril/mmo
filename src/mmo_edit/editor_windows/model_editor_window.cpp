@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -17,19 +18,21 @@ namespace mmo
 		EditorWindowBase::SetVisible(false);
 
 		m_toolbarButtonText = "Models";
+		ReloadModelList();
 
-		std::vector<std::string> files = AssetRegistry::ListFiles();
-		for (const auto& filename : files)
-		{
-			if (filename.ends_with(".hmsh"))
-			{
-				m_modelFiles.push_back(filename);
-			}
-		}
+		m_assetImported = m_host.assetImported.connect(this, &ModelEditorWindow::OnAssetImported);
 	}
 
 	void ModelEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
+		if (ImGui::Button("Duplicate"))
+		{
+			proto::ModelDataEntry* copied = m_project.models.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+		}
+
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \
@@ -95,6 +98,9 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			CHECKBOX_FLAG_PROP(flags, "Customizable", model_data_flags::IsCustomizable);
+			CHECKBOX_FLAG_PROP(flags, "Is Player Character", model_data_flags::IsPlayerCharacter);
+
 			if (ImGui::BeginCombo("File", currentEntry.filename().c_str(), ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < m_modelFiles.size(); i++)
@@ -105,6 +111,16 @@ namespace mmo
 					if (ImGui::Selectable(item_text, item_selected))
 					{
 						currentEntry.set_filename(item_text);
+
+						const Path p = item_text;
+						if (p.extension() == ".char")
+						{
+							currentEntry.set_flags(currentEntry.flags() | model_data_flags::IsCustomizable);
+						}
+						else
+						{
+							currentEntry.set_flags(currentEntry.flags() & ~model_data_flags::IsCustomizable);
+						}
 					}
 					if (item_selected)
 					{
@@ -122,5 +138,27 @@ namespace mmo
 		proto::TemplateManager<proto::ModelDatas, proto::ModelDataEntry>::EntryType& entry)
 	{
 		entry.set_filename(m_modelFiles[0].empty() ? "" : m_modelFiles[0].c_str());
+	}
+
+	void ModelEditorWindow::OnAssetImported(const Path& path)
+	{
+		if (path.extension() == ".hmsh" || path.extension() == ".char")
+		{
+			ReloadModelList();
+		}
+	}
+
+	void ModelEditorWindow::ReloadModelList()
+	{
+		m_modelFiles.clear();
+
+		std::vector<std::string> files = AssetRegistry::ListFiles();
+		for (const auto& filename : files)
+		{
+			if (filename.ends_with(".hmsh") || filename.ends_with(".char"))
+			{
+				m_modelFiles.push_back(filename);
+			}
+		}
 	}
 }

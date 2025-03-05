@@ -90,7 +90,7 @@ namespace mmo
 		MeshPtr m_mesh;
 		MeshEntry m_entry { };
 		AnimationState* m_animState{ nullptr };
-		bool m_playAnimation = false;
+		bool m_playAnimation = true;
 		String m_newAnimationName;
 		String m_animationImportPath;
 
