@@ -507,18 +507,20 @@ namespace mmo
 		for (const auto& kv : subEntityToMaterial)
 			keys.push_back(kv.first);
 
-		// Let’s also store which key to remove if requested
+		// Let's also store which key to remove if requested
 		std::string keyToRemove;
 
 		for (auto& key : keys)
 		{
+			ImGui::PushID(key.c_str());
+
 			std::string& matRef = subEntityToMaterial[key];
 
 			ImGui::Separator();
 
 			char keyBuf[256];
 			std::snprintf(keyBuf, sizeof(keyBuf), "%s", key.c_str());
-			if (ImGui::InputText("Sub Entity", keyBuf, IM_ARRAYSIZE(keyBuf)))
+			if (ImGui::InputText("Sub Entity", keyBuf, IM_ARRAYSIZE(keyBuf), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
 			{
 				keyToRemove = key;
 				subEntityToMaterial[keyBuf] = matRef;
@@ -547,13 +549,14 @@ namespace mmo
 				ImGui::EndDragDropTarget();
 			}
 
-
 			// Optionally let user rename the sub-entity key too,
 			// but be careful about re-inserting. This can be tricky with a map.
 			if (ImGui::Button("Remove Pair"))
 			{
 				keyToRemove = key;
 			}
+
+			ImGui::PopID();
 		}
 
 		if (!keyToRemove.empty())
@@ -561,10 +564,8 @@ namespace mmo
 			subEntityToMaterial.erase(keyToRemove);
 		}
 
-		// Button to add a new sub-entity -> material pair
 		if (ImGui::Button("Add Pair"))
 		{
-			// For example, we insert a default pair
 			subEntityToMaterial["NewSubEntity"] = "Materials/Path/Default.hmi";
 		}
 	}
