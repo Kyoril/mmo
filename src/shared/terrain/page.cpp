@@ -86,8 +86,8 @@ namespace mmo
 
 			m_preparing = true;
 
-			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0.0f);
-			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage, Vector3::UnitY);
+			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage);
+			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
 			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
@@ -453,10 +453,13 @@ namespace mmo
 			}
 		}
 
-		const Vector3& Page::GetNormalAt(const uint32 x, const uint32 z)
+		Vector3 Page::GetNormalAt(const uint32 x, const uint32 z)
 		{
 			ASSERT(x < constants::VerticesPerPage && z < constants::VerticesPerPage);
-			return m_normals[x + z * constants::VerticesPerPage];
+
+			Vector3 normal;
+			DecodeNormalSNorm8(m_normals[x + z * constants::VerticesPerPage], normal.x, normal.y, normal.z);
+			return normal;
 		}
 
 		Vector3 Page::CalculateNormalAt(const uint32 x, const uint32 z)
@@ -490,7 +493,7 @@ namespace mmo
 			norm.y *= flip;
 			norm.Normalize();
 
-			m_normals[x + z * constants::VerticesPerPage] = norm;
+			m_normals[x + z * constants::VerticesPerPage] = EncodeNormalSNorm8(norm.x, norm.y, norm.z);
 
 			return norm;
 		}
@@ -603,8 +606,7 @@ namespace mmo
 				ChunkWriter normalChunk{ constants::NormalChunk, writer };
 				for (const auto& normal : m_normals)
 				{
-					auto encodedNormal = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
-					writer.WritePOD(encodedNormal);
+					writer.WritePOD(normal);
 				}
 				normalChunk.Finish();
 			}
@@ -619,7 +621,10 @@ namespace mmo
 			// Zones
 			{
 				ChunkWriter areaChunk{ constants::AreaChunk, writer };
-				writer << io::write_range(m_tileZones);
+				for (const auto& zone : m_tileZones)
+				{
+					writer << io::write<uint32>(zone);
+				}
 				areaChunk.Finish();
 			}
 
@@ -683,16 +688,13 @@ namespace mmo
 			// Read heightmap data
 			for (auto& normal : m_normals)
 			{
-				EncodedNormal8 encodedNormal;
-				reader.readPOD(encodedNormal);
+				reader.readPOD(normal);
 
 				if (!reader)
 				{
 					ELOG("Failed to read normal from tile " << m_x << "x" << m_z << "!");
 					return false;
 				}
-
-				DecodeNormalSNorm8(encodedNormal, normal.x, normal.y, normal.z);
 			}
 
 			return reader;
@@ -868,7 +870,15 @@ namespace mmo
 		bool Page::ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size)
 		{
 			// Read tile zones
-			reader >> io::read_range(m_tileZones);
+			for (auto& zone : m_tileZones)
+			{
+				reader >> io::read<uint32>(zone);
+				if (!reader)
+				{
+					ELOG("Failed to read tile zones from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+			}
 
 			return reader;
 		}

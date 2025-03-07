@@ -72,7 +72,7 @@ namespace mmo
 
 			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
 
-			const Vector3& GetNormalAt(uint32 x, uint32 z);
+			Vector3 GetNormalAt(uint32 x, uint32 z);
 
 			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 
@@ -151,11 +151,10 @@ namespace mmo
 			TileGrid m_Tiles;
 
 			std::vector<float> m_heightmap;
-			std::vector<Vector3> m_normals;
-			std::vector<Vector3> m_tangents;
+			std::vector<EncodedNormal8> m_normals;
 			std::vector<MaterialPtr> m_materials;
 			std::vector<uint32> m_layers;
-			std::vector<uint32> m_tileZones;
+			std::vector<uint16> m_tileZones;
 
 			int32 m_x;
 			int32 m_z;
