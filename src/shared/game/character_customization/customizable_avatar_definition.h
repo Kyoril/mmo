@@ -94,6 +94,24 @@ namespace mmo
 			applier.Apply(*this, configuration);
 		}
 
+		int32 GetPropertyValueIndex(const String& valueId) const
+		{
+			if (valueId.empty())
+			{
+				return -1;
+			}
+
+			for (size_t i = 0; i < possibleValues.size(); ++i)
+			{
+				if (possibleValues[i].valueId == valueId)
+				{
+					return static_cast<int32>(i);
+				}
+			}
+
+			return -1;
+		}
+
 	public:
 		std::string subEntityTag;
 
@@ -117,6 +135,24 @@ namespace mmo
 		void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) override
 		{
 			applier.Apply(*this, configuration);
+		}
+
+		int32 GetPropertyValueIndex(const String& valueId) const
+		{
+			if (valueId.empty())
+			{
+				return possibleValues.empty() ? -1 : 0;
+			}
+
+			for (size_t i = 0; i < possibleValues.size(); ++i)
+			{
+				if (possibleValues[i].valueId == valueId)
+				{
+					return static_cast<int32>(i);
+				}
+			}
+
+			return -1;
 		}
 
 	public:
@@ -176,6 +212,8 @@ namespace mmo
 		}
 
 		void Serialize(io::Writer& writer) const;
+
+		CustomizationPropertyGroup* GetProperty(const std::string& name);
 
 	protected:
 		bool ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);

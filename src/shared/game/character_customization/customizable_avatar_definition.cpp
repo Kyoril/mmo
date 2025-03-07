@@ -98,6 +98,18 @@ namespace mmo
 		}
 	}
 
+	CustomizationPropertyGroup* CustomizableAvatarDefinition::GetProperty(const std::string& name)
+	{
+		for (auto& property : m_properties)
+		{
+			if (property->GetName() == name)
+			{
+				return property.get();
+			}
+		}
+		return nullptr;
+	}
+
 	bool CustomizableAvatarDefinition::ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		// We can only have this chunk once

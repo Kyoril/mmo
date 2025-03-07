@@ -42,13 +42,6 @@ namespace mmo
 		Rect m_lastFrameRect;
 		ModelFrame* m_modelFrame;
 		scoped_connection m_frameRenderEndCon;
-		std::unique_ptr<Scene> m_scene;
-		SceneNode* m_entityNode = nullptr;
-		SceneNode* m_cameraAnchorNode = nullptr;
-		SceneNode* m_cameraNode = nullptr;
-		Entity* m_entity = nullptr;
-		Camera* m_camera = nullptr;
-		AnimationState* m_animationState = nullptr;
 		
 	};
 }

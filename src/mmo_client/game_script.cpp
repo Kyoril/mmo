@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "action_bar.h"
+#include "char_create_info.h"
 #include "cursor.h"
 #include "loot_client.h"
 #include "platform.h"
@@ -619,7 +620,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -632,6 +633,7 @@ namespace mmo
 		, m_questClient(questClient)
 		, m_audio(audio)
 		, m_partyInfo(partyInfo)
+		, m_charCreateInfo(charCreateInfo)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -699,6 +701,8 @@ namespace mmo
 			luabind::class_<mmo::RealmData>("RealmData")
 			.def_readonly("id", &mmo::RealmData::id)
 			.def_readonly("name", &mmo::RealmData::name)),
+
+			
 
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
@@ -875,6 +879,27 @@ namespace mmo
 				
 			luabind::def<std::function<std::shared_ptr<UnitHandle>(const String&)>>("GetUnit", [this](const String& unitName) { return GetUnitHandleByName(unitName); }),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
+
+			luabind::def<std::function<void(Frame*)>>("SetCharCustomizeFrame", [this](Frame* frame) { m_charCreateInfo.SetCharacterCreationFrame(frame); }),
+			luabind::def<std::function<void(int32)>>("SetCharacterClass", [this](int32 classId) { m_charCreateInfo.SetSelectedClass(classId); }),
+			luabind::def<std::function<void(int32)>>("SetCharacterGender", [this](int32 genderId) { m_charCreateInfo.SetSelectedGender(genderId); }),
+			luabind::def<std::function<void(int32)>>("SetCharacterRace", [this](int32 raceId) { m_charCreateInfo.SetSelectedGender(raceId); }),
+			luabind::def<std::function<int32()>>("GetCharacterRace", [this]() { return m_charCreateInfo.GetSelectedRace(); }),
+			luabind::def<std::function<int32()>>("GetCharacterGender", [this]() { return m_charCreateInfo.GetSelectedGender(); }),
+			luabind::def<std::function<int32()>>("GetCharacterClass", [this]() { return m_charCreateInfo.GetSelectedClass(); }),
+			luabind::def<std::function<void()>>("ResetCharCustomize", [this]() { m_charCreateInfo.ResetCharacterCreation(); }),
+			luabind::def<std::function<void(const String&, bool)>>("CycleCustomizationProperty", [this](const String& property, bool forward) { m_charCreateInfo.CycleCustomizationProperty(property, forward, true); }),
+			luabind::def<std::function<int32()>>("GetNumCustomizationProperties", [this]() { return static_cast<int32>(m_charCreateInfo.GetPropertyNames().size()); }),
+			luabind::def<std::function<const char*(int32)>>("GetCustomizationProperty", [this](int32 index) -> const char*
+			{
+				const auto& names = m_charCreateInfo.GetPropertyNames();
+				if (index < 0 || index >= names.size())
+				{
+					return nullptr;
+				}
+
+				return names[index].c_str();
+			}),
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),

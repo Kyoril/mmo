@@ -49,6 +49,8 @@
 #include "quest_client.h"
 #include "party_info.h"
 
+#include "char_create_info.h"
+
 
 ////////////////////////////////////////////////////////////////
 // Network handler
@@ -274,6 +276,8 @@ namespace mmo
 	static std::unique_ptr<QuestClient> s_questClient;
 	static std::unique_ptr<PartyInfo> s_partyInfo;
 
+	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -359,6 +363,8 @@ namespace mmo
 			s_questCache->Deserialize(reader);
 		}
 
+		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project);
+
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
@@ -379,7 +385,7 @@ namespace mmo
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

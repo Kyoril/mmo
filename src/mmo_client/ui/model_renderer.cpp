@@ -17,14 +17,9 @@ namespace mmo
 	{
 	}
 
-	void ModelRenderer::Update(float elapsedSeconds)
+	void ModelRenderer::Update(const float elapsedSeconds)
 	{
 		FrameRenderer::Update(elapsedSeconds);
-
-		if (m_animationState)
-		{
-			m_animationState->AddTime(elapsedSeconds);
-		}
 
 	}
 
@@ -34,21 +29,6 @@ namespace mmo
 		if (!m_renderTexture || !m_modelFrame)
 		{
 			return;
-		}
-
-		// Get the model frame's mesh and stop if there is no mesh to render
-		if ((!m_scene && m_modelFrame->GetMesh()) ||
-			(m_scene && m_entity && m_entity->GetMesh() != m_modelFrame->GetMesh()))
-		{
-			m_frame->GetGeometryBuffer().Reset();
-			m_frame->Invalidate(true);
-			NotifyFrameAttached();
-		}
-
-		if (m_modelFrame && m_scene)
-		{
-			m_entityNode->SetOrientation(Quaternion(Degree(m_modelFrame->GetYaw()), Vector3::UnitY));
-			m_cameraNode->SetPosition(Vector3::UnitZ * m_modelFrame->GetZoom());
 		}
 
 		// Grab the graphics device instance
@@ -91,11 +71,11 @@ namespace mmo
 		// Activate render target
 		m_renderTexture->Activate();
 		m_renderTexture->Clear(mmo::ClearFlags::All);
-		
-		if (m_scene && m_camera)
+
+		if (m_modelFrame && m_modelFrame->GetCamera())
 		{
-			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-			m_scene->Render(*m_camera);
+			m_modelFrame->GetCamera()->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
+			m_modelFrame->GetScene().Render(*m_modelFrame->GetCamera());
 		}
 
 		// Restore state before drawing the frame's geometry buffer
@@ -132,36 +112,10 @@ namespace mmo
 		m_frameRenderEndCon = m_frame->RenderingEnded.connect([this]() {
 			m_frame->Invalidate(false);
 		});
-
-		if (m_modelFrame->GetMesh())
-		{
-			m_scene = std::make_unique<Scene>();
-			m_entityNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::Zero, Quaternion(Degree(m_modelFrame->GetYaw()), Vector3::UnitY));
-			m_entity = m_scene->CreateEntity("CharacterMesh", m_modelFrame->GetMesh());
-			m_entityNode->AttachObject(*m_entity);
-
-			m_cameraAnchorNode = m_scene->GetRootSceneNode().CreateChildSceneNode(Vector3::UnitY, Quaternion(Degree(-120), Vector3::UnitY));
-			m_cameraNode = m_cameraAnchorNode->CreateChildSceneNode(Vector3::UnitZ * m_modelFrame->GetZoom());
-			m_camera = m_scene->CreateCamera("Camera");
-			m_cameraNode->AttachObject(*m_camera);
-
-			if (!m_modelFrame->GetAnimation().empty())
-			{
-				m_animationState = m_entity->GetAnimationState(m_modelFrame->GetAnimation());
-				if (m_animationState)
-				{
-					m_animationState->SetLoop(true);
-					m_animationState->SetEnabled(true);
-				}
-			}
-		}
 	}
 
 	void ModelRenderer::NotifyFrameDetached()
 	{
-		m_animationState = nullptr;
-		m_scene.reset();
-
 		// We no longer manually reset the frame
 		m_frame->RemoveFlags(static_cast<uint32>(FrameFlags::ManualResetBuffer));
 
