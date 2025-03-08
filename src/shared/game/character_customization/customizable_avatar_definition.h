@@ -7,6 +7,7 @@
 
 #include "base/chunk_reader.h"
 #include "base/chunk_writer.h"
+#include "base/id_generator.h"
 #include "base/macros.h"
 
 namespace mmo
@@ -30,13 +31,15 @@ namespace mmo
 
 	struct VisibilitySetValue
 	{
-		std::string valueId;                // e.g. "LongHair", "ShortHair", etc.
+		uint32_t valueId;
+		std::string valueName;                // e.g. "LongHair", "ShortHair", etc.
 		std::vector<std::string> visibleSubEntities;
 	};
 
 	struct MaterialOverrideValue
 	{
-		std::string valueId; // e.g. "DarkSkin", "FairSkin"
+		uint32_t valueId;
+		std::string valueName;
 
 		// For each sub-entity, which material do we apply?
 		// Could be a map or a vector of pairs.
@@ -59,7 +62,7 @@ namespace mmo
 	class CustomizationPropertyGroup
 	{
 	public:
-		explicit CustomizationPropertyGroup(const std::string& name) : m_name(name) {}
+		explicit CustomizationPropertyGroup(uint32 id, const std::string& name) : m_id(id), m_name(name) {}
 		virtual ~CustomizationPropertyGroup() = default;
 
 	public:
@@ -71,7 +74,13 @@ namespace mmo
 
 		virtual void Apply(CustomizationPropertyGroupApplier& applier, const AvatarConfiguration& configuration) = 0;
 
+		[[nodiscard]] uint32 GetId() const { return m_id; }
+
+		void SetId(const uint32 id) { m_id = id; }
+
 	protected:
+		uint32 m_id;
+
 		std::string m_name;
 	};
 
@@ -79,8 +88,8 @@ namespace mmo
 	class VisibilitySetPropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		explicit VisibilitySetPropertyGroup(const std::string& name)
-			: CustomizationPropertyGroup(name)
+		explicit VisibilitySetPropertyGroup(uint32 id, const std::string& name)
+			: CustomizationPropertyGroup(id, name)
 		{
 		}
 
@@ -94,13 +103,26 @@ namespace mmo
 			applier.Apply(*this, configuration);
 		}
 
-		int32 GetPropertyValueIndex(const String& valueId) const
+		int32 GetPropertyValueIndex(const String& valueName) const
 		{
-			if (valueId.empty())
+			if (valueName.empty())
 			{
 				return -1;
 			}
 
+			for (size_t i = 0; i < possibleValues.size(); ++i)
+			{
+				if (possibleValues[i].valueName == valueName)
+				{
+					return static_cast<int32>(i);
+				}
+			}
+
+			return -1;
+		}
+
+		int32 GetPropertyValueIndex(const uint32 valueId) const
+		{
 			for (size_t i = 0; i < possibleValues.size(); ++i)
 			{
 				if (possibleValues[i].valueId == valueId)
@@ -116,14 +138,16 @@ namespace mmo
 		std::string subEntityTag;
 
 		std::vector<VisibilitySetValue> possibleValues;
+
+		IdGenerator<uint32> idGenerator { 1 };
 	};
 
 	// Another derived type
 	class MaterialOverridePropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		explicit MaterialOverridePropertyGroup(const std::string& name)
-			: CustomizationPropertyGroup(name)
+		explicit MaterialOverridePropertyGroup(uint32 id, const std::string& name)
+			: CustomizationPropertyGroup(id, name)
 		{
 		}
 
@@ -137,13 +161,26 @@ namespace mmo
 			applier.Apply(*this, configuration);
 		}
 
-		int32 GetPropertyValueIndex(const String& valueId) const
+		int32 GetPropertyValueIndex(const String& valueName) const
 		{
-			if (valueId.empty())
+			if (valueName.empty())
 			{
 				return possibleValues.empty() ? -1 : 0;
 			}
 
+			for (size_t i = 0; i < possibleValues.size(); ++i)
+			{
+				if (possibleValues[i].valueName == valueName)
+				{
+					return static_cast<int32>(i);
+				}
+			}
+
+			return -1;
+		}
+
+		int32 GetPropertyValueIndex(const uint32 valueId) const
+		{
 			for (size_t i = 0; i < possibleValues.size(); ++i)
 			{
 				if (possibleValues[i].valueId == valueId)
@@ -157,14 +194,16 @@ namespace mmo
 
 	public:
 		std::vector<MaterialOverrideValue> possibleValues;
+
+		IdGenerator<uint32> idGenerator { 1 };
 	};
 
 	// Another derived type
 	class ScalarParameterPropertyGroup final : public CustomizationPropertyGroup
 	{
 	public:
-		explicit ScalarParameterPropertyGroup(const std::string& name)
-			: CustomizationPropertyGroup(name), minValue(0.0f), maxValue(1.0f)
+		explicit ScalarParameterPropertyGroup(uint32 id, const std::string& name)
+			: CustomizationPropertyGroup(id, name), minValue(0.0f), maxValue(1.0f)
 		{
 		}
 
@@ -215,6 +254,11 @@ namespace mmo
 
 		CustomizationPropertyGroup* GetProperty(const std::string& name);
 
+		uint32 GetNextPropertyId()
+		{
+			return m_propertyIdGenerator.GenerateId();
+		}
+
 	protected:
 		bool ReadVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
@@ -257,6 +301,10 @@ namespace mmo
 		String m_baseMesh;
 
 		Properties m_properties;
+
+		uint32 m_version;
+
+		IdGenerator<uint32> m_propertyIdGenerator { 1 };
 	};
 
 	class AvatarConfiguration
@@ -276,11 +324,10 @@ namespace mmo
 			}
 		}
 
-
 	public:
 		// For each property group that is a "dropdown" (VisibilitySet or MaterialOverride),
 		// store the chosen "valueId"
-		std::unordered_map<std::string, std::string> chosenOptionPerGroup;
+		std::unordered_map<std::string, uint32> chosenOptionPerGroup;
 
 		// For each property group that is a scalar (like Height),
 		// store the chosen float 

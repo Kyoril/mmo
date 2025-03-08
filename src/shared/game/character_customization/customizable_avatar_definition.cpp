@@ -10,7 +10,7 @@ namespace mmo
 	static const ChunkMagic AvatarDefinitionChunk = MakeChunkMagic('AVDF');
 	static const ChunkMagic PropertyGroupChunk = MakeChunkMagic('PRGP');
 
-	constexpr uint32 CurrentVersion = 1;
+	constexpr uint32 CurrentVersion = 2;
 
 	CustomizableAvatarDefinition::CustomizableAvatarDefinition(String baseMesh)
 		: m_baseMesh(std::move(baseMesh))
@@ -41,6 +41,10 @@ namespace mmo
 		{
 			ChunkWriter definitionChunk(AvatarDefinitionChunk, writer);
 			writer << io::write_dynamic_range<uint16>(m_baseMesh);
+
+			// Write the next id for the property id generator
+			writer << io::write<uint32>(m_propertyIdGenerator.GetCurrentId());
+
 			definitionChunk.Finish();
 		}
 
@@ -50,15 +54,21 @@ namespace mmo
 			ChunkWriter propertyChunk(PropertyGroupChunk, writer);
 			writer << io::write_dynamic_range<uint8>(property->GetName());
 			writer << io::write<uint32>(static_cast<uint32>(property->GetType()));
+			writer << io::write<uint32>(property->GetId());
+
 			switch (property->GetType())
 			{
 			case CharacterCustomizationPropertyType::MaterialOverride:
 			{
 				auto& matProp = static_cast<MaterialOverridePropertyGroup&>(*property);
+
+				writer << io::write<uint32>(matProp.idGenerator.GetCurrentId());
 				writer << io::write<uint8>(matProp.possibleValues.size());
+
 				for (const auto& value : matProp.possibleValues)
 				{
-					writer << io::write_dynamic_range<uint8>(value.valueId);
+					writer << io::write<uint32>(value.valueId);
+					writer << io::write_dynamic_range<uint8>(value.valueName);
 					writer << io::write<uint8>(value.subEntityToMaterial.size());
 					for (const auto& kvp : value.subEntityToMaterial)
 					{
@@ -72,10 +82,13 @@ namespace mmo
 			{
 				auto& visProp = static_cast<VisibilitySetPropertyGroup&>(*property);
 				writer << io::write_dynamic_range<uint8>(visProp.subEntityTag);
+				writer << io::write<uint32>(visProp.idGenerator.GetCurrentId());
 				writer << io::write<uint8>(visProp.possibleValues.size());
+
 				for (const auto& value : visProp.possibleValues)
 				{
-					writer << io::write_dynamic_range<uint8>(value.valueId);
+					writer << io::write<uint32>(value.valueId);
+					writer << io::write_dynamic_range<uint8>(value.valueName);
 					writer << io::write<uint8>(value.visibleSubEntities.size());
 					for (const auto& visibleEntityName : value.visibleSubEntities)
 					{
@@ -121,11 +134,13 @@ namespace mmo
 			return false;
 		}
 
-		if (version != CurrentVersion)
+		if (version == 0 || version > CurrentVersion)
 		{
 			ELOG("Unsupported version of customizable avatar definition: " << version);
 			return false;
 		}
+
+		m_version = version;
 
 		// Add new chunk readers
 		AddChunkHandler(*AvatarDefinitionChunk, true, *this, &CustomizableAvatarDefinition::ReadAvatarDefinitionChunk);
@@ -142,6 +157,19 @@ namespace mmo
 		if (!(reader >> io::read_container<uint16>(m_baseMesh)))
 		{
 			return false;
+		}
+
+		m_propertyIdGenerator.Reset();
+
+		if (m_version >= 2)
+		{
+			uint32 nextId;
+			if (!(reader >> io::read<uint32>(nextId)))
+			{
+				return false;
+			}
+
+			m_propertyIdGenerator.NotifyId(nextId);
 		}
 
 		return reader;
@@ -163,13 +191,40 @@ namespace mmo
 			return false;
 		}
 
+		uint32 nextId;
+		if (m_version >= 2)
+		{
+			// Read the id generator state
+			if (!(reader >> io::read<uint32>(nextId)))
+			{
+				return false;
+			}
+
+			m_propertyIdGenerator.NotifyId(nextId);
+		}
+		else
+		{
+			nextId = m_propertyIdGenerator.GenerateId();
+		}
+
 		std::unique_ptr<CustomizationPropertyGroup> property;
 		switch (static_cast<CharacterCustomizationPropertyType>(type))
 		{
 		case CharacterCustomizationPropertyType::MaterialOverride:
 		{
-			property = std::make_unique<MaterialOverridePropertyGroup>(name);
+			property = std::make_unique<MaterialOverridePropertyGroup>(nextId, name);
 			auto& matProp = static_cast<MaterialOverridePropertyGroup&>(*property);
+
+			if (m_version >= 2)
+			{
+				if (!(reader >> io::read<uint32>(nextId)))
+				{
+					return false;
+				}
+
+				matProp.idGenerator.NotifyId(nextId);
+			}
+
 			uint8 numValues;
 			if (!(reader >> io::read<uint8>(numValues)))
 			{
@@ -178,15 +233,34 @@ namespace mmo
 			for (uint8 i = 0; i < numValues; ++i)
 			{
 				MaterialOverrideValue value;
-				if (!(reader >> io::read_container<uint8>(value.valueId)))
+
+				if (m_version >= 2)
+				{
+					if (!(reader >> io::read<uint32>(value.valueId)))
+					{
+						return false;
+					}
+
+					// Just in case!
+					matProp.idGenerator.NotifyId(value.valueId);
+				}
+				else
+				{
+					// No id stored before, generate a new one!
+					value.valueId = matProp.idGenerator.GenerateId();
+				}
+
+				if (!(reader >> io::read_container<uint8>(value.valueName)))
 				{
 					return false;
 				}
+
 				uint8 numPairs;
 				if (!(reader >> io::read<uint8>(numPairs)))
 				{
 					return false;
 				}
+
 				for (uint8 j = 0; j < numPairs; ++j)
 				{
 					String subEntity;
@@ -196,20 +270,34 @@ namespace mmo
 					{
 						return false;
 					}
+
 					value.subEntityToMaterial[subEntity] = material;
 				}
+
 				matProp.possibleValues.push_back(value);
 			}
 			break;
 		}
 		case CharacterCustomizationPropertyType::VisibilitySet:
 		{
-			property = std::make_unique<VisibilitySetPropertyGroup>(name);
+			property = std::make_unique<VisibilitySetPropertyGroup>(nextId, name);
 			auto& visProp = static_cast<VisibilitySetPropertyGroup&>(*property);
 			if (!(reader >> io::read_container<uint8>(visProp.subEntityTag)))
 			{
 				return false;
 			}
+
+			if (m_version >= 2)
+			{
+				uint32 nextId;
+				if (!(reader >> io::read<uint32>(nextId)))
+				{
+					return false;
+				}
+
+				visProp.idGenerator.NotifyId(nextId);
+			}
+
 			uint8 numValues;
 			if (!(reader >> io::read<uint8>(numValues)))
 			{
@@ -218,7 +306,24 @@ namespace mmo
 			for (uint8 i = 0; i < numValues; ++i)
 			{
 				VisibilitySetValue value;
-				if (!(reader >> io::read_container<uint8>(value.valueId)))
+
+				if (m_version >= 2)
+				{
+					if (!(reader >> io::read<uint32>(value.valueId)))
+					{
+						return false;
+					}
+
+					// Just in case!
+					visProp.idGenerator.NotifyId(value.valueId);
+				}
+				else
+				{
+					// No id stored before, generate a new one!
+					value.valueId = visProp.idGenerator.GenerateId();
+				}
+
+				if (!(reader >> io::read_container<uint8>(value.valueName)))
 				{
 					return false;
 				}
@@ -242,7 +347,7 @@ namespace mmo
 		}
 		case CharacterCustomizationPropertyType::ScalarParameter:
 		{
-			property = std::make_unique<ScalarParameterPropertyGroup>(name);
+			property = std::make_unique<ScalarParameterPropertyGroup>(nextId, name);
 			auto& scalarProp = static_cast<ScalarParameterPropertyGroup&>(*property);
 			if (!(reader >> io::read<float>(scalarProp.minValue)) ||
 				!(reader >> io::read<float>(scalarProp.maxValue)))

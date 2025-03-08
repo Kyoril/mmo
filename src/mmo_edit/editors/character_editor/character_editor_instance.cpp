@@ -299,13 +299,13 @@ namespace mmo
 					switch (selectedType)
 					{
 					case 0: // MaterialOverride
-						newProp = std::make_unique<MaterialOverridePropertyGroup>(newPropName);
+						newProp = std::make_unique<MaterialOverridePropertyGroup>(m_avatarDefinition->GetNextPropertyId(), newPropName);
 						break;
 					case 1: // VisibilitySet
-						newProp = std::make_unique<VisibilitySetPropertyGroup>(newPropName);
+						newProp = std::make_unique<VisibilitySetPropertyGroup>(m_avatarDefinition->GetNextPropertyId(), newPropName);
 						break;
 					case 2: // ScalarParameter
-						newProp = std::make_unique<ScalarParameterPropertyGroup>(newPropName);
+						newProp = std::make_unique<ScalarParameterPropertyGroup>(m_avatarDefinition->GetNextPropertyId(), newPropName);
 						break;
 					}
 
@@ -323,7 +323,9 @@ namespace mmo
 			{
 				ImGui::PushID(static_cast<int>(counter));
 
-				if (ImGui::CollapsingHeader(property->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				char propertyNameBuffer[128];
+				std::snprintf(propertyNameBuffer, sizeof(propertyNameBuffer), "%s (%u)", property->GetName().c_str(), property->GetId());
+				if (ImGui::CollapsingHeader(propertyNameBuffer, ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					// Show a rename input
 					char nameBuffer[64];
@@ -373,7 +375,8 @@ namespace mmo
 		if (ImGui::Button("Add Value"))
 		{
 			VisibilitySetValue newVal;
-			newVal.valueId = "NewValue";  // default name
+			newVal.valueId = visProp.idGenerator.GenerateId();
+			newVal.valueName = "NewValue";  // default name
 			newVal.visibleSubEntities = {};
 			visProp.possibleValues.push_back(std::move(newVal));
 		}
@@ -387,14 +390,14 @@ namespace mmo
 			auto& val = visProp.possibleValues[i];
 
 			// Make a TreeNode so we can expand/collapse each value
-			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s", i, val.valueId.c_str()))
+			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s (%u)", i, val.valueName.c_str(), val.valueId))
 			{
 				// Edit the valueId
 				char idBuffer[64];
-				std::snprintf(idBuffer, sizeof(idBuffer), "%s", val.valueId.c_str());
-				if (ImGui::InputText("Value ID", idBuffer, IM_ARRAYSIZE(idBuffer)))
+				std::snprintf(idBuffer, sizeof(idBuffer), "%s", val.valueName.c_str());
+				if (ImGui::InputText("Value Name", idBuffer, IM_ARRAYSIZE(idBuffer)))
 				{
-					val.valueId = idBuffer;
+					val.valueName = idBuffer;
 				}
 
 				// Edit the list of visibleSubEntities
@@ -460,7 +463,8 @@ namespace mmo
 		if (ImGui::Button("Add Value"))
 		{
 			MaterialOverrideValue newVal;
-			newVal.valueId = "NewSkinColor"; // or something
+			newVal.valueId = matProp.idGenerator.GenerateId();
+			newVal.valueName = "NewSkinColor"; // or something
 			matProp.possibleValues.push_back(std::move(newVal));
 		}
 
@@ -468,14 +472,14 @@ namespace mmo
 		for (int i = 0; i < (int)matProp.possibleValues.size(); ++i)
 		{
 			auto& val = matProp.possibleValues[i];
-			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s", i, val.valueId.c_str()))
+			if (ImGui::TreeNode((void*)(intptr_t)i, "Value %d: %s (%u)", i, val.valueName.c_str(), val.valueId))
 			{
 				// Edit the valueId
 				char valBuf[64];
-				std::snprintf(valBuf, sizeof(valBuf), "%s", val.valueId.c_str());
+				std::snprintf(valBuf, sizeof(valBuf), "%s", val.valueName.c_str());
 				if (ImGui::InputText("Value ID", valBuf, IM_ARRAYSIZE(valBuf)))
 				{
-					val.valueId = valBuf;
+					val.valueName = valBuf;
 				}
 
 				// Now show the subEntity->material pairs
@@ -577,6 +581,8 @@ namespace mmo
 			return;
 		}
 
+		static const char* s_none = "(None)";
+
 		if (ImGui::Begin(id.c_str()))
 		{
 			// For each property group, show a dropdown to select the value
@@ -590,11 +596,22 @@ namespace mmo
 				{
 					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
 					const auto visibilityProp = static_cast<VisibilitySetPropertyGroup*>(property.get());
-					if (ImGui::BeginCombo(property->GetName().c_str(), it == m_configuration.chosenOptionPerGroup.end() ? "(None)" : it->second.c_str()))
+
+					const char* previewString = s_none;
+					if (it != m_configuration.chosenOptionPerGroup.end())
+					{
+						const int32 valueIndex = visibilityProp->GetPropertyValueIndex(it->second);
+						if (valueIndex != -1)
+						{
+							previewString = visibilityProp->possibleValues[valueIndex].valueName.c_str();
+						}
+					}
+
+					if (ImGui::BeginCombo(property->GetName().c_str(), previewString))
 					{
 						for (const auto& value : visibilityProp->possibleValues)
 						{
-							if (ImGui::Selectable(value.valueId.c_str()))
+							if (ImGui::Selectable(value.valueName.c_str()))
 							{
 								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
 
@@ -613,11 +630,21 @@ namespace mmo
 					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
 					const auto materialProp = static_cast<MaterialOverridePropertyGroup*>(property.get());
 
-					if (ImGui::BeginCombo(property->GetName().c_str(), it == m_configuration.chosenOptionPerGroup.end() ? "(None)" : it->second.c_str()))
+					const char* previewString = s_none;
+					if (it != m_configuration.chosenOptionPerGroup.end())
+					{
+						const int32 valueIndex = materialProp->GetPropertyValueIndex(it->second);
+						if (valueIndex != -1)
+						{
+							previewString = materialProp->possibleValues[valueIndex].valueName.c_str();
+						}
+					}
+
+					if (ImGui::BeginCombo(property->GetName().c_str(), previewString))
 					{
 						for (const auto& value : materialProp->possibleValues)
 						{
-							if (ImGui::Selectable(value.valueId.c_str()))
+							if (ImGui::Selectable(value.valueName.c_str()))
 							{
 								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
 
