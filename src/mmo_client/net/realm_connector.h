@@ -13,6 +13,7 @@
 #include "asio/io_service.hpp"
 #include "game/action_button.h"
 #include "game/chat_type.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "math/vector3.h"
 
 
@@ -196,7 +197,7 @@ namespace mmo
 		void EnterWorld(const CharacterView& character);
 
 		/// Sends the command to create a new character to the realm.
-		void CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender);
+		void CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender, const AvatarConfiguration& customization);
 
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);

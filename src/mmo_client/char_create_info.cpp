@@ -3,12 +3,15 @@
 #include "char_create_info.h"
 #include "client_data/project.h"
 #include "scene_graph/material_manager.h"
+#include "game/character_customization/avatar_definition_mgr.h"
+#include "net/realm_connector.h"
 #include "ui/model_frame.h"
 
 namespace mmo
 {
-	CharCreateInfo::CharCreateInfo(const proto_client::Project& project)
+	CharCreateInfo::CharCreateInfo(const proto_client::Project& project, RealmConnector& realmConnector)
 		: m_project(project)
+		, m_realmConnector(realmConnector)
 	{
 	}
 
@@ -115,7 +118,7 @@ namespace mmo
 			return;
 		}
 
-		CustomizationPropertyGroup* propertyDefinition = m_avatarDefinition->GetProperty(propertyName);
+		const CustomizationPropertyGroup* propertyDefinition = m_avatarDefinition->GetProperty(propertyName);
 		if (!propertyDefinition)
 		{
 			ELOG("Property named " << propertyName << " not found in avatar definition!");
@@ -126,7 +129,7 @@ namespace mmo
 		{
 			case CharacterCustomizationPropertyType::VisibilitySet:
 			{
-				const auto visibilityProperty = dynamic_cast<VisibilitySetPropertyGroup*>(propertyDefinition);
+				const auto visibilityProperty = dynamic_cast<const VisibilitySetPropertyGroup*>(propertyDefinition);
 				if (!visibilityProperty)
 				{
 					return;
@@ -139,7 +142,7 @@ namespace mmo
 					return;
 				}
 
-				auto& currentOption = m_configuration.chosenOptionPerGroup[propertyName];
+				auto& currentOption = m_configuration.chosenOptionPerGroup[propertyDefinition->GetId()];
 				int32 index = visibilityProperty->GetPropertyValueIndex(currentOption);
 				if (index == -1 && !forward)
 				{
@@ -155,7 +158,7 @@ namespace mmo
 
 			case CharacterCustomizationPropertyType::MaterialOverride:
 			{
-				const auto materialProperty = dynamic_cast<MaterialOverridePropertyGroup*>(propertyDefinition);
+				const auto materialProperty = dynamic_cast<const MaterialOverridePropertyGroup*>(propertyDefinition);
 				if (!materialProperty)
 				{
 					return;
@@ -168,7 +171,7 @@ namespace mmo
 					return;
 				}
 
-				auto& currentOption = m_configuration.chosenOptionPerGroup[propertyName];
+				auto& currentOption = m_configuration.chosenOptionPerGroup[propertyDefinition->GetId()];
 				int32 index = materialProperty->GetPropertyValueIndex(currentOption);
 				if (index == -1 && !forward)
 				{
@@ -187,6 +190,15 @@ namespace mmo
 		{
 			ApplyCustomizations();
 		}
+	}
+
+	void CharCreateInfo::CreateCharacter(const String& name) const
+	{
+		m_realmConnector.CreateCharacter(name,
+			static_cast<uint8>(m_selectedRace),
+			static_cast<uint8>(m_selectedClass),
+			static_cast<uint8>(m_selectedGender),
+			m_configuration);
 	}
 
 	void CharCreateInfo::RefreshModel()
@@ -224,21 +236,16 @@ namespace mmo
 			m_configuration.chosenOptionPerGroup.clear();
 			m_configuration.scalarValues.clear();
 
-			// Load avatar definition (TODO: Cache this shit and not load it every time again!)
-			m_avatarDefinition = std::make_unique<CustomizableAvatarDefinition>();
-			if (const auto file = AssetRegistry::OpenFile(model->filename()))
+			// Load avatar definition
+			m_avatarDefinition = AvatarDefinitionManager::Get().Load(model->filename());
+			if (m_avatarDefinition)
 			{
-				io::StreamSource source(*file);
-				io::Reader reader(source);
-				if (m_avatarDefinition->Read(reader))
-				{
-					m_characterCreationFrame->SetModelFile(m_avatarDefinition->GetBaseMesh());
+				m_characterCreationFrame->SetModelFile(m_avatarDefinition->GetBaseMesh());
 
-					for (const auto& property : *m_avatarDefinition)
-					{
-						m_propertyNameCache.push_back(property->GetName());
-						CycleCustomizationProperty(property->GetName(), true, false);
-					}
+				for (const auto& property : *m_avatarDefinition)
+				{
+					m_propertyNameCache.push_back(property->GetName());
+					CycleCustomizationProperty(property->GetName(), true, false);
 				}
 			}
 		}
@@ -290,7 +297,7 @@ namespace mmo
 			}
 		}
 
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
 			// Nothing to do here because we have no value set
@@ -326,7 +333,7 @@ namespace mmo
 			return;
 		}
 
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
 			// Nothing to do here because we have no value set

@@ -363,7 +363,7 @@ namespace mmo
 			s_questCache->Deserialize(reader);
 		}
 
-		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project);
+		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
 
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);

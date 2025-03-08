@@ -21,6 +21,7 @@
 #include "base/utilities.h"
 #include "game/chat_type.h"
 #include "game/quest_info.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/game_player_s.h"
 
 
@@ -294,11 +295,13 @@ namespace mmo
 	{
 		uint8 race = 0, characterClass = 0, gender = 0;
 		std::string characterName;
+		AvatarConfiguration configuration;
 		if (!(packet
 			>> io::read_container<uint8>(characterName)
 			>> io::read<uint8>(race)
 			>> io::read<uint8>(characterClass)
 			>> io::read<uint8>(gender)
+			>> configuration
 			))
 		{
 			return PacketParseResult::Disconnect;
@@ -342,6 +345,23 @@ namespace mmo
 				});
 			return PacketParseResult::Pass;
 		}
+
+		// Get model
+		const uint32 modelId = gender == 0 ? raceEntry->malemodel() : raceEntry->femalemodel();
+		const proto::ModelDataEntry* model = m_project.models.getById(modelId);
+		if (!model)
+		{
+			ELOG("Unable to find model data for model " << log_hex_digit(modelId));
+			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		// TODO: Load avatar definition and validate chosen property values
 
 		std::weak_ptr weakThis{ shared_from_this() };
 		auto handler = [weakThis](const std::optional<CharCreateResult>& result) {
@@ -424,7 +444,7 @@ namespace mmo
 		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
-			spellIds, mana, rage, energy, actionButtons);
+			spellIds, mana, rage, energy, actionButtons, configuration);
 		
 		return PacketParseResult::Pass;
 	}

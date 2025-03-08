@@ -245,15 +245,16 @@ namespace mmo
 		});
 	}
 
-	void RealmConnector::CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender)
+	void RealmConnector::CreateCharacter(const std::string& name, uint8 race, uint8 characterClass, uint8 characterGender, const AvatarConfiguration& customization)
 	{
-		sendSinglePacket([&name, race, characterClass, characterGender](game::OutgoingPacket& packet) {
+		sendSinglePacket([&name, race, characterClass, characterGender, &customization](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CreateChar);
 			packet
 				<< io::write_dynamic_range<uint8>(name)
 				<< io::write<uint8>(race)
 				<< io::write<uint8>(characterClass)
-				<< io::write<uint8>(characterGender);
+				<< io::write<uint8>(characterGender)
+				<< customization;
 			packet.Finish();
 			});
 	}

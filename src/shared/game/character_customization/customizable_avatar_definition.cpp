@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "customizable_avatar_definition.h"
 
@@ -359,6 +360,66 @@ namespace mmo
 		}
 
 		m_properties.push_back(std::move(property));
+
+		return reader;
+	}
+
+	io::Writer& operator<<(io::Writer& writer, const AvatarConfiguration& configuration)
+	{
+		writer << io::write<uint16>(configuration.chosenOptionPerGroup.size());
+		for (const auto& kvp : configuration.chosenOptionPerGroup)
+		{
+			writer << io::write<uint32>(kvp.first);
+			writer << io::write<uint32>(kvp.second);
+		}
+
+		writer << io::write<uint16>(configuration.scalarValues.size());
+		for (const auto& kvp : configuration.scalarValues)
+		{
+			writer << io::write<uint32>(kvp.first);
+			writer << io::write<float>(kvp.second);
+		}
+
+		return writer;
+	}
+
+	io::Reader& operator>>(io::Reader& reader, AvatarConfiguration& configuration)
+	{
+		uint16 numGroups;
+		if (!(reader >> io::read<uint16>(numGroups)))
+		{
+			return reader;
+		}
+
+		for (uint16 i = 0; i < numGroups; ++i)
+		{
+			uint32 groupId;
+			uint32 valueId;
+			if (!(reader >> io::read<uint32>(groupId)) ||
+				!(reader >> io::read<uint32>(valueId)))
+			{
+				return reader;
+			}
+			configuration.chosenOptionPerGroup[groupId] = valueId;
+		}
+
+		uint16 numScalars;
+		if (!(reader >> io::read<uint16>(numScalars)))
+		{
+			return reader;
+		}
+
+		for (uint16 i = 0; i < numScalars; ++i)
+		{
+			uint32 groupId;
+			float scalarValue;
+			if (!(reader >> io::read<uint32>(groupId)) ||
+				!(reader >> io::read<float>(scalarValue)))
+			{
+				return reader;
+			}
+			configuration.scalarValues[groupId] = scalarValue;
+		}
 
 		return reader;
 	}

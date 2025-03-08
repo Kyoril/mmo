@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
 #pragma once
 
 #include "character_customization_property.h"
@@ -327,10 +329,14 @@ namespace mmo
 	public:
 		// For each property group that is a "dropdown" (VisibilitySet or MaterialOverride),
 		// store the chosen "valueId"
-		std::unordered_map<std::string, uint32> chosenOptionPerGroup;
+		std::unordered_map<uint32, uint32> chosenOptionPerGroup;
 
 		// For each property group that is a scalar (like Height),
 		// store the chosen float 
-		std::unordered_map<std::string, float> scalarValues;
+		std::unordered_map<uint32, float> scalarValues;
 	};
+
+	io::Writer& operator<<(io::Writer& writer, const AvatarConfiguration& configuration);
+
+	io::Reader& operator>>(io::Reader& reader, AvatarConfiguration& configuration);
 }

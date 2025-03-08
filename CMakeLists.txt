@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.12)
 # Generate a solution file
 project(mmo)
 
+cmake_policy(SET CMP0169 OLD)
+
 include(FetchContent)
 
 FetchContent_Declare(

@@ -8,6 +8,8 @@
 
 namespace mmo
 {
+	class RealmConnector;
+
 	namespace proto_client
 	{
 		class ModelDataEntry;
@@ -18,7 +20,7 @@ namespace mmo
 	class CharCreateInfo final : public CustomizationPropertyGroupApplier
 	{
 	public:
-		explicit CharCreateInfo(const proto_client::Project& project);
+		explicit CharCreateInfo(const proto_client::Project& project, RealmConnector& realmConnector);
 
 		~CharCreateInfo() override = default;
 
@@ -43,6 +45,8 @@ namespace mmo
 
 		void CycleCustomizationProperty(const String& propertyName, bool forward, bool apply);
 
+		void CreateCharacter(const String& name) const;
+
 	private:
 		void RefreshModel();
 
@@ -56,6 +60,8 @@ namespace mmo
 	private:
 		const proto_client::Project& m_project;
 
+		RealmConnector& m_realmConnector;
+
 		ModelFrame* m_characterCreationFrame = nullptr;
 
 		int32 m_selectedRace = 0;
@@ -68,7 +74,7 @@ namespace mmo
 
 		const proto_client::ModelDataEntry* m_selectedModel = nullptr;
 
-		std::unique_ptr<CustomizableAvatarDefinition> m_avatarDefinition;
+		std::shared_ptr<CustomizableAvatarDefinition> m_avatarDefinition;
 
 		AvatarConfiguration m_configuration;
 

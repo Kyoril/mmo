@@ -5,6 +5,7 @@
 #include "base/clock.h"
 #include "client_data/project.h"
 #include "game/spell.h"
+#include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
 #include "scene_graph/material_manager.h"
@@ -1230,19 +1231,19 @@ namespace mmo
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
 
-		CustomizableAvatarDefinition* definition = nullptr;
+		m_customizationDefinition = nullptr;
 		String meshFile = modelEntry->filename();
 		if (modelEntry->flags() & model_data_flags::IsCustomizable)
 		{
 			// Check if the model is a mesh file or a .char file
-			definition = ObjectMgr::GetCharDefinition(modelEntry->filename());
-			if (!definition)
+			m_customizationDefinition = AvatarDefinitionManager::Get().Load(modelEntry->filename());
+			if (!m_customizationDefinition)
 			{
 				ELOG("Failed to find customizable avatar definition for " << modelEntry->filename());
 				return;
 			}
 
-			meshFile = definition->GetBaseMesh();
+			meshFile = m_customizationDefinition->GetBaseMesh();
 		}
 
 		// Update or create entity
@@ -1259,7 +1260,7 @@ namespace mmo
 			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
 		}
 
-		if (definition)
+		if (m_customizationDefinition)
 		{
 			// TODO: Apply preconfigured configuration
 

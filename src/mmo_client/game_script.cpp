@@ -745,7 +745,6 @@ namespace mmo
 					.def("IsConnected", &RealmConnector::IsConnected)
 	               .def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
 	               .def("GetRealmName", &RealmConnector::GetRealmName)
-	               .def("CreateCharacter", &RealmConnector::CreateCharacter)
 	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
 
 			luabind::scope(
@@ -880,6 +879,7 @@ namespace mmo
 			luabind::def<std::function<std::shared_ptr<UnitHandle>(const String&)>>("GetUnit", [this](const String& unitName) { return GetUnitHandleByName(unitName); }),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 
+			luabind::def<std::function<void(const String&)>>("CreateCharacter", [this](const String& name) { m_charCreateInfo.CreateCharacter(name); }),
 			luabind::def<std::function<void(Frame*)>>("SetCharCustomizeFrame", [this](Frame* frame) { m_charCreateInfo.SetCharacterCreationFrame(frame); }),
 			luabind::def<std::function<void(int32)>>("SetCharacterClass", [this](int32 classId) { m_charCreateInfo.SetSelectedClass(classId); }),
 			luabind::def<std::function<void(int32)>>("SetCharacterGender", [this](int32 genderId) { m_charCreateInfo.SetSelectedGender(genderId); }),

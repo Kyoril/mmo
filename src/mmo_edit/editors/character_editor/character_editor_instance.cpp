@@ -594,7 +594,7 @@ namespace mmo
 				{
 				case CharacterCustomizationPropertyType::VisibilitySet:
 				{
-					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
+					auto it = m_configuration.chosenOptionPerGroup.find(property->GetId());
 					const auto visibilityProp = static_cast<VisibilitySetPropertyGroup*>(property.get());
 
 					const char* previewString = s_none;
@@ -613,7 +613,7 @@ namespace mmo
 						{
 							if (ImGui::Selectable(value.valueName.c_str()))
 							{
-								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
+								m_configuration.chosenOptionPerGroup[property->GetId()] = value.valueId;
 
 								// Apply the visibility set
 								// For each sub-entity in value.visibleSubEntities, set visibility
@@ -627,7 +627,7 @@ namespace mmo
 				}
 				case CharacterCustomizationPropertyType::MaterialOverride:
 				{
-					auto it = m_configuration.chosenOptionPerGroup.find(property->GetName());
+					auto it = m_configuration.chosenOptionPerGroup.find(property->GetId());
 					const auto materialProp = static_cast<MaterialOverridePropertyGroup*>(property.get());
 
 					const char* previewString = s_none;
@@ -646,7 +646,7 @@ namespace mmo
 						{
 							if (ImGui::Selectable(value.valueName.c_str()))
 							{
-								m_configuration.chosenOptionPerGroup[property->GetName()] = value.valueId;
+								m_configuration.chosenOptionPerGroup[property->GetId()] = value.valueId;
 
 								// Apply the visibility set
 								// For each sub-entity in value.visibleSubEntities, set visibility
@@ -730,7 +730,7 @@ namespace mmo
 			
 		}
 
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
 			// Nothing to do here because we have no value set
@@ -755,7 +755,7 @@ namespace mmo
 
 	void CharacterEditorInstance::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
 	{
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetName());
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
 			// Nothing to do here because we have no value set

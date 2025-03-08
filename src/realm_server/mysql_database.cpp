@@ -16,6 +16,7 @@
 #include "virtual_dir/file_system_reader.h"
 #include <format>
 
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/character_data.h"
 #include "game_server/game_player_s.h"
 
@@ -237,7 +238,7 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -259,6 +260,33 @@ namespace mmo
 		}
 
 		const auto characterId = m_connection.GetLastInsertId();
+
+		// Insert character customization settings
+		if (!configuration.chosenOptionPerGroup.empty() || !configuration.scalarValues.empty())
+		{
+			std::ostringstream customizationQuery;
+			customizationQuery << "INSERT INTO `character_customization` (`character_id`, `property_group_id`, `property_value_id`, `scalar_value`) VALUES ";
+
+			for (const auto& customization : configuration.chosenOptionPerGroup)
+			{
+				customizationQuery << "('" << characterId << "', '" << customization.first << "', '" << customization.second << "', NULL),";
+			}
+			for (const auto& customization : configuration.scalarValues)
+			{
+				customizationQuery << "('" << characterId << "', '" << customization.first << "', NULL, '" << customization.second << "'),";
+			}
+
+			// Delete the last character from the customization query since this is the "," character
+			customizationQuery.seekp(-1, std::ios_base::end);
+			customizationQuery << ";";
+
+			const String query = customizationQuery.str();
+			if (!m_connection.Execute(query))
+			{
+				PrintDatabaseError();
+				return CharCreateResult::Error;
+			}
+		}
 
 		if (!spellIds.empty())
 		{

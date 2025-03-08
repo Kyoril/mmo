@@ -7,6 +7,7 @@
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "game/creature_data.h"
 #include "game/quest.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 
 namespace mmo
 {
@@ -340,6 +341,8 @@ namespace mmo
 		const proto_client::FactionTemplateEntry* m_factionTemplate = nullptr;
 
 		std::vector<std::unique_ptr<GameAuraC>> m_auras;
+
+		std::shared_ptr<CustomizableAvatarDefinition> m_customizationDefinition;
 
 	protected:
 		// Animation stuff
