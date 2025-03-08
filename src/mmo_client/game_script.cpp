@@ -695,14 +695,11 @@ namespace mmo
 			.def_readonly("id", &mmo::RealmData::id)
 			.def_readonly("name", &mmo::RealmData::name)),
 
-			
-
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
 				.def_readonly("guid", &mmo::CharacterView::GetGuid)
 				.def_readonly("name", &mmo::CharacterView::GetName)
 				.def_readonly("level", &mmo::CharacterView::GetLevel)
-				.def_readonly("displayId", &mmo::CharacterView::GetDisplayId)
 				.def_readonly("dead", &mmo::CharacterView::IsDead)
 				.def_readonly("raceId", &mmo::CharacterView::GetRaceId)
 				.def_readonly("classId", &mmo::CharacterView::GetClassId)
@@ -736,7 +733,6 @@ namespace mmo
 				luabind::class_<RealmConnector>("RealmConnector")
 	               .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
 					.def("IsConnected", &RealmConnector::IsConnected)
-	               .def("GetCharViews", &RealmConnector::GetCharacterViews, luabind::return_stl_iterator())
 	               .def("GetRealmName", &RealmConnector::GetRealmName)
 	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
 
