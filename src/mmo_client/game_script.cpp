@@ -15,6 +15,7 @@
 
 #include "action_bar.h"
 #include "char_create_info.h"
+#include "char_select.h"
 #include "cursor.h"
 #include "loot_client.h"
 #include "platform.h"
@@ -46,8 +47,6 @@ namespace luabind
 
 namespace mmo
 {
-	CharacterView s_selectedCharacter;
-
 	Cursor g_cursor;
 
 	extern std::string s_zoneName;
@@ -77,14 +76,7 @@ namespace mmo
 		{
 			return s_zoneName.c_str();
 		}
-
-		void Script_EnterWorld(const CharacterView& characterView)
-		{
-			s_selectedCharacter = characterView;
-
-			GameStateMgr::Get().SetGameState(WorldState::Name);
-		}
-		
+				
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
@@ -620,7 +612,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -634,6 +626,7 @@ namespace mmo
 		, m_audio(audio)
 		, m_partyInfo(partyInfo)
 		, m_charCreateInfo(charCreateInfo)
+		, m_charSelect(charSelect)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -879,6 +872,7 @@ namespace mmo
 			luabind::def<std::function<std::shared_ptr<UnitHandle>(const String&)>>("GetUnit", [this](const String& unitName) { return GetUnitHandleByName(unitName); }),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 
+			// Char Creation
 			luabind::def<std::function<void(const String&)>>("CreateCharacter", [this](const String& name) { m_charCreateInfo.CreateCharacter(name); }),
 			luabind::def<std::function<void(Frame*)>>("SetCharCustomizeFrame", [this](Frame* frame) { m_charCreateInfo.SetCharacterCreationFrame(frame); }),
 			luabind::def<std::function<void(int32)>>("SetCharacterClass", [this](int32 classId) { m_charCreateInfo.SetSelectedClass(classId); }),
@@ -901,9 +895,15 @@ namespace mmo
 				return names[index].c_str();
 			}),
 
+			// Char Select
+			luabind::def<std::function<void(Frame*)>>("SetCharSelectModelFrame", [this](Frame* frame) { m_charSelect.SetModelFrame(frame); }),
+			luabind::def<std::function<int32()>>("GetNumCharacters", [this]() { return m_charSelect.GetNumCharacters(); }),
+			luabind::def<std::function<const mmo::CharacterView*(int32)>>("GetCharacterInfo", [this](int32 index) { return m_charSelect.GetCharacterView(index); }),
+			luabind::def<std::function<void(int32)>>("SelectCharacter", [this](int32 index) { return m_charSelect.SelectCharacter(index); }),
+
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
-			luabind::def("EnterWorld", &Script_EnterWorld),
+			luabind::def<std::function<void()>>("EnterWorld", [this] { GameStateMgr::Get().SetGameState(WorldState::Name); }),
 			luabind::def("print", &Script_Print),
 
 			luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),

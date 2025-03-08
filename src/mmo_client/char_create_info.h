@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "base/non_copyable.h"
 #include "frame_ui/frame.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "ui/model_frame.h"
@@ -17,7 +18,7 @@ namespace mmo
 	}
 
 	/// This class manages the character creation state info in the login screen.
-	class CharCreateInfo final : public CustomizationPropertyGroupApplier
+	class CharCreateInfo final : public NonCopyable, public CustomizationPropertyGroupApplier
 	{
 	public:
 		explicit CharCreateInfo(const proto_client::Project& project, RealmConnector& realmConnector);

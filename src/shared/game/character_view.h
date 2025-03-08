@@ -7,13 +7,13 @@
 
 #include <algorithm>
 
+#include "character_customization/customizable_avatar_definition.h"
 
 namespace io
 {
 	class Reader;
 	class Writer;
 }
-
 
 namespace mmo
 {
@@ -88,6 +88,10 @@ namespace mmo
 		/// Sets the characters display id. This is a workaround because resolving the actual display id is a post processing step based on race/gender combination.
 		void SetDisplayId(const uint32 displayId) { m_displayId = displayId; }
 
+		AvatarConfiguration& GetConfiguration() { return m_configuration; }
+
+		const AvatarConfiguration& GetConfiguration() const { return m_configuration; }
+
 	private:
 		/// The character guid.
 		uint64 m_guid{};
@@ -109,6 +113,8 @@ namespace mmo
 		bool m_dead = false;
 		/// Gets the display id of the character.
 		uint32 m_displayId = 0;
+
+		AvatarConfiguration m_configuration;
 
 		// TODO: Add more attributes of a character in here, for example item display id's
 		// for previewing a character's equipment, pet display id etc. etc.

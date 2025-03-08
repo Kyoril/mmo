@@ -57,8 +57,6 @@ namespace mmo
 
 	extern uint32 g_mapId;
 
-	extern CharacterView s_selectedCharacter;
-
 	// Console command names
 	namespace command_names
 	{
@@ -145,7 +143,7 @@ namespace mmo
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 		DBNameCache& nameCache,
-		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo)
+		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -162,6 +160,7 @@ namespace mmo
 		, m_questClient(questClient)
 		, m_audio(audio)
 		, m_partyInfo(partyInfo)
+		, m_charSelect(charSelect)
 	{
 	}
 
@@ -202,10 +201,13 @@ namespace mmo
 			m_realmConnector.Disconnected.connect(*this, &WorldState::OnRealmDisconnected)
 		};
 
-		g_mapId = s_selectedCharacter.GetMapId();
+		const auto* selectedCharacter = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
+		ASSERT(selectedCharacter);
+
+		g_mapId = selectedCharacter->GetMapId();
 
 		// Send enter world request to server
-		m_realmConnector.EnterWorld(s_selectedCharacter);
+		m_realmConnector.EnterWorld(*selectedCharacter);
 		m_realmConnector.VerifyNewWorld += [this](uint32 mapId, Vector3 position, float facing)
 			{
 				if (mapId != g_mapId)

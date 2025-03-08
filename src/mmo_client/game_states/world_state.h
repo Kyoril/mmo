@@ -3,6 +3,7 @@
 #pragma once
 
 #include "audio.h"
+#include "char_select.h"
 #include "client_cache.h"
 #include "connection.h"
 #include "db_cache.h"
@@ -95,7 +96,8 @@ namespace mmo
 			TrainerClient& trainerClient,
 			QuestClient& questClient,
 			IAudio& audio,
-			PartyInfo& partyInfo);
+			PartyInfo& partyInfo,
+			CharSelect& charSelect);
 
 	public:
 		/// @brief The default name of the world state
@@ -392,6 +394,8 @@ namespace mmo
 
 		SoundIndex m_ambienceSound{ InvalidSound };
 		ChannelIndex m_ambienceChannel{ InvalidChannel };
+
+		CharSelect& m_charSelect;
 
 	private:
 		static IInputControl* s_inputControl;

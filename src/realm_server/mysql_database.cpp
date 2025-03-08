@@ -136,7 +136,7 @@ namespace mmo
 
 	std::optional<std::vector<CharacterView>> MySQLDatabase::GetCharacterViewsByAccountId(uint64 accountId)
 	{
-		mysql::Select select(m_connection, "SELECT id,name,level,map,zone,race,class,gender,flags FROM characters WHERE account_id=" + std::to_string(accountId));
+		mysql::Select select(m_connection, "SELECT `id`, `name`, `level`, `map`, `zone`, `race`, `class`, `gender`, `flags` FROM `characters` WHERE `account_id`=" + std::to_string(accountId));
 		if (select.Success())
 		{
 			std::vector<CharacterView> result;
@@ -160,18 +160,47 @@ namespace mmo
 				row.GetField<uint8, uint16>(index++, gender);
 				row.GetField(index++, flags);
 
-				result.emplace_back(
-					CharacterView(
-						guid, 
-						std::move(name), 
-						level, 
-						map, 
-						zone, 
-						race, 
-						charClass, 
-						gender,
-						(flags & character_flags::Dead) != 0,
-						0));
+				auto view = CharacterView(
+					guid,
+					std::move(name),
+					level,
+					map,
+					zone,
+					race,
+					charClass,
+					gender,
+					(flags & character_flags::Dead) != 0,
+					0);
+
+				// Load configuration as well
+				mysql::Select customizationSelect(m_connection, "SELECT `property_group_id`, `property_value_id`, `scalar_value` FROM `character_customization` WHERE `character_id`=" + std::to_string(guid));
+				if (customizationSelect.Success())
+				{
+					mysql::Row customizationRow(customizationSelect);
+					while (customizationRow)
+					{
+						uint32 propertyGroupId = 0;
+						uint32 propertyValueId = 0;
+						float scalarValue = 0.0f;
+						customizationRow.GetField(0, propertyGroupId);
+						if (customizationRow.GetField(1, propertyValueId))
+						{
+							view.GetConfiguration().chosenOptionPerGroup[propertyGroupId] = propertyValueId;
+						}
+						if (customizationRow.GetField(2, scalarValue))
+						{
+							view.GetConfiguration().scalarValues[propertyGroupId] = scalarValue;
+						}
+						customizationRow = mysql::Row::Next(customizationSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character customization data");
+				}
+
+				result.emplace_back(std::move(view));
 
 				// Next line entry
 				row = row.Next(select);

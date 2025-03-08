@@ -5,7 +5,6 @@
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
-
 namespace mmo
 {
 	io::Writer& operator<<(io::Writer& writer, const CharacterView& characterView)
@@ -20,7 +19,8 @@ namespace mmo
 			<< io::write<uint32>(characterView.m_classId)
 			<< io::write<uint8>(characterView.m_gender)
 			<< io::write<uint8>(characterView.m_dead ? 1 : 0)
-			<< io::write<uint32>(characterView.m_displayId);
+			<< io::write<uint32>(characterView.m_displayId)
+			<< characterView.m_configuration;
 	}
 
 	io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView)
@@ -35,6 +35,7 @@ namespace mmo
 			>> io::read<uint32>(outCharacterView.m_classId)
 			>> io::read<uint8>(outCharacterView.m_gender)
 			>> io::read<uint8>(outCharacterView.m_dead)
-			>> io::read<uint32>(outCharacterView.m_displayId);
+			>> io::read<uint32>(outCharacterView.m_displayId)
+			>> outCharacterView.m_configuration;
 	}
 }

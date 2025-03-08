@@ -14,6 +14,7 @@
 
 namespace mmo
 {
+	class CharSelect;
 	class CharCreateInfo;
 }
 
@@ -73,7 +74,8 @@ namespace mmo
 			QuestClient& questClient,
 			IAudio& audio,
 			PartyInfo& partyInfo,
-			CharCreateInfo& charCreateInfo);
+			CharCreateInfo& charCreateInfo,
+			CharSelect& charSelect);
 
 	public:
 		/// Gets the current lua state
@@ -158,6 +160,8 @@ namespace mmo
 		PartyInfo& m_partyInfo;
 
 		CharCreateInfo& m_charCreateInfo;
+
+		CharSelect& m_charSelect;
 
 	private:
 		void Script_ReviveMe() const;

@@ -50,6 +50,7 @@
 #include "party_info.h"
 
 #include "char_create_info.h"
+#include "char_select.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -277,6 +278,7 @@ namespace mmo
 	static std::unique_ptr<PartyInfo> s_partyInfo;
 
 	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
+	static std::unique_ptr<CharSelect> s_charSelect;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
@@ -364,6 +366,7 @@ namespace mmo
 		}
 
 		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
+		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
 
 		// Initialize loot client
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
@@ -381,11 +384,11 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_nameCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_nameCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
