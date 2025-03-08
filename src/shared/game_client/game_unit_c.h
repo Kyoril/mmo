@@ -77,7 +77,7 @@ namespace mmo
 
 	/// @brief Base class for a unit in the game client. A unit is a living object in the game world which can be interacted with,
 	///	       participate in combat and more. All player characters are also units.
-	class GameUnitC : public GameObjectC
+	class GameUnitC : public GameObjectC, public CustomizationPropertyGroupApplier
 	{
 	public:
 		signal<void(GameUnitC&, const MovementInfo&)> movementEnded;
@@ -309,6 +309,11 @@ namespace mmo
 
 		void PerformGroundCheck();
 
+	public:
+		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
+		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
+		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
+
 	protected:
 		NetClient& m_netDriver;
 		MovementInfo m_movementInfo;
@@ -362,5 +367,7 @@ namespace mmo
 
 		SceneNode* m_questGiverNode = nullptr;
 		Entity* m_questGiverEntity = nullptr;
+
+		AvatarConfiguration m_configuration;
 	};
 }

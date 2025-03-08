@@ -6,6 +6,7 @@
 #include "game_unit_s.h"
 #include "inventory.h"
 #include "game/quest.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 
 namespace mmo
 {
@@ -46,6 +47,8 @@ namespace mmo
 		~GamePlayerS() override = default;
 
 		virtual void Initialize() override;
+
+		void SetConfiguration(const AvatarConfiguration& configuration);
 
 		void SetPlayerWatcher(NetPlayerWatcher* watcher);
 
@@ -88,6 +91,8 @@ namespace mmo
 
 		/// Sets the characters group id.
 		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
+
+		void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
 
 	public:
 
@@ -195,6 +200,7 @@ namespace mmo
 		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
+		AvatarConfiguration m_configuration;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

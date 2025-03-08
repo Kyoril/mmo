@@ -1230,8 +1230,8 @@ namespace mmo
 		m_targetState = nullptr;
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
-
 		m_customizationDefinition = nullptr;
+
 		String meshFile = modelEntry->filename();
 		if (modelEntry->flags() & model_data_flags::IsCustomizable)
 		{
@@ -1263,7 +1263,7 @@ namespace mmo
 		if (m_customizationDefinition)
 		{
 			// TODO: Apply preconfigured configuration
-
+			m_configuration.Apply(*this, *m_customizationDefinition);
 		}
 
 		m_collider.radius = 0.5f;
@@ -1333,5 +1333,82 @@ namespace mmo
 
 	void GameUnitC::PerformGroundCheck()
 	{
+	}
+
+	void GameUnitC::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+		// First, hide all sub entities with the given visibility set tag
+		if (!group.subEntityTag.empty())
+		{
+			for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+			{
+				ASSERT(m_entity->GetMesh()->GetSubMeshCount() == m_entity->GetNumSubEntities());
+
+				SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(i);
+				if (subMesh.HasTag(group.subEntityTag))
+				{
+					SubEntity* subEntity = m_entity->GetSubEntity(i);
+					ASSERT(subEntity);
+					subEntity->SetVisible(false);
+				}
+			}
+
+		}
+
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
+		if (it == configuration.chosenOptionPerGroup.end())
+		{
+			// Nothing to do here because we have no value set
+			return;
+		}
+
+		// Now make each referenced sub entity visible
+		for (const auto& value : group.possibleValues)
+		{
+			if (value.valueId == it->second)
+			{
+				for (const auto& subEntityName : value.visibleSubEntities)
+				{
+					if (SubEntity* subEntity = m_entity->GetSubEntity(subEntityName))
+					{
+						subEntity->SetVisible(true);
+					}
+				}
+			}
+		}
+	}
+
+	void GameUnitC::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
+		if (it == configuration.chosenOptionPerGroup.end())
+		{
+			// Nothing to do here because we have no value set
+			return;
+		}
+
+		// Now make each referenced sub entity visible
+		for (const auto& value : group.possibleValues)
+		{
+			if (value.valueId == it->second)
+			{
+				for (const auto& pair : value.subEntityToMaterial)
+				{
+					if (SubEntity* subEntity = m_entity->GetSubEntity(pair.first))
+					{
+						MaterialPtr material = MaterialManager::Get().Load(pair.second);
+						if (material)
+						{
+							subEntity->SetMaterial(material);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	void GameUnitC::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
+	{
+
 	}
 }

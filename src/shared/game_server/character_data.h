@@ -9,6 +9,7 @@
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 #include "game/spell.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/inventory.h"
 #include "game_server/quest_status_data.h"
 
@@ -80,6 +81,7 @@ namespace mmo
 		Radian bindFacing;
 
 		uint64 groupId = 0;
+		AvatarConfiguration configuration;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -111,7 +113,8 @@ namespace mmo
 			>> data.bindFacing
 			>> io::read_range(data.attributePointsSpent)
 			>> io::read_container<uint16>(data.rewardedQuestIds)
-			>> io::read<uint64>(data.groupId)))
+			>> io::read<uint64>(data.groupId)
+			>> data.configuration))
 		{
 			return reader;
 		}
@@ -166,7 +169,8 @@ namespace mmo
 			<< data.bindFacing
 			<< io::write_range(data.attributePointsSpent)
 			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds)
-			<< io::write<uint64>(data.groupId);
+			<< io::write<uint64>(data.groupId)
+			<< data.configuration;
 
 		writer << io::write<uint16>(data.questStatus.size());
 		for (auto const& [questId, questData] : data.questStatus)

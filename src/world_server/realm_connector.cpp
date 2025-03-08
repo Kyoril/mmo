@@ -536,6 +536,7 @@ namespace mmo
 		// Create the character object
 		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
 		characterObject->Initialize();
+		characterObject->SetConfiguration(characterData.configuration);
 		characterObject->Set(object_fields::Guid, characterData.characterId);
 
 		if (characterData.position.y < 0.0f)

@@ -443,6 +443,34 @@ namespace mmo
 					}
 				}
 
+				// Load configuration
+				mysql::Select customizationSelect(m_connection, "SELECT `property_group_id`, `property_value_id`, `scalar_value` FROM `character_customization` WHERE `character_id`=" + std::to_string(characterId));
+				if (customizationSelect.Success())
+				{
+					mysql::Row customizationRow(customizationSelect);
+					while (customizationRow)
+					{
+						uint32 propertyGroupId = 0;
+						uint32 propertyValueId = 0;
+						float scalarValue = 0.0f;
+						customizationRow.GetField(0, propertyGroupId);
+						if (customizationRow.GetField(1, propertyValueId))
+						{
+							result.configuration.chosenOptionPerGroup[propertyGroupId] = propertyValueId;
+						}
+						if (customizationRow.GetField(2, scalarValue))
+						{
+							result.configuration.scalarValues[propertyGroupId] = scalarValue;
+						}
+						customizationRow = mysql::Row::Next(customizationSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character customization data");
+				}
+
 				// Load quest data
 				mysql::Select questSelect(m_connection,
 					"SELECT `quest`, `status`, `explored`, `timer`, "

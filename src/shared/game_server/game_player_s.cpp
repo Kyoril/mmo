@@ -54,6 +54,22 @@ namespace mmo
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
+	void GamePlayerS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
+	{
+		GameUnitS::WriteObjectUpdateBlock(writer, creation);
+
+		// Apply configuration
+		if (creation)
+		{
+			writer << m_configuration;
+		}
+	}
+
+	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
+	{
+		m_configuration = configuration;
+	}
+
 	void GamePlayerS::SetPlayerWatcher(NetPlayerWatcher* watcher)
 	{
 		m_netPlayerWatcher = watcher;

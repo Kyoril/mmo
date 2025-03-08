@@ -36,6 +36,16 @@ namespace mmo
 	{
 		GameUnitC::Deserialize(reader, complete);
 
+		if (complete)
+		{
+			if (!(reader >> m_configuration))
+			{
+				ELOG("Failed to read player configuration");
+			}
+
+			OnDisplayIdChanged();
+		}
+
 		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 	}
 

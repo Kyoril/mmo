@@ -309,10 +309,36 @@ namespace mmo
 		IdGenerator<uint32> m_propertyIdGenerator { 1 };
 	};
 
-	class AvatarConfiguration
+	class AvatarConfiguration final
 	{
 	public:
-		void Apply(CustomizationPropertyGroupApplier& applier, const CustomizableAvatarDefinition& definition)
+		explicit AvatarConfiguration() = default;
+
+		explicit AvatarConfiguration(const AvatarConfiguration& other)
+		{
+			chosenOptionPerGroup = other.chosenOptionPerGroup;
+			scalarValues = other.scalarValues;
+		}
+
+		explicit AvatarConfiguration(AvatarConfiguration&& other) noexcept
+		{
+			chosenOptionPerGroup = std::move(other.chosenOptionPerGroup);
+			scalarValues = std::move(other.scalarValues);
+		}
+
+		~AvatarConfiguration() = default;
+
+		AvatarConfiguration& operator=(const AvatarConfiguration& other) = default;
+
+		AvatarConfiguration& operator=(AvatarConfiguration&& other) noexcept
+		{
+			chosenOptionPerGroup = std::move(other.chosenOptionPerGroup);
+			scalarValues = std::move(other.scalarValues);
+			return *this;
+		}
+
+	public:
+		void Apply(CustomizationPropertyGroupApplier& applier, const CustomizableAvatarDefinition& definition) const
 		{
 			for (const auto& group : definition)
 			{
