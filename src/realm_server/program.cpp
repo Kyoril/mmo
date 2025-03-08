@@ -36,6 +36,7 @@
 #include <thread>
 
 #include "player_group.h"
+#include "assets/asset_registry.h"
 #include "proto_data/project.h"
 
 
@@ -157,6 +158,9 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		
 		PlayerManager playerManager{ config.maxPlayers };
+
+		// Initialize asset registry
+		AssetRegistry::Initialize(config.dataFolder, {});
 
 		// Restore groups
 		const auto startTime = GetAsyncTimeMs();
