@@ -51,6 +51,11 @@
 
 #include "char_create_info.h"
 #include "char_select.h"
+#include "ui/unit_model_frame.h"
+
+#include "luabind/luabind.hpp"
+#include "luabind/iterator_policy.hpp"
+#include "luabind/out_value_policy.hpp"
 
 
 ////////////////////////////////////////////////////////////////
@@ -170,6 +175,9 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("Model", [](const std::string& name) {
 			return std::make_shared<ModelFrame>(name);
 		});
+		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string& name) {
+			return std::make_shared<UnitModelFrame>(name);
+			});
 
 		// Setup cursor graphics
 		g_cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
@@ -222,7 +230,11 @@ namespace mmo
 				.def("SetZoom", &ModelFrame::SetZoom)
 				.def("GetZoom", &ModelFrame::GetZoom)
 				.def("GetYaw", &ModelFrame::GetYaw)
-				.def("ResetYaw", &ModelFrame::ResetYaw))
+				.def("ResetYaw", &ModelFrame::ResetYaw)),
+				
+			luabind::scope(
+				luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")
+				.def("SetUnit", &UnitModelFrame::SetUnit))
 		];
 
 		return true;
@@ -237,6 +249,7 @@ namespace mmo
 		// Unregister model renderer
 		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
 		FrameManager::Get().UnregisterFrameFactory("Model");
+		FrameManager::Get().UnregisterFrameFactory("UnitModel");
 
 		// Destroy the frame manager
 		FrameManager::Destroy();

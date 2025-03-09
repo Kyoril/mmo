@@ -2,8 +2,11 @@
 #include "object_mgr.h"
 
 #include "game_item_c.h"
+#include "unit_handle.h"
 #include "base/macros.h"
 #include "client_data/project.h"
+#include "mmo_client/party_info.h"
+#include "mmo_client/party_unit_handle.h"
 
 namespace mmo
 {
@@ -15,14 +18,16 @@ namespace mmo
 
 	std::map<uint32, uint32> ObjectMgr::ms_itemCount;
 	std::map<uint64, scoped_connection> ObjectMgr::ms_itemConnections;
+	PartyInfo* ObjectMgr::ms_partyInfo = nullptr;
 
-	void ObjectMgr::Initialize(const proto_client::Project& project)
+	void ObjectMgr::Initialize(const proto_client::Project& project, PartyInfo& partyInfo)
 	{
 		ms_project = &project;
 		ms_objectyByGuid.clear();
 		ms_activePlayerGuid = 0;
 		ms_selectedObjectGuid = 0;
 		ms_itemCount.clear();
+		ms_partyInfo = &partyInfo;
 	}
 
 	void ObjectMgr::UpdateObjects(float deltaTime)
@@ -87,6 +92,63 @@ namespace mmo
 
 			ms_objectyByGuid.erase(it);
 		}
+	}
+
+	std::shared_ptr<UnitHandle> ObjectMgr::GetUnitHandleByName(const std::string& unitName)
+	{
+		if (unitName == "player")
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				return std::make_shared<UnitHandle>(*player);
+			}
+		}
+		else if (unitName == "target")
+		{
+			if (const auto playerObject = ObjectMgr::GetActivePlayer())
+			{
+				const uint64 targetGuid = playerObject->Get<uint64>(object_fields::TargetUnit);
+				if (const auto target = ObjectMgr::Get<GameUnitC>(targetGuid); target)
+				{
+					return std::make_shared<UnitHandle>(*target);
+				}
+
+				if (int32 index = ms_partyInfo->GetMemberIndexByGuid(targetGuid); index >= 0)
+				{
+					return std::make_shared<PartyUnitHandle>(*ms_partyInfo, index);
+				}
+			}
+		}
+		else if (unitName.starts_with("party"))
+		{
+			if (!ms_partyInfo)
+			{
+				return nullptr;
+			}
+
+			// Read party member index from string and parse it to integer
+			const int32 partyIndex = std::stoi(unitName.substr(5));
+			if (partyIndex <= 0 || partyIndex > 4)
+			{
+				ELOG("Wrong party index, allowed unit is party1-4!");
+				return nullptr;
+			}
+
+			const uint64 memberGuid = ms_partyInfo->GetMemberGuid(partyIndex - 1);
+			if (memberGuid == 0)
+			{
+				return nullptr;
+			}
+
+			if (const auto partyMember = ObjectMgr::Get<GamePlayerC>(memberGuid); partyMember)
+			{
+				return std::make_shared<PartyUnitHandle>(*ms_partyInfo, *partyMember, partyIndex - 1);
+			}
+
+			return std::make_shared<PartyUnitHandle>(*ms_partyInfo, partyIndex - 1);
+		}
+
+		return nullptr;
 	}
 
 	void ObjectMgr::RemoveAllObjects()

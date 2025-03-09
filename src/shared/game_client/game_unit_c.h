@@ -13,6 +13,7 @@ namespace mmo
 {
 	namespace proto_client
 	{
+		class ModelDataEntry;
 		class FactionEntry;
 		class FactionTemplateEntry;
 	}
@@ -120,6 +121,12 @@ namespace mmo
 		void SetQuestgiverStatus(QuestgiverStatus status);
 
 		bool IsBeingMoved() const { return m_movementAnimation != nullptr; }
+
+		const proto_client::ModelDataEntry* GetDisplayModel() const;
+
+		const AvatarConfiguration& GetAvatarConfiguration() const { return m_configuration; }
+
+		const std::shared_ptr<CustomizableAvatarDefinition>& GetAvatarDefinition() const { return m_customizationDefinition; }
 
 	protected:
 		virtual void SetupSceneObjects() override;

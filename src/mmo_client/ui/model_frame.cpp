@@ -18,7 +18,7 @@ namespace mmo
 		m_cameraNode = m_cameraAnchorNode->CreateChildSceneNode(Vector3::UnitZ * GetZoom());
 		m_camera = m_scene.CreateCamera("Camera");
 		m_cameraNode->AttachObject(*m_camera);
-
+		
 		// Register default properties and subscribe to their Changed events.
 		m_propConnections += AddProperty("ModelFile", "").Changed.connect(this, &ModelFrame::OnModelFileChanged);
 		m_propConnections += AddProperty("Zoom", "4.0").Changed.connect(this, &ModelFrame::OnZoomChanged);
@@ -98,8 +98,6 @@ namespace mmo
 
 	void ModelFrame::OnModelFileChanged(const Property& prop)
 	{
-		// Load the mesh file
-		m_mesh = MeshManager::Get().Load(prop.GetValue());
 		if (m_entity)
 		{
 			m_entityNode->DetachObject(*m_entity);
@@ -108,6 +106,7 @@ namespace mmo
 			m_animationState = nullptr;
 		}
 
+		m_mesh = prop.GetValue().empty() ? nullptr : MeshManager::Get().Load(prop.GetValue());
 		if (m_mesh)
 		{
 			m_entity = m_scene.CreateEntity("Preview", m_mesh);
@@ -124,11 +123,7 @@ namespace mmo
 				}
 			}
 		}
-		else
-		{
-			ELOG("Unable to load mesh " << prop.GetValue());
-		}
-		
+
 		// Invalidate the frame
 		Invalidate(false);
 	}

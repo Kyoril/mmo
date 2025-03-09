@@ -166,7 +166,7 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
-		ObjectMgr::Initialize(m_project);
+		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		SetupWorldScene();
 
@@ -278,7 +278,7 @@ namespace mmo
 
 		m_spellProjectiles.clear();
 
-		ObjectMgr::Initialize(m_project);
+		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		m_worldInstance.reset();
 
@@ -399,6 +399,12 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
+	}
+
+	void WorldState::OnDisplayIdChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_MODEL_CHANGED");
 	}
 
 	void WorldState::MovementIdleMoveUnits()
@@ -992,6 +998,7 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::DisplayId, 1, *this, &WorldState::OnDisplayIdChanged);
 
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AttackPower, 1, *this, &WorldState::OnPlayerStatsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Armor, 1, *this, &WorldState::OnPlayerStatsChanged);

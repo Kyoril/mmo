@@ -121,8 +121,6 @@ namespace mmo
 
 		void PlaySound(const char* sound) const;
 
-		std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName) const;
-
 		void SendChatMessage(const char* message, const char* type, const char* target = nullptr) const;
 
 	private:

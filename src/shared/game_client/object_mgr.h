@@ -10,6 +10,9 @@
 
 namespace mmo
 {
+	class UnitHandle;
+	class PartyInfo;
+
 	namespace proto_client
 	{
 		class ModelDataEntry;
@@ -19,7 +22,7 @@ namespace mmo
 	class ObjectMgr
 	{
 	public:
-		static void Initialize(const proto_client::Project& project);
+		static void Initialize(const proto_client::Project& project, PartyInfo& partyInfo);
 
 		template<typename TObject>
 		static std::shared_ptr<TObject> Get(uint64 guid)
@@ -61,6 +64,8 @@ namespace mmo
 
 		static MovementGlobals& GetMovementGlobals() { return ms_movementGlobals; }
 
+		static std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
+
 	private:
 		static void OnItemStackCountChanged(uint64 itemGuid);
 
@@ -88,5 +93,7 @@ namespace mmo
 		static std::map<uint64, scoped_connection> ms_itemConnections;
 
 		static MovementGlobals ms_movementGlobals;
+
+		static PartyInfo* ms_partyInfo;
 	};
 }

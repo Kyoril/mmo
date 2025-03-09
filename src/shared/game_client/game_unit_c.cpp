@@ -588,6 +588,17 @@ namespace mmo
 		return reader;
 	}
 
+	const proto_client::ModelDataEntry* GameUnitC::GetDisplayModel() const
+	{
+		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		if (!displayId)
+		{
+			return nullptr;
+		}
+
+		return m_project.models.getById(displayId);
+	}
+
 	void GameUnitC::SetupSceneObjects()
 	{
 		GameObjectC::SetupSceneObjects();

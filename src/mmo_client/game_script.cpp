@@ -690,10 +690,10 @@ namespace mmo
 		// Register common functions
 		luabind::module(m_luaState.get())
 		[
-		luabind::scope(
-			luabind::class_<mmo::RealmData>("RealmData")
-			.def_readonly("id", &mmo::RealmData::id)
-			.def_readonly("name", &mmo::RealmData::name)),
+			luabind::scope(
+				luabind::class_<mmo::RealmData>("RealmData")
+				.def_readonly("id", &mmo::RealmData::id)
+				.def_readonly("name", &mmo::RealmData::name)),
 
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
@@ -718,16 +718,6 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<proto_client::SpellManager>("SpellManager")
 				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
-
-			luabind::scope(
-				luabind::class_<proto_client::ModelDataManager>("ModelDataManager")
-				.def_const<const proto_client::ModelDataEntry*, proto_client::ModelDataManager, uint32>("GetById", &mmo::proto_client::ModelDataManager::getById)),
-
-			luabind::scope(
-				luabind::class_<proto_client::ModelDataEntry>("ModelData")
-				.def_readonly("id", &proto_client::ModelDataEntry::id)
-				.def_readonly("name", &proto_client::ModelDataEntry::name)
-				.def_readonly("filename", &proto_client::ModelDataEntry::filename)),
 
 			luabind::scope(
 				luabind::class_<RealmConnector>("RealmConnector")
@@ -865,7 +855,7 @@ namespace mmo
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
 				.def_readonly("icon", &proto_client::SpellEntry::icon)),
 				
-			luabind::def<std::function<std::shared_ptr<UnitHandle>(const String&)>>("GetUnit", [this](const String& unitName) { return GetUnitHandleByName(unitName); }),
+			luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 
 			// Char Creation
@@ -1204,13 +1194,12 @@ namespace mmo
 			return;
 		}
 
-		auto player = Script_GetUnitByName("player");
-		if (!player)
+		if (const auto player = Script_GetUnitByName("player"); !player)
 		{
 			return;
 		}
 
-		auto targetHandle = GetUnitHandleByName(name);
+		const auto targetHandle = ObjectMgr::GetUnitHandleByName(name);
 		if (!targetHandle)
 		{
 			ELOG("Unable to find target unit " << name);
@@ -1429,58 +1418,6 @@ namespace mmo
 			ChannelIndex channel;
 			m_audio.PlaySound(index, &channel);
 		}
-	}
-
-	std::shared_ptr<UnitHandle> GameScript::GetUnitHandleByName(const std::string& unitName) const
-	{
-		if (unitName == "player")
-		{
-			if (const auto player = ObjectMgr::GetActivePlayer())
-			{
-				return std::make_shared<UnitHandle>(*player);
-			}
-		}
-		else if (unitName == "target")
-		{
-			if (const auto playerObject = ObjectMgr::GetActivePlayer())
-			{
-				const uint64 targetGuid = playerObject->Get<uint64>(object_fields::TargetUnit);
-				if (const auto target = ObjectMgr::Get<GameUnitC>(targetGuid); target)
-				{
-					return std::make_shared<UnitHandle>(*target);
-				}
-
-				if (int32 index = m_partyInfo.GetMemberIndexByGuid(targetGuid); index >= 0)
-				{
-					return std::make_shared<PartyUnitHandle>(m_partyInfo, index);
-				}
-			}
-		}
-		else if (unitName.starts_with("party"))
-		{
-			// Read party member index from string and parse it to integer
-			const int32 partyIndex = std::stoi(unitName.substr(5));
-			if (partyIndex <= 0 || partyIndex > 4)
-			{
-				ELOG("Wrong party index, allowed unit is party1-4!");
-				return nullptr;
-			}
-
-			const uint64 memberGuid = m_partyInfo.GetMemberGuid(partyIndex - 1);
-			if (memberGuid == 0)
-			{
-				return nullptr;
-			}
-
-			if (const auto partyMember = ObjectMgr::Get<GamePlayerC>(memberGuid); partyMember)
-			{
-				return std::make_shared<PartyUnitHandle>(m_partyInfo, *partyMember, partyIndex - 1);
-			}
-
-			return std::make_shared<PartyUnitHandle>(m_partyInfo, partyIndex - 1);
-		}
-
-		return nullptr;
 	}
 
 	void GameScript::Script_ReviveMe() const

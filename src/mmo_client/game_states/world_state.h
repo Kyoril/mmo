@@ -134,6 +134,8 @@ namespace mmo
 
 		void OnPlayerStatsChanged(uint64 monitoredGuid);
 
+		void OnDisplayIdChanged(uint64 monitoredGuid);
+
 		void MovementIdleMoveUnits();
 
 	private:
@@ -420,4 +422,5 @@ namespace mmo
 
 		void OnMoveFall(GameUnitC& unit) override;
 	};
+
 }

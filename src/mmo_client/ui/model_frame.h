@@ -9,7 +9,7 @@
 namespace mmo
 {
 	/// This class renders a model inside it's content area.
-	class ModelFrame final
+	class ModelFrame
 		: public Frame
 	{
 	public:
@@ -61,7 +61,7 @@ namespace mmo
 
 		Camera* GetCamera() const noexcept { return m_camera; }
 
-	private:
+	protected:
 		/// This method is called whenever the ModelFile property is changed.
 		void OnModelFileChanged(const Property& prop);
 
@@ -73,7 +73,7 @@ namespace mmo
 
 		void OnOffsetChanged(const Property& prop);
 
-	private:
+	protected:
 		/// Contains a list of all property connections.
 		scoped_connection_container m_propConnections;
 
