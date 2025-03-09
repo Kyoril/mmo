@@ -46,6 +46,8 @@
 #include "audio.h"
 #include "party_info.h"
 #include "game/group.h"
+#include "graphics/texture_mgr.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/octree_scene.h"
 
 namespace mmo

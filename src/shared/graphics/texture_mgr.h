@@ -22,7 +22,7 @@ namespace mmo
 	{
 	private:
 		TextureManager()
-			: m_memoryBudget(1024 * 1024 * 1024)	// 1 GB budget for now
+			: m_memoryBudget(1024 * 1024 * 512)	// 512 MB budget for now
 			, m_memoryUsage(0)
 		{}
 
@@ -38,6 +38,8 @@ namespace mmo
 		TexturePtr CreateOrRetrieve(const std::string& filename);
 
 		TexturePtr CreateManual(const std::string& name, uint16 width, uint16 height, PixelFormat format, BufferUsage usage);
+
+		void RemoveAllUnreferenced();
 
 	private:
 		/// Checks if the memory budget is exceeded and if so, tries to free some memory

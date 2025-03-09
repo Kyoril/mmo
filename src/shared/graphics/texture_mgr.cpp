@@ -75,6 +75,30 @@ namespace mmo
 		return texture;
 	}
 
+	void TextureManager::RemoveAllUnreferenced()
+	{
+		size_t erasedCount = 0;
+
+		auto it = m_texturesByName.begin();
+		while (it != m_texturesByName.end() && m_memoryUsage > m_memoryBudget)
+		{
+			// Use count of 1 means the texture manager is the only one referencing this texture
+			// right now, so we can safely erase it now.
+			if (it->second.use_count() == 1)
+			{
+				// Reduce current memory usage
+				auto usage = it->second->GetMemorySize();
+				m_memoryUsage -= usage;
+				erasedCount++;
+
+				// Remove reference
+				it = m_texturesByName.erase(it);
+			}
+		}
+
+		DLOG("Removed " << erasedCount << " unreferenced textures");
+	}
+
 	void TextureManager::EnsureMemoryBudget()
 	{
 		if (m_memoryUsage < m_memoryBudget)

@@ -100,9 +100,11 @@ namespace mmo
 
 	void MaterialManager::RemoveAllUnreferenced()
 	{
-		std::erase_if(m_materials, [](const std::pair<std::string, MaterialPtr>& pair)
+		const size_t erased = std::erase_if(m_materials, [](const std::pair<std::string, MaterialPtr>& pair)
 		{
 			return pair.second.use_count() <= 1;
 		});
+
+		DLOG("Removed " << erased << " unreferenced materials");
 	}
 }
