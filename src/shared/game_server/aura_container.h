@@ -149,6 +149,9 @@ namespace mmo
 
 		bool HasEffect(AuraType type) const;
 
+	private:
+		void HandleAreaAuraTick();
+
 	public:
 		/// Gets the owning unit of this aura (the target of the aura).
 		GameUnitS& GetOwner() const
@@ -192,6 +195,8 @@ namespace mmo
 				(m_spell.attributes(0) & spell_attributes::HiddenClientSide) == 0;
 		}
 
+		bool IsAreaAura() const { return m_areaAura; }
+
 		/// Gets the maximum number of base points for a specific aura type.
 		int32 GetMaximumBasePoints(AuraType type) const;
 
@@ -233,6 +238,12 @@ namespace mmo
 		uint64 m_itemGuid = 0;
 
 		scoped_connection m_expiredConnection;
+
+		bool m_areaAura = false;
+
+		Countdown m_areaAuraTick;
+
+		scoped_connection m_areaAuraTickConnection;
 	};
 
 }

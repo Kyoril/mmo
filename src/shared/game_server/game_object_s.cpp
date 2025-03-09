@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_object_s.h"
+#include "game_player_s.h"
 
 #include "base/clock.h"
 #include "binary_io/vector_sink.h"
@@ -24,6 +25,12 @@ namespace mmo
 	void GameObjectS::Initialize()
 	{
 		PrepareFieldMap();
+	}
+
+	GamePlayerS& GameObjectS::AsPlayer() const
+	{
+		ASSERT(IsPlayer());
+		return *static_cast<GamePlayerS*>(const_cast<GameObjectS*>(this));
 	}
 
 	uint32 GameObjectS::GetMapId() const

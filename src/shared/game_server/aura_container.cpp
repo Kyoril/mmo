@@ -1,6 +1,7 @@
 
 #include "aura_container.h"
 
+#include "game_player_s.h"
 #include "game_unit_s.h"
 #include "spell_cast.h"
 #include "base/clock.h"
@@ -424,7 +425,9 @@ namespace mmo
 		, m_duration(duration)
 		, m_expirationCountdown(owner.GetTimers())
 		, m_itemGuid(itemGuid)
+		, m_areaAuraTick(owner.GetTimers())
 	{
+		m_areaAuraTickConnection = m_areaAuraTick.ended.connect(this, &AuraContainer::HandleAreaAuraTick);
 	}
 
 	AuraContainer::~AuraContainer()
@@ -439,6 +442,12 @@ namespace mmo
 
 	void AuraContainer::AddAuraEffect(const proto::SpellEffect& effect, int32 basePoints)
 	{
+		// Check if this aura is an area aura and thus needs special handling
+		if (effect.type() == spell_effects::ApplyAreaAura)
+		{
+			m_areaAura = true;
+		}
+
 		// Add aura to the list of effective auras
 		m_auras.emplace_back(std::make_shared<AuraEffect>(
 			*this,
@@ -458,6 +467,12 @@ namespace mmo
 		// Does this aura expire?
 		if (apply)
 		{
+			// Start ticking area auras
+			if (IsAreaAura())
+			{
+				m_areaAuraTick.SetEnd(GetAsyncTimeMs() + constants::OneSecond);
+			}
+			
 			if (m_duration > 0)
 			{
 				if (!m_expiredConnection)
@@ -475,6 +490,14 @@ namespace mmo
 
 				m_expiration = GetAsyncTimeMs() + m_duration;
 				m_expirationCountdown.SetEnd(m_expiration);
+			}
+		}
+		else
+		{
+			// Stop ticking area aura update
+			if (IsAreaAura())
+			{
+				m_areaAuraTick.Cancel();
 			}
 		}
 
@@ -527,6 +550,101 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void AuraContainer::HandleAreaAuraTick()
+	{
+		// Should only ever be active for players right now!
+		ASSERT(m_owner.IsPlayer());
+
+		GamePlayerS& owner = m_owner.AsPlayer();
+		const uint64 groupId = owner.GetGroupId();
+
+		// TODO: Real range!!!
+		const float range = 30.0f;
+		const Vector3& position = m_owner.GetPosition();
+
+		// Check if this is our area aura or if we got this from someone else
+		if (GetCasterId() == m_owner.GetGuid())
+		{
+			if (groupId != 0)
+			{
+				// It's us: Search for nearby party members and apply the aura to them as well
+				m_owner.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.y, range), [&owner, this](GameUnitS& unit) -> bool
+					{
+						// Skip ourself!
+						if (unit.GetGuid() == owner.GetGuid())
+						{
+							return true;
+						}
+
+						if (!unit.IsPlayer())
+						{
+							return true;
+						}
+
+						GamePlayerS& player = unit.AsPlayer();
+						if (player.GetGroupId() == owner.GetGroupId() && player.UnitIsFriendly(owner))
+						{
+							// Found one - try to apply the aura
+							auto container = std::make_shared<AuraContainer>(player, m_casterId, m_spell, m_duration, m_itemGuid);
+							for (const auto& effect : m_auras)
+							{
+								container->AddAuraEffect(effect->GetEffect(), effect->GetBasePoints());
+							}
+							player.ApplyAura(std::move(container));
+						}
+
+						return true;
+					});
+			}
+		}
+		else
+		{
+			// It's someone else: Check if we should remove this container because...
+			// - the caster is out of range
+			// - the caster is no longer in our party
+			// - the caster no longer has the original aura
+
+			std::shared_ptr<GameUnitS> caster = m_caster.lock();
+			if (!caster)
+			{
+				SetApplied(false);
+				m_owner.RemoveAura(shared_from_this());
+				return;
+			}
+
+			if (!caster->IsPlayer())
+			{
+				SetApplied(false);
+				m_owner.RemoveAura(shared_from_this());
+				return;
+			}
+
+			GamePlayerS& casterPlayer = caster->AsPlayer();
+			if (casterPlayer.GetGroupId() != groupId || groupId == 0)
+			{
+				SetApplied(false);
+				m_owner.RemoveAura(shared_from_this());
+				return;
+			}
+
+			if (!casterPlayer.UnitIsFriendly(m_owner))
+			{
+				SetApplied(false);
+				m_owner.RemoveAura(shared_from_this());
+				return;
+			}
+
+			if (casterPlayer.GetSquaredDistanceTo(position, true) > (range * range))
+			{
+				SetApplied(false);
+				m_owner.RemoveAura(shared_from_this());
+				return;
+			}
+		}
+
+		m_areaAuraTick.SetEnd(GetAsyncTimeMs() + constants::OneSecond);
 	}
 
 	uint32 AuraContainer::GetSpellId() const

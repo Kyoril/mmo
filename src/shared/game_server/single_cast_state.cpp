@@ -572,6 +572,7 @@ namespace mmo
 			{se::LearnSpell,				std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
 			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
 			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
+			{se::ApplyAreaAura,			std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},	// Area Auras are auras too, but have a special handling in the resulting aura container
 			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
 			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)},
 			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)},
