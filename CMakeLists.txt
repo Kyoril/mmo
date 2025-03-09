@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.12)
 # Generate a solution file
 project(mmo)
 
-cmake_policy(SET CMP0169 OLD)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30")
+    cmake_policy(SET CMP0169 OLD)
+endif()
 
 include(FetchContent)
 
