@@ -315,6 +315,8 @@ namespace mmo
 
 				AttackerStateUpdate,
 
+				SpellHealLog,
+
 				/// Counter constant
 				Count_,
 			};

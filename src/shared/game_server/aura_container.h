@@ -75,6 +75,8 @@ namespace mmo
 
 		void HandleModHealingDone(bool apply) const;
 
+		void HandleModHealingTaken(bool apply) const;
+
 		void HandleModAttackPower(bool apply) const;
 
 		void HandleModAttackSpeed(bool apply) const;
@@ -220,9 +222,9 @@ namespace mmo
 
 		bool m_applied = false;
 
-		GameTime m_duration;
+		GameTime m_duration = 0;
 
-		GameTime m_expiration;
+		GameTime m_expiration = 0;
 
 		Countdown m_expirationCountdown;
 

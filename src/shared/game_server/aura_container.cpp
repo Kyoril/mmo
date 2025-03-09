@@ -19,7 +19,7 @@ namespace mmo
 		, m_tickCountdown(timers)
 	{
 		m_casterSpellPower = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::SpellDamage);
-		m_casterSpellHeal = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::Healing);
+		m_casterSpellHeal = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::HealingDone);
 
 		m_onTick = m_tickCountdown.ended.connect(this, &AuraEffect::OnTick);
 
@@ -53,6 +53,9 @@ namespace mmo
 			break;
 		case AuraType::ModHealingDone:
 			HandleModHealingDone(apply);
+			break;
+		case AuraType::ModHealingTaken:
+			HandleModHealingTaken(apply);
 			break;
 		case AuraType::ModDamageTaken:
 			break;
@@ -170,7 +173,15 @@ namespace mmo
 
 	void AuraEffect::HandleModHealingDone(const bool apply) const
 	{
-		m_container.GetOwner().UpdateModifierValue(unit_mods::Healing,
+		m_container.GetOwner().UpdateModifierValue(unit_mods::HealingDone,
+			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModHealingTaken(bool apply) const
+	{
+		m_container.GetOwner().UpdateModifierValue(unit_mods::HealingTaken,
 			unit_mod_type::TotalValue,
 			GetBasePoints(),
 			apply);
@@ -297,6 +308,17 @@ namespace mmo
 			heal += static_cast<int32>(m_casterSpellHeal * m_effect.powerbonusfactor() / static_cast<float>(m_totalTicks));
 		}
 
+		const float healingTakenBonus = m_container.GetOwner().GetCalculatedModifierValue(unit_mods::HealingTaken);
+		if (m_totalTicks > 0)
+		{
+			heal += static_cast<int32>(healingTakenBonus / static_cast<float>(m_totalTicks));
+		}
+
+		if (heal < 0)
+		{
+			heal = 0;
+		}
+		
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);

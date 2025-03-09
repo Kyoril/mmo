@@ -111,7 +111,11 @@ namespace mmo
 
 			SpellDamage,
 
-			Healing,
+			// Healing Done
+			HealingDone,
+
+			// Healing Taken
+			HealingTaken,
 
 			End
 		};

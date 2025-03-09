@@ -760,6 +760,8 @@ namespace mmo
 
 			Charge,
 
+			ApplyAreaAura,
+
 			Count_,
 			Invalid_ = 0
 		};

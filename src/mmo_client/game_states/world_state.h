@@ -275,6 +275,8 @@ namespace mmo
 
 		PacketParseResult OnRandomRollResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnSpellHealLog(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

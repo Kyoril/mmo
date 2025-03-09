@@ -764,6 +764,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellHealLog, *this, &WorldState::OnSpellHealLog);
+		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
@@ -2238,7 +2240,7 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
-			if (casterGuid == ObjectMgr::GetActivePlayerGuid())
+			if (casterGuid == ObjectMgr::GetActivePlayerGuid() || targetGuid == ObjectMgr::GetActivePlayerGuid())
 			{
 				if (const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid))
 				{
@@ -2489,6 +2491,37 @@ namespace mmo
 			{
 				FrameManager::Get().TriggerLuaEvent("RANDOM_ROLL_RESULT", playerName.c_str(), min, max, result);
 			});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellHealLog(game::IncomingPacket& packet)
+	{
+		uint64 targetGuid, casterGuid;
+		uint32 amount;
+		bool crit;
+		uint32 spellId;
+
+		if (!(packet
+			>> io::read_packed_guid(targetGuid)
+			>> io::read_packed_guid(casterGuid)
+			>> io::read<uint32>(spellId)
+			>> io::read<uint32>(amount)
+			>> io::read<uint8>(crit)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// If the target or the caster is our player, we want to display the heal amount
+		if (casterGuid == ObjectMgr::GetActivePlayerGuid() || targetGuid == ObjectMgr::GetActivePlayerGuid())
+		{
+			// Find unit
+			std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+			if (target)
+			{
+				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(0.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}

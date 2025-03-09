@@ -810,16 +810,38 @@ namespace mmo
 		uint32 healingAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
 
 		// Add spell power to heal
-		const float spellHealing = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::Healing);
+		const float spellHealing = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::HealingDone);
 		if (spellHealing > 0.0f && effect.powerbonusfactor() > 0.0f)
 		{
 			healingAmount += static_cast<uint32>(spellHealing * effect.powerbonusfactor());
 		}
 
+		const float healingTakenBonus = unitTarget->GetCalculatedModifierValue(unit_mods::HealingTaken);
+		if (healingTakenBonus > 0.0f || -healingTakenBonus < healingAmount)
+		{
+			healingAmount += static_cast<uint32>(healingTakenBonus);
+		}
+		else
+		{
+			healingAmount = 0;
+		}
+
 		unitTarget->Heal(healingAmount, &m_cast.GetExecuter());
 
-
-		// TODO: Heal log to show healing numbers at the clients
+		GameUnitS& caster = m_cast.GetExecuter();
+		const uint32 spellId = m_spell.id();
+		SendPacketFromCaster(m_cast.GetExecuter(),
+			[unitTarget, &caster, spellId, healingAmount](game::OutgoingPacket& out_packet)
+			{
+				out_packet.Start(game::realm_client_packet::SpellHealLog);
+				out_packet
+					<< io::write_packed_guid(unitTarget->GetGuid())
+					<< io::write_packed_guid(caster.GetGuid())
+					<< io::write<uint32>(spellId)
+					<< io::write<uint32>(healingAmount)
+					<< io::write<uint8>(false);
+				out_packet.Finish();
+			});
 	}
 
 	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
@@ -1206,8 +1228,11 @@ namespace mmo
 		}
 
 		GameTime duration = m_spell.duration();
-		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Duration, m_spell.id(), duration);
-
+		if (duration != 0)	// Infinite duration is infinite, nothing to modify here!
+		{
+			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Duration, m_spell.id(), duration);
+		}
+		
 		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
 		return *container;
 	}

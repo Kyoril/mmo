@@ -111,6 +111,8 @@ namespace mmo
 			ModHealingDone,
 			ModAttackPower,
 
+			ModHealingTaken,
+
 			Count_,
 			Invalid_ = Count_
 		};

@@ -79,7 +79,8 @@ namespace mmo
 		"Weapon Damage +",
 		"Reset Attribute Points",
 		"Heal Percentage",
-		"Charge"
+		"Charge",
+		"Apply Area Aura",
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -109,6 +110,8 @@ namespace mmo
 
 		"ModHealingDone",
 		"ModAttackPower",
+
+		"ModHealingTaken"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -655,6 +658,8 @@ namespace mmo
 			switch(currentEffectType)
 			{
 			case spell_effects::ApplyAura:
+			case spell_effects::ApplyAreaAura:
+			case spell_effects::PersistentAreaAura:
 				DrawSpellAuraEffectDetails(effect);
 				break;
 			default:
