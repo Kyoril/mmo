@@ -1827,7 +1827,18 @@ namespace mmo
 
 	PacketParseResult WorldState::OnXpLog(game::IncomingPacket& packet)
 	{
+		uint32 xp;
+		if (!(packet >> io::read<uint32>(xp)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
+		// Find unit
+		std::shared_ptr<GamePlayerC> target = ObjectMgr::GetActivePlayer();
+		if (target)
+		{
+			AddWorldTextFrame(target->GetPosition(), std::to_string(xp) + " XP", Color(1.0f, 0.0f, 0.85f, 1.0f), 2.0f);
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -1954,7 +1965,7 @@ namespace mmo
 		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
 		if (attacked)
 		{
-			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid)
+			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
 			{
 				String damageText;
 				if (hitInfo & hit_info::Miss)
@@ -1978,11 +1989,7 @@ namespace mmo
 					damageText = std::to_string(totalDamage);
 				}
 
-				AddWorldTextFrame(attacked->GetPosition(), damageText, Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
-			}
-			else if (ObjectMgr::GetActivePlayerGuid() == attackedGuid)
-			{
-				// TODO: Notify about damage event
+				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
 			}
 		}
 
