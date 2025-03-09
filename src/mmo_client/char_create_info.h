@@ -48,6 +48,8 @@ namespace mmo
 
 		void CreateCharacter(const String& name) const;
 
+		const char* GetCustomizationValue(const String& propertyName) const;
+
 	private:
 		void RefreshModel();
 

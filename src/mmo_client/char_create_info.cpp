@@ -201,6 +201,73 @@ namespace mmo
 			m_configuration);
 	}
 
+	const char* CharCreateInfo::GetCustomizationValue(const String& propertyName) const
+	{
+		if (!m_avatarDefinition)
+		{
+			return nullptr;
+		}
+
+		const CustomizationPropertyGroup* propertyDefinition = m_avatarDefinition->GetProperty(propertyName);
+		if (!propertyDefinition)
+		{
+			ELOG("Property named " << propertyName << " not found in avatar definition!");
+			return nullptr;
+		}
+
+		switch (propertyDefinition->GetType())
+		{
+		case CharacterCustomizationPropertyType::VisibilitySet:
+		{
+			const auto visibilityProperty = dynamic_cast<const VisibilitySetPropertyGroup*>(propertyDefinition);
+			if (!visibilityProperty)
+			{
+				return nullptr;
+			}
+
+			// Do we even have multiple values (or values at all?)
+			const auto& possibleValues = visibilityProperty->possibleValues;
+			if (possibleValues.empty())
+			{
+				return nullptr;
+			}
+
+            const auto it = m_configuration.chosenOptionPerGroup.find(propertyDefinition->GetId());
+            if (it != m_configuration.chosenOptionPerGroup.end())
+			{
+                const uint32 currentOption = it->second;
+				const int32 index = visibilityProperty->GetPropertyValueIndex(currentOption);
+				return possibleValues[index].valueName.c_str();
+            }
+		}
+		case CharacterCustomizationPropertyType::MaterialOverride:
+		{
+			const auto materialProperty = dynamic_cast<const MaterialOverridePropertyGroup*>(propertyDefinition);
+			if (!materialProperty)
+			{
+				return nullptr;
+			}
+
+			// Do we even have multiple values (or values at all?)
+			const auto& possibleValues = materialProperty->possibleValues;
+			if (possibleValues.size() <= 1)
+			{
+				return nullptr;
+			}
+
+			const auto it = m_configuration.chosenOptionPerGroup.find(propertyDefinition->GetId());
+			if (it != m_configuration.chosenOptionPerGroup.end())
+			{
+				const uint32 currentOption = it->second;
+				const int32 index = materialProperty->GetPropertyValueIndex(currentOption);
+				return possibleValues[index].valueName.c_str();
+			}
+		}
+		}
+
+		return nullptr;
+	}
+
 	void CharCreateInfo::RefreshModel()
 	{
 		m_propertyNameCache.clear();

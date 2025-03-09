@@ -868,6 +868,7 @@ namespace mmo
 			luabind::def<std::function<int32()>>("GetCharacterGender", [this]() { return m_charCreateInfo.GetSelectedGender(); }),
 			luabind::def<std::function<int32()>>("GetCharacterClass", [this]() { return m_charCreateInfo.GetSelectedClass(); }),
 			luabind::def<std::function<void()>>("ResetCharCustomize", [this]() { m_charCreateInfo.ResetCharacterCreation(); }),
+			luabind::def<std::function<const char*(const String&)>>("GetCustomizationValue", [this](const String& name) { return m_charCreateInfo.GetCustomizationValue(name); }),
 			luabind::def<std::function<void(const String&, bool)>>("CycleCustomizationProperty", [this](const String& property, bool forward) { m_charCreateInfo.CycleCustomizationProperty(property, forward, true); }),
 			luabind::def<std::function<int32()>>("GetNumCustomizationProperties", [this]() { return static_cast<int32>(m_charCreateInfo.GetPropertyNames().size()); }),
 			luabind::def<std::function<const char*(int32)>>("GetCustomizationProperty", [this](int32 index) -> const char*
