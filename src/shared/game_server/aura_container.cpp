@@ -466,6 +466,15 @@ namespace mmo
 
 		m_applied = apply;
 
+		if (notify && m_owner.GetWorldInstance())
+		{
+			// TODO: Flag this aura as updated so we only sync changed auras to units which already know about this unit's auras instead
+			// of having to sync ALL unit auras over and over again
+
+			// Auras changed, flag object for next update loop
+			m_owner.GetWorldInstance()->AddObjectUpdate(m_owner);
+		}
+
 		// Does this aura expire?
 		if (apply)
 		{
@@ -473,7 +482,7 @@ namespace mmo
 			if (IsAreaAura())
 			{
 				// Do an initial tick
-				HandleAreaAuraTick();
+				m_areaAuraTick.SetEnd(GetAsyncTimeMs() + constants::OneSecond);
 			}
 			
 			if (m_duration > 0)
@@ -485,8 +494,7 @@ namespace mmo
 						{
 							if (const auto strong = weakThis.lock())
 							{
-								strong->SetApplied(false);
-								strong->m_owner.RemoveAura(strong);
+								strong->RemoveSelf();
 							}
 						};
 				}
@@ -497,6 +505,9 @@ namespace mmo
 		}
 		else
 		{
+			m_expirationCountdown.Cancel();
+			m_expiredConnection.disconnect();
+
 			// Stop ticking area aura update
 			if (IsAreaAura())
 			{
@@ -504,16 +515,6 @@ namespace mmo
 			}
 		}
 
-		if (notify && m_owner.GetWorldInstance())
-		{
-			// TODO: Flag this aura as updated so we only sync changed auras to units which already know about this unit's auras instead
-			// of having to sync ALL unit auras over and over again
-
-			// Auras changed, flag object for next update loop
-			m_owner.GetWorldInstance()->AddObjectUpdate(m_owner);
-		}
-
-		// TODO: Apply auras to the owning unit and notify others
 		for(const auto& aura : m_auras)
 		{
 			aura->HandleEffect(m_applied);
@@ -602,6 +603,7 @@ namespace mmo
 	{
 		// Should only ever be active for players right now!
 		ASSERT(m_owner.IsPlayer());
+		ASSERT(m_applied);
 
 		GamePlayerS& owner = m_owner.AsPlayer();
 		const uint64 groupId = owner.GetGroupId();
@@ -617,7 +619,7 @@ namespace mmo
 			if (groupId != 0)
 			{
 				// Search for nearby party members and apply the aura to them
-				m_owner.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.y, range), [&owner, this](GameUnitS& unit) -> bool
+				m_owner.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, range), [&owner, this](GameUnitS& unit) -> bool
 					{
 						// Skip ourselves!
 						if (unit.GetGuid() == owner.GetGuid())

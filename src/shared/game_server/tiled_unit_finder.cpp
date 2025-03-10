@@ -18,7 +18,7 @@ namespace mmo
 		{
 			return Vector<Distance, 2>(
 				point[0],
-				point[1]);
+				point[2]);
 		}
 	}
 
