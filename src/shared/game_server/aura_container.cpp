@@ -608,8 +608,10 @@ namespace mmo
 		GamePlayerS& owner = m_owner.AsPlayer();
 		const uint64 groupId = owner.GetGroupId();
 
-		// TODO: Real range!!!
-		const float range = 30.0f;
+		const auto* rangeType = owner.GetProject().ranges.getById(m_spell.rangetype());
+		ASSERT(rangeType);
+
+		const float range = rangeType->range();
 		const Vector3& position = m_owner.GetPosition();
 
 		// Check if this is our area aura or if we got this from someone else
