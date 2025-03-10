@@ -438,6 +438,8 @@ namespace mmo
 
 		void RemoveAura(const std::shared_ptr<AuraContainer>& aura);
 
+		bool HasAuraSpellFromCaster(uint32 spellId, uint64 casterId);
+
 		void BuildAuraPacket(io::Writer& writer) const;
 
 		void NotifyManaUsed();

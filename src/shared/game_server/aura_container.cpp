@@ -464,13 +464,16 @@ namespace mmo
 			return;
 		}
 
+		m_applied = apply;
+
 		// Does this aura expire?
 		if (apply)
 		{
 			// Start ticking area auras
 			if (IsAreaAura())
 			{
-				m_areaAuraTick.SetEnd(GetAsyncTimeMs() + constants::OneSecond);
+				// Do an initial tick
+				HandleAreaAuraTick();
 			}
 			
 			if (m_duration > 0)
@@ -500,8 +503,6 @@ namespace mmo
 				m_areaAuraTick.Cancel();
 			}
 		}
-
-		m_applied = apply;
 
 		if (notify && m_owner.GetWorldInstance())
 		{
@@ -552,6 +553,51 @@ namespace mmo
 		return false;
 	}
 
+	void AuraContainer::RemoveSelf()
+	{
+		SetApplied(false);
+		m_owner.RemoveAura(shared_from_this());
+	}
+
+	bool AuraContainer::ShouldRemoveAreaAuraDueToCasterConditions(const std::shared_ptr<GameUnitS>& caster,
+		uint64 ownerGroupId, const Vector3& position, float range)
+	{
+		// If caster pointer is invalid
+		if (!caster)
+		{
+			return true;
+		}
+
+		// Must be a player
+		if (!caster->IsPlayer())
+		{
+			return true;
+		}
+
+		const GamePlayerS& casterPlayer = caster->AsPlayer();
+
+		// Must be in same group; group must be non-zero
+		if (casterPlayer.GetGroupId() != ownerGroupId || ownerGroupId == 0)
+		{
+			return true;
+		}
+
+		// Must be friendly
+		if (!casterPlayer.UnitIsFriendly(m_owner))
+		{
+			return true;
+		}
+
+		// Must be in range
+		const float distanceSq = casterPlayer.GetSquaredDistanceTo(position, /*allowZDiff=*/true);
+		if (distanceSq > (range * range))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
 	void AuraContainer::HandleAreaAuraTick()
 	{
 		// Should only ever be active for players right now!
@@ -567,32 +613,40 @@ namespace mmo
 		// Check if this is our area aura or if we got this from someone else
 		if (GetCasterId() == m_owner.GetGuid())
 		{
+			// It's our own aura
 			if (groupId != 0)
 			{
-				// It's us: Search for nearby party members and apply the aura to them as well
+				// Search for nearby party members and apply the aura to them
 				m_owner.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.y, range), [&owner, this](GameUnitS& unit) -> bool
 					{
-						// Skip ourself!
+						// Skip ourselves!
 						if (unit.GetGuid() == owner.GetGuid())
 						{
 							return true;
 						}
 
+						// Only players
 						if (!unit.IsPlayer())
 						{
 							return true;
 						}
 
 						GamePlayerS& player = unit.AsPlayer();
+
+						// Must be in the same group and friendly
 						if (player.GetGroupId() == owner.GetGroupId() && player.UnitIsFriendly(owner))
 						{
-							// Found one - try to apply the aura
-							auto container = std::make_shared<AuraContainer>(player, m_casterId, m_spell, m_duration, m_itemGuid);
-							for (const auto& effect : m_auras)
+							// Aura already active from same caster?
+							if (!player.HasAuraSpellFromCaster(m_spell.id(), m_casterId))
 							{
-								container->AddAuraEffect(effect->GetEffect(), effect->GetBasePoints());
+								// Apply the aura
+								auto container = std::make_shared<AuraContainer>(player, m_casterId, m_spell, m_duration, m_itemGuid);
+								for (const auto& effect : m_auras)
+								{
+									container->AddAuraEffect(effect->GetEffect(), effect->GetBasePoints());
+								}
+								player.ApplyAura(std::move(container));
 							}
-							player.ApplyAura(std::move(container));
 						}
 
 						return true;
@@ -601,45 +655,11 @@ namespace mmo
 		}
 		else
 		{
-			// It's someone else: Check if we should remove this container because...
-			// - the caster is out of range
-			// - the caster is no longer in our party
-			// - the caster no longer has the original aura
-
+			// It's from someone else; check if we should remove it
 			std::shared_ptr<GameUnitS> caster = m_caster.lock();
-			if (!caster)
+			if (ShouldRemoveAreaAuraDueToCasterConditions(caster, groupId, position, range))
 			{
-				SetApplied(false);
-				m_owner.RemoveAura(shared_from_this());
-				return;
-			}
-
-			if (!caster->IsPlayer())
-			{
-				SetApplied(false);
-				m_owner.RemoveAura(shared_from_this());
-				return;
-			}
-
-			GamePlayerS& casterPlayer = caster->AsPlayer();
-			if (casterPlayer.GetGroupId() != groupId || groupId == 0)
-			{
-				SetApplied(false);
-				m_owner.RemoveAura(shared_from_this());
-				return;
-			}
-
-			if (!casterPlayer.UnitIsFriendly(m_owner))
-			{
-				SetApplied(false);
-				m_owner.RemoveAura(shared_from_this());
-				return;
-			}
-
-			if (casterPlayer.GetSquaredDistanceTo(position, true) > (range * range))
-			{
-				SetApplied(false);
-				m_owner.RemoveAura(shared_from_this());
+				RemoveSelf();
 				return;
 			}
 		}

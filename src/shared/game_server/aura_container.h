@@ -10,6 +10,8 @@
 
 namespace mmo
 {
+	class Vector3;
+
 	namespace proto
 	{
 		class SpellEntry;
@@ -151,6 +153,10 @@ namespace mmo
 
 	private:
 		void HandleAreaAuraTick();
+
+		void RemoveSelf();
+
+		bool ShouldRemoveAreaAuraDueToCasterConditions(const std::shared_ptr<GameUnitS>& caster, uint64 ownerGroupId, const Vector3& position, float range);
 
 	public:
 		/// Gets the owning unit of this aura (the target of the aura).
