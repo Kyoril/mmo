@@ -28,7 +28,7 @@ namespace mmo
 
 		const auto& location = GetControlled().GetPosition();
 
-		m_unitWatcher = GetControlled().GetWorldInstance()->GetUnitFinder().WatchUnits(Circle(location.x, location.y, 40.0f), [this](GameUnitS& unit, bool isVisible) -> bool
+		m_unitWatcher = GetControlled().GetWorldInstance()->GetUnitFinder().WatchUnits(Circle(location.x, location.z, 40.0f), [this](GameUnitS& unit, bool isVisible) -> bool
 			{
 				const auto& controlled = GetControlled();
 				if (&unit == &controlled)
@@ -109,7 +109,7 @@ namespace mmo
 		if (m_unitWatcher)
 		{
 			const auto& loc = GetControlled().GetPosition();
-			m_unitWatcher->SetShape(Circle(loc.x, loc.y, 40.0f));
+			m_unitWatcher->SetShape(Circle(loc.x, loc.z, 40.0f));
 		}
 	}
 
