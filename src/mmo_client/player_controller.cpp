@@ -597,7 +597,7 @@ namespace mmo
 					}
 					else if (m_hoveredUnit->IsAlive())
 					{
-						if (m_controlledUnit->IsFriendlyTo(*m_hoveredUnit))
+						if (m_controlledUnit->IsFriendlyTo(*m_hoveredUnit) && m_controlledUnit->IsWithinRange(*m_hoveredUnit, LootDistance))
 						{
 							const uint32 npcFlags = m_hoveredUnit->Get<uint32>(object_fields::NpcFlags);
 

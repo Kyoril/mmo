@@ -171,6 +171,8 @@ namespace mmo
 
 		bool IsWorldObject() const { return GetTypeId() == ObjectTypeId::Object; }
 
+		virtual bool IsInteractable(const GameUnitS& interactor) const { return false; };
+
 		template<class T>
 		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{

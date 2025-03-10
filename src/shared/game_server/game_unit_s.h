@@ -372,7 +372,7 @@ namespace mmo
 		/// Determines whether there is a timed out pending movement change.
 		bool HasTimedOutPendingMovementChange() const;
 
-		virtual bool IsInteractable(const GameUnitS& interactor) const;
+		virtual bool IsInteractable(const GameUnitS& interactor) const override;
 
 		virtual float GetInteractionDistance() const;
 

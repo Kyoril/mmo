@@ -42,6 +42,11 @@ namespace mmo
 			return;
 		}
 
+		if (!unit->IsInteractable(*m_character))
+		{
+			return;
+		}
+
 		// Is this unit a quest giver?
 		if (unit->GetEntry().quests_size() == 0 && unit->GetEntry().end_quests_size() == 0)
 		{
@@ -192,6 +197,11 @@ namespace mmo
 			return;
 		}
 
+		if (!questGiverObject->IsInteractable(*m_character))
+		{
+			return;
+		}
+
 		SendQuestDetails(questGiverGuid, *quest);
 	}
 
@@ -228,6 +238,11 @@ namespace mmo
 		}
 
 		if (!questGiverObject->EndsQuest(questId))
+		{
+			return;
+		}
+
+		if (!questGiverObject->IsInteractable(*m_character))
 		{
 			return;
 		}
@@ -316,6 +331,11 @@ namespace mmo
 		if (!questGiverObject->EndsQuest(questId))
 		{
 			ELOG("Quest " << questId << " is not ended by questgiver " << log_hex_digit(questGiverGuid));
+			return;
+		}
+
+		if (!questGiverObject->IsInteractable(*m_character))
+		{
 			return;
 		}
 
@@ -652,6 +672,11 @@ namespace mmo
 
 		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(objectGuid);
 		if (!unit)
+		{
+			return;
+		}
+
+		if (!unit->IsInteractable(*m_character))
 		{
 			return;
 		}
