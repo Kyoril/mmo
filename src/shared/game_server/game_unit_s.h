@@ -683,7 +683,7 @@ namespace mmo
 		NetUnitWatcherS* m_netUnitWatcher = nullptr;
 		mutable Vector3 m_lastPosition;
 
-		std::vector<std::shared_ptr<AuraContainer>> m_auras;
+		stable_list<std::shared_ptr<AuraContainer>> m_auras;
 
 		typedef std::array<float, unit_mod_type::End> UnitModTypeArray;
 		typedef std::array<UnitModTypeArray, unit_mods::End> UnitModArray;

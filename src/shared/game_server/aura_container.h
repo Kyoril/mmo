@@ -153,6 +153,8 @@ namespace mmo
 
 		bool HasEffect(AuraType type) const;
 
+		void NotifyOwnerMoved();
+
 	private:
 		void HandleAreaAuraTick();
 
@@ -253,5 +255,4 @@ namespace mmo
 
 		scoped_connection m_areaAuraTickConnection;
 	};
-
 }

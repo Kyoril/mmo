@@ -494,6 +494,32 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt##flag", spell_interrupt_flags::Interrupt);
 		}
 
+		if (ImGui::CollapsingHeader("Aura Interrupt Flags", ImGuiTreeNodeFlags_None))
+		{
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Hit By Spell", spell_aura_interrupt_flags::HitBySpell);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Damaged By Any Damage", spell_aura_interrupt_flags::Damage);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Crowd Controlled", spell_aura_interrupt_flags::CrowdControl);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Moving", spell_aura_interrupt_flags::Move);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Turning", spell_aura_interrupt_flags::Turning);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Entering Combat", spell_aura_interrupt_flags::EnterCombat);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Unmounted", spell_aura_interrupt_flags::NotMounted);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Swimming", spell_aura_interrupt_flags::NotAboveWater);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When No Longer Swimming", spell_aura_interrupt_flags::NotUnderWater);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Unsheathing", spell_aura_interrupt_flags::NotSheathed);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Talking to an Npc", spell_aura_interrupt_flags::Talk);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Interacting with a Game Object", spell_aura_interrupt_flags::Use);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Auto Attacking", spell_aura_interrupt_flags::Attack);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Spell Casting", spell_aura_interrupt_flags::Cast);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Transforming", spell_aura_interrupt_flags::Transform);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Mounting", spell_aura_interrupt_flags::Mount);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Standing Up", spell_aura_interrupt_flags::NotSeated);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Map Changed", spell_aura_interrupt_flags::ChangeMap);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Unattackable", spell_aura_interrupt_flags::Unattackable);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Teleported", spell_aura_interrupt_flags::Teleported);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Flagged For PvP", spell_aura_interrupt_flags::EnterPvPCombat);
+			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Directly Damaged", spell_aura_interrupt_flags::DirectDamage);
+		}
+
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
 		{
 			CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
@@ -736,17 +762,22 @@ namespace mmo
 					break;
 				}
 			case spell_effects::Energize:
-				if (ImGui::BeginCombo("Power Type", s_powerTypes[effect.miscvaluea()].c_str(), ImGuiComboFlags_None))
+			case spell_effects::ApplyAura:
+			case spell_effects::ApplyAreaAura:
+				if (currentEffectType == spell_effects::Energize || effect.aura() == aura_type::PeriodicEnergize)
 				{
-					for (size_t i = 0; i < std::size(s_powerTypes); ++i)
+					if (ImGui::BeginCombo("Power Type", s_powerTypes[effect.miscvaluea()].c_str(), ImGuiComboFlags_None))
 					{
-						if (ImGui::Selectable(s_powerTypes[i].c_str(), effect.miscvaluea() == i))
+						for (size_t i = 0; i < std::size(s_powerTypes); ++i)
 						{
-							effect.set_miscvaluea(i);
+							if (ImGui::Selectable(s_powerTypes[i].c_str(), effect.miscvaluea() == i))
+							{
+								effect.set_miscvaluea(i);
+							}
 						}
-					}
 
-					ImGui::EndCombo();
+						ImGui::EndCombo();
+					}
 				}
 				break;
 			}

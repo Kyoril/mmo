@@ -632,7 +632,7 @@ namespace mmo
 		}
 
 		// Take money
-		uint32 price = itemEntry->buyprice() * count;
+		uint32 price = itemEntry->buyprice() * totalCount;
 		uint32 money = m_character->Get<uint32>(object_fields::Money);
 		if (money < price)
 		{

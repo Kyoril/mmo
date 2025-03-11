@@ -352,7 +352,47 @@ namespace mmo
 
 	void AuraEffect::HandlePeriodicEnergize()
 	{
-		// TODO
+		int32 powerType = m_effect.miscvaluea();
+		if (powerType < 0 || powerType > 2)
+		{
+			return;
+		}
+
+		uint32 power = GetBasePoints();
+
+		uint32 curPower = m_container.GetOwner().Get<uint32>(object_fields::Mana + powerType);
+		uint32 maxPower = m_container.GetOwner().Get<uint32>(object_fields::MaxMana + powerType);
+		if (curPower + power > maxPower)
+		{
+			power = maxPower - curPower;
+			curPower = maxPower;
+		}
+		else
+		{
+			curPower += power;
+		}
+
+		m_container.GetOwner().Set<uint32>(object_fields::Mana + powerType, curPower);
+
+		// Send event to all subscribers in sight
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::OutgoingPacket packet(sink);
+
+		packet.Start(game::realm_client_packet::PeriodicAuraLog);
+		packet
+			<< io::write_packed_guid(m_container.GetOwner().GetGuid())
+			<< io::write_packed_guid(m_container.GetCasterId())
+			<< io::write<uint32>(m_container.GetSpell().id())
+			<< io::write<uint32>(GetType())
+			<< io::write<uint32>(power);
+		packet.Finish();
+
+		m_container.GetOwner().ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer, true);
+			});
+
 	}
 
 	void AuraEffect::HandlePeriodicTriggerSpell() const
@@ -559,6 +599,20 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void AuraContainer::NotifyOwnerMoved()
+	{
+		if (!m_applied)
+		{
+			return;
+		}
+
+		// Should aura be removed when moving?
+		if (m_spell.aurainterruptflags() & spell_aura_interrupt_flags::Move)
+		{
+			RemoveSelf();
+		}
 	}
 
 	void AuraContainer::RemoveSelf()

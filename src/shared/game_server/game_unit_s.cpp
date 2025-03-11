@@ -305,6 +305,11 @@ namespace mmo
 	{
 		if (m_movementInfo.position != info.position)
 		{
+			for (const auto& aura : m_auras)
+			{
+				aura->NotifyOwnerMoved();
+			}
+
 			m_spellCast->StopCast(spell_interrupt_flags::Movement);
 		}
 
@@ -660,8 +665,8 @@ namespace mmo
 		}
 
 		// Apply new aura
-		const auto& appliedAura = m_auras.emplace_back(std::move(aura));
-		appliedAura->SetApplied(true);
+		m_auras.emplace_back(aura);
+		aura->SetApplied(true);
 	}
 
 	void GameUnitS::RemoveAllAurasDueToItem(const uint64 itemGuid)

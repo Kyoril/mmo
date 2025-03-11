@@ -24,6 +24,7 @@
 #include "vendor_client.h"
 #include "party_info.h"
 #include "party_unit_handle.h"
+#include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
@@ -454,7 +455,7 @@ namespace mmo
 			maxBasePoints = basePoints + randomPoints;
 		}
 
-		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int32 level, int effectIndex, int& min, int& max)
+		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int32 level, int effectIndex, bool includeTickCount, int& min, int& max)
 		{
 			min = 0;
 			max = 0;
@@ -469,10 +470,28 @@ namespace mmo
 				return;
 			}
 
+			const bool isPeriodicEffect =
+				spell.effects(effectIndex).aura() == aura_type::PeriodicDamage || 
+				spell.effects(effectIndex).aura() == aura_type::PeriodicHeal ||
+				spell.effects(effectIndex).aura() == aura_type::PeriodicTriggerSpell || 
+				spell.effects(effectIndex).aura() == aura_type::PeriodicEnergize;
+
+			int32 tickCount = 1;
+			if (isPeriodicEffect && spell.effects(effectIndex).amplitude() > 0 && spell.duration() > 0)
+			{
+				tickCount = spell.duration() / spell.effects(effectIndex).amplitude();
+			}
+
 			const auto& effect = spell.effects(effectIndex);
 
 			int32 minPoints = 0, maxPoints = 0;
 			CalculateEffectBasePoints(effect, spell, level, minPoints, maxPoints);
+
+			if (includeTickCount)
+			{
+				minPoints *= tickCount;
+				maxPoints *= tickCount;
+			}
 
 			min = std::abs(minPoints);
 			max = std::abs(maxPoints);
@@ -535,6 +554,60 @@ namespace mmo
 					}
 					break;
 
+					case 'i':
+					case 'I':
+					{
+						if (i < text.size() - 1 && text[i + 1] != ' ')
+						{
+							effectIndex = text[i + 1] - '0';
+							i++;
+						}
+
+						uint32 amplitude = 0;
+						double displayValue = 0.0f;
+						if (effectIndex >= 0 || effectIndex < spell->effects_size())
+						{
+							if (spell->effects(effectIndex).amplitude() > 0)
+							{
+								amplitude = spell->effects(effectIndex).amplitude();
+								displayValue = static_cast<double>(spell->effects(effectIndex).amplitude()) / 1000.0;
+							}
+						}
+
+						// Default display value is seconds
+						String formatTemplate = "FORMAT_DURATION_SECONDS";
+
+						if (amplitude >= 60000 * 60)
+						{
+							// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
+							displayValue /= 3600.0;
+							formatTemplate = "FORMAT_DURATION_HOURS";
+						}
+						else if (amplitude >= 60000)
+						{
+							displayValue /= 60.0;
+							formatTemplate = "FORMAT_DURATION_MINUTES";
+						}
+
+						if (token == 'i')
+						{
+							formatTemplate += "_PRECISE";
+						}
+
+						auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
+						if (format)
+						{
+							char buffer[128];
+							snprintf(buffer, 128, format->c_str(), displayValue);
+							strm << buffer;
+						}
+						else
+						{
+							strm << formatTemplate;
+						}
+					}
+					break;
+
 					case 'm':
 						if (i < text.size() - 1 && text[i + 1] != ' ')
 						{
@@ -542,7 +615,7 @@ namespace mmo
 							i++;
 						}
 
-						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
 						strm << min;
 						break;
 
@@ -552,7 +625,7 @@ namespace mmo
 							effectIndex = text[i + 1] - '0';
 							i++;
 						}
-						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
 						strm << max;
 						break;
 
@@ -564,7 +637,26 @@ namespace mmo
 							i++;
 						}
 
-						Spell_GetEffectPoints(*spell, level, effectIndex, min, max);
+						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
+						if (min == max)
+						{
+							strm << min;
+						}
+						else
+						{
+							strm << min << " - " << max;
+						}
+						break;
+
+					case 'o':
+					case 'O':
+						if (i < text.size() - 1 && text[i + 1] != ' ')
+						{
+							effectIndex = text[i + 1] - '0';
+							i++;
+						}
+
+						Spell_GetEffectPoints(*spell, level, effectIndex, true, min, max);
 						if (min == max)
 						{
 							strm << min;
