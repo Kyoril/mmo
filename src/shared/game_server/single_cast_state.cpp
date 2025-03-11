@@ -260,6 +260,13 @@ namespace mmo
 
 	bool SingleCastState::Validate()
 	{
+		// Caster level too low?
+		if (m_spell.spelllevel() > 1 && m_cast.GetExecuter().GetLevel() < m_spell.spelllevel())
+		{
+			SendEndCast(spell_cast_result::FailedLevelRequirement);
+			return false;
+		}
+
 		// Caster either has to be alive or spell has to be castable while dead
 		if (!m_cast.GetExecuter().IsAlive() && !HasAttributes(0, spell_attributes::CastableWhileDead))
 		{
