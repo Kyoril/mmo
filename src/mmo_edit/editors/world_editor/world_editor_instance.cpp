@@ -17,6 +17,8 @@
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
+#include "game/character_customization/avatar_definition_mgr.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
@@ -1129,7 +1131,24 @@ namespace mmo
 			}
 			else if (const auto* model = project.models.getById(modelId))
 			{
-				meshFile = model->filename();
+				if (model->flags() & model_data_flags::IsCustomizable)
+				{
+					auto definition = AvatarDefinitionManager::Get().Load(model->filename());
+					if (!definition)
+					{
+						ELOG("Unable to load avatar definition " << model->filename());
+					}
+					else
+					{
+						meshFile = definition->GetBaseMesh();
+
+						// TODO: Apply customization
+					}
+				}
+				else
+				{
+					meshFile = model->filename();
+				}
 			}
 			else
 			{
@@ -1266,8 +1285,28 @@ namespace mmo
 			return;
 		}
 
+		String meshFile;
+		if (model->flags() & model_data_flags::IsCustomizable)
+		{
+			auto definition = AvatarDefinitionManager::Get().Load(model->filename());
+			if (!definition)
+			{
+				ELOG("Unable to load avatar definition " << model->filename());
+			}
+			else
+			{
+				meshFile = definition->GetBaseMesh();
+
+				// TODO: Apply customization
+			}
+		}
+		else
+		{
+			meshFile = model->filename();
+		}
+
 		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
-		Entity* entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), model->filename());
+		Entity* entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), meshFile);
 		ASSERT(entity);
 
 		entity->SetUserObject(&spawn);

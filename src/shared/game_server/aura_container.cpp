@@ -50,6 +50,7 @@ namespace mmo
 			HandleProcTriggerSpell(apply);
 			break;
 		case AuraType::ModDamageDone:
+		case AuraType::ModDamageDonePct:
 			HandleModDamageDone(apply);
 			break;
 		case AuraType::ModHealingDone:
@@ -59,6 +60,7 @@ namespace mmo
 			HandleModHealingTaken(apply);
 			break;
 		case AuraType::ModDamageTaken:
+			HandleModDamageTaken(apply);
 			break;
 		case AuraType::ModAttackSpeed:
 			HandleModAttackSpeed(apply);
@@ -167,9 +169,14 @@ namespace mmo
 	void AuraEffect::HandleModDamageDone(const bool apply) const
 	{
 		m_container.GetOwner().UpdateModifierValue(unit_mods::SpellDamage,
-			unit_mod_type::TotalValue,
+			m_effect.aura() == aura_type::ModDamageDone ? unit_mod_type::TotalValue : unit_mod_type::TotalPct,
 			GetBasePoints(),
 			apply);
+	}
+
+	void AuraEffect::HandleModDamageTaken(bool apply) const
+	{
+
 	}
 
 	void AuraEffect::HandleModHealingDone(const bool apply) const
