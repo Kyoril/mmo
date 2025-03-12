@@ -3,6 +3,7 @@
 #include "game_unit_s.h"
 
 #include "each_tile_in_sight.h"
+#include "game_player_s.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "proto_data/project.h"
@@ -404,6 +405,25 @@ namespace mmo
 				continue;
 			}
 
+			// Check race requirement
+			if (IsPlayer())
+			{
+				GamePlayerS& playerCaster = AsPlayer();
+				if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+				{
+					WLOG("Spell " << spellId << " is not usable by the players race");
+					continue;
+				}
+
+				// Check class requirement
+				if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+				{
+					WLOG("Spell " << spellId << " is not usable by the players class");
+					continue;
+				}
+			}
+
+
 			m_spells.insert(spell);
 		}
 	}
@@ -421,6 +441,24 @@ namespace mmo
 		{
 			WLOG("Spell " << spellId << " is already known by unit " << log_hex_digit(GetGuid()));
 			return;
+		}
+
+		// Check race requirement
+		if (IsPlayer())
+		{
+			GamePlayerS& playerCaster = AsPlayer();
+			if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+			{
+				WLOG("Spell " << spellId << " is not usable by the players race");
+				return;
+			}
+
+			// Check class requirement
+			if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+			{
+				WLOG("Spell " << spellId << " is not usable by the players class");
+				return;
+			}
 		}
 
 		auto it = m_spells.insert(spell);

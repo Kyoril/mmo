@@ -267,6 +267,24 @@ namespace mmo
 			return false;
 		}
 
+		// Check race requirement
+		if (m_cast.GetExecuter().IsPlayer())
+		{
+			GamePlayerS& playerCaster = m_cast.GetExecuter().AsPlayer();
+			if (m_spell.racemask() != 0 && !(m_spell.racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+			{
+				SendEndCast(spell_cast_result::FailedError);
+				return false;
+			}
+
+			// Check class requirement
+			if (m_spell.classmask() != 0 && !(m_spell.classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+			{
+				SendEndCast(spell_cast_result::FailedError);
+				return false;
+			}
+		}
+
 		// Caster either has to be alive or spell has to be castable while dead
 		if (!m_cast.GetExecuter().IsAlive() && !HasAttributes(0, spell_attributes::CastableWhileDead))
 		{

@@ -432,6 +432,59 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("If none are checked, all races / classes are allowed.");
+
+			ImGui::Text("Required Races");
+
+			if (ImGui::BeginTable("requiredRaces", 4, ImGuiTableFlags_None))
+			{
+				for (uint32 i = 0; i < 32; ++i)
+				{
+					if (proto::RaceEntry* race = m_project.races.getById(i))
+					{
+						ImGui::TableNextColumn();
+
+						bool raceIncluded = (currentEntry.racemask() & (1 << (i - 1))) != 0;
+						if (ImGui::Checkbox(race->name().c_str(), &raceIncluded))
+						{
+							if (raceIncluded)
+								currentEntry.set_racemask(currentEntry.racemask() | (1 << (i - 1)));
+							else
+								currentEntry.set_racemask(currentEntry.racemask() & ~(1 << (i - 1)));
+						}
+					}
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::Text("Required Classes");
+
+			if (ImGui::BeginTable("requiredClasses", 4, ImGuiTableFlags_None))
+			{
+				for (uint32 i = 0; i < 32; ++i)
+				{
+					if (proto::ClassEntry* classEntry = m_project.classes.getById(i))
+					{
+						ImGui::TableNextColumn();
+
+						bool classIncluded = (currentEntry.classmask() & (1 << (i - 1))) != 0;
+						if (ImGui::Checkbox(classEntry->name().c_str(), &classIncluded))
+						{
+							if (classIncluded)
+								currentEntry.set_classmask(currentEntry.classmask() | (1 << (i - 1)));
+							else
+								currentEntry.set_classmask(currentEntry.classmask() & ~(1 << (i - 1)));
+						}
+					}
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Spell Proc", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(procchance, "Chance %", 0, 100);
