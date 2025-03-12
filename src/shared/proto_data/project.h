@@ -75,7 +75,6 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::DodgeChance, mmo::proto::DodgeChanceEntry> DodgeChanceManager;
 		typedef TemplateManager<mmo::proto::ResistancePercentage, mmo::proto::ResistancePercentageEntry> ResistancePercentageManager;
 		typedef TemplateManager<mmo::proto::Variables, mmo::proto::VariableEntry> VariableManager;
-		typedef TemplateManager<mmo::proto::NpcTexts, mmo::proto::NpcTextEntry> NpcTextManager;
 		typedef TemplateManager<mmo::proto::GossipMenus, mmo::proto::GossipMenuEntry> GossipMenuManager;
 		typedef TemplateManager<mmo::proto::ModelDatas, mmo::proto::ModelDataEntry> ModelDataManager;
 
@@ -127,7 +126,6 @@ namespace mmo
 			DodgeChanceManager dodgeChance;
 			ResistancePercentageManager resistancePcts;
 			VariableManager variables;
-			NpcTextManager npcTexts;
 			GossipMenuManager gossipMenus;
 			RangeManager ranges;
 			ModelDataManager models;
@@ -206,7 +204,6 @@ namespace mmo
 				managers.push_back(ManagerEntry("dodge_chance", dodgeChance));
 				managers.push_back(ManagerEntry("resistance_percentages", resistancePcts));
 				managers.push_back(ManagerEntry("variables", variables));
-				managers.push_back(ManagerEntry("npc_texts", npcTexts));
 				managers.push_back(ManagerEntry("gossip_menus", gossipMenus));
 				managers.push_back(ManagerEntry("model_data", models));
 
@@ -274,7 +271,6 @@ namespace mmo
 				managers.push_back(ManagerEntry("dodge_chance", "dodge_chance", dodgeChance));
 				managers.push_back(ManagerEntry("resistance_percentages", "resistance_percentages", resistancePcts));
 				managers.push_back(ManagerEntry("variables", "variables", variables));
-				managers.push_back(ManagerEntry("npc_texts", "npc_texts", npcTexts));
 				managers.push_back(ManagerEntry("gossip_menus", "gossip_menus", gossipMenus));
 				managers.push_back(ManagerEntry("model_data", "model_data", models));
 
