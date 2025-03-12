@@ -177,6 +177,261 @@ namespace mmo
 		}
 	}
 
+	void MeshEditorInstance::LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh,
+		const Matrix4& transform)
+	{
+		if (pNode->mNumMeshes > 0)
+		{
+			AABB aabb = mesh->GetBounds();
+
+			for (unsigned int idx = 0; idx < pNode->mNumMeshes; ++idx)
+			{
+				const aiMesh* aiMesh = mScene->mMeshes[pNode->mMeshes[idx]];
+				DLOG("Submesh " << idx << " for mesh '" << String(pNode->mName.data) << "'");
+
+				// Create a material instance for the mesh.
+				const aiMaterial* pAIMaterial = mScene->mMaterials[aiMesh->mMaterialIndex];
+				MaterialPtr material = m_scene.GetDefaultMaterial();
+
+				CreateSubMesh(pNode->mName.data, idx, pNode, aiMesh, material, mesh, aabb, transform);
+			}
+
+			// We must indicate the bounding box
+			mesh->SetBounds(aabb);
+		}
+
+		// Traverse all child nodes of the current node instance
+		for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; childIdx++)
+		{
+			const aiNode* pChildNode = pNode->mChildren[childIdx];
+			LoadDataFromNode(mScene, pChildNode, mesh, transform);
+		}
+	}
+
+	bool MeshEditorInstance::CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh,
+		const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const
+	{
+		// if animated all submeshes must have bone weights
+		if (!m_mesh->GetSkeleton() && aiMesh->HasBones())
+		{
+			DLOG("Skipping mesh " << aiMesh->mName.C_Str() << " with bone weights");
+			return false;
+		}
+
+		// now begin the object definition
+		// We create a submesh per material
+		SubMesh& submesh = mesh->CreateSubMesh(name + std::to_string(index));
+		submesh.useSharedVertices = false;
+		submesh.SetMaterial(material);
+
+		// prime pointers to vertex related data
+		aiVector3D* vec = aiMesh->mVertices;
+		aiVector3D* norm = aiMesh->mNormals;
+		aiVector3D* binorm = aiMesh->mBitangents;
+		aiVector3D* tang = aiMesh->mTangents;
+		aiVector3D* uv = aiMesh->mTextureCoords[0];
+		aiColor4D* col = aiMesh->mColors[0];
+
+		// We must create the vertex data, indicating how many vertices there will be
+		submesh.vertexData = std::make_unique<VertexData>();
+		submesh.vertexData->vertexStart = 0;
+		submesh.vertexData->vertexCount = aiMesh->mNumVertices;
+
+		// We must now declare what the vertex data contains
+		VertexDeclaration* declaration = submesh.vertexData->vertexDeclaration;
+		static constexpr unsigned short source = 0;
+		uint32 offset = 0;
+
+		DLOG(aiMesh->mNumVertices << " vertices");
+		offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
+		offset += declaration->AddElement(source, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+		offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+		offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+		offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
+		offset += declaration->AddElement(source, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
+
+		Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second* transform;
+		Matrix3 normalMatrix = aiM.Linear().Inverse().Transpose();
+
+		std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertexData(aiMesh->mNumVertices);
+		POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX* dataPointer = vertexData.data();
+
+		// Now we get access to the buffer to fill it. During so we record the bounding box.
+		for (size_t i = 0; i < aiMesh->mNumVertices; ++i)
+		{
+			// Position
+			Vector3 vectorData(vec->x, vec->y, vec->z);
+			vectorData = aiM * vectorData;
+
+			dataPointer->pos = vectorData;
+			vec++;
+
+			boundingBox.Combine(vectorData);
+
+			// Color
+			if (col)
+			{
+				dataPointer->color = Color(col->r, col->g, col->b, col->a);
+				col++;
+			}
+			else
+			{
+				dataPointer->color = Color::White;
+			}
+
+			// Normal
+			if (norm)
+			{
+				vectorData = normalMatrix * Vector3(norm->x, norm->y, norm->z).NormalizedCopy();
+				vectorData.Normalize();
+
+				dataPointer->normal = vectorData;
+				norm++;
+			}
+			else
+			{
+				dataPointer->normal = Vector3::UnitY;
+			}
+
+			// Calculate binormal and tangent from normal
+			const Vector3 c1 = dataPointer->normal.Cross(Vector3::UnitZ);
+			const Vector3 c2 = dataPointer->normal.Cross(Vector3::UnitY);
+			if (c1.GetSquaredLength() > c2.GetSquaredLength())
+			{
+				dataPointer->tangent = c1;
+			}
+			else
+			{
+				dataPointer->tangent = c2;
+			}
+			dataPointer->tangent.Normalize();
+			dataPointer->binormal = dataPointer->normal.Cross(dataPointer->tangent);
+			dataPointer->binormal.Normalize();
+
+			// uvs
+			if (uv)
+			{
+				dataPointer->uv[0] = uv->x;
+				dataPointer->uv[1] = uv->y;
+				uv++;
+			}
+			else
+			{
+				dataPointer->uv[0] = 0.0f;
+				dataPointer->uv[1] = 0.0f;
+			}
+
+			dataPointer++;
+		}
+
+		VertexBufferPtr buffer = GraphicsDevice::Get().CreateVertexBuffer(
+			submesh.vertexData->vertexCount,
+			submesh.vertexData->vertexDeclaration->GetVertexSize(source),
+			BufferUsage::StaticWriteOnly,
+			vertexData.data());
+		submesh.vertexData->vertexBufferBinding->SetBinding(source, buffer);
+
+		// set bone weights
+		if (aiMesh->HasBones() && m_mesh->GetSkeleton())
+		{
+			for (uint32 i = 0; i < aiMesh->mNumBones; i++)
+			{
+				if (aiBone* bone = aiMesh->mBones[i]; nullptr != bone)
+				{
+					String boneName = bone->mName.data;
+					for (uint32 weightIdx = 0; weightIdx < bone->mNumWeights; weightIdx++)
+					{
+						aiVertexWeight aiWeight = bone->mWeights[weightIdx];
+
+						VertexBoneAssignment vba;
+						vba.vertexIndex = aiWeight.mVertexId;
+						vba.boneIndex = m_mesh->GetSkeleton()->GetBone(boneName)->GetHandle();
+						vba.weight = aiWeight.mWeight;
+
+						submesh.AddBoneAssignment(vba);
+					}
+				}
+			}
+		}
+		else
+		{
+			DLOG("Mesh " << aiMesh->mName.C_Str() << " has no bone weights");
+		}
+
+		if (aiMesh->mNumFaces == 0)
+		{
+			return true;
+		}
+
+		DLOG(aiMesh->mNumFaces << " faces");
+
+		aiFace* faces = aiMesh->mFaces;
+		int faceSz = aiMesh->mPrimitiveTypes == aiPrimitiveType_LINE ? 2 : 3;
+
+		// Creates the index data
+		submesh.indexData = std::make_unique<IndexData>();
+		submesh.indexData->indexStart = 0;
+		submesh.indexData->indexCount = aiMesh->mNumFaces * faceSz;
+
+		if (aiMesh->mNumVertices >= 65536) // 32 bit index buffer
+		{
+			std::vector<uint32> indexDataBuffer(aiMesh->mNumFaces * faceSz);
+			uint32* indexData = indexDataBuffer.data();
+			for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
+			{
+				for (int j = 0; j < faceSz; j++)
+				{
+					*indexData++ = faces->mIndices[j];
+				}
+
+				faces++;
+			}
+
+			submesh.indexData->indexBuffer =
+				GraphicsDevice::Get().CreateIndexBuffer(
+					submesh.indexData->indexCount,
+					IndexBufferSize::Index_32,
+					BufferUsage::StaticWriteOnly,
+					indexDataBuffer.data());
+		}
+		else // 16 bit index buffer
+		{
+			std::vector<uint16> indexDataBuffer(aiMesh->mNumFaces * faceSz);
+			uint16* indexData = indexDataBuffer.data();
+			for (size_t i = 0; i < aiMesh->mNumFaces; ++i)
+			{
+				for (int j = 0; j < faceSz; j++)
+					*indexData++ = faces->mIndices[j];
+
+				faces++;
+			}
+
+			submesh.indexData->indexBuffer =
+				GraphicsDevice::Get().CreateIndexBuffer(
+					submesh.indexData->indexCount,
+					IndexBufferSize::Index_16,
+					BufferUsage::StaticWriteOnly,
+					indexDataBuffer.data());
+		}
+
+		return true;
+	}
+
+	void MeshEditorInstance::ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode,
+		const aiMatrix4x4& accTransform)
+	{
+		if (!mNodeDerivedTransformByName.contains(pNode->mName.data))
+		{
+			mNodeDerivedTransformByName[pNode->mName.data] = Matrix4(accTransform[0]);
+		}
+		for (unsigned int childIdx = 0; childIdx < pNode->mNumChildren; ++childIdx)
+		{
+			const aiNode* pChildNode = pNode->mChildren[childIdx];
+			ComputeNodesDerivedTransform(mScene, pChildNode, accTransform * pChildNode->mTransformation);
+		}
+	}
+
+
 	void MeshEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
@@ -320,6 +575,18 @@ namespace mmo
 			if (ImGui::Button("Save"))
 			{
 				Save();
+			}
+
+			ImGui::Separator();
+
+			
+			ImGui::InputText("Mesh", &m_importSubmeshFile);
+			if (ImGui::Button("Import Additional Submesh"))
+			{
+				ImportAdditionalSubmeshes(m_importSubmeshFile);
+				m_importSubmeshFile.clear();
+
+				m_entity->SetMesh(m_mesh);
 			}
 
 			ImGui::Separator();
@@ -892,5 +1159,35 @@ namespace mmo
 		SkeletonSerializer serializer;
 		serializer.Export(*m_mesh->GetSkeleton(), writer);
 		ILOG("Successfully saved animation to skeleton " << p);
+	}
+
+	void MeshEditorInstance::ImportAdditionalSubmeshes(const std::filesystem::path& path)
+	{
+		// Build transform matrix
+		const Matrix4 importTransform = Matrix4::Identity;
+
+		Assimp::Importer importer;
+
+		const aiScene* scene = importer.ReadFile(path.string(),
+			aiProcess_CalcTangentSpace |
+			aiProcess_Triangulate |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_SortByPType |
+			aiProcess_FlipUVs |
+			aiProcess_GenNormals
+		);
+
+		if (!scene)
+		{
+			ELOG("Failed to open file: " << importer.GetErrorString());
+			return;
+		}
+
+		mNodeDerivedTransformByName.clear();
+
+		ComputeNodesDerivedTransform(scene, scene->mRootNode, scene->mRootNode->mTransformation);
+
+		LoadDataFromNode(scene, scene->mRootNode, m_mesh.get(), importTransform);
+
 	}
 }

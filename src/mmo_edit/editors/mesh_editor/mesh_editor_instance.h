@@ -5,6 +5,7 @@
 #include "base/signal.h"
 
 #include <imgui.h>
+#include <assimp/scene.h>
 
 #include "anim_evaluator.h"
 #include "editors/editor_instance.h"
@@ -56,7 +57,15 @@ namespace mmo
 
 		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
 
+		void ImportAdditionalSubmeshes(const std::filesystem::path& path);
+
 		void RenderBoneNode(Bone& bone);
+
+		void LoadDataFromNode(const aiScene* mScene, const aiNode* pNode, Mesh* mesh, const Matrix4& transform);
+
+		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const;
+
+		void ComputeNodesDerivedTransform(const aiScene* mScene, const aiNode* pNode, const aiMatrix4x4& accTransform);
 
 	private:
 		MeshEditor& m_editor;
@@ -91,5 +100,9 @@ namespace mmo
 		std::unique_ptr<AnimEvaluator> m_animEvaluator;
 
 		std::set<uint16> m_includedSubMeshes;
+
+		typedef std::map<String, Matrix4> NodeTransformMap;
+		NodeTransformMap mNodeDerivedTransformByName;
+		String m_importSubmeshFile;
 	};
 }
