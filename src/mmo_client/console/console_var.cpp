@@ -192,6 +192,7 @@ namespace mmo
 		const auto it = s_consoleVars.find(name);
 		if (it != s_consoleVars.end())
 		{
+			it->second.RemoveFlag(CVF_Unregistered);
 			return &it->second;
 		}
 

@@ -45,6 +45,7 @@
 
 #include "audio.h"
 #include "party_info.h"
+#include "console/console_var.h"
 #include "game/group.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
@@ -70,6 +71,8 @@ namespace mmo
 
 	namespace
 	{
+		static ConsoleVar* s_debugOutputPathVar = nullptr;
+
 		String MapMouseButton(const MouseButton button)
 		{
 			if ((button & MouseButton::Left) == MouseButton::Left) return "LMB";
@@ -831,6 +834,8 @@ namespace mmo
 
 	void WorldState::RegisterGameplayCommands()
 	{
+		s_debugOutputPathVar = ConsoleVarMgr::RegisterConsoleVar("DebugTargetPath", "", "0");
+
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
 			ToggleAxisVisibility();
@@ -860,6 +865,8 @@ namespace mmo
 
 	void WorldState::RemoveGameplayCommands()
 	{
+		ConsoleVarMgr::UnregisterConsoleVar("DebugTargetPath");
+
 		const String commandsToRemove[] = {
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
@@ -1397,6 +1404,29 @@ namespace mmo
 		}
 
 		path.push_back(endPosition);
+
+		// Check whether we should update the output debug path
+		if (guid == ObjectMgr::GetSelectedObjectGuid())
+		{
+			if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
+			{
+				// Update it!
+				DLOG("Creature path received (Size: " << path.size() << ")");
+
+				size_t index = 0;
+				for (auto& p : path)
+				{
+					DLOG("\t#" << index++ << ": " << p);
+				}
+			}
+			else
+			{
+				// Ensure it is not visible
+
+			}
+		}
+		
+
 		unitPtr->SetMovementPath(path, endTime - startTime);
 
 		return PacketParseResult::Pass;
