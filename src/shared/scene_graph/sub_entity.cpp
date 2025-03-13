@@ -12,6 +12,7 @@ namespace mmo
 		: m_parent(parent)
 		, m_subMesh(subMesh)
 	{
+		m_visible = m_subMesh.IsVisibleByDefault();
 	}
 
 	void SubEntity::PrepareRenderOperation(RenderOperation& operation)

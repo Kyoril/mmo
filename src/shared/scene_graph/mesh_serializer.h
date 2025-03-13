@@ -28,7 +28,8 @@ namespace mmo
 
 			Version_0_1 = 0x0100,
 			Version_0_2 = 0x0200,
-			Version_0_3 = 0x0300
+			Version_0_3 = 0x0300,
+			Version_0_3_1 = 0x0301
 		};	
 	}
 

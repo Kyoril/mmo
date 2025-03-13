@@ -65,6 +65,10 @@ namespace mmo
 
 		const String& GetTag(uint16 index) const;
 
+		bool IsVisibleByDefault() const { return m_visibleByDefault; }
+
+		void SetVisibleByDefault(bool visible) { m_visibleByDefault = visible; }
+
 	public:
 		Mesh& parent;
 
@@ -82,6 +86,6 @@ namespace mmo
 		TopologyType m_topologyType = TopologyType::TriangleList;
 		VertexBoneAssignmentList m_boneAssignments {};
 		std::set<String> m_tags;
-
+		bool m_visibleByDefault = true;
 	};
 }

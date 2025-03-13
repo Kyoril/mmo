@@ -665,7 +665,23 @@ namespace mmo
 								ImGui::NextColumn();
 
 								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::AlignTextToFramePadding();
+								ImGui::TreeNodeEx("Field_Visible", flags, "Visible");
 
+								ImGui::TableSetColumnIndex(1);
+								ImGui::SetNextItemWidth(-FLT_MIN);
+
+								bool visible = m_entity->GetMesh()->GetSubMesh(i).IsVisibleByDefault();
+								if (ImGui::Checkbox("##visibleByDefault", &visible))
+								{
+									m_entity->GetMesh()->GetSubMesh(i).SetVisibleByDefault(visible);
+									m_entity->GetSubEntity(i)->SetVisible(visible);
+								}
+
+								ImGui::NextColumn();
+
+								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::AlignTextToFramePadding();
 								if (ImGui::TreeNode("Field_Tags", "Tags"))

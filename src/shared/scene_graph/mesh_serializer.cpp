@@ -123,7 +123,7 @@ namespace mmo
 	{
 		if (version == mesh_version::Latest)
 		{
-			version = mesh_version::Version_0_3;
+			version = mesh_version::Version_0_3_1;
 		}
 
 		// Write the vertex chunk data
@@ -180,6 +180,12 @@ namespace mmo
 
 				// Write vertex data
 				writer << io::write<uint8>(submesh->useSharedVertices);
+
+				if (version >= mesh_version::Version_0_3_1)
+				{
+					writer << io::write<uint8>(submesh->IsVisibleByDefault());
+				}
+				
 				if (!submesh->useSharedVertices)
 				{
 					WriteVertexData(*submesh->vertexData, writer);
@@ -527,12 +533,22 @@ namespace mmo
 		subMesh.useSharedVertices = useSharedVertices;
 		ASSERT(!useSharedVertices || m_mesh.sharedVertexData);
 
+		if (m_version >= mesh_version::Version_0_3_1)
+		{
+			bool visibleByDefault = true;
+			if (!(reader >> io::read<uint8>(visibleByDefault)))
+			{
+				ELOG("Failed to read submesh visibleByDefault");
+				return false;
+			}
+
+			subMesh.SetVisibleByDefault(visibleByDefault);
+		}
+
 		if (!useSharedVertices)
 		{
 			// Read vertex data
 			subMesh.vertexData = std::make_unique<VertexData>();
-
-			// TODO: Read vertex data
 
 			uint32 vertexCount = 0;
 			if (!(reader >> io::read<uint32>(vertexCount)))
