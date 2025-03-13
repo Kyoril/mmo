@@ -184,6 +184,8 @@ namespace mmo
 			>> io::read<uint8>(m_version2)
 			>> io::read<uint8>(m_version3)
 			>> io::read<uint16>(m_build)
+			>> io::read<uint32>(m_authProtocol)
+			>> io::read<uint32>(m_gameProtocol)
 			>> io::read_container<uint8>(m_realmName)))
 		{
 			return PacketParseResult::Disconnect;

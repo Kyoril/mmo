@@ -86,6 +86,9 @@ namespace mmo
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
+		uint32 m_authProtocol = 0;
+		uint32 m_gameProtocol = 0;
+
 	private:
 		BigNumber m_sessionKey;
 		BigNumber m_s, m_v;

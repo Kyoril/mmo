@@ -7,6 +7,7 @@
 #include "base/typedefs.h"
 #include "binary_io/writer.h"
 #include "game/aura.h"
+#include "game/damage_school.h"
 
 namespace mmo
 {
@@ -162,6 +163,8 @@ namespace mmo
 
 		bool ShouldRemoveAreaAuraDueToCasterConditions(const std::shared_ptr<GameUnitS>& caster, uint64 ownerGroupId, const Vector3& position, float range);
 
+		void OnOwnerDamaged(GameUnitS* instigator, uint32 school, DamageType type);
+
 	public:
 		/// Gets the owning unit of this aura (the target of the aura).
 		GameUnitS& GetOwner() const
@@ -254,5 +257,7 @@ namespace mmo
 		Countdown m_areaAuraTick;
 
 		scoped_connection m_areaAuraTickConnection;
+
+		scoped_connection_container m_ownerEventConnections;
 	};
 }

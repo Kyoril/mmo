@@ -324,7 +324,8 @@ namespace mmo
 		/// information is not available (for example due to environmental damage))
 		signal<void(GameUnitS*)> killed;
 		signal<void(GameUnitS&, float)> threatened;
-		signal<void(GameUnitS*, uint32)> takenDamage;
+		signal<void(GameUnitS*, uint32, DamageType)> takenDamage;
+		signal<void(GameUnitS&, uint32, DamageType)> doneDamage;
 		signal<void(const proto::SpellEntry&)> startedCasting;
 
 		signal<void(GameUnitS&)> meleeAttackDone;
@@ -410,7 +411,7 @@ namespace mmo
 
 		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 
-		void Damage(uint32 damage, uint32 school, GameUnitS* instigator);
+		void Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType);
 
 		int32 Heal(uint32 amount, GameUnitS* instigator);
 

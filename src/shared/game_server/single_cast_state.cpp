@@ -734,7 +734,7 @@ namespace mmo
 			damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
 		}
 
-		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter());
+		unitTarget->Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility);
 
 		// Log spell damage to client
 		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
@@ -1242,7 +1242,7 @@ namespace mmo
 		}
 
 		// Log spell damage to client
-		unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter());
+		unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter(), damage_type::PhysicalAbility);
 		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
 	}
 

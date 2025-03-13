@@ -150,6 +150,12 @@ namespace mmo
 
 		const uint32 procChance = spell.procchance();
 
+
+		if (spell.procflags() & spell_proc_flags::TakenDamage)
+		{
+
+		}
+
 		if (spell.procflags() & spell_proc_flags::DoneMeleeAutoAttack)
 		{
 			m_procEffects += m_container.GetOwner().meleeAttackDone.connect([this, procSpell, procChance](GameUnitS& victim)
@@ -303,7 +309,7 @@ namespace mmo
 		});
 
 		// Update health
-		m_container.GetOwner().Damage(damage, school, m_container.GetCaster());
+		m_container.GetOwner().Damage(damage, school, m_container.GetCaster(), damage_type::Periodic);
 	}
 
 	void AuraEffect::HandlePeriodicHeal() const
@@ -531,7 +537,9 @@ namespace mmo
 				// Do an initial tick
 				m_areaAuraTick.SetEnd(GetAsyncTimeMs() + constants::OneSecond);
 			}
-			
+
+			m_ownerEventConnections += m_owner.takenDamage.connect(this, &AuraContainer::OnOwnerDamaged);
+
 			if (m_duration > 0)
 			{
 				if (!m_expiredConnection)
@@ -552,6 +560,7 @@ namespace mmo
 		}
 		else
 		{
+			m_ownerEventConnections.disconnect();
 			m_expirationCountdown.Cancel();
 			m_expiredConnection.disconnect();
 
@@ -658,6 +667,33 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void AuraContainer::OnOwnerDamaged(GameUnitS* instigator, uint32 school, DamageType type)
+	{
+		if (m_spell.aurainterruptflags() & spell_aura_interrupt_flags::Damage)
+		{
+			RemoveSelf();
+			return;
+		}
+
+		if (m_spell.aurainterruptflags() & spell_aura_interrupt_flags::DirectDamage)
+		{
+			if (type != damage_type::Periodic)
+			{
+				RemoveSelf();
+				return;
+			}
+		}
+
+		if (m_spell.aurainterruptflags() & spell_aura_interrupt_flags::HitBySpell)
+		{
+			if (type == damage_type::MagicalAbility)
+			{
+				RemoveSelf();
+				return;
+			}
+		}
 	}
 
 	void AuraContainer::HandleAreaAuraTick()

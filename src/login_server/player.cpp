@@ -185,10 +185,27 @@ namespace mmo
 			>> io::read<uint8>(m_version2)
 			>> io::read<uint8>(m_version3)
 			>> io::read<uint16>(m_build)
+			>> io::read<uint32>(m_authProtocol)
+			>> io::read<uint32>(m_gameProtocol)
 			>> m_locale
 			>> io::read_container<uint8>(m_accountName)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (m_authProtocol != auth::ProtocolVersion)
+		{
+			WLOG("Client " << m_address << " uses invalid auth protocol version " << m_authProtocol);
+
+			// Send packet with result
+			const uint32 authVersion = m_authProtocol;
+			m_connection->sendSinglePacket([authVersion](auth::OutgoingPacket& packet) {
+				packet.Start(auth::login_client_packet::LogonChallenge);
+				packet << io::write<uint8>(authVersion < auth::ProtocolVersion ? auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid);
+				packet.Finish();
+				});
+
+			return PacketParseResult::Pass;
 		}
 
 		// Write the login attempt to the logs

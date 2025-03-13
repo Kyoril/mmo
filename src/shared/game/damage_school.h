@@ -29,6 +29,24 @@ namespace mmo
 
     typedef damage_flags::Type DamageFlags;
 
+    namespace damage_type
+    {
+        enum Type
+        {
+            AttackSwing,
+
+            PhysicalAbility,
+
+            MagicalAbility,
+
+            RangedAttack,
+
+            Periodic,
+        };
+    }
+
+    typedef damage_type::Type DamageType;
+
     namespace melee_attack_outcome
     {
 	    enum Type

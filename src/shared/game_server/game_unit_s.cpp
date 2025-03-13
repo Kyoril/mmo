@@ -587,7 +587,7 @@ namespace mmo
 		m_spellCast->StopCast(reason, interruptCooldown);
 	}
 
-	void GameUnitS::Damage(const uint32 damage, uint32 school, GameUnitS* instigator)
+	void GameUnitS::Damage(const uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
@@ -607,7 +607,11 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health);
-		takenDamage(instigator, damage);
+		takenDamage(instigator, damage, damageType);
+		if (instigator)
+		{
+			instigator->doneDamage(*this, damage, damageType);
+		}
 
 		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
@@ -1945,7 +1949,7 @@ namespace mmo
 			victim->OnDodge();
 		}
 
-		victim->Damage(totalDamage, spell_school::Normal, this);
+		victim->Damage(totalDamage, spell_school::Normal, this, damage_type::AttackSwing);
 
 		// Notify all subscribers
 		std::vector<char> buffer;

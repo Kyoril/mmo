@@ -16,6 +16,7 @@ namespace mmo
 			typedef game::OutgoingPacket OutgoingPacket;
 		};
 
+		constexpr uint32 ProtocolVersion = 0x00000001;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section

@@ -8,6 +8,7 @@
 #include "base/constants.h"
 #include "base/timer_queue.h"
 #include "base/clock.h"
+#include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -40,6 +41,8 @@ namespace mmo
 					<< io::write<uint8>(mmo::Minor)
 					<< io::write<uint8>(mmo::Build)
 					<< io::write<uint16>(mmo::Revision)
+					<< io::write<uint32>(auth::ProtocolVersion)
+					<< io::write<uint32>(game::ProtocolVersion)
 					<< io::write_dynamic_range<uint8>(m_realmName);
 
 				// Finish packet and send it

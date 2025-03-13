@@ -82,6 +82,8 @@ namespace mmo
 		uint8 m_version3;						// Patch version: 0.0.X.00000
 		uint16 m_build;							// Build version: 0.0.0.XXXXX
 		uint32 m_realmId;						// Realm ID
+		uint32 m_authProtocol;
+		uint32 m_gameProtocol;
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
