@@ -164,7 +164,7 @@ namespace mmo
 		}
 	}
 
-	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) const
+	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Handle object field updates if any
 		{
@@ -224,7 +224,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) const
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
 	{
 		// Send spawn packet
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
@@ -259,13 +259,20 @@ namespace mmo
 				unit->BuildAuraPacket(outPacket);
 				outPacket.Finish();
 			}, false);
+
+
+			// Send movement packets
+			if (object->IsUnit())
+			{
+				object->AsUnit().GetMover().SendMovementPackets(*this);
+			}
 		}
 
 		// Flush packets
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) const
+	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects)
 	{
 		const uint64 currentTarget = m_character->Get<uint64>(object_fields::TargetUnit);
 		if (currentTarget != 0)

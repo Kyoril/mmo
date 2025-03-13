@@ -1255,6 +1255,16 @@ namespace mmo
 			}
 
 			meshFile = m_customizationDefinition->GetBaseMesh();
+
+			if (!IsPlayer())
+			{
+				m_configuration.chosenOptionPerGroup.clear();
+				m_configuration.scalarValues.clear();
+				for (const auto& kvp : modelEntry->customizationproperties())
+				{
+					m_configuration.chosenOptionPerGroup[kvp.first] = kvp.second;
+				}
+			}
 		}
 
 		// Update or create entity
@@ -1273,7 +1283,6 @@ namespace mmo
 
 		if (m_customizationDefinition)
 		{
-			// TODO: Apply preconfigured configuration
 			m_configuration.Apply(*this, *m_customizationDefinition);
 		}
 
@@ -1331,6 +1340,8 @@ namespace mmo
 			m_damageHitState->SetLoop(false);
 			m_damageHitState->SetTimePosition(0.0f);
 		}
+
+		OnScaleChanged();
 	}
 
 	void GameUnitC::UpdateCollider()

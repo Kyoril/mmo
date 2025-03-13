@@ -337,6 +337,8 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
+			SLIDER_FLOAT_PROP(scale, "Scale", 0.01f, 10.0f);
+
 			int32 maleModel = currentEntry.malemodel();
 
 			const auto* maleModelEntry = m_project.models.getById(maleModel);

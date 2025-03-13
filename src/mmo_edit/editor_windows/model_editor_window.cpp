@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "log/default_log_levels.h"
 
@@ -130,6 +131,81 @@ namespace mmo
 				}
 
 				ImGui::EndCombo();
+			}
+
+			if (currentEntry.flags() & model_data_flags::IsCustomizable)
+			{
+				m_definition = AvatarDefinitionManager::Get().Load(currentEntry.filename());
+				if (m_definition)
+				{
+					static const char* s_none = "(None)";
+
+					// For each property group, show a dropdown to select the value
+					for (const auto& property : *m_definition)
+					{
+						// Draw the property name
+						switch (property->GetType())
+						{
+						case CharacterCustomizationPropertyType::VisibilitySet:
+						{
+							auto it = currentEntry.customizationproperties().find(property->GetId());
+							const auto visibilityProp = static_cast<VisibilitySetPropertyGroup*>(property.get());
+
+							const char* previewString = s_none;
+							if (it != currentEntry.customizationproperties().end())
+							{
+								const int32 valueIndex = visibilityProp->GetPropertyValueIndex(it->second);
+								if (valueIndex != -1)
+								{
+									previewString = visibilityProp->possibleValues[valueIndex].valueName.c_str();
+								}
+							}
+
+							if (ImGui::BeginCombo(property->GetName().c_str(), previewString))
+							{
+								for (const auto& value : visibilityProp->possibleValues)
+								{
+									if (ImGui::Selectable(value.valueName.c_str()))
+									{
+										(*currentEntry.mutable_customizationproperties())[property->GetId()] = value.valueId;
+									}
+								}
+								ImGui::EndCombo();
+							}
+							break;
+						}
+						case CharacterCustomizationPropertyType::MaterialOverride:
+						{
+							auto it = currentEntry.customizationproperties().find(property->GetId());
+							const auto materialProp = static_cast<MaterialOverridePropertyGroup*>(property.get());
+
+							const char* previewString = s_none;
+							if (it != currentEntry.customizationproperties().end())
+							{
+								const int32 valueIndex = materialProp->GetPropertyValueIndex(it->second);
+								if (valueIndex != -1)
+								{
+									previewString = materialProp->possibleValues[valueIndex].valueName.c_str();
+								}
+							}
+
+							if (ImGui::BeginCombo(property->GetName().c_str(), previewString))
+							{
+								for (const auto& value : materialProp->possibleValues)
+								{
+									if (ImGui::Selectable(value.valueName.c_str()))
+									{
+										(*currentEntry.mutable_customizationproperties())[property->GetId()] = value.valueId;
+									}
+								}
+								ImGui::EndCombo();
+							}
+							break;
+						}
+						}
+					}
+
+				}
 			}
 		}
 	}

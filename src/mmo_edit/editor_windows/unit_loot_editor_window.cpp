@@ -26,6 +26,13 @@ namespace mmo
 
 	void UnitLootEditorWindow::DrawDetailsImpl(proto::LootEntry& currentEntry)
 	{
+		if (ImGui::Button("Duplicate"))
+		{
+			proto::LootEntry* copied = m_project.unitLoot.add();
+			const uint32 newId = copied->id();
+			copied->CopyFrom(currentEntry);
+			copied->set_id(newId);
+		}
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \

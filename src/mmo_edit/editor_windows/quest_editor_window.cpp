@@ -36,7 +36,7 @@ namespace mmo
 		uint##datasize value = currentEntry.name(); \
 		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
 		{ \
-			if (value >= min && value <= max) \
+			if (value >= (min) && value <= (max)) \
 				currentEntry.set_##name(value); \
 		} \
 	}
@@ -165,6 +165,50 @@ namespace mmo
 			{
 				SLIDER_UINT32_PROP(srcitemcount, "Number of source item to give", 1, 255);
 			}
+
+			// Ensure we don't have ourself as a prerequisite
+			uint32 prevQuestId = currentEntry.prevquestid();
+			if (prevQuestId == currentEntry.id())
+			{
+				currentEntry.set_prevquestid(0);
+				prevQuestId = 0;
+			}
+
+			const auto* questEntry = m_project.quests.getById(prevQuestId);
+			if (ImGui::BeginCombo("Previous Quest", questEntry != nullptr ? questEntry->name().c_str() : "(None)", ImGuiComboFlags_None))
+			{
+				ImGui::PushID(0);
+				if (ImGui::Selectable("(None)"))
+				{
+					currentEntry.set_prevquestid(0);
+					sourceItemId = 0;
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.quests.count(); i++)
+				{
+					if (m_project.quests.getTemplates().entry(i).id() == currentEntry.id())
+					{
+						continue;
+					}
+
+					ImGui::PushID(i);
+					const bool item_selected = m_project.quests.getTemplates().entry(i).id() == sourceItemId;
+					const char* item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_prevquestid(m_project.quests.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
 		}
 
 		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))
@@ -384,8 +428,8 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Rewards", ImGuiTreeNodeFlags_None))
 		{
-			SLIDER_UINT32_PROP(rewardxp, "Rewarded Xp", 0, 255);
-			SLIDER_UINT32_PROP(rewardmoney, "Rewarded Money", 0, 255);
+			SLIDER_UINT32_PROP(rewardxp, "Rewarded Xp", 0, std::numeric_limits<int32>::max());
+			SLIDER_UINT32_PROP(rewardmoney, "Rewarded Money", 0, std::numeric_limits<int32>::max());
 
 			// Add button
 			if (ImGui::Button("Add", ImVec2(-1, 0)))

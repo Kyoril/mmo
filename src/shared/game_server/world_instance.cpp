@@ -179,7 +179,7 @@ namespace mmo
 		    [&added](VisibilityTile & tile)
 		{
 		    std::vector objects { &added };
-		    for (const auto *subscriber : tile.GetWatchers())
+		    for (auto *subscriber : tile.GetWatchers())
 			{
 				if (subscriber->GetGameUnit().GetGuid() == added.GetGuid())
 				{
@@ -252,7 +252,7 @@ namespace mmo
 				[&remove](VisibilityTile& tile)
 				{
 					std::vector objects{ &remove };
-					for (const auto* subscriber : tile.GetWatchers())
+					for (auto* subscriber : tile.GetWatchers())
 					{
 						subscriber->NotifyObjectsDespawned(objects);
 					}
@@ -379,7 +379,7 @@ namespace mmo
 		ForEachSubscriberInSight(
 			*m_visibilityGrid,
 			center,
-			[&objects](const TileSubscriber& subscriber)
+			[&objects](TileSubscriber& subscriber)
 			{
 				auto& character = subscriber.GetGameUnit();
 				subscriber.NotifyObjectsUpdated(objects);
@@ -444,7 +444,7 @@ namespace mmo
 				[&object, &objects](VisibilityTile& tile)
 				{
 					// Spawn this new object for all watchers of the new tile
-					for (const auto* subscriber : tile.GetWatchers().getElements())
+					for (auto* subscriber : tile.GetWatchers().getElements())
 					{
 						// TODO: Spawn conditions for watcher
 

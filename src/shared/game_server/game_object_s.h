@@ -163,6 +163,8 @@ namespace mmo
 
 		GamePlayerS& AsPlayer() const;
 
+		GameUnitS& AsUnit() const;
+
 		bool IsItem() const { return GetTypeId() == ObjectTypeId::Item || IsContainer(); }
 
 		bool IsContainer() const { return GetTypeId() == ObjectTypeId::Container; }

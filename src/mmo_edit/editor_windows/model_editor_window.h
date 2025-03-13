@@ -7,6 +7,7 @@
 #include "editor_entry_window_base.h"
 
 #include "editor_host.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "graphics/texture.h"
 #include "proto_data/project.h"
 
@@ -39,5 +40,7 @@ namespace mmo
 		EditorHost& m_host;
 		std::vector<String> m_modelFiles;
 		scoped_connection m_assetImported;
+
+		std::shared_ptr<CustomizableAvatarDefinition> m_definition;
 	};
 }
