@@ -826,10 +826,18 @@ namespace mmo
 			prevPosition = point;
 		}
 
+		if (totalDistance <= 0.0f || totalDuration <= 0.0f)
+		{
+			return;
+		}
+
 		ASSERT(positions.size() == keyFrameTimes.size());
 
 		for (auto& time : keyFrameTimes)
 		{
+			ASSERT(totalDistance != 0.0f);
+			ASSERT(totalDuration != 0.0f);
+
 			// Convert to percentage first
 			time /= totalDistance;
 

@@ -50,6 +50,7 @@ namespace mmo
 			, y(inY)
 			, z(inZ)
 		{
+			ASSERT(!IsNAN());
 		}
 
 		inline Vector3(Vector3 const& other)
@@ -57,10 +58,16 @@ namespace mmo
 			, y(other.y)
 			, z(other.z)
 		{
+			ASSERT(!IsNAN());
 		}
 
 		[[nodiscard]] float* Ptr() { return &x; }
 		[[nodiscard]] const float* Ptr() const { return &x; }
+
+		inline bool IsNAN() const
+		{
+			return x != x || y != y || z != z;
+		}
 
 		// Logarithmic
 		inline Vector3& operator+=(Vector3 const& other)
@@ -69,6 +76,7 @@ namespace mmo
 			y += other.y;
 			z += other.z;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 		inline Vector3& operator-=(Vector3 const& other)
@@ -77,6 +85,7 @@ namespace mmo
 			y -= other.y;
 			z -= other.z;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 		inline Vector3& operator*=(float scalar)
@@ -85,6 +94,7 @@ namespace mmo
 			y *= scalar;
 			z *= scalar;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 		inline Vector3& operator*=(const Vector3& v)
@@ -93,6 +103,7 @@ namespace mmo
 			y *= v.y;
 			z *= v.z;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 		inline Vector3& operator/=(float scalar)
@@ -101,6 +112,7 @@ namespace mmo
 			y /= scalar;
 			z /= scalar;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 		inline Vector3& operator/=(const Vector3& v)
@@ -109,6 +121,7 @@ namespace mmo
 			y /= v.y;
 			z /= v.z;
 
+			ASSERT(!IsNAN());
 			return *this;
 		}
 
@@ -287,6 +300,7 @@ namespace mmo
 				y /= length;
 				z /= length;
 			}
+			ASSERT(!IsNAN());
 			return length;
 		}
 
