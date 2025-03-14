@@ -277,6 +277,11 @@ namespace mmo
 		// Always force dead state
 		if (isDead)
 		{
+			if (m_oneShotState && m_oneShotState->IsEnabled())
+			{
+				m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
+			}
+
 			SetTargetAnimState(m_deathState);
 		}
 

@@ -1995,6 +1995,8 @@ namespace mmo
 		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
 		if (attacked)
 		{
+			attacked->NotifyHitEvent();
+
 			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
 			{
 				String damageText;
