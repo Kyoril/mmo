@@ -2441,6 +2441,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		FrameManager::Get().TriggerLuaEvent("PARTY_INVITE_DECLINED", inviterName);
+
 		// TODO
 		ELOG(inviterName << " declines your group invitation.");
 		return PacketParseResult::Pass;
@@ -2463,51 +2465,17 @@ namespace mmo
 		// Was it an error?
 		if (result != party_result::Ok)
 		{
-			switch (result)
-			{
-			case party_result::AlreadyInGroup:
-				ELOG(playerName << " is already in a group.");
-				break;
-			case party_result::CantInviteYourself:
-				ELOG("You cannot invite yourself.");
-				break;
-			case party_result::CantFindTarget:
-				ELOG("Cannot find '" << playerName << "'.");
-				break;
-			case party_result::NotInYourParty:
-				ELOG(playerName << " is not in your party.");
-				break;
-			case party_result::NotInYourInstance:
-				ELOG("Cannot find '" << playerName << "'.");
-				break;
-			case party_result::PartyFull:
-				ELOG("Your party is full.");
-				break;
-			case party_result::YouNotInGroup:
-				ELOG("You aren't in a party.");
-				break;
-			case party_result::YouNotLeader:
-				ELOG("You are not the party leader.");
-				break;
-			case party_result::TargetUnfriendly:
-				ELOG("Target is not part of your alliance.");
-				break;
-			case party_result::TargetIgnoreYou:
-				ELOG(playerName << " is ignoring you.");
-				break;
-			}
+			FrameManager::Get().TriggerLuaEvent("PARTY_COMMAND_RESULT", static_cast<int32>(result), playerName);
 		}
 		else
 		{
 			if (command == party_operation::Invite)
 			{
-				// TODO: Display invite
-				ILOG("You have invited " << playerName << " to join your group.");
+				FrameManager::Get().TriggerLuaEvent("PARTY_INVITE_SENT", playerName);
 			}
 			else if (command == party_operation::Leave)
 			{
-				// TODO: Remove all party UI
-				ILOG("You leave the group.");
+				FrameManager::Get().TriggerLuaEvent("PARTY_LEFT");
 			}
 		}
 

@@ -196,7 +196,7 @@ namespace mmo
 
 	PacketParseResult PartyInfo::OnGroupDestroyed(game::IncomingPacket& packet)
 	{
-		DLOG("Your group has been disbanded.");
+		FrameManager::Get().TriggerLuaEvent("PARTY_DISBANDED");
 
 		// Reset everything
 		m_type = group_type::None;
@@ -271,7 +271,7 @@ namespace mmo
 				// Ensure we know the name
 				m_nameCache.Get(newMember.guid);
 
-				ILOG(newMember.name << " has joined the group.");
+				FrameManager::Get().TriggerLuaEvent("PARTY_MEMBER_JOINED", newMember.name);
 				m_members.push_back(newMember);
 			}
 		}
@@ -290,7 +290,7 @@ namespace mmo
 
 			if (!isInGroup)
 			{
-				ILOG(it->name << " has left the group.");
+				FrameManager::Get().TriggerLuaEvent("PARTY_MEMBER_LEFT", it->name);
 				it = m_members.erase(it);
 			}
 			else

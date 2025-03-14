@@ -61,7 +61,7 @@ namespace mmo
 				std::vector<uint64> nearbyMembers;
 
 				// Determine nearby party members
-				instance.GetUnitFinder().FindUnits(Circle(location.x, location.y, 100.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
+				instance.GetUnitFinder().FindUnits(Circle(location.x, location.z, 40.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
 					{
 						// Only characters
 						if (!unit.IsPlayer())
