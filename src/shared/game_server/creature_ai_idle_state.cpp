@@ -25,7 +25,6 @@ namespace mmo
 			ai->OnThreatened(std::forward<T0>(instigator), std::forward<T1>(threat));
 		});
 
-
 		const auto& location = GetControlled().GetPosition();
 
 		m_unitWatcher = GetControlled().GetWorldInstance()->GetUnitFinder().WatchUnits(Circle(location.x, location.z, 40.0f), [this](GameUnitS& unit, bool isVisible) -> bool
@@ -62,11 +61,11 @@ namespace mmo
 				float reqDist = 20.0f;
 				if (ourLevel < otherLevel)
 				{
-					reqDist = Clamp<float>(reqDist - diff, 5.0f, 40.0f);
+					reqDist = Clamp<float>(reqDist - diff * 2, 1.0f, 40.0f);
 				}
 				else if (otherLevel < ourLevel)
 				{
-					reqDist = Clamp<float>(reqDist + diff, 5.0f, 40.0f);
+					reqDist = Clamp<float>(reqDist + diff, 1.0f, 40.0f);
 				}
 
 				if (dist > reqDist)
@@ -135,14 +134,16 @@ namespace mmo
 		// Make random movement
 		UnitMover& mover = GetAI().GetControlled().GetMover();
 
-		Vector3 position;
-
-		auto* map = GetAI().GetControlled().GetWorldInstance()->GetMapData();
+		const auto* map = GetAI().GetControlled().GetWorldInstance()->GetMapData();
 		ASSERT(map);
 
-		if (map->FindRandomPointAroundCircle(GetAI().GetHome().position, 4.0f, position))
+		if (Vector3 position; map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position))
 		{
 			mover.MoveTo(position);
+		}
+		else
+		{
+			OnTargetReached();
 		}
 	}
 }

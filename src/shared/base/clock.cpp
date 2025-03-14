@@ -44,7 +44,7 @@ namespace mmo
 		}
 
 		return static_cast<GameTime>(::GetTickCount64());
-#elif defined(__MACH__)
+#elif defined(__APPLE__)
         struct timeval tp;
         gettimeofday(&tp, nullptr);
         return uint32(

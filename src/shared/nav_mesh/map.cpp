@@ -540,31 +540,49 @@ namespace mmo::nav
 
 	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
-		float recastCenter[3] = { centerPosition.x, centerPosition.y, centerPosition.z };
+		constexpr int maxAttempts = 10;
 
-		constexpr float extents[] = { 1.f, 1.f, 1.f };
+		// Prepare for Recast/Detour calls.
+		const float recastCenter[3] = { centerPosition.x, centerPosition.y, centerPosition.z };
+		constexpr float extents[] = { 1.f, 2.f, 1.f };
 
+		// Find the nearest polygon to centerPosition.
 		dtPolyRef startRef;
-		if (m_navQuery.findNearestPoly(recastCenter, extents, &m_queryFilter,
-			&startRef, nullptr) != DT_SUCCESS) {
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastCenter, extents, &m_queryFilter, &startRef, nullptr)))
 			return false;
+
+		// Try multiple times to get a point that is truly within 'radius'.
+		for (int i = 0; i < maxAttempts; ++i)
+		{
+			float outputPoint[3];
+			dtPolyRef randomRef;
+
+			// Ask Recast for a random point around the circle.
+			if (dtStatusSucceed(m_navQuery.findRandomPointAroundCircle(
+				startRef,
+				recastCenter,
+				radius,
+				&m_queryFilter,
+				&random_between_0_and_1,  // your custom frand() or similar
+				&randomRef,
+				outputPoint)))
+			{
+				// Check if Detour's picked point is actually within the circle.
+				const float dx = outputPoint[0] - centerPosition.x;
+				const float dy = outputPoint[1] - centerPosition.y;
+				const float dz = outputPoint[2] - centerPosition.z;
+
+				if ((dx * dx + dy * dy + dz * dz) <= (radius * radius))
+				{
+					// Good point!
+					randomPoint = Vector3(outputPoint[0], outputPoint[1], outputPoint[2]);
+					return true;
+				}
+			}
 		}
 
-		float outputPoint[3];
-
-		dtPolyRef randomRef;
-		if (m_navQuery.findRandomPointAroundCircle(startRef,
-			recastCenter,
-			radius,
-			&m_queryFilter,
-			&random_between_0_and_1,
-			&randomRef,
-			outputPoint) != DT_SUCCESS) {
-			return false;
-		}
-
-		randomPoint = Vector3(outputPoint[0], outputPoint[1], outputPoint[2]);
-		return true;
+		// We could not find a valid point that satisfies the distance constraint.
+		return false;
 	}
 
 	const Tile* Map::GetTile(float x, float y) const
