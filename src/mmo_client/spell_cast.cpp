@@ -10,9 +10,10 @@
 
 namespace mmo
 {
-	SpellCast::SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells)
+	SpellCast::SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::RangeManager& ranges)
 		: m_connector(connector)
 		, m_spells(spells)
+		, m_ranges(ranges)
 	{
 	}
 
@@ -123,6 +124,13 @@ namespace mmo
 			return;
 		}
 
+		// Check if spell is known
+		if (!unit->HasSpell(spellId))
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NOT_KNOWN");
+			return;
+		}
+
 		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
 
 		// Is known spell?
@@ -158,8 +166,6 @@ namespace mmo
 				else
 				{
 					// TODO: Instead of printing an error here we should trigger a selection mode where the user has to click on a target unit instead
-
-					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
 					return;
 				}
@@ -173,20 +179,41 @@ namespace mmo
 
 			if ((requirements & spell_target_requirements::FriendlyUnitTarget) == 0 && (requirements & spell_target_requirements::HostileUnitTarget) != 0 && unit->IsFriendlyTo(*targetUnit))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_FRIENDLY");
 				return;
 			}
 
 			// Set target unit
 			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-			targetMap.SetUnitTarget(targetUnit->GetGuid());
+			targetMap.SetUnitTarget(targetUnit ? targetUnit->GetGuid() : 0);
+
+			// Power check
+			if (spell->powertype() != unit->GetPowerType() ||
+				spell->cost() > unit->GetPower(unit->GetPowerType()))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
+				return;
+			}
+
+			// Range check
+			if (targetUnit && spell->rangetype() != 0)
+			{
+				// Check if we are in range of the target unit
+				if (const auto* range = m_ranges.getById(spell->rangetype()))
+				{
+					const float distanceSquared = unit->GetPosition().GetSquaredDistanceTo(targetUnit->GetPosition());
+					if (distanceSquared > range->range() * range->range())
+					{
+						FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
+						return;
+					}
+				}
+			}
 
 			// Can this spell target dead units, and if not, are we targeting a dead unit?
 			if ((spell->attributes(0) & spell_attributes::CanTargetDead) == 0 &&
 				(targetUnit && !targetUnit->IsAlive()))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
 				return;
 			}

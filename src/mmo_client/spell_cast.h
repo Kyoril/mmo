@@ -20,7 +20,7 @@ namespace mmo
 		signal<void()> SpellCastTargetRequired;
 
 	public:
-		SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells);
+		SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::RangeManager& ranges);
 		~SpellCast() override = default;
 
 	public:
@@ -47,6 +47,8 @@ namespace mmo
 		RealmConnector& m_connector;
 
 		const proto_client::SpellManager& m_spells;
+
+		const proto_client::RangeManager& m_ranges;
 
 		uint32 m_spellCastId = 0;
 

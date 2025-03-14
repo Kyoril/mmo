@@ -249,6 +249,8 @@ namespace mmo
 		/// @brief Returns whether this unit knows any spells at all.
 		bool HasSpells() const noexcept { return !m_spells.empty(); }
 
+		bool HasSpell(uint32 spellId) const;
+
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
 		const proto_client::SpellEntry* GetSpell(uint32 index) const;
 

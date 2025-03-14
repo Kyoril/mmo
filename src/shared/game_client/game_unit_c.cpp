@@ -1023,6 +1023,11 @@ namespace mmo
 		std::erase_if(m_spellBookSpells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
 	}
 
+	bool GameUnitC::HasSpell(uint32 spellId) const
+	{
+		return std::find_if(m_spells.begin(), m_spells.end(), [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; }) != m_spells.end();
+	}
+
 	const proto_client::SpellEntry* GameUnitC::GetSpell(uint32 index) const
 	{
 		if (index < m_spells.size())

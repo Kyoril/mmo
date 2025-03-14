@@ -24,6 +24,7 @@ namespace mmo
 	{
 		typedef TemplateManager<mmo::proto_client::Races, mmo::proto_client::RaceEntry> RaceManager;
 		typedef TemplateManager<mmo::proto_client::Zones, mmo::proto_client::ZoneEntry> ZoneManager;
+		typedef TemplateManager<mmo::proto_client::Ranges, mmo::proto_client::RangeType> RangeManager;
 		typedef TemplateManager<mmo::proto_client::Spells, mmo::proto_client::SpellEntry> SpellManager;
 		typedef TemplateManager<mmo::proto_client::SpellCategories, mmo::proto_client::SpellCategoryEntry> SpellCategoryManager;
 		typedef TemplateManager<mmo::proto_client::ModelDatas, mmo::proto_client::ModelDataEntry> ModelDataManager;
@@ -48,6 +49,7 @@ namespace mmo
 			MapManager maps;
 			ZoneManager zones;
 			SpellManager spells;
+			RangeManager ranges;
 			SpellCategoryManager spellCategories;
 			RaceManager races;
 			ModelDataManager models;
@@ -97,6 +99,7 @@ namespace mmo
 
 				ClientProjectLoader::Managers managers;
 				managers.push_back(ManagerEntry("spells", spells));
+				managers.push_back(ManagerEntry("ranges", ranges));
 				managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
 				managers.push_back(ManagerEntry("model_data", models));
@@ -136,6 +139,7 @@ namespace mmo
 
 				ClientProjectSaver::Managers managers;
 				managers.emplace_back("spells", "spells", spells);
+				managers.emplace_back("ranges", "ranges", ranges);
 				managers.emplace_back("maps", "maps", maps);
 				managers.emplace_back("spell_categories", "spell_categories", spellCategories);
 				managers.emplace_back("model_data", "model_data", models);

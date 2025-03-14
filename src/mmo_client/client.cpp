@@ -148,8 +148,7 @@ namespace mmo
 	/// Initializes everything related to FrameUI.
 	bool InitializeFrameUi()
 	{
-		auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
-		if (window)
+		if (const auto window = GraphicsDevice::Get().GetAutoCreatedWindow())
 		{
 			s_frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
 			{
@@ -388,7 +387,7 @@ namespace mmo
 		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache, s_localization);
 		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, *s_nameCache);
 
-		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells);
+		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
