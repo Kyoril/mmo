@@ -1087,9 +1087,31 @@ namespace mmo
 		UpdateArmor();
 
 		// TODO: Apply item stats
-		
+
+		uint32 maxHealth = 0;
+		uint32 maxMana = 0;
+		if (m_classEntry)
+		{
+			for (int i = 0; i < m_classEntry->healthstatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->healthstatsources(i);
+				if (statSource.statid() < 5)
+				{
+					maxHealth += UnitStats::DeriveFromBaseWithFactor(Get<uint32>(object_fields::StatStamina + statSource.statid()), 20, statSource.factor());
+				}
+			}
+
+			for (int i = 0; i < m_classEntry->manastatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->manastatsources(i);
+				if (statSource.statid() < 5)
+				{
+					maxMana += UnitStats::DeriveFromBaseWithFactor(Get<uint32>(object_fields::StatStamina + statSource.statid()), 20, statSource.factor());
+				}
+			}
+		}
+
 		// Calculate max health from stats
-		uint32 maxHealth = UnitStats::GetMaxHealthFromStamina(Get<uint32>(object_fields::StatStamina));
 		maxHealth += levelStats->health();
 		Set<uint32>(object_fields::MaxHealth, maxHealth);
 
@@ -1099,7 +1121,6 @@ namespace mmo
 			Set<uint32>(object_fields::Health, maxHealth);
 		}
 
-		uint32 maxMana = UnitStats::GetMaxManaFromIntellect(Get<uint32>(object_fields::StatIntellect));
 		maxMana += levelStats->mana();
 		Set<uint32>(object_fields::MaxMana, maxMana);
 

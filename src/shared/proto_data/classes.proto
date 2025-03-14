@@ -23,6 +23,16 @@ message AttackPowerStatSource {
 	required float factor = 2;
 }
 
+message HealthStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
+message ManaStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
 message ArmorStatSource {
 	required uint32 statId = 1;
 	required float factor = 2;
@@ -57,6 +67,10 @@ message ClassEntry {
 	repeated AttackPowerStatSource armorStatSources = 16;
 
 	repeated uint32 xpToNextLevel = 17;
+
+	repeated HealthStatSource healthStatSources = 18;
+	
+	repeated ManaStatSource manaStatSources = 19;
 }
 
 message Classes {

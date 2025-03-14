@@ -293,6 +293,14 @@ namespace mmo
 			}
 		}
 
+		static String s_statNames[] = {
+			"Stamina",
+			"Strength",
+			"Agility",
+			"Intellect",
+			"Spirit"
+		};
+
 		if (ImGui::CollapsingHeader("Attack Power", ImGuiTreeNodeFlags_None))
 		{
 			float offset = currentEntry.attackpoweroffset();
@@ -320,14 +328,6 @@ namespace mmo
 				for (int index = 0; index < currentEntry.attackpowerstatsources_size(); ++index)
 				{
 					auto* currentSource = currentEntry.mutable_attackpowerstatsources(index);
-
-					static String s_statNames[] = {
-						"Stamina",
-						"Strength",
-						"Agility",
-						"Intellect",
-						"Spirit"
-					};
 
 					ImGui::PushID(index);
 					ImGui::TableNextRow();
@@ -370,12 +370,138 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Health", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("Health Stat Source");
+
+			// Add button
+			if (ImGui::Button("Add##addHealthStat", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_healthstatsources();
+				newEntry->set_statid(0);
+				newEntry->set_factor(1.0f);
+			}
+
+			if (ImGui::BeginTable("healthStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.healthstatsources_size(); ++index)
+				{
+					auto* currentSource = currentEntry.mutable_healthstatsources(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int statId = currentSource->statid();
+					if (ImGui::Combo("##healthStat", &statId, [](void*, int index, const char** out_text) -> bool
+						{
+							if (index < 0 || index > 4)
+							{
+								*out_text = "";
+								return false;
+							}
+
+							*out_text = s_statNames[index].c_str();
+							return true;
+						}, nullptr, 5))
+					{
+						currentSource->set_statid(statId);
+					}
+
+					ImGui::TableNextColumn();
+
+					float factor = currentSource->factor();
+					if (ImGui::InputFloat("##healthStatFactor", &factor)) currentSource->set_factor(factor);
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_healthstatsources()->erase(currentEntry.mutable_healthstatsources()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Mana", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("Mana Stat Source");
+
+			// Add button
+			if (ImGui::Button("Add##addManaStat", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_manastatsources();
+				newEntry->set_statid(0);
+				newEntry->set_factor(1.0f);
+			}
+
+			if (ImGui::BeginTable("manaStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.manastatsources_size(); ++index)
+				{
+					auto* currentSource = currentEntry.mutable_manastatsources(index);
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int statId = currentSource->statid();
+					if (ImGui::Combo("##manaStat", &statId, [](void*, int index, const char** out_text) -> bool
+						{
+							if (index < 0 || index > 4)
+							{
+								*out_text = "";
+								return false;
+							}
+
+							*out_text = s_statNames[index].c_str();
+							return true;
+						}, nullptr, 5))
+					{
+						currentSource->set_statid(statId);
+					}
+
+					ImGui::TableNextColumn();
+
+					float factor = currentSource->factor();
+					if (ImGui::InputFloat("##manaStatFactor", &factor)) currentSource->set_factor(factor);
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_manastatsources()->erase(currentEntry.mutable_manastatsources()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Armor", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Armor Stat Source");
 
 			// Add button
-			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			if (ImGui::Button("Add##addArmorStat", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_armorstatsources();
 				newEntry->set_statid(0);
