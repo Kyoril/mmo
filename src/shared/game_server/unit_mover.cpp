@@ -118,8 +118,8 @@ namespace mmo
 			<< io::write<float>(oldPosition.x)
 			<< io::write<float>(oldPosition.y)
 			<< io::write<float>(oldPosition.z)
-			<< io::write<uint32>(startTime)	// Start time
-			<< io::write<uint32>(endTime)	// End time
+			<< io::write<GameTime>(startTime)	// Start time
+			<< io::write<GameTime>(endTime)	// End time
 			<< io::write<uint32>(path.size() - 1);
 
 		// Write destination point (this counts as the first point)
@@ -214,7 +214,7 @@ namespace mmo
 		m_moveStart = GetAsyncTimeMs();
 		if (m_debugOutputEnabled)
 		{
-			DLOG("Move start: " << m_moveStart);
+			DLOG("Move start: " << m_moveStart << " ( with speed: " << customSpeed << ")");
 		}
 
 		GameTime moveTime = m_moveStart;

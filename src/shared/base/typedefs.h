@@ -26,7 +26,7 @@ namespace mmo
 	typedef uint32 Identifier;
 	typedef uint64 ObjectGuid;
 	typedef uint64 DatabaseId;
-	typedef uint32 GameTime;
+	typedef uint64 GameTime;
 	typedef uint8 PacketBegin;
 	typedef uint8 PacketId;
 	typedef uint32 PacketSize;

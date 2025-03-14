@@ -16,7 +16,7 @@ namespace mmo
 			typedef auth::OutgoingPacket OutgoingPacket;
 		};
 
-		constexpr uint32 ProtocolVersion = 0x00000001;
+		constexpr uint32 ProtocolVersion = 0x00000002;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Login section

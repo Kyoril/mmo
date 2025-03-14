@@ -150,6 +150,20 @@ namespace mmo
 
 		const uint32 procChance = spell.procchance();
 
+		if (spell.procflags() & (spell_proc_flags::Death | spell_proc_flags::Killed))
+		{
+			m_procEffects += m_container.GetOwner().killed.connect([this, procSpell, procChance](GameUnitS* killer)
+				{
+					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
+					if (chanceDistribution(randomGenerator) < procChance)
+					{
+						SpellTargetMap targetMap;
+						targetMap.SetUnitTarget(m_container.GetOwner().GetGuid());
+						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+						m_container.GetOwner().CastSpell(targetMap, *procSpell, 0, true, 0);
+					}
+				});
+		}
 
 		if (spell.procflags() & spell_proc_flags::TakenDamage)
 		{

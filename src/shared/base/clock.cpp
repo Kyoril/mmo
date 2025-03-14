@@ -8,6 +8,7 @@
 #else
 #	include <sys/time.h>
 #	include <unistd.h>
+#	include <time.h>
 #	ifdef __MACH__
 #		include <mach/clock.h>
 #		include <mach/mach.h>
@@ -43,11 +44,17 @@ namespace mmo
 		}
 
 		return static_cast<GameTime>(::GetTickCount64());
-#else
+#elif defined(__MACH__)
         struct timeval tp;
         gettimeofday(&tp, nullptr);
         return uint32(
             (tp.tv_sec * 1000) + (tp.tv_usec / 1000) % uint64(0x00000000FFFFFFFF));
+#else
+		// Use a monotonic clock if available
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		uint64_t ms = (uint64_t)ts.tv_sec * 1000ULL + (ts.tv_nsec / 1000000ULL);
+		return static_cast<GameTime>(ms);
 #endif
     }
 }
