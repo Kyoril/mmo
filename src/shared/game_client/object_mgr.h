@@ -66,6 +66,23 @@ namespace mmo
 
 		static std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
 
+		template<typename C>
+		static void ForEachUnit(const C& callback)
+		{
+			for (const auto& [guid, object] : ms_objectyByGuid)
+			{
+				if (!object->IsUnit())
+				{
+					continue;
+				}
+
+				if (std::shared_ptr<GameUnitC> unit = std::dynamic_pointer_cast<GameUnitC>(object))
+				{
+					callback(unit);
+				}
+			}
+		}
+
 	private:
 		static void OnItemStackCountChanged(uint64 itemGuid);
 

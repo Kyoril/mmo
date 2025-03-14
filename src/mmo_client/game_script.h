@@ -123,6 +123,8 @@ namespace mmo
 
 		void SendChatMessage(const char* message, const char* type, const char* target = nullptr) const;
 
+		void TargetNearestEnemy();
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 

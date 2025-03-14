@@ -980,6 +980,8 @@ namespace mmo
 			luabind::def<std::function<const mmo::CharacterView*(int32)>>("GetCharacterInfo", [this](int32 index) { return m_charSelect.GetCharacterView(index); }),
 			luabind::def<std::function<void(int32)>>("SelectCharacter", [this](int32 index) { return m_charSelect.SelectCharacter(index); }),
 
+			luabind::def<std::function<void()>>("TargetNearestEnemy", [this]() { TargetNearestEnemy(); }),
+
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
 			luabind::def<std::function<void()>>("EnterWorld", [this] { GameStateMgr::Get().SetGameState(WorldState::Name); }),
@@ -1189,6 +1191,66 @@ namespace mmo
 		}
 
 		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
+	}
+
+	void GameScript::TargetNearestEnemy()
+	{
+		auto player = ObjectMgr::GetActivePlayer();
+
+		std::vector<std::shared_ptr<GameUnitC>> units;
+
+		ObjectMgr::ForEachUnit([&units, &player](const std::shared_ptr<GameUnitC> unit)
+			{
+				if (!unit->IsAlive())
+				{
+					return;
+				}
+
+				if (unit->GetGuid() == ObjectMgr::GetActivePlayerGuid())
+				{
+					return;
+				}
+
+				if (player->IsFriendlyTo(*unit))
+				{
+					return;
+				}
+
+				units.push_back(unit);
+			}
+		);
+
+		if (units.empty())
+		{
+			return;
+		}
+
+		const Vector3 playerPos = player->GetPosition();
+		std::sort(units.begin(), units.end(),
+			[&](const std::shared_ptr<GameUnitC>& a, const std::shared_ptr<GameUnitC>& b)
+			{
+				return (a->GetPosition().GetSquaredDistanceTo(playerPos) < b->GetPosition().GetSquaredDistanceTo(playerPos));
+			});
+
+		int currentIndex = -1;
+		for (int i = 0; i < units.size(); ++i)
+		{
+			if (units[i]->GetGuid() == ObjectMgr::GetSelectedObjectGuid())
+			{
+				currentIndex = i;
+				break;
+			}
+		}
+
+		int nextIndex = 0; // default if current target isn't found
+		if (currentIndex >= 0)
+		{
+			nextIndex = (currentIndex + 1) % units.size();
+		}
+
+		ObjectMgr::SetSelectedObjectGuid(units[nextIndex]->GetGuid());
+		player->SetTargetUnit(units[nextIndex]);
+		m_realmConnector.SetSelection(units[nextIndex]->GetGuid());
 	}
 
 	void GameScript::PickupContainerItem(uint32 slot) const
