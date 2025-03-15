@@ -299,17 +299,29 @@ namespace mmo
 
 	void PlayerController::ClampCameraPitch()
 	{
+		// Desired clamp limits in degrees.
 		const float clampDegree = 60.0f;
+		const float minPitchRad = Degree(-clampDegree).GetValueRadians();
+		const float maxPitchRad = Degree(clampDegree).GetValueRadians();
 
-		// Ensure the camera pitch is clamped
-		const Radian pitch = m_cameraAnchorNode->GetOrientation().GetPitch();
-		if (pitch < Degree(-clampDegree))
+		// Calculate the forward vector of the camera anchor.
+		// Using the forward vector allows us to extract the actual vertical angle irrespective of yaw.
+		Vector3 forward = m_cameraAnchorNode->GetOrientation() * Vector3::NegativeUnitZ;
+
+		// Clamp forward.y to valid asin range.
+		const float clampedY = std::max(std::min(forward.y, 1.0f), -1.0f);
+		float currentPitchRad = std::asin(clampedY);
+
+		// If out of bounds, compute the correction delta and apply it.
+		if (currentPitchRad < minPitchRad)
 		{
-			m_cameraAnchorNode->Pitch(Degree(-clampDegree) - pitch, TransformSpace::Local);
+			float deltaRad = minPitchRad - currentPitchRad;
+			m_cameraAnchorNode->Pitch(Radian(deltaRad), TransformSpace::Local);
 		}
-		if (pitch > Degree(clampDegree))
+		else if (currentPitchRad > maxPitchRad)
 		{
-			m_cameraAnchorNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
+			float deltaRad = maxPitchRad - currentPitchRad;
+			m_cameraAnchorNode->Pitch(Radian(deltaRad), TransformSpace::Local);
 		}
 	}
 

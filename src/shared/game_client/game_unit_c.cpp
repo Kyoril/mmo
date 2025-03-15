@@ -733,7 +733,7 @@ namespace mmo
 
 	void GameUnitC::StopMove()
 	{
-		m_movementInfo.movementFlags &= ~(movement_flags::Forward | movement_flags::Backward | movement_flags::StrafeLeft | movement_flags::StrafeRight );
+		m_movementInfo.movementFlags &= ~(movement_flags::Forward | movement_flags::Backward);
 	}
 
 	void GameUnitC::StopStrafe()
