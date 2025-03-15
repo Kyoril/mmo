@@ -63,7 +63,7 @@ namespace mmo
 					const Vector3 location(controlled.GetPosition());
 
 					// Find nearby group members and make them loot recipients, too
-					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.y, 200.0f), [&lootRecipients, &controlled, groupId](GameUnitS& unit) -> bool
+					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, 100.0f), [&lootRecipients, &controlled, groupId](GameUnitS& unit) -> bool
 						{
 							if (!unit.IsPlayer())
 							{
