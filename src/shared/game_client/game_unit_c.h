@@ -44,6 +44,8 @@ namespace mmo
 		virtual void OnMoveFallLand(GameUnitC& unit) = 0;
 
 		virtual void OnMoveFall(GameUnitC& unit) = 0;
+
+		virtual void SetSelectedTarget(uint64 guid) = 0;
 	};
 
 	class GameAuraC final : public NonCopyable
@@ -219,7 +221,6 @@ namespace mmo
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;
-
 
 		int32 GetNegStat(int32 statId) const;
 

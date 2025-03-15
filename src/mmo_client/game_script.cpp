@@ -92,10 +92,10 @@ namespace mmo
 
 			if (unitName == "target")
 			{
-				const auto playerObject = ObjectMgr::GetActivePlayer();
-				if (playerObject)
+				const auto target = ObjectMgr::GetSelectedObject();
+				if (target)
 				{
-					return ObjectMgr::Get<GameUnitC>(playerObject->Get<uint64>(object_fields::TargetUnit));
+					return target;
 				}
 			}
 
@@ -1349,7 +1349,8 @@ namespace mmo
 			return;
 		}
 
-		if (const auto player = Script_GetUnitByName("player"); !player)
+		auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
 		{
 			return;
 		}
@@ -1361,12 +1362,7 @@ namespace mmo
 			return;
 		}
 
-		if (ObjectMgr::GetActivePlayer())
-		{
-			ObjectMgr::GetActivePlayer()->SetTargetUnit(ObjectMgr::Get<GameUnitC>(targetHandle->GetGuid()));
-			ObjectMgr::SetSelectedObjectGuid(targetHandle->GetGuid());
-		}
-		m_realmConnector.SetSelection(targetHandle->GetGuid());
+		player->SetTargetUnit(ObjectMgr::Get<GameUnitC>(targetHandle->GetGuid()));
 	}
 
 	void GameScript::LootSlot(int32 slot, bool force) const

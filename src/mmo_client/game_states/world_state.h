@@ -423,6 +423,8 @@ namespace mmo
 		void OnMoveFallLand(GameUnitC& unit) override;
 
 		void OnMoveFall(GameUnitC& unit) override;
+
+		void SetSelectedTarget(uint64 guid) override;
 	};
 
 }

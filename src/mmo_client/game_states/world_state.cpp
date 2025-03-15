@@ -327,27 +327,7 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
-		m_targetObservers.disconnect();
-
-		// Do we have a new target to select?
-		const uint64 targetGuid = ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit);
-		ObjectMgr::SetSelectedObjectGuid(targetGuid);
-
-		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
-
-		if (targetGuid == 0)
-		{
-			// No - do not register any field observers
-			return;
-		}
-
-		if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
-		{
-			// Yes, register field observers
-			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::MaxHealth, 2, *this, &WorldState::OnTargetHealthChanged);
-			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnTargetPowerChanged);
-			m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Level, 2, *this, &WorldState::OnTargetLevelChanged);
-		}
+		DLOG("Target changed to " << log_hex_digit(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)));
 	}
 
 	void WorldState::OnMoneyChanged(uint64 monitoredGuid)
@@ -3219,5 +3199,25 @@ namespace mmo
 		}
 
 		m_playerController->OnMoveFall();
+	}
+
+	void WorldState::SetSelectedTarget(uint64 guid)
+	{
+		m_targetObservers.disconnect();
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+
+		if (guid != 0)
+		{
+			if (const auto targetUnit = ObjectMgr::Get<GameUnitC>(guid))
+			{
+				// Yes, register field observers
+				m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::MaxHealth, 2, *this, &WorldState::OnTargetHealthChanged);
+				m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnTargetPowerChanged);
+				m_targetObservers += targetUnit->RegisterMirrorHandler(object_fields::Level, 2, *this, &WorldState::OnTargetLevelChanged);
+			}
+		}
+
+		m_realmConnector.SetSelection(guid);
 	}
 }

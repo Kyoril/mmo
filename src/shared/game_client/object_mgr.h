@@ -53,6 +53,8 @@ namespace mmo
 		static uint64 GetActivePlayerGuid();
 
 		static uint64 GetSelectedObjectGuid();
+		
+		static std::shared_ptr<GameUnitC> GetSelectedObject();
 
 		static void SetSelectedObjectGuid(uint64 guid);
 

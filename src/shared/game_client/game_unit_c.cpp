@@ -990,7 +990,27 @@ namespace mmo
 
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
 	{
-		m_targetUnit = targetUnit;
+		if (m_targetUnit.expired() && !targetUnit)
+		{
+			return;
+		}
+
+		// Check if the target unit actually changed
+		{
+			auto prevUnit = m_targetUnit.lock();
+			if (targetUnit && prevUnit && prevUnit->GetGuid() == targetUnit->GetGuid())
+			{
+				return;
+			}
+		}
+
+		if (GetGuid() == ObjectMgr::GetActivePlayerGuid())
+		{
+			ObjectMgr::SetSelectedObjectGuid(targetUnit ? targetUnit->GetGuid() : 0);
+
+			m_targetUnit = targetUnit;
+			m_netDriver.SetSelectedTarget(targetUnit ? targetUnit->GetGuid() : 0);
+		}
 	}
 
 	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spells)

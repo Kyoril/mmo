@@ -105,18 +105,15 @@ namespace mmo
 		}
 		else if (unitName == "target")
 		{
-			if (const auto playerObject = ObjectMgr::GetActivePlayer())
+			const auto selectedObject = ObjectMgr::GetSelectedObject();
+			if (selectedObject)
 			{
-				const uint64 targetGuid = playerObject->Get<uint64>(object_fields::TargetUnit);
-				if (const auto target = ObjectMgr::Get<GameUnitC>(targetGuid); target)
-				{
-					return std::make_shared<UnitHandle>(*target);
-				}
+				return std::make_shared<UnitHandle>(*selectedObject);
+			}
 
-				if (int32 index = ms_partyInfo->GetMemberIndexByGuid(targetGuid); index >= 0)
-				{
-					return std::make_shared<PartyUnitHandle>(*ms_partyInfo, index);
-				}
+			if (int32 index = ms_partyInfo->GetMemberIndexByGuid(ObjectMgr::GetSelectedObjectGuid()); index >= 0)
+			{
+				return std::make_shared<PartyUnitHandle>(*ms_partyInfo, index);
 			}
 		}
 		else if (unitName.starts_with("party"))
@@ -172,6 +169,16 @@ namespace mmo
 	uint64 ObjectMgr::GetSelectedObjectGuid()
 	{
 		return ms_selectedObjectGuid;
+	}
+
+	std::shared_ptr<GameUnitC> ObjectMgr::GetSelectedObject()
+	{
+		if (ms_selectedObjectGuid == 0)
+		{
+			return nullptr;
+		}
+
+		return Get<GameUnitC>(ms_selectedObjectGuid);
 	}
 
 	void ObjectMgr::SetSelectedObjectGuid(uint64 guid)
