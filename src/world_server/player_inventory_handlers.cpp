@@ -199,6 +199,20 @@ namespace mmo
 			break;
 		}
 
+		if (targetSlot == player_equipment_slots::Finger1 ||
+			targetSlot == player_equipment_slots::Trinket1)
+		{
+			const auto itemAtTargetSlot = inv.GetItemAtSlot(Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot));
+			if (itemAtTargetSlot)
+			{
+				const auto itemAtSecondSlot = inv.GetItemAtSlot(Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot + 1));
+				if (!itemAtSecondSlot)
+				{
+					targetSlot++;
+				}
+			}
+		}
+
 		// Check if valid slot found
 		auto absDstSlot = Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot);
 		if (!Inventory::IsEquipmentSlot(absDstSlot) && !Inventory::IsBagPackSlot(absDstSlot))
