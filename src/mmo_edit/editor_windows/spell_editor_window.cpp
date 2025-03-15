@@ -430,6 +430,12 @@ namespace mmo
 			{
 				// TODO: Open popup
 			}
+
+			ImGui::Text("Facing flags");
+
+			CHECKBOX_FLAG_PROP(facing, "Target Must be Infront of Caster", spell_facing_flags::TargetInFront);
+			ImGui::SameLine();
+			CHECKBOX_FLAG_PROP(facing, "Caster must be behind target", spell_facing_flags::BehindTarget);
 		}
 
 		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))

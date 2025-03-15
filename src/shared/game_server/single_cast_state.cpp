@@ -298,10 +298,19 @@ namespace mmo
 			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
 		}
 
-		if (unitTarget != nullptr && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+		if (unitTarget != nullptr)
 		{
-			SendEndCast(spell_cast_result::FailedUnitNotInfront);
-			return false;
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			{
+				SendEndCast(spell_cast_result::FailedUnitNotInfront);
+				return false;
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::BehindTarget) != 0 && !unitTarget->IsFacingAwayFrom(m_cast.GetExecuter()))
+			{
+				SendEndCast(spell_cast_result::FailedUnitNotBehind);
+				return false;
+			}
 		}
 
 		// Check if we are trying to cast a spell on a dead target which is not allowed

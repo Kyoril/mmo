@@ -6,6 +6,18 @@
 
 namespace mmo
 {
+	namespace spell_facing_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			TargetInFront = 1 << 0,
+
+			BehindTarget = 1 << 1,
+		};
+	}
+
 	namespace power_type
 	{
 		enum Type
