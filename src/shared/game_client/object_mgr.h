@@ -56,6 +56,12 @@ namespace mmo
 		
 		static std::shared_ptr<GameUnitC> GetSelectedObject();
 
+		static uint64 GetHoveredObjectGuid();
+
+		static std::shared_ptr<GameUnitC> GetHoveredUnit();
+
+		static void SetHoveredObject(uint64 hoveredObjectGuid);
+
 		static void SetSelectedObjectGuid(uint64 guid);
 
 		static uint32 GetItemCount(uint32 itemId);
@@ -106,6 +112,7 @@ namespace mmo
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
 		static uint64 ms_activePlayerGuid;
 		static uint64 ms_selectedObjectGuid;
+		static uint64 ms_hoveredObjectGuid;
 		static const proto_client::Project* ms_project;
 
 		static std::map<uint32, uint32> ms_itemCount;

@@ -14,6 +14,7 @@ namespace mmo
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
 	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
+	uint64 ObjectMgr::ms_hoveredObjectGuid = 0;
 	const proto_client::Project* ObjectMgr::ms_project = nullptr;
 
 	std::map<uint32, uint32> ObjectMgr::ms_itemCount;
@@ -26,6 +27,7 @@ namespace mmo
 		ms_objectyByGuid.clear();
 		ms_activePlayerGuid = 0;
 		ms_selectedObjectGuid = 0;
+		ms_hoveredObjectGuid = 0;
 		ms_itemCount.clear();
 		ms_partyInfo = &partyInfo;
 	}
@@ -116,6 +118,15 @@ namespace mmo
 				return std::make_shared<PartyUnitHandle>(*ms_partyInfo, index);
 			}
 		}
+		else if (unitName == "mouseover")
+		{
+			const auto hoveredUnit = ObjectMgr::GetHoveredUnit();
+			if (hoveredUnit)
+			{
+				return std::make_shared<UnitHandle>(*hoveredUnit);
+			}
+
+		}
 		else if (unitName.starts_with("party"))
 		{
 			if (!ms_partyInfo)
@@ -179,6 +190,25 @@ namespace mmo
 		}
 
 		return Get<GameUnitC>(ms_selectedObjectGuid);
+	}
+
+	uint64 ObjectMgr::GetHoveredObjectGuid()
+	{
+		return ms_hoveredObjectGuid;
+	}
+
+	std::shared_ptr<GameUnitC> ObjectMgr::GetHoveredUnit()
+	{
+		if (ms_hoveredObjectGuid == 0)
+		{
+			return nullptr;
+		}
+		return Get<GameUnitC>(ms_hoveredObjectGuid);
+	}
+
+	void ObjectMgr::SetHoveredObject(uint64 hoveredObjectGuid)
+	{
+		ms_hoveredObjectGuid = hoveredObjectGuid;
 	}
 
 	void ObjectMgr::SetSelectedObjectGuid(uint64 guid)

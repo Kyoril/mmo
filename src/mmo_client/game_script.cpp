@@ -899,7 +899,10 @@ namespace mmo
 				.def("GetStat", &UnitHandle::GetStat)
 				.def("GetPosStat", &UnitHandle::GetPosStat)
 				.def("GetNegStat", &UnitHandle::GetNegStat)
-				.def("IsAlive", &UnitHandle::IsAlive)),
+				.def("IsAlive", &UnitHandle::IsAlive)
+				.def("GetType", &UnitHandle::GetType)
+				.def("IsFriendly", &UnitHandle::IsFriendly)
+				.def("IsHostile", &UnitHandle::IsHostile)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")

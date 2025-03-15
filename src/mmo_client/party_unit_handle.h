@@ -32,6 +32,8 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetPowerType() const override;
 		[[nodiscard]] virtual bool IsAlive() const override;
 		[[nodiscard]] virtual uint32 GetAuraCount() const override;
+		[[nodiscard]] virtual bool IsFriendly() const override;
+		[[nodiscard]] virtual bool IsHostile() const override;
 
 	private:
 		std::shared_ptr<GameUnitC> GetRealUnit() const;

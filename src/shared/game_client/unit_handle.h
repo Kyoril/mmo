@@ -62,6 +62,9 @@ namespace mmo
 		[[nodiscard]] virtual float GetArmorReductionFactor() const;
 		[[nodiscard]] virtual int32 GetAvailableAttributePoints() const;
 		[[nodiscard]] virtual bool IsAlive() const;
+		[[nodiscard]] virtual bool IsFriendly() const;
+		[[nodiscard]] virtual bool IsHostile() const;
+		[[nodiscard]] virtual const char* GetType() const;
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;

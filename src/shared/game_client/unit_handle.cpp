@@ -197,6 +197,35 @@ namespace mmo
 		return Get()->IsAlive();
 	}
 
+	bool UnitHandle::IsFriendly() const
+	{
+		if (!CheckNonNull()) return false;
+		return Get()->IsFriendly();
+	}
+
+	bool UnitHandle::IsHostile() const
+	{
+		if (!CheckNonNull()) return false;
+		return Get()->IsHostile();
+	}
+
+	const char* UnitHandle::GetType() const
+	{
+		if (!CheckNonNull()) return nullptr;
+
+		static const char* s_unitTypeStrings[] = {
+			"CREATURE",
+			"PLAYER"
+		};
+
+		if (Get()->IsPlayer())
+		{
+			return s_unitTypeStrings[1];
+		}
+
+		return s_unitTypeStrings[0];
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

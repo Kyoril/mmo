@@ -446,8 +446,11 @@ namespace mmo
 			g_cursor.SetCursorType(CursorType::Pointer);
 		}
 
-		// TODO: Raise UI event?
-
+		if (m_hoveredUnit != previousHoveredUnit)
+		{
+			ObjectMgr::SetHoveredObject(m_hoveredUnit ? m_hoveredUnit->GetGuid() : 0);
+			FrameManager::Get().TriggerLuaEvent("HOVERED_UNIT_CHANGED");
+		}
 	}
 
 	void PlayerController::Update(const float deltaSeconds)

@@ -915,6 +915,48 @@ namespace mmo
 		m_casting = false;
 	}
 
+	bool GameUnitC::IsFriendly() const
+	{
+		if (ObjectMgr::GetActivePlayerGuid() == GetGuid())
+		{
+			return true;
+		}
+
+		if (ObjectMgr::GetActivePlayerGuid() == 0)
+		{
+			return false;
+		}
+
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return false;
+		}
+
+		return IsFriendlyTo(*player);
+	}
+
+	bool GameUnitC::IsHostile() const
+	{
+		if (ObjectMgr::GetActivePlayerGuid() == GetGuid())
+		{
+			return true;
+		}
+
+		if (ObjectMgr::GetActivePlayerGuid() == 0)
+		{
+			return false;
+		}
+
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return false;
+		}
+
+		return IsHostileTo(*player);
+	}
+
 	int32 GameUnitC::GetPower(const int32 powerType) const
 	{
 		if (powerType < 0 || powerType >= power_type::Health)

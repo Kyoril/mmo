@@ -159,6 +159,18 @@ namespace mmo
 		return 0;
 	}
 
+	bool PartyUnitHandle::IsFriendly() const
+	{
+		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
+		return true;
+	}
+
+	bool PartyUnitHandle::IsHostile() const
+	{
+		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
+		return false;
+	}
+
 	std::shared_ptr<GameUnitC> PartyUnitHandle::GetRealUnit() const
 	{
 		auto unit = m_realUnit.lock();

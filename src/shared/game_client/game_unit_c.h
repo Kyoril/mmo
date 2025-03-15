@@ -180,6 +180,10 @@ namespace mmo
 
 		void NotifySpellCastSucceeded();
 
+		bool IsFriendly() const;
+
+		bool IsHostile() const;
+
 	public:
 		/// @brief Returns the current health of this unit.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
