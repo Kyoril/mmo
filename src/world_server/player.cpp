@@ -1724,6 +1724,9 @@ namespace mmo
 				<< io::write<int32>(attributePoints);
 			packet.Finish();
 			});
+
+		// Save character due to levelup
+		SaveCharacterData();
 	}
 
 	void Player::OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value)
@@ -1773,5 +1776,8 @@ namespace mmo
 				<< io::write<uint32>(rewardMoney);
 			packet.Finish();
 			});
+
+		// Save character due to quest data change
+		SaveCharacterData();
 	}
 }
