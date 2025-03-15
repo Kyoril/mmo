@@ -471,6 +471,17 @@ namespace mmo
 
 	typedef spell_attributes::Type SpellAttributes;
 
+	namespace spell_attributes_b
+	{
+		enum Type
+		{
+			TargetMustNotBeInFrontOfCaster = 0x00000001,
+
+		};
+	}
+
+	typedef spell_attributes::Type SpellAttributes;
+
 	namespace spell_proc_flags
 	{
 		enum Type

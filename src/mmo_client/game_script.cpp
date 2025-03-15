@@ -1361,6 +1361,11 @@ namespace mmo
 			return;
 		}
 
+		if (ObjectMgr::GetActivePlayer())
+		{
+			ObjectMgr::GetActivePlayer()->SetTargetUnit(ObjectMgr::Get<GameUnitC>(targetHandle->GetGuid()));
+			ObjectMgr::SetSelectedObjectGuid(targetHandle->GetGuid());
+		}
 		m_realmConnector.SetSelection(targetHandle->GetGuid());
 	}
 

@@ -31,6 +31,9 @@ namespace mmo
 	static ConsoleVar* s_maxCameraZoomCVar = nullptr;
 	static ConsoleVar* s_cameraZoomCVar = nullptr;
 
+	static ConsoleVar* s_resetCameraYawCVar = nullptr;
+	static ConsoleVar* s_resetCameraPitchCVar = nullptr;
+
 	extern Cursor g_cursor;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient)
@@ -46,6 +49,9 @@ namespace mmo
 			s_invertVMouseCVar = ConsoleVarMgr::RegisterConsoleVar("InvertVMouse", "Whether the vertical camera rotation is inverted.", "1");
 			s_maxCameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("MaxCameraZoom", "Gets or sets the maximum camera zoom value.", "8");
 			s_cameraZoomCVar = ConsoleVarMgr::RegisterConsoleVar("CameraZoom", "Gets or sets the current camera zoom value.", "8");
+
+			s_resetCameraYawCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraHorizontally", "Gets or sets whether the camera yaw will be reset while moving.", "1");
+			s_resetCameraPitchCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraVertically", "Gets or sets whether the camera pitch will be reset while moving.", "1");
 		}
 
 		m_cvarConnections += {
@@ -466,6 +472,28 @@ namespace mmo
 			UpdateHeartbeat();
 		}
 
+		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))
+		{
+			if (m_controlledUnit->GetMovementInfo().IsChangingPosition())
+			{
+				if (s_resetCameraYawCVar->GetBoolValue())
+				{
+					// Slowly reset the camera yaw over time to the player's facing direction (yaw = 0.0f)
+					const float yaw = m_cameraAnchorNode->GetOrientation().GetYaw().GetValueRadians();
+					const float newYaw = 0.0f;
+					m_cameraAnchorNode->Yaw(Radian((newYaw - yaw) * 4.0f * deltaSeconds), TransformSpace::Parent);
+				}
+
+				if (s_resetCameraPitchCVar->GetBoolValue())
+				{
+					// Slowly reset the camera pitch over time to the player's facing direction (pitch = 0.0f)
+					const float pitch = m_cameraAnchorNode->GetOrientation().GetPitch().GetValueRadians();
+					const float newPitch = Degree(-15.0f).GetValueRadians();
+					m_cameraAnchorNode->Pitch(Radian((newPitch - pitch) * 4.0f * deltaSeconds), TransformSpace::Local);
+				}
+			}
+		}
+
 		// When we are looting, check the distance to the looted object on movement
 		if (m_lootClient.IsLooting() && m_controlledUnit->GetMovementInfo().IsChangingPosition())
 		{
@@ -590,6 +618,7 @@ namespace mmo
 			{
 				if (m_hoveredUnit->GetGuid() != previousSelectedUnit)
 				{
+					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_hoveredUnit->GetGuid()));
 					m_connector.SetSelection(m_hoveredUnit->GetGuid());
 				}
 
@@ -645,6 +674,7 @@ namespace mmo
 			{
 				if (previousSelectedUnit != 0)
 				{
+					m_controlledUnit->SetTargetUnit(nullptr);
 					m_connector.SetSelection(0);
 				}
 			}
