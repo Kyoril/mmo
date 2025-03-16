@@ -24,7 +24,9 @@ namespace mmo
 
 	void TiledUnitFinder::TiledUnitWatcher::Start()
 	{
-		const auto shapeArea = GetTileIndexArea(GetShape());
+		m_previousShape = GetShape();
+
+		const auto shapeArea = GetTileIndexArea(m_previousShape);
 		ASSERT(shapeArea.topLeft[1] <= shapeArea.bottomRight[1]);
 		ASSERT(shapeArea.topLeft[0] <= shapeArea.bottomRight[0]);
 
@@ -35,18 +37,16 @@ namespace mmo
 				auto& tile = m_finder.GetTile(TileIndex2D(x, y));
 				if (WatchTile(tile))
 				{
-					return;
+					//return;
 				}
 			}
 		}
 
-		m_previousShape = GetShape();
 	}
 
 	TileArea TiledUnitFinder::TiledUnitWatcher::GetTileIndexArea(const Circle& shape) const
 	{
 		const auto boundingBox = shape.GetBoundingRect();
-		// WoW's Coordinate System sucks... topLeft >= bottomRight
 		const auto topLeft = m_finder.GetTilePosition(boundingBox[1]);
 		const auto bottomRight = m_finder.GetTilePosition(boundingBox[0]);
 		return TileArea(topLeft, bottomRight);
@@ -54,7 +54,7 @@ namespace mmo
 
 	bool TiledUnitFinder::TiledUnitWatcher::WatchTile(Tile& tile)
 	{
-		ASSERT(m_connections.count(&tile) == 0);
+		ASSERT(!m_connections.contains(&tile));
 
 		const auto connection = tile.moved->connect(
 			std::bind(&TiledUnitWatcher::OnUnitMoved,
@@ -66,7 +66,7 @@ namespace mmo
 		{
 			const Vector3& location = unit->GetPosition();
 
-			if (GetShape().IsPointInside(Point(location.x, location.y)))
+			if (GetShape().IsPointInside(Point(location.x, location.z)))
 			{
 				if (m_visibilityChanged(*unit, true))
 				{
@@ -80,20 +80,22 @@ namespace mmo
 
 	bool TiledUnitFinder::TiledUnitWatcher::UnwatchTile(Tile& tile)
 	{
-		ASSERT(m_connections.count(&tile) == 1);
+		ASSERT(m_connections.contains(&tile));
 
 		{
 			const auto i = m_connections.find(&tile);
 			ASSERT(i != m_connections.end());
-
-			i->second.disconnect();
-			m_connections.erase(i);
+			if (i != m_connections.end())
+			{
+				i->second.disconnect();
+				m_connections.erase(i);
+			}
 		}
 
 		for (GameUnitS* const unit : tile.GetUnits().getElements())
 		{
 			const Vector3& location = unit->GetPosition();
-			if (GetShape().IsPointInside(Point(location.x, location.y)))
+			if (GetShape().IsPointInside(Point(location.x, location.z)))
 			{
 				if (m_visibilityChanged(*unit, false))
 				{
@@ -109,7 +111,7 @@ namespace mmo
 	{
 		const Vector3& location = unit.GetPosition();
 
-		const bool isInside = GetShape().IsPointInside(Point(location.x, location.y));
+		const bool isInside = GetShape().IsPointInside(Point(location.x, location.z));
 		m_visibilityChanged(unit, isInside);
 	}
 
@@ -118,7 +120,7 @@ namespace mmo
 		for (GameUnitS* const unit : tile.GetUnits().getElements())
 		{
 			const auto& location = unit->GetPosition();
-			const auto planarPos = Point(location.x, location.y);
+			const auto planarPos = Point(location.x, location.z);
 			const bool isInside = GetShape().IsPointInside(planarPos);
 
 			if (m_visibilityChanged(*unit, isInside))
@@ -133,7 +135,9 @@ namespace mmo
 	void TiledUnitFinder::TiledUnitWatcher::OnShapeUpdated()
 	{
 		const auto previousArea = GetTileIndexArea(m_previousShape);
-		const auto currentArea = GetTileIndexArea(GetShape());
+
+		m_previousShape = GetShape();
+		const auto currentArea = GetTileIndexArea(m_previousShape);
 
 		for (TileIndex y = previousArea.topLeft[1]; y <= previousArea.bottomRight[1]; ++y)
 		{
@@ -146,14 +150,14 @@ namespace mmo
 				{
 					if (UpdateTile(tile))
 					{
-						return;
+						//break;
 					}
 				}
 				else
 				{
 					if (UnwatchTile(tile))
 					{
-						return;
+						//break;
 					}
 				}
 			}
@@ -170,19 +174,17 @@ namespace mmo
 				{
 					if (UpdateTile(tile))
 					{
-						return;
+						//break;
 					}
 				}
 				else
 				{
 					if (WatchTile(tile))
 					{
-						return;
+						//break;
 					}
 				}
 			}
 		}
-
-		m_previousShape = GetShape();
 	}
 }

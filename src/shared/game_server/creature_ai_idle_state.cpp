@@ -32,50 +32,79 @@ namespace mmo
 				const auto& controlled = GetControlled();
 				if (&unit == &controlled)
 				{
-					return false;
+					return true;
 				}
 
 				if (!controlled.IsAlive())
 				{
-					return false;
+					return true;
 				}
 
 				if (!unit.IsAlive())
 				{
-					return false;
+					return true;
 				}
-
-				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
-				if (!controlled.UnitIsEnemy(unit))
-				{
-					return false;
-				}
-
-				const int32 ourLevel = controlled.Get<int32>(object_fields::Level);
-				const int32 otherLevel = unit.Get<int32>(object_fields::Level);
-				const int32 diff = ::abs(ourLevel - otherLevel);
 
 				const float dist = sqrtf(controlled.GetSquaredDistanceTo(unit.GetPosition(), true));
 
-				// Check distance
-				float reqDist = 20.0f;
-				if (ourLevel < otherLevel)
+				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
+				if (controlled.UnitIsEnemy(unit))
 				{
-					reqDist = Clamp<float>(reqDist - diff * 2, 1.0f, 40.0f);
+					const int32 ourLevel = controlled.Get<int32>(object_fields::Level);
+					const int32 otherLevel = unit.Get<int32>(object_fields::Level);
+					const int32 diff = ::abs(ourLevel - otherLevel);
+
+					// Check distance
+					float reqDist = 20.0f;
+					if (ourLevel < otherLevel)
+					{
+						reqDist = Clamp<float>(reqDist - diff * 2, 1.0f, 40.0f);
+					}
+					else if (otherLevel < ourLevel)
+					{
+						reqDist = Clamp<float>(reqDist + diff, 1.0f, 40.0f);
+					}
+
+					if (dist > reqDist)
+					{
+						return true;
+					}
+
+					// TODO: Line of sight check
+
+					GetAI().EnterCombat(unit);
 				}
-				else if (otherLevel < ourLevel)
+				else if (controlled.UnitIsFriendly(unit))
 				{
-					reqDist = Clamp<float>(reqDist + diff, 1.0f, 40.0f);
+					const bool unitIsGrimtusk = unit.Get<uint32>(object_fields::Entry) == 21;
+					if (unitIsGrimtusk && isVisible)
+					{
+						WLOG("Friendly unit grimtusk was detected nearby at distance " << dist);
+					}
+
+					// It's our ally - check if we should assist in combat
+					if (isVisible)
+					{
+						if (dist <= 8.0f)
+						{
+							auto* victim = unit.GetVictim();
+							if (unit.IsInCombat() && victim != nullptr)
+							{
+								// Is the enemy of our friend our enemy?
+								if (!controlled.UnitIsEnemy(*victim))
+								{
+									return false;
+								}
+
+								// TODO: Line of sight check
+
+								GetAI().EnterCombat(*victim);
+								return true;
+							}
+						}
+					}
 				}
 
-				if (dist > reqDist)
-				{
-					return false;
-				}
-
-				// TODO: Line of sight check
-
-				GetAI().EnterCombat(unit);
 				return true;
 			});
 		ASSERT(m_unitWatcher);

@@ -35,7 +35,7 @@ namespace mmo
 
 		m_nextActionCountdown.ended.connect(this, &CreatureAICombatState::ChooseNextAction);
 
-		controlled.SetInCombat(false);
+		controlled.SetInCombat(true);
 
 		// Watch for threat events
 		m_onThreatened = controlled.threatened.connect([this](GameUnitS& threatener, float amount)

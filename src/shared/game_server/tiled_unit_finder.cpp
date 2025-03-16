@@ -42,13 +42,6 @@ namespace mmo
 		tile->AddUnit(findable);
 
 		UnitRecord& record = *m_units.insert(std::make_pair(&findable, std::make_unique<UnitRecord>())).first->second;
-		/*record.moved = findable.moved.connect([this, &findable](GameObject & obj, math::Vector3 position, float o)
-		{
-			if (findable.getLocation() != position)
-			{
-				onUnitMoved(findable);
-			}
-		});*/
 		record.lastTile = tile.get();
 	}
 
@@ -63,7 +56,7 @@ namespace mmo
 
 	void TiledUnitFinder::UpdatePosition(GameUnitS& updated, const Vector3& previousPos)
 	{
-		if (updated.GetPosition() != previousPos)
+		//if (updated.GetPosition() != previousPos)
 		{
 			OnUnitMoved(updated);
 		}

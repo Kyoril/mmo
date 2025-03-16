@@ -110,6 +110,7 @@ namespace mmo
 		scoped_connection m_onAutoAttackDone;
 		GameTime m_lastThreatTime;
 		Countdown m_nextActionCountdown;
+		
 		bool m_isCasting;
 		bool m_entered;
 		bool m_isRanged;

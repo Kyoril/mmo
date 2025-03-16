@@ -141,8 +141,43 @@ namespace mmo
 		auto* worldInstance = controlled.GetWorldInstance();
 		ASSERT(worldInstance);
 
-		// Warning: This destroys the current AI state as it enters the combat state
-		EnterCombat(threat);
+		if (!controlled.UnitIsFriendly(threat))
+		{
+			const auto& location = controlled.GetPosition();
+
+			worldInstance->GetUnitFinder().FindUnits(Circle(location.x, location.z, 8.0f), [&controlled, &threat, &worldInstance](GameUnitS& unit) -> bool
+				{
+					if (!unit.IsUnit())
+					{
+						return true;
+					}
+
+					if (!unit.IsAlive())
+					{
+						return true;
+					}
+
+					if (unit.IsInCombat())
+					{
+						return true;
+					}
+
+					// TODO: Line of sight
+
+					if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
+					{
+						worldInstance->GetUniverse().Post([&unit, &threat]()
+							{
+								unit.threatened(threat, 0.0f);
+							});
+					}
+
+					return false;
+				});
+
+			// Warning: This destroys the current AI state as it enters the combat state
+			EnterCombat(threat);
+		}
 	}
 
 }
