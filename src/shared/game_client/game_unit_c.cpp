@@ -1046,11 +1046,11 @@ namespace mmo
 			}
 		}
 
+		m_targetUnit = targetUnit;
+
 		if (GetGuid() == ObjectMgr::GetActivePlayerGuid())
 		{
 			ObjectMgr::SetSelectedObjectGuid(targetUnit ? targetUnit->GetGuid() : 0);
-
-			m_targetUnit = targetUnit;
 			m_netDriver.SetSelectedTarget(targetUnit ? targetUnit->GetGuid() : 0);
 		}
 	}
