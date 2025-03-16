@@ -1153,7 +1153,17 @@ namespace mmo
 		// No font!
 		return nullptr;
 	}
-	
+
+	float Frame::GetOpacity(bool inherit) const
+	{
+		if (inherit && m_parent)
+		{
+			return m_opacity * m_parent->GetOpacity(true);
+		}
+
+		return m_opacity;
+	}
+
 	void Frame::DrawSelf()
 	{
 		BufferGeometry();
@@ -1178,7 +1188,7 @@ namespace mmo
 			if (m_renderer != nullptr)
 			{
 				Color color = m_color;
-				color.SetAlpha(m_opacity);
+				color.SetAlpha(GetOpacity(true));
 				m_renderer->Render(optional<Color>(color));
 			}
 			else

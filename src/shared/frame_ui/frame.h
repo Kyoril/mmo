@@ -437,7 +437,7 @@ namespace mmo
 
 		void SetOpacity(const float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
 
-		[[nodiscard]] float GetOpacity() const { return m_opacity; }
+		[[nodiscard]] float GetOpacity(bool inherit = true) const;
 
 	protected:
 		virtual void DrawSelf();

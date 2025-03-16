@@ -614,7 +614,7 @@ namespace mmo
 				// Draw drop shadow?
 				if (m_shadowX != 0.0f || m_shadowY != 0.0f)
 				{
-					image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, buffer, 0xFF000000);
+					image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, buffer, Color(0.0f, 0.0f, 0.0f, Color(color).GetAlpha()));
 				}
 
 				image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, buffer, color);
@@ -667,7 +667,7 @@ namespace mmo
 					// Draw drop shadow?
 					if (m_shadowX != 0.0f || m_shadowY != 0.0f)
 					{
-						image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, *buffer, 0xFF000000);
+						image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, *buffer, Color(0.0f, 0.0f, 0.0f, Color(color).GetAlpha()));
 					}
 
 					image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
