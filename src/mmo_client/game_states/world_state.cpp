@@ -432,6 +432,20 @@ namespace mmo
 		}
 	}
 
+	void WorldState::OnCombatModeChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+
+		const uint32 flags = ObjectMgr::GetActivePlayer()->Get<uint32>(object_fields::Flags);
+		const bool combatMode = (flags & unit_flags::InCombat) != 0;
+
+		if (combatMode != m_combatMode)
+		{
+			m_combatMode = combatMode;
+			FrameManager::Get().TriggerLuaEvent("COMBAT_MODE_CHANGED", m_combatMode);
+		}
+	}
+
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
@@ -990,6 +1004,7 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::DisplayId, 1, *this, &WorldState::OnDisplayIdChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Flags, 1, *this, &WorldState::OnCombatModeChanged);
 
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AttackPower, 1, *this, &WorldState::OnPlayerStatsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Armor, 1, *this, &WorldState::OnPlayerStatsChanged);
@@ -1021,6 +1036,8 @@ namespace mmo
 					}
 
 					m_questClient.UpdateQuestLog(*std::static_pointer_cast<GamePlayerC>(object));
+
+					OnCombatModeChanged(object->GetGuid());
 				}
 			}
 			else

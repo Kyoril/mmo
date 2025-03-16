@@ -76,12 +76,6 @@ namespace mmo
 				}
 				else if (controlled.UnitIsFriendly(unit))
 				{
-					const bool unitIsGrimtusk = unit.Get<uint32>(object_fields::Entry) == 21;
-					if (unitIsGrimtusk && isVisible)
-					{
-						WLOG("Friendly unit grimtusk was detected nearby at distance " << dist);
-					}
-
 					// It's our ally - check if we should assist in combat
 					if (isVisible)
 					{
