@@ -37,11 +37,14 @@ namespace mmo
 		// Get the current frame rect
 		const auto frameRect = m_frame->GetAbsoluteFrameRect();
 
+		bool shouldRenderScene = m_modelFrame ? m_modelFrame->ShouldRenderModel() : false;
+
 		// Need to resize the render target first?
 		if (m_lastFrameRect.GetSize() != frameRect.GetSize())
 		{
 			// Resize render target
 			m_renderTexture->Resize(static_cast<uint16>(frameRect.GetWidth()), static_cast<uint16>(frameRect.GetHeight()));
+			shouldRenderScene = true;
 		}
 
 		// If frame rect mismatches or buffer empty...
@@ -68,18 +71,22 @@ namespace mmo
 		// Capture the old graphics state (including the render target)
 		gx.CaptureState();
 
-		// Activate render target
-		m_renderTexture->Activate();
-		m_renderTexture->Clear(mmo::ClearFlags::All);
-
-		if (m_modelFrame && m_modelFrame->GetCamera())
+		if (shouldRenderScene)
 		{
-			m_modelFrame->GetCamera()->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-			m_modelFrame->GetScene().Render(*m_modelFrame->GetCamera());
-		}
+			// Activate render target
+			m_renderTexture->Activate();
+			m_renderTexture->Clear(mmo::ClearFlags::All);
 
-		// Restore state before drawing the frame's geometry buffer
-		GraphicsDevice::Get().RestoreState();
+			if (m_modelFrame && m_modelFrame->GetCamera())
+			{
+				m_modelFrame->GetCamera()->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
+				m_modelFrame->GetScene().Render(*m_modelFrame->GetCamera());
+			}
+
+			// Restore state before drawing the frame's geometry buffer
+			GraphicsDevice::Get().RestoreState();
+		}
+		
 		m_frame->GetGeometryBuffer().Draw();
 
 		// Apply frame rect

@@ -229,7 +229,9 @@ namespace mmo
 				.def("SetZoom", &ModelFrame::SetZoom)
 				.def("GetZoom", &ModelFrame::GetZoom)
 				.def("GetYaw", &ModelFrame::GetYaw)
-				.def("ResetYaw", &ModelFrame::ResetYaw)),
+				.def("ResetYaw", &ModelFrame::ResetYaw)
+				.def("InvalidateModel", &ModelFrame::InvalidateModel)
+				.def("SetAutoRender", &ModelFrame::SetAutoRender)),
 				
 			luabind::scope(
 				luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")

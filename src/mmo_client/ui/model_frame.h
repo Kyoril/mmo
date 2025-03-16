@@ -27,6 +27,8 @@ namespace mmo
 
 		void ResetYaw();
 
+		void SetAutoRender(bool value);
+
 		void SetZoom(float zoom);
 
 		float GetZoom() const { return m_zoom; }
@@ -51,6 +53,12 @@ namespace mmo
 
 		void Update(float elapsed) override;
 
+		void InvalidateModel();
+
+		bool ShouldAutoUpdateModel();
+
+		bool ShouldRenderModel();
+
 	public:
 		/// Gets the mesh instance or nullptr if there is no mesh loaded.
 		inline MeshPtr GetMesh() const noexcept { return m_mesh; }
@@ -72,6 +80,8 @@ namespace mmo
 		void OnAnimationChanged(const Property& prop);
 
 		void OnOffsetChanged(const Property& prop);
+
+		void OnAutoRenderChanged(const Property& prop);
 
 	protected:
 		/// Contains a list of all property connections.
@@ -101,5 +111,9 @@ namespace mmo
 		Camera* m_camera = nullptr;
 
 		AnimationState* m_animationState = nullptr;
+
+		bool m_autoUpdateModel = true;
+
+		bool m_modelInvalidated = false;
 	};
 }

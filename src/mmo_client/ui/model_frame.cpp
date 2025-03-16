@@ -27,6 +27,7 @@ namespace mmo
 		m_propConnections += AddProperty("OffsetX", "0").Changed.connect(this, &ModelFrame::OnOffsetChanged);
 		m_propConnections += AddProperty("OffsetY", "1").Changed.connect(this, &ModelFrame::OnOffsetChanged);
 		m_propConnections += AddProperty("OffsetZ", "0").Changed.connect(this, &ModelFrame::OnOffsetChanged);
+		m_propConnections += AddProperty("AutoRender", "true").Changed.connect(this, &ModelFrame::OnAutoRenderChanged);
 	}
 
 	void ModelFrame::SetModelFile(const std::string & filename)
@@ -54,6 +55,11 @@ namespace mmo
 	{
 		m_yaw = Degree(0);
 		Invalidate(false);
+	}
+
+	void ModelFrame::SetAutoRender(bool value)
+	{
+		SetProperty("AutoRender", value ? "true" : "false");
 	}
 
 	void ModelFrame::SetZoom(const float zoom)
@@ -96,6 +102,27 @@ namespace mmo
 		}
 	}
 
+	void ModelFrame::InvalidateModel()
+	{
+		m_modelInvalidated = true;
+		Invalidate(false);
+	}
+
+	bool ModelFrame::ShouldAutoUpdateModel()
+	{
+		return m_autoUpdateModel;
+	}
+
+	bool ModelFrame::ShouldRenderModel()
+	{
+		if (m_autoUpdateModel)
+		{
+			return m_needsRedraw;
+		}
+
+		return m_modelInvalidated;
+	}
+
 	void ModelFrame::OnModelFileChanged(const Property& prop)
 	{
 		if (m_entity)
@@ -105,6 +132,9 @@ namespace mmo
 			m_entity = nullptr;
 			m_animationState = nullptr;
 		}
+
+		m_cameraNode->SetPosition(Vector3::UnitZ * GetZoom());
+		m_cameraAnchorNode->SetPosition(m_offset);
 
 		m_mesh = prop.GetValue().empty() ? nullptr : MeshManager::Get().Load(prop.GetValue());
 		if (m_mesh)
@@ -148,5 +178,11 @@ namespace mmo
 		m_offset.x = std::atof(GetProperty("OffsetX")->GetValue().c_str());
 		m_offset.y = std::atof(GetProperty("OffsetY")->GetValue().c_str());
 		m_offset.z = std::atof(GetProperty("OffsetZ")->GetValue().c_str());
+		Invalidate(false);
+	}
+
+	void ModelFrame::OnAutoRenderChanged(const Property& prop)
+	{
+		m_autoUpdateModel = prop.GetBoolValue();
 	}
 }
