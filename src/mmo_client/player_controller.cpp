@@ -305,29 +305,17 @@ namespace mmo
 
 	void PlayerController::ClampCameraPitch()
 	{
-		// Desired clamp limits in degrees.
 		const float clampDegree = 60.0f;
-		const float minPitchRad = Degree(-clampDegree).GetValueRadians();
-		const float maxPitchRad = Degree(clampDegree).GetValueRadians();
 
-		// Calculate the forward vector of the camera anchor.
-		// Using the forward vector allows us to extract the actual vertical angle irrespective of yaw.
-		Vector3 forward = m_cameraAnchorNode->GetOrientation() * Vector3::NegativeUnitZ;
-
-		// Clamp forward.y to valid asin range.
-		const float clampedY = std::max(std::min(forward.y, 1.0f), -1.0f);
-		float currentPitchRad = std::asin(clampedY);
-
-		// If out of bounds, compute the correction delta and apply it.
-		if (currentPitchRad < minPitchRad)
+		// Ensure the camera pitch is clamped
+		const Radian pitch = m_cameraPitchNode->GetOrientation().GetPitch();
+		if (pitch < Degree(-clampDegree))
 		{
-			float deltaRad = minPitchRad - currentPitchRad;
-			m_cameraAnchorNode->Pitch(Radian(deltaRad), TransformSpace::Local);
+			m_cameraPitchNode->Pitch(Degree(-clampDegree) - pitch, TransformSpace::Local);
 		}
-		else if (currentPitchRad > maxPitchRad)
+		if (pitch > Degree(clampDegree))
 		{
-			float deltaRad = maxPitchRad - currentPitchRad;
-			m_cameraAnchorNode->Pitch(Radian(deltaRad), TransformSpace::Local);
+			m_cameraPitchNode->Pitch(Degree(clampDegree) - pitch, TransformSpace::Local);
 		}
 	}
 
@@ -477,7 +465,7 @@ namespace mmo
 
 		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))
 		{
-			if (m_controlledUnit->GetMovementInfo().IsChangingPosition())
+			if (m_controlledUnit->GetMovementInfo().IsChangingPosition() || m_controlledUnit->GetMovementInfo().IsTurning())
 			{
 				if (s_resetCameraYawCVar->GetBoolValue())
 				{
@@ -489,10 +477,17 @@ namespace mmo
 
 				if (s_resetCameraPitchCVar->GetBoolValue())
 				{
-					// Slowly reset the camera pitch over time to the player's facing direction (pitch = 0.0f)
-					const float pitch = m_cameraAnchorNode->GetOrientation().GetPitch().GetValueRadians();
-					const float newPitch = Degree(-15.0f).GetValueRadians();
-					m_cameraAnchorNode->Pitch(Radian((newPitch - pitch) * 4.0f * deltaSeconds), TransformSpace::Local);
+					// Get the current pitch in radians.
+					const float currentPitch = m_cameraPitchNode->GetOrientation().GetPitch().GetValueRadians();
+					// Define the target pitch (-15 degrees converted to radians).
+					const float targetPitch = Degree(-15.0f).GetValueRadians();
+
+					// Compute the shortest angular difference.
+					const float deltaAngle = std::atan2(std::sin(targetPitch - currentPitch),
+						std::cos(targetPitch - currentPitch));
+
+					// Interpolate the pitch correction over time.
+					m_cameraPitchNode->Pitch(Radian(deltaAngle * 4.0f * deltaSeconds), TransformSpace::Local);
 				}
 			}
 		}
@@ -727,7 +722,7 @@ namespace mmo
 			const float factor = s_invertVMouseCVar->GetBoolValue() ? -1.0f : 1.0f;
 
 			const Radian deltaPitch = Degree(static_cast<float>(deltaY) * factor * s_mouseSensitivityCVar->GetFloatValue());
-			m_cameraAnchorNode->Pitch(deltaPitch, TransformSpace::Local);
+			m_cameraPitchNode->Pitch(deltaPitch, TransformSpace::Local);
 
 			ClampCameraPitch();
 		}
@@ -736,7 +731,7 @@ namespace mmo
 		{
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
-			m_cameraAnchorNode->SetOrientation(Quaternion(m_cameraAnchorNode->GetOrientation().GetPitch(false), Vector3::UnitX));
+			m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
 
 			m_controlledUnit->SetFacing(facing);
 
@@ -817,8 +812,10 @@ namespace mmo
 		// the target view point of the camera. By adding the camera node as a child, we can rotate
 		// the anchor node which results in the camera orbiting around the player entity.
 		m_cameraAnchorNode = &m_scene.CreateSceneNode("CameraAnchor");
-		m_cameraAnchorNode->AddChild(*m_cameraNode);
 		m_cameraAnchorNode->SetPosition(Vector3::UnitY);
+
+		m_cameraPitchNode = m_cameraAnchorNode->CreateChildSceneNode("CameraPitch", Vector3::Zero, Quaternion(Degree(-15.0f), Vector3::UnitX));
+		m_cameraPitchNode->AddChild(*m_cameraNode);
 
 		m_cameraOffsetNode = &m_scene.CreateSceneNode("CameraOffset");
 		m_cameraOffsetNode->AddChild(*m_cameraAnchorNode);

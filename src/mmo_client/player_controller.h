@@ -96,6 +96,7 @@ namespace mmo
 		Camera* m_defaultCamera { nullptr };
 		SceneNode* m_cameraOffsetNode{ nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };
+		SceneNode* m_cameraPitchNode{ nullptr };
 		SceneNode* m_cameraNode { nullptr };
 		std::shared_ptr<GameUnitC> m_controlledUnit;
 		uint32 m_mouseMoved = 0;
