@@ -2,6 +2,7 @@
 #include "creature_ai_idle_state.h"
 #include "creature_ai.h"
 #include "game_creature_s.h"
+#include "universe.h"
 #include "world_instance.h"
 
 namespace mmo
@@ -72,7 +73,12 @@ namespace mmo
 
 					// TODO: Line of sight check
 
-					GetAI().EnterCombat(unit);
+					auto strongUnit = unit.shared_from_this();
+					auto strongThis = shared_from_this();
+					GetAI().GetControlled().GetWorldInstance()->GetUniverse().Post([strongUnit, strongThis]()
+						{
+							strongThis->GetAI().EnterCombat(strongUnit->AsUnit());
+						});
 				}
 				else if (controlled.UnitIsFriendly(unit))
 				{
@@ -92,7 +98,12 @@ namespace mmo
 
 								// TODO: Line of sight check
 
-								GetAI().EnterCombat(*victim);
+								auto strongVictim = victim->shared_from_this();
+								auto strongThis = shared_from_this();
+								GetAI().GetControlled().GetWorldInstance()->GetUniverse().Post([strongVictim, strongThis]()
+									{
+										strongThis->GetAI().EnterCombat(strongVictim->AsUnit());
+									});
 								return true;
 							}
 						}

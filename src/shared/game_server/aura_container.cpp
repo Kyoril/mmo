@@ -149,8 +149,15 @@ namespace mmo
 		}
 
 		const uint32 procChance = spell.procchance();
+		if (procChance == 0)
+		{
+			return;
+		}
 
-		if (spell.procflags() & (spell_proc_flags::Death | spell_proc_flags::Killed))
+		const uint32 procFlags = spell.procflags();
+		const uint32 procSchool = spell.procschool();
+
+		if (procFlags & (spell_proc_flags::Death | spell_proc_flags::Killed))
 		{
 			m_procEffects += m_container.GetOwner().killed.connect([this, procSpell, procChance](GameUnitS* killer)
 				{
@@ -165,9 +172,45 @@ namespace mmo
 				});
 		}
 
-		if (spell.procflags() & spell_proc_flags::TakenDamage)
+		if (procFlags & (spell_proc_flags::TakenDamage |
+			spell_proc_flags::TakenMeleeAutoAttack |
+			spell_proc_flags::TakenSpellMagicDmgClassNeg |
+			spell_proc_flags::TakenRangedAutoAttack))
 		{
+			m_procEffects += m_container.GetOwner().takenDamage.connect([this, procFlags, procSchool, procSpell, procChance](GameUnitS* instigator, uint32 school, DamageType type)
+				{
+					bool shouldProc = false;
 
+					if (procFlags & spell_proc_flags::TakenDamage) shouldProc = true;
+					else if (procFlags & spell_proc_flags::TakenMeleeAutoAttack && type == damage_type::AttackSwing) shouldProc = true;
+					else if (procFlags & spell_proc_flags::TakenSpellMagicDmgClassNeg && type == damage_type::MagicalAbility && school == procSpell->procschool()) shouldProc = true;
+					else if (procFlags & spell_proc_flags::TakenRangedAutoAttack && type == damage_type::RangedAttack) shouldProc = true;
+
+					if (!shouldProc)
+					{
+						return;
+					}
+
+					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
+					if (chanceDistribution(randomGenerator) < procChance)
+					{
+						SpellTargetMap targetMap;
+						if (instigator)
+						{
+							targetMap.SetUnitTarget(instigator->GetGuid());
+							targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+						}
+						else
+						{
+							targetMap.SetTargetMap(spell_cast_target_flags::Self);
+						}
+
+						if (GameUnitS* caster = m_container.GetCaster())
+						{
+							caster->CastSpell(targetMap, *procSpell, 0, true, 0);
+						}
+					}
+				});
 		}
 
 		if (spell.procflags() & spell_proc_flags::DoneMeleeAutoAttack)

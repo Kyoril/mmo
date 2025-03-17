@@ -39,6 +39,18 @@ namespace mmo
 		return *static_cast<GameUnitS*>(const_cast<GameObjectS*>(this));
 	}
 
+	GamePlayerS& GameObjectS::AsPlayer()
+	{
+		ASSERT(IsPlayer());
+		return *static_cast<GamePlayerS*>(this);
+	}
+
+	GameUnitS& GameObjectS::AsUnit()
+	{
+		ASSERT(IsUnit());
+		return *static_cast<GameUnitS*>(this);
+	}
+
 	uint32 GameObjectS::GetMapId() const
 	{
 		if (!m_worldInstance)

@@ -871,6 +871,29 @@ namespace mmo
 				}
 			}
 
+			if (currentEffectType == spell_effects::ApplyAura ||
+				currentEffectType == spell_effects::ApplyAreaAura)
+			{
+				if (effect.aura() == aura_type::ProcTriggerSpell ||
+					effect.aura() == aura_type::PeriodicTriggerSpell)
+				{
+					int effectTarget = effect.targetb();
+					if (ImGui::Combo("Proc Spell Target", &effectTarget, [](void*, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_effectTargets))
+							{
+								return false;
+							}
+
+							*out_text = s_effectTargets[idx].c_str();
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_effectTargets), -1))
+					{
+						effect.set_targetb(effectTarget);
+					}
+				}
+			}
+
 			ImGui::Text("Points");
 
 			if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
