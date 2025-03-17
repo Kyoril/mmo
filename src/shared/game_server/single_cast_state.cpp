@@ -261,7 +261,7 @@ namespace mmo
 	bool SingleCastState::Validate()
 	{
 		// Caster level too low?
-		if (m_spell.spelllevel() > 1 && m_cast.GetExecuter().GetLevel() < m_spell.spelllevel())
+		if (m_spell.spelllevel() > 1 && static_cast<int32>(m_cast.GetExecuter().GetLevel()) < m_spell.spelllevel())
 		{
 			SendEndCast(spell_cast_result::FailedLevelRequirement);
 			return false;
