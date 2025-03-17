@@ -952,6 +952,7 @@ namespace mmo
 				
 			luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
+			luabind::def<std::function<int32()>>("GetPartySize", [this]() { return m_partyInfo.GetMemberCount(); }),
 
 			// Char Creation
 			luabind::def<std::function<void(const String&)>>("CreateCharacter", [this](const String& name) { m_charCreateInfo.CreateCharacter(name); }),
