@@ -1721,6 +1721,7 @@ namespace mmo
 			m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
 
 			// Destroy player instance
+			m_character.reset();
 			m_manager.RemovePlayer(shared_from_this());
 		}
 	}
