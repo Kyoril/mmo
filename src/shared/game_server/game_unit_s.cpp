@@ -294,17 +294,17 @@ namespace mmo
 
 	void GameUnitS::Relocate(const Vector3& position, const Radian& facing)
 	{
-		GameObjectS::Relocate(position, facing);
-
-		if (GetPosition() != position)
+		if (m_movementInfo.IsChangingPosition())
 		{
 			m_spellCast->StopCast(spell_interrupt_flags::Movement);
 		}
+
+		GameObjectS::Relocate(position, facing);
 	}
 
 	void GameUnitS::ApplyMovementInfo(const MovementInfo& info)
 	{
-		if (m_movementInfo.position != info.position)
+		if (info.IsChangingPosition())
 		{
 			for (const auto& aura : m_auras)
 			{

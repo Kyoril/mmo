@@ -487,8 +487,7 @@ namespace mmo
 	{
 		enum Type
 		{
-			TargetMustNotBeInFrontOfCaster = 0x00000001,
-
+			MeleeCombatStart = 0x00000001,
 		};
 	}
 

@@ -28,6 +28,8 @@ namespace mmo
 
 		void DrawSpellAuraEffectDetails(proto::SpellEffect& effect);
 
+		void OnNewEntry(proto::TemplateManager<proto::Spells, proto::SpellEntry>::EntryType& entry) override;
+
 	public:
 		bool IsDockable() const noexcept override { return true; }
 
@@ -38,4 +40,13 @@ namespace mmo
 		std::vector<String> m_textures;
 		std::map<std::string, TexturePtr> m_iconCache;
 	};
+
+	inline void SpellEditorWindow::OnNewEntry(
+		proto::TemplateManager<proto::Spells, proto::SpellEntry>::EntryType& entry)
+	{
+		EditorEntryWindowBase<proto::Spells, proto::SpellEntry>::OnNewEntry(entry);
+
+		entry.add_attributes(0);
+		entry.add_attributes(0);
+	}
 }

@@ -202,6 +202,15 @@ namespace mmo
 				m_textures.push_back(filename);
 			}
 		}
+
+		// Ensure each spell has 2 attribute sets
+		for (auto& spell : *m_project.spells.getTemplates().mutable_entry())
+		{
+			while (spell.attributes_size() < 2)
+			{
+				spell.add_attributes(0);
+			}
+		}
 	}
 
 	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
@@ -581,37 +590,106 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
 		{
-			CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
-			CHECKBOX_ATTR_PROP(0, "Ranged", spell_attributes::Ranged);
-			CHECKBOX_ATTR_PROP(0, "On Next Swing", spell_attributes::OnNextSwing);
-			CHECKBOX_ATTR_PROP(0, "Only One Stack Total", spell_attributes::OnlyOneStackTotal);
-			CHECKBOX_ATTR_PROP(0, "Ability", spell_attributes::Ability);
-			CHECKBOX_ATTR_PROP(0, "Trade Spell", spell_attributes::TradeSpell);
-			CHECKBOX_ATTR_PROP(0, "Passive", spell_attributes::Passive);
-			CHECKBOX_ATTR_PROP(0, "Hidden On Client", spell_attributes::HiddenClientSide);
-			CHECKBOX_ATTR_PROP(0, "Hidden Cast Time", spell_attributes::HiddenCastTime);
-			CHECKBOX_ATTR_PROP(0, "Target MainHand Item", spell_attributes::TargetMainhandItem);
-			CHECKBOX_ATTR_PROP(0, "Can Target Dead", spell_attributes::CanTargetDead);
-			CHECKBOX_ATTR_PROP(0, "Only Daytime", spell_attributes::DaytimeOnly);
-			CHECKBOX_ATTR_PROP(0, "Only Night", spell_attributes::NightOnly);
-			CHECKBOX_ATTR_PROP(0, "Only Indoor", spell_attributes::IndoorOnly);
-			CHECKBOX_ATTR_PROP(0, "Only Outdoor", spell_attributes::OutdoorOnly);
-			CHECKBOX_ATTR_PROP(0, "Not Shapeshifted", spell_attributes::NotShapeshifted);
-			CHECKBOX_ATTR_PROP(0, "Only Stealthed", spell_attributes::OnlyStealthed);
-			CHECKBOX_ATTR_PROP(0, "Dont Sheath", spell_attributes::DontAffectSheathState);
-			CHECKBOX_ATTR_PROP(0, "Level Damage Calc", spell_attributes::LevelDamageCalc);
-			CHECKBOX_ATTR_PROP(0, "Stop Auto Attack", spell_attributes::StopAttackTarget);
-			CHECKBOX_ATTR_PROP(0, "No Defense", spell_attributes::NoDefense);
-			CHECKBOX_ATTR_PROP(0, "Track Target", spell_attributes::CastTrackTarget);
-			CHECKBOX_ATTR_PROP(0, "Castable While Dead", spell_attributes::CastableWhileDead);
-			CHECKBOX_ATTR_PROP(0, "Castable While Mounted", spell_attributes::CastableWhileMounted);
-			CHECKBOX_ATTR_PROP(0, "Disabled While Active", spell_attributes::DisabledWhileActive);
-			CHECKBOX_ATTR_PROP(0, "Castable While Sitting", spell_attributes::CastableWhileSitting);
-			CHECKBOX_ATTR_PROP(0, "Negative", spell_attributes::Negative);
-			CHECKBOX_ATTR_PROP(0, "Not In Combat", spell_attributes::NotInCombat);
-			CHECKBOX_ATTR_PROP(0, "Ignore Invulnerabiltiy", spell_attributes::IgnoreInvulnerability);
-			CHECKBOX_ATTR_PROP(0, "Breakable By Damage", spell_attributes::BreakableByDamage);
-			CHECKBOX_ATTR_PROP(0, "Cant Cancel", spell_attributes::CantCancel);
+			if (ImGui::BeginTable("AttributesTable", 4, ImGuiTableFlags_None))
+			{
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Ranged", spell_attributes::Ranged);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "On Next Swing", spell_attributes::OnNextSwing);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only One Stack Total", spell_attributes::OnlyOneStackTotal);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Ability", spell_attributes::Ability);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Trade Spell", spell_attributes::TradeSpell);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Passive", spell_attributes::Passive);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Hidden On Client", spell_attributes::HiddenClientSide);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Hidden Cast Time", spell_attributes::HiddenCastTime);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Target MainHand Item", spell_attributes::TargetMainhandItem);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Can Target Dead", spell_attributes::CanTargetDead);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only Daytime", spell_attributes::DaytimeOnly);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only Night", spell_attributes::NightOnly);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only Indoor", spell_attributes::IndoorOnly);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only Outdoor", spell_attributes::OutdoorOnly);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Not Shapeshifted", spell_attributes::NotShapeshifted);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Only Stealthed", spell_attributes::OnlyStealthed);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Dont Sheath", spell_attributes::DontAffectSheathState);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Level Damage Calc", spell_attributes::LevelDamageCalc);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Stop Auto Attack", spell_attributes::StopAttackTarget);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "No Defense", spell_attributes::NoDefense);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Track Target", spell_attributes::CastTrackTarget);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Castable While Dead", spell_attributes::CastableWhileDead);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Castable While Mounted", spell_attributes::CastableWhileMounted);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Disabled While Active", spell_attributes::DisabledWhileActive);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Castable While Sitting", spell_attributes::CastableWhileSitting);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Negative", spell_attributes::Negative);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Not In Combat", spell_attributes::NotInCombat);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Ignore Invulnerabiltiy", spell_attributes::IgnoreInvulnerability);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Breakable By Damage", spell_attributes::BreakableByDamage);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(0, "Cant Cancel", spell_attributes::CantCancel);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Start Melee Combat", spell_attributes_b::MeleeCombatStart);
+
+				ImGui::EndTable();
+			}
 		}
 
 		static bool s_spellClientVisible = false;
