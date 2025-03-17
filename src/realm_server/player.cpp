@@ -1297,6 +1297,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::ForceSetFlightBackSpeedAck, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveTeleportAck, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveEnded, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveSplineDone, *this, &Player::OnProxyPacket);
 
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AutoStoreLootItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AutoEquipItem, *this, &Player::OnProxyPacket);

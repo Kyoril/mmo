@@ -73,6 +73,10 @@ namespace mmo
 
 	PlayerController::~PlayerController()
 	{
+		// Ensure we reset the cursor type properly
+		g_cursor.SetCursorType(CursorType::Pointer);
+		Platform::ReleaseMouseCapture();
+
 		m_controlledUnit.reset();
 
 		if (m_defaultCamera)
@@ -98,6 +102,11 @@ namespace mmo
 			m_scene.DestroySceneNode(*m_cameraOffsetNode);
 			m_cameraOffsetNode = nullptr;
 		}
+	}
+
+	void PlayerController::StopAllMovement()
+	{
+		m_controlFlags = ControlFlags::None;
 	}
 
 	void PlayerController::MovePlayer()

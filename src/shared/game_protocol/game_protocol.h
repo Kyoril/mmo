@@ -151,6 +151,8 @@ namespace mmo
 
 				RandomRoll,
 
+				MoveSplineDone,
+
 				/// Counter constant
 				Count_,
 			};
@@ -317,6 +319,8 @@ namespace mmo
 				AttackerStateUpdate,
 
 				SpellHealLog,
+
+				MoveSplineDone,
 
 				/// Counter constant
 				Count_,

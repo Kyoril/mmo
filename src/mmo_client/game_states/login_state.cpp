@@ -4,6 +4,7 @@
 
 #include "game_state_mgr.h"
 #include "loading_screen.h"
+#include "platform.h"
 #include "world_state.h"
 #include "console/console.h"
 #include "console/console_var.h"

@@ -700,6 +700,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
@@ -2174,6 +2175,8 @@ namespace mmo
 			ELOG("Failed to read move teleport packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_playerController->StopAllMovement();
 
 		// Teleport player
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");

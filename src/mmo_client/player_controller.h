@@ -28,6 +28,8 @@ namespace mmo
 		~PlayerController() override;
 
 	public:
+		void StopAllMovement();
+
 		void Update(float deltaSeconds);
 		
 		void OnMouseDown(MouseButton button, int32 x, int32 y);

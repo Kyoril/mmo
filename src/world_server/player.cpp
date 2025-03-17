@@ -463,6 +463,7 @@ namespace mmo
 		case game::client_realm_packet::MoveJump:
 		case game::client_realm_packet::MoveFallLand:
 		case game::client_realm_packet::MoveEnded:
+		case game::client_realm_packet::MoveSplineDone:
 			OnMovement(opCode, buffer.size(), reader);
 			break;
 
@@ -794,8 +795,8 @@ namespace mmo
 
 	void Player::Kick()
 	{
-		m_worldInstance->RemoveGameObject(*m_character);
-		m_character.reset();
+		m_connector.NotifyWorldInstanceLeft(m_character->GetGuid(), auth::world_left_reason::Disconnect);
+		m_manager.RemovePlayer(shared_from_this());
 	}
 
 	void Player::SendTrainerBuyError(uint64 trainerGuid, trainer_result::Type result) const
@@ -947,6 +948,13 @@ namespace mmo
 			return;
 		}
 
+		// Should the character currently be moved automatically?
+		if (m_character->GetMover().IsMoving())
+		{
+			// Just ignore this movement op code for now
+			return;
+		}
+
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
 		if (info.IsFalling() && !m_character->GetMovementInfo().IsFalling() && opCode != game::client_realm_packet::MoveJump)
 		{
@@ -1000,6 +1008,7 @@ namespace mmo
 		case game::client_realm_packet::MoveJump: opCode = game::realm_client_packet::MoveJump; break;
 		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
 		case game::client_realm_packet::MoveEnded: opCode = game::realm_client_packet::MoveEnded; break;
+		case game::client_realm_packet::MoveSplineDone: opCode = game::realm_client_packet::MoveSplineDone; break;
 		default:
 			WLOG("Received unknown movement packet " << log_hex_digit(opCode) << ", ensure that it is handled");
 		}
@@ -1014,7 +1023,7 @@ namespace mmo
 				//return;
 			}
 		}
-		else if (!m_character->GetMovementInfo().IsChangingPosition())
+		else if (!m_character->GetMovementInfo().IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
 			if (info.position != m_character->GetPosition())
 			{
@@ -1365,6 +1374,11 @@ namespace mmo
 				WLOG("Teleport ack received but player is not falling while it should be!");
 			}
 
+			if (info.movementFlags & (movement_flags::Moving | movement_flags::Turning | movement_flags::Strafing))
+			{
+				WLOG("Teleport ack received but player is moving");
+			}
+
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
 			break;
 		}
@@ -1669,11 +1683,16 @@ namespace mmo
 
 			// Send notification
 			SendPacket([this, ackId](game::OutgoingPacket& packet) {
+
+				auto movementInfo = m_character->GetMovementInfo();
+				movementInfo.movementFlags |= movement_flags::Falling;
+				movementInfo.movementFlags &= ~(movement_flags::Moving | movement_flags::Turning | movement_flags::Strafing);
+
 				packet.Start(game::realm_client_packet::MoveTeleportAck);
 				packet
 					<< io::write_packed_guid(this->m_character->GetGuid())
 					<< io::write<uint32>(ackId)
-					<< this->m_character->GetMovementInfo();
+					<< movementInfo;
 				packet.Finish();
 				});
 		}
@@ -1697,7 +1716,6 @@ namespace mmo
 
 			// Remove the character from the world (this will save the character)
 			m_worldInstance->RemoveGameObject(*m_character);
-			m_character.reset();
 
 			// Notify realm that our character left this world instance (this will commit the pending teleport request)
 			m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
