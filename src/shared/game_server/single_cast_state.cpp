@@ -175,8 +175,6 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Stopping cast...");
-
 		// Check whether the spell can be interrupted by this action
 		if (reason != spell_interrupt_flags::Any &&
 			(m_spell.interruptflags() & reason) == 0)
