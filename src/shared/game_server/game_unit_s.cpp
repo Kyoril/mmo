@@ -1626,6 +1626,8 @@ namespace mmo
 		Set<uint64>(object_fields::TargetUnit, 0);
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 
+		killed(killer);
+
 		// For now, remove all auras
 		for (auto& aura : m_auras)
 		{
@@ -1633,8 +1635,6 @@ namespace mmo
 		}
 
 		m_auras.clear();
-
-		killed(killer);
 	}
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)

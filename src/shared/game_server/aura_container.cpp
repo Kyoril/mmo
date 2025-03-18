@@ -167,7 +167,11 @@ namespace mmo
 						SpellTargetMap targetMap;
 						targetMap.SetUnitTarget(m_container.GetOwner().GetGuid());
 						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-						m_container.GetOwner().CastSpell(targetMap, *procSpell, 0, true, 0);
+
+						if (GameUnitS* caster = m_container.GetCaster())
+						{
+							caster->CastSpell(targetMap, *procSpell, 0, true, 0);
+						}
 					}
 				});
 		}

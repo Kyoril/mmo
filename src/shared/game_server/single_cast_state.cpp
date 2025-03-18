@@ -1374,9 +1374,9 @@ namespace mmo
 		{
 			// For these effects, the spell needs to have a range set!
 			const auto& position = m_cast.GetExecuter().GetPosition();
-			if (!range)
+			if (effect.radius() <= 0.0f)
 			{
-				ELOG("Spell " << m_spell.id() << " (" << m_spell.name() << ") has no range set but a range is required");
+				ELOG("Spell " << m_spell.id() << " (" << m_spell.name() << ") effect has no radius >= 0 set");
 				return false;
 			}
 
@@ -1392,10 +1392,15 @@ namespace mmo
 				}
 			}
 
-			m_cast.GetExecuter().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, range->range()), [this, &effect, &targets](GameUnitS& unit)
+			m_cast.GetExecuter().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &effect, &targets](GameUnitS& unit)
 			{
 				// Already too many targets
 				if (m_spell.maxtargets() > 0 && targets.size() >= m_spell.maxtargets())
+				{
+					return true;
+				}
+
+				if (!(m_spell.attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
 				{
 					return true;
 				}
@@ -1433,6 +1438,47 @@ namespace mmo
 
 				return true;
 			});
+
+			return true;
+		}
+
+		if (effect.targeta() == spell_effect_targets::TargetAreaEnemy)
+		{
+			GameObjectS* targetObject = m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget());
+			if (!targetObject)
+			{
+				return false;
+			}
+
+			// For these effects, the spell needs to have a range set!
+			const auto& position = targetObject->GetPosition();
+			if (effect.radius() <= 0.0f)
+			{
+				ELOG("Spell " << m_spell.id() << " (" << m_spell.name() << ") effect has no radius >= 0 set");
+				return false;
+			}
+
+			m_cast.GetExecuter().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &effect, &targets](GameUnitS& unit)
+				{
+					// Already too many targets
+					if (m_spell.maxtargets() > 0 && targets.size() >= m_spell.maxtargets())
+					{
+						return true;
+					}
+
+					if (!(m_spell.attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
+					{
+						return true;
+					}
+
+					if (m_cast.GetExecuter().UnitIsFriendly(unit))
+					{
+						return true;
+					}
+
+					targets.push_back(&unit);
+					return true;
+				});
 
 			return true;
 		}

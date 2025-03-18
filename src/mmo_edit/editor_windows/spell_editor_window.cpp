@@ -396,6 +396,7 @@ namespace mmo
 			SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
 			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
 			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 10000000);
+			SLIDER_UINT32_PROP(maxtargets, "Max Targets", 0, 100);
 
 			const bool hasRange = currentEntry.has_rangetype();
 			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentEntry.rangetype()) : nullptr;
@@ -1140,5 +1141,10 @@ namespace mmo
 		break;
 		}
 
+		float radius = effect.radius();
+		if (ImGui::InputFloat("Radius", &radius))
+		{
+			effect.set_radius(radius);
+		}
 	}
 }
