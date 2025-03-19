@@ -702,13 +702,14 @@ namespace mmo
 		uint32 startquestid;
 		float rangedrangepercent;
 		uint32 skill;
-		String icon;
 
 		const char* GetItemClassName() const;
 
 		const char* GetItemSubClassName() const;
 
 		const char* GetItemInventoryTypeName() const;
+
+		const char* GetIcon() const;
 
 		float GetMinDamage() const;
 

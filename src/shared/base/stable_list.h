@@ -72,11 +72,13 @@ namespace mmo
 	public:
 		template <class U>
 		struct iterator_base 
-			: std::iterator<std::bidirectional_iterator_tag, U>
+			//: std::iterator<std::bidirectional_iterator_tag, U>
 		{
+			typedef std::bidirectional_iterator_tag iterator_category;
 			typedef U value_type;
-			typedef U& reference;
+			typedef ptrdiff_t difference_type;
 			typedef U* pointer;
+			typedef U& reference;
 
 			iterator_base() = default;
 			~iterator_base() = default;

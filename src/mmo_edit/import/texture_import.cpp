@@ -33,7 +33,7 @@ namespace mmo
 	bool TextureImport::ImportFromFile(const Path& filename, const Path& currentAssetPath)
 	{
 		// Remember these
-		m_fileToImport = filename;
+		m_filesToImport.push_back(filename);
 		m_importAssetPath = currentAssetPath;
 		m_showImportFileDialog = true;
 
@@ -64,9 +64,10 @@ namespace mmo
 
 		if (ImGui::BeginPopupModal("Texture Import Settings", nullptr))
 		{
+			ImGui::Text("Importing %d texture files", m_filesToImport.size());
 			ImGui::Checkbox("Apply compression", &m_useCompression);
 
-			if (ImGui::Button("Import"))
+			if (ImGui::Button(m_filesToImport.size() > 1 ? "Import all" : "Import"))
 			{
 				DoImportInternal();
 				ImGui::CloseCurrentPopup();
@@ -76,6 +77,7 @@ namespace mmo
 
 			if (ImGui::Button("Cancel"))
 			{
+				m_filesToImport.clear();
 				ImGui::CloseCurrentPopup();
 			}
 
@@ -85,22 +87,37 @@ namespace mmo
 
 	bool TextureImport::DoImportInternal()
 	{
-		int32 width, height, numChannels;
-		std::vector<uint8> rawData;
-		if (!ReadTextureData(m_fileToImport, width, height, numChannels, rawData))
+		bool succeeded = true;
+
+		for (auto& fileToImport : m_filesToImport)
 		{
-			return false;
+			int32 width, height, numChannels;
+			std::vector<uint8> rawData;
+			if (!ReadTextureData(fileToImport, width, height, numChannels, rawData))
+			{
+				succeeded = false;
+				continue;
+			}
+
+			TextureData data;
+			if (!ConvertData(rawData, width, height, numChannels, data))
+			{
+				succeeded = false;
+				continue;
+			}
+
+			// SomeImageFile.jpg => SomeImageFile
+			const Path name = fileToImport.filename().replace_extension();
+			if (!CreateTextureAsset(name, m_importAssetPath, data))
+			{
+				ELOG("Failed to import asset " << fileToImport);
+				succeeded = false;
+			}
 		}
 
-		TextureData data;
-		if (!ConvertData(rawData, width, height, numChannels, data))
-		{
-			return false;
-		}
+		m_filesToImport.clear();
 
-		// SomeImageFile.jpg => SomeImageFile
-		const Path name = m_fileToImport.filename().replace_extension();
-		return CreateTextureAsset(name, m_importAssetPath, data);
+		return succeeded;
 	}
 
 	bool TextureImport::ReadTextureData(const Path& filename, int32& width, int32& height, int32& numChannels, std::vector<uint8>& rawData) const

@@ -31,6 +31,8 @@ namespace mmo
 		virtual ~Entity() override = default;
 
 	public:
+		void ResetSubEntities();
+
 		[[nodiscard]] const MeshPtr& GetMesh() const noexcept { return m_mesh; }
 
 		[[nodiscard]] std::shared_ptr<SkeletonInstance> GetSkeleton() const noexcept { return m_skeleton; }

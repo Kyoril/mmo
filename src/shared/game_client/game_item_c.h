@@ -4,6 +4,11 @@
 
 namespace mmo
 {
+	namespace proto_client
+	{
+		class ItemDisplayEntry;
+	}
+
 	class NetClient;
 
 	class GameItemC : public GameObjectC
@@ -25,6 +30,8 @@ namespace mmo
 		[[nodiscard]] bool IsBag() const { return GetTypeId() == ObjectTypeId::Container; }
 
 		[[nodiscard]] int32 GetBagSlots() const { return IsBag() ? Get<int32>(object_fields::NumSlots) : 0; }
+
+		const proto_client::ItemDisplayEntry* GetDisplayData() const;
 
 	public:
 		virtual void InitializeFieldMap() override;

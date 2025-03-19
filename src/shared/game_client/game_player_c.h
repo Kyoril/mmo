@@ -39,6 +39,8 @@ namespace mmo
 	protected:
 		virtual void SetupSceneObjects() override;
 
+		void OnEquipmentChanged(uint64);
+
 	protected:
 		String m_name;
 
@@ -47,5 +49,7 @@ namespace mmo
 
 		TagPoint* m_weaponAttachment{ nullptr };
 		Entity* m_weaponEntity{ nullptr };
+
+		scoped_connection m_equipmentChangedHandler;
 	};
 }

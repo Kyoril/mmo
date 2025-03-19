@@ -1830,7 +1830,6 @@ namespace mmo
 		info.extraflags = itemEntry->extraflags();
 		info.startquestid = itemEntry->questentry();
 		info.skill = itemEntry->skill();
-		info.icon = itemEntry->icon();
 
 		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket& packet)
 			{

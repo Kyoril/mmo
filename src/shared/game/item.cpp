@@ -187,6 +187,12 @@ namespace mmo
 		return s_inventoryTypeStrings[inventoryType];
 	}
 
+	const char* ItemInfo::GetIcon() const
+	{
+		// TODO!
+		return nullptr;
+	}
+
 	float ItemInfo::GetMinDamage() const
 	{
 		return damage.min;
@@ -372,8 +378,7 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.extraflags)
 			<< io::write<uint32>(itemInfo.startquestid)
 			<< io::write<float>(itemInfo.rangedrangepercent)
-			<< io::write<uint32>(itemInfo.skill)
-			<< io::write_dynamic_range<uint8>(itemInfo.icon);
+			<< io::write<uint32>(itemInfo.skill);
 
 		return writer;
 	}
@@ -454,8 +459,7 @@ namespace mmo
 			>> io::read<uint32>(itemInfo.extraflags)
 			>> io::read<uint32>(itemInfo.startquestid)
 			>> io::read<float>(itemInfo.rangedrangepercent)
-			>> io::read<uint32>(itemInfo.skill)
-			>> io::read_container<uint8>(itemInfo.icon);
+			>> io::read<uint32>(itemInfo.skill);
 
 		return reader;
 	}

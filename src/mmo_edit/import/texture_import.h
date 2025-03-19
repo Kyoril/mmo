@@ -78,7 +78,7 @@ namespace mmo
 		bool CreateTextureAsset(const Path& name, const Path& assetPath, TextureData& data) const;
 
 	private:
-		Path m_fileToImport;
+		std::vector<Path> m_filesToImport;
 		Path m_importAssetPath;
 		bool m_showImportFileDialog = false;
 		bool m_useCompression = false;

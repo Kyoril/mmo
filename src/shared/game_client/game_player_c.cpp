@@ -3,8 +3,10 @@
 
 #include "object_mgr.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/tag_point.h"
+#include "shared/client_data/proto_client/item_display.pb.h"
 
 namespace mmo
 {
@@ -44,6 +46,9 @@ namespace mmo
 			}
 
 			OnDisplayIdChanged();
+
+			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::InvSlotHead, player_inventory_pack_slots::Start * 2, *this, &GamePlayerC::OnEquipmentChanged);
+			OnEquipmentChanged(GetGuid());
 		}
 
 		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
@@ -108,5 +113,123 @@ namespace mmo
 			m_weaponAttachment->SetScale(Vector3::UnitScale * 1.0f);
 		}
 		*/
+	}
+
+	void GamePlayerC::OnEquipmentChanged(uint64)
+	{
+		// First ensure customization options are applied to properly display the character
+		if (!m_customizationDefinition)
+		{
+			return;
+		}
+
+		// Reset entity to default configuration
+		m_entity->ResetSubEntities();
+
+		m_configuration.Apply(*this, *m_customizationDefinition);
+
+		// Now apply each visible item slot
+		for (uint16 i = 0; i < player_inventory_pack_slots::Start; ++i)
+		{
+			const uint64 itemGuid = Get<uint64>(object_fields::InvSlotHead + i * 2);
+			if (itemGuid == 0)
+			{
+				continue;
+			}
+
+			const auto item = ObjectMgr::Get<GameItemC>(itemGuid);
+			if (!item)
+			{
+				ELOG("Unable to find item with guid " << itemGuid);
+				continue;
+			}
+
+			const auto* displayData = item->GetDisplayData();
+			if (displayData)
+			{
+				for (const auto& variant : displayData->variants())
+				{
+					// Does this variant affect us?
+					if (variant.model() != 0 && variant.model() != Get<uint32>(object_fields::DisplayId))
+					{
+						continue;
+					}
+
+					// It does affect us!
+					for (const auto& subEntity : variant.hidden_by_name())
+					{
+						auto* sub = m_entity->GetSubEntity(subEntity);
+						if (!sub)
+						{
+							ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+							continue;
+						}
+
+						sub->SetVisible(false);
+					}
+
+					for (const auto& subEntity : variant.hidden_by_tag())
+					{
+						for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
+						{
+							SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
+							if (subMesh.HasTag(subEntity))
+							{
+								SubEntity* subEntity = m_entity->GetSubEntity(j);
+								ASSERT(subEntity);
+								subEntity->SetVisible(false);
+							}
+						}
+					}
+
+					// Now show all entities by name
+					for (const auto& subEntity : variant.shown_by_name())
+					{
+						auto* sub = m_entity->GetSubEntity(subEntity);
+						if (!sub)
+						{
+							ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+							continue;
+						}
+						sub->SetVisible(true);
+					}
+
+					// Now show all entities by tag
+					for (const auto& subEntity : variant.shown_by_tag())
+					{
+						for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
+						{
+							SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
+							if (subMesh.HasTag(subEntity))
+							{
+								SubEntity* subEntity = m_entity->GetSubEntity(j);
+								ASSERT(subEntity);
+								subEntity->SetVisible(true);
+							}
+						}
+					}
+
+					// Apply sub entity material overrides
+					for (const auto& materialOverride : variant.material_overrides())
+					{
+						auto* sub = m_entity->GetSubEntity(materialOverride.first);
+						if (!sub)
+						{
+							ELOG("Could not find sub entity " << materialOverride.first << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+							continue;
+						}
+
+						auto mat = MaterialManager::Get().Load(materialOverride.second);
+						if (!mat)
+						{
+							ELOG("Could not load material " << materialOverride.second << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+							continue;
+						}
+
+						sub->SetMaterial(mat);
+					}
+				}
+			}
+		}
 	}
 }

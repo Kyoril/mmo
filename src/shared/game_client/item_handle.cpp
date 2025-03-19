@@ -86,18 +86,13 @@ namespace mmo
 			return nullptr;
 		}
 
-		const ItemInfo* info = Get()->GetEntry();
-		if (!info)
+		const proto_client::ItemDisplayEntry* displayData = Get()->GetDisplayData();
+		if (!displayData || displayData->icon().empty())
 		{
-			return nullptr;
+			return s_defaultItemIcon.c_str();
 		}
 
-		if (!info->icon.empty())
-		{
-			return info->icon.c_str();
-		}
-
-		return s_defaultItemIcon.c_str();
+		return displayData->icon().c_str();
 	}
 
 	int32 ItemHandle::GetQuality() const

@@ -877,29 +877,19 @@ namespace mmo
 		static bool s_spellClientVisible = false;
 		if (ImGui::CollapsingHeader("Client Only", ImGuiTreeNodeFlags_None))
 		{
-			if (!currentEntry.icon().empty())
+			// Add a dropdown to select a displayDataEntry from m_project.itemDisplays
+			int displayId = currentEntry.displayid();
+			const auto* displayEntry = m_project.itemDisplays.getById(displayId);
+			if (ImGui::BeginCombo("Display ID", displayEntry ? displayEntry->name().c_str() : "(None)"))
 			{
-				if (!m_iconCache.contains(currentEntry.icon()))
-				{
-					m_iconCache[currentEntry.icon()] = TextureManager::Get().CreateOrRetrieve(currentEntry.icon());
-				}
-
-				if (const TexturePtr tex = m_iconCache[currentEntry.icon()])
-				{
-					ImGui::Image(tex->GetTextureObject(), ImVec2(64, 64));
-				}
-			}
-
-			if (ImGui::BeginCombo("Icon", currentEntry.icon().c_str(), ImGuiComboFlags_None))
-			{
-				for (int i = 0; i < m_textures.size(); i++)
+				for (int i = 0; i < m_project.itemDisplays.count(); i++)
 				{
 					ImGui::PushID(i);
-					const bool item_selected = m_textures[i] == currentEntry.icon();
-					const char* item_text = m_textures[i].c_str();
+					const bool item_selected = m_project.itemDisplays.getTemplates().entry(i).id() == displayId;
+					const char* item_text = m_project.itemDisplays.getTemplates().entry(i).name().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
-						currentEntry.set_icon(item_text);
+						currentEntry.set_displayid(m_project.itemDisplays.getTemplates().entry(i).id());
 					}
 					if (item_selected)
 					{
@@ -907,8 +897,18 @@ namespace mmo
 					}
 					ImGui::PopID();
 				}
-
 				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Create New Display Id"))
+			{
+				proto::ItemDisplayEntry* newDisplay = m_project.itemDisplays.add();
+				const uint32 newId = newDisplay->id();
+				newDisplay->set_name(currentEntry.name());
+				newDisplay->set_id(newId);
+				currentEntry.set_displayid(newId);
 			}
 		}
 	}

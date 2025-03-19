@@ -23,6 +23,23 @@ namespace mmo
 		Initialize();
 	}
 
+	void Entity::ResetSubEntities()
+	{
+		if (!m_mesh)
+		{
+			return;
+		}
+
+		uint16 index = 0;
+
+		for (const auto& subEntity : m_subEntities)
+		{
+			subEntity->SetVisible(m_mesh->GetSubMesh(index).IsVisibleByDefault());
+			subEntity->SetMaterial(m_mesh->GetSubMesh(index).GetMaterial());
+			index++;
+		}
+	}
+
 	SubEntity* Entity::GetSubEntity(const uint16 index) const noexcept
 	{
 		ASSERT(index <= m_subEntities.size());

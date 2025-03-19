@@ -748,7 +748,12 @@ namespace mmo
 
 		ASSERT(vendorItems[slot].itemData);
 		outItem = vendorItems[slot].itemData;
-		outIcon = vendorItems[slot].itemData->icon;
+
+		const auto* displayData = m_project.itemDisplays.getById(vendorItems[slot].displayId);
+		if (displayData)
+		{
+			outIcon = displayData->icon().c_str();
+		}
 		outPrice = vendorItems[slot].buyPrice + vendorItems[slot].extendedCost;
 		outQuantity = vendorItems[slot].buyCount;
 		outNumAvailable = vendorItems[slot].maxCount;
@@ -839,7 +844,7 @@ namespace mmo
 				.def_readonly("class", &ItemInfo::GetItemClassName)
 				.def_readonly("subClass", &ItemInfo::GetItemSubClassName)
 				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
-				.def_readonly("icon", &ItemInfo::icon)
+				.def_readonly("icon", &ItemInfo::GetIcon)
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)
 				.def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
 				.def("GetStatType", &ItemInfo::GetStatType)
@@ -1460,7 +1465,15 @@ namespace mmo
 			return;
 		}
 
-		out_icon = item->itemInfo->icon;
+		if (const auto* displayData = m_project.itemDisplays.getById(item->itemInfo->displayId))
+		{
+			out_icon = displayData->icon();
+		}
+		else
+		{
+			out_icon = "";
+		}
+		
 		out_text = item->itemInfo->name;
 		out_count = item->count;
 	}

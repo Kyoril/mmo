@@ -32,6 +32,7 @@
 #include "editor_windows/quest_editor_window.h"
 #include "editor_windows/zone_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
+#include "editor_windows/item_display_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -122,6 +123,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemDisplayEditorWindow>("Item Display Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitLootEditorWindow>("Unit Loot Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TrainerEditorWindow>("Trainer Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VendorEditorWindow>("Vendor Editor", project, mainWindow));

@@ -1,0 +1,62 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message ItemDisplayBoneAttachment {
+	required string bone_name = 1;
+
+	optional float offset_x = 2 [default = 0.0];
+	
+	optional float offset_y = 3 [default = 0.0];
+	
+	optional float offset_z = 4 [default = 0.0];
+
+	optional float rotation_w = 5 [default = 1.0];
+	
+	optional float rotation_x = 6 [default = 0.0];
+	
+	optional float rotation_y = 7 [default = 0.0];
+
+	optional float rotation_z = 8 [default = 0.0];
+	
+	optional float scale_x = 9 [default = 1.0];
+	
+	optional float scale_y = 10 [default = 1.0];
+	
+	optional float scale_z = 11 [default = 1.0];
+}
+
+message ItemDisplayVariant {
+	required uint32 model = 1;
+
+	repeated string hidden_by_name = 2;
+
+	repeated string hidden_by_tag = 3;
+
+	repeated string shown_by_name = 4;
+
+	repeated string shown_by_tag = 5;
+
+	optional string mesh = 6;
+
+	optional ItemDisplayBoneAttachment attached_bone_default = 7;
+
+	optional ItemDisplayBoneAttachment attached_bone_drawn = 8;
+
+	optional ItemDisplayBoneAttachment attached_bone_sheath = 9;
+
+	map<string, string> material_overrides = 10;
+}
+
+message ItemDisplayEntry {
+	required uint32 id = 1;
+
+	required string name = 2;
+
+	optional string icon = 3;
+
+	repeated ItemDisplayVariant variants = 4;
+}
+
+message ItemDisplayData {
+	repeated ItemDisplayEntry entry = 1;
+}
