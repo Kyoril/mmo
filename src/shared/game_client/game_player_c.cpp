@@ -82,6 +82,18 @@ namespace mmo
 		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
 	}
 
+	void GamePlayerC::NotifyItemData(const ItemInfo& data)
+	{
+		if (m_pendingItemData > 1)
+		{
+			m_pendingItemData--;
+			return;
+		}
+
+		m_pendingItemData = 0;
+		RefreshDisplay();
+	}
+
 	void GamePlayerC::SetupSceneObjects()
 	{
 		GameUnitC::SetupSceneObjects();
@@ -115,7 +127,7 @@ namespace mmo
 		*/
 	}
 
-	void GamePlayerC::OnEquipmentChanged(uint64)
+	void GamePlayerC::RefreshDisplay()
 	{
 		// First ensure customization options are applied to properly display the character
 		if (!m_customizationDefinition)
@@ -230,6 +242,49 @@ namespace mmo
 					}
 				}
 			}
+		}
+	}
+
+	void GamePlayerC::OnEquipmentChanged(uint64)
+	{
+		// First ensure customization options are applied to properly display the character
+		if (!m_customizationDefinition)
+		{
+			return;
+		}
+
+		// Now apply each visible item slot
+		size_t pendingItems = 0, totalItems = 0;
+
+		for (uint16 i = 0; i < player_inventory_pack_slots::Start; ++i)
+		{
+			const uint64 itemGuid = Get<uint64>(object_fields::InvSlotHead + i * 2);
+			if (itemGuid == 0)
+			{
+				continue;
+			}
+
+			totalItems++;
+
+			const auto item = ObjectMgr::Get<GameItemC>(itemGuid);
+			if (!item)
+			{
+				ELOG("Unable to find item with guid " << itemGuid);
+				continue;
+			}
+
+			if (!item->GetEntry())
+			{
+				m_pendingItemData++;
+				pendingItems++;
+				m_netDriver.GetItemData(item->Get<uint32>(object_fields::Entry), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
+			}
+		}
+
+		// There were display ids to apply and no items needed to be queried from the server first
+		if (pendingItems == 0 && totalItems > 0 && m_pendingItemData == 0)
+		{
+			RefreshDisplay();
 		}
 	}
 }

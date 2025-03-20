@@ -19,7 +19,20 @@ namespace mmo
 		, m_timerQueue(queue)
 		, m_playerManager(playerManager)
 		, m_willTerminate(false)
+		, m_pingCountdown(queue)
 	{
+		m_pingConnection = m_pingCountdown.ended.connect([this]() {
+			// Send a ping packet to the server
+			DLOG("Pinging login server...");
+
+			sendSinglePacket([](auth::OutgoingPacket& packet)
+				{
+					packet.Start(auth::realm_login_packet::Ping);
+					packet.Finish();
+				});
+			// Queue next ping
+			QueueNextPing();
+			});
 	}
 
 	bool LoginConnector::connectionEstablished(bool success)
@@ -64,6 +77,7 @@ namespace mmo
 	{
 		// Notify the user
 		ELOG("Connection to the login server has been lost!");
+		m_pingCountdown.Cancel();
 
 		// Cancel all pending client auth session requests
 		{
@@ -91,7 +105,11 @@ namespace mmo
 	void LoginConnector::connectionMalformedPacket()
 	{
 		ELOG("Received a malformed packet from login server!");
-		QueueTermination();
+
+		// Reset authentication status
+		Reset();
+
+		QueueReconnect();
 	}
 
 	PacketParseResult LoginConnector::connectionPacketReceived(auth::IncomingPacket & packet)
@@ -327,12 +345,15 @@ namespace mmo
 				// Register required packet handlers
 				RegisterPacketHandler(auth::login_realm_packet::ClientAuthSessionResponse, *this, &LoginConnector::OnClientAuthSessionResponse);
 				RegisterPacketHandler(auth::login_realm_packet::AccountBanned, *this, &LoginConnector::OnAccountBanned);
+				RegisterPacketHandler(auth::login_realm_packet::Pong, *this, &LoginConnector::OnPong);
+
+				QueueNextPing();
 			}
 			else
 			{
 				// Output error code in chat before terminating the application
 				ELOG("[Login Server] Could not authenticate realm at login server, hash mismatch detected!");
-				QueueTermination();
+				QueueReconnect();
 
 				return PacketParseResult::Disconnect;
 			}
@@ -438,11 +459,18 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult LoginConnector::OnPong(auth::IncomingPacket& packet)
+	{
+		// Nothing to do here, login server connection seems to be still alive
+
+		return PacketParseResult::Pass;
+	}
+
 	void LoginConnector::OnLoginError(auth::AuthResult result)
 	{
 		// Output error code in chat before terminating the application
 		ELOG("[Login Server] Could not authenticate realm at login server. Error code 0x" << std::hex << static_cast<uint16>(result));
-		QueueTermination();
+		QueueReconnect();
 	}
 
 	void LoginConnector::Reset()
@@ -470,6 +498,8 @@ namespace mmo
 	{
 		if (!m_willTerminate)
 		{
+			ILOG("Server will reconnect in 5 seconds...");
+
 			// Reconnect in 5 seconds from now on
 			m_timerQueue.AddEvent(std::bind(&LoginConnector::OnReconnectTimer, this), m_timerQueue.GetNow() + constants::OneSecond * 5);
 		}
@@ -479,6 +509,8 @@ namespace mmo
 	{
 		if (!m_willTerminate)
 		{
+			ILOG("Reconnecting to the login server...");
+
 			// Try to connect, everything in terms of authentication is handled in the connectionEstablished event
 			connect(m_loginAddress, m_loginPort, *this, m_ioService);
 		}
@@ -501,6 +533,11 @@ namespace mmo
 		// Notify the user
 		WLOG("Server will terminate in 5 seconds...");
 		m_timerQueue.AddEvent(std::move(termination), m_timerQueue.GetNow() + constants::OneSecond * 5);
+	}
+
+	void LoginConnector::QueueNextPing()
+	{
+		m_pingCountdown.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 30);
 	}
 
 	bool LoginConnector::Login(const std::string& serverAddress, const uint16 port, const std::string & realmName, std::string password)

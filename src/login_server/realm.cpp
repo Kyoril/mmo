@@ -18,14 +18,31 @@ namespace mmo
 		RealmManager& realmManager, 
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
-		const String & address)
+		const String & address,
+		TimerQueue& timerQueue)
 		: m_manager(realmManager)
 		, m_database(database)
 		, m_connection(std::move(connection))
 		, m_address(address)
 		, m_authenticated(false)
+		, m_pingTimeoutCountdown(timerQueue)
 	{
 		// Reminder: constructor might be called by multiple threads
+
+		m_pingTimeoutConnection = m_pingTimeoutCountdown.ended.connect([this]() {
+			// Check if the last ping is older than 1 minute
+			if (GetAsyncTimeMs() - m_lastPing > constants::OneMinute)
+			{
+				// Connection timed out
+				ILOG("Realm server " << m_address << " timed out");
+				Destroy();
+			}
+			else
+			{
+				// Queue next ping check
+				QueueNextPingTimeoutCheck();
+			}
+			});
 
 		m_connection->setListener(*this);
 
@@ -35,6 +52,7 @@ namespace mmo
 
 	void Realm::Destroy()
 	{
+		m_pingTimeoutCountdown.Cancel();
 		m_authenticated = false;
 
 		m_connection->resetListener();
@@ -130,6 +148,12 @@ namespace mmo
 
 			packet.Finish();
 		});
+	}
+
+	void Realm::QueueNextPingTimeoutCheck()
+	{
+		// Once per minute we check that the last ping is not older than 1 minute, otherwise we consider the connection as lost
+		m_pingTimeoutCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
 	}
 
 	void Realm::NotifyAccountBanned(uint64 accountId)
@@ -374,6 +398,9 @@ namespace mmo
 
 						// From here on, accept ClientAuthSession packets
 						strongThis->RegisterPacketHandler(auth::realm_login_packet::ClientAuthSession, *strongThis.get(), &Realm::OnClientAuthSession);
+						strongThis->RegisterPacketHandler(auth::realm_login_packet::Ping, *strongThis.get(), &Realm::OnPing);
+						strongThis->m_lastPing = GetAsyncTimeMs();
+						strongThis->QueueNextPingTimeoutCheck();
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -483,6 +510,13 @@ namespace mmo
 
 		// Now do a database request by account name to retrieve the session key
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountSessionKey, std::move(accountName));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Realm::OnPing(auth::IncomingPacket& packet)
+	{
+		m_lastPing = GetAsyncTimeMs();
 
 		return PacketParseResult::Pass;
 	}

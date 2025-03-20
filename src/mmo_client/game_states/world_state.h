@@ -419,6 +419,8 @@ namespace mmo
 
 		void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) override;
 
+		void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
+
 		bool GetHeightAt(const Vector3& position, float range, float& out_height) override;
 
 		void GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities) override;

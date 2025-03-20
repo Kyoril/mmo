@@ -202,11 +202,10 @@ namespace mmo
 				if (const auto* range = m_ranges.getById(spell->rangetype()))
 				{
 					const float distanceSquared = unit->GetPosition().GetSquaredDistanceTo(targetUnit->GetPosition());
-					WLOG("Distance: " << sqrtf(distanceSquared));
-					//if (distanceSquared > range->range() * range->range())
+					if (distanceSquared > range->range() * range->range())
 					{
-						//FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
-						//return;
+						FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
+						return;
 					}
 				}
 			}

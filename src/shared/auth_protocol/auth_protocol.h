@@ -78,6 +78,8 @@ namespace mmo
 
 				/// Notifies the realm that an account has been banned, which allows the realm to close the connection to the player client.
 				AccountBanned = 0x03,
+
+				Pong = 0x04
 			};
 		}
 
@@ -93,6 +95,8 @@ namespace mmo
 
 				/// Sent to the login server to verify a clients AuthSession request.
 				ClientAuthSession = 0x02,
+
+				Ping = 0x03,
 			};
 		}
 		

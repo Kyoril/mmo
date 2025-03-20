@@ -13,6 +13,8 @@
 #include <map>
 #include <cassert>
 
+#include "base/countdown.h"
+
 namespace mmo
 {
 	class AsyncDatabase;
@@ -32,7 +34,8 @@ namespace mmo
 			RealmManager &manager,
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
-			const std::string &address);
+			const std::string &address,
+			TimerQueue& timerQueue);
 
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -87,6 +90,9 @@ namespace mmo
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
+		Countdown m_pingTimeoutCountdown;
+		scoped_connection m_pingTimeoutConnection;
+
 	private:
 		BigNumber m_sessionKey;
 		BigNumber m_s, m_v;
@@ -96,6 +102,8 @@ namespace mmo
 		BigNumber m_reconnectKey;
 		SHA1Hash m_m2;
 		bool m_authenticated;
+
+		GameTime m_lastPing = 0;
 
 		/// Number of bytes used to store m_s.
 		static constexpr int ByteCountS = 32;
@@ -118,15 +126,22 @@ namespace mmo
 		/// Send the auth session result back to the realm server.
 		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, BigNumber sessionKey);
 
+		void QueueNextPingTimeoutCheck();
+
 	private:
 
 		/// Handles an incoming packet with packet id LogonChallenge.
 		/// @param packet The packet data.
 		PacketParseResult HandleLogonChallenge(auth::IncomingPacket &packet);
+
 		/// Handles an incoming packet with packet id LogonProof.
 		/// @param packet The packet data.
 		PacketParseResult HandleLogonProof(auth::IncomingPacket &packet);
+
 		/// Handles incoming ClientAuthSession packets from a realm server.
 		PacketParseResult OnClientAuthSession(auth::IncomingPacket &packet);
+
+		/// Handles ping from the realm.
+		PacketParseResult OnPing(auth::IncomingPacket& packet);
 	};
 }

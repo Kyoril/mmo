@@ -67,7 +67,7 @@ namespace mmo
 		// Keep the database service alive / busy until this object is alive
 		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
-		TimerQueue timerQueue(dbService);
+		TimerQueue timerQueue(ioService);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
@@ -152,7 +152,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createRealm = [&realmManager, &asyncDatabase](std::shared_ptr<Realm::Client> connection)
+		const auto createRealm = [&realmManager, &asyncDatabase, &timerQueue](std::shared_ptr<Realm::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -166,7 +166,7 @@ namespace mmo
 				return;
 			}
 
-			auto realm = std::make_shared<Realm>(realmManager, asyncDatabase, connection, address.to_string());
+			auto realm = std::make_shared<Realm>(realmManager, asyncDatabase, connection, address.to_string(), timerQueue);
 			ILOG("Incoming realm connection from " << address);
 			realmManager.AddRealm(std::move(realm));
 

@@ -3101,6 +3101,17 @@ namespace mmo
 			});
 	}
 
+	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player)
+	{
+		m_itemCache.Get(guid, [player](uint64, const ItemInfo& data)
+			{
+				if (const std::shared_ptr<GamePlayerC> strong = player.lock())
+				{
+					strong->NotifyItemData(data);
+				}
+			});
+	}
+
 	bool WorldState::GetHeightAt(const Vector3& position, float range, float& out_height)
 	{
 		float closestHeight = -10000.0f;

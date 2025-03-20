@@ -13,6 +13,8 @@
 
 #include <functional>
 
+#include "base/countdown.h"
+
 
 namespace mmo
 {
@@ -97,6 +99,10 @@ namespace mmo
 		/// Mutex for accessing m_pendingClientAuthSessionReqs
 		std::mutex m_authSessionReqMutex;
 
+		Countdown m_pingCountdown;
+
+		scoped_connection m_pingConnection;
+
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -134,6 +140,8 @@ namespace mmo
 		/// Queues app termination in case of errors.
 		void QueueTermination();
 
+		void QueueNextPing();
+
 	private:
 		// Handles the LogonChallenge packet from the server.
 		PacketParseResult OnLogonChallenge(auth::Protocol::IncomingPacket &packet);
@@ -146,6 +154,9 @@ namespace mmo
 
 		// Handles the ClientAuthSessionResponse packet from the login server.
 		PacketParseResult OnAccountBanned(auth::IncomingPacket& packet);
+
+		// Handles the Pong packet from the login server.
+		PacketParseResult OnPong(auth::IncomingPacket& packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

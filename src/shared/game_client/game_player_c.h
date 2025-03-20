@@ -36,10 +36,14 @@ namespace mmo
 
 		uint8 GetAttributeCost(uint32 attribute) const;
 
+		void NotifyItemData(const ItemInfo& data);
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
 		void OnEquipmentChanged(uint64);
+
+		void RefreshDisplay();
 
 	protected:
 		String m_name;
@@ -51,5 +55,7 @@ namespace mmo
 		Entity* m_weaponEntity{ nullptr };
 
 		scoped_connection m_equipmentChangedHandler;
+
+		size_t m_pendingItemData = 0;
 	};
 }

@@ -41,6 +41,8 @@ namespace mmo
 
 		virtual void GetItemData(uint64 guid, std::weak_ptr<GameItemC> item) = 0;
 
+		virtual void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) = 0;
+
 		virtual void OnMoveFallLand(GameUnitC& unit) = 0;
 
 		virtual void OnMoveFall(GameUnitC& unit) = 0;
