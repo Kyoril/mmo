@@ -1,0 +1,59 @@
+syntax = "proto2";
+package mmo.proto;
+
+// The Condition message represents one condition or condition group.
+message Condition 
+{
+  // Possible "types" of conditions.
+  // You can add more as needed (race check, faction check, quest status, etc.).
+  enum ConditionType 
+  {
+    NONE_TYPE        = 0; // or used as a default
+
+    CLASS_CHECK = 1;
+
+    LEVEL_CHECK = 2;
+
+    QUEST_CHECK = 3;
+  }
+  
+  // If you want to combine sub-conditions with AND/OR logic,
+  // you can define a small operator enum.
+  enum LogicOperator
+  {
+    NONE_OPERATOR = 0; // Means no operator, or single condition.
+    AND  = 1;
+    OR   = 2;
+  }
+
+  // A unique identifier for this condition (or condition group).
+  required uint32 id = 1;
+
+  required string name = 2;
+
+  // The condition type. (e.g., CLASS_CHECK, LEVEL_CHECK, etc.)
+  required ConditionType conditionType = 3;
+
+  // If you want to combine multiple subconditions in a group,
+  // store an operator here. If you have no subconditions,
+  // you can set this to NONE or AND by default.
+  optional LogicOperator logicOperator = 4 [default = NONE_OPERATOR];
+
+  // Up to 3 parameters to store integers that configure your condition.
+  // For example:
+  //   if conditionType = CLASS_CHECK, param1 might be the class ID (e.g., 1 for Warrior).
+  //   if conditionType = LEVEL_CHECK, param1 might be minLevel, param2 might be maxLevel, etc.
+  optional uint32 param1 = 5 [default = 0];
+  optional uint32 param2 = 6 [default = 0];
+  optional uint32 param3 = 7 [default = 0];
+
+  // If this condition is actually a "container" or "group"
+  // that references other conditions by ID, they go here.
+  // Example: if logicOperator=AND, then ALL sub-conditions must be satisfied.
+  repeated uint32 subConditionIds = 8;
+}
+
+// A wrapper for the repeated list of Condition entries.
+message Conditions {
+  repeated Condition entry = 1;
+}

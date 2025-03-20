@@ -16,16 +16,18 @@
 #include "game/loot.h"
 #include "game/vendor.h"
 #include "game_server/universe.h"
+#include "game_server/condition_mgr.h"
 
 namespace mmo
 {
-	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project, WorldInstance& instance)
+	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr)
 		: m_manager(playerManager)
 		, m_connector(realmConnector)
 		, m_character(std::move(characterObject))
 		, m_characterData(std::move(characterData))
 		, m_project(project)
 		, m_groupUpdate(instance.GetUniverse().GetTimers())
+		, m_conditionMgr(conditionMgr)
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);

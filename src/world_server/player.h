@@ -15,6 +15,11 @@
 
 namespace mmo
 {
+	class ConditionMgr;
+}
+
+namespace mmo
+{
 	class LootInstance;
 
 	namespace proto
@@ -30,7 +35,7 @@ namespace mmo
 	{
 	public:
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
-		                CharacterData characterData, const proto::Project& project, WorldInstance& instance);
+		                CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr);
 		~Player() override;
 
 	public:
@@ -428,6 +433,8 @@ namespace mmo
 		scoped_connection m_onLootSourceDespawned;
 
 		Countdown m_groupUpdate;
+
+		ConditionMgr& m_conditionMgr;
 	};
 
 }

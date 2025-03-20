@@ -29,6 +29,256 @@ namespace mmo
 		m_toolbarButtonText = "Creatures";
 	}
 
+	// Renders the gossip_menus from a UnitEntry, with reordering + add/remove
+	void RenderGossipMenus(const proto::GossipMenuManager& gossipMenus, mmo::proto::UnitEntry& unitEntry)
+	{
+		// Which row is selected?
+		static int selectedIndex = -1;
+
+		// This controls the "add menu ID" popup:
+		static bool openAddPopup = false;
+		static uint32_t pendingAddMenuId = 0;
+
+		ImGui::TextUnformatted("Gossip Menus Linked to This Unit");
+
+		// Optional: set a region for the table with a certain height
+		// or let the table itself handle scrolling with ImGuiTableFlags_ScrollY.
+		ImGui::BeginChild("GossipMenusChild", ImVec2(0, 300), true);
+
+		const ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders
+			| ImGuiTableFlags_RowBg
+			| ImGuiTableFlags_Resizable
+			| ImGuiTableFlags_ScrollY;
+		if (ImGui::BeginTable("GossipMenusTable", 3, tableFlags))
+		{
+			ImGui::TableSetupScrollFreeze(0, 1); // Keep the header row visible
+			ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+			ImGui::TableSetupColumn("Menu ID", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Menu Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			int itemCount = unitEntry.gossip_menus_size();
+
+			for (int i = 0; i < itemCount; i++)
+			{
+				uint32_t menuId = unitEntry.gossip_menus(i);
+
+				ImGui::TableNextRow(ImGuiTableRowFlags_None);
+
+				// We'll handle each column
+				for (int col = 0; col < 3; col++)
+				{
+					ImGui::TableSetColumnIndex(col);
+
+					// Common label/ID for drag handling
+					// We'll store row in the label so we can differentiate them.
+					char rowLabel[32];
+					snprintf(rowLabel, sizeof(rowLabel), "##row%d_col%d", i, col);
+
+					if (col == 0)
+					{
+						// ----- Column 0: reorder "handle" -----
+
+						// Make a small selectable or button
+						// that user can drag to reorder.
+						bool isSelected = (selectedIndex == i);
+
+						ImGuiSelectableFlags selFlags = ImGuiSelectableFlags_SpanAllColumns
+							| ImGuiSelectableFlags_AllowItemOverlap;
+						if (ImGui::Selectable(rowLabel, isSelected, selFlags, ImVec2(0, 0)))
+						{
+							selectedIndex = i;
+						}
+
+						// Begin Drag Source
+						if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+						{
+							ImGui::SetDragDropPayload("GOSSIP_MENU_REORDER", &i, sizeof(int));
+							ImGui::Text("Reorder Menu %u", menuId);
+							ImGui::EndDragDropSource();
+						}
+
+						// Accept Drag Target
+						if (ImGui::BeginDragDropTarget())
+						{
+							if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GOSSIP_MENU_REORDER"))
+							{
+								IM_ASSERT(payload->DataSize == sizeof(int));
+								int srcIndex = *(const int*)payload->Data;
+								if (srcIndex != i)
+								{
+									// reorder the repeated field
+									auto* menus = unitEntry.mutable_gossip_menus();
+
+									// Convert to vector
+									std::vector<uint32_t> tmp;
+									tmp.reserve(menus->size());
+									for (int idx = 0; idx < menus->size(); idx++)
+										tmp.push_back(menus->Get(idx));
+
+									uint32_t movedVal = tmp[srcIndex];
+									// remove old
+									tmp.erase(tmp.begin() + srcIndex);
+
+									// figure out new insertion index
+									int insertIndex = i;
+									if (srcIndex < i)
+										insertIndex = i - 1;
+
+									tmp.insert(tmp.begin() + insertIndex, movedVal);
+
+									// rewrite
+									menus->Clear();
+									for (auto val : tmp)
+										menus->Add(val);
+
+									// Update selectedIndex if needed
+									if (selectedIndex == srcIndex)
+										selectedIndex = insertIndex;
+									else if (selectedIndex == i && srcIndex < i)
+										selectedIndex = i + 1;
+								}
+							}
+							ImGui::EndDragDropTarget();
+						}
+
+						// If we want to highlight the row when a drag is hovering:
+						// Check if there's any payload hovering over this target
+						const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+						if (payload && payload->IsDataType("GOSSIP_MENU_REORDER") && ImGui::IsItemHovered())
+						{
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(100, 255, 100, 80));
+						}
+					}
+					else if (col == 1)
+					{
+						// ----- Column 1: show the ID -----
+						ImGui::Text("%u", menuId);
+					}
+					else
+					{
+						// ----- Column 2: show the name -----
+						const auto* menu = gossipMenus.getById(menuId);
+						ImGui::TextUnformatted(menu ? menu->name().c_str() : "(None)");
+					}
+				}
+			} // end for rows
+
+			ImGui::EndTable();
+		}
+
+		ImGui::EndChild(); // end of child region
+
+		// ----- Buttons (Add/Remove) -----
+
+		// "Add" button triggers a pop-up
+		if (ImGui::Button("Add"))
+		{
+			// Reset our new ID, open popup
+			pendingAddMenuId = 0;
+			openAddPopup = true;
+			ImGui::OpenPopup("AddGossipMenuPopup");
+		}
+		ImGui::SameLine();
+
+		// Remove
+		bool canRemove = (selectedIndex >= 0
+			&& selectedIndex < unitEntry.gossip_menus_size());
+		if (!canRemove)
+			ImGui::BeginDisabled();
+		if (ImGui::Button("Remove") && canRemove)
+		{
+			auto* menus = unitEntry.mutable_gossip_menus();
+
+			// copy to vector
+			std::vector<uint32_t> tmp;
+			tmp.reserve(menus->size());
+			for (int i = 0; i < menus->size(); i++)
+				tmp.push_back(menus->Get(i));
+
+			tmp.erase(tmp.begin() + selectedIndex);
+
+			menus->Clear();
+			for (auto val : tmp)
+				menus->Add(val);
+
+			if (selectedIndex >= (int)tmp.size())
+				selectedIndex = (int)tmp.size() - 1;
+		}
+		if (!canRemove)
+			ImGui::EndDisabled();
+
+		// ----- Render the "Add" modal popup -----
+		if (ImGui::BeginPopupModal("AddGossipMenuPopup", &openAddPopup, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::TextUnformatted("Select or enter a new GossipMenu ID:");
+
+			static ImGuiTextFilter filter;
+			filter.Draw("Filter (by name or ID)...", 200);
+
+			// Retrieve all known IDs once
+			ImGui::BeginChild("MenuList", ImVec2(300, 200), true);
+
+			for (const auto& menu : gossipMenus.getTemplates().entry())
+			{
+				// Build a text for this ID
+				std::string entryName = menu.name();
+				char label[128];
+				snprintf(label, sizeof(label), "%u - %s", menu.id(), entryName.c_str());
+
+				// If the filter is active, we can check if it passes
+				if (!filter.PassFilter(label))
+					continue;
+
+				if (ImGui::Selectable(label, (pendingAddMenuId == menu.id())))
+				{
+					pendingAddMenuId = menu.id();
+				}
+			}
+
+			ImGui::EndChild();
+
+			// Also let user type an ID manually
+			ImGui::Separator();
+			ImGui::TextUnformatted("Or type an ID manually:");
+			ImGui::PushItemWidth(120);
+			static char idInputBuf[32] = "";
+			// If we just opened the popup, reset the buffer:
+			if (ImGui::IsWindowAppearing())
+				snprintf(idInputBuf, sizeof(idInputBuf), "%u", pendingAddMenuId);
+
+			if (ImGui::InputText("##ManualId", idInputBuf, IM_ARRAYSIZE(idInputBuf), ImGuiInputTextFlags_CharsDecimal))
+			{
+				// convert to integer
+				uint32_t val = atoi(idInputBuf);
+				pendingAddMenuId = val;
+			}
+			ImGui::PopItemWidth();
+
+			ImGui::Separator();
+
+			// Confirm / Cancel
+			if (ImGui::Button("OK", ImVec2(120, 0)))
+			{
+				// Insert the chosen ID
+				unitEntry.add_gossip_menus(pendingAddMenuId);
+				selectedIndex = unitEntry.gossip_menus_size() - 1;
+
+				// close popup
+				ImGui::CloseCurrentPopup();
+				openAddPopup = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				openAddPopup = false;
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
 	void CreatureEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
 		if (ImGui::Button("Duplicate Creature"))
@@ -211,6 +461,9 @@ namespace mmo
 			}
 
 			CHECKBOX_FLAG_PROP(npcflags, "Inn Keeper", npc_flags::InnKeeper);
+
+			// Add a list of gossip menus with an add button and remove button (to remove the selected menu from the list). Also make the menu items reorderable using drag and drop.
+			RenderGossipMenus(m_project.gossipMenus, currentEntry);
 		}
 
 		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))

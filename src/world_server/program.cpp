@@ -13,6 +13,7 @@
 #include "realm_connector.h"
 #include "game_server/world_instance_manager.h"
 #include "player_manager.h"
+#include "game_server/condition_mgr.h"
 
 #include <fstream>
 #include <sstream>
@@ -111,6 +112,8 @@ namespace mmo
 			return 1;
 		}
 
+		ConditionMgr conditionMgr{ project.conditions };
+
 		PlayerManager playerManager;
 
 		// Initialize asset registry
@@ -143,7 +146,8 @@ namespace mmo
 				std::cref(config.hostedMaps),
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
-				project);
+				project,
+				conditionMgr);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

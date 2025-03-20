@@ -33,6 +33,7 @@
 #include "editor_windows/zone_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
+#include "editor_windows/condition_editor_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -129,6 +130,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VendorEditorWindow>("Vendor Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ZoneEditorWindow>("Zone Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));

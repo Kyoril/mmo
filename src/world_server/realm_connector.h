@@ -15,6 +15,7 @@
 
 namespace mmo
 {
+	class ConditionMgr;
 	class Radian;
 	class Vector3;
 	struct QuestStatusData;
@@ -40,7 +41,7 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-			const proto::Project& project);
+			const proto::Project& project, ConditionMgr& conditionMgr);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -173,6 +174,8 @@ namespace mmo
 		std::vector<uint64> m_hostedMapIds;
 
 		const proto::Project& m_project;
+
+		ConditionMgr& m_conditionMgr;
 
 	public:
 		// ~ Begin IConnectorListener

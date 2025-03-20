@@ -39,6 +39,7 @@
 #include "shared/proto_data/gossip_menus.pb.h"
 #include "shared/proto_data/model_data.pb.h"
 #include "shared/proto_data/item_display.pb.h"
+#include "shared/proto_data/conditions.pb.h"
 
 namespace mmo
 {
@@ -79,6 +80,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::GossipMenus, mmo::proto::GossipMenuEntry> GossipMenuManager;
 		typedef TemplateManager<mmo::proto::ModelDatas, mmo::proto::ModelDataEntry> ModelDataManager;
 		typedef TemplateManager<mmo::proto::ItemDisplayData, mmo::proto::ItemDisplayEntry> ItemDisplayManager;
+		typedef TemplateManager<mmo::proto::Conditions, mmo::proto::Condition> ConditionManager;
 
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
@@ -132,6 +134,7 @@ namespace mmo
 			RangeManager ranges;
 			ModelDataManager models;
 			ItemDisplayManager itemDisplays;
+			ConditionManager conditions;
 
 		private:
 
@@ -210,6 +213,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("gossip_menus", gossipMenus));
 				managers.push_back(ManagerEntry("model_data", models));
 				managers.push_back(ManagerEntry("item_displays", itemDisplays));
+				managers.push_back(ManagerEntry("conditions", conditions));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -278,6 +282,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("gossip_menus", "gossip_menus", gossipMenus));
 				managers.push_back(ManagerEntry("model_data", "model_data", models));
 				managers.push_back(ManagerEntry("item_displays", "item_displays", itemDisplays));
+				managers.push_back(ManagerEntry("conditions", "conditions", conditions));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

@@ -6,6 +6,7 @@ message GossipMenuOption {
 	required string text = 2;
 	required uint32 action_type = 3;
 	optional uint32 action_param = 4;
+	optional uint32 conditionId = 5; // If non-zero, we check it
 }
 
 message GossipMenuEntry {
@@ -14,6 +15,7 @@ message GossipMenuEntry {
 	optional string text = 3;
 	optional bool show_quests = 4 [default = false];
 	repeated GossipMenuOption options = 5;
+	optional uint32 conditionId = 6; // If non-zero, we check it
 }
 
 message GossipMenus {
