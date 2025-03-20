@@ -850,7 +850,7 @@ namespace mmo
 		}
 
 		m_pixelShaderStream
-			<< "\tif (opacity <= 0) { clip(-1); }\n";
+			<< "\tif (opacity <= 0.333) { clip(-1); }\n";
 
 		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
 		m_pixelShaderStream
