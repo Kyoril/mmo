@@ -233,10 +233,10 @@ namespace mmo
 		// Now apply each visible item slot
 		size_t pendingItems = 0, totalItems = 0;
 
-		for (uint16 i = 0; i < player_inventory_pack_slots::Start; ++i)
-		{
-			static constexpr size_t visibleItemFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+		static constexpr size_t visibleItemFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
 
+		for (uint16 i = 0; i < 19; ++i)
+		{
 			const uint32 itemEntry = Get<uint32>(object_fields::VisibleItem1_0 + i * visibleItemFields);
 			if (itemEntry == 0)
 			{
