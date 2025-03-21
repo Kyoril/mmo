@@ -24,6 +24,8 @@ namespace mmo
 
 	namespace proto
 	{
+		class GossipMenuOption;
+		class GossipMenuEntry;
 		class TrainerEntry;
 		class VendorEntry;
 		class Project;
@@ -113,6 +115,10 @@ namespace mmo
 		void SendQuestDetails(uint64 questgiverGuid, const proto::QuestEntry& quest);
 
 		void SendQuestReward(uint64 questgiverGuid, const proto::QuestEntry& quest);
+
+		void SendGossipMenu(const GameCreatureS& npc, const proto::GossipMenuEntry& menu);
+
+		void SerializeQuestList(const GameCreatureS& unit, io::Writer& writer);
 
 	public:
 		/// @brief Gets the character guid.
@@ -319,6 +325,15 @@ namespace mmo
 
 		void OnRandomRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnGossipAction(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	private:
+		const proto::GossipMenuEntry* GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const;
+
+		void HandleGossipAction(const GameCreatureS& unit, const proto::GossipMenuOption& action);
+
+		void CloseGossip();
+
 	private:
 		// Implemented in player_dev_handlers.cpp
 
@@ -436,5 +451,4 @@ namespace mmo
 
 		ConditionMgr& m_conditionMgr;
 	};
-
 }

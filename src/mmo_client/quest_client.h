@@ -64,6 +64,13 @@ namespace mmo
 		uint8 counters[4] = { 0, 0, 0, 0 };
 	};
 
+	struct GossipMenuAction
+	{
+		uint32 id;
+		uint8 icon;
+		String text;
+	};
+
 	/// This class handles quest op codes and interaction for the client with the game server.
 	class QuestClient final : public NonCopyable
 	{
@@ -118,10 +125,20 @@ namespace mmo
 
 		const char* GetQuestObjectiveText(uint32 i);
 
+		uint32 GetNumGossipActions() const { return m_gossipActions.size(); }
+
+		const GossipMenuAction* GetGossipAction(int32 index) const;
+
+		void ExecuteGossipAction(int32 index) const;
+
 	private:
 		bool HasQuestInQuestLog(uint32 questId);
 
+		bool ReadQuestList(io::Reader& reader);
+
 	private:
+		PacketParseResult OnGossipMenu(game::IncomingPacket& packet);
+
 		PacketParseResult OnQuestGiverQuestList(game::IncomingPacket& packet);
 
 		PacketParseResult OnQuestGiverQuestDetails(game::IncomingPacket& packet);
@@ -158,5 +175,9 @@ namespace mmo
 		std::vector<uint32> m_questLogQuests;
 		std::vector<String> m_questObjectiveTexts;
 		uint32 m_selectedQuestLogQuest = 0;
+
+		std::vector<GossipMenuAction> m_gossipActions;
+
+		uint32 m_gossipMenu = 0;
 	};
 }

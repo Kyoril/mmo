@@ -97,6 +97,41 @@ namespace mmo
 			CHECKBOX_BOOL_PROP(show_quests, "Show Quest Menu for this page");
 
 			ImGui::InputTextMultiline("Greeting Text", currentEntry.mutable_text());
+
+			// Draw condition selection
+			int conditionid = currentEntry.conditionid();
+			const auto* condition = m_project.conditions.getById(conditionid);
+			if (ImGui::BeginCombo("Menu Condition", condition ? condition->name().c_str() : "<None>", ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable("<None>", conditionid == 0))
+				{
+					currentEntry.set_conditionid(0);
+				}
+				if (conditionid == 0)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.conditions.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.conditions.getTemplates().entry(i).id() == currentEntry.conditionid();
+					const char* item_text = m_project.conditions.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_conditionid(m_project.conditions.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Gossip Options", ImGuiTreeNodeFlags_DefaultOpen))
@@ -124,11 +159,12 @@ namespace mmo
 
 			static const char* s_spellNone = "<None>";
 
-			if (ImGui::BeginTable("optionsTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			if (ImGui::BeginTable("optionsTable", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 			{
 				ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Action Type", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Condition", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableHeadersRow();
 
 				for (int index = 0; index < currentEntry.options_size(); ++index)
@@ -188,7 +224,7 @@ namespace mmo
 								}
 
 								ImGui::PushID(i);
-								const bool item_selected = m_project.gossipMenus.getTemplates().entry(i).id() == mutableEntry->action_param();
+								const bool item_selected = m_project.gossipMenus.getTemplates().entry(i).id() == mutableEntry->conditionid();
 								const char* item_text = m_project.gossipMenus.getTemplates().entry(i).name().c_str();
 								if (ImGui::Selectable(item_text, item_selected))
 								{
@@ -206,6 +242,54 @@ namespace mmo
 						}
 						break;
 					}
+
+					ImGui::TableNextColumn();
+
+					// Draw condition selection
+					int conditionid = mutableEntry->conditionid();
+					const auto* condition = m_project.conditions.getById(conditionid);
+
+					if (ImGui::BeginCombo("##actionCondition", condition ? condition->name().c_str() : "<None>", ImGuiComboFlags_None))
+					{
+						ImGui::PushID(-1);
+						if (ImGui::Selectable("<None>", conditionid == 0))
+						{
+							mutableEntry->set_conditionid(0);
+						}
+						if (conditionid == 0)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+
+
+						for (int i = 0; i < m_project.conditions.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.conditions.getTemplates().entry(i).id() == mutableEntry->action_param();
+							const char* item_text = m_project.conditions.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								mutableEntry->set_conditionid(m_project.conditions.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_options()->DeleteSubrange(index, 1);
+						index--;
+					}
+
 					ImGui::PopID();
 				}
 

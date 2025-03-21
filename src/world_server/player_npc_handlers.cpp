@@ -4,6 +4,7 @@
 
 #include "player_manager.h"
 #include "base/utilities.h"
+#include "game/gossip.h"
 #include "game_server/game_creature_s.h"
 #include "game_server/game_object_s.h"
 #include "game_server/game_player_s.h"
@@ -11,22 +12,10 @@
 #include "proto_data/project.h"
 #include "game/loot.h"
 #include "game/vendor.h"
+#include "game_server/condition_mgr.h"
 
 namespace mmo
 {
-
-	namespace
-	{
-		void WriteQuestMenuEntry(const proto::QuestEntry& quest, QuestgiverStatus status, io::Writer& writer)
-		{
-			writer
-				<< io::write<uint32>(quest.id())
-				<< io::write<uint32>(status)
-				<< io::write<int32>(quest.questlevel())
-				<< io::write_dynamic_range<uint8>(quest.name());
-		}
-	}
-
 	void Player::OnQuestGiverHello(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 questGiverGuid;
@@ -60,39 +49,7 @@ namespace mmo
 		typename game::Protocol::OutgoingPacket packet(sink);
 		packet.Start(game::realm_client_packet::QuestGiverQuestList);
 		packet << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(unit->GetEntry().greeting_text());	// TODO: 512 cap
-
-		const size_t questCountPos = sink.Position();
-
-		uint8 questCount = 0;
-		packet << io::write<uint8>(0); // Placeholder for real quest count
-
-		for (const auto& questId : unit->GetEntry().end_quests())
-		{
-			auto questStatus = m_character->GetQuestStatus(questId);
-			if (questStatus == quest_status::Incomplete || questStatus == quest_status::Complete)
-			{
-				if (const auto* quest = m_project.quests.getById(questId))
-				{
-					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, packet);
-					questCount++;
-				}
-			}
-		}
-		for (const auto& questId : unit->GetEntry().quests())
-		{
-			auto questStatus = m_character->GetQuestStatus(questId);
-			if (questStatus == quest_status::Available)
-			{
-				if (const auto* quest = m_project.quests.getById(questId))
-				{
-					WriteQuestMenuEntry(*quest, questgiver_status::Available, packet);
-					questCount++;
-				}
-			}
-		}
-
-		// Overwrite real quest count in menu before finish
-		sink.Overwrite(questCountPos, reinterpret_cast<const char*>(&questCount), sizeof(questCount));
+		SerializeQuestList(*unit, packet);
 		packet.Finish();
 
 		// Send proxy packet
@@ -146,11 +103,7 @@ namespace mmo
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
 
 		// Ensure that the gossip menu is closed
-		SendPacket([](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::GossipComplete);
-			packet.Finish();
-		});
+		CloseGossip();
 	}
 
 	void Player::OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -681,34 +634,209 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Requested gossip menu from npc " << log_hex_digit(objectGuid) << " (" << unit->GetEntry().name() << ")");
-
-		// Is this unit a trainer?
-		const proto::UnitEntry& unitEntry = unit->GetEntry();
-		const proto::TrainerEntry* trainer = nullptr;
-		const proto::VendorEntry* vendor = nullptr;
-		if (unitEntry.trainerentry() != 0)
+		// Lets search for npc's gossip menu entries and check conditions
+		const proto::GossipMenuEntry* gossipMenuToSend = nullptr;
+		for (const auto gossip : unit->GetEntry().gossip_menus())
 		{
-			trainer = m_project.trainers.getById(unitEntry.trainerentry());
+			const auto* gossipMenu = m_project.gossipMenus.getById(gossip);
+			if (!gossipMenu)
+			{
+				ELOG("Gossip menu " << gossip << " not found but assigned to npc " << unit->GetEntry().id() << " (" << unit->GetEntry().name() << ")");
+				continue;
+			}
+
+			// Has this gossip menu a condition?
+			if (gossipMenu->conditionid() == 0)
+			{
+				// No condition means we are always going to use this menu!
+				gossipMenuToSend = gossipMenu;
+				break;
+			}
+			else
+			{
+				if (m_conditionMgr.PlayerMeetsCondition(*m_character, gossipMenu->conditionid()))
+				{
+					gossipMenuToSend = gossipMenu;
+					break;
+				}
+			}
 		}
 
-		if (unitEntry.vendorentry() != 0)
+		// Has a gossip menu to send?
+		if (gossipMenuToSend != nullptr)
 		{
-			vendor = m_project.vendors.getById(unitEntry.vendorentry());
-		}
-
-		if (vendor && !trainer)
-		{
-			HandleVendorGossip(*vendor, *unit);
-		}
-		else if (trainer && !vendor)
-		{
-			HandleTrainerGossip(*trainer, *unit);
+			DLOG("Sending gossip menu " << gossipMenuToSend->name() << " to player");
+			SendGossipMenu(*unit, *gossipMenuToSend);
 		}
 		else
 		{
-			// TODO: Handle other gossip
+			// TODO: Validate if this is the right thing for us to do here
+
+			// Is this unit a trainer?
+			const proto::UnitEntry& unitEntry = unit->GetEntry();
+			const proto::TrainerEntry* trainer = nullptr;
+			const proto::VendorEntry* vendor = nullptr;
+			if (unitEntry.trainerentry() != 0)
+			{
+				trainer = m_project.trainers.getById(unitEntry.trainerentry());
+			}
+
+			if (unitEntry.vendorentry() != 0)
+			{
+				vendor = m_project.vendors.getById(unitEntry.vendorentry());
+			}
+
+			if (vendor && !trainer)
+			{
+				HandleVendorGossip(*vendor, *unit);
+			}
+			else if (trainer && !vendor)
+			{
+				HandleTrainerGossip(*trainer, *unit);
+			}
 		}
 	}
 
+	void Player::HandleGossipAction(const GameCreatureS& unit, const proto::GossipMenuOption& action)
+	{
+		switch (action.action_type())
+		{
+		case gossip_actions::None:
+			CloseGossip();
+			break;
+
+		case gossip_actions::GossipMenu:
+			{
+				const auto* menu = m_project.gossipMenus.getById(action.action_param());
+				if (!menu)
+				{
+					ELOG("Gossip menu " << action.action_param() << " not found but assigned to npc " << unit.GetEntry().id() << " (" << unit.GetEntry().name() << ")");
+					return;
+				}
+
+				SendGossipMenu(unit, *menu);
+			}
+			break;
+
+		case gossip_actions::Trainer:
+			{
+				const auto* trainer = m_project.trainers.getById(unit.GetEntry().trainerentry());
+				if (!trainer)
+				{
+					ELOG("Trainer " << unit.GetEntry().trainerentry() << " not found but assigned to npc " << unit.GetEntry().id() << " (" << unit.GetEntry().name() << ")");
+					return;
+				}
+				SendTrainerList(*trainer, unit);
+			}
+			break;
+
+		case gossip_actions::Vendor:
+			{
+				const auto* vendor = m_project.vendors.getById(unit.GetEntry().vendorentry());
+				if (!vendor)
+				{
+					ELOG("Vendor " << unit.GetEntry().vendorentry() << " not found but assigned to npc " << unit.GetEntry().id() << " (" << unit.GetEntry().name() << ")");
+					return;
+				}
+				SendVendorInventory(*vendor, unit);
+			}
+			break;
+		}
+	}
+
+	void Player::CloseGossip()
+	{
+		SendPacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GossipComplete);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnGossipAction(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 objectGuid;
+		uint32 menuId;
+		uint32 actionId;
+		if (!(contentReader >> io::read<uint64>(objectGuid) >> io::read<uint32>(menuId) >> io::read<uint32>(actionId)))
+		{
+			WLOG("Failed to read object guid");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(objectGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		if (!unit->IsInteractable(*m_character))
+		{
+			return;
+		}
+
+		// Check if this npc has the gossip menu and if the gossip menu and the gossip actions are available and usable for the player
+		const proto::GossipMenuEntry* gossipMenu = GetActiveGossipMenuFromNpc(*unit);
+		if (!gossipMenu)
+		{
+			ELOG("Player tried to interact with npc which does not offer a gossip menu at all for the player");
+			return;
+		}
+
+		if (gossipMenu->id() != menuId)
+		{
+			ELOG("Player tried to interact with npc with wrong gossip menu id");
+			return;
+		}
+
+		// Now find the gossip action
+		for (const mmo::proto::GossipMenuOption& action : gossipMenu->options())
+		{
+			if (action.id() == actionId)
+			{
+				if (action.conditionid() != 0)
+				{
+					if (!m_conditionMgr.PlayerMeetsCondition(*m_character, action.conditionid()))
+					{
+						ELOG("Player tried to interact with npc with gossip action " << actionId << "  in menu " << menuId << " but condition is not met");
+						return;
+					}
+				}
+
+				// Handle the gossip action
+				HandleGossipAction(*unit, action);
+				return;
+			}
+		}
+
+		ELOG("Player tried to execute gossip action " << actionId << " but menu " << menuId << " does not offer this action for the player");
+	}
+
+	const proto::GossipMenuEntry* Player::GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const
+	{
+		// Lets search for npc's gossip menu entries and check conditions
+		for (const auto gossip : npc.GetEntry().gossip_menus())
+		{
+			const auto* gossipMenu = m_project.gossipMenus.getById(gossip);
+			if (!gossipMenu)
+			{
+				ELOG("Gossip menu " << gossip << " not found but assigned to npc " << npc.GetEntry().id() << " (" << npc.GetEntry().name() << ")");
+				continue;
+			}
+
+			// Has this gossip menu a condition?
+			if (gossipMenu->conditionid() == 0)
+			{
+				// No condition means we are always going to use this menu!
+				return gossipMenu;
+			}
+
+			if (m_conditionMgr.PlayerMeetsCondition(*m_character, gossipMenu->conditionid()))
+			{
+				return gossipMenu;
+			}
+		}
+
+		return nullptr;
+	}
 }

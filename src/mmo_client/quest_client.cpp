@@ -19,6 +19,7 @@ namespace mmo
 
 	void QuestClient::Initialize()
 	{
+		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GossipMenu, *this, &QuestClient::OnGossipMenu);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverQuestList, *this, &QuestClient::OnQuestGiverQuestList);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverQuestDetails, *this, &QuestClient::OnQuestGiverQuestDetails);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverQuestComplete, *this, &QuestClient::OnQuestGiverQuestComplete);
@@ -41,10 +42,12 @@ namespace mmo
 
 	void QuestClient::CloseQuest()
 	{
+		m_gossipMenu = 0;
 		m_questGiverGuid = 0;
 		m_questDetails.Clear();
 		m_greetingText.clear();
 		m_questList.clear();
+		m_gossipActions.clear();
 
 		// Raise UI event to show the quest list window to the user
 		FrameManager::Get().TriggerLuaEvent("QUEST_FINISHED");
@@ -333,6 +336,30 @@ namespace mmo
 		return m_questObjectiveTexts[i].c_str();
 	}
 
+	const GossipMenuAction* QuestClient::GetGossipAction(const int32 index) const
+	{
+		if (index < 0 || index >= static_cast<int32>(m_gossipActions.size()))
+		{
+			return nullptr;
+		}
+
+		return &m_gossipActions[index];
+	}
+
+	void QuestClient::ExecuteGossipAction(const int32 index) const
+	{
+		ASSERT(HasQuestGiver());
+		ASSERT(m_gossipMenu != 0);
+
+		if (index < 0 || index >= m_gossipActions.size())
+		{
+			ELOG("Invalid action index " << index);
+			return;
+		}
+
+		m_connector.ExecuteGossipAction(m_questGiverGuid, m_gossipMenu, m_gossipActions[index].id);
+	}
+
 	bool QuestClient::HasQuestInQuestLog(uint32 questId)
 	{
 		// Check if we know that quest
@@ -383,27 +410,76 @@ namespace mmo
 		m_connector.QuestGiverChooseQuestReward(m_questGiverGuid, m_questDetails.questId, rewardChoice);
 	}
 
-	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
+	PacketParseResult QuestClient::OnGossipMenu(game::IncomingPacket& packet)
+	{
+		m_questList.clear();
+		m_gossipActions.clear();
+
+		uint64 npcGuid;
+		String menuText;
+		uint8 showQuests;
+		if (!(packet >> io::read<uint64>(npcGuid) >> io::read<uint32>(m_gossipMenu) >> io::read_container<uint16>(menuText, 512) >> io::read<uint8>(showQuests)))
+		{
+			ELOG("Failed to read GossipMenu packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		ASSERT(m_gossipMenu != 0);
+
+		if (showQuests)
+		{
+			if (!ReadQuestList(packet))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		uint16 actionCount = 0;
+		if (!(packet >> io::read<uint16>(actionCount)))
+		{
+			ELOG("Failed to read GossipMenu packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < actionCount; ++i)
+		{
+			uint32 actionId;
+			String actionText;
+			uint8 actionIcon;
+			if (!(packet >> io::read<uint32>(actionId) >> io::read<uint8>(actionIcon) >> io::read_container<uint8>(actionText)))
+			{
+				ELOG("Failed to read GossipMenu packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_gossipActions.emplace_back(actionId, actionIcon, std::move(actionText));
+		}
+
+		m_questGiverGuid = npcGuid;
+		m_greetingText = std::move(menuText);
+		ProcessQuestText(m_greetingText);
+
+		// Raise UI event to show the quest list window to the user
+		FrameManager::Get().TriggerLuaEvent("QUEST_GREETING");
+
+		return PacketParseResult::Pass;
+	}
+
+	bool QuestClient::ReadQuestList(io::Reader& reader)
 	{
 		m_questList.clear();
 
 		uint8 numQuests;
-
-		if (!(packet
-			>> io::read<uint64>(m_questGiverGuid)
-			>> io::read_container<uint16>(m_greetingText, 512)
-			>> io::read<uint8>(numQuests)))
+		if (!(reader >> io::read<uint8>(numQuests)))
 		{
 			ELOG("Failed to read QuestGiverQuestList packet");
-			return PacketParseResult::Disconnect;
+			return false;
 		}
-
-		ProcessQuestText(m_greetingText);
 
 		for (uint8 i = 0; i < numQuests; ++i)
 		{
 			QuestListEntry entry;
-			if (!(packet
+			if (!(reader
 				>> io::read<uint32>(entry.questId)
 				>> io::read<uint32>(entry.menuIcon)
 				>> io::read<int32>(entry.questLevel)
@@ -412,7 +488,7 @@ namespace mmo
 				m_questList.clear();
 
 				ELOG("Failed to read QuestList entry");
-				return PacketParseResult::Disconnect;
+				return false;
 			}
 
 			auto questLogIt = std::find_if(m_questLog.begin(), m_questLog.end(), [this, &entry](const QuestLogEntry& logEntry)
@@ -431,6 +507,28 @@ namespace mmo
 			// Add to list of quests
 			m_questList.emplace_back(std::move(entry));
 		}
+
+		return true;
+	}
+
+	PacketParseResult QuestClient::OnQuestGiverQuestList(game::IncomingPacket& packet)
+	{
+		m_gossipActions.clear();
+
+		if (!(packet
+			>> io::read<uint64>(m_questGiverGuid)
+			>> io::read_container<uint16>(m_greetingText, 512)))
+		{
+			ELOG("Failed to read QuestGiverQuestList packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!ReadQuestList(packet))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ProcessQuestText(m_greetingText);
 
 		// Raise UI event to show the quest list window to the user
 		FrameManager::Get().TriggerLuaEvent("QUEST_GREETING");

@@ -450,6 +450,9 @@ namespace mmo
 		case game::client_realm_packet::QuestGiverChooseQuestReward:
 			QuestGiverChooseQuestReward(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::GossipAction:
+			OnGossipAction(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
@@ -918,6 +921,101 @@ namespace mmo
 					<< io::write<uint32>(quest.rewardspell());
 				packet.Finish();
 			});
+	}
+
+	void Player::SendGossipMenu(const GameCreatureS& npc, const proto::GossipMenuEntry& menu)
+	{
+		// Quest is completed, offer the rewards to the player
+		SendPacket([&npc, &menu, this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GossipMenu);
+				packet
+					<< io::write<uint64>(npc.GetGuid())
+					<< io::write<uint32>(menu.id())
+					<< io::write_dynamic_range<uint16>(menu.text())
+					<< io::write<uint8>(menu.show_quests());
+
+				if (menu.show_quests())
+				{
+					SerializeQuestList(npc, packet);
+				}
+
+				uint16 actionCount = 0;
+				const size_t actionCountPosition = packet.Sink().Position();
+				packet << io::write<uint16>(actionCount);
+
+				// Send actions along with the menu
+				for (const auto& action : menu.options())
+				{
+					if (action.conditionid() != 0)
+					{
+						if (!m_conditionMgr.PlayerMeetsCondition(*m_character, action.conditionid()))
+						{
+							continue;
+						}
+					}
+
+					actionCount++;
+					packet
+						<< io::write<uint32>(action.id())
+						<< io::write<uint8>(action.action_type())
+						<< io::write_dynamic_range<uint8>(action.text());
+				}
+
+				packet.Sink().Overwrite(actionCountPosition, reinterpret_cast<const char*>(&actionCount), sizeof(uint16));
+				packet.Finish();
+			});
+	}
+
+	void WriteQuestMenuEntry(const proto::QuestEntry& quest, QuestgiverStatus status, io::Writer& writer)
+	{
+		writer
+			<< io::write<uint32>(quest.id())
+			<< io::write<uint32>(status)
+			<< io::write<int32>(quest.questlevel())
+			<< io::write_dynamic_range<uint8>(quest.name());
+	}
+
+	void Player::SerializeQuestList(const GameCreatureS& unit, io::Writer& writer)
+	{
+		// Is this unit a quest giver?
+		if (unit.GetEntry().quests_size() == 0 && unit.GetEntry().end_quests_size() == 0)
+		{
+			WLOG("Unit " << log_hex_digit(unit.GetGuid()) << " has no quests to offer or turn in!");
+			return;
+		}
+
+		const size_t questCountPos = writer.Sink().Position();
+		uint8 questCount = 0;
+		writer << io::write<uint8>(0); // Placeholder for real quest count
+
+		for (const auto& questId : unit.GetEntry().end_quests())
+		{
+			auto questStatus = m_character->GetQuestStatus(questId);
+			if (questStatus == quest_status::Incomplete || questStatus == quest_status::Complete)
+			{
+				if (const auto* quest = m_project.quests.getById(questId))
+				{
+					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, writer);
+					questCount++;
+				}
+			}
+		}
+		for (const auto& questId : unit.GetEntry().quests())
+		{
+			auto questStatus = m_character->GetQuestStatus(questId);
+			if (questStatus == quest_status::Available)
+			{
+				if (const auto* quest = m_project.quests.getById(questId))
+				{
+					WriteQuestMenuEntry(*quest, questgiver_status::Available, writer);
+					questCount++;
+				}
+			}
+		}
+
+		// Overwrite real quest count in menu before finish
+		writer.Sink().Overwrite(questCountPos, reinterpret_cast<const char*>(&questCount), sizeof(questCount));
 	}
 
 	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)

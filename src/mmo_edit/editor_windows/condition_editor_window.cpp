@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "game/gossip.h"
+#include "game/quest.h"
 #include "log/default_log_levels.h"
 #include "math/clamp.h"
 
@@ -42,6 +43,83 @@ namespace mmo
 
         return operators[op];
 	}
+
+    static void RenderConditionDescription(const proto::ConditionManager& conditions, const proto::Condition& condition)
+    {
+		const ImVec4 valueColor = ImVec4(0.2f, 0.4f, 1.0f, 1.0f);
+
+        switch (condition.conditiontype())
+        {
+        case proto::Condition_ConditionType_CLASS_CHECK:
+            ImGui::Text("PlayerClass is");
+			ImGui::SameLine();
+            ImGui::TextColored(valueColor, "%d", condition.param1());
+            break;
+		case proto::Condition_ConditionType_LEVEL_CHECK:
+			ImGui::Text("PlayerLevel is");
+            ImGui::SameLine();
+            if (condition.param2() <= 0)
+			{
+				ImGui::TextColored(valueColor, ">= %d", condition.param1());
+			}
+			else
+			{
+				ImGui::TextColored(valueColor, ">= %d && <= %d", condition.param1(), condition.param2());
+			}
+			break;
+        case proto::Condition_ConditionType_QUEST_CHECK:
+            ImGui::Text("Quest %d", condition.param1());
+			ImGui::SameLine();
+            switch (condition.param2())
+            {
+			case 0:
+                ImGui::TextColored(valueColor, "REWARDED");
+				break;
+            case 1:
+                ImGui::TextColored(valueColor, "COMPLETED");
+                break;
+            case 2:
+                ImGui::TextColored(valueColor, "UNAVAILABLE");
+                break;
+            case 3:
+                ImGui::TextColored(valueColor, "IN PROGRESS");
+                break;
+            case 4:
+                ImGui::TextColored(valueColor, "AVAILABLE");
+                break;
+            case 5:
+                ImGui::TextColored(valueColor, "FAILED");
+                break;
+            default:
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "<INVALID PARAM2 VALUE>");
+				break;
+            }
+            break;
+		case proto::Condition_ConditionType_NONE_TYPE:
+			if (condition.logicoperator() == proto::Condition_LogicOperator_AND || condition.logicoperator() == proto::Condition_LogicOperator_OR)
+			{
+                for (int i = 0; i < condition.subconditionids_size(); i++)
+                {
+                    const auto* subCond = conditions.getById(condition.subconditionids(i));
+                    if (subCond)
+                    {
+                        RenderConditionDescription(conditions, *subCond);
+                    }
+
+                    if (i < condition.subconditionids_size() - 1)
+                    {
+						ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.1f, 1.0f, 0.1f, 1.0f), "%s", condition.logicoperator() == proto::Condition_LogicOperator_AND ? "AND" : "OR");
+                        ImGui::SameLine();
+                    }
+                }
+			}
+            break;
+        default:
+            ImGui::Text("Quest %d", condition.param1());
+            break;
+        }
+    }
 
 	void ConditionEditorWindow::DrawDetailsImpl(proto::Condition& currentEntry)
 	{
@@ -116,6 +194,8 @@ namespace mmo
 			}
 		}
 
+        bool conditionChanged = false;
+
         // Condition Type Combo
         {
             // We'll build a small array of known ConditionType values
@@ -131,6 +211,7 @@ namespace mmo
                     if (ImGui::Selectable(GetConditionTypeName(t), isSelected))
                     {
                         currentEntry.set_conditiontype(static_cast<proto::Condition_ConditionType>(t));
+                        conditionChanged = true;
                     }
                     if (isSelected)
                         ImGui::SetItemDefaultFocus();
@@ -152,6 +233,7 @@ namespace mmo
                     if (ImGui::Selectable(GetLogicOperatorName(op), isSelected))
                     {
                         currentEntry.set_logicoperator(static_cast<mmo::proto::Condition_LogicOperator>(op));
+                        conditionChanged = true;
                     }
                     if (isSelected)
                         ImGui::SetItemDefaultFocus();
@@ -167,16 +249,19 @@ namespace mmo
         if (ImGui::InputScalar("Param1", ImGuiDataType_U32, &param))
         {
 			currentEntry.set_param1(param);
+            conditionChanged = true;
         }
         param = currentEntry.param2();
         if (ImGui::InputScalar("Param2", ImGuiDataType_U32, &param))
         {
             currentEntry.set_param2(param);
+            conditionChanged = true;
         }
         param = currentEntry.param3();
         if (ImGui::InputScalar("Param3", ImGuiDataType_U32, &param))
         {
             currentEntry.set_param3(param);
+            conditionChanged = true;
         }
 
 		if (currentEntry.logicoperator() != proto::Condition_LogicOperator_NONE_OPERATOR)
@@ -299,6 +384,7 @@ namespace mmo
                 pendingAddSubId = 0;
                 ImGui::OpenPopup("AddSubConditionPopup");
             }
+
             ImGui::SameLine();
 
             bool canRemove = (selectedSubIndex >= 0 && selectedSubIndex < (int)currentEntry.subconditionids_size());
@@ -367,6 +453,13 @@ namespace mmo
                 ImGui::EndPopup();
             }
 		}
+
+        // Render a preview of the condition
+        ImGui::Separator();
+        ImGui::TextUnformatted("Preview");
+        ImGui::Separator();
+
+        RenderConditionDescription(m_project.conditions, currentEntry);
 	}
 
 	void ConditionEditorWindow::OnNewEntry(proto::TemplateManager<proto::Conditions, proto::Condition>::EntryType& entry)

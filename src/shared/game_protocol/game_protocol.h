@@ -153,6 +153,8 @@ namespace mmo
 
 				MoveSplineDone,
 
+				GossipAction,
+
 				/// Counter constant
 				Count_,
 			};
@@ -321,6 +323,7 @@ namespace mmo
 				SpellHealLog,
 
 				MoveSplineDone,
+				GossipMenu,
 
 				/// Counter constant
 				Count_,

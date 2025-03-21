@@ -812,4 +812,17 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::ExecuteGossipAction(uint64 npcGuid, uint32 gossipMenu, uint32 gossipIndex)
+	{
+		sendSinglePacket([npcGuid, gossipMenu, gossipIndex](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::GossipAction);
+				packet
+					<< io::write<uint64>(npcGuid)
+					<< io::write<uint32>(gossipMenu)
+					<< io::write<uint32>(gossipIndex);
+				packet.Finish();
+			});
+	}
 }

@@ -209,6 +209,7 @@ namespace mmo
 			ImGui::EndDisabled();
 
 		// ----- Render the "Add" modal popup -----
+		bool selectionChanged = false;
 		if (ImGui::BeginPopupModal("AddGossipMenuPopup", &openAddPopup, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::TextUnformatted("Select or enter a new GossipMenu ID:");
@@ -230,9 +231,15 @@ namespace mmo
 				if (!filter.PassFilter(label))
 					continue;
 
-				if (ImGui::Selectable(label, (pendingAddMenuId == menu.id())))
+				ImGuiStyle& style = ImGui::GetStyle();
+				style.Colors[ImGuiCol_Header] = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
+				style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+				style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+
+				if (ImGui::Selectable(label, (pendingAddMenuId == menu.id()), ImGuiSelectableFlags_SelectOnClick))
 				{
 					pendingAddMenuId = menu.id();
+					selectionChanged = true;
 				}
 			}
 
@@ -244,7 +251,7 @@ namespace mmo
 			ImGui::PushItemWidth(120);
 			static char idInputBuf[32] = "";
 			// If we just opened the popup, reset the buffer:
-			if (ImGui::IsWindowAppearing())
+			if (ImGui::IsWindowAppearing() || selectionChanged)
 				snprintf(idInputBuf, sizeof(idInputBuf), "%u", pendingAddMenuId);
 
 			if (ImGui::InputText("##ManualId", idInputBuf, IM_ARRAYSIZE(idInputBuf), ImGuiInputTextFlags_CharsDecimal))

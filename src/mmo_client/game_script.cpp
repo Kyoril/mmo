@@ -872,6 +872,12 @@ namespace mmo
 				.def_readonly("status", &QuestLogEntry::status)),
 
 			luabind::scope(
+				luabind::class_<GossipMenuAction>("GossipMenuAction")
+				.def_readonly("id", &GossipMenuAction::id)
+				.def_readonly("text", &GossipMenuAction::text)
+				.def_readonly("icon", &GossipMenuAction::icon)),
+
+			luabind::scope(
 				luabind::class_<QuestDetails>("QuestDetails")
 				.def_readonly("id", &QuestDetails::questId)
 				.def_readonly("title", &QuestDetails::questTitle)
@@ -1060,12 +1066,15 @@ namespace mmo
 			luabind::def<std::function<void(uint32)>>("AcceptQuest", [this](uint32 questId) { m_questClient.AcceptQuest(questId); }),
 			luabind::def<std::function<uint32()>>("GetNumQuestLogEntries", [this]() { return m_questClient.GetNumQuestLogEntries(); }),
 			luabind::def<std::function<const QuestLogEntry*(uint32)>>("GetQuestLogEntry", [this](uint32 index) { return m_questClient.GetQuestLogEntry(index); }),
+			luabind::def<std::function<uint32()>>("GetNumGossipActions", [this]() { return m_questClient.GetNumGossipActions(); }),
+			luabind::def<std::function<const GossipMenuAction* (int32)>>("GetGossipAction", [this](int32 index) { return m_questClient.GetGossipAction(index); }),
 			luabind::def<std::function<void(uint32)>>("AbandonQuest", [this](uint32 questId) { m_questClient.AbandonQuest(questId); }),
 			luabind::def<std::function<void(uint32)>>("GetQuestReward", [this](uint32 rewardChoice) { m_questClient.GetQuestReward(rewardChoice); }),
 			luabind::def<std::function<void(uint32)>>("QuestLogSelectQuest", [this](uint32 questId) { m_questClient.QuestLogSelectQuest(questId); }),
 			luabind::def<std::function<uint32()>>("GetQuestLogSelection", [this]() { return m_questClient.GetSelectedQuestLogQuest(); }),
 			luabind::def<std::function<uint32()>>("GetQuestObjectiveCount", [this]() { return m_questClient.GetQuestObjectiveCount(); }),
 			luabind::def<std::function<const char*(uint32)>>("GetQuestObjectiveText", [this](uint32 index) { return m_questClient.GetQuestObjectiveText(index); }),
+			luabind::def<std::function<void(int32)>>("GossipAction", [this](int32 index) { return m_questClient.ExecuteGossipAction(index); }),
 
 			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; m_questClient.ProcessQuestText(questText); return questText; }),
 			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; m_questClient.ProcessQuestText(questText); return questText; }),
