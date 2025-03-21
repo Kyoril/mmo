@@ -22,105 +22,141 @@ namespace mmo
 		m_toolbarButtonText = "Conditions";
 	}
 
-	static const char* GetConditionTypeName(int type)
+    namespace
 	{
-        static const char* s_unknown = "Unknown";
-		static const char* conditionTypes[] = { "NONE", "CLASS_CHECK", "LEVEL_CHECK", "QUEST_CHECK" };
+        static const char* s_questParamValues[] = {
+            "REWARDED",
+            "COMPLETED",
+            "UNAVAILABLE",
+            "IN PROGRESS",
+            "AVAILABLE",
+            "FAILED"
+        };
 
-		if (type < 0 || type >= std::size(conditionTypes))
-			return s_unknown;
-
-        return conditionTypes[type];
-	}
-
-	static const char* GetLogicOperatorName(int op)
-	{
-        static const char* s_unknown = "Unknown";
-        static const char* operators[] = { "NONE", "AND", "OR" };
-
-        if (op < 0 || op >= std::size(operators))
-            return s_unknown;
-
-        return operators[op];
-	}
-
-    static void RenderConditionDescription(const proto::ConditionManager& conditions, const proto::Condition& condition)
-    {
-		const ImVec4 valueColor = ImVec4(0.2f, 0.4f, 1.0f, 1.0f);
-
-        switch (condition.conditiontype())
+        constexpr int32 GetQuestParam2Count()
         {
-        case proto::Condition_ConditionType_CLASS_CHECK:
-            ImGui::Text("PlayerClass is");
-			ImGui::SameLine();
-            ImGui::TextColored(valueColor, "%d", condition.param1());
-            break;
-		case proto::Condition_ConditionType_LEVEL_CHECK:
-			ImGui::Text("PlayerLevel is");
-            ImGui::SameLine();
-            if (condition.param2() <= 0)
-			{
-				ImGui::TextColored(valueColor, ">= %d", condition.param1());
-			}
-			else
-			{
-				ImGui::TextColored(valueColor, ">= %d && <= %d", condition.param1(), condition.param2());
-			}
-			break;
-        case proto::Condition_ConditionType_QUEST_CHECK:
-            ImGui::Text("Quest %d", condition.param1());
-			ImGui::SameLine();
-            switch (condition.param2())
-            {
-			case 0:
-                ImGui::TextColored(valueColor, "REWARDED");
-				break;
-            case 1:
-                ImGui::TextColored(valueColor, "COMPLETED");
-                break;
-            case 2:
-                ImGui::TextColored(valueColor, "UNAVAILABLE");
-                break;
-            case 3:
-                ImGui::TextColored(valueColor, "IN PROGRESS");
-                break;
-            case 4:
-                ImGui::TextColored(valueColor, "AVAILABLE");
-                break;
-            case 5:
-                ImGui::TextColored(valueColor, "FAILED");
-                break;
-            default:
-				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "<INVALID PARAM2 VALUE>");
-				break;
-            }
-            break;
-		case proto::Condition_ConditionType_NONE_TYPE:
-			if (condition.logicoperator() == proto::Condition_LogicOperator_AND || condition.logicoperator() == proto::Condition_LogicOperator_OR)
-			{
-                for (int i = 0; i < condition.subconditionids_size(); i++)
-                {
-                    const auto* subCond = conditions.getById(condition.subconditionids(i));
-                    if (subCond)
-                    {
-                        RenderConditionDescription(conditions, *subCond);
-                    }
+            return std::size(s_questParamValues);
+        }
 
-                    if (i < condition.subconditionids_size() - 1)
+        static_assert(std::size(s_questParamValues) == GetQuestParam2Count(), "QuestParam2 values do not match the expected count");
+
+		const char* GetQuestParam2(int param2)
+		{
+			static const char* s_invalidValue = "<INVALID>";
+
+            if (param2 >= 0 && param2 < GetQuestParam2Count())
+            {
+                return s_questParamValues[param2];
+            }
+
+            return s_invalidValue;
+		}
+
+        bool RenderQuestParam2(proto::Condition& condition, int32 param2)
+		{
+			if (ImGui::Combo("##quest_param2", &param2, s_questParamValues, std::size(s_questParamValues)))
+			{
+				// Set the new value
+				condition.set_param2(param2);
+                return true;
+			}
+
+            return false;
+		}
+
+        int32 GetConditionParamCount(const int type)
+        {
+            switch (type)
+            {
+            case proto::Condition_ConditionType_CLASS_CHECK:
+                return 1;
+            case proto::Condition_ConditionType_LEVEL_CHECK:
+                return 2;
+            case proto::Condition_ConditionType_QUEST_CHECK:
+                return 2;
+            case proto::Condition_ConditionType_NONE_TYPE:
+                return 0;
+            }
+
+            return 0;
+        }
+
+        const char* GetConditionTypeName(int type)
+        {
+            static const char* s_unknown = "Unknown";
+            static const char* conditionTypes[] = { "NONE", "CLASS_CHECK", "LEVEL_CHECK", "QUEST_CHECK" };
+
+            if (type < 0 || type >= std::size(conditionTypes))
+                return s_unknown;
+
+            return conditionTypes[type];
+        }
+
+        const char* GetLogicOperatorName(int op)
+        {
+            static const char* s_unknown = "Unknown";
+            static const char* operators[] = { "NONE", "AND", "OR" };
+
+            if (op < 0 || op >= std::size(operators))
+                return s_unknown;
+
+            return operators[op];
+        }
+
+        void RenderConditionDescription(const proto::ConditionManager& conditions, const proto::Condition& condition)
+        {
+            const auto valueColor = ImVec4(0.2f, 0.4f, 1.0f, 1.0f);
+
+            switch (condition.conditiontype())
+            {
+            case proto::Condition_ConditionType_CLASS_CHECK:
+                ImGui::Text("PlayerClass is");
+                ImGui::SameLine();
+                ImGui::TextColored(valueColor, "%d", condition.param1());
+                break;
+            case proto::Condition_ConditionType_LEVEL_CHECK:
+                ImGui::Text("PlayerLevel is");
+                ImGui::SameLine();
+                if (condition.param2() <= 0)
+                {
+                    ImGui::TextColored(valueColor, ">= %d", condition.param1());
+                }
+                else
+                {
+                    ImGui::TextColored(valueColor, ">= %d && <= %d", condition.param1(), condition.param2());
+                }
+                break;
+            case proto::Condition_ConditionType_QUEST_CHECK:
+                ImGui::Text("Quest %d", condition.param1());
+                ImGui::SameLine();
+                ImGui::TextColored(valueColor, GetQuestParam2(condition.param2()));
+                break;
+            case proto::Condition_ConditionType_NONE_TYPE:
+                if (condition.logicoperator() == proto::Condition_LogicOperator_AND || condition.logicoperator() == proto::Condition_LogicOperator_OR)
+                {
+                    for (int i = 0; i < condition.subconditionids_size(); i++)
                     {
-						ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.1f, 1.0f, 0.1f, 1.0f), "%s", condition.logicoperator() == proto::Condition_LogicOperator_AND ? "AND" : "OR");
-                        ImGui::SameLine();
+	                    if (const auto* subCond = conditions.getById(condition.subconditionids(i)))
+                        {
+                            RenderConditionDescription(conditions, *subCond);
+                        }
+
+                        if (i < condition.subconditionids_size() - 1)
+                        {
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.1f, 1.0f, 0.1f, 1.0f), "%s", condition.logicoperator() == proto::Condition_LogicOperator_AND ? "AND" : "OR");
+                            ImGui::SameLine();
+                        }
                     }
                 }
-			}
-            break;
-        default:
-            ImGui::Text("Quest %d", condition.param1());
-            break;
+                break;
+            default:
+                ImGui::Text("Quest %d", condition.param1());
+                break;
+            }
         }
-    }
-
+	}
+    
 	void ConditionEditorWindow::DrawDetailsImpl(proto::Condition& currentEntry)
 	{
 		if (ImGui::Button("Duplicate Condition"))
@@ -242,28 +278,44 @@ namespace mmo
             }
         }
 
-        // param1 / param2 / param3
-        // For example: "MinLevel" if type=LEVEL_CHECK, "ClassId" if type=CLASS_CHECK, etc.
-        // We'll just label them generically:
-		uint32 param = currentEntry.param1();
-        if (ImGui::InputScalar("Param1", ImGuiDataType_U32, &param))
+		const int32 paramCount = GetConditionParamCount(currentEntry.conditiontype());
+        if (paramCount >= 1)
         {
-			currentEntry.set_param1(param);
-            conditionChanged = true;
-        }
-        param = currentEntry.param2();
-        if (ImGui::InputScalar("Param2", ImGuiDataType_U32, &param))
-        {
-            currentEntry.set_param2(param);
-            conditionChanged = true;
-        }
-        param = currentEntry.param3();
-        if (ImGui::InputScalar("Param3", ImGuiDataType_U32, &param))
-        {
-            currentEntry.set_param3(param);
-            conditionChanged = true;
-        }
+            uint32 param = currentEntry.param1();
+            if (ImGui::InputScalar("Param1", ImGuiDataType_U32, &param))
+            {
+                currentEntry.set_param1(param);
+                conditionChanged = true;
+            }
 
+            if (paramCount >= 2)
+            {
+                param = currentEntry.param2();
+				if (currentEntry.conditiontype() == proto::Condition_ConditionType_QUEST_CHECK)
+				{
+                    conditionChanged = conditionChanged || RenderQuestParam2(currentEntry, param);
+				}
+				else
+				{
+                    if (ImGui::InputScalar("Param2", ImGuiDataType_U32, &param))
+                    {
+                        currentEntry.set_param2(param);
+                        conditionChanged = true;
+                    }
+				}
+
+                if (paramCount >= 3)
+                {
+                    param = currentEntry.param3();
+                    if (ImGui::InputScalar("Param3", ImGuiDataType_U32, &param))
+                    {
+                        currentEntry.set_param3(param);
+                        conditionChanged = true;
+                    }
+                }
+            }
+        }
+        
 		if (currentEntry.logicoperator() != proto::Condition_LogicOperator_NONE_OPERATOR)
 		{
             ImGui::Separator();
