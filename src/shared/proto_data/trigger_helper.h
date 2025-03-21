@@ -24,56 +24,56 @@ namespace mmo
 		{
 			/// Executed when the unit is spawned.
 			/// Data: NONE;
-			OnSpawn = 0,
+			OnSpawn,
 			/// Executed when the unit will despawn.
 			/// Data: NONE;
-			OnDespawn = 1,
+			OnDespawn,
 			/// Executed when the unit enters the combat.
 			/// Data: NONE;
-			OnAggro = 2,
+			OnAggro,
 			/// Executed when the unit was killed.
 			/// Data: NONE;
-			OnKilled = 3,
+			OnKilled,
 			/// Executed when the unit killed another unit.
 			/// Data: NONE;
-			OnKill = 4,
+			OnKill,
 			/// Executed when the unit was damaged.
 			/// Data: NONE;
-			OnDamaged = 5,
+			OnDamaged,
 			/// Executed when the unit was healed.
 			/// Data: NONE;
-			OnHealed = 6,
+			OnHealed,
 			/// Executed when the unit made an auto attack swing.
 			/// Data: NONE;
-			OnAttackSwing = 7,
+			OnAttackSwing,
 			/// Executed when the unit resets.
 			/// Data: NONE;
-			OnReset = 8,
+			OnReset,
 			/// Executed when the unit reached it's home point after reset.
 			/// Data: NONE;
-			OnReachedHome = 9,
+			OnReachedHome,
 			/// Executed when a player is interacting with this object. Only works on GameObjects right now, but could also be used
 			/// for npc interaction.
 			/// Data: NONE;
-			OnInteraction = 10,
+			OnInteraction,
 			/// Executed when a units health drops below a certain percentage.
 			/// Data: <HEALTH_PERCENTAGE:0-100>;
-			OnHealthDroppedBelow = 11,
+			OnHealthDroppedBelow,
 			/// Executed when a unit reaches it's target point for a move that was triggered by a trigger.
 			/// Data: NONE;
-			OnReachedTriggeredTarget = 12,
+			OnReachedTriggeredTarget,
 			/// Executed when a unit was hit by a specific spell.
 			/// Data: <SPELL-ID>;
-			OnSpellHit = 13,
+			OnSpellHit,
 			/// Executed when a spell aura is removed.
 			/// Data: <SPELL-ID>;
-			OnSpellAuraRemoved = 14,
+			OnSpellAuraRemoved,
 			/// Executed when a unit is target of a specific emote.
 			/// Data: <EMOTE-ID>;
-			OnEmote = 15,
+			OnEmote,
 			/// Executed when a unit successfully casted a specific spell.
 			/// Data: <SPELL-ID>;
-			OnSpellCast = 16,
+			OnSpellCast,
 
 			Invalid,
 			Count_ = Invalid
