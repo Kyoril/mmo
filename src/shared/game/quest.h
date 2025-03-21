@@ -66,6 +66,9 @@ namespace mmo
 
 			/// This quest is repeatable once per week.
 			Weekly = 0x0080,
+
+			/// Quest is not auto completed but needs an event to complete.
+			Exploration = 0x0100,
 		};
 	}
 

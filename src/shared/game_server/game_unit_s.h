@@ -14,6 +14,8 @@
 #include "base/countdown.h"
 #include "game/damage_school.h"
 #include "game/spell.h"
+#include "proto_data/trigger_helper.h"
+#include "shared/proto_data/triggers.pb.h"
 
 namespace mmo
 {
@@ -328,6 +330,9 @@ namespace mmo
 		signal<void(GameUnitS&, uint32, DamageType)> doneDamage;
 		signal<void(const proto::SpellEntry&)> startedCasting;
 
+		/// Fired when a unit trigger should be executed.
+		signal<void(const proto::TriggerEntry&, GameUnitS&, GameUnitS*)> unitTrigger;
+
 		signal<void(GameUnitS&)> meleeAttackDone;
 
 	public:
@@ -376,6 +381,12 @@ namespace mmo
 		virtual bool IsInteractable(const GameUnitS& interactor) const override;
 
 		virtual float GetInteractionDistance() const;
+
+		///
+		virtual void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit = nullptr);
+
+		///
+		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit = nullptr);
 
 	public:
 		virtual void SetLevel(uint32 newLevel);

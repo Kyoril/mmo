@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "game/quest.h"
 #include "log/default_log_levels.h"
 #include "math/clamp.h"
 
@@ -128,6 +129,11 @@ namespace mmo
 			{
 				currentEntry.set_type(2);
 			}
+
+			CHECKBOX_FLAG_PROP(flags, "Stay Alive", quest_flags::StayAlive);
+			CHECKBOX_FLAG_PROP(flags, "Party Accept", quest_flags::PartyAccept);
+			CHECKBOX_FLAG_PROP(flags, "Can Be Shared", quest_flags::Sharable);
+			CHECKBOX_FLAG_PROP(flags, "Exploration", quest_flags::Exploration);
 
 			uint32 sourceItemId = currentEntry.srcitemid();
 

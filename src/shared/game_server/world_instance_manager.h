@@ -12,6 +12,7 @@
 #include <vector>
 #include <mutex>
 
+#include "trigger_handler.h"
 #include "base/signal.h"
 
 namespace mmo
@@ -35,7 +36,7 @@ namespace mmo
 		///	@param ioContext The global async io context to use.
 		explicit WorldInstanceManager(asio::io_context& ioContext,
 			Universe& universe, const proto::Project& project,
-			IdGenerator<uint64>& objectIdGenerator);
+			IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler);
 
 	public:
 		/// Creates a new world instance using a specific map id.
@@ -70,5 +71,7 @@ namespace mmo
 
 		GameTime m_lastTick;
 		std::mutex m_worldInstanceMutex;
+
+		ITriggerHandler& m_triggerHandler;
 	};
 }

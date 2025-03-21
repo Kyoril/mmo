@@ -17,6 +17,11 @@
 
 namespace mmo
 {
+	class ITriggerHandler;
+}
+
+namespace mmo
+{
 	class MapData
 	{
 	public:
@@ -87,7 +92,7 @@ namespace mmo
 	class WorldInstance
 	{
 	public:
-		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder);
+		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler);
 	
 	public:
 		
@@ -121,6 +126,12 @@ namespace mmo
 		UnitFinder& GetUnitFinder() { return *m_unitFinder; }
 
 		GameObjectS* FindObjectByGuid(uint64 guid);
+
+		///
+		CreatureSpawner* FindCreatureSpawner(const String& name);
+
+		///
+		//WorldObjectSpawner* FindObjectSpawner(const String& name);
 
 		template<class T>
 		T* FindByGuid(uint64 guid)
@@ -182,6 +193,7 @@ namespace mmo
 		std::unique_ptr<UnitFinder> m_unitFinder;
 
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
+		ITriggerHandler& m_triggerHandler;
 
 		typedef std::unordered_map<uint64, GameObjectS*> GameObjectsByGuid;
 		GameObjectsByGuid m_objectsByGuid;

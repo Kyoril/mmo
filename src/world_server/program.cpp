@@ -14,6 +14,7 @@
 #include "game_server/world_instance_manager.h"
 #include "player_manager.h"
 #include "game_server/condition_mgr.h"
+#include "trigger_handler.h"
 
 #include <fstream>
 #include <sstream>
@@ -115,6 +116,7 @@ namespace mmo
 		ConditionMgr conditionMgr{ project.conditions };
 
 		PlayerManager playerManager;
+		TriggerHandler triggerHandler{ project, playerManager, timerQueue };
 
 		// Initialize asset registry
 		AssetRegistry::Initialize(config.mapFolder, {});
@@ -133,7 +135,7 @@ namespace mmo
 		TimerQueue timer(ioService);
 		Universe universe(ioService, timer);
 		IdGenerator<uint64> objectIdGenerator(0x01);
-		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator };
+		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator, triggerHandler };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup

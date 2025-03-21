@@ -23,8 +23,6 @@ namespace mmo
 	{
 		m_pingConnection = m_pingCountdown.ended.connect([this]() {
 			// Send a ping packet to the server
-			DLOG("Pinging login server...");
-
 			sendSinglePacket([](auth::OutgoingPacket& packet)
 				{
 					packet.Start(auth::realm_login_packet::Ping);

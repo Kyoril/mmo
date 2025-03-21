@@ -280,6 +280,16 @@ namespace mmo
 		return 5.0f;
 	}
 
+	void GameUnitS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	{
+		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
+	}
+
+	void GameUnitS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
+	{
+		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
+	}
+
 	void GameUnitS::SetLevel(uint32 newLevel)
 	{
 		Set(object_fields::Level, newLevel);

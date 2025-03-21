@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <memory>
+#include <variant>
 
 #include "each_tile_in_sight.h"
 #include "game/field_map.h"
@@ -22,6 +23,7 @@
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
 #include "world_instance.h"
+#include "shared/proto_data/variables.pb.h"
 
 namespace mmo
 {
@@ -35,6 +37,12 @@ namespace mmo
 		Unit = 3,
 		Pet = 4,
 		Item = 5
+	};
+
+	struct VariableInstance
+	{
+		proto::VariableEntry::DataCase dataCase;
+		std::variant<String, int64, float> value;
 	};
 
 	/// Gets the high part of a guid which can be used to determine the object type by it's GUID.
@@ -350,11 +358,71 @@ namespace mmo
 
 		virtual bool HasMovementInfo() const { return false; }
 
+	public:
+
+		/// Adds a new variable to the list of variables of this object.
+		/// @param entry Entry id of the variable.
+		void AddVariable(uint32 entry);
+
+		/// Determines if this object has an instance of the specified variable id.
+		/// @param entry Entry id of the variable.
+		/// @returns True, if this object owns an instance of this variable, false otherwise.
+		const bool HasVariable(uint32 entry) const;
+
+		/// Sets the value of a specific variable.
+		/// @param entry Entry id of the variable.
+		/// @param value Value to set.
+		/// @returns false if the object does not own an instance of the variable or the type is not supported.
+		template<typename T>
+		bool SetVariable(uint32 entry, const T& value)
+		{
+			auto it = m_variables.find(entry);
+			if (it == m_variables.end())
+				return false;
+
+			try
+			{
+				it->second.value = value;
+				return true;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		/// Gets the value of a specific variable instance of this object.
+		/// @param entry Entry id of the variable.
+		/// @param out_value Reference of an object where the value will be copied to.
+		/// @returns false if this object does not own an instance of the variable.
+		template<typename T>
+		bool GetVariable(uint32 entry, T& out_value)
+		{
+			auto it = m_variables.find(entry);
+			if (it == m_variables.end())
+				return false;
+
+			try
+			{
+				out_value = std::get<T>(it->second.value);
+				return true;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		/// Removes an instance of a variable from this object.
+		/// @param entry Entry id of the variable.
+		void RemoveVariable(uint32 entry);
+
 	protected:
 		const proto::Project& m_project;
 		ObjectFieldMap m_fields;
 		MovementInfo m_movementInfo;
 		WorldInstance* m_worldInstance { nullptr };
+		std::map<uint32, VariableInstance> m_variables;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameObjectS const& object);

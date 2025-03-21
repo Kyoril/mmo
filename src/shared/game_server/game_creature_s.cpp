@@ -182,6 +182,62 @@ namespace mmo
 		return std::find_if(GetEntry().end_quests().begin(), GetEntry().end_quests().end(), [questId](uint32 id) { return id == questId; }) != GetEntry().end_quests().end();
 	}
 
+	void GameCreatureS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	{
+		for (const auto& triggerId : GetEntry().triggers())
+		{
+			if (const auto* triggerEntry = GetProject().triggers.getById(triggerId))
+			{
+				for (const auto& triggerEvent : triggerEntry->newevents())
+				{
+					if (triggerEvent.type() == e)
+					{
+						unitTrigger(std::cref(*triggerEntry), std::ref(*this), triggeringUnit);
+					}
+				}
+			}
+		}
+	}
+
+	void GameCreatureS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
+	{
+		for (const auto& triggerId : GetEntry().triggers())
+		{
+			const auto* triggerEntry = GetProject().triggers.getById(triggerId);
+			if (!triggerEntry)
+			{
+				continue;
+			}
+
+			for (const auto& triggerEvent : triggerEntry->newevents())
+			{
+				if (triggerEvent.type() != e)
+					continue;
+
+				if (triggerEvent.data_size() > 0)
+				{
+					switch (e)
+					{
+					case trigger_event::OnSpellHit:
+					case trigger_event::OnSpellAuraRemoved:
+					case trigger_event::OnEmote:
+					case trigger_event::OnSpellCast:
+						if (triggerEvent.data(0) != 0)
+						{
+							if (data.empty() || data[0] != triggerEvent.data(0))
+								continue;
+						}
+						break;
+					default:
+						break;
+					}
+				}
+
+				unitTrigger(std::cref(*triggerEntry), std::ref(*this), triggeringUnit);
+			}
+		}
+	}
+
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)
 	{
 		m_combatParticipantGuids.insert(unit.GetGuid());

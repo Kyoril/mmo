@@ -730,6 +730,14 @@ namespace mmo
 			return true;
 		}
 
+		if (entry.flags() & quest_flags::Exploration)
+		{
+			if (!it->second.explored)
+			{
+				return false;
+			}
+		}
+
 		// Now check all available quest requirements
 		uint32 counter = 0;
 		for (const auto& req : entry.requirements())

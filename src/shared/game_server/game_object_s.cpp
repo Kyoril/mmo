@@ -8,6 +8,8 @@
 
 #include <cmath>
 
+#include "proto_data/project.h"
+
 namespace mmo
 {
 	GameObjectS::GameObjectS(const proto::Project& project)
@@ -212,6 +214,56 @@ namespace mmo
 	{
 		// Use new instance
 		m_worldInstance = instance;
+	}
+
+	void GameObjectS::AddVariable(uint32 entry)
+	{
+		// Find variable
+		const auto* var = m_project.variables.getById(entry);
+		if (!var)
+		{
+			return;
+		}
+
+		if (!HasVariable(entry))
+		{
+			VariableInstance instance;
+			instance.dataCase = var->data_case();
+
+			// Initialize using default value
+			switch (instance.dataCase)
+			{
+			case proto::VariableEntry::kIntvalue:
+				instance.value = static_cast<int64>(var->intvalue());
+				break;
+			case proto::VariableEntry::kLongvalue:
+				instance.value = static_cast<int64>(var->longvalue());
+				break;
+			case proto::VariableEntry::kFloatvalue:
+				instance.value = static_cast<float>(var->floatvalue());
+				break;
+			case proto::VariableEntry::kStringvalue:
+				instance.value = static_cast<String>(var->stringvalue());
+				break;
+			}
+
+			// Save
+			m_variables[entry] = std::move(instance);
+		}
+	}
+
+	const bool GameObjectS::HasVariable(uint32 entry) const
+	{
+		return (m_variables.find(entry) != m_variables.end());
+	}
+
+	void GameObjectS::RemoveVariable(uint32 entry)
+	{
+		auto it = m_variables.find(entry);
+		if (it != m_variables.end())
+		{
+			it = m_variables.erase(it);
+		}
 	}
 
 	io::Writer& operator<<(io::Writer& w, GameObjectS const& object)

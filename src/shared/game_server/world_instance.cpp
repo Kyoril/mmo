@@ -90,7 +90,7 @@ namespace mmo
 		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
 	}
 
-	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder)
+	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)
 		, m_manager(manager)
@@ -98,6 +98,7 @@ namespace mmo
 		, m_project(project)
 		, m_visibilityGrid(std::move(visibilityGrid))
 		, m_unitFinder(std::move(unitFinder))
+		, m_triggerHandler(triggerHandler)
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();
@@ -194,6 +195,13 @@ namespace mmo
 		if (GameUnitS* addedUnit = dynamic_cast<GameUnitS*>(&added))
 		{
 			m_unitFinder->AddUnit(*addedUnit);
+		}
+
+		if (added.IsUnit())
+		{
+			added.AsUnit().unitTrigger.connect([this](const proto::TriggerEntry& trigger, GameUnitS& owner, GameUnitS* triggeringUnit) {
+				m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
+				});
 		}
 	}
 
@@ -301,6 +309,17 @@ namespace mmo
 	{
 		const auto it = m_objectsByGuid.find(guid);
 		if (it == m_objectsByGuid.end())
+		{
+			return nullptr;
+		}
+
+		return it->second;
+	}
+
+	CreatureSpawner* WorldInstance::FindCreatureSpawner(const String& name)
+	{
+		const auto it = m_creatureSpawnsByName.find(name);
+		if (it == m_creatureSpawnsByName.end())
 		{
 			return nullptr;
 		}

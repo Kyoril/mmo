@@ -103,6 +103,12 @@ namespace mmo
 
 		bool EndsQuest(uint32 questId) const override;
 
+		///
+		virtual void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit = nullptr);
+
+		///
+		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit = nullptr);
+
 		/// Executes a callback function for every valid loot recipient.
 		template<typename OnRecipient>
 		void ForEachLootRecipient(OnRecipient callback)

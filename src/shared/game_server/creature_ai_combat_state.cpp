@@ -29,7 +29,7 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.RemoveAllCombatParticipants();
 
-		const auto initiator = m_combatInitiator.lock();
+		const std::shared_ptr<GameUnitS> initiator = m_combatInitiator.lock();
 		AddThreat(*initiator, 0.0f);
 		m_combatInitiator.reset();
 
@@ -94,6 +94,11 @@ namespace mmo
 				strongThis->ChooseNextAction();
 			}
 		});
+
+
+		// Raise OnAggro triggers
+		controlled.RaiseTrigger(trigger_event::OnAggro, initiator.get());
+
 	}
 
 	void CreatureAICombatState::OnLeave()

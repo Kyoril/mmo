@@ -20,6 +20,7 @@ namespace mmo
 
 		auto& controlled = GetControlled();
 
+		controlled.RaiseTrigger(trigger_event::OnReset);
 		controlled.RemoveLootRecipients();
 		controlled.SetTarget(0);
 
@@ -44,6 +45,7 @@ namespace mmo
 		auto& controlled = GetControlled();
 
 		m_onHomeReached.disconnect();
+		controlled.RaiseTrigger(trigger_event::OnReachedHome);
 
 		// Fully heal unit
 		if (controlled.IsAlive())
