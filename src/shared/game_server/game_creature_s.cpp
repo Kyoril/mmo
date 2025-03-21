@@ -75,6 +75,11 @@ namespace mmo
 			npcFlags |= npc_flags::Vendor;
 		}
 
+		if (m_entry->gossip_menus_size() > 0)
+		{
+			npcFlags |= npc_flags::Gossip;
+		}
+
 		// Creature offers or accepts quests (potentially)
 		if (m_entry->quests_size() > 0 || m_entry->end_quests_size() > 0)
 		{

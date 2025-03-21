@@ -978,13 +978,6 @@ namespace mmo
 
 	void Player::SerializeQuestList(const GameCreatureS& unit, io::Writer& writer)
 	{
-		// Is this unit a quest giver?
-		if (unit.GetEntry().quests_size() == 0 && unit.GetEntry().end_quests_size() == 0)
-		{
-			WLOG("Unit " << log_hex_digit(unit.GetGuid()) << " has no quests to offer or turn in!");
-			return;
-		}
-
 		const size_t questCountPos = writer.Sink().Position();
 		uint8 questCount = 0;
 		writer << io::write<uint8>(0); // Placeholder for real quest count
