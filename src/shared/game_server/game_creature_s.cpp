@@ -97,6 +97,12 @@ namespace mmo
 			Set<uint32>(object_fields::Mana, m_entry->minlevelmana());
 			ClearFieldChanges();
 		}
+
+		// Add all required variables
+		for (const auto& variable : m_entry->variables())
+		{
+			AddVariable(variable);
+		}
 	}
 
 	void GameCreatureS::AddLootRecipient(uint64 guid)

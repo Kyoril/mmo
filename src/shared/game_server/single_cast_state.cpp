@@ -658,6 +658,22 @@ namespace mmo
 		m_targetAuraContainers.clear();
 
 		completedEffects();
+
+		if (strongCaster->IsUnit())
+		{
+			for (const auto& target : m_affectedTargets)
+			{
+				auto strongTarget = target.lock();
+				if (strongTarget)
+				{
+					if (strongTarget->IsUnit())
+					{
+						std::static_pointer_cast<GameUnitS>(strongTarget)->RaiseTrigger(
+							trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
+					}
+				}
+			}
+		}
 	}
 
 	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
@@ -854,6 +870,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
 			// Threaten target on aura application if the target is not ourself
@@ -891,6 +908,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
 			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
@@ -948,6 +966,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.SetBinding(
 				unitTarget.GetWorldInstance()->GetMapId(),
@@ -989,6 +1008,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& playerTarget = targetObject->AsPlayer();
 
 			const int32 itemCount = CalculateEffectBasePoints(effect);
@@ -1029,6 +1049,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			uint32 power = CalculateEffectBasePoints(effect);
 
@@ -1132,6 +1153,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
 			auto& mover = m_cast.GetExecuter().GetMover();
@@ -1191,6 +1213,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.AddSpell(spellId);
 		}
@@ -1233,6 +1256,8 @@ namespace mmo
 			return;
 		}
 
+		m_affectedTargets.insert(unitTarget->shared_from_this());
+
 		if (const std::shared_ptr<GamePlayerS> playerTarget = std::dynamic_pointer_cast<GamePlayerS>(unitTarget))
 		{
 			DLOG("Resetting attribute points for player!");
@@ -1260,6 +1285,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanParry(true);
 		}
@@ -1281,6 +1307,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanBlock(true);
 		}
@@ -1302,6 +1329,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanDodge(true);
 		}
@@ -1323,6 +1351,7 @@ namespace mmo
 				continue;
 			}
 
+			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
 			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
@@ -1353,6 +1382,7 @@ namespace mmo
 
 		for (int32 i = 0; i < numAttacks; ++i)
 		{
+			m_affectedTargets.insert(m_cast.GetExecuter().shared_from_this());
 			m_cast.GetExecuter().OnAttackSwing();
 		}
 	}
@@ -1531,6 +1561,7 @@ namespace mmo
 			return;
 		}
 
+		m_affectedTargets.insert(unitTarget->shared_from_this());
 		const float minDamage = m_cast.GetExecuter().Get<float>(object_fields::MinDamage);
 		const float maxDamage = m_cast.GetExecuter().Get<float>(object_fields::MaxDamage);
 		const uint32 casterLevel = m_cast.GetExecuter().Get<uint32>(object_fields::Level);
@@ -1734,6 +1765,8 @@ namespace mmo
 		{
 			ApplyAllEffects();
 		}
+
+		m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
 
 		if (!IsChanneled())
 		{
