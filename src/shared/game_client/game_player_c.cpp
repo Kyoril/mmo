@@ -2,6 +2,7 @@
 #include "game_player_c.h"
 
 #include "object_mgr.h"
+#include "client_data/project.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
@@ -54,7 +55,7 @@ namespace mmo
 		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 	}
 
-	void GamePlayerC::Update(float deltaTime)
+	void GamePlayerC::Update(const float deltaTime)
 	{
 		GameUnitC::Update(deltaTime);
 	}
@@ -74,7 +75,7 @@ namespace mmo
 		return m_name;
 	}
 
-	uint8 GamePlayerC::GetAttributeCost(uint32 attribute) const
+	uint8 GamePlayerC::GetAttributeCost(const uint32 attribute) const
 	{
 		ASSERT(attribute < 5);
 
@@ -84,14 +85,99 @@ namespace mmo
 
 	void GamePlayerC::NotifyItemData(const ItemInfo& data)
 	{
-		if (m_pendingItemData > 1)
+		if (data.displayId == 0)
 		{
-			m_pendingItemData--;
 			return;
 		}
 
-		m_pendingItemData = 0;
-		RefreshDisplay();
+		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
+		if (!displayData)
+		{
+			return;
+		}
+
+		for (const auto& variant : displayData->variants())
+		{
+			// Does this variant affect us?
+			if (variant.model() != 0 && variant.model() != Get<uint32>(object_fields::DisplayId))
+			{
+				continue;
+			}
+
+			// It does affect us!
+			for (const auto& subEntity : variant.hidden_by_name())
+			{
+				auto* sub = m_entity->GetSubEntity(subEntity);
+				if (!sub)
+				{
+					//ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+					continue;
+				}
+
+				sub->SetVisible(false);
+			}
+
+			for (const auto& subEntity : variant.hidden_by_tag())
+			{
+				for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
+				{
+					SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
+					if (subMesh.HasTag(subEntity))
+					{
+						SubEntity* subEntity = m_entity->GetSubEntity(j);
+						ASSERT(subEntity);
+						subEntity->SetVisible(false);
+					}
+				}
+			}
+
+			// Now show all entities by name
+			for (const auto& subEntity : variant.shown_by_name())
+			{
+				auto* sub = m_entity->GetSubEntity(subEntity);
+				if (!sub)
+				{
+					//ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+					continue;
+				}
+				sub->SetVisible(true);
+			}
+
+			// Now show all entities by tag
+			for (const auto& subEntity : variant.shown_by_tag())
+			{
+				for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
+				{
+					SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
+					if (subMesh.HasTag(subEntity))
+					{
+						SubEntity* subEntity = m_entity->GetSubEntity(j);
+						ASSERT(subEntity);
+						subEntity->SetVisible(true);
+					}
+				}
+			}
+
+			// Apply sub entity material overrides
+			for (const auto& materialOverride : variant.material_overrides())
+			{
+				auto* sub = m_entity->GetSubEntity(materialOverride.first);
+				if (!sub)
+				{
+					//ELOG("Could not find sub entity " << materialOverride.first << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+					continue;
+				}
+
+				auto mat = MaterialManager::Get().Load(materialOverride.second);
+				if (!mat)
+				{
+					//ELOG("Could not load material " << materialOverride.second << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
+					continue;
+				}
+
+				sub->SetMaterial(mat);
+			}
+		}
 	}
 
 	void GamePlayerC::SetupSceneObjects()
@@ -129,6 +215,10 @@ namespace mmo
 
 	void GamePlayerC::RefreshDisplay()
 	{
+	}
+
+	void GamePlayerC::OnEquipmentChanged(uint64)
+	{
 		// First ensure customization options are applied to properly display the character
 		if (!m_customizationDefinition)
 		{
@@ -141,150 +231,19 @@ namespace mmo
 		m_configuration.Apply(*this, *m_customizationDefinition);
 
 		// Now apply each visible item slot
-		for (uint16 i = 0; i < player_inventory_pack_slots::Start; ++i)
-		{
-			const uint64 itemGuid = Get<uint64>(object_fields::InvSlotHead + i * 2);
-			if (itemGuid == 0)
-			{
-				continue;
-			}
-
-			const auto item = ObjectMgr::Get<GameItemC>(itemGuid);
-			if (!item)
-			{
-				ELOG("Unable to find item with guid " << itemGuid);
-				continue;
-			}
-
-			const auto* displayData = item->GetDisplayData();
-			if (displayData)
-			{
-				for (const auto& variant : displayData->variants())
-				{
-					// Does this variant affect us?
-					if (variant.model() != 0 && variant.model() != Get<uint32>(object_fields::DisplayId))
-					{
-						continue;
-					}
-
-					// It does affect us!
-					for (const auto& subEntity : variant.hidden_by_name())
-					{
-						auto* sub = m_entity->GetSubEntity(subEntity);
-						if (!sub)
-						{
-							ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-							continue;
-						}
-
-						sub->SetVisible(false);
-					}
-
-					for (const auto& subEntity : variant.hidden_by_tag())
-					{
-						for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
-						{
-							SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
-							if (subMesh.HasTag(subEntity))
-							{
-								SubEntity* subEntity = m_entity->GetSubEntity(j);
-								ASSERT(subEntity);
-								subEntity->SetVisible(false);
-							}
-						}
-					}
-
-					// Now show all entities by name
-					for (const auto& subEntity : variant.shown_by_name())
-					{
-						auto* sub = m_entity->GetSubEntity(subEntity);
-						if (!sub)
-						{
-							ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-							continue;
-						}
-						sub->SetVisible(true);
-					}
-
-					// Now show all entities by tag
-					for (const auto& subEntity : variant.shown_by_tag())
-					{
-						for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
-						{
-							SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
-							if (subMesh.HasTag(subEntity))
-							{
-								SubEntity* subEntity = m_entity->GetSubEntity(j);
-								ASSERT(subEntity);
-								subEntity->SetVisible(true);
-							}
-						}
-					}
-
-					// Apply sub entity material overrides
-					for (const auto& materialOverride : variant.material_overrides())
-					{
-						auto* sub = m_entity->GetSubEntity(materialOverride.first);
-						if (!sub)
-						{
-							ELOG("Could not find sub entity " << materialOverride.first << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-							continue;
-						}
-
-						auto mat = MaterialManager::Get().Load(materialOverride.second);
-						if (!mat)
-						{
-							ELOG("Could not load material " << materialOverride.second << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-							continue;
-						}
-
-						sub->SetMaterial(mat);
-					}
-				}
-			}
-		}
-	}
-
-	void GamePlayerC::OnEquipmentChanged(uint64)
-	{
-		// First ensure customization options are applied to properly display the character
-		if (!m_customizationDefinition)
-		{
-			return;
-		}
-
-		// Now apply each visible item slot
 		size_t pendingItems = 0, totalItems = 0;
 
 		for (uint16 i = 0; i < player_inventory_pack_slots::Start; ++i)
 		{
-			const uint64 itemGuid = Get<uint64>(object_fields::InvSlotHead + i * 2);
-			if (itemGuid == 0)
+			static constexpr size_t visibleItemFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+
+			const uint32 itemEntry = Get<uint32>(object_fields::VisibleItem1_0 + i * visibleItemFields);
+			if (itemEntry == 0)
 			{
 				continue;
 			}
 
-			totalItems++;
-
-			const auto item = ObjectMgr::Get<GameItemC>(itemGuid);
-			if (!item)
-			{
-				ELOG("Unable to find item with guid " << itemGuid);
-				continue;
-			}
-
-			if (!item->GetEntry())
-			{
-				m_pendingItemData++;
-				pendingItems++;
-				m_netDriver.GetItemData(item->Get<uint32>(object_fields::Entry), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
-			}
-		}
-
-		// There were display ids to apply and no items needed to be queried from the server first
-		if (pendingItems == 0 && totalItems > 0 && m_pendingItemData == 0)
-		{
-			RefreshDisplay();
+			m_netDriver.GetItemData(itemEntry, std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 		}
 	}
 }

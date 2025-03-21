@@ -55,7 +55,5 @@ namespace mmo
 		Entity* m_weaponEntity{ nullptr };
 
 		scoped_connection m_equipmentChangedHandler;
-
-		size_t m_pendingItemData = 0;
 	};
 }

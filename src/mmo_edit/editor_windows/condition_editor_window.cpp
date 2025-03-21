@@ -54,7 +54,7 @@ namespace mmo
 
         bool RenderQuestParam2(proto::Condition& condition, int32 param2)
 		{
-			if (ImGui::Combo("##quest_param2", &param2, s_questParamValues, std::size(s_questParamValues)))
+			if (ImGui::Combo("Quest Status", &param2, s_questParamValues, std::size(s_questParamValues)))
 			{
 				// Set the new value
 				condition.set_param2(param2);
