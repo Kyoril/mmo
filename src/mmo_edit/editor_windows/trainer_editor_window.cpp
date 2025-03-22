@@ -124,7 +124,7 @@ namespace mmo
 			static const char* s_itemNone = "<None>";
 
 			// Add button
-			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			if (ImGui::Button("Add"))
 			{
 				auto* newEntry = currentEntry.add_spells();
 				newEntry->set_spell(0);
@@ -132,6 +132,31 @@ namespace mmo
 				newEntry->set_reqlevel(1);
 				newEntry->set_reqskill(0);
 				newEntry->set_reqskillval(0);
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Order By Level"))
+			{
+				std::sort(currentEntry.mutable_spells()->begin(), currentEntry.mutable_spells()->end(), [](const proto::TrainerSpellEntry& a, const proto::TrainerSpellEntry& b)
+					{
+						return a.reqlevel() < b.reqlevel();
+					});
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Adjust Min Level"))
+			{
+				// For each spell in the list, adjust the min level to the spells baselevel property
+				for (auto& spell : *currentEntry.mutable_spells())
+				{
+					const auto* spellEntry = m_project.spells.getById(spell.spell());
+					if (spellEntry)
+					{
+						spell.set_reqlevel(spellEntry->spelllevel());
+					}
+				}
 			}
 
 			if (ImGui::BeginTable("vendorspells", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
