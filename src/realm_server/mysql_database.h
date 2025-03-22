@@ -37,7 +37,7 @@ namespace mmo
 		/// @copydoc IDatabase::WorldLogin
 		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
 
-		std::optional<std::vector<GuildInfo>> LoadGuilds() final override;
+		std::optional<std::vector<GuildData>> LoadGuilds() final override;
 
 		/// @copydoc IDatabase::DeleteCharacter
 		void DeleteCharacter(uint64 characterGuid) final override;
@@ -83,6 +83,8 @@ namespace mmo
 		std::optional<GroupData> LoadGroup(uint64 groupId) override;
 
 		std::optional<String> GetCharacterNameById(uint64 characterId) override;
+
+		void CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member) override;
 
 	private:
 		void PrintDatabaseError();

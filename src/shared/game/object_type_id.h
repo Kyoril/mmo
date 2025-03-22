@@ -220,7 +220,9 @@ namespace mmo
 
 			Money,
 
-			AvailableAttributePoints,
+			Guild,
+
+			AvailableAttributePoints = Guild + 2,
 
 			AttributePointCost,
 

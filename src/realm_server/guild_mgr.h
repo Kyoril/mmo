@@ -11,8 +11,10 @@ namespace mmo
 	class Guild final : public NonCopyable
 	{
 	public:
-		Guild(GuildMgr& manager, uint64 id, String name, uint64 leaderGuid)
-			: m_id(id)
+		Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
+			: m_manager(manager)
+			, m_database(database)
+			, m_id(id)
 			, m_name(std::move(name))
 			, m_leaderGuid(leaderGuid)
 		{
@@ -25,7 +27,12 @@ namespace mmo
 
 		uint64 GetLeaderGuid() const { return m_leaderGuid; }
 
+	public:
+
+
 	private:
+		GuildMgr& m_manager;
+		AsyncDatabase& m_database;
 		uint64 m_id;
 		String m_name;
 		uint64 m_leaderGuid;
@@ -39,7 +46,7 @@ namespace mmo
 	public:
 		void LoadGuilds();
 
-		Guild* CreateGuild(const String& name, uint64 leaderGuid, const std::vector<uint64>& initialMembers);
+		bool CreateGuild(const String& name, uint64 leaderGuid, const std::vector<uint64>& initialMembers, std::function<void(Guild*)> callback);
 
 		bool HasGuild(uint64 guildId) const { return m_guildsById.find(guildId) != m_guildsById.end(); }
 
@@ -47,8 +54,10 @@ namespace mmo
 
 		bool GuildsLoaded() const { return m_guildsLoaded; }
 
+		Guild* GetGuild(uint64 guildId) const;
+
 	private:
-		bool AddGuild(const GuildInfo& info);
+		bool AddGuild(const GuildData& info);
 
 	private:
 		AsyncDatabase& m_asyncDatabase;

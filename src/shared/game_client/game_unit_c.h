@@ -48,6 +48,8 @@ namespace mmo
 		virtual void OnMoveFall(GameUnitC& unit) = 0;
 
 		virtual void SetSelectedTarget(uint64 guid) = 0;
+
+		virtual void OnGuildChanged(uint64 guid, uint64 guildGuid) = 0;
 	};
 
 	class GameAuraC final : public NonCopyable

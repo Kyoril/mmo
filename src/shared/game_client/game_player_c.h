@@ -45,6 +45,8 @@ namespace mmo
 
 		void RefreshDisplay();
 
+		void OnGuildChanged(uint64);
+
 	protected:
 		String m_name;
 

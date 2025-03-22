@@ -50,6 +50,9 @@ namespace mmo
 
 			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::InvSlotHead, player_inventory_pack_slots::Start * 2, *this, &GamePlayerC::OnEquipmentChanged);
 			OnEquipmentChanged(GetGuid());
+
+			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::Guild, 2, *this, &GamePlayerC::OnGuildChanged);
+			OnGuildChanged(GetGuid());
 		}
 
 		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
@@ -215,6 +218,11 @@ namespace mmo
 
 	void GamePlayerC::RefreshDisplay()
 	{
+	}
+
+	void GamePlayerC::OnGuildChanged(uint64)
+	{
+		m_netDriver.OnGuildChanged(GetGuid(), Get<uint64>(object_fields::Guild));
 	}
 
 	void GamePlayerC::OnEquipmentChanged(uint64)

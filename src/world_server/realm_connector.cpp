@@ -563,6 +563,7 @@ namespace mmo
 		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
+		characterObject->Set<uint64>(object_fields::Guild, characterData.guildId);
 
 		// Mark rewarded quests
 		for (const uint32& questId : characterData.rewardedQuestIds)

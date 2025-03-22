@@ -258,24 +258,24 @@ namespace mmo
 		}
 	}
 
-	std::optional<std::vector<GuildInfo>> MySQLDatabase::LoadGuilds()
+	std::optional<std::vector<GuildData>> MySQLDatabase::LoadGuilds()
 	{
-		std::vector<GuildInfo> result;
+		std::vector<GuildData> result;
 
-		mysql::Select select(m_connection, "SELECT id, name, leader FROM guilds");
+		mysql::Select select(m_connection, "SELECT `id`, `name`, `leader` FROM `guilds`");
 		if (select.Success())
 		{
 			mysql::Row row(select);
 			while (row)
 			{
 				// Create the structure and fill it with data
-				GuildInfo info;
+				GuildData info;
 				row.GetField(0, info.id);
 				row.GetField(1, info.name);
 				row.GetField(2, info.leaderGuid);
 
 				// Load guild ranks
-				mysql::Select rankSelect(m_connection, "SELECT name, permissions FROM guild_ranks WHERE guild_id = " + std::to_string(info.id) + " ORDER BY id ASC LIMIT 10");
+				mysql::Select rankSelect(m_connection, "SELECT `name`, `permissions` FROM `guild_ranks` WHERE `guild_id` = '" + std::to_string(info.id) + "' ORDER BY id ASC LIMIT 10");
 				if (rankSelect.Success())
 				{
 					mysql::Row rankRow(rankSelect);
@@ -296,7 +296,7 @@ namespace mmo
 				}
 
 				// Load guild member ids
-				mysql::Select memberSelect(m_connection, "SELECT guid, rank FROM guild_members WHERE guild_id = " + std::to_string(info.id) + " LIMIT 100");
+				mysql::Select memberSelect(m_connection, "SELECT `guid`, `rank` FROM `guild_members` WHERE `guild_id` = '" + std::to_string(info.id) + "' ORDER BY `rank` DESC LIMIT 100");
 				if (memberSelect.Success())
 				{
 					mysql::Row memberRow(memberSelect);
@@ -1251,6 +1251,65 @@ namespace mmo
 		// There was an error
 		PrintDatabaseError();
 		return {};
+	}
+
+
+	void MySQLDatabase::CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member)
+	{
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `guilds` (`id`, `name`, `leader`) VALUES ('{0}', '{1}', '{2}')"
+				, id
+				, m_connection.EscapeString(name)
+				, leaderGuid
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			std::ostringstream rankQuery;
+			rankQuery << "INSERT INTO `guild_ranks` (`guild_id`, `id`, `name`, `permissions`) VALUES";
+
+			size_t index = 0;
+			for (const auto& rank : ranks)
+			{
+				rankQuery << "('" << id << "', '" << index++ << "', '" << m_connection.EscapeString(rank.name) << "', '" << rank.permissions << "'),";
+			}
+			rankQuery.seekp(-1, std::ios_base::end);
+			rankQuery << ";";
+
+			if (!m_connection.Execute(rankQuery.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			std::ostringstream memberQuery;
+			memberQuery << "INSERT INTO `guild_members` (`guild_id`, `guid`, `rank`) VALUES";
+			for (const auto& member : member)
+			{
+				memberQuery << "('" << id << "', '" << member.guid << "', '" << member.rank << "'),";
+			}
+			memberQuery.seekp(-1, std::ios_base::end);
+			memberQuery << ";";
+
+			if (!m_connection.Execute(memberQuery.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not create guild: " << e.what());
+			throw;
+		}
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

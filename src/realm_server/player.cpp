@@ -17,9 +17,11 @@
 
 #include <functional>
 
+#include "guild_mgr.h"
 #include "player_group.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
+#include "game/guild_info.h"
 #include "game/quest_info.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/game_player_s.h"
@@ -36,7 +38,8 @@ namespace mmo
 		std::shared_ptr<Client> connection,
 		String address,
 		const proto::Project& project,
-		IdGenerator<uint64>& groupIdGenerator)
+		IdGenerator<uint64>& groupIdGenerator,
+		GuildMgr& guildMgr)
 		: m_timerQueue(timerQueue)
 		, m_manager(playerManager)
 		, m_worldManager(worldManager)
@@ -47,6 +50,7 @@ namespace mmo
 		, m_connection(std::move(connection))
 		, m_address(std::move(address))
 		, m_accountId(0)
+		, m_guildMgr(guildMgr)
 	{
 		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
@@ -644,6 +648,49 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnGuildQuery(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read_packed_guid(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received CMSG_GUILD_QUERY for unit " << log_hex_digit(guid) << "...");
+
+		Guild* guild = m_guildMgr.GetGuild(guid);
+		if (!guild)
+		{
+			WLOG("Queried guild " << log_hex_digit(guid) << " does not exist!");
+
+			m_connection->sendSinglePacket([guid](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GuildQueryResponse);
+					packet
+						<< io::write_packed_guid(guid)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+			return PacketParseResult::Pass;
+		}
+
+		GuildInfo info;
+		info.id = guild->GetId();
+		info.name = guild->GetName();
+
+		m_connection->sendSinglePacket([&info](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildQueryResponse);
+				packet
+					<< io::write_packed_guid(info.id)
+					<< io::write<uint8>(true)
+					<< info;
+				packet.Finish();
+			});
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnDbQuery(game::IncomingPacket& packet)
 	{
 		uint64 guid;
@@ -1000,6 +1047,66 @@ namespace mmo
 	}
 #endif
 
+#ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnGuildCreate(game::IncomingPacket& packet)
+	{
+		String guildName;
+		if (!(packet >> io::read_container<uint8>(guildName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to create a guild named '" << guildName << "'...");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to create a guild without having a character data object");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId != 0)
+		{
+			ELOG("Player tried to create a guild while already being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		// TODO: Create guild
+		if (m_guildMgr.GetGuildIdByName(guildName) != 0)
+		{
+			ELOG("Guild with name '" << guildName << "' already exists");
+			return PacketParseResult::Pass;
+		}
+
+		std::weak_ptr weak = shared_from_this();
+		auto guildCreationHandler = [weak](Guild* guild)
+			{
+				auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				if (guild)
+				{
+					ILOG("Successfully created guild " << guild->GetName());
+					// TODO: Notify world nodes about guild creation
+				}
+				else
+				{
+					ELOG("Guild creation failed");
+				}
+			};
+
+		if (!m_guildMgr.CreateGuild(guildName, m_characterData->characterId, { m_characterData->characterId }, std::move(guildCreationHandler)))
+		{
+			ELOG("Failed to create guild");
+			return PacketParseResult::Pass;
+		}
+
+		return PacketParseResult::Pass;
+	}
+#endif
+
 	bool Player::InitializeTransfer(uint32 map, const Vector3& location, const float o, bool shouldLeaveNode)
 	{
 		const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(m_instanceId);
@@ -1344,6 +1451,7 @@ namespace mmo
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
+			RegisterPacketHandler(game::client_realm_packet::GuildQuery, *this, &Player::OnGuildQuery);
 			RegisterPacketHandler(game::client_realm_packet::CreatureQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
@@ -1356,12 +1464,14 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
 			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
+			RegisterPacketHandler(game::client_realm_packet::GuildCreate, *this, &Player::OnGuildCreate);
 #endif
 		}
 		else
 		{
 			ClearPacketHandler(game::client_realm_packet::ChatMessage);
 			ClearPacketHandler(game::client_realm_packet::NameQuery);
+			ClearPacketHandler(game::client_realm_packet::GuildQuery);
 			ClearPacketHandler(game::client_realm_packet::CreatureQuery);
 			ClearPacketHandler(game::client_realm_packet::ItemQuery);
 			ClearPacketHandler(game::client_realm_packet::QuestQuery);
@@ -1374,6 +1484,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
 			ClearPacketHandler(game::client_realm_packet::CheatSummon);
+			ClearPacketHandler(game::client_realm_packet::GuildCreate);
 #endif
 		}
 	}

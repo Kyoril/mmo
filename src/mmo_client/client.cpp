@@ -48,6 +48,7 @@
 #include "trainer_client.h"
 #include "quest_client.h"
 #include "party_info.h"
+#include "guild_client.h"
 
 #include "char_create_info.h"
 #include "char_select.h"
@@ -280,7 +281,8 @@ namespace mmo
 	std::unique_ptr<DBItemCache> s_itemCache;
 	std::unique_ptr<DBCreatureCache> s_creatureCache;
 	std::unique_ptr<DBQuestCache> s_questCache;
-	std::unique_ptr< DBNameCache> s_nameCache;
+	std::unique_ptr<DBNameCache> s_nameCache;
+	std::unique_ptr<DBGuildCache> s_guildCache;
 
 	static const char* const s_itemCacheFilename = "Cache/Items.db";
 	static const char* const s_creatureCacheFilename = "Cache/Creatures.db";
@@ -290,6 +292,7 @@ namespace mmo
 	static std::unique_ptr<SpellCast> s_spellCast;
 	static std::unique_ptr<QuestClient> s_questClient;
 	static std::unique_ptr<PartyInfo> s_partyInfo;
+	static std::unique_ptr<GuildClient> s_guildClient;
 
 	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
 	static std::unique_ptr<CharSelect> s_charSelect;
@@ -353,6 +356,7 @@ namespace mmo
 		}
 
 		s_nameCache = std::make_unique<DBNameCache>(*s_realmConnector);
+		s_guildCache = std::make_unique<DBGuildCache>(*s_realmConnector);
 
 		// Initialize item cache (TODO: Try loading cache from file so we maybe won't have to ask the server next time we run the client)
 		s_itemCache = std::make_unique<DBItemCache>(*s_realmConnector);
@@ -388,6 +392,7 @@ namespace mmo
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
 		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache, s_localization);
 		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, *s_nameCache);
+		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, *s_guildCache);
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
@@ -398,7 +403,8 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, *s_questCache, *s_nameCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, 
+			*s_questCache, *s_nameCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_guildCache);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance

@@ -99,12 +99,10 @@ namespace mmo
 	{
 		uint64 guid;
 
-		String name;
-
 		uint32 rank;
 	};
 
-	struct GuildInfo
+	struct GuildData
 	{
 		uint64 id;
 
@@ -141,7 +139,7 @@ namespace mmo
 		///	@param characterGuid Unique id of the character to delete.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 
-		virtual std::optional<std::vector<GuildInfo>> LoadGuilds() = 0;
+		virtual std::optional<std::vector<GuildData>> LoadGuilds() = 0;
 
 		/// Creates a new character on the given account.
 		///	@param characterName Name of the character. Has to be unique on the realm.
@@ -194,6 +192,8 @@ namespace mmo
 		virtual std::optional<GroupData> LoadGroup(uint64 groupId) = 0;
 
 		virtual std::optional<String> GetCharacterNameById(uint64 characterId) = 0;
+
+		virtual void CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member) = 0;
 	};
 
 

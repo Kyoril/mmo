@@ -26,6 +26,11 @@
 
 namespace mmo
 {
+	class GuildMgr;
+}
+
+namespace mmo
+{
 	namespace proto
 	{
 		class Project;
@@ -57,7 +62,8 @@ namespace mmo
 			std::shared_ptr<Client> connection,
 			std::string address,
 			const proto::Project& project,
-			IdGenerator<uint64>& groupIdGenerator);
+			IdGenerator<uint64>& groupIdGenerator,
+			GuildMgr& guildMgr);
 
 		void Kick();
 
@@ -319,6 +325,8 @@ namespace mmo
 
 		scoped_connection m_onGroupLoaded;
 
+		GuildMgr& m_guildMgr;
+
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
@@ -346,6 +354,7 @@ namespace mmo
 		PacketParseResult OnProxyPacket(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
 		PacketParseResult OnNameQuery(game::IncomingPacket& packet);
+		PacketParseResult OnGuildQuery(game::IncomingPacket& packet);
 		PacketParseResult OnDbQuery(game::IncomingPacket& packet);
 		PacketParseResult OnSetActionBarButton(game::IncomingPacket& packet);
 		PacketParseResult OnMoveWorldPortAck(game::IncomingPacket& packet);
@@ -357,6 +366,7 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket& packet);
+		PacketParseResult OnGuildCreate(game::IncomingPacket& packet);
 #endif
 	};
 }

@@ -155,6 +155,19 @@ namespace mmo
 
 				GossipAction,
 
+				GuildCreate,
+				GuildInvite,
+				GuildAccept,
+				GuildDecline,
+				GuildRemove,
+				GuildLeave,
+				GuildDisband,
+				GuildPromote,
+				GuildDemote,
+				GuildMotd,
+
+				GuildQuery,
+
 				/// Counter constant
 				Count_,
 			};
@@ -324,6 +337,11 @@ namespace mmo
 
 				MoveSplineDone,
 				GossipMenu,
+
+				GuildInvite,
+				GuildDecline,
+				GuildCommandResult,
+				GuildQueryResponse,
 
 				/// Counter constant
 				Count_,

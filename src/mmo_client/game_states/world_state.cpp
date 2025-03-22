@@ -42,6 +42,7 @@
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
+#include "guild_client.h"
 
 #include "audio.h"
 #include "party_info.h"
@@ -148,7 +149,7 @@ namespace mmo
 		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
 		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
 		DBNameCache& nameCache,
-		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect)
+		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, DBGuildCache& guildCache)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_itemCache(itemCache)
@@ -166,6 +167,8 @@ namespace mmo
 		, m_audio(audio)
 		, m_partyInfo(partyInfo)
 		, m_charSelect(charSelect)
+		, m_guildClient(guildClient)
+		, m_guildCache(guildCache)
 	{
 	}
 
@@ -769,6 +772,7 @@ namespace mmo
 		m_trainerClient.Initialize();
 		m_questClient.Initialize();
 		m_partyInfo.Initialize();
+		m_guildClient.Initialize();
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -803,6 +807,7 @@ namespace mmo
 		Console::UnregisterCommand("speed");
 #endif
 
+		m_guildClient.Shutdown();
 		m_partyInfo.Shutdown();
 		m_questClient.Shutdown();
 		m_trainerClient.Shutdown();
@@ -3250,5 +3255,18 @@ namespace mmo
 		}
 
 		m_realmConnector.SetSelection(guid);
+	}
+
+	void WorldState::OnGuildChanged(uint64 guid, uint64 guildGuid)
+	{
+		if (guildGuid == 0)
+		{
+			return;
+		}
+
+		m_guildCache.Get(guildGuid, [guid](uint64, const GuildInfo& info)
+			{
+				// TODO: Update guild name and shit
+			});
 	}
 }

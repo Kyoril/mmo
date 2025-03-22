@@ -66,6 +66,7 @@ namespace mmo
 	class LootClient;
 	class TrainerClient;
 	class PartyInfo;
+	class GuildClient;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -97,7 +98,9 @@ namespace mmo
 			QuestClient& questClient,
 			IAudio& audio,
 			PartyInfo& partyInfo,
-			CharSelect& charSelect);
+			CharSelect& charSelect,
+			GuildClient& guildClient,
+			DBGuildCache& guildCache);
 
 	public:
 		/// @brief The default name of the world state
@@ -403,6 +406,8 @@ namespace mmo
 		ChannelIndex m_ambienceChannel{ InvalidChannel };
 
 		CharSelect& m_charSelect;
+		GuildClient& m_guildClient;
+		DBGuildCache& m_guildCache;
 
 	private:
 		static IInputControl* s_inputControl;
@@ -430,6 +435,7 @@ namespace mmo
 		void OnMoveFall(GameUnitC& unit) override;
 
 		void SetSelectedTarget(uint64 guid) override;
-	};
 
+		void OnGuildChanged(uint64 guid, uint64 guildGuid) override;
+	};
 }

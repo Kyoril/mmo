@@ -413,6 +413,8 @@ namespace mmo
 
 		void ExecuteGossipAction(uint64 npcGuid, uint32 gossipMenu, uint32 gossipIndex);
 
+		void CreateGuild(const String& guildName);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

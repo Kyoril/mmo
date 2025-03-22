@@ -825,4 +825,15 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::CreateGuild(const String& guildName)
+	{
+		sendSinglePacket([&guildName](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::GuildCreate);
+				packet
+					<< io::write_dynamic_range<uint8>(guildName);
+				packet.Finish();
+			});
+	}
 }
