@@ -56,6 +56,7 @@ namespace mmo
 			ObjectTarget,
 			ConeEnemy,
 			TargetAny,
+			Instigator,
 
 			Count_
 		};

@@ -617,10 +617,10 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health);
-		takenDamage(instigator, damage, damageType);
+		takenDamage(instigator, school, damageType);
 		if (instigator)
 		{
-			instigator->doneDamage(*this, damage, damageType);
+			instigator->doneDamage(*this, school, damageType);
 		}
 
 		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)

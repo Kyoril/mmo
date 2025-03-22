@@ -105,6 +105,14 @@ namespace mmo
 
 		void HandlePeriodicTriggerSpell() const;
 
+		void HandleProcForUnitTarget(GameUnitS& unit);
+
+		bool RollProcChance() const;
+
+		void ForEachProcTarget(const proto::SpellEffect& effect, GameUnitS* instigator, const std::function<bool(GameUnitS&)>& proc);
+
+		bool ExecuteSpellProc(const proto::SpellEntry* procSpell, const GameUnitS& unit) const;
+
 	private:
 		AuraContainer& m_container;
 		int32 m_basePoints = 0;
@@ -115,6 +123,7 @@ namespace mmo
 		uint32 m_tickCount = 0;
 		scoped_connection m_onTick;
 		bool m_isPeriodic = false;
+		float m_procChance = 0;
 
 		float m_casterSpellPower = 0.0f;
 		float m_casterSpellHeal = 0.0f;

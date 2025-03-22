@@ -4,6 +4,7 @@
 #include "game_player_s.h"
 #include "game_unit_s.h"
 #include "spell_cast.h"
+#include "universe.h"
 #include "base/clock.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
@@ -132,6 +133,30 @@ namespace mmo
 			apply);
 	}
 
+	bool AuraEffect::ExecuteSpellProc(const proto::SpellEntry* procSpell, const GameUnitS& unit) const
+	{
+		// Check if castable on dead unit
+		if (!(procSpell->attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
+		{
+			return false;
+		}
+
+		SpellTargetMap targetMap;
+		targetMap.SetUnitTarget(unit.GetGuid());
+		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+
+		if (GameUnitS* caster = m_container.GetCaster())
+		{
+			auto strongCaster = std::static_pointer_cast<GameUnitS>(caster->shared_from_this());
+			caster->GetWorldInstance()->GetUniverse().Post([strongCaster, targetMap, procSpell]()
+				{
+					const auto result = strongCaster->CastSpell(targetMap, *procSpell, 0, true, 0);
+				});
+		}
+
+		return true;
+	}
+
 	void AuraEffect::HandleProcTriggerSpell(const bool apply)
 	{
 		if (!apply)
@@ -148,30 +173,41 @@ namespace mmo
 			return;
 		}
 
-		const uint32 procChance = spell.procchance();
-		if (procChance == 0)
+		m_procChance = spell.procchance();
+		if (m_container.GetCaster())
+		{
+			m_container.GetCaster()->ApplySpellMod(spell_mod_op::ChanceOfSuccess, spell.id(), m_procChance);
+			DLOG("Spell " << spell.id() << " has modified proc chance " << m_procChance);
+		}
+
+		if (m_procChance == 0)
 		{
 			return;
 		}
-
+		
 		const uint32 procFlags = spell.procflags();
 		const uint32 procSchool = spell.procschool();
 
+		std::weak_ptr weakThis = shared_from_this();
+
 		if (procFlags & (spell_proc_flags::Death | spell_proc_flags::Killed))
 		{
-			m_procEffects += m_container.GetOwner().killed.connect([this, procSpell, procChance](GameUnitS* killer)
+			m_procEffects += m_container.GetOwner().killed.connect([weakThis, procSpell](GameUnitS* killer)
 				{
-					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
-					if (chanceDistribution(randomGenerator) < procChance)
+					auto strongThis = weakThis.lock();
+					if (!strongThis)
 					{
-						SpellTargetMap targetMap;
-						targetMap.SetUnitTarget(m_container.GetOwner().GetGuid());
-						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+						return;
+					}
 
-						if (GameUnitS* caster = m_container.GetCaster())
-						{
-							caster->CastSpell(targetMap, *procSpell, 0, true, 0);
-						}
+					if (!strongThis->m_container.GetCaster())
+					{
+						return;
+					}
+
+					if (strongThis->RollProcChance())
+					{
+						strongThis->ForEachProcTarget(strongThis->m_effect, killer, [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
 					}
 				});
 		}
@@ -179,55 +215,60 @@ namespace mmo
 		if (procFlags & (spell_proc_flags::TakenDamage |
 			spell_proc_flags::TakenMeleeAutoAttack |
 			spell_proc_flags::TakenSpellMagicDmgClassNeg |
-			spell_proc_flags::TakenRangedAutoAttack))
+			spell_proc_flags::TakenRangedAutoAttack |
+			spell_proc_flags::TakenPeriodic))
 		{
-			m_procEffects += m_container.GetOwner().takenDamage.connect([this, procFlags, procSchool, procSpell, procChance](GameUnitS* instigator, uint32 school, DamageType type)
+			m_procEffects += m_container.GetOwner().takenDamage.connect([weakThis, procFlags, procSchool, procSpell](GameUnitS* instigator, uint32 school, DamageType type)
 				{
+					auto strongThis = weakThis.lock();
+					if (!strongThis)
+					{
+						return;
+					}
+
+					if (!strongThis->m_container.GetCaster())
+					{
+						return;
+					}
+
 					bool shouldProc = false;
 
 					if (procFlags & spell_proc_flags::TakenDamage) shouldProc = true;
 					else if (procFlags & spell_proc_flags::TakenMeleeAutoAttack && type == damage_type::AttackSwing) shouldProc = true;
 					else if (procFlags & spell_proc_flags::TakenSpellMagicDmgClassNeg && type == damage_type::MagicalAbility && school == procSpell->procschool()) shouldProc = true;
 					else if (procFlags & spell_proc_flags::TakenRangedAutoAttack && type == damage_type::RangedAttack) shouldProc = true;
+					else if (procFlags & spell_proc_flags::TakenPeriodic && type == damage_type::Periodic && school == procSpell->procschool()) shouldProc = true;
 
 					if (!shouldProc)
 					{
 						return;
 					}
 
-					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
-					if (chanceDistribution(randomGenerator) < procChance)
+					if (strongThis->RollProcChance())
 					{
-						SpellTargetMap targetMap;
-						if (instigator)
-						{
-							targetMap.SetUnitTarget(instigator->GetGuid());
-							targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-						}
-						else
-						{
-							targetMap.SetTargetMap(spell_cast_target_flags::Self);
-						}
-
-						if (GameUnitS* caster = m_container.GetCaster())
-						{
-							caster->CastSpell(targetMap, *procSpell, 0, true, 0);
-						}
+						strongThis->ForEachProcTarget(strongThis->m_effect, instigator, [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
 					}
 				});
 		}
 
 		if (spell.procflags() & spell_proc_flags::DoneMeleeAutoAttack)
 		{
-			m_procEffects += m_container.GetOwner().meleeAttackDone.connect([this, procSpell, procChance](GameUnitS& victim)
+			m_procEffects += m_container.GetOwner().meleeAttackDone.connect([weakThis, procSpell](GameUnitS& victim)
 				{
-					std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
-					if (chanceDistribution(randomGenerator) < procChance)
+					auto strongThis = weakThis.lock();
+					if (!strongThis)
 					{
-						SpellTargetMap targetMap;
-						targetMap.SetUnitTarget(victim.GetGuid());
-						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-						m_container.GetOwner().CastSpell(targetMap, *procSpell, 0, true, 0);
+						return;
+					}
+
+					if (!strongThis->m_container.GetCaster())
+					{
+						return;
+					}
+
+					if (strongThis->RollProcChance())
+					{
+						strongThis->ForEachProcTarget(strongThis->m_effect, &strongThis->m_container.GetOwner(), [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
 					}
 				});
 		}
@@ -485,6 +526,136 @@ namespace mmo
 		}
 	}
 
+	void AuraEffect::HandleProcForUnitTarget(GameUnitS& unit)
+	{
+
+	}
+
+	bool AuraEffect::RollProcChance() const
+	{
+		if (m_procChance == 0)
+		{
+			return false;
+		}
+
+		std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
+		return chanceDistribution(randomGenerator) < m_procChance;
+	}
+
+	void AuraEffect::ForEachProcTarget(const proto::SpellEffect& effect, GameUnitS* instigator, const std::function<bool(GameUnitS&)>& proc)
+	{
+		uint32 targets = 0;
+
+		switch (effect.targetb())
+		{
+		case spell_effect_targets::Caster:
+			if (m_container.GetCaster())
+			{
+				proc(*m_container.GetCaster());
+			}
+			break;
+
+		case spell_effect_targets::Instigator:
+			if (instigator)
+			{
+				proc(*instigator);
+			}
+			break;
+
+		case spell_effect_targets::TargetAny:
+		case spell_effect_targets::TargetEnemy:
+		case spell_effect_targets::TargetAlly:
+			proc(m_container.GetOwner());
+			break;
+
+		case spell_effect_targets::TargetArea:
+		case spell_effect_targets::TargetAreaEnemy:
+			{
+				const float range = effect.radius();
+				const Vector3& position = m_container.GetOwner().GetPosition();
+				m_container.GetOwner().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, range), [&effect, &proc, &targets, this](GameUnitS& unit) -> bool
+					{
+						// Limit hit targets
+						if (m_container.GetSpell().maxtargets() != 0 && targets >= m_container.GetSpell().maxtargets())
+						{
+							return true;
+						}
+
+						if (effect.targetb() == spell_effect_targets::TargetAreaEnemy)
+						{
+							if (!m_container.GetCaster())
+							{
+								return true;
+							}
+
+							if (m_container.GetCaster()->UnitIsFriendly(unit))
+							{
+								return true;
+							}
+						}
+
+						if (proc(unit))
+						{
+							targets++;
+						}
+						return true;
+					});
+			}
+			break;
+		case spell_effect_targets::NearbyAlly:
+		case spell_effect_targets::NearbyEnemy:
+		case spell_effect_targets::CasterAreaParty:
+		case spell_effect_targets::NearbyParty:
+		{
+			const float range = effect.radius();
+			const Vector3& position = m_container.GetOwner().GetPosition();
+			m_container.GetOwner().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, range), [&proc, &targets, this](GameUnitS& unit) -> bool
+				{
+					// Limit hit targets
+					if (m_container.GetSpell().maxtargets() != 0 && targets >= m_container.GetSpell().maxtargets())
+					{
+						return true;
+					}
+
+					if (unit.GetGuid() == m_container.GetCasterId())
+					{
+						if (proc(unit))
+						{
+							targets++;
+						}
+						return true;
+					}
+
+					if (!m_container.GetCaster())
+					{
+						return true;
+					}
+
+					if (m_container.GetCaster()->IsPlayer())
+					{
+						auto& casterPlayer = m_container.GetCaster()->AsPlayer();
+						if (casterPlayer.GetGroupId() == 0)
+						{
+							return true;
+						}
+
+						if (!unit.IsPlayer() || unit.AsPlayer().GetGroupId() != casterPlayer.GetGroupId())
+						{
+							return true;
+						}
+					}
+
+					if (proc(unit))
+					{
+						targets++;
+					}
+					return true;
+				});
+		}
+		break;
+		}
+	}
+
 	void AuraEffect::StartPeriodicTimer() const
 	{
 		m_tickCountdown.SetEnd(GetAsyncTimeMs() + m_tickInterval);
@@ -552,6 +723,8 @@ namespace mmo
 		{
 			SetApplied(false);
 		}
+
+		m_auras.clear();
 	}
 
 	void AuraContainer::AddAuraEffect(const proto::SpellEffect& effect, int32 basePoints)

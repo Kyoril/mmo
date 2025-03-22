@@ -94,6 +94,10 @@ namespace mmo
 
 		void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
 
+		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit) override;
+
+		void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit) override;
+
 	public:
 
 		/// Gets the current status of a given quest by its id.

@@ -180,7 +180,8 @@ namespace mmo
 		"Target Ally",
 		"Object Target",
 		"Cone Enemy",
-		"Target Any"
+		"Target Any",
+		"Instigator"
 	};
 
 	static_assert(std::size(s_effectTargets) == spell_effect_targets::Count_, "One string per effect target has to exist!");

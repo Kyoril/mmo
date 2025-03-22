@@ -101,6 +101,7 @@ namespace mmo
 	{
 		if (!Validate())
 		{
+			ELOG("Validation failed");
 			m_hasFinished = true;
 			return;
 		}
@@ -260,6 +261,12 @@ namespace mmo
 
 	bool SingleCastState::Validate()
 	{
+		// Risky: Is this really good?
+		if (m_isProc)
+		{
+			return true;
+		}
+
 		// Caster level too low?
 		if (m_spell.spelllevel() > 1 && static_cast<int32>(m_cast.GetExecuter().GetLevel()) < m_spell.spelllevel())
 		{
@@ -495,11 +502,23 @@ namespace mmo
 
 	bool SingleCastState::ConsumeReagents(bool delayed)
 	{
+		// Nothing to consume when proccing
+		if (m_isProc)
+		{
+			return true;
+		}
+
 		return true;
 	}
 
 	bool SingleCastState::ConsumePower()
 	{
+		// Nothing to consume when proccing
+		if (m_isProc)
+		{
+			return true;
+		}
+
 		const int32 totalCost = m_cast.CalculatePowerCost(m_spell);
 		if (totalCost > 0)
 		{

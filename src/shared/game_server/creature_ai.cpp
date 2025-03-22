@@ -34,7 +34,7 @@ namespace mmo
 				auto state = std::make_shared<CreatureAIDeathState>(*this);
 				SetState(std::move(state));
 			});
-		m_onDamaged = m_controlled.takenDamage.connect([this](GameUnitS* attacker, uint32 damage, DamageType damageType)
+		m_onDamaged = m_controlled.takenDamage.connect([this](GameUnitS* attacker, uint32 school, DamageType damageType)
 			{
 				if (attacker) 
 				{

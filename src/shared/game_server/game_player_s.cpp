@@ -65,6 +65,16 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
+	{
+		// TODO
+	}
+
+	void GamePlayerS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	{
+		// TODO
+	}
+
 	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
 	{
 		m_configuration = configuration;
