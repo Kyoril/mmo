@@ -82,6 +82,8 @@ namespace mmo
 
 		uint64 groupId = 0;
 		AvatarConfiguration configuration;
+
+		uint64 guildId = 0;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -114,6 +116,7 @@ namespace mmo
 			>> io::read_range(data.attributePointsSpent)
 			>> io::read_container<uint16>(data.rewardedQuestIds)
 			>> io::read<uint64>(data.groupId)
+			>> io::read<uint64>(data.guildId)
 			>> data.configuration))
 		{
 			return reader;
@@ -170,6 +173,7 @@ namespace mmo
 			<< io::write_range(data.attributePointsSpent)
 			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds)
 			<< io::write<uint64>(data.groupId)
+			<< io::write<uint64>(data.guildId)
 			<< data.configuration;
 
 		writer << io::write<uint16>(data.questStatus.size());

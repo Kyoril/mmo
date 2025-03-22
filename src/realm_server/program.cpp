@@ -10,6 +10,7 @@
 #include "configuration.h"
 #include "version.h"
 #include "web_service.h"
+#include "guild_mgr.h"
 
 #include "asio.hpp"
 
@@ -223,6 +224,20 @@ namespace mmo
 			connection->startReceiving();
 		};
 
+		// Keep realm busy
+		asio::io_context::work work{ ioService };
+
+		// Load all guilds
+		GuildMgr guildMgr{ asyncDatabase };
+		guildMgr.LoadGuilds();
+
+		// Wait for all guilds to load
+		while (!guildMgr.GuildsLoaded())
+		{
+			dbService.run_one();
+			ioService.run_one();
+		}
+
 		// Start accepting incoming world node connections
 		const scoped_connection worldNodeConnected{ worldServer->connected().connect(createWorld) };
 		worldServer->startAccept();
@@ -318,9 +333,6 @@ namespace mmo
 
 		// Run the database service thread
 		std::thread dbThread{ [&dbService]() { dbService.run(); } };
-
-		// Keep realm busy
-		asio::io_context::work work{ ioService };
 
 		// Also run the io service on the main thread as well
 		ioService.run();

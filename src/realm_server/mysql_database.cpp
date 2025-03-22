@@ -217,7 +217,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<WorldAuthData> MySQLDatabase::GetWorldAuthData(std::string name)
+	std::optional<WorldAuthData> MySQLDatabase::GetWorldAuthData(const std::string name)
 	{
 		mysql::Select select(m_connection, "SELECT id,name,s,v FROM world WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
@@ -243,7 +243,7 @@ namespace mmo
 		return {};
 	}
 
-	void MySQLDatabase::WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build)
+	void MySQLDatabase::WorldLogin(const uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build)
 	{
 		if (!m_connection.Execute("UPDATE world SET k = '"
 			+ m_connection.EscapeString(sessionKey)
@@ -258,7 +258,80 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::DeleteCharacter(uint64 characterGuid)
+	std::optional<std::vector<GuildInfo>> MySQLDatabase::LoadGuilds()
+	{
+		std::vector<GuildInfo> result;
+
+		mysql::Select select(m_connection, "SELECT id, name, leader FROM guilds");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			while (row)
+			{
+				// Create the structure and fill it with data
+				GuildInfo info;
+				row.GetField(0, info.id);
+				row.GetField(1, info.name);
+				row.GetField(2, info.leaderGuid);
+
+				// Load guild ranks
+				mysql::Select rankSelect(m_connection, "SELECT name, permissions FROM guild_ranks WHERE guild_id = " + std::to_string(info.id) + " ORDER BY id ASC LIMIT 10");
+				if (rankSelect.Success())
+				{
+					mysql::Row rankRow(rankSelect);
+					while (rankRow)
+					{
+						GuildRank rank;
+						rankRow.GetField(0, rank.name);
+						rankRow.GetField(1, rank.permissions);
+						info.ranks.push_back(rank);
+
+						rankRow = mysql::Row::Next(rankSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load guild ranks");
+				}
+
+				// Load guild member ids
+				mysql::Select memberSelect(m_connection, "SELECT guid, rank FROM guild_members WHERE guild_id = " + std::to_string(info.id) + " LIMIT 100");
+				if (memberSelect.Success())
+				{
+					mysql::Row memberRow(memberSelect);
+					while (memberRow)
+					{
+						GuildMember member;
+						memberRow.GetField(0, member.guid);
+						memberRow.GetField(1, member.rank);
+						info.members.push_back(member);
+
+						memberRow = mysql::Row::Next(memberSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load guild members");
+				}
+
+				result.emplace_back(std::move(info));
+
+				row = mysql::Row::Next(select);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+			return {};
+		}
+
+		return result;
+	}
+
+	void MySQLDatabase::DeleteCharacter(const uint64 characterGuid)
 	{
 		if (!m_connection.Execute("UPDATE characters SET deleted_account = account_id, account_id = NULL, deleted_at = NOW() WHERE id = " + std::to_string(characterGuid) + " AND account_id IS NOT NULL LIMIT 1;"))
 		{
@@ -551,6 +624,22 @@ namespace mmo
 					throw mysql::Exception("Could not load character quests");
 				}
 
+				// Load guild membership
+				mysql::Select guildSelect(m_connection, std::format("SELECT `guild_id` FROM `guild_members` WHERE `guid`='{0}' LIMIT 1", characterId));
+				if (guildSelect.Success())
+				{
+					if (const mysql::Row guildRow(guildSelect); guildRow)
+					{
+						uint32 guildId = 0;
+						guildRow.GetField(0, guildId);
+						result.guildId = guildId;
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character guild membership");
+				}
 
 				const GameTime endTime = GetAsyncTimeMs();
 				DLOG("Character data loaded in " << endTime - startTime << " ms");

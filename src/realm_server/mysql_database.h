@@ -36,7 +36,9 @@ namespace mmo
 		
 		/// @copydoc IDatabase::WorldLogin
 		void WorldLogin(uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build) final override;
-		
+
+		std::optional<std::vector<GuildInfo>> LoadGuilds() final override;
+
 		/// @copydoc IDatabase::DeleteCharacter
 		void DeleteCharacter(uint64 characterGuid) final override;
 		

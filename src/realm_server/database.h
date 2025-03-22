@@ -88,6 +88,35 @@ namespace mmo
 		std::vector<GroupMemberData> members;
 	};
 
+	struct GuildRank
+	{
+		String name;
+
+		uint32 permissions;
+	};
+
+	struct GuildMember
+	{
+		uint64 guid;
+
+		String name;
+
+		uint32 rank;
+	};
+
+	struct GuildInfo
+	{
+		uint64 id;
+
+		String name;
+
+		uint64 leaderGuid;
+
+		std::vector<GuildRank> ranks;
+
+		std::vector<GuildMember> members;
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -111,6 +140,8 @@ namespace mmo
 		/// Deletes a character with the given guid.
 		///	@param characterGuid Unique id of the character to delete.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
+
+		virtual std::optional<std::vector<GuildInfo>> LoadGuilds() = 0;
 
 		/// Creates a new character on the given account.
 		///	@param characterName Name of the character. Has to be unique on the realm.
