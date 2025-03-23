@@ -3266,7 +3266,10 @@ namespace mmo
 
 		m_guildCache.Get(guildGuid, [guid](uint64, const GuildInfo& info)
 			{
-				// TODO: Update guild name and shit
+				if (const std::shared_ptr<GamePlayerC> player = ObjectMgr::Get<GamePlayerC>(guid))
+				{
+					player->NotifyGuildInfo(&info);
+				}
 			});
 	}
 }

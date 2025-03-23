@@ -3,6 +3,7 @@
 
 #include "object_mgr.h"
 #include "client_data/project.h"
+#include "game/guild_info.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
@@ -76,6 +77,12 @@ namespace mmo
 		}
 
 		return m_name;
+	}
+
+	void GamePlayerC::SetName(const String& name)
+	{
+		m_name = name;
+		RefreshUnitName();
 	}
 
 	uint8 GamePlayerC::GetAttributeCost(const uint32 attribute) const
@@ -183,6 +190,17 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerC::NotifyGuildInfo(const GuildInfo* guild)
+	{
+		if (guild == m_guild)
+		{
+			return;
+		}
+
+		m_guild = guild;
+		RefreshUnitName();
+	}
+
 	void GamePlayerC::SetupSceneObjects()
 	{
 		GameUnitC::SetupSceneObjects();
@@ -222,7 +240,33 @@ namespace mmo
 
 	void GamePlayerC::OnGuildChanged(uint64)
 	{
-		m_netDriver.OnGuildChanged(GetGuid(), Get<uint64>(object_fields::Guild));
+		const uint64 guildId = Get<uint64>(object_fields::Guild);
+		if (guildId != 0)
+		{
+			m_netDriver.OnGuildChanged(GetGuid(), guildId);
+		}
+		else if (m_guild)
+		{
+			m_guild = nullptr;
+			RefreshUnitName();
+		}
+	}
+
+	void GamePlayerC::RefreshUnitName()
+	{
+		if (!m_nameComponent)
+		{
+			return;
+		}
+
+		std::ostringstream strm;
+		strm << GetName();
+		if (m_guild && !m_guild->name.empty())
+		{
+			strm << "\n<" << m_guild->name << ">";
+		}
+
+		m_nameComponent->SetText(strm.str());
 	}
 
 	void GamePlayerC::OnEquipmentChanged(uint64)

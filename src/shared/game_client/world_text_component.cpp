@@ -140,7 +140,7 @@ namespace mmo
 
 		// Decide how big or small you want the text to be.
 		// E.g. 0.01f if you are in "world" space units.
-		constexpr float scale = 0.01f;
+		constexpr float scale = 0.005f;
 
 		// Start drawing at some "anchor" point
 		// (You can make this your baseline or top-left; adjust as needed.)

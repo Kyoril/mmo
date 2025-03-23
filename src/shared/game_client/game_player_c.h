@@ -6,6 +6,11 @@
 
 namespace mmo
 {
+	struct GuildInfo;
+}
+
+namespace mmo
+{
 	class GamePlayerC : public GameUnitC
 	{
 	public:
@@ -29,14 +34,13 @@ namespace mmo
 
 		virtual const String& GetName() const override;
 
-		void SetName(const String& name)
-		{
-			m_name = name;
-		}
+		void SetName(const String& name);
 
 		uint8 GetAttributeCost(uint32 attribute) const;
 
 		void NotifyItemData(const ItemInfo& data);
+
+		void NotifyGuildInfo(const GuildInfo* guild);
 
 	protected:
 		virtual void SetupSceneObjects() override;
@@ -46,6 +50,8 @@ namespace mmo
 		void RefreshDisplay();
 
 		void OnGuildChanged(uint64);
+
+		void RefreshUnitName();
 
 	protected:
 		String m_name;
@@ -57,5 +63,7 @@ namespace mmo
 		Entity* m_weaponEntity{ nullptr };
 
 		scoped_connection m_equipmentChangedHandler;
+
+		const GuildInfo* m_guild{ nullptr };
 	};
 }
