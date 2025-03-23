@@ -4,6 +4,7 @@
 #include "object_mgr.h"
 #include "base/clock.h"
 #include "client_data/project.h"
+#include "frame_ui/font_mgr.h"
 #include "game/spell.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
@@ -145,6 +146,16 @@ namespace mmo
 			{
 				m_questGiverNode->SetFixedYawAxis(true);
 				m_questGiverNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World);
+			}
+		}
+
+		if (m_nameComponent && m_nameComponent->IsVisible())
+		{
+			Camera* cam = m_scene.GetCamera(0);
+			if (cam)
+			{
+				m_nameComponentNode->SetFixedYawAxis(true);
+				m_nameComponentNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::UnitZ);
 			}
 		}
 
@@ -609,9 +620,10 @@ namespace mmo
 		GameObjectC::SetupSceneObjects();
 
 		// Attach text component
-		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitZ * 2.0f);
-		m_nameComponent = std::make_unique<WorldTextComponent>(nullptr, GetName());
+		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * 2.0f);
+		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), GetName());
 		m_nameComponentNode->AttachObject(*m_nameComponent);
+		m_nameComponent->SetVisible(ObjectMgr::GetSelectedObjectGuid() == GetGuid());
 
 		// Setup object display
 		OnDisplayIdChanged();
@@ -1162,6 +1174,7 @@ namespace mmo
 		if (m_nameComponent)
 		{
 			m_nameComponent->SetText(GetName());
+			m_nameComponent->SetVisible(true);
 		}
 	}
 
@@ -1421,6 +1434,11 @@ namespace mmo
 			m_damageHitState->SetTimePosition(0.0f);
 		}
 
+		if (m_entity)
+		{
+			m_nameComponentNode->SetPosition(Vector3::UnitY * m_entity->GetBoundingRadius());
+		}
+
 		OnScaleChanged();
 	}
 
@@ -1512,5 +1530,13 @@ namespace mmo
 	void GameUnitC::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
 	{
 
+	}
+
+	void GameUnitC::SetUnitNameVisible(bool show)
+	{
+		if (m_nameComponent)
+		{
+			m_nameComponent->SetVisible(show);
+		}
 	}
 }

@@ -2,6 +2,7 @@
 
 #include "scene_graph/movable_object.h"
 #include "frame_ui/font.h"
+#include "graphics/vertex_index_data.h"
 
 namespace mmo
 {
@@ -9,7 +10,7 @@ namespace mmo
 	class WorldTextComponent : public MovableObject, public Renderable
 	{
 	public:
-		WorldTextComponent(FontPtr font, const String& text);
+		WorldTextComponent(FontPtr font, MaterialPtr material, const String& text);
 
 		void PrepareRenderOperation(RenderOperation& operation) override;
 
@@ -40,6 +41,8 @@ namespace mmo
 	private:
 		void OnTextChanged();
 
+		void UpdateGeometry();
+
 	private:
 		FontPtr m_font;
 
@@ -50,5 +53,11 @@ namespace mmo
 		AABB m_boundingBox;
 
 		Matrix4 m_worldTransform;
+
+		MaterialPtr m_material;
+
+		std::unique_ptr<VertexData> m_vertexData;
+
+		std::unique_ptr<IndexData> m_indexData;
 	};
 }

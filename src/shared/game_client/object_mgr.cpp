@@ -213,7 +213,17 @@ namespace mmo
 
 	void ObjectMgr::SetSelectedObjectGuid(uint64 guid)
 	{
+		if (GetSelectedObject())
+		{
+			GetSelectedObject()->SetUnitNameVisible(false);
+		}
+
 		ms_selectedObjectGuid = guid;
+
+		if (GetSelectedObject())
+		{
+			GetSelectedObject()->SetUnitNameVisible(true);
+		}
 	}
 
 	uint32 ObjectMgr::GetItemCount(const uint32 itemId)

@@ -39,6 +39,8 @@ namespace mmo
 		/// Gets the y coordinate of the start offset of this image in pixels.
 		inline float GetOffsetY() const { return m_scaledOffset.y; }
 
+		const FontImageset* GetImageset() const { return m_owner; }
+
 	public:
 		/// A rectangle which describes the source texture area used by this image.
 		const Rect& GetSourceTextureArea() const;

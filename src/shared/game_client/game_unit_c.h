@@ -332,6 +332,8 @@ namespace mmo
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
 		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
 
+		void SetUnitNameVisible(bool show);
+
 	protected:
 		NetClient& m_netDriver;
 		MovementInfo m_movementInfo;

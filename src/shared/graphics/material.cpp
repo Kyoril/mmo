@@ -207,7 +207,7 @@ namespace mmo
 	void Material::SetTextureParameter(std::string_view name, const String& value)
 	{
 		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
-		if (it != m_textureParameters.end())
+		if (it == m_textureParameters.end())
 		{
 			return;
 		}
@@ -217,6 +217,21 @@ namespace mmo
 			m_bufferDataDirty[(uint8)MaterialParameterType::Texture] = true;
 			it->texture = value;
 			m_textureParamTextures[String(name)] = TextureManager::Get().CreateOrRetrieve(value);
+		}
+	}
+
+	void Material::SetTextureParameter(std::string_view name, const TexturePtr& value)
+	{
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });
+		if (it == m_textureParameters.end())
+		{
+			return;
+		}
+
+		if (m_textureParamTextures[String(name)] != value)
+		{
+			m_bufferDataDirty[(uint8)MaterialParameterType::Texture] = true;
+			m_textureParamTextures[String(name)] = value;
 		}
 	}
 

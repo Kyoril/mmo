@@ -176,6 +176,8 @@ namespace mmo
 
 		virtual void SetTextureParameter(std::string_view name, const String& value) = 0;
 
+		virtual void SetTextureParameter(std::string_view name, const TexturePtr& value) = 0;
+
 		virtual bool GetTextureParameter(std::string_view name, String& out_value) = 0;
 	};
 
@@ -271,6 +273,8 @@ namespace mmo
 		virtual void AddTextureParameter(std::string_view name, const String& defaultValue) override;
 
 		virtual void SetTextureParameter(std::string_view name, const String& value) override;
+
+		virtual void SetTextureParameter(std::string_view name, const TexturePtr& value) override;
 
 		virtual bool GetTextureParameter(std::string_view name, String& out_value) override;
 

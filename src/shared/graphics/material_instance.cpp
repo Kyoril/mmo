@@ -333,6 +333,17 @@ namespace mmo
 		m_textureParamTextures[String(name)] = TextureManager::Get().CreateOrRetrieve(value);
 	}
 
+	void MaterialInstance::SetTextureParameter(std::string_view name, const TexturePtr& value)
+	{
+		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const auto& value) { return value.name == name; });
+		if (it == m_textureParameters.end())
+		{
+			return;
+		}
+
+		m_textureParamTextures[String(name)] = value;
+	}
+
 	bool MaterialInstance::GetTextureParameter(std::string_view name, String& out_value)
 	{
 		const auto it = std::find_if(m_textureParameters.begin(), m_textureParameters.end(), [&name](const TextureParameterValue& value) { return value.name == name; });

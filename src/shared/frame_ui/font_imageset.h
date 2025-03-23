@@ -31,6 +31,9 @@ namespace mmo
 		/// Draws an image from the imageset.
 		void Draw(const Rect& srcRect, const Rect& dstRect, GeometryBuffer& buffer, argb_t color = 0xffffffff) const;
 
+	public:
+		const TexturePtr& GetTexture() const { return m_texture; }
+
 	private:
 
 		/// Gets the texture id of this font.
