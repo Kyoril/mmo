@@ -21,6 +21,9 @@ namespace mmo
 	std::map<uint64, scoped_connection> ObjectMgr::ms_itemConnections;
 	PartyInfo* ObjectMgr::ms_partyInfo = nullptr;
 
+	FontPtr ObjectMgr::ms_unitNameFont = nullptr;
+	MaterialPtr ObjectMgr::ms_unitNameFontMaterial = nullptr;
+
 	void ObjectMgr::Initialize(const proto_client::Project& project, PartyInfo& partyInfo)
 	{
 		ms_project = &project;
@@ -30,6 +33,14 @@ namespace mmo
 		ms_hoveredObjectGuid = 0;
 		ms_itemCount.clear();
 		ms_partyInfo = &partyInfo;
+	}
+
+	void ObjectMgr::SetUnitNameFontSettings(FontPtr font, MaterialPtr material)
+	{
+		ms_unitNameFont = font;
+		ms_unitNameFontMaterial = material;
+
+		// TODO: Refresh all unit names?
 	}
 
 	void ObjectMgr::UpdateObjects(float deltaTime)

@@ -274,6 +274,7 @@ namespace mmo
 			}
 
 			vertex.position.x -= currentLineWidth * 0.5f;
+			vertex.position.y += m_font->GetHeight(scale) * static_cast<float>(lineWidths.size() - 1);
 		}
 
 		m_vertexData->vertexCount = vertices.size();

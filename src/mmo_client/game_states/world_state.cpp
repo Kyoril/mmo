@@ -47,6 +47,7 @@
 #include "audio.h"
 #include "party_info.h"
 #include "console/console_var.h"
+#include "frame_ui/font_mgr.h"
 #include "game/group.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
@@ -170,6 +171,8 @@ namespace mmo
 		, m_guildClient(guildClient)
 		, m_guildCache(guildCache)
 	{
+		// TODO: Do we want to put these asset references in some sort of config setting or something?
+		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
 	}
 
 	void WorldState::OnEnter()

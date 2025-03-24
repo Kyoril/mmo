@@ -24,6 +24,12 @@ namespace mmo
 	public:
 		static void Initialize(const proto_client::Project& project, PartyInfo& partyInfo);
 
+		static void SetUnitNameFontSettings(FontPtr font, MaterialPtr material);
+
+		static const FontPtr& GetUnitNameFont() { return ms_unitNameFont; }
+
+		static const MaterialPtr& GetUnitNameFontMaterial() { return ms_unitNameFontMaterial; }
+
 		template<typename TObject>
 		static std::shared_ptr<TObject> Get(uint64 guid)
 		{
@@ -121,5 +127,8 @@ namespace mmo
 		static MovementGlobals ms_movementGlobals;
 
 		static PartyInfo* ms_partyInfo;
+
+		static FontPtr ms_unitNameFont;
+		static MaterialPtr ms_unitNameFontMaterial;
 	};
 }

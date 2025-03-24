@@ -619,9 +619,13 @@ namespace mmo
 	{
 		GameObjectC::SetupSceneObjects();
 
+		// These need to be set before!
+		ASSERT(ObjectMgr::GetUnitNameFont());
+		ASSERT(ObjectMgr::GetUnitNameFontMaterial());
+
 		// Attach text component
 		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * 2.0f);
-		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), "");
+		m_nameComponent = std::make_unique<WorldTextComponent>(ObjectMgr::GetUnitNameFont(), ObjectMgr::GetUnitNameFontMaterial(), "");
 		m_nameComponentNode->AttachObject(*m_nameComponent);
 		m_nameComponent->SetVisible(ObjectMgr::GetSelectedObjectGuid() == GetGuid());
 
@@ -1449,7 +1453,7 @@ namespace mmo
 
 		if (m_entity)
 		{
-			m_nameComponentNode->SetPosition(Vector3::UnitY * m_entity->GetBoundingRadius());
+			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
 		}
 
 		OnScaleChanged();
