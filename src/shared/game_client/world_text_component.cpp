@@ -82,6 +82,11 @@ namespace mmo
 
 	void WorldTextComponent::PopulateRenderQueue(RenderQueue& queue)
 	{
+		if (m_text.empty())
+		{
+			return;
+		}
+
 		queue.AddRenderable(*this, m_renderQueueId, m_renderQueuePriority);
 	}
 
@@ -146,12 +151,18 @@ namespace mmo
 		// (You can make this your baseline or top-left; adjust as needed.)
 		Point cursor(0.0f, 0.0f);
 
+		std::vector<float> lineWidths;
+		std::vector<uint32> lineStarts;
+
 		for (size_t i = 0; i < m_text.length(); ++i)
 		{
 			char c = m_text[i];
 
 			if (c == '\n')
 			{
+				lineStarts.push_back(vertices.size());
+				lineWidths.push_back(cursor.x);
+
 				cursor.x = 0.0f;
 				cursor.y -= m_font->GetHeight(scale);
 				continue;
@@ -245,15 +256,36 @@ namespace mmo
 			cursor.x += glyph->GetAdvance(scale);
 		}
 
+		lineStarts.push_back(vertices.size());
+		lineWidths.push_back(cursor.x);
+
 		// Iterate through all vertices again and modify the vertex x position by reducing it half of max.x from m_boundingBox
+		uint32 i = 0, line = 0;
+		uint32 nextLineIndex = lineStarts[line];
+		float currentLineWidth = lineWidths[line];
+
 		for (auto& vertex : vertices)
 		{
-			vertex.position.x -= (m_boundingBox.max.x - m_boundingBox.min.x) * 0.5f;
+			if (i++ >= nextLineIndex)
+			{
+				nextLineIndex = lineStarts[line + 1];
+				currentLineWidth = lineWidths[line + 1];
+				line++;
+			}
+
+			vertex.position.x -= currentLineWidth * 0.5f;
 		}
 
 		m_vertexData->vertexCount = vertices.size();
 
-		VertexBufferPtr bufferPtr = GraphicsDevice::Get().CreateVertexBuffer(m_vertexData->vertexCount, m_vertexData->vertexDeclaration->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
-		m_vertexData->vertexBufferBinding->SetBinding(0, bufferPtr);
+		if (!vertices.empty())
+		{
+			VertexBufferPtr bufferPtr = GraphicsDevice::Get().CreateVertexBuffer(m_vertexData->vertexCount, m_vertexData->vertexDeclaration->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
+			m_vertexData->vertexBufferBinding->SetBinding(0, bufferPtr);
+		}
+		else
+		{
+			m_vertexData->vertexBufferBinding->UnsetAllBindings();
+		}
 	}
 }

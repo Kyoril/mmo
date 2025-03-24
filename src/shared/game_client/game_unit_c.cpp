@@ -621,9 +621,11 @@ namespace mmo
 
 		// Attach text component
 		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * 2.0f);
-		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), GetName());
+		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), "");
 		m_nameComponentNode->AttachObject(*m_nameComponent);
 		m_nameComponent->SetVisible(ObjectMgr::GetSelectedObjectGuid() == GetGuid());
+
+		RefreshUnitName();
 
 		// Setup object display
 		OnDisplayIdChanged();
@@ -712,6 +714,23 @@ namespace mmo
 		{
 			m_questGiverNode->SetPosition(Vector3::UnitY * height);
 			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
+		}
+	}
+
+	void GameUnitC::RefreshUnitName()
+	{
+		// Ensure name component is updated to display the correct name
+		if (m_nameComponent)
+		{
+			std::ostringstream strm;
+			strm << GetName();
+
+			if (!m_creatureInfo.subname.empty())
+			{
+				strm << "\n<" << m_creatureInfo.subname << ">";
+			}
+
+			m_nameComponent->SetText(strm.str());
 		}
 	}
 
@@ -1169,13 +1188,7 @@ namespace mmo
 	void GameUnitC::SetCreatureInfo(const CreatureInfo& creatureInfo)
 	{
 		m_creatureInfo = creatureInfo;
-
-		// Ensure name component is updated to display the correct name
-		if (m_nameComponent)
-		{
-			m_nameComponent->SetText(GetName());
-			m_nameComponent->SetVisible(true);
-		}
+		RefreshUnitName();
 	}
 
 	const String& GameUnitC::GetName() const

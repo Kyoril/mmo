@@ -147,6 +147,8 @@ namespace mmo
 
 		void SetQuestGiverMesh(const String& meshName);
 
+		virtual void RefreshUnitName();
+
 	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);

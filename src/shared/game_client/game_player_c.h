@@ -51,7 +51,7 @@ namespace mmo
 
 		void OnGuildChanged(uint64);
 
-		void RefreshUnitName();
+		virtual void RefreshUnitName() override;
 
 	protected:
 		String m_name;
