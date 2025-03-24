@@ -667,7 +667,7 @@ namespace mmo
 		if (m_spell.attributes(1) & spell_attributes_b::MeleeCombatStart)
 		{
 			GameUnitS* targetUnit = m_cast.GetExecuter().GetWorldInstance()->FindByGuid<GameUnitS>(m_target.GetUnitTarget());
-			if (targetUnit && !m_cast.GetExecuter().UnitIsFriendly(*targetUnit))
+			if (targetUnit && !m_cast.GetExecuter().UnitIsFriendly(*targetUnit) && targetUnit->IsAlive())
 			{
 				m_cast.GetExecuter().StartAttack(std::static_pointer_cast<GameUnitS>(targetUnit->shared_from_this()));
 			}

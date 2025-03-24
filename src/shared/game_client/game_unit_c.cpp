@@ -621,7 +621,7 @@ namespace mmo
 
 		// Attach text component
 		m_nameComponentNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * 2.0f);
-		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), GetName());
+		m_nameComponent = std::make_unique<WorldTextComponent>(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"), GetName());
 		m_nameComponentNode->AttachObject(*m_nameComponent);
 		m_nameComponent->SetVisible(ObjectMgr::GetSelectedObjectGuid() == GetGuid());
 
