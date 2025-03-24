@@ -9,54 +9,56 @@ namespace mmo
 	class GuildMgr;
 	class GamePlayerS;
 
-class Guild final : public NonCopyable
-{
-public:
-	Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
-		: m_manager(manager)
-		, m_database(database)
-		, m_id(id)
-		, m_name(std::move(name))
-		, m_leaderGuid(leaderGuid)
+	class Guild final : public NonCopyable, public std::enable_shared_from_this<Guild>
 	{
-	}
+	public:
+		Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
+			: m_manager(manager)
+			, m_database(database)
+			, m_id(id)
+			, m_name(std::move(name))
+			, m_leaderGuid(leaderGuid)
+		{
+		}
 
-public:
-	uint64 GetId() const { return m_id; }
+	public:
+		uint64 GetId() const { return m_id; }
 
-	const String& GetName() const { return m_name; }
+		const String& GetName() const { return m_name; }
 
-	uint64 GetLeaderGuid() const { return m_leaderGuid; }
+		uint64 GetLeaderGuid() const { return m_leaderGuid; }
 
-	bool IsMember(uint64 playerGuid) const;
+		bool IsMember(uint64 playerGuid) const;
 
-	uint32 GetMemberRank(uint64 playerGuid) const;
+		uint32 GetMemberRank(uint64 playerGuid) const;
 
-	bool HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const;
+		bool HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const;
 
-	std::vector<uint64> GetMembersWithPermission(guild_rank_permissions::Type permission) const;
+		std::vector<uint64> GetMembersWithPermission(guild_rank_permissions::Type permission) const;
 
-	void LoadMembers();
+		void LoadMembers();
 
-	bool AddMember(uint64 playerGuid, uint32 rank = 4);
+		bool AddMember(uint64 playerGuid, uint32 rank = 4);
 
-	bool RemoveMember(uint64 playerGuid);
+		bool RemoveMember(uint64 playerGuid);
 
-	const std::vector<GuildMember>& GetMembers() const { return m_members; }
-	std::vector<GuildMember>& GetMembersRef() { return m_members; }
+		const std::vector<GuildMember>& GetMembers() const { return m_members; }
+		std::vector<GuildMember>& GetMembersRef() { return m_members; }
 
-	const std::vector<GuildRank>& GetRanks() const { return m_ranks; }
-	std::vector<GuildRank>& GetRanksRef() { return m_ranks; }
+		const std::vector<GuildRank>& GetRanks() const { return m_ranks; }
+		std::vector<GuildRank>& GetRanksRef() { return m_ranks; }
 
-private:
-	GuildMgr& m_manager;
-	AsyncDatabase& m_database;
-	uint64 m_id;
-	String m_name;
-	uint64 m_leaderGuid;
-	std::vector<GuildMember> m_members;
-	std::vector<GuildRank> m_ranks;
-	bool m_membersLoaded = false;
+		uint32 GetLowestRank() const;
+
+	private:
+		GuildMgr& m_manager;
+		AsyncDatabase& m_database;
+		uint64 m_id;
+		String m_name;
+		uint64 m_leaderGuid;
+		std::vector<GuildMember> m_members;
+		std::vector<GuildRank> m_ranks;
+		bool m_membersLoaded = false;
 	};
 
 	class GuildMgr final : public NonCopyable
@@ -83,7 +85,7 @@ private:
 	private:
 		AsyncDatabase& m_asyncDatabase;
 
-		std::map<uint64, std::unique_ptr<Guild>> m_guildsById;
+		std::map<uint64, std::shared_ptr<Guild>> m_guildsById;
 
 		std::map<String, uint64> m_guildIdsByName;
 

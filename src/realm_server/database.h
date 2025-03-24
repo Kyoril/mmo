@@ -194,6 +194,8 @@ namespace mmo
 		virtual std::optional<String> GetCharacterNameById(uint64 characterId) = 0;
 
 		virtual void CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member) = 0;
+
+		virtual void AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
 	};
 
 

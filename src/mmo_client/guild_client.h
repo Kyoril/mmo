@@ -18,8 +18,32 @@ namespace mmo
 
 		void Shutdown();
 
+		void GuildInviteByName(const String& name);
+
+		void GuildUninviteByName(const String& name);
+
+		void GuildPromoteByName(const String& name);
+
+		void GuildDemoteByName(const String& name);
+
+		void GuildSetLeaderByName(const String& name);
+
+		void GuildSetMOTD(const String& motd);
+
+		void GuildLeave();
+
+		void GuildDisband();
+
+		void AcceptGuild();
+
+		void DeclineGuild();
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildCommandResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildInvite(game::IncomingPacket& packet);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		void Command_GuildCreate(const std::string& cmd, const std::string& args) const;
@@ -29,5 +53,8 @@ namespace mmo
 		RealmConnector& m_connector;
 		DBGuildCache& m_guildCache;
 		RealmConnector::PacketHandlerHandleContainer m_handlers;
+
+		String m_invitePlayerName;
+		String m_inviteGuildName;
 	};
 }

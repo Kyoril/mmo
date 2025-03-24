@@ -11,5 +11,8 @@
         "-DMMO_BUILD_EDITOR=ON",
         "-DMMO_BUILD_CLIENT=ON",
         "-DMMO_BUILD_LAUNCHER=ON"
-    ]
+    ],
+    "files.associations": {
+        "vector": "cpp"
+    }
 }

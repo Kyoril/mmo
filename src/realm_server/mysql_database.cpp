@@ -1312,6 +1312,20 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank)
+	{
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `guild_members` (`guild_id`, `guid`, `rank`) VALUES ('{0}', '{1}', '{2}')"
+			, guildId
+			, memberGuid
+			, rank
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());

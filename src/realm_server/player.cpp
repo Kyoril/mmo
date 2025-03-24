@@ -993,6 +993,44 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnGuildAccept(game::IncomingPacket& packet)
+	{
+		if (m_pendingGuildInvite == 0)
+		{
+			ELOG("Player tried to accept guild invite without having a pending invite");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Get the guild
+		Guild* guild = m_guildMgr.GetGuild(m_pendingGuildInvite);
+		if (!guild)
+		{
+			ELOG("Player tried to accept guild invite to a guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		if (!guild->AddMember(m_characterData->characterId, guild->GetLowestRank()))
+		{
+			ELOG("Failed to add player to guild");
+			return PacketParseResult::Pass;
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildDecline(game::IncomingPacket& packet)
+	{
+		if (m_pendingGuildInvite == 0)
+		{
+			ELOG("Player tried to decline guild invite without having a pending invite");
+			return PacketParseResult::Disconnect;
+		}
+
+
+
+		return PacketParseResult::Pass;
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
 	{
@@ -1485,6 +1523,17 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::RandomRoll, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::GossipAction, *this, &Player::OnProxyPacket);
 			
+			// Guild packet handlers
+			RegisterPacketHandler(game::client_realm_packet::GuildInvite, *this, &Player::OnGuildInvite);
+			RegisterPacketHandler(game::client_realm_packet::GuildRemove, *this, &Player::OnGuildRemove);
+			RegisterPacketHandler(game::client_realm_packet::GuildPromote, *this, &Player::OnGuildPromote);
+			RegisterPacketHandler(game::client_realm_packet::GuildDemote, *this, &Player::OnGuildDemote);
+			RegisterPacketHandler(game::client_realm_packet::GuildLeave, *this, &Player::OnGuildLeave);
+			RegisterPacketHandler(game::client_realm_packet::GuildDisband, *this, &Player::OnGuildDisband);
+			RegisterPacketHandler(game::client_realm_packet::GuildMotd, *this, &Player::OnGuildMotd);
+			RegisterPacketHandler(game::client_realm_packet::GuildAccept, *this, &Player::OnGuildAccept);
+			RegisterPacketHandler(game::client_realm_packet::GuildDecline, *this, &Player::OnGuildDecline);
+			
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRecharge, *this, &Player::OnProxyPacket);
@@ -1530,6 +1579,16 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::GroupUninvite);
 			ClearPacketHandler(game::client_realm_packet::GroupAccept);
 			ClearPacketHandler(game::client_realm_packet::GroupDecline);
+
+			ClearPacketHandler(game::client_realm_packet::GuildInvite);
+			ClearPacketHandler(game::client_realm_packet::GuildRemove);
+			ClearPacketHandler(game::client_realm_packet::GuildPromote);
+			ClearPacketHandler(game::client_realm_packet::GuildDemote);
+			ClearPacketHandler(game::client_realm_packet::GuildLeave);
+			ClearPacketHandler(game::client_realm_packet::GuildDisband);
+			ClearPacketHandler(game::client_realm_packet::GuildMotd);
+			ClearPacketHandler(game::client_realm_packet::GuildAccept);
+			ClearPacketHandler(game::client_realm_packet::GuildDecline);
 
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
@@ -2131,6 +2190,19 @@ namespace mmo
 			});
 	}
 
+	void Player::SendGuildCommandResult(uint8 command, uint8 result, const String& playerName)
+	{
+		m_connection->sendSinglePacket([command, result, playerName](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildCommandResult);
+				packet
+					<< io::write<uint8>(command)
+					<< io::write<uint8>(result)
+					<< io::write_dynamic_range<uint8>(playerName);
+				packet.Finish();
+			});
+	}
+
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
@@ -2154,5 +2226,532 @@ namespace mmo
 		{
 			m_packetHandlers.erase(it);
 		}
+	}
+
+	PacketParseResult Player::OnGuildInvite(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to invite " << playerName << " to guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to invite player to guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to invite player to guild without being in a guild");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::NotInGuild, "");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to invite player to guild that doesn't exist");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check if the player has permission to invite members
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Invite))
+		{
+			ELOG("Player tried to invite player to guild without having permission to invite members");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::NotAllowed, "");
+			return PacketParseResult::Pass;
+		}
+
+		// Find the target player
+		Player* targetPlayer = m_manager.GetPlayerByCharacterName(playerName);
+		if (!targetPlayer)
+		{
+			ELOG("Player tried to invite player to guild who is not online");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::PlayerNotFound, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		if (targetPlayer->m_pendingGuildInvite != 0)
+		{
+			ELOG("Player tried to invite player to guild who already has a pending invite");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::InvitePending, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		if (targetPlayer->m_characterData->guildId != 0)
+		{
+			ELOG("Player tried to invite player to guild who is already in a guild");
+			if (targetPlayer->m_characterData->guildId == m_characterData->guildId)
+			{
+				SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::AlreadyInGuild, playerName);
+			}
+			else
+			{
+				SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::AlreadyInOtherGuild, playerName);
+			}
+			return PacketParseResult::Pass;
+		}
+
+		// Set pending guild invite
+		targetPlayer->m_pendingGuildInvite = guild->GetId();
+
+		// Send guild invite to target player
+		targetPlayer->GetConnection().sendSinglePacket([this, guild](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildInvite);
+				packet
+					<< io::write_dynamic_range<uint8>(m_characterData->name)
+					<< io::write_dynamic_range<uint8>(guild->GetName());
+				packet.Finish();
+			});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildRemove(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to remove " << playerName << " from guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to remove player from guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to remove player from guild without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to remove player from guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// Check if the player has permission to remove members
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Remove))
+		{
+			ELOG("Player tried to remove player from guild without having permission to remove members");
+			return PacketParseResult::Pass;
+		}
+
+		// Find the target player's GUID
+		uint64 targetGuid = 0;
+		for (const auto& member : guild->GetMembers())
+		{
+			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
+			if (player && player->GetCharacterName() == playerName)
+			{
+				targetGuid = member.guid;
+				break;
+			}
+		}
+
+		if (targetGuid == 0)
+		{
+			// We couldn't find the player online, so we can't remove them
+			ELOG("Failed to find player " << playerName << " in guild members list");
+			return PacketParseResult::Pass;
+		}
+
+		// Remove the player from the guild
+		if (!guild->RemoveMember(targetGuid))
+		{
+			ELOG("Failed to remove player " << playerName << " from guild");
+			return PacketParseResult::Pass;
+		}
+
+		// Notify the player that they have been removed from the guild
+		Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(targetGuid);
+		if (targetPlayer)
+		{
+			targetPlayer->m_characterData->guildId = 0;
+			targetPlayer->GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GuildCommandResult);
+					packet
+						<< io::write<uint8>(0) // Command (Remove)
+						<< io::write<uint8>(0) // Result (Success)
+					;
+					packet.Finish();
+				});
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildPromote(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check if this is a special "set leader" operation
+		uint8 setLeaderFlag = 0;
+		if (packet.GetSize() > 0)
+		{
+			if (!(packet >> io::read<uint8>(setLeaderFlag)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		DLOG("Player wants to promote " << playerName << " in guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to promote player in guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to promote player in guild without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to promote player in guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// If this is a set leader operation, check if the player is the guild leader
+		if (setLeaderFlag == 0 && guild->GetLeaderGuid() != m_characterData->characterId)
+		{
+			ELOG("Player tried to set guild leader without being the guild leader");
+			return PacketParseResult::Pass;
+		}
+		// Otherwise check if the player has permission to promote members
+		else if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Promote))
+		{
+			ELOG("Player tried to promote player in guild without having permission to promote members");
+			return PacketParseResult::Pass;
+		}
+
+		// Find the target player's GUID and current rank
+		uint64 targetGuid = 0;
+		uint32 targetRank = 0;
+		for (const auto& member : guild->GetMembers())
+		{
+			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
+			if (player && player->GetCharacterName() == playerName)
+			{
+				targetGuid = member.guid;
+				targetRank = member.rank;
+				break;
+			}
+		}
+
+		if (targetGuid == 0)
+		{
+			ELOG("Failed to find player " << playerName << " in guild");
+			return PacketParseResult::Pass;
+		}
+
+		// If this is a set leader operation, set the player as the guild leader
+		if (setLeaderFlag == 0)
+		{
+			// TODO: Implement set leader functionality
+			ELOG("Set leader functionality not implemented yet");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot promote the guild leader
+		if (targetGuid == guild->GetLeaderGuid())
+		{
+			ELOG("Cannot promote the guild leader");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot promote a player with a higher rank than the player
+		if (targetRank < guild->GetMemberRank(m_characterData->characterId))
+		{
+			ELOG("Cannot promote a player with a higher rank than the player");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot promote a player with the same rank as the player
+		if (targetRank == guild->GetMemberRank(m_characterData->characterId))
+		{
+			ELOG("Cannot promote a player with the same rank as the player");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot promote a player who is already at the highest rank
+		if (targetRank <= 1)
+		{
+			ELOG("Cannot promote a player who is already at the highest rank");
+			return PacketParseResult::Pass;
+		}
+
+		// Promote the player
+		// TODO: Implement promote functionality
+		ELOG("Promote functionality not implemented yet");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildDemote(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to demote " << playerName << " in guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to demote player in guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to demote player in guild without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to demote player in guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// Check if the player has permission to demote members
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Demote))
+		{
+			ELOG("Player tried to demote player in guild without having permission to demote members");
+			return PacketParseResult::Pass;
+		}
+
+		// Find the target player's GUID and current rank
+		uint64 targetGuid = 0;
+		uint32 targetRank = 0;
+		for (const auto& member : guild->GetMembers())
+		{
+			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
+			if (player && player->GetCharacterName() == playerName)
+			{
+				targetGuid = member.guid;
+				targetRank = member.rank;
+				break;
+			}
+		}
+
+		if (targetGuid == 0)
+		{
+			ELOG("Failed to find player " << playerName << " in guild");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot demote the guild leader
+		if (targetGuid == guild->GetLeaderGuid())
+		{
+			ELOG("Cannot demote the guild leader");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot demote a player with a higher rank than the player
+		if (targetRank < guild->GetMemberRank(m_characterData->characterId))
+		{
+			ELOG("Cannot demote a player with a higher rank than the player");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot demote a player with the same rank as the player
+		if (targetRank == guild->GetMemberRank(m_characterData->characterId))
+		{
+			ELOG("Cannot demote a player with the same rank as the player");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot demote a player who is already at the lowest rank
+		if (targetRank >= guild->GetRanks().size() - 1)
+		{
+			ELOG("Cannot demote a player who is already at the lowest rank");
+			return PacketParseResult::Pass;
+		}
+
+		// Demote the player
+		// TODO: Implement demote functionality
+		ELOG("Demote functionality not implemented yet");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildLeave(game::IncomingPacket& packet)
+	{
+		DLOG("Player wants to leave guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to leave guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to leave guild without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to leave guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// Cannot leave the guild if the player is the guild leader
+		if (guild->GetLeaderGuid() == m_characterData->characterId)
+		{
+			ELOG("Guild leader cannot leave the guild, must disband or set a new leader");
+			return PacketParseResult::Pass;
+		}
+
+		// Remove the player from the guild
+		if (!guild->RemoveMember(m_characterData->characterId))
+		{
+			ELOG("Failed to remove player from guild");
+			return PacketParseResult::Pass;
+		}
+
+		// Update the player's guild ID
+		m_characterData->guildId = 0;
+
+		// Notify the player that they have left the guild
+		GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildCommandResult);
+				packet
+					<< io::write<uint8>(0) // Command
+					<< io::write<uint8>(0); // Result
+				packet.Finish();
+			});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildDisband(game::IncomingPacket& packet)
+	{
+		DLOG("Player wants to disband guild");
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to disband guild without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to disband guild without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to disband guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// Only the guild leader can disband the guild
+		if (guild->GetLeaderGuid() != m_characterData->characterId)
+		{
+			ELOG("Only the guild leader can disband the guild");
+			return PacketParseResult::Pass;
+		}
+
+		// Get all guild members
+		std::vector<uint64> guildMembers;
+		for (const auto& member : guild->GetMembers())
+		{
+			guildMembers.push_back(member.guid);
+		}
+
+		// Notify all online guild members that the guild has been disbanded
+		for (uint64 memberGuid : guildMembers)
+		{
+			Player* member = m_manager.GetPlayerByCharacterGuid(memberGuid);
+			if (member)
+			{
+				member->m_characterData->guildId = 0;
+				member->GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::GuildCommandResult);
+						packet
+							<< io::write<uint8>(0) // Command
+							<< io::write<uint8>(0); // Result
+						packet.Finish();
+					});
+			}
+		}
+
+		// TODO: Delete the guild from the database
+		ELOG("Guild disband functionality not fully implemented yet");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGuildMotd(game::IncomingPacket& packet)
+	{
+		String motd;
+		if (!(packet >> io::read_container<uint8>(motd)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to set guild MOTD to: " << motd);
+
+		if (!m_characterData)
+		{
+			ELOG("Player tried to set guild MOTD without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_characterData->guildId == 0)
+		{
+			ELOG("Player tried to set guild MOTD without being in a guild");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to set MOTD for guild that doesn't exist");
+			return PacketParseResult::Pass;
+		}
+
+		// Check if the player has permission to set the MOTD
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::SetMotd))
+		{
+			ELOG("Player tried to set guild MOTD without having permission to set MOTD");
+			return PacketParseResult::Pass;
+		}
+
+		// TODO: Set the guild MOTD
+		ELOG("Set guild MOTD functionality not implemented yet");
+
+		return PacketParseResult::Pass;
 	}
 }

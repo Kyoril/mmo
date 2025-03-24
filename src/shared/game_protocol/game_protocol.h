@@ -16,6 +16,41 @@ namespace mmo
 			typedef game::OutgoingPacket OutgoingPacket;
 		};
 
+		namespace guild_command
+		{
+			enum Type
+			{
+				Invite,
+				Uninvite,
+				Promote,
+				Demote,
+				SetLeader,
+				SetMOTD,
+				Leave,
+				Disband,
+			};
+		}
+
+		namespace guild_invite_result
+		{
+			enum Type
+			{
+				Ok,
+
+				NotInGuild,
+
+				AlreadyInGuild,
+
+				NotAllowed,
+
+				PlayerNotFound,
+
+				AlreadyInOtherGuild,
+
+				InvitePending
+			};
+		}
+
 		constexpr uint32 ProtocolVersion = 0x00000002;
 
 		////////////////////////////////////////////////////////////////////////////////

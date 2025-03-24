@@ -86,6 +86,8 @@ namespace mmo
 
 		void CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member) override;
 
+		void AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank) override;
+
 	private:
 		void PrintDatabaseError();
 

@@ -17,6 +17,7 @@
 #include "char_create_info.h"
 #include "char_select.h"
 #include "cursor.h"
+#include "guild_client.h"
 #include "loot_client.h"
 #include "platform.h"
 #include "quest_client.h"
@@ -704,7 +705,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -719,6 +720,7 @@ namespace mmo
 		, m_partyInfo(partyInfo)
 		, m_charCreateInfo(charCreateInfo)
 		, m_charSelect(charSelect)
+		, m_guildClient(guildClient)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -1096,6 +1098,18 @@ namespace mmo
 			luabind::def<std::function<void(int32, const ItemInfo*&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo*& out_item, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
 			luabind::def<std::function<void()>>("CloseVendor", [this]() { this->m_vendorClient.CloseVendor(); }),
+
+			// Guild
+			luabind::def<std::function<void(const String&)>>("GuildInviteByName", [this](const String& name) { return this->m_guildClient.GuildInviteByName(name); }),
+			luabind::def<std::function<void(const String&)>>("GuildUninviteByName", [this](const String& name) { return this->m_guildClient.GuildUninviteByName(name); }),
+			luabind::def<std::function<void(const String&)>>("GuildPromoteByName", [this](const String& name) { return this->m_guildClient.GuildPromoteByName(name); }),
+			luabind::def<std::function<void(const String&)>>("GuildDemoteByName", [this](const String& name) { return this->m_guildClient.GuildDemoteByName(name); }),
+			luabind::def<std::function<void(const String&)>>("GuildSetLeaderByName", [this](const String& name) { return this->m_guildClient.GuildSetLeaderByName(name); }),
+			luabind::def<std::function<void(const String&)>>("GuildSetMOTD", [this](const String& motd) { return this->m_guildClient.GuildSetMOTD(motd); }),
+			luabind::def<std::function<void()>>("GuildLeave", [this]() { return this->m_guildClient.GuildLeave(); }),
+			luabind::def<std::function<void()>>("GuildDisband", [this]() { return this->m_guildClient.GuildDisband(); }),
+			luabind::def<std::function<void()>>("AcceptGuild", [this]() { return this->m_guildClient.AcceptGuild(); }),
+			luabind::def<std::function<void()>>("DeclineGuild", [this]() { return this->m_guildClient.DeclineGuild(); }),
 
 			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),

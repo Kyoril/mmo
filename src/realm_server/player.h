@@ -169,6 +169,8 @@ namespace mmo
 
 		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String& playerName);
 
+		void SendGuildCommandResult(uint8 command, uint8 result, const String& playerName);
+
 	public:
 		struct PacketHandlerRegistrationHandle final
 		{
@@ -327,6 +329,8 @@ namespace mmo
 
 		GuildMgr& m_guildMgr;
 
+		uint64 m_pendingGuildInvite = 0;
+
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
@@ -362,6 +366,17 @@ namespace mmo
 		PacketParseResult OnGroupUninvite(game::IncomingPacket& packet);
 		PacketParseResult OnGroupAccept(game::IncomingPacket& packet);
 		PacketParseResult OnGroupDecline(game::IncomingPacket& packet);
+
+		// Guild packet handlers
+		PacketParseResult OnGuildInvite(game::IncomingPacket& packet);
+		PacketParseResult OnGuildRemove(game::IncomingPacket& packet);
+		PacketParseResult OnGuildPromote(game::IncomingPacket& packet);
+		PacketParseResult OnGuildDemote(game::IncomingPacket& packet);
+		PacketParseResult OnGuildLeave(game::IncomingPacket& packet);
+		PacketParseResult OnGuildDisband(game::IncomingPacket& packet);
+		PacketParseResult OnGuildMotd(game::IncomingPacket& packet);
+		PacketParseResult OnGuildAccept(game::IncomingPacket& packet);
+		PacketParseResult OnGuildDecline(game::IncomingPacket& packet);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);

@@ -58,11 +58,11 @@ namespace mmo
 					return;
 				}
 
-				auto guild = std::make_unique<Guild>(*this, m_asyncDatabase, guildId, name, leaderGuid);
+				auto guild = std::make_shared<Guild>(*this, m_asyncDatabase, guildId, name, leaderGuid);
 				m_guildIdsByName[name] = guild->GetId();
 
-				const std::unique_ptr<Guild>& ref = (m_guildsById[guildId] = std::move(guild));
-				callback(ref.get());
+				m_guildsById[guildId] = guild;
+				callback(guild.get());
 			};
 
 		std::vector<GuildRank> defaultRanks;
@@ -108,7 +108,7 @@ namespace mmo
 		m_idGenerator.NotifyId(info.id);
 
 		// Add the guild to the internal list
-		auto guild = std::make_unique<Guild>(*this, m_asyncDatabase, info.id, info.name, info.leaderGuid);
+		auto guild = std::make_shared<Guild>(*this, m_asyncDatabase, info.id, info.name, info.leaderGuid);
 		
 		// Add ranks and members
 		for (const auto& rank : info.ranks)
@@ -214,11 +214,21 @@ namespace mmo
 			return false;
 		}
 
-		// Add the member
-		m_members.emplace_back(playerGuid, rank);
+		std::weak_ptr weak = shared_from_this();
+		auto handler = [weak, playerGuid, rank](bool success)
+			{
+				auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
 
-		// TODO: Update the database
+				// Add the member
+				strong->m_members.emplace_back(playerGuid, rank);
+			};
 
+		// Update the database
+		m_database.asyncRequest(std::move(handler), &IDatabase::AddGuildMember, m_id, playerGuid, rank);
 		return true;
 	}
 
@@ -239,5 +249,10 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	uint32 Guild::GetLowestRank() const
+	{
+		return m_ranks.size() - 1;
 	}
 }
