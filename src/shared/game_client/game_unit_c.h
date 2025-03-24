@@ -329,6 +329,8 @@ namespace mmo
 
 		void PerformGroundCheck();
 
+		Vector3 GetDefaultQuestGiverOffset();
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
@@ -391,5 +393,7 @@ namespace mmo
 		Entity* m_questGiverEntity = nullptr;
 
 		AvatarConfiguration m_configuration;
+
+		Vector3 m_questOffset = Vector3::Zero;
 	};
 }

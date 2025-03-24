@@ -140,6 +140,12 @@ namespace mmo
 
 		if (m_questGiverNode != nullptr)
 		{
+			if (!m_questOffset.IsNearlyEqual(m_questGiverNode->GetPosition()))
+			{
+				// Lerp questgivernode position to quest offset node
+				m_questGiverNode->SetPosition(m_questGiverNode->GetPosition().Lerp(m_questOffset, deltaTime * 5.0f));
+			}
+
 			// TODO: Get rotation to the current camera and yaw the icon to face it!
 			Camera* cam = m_scene.GetCamera(0);
 			if (cam)
@@ -696,28 +702,35 @@ namespace mmo
 			m_questGiverEntity->SetMesh(MeshManager::Get().Load(meshName));
 		}
 
-		// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
-		// so that for very big models its not just that tiny icon floating in the sky above some giant head or something of that
-		float height = 2.0f;
-		float scale = 1.0f;
-		if (m_entity)
-		{
-			height = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
-			scale = height / 2.0f;
-		}
-
 		if (!m_questGiverNode)
 		{
-			m_questGiverNode = m_sceneNode->CreateChildSceneNode(Vector3::UnitY * height);
+			// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
+			// so that for very big models it's not just that tiny icon floating in the sky above some giant head or something of that
+
+			auto offset = GetDefaultQuestGiverOffset();
+			float scale = 1.0f;
+			if (m_entity)
+			{
+				offset.y = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
+				scale = offset.y / 2.0f;
+			}
+
+			// Hack to ensure the offset is set correctly initialized
+			if (m_questOffset.y <= 0.0f)
+			{
+				m_questOffset = offset;
+			}
+
+			m_questGiverNode = m_sceneNode->CreateChildSceneNode(m_questOffset);
 			ASSERT(m_questGiverNode);
 
 			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
 			m_questGiverNode->AttachObject(*m_questGiverEntity);
-		}
-		else
-		{
-			m_questGiverNode->SetPosition(Vector3::UnitY * height);
-			m_questGiverNode->SetScale(Vector3::UnitScale * scale);
+
+			if (m_nameComponent)
+			{
+				SetUnitNameVisible(m_nameComponent->IsVisible());
+			}
 		}
 	}
 
@@ -1472,6 +1485,21 @@ namespace mmo
 	{
 	}
 
+	Vector3 GameUnitC::GetDefaultQuestGiverOffset()
+	{
+		// Ideal size is a unit with a size of 2 units in height, but if the unit is bigger we want to offset the icon position as well as scale it up
+		// so that for very big models its not just that tiny icon floating in the sky above some giant head or something of that
+		float height = 2.0f;
+		float scale = 1.0f;
+		if (m_entity)
+		{
+			height = m_entity->GetBoundingBox().GetExtents().y * 2.2f;
+			scale = height / 2.0f;
+		}
+
+		return Vector3::UnitY * height;
+	}
+
 	void GameUnitC::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
 	{
 		// First, hide all sub entities with the given visibility set tag
@@ -1549,8 +1577,14 @@ namespace mmo
 
 	}
 
-	void GameUnitC::SetUnitNameVisible(bool show)
+	void GameUnitC::SetUnitNameVisible(const bool show)
 	{
+		m_questOffset = GetDefaultQuestGiverOffset();
+		if (show)
+		{
+			m_questOffset.y += (m_nameComponent->GetBoundingBox().GetSize().y + 0.1f);
+		}
+
 		if (m_nameComponent)
 		{
 			m_nameComponent->SetVisible(show);

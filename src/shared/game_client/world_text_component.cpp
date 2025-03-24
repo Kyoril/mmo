@@ -35,8 +35,6 @@ namespace mmo
 
 	void WorldTextComponent::PrepareRenderOperation(RenderOperation& operation)
 	{
-		UpdateGeometry();
-
 		operation.vertexData = m_vertexData.get();
 		operation.indexData = nullptr;
 		operation.material = m_material;
@@ -112,6 +110,7 @@ namespace mmo
 
 		m_text = text;
 		m_textInvalidated = true;
+		UpdateGeometry();
 	}
 
 	void WorldTextComponent::OnTextChanged()
@@ -139,6 +138,10 @@ namespace mmo
 		m_boundingBox.SetNull();
 		m_boundingBox.min.z = -1.0f;
 		m_boundingBox.max.z = 1.0f;
+		m_boundingBox.min.x = std::numeric_limits<float>::max();
+		m_boundingBox.min.y = std::numeric_limits<float>::max();
+		m_boundingBox.max.x = std::numeric_limits<float>::lowest();
+		m_boundingBox.max.y = std::numeric_limits<float>::lowest();
 
 		std::vector<VertexStruct> vertices;
 		vertices.reserve(m_text.size() * 6);  // 6 verts per glyph
@@ -244,14 +247,6 @@ namespace mmo
 			vertices.push_back({ { left,  top,    0.0f }, color,
 								 Vector3::UnitZ, Vector3::UnitX, Vector3::UnitY, u1, v1 });
 
-			// Update bounding box 
-			// (so the scene culler knows how big this object is).
-			// If you want "min.y < max.y," remember that top < bottom in this coordinate system.
-			m_boundingBox.min.x = std::min(m_boundingBox.min.x, left);
-			m_boundingBox.min.y = std::min(m_boundingBox.min.y, top);
-			m_boundingBox.max.x = std::max(m_boundingBox.max.x, right);
-			m_boundingBox.max.y = std::max(m_boundingBox.max.y, bottom);
-
 			// Advance cursor horizontally by the glyph's advance value
 			cursor.x += glyph->GetAdvance(scale);
 		}
@@ -275,6 +270,11 @@ namespace mmo
 
 			vertex.position.x -= currentLineWidth * 0.5f;
 			vertex.position.y += m_font->GetHeight(scale) * static_cast<float>(lineWidths.size() - 1);
+
+			m_boundingBox.min.x = std::min(m_boundingBox.min.x, vertex.position.x);
+			m_boundingBox.min.y = std::min(m_boundingBox.min.y, vertex.position.y);
+			m_boundingBox.max.x = std::max(m_boundingBox.max.x, vertex.position.x);
+			m_boundingBox.max.y = std::max(m_boundingBox.max.y, vertex.position.y);
 		}
 
 		m_vertexData->vertexCount = vertices.size();
@@ -286,6 +286,11 @@ namespace mmo
 		}
 		else
 		{
+			m_boundingBox.min.x = 0.0f;
+			m_boundingBox.min.y = 0.0f;
+			m_boundingBox.max.x = 0.0f;
+			m_boundingBox.max.y = 0.0f;
+
 			m_vertexData->vertexBufferBinding->UnsetAllBindings();
 		}
 	}
