@@ -2,40 +2,61 @@
 
 #include "database.h"
 #include "base/non_copyable.h"
+#include "game/guild_info.h"
 
 namespace mmo
 {
 	class GuildMgr;
 	class GamePlayerS;
 
-	class Guild final : public NonCopyable
+class Guild final : public NonCopyable
+{
+public:
+	Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
+		: m_manager(manager)
+		, m_database(database)
+		, m_id(id)
+		, m_name(std::move(name))
+		, m_leaderGuid(leaderGuid)
 	{
-	public:
-		Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
-			: m_manager(manager)
-			, m_database(database)
-			, m_id(id)
-			, m_name(std::move(name))
-			, m_leaderGuid(leaderGuid)
-		{
-		}
+	}
 
-	public:
-		uint64 GetId() const { return m_id; }
+public:
+	uint64 GetId() const { return m_id; }
 
-		const String& GetName() const { return m_name; }
+	const String& GetName() const { return m_name; }
 
-		uint64 GetLeaderGuid() const { return m_leaderGuid; }
+	uint64 GetLeaderGuid() const { return m_leaderGuid; }
 
-	public:
+	bool IsMember(uint64 playerGuid) const;
 
+	uint32 GetMemberRank(uint64 playerGuid) const;
 
-	private:
-		GuildMgr& m_manager;
-		AsyncDatabase& m_database;
-		uint64 m_id;
-		String m_name;
-		uint64 m_leaderGuid;
+	bool HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const;
+
+	std::vector<uint64> GetMembersWithPermission(guild_rank_permissions::Type permission) const;
+
+	void LoadMembers();
+
+	bool AddMember(uint64 playerGuid, uint32 rank = 4);
+
+	bool RemoveMember(uint64 playerGuid);
+
+	const std::vector<GuildMember>& GetMembers() const { return m_members; }
+	std::vector<GuildMember>& GetMembersRef() { return m_members; }
+
+	const std::vector<GuildRank>& GetRanks() const { return m_ranks; }
+	std::vector<GuildRank>& GetRanksRef() { return m_ranks; }
+
+private:
+	GuildMgr& m_manager;
+	AsyncDatabase& m_database;
+	uint64 m_id;
+	String m_name;
+	uint64 m_leaderGuid;
+	std::vector<GuildMember> m_members;
+	std::vector<GuildRank> m_ranks;
+	bool m_membersLoaded = false;
 	};
 
 	class GuildMgr final : public NonCopyable

@@ -574,8 +574,58 @@ namespace mmo
 			break;
 
 		case ChatType::Guild:
-			WLOG("Guild chat is not implemented yet!")
-				break;
+			{
+				if (!m_characterData)
+				{
+					WLOG("Player tried to send guild chat message without having character data!");
+					break;
+				}
+
+				if (m_characterData->guildId == 0)
+				{
+					WLOG("Player tried to send guild chat message without being in a guild!");
+					break;
+				}
+
+				Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+				if (!guild)
+				{
+					WLOG("Player tried to send guild chat message to a guild that doesn't exist!");
+					break;
+				}
+
+				// Check if the player has permission to write to guild chat
+				if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::WriteGuildChat))
+				{
+					WLOG("Player tried to send guild chat message without having permission to write to guild chat!");
+					break;
+				}
+
+				// Get all guild members with permission to read guild chat
+				std::vector<uint64> recipients = guild->GetMembersWithPermission(guild_rank_permissions::ReadGuildChat);
+
+				// Send the message to all recipients
+				for (uint64 recipientGuid : recipients)
+				{
+					Player* recipient = m_manager.GetPlayerByCharacterGuid(recipientGuid);
+					if (recipient)
+					{
+						recipient->GetConnection().sendSinglePacket([this, &message, chatType](game::OutgoingPacket& outPacket)
+							{
+								outPacket.Start(game::realm_client_packet::ChatMessage);
+								outPacket
+									<< io::write_packed_guid(m_characterData->characterId)
+									<< io::write<uint8>(chatType)
+									<< io::write_range(message)
+									<< io::write<uint8>(0)  // Chat flags
+									<< io::write<uint8>(0); // Chat tag
+								outPacket.Finish();
+							});
+					}
+				}
+			}
+			
+			break;
 
 		case ChatType::Raid:
 			WLOG("Raid chat is not implemented yet!");

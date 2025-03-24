@@ -108,7 +108,20 @@ namespace mmo
 		m_idGenerator.NotifyId(info.id);
 
 		// Add the guild to the internal list
-		m_guildsById[info.id] = std::make_unique<Guild>(*this, m_asyncDatabase, info.id, info.name, info.leaderGuid);
+		auto guild = std::make_unique<Guild>(*this, m_asyncDatabase, info.id, info.name, info.leaderGuid);
+		
+		// Add ranks and members
+		for (const auto& rank : info.ranks)
+		{
+			guild->GetRanksRef().push_back(rank);
+		}
+		
+		for (const auto& member : info.members)
+		{
+			guild->GetMembersRef().push_back(member);
+		}
+		
+		m_guildsById[info.id] = std::move(guild);
 		m_guildIdsByName[info.name] = info.id;
 
 		return true;
@@ -123,5 +136,108 @@ namespace mmo
 		}
 
 		return it->second;
+	}
+
+	bool Guild::IsMember(uint64 playerGuid) const
+	{
+		for (const auto& member : m_members)
+		{
+			if (member.guid == playerGuid)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	uint32 Guild::GetMemberRank(uint64 playerGuid) const
+	{
+		for (const auto& member : m_members)
+		{
+			if (member.guid == playerGuid)
+			{
+				return member.rank;
+			}
+		}
+		return UINT32_MAX; // Invalid rank
+	}
+
+	bool Guild::HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const
+	{
+		const uint32 rank = GetMemberRank(playerGuid);
+		if (rank == UINT32_MAX || rank >= m_ranks.size())
+		{
+			return false;
+		}
+
+		return (m_ranks[rank].permissions & permission) != 0;
+	}
+
+	std::vector<uint64> Guild::GetMembersWithPermission(guild_rank_permissions::Type permission) const
+	{
+		std::vector<uint64> result;
+		
+		for (const auto& member : m_members)
+		{
+			if (HasPermission(member.guid, permission))
+			{
+				result.push_back(member.guid);
+			}
+		}
+		
+		return result;
+	}
+
+	void Guild::LoadMembers()
+	{
+		if (m_membersLoaded)
+		{
+			return;
+		}
+
+		// In a real implementation, we would load members from the database here
+		// For now, we'll just mark them as loaded since they're already loaded in AddGuild
+		m_membersLoaded = true;
+	}
+
+	bool Guild::AddMember(uint64 playerGuid, uint32 rank)
+	{
+		// Check if the player is already a member
+		if (IsMember(playerGuid))
+		{
+			return false;
+		}
+
+		// Check if the rank is valid
+		if (rank >= m_ranks.size())
+		{
+			return false;
+		}
+
+		// Add the member
+		m_members.emplace_back(playerGuid, rank);
+
+		// TODO: Update the database
+
+		return true;
+	}
+
+	bool Guild::RemoveMember(uint64 playerGuid)
+	{
+		// Find the member
+		for (auto it = m_members.begin(); it != m_members.end(); ++it)
+		{
+			if (it->guid == playerGuid)
+			{
+				// Remove the member
+				m_members.erase(it);
+
+				// TODO: Update the database
+
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
