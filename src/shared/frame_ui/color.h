@@ -43,6 +43,11 @@ namespace mmo
 			return m_argb;
 		}
 
+		inline argb_t GetABGR() const noexcept
+		{
+			return CalculateABGR();
+		}
+
 		inline float GetAlpha() const noexcept { return m_alpha; }
 		inline float GetRed() const noexcept { return m_red; }
 		inline float GetGreen() const noexcept { return m_green; }
@@ -121,6 +126,7 @@ namespace mmo
 			SetARGB(argb);
 			return *this;
 		}
+
 		inline Color& operator=(const Color& color) noexcept
 		{
 			m_alpha = color.m_alpha;
@@ -189,6 +195,7 @@ namespace mmo
 				m_alpha * scalar
 			);
 		}
+
 		inline Color& operator*=(const Color& color) noexcept
 		{
 			m_red *= color.m_red;
@@ -200,6 +207,7 @@ namespace mmo
 
 			return *this;
 		}
+
 		inline bool operator==(const Color& rhs) const noexcept
 		{
 			// Try to compare by argb value, which is uint32 instead of costly float comparison
@@ -209,10 +217,12 @@ namespace mmo
 				std::fabs(m_blue - rhs.m_blue) <= FLT_EPSILON &&
 				std::fabs(m_alpha - rhs.m_alpha) <= FLT_EPSILON;
 		}
+
 		inline bool operator!=(const Color& rhs) const noexcept
 		{
 			return !(*this == rhs);
 		}
+
 		/// Hex ARGB stream writer operator
 		inline friend std::ostream& operator <<(std::ostream& s, const Color& val)
 		{
@@ -227,6 +237,7 @@ namespace mmo
 
 			return s;
 		}
+
 		/// Hex ARGB stream reader operator
 		inline friend std::istream& operator >>(std::istream& s, Color& val)
 		{
@@ -251,6 +262,7 @@ namespace mmo
 
 	private:
 		argb_t CalculateARGB() const noexcept;
+		argb_t CalculateABGR() const noexcept;
 
 		inline float MaxComponentVal() const noexcept { return std::max(std::max(m_red, m_green), m_blue); }
 		inline float MinComponentVal() const noexcept { return std::min(std::min(m_red, m_green), m_blue); }

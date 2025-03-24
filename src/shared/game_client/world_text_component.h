@@ -34,9 +34,15 @@ namespace mmo
 
 		[[nodiscard]] FontPtr GetFont() const { return m_font; }
 
-		void SetText(const String& text);
+	void SetText(const String& text);
 
-		[[nodiscard]] const String& GetText() const { return m_text; }
+	[[nodiscard]] const String& GetText() const { return m_text; }
+
+	/// Sets the font color for the text
+	void SetFontColor(const Color& color);
+
+	/// Gets the current font color
+	[[nodiscard]] const Color& GetFontColor() const { return m_fontColor; }
 
 	private:
 		void OnTextChanged();
@@ -54,10 +60,12 @@ namespace mmo
 
 		Matrix4 m_worldTransform;
 
-		MaterialPtr m_material;
+	MaterialPtr m_material;
 
-		std::unique_ptr<VertexData> m_vertexData;
+	std::unique_ptr<VertexData> m_vertexData;
 
-		std::unique_ptr<IndexData> m_indexData;
+	std::unique_ptr<IndexData> m_indexData;
+
+	Color m_fontColor{ Color::White };
 	};
 }

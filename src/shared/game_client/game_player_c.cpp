@@ -243,7 +243,8 @@ namespace mmo
 		const uint64 guildId = Get<uint64>(object_fields::Guild);
 		if (guildId != 0)
 		{
-			m_netDriver.OnGuildChanged(GetGuid(), guildId);
+			const auto strong = std::static_pointer_cast<GamePlayerC>(shared_from_this());
+			m_netDriver.OnGuildChanged(strong, guildId);
 		}
 		else if (m_guild)
 		{

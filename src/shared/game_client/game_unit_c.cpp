@@ -734,22 +734,65 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::RefreshUnitName()
+void GameUnitC::RefreshUnitName()
+{
+	// Ensure name component is updated to display the correct name
+	if (m_nameComponent)
 	{
-		// Ensure name component is updated to display the correct name
-		if (m_nameComponent)
+		std::ostringstream strm;
+		strm << GetName();
+
+		if (!m_creatureInfo.subname.empty())
 		{
-			std::ostringstream strm;
-			strm << GetName();
-
-			if (!m_creatureInfo.subname.empty())
-			{
-				strm << "\n<" << m_creatureInfo.subname << ">";
-			}
-
-			m_nameComponent->SetText(strm.str());
+			strm << "\n<" << m_creatureInfo.subname << ">";
 		}
+
+		m_nameComponent->SetText(strm.str());
+
+		// Set the text color based on the unit's relationship to the player
+		Color textColor = Color::White;  // Default color
+
+		// Check if this is a party member
+		bool isPartyMember = false;
+		if (IsPlayer())
+		{
+			// Check if this player is in the active player's party
+			auto activePlayer = ObjectMgr::GetActivePlayer();
+			if (activePlayer && activePlayer->GetGuid() != GetGuid())
+			{
+				// TODO: Check if this player is in the active player's party
+				// For now, we'll just check if it's a friendly player
+				if (activePlayer->IsFriendlyTo(*this))
+				{
+					isPartyMember = true;
+				}
+			}
+		}
+
+		if (isPartyMember || (IsPlayer() && IsFriendly()))
+		{
+			// Blue for party members and friendly players
+			textColor.Set(0.0f, 0.5f, 1.0f, 1.0f);
+		}
+		else if (IsHostile())
+		{
+			// Red for hostile units
+			textColor.Set(1.0f, 0.0f, 0.0f, 1.0f);
+		}
+		else if (IsFriendly())
+		{
+			// Green for friendly units
+			textColor.Set(0.0f, 1.0f, 0.0f, 1.0f);
+		}
+		else
+		{
+			// Yellow for neutral units
+			textColor.Set(1.0f, 1.0f, 0.0f, 1.0f);
+		}
+
+		m_nameComponent->SetFontColor(textColor);
 	}
+}
 
 	void GameUnitC::StartMove(const bool forward)
 	{

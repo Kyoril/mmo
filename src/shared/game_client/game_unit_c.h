@@ -49,7 +49,7 @@ namespace mmo
 
 		virtual void SetSelectedTarget(uint64 guid) = 0;
 
-		virtual void OnGuildChanged(uint64 guid, uint64 guildGuid) = 0;
+		virtual void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) = 0;
 	};
 
 	class GameAuraC final : public NonCopyable

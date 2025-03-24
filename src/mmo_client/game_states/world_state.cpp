@@ -3260,18 +3260,18 @@ namespace mmo
 		m_realmConnector.SetSelection(guid);
 	}
 
-	void WorldState::OnGuildChanged(uint64 guid, uint64 guildGuid)
+	void WorldState::OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid)
 	{
 		if (guildGuid == 0)
 		{
 			return;
 		}
 
-		m_guildCache.Get(guildGuid, [guid](uint64, const GuildInfo& info)
+		m_guildCache.Get(guildGuid, [player, this](uint64, const GuildInfo& info)
 			{
-				if (const std::shared_ptr<GamePlayerC> player = ObjectMgr::Get<GamePlayerC>(guid))
+				if (const auto strong = player.lock())
 				{
-					player->NotifyGuildInfo(&info);
+					strong->NotifyGuildInfo(&info);
 				}
 			});
 	}

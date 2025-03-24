@@ -18,6 +18,16 @@ namespace mmo
 			);
 	}
 
+	argb_t Color::CalculateABGR() const noexcept
+	{
+		return (
+			static_cast<argb_t>(m_alpha * 255) << 24 |
+			static_cast<argb_t>(m_blue * 255) << 16 |
+			static_cast<argb_t>(m_green * 255) << 8 |
+			static_cast<argb_t>(m_red * 255)
+			);
+	}
+
 	Color::Color() noexcept
 		: m_alpha(1.0f)
 		, m_red(0.0f)

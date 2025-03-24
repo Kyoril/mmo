@@ -101,17 +101,29 @@ namespace mmo
 		m_textInvalidated = true;
 	}
 
-	void WorldTextComponent::SetText(const String& text)
+void WorldTextComponent::SetText(const String& text)
+{
+	if (text == m_text)
 	{
-		if (text == m_text)
-		{
-			return;
-		}
-
-		m_text = text;
-		m_textInvalidated = true;
-		UpdateGeometry();
+		return;
 	}
+
+	m_text = text;
+	m_textInvalidated = true;
+	UpdateGeometry();
+}
+
+void WorldTextComponent::SetFontColor(const Color& color)
+{
+	if (color == m_fontColor)
+	{
+		return;
+	}
+
+	m_fontColor = color;
+	m_textInvalidated = true;
+	UpdateGeometry();
+}
 
 	void WorldTextComponent::OnTextChanged()
 	{
@@ -156,6 +168,8 @@ namespace mmo
 
 		std::vector<float> lineWidths;
 		std::vector<uint32> lineStarts;
+
+		const uint32 color = m_fontColor.GetABGR();
 
 		for (size_t i = 0; i < m_text.length(); ++i)
 		{
@@ -225,11 +239,6 @@ namespace mmo
 			float v1 = texArea.top / texH;
 			float u2 = texArea.right / texW;
 			float v2 = texArea.bottom / texH;
-
-			// Build two triangles (6 vertices).
-			// If your coordinate system is "Y down," the "top < bottom" is correct.
-			// Adjust normal/tangent if needed, or set them to e.g. UnitZ or NegativeUnitZ.
-			const uint32 color = 0xFFFFFFFF;
 
 			// Triangle #1
 			vertices.push_back({ { left,  top,    0.0f }, color,

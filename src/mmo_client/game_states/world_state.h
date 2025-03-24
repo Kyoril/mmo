@@ -436,6 +436,6 @@ namespace mmo
 
 		void SetSelectedTarget(uint64 guid) override;
 
-		void OnGuildChanged(uint64 guid, uint64 guildGuid) override;
+		void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) override;
 	};
 }
