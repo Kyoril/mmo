@@ -1,0 +1,64 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Launch MMO Client",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/bin/${input:buildType}/mmo_client",
+        "cwd": "${workspaceFolder}/bin/${input:buildType}",
+        "stopAtEntry": false,
+        "args": [],
+        "MIMode": "gdb"
+      },
+      {
+        "name": "Launch Login Server",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/bin/${input:buildType}/login_server",
+        "cwd": "${workspaceFolder}/bin/${input:buildType}",
+        "stopAtEntry": false,
+        "args": [],
+        "MIMode": "gdb"
+      },
+      {
+        "name": "Launch Realm Server",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/bin/${input:buildType}/realm_server",
+        "cwd": "${workspaceFolder}/bin/${input:buildType}",
+        "stopAtEntry": false,
+        "args": [],
+        "MIMode": "gdb"
+      },
+      {
+        "name": "Launch World Server",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/bin/${input:buildType}/world_server",
+        "cwd": "${workspaceFolder}/bin/${input:buildType}",
+        "stopAtEntry": false,
+        "args": [],
+        "MIMode": "gdb"
+      },
+      {
+        "name": "Launch MMO Editor",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/bin/${input:buildType}/mmo_edit",
+        "cwd": "${workspaceFolder}/bin/${input:buildType}",
+        "stopAtEntry": false,
+        "args": [],
+        "MIMode": "gdb"
+      }
+    ],
+    "inputs": [
+        {
+            "id": "buildType",
+            "type": "pickString",
+            "description": "Select build configuration",
+            "options": [ "Debug", "Release" ],
+            "default": "Debug"
+        }
+    ]
+}

@@ -1,0 +1,15 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.exclude": {
+        "**/build": true
+    },
+    "cmake.configureArgs": [
+        "-DMMO_WITH_DEV_COMMANDS=ON",
+        "-DMMO_BUILD_TOOLS=ON",
+        "-DMMO_BUILD_EDITOR=ON",
+        "-DMMO_BUILD_CLIENT=ON",
+        "-DMMO_BUILD_LAUNCHER=ON"
+    ]
+}

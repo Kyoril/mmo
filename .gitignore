@@ -14,3 +14,5 @@ deps/assimp/
 .DS_Store
 **/.DS_Store
 
+.vscode/cmake-kits.json
+.vscode/ipch/
