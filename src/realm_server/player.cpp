@@ -2665,17 +2665,8 @@ namespace mmo
 		}
 
 		// Update the player's guild ID
-		m_characterData->guildId = 0;
-
-		// Notify the player that they have left the guild
-		GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::realm_client_packet::GuildCommandResult);
-				packet
-					<< io::write<uint8>(0) // Command
-					<< io::write<uint8>(0); // Result
-				packet.Finish();
-			});
+		SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::Ok, "");
+		GuildChange(0);
 
 		return PacketParseResult::Pass;
 	}
