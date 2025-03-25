@@ -3,6 +3,7 @@
 
 #include "console/console.h"
 #include "frame_ui/frame_mgr.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -17,6 +18,8 @@ namespace mmo
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildQueryResponse, *this, &GuildClient::OnGuildQueryResult);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildCommandResult, *this, &GuildClient::OnGuildCommandResult);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildInvite, *this, &GuildClient::OnGuildInvite);
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildDecline, *this, &GuildClient::OnGuildDecline);
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildUninvite, *this, &GuildClient::OnGuildUninvite);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("guildcreate", [this](const std::string& cmd, const std::string& args) { Command_GuildCreate(cmd, args); }, ConsoleCommandCategory::Gm, "Creates a new guild with yourself as the leader.");
@@ -170,21 +173,29 @@ namespace mmo
 	PacketParseResult GuildClient::OnGuildCommandResult(game::IncomingPacket& packet)
 	{
 		uint8 command, result;
+		String playerName;
 		if (!(packet
 			>> io::read<uint8>(command)
-			>> io::read<uint8>(result)))
+			>> io::read<uint8>(result)
+			>> io::read_container<uint8>(playerName)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		switch (command)
+		if (result != game::guild_command_result::Ok)
 		{
-		case game::guild_command::Invite:
-			break;
-
-		default:
-			ELOG("Unhandled guild command result: " << log_hex_digit(command));
-			break;
+			FrameManager::Get().TriggerLuaEvent("GUILD_COMMAND_RESULT", static_cast<int32>(result), playerName);
+		}
+		else
+		{
+			if (command == game::guild_command::Invite)
+			{
+				FrameManager::Get().TriggerLuaEvent("GUILD_INVITE_SENT", playerName);
+			}
+			else if (command == game::guild_command::Leave)
+			{
+				FrameManager::Get().TriggerLuaEvent("GUILD_LEFT");
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -201,6 +212,26 @@ namespace mmo
 
 		// TODO: Raise UI event
 		FrameManager::Get().TriggerLuaEvent("GUILD_INVITE_REQUEST", m_invitePlayerName, m_inviteGuildName);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult GuildClient::OnGuildDecline(game::IncomingPacket& packet)
+	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("GUILD_INVITE_DECLINED", playerName);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult GuildClient::OnGuildUninvite(game::IncomingPacket& packet)
+	{
+
 
 		return PacketParseResult::Pass;
 	}

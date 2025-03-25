@@ -1326,6 +1326,19 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::RemoveGuildMember(uint64 guildId, uint64 memberGuid)
+	{
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `guild_members` WHERE `guild_id` = '{0}' AND `guid` = '{1}' LIMIT 1"
+			, guildId
+			, memberGuid
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());

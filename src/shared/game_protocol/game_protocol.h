@@ -31,7 +31,7 @@ namespace mmo
 			};
 		}
 
-		namespace guild_invite_result
+		namespace guild_command_result
 		{
 			enum Type
 			{
@@ -377,6 +377,7 @@ namespace mmo
 				GuildDecline,
 				GuildCommandResult,
 				GuildQueryResponse,
+				GuildUninvite,
 
 				/// Counter constant
 				Count_,

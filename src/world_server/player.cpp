@@ -166,6 +166,16 @@ namespace mmo
 		}
 	}
 
+	void Player::UpdateCharacterGuild(uint64 guildId)
+	{
+		if (!m_character)
+		{
+			return;
+		}
+
+		m_character->Set<uint64>(object_fields::Guild, guildId);
+	}
+
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Handle object field updates if any

@@ -92,6 +92,8 @@ namespace mmo
 
 		void UpdateCharacterGroup(uint64 groupId);
 
+		void UpdateCharacterGuild(uint64 guildId);
+
 	public:
 		TileIndex2D GetTileIndex() const;
 

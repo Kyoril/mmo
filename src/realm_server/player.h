@@ -115,6 +115,8 @@ namespace mmo
 
 		void BuildPartyMemberStatsPacket(game::OutgoingPacket& packet, uint32 groupUpdateFlags) const;
 
+		void GuildChange(uint64 guildId);
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
@@ -130,6 +132,8 @@ namespace mmo
 		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3& position, const Radian& facing);
 
 		PacketParseResult OnGroupUpdate(auth::IncomingPacket& packet);
+
+		void BroadcastToGuildMembers();
 
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
@@ -330,6 +334,8 @@ namespace mmo
 		GuildMgr& m_guildMgr;
 
 		uint64 m_pendingGuildInvite = 0;
+
+		uint64 m_guildInviter = 0;
 
 	private:
 		/// Closes the connection if still connected.

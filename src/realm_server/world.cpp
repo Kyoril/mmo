@@ -530,6 +530,18 @@ namespace mmo
 			});
 	}
 
+	void World::NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId)
+	{
+		GetConnection().sendSinglePacket([characterId, guildId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerGuildChanged);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint64>(guildId);
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;

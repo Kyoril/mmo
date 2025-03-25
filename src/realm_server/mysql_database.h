@@ -88,6 +88,8 @@ namespace mmo
 
 		void AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank) override;
 
+		void RemoveGuildMember(uint64 guildId, uint64 memberGuid) override;
+
 	private:
 		void PrintDatabaseError();
 

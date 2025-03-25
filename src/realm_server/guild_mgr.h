@@ -1,6 +1,8 @@
 #pragma once
 
 #include "database.h"
+#include "player.h"
+#include "player_manager.h"
 #include "base/non_copyable.h"
 #include "game/guild_info.h"
 
@@ -12,8 +14,9 @@ namespace mmo
 	class Guild final : public NonCopyable, public std::enable_shared_from_this<Guild>
 	{
 	public:
-		Guild(GuildMgr& manager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
+		Guild(GuildMgr& manager, PlayerManager& playerManager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
 			: m_manager(manager)
+			, m_playerManager(playerManager)
 			, m_database(database)
 			, m_id(id)
 			, m_name(std::move(name))
@@ -32,9 +35,9 @@ namespace mmo
 
 		uint32 GetMemberRank(uint64 playerGuid) const;
 
-		bool HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const;
+		bool HasPermission(uint64 playerGuid, uint32 permission) const;
 
-		std::vector<uint64> GetMembersWithPermission(guild_rank_permissions::Type permission) const;
+		std::vector<uint64> GetMembersWithPermission(uint32 permission) const;
 
 		void LoadMembers();
 
@@ -50,8 +53,26 @@ namespace mmo
 
 		uint32 GetLowestRank() const;
 
+		template<class F>
+		void BroadcastPacketWithPermission(F creator, const uint32 permissions)
+		{
+			for (auto& member : m_members)
+			{
+				if (!HasPermission(member.guid, permissions))
+				{
+					continue;
+				}
+
+				if (auto player = m_playerManager.GetPlayerByCharacterGuid(member.guid))
+				{
+					player->SendPacket(creator);
+				}
+			}
+		}
+
 	private:
 		GuildMgr& m_manager;
+		PlayerManager& m_playerManager;
 		AsyncDatabase& m_database;
 		uint64 m_id;
 		String m_name;
@@ -64,7 +85,7 @@ namespace mmo
 	class GuildMgr final : public NonCopyable
 	{
 	public:
-		explicit GuildMgr(AsyncDatabase& asyncDatabase);
+		explicit GuildMgr(AsyncDatabase& asyncDatabase, PlayerManager& playerManager);
 
 	public:
 		void LoadGuilds();
@@ -84,6 +105,8 @@ namespace mmo
 
 	private:
 		AsyncDatabase& m_asyncDatabase;
+
+		PlayerManager& m_playerManager;
 
 		std::map<uint64, std::shared_ptr<Guild>> m_guildsById;
 

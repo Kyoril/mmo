@@ -228,7 +228,7 @@ namespace mmo
 		asio::io_context::work work{ ioService };
 
 		// Load all guilds
-		GuildMgr guildMgr{ asyncDatabase };
+		GuildMgr guildMgr{ asyncDatabase, playerManager };
 		guildMgr.LoadGuilds();
 
 		// Wait for all guilds to load

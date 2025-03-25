@@ -117,6 +117,8 @@ namespace mmo
 		PacketParseResult OnTeleportRequest(auth::IncomingPacket& packet);
 
 		PacketParseResult OnPlayerGroupChanged(auth::IncomingPacket& packet);
+
+		PacketParseResult OnPlayerGuildChanged(auth::IncomingPacket& packet);
 		
 		/// Resets this instance to an unauthenticated state.
 		void Reset();

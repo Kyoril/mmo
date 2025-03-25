@@ -129,6 +129,8 @@ namespace mmo
 				TeleportRequest,
 
 				PlayerGroupChanged,
+
+				PlayerGuildChanged,
 			};
 		}
 

@@ -25,6 +25,9 @@ namespace mmo
 		/// @brief A player says something in guild chat.
 		Guild,
 
+		/// @brief A player says something in guild officer chat.
+		GuildOfficer,
+
 		Whisper,
 
 		/// @brief A player performs an emote. Executed on world node.

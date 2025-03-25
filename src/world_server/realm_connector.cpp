@@ -440,6 +440,7 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::FetchCharacterLocation, *this, &RealmConnector::OnFetchCharacterLocation);
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
 				
 				PropagateHostedMapIds();
 			}
@@ -822,6 +823,29 @@ namespace mmo
 		}
 
 		player->UpdateCharacterGroup(groupId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerGuildChanged(auth::IncomingPacket& packet)
+	{
+		uint64 characterId, guildId;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(guildId)))
+		{
+			ELOG("Failed to read PLAYER_GUILD_CHANGED packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player " << log_hex_digit(characterId) << " is now a member of guild " << log_hex_digit(guildId));
+
+		// Try to find character
+		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (!player)
+		{
+			WLOG("Could not find character by guid " << log_hex_digit(characterId));
+			return PacketParseResult::Pass;
+		}
+
+		player->UpdateCharacterGuild(guildId);
 		return PacketParseResult::Pass;
 	}
 

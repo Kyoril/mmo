@@ -574,6 +574,7 @@ namespace mmo
 			break;
 
 		case ChatType::Guild:
+		case ChatType::GuildOfficer:
 			{
 				if (!m_characterData)
 				{
@@ -595,36 +596,28 @@ namespace mmo
 				}
 
 				// Check if the player has permission to write to guild chat
-				if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::WriteGuildChat))
+				const uint32 requiredWritePermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::WriteOfficerChat : guild_rank_permissions::WriteGuildChat;
+				if (!guild->HasPermission(m_characterData->characterId, requiredWritePermissions))
 				{
 					WLOG("Player tried to send guild chat message without having permission to write to guild chat!");
 					break;
 				}
 
-				// Get all guild members with permission to read guild chat
-				std::vector<uint64> recipients = guild->GetMembersWithPermission(guild_rank_permissions::ReadGuildChat);
+				const uint32 requiredReadPermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::ReadOfficerChat : guild_rank_permissions::ReadGuildChat;
 
-				// Send the message to all recipients
-				for (uint64 recipientGuid : recipients)
-				{
-					Player* recipient = m_manager.GetPlayerByCharacterGuid(recipientGuid);
-					if (recipient)
+				// Send guild chat packet to all members with permission to read guild chat
+				guild->BroadcastPacketWithPermission([this, &message, chatType](game::OutgoingPacket& outPacket)
 					{
-						recipient->GetConnection().sendSinglePacket([this, &message, chatType](game::OutgoingPacket& outPacket)
-							{
-								outPacket.Start(game::realm_client_packet::ChatMessage);
-								outPacket
-									<< io::write_packed_guid(m_characterData->characterId)
-									<< io::write<uint8>(chatType)
-									<< io::write_range(message)
-									<< io::write<uint8>(0)  // Chat flags
-									<< io::write<uint8>(0); // Chat tag
-								outPacket.Finish();
-							});
-					}
-				}
+						outPacket.Start(game::realm_client_packet::ChatMessage);
+						outPacket
+							<< io::write_packed_guid(m_characterData->characterId)
+							<< io::write<uint8>(chatType)
+							<< io::write_range(message)
+							<< io::write<uint8>(0)  // Chat flags
+							<< io::write<uint8>(0); // Chat tag
+						outPacket.Finish();
+					}, requiredReadPermissions);
 			}
-			
 			break;
 
 		case ChatType::Raid:
@@ -1015,6 +1008,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		GuildChange(guild->GetId());
+
 		return PacketParseResult::Pass;
 	}
 
@@ -1026,7 +1021,25 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		ASSERT(m_characterData);
+		DLOG("Pending guild invite from " << log_hex_digit(m_guildInviter) << " to guild " << log_hex_digit(m_pendingGuildInvite) << " declined by player " << log_hex_digit(m_characterData->characterId));
 
+		// Notify the inviter if possible
+		const auto player = m_manager.GetPlayerByCharacterGuid(m_guildInviter);
+		m_guildInviter = 0;
+		m_pendingGuildInvite = 0;
+		if (player)
+		{
+			const String& inviterName = GetCharacterName();
+			player->SendPacket(
+				[&inviterName](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::GuildDecline);
+					packet << io::write_dynamic_range<uint8>(inviterName);
+					packet.Finish();
+				}
+			);
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -1367,6 +1380,28 @@ namespace mmo
 		}
 
 		packet.Finish();
+	}
+
+	void Player::GuildChange(const uint64 guildId)
+	{
+		if (!m_characterData)
+		{
+			ELOG("Player tried to change guild without having character data");
+			return;
+		}
+
+		m_pendingGuildInvite = 0;
+		m_guildInviter = 0;
+
+		m_characterData->guildId = guildId;
+
+		const auto world = GetWorld();
+		if (!world)
+		{
+			return;
+		}
+
+		world->NotifyPlayerGuildChanged(m_characterData->characterId, guildId);
 	}
 
 	void Player::SendAuthChallenge()
@@ -2247,7 +2282,7 @@ namespace mmo
 		if (m_characterData->guildId == 0)
 		{
 			ELOG("Player tried to invite player to guild without being in a guild");
-			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::NotInGuild, "");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2262,7 +2297,7 @@ namespace mmo
 		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Invite))
 		{
 			ELOG("Player tried to invite player to guild without having permission to invite members");
-			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::NotAllowed, "");
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2271,14 +2306,14 @@ namespace mmo
 		if (!targetPlayer)
 		{
 			ELOG("Player tried to invite player to guild who is not online");
-			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::PlayerNotFound, playerName);
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::PlayerNotFound, playerName);
 			return PacketParseResult::Pass;
 		}
 
 		if (targetPlayer->m_pendingGuildInvite != 0)
 		{
 			ELOG("Player tried to invite player to guild who already has a pending invite");
-			SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::InvitePending, playerName);
+			SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::InvitePending, playerName);
 			return PacketParseResult::Pass;
 		}
 
@@ -2287,17 +2322,18 @@ namespace mmo
 			ELOG("Player tried to invite player to guild who is already in a guild");
 			if (targetPlayer->m_characterData->guildId == m_characterData->guildId)
 			{
-				SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::AlreadyInGuild, playerName);
+				SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::AlreadyInGuild, playerName);
 			}
 			else
 			{
-				SendGuildCommandResult(game::guild_command::Invite, game::guild_invite_result::AlreadyInOtherGuild, playerName);
+				SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::AlreadyInOtherGuild, playerName);
 			}
 			return PacketParseResult::Pass;
 		}
 
 		// Set pending guild invite
 		targetPlayer->m_pendingGuildInvite = guild->GetId();
+		targetPlayer->m_guildInviter = m_characterData->characterId;
 
 		// Send guild invite to target player
 		targetPlayer->GetConnection().sendSinglePacket([this, guild](game::OutgoingPacket& packet)
@@ -2309,6 +2345,8 @@ namespace mmo
 				packet.Finish();
 			});
 
+		// Success
+		SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::Ok, playerName);
 		return PacketParseResult::Pass;
 	}
 
@@ -2375,19 +2413,9 @@ namespace mmo
 		}
 
 		// Notify the player that they have been removed from the guild
-		Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(targetGuid);
-		if (targetPlayer)
+		if (Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(targetGuid))
 		{
-			targetPlayer->m_characterData->guildId = 0;
-			targetPlayer->GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::GuildCommandResult);
-					packet
-						<< io::write<uint8>(0) // Command (Remove)
-						<< io::write<uint8>(0) // Result (Success)
-					;
-					packet.Finish();
-				});
+			targetPlayer->GuildChange(0);
 		}
 
 		return PacketParseResult::Pass;

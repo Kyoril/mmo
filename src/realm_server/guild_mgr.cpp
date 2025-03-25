@@ -7,8 +7,9 @@
 
 namespace mmo
 {
-	GuildMgr::GuildMgr(AsyncDatabase& asyncDatabase)
+	GuildMgr::GuildMgr(AsyncDatabase& asyncDatabase, PlayerManager& playerManager)
 		: m_asyncDatabase(asyncDatabase)
+		, m_playerManager(playerManager)
 	{
 	}
 
@@ -58,7 +59,7 @@ namespace mmo
 					return;
 				}
 
-				auto guild = std::make_shared<Guild>(*this, m_asyncDatabase, guildId, name, leaderGuid);
+				auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, name, leaderGuid);
 				m_guildIdsByName[name] = guild->GetId();
 
 				m_guildsById[guildId] = guild;
@@ -108,7 +109,7 @@ namespace mmo
 		m_idGenerator.NotifyId(info.id);
 
 		// Add the guild to the internal list
-		auto guild = std::make_shared<Guild>(*this, m_asyncDatabase, info.id, info.name, info.leaderGuid);
+		auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, info.id, info.name, info.leaderGuid);
 		
 		// Add ranks and members
 		for (const auto& rank : info.ranks)
@@ -162,7 +163,7 @@ namespace mmo
 		return UINT32_MAX; // Invalid rank
 	}
 
-	bool Guild::HasPermission(uint64 playerGuid, guild_rank_permissions::Type permission) const
+	bool Guild::HasPermission(uint64 playerGuid, uint32 permission) const
 	{
 		const uint32 rank = GetMemberRank(playerGuid);
 		if (rank == UINT32_MAX || rank >= m_ranks.size())
@@ -173,7 +174,7 @@ namespace mmo
 		return (m_ranks[rank].permissions & permission) != 0;
 	}
 
-	std::vector<uint64> Guild::GetMembersWithPermission(guild_rank_permissions::Type permission) const
+	std::vector<uint64> Guild::GetMembersWithPermission(uint32 permission) const
 	{
 		std::vector<uint64> result;
 		
@@ -223,6 +224,8 @@ namespace mmo
 					return;
 				}
 
+				ASSERT(success);
+
 				// Add the member
 				strong->m_members.emplace_back(playerGuid, rank);
 			};
@@ -235,20 +238,49 @@ namespace mmo
 	bool Guild::RemoveMember(uint64 playerGuid)
 	{
 		// Find the member
-		for (auto it = m_members.begin(); it != m_members.end(); ++it)
-		{
-			if (it->guid == playerGuid)
+		const auto it = std::find_if(m_members.begin(), m_members.end(), [playerGuid](const GuildMember& member)
 			{
-				// Remove the member
-				m_members.erase(it);
+				return member.guid == playerGuid;
+			});
 
-				// TODO: Update the database
-
-				return true;
-			}
+		if (it == m_members.end())
+		{
+			return false;
 		}
 
-		return false;
+		std::weak_ptr weak = shared_from_this();
+		auto handler = [weak, playerGuid](const bool success)
+			{
+				const auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				ASSERT(success);
+
+				const auto it = std::find_if(strong->m_members.begin(), strong->m_members.end(), [playerGuid](const GuildMember& member)
+					{
+						return member.guid == playerGuid;
+					});
+
+				if (it != strong->m_members.end())
+				{
+					strong->m_members.erase(it);
+
+					// TODO: Maybe we should send names
+					strong->BroadcastPacketWithPermission([strong, playerGuid](game::OutgoingPacket& packet) {
+						packet.Start(game::realm_client_packet::GuildUninvite);
+						packet << io::write<uint64>(playerGuid);
+						packet.Finish();
+						}, 0);
+				}
+			};
+
+		// Update the database
+		m_database.asyncRequest(std::move(handler), &IDatabase::RemoveGuildMember, m_id, playerGuid);
+
+		return true;
 	}
 
 	uint32 Guild::GetLowestRank() const

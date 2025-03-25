@@ -45,6 +45,10 @@ namespace mmo
 
 		PacketParseResult OnGuildInvite(game::IncomingPacket& packet);
 
+		PacketParseResult OnGuildDecline(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildUninvite(game::IncomingPacket& packet);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		void Command_GuildCreate(const std::string& cmd, const std::string& args) const;
 #endif
@@ -56,5 +60,7 @@ namespace mmo
 
 		String m_invitePlayerName;
 		String m_inviteGuildName;
+
+		uint64 m_guildId = 0;
 	};
 }

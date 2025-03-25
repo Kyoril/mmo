@@ -113,6 +113,8 @@ namespace mmo
 
 		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId);
 
+		void NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId);
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
