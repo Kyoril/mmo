@@ -20,6 +20,7 @@ namespace mmo
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildInvite, *this, &GuildClient::OnGuildInvite);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildDecline, *this, &GuildClient::OnGuildDecline);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildUninvite, *this, &GuildClient::OnGuildUninvite);
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildEvent, *this, &GuildClient::OnGuildEvent);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("guildcreate", [this](const std::string& cmd, const std::string& args) { Command_GuildCreate(cmd, args); }, ConsoleCommandCategory::Gm, "Creates a new guild with yourself as the leader.");
@@ -232,6 +233,51 @@ namespace mmo
 	PacketParseResult GuildClient::OnGuildUninvite(game::IncomingPacket& packet)
 	{
 
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult GuildClient::OnGuildEvent(game::IncomingPacket& packet)
+	{
+		GuildEvent event;
+		uint8 stringCount;
+		if (!(packet
+			>> io::read<uint8>(event)
+			>> io::read<uint8>(stringCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<String> args;
+		args.resize(stringCount);
+		for (uint8 i = 0; i < stringCount; ++i)
+		{
+			if (!(packet >> io::read_container<uint8>(args[i])))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		ASSERT(static_cast<size_t>(event) < guild_event::Count_);
+		static const char* s_eventStrings[] = {
+			"PROMOTION",
+			"DEMOTION",
+			"MOTD",
+			"JOINED",
+			"LEFT",
+			"REMOVED",
+			"LEADER_CHANGED",
+			"DISBANDED",
+			"LOGGED_IN",
+			"LOGGED_OUT"
+		};
+
+		static_assert(std::size(s_eventStrings) == static_cast<size_t>(GuildEvent::Count_), "Event string count mismatch");
+
+		const char* arg1 = args.size() >= 1 ? args[0].c_str() : nullptr;
+		const char* arg2 = args.size() >= 2 ? args[1].c_str() : nullptr;
+		const char* arg3 = args.size() >= 3 ? args[2].c_str() : nullptr;
+		FrameManager::Get().TriggerLuaEvent("GUILD_EVENT", s_eventStrings[static_cast<size_t>(event)], arg1, arg2, arg3);
 
 		return PacketParseResult::Pass;
 	}

@@ -86,6 +86,18 @@ namespace mmo
 			m_group->NotifyMemberDisconnected(m_characterData->characterId);
 		}
 
+		if (m_characterData && m_characterData->guildId != 0)
+		{
+			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			{
+				guild->BroadcastEvent(guild_event::LoggedOut, m_characterData->characterId, m_characterData->name.c_str());
+			}
+			else
+			{
+				ELOG("Player " << log_hex_digit(m_characterData->characterId) << " is in guild " << log_hex_digit(m_characterData->guildId) << " which could not be found (not loaded from database?)");
+			}
+		}
+
 		if (const auto strongWorld = m_world.lock())
 		{
 			if (HasCharacterGuid())
@@ -1009,6 +1021,7 @@ namespace mmo
 		}
 
 		GuildChange(guild->GetId());
+		guild->BroadcastEvent(guild_event::Joined, 0, GetCharacterName().c_str());
 
 		return PacketParseResult::Pass;
 	}
@@ -1190,6 +1203,8 @@ namespace mmo
 				if (guild)
 				{
 					ILOG("Successfully created guild " << guild->GetName());
+					strong->GuildChange(guild->GetId());
+
 					// TODO: Notify world nodes about guild creation
 				}
 				else
@@ -1671,6 +1686,21 @@ namespace mmo
 			;
 			outPacket.Finish();
 		});
+
+		// Check if we are in a guild
+		if (m_characterData->guildId != 0)
+		{
+			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			{
+				// TODO: MOTD guild packet
+
+				guild->BroadcastEvent(guild_event::LoggedIn, m_characterData->characterId, m_characterData->name.c_str());
+			}
+			else
+			{
+				ELOG("Player " << log_hex_digit(m_characterData->characterId) << " is in guild " << log_hex_digit(m_characterData->guildId) << " which could not be found (not loaded from database?)");
+			}
+		}
 
 		// If we have a group, either it is already loaded (in which case we just send the group data to all members) or we wait for it to load
 		if (m_group)
@@ -2412,6 +2442,9 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Removed event
+		guild->BroadcastEvent(guild_event::Removed, targetGuid, playerName.c_str());
+
 		// Notify the player that they have been removed from the guild
 		if (Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(targetGuid))
 		{
@@ -2664,6 +2697,9 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Leave event
+		guild->BroadcastEvent(guild_event::Left, m_characterData->characterId, m_characterData->name.c_str());
+
 		// Update the player's guild ID
 		SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::Ok, "");
 		GuildChange(0);
@@ -2701,33 +2737,10 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Get all guild members
-		std::vector<uint64> guildMembers;
-		for (const auto& member : guild->GetMembers())
+		if (!m_guildMgr.DisbandGuild(guild->GetId()))
 		{
-			guildMembers.push_back(member.guid);
+			ELOG("Failed to disband guild");
 		}
-
-		// Notify all online guild members that the guild has been disbanded
-		for (uint64 memberGuid : guildMembers)
-		{
-			Player* member = m_manager.GetPlayerByCharacterGuid(memberGuid);
-			if (member)
-			{
-				member->m_characterData->guildId = 0;
-				member->GetConnection().sendSinglePacket([](game::OutgoingPacket& packet)
-					{
-						packet.Start(game::realm_client_packet::GuildCommandResult);
-						packet
-							<< io::write<uint8>(0) // Command
-							<< io::write<uint8>(0); // Result
-						packet.Finish();
-					});
-			}
-		}
-
-		// TODO: Delete the guild from the database
-		ELOG("Guild disband functionality not fully implemented yet");
 
 		return PacketParseResult::Pass;
 	}

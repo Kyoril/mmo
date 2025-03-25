@@ -91,6 +91,41 @@ namespace mmo
 		return it->second.get();
 	}
 
+	bool GuildMgr::DisbandGuild(uint64 guildId)
+	{
+		const auto it = m_guildsById.find(guildId);
+		if (it == m_guildsById.end())
+		{
+			return false;
+		}
+
+		auto handler = [this, guildId](bool success)
+			{
+				ASSERT(success);
+
+				const auto it = m_guildsById.find(guildId);
+				ASSERT(it != m_guildsById.end());
+
+				// Notify members about disbanding
+				it->second->BroadcastEvent(guild_event::Disbanded);
+
+				for (const auto& member : it->second->GetMembers())
+				{
+					if (auto player = m_playerManager.GetPlayerByCharacterGuid(member.guid))
+					{
+						player->GuildChange(0);
+					}
+				}
+
+				// Delete guild
+				m_guildIdsByName.erase(it->second->GetName());
+				m_guildsById.erase(it);
+			};
+
+		m_asyncDatabase.asyncRequest(std::move(handler), &IDatabase::DisbandGuild, guildId);
+		return true;
+	}
+
 	bool GuildMgr::AddGuild(const GuildData& info)
 	{
 		if (m_guildsById.find(info.id) != m_guildsById.end())
@@ -286,5 +321,35 @@ namespace mmo
 	uint32 Guild::GetLowestRank() const
 	{
 		return m_ranks.size() - 1;
+	}
+
+	void Guild::BroadcastEvent(GuildEvent event, uint64 exceptGuid, const char* arg1, const char* arg2, const char* arg3)
+	{
+		BroadcastPacketWithPermission([event, arg1, arg2, arg3](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildEvent);
+				packet << io::write<uint8>(event);
+
+				uint8 stringCount = 0;
+				if (arg1) stringCount++;
+				if (arg2) stringCount++;
+				if (arg3) stringCount++;
+				packet << io::write<uint8>(stringCount);
+
+				if (arg1)
+				{
+					packet << io::write_dynamic_range<uint8>(String(arg1));
+				}
+				if (arg2)
+				{
+					packet << io::write_dynamic_range<uint8>(String(arg2));
+				}
+				if (arg3)
+				{
+					packet << io::write_dynamic_range<uint8>(String(arg3));
+				}
+
+				packet.Finish();
+			}, 0, exceptGuid);
 	}
 }

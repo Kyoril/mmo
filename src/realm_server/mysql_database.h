@@ -90,6 +90,8 @@ namespace mmo
 
 		void RemoveGuildMember(uint64 guildId, uint64 memberGuid) override;
 
+		void DisbandGuild(uint64 guildId) override;
+
 	private:
 		void PrintDatabaseError();
 

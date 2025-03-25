@@ -198,6 +198,8 @@ namespace mmo
 		virtual void AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
 
 		virtual void RemoveGuildMember(uint64 guildId, uint64 memberGuid) = 0;
+
+		virtual void DisbandGuild(uint64 guildId) = 0;
 	};
 
 

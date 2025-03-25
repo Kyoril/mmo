@@ -10,6 +10,27 @@ namespace io
 
 namespace mmo
 {
+	namespace guild_event
+	{
+		enum Type
+		{
+			Promotion,
+			Demotion,
+			Motd,
+			Joined,
+			Left,
+			Removed,
+			LeaderChanged,
+			Disbanded,
+			LoggedIn,
+			LoggedOut,
+
+			Count_
+		};
+	}
+
+	typedef guild_event::Type GuildEvent;
+
     namespace guild_rank_permissions
     {
 		enum Type

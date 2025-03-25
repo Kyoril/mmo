@@ -378,6 +378,7 @@ namespace mmo
 				GuildCommandResult,
 				GuildQueryResponse,
 				GuildUninvite,
+				GuildEvent,
 
 				/// Counter constant
 				Count_,

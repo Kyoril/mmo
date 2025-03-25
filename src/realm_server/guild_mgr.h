@@ -22,6 +22,10 @@ namespace mmo
 			, m_name(std::move(name))
 			, m_leaderGuid(leaderGuid)
 		{
+			ASSERT(leaderGuid != 0);
+
+			// Ensure the leader is a member
+			m_members.emplace_back(leaderGuid, 0);
 		}
 
 	public:
@@ -53,12 +57,19 @@ namespace mmo
 
 		uint32 GetLowestRank() const;
 
+		void BroadcastEvent(GuildEvent event, uint64 exceptGuid = 0, const char* arg1 = nullptr, const char* arg2 = nullptr, const char* arg3 = nullptr);
+
 		template<class F>
-		void BroadcastPacketWithPermission(F creator, const uint32 permissions)
+		void BroadcastPacketWithPermission(F creator, const uint32 permissions, uint64 exceptGuid = 0)
 		{
 			for (auto& member : m_members)
 			{
-				if (!HasPermission(member.guid, permissions))
+				if (exceptGuid != 0 && member.guid == exceptGuid)
+				{
+					continue;
+				}
+
+				if (permissions != 0 && !HasPermission(member.guid, permissions))
 				{
 					continue;
 				}
@@ -99,6 +110,8 @@ namespace mmo
 		bool GuildsLoaded() const { return m_guildsLoaded; }
 
 		Guild* GetGuild(uint64 guildId) const;
+
+		bool DisbandGuild(uint64 guildId);
 
 	private:
 		bool AddGuild(const GuildData& info);

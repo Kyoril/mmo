@@ -49,6 +49,8 @@ namespace mmo
 
 		PacketParseResult OnGuildUninvite(game::IncomingPacket& packet);
 
+		PacketParseResult OnGuildEvent(game::IncomingPacket& packet);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		void Command_GuildCreate(const std::string& cmd, const std::string& args) const;
 #endif
