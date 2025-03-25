@@ -2399,6 +2399,7 @@ namespace mmo
 		if (m_characterData->guildId == 0)
 		{
 			ELOG("Player tried to remove player from guild without being in a guild");
+			SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2406,6 +2407,7 @@ namespace mmo
 		if (!guild)
 		{
 			ELOG("Player tried to remove player from guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2413,6 +2415,7 @@ namespace mmo
 		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Remove))
 		{
 			ELOG("Player tried to remove player from guild without having permission to remove members");
+			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2432,6 +2435,7 @@ namespace mmo
 		{
 			// We couldn't find the player online, so we can't remove them
 			ELOG("Failed to find player " << playerName << " in guild members list");
+			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::PlayerNotFound, playerName);
 			return PacketParseResult::Pass;
 		}
 
@@ -2673,6 +2677,7 @@ namespace mmo
 		if (m_characterData->guildId == 0)
 		{
 			ELOG("Player tried to leave guild without being in a guild");
+			SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2680,6 +2685,7 @@ namespace mmo
 		if (!guild)
 		{
 			ELOG("Player tried to leave guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2727,6 +2733,7 @@ namespace mmo
 		if (!guild)
 		{
 			ELOG("Player tried to disband guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Disband, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2734,6 +2741,7 @@ namespace mmo
 		if (guild->GetLeaderGuid() != m_characterData->characterId)
 		{
 			ELOG("Only the guild leader can disband the guild");
+			SendGuildCommandResult(game::guild_command::Disband, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}
 
