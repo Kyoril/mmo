@@ -346,7 +346,7 @@ namespace mmo::nav
 	}
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
-		constexpr float extents[] = { 2.f, 4.f, 2.f };
+		constexpr float extents[] = { 1.f, 1.5f, 1.f };
 
 		float recastStart[3] = { start.x, start.y, start.z };
 		float recastEnd[3] = { end.x, end.y, end.z };
@@ -394,8 +394,8 @@ namespace mmo::nav
 			m_navQuery.closestPointOnPoly(startPolyRef, recastStart, iterPos, nullptr);
 			m_navQuery.closestPointOnPoly(polys[npolys - 1], recastEnd, targetPos, nullptr);
 
-			static const float STEP_SIZE = 0.5f;
-			static const float SLOP = 0.01f;
+			static constexpr float STEP_SIZE = 1.0f;
+			static constexpr float SLOP = 0.3f;
 
 			dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
 			smoothPathPoints++;
