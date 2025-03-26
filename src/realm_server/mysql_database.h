@@ -66,6 +66,8 @@ namespace mmo
 
 		std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) override;
 
+		std::optional<DatabaseId> GetCharacterIdByName(String characterName) override;
+
 		void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) override;
 
 		void CreateGroup(uint64 id, uint64 leaderGuid) override;
@@ -91,6 +93,8 @@ namespace mmo
 		void RemoveGuildMember(uint64 guildId, uint64 memberGuid) override;
 
 		void DisbandGuild(uint64 guildId) override;
+
+		void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) override;
 
 	private:
 		void PrintDatabaseError();

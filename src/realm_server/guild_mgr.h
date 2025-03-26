@@ -23,9 +23,6 @@ namespace mmo
 			, m_leaderGuid(leaderGuid)
 		{
 			ASSERT(leaderGuid != 0);
-
-			// Ensure the leader is a member
-			m_members.emplace_back(leaderGuid, 0);
 		}
 
 	public:
@@ -43,11 +40,13 @@ namespace mmo
 
 		std::vector<uint64> GetMembersWithPermission(uint32 permission) const;
 
-		void LoadMembers();
-
 		bool AddMember(uint64 playerGuid, uint32 rank = 4);
 
 		bool RemoveMember(uint64 playerGuid);
+
+		bool PromoteMember(uint64 playerGuid, const String& promoterName, const String& promotedName);
+
+		bool DemoteMember(uint64 playerGuid, const String& demoterName, const String& demotedName);
 
 		const std::vector<GuildMember>& GetMembers() const { return m_members; }
 		std::vector<GuildMember>& GetMembersRef() { return m_members; }
@@ -57,10 +56,12 @@ namespace mmo
 
 		uint32 GetLowestRank() const;
 
+		const GuildRank* GetRank(uint32 rank) const;
+
 		void BroadcastEvent(GuildEvent event, uint64 exceptGuid = 0, const char* arg1 = nullptr, const char* arg2 = nullptr, const char* arg3 = nullptr);
 
 		template<class F>
-		void BroadcastPacketWithPermission(F creator, const uint32 permissions, uint64 exceptGuid = 0)
+		void BroadcastPacketWithPermission(const F& creator, const uint32 permissions, uint64 exceptGuid = 0)
 		{
 			for (auto& member : m_members)
 			{
@@ -76,6 +77,7 @@ namespace mmo
 
 				if (auto player = m_playerManager.GetPlayerByCharacterGuid(member.guid))
 				{
+					DLOG("Send packet to player " << member.guid);
 					player->SendPacket(creator);
 				}
 			}
@@ -90,7 +92,6 @@ namespace mmo
 		uint64 m_leaderGuid;
 		std::vector<GuildMember> m_members;
 		std::vector<GuildRank> m_ranks;
-		bool m_membersLoaded = false;
 	};
 
 	class GuildMgr final : public NonCopyable

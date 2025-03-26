@@ -211,7 +211,6 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// TODO: Raise UI event
 		FrameManager::Get().TriggerLuaEvent("GUILD_INVITE_REQUEST", m_invitePlayerName, m_inviteGuildName);
 
 		return PacketParseResult::Pass;
@@ -232,7 +231,13 @@ namespace mmo
 
 	PacketParseResult GuildClient::OnGuildUninvite(game::IncomingPacket& packet)
 	{
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
+		FrameManager::Get().TriggerLuaEvent("GUILD_REMOVED", playerName);
 
 		return PacketParseResult::Pass;
 	}

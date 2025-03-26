@@ -175,6 +175,8 @@ namespace mmo
 
 		virtual std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) = 0;
 
+		virtual std::optional<DatabaseId> GetCharacterIdByName(String characterName) = 0;
+
 		virtual void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) = 0;
 
 		virtual void CreateGroup(uint64 id, uint64 leaderGuid) = 0;
@@ -200,6 +202,8 @@ namespace mmo
 		virtual void RemoveGuildMember(uint64 guildId, uint64 memberGuid) = 0;
 
 		virtual void DisbandGuild(uint64 guildId) = 0;
+
+		virtual void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
 	};
 
 

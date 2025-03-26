@@ -975,6 +975,30 @@ namespace mmo
 		return {};
 	}
 
+	std::optional<DatabaseId> MySQLDatabase::GetCharacterIdByName(String characterName)
+	{
+		mysql::Select select(m_connection, std::format("SELECT id FROM characters WHERE name = '{0}' LIMIT 1",
+			m_connection.EscapeString(characterName)));
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				// Create the structure and fill it with data
+				DatabaseId characterId;
+				row.GetField(0, characterId);
+				return characterId;
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
 	void MySQLDatabase::TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation)
 	{
 		if (!m_connection.Execute(std::format(
@@ -1344,6 +1368,20 @@ namespace mmo
 		if (!m_connection.Execute(std::format(
 			"DELETE FROM `guilds` WHERE `id` = '{0}' LIMIT 1"
 			, guildId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank)
+	{
+		if (!m_connection.Execute(std::format(
+			"UPDATE `guild_members` SET `rank` = '{0}' WHERE `guild_id` = '{1}' AND `guid` = '{2}'"
+			, rank
+			, guildId
+			, memberGuid
 		)))
 		{
 			PrintDatabaseError();

@@ -133,8 +133,6 @@ namespace mmo
 
 		PacketParseResult OnGroupUpdate(auth::IncomingPacket& packet);
 
-		void BroadcastToGuildMembers();
-
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.
 		void EnableEnterWorldPacket(bool enable);
@@ -174,6 +172,8 @@ namespace mmo
 		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String& playerName);
 
 		void SendGuildCommandResult(uint8 command, uint8 result, const String& playerName);
+
+		void OnGuildRemoveCharacterIdResolve(DatabaseId characterId, const String& playerName);
 
 	public:
 		struct PacketHandlerRegistrationHandle final

@@ -2268,6 +2268,39 @@ namespace mmo
 			});
 	}
 
+	void Player::OnGuildRemoveCharacterIdResolve(DatabaseId characterId, const String& playerName)
+	{
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			ELOG("Player tried to remove player from guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::NotInGuild, "");
+			return;
+		}
+
+		// Remove the player from the guild
+		if (!guild->RemoveMember(characterId))
+		{
+			ELOG("Failed to remove player " << playerName << " from guild");
+			return;
+		}
+
+		// Removed event
+		guild->BroadcastEvent(guild_event::Removed, characterId, playerName.c_str());
+
+		// Notify the player that they have been removed from the guild
+		if (Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(characterId))
+		{
+			targetPlayer->GuildChange(0);
+			targetPlayer->GetConnection().sendSinglePacket([&playerName](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::GuildUninvite);
+				packet << io::write_dynamic_range<uint8>(playerName);
+				packet.Finish();
+				});
+		}
+
+	}
+
 	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
 	{
 		std::scoped_lock lock{ m_packetHandlerMutex };
@@ -2419,42 +2452,26 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Find the target player's GUID
-		uint64 targetGuid = 0;
-		for (const auto& member : guild->GetMembers())
-		{
-			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
-			if (player && player->GetCharacterName() == playerName)
+		// Okay, now we need to find the guid of the player by name
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis, playerName](const std::optional<DatabaseId>& characterId)
 			{
-				targetGuid = member.guid;
-				break;
-			}
-		}
+				auto strong = weakThis.lock();
+				if (!strong)
+				{
+					return;
+				}
 
-		if (targetGuid == 0)
-		{
-			// We couldn't find the player online, so we can't remove them
-			ELOG("Failed to find player " << playerName << " in guild members list");
-			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::PlayerNotFound, playerName);
-			return PacketParseResult::Pass;
-		}
+				if (!characterId)
+				{
+					strong->SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::PlayerNotFound, playerName);
+					return;
+				}
 
-		// Remove the player from the guild
-		if (!guild->RemoveMember(targetGuid))
-		{
-			ELOG("Failed to remove player " << playerName << " from guild");
-			return PacketParseResult::Pass;
-		}
+				strong->OnGuildRemoveCharacterIdResolve(*characterId, playerName);
+			};
 
-		// Removed event
-		guild->BroadcastEvent(guild_event::Removed, targetGuid, playerName.c_str());
-
-		// Notify the player that they have been removed from the guild
-		if (Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(targetGuid))
-		{
-			targetPlayer->GuildChange(0);
-		}
-
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterIdByName, playerName);
 		return PacketParseResult::Pass;
 	}
 
@@ -2464,16 +2481,6 @@ namespace mmo
 		if (!(packet >> io::read_container<uint8>(playerName)))
 		{
 			return PacketParseResult::Disconnect;
-		}
-
-		// Check if this is a special "set leader" operation
-		uint8 setLeaderFlag = 0;
-		if (packet.GetSize() > 0)
-		{
-			if (!(packet >> io::read<uint8>(setLeaderFlag)))
-			{
-				return PacketParseResult::Disconnect;
-			}
 		}
 
 		DLOG("Player wants to promote " << playerName << " in guild");
@@ -2487,6 +2494,7 @@ namespace mmo
 		if (m_characterData->guildId == 0)
 		{
 			ELOG("Player tried to promote player in guild without being in a guild");
+			SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2494,81 +2502,70 @@ namespace mmo
 		if (!guild)
 		{
 			ELOG("Player tried to promote player in guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
-		// If this is a set leader operation, check if the player is the guild leader
-		if (setLeaderFlag == 0 && guild->GetLeaderGuid() != m_characterData->characterId)
-		{
-			ELOG("Player tried to set guild leader without being the guild leader");
-			return PacketParseResult::Pass;
-		}
 		// Otherwise check if the player has permission to promote members
-		else if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Promote))
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Promote))
 		{
 			ELOG("Player tried to promote player in guild without having permission to promote members");
+			SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}
 
-		// Find the target player's GUID and current rank
-		uint64 targetGuid = 0;
-		uint32 targetRank = 0;
-		for (const auto& member : guild->GetMembers())
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& data)
 		{
-			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
-			if (player && player->GetCharacterName() == playerName)
+			auto strong = weakThis.lock();
+			if (!strong)
 			{
-				targetGuid = member.guid;
-				targetRank = member.rank;
-				break;
+				return;
 			}
-		}
 
-		if (targetGuid == 0)
-		{
-			ELOG("Failed to find player " << playerName << " in guild");
-			return PacketParseResult::Pass;
-		}
+			if (!data)
+			{
+				ELOG("Failed to find player " << playerName);
+				strong->SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::PlayerNotFound, playerName);
+				return;
+			}
 
-		// If this is a set leader operation, set the player as the guild leader
-		if (setLeaderFlag == 0)
-		{
-			// TODO: Implement set leader functionality
-			ELOG("Set leader functionality not implemented yet");
-			return PacketParseResult::Pass;
-		}
+			Guild* guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
+			if (!guild)
+			{
+				return;
+			}
 
-		// Cannot promote the guild leader
-		if (targetGuid == guild->GetLeaderGuid())
-		{
-			ELOG("Cannot promote the guild leader");
-			return PacketParseResult::Pass;
-		}
+			// Find the target player's GUID and current rank
+			if (!guild->IsMember(data->characterId))
+			{
+				ELOG("Failed to find player " << playerName << " in guild");
+				strong->SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::PlayerNotFound, playerName);
+				return;
+			}
 
-		// Cannot promote a player with a higher rank than the player
-		if (targetRank < guild->GetMemberRank(m_characterData->characterId))
-		{
-			ELOG("Cannot promote a player with a higher rank than the player");
-			return PacketParseResult::Pass;
-		}
+			uint64 targetGuid = data->characterId;
+			uint32 targetRank = guild->GetMemberRank(targetGuid);
 
-		// Cannot promote a player with the same rank as the player
-		if (targetRank == guild->GetMemberRank(m_characterData->characterId))
-		{
-			ELOG("Cannot promote a player with the same rank as the player");
-			return PacketParseResult::Pass;
-		}
+			// Cannot promote a player with a higher or equal rank as the player
+			// The guild leader (rank 0) for example can never promote anybody to rank 0 as well.
+			// An officer (rank 1) can not promote another player to an officer (rank 1) either.
+			// An officer (rank 1) can promote an initiate (rank 4) to a member (rank 3) or a veteran (rank 2).
+			if (const uint32 ourRank = guild->GetMemberRank(strong->m_characterData->characterId); targetRank == 0 || targetRank <= ourRank + 1)
+			{
+				ELOG("Cannot promote a player to the same or higher rank as the promoter");
+				strong->SendGuildCommandResult(game::guild_command::Promote, game::guild_command_result::NotAllowed, "");
+				return;
+			}
 
-		// Cannot promote a player who is already at the highest rank
-		if (targetRank <= 1)
-		{
-			ELOG("Cannot promote a player who is already at the highest rank");
-			return PacketParseResult::Pass;
-		}
+			// Promote the player
+			if (!guild->PromoteMember(targetGuid, strong->m_characterData->name, playerName))
+			{
+				ELOG("Failed to promote player " << playerName << " in guild");
+			}
+		};
 
-		// Promote the player
-		// TODO: Implement promote functionality
-		ELOG("Promote functionality not implemented yet");
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
 
 		return PacketParseResult::Pass;
 	}
@@ -2585,13 +2582,14 @@ namespace mmo
 
 		if (!m_characterData)
 		{
-			ELOG("Player tried to demote player in guild without having character data");
+			ELOG("Player tried to promote player in guild without having character data");
 			return PacketParseResult::Disconnect;
 		}
 
 		if (m_characterData->guildId == 0)
 		{
 			ELOG("Player tried to demote player in guild without being in a guild");
+			SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
@@ -2599,67 +2597,74 @@ namespace mmo
 		if (!guild)
 		{
 			ELOG("Player tried to demote player in guild that doesn't exist");
+			SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
 
-		// Check if the player has permission to demote members
-		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Demote))
+		// Otherwise check if the player has permission to promote members
+		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Promote))
 		{
 			ELOG("Player tried to demote player in guild without having permission to demote members");
+			SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}
 
-		// Find the target player's GUID and current rank
-		uint64 targetGuid = 0;
-		uint32 targetRank = 0;
-		for (const auto& member : guild->GetMembers())
-		{
-			Player* player = m_manager.GetPlayerByCharacterGuid(member.guid);
-			if (player && player->GetCharacterName() == playerName)
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& data)
 			{
-				targetGuid = member.guid;
-				targetRank = member.rank;
-				break;
-			}
-		}
+				auto strong = weakThis.lock();
+				if (!strong)
+				{
+					return;
+				}
 
-		if (targetGuid == 0)
-		{
-			ELOG("Failed to find player " << playerName << " in guild");
-			return PacketParseResult::Pass;
-		}
+				if (!data)
+				{
+					ELOG("Failed to find player " << playerName);
+					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
+					return;
+				}
 
-		// Cannot demote the guild leader
-		if (targetGuid == guild->GetLeaderGuid())
-		{
-			ELOG("Cannot demote the guild leader");
-			return PacketParseResult::Pass;
-		}
+				Guild* guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
+				if (!guild)
+				{
+					return;
+				}
 
-		// Cannot demote a player with a higher rank than the player
-		if (targetRank < guild->GetMemberRank(m_characterData->characterId))
-		{
-			ELOG("Cannot demote a player with a higher rank than the player");
-			return PacketParseResult::Pass;
-		}
+				// Find the target player's GUID and current rank
+				if (!guild->IsMember(data->characterId))
+				{
+					ELOG("Failed to find player " << playerName << " in guild");
+					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
+					return;
+				}
 
-		// Cannot demote a player with the same rank as the player
-		if (targetRank == guild->GetMemberRank(m_characterData->characterId))
-		{
-			ELOG("Cannot demote a player with the same rank as the player");
-			return PacketParseResult::Pass;
-		}
+				uint64 targetGuid = data->characterId;
+				uint32 targetRank = guild->GetMemberRank(targetGuid);
 
-		// Cannot demote a player who is already at the lowest rank
-		if (targetRank >= guild->GetRanks().size() - 1)
-		{
-			ELOG("Cannot demote a player who is already at the lowest rank");
-			return PacketParseResult::Pass;
-		}
+				if (targetRank >= guild->GetLowestRank())
+				{
+					ELOG("Unable to demote player who is already on the lowest rank");
+					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, playerName);
+					return;
+				}
 
-		// Demote the player
-		// TODO: Implement demote functionality
-		ELOG("Demote functionality not implemented yet");
+				// Cannot demote a player with a higher or equal rank as the player
+				if (const uint32 ourRank = guild->GetMemberRank(strong->m_characterData->characterId); targetRank <= ourRank)
+				{
+					ELOG("Cannot demote a player with the same or a higher rank");
+					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, "");
+					return;
+				}
+
+				// Promote the player
+				if (!guild->DemoteMember(targetGuid, strong->m_characterData->name, playerName))
+				{
+					ELOG("Failed to demote player " << playerName << " in guild");
+				}
+			};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
 
 		return PacketParseResult::Pass;
 	}

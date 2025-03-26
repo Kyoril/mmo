@@ -60,8 +60,9 @@ namespace mmo
 				}
 
 				auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, name, leaderGuid);
-				m_guildIdsByName[name] = guild->GetId();
+				guild->AddMember(leaderGuid, 0);
 
+				m_guildIdsByName[name] = guild->GetId();
 				m_guildsById[guildId] = guild;
 				callback(guild.get());
 			};
@@ -224,18 +225,6 @@ namespace mmo
 		return result;
 	}
 
-	void Guild::LoadMembers()
-	{
-		if (m_membersLoaded)
-		{
-			return;
-		}
-
-		// In a real implementation, we would load members from the database here
-		// For now, we'll just mark them as loaded since they're already loaded in AddGuild
-		m_membersLoaded = true;
-	}
-
 	bool Guild::AddMember(uint64 playerGuid, uint32 rank)
 	{
 		// Check if the player is already a member
@@ -302,13 +291,6 @@ namespace mmo
 				if (it != strong->m_members.end())
 				{
 					strong->m_members.erase(it);
-
-					// TODO: Maybe we should send names
-					strong->BroadcastPacketWithPermission([strong, playerGuid](game::OutgoingPacket& packet) {
-						packet.Start(game::realm_client_packet::GuildUninvite);
-						packet << io::write<uint64>(playerGuid);
-						packet.Finish();
-						}, 0);
 				}
 			};
 
@@ -318,9 +300,108 @@ namespace mmo
 		return true;
 	}
 
+	bool Guild::PromoteMember(uint64 playerGuid, const String& promoterName, const String& promotedName)
+	{
+		const auto it = std::find_if(m_members.begin(), m_members.end(), [playerGuid](const GuildMember& member)
+			{
+				return member.guid == playerGuid;
+			});
+
+		if (it == m_members.end())
+		{
+			return false;
+		}
+
+		const uint32 newRankId = it->rank - 1;
+
+		std::weak_ptr weak = shared_from_this();
+		auto handler = [weak, playerGuid, newRankId, promoterName, promotedName](const bool success)
+			{
+				const auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				ASSERT(success);
+				const auto it = std::find_if(strong->m_members.begin(), strong->m_members.end(), [playerGuid](const GuildMember& member)
+					{
+						return member.guid == playerGuid;
+					});
+
+				const GuildRank* newRank = strong->GetRank(newRankId);
+				ASSERT(newRank);
+
+				if (it != strong->m_members.end())
+				{
+					it->rank = newRankId;
+					strong->BroadcastEvent(guild_event::Promotion, 0, promoterName.c_str(), promotedName.c_str(), newRank->name.c_str());
+				}
+			};
+
+		// Update the database
+		m_database.asyncRequest(std::move(handler), &IDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
+
+		return true;
+	}
+
+	bool Guild::DemoteMember(uint64 playerGuid, const String& demoterName, const String& demotedName)
+	{
+		const auto it = std::find_if(m_members.begin(), m_members.end(), [playerGuid](const GuildMember& member)
+			{
+				return member.guid == playerGuid;
+			});
+
+		if (it == m_members.end())
+		{
+			return false;
+		}
+
+		const uint32 newRankId = it->rank + 1;
+
+		std::weak_ptr weak = shared_from_this();
+		auto handler = [weak, playerGuid, newRankId, demoterName, demotedName](const bool success)
+			{
+				const auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				ASSERT(success);
+				const auto it = std::find_if(strong->m_members.begin(), strong->m_members.end(), [playerGuid](const GuildMember& member)
+					{
+						return member.guid == playerGuid;
+					});
+
+				const GuildRank* newRank = strong->GetRank(newRankId);
+				ASSERT(newRank);
+
+				if (it != strong->m_members.end())
+				{
+					it->rank = newRankId;
+					strong->BroadcastEvent(guild_event::Demotion, 0, demoterName.c_str(), demotedName.c_str(), newRank->name.c_str());
+				}
+			};
+
+		// Update the database
+		m_database.asyncRequest(std::move(handler), &IDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
+
+		return true;
+	}
+
 	uint32 Guild::GetLowestRank() const
 	{
 		return m_ranks.size() - 1;
+	}
+
+	const GuildRank* Guild::GetRank(uint32 rank) const
+	{
+		if (rank >= m_ranks.size())
+		{
+			return nullptr;
+		}
+		return &m_ranks[rank];
 	}
 
 	void Guild::BroadcastEvent(GuildEvent event, uint64 exceptGuid, const char* arg1, const char* arg2, const char* arg3)
