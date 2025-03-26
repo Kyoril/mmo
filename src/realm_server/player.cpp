@@ -2697,7 +2697,11 @@ namespace mmo
 		// Cannot leave the guild if the player is the guild leader
 		if (guild->GetLeaderGuid() == m_characterData->characterId)
 		{
-			ELOG("Guild leader cannot leave the guild, must disband or set a new leader");
+			if (!m_guildMgr.DisbandGuild(guild->GetId()))
+			{
+				ELOG("Failed to disband guild");
+			}
+
 			return PacketParseResult::Pass;
 		}
 
