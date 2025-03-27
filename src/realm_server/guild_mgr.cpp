@@ -50,8 +50,15 @@ namespace mmo
 			return false;
 		}
 
+		std::vector<GuildRank> defaultRanks;
+		defaultRanks.emplace_back("Guild Master", guild_rank_permissions::All);
+		defaultRanks.emplace_back("Officer", guild_rank_permissions::All);
+		defaultRanks.emplace_back("Veteran", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
+		defaultRanks.emplace_back("Member", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
+		defaultRanks.emplace_back("Initiate", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
+
 		const uint64 guildId = m_idGenerator.GenerateId();
-		auto handler = [guildId, name, leaderGuid, this, callback](bool success)
+		auto handler = [guildId, name, leaderGuid, this, callback, defaultRanks](bool success)
 			{
 				if (!success)
 				{
@@ -60,19 +67,17 @@ namespace mmo
 				}
 
 				auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, name, leaderGuid);
-				guild->AddMember(leaderGuid, 0);
+				for (const auto& rank : defaultRanks)
+				{
+					guild->GetRanksRef().push_back(rank);
+				}
+
+				guild->GetMembersRef().emplace_back(leaderGuid, 0);
 
 				m_guildIdsByName[name] = guild->GetId();
 				m_guildsById[guildId] = guild;
 				callback(guild.get());
 			};
-
-		std::vector<GuildRank> defaultRanks;
-		defaultRanks.emplace_back("Guild Master", guild_rank_permissions::All);
-		defaultRanks.emplace_back("Officer", guild_rank_permissions::All);
-		defaultRanks.emplace_back("Veteran", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
-		defaultRanks.emplace_back("Member", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
-		defaultRanks.emplace_back("Initiate", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
 
 		std::vector<GuildMember> members;
 		members.emplace_back(leaderGuid, 0);

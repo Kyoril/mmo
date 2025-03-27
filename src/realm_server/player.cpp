@@ -1204,8 +1204,6 @@ namespace mmo
 				{
 					ILOG("Successfully created guild " << guild->GetName());
 					strong->GuildChange(guild->GetId());
-
-					// TODO: Notify world nodes about guild creation
 				}
 				else
 				{

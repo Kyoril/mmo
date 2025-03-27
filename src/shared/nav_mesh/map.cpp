@@ -346,7 +346,7 @@ namespace mmo::nav
 	}
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
-		constexpr float extents[] = { 1.f, 1.5f, 1.f };
+		constexpr float extents[] = { 1.f, 2.5f, 1.f };
 
 		float recastStart[3] = { start.x, start.y, start.z };
 		float recastEnd[3] = { end.x, end.y, end.z };

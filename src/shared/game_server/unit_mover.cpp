@@ -198,7 +198,6 @@ namespace mmo
 		std::vector<Vector3> path;
 		if (!map->CalculatePath(currentLoc, target, path))
 		{
-			ELOG("Failed to calculate path from " << currentLoc << " to " << target);
 			return false;
 		}
 
