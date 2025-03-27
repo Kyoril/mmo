@@ -55,9 +55,7 @@ namespace mmo
 
 			Vector3 GetVectorAt(uint32 x, uint32 z);
 
-			Vector3 GetNormalAt(uint32 x, uint32 z);
-
-			Vector3 GetSmoothedNormalAt(uint32 x, uint32 z);
+			Vector3 GetSmoothNormalAt(float x, float z);
 
 			Vector3 GetTangentAt(uint32 x, uint32 z);
 

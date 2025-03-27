@@ -115,6 +115,8 @@ namespace mmo
 
 		virtual void ApplyLocalMovement(float deltaTime);
 
+		bool CanWalkOnSlope(const Vector3& position, float maxSlopeDegrees) const;
+
 		virtual void ApplyMovementInfo(const MovementInfo& movementInfo);
 
 		/// @copydoc GameObjectC::InitializeFieldMap

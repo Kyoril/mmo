@@ -96,10 +96,10 @@ namespace mmo
 		m_faceIndices.clear();
 	}
 
-	bool AABBTree::IntersectRay(Ray& ray, Index* faceIndex, RaycastFlags flags) const
+	bool AABBTree::IntersectRay(Ray& ray, Index* faceIndex, RaycastFlags flags, Vector3* outHitNormal) const
 	{
 		const float distance = ray.hitDistance;
-		Trace(ray, faceIndex, flags);
+		Trace(ray, faceIndex, flags, outHitNormal);
 		return ray.hitDistance < distance;
 	}
 
@@ -233,7 +233,7 @@ namespace mmo
 		return AABB(minExtents, maxExtents);
 	}
 
-	void AABBTree::Trace(Ray& ray, Index* faceIndex, RaycastFlags flags) const
+	void AABBTree::Trace(Ray& ray, Index* faceIndex, RaycastFlags flags, Vector3* outHitNormal) const
 	{
 		if (m_indices.empty())
 			return;
@@ -291,7 +291,7 @@ namespace mmo
 				}
 			}
 			else
-				if (TraceLeafNode(node, ray, faceIndex, flags))
+				if (TraceLeafNode(node, ray, faceIndex, flags, outHitNormal))
 					return;
 		}
 	}
@@ -332,7 +332,7 @@ namespace mmo
 			TraceRecursive(node.children + furthest, ray, faceIndex, flags);
 	}
 
-	bool AABBTree::TraceLeafNode(const Node& node, Ray& ray, Index* faceIndex, RaycastFlags flags) const
+	bool AABBTree::TraceLeafNode(const Node& node, Ray& ray, Index* faceIndex, RaycastFlags flags, Vector3* outHitNormal) const
 	{
 		for (auto i = node.startFace; i < node.startFace + node.numFaces; ++i)
 		{
@@ -349,6 +349,15 @@ namespace mmo
 				ray.hitDistance = result.second;
 				if (faceIndex)
 					*faceIndex = i;
+
+				if (outHitNormal)
+				{
+					// Compute triangle normal.
+					Vector3 edge1 = v1 - v0;
+					Vector3 edge2 = v2 - v0;
+					*outHitNormal = edge1.Cross(edge2);
+					outHitNormal->Normalize();
+				}
 
 				if (flags & raycast_flags::EarlyExit)
 					return true;

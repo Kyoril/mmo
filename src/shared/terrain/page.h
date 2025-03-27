@@ -68,11 +68,13 @@ namespace mmo
 
 			float GetSmoothHeightAt(float x, float y) const;
 
+			Vector3 GetSmoothNormalAt(float x, float y) const;
+
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly = false);
 
 			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
 
-			Vector3 GetNormalAt(uint32 x, uint32 z);
+			Vector3 GetNormalAt(uint32 x, uint32 z) const;
 
 			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 

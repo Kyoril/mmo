@@ -375,6 +375,42 @@ namespace mmo
 			return ipHeight;
 		}
 
+		Vector3 Page::GetSmoothNormalAt(float x, float y) const
+		{
+			// scale down
+			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
+			x /= scale;
+			y /= scale;
+
+			// retrieve height from heightmap via bilinear interpolation
+			size_t xi = (size_t)x, zi = (size_t)y;
+			float xpct = x - xi, zpct = y - zi;
+			if (xi == constants::VerticesPerPage - 1)
+			{
+				// one too far
+				--xi;
+				xpct = 1.0f;
+			}
+			if (zi == constants::VerticesPerPage - 1)
+			{
+				--zi;
+				zpct = 1.0f;
+			}
+
+			// retrieve normals
+			const Vector3 n00 = GetNormalAt(xi, zi);
+			const Vector3 n01 = GetNormalAt(xi, zi + 1);
+			const Vector3 n10 = GetNormalAt(xi + 1, zi);
+			const Vector3 n11 = GetNormalAt(xi + 1, zi + 1);
+
+			// Bilinear interpolation
+			const Vector3 n0 = n00 * (1.0f - xpct) + n10 * xpct;
+			const Vector3 n1 = n01 * (1.0f - xpct) + n11 * xpct;
+
+			// Then interpolate the result along the z-axis.
+			return (n0 * (1.0f - zpct) + n1 * zpct).NormalizedCopy();
+		}
+
 		void Page::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ, const bool normalsOnly)
 		{
 			if (!m_loaded)
@@ -453,7 +489,7 @@ namespace mmo
 			}
 		}
 
-		Vector3 Page::GetNormalAt(const uint32 x, const uint32 z)
+		Vector3 Page::GetNormalAt(const uint32 x, const uint32 z) const
 		{
 			ASSERT(x < constants::VerticesPerPage && z < constants::VerticesPerPage);
 

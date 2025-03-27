@@ -437,5 +437,7 @@ namespace mmo
 		void SetSelectedTarget(uint64 guid) override;
 
 		void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) override;
+
+		bool GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal) override;
 	};
 }

@@ -240,14 +240,25 @@ namespace mmo
 			return Vector3();
 		}
 
-		Vector3 Terrain::GetNormalAt(uint32 x, uint32 z)
+		Vector3 Terrain::GetSmoothNormalAt(float x, float z)
 		{
-			return Vector3();
-		}
+			int32 pageX, pageY;
+			if (!GetPageIndexByWorldPosition(Vector3(x, 0.0f, z), pageX, pageY))
+			{
+				// TODO
+				return Vector3::UnitY;
+			}
 
-		Vector3 Terrain::GetSmoothedNormalAt(uint32 x, uint32 z)
-		{
-			return Vector3();
+			Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				// TODO
+				return Vector3::UnitY;
+			}
+
+			return page->GetSmoothNormalAt(
+				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
+				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
 		}
 
 		Vector3 Terrain::GetTangentAt(uint32 x, uint32 z)

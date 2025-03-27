@@ -386,17 +386,21 @@ namespace mmo
 				movementVector.z += 1.0f;
 			}
 
-			MovementType movementType = movement_type::Run;
-			if (movementVector.x < 0.0)
-			{
-				movementType = movement_type::Backwards;
-			}
+			const MovementType movementType = (movementVector.x < 0.0f) ? movement_type::Backwards : movement_type::Run;
+			const Vector3 desiredMovement = movementVector.NormalizedCopy() * GetSpeed(movementType) * deltaTime;
+			const Vector3 potentialPosition = playerNode->GetDerivedPosition() + desiredMovement;
 
-			playerNode->Translate(movementVector.NormalizedCopy() * GetSpeed(movementType) * deltaTime, TransformSpace::Local);
-			m_movementInfo.position = playerNode->GetDerivedPosition();
-			UpdateCollider();
+			// Check the slope at the new position. Let's assume a max slope of 50 degrees.
+			if (CanWalkOnSlope(potentialPosition, 50.0f))
+			{
+				// Option 1: Simply do not apply movement if the slope is too steep.
+				playerNode->Translate(desiredMovement, TransformSpace::Local);
+				m_movementInfo.position = playerNode->GetDerivedPosition();
+				UpdateCollider();
+			}
 		}
 
+		// Adjust for collision
 		float groundHeight = 0.0f;
 		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
 
@@ -493,6 +497,24 @@ namespace mmo
 				UpdateCollider();
 			}
 		}
+	}
+
+	bool GameUnitC::CanWalkOnSlope(const Vector3& position, float maxSlopeDegrees) const
+	{
+		/*Vector3 groundNormal;
+
+		if (GetCollisionProvider().GetGroundNormalAt(position + Vector3::UnitY * 0.55f, 1.0f, groundNormal))
+		{			
+			// Compute the angle between the ground normal and the up vector.
+			// Dot product gives cos(angle) so acos(dot) is the angle in radians.
+			float angleRadians = acos(Clamp(groundNormal.Dot(Vector3::UnitY), -1.0f, 1.0f));
+			// Convert maximum slope from degrees to radians.
+			float maxSlopeRadians = maxSlopeDegrees * 0.0174533f;
+			return angleRadians <= maxSlopeRadians;
+		}*/
+
+		// If no ground normal could be determined, assume the slope is okay.
+		return true;
 	}
 
 	void GameUnitC::ApplyMovementInfo(const MovementInfo& movementInfo)

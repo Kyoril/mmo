@@ -16,6 +16,8 @@ namespace mmo
 
 		virtual bool GetHeightAt(const Vector3& position, float range, float& out_height) = 0;
 
+		virtual bool GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal) = 0;
+
 		virtual void GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities) = 0;
 	};
 }

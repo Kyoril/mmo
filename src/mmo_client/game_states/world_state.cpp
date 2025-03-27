@@ -17,6 +17,7 @@
 #include "game/object_type_id.h"
 #include "scene_graph/entity.h"
 
+#include <algorithm>
 #include <zstr/zstr.hpp>
 
 #include "action_bar.h"
@@ -3128,10 +3129,7 @@ namespace mmo
 		if (m_worldInstance->HasTerrain())
 		{
 			const float terrainHeight = m_worldInstance->GetTerrain()->GetSmoothHeightAt(position.x, position.z);
-			if (terrainHeight > closestHeight)
-			{
-				closestHeight = terrainHeight;
-			}
+			closestHeight = std::max(terrainHeight, closestHeight);
 		}
 
 		// TODO: Do raycast against world entity collision geometry instead of just assuming an invisible plane at height 0.0f
@@ -3171,10 +3169,7 @@ namespace mmo
 					const Vector3 hitPoint = groundDetectionRay.origin.Lerp(groundDetectionRay.destination, transformedRay.hitDistance);
 					ASSERT(hitPoint.y <= position.y);
 
-					if (hitPoint.y > closestHeight)
-					{
-						closestHeight = hitPoint.y;
-					}
+					closestHeight = std::max(hitPoint.y, closestHeight);
 				}
 			}
 		}
@@ -3274,5 +3269,66 @@ namespace mmo
 					strong->NotifyGuildInfo(&info);
 				}
 			});
+	}
+
+	bool WorldState::GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal)
+	{
+		// First, check if terrain is present and provides a normal.
+		if (m_worldInstance->HasTerrain())
+		{
+			// Assuming your terrain has a method GetNormalAt(x, z).
+			out_normal = m_worldInstance->GetTerrain()->GetSmoothNormalAt(position.x, position.z);
+			return true;
+		}
+
+		// Otherwise, use a ray query similar to GetHeightAt.
+		Ray groundDetectionRay(position, position + Vector3::NegativeUnitY * range);
+		m_rayQuery->ClearResult();
+		m_rayQuery->SetRay(groundDetectionRay);
+		m_rayQuery->SetQueryMask(1);
+		const RaySceneQueryResult& result = m_rayQuery->Execute();
+
+		bool foundIntersection = false;
+		Vector3 bestNormal;
+		float bestHitDistance = range;
+
+		for (const auto& entry : result)
+		{
+			Entity* entity = dynamic_cast<Entity*>(entry.movable);
+			if (!entity || !entity->GetMesh())
+				continue;
+
+			const AABBTree& collisionTree = entity->GetMesh()->GetCollisionTree();
+			if (collisionTree.IsEmpty())
+				continue;
+
+			// Transform ray into the entity's local space.
+			Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
+			Ray transformedRay(inverse * groundDetectionRay.origin,
+				inverse * groundDetectionRay.destination);
+			transformedRay.hitDistance = range;
+
+			Vector3 localHitNormal;
+			// Call the extended intersection function that outputs the hit normal.
+			if (collisionTree.IntersectRay(transformedRay, nullptr, raycast_flags::EarlyExit, &localHitNormal))
+			{
+				float hitDistance = transformedRay.hitDistance;
+				if (hitDistance < bestHitDistance)
+				{
+					bestHitDistance = hitDistance;
+					// Transform the hit normal back to world space.
+					bestNormal = entity->GetParentNodeFullTransform() * localHitNormal;
+					foundIntersection = true;
+				}
+			}
+		}
+
+		if (foundIntersection)
+		{
+			out_normal = bestNormal.NormalizedCopy();
+			return true;
+		}
+
+		return false;
 	}
 }

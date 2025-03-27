@@ -84,7 +84,7 @@ namespace mmo
 		/// @param ray 
 		/// @param faceIndex
 		/// @returns 
-		bool IntersectRay(Ray& ray, Index* faceIndex = nullptr, RaycastFlags flags = raycast_flags::None) const;
+		bool IntersectRay(Ray& ray, Index* faceIndex = nullptr, RaycastFlags flags = raycast_flags::None, Vector3* outHitNormal = nullptr) const;
 
 		/// Gets the bounding box of this tree.
 		/// @returns Bounding box of this tree.
@@ -127,7 +127,7 @@ namespace mmo
 		/// 
 		/// @param ray
 		/// @param faceIndex
-		void Trace(Ray& ray, Index* faceIndex, RaycastFlags flags) const;
+		void Trace(Ray& ray, Index* faceIndex, RaycastFlags flags, Vector3* outHitNormal = nullptr) const;
 
 		/// 
 		/// @param nodeIndex
@@ -145,7 +145,7 @@ namespace mmo
 		/// @param node
 		/// @param ray
 		/// @param faceIndex
-		bool TraceLeafNode(const Node& node, Ray& ray, Index* faceIndex, RaycastFlags flags) const;
+		bool TraceLeafNode(const Node& node, Ray& ray, Index* faceIndex, RaycastFlags flags, Vector3* outHitNormal = nullptr) const;
 
 	private:
 
