@@ -643,14 +643,14 @@ namespace mmo
 		uint32 mapId = 0;
 		InstanceId instanceId;
 
-		GamePlayerS player(m_project, m_timerQueue);
-		player.Initialize();
+		std::shared_ptr<GamePlayerS> player = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
+		player->Initialize();
 
 		if (!(packet
 			>> io::read<uint64>(characterGuid)
 			>> io::read<uint32>(mapId)
 			>> instanceId
-			>> player
+			>> *player
 			))
 		{
 			return PacketParseResult::Disconnect;
@@ -661,31 +661,45 @@ namespace mmo
 		std::array<uint32, 5> attributePoints;
 		for (uint32 i = 0; i < attributePoints.size(); ++i)
 		{
-			attributePoints[i] = player.GetAttributePointsByAttribute(i);
+			attributePoints[i] = player->GetAttributePointsByAttribute(i);
 		}
 
 		std::vector<uint32> spellIds;
-		spellIds.reserve(player.GetSpells().size());
-		for (const auto& spell : player.GetSpells())
+		spellIds.reserve(player->GetSpells().size());
+		for (const auto& spell : player->GetSpells())
 		{
 			if (!spell) continue;
 			spellIds.push_back(spell->id());
 		}
 
 		// RequestHandler
-		auto handler = [](bool result) { };
-		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
-			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
-			player.Get<uint32>(object_fields::Xp), 
-			player.Get<uint32>(object_fields::Health), 
-			player.Get<uint32>(object_fields::Mana), 
-			player.Get<uint32>(object_fields::Rage), 
-			player.Get<uint32>(object_fields::Energy),
-			player.Get<uint32>(object_fields::Money),
-			player.GetInventory().GetItemData(),
-			player.GetBindMap(),
-			player.GetBindPosition(),
-			player.GetBindFacing(),
+		PlayerManager* playerManager = &m_playerManager;
+		auto handler = [characterGuid, player, playerManager](const bool result)
+		{
+			if (!result)
+			{
+				ELOG("Failed to persist character data");
+				return;
+			}
+
+			if (Player* playerConnection = playerManager->GetPlayerByCharacterGuid(characterGuid))
+			{
+				playerConnection->NotifyCharacterUpdate(*player);
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player->GetMovementInfo().position,
+			player->GetMovementInfo().facing, player->Get<uint32>(object_fields::Level),
+			player->Get<uint32>(object_fields::Xp), 
+			player->Get<uint32>(object_fields::Health), 
+			player->Get<uint32>(object_fields::Mana), 
+			player->Get<uint32>(object_fields::Rage), 
+			player->Get<uint32>(object_fields::Energy),
+			player->Get<uint32>(object_fields::Money),
+			player->GetInventory().GetItemData(),
+			player->GetBindMap(),
+			player->GetBindPosition(),
+			player->GetBindFacing(),
 			attributePoints,
 			spellIds
 			);

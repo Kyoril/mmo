@@ -233,6 +233,12 @@ namespace mmo
 
 		const proto::SpellEntry& GetSpell() const { return m_spell; }
 
+		uint32 GetBaseSpellId() const { return GetSpell().baseid(); }
+
+		uint32 GetSpellRank() const { return GetSpell().rank(); }
+
+		bool HasSameBaseSpellId(const proto::SpellEntry& spell) const;
+
 		GameUnitS* GetCaster() const;
 
 		uint64 GetItemGuid() const { return m_itemGuid; }

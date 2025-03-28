@@ -1073,7 +1073,8 @@ namespace mmo
 			return true;
 		}
 
-		const bool sameSpellId = other.GetSpellId() == GetSpellId();
+		const bool sameBaseSpellId = HasSameBaseSpellId(other.GetSpell());
+		const bool sameSpellId = sameBaseSpellId || (other.GetSpellId() == GetSpellId());
 		const bool onlyOneStackTotal = (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
 		const bool sameCaster = other.GetCasterId() == GetCasterId();
 		const bool sameItem = other.GetItemGuid() == GetItemGuid();
@@ -1092,6 +1093,22 @@ namespace mmo
 		}
 
 		// Should not overwrite, but create a whole new aura
+		return false;
+	}
+
+	bool AuraContainer::HasSameBaseSpellId(const proto::SpellEntry& spell) const
+	{
+		if (spell.baseid() == 0)
+		{
+			return false;
+		}
+
+		const uint32 baseSpellId = GetBaseSpellId();
+		if (baseSpellId == spell.baseid())
+		{
+			return true;
+		}
+
 		return false;
 	}
 

@@ -708,7 +708,17 @@ namespace mmo
 		{
 			if (auto& existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
 			{
-				it = m_auras.erase(it);
+				// Check if aura is same base spell but lower rank
+				if (aura->HasSameBaseSpellId(existingAura->GetSpell()) && aura->GetSpellRank() < existingAura->GetSpellRank())
+				{
+					// We can't override a higher rank with a lower rank spell
+					// TODO: Report back cast failure?
+					++it;
+				}
+				else
+				{
+					it = m_auras.erase(it);
+				}
 			}
 			else
 			{

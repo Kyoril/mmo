@@ -117,6 +117,8 @@ namespace mmo
 
 		void GuildChange(uint64 guildId);
 
+		void NotifyCharacterUpdate(const GamePlayerS& character);
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();

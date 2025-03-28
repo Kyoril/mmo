@@ -1417,6 +1417,24 @@ namespace mmo
 		world->NotifyPlayerGuildChanged(m_characterData->characterId, guildId);
 	}
 
+	void Player::NotifyCharacterUpdate(const GamePlayerS& character)
+	{
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis](const std::optional<CharacterData>& characterData)
+			{
+				if (const auto strongThis = weakThis.lock())
+				{
+					if (characterData)
+					{
+						strongThis->m_characterData = characterData;
+					}
+					
+				}
+			};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, character.GetGuid(), m_accountId);
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
