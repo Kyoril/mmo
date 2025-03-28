@@ -13,6 +13,7 @@
         "-DMMO_BUILD_LAUNCHER=ON"
     ],
     "files.associations": {
-        "vector": "cpp"
+        "vector": "cpp",
+        "memory": "cpp"
     }
 }

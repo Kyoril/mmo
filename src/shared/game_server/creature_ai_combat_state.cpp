@@ -11,10 +11,12 @@ namespace mmo
 		: CreatureAIState(ai)
 		, m_combatInitiator(std::static_pointer_cast<GameUnitS>(victim.shared_from_this()))
 		, m_lastThreatTime(0)
+		, m_stuckCounter(0)
 		, m_nextActionCountdown(ai.GetControlled().GetTimers())
 		, m_isCasting(false)
 		, m_entered(false)
 		, m_isRanged(false)
+		, m_canReset(false)
 	{
 	}
 
@@ -25,6 +27,8 @@ namespace mmo
 	void CreatureAICombatState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
+		
+		m_stuckCounter = 0;
 
 		auto& controlled = GetControlled();
 		controlled.RemoveAllCombatParticipants();
@@ -48,6 +52,8 @@ namespace mmo
 		// Reset AI if target is out of range, but only in non-instanced-pve-areas
 		if (!controlled.GetWorldInstance()->IsInstancedPvE())
 		{
+			m_canReset = true;
+
 			m_onMoveTargetChanged = GetControlled().GetMover().targetChanged.connect([this]()
 			{
 				auto& homePos = GetAI().GetHome().position;
@@ -78,6 +84,7 @@ namespace mmo
 				if (GetAsyncTimeMs() >= (m_lastThreatTime + constants::OneSecond * 10) && outOfRange)
 				{
 					GetAI().Reset();
+					return;
 				}
 			});
 		}
@@ -98,7 +105,6 @@ namespace mmo
 
 		// Raise OnAggro triggers
 		controlled.RaiseTrigger(trigger_event::OnAggro, initiator.get());
-
 	}
 
 	void CreatureAICombatState::OnLeave()
@@ -335,7 +341,7 @@ namespace mmo
 
 	void CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
-		const float combatRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
+		const float combatRange = GetControlled().GetMeleeReach();
 
 		Vector3 currentLocation;
 		auto& mover = GetControlled().GetMover();
@@ -349,7 +355,7 @@ namespace mmo
 		const float distance = (currentUnitLoc - currentLocation).GetSquaredLength();
 
 		// Check distance and whether we need to move
-		if (distance > (combatRange * 0.5f) * (combatRange * 0.5f))
+		if (distance > (combatRange * 0.75f) * (combatRange * 0.75f))
 		{
 			Vector3 newTargetLocation = target.GetPredictedPosition();
 			Vector3 direction = (newTargetLocation - currentLocation);
@@ -359,8 +365,28 @@ namespace mmo
 				newTargetLocation = newTargetLocation - (direction * 2.0);
 			}
 
+			// Check if target location is too far away from home
+			if (m_canReset && newTargetLocation.GetSquaredDistanceTo(GetAI().GetHome().position) > 60.0f * 60.0f)
+			{
+				// We are too far away from home, reset AI
+				GetAI().Reset();
+				return; // Important: ResetAI might destroy this AI state
+			}
+
 			// Chase the target
-			GetControlled().GetMover().MoveTo(newTargetLocation);
+			if (GetControlled().GetMover().MoveTo(newTargetLocation))
+			{
+				m_stuckCounter = 0;
+			}
+			else
+			{
+				if (++m_stuckCounter > 20)
+				{
+					// We are stuck, reset AI
+					GetAI().Reset();
+					return; // Important: ResetAI might destroy this AI state
+				}
+			}
 		}
 		else
 		{
