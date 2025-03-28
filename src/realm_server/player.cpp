@@ -1432,6 +1432,8 @@ namespace mmo
 		m_characterData->energy = character.Get<uint32>(object_fields::Energy);
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 
+		m_characterData->attributePointsSpent;
+
 		m_characterData->spellIds.clear();
 		for (const auto& spell : character.GetSpells())
 		{

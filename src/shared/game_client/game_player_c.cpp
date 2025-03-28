@@ -52,7 +52,7 @@ namespace mmo
 			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::InvSlotHead, player_inventory_pack_slots::Start * 2, *this, &GamePlayerC::OnEquipmentChanged);
 			OnEquipmentChanged(GetGuid());
 
-			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::Guild, 2, *this, &GamePlayerC::OnGuildChanged);
+			m_guildChangedHandler = RegisterMirrorHandler(object_fields::Guild, 2, *this, &GamePlayerC::OnGuildChanged);
 			OnGuildChanged(GetGuid());
 		}
 

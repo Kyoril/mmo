@@ -63,6 +63,7 @@ namespace mmo
 		Entity* m_weaponEntity{ nullptr };
 
 		scoped_connection m_equipmentChangedHandler;
+		scoped_connection m_guildChangedHandler;
 
 		const GuildInfo* m_guild{ nullptr };
 	};
