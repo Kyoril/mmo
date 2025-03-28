@@ -1417,22 +1417,38 @@ namespace mmo
 		world->NotifyPlayerGuildChanged(m_characterData->characterId, guildId);
 	}
 
-	void Player::NotifyCharacterUpdate(const GamePlayerS& character)
+	void Player::NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS& character)
 	{
-		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis](const std::optional<CharacterData>& characterData)
-			{
-				if (const auto strongThis = weakThis.lock())
-				{
-					if (characterData)
-					{
-						strongThis->m_characterData = characterData;
-					}
-					
-				}
-			};
+		m_characterData->mapId = mapId;
+		m_characterData->instanceId = instanceId;
+		m_characterData->level = static_cast<uint8>(character.GetLevel());
+		m_characterData->xp = character.Get<uint32>(object_fields::Xp);
+		m_characterData->hp = character.GetHealth();
+		m_characterData->maxHp = character.GetMaxHealth();
+		m_characterData->mana = character.Get<uint32>(object_fields::Mana);
+		m_characterData->maxMana = character.Get<uint32>(object_fields::MaxMana);
+		m_characterData->rage = character.Get<uint32>(object_fields::Rage);
+		m_characterData->maxRage= character.Get<uint32>(object_fields::MaxRage);
+		m_characterData->energy = character.Get<uint32>(object_fields::Energy);
+		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, character.GetGuid(), m_accountId);
+		m_characterData->spellIds.clear();
+		for (const auto& spell : character.GetSpells())
+		{
+			if (!spell)
+			{
+				continue;
+			}
+
+			m_characterData->spellIds.push_back(spell->id());
+		}
+
+		m_characterData->position = character.GetPosition();
+		m_characterData->facing = character.GetFacing();
+		m_characterData->bindMap = character.GetBindMap();
+		m_characterData->bindPosition = character.GetBindPosition();
+		m_characterData->bindFacing = character.GetBindFacing();
+		m_characterData->items = character.GetInventory().GetItemData();
 	}
 
 	void Player::SendAuthChallenge()
@@ -2187,6 +2203,24 @@ namespace mmo
 		// Execute callback
 		it->second(succeeded, mapId, position, facing);
 		m_characterLocationCallbacks.erase(it);
+	}
+
+	void Player::NotifyQuestData(uint32 questId, const QuestStatusData& questData)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		if (questData.status == quest_status::Rewarded)
+		{
+			m_characterData->rewardedQuestIds.push_back(questId);
+			m_characterData->questStatus.erase(questId);
+		}
+		else
+		{
+			m_characterData->questStatus[questId] = questData;
+		}
 	}
 
 	PacketParseResult Player::OnGroupUpdate(auth::IncomingPacket& packet)

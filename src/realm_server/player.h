@@ -117,7 +117,7 @@ namespace mmo
 
 		void GuildChange(uint64 guildId);
 
-		void NotifyCharacterUpdate(const GamePlayerS& character);
+		void NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS& character);
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -134,6 +134,8 @@ namespace mmo
 		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3& position, const Radian& facing);
 
 		PacketParseResult OnGroupUpdate(auth::IncomingPacket& packet);
+
+		void NotifyQuestData(uint32 questId, const QuestStatusData& questData);
 
 	private:
 		/// Enables or disables handling of EnterWorld packets from the client.

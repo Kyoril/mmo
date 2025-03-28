@@ -72,6 +72,8 @@ namespace mmo
 		/// Gets a reference to the characters inventory component.
 		Inventory& GetInventory() { return m_inventory; }
 
+		const Inventory& GetInventory() const { return m_inventory; }
+
 		const proto::ClassEntry* GetClassEntry() const { return m_classEntry; }
 
 		const proto::RaceEntry* GetRaceEntry() const { return m_raceEntry; }
