@@ -29,7 +29,6 @@ message UnitEntry {
 	optional float scale = 10 [default = 1.0];
 	required uint32 type = 11;
 	required uint32 family = 12;
-	optional bool regeneratehealth = 13 [default = true];
 	optional uint32 npcflags = 14;
 	optional uint32 unitflags = 15;
 	optional uint32 dynamicflags = 16;
@@ -75,6 +74,7 @@ message UnitEntry {
 	optional uint32 killcredit = 56;
 	repeated uint32 gossip_menus = 59;
 	optional string greeting_text = 60;
+	optional uint32 regeneration = 61;
 }
 
 message Units {

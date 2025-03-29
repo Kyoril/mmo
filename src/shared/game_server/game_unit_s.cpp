@@ -78,6 +78,8 @@ namespace mmo
 	{
 		GameObjectS::Initialize();
 
+		SetStandState(unit_stand_state::Stand);
+
 		// Initialize unit mods
 		for (size_t i = 0; i < unit_mods::End; ++i)
 		{
@@ -1695,6 +1697,11 @@ namespace mmo
 			return;
 		}
 
+		if (!RegeneratesHealth())
+		{
+			return;
+		}
+
 		const uint32 maxHealth = GetMaxHealth();
 		uint32 health = GetHealth();
 
@@ -1707,6 +1714,11 @@ namespace mmo
 	void GameUnitS::RegeneratePower(PowerType powerType)
 	{
 		if (!IsAlive())
+		{
+			return;
+		}
+
+		if (!RegeneratesPower())
 		{
 			return;
 		}

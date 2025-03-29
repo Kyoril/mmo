@@ -165,7 +165,7 @@ namespace mmo
 			}
 		}
 
-		const bool isDead = GetHealth() <= 0;
+		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
 		if (m_movementAnimation)
 		{
 			bool animationFinished = false;

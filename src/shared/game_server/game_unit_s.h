@@ -19,6 +19,17 @@
 
 namespace mmo
 {
+	namespace regeneration_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			Health = 1 << 0,
+			Power = 1 << 1
+		};
+	}
+
 	namespace unit_mod_type
 	{
 		enum Type
@@ -456,6 +467,14 @@ namespace mmo
 
 		void NotifyManaUsed();
 
+		void SetRegeneration(uint32 regenerationFlags) { m_regeneration = regenerationFlags; }
+
+		uint32 GetRegeneration() const { return m_regeneration; }
+
+		bool RegeneratesHealth() const { return (m_regeneration & regeneration_flags::Health) != 0; }
+
+		bool RegeneratesPower() const { return (m_regeneration & regeneration_flags::Power) != 0; }
+
 		/// Executed when an attack was successfully parried.
 		virtual void OnParry();
 
@@ -650,6 +669,12 @@ namespace mmo
 
 		void OnAttackSwing();
 
+		void SetStandState(const unit_stand_state::Type standState) { Set<uint32>(object_fields::StandState, standState); }
+
+		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<uint32>(object_fields::StandState)); }
+
+		bool IsSitting() const { return GetStandState() == unit_stand_state::Sit; }
+
 	protected:
 		virtual void PrepareFieldMap() override
 		{
@@ -721,6 +746,8 @@ namespace mmo
 		uint8 m_combatCapabilities = combat_capabilities::None;
 
 		std::map<uint8, float> m_baseSpeeds;
+
+		uint32 m_regeneration = regeneration_flags::None;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);

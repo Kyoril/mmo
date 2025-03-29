@@ -136,6 +136,8 @@ namespace mmo
 
 		const std::shared_ptr<CustomizableAvatarDefinition>& GetAvatarDefinition() const { return m_customizationDefinition; }
 
+		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<int32>(object_fields::StandState)); }
+
 	protected:
 		virtual void SetupSceneObjects() override;
 

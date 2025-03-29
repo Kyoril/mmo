@@ -51,6 +51,8 @@ message UnitSpawnEntry {
 
 	optional uint32 standstate = 15;
 	repeated UnitSpawnLocation locations = 16;
+
+	optional float health_percent = 17 [default = 1.0];
 }
 
 message ObjectSpawnEntry {

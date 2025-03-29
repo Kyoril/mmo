@@ -60,6 +60,16 @@ namespace mmo
 			movement = static_cast<CreatureMovement>(m_spawnEntry.movement());
 		}
 		spawned->SetMovementType(movement);
+		spawned->SetHealthPercent(m_spawnEntry.health_percent());
+
+		if (m_spawnEntry.standstate() < unit_stand_state::Count_)
+		{
+			spawned->SetStandState(static_cast<unit_stand_state::Type>(m_spawnEntry.standstate()));
+		}
+		else
+		{
+			ELOG("Unit spawn has invalid stand state value " << m_spawnEntry.standstate() << " - value is ignored");
+		}
 
 		// watch for destruction
 		spawned->destroy = [this]<typename TUnit>(TUnit&& destroyedUnit) { OnRemoval(std::forward<TUnit>(destroyedUnit)); };

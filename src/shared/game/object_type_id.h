@@ -63,6 +63,24 @@ namespace mmo
 		};
 	}
 
+	namespace unit_stand_state
+	{
+		enum Type
+		{
+			Stand = 0,
+
+			Sit,
+
+			Sleep,
+
+			Dead,
+
+			Kneel,
+
+			Count_
+		};
+	}
+
 	namespace object_update_flags
 	{
 		enum Type
@@ -190,8 +208,9 @@ namespace mmo
 			MaxDamage,
 
 			NpcFlags,
+			StandState,
 
-			UnitFieldCount = NpcFlags + 1,
+			UnitFieldCount = StandState + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \

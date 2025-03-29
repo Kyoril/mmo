@@ -89,6 +89,8 @@ namespace mmo
 		/// Determines whether this creature is tagged by a player or group.
 		bool IsTagged() const { return !m_lootRecipients.empty(); }
 
+		void SetHealthPercent(float percent);
+
 		/// Get unit loot.
 		std::shared_ptr<LootInstance> getUnitLoot() const { return m_unitLoot; }
 
@@ -172,5 +174,6 @@ namespace mmo
 		CreatureMovement m_movement;
 		std::shared_ptr<LootInstance> m_unitLoot;
 		LootRecipients m_lootRecipients;
+		float m_healthPercent = 1.0f;
 	};
 }

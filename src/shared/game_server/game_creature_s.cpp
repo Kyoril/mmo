@@ -20,6 +20,8 @@ namespace mmo
 	{
 		GameUnitS::Initialize();
 
+		SetRegeneration(m_originalEntry.regeneration());
+
 		// Initialize creature based on unit entry values
 		Set<uint32>(object_fields::Level, m_originalEntry.minlevel());
 		ClearFieldChanges();
@@ -96,9 +98,11 @@ namespace mmo
 		Set<uint32>(object_fields::PowerType, power_type::Mana);	// TODO
 		RefreshStats();
 
+		SetRegeneration(m_entry->regeneration());
+
 		if (firstInitialization)
 		{
-			Set<uint32>(object_fields::Health, m_entry->minlevelhealth());
+			Set<uint32>(object_fields::Health, static_cast<uint32>(static_cast<float>(m_entry->minlevelhealth()) * m_healthPercent));
 			Set<uint32>(object_fields::Mana, m_entry->minlevelmana());
 			ClearFieldChanges();
 		}
@@ -123,6 +127,14 @@ namespace mmo
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
 	{
 		return m_lootRecipients.contains(character.GetGuid());
+	}
+
+	void GameCreatureS::SetHealthPercent(const float percent)
+	{
+		ASSERT(percent >= 0.0f && percent <= 1.0f);
+
+		m_healthPercent = percent;
+		Set<uint32>(object_fields::Health, static_cast<uint32>(static_cast<float>(GetMaxHealth()) * percent));
 	}
 
 	void GameCreatureS::SetUnitLoot(std::unique_ptr<LootInstance> unitLoot)

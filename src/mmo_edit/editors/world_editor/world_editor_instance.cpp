@@ -17,6 +17,7 @@
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
+#include "game/object_type_id.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "nav_build/common.h"
@@ -1626,6 +1627,38 @@ namespace mmo
 			if (ImGui::Checkbox("Respawn", &respawn))
 			{
 				selectable.GetEntry().set_respawn(respawn);
+			}
+
+			float healthPercent = selectable.GetEntry().health_percent();
+			if (ImGui::SliderFloat("Health Percent", &healthPercent, 0.0f, 1.0f))
+			{
+				selectable.GetEntry().set_health_percent(healthPercent);
+			}
+
+			static const char* s_standStateStrings[] = {
+				"Stand",
+				"Sit",
+				"Sleep",
+				"Dead",
+				"Kneel"
+			};
+
+			static_assert(std::size(s_standStateStrings) == unit_stand_state::Count_, "Size of stand state strings must match");
+
+			if (ImGui::BeginCombo("Stand State", s_standStateStrings[selectable.GetEntry().standstate()]))
+			{
+				uint32 index = 0;
+				for (const auto& mode : s_standStateStrings)
+				{
+					if (ImGui::Selectable(mode, selectable.GetEntry().movement() == index))
+					{
+						selectable.GetEntry().set_standstate(index);
+					}
+
+					index++;
+				}
+
+				ImGui::EndCombo();
 			}
 
 			uint64 respawnDelay = selectable.GetEntry().respawndelay();

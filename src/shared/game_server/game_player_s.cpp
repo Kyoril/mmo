@@ -38,6 +38,9 @@ namespace mmo
 	{
 		GameUnitS::Initialize();
 
+		// Per default players regenerate both
+		m_regeneration = regeneration_flags::Health | regeneration_flags::Power;
+
 		// Initialize some default values
 		Set<int32>(object_fields::MaxLevel, 5, false);
 		Set<int32>(object_fields::Xp, 0, false);

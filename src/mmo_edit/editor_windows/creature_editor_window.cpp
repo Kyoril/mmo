@@ -7,6 +7,7 @@
 
 #include "assets/asset_registry.h"
 #include "game/object_type_id.h"
+#include "game_server/game_unit_s.h"
 #include "log/default_log_levels.h"
 
 namespace ImGui
@@ -683,6 +684,10 @@ namespace mmo
 			SLIDER_FLOAT_PROP(minmeleedmg, "Min Melee Dmg", 0.0f, 10000000.0f);
 			SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
 			ImGui::EndGroupPanel();
+
+			CHECKBOX_FLAG_PROP(regeneration, "Regenerate Health", regeneration_flags::Health);
+			ImGui::SameLine();
+			CHECKBOX_FLAG_PROP(regeneration, "Regenerate Power", regeneration_flags::Power);
 		}
 
 		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_None))
