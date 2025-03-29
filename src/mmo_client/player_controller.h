@@ -79,6 +79,8 @@ namespace mmo
 
 		void OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo);
 
+		void HandleCameraCollision();
+
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override;
 
@@ -113,5 +115,7 @@ namespace mmo
 		scoped_connection_container m_cvarConnections;
 		scoped_connection m_moveCompleted;
 		GameTime m_nextSetFacing = 0;
+
+		Vector3 m_desiredCameraLocation;
 	};
 }

@@ -309,7 +309,7 @@ namespace mmo
 
 		const float maxZoom = Clamp<float>(s_maxCameraZoomCVar->GetFloatValue(), 2.0f, 15.0f);
 		const float newZoom = Clamp<float>(s_cameraZoomCVar->GetFloatValue(), 0.0f, maxZoom);
-		m_cameraNode->SetPosition(m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom));
+		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom);
 	}
 
 	void PlayerController::ClampCameraPitch()
@@ -331,6 +331,53 @@ namespace mmo
 	void PlayerController::OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo)
 	{
 		SendMovementUpdate(game::client_realm_packet::MoveEnded);
+	}
+
+	void PlayerController::HandleCameraCollision()
+	{
+		float zoom = s_cameraZoomCVar->GetFloatValue();
+		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * zoom);
+		m_cameraNode->SetPosition(m_desiredCameraLocation);
+
+		// Camera raycast
+		m_selectionSceneQuery->ClearResult();
+		m_selectionSceneQuery->SetSortByDistance(true);
+		m_selectionSceneQuery->SetQueryMask(0xffffffff);
+		Ray cameraRay(m_cameraAnchorNode->GetDerivedPosition(), m_cameraNode->GetDerivedPosition());
+		m_selectionSceneQuery->SetRay(cameraRay);
+		m_selectionSceneQuery->Execute();
+
+		const auto& cameraHitResult = m_selectionSceneQuery->GetLastResult();
+		for (auto& result : cameraHitResult)
+		{
+			if (const Entity* entity = static_cast<Entity*>(result.movable))
+			{
+				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
+				Ray localRay = Ray(inverse * cameraRay.origin, inverse * cameraRay.destination);
+				localRay.hitDistance = std::numeric_limits<float>::max();
+
+				const auto& tree = entity->GetMesh()->GetCollisionTree();
+				if (tree.IsEmpty())
+				{
+					continue;
+				}
+
+				if (tree.IntersectRay(localRay, nullptr, raycast_flags::EarlyExit))
+				{
+					const float dist = localRay.hitDistance * localRay.GetLength() * 0.9f;
+					if (zoom > dist)
+					{
+						zoom = std::max(0.0f, dist);
+					}
+
+					break;
+				}
+
+			}
+		}
+
+		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * zoom);
+		m_cameraNode->SetPosition(m_desiredCameraLocation);
 	}
 
 	void PlayerController::SetControlBit(const ControlFlags::Type flag, bool set)
@@ -457,6 +504,8 @@ namespace mmo
 			return;
 		}
 
+		HandleCameraCollision();
+
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->InvalidateView();
@@ -534,6 +583,7 @@ namespace mmo
 		// Fire unit raycast
 		m_selectionSceneQuery->ClearResult();
 		m_selectionSceneQuery->SetSortByDistance(true);
+		m_selectionSceneQuery->SetQueryMask(0x00000002);
 		m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
 			static_cast<float>(m_x) / static_cast<float>(w),
 			static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
@@ -763,8 +813,9 @@ namespace mmo
 
 		ASSERT(m_cameraNode);
 
-		const float currentZoom = m_cameraNode->GetPosition().z;
-		s_cameraZoomCVar->Set(currentZoom - static_cast<float>(delta));
+		const float currentZoom = s_cameraZoomCVar->GetFloatValue();
+		const float maxZoom = s_maxCameraZoomCVar->GetFloatValue();
+		s_cameraZoomCVar->Set(std::max(0.0f, std::min(currentZoom - static_cast<float>(delta), maxZoom)));
 	}
 		
 	void PlayerController::SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit)

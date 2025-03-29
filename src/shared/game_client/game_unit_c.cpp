@@ -913,12 +913,9 @@ void GameUnitC::RefreshUnitName()
 			prevPosition.y = groundHeight;
 		}
 
-		const Vector3 targetPos = points.back();
-		const Radian targetAngle = GetAngle(targetPos.x, targetPos.z);
-
-		const Quaternion prevRotation = Quaternion(targetAngle, Vector3::UnitY);
-		m_movementStartRot = prevRotation;
-		m_sceneNode->SetOrientation(prevRotation);
+		Quaternion prevRotation = Quaternion::Identity;
+		m_movementStartRot = Quaternion::Identity;
+		m_sceneNode->SetOrientation(m_movementStartRot);
 
 		// First point
 		positions.emplace_back(0.0f, 0.0f, 0.0f);
@@ -970,6 +967,13 @@ void GameUnitC::RefreshUnitName()
 		{
 			const auto frame = track->CreateNodeKeyFrame(keyFrameTimes[i]);
 			frame->SetTranslate(positions[i]);
+
+			if (i < positions.size() - 1)
+			{
+				prevRotation = Quaternion(GetAngle(positions[i].x, positions[i].z, positions[i + 1].x, positions[i + 1].z), Vector3::UnitY);
+			}
+
+			frame->SetRotation(prevRotation);
 		}
 
 		m_movementEnd = prevPosition;
