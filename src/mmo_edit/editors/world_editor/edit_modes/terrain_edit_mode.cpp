@@ -95,7 +95,7 @@ namespace mmo
 			}
 		}
 
-		ImGui::SliderInt("Brush Radius", &m_terrainBrushSize, 1, terrain::constants::VerticesPerTile);
+		ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, terrain::constants::VerticesPerTile);
 		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
 		ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
 
@@ -132,8 +132,8 @@ namespace mmo
 
 		const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
 
-		const int32 outerRadius = m_terrainBrushSize;
-		const int32 innerRadius = std::max(1, static_cast<int32>(static_cast<float>(m_terrainBrushSize) * m_terrainBrushHardness));
+		const float outerRadius = m_terrainBrushSize;
+		const float innerRadius = std::max(0.05f, m_terrainBrushSize * m_terrainBrushHardness);
 
 		if (m_type == TerrainEditType::Deform)
 		{

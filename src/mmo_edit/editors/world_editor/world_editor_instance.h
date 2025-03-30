@@ -3,11 +3,9 @@
 #pragma once
 
 #include "base/signal.h"
-
 #include <imgui.h>
 #include <thread>
 #include <asio/io_service.hpp>
-
 #include "detour_debug_drawer.h"
 #include "selected_map_entity.h"
 #include "paging/world_page_loader.h"

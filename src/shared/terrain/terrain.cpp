@@ -411,69 +411,206 @@ namespace mmo
 
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray& ray)
 		{
-			float closestHit = 10000.0f;
+			float closestHit = std::numeric_limits<float>::max();
 			Vector3 hitPoint = Vector3::Zero;
-
-			const Vector3& orig = ray.origin;
-			const Vector3& dir = ray.direction;
-
 			Page* hitPage = nullptr;
 
-			for (unsigned int x = 0; x < m_width; x += 1)
+			// First do a broad phase - find which pages the ray potentially intersects
+			std::vector<std::pair<Page*, float>> potentialPages;
+			potentialPages.reserve(16); // Reserve space for some pages to avoid reallocation
+
+			for (unsigned int x = 0; x < m_width; x++)
 			{
-				for (unsigned int y = 0; y < m_height; y += 1)
+				for (unsigned int y = 0; y < m_height; y++)
 				{
 					// Get page
 					Page* page = m_pages(x, y).get();
-					if (page)
+					if (!page || !page->IsPrepared())
 					{
-						// Get axis aligned box of that page
-						const AABB& box = page->GetBoundingBox();
+						continue;
+					}
 
-						// Get start and direction
-						Vector3 point = ray.origin;
+					// Get axis aligned box of that page
+					const AABB& box = page->GetBoundingBox();
 
-						// Check if the ray hits the box
-						std::pair<bool, float> res = ray.IntersectsAABB(box);
-						if (!res.first)
+					// Check if the ray hits the box
+					std::pair<bool, float> boxHit = ray.IntersectsAABB(box);
+					if (boxHit.first)
+					{
+						// Store the page and distance for sorting
+						potentialPages.emplace_back(page, boxHit.second);
+					}
+				}
+			}
+
+			// Early out if no pages hit
+			if (potentialPages.empty())
+			{
+				return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
+			}
+
+			// Sort pages by distance from ray origin
+			std::sort(potentialPages.begin(), potentialPages.end(),
+				[](const auto& a, const auto& b) { return a.second < b.second; });
+
+			// Detailed check phase - check triangles in pages ordered by distance
+			for (const auto& [page, distance] : potentialPages)
+			{
+				// Skip if we already found a hit closer than this page's bounding box
+				if (distance > closestHit)
+				{
+					continue;
+				}
+
+				// Get the page coordinates
+				unsigned int pageX = 0, pageY = 0;
+				for (unsigned int x = 0; x < m_width; x++)
+				{
+					for (unsigned int y = 0; y < m_height; y++)
+					{
+						if (m_pages(x, y).get() == page)
 						{
+							pageX = x;
+							pageY = y;
+							break;
+						}
+					}
+				}
+
+				// Performance optimization: Only check every 4th vertex for initial pass
+				// Then refine around potential hits
+				static const int COARSE_STEP = 4;
+				bool potentialHit = false;
+				float coarseHitT = std::numeric_limits<float>::max();
+				unsigned int coarseHitX = 0, coarseHitZ = 0;
+
+				// Coarse pass - check every 4th vertex
+				for (unsigned int vx = 0; vx < constants::VerticesPerPage - 1; vx += COARSE_STEP)
+				{
+					for (unsigned int vz = 0; vz < constants::VerticesPerPage - 1; vz += COARSE_STEP)
+					{
+						// Ensure we don't go out of bounds
+						if (vx + COARSE_STEP >= constants::VerticesPerPage || vz + COARSE_STEP >= constants::VerticesPerPage)
 							continue;
+
+						// Get the four corners of this quad
+						const uint32 globalVx = pageX * (constants::VerticesPerPage - 1) + vx;
+						const uint32 globalVz = pageY * (constants::VerticesPerPage - 1) + vz;
+
+						// Get world positions for the quad vertices
+						float wx1, wz1, wx2, wz2;
+						GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
+						GetGlobalVertexWorldPosition(globalVx + COARSE_STEP, globalVz + COARSE_STEP, &wx2, &wz2);
+
+						// Get heights for the four corners
+						const float h1 = GetHeightAt(globalVx, globalVz);
+						const float h2 = GetHeightAt(globalVx + COARSE_STEP, globalVz);
+						const float h3 = GetHeightAt(globalVx, globalVz + COARSE_STEP);
+						const float h4 = GetHeightAt(globalVx + COARSE_STEP, globalVz + COARSE_STEP);
+
+						// Create the four corner vertices
+						const Vector3 v1(wx1, h1, wz1);
+						const Vector3 v2(wx2, h2, wz1);
+						const Vector3 v3(wx1, h3, wz2);
+						const Vector3 v4(wx2, h4, wz2);
+
+						// Check first triangle (v1, v2, v3)
+						float t1;
+						Vector3 intersectionPoint1;
+						if (RayTriangleIntersection(ray, v1, v2, v3, t1, intersectionPoint1))
+						{
+							if (t1 < coarseHitT)
+							{
+								coarseHitT = t1;
+								coarseHitX = vx;
+								coarseHitZ = vz;
+								potentialHit = true;
+							}
 						}
 
-						// Get the hit point
-						point = ray.GetPoint(res.second + FLT_EPSILON);
-
-						while (true)
+						// Check second triangle (v2, v4, v3)
+						float t2;
+						Vector3 intersectionPoint2;
+						if (RayTriangleIntersection(ray, v2, v4, v3, t2, intersectionPoint2))
 						{
-							// Get height
-							float height = GetSmoothHeightAt(point.x, point.z);
-							if (point.y < height)
+							if (t2 < coarseHitT)
 							{
-								// We are under the terrain! Correct y field and return hit
-								point.y = height;
+								coarseHitT = t2;
+								coarseHitX = vx;
+								coarseHitZ = vz;
+								potentialHit = true;
+							}
+						}
+					}
+				}
 
-								// Get distance
-								float distance = ray.origin.GetSquaredDistanceTo(point);
-								if (distance < closestHit)
+				// If we found a potential hit in the coarse pass, refine it
+				if (potentialHit)
+				{
+					// Define the refinement area
+					unsigned int startX = (coarseHitX > COARSE_STEP) ? (coarseHitX - COARSE_STEP) : 0;
+					unsigned int startZ = (coarseHitZ > COARSE_STEP) ? (coarseHitZ - COARSE_STEP) : 0;
+					unsigned int endX = std::min(coarseHitX + COARSE_STEP, constants::VerticesPerPage - 2);
+					unsigned int endZ = std::min(coarseHitZ + COARSE_STEP, constants::VerticesPerPage - 2);
+
+					// Detailed pass - check every vertex in the refined area
+					for (unsigned int vx = startX; vx <= endX; vx++)
+					{
+						for (unsigned int vz = startZ; vz <= endZ; vz++)
+						{
+							// Get the four corners of this quad
+							const uint32 globalVx = pageX * (constants::VerticesPerPage - 1) + vx;
+							const uint32 globalVz = pageY * (constants::VerticesPerPage - 1) + vz;
+
+							// Get world positions for the quad vertices
+							float wx1, wz1, wx2, wz2;
+							GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
+							GetGlobalVertexWorldPosition(globalVx + 1, globalVz + 1, &wx2, &wz2);
+
+							// Get heights for the four corners
+							const float h1 = GetHeightAt(globalVx, globalVz);
+							const float h2 = GetHeightAt(globalVx + 1, globalVz);
+							const float h3 = GetHeightAt(globalVx, globalVz + 1);
+							const float h4 = GetHeightAt(globalVx + 1, globalVz + 1);
+
+							// Create the four corner vertices
+							const Vector3 v1(wx1, h1, wz1);
+							const Vector3 v2(wx2, h2, wz1);
+							const Vector3 v3(wx1, h3, wz2);
+							const Vector3 v4(wx2, h4, wz2);
+
+							// Check first triangle (v1, v2, v3)
+							float t1;
+							Vector3 intersectionPoint1;
+							if (RayTriangleIntersection(ray, v1, v2, v3, t1, intersectionPoint1))
+							{
+								if (t1 < closestHit)
 								{
-									closestHit = distance;
-									hitPoint = point;
+									closestHit = t1;
+									hitPoint = intersectionPoint1;
 									hitPage = page;
 								}
-
-								break;
 							}
 
-							// Walk along the line
-							point += dir / 4.0f;
-
-							// Check if we left the box
-							if (point.x < box.min.x || point.z < box.min.z ||
-								point.x > box.max.x || point.z > box.max.z)
+							// Check second triangle (v2, v4, v3)
+							float t2;
+							Vector3 intersectionPoint2;
+							if (RayTriangleIntersection(ray, v2, v4, v3, t2, intersectionPoint2))
 							{
-								break;
+								if (t2 < closestHit)
+								{
+									closestHit = t2;
+									hitPoint = intersectionPoint2;
+									hitPage = page;
+								}
 							}
 						}
+					}
+
+					// Early out if we found a hit in this page
+					if (hitPage == page)
+					{
+						break;
 					}
 				}
 			}
@@ -500,6 +637,7 @@ namespace mmo
 			// We didn't hit anything
 			return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
 		}
+
 
 		void Terrain::GetTerrainVertex(const float x, const float z, uint32& vertexX, uint32& vertexZ)
 		{

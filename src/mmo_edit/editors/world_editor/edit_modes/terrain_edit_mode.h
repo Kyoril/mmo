@@ -116,7 +116,7 @@ namespace mmo
 
 		float m_deformFlattenHeight = 0.0f;
 
-		int32 m_terrainBrushSize = 6;
+		float m_terrainBrushSize = 0.5f;
 
 		float m_terrainBrushHardness = 0.5f;
 
