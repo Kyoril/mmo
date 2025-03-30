@@ -128,6 +128,10 @@ namespace mmo
 
 		const std::vector<TextureParameterValue>& GetTextureParameters() const override { return m_textureParameters; }
 
+		bool IsWireframe() const override { return m_wireframe; }
+
+		void SetWireframe(bool value) override { m_wireframe = value; }
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
@@ -138,6 +142,7 @@ namespace mmo
 		MaterialType m_type;
 		bool m_depthTest;
 		bool m_depthWrite;
+		bool m_wireframe;
 
 		std::vector<ScalarParameterValue> m_scalarParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;

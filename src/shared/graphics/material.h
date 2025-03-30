@@ -179,6 +179,10 @@ namespace mmo
 		virtual void SetTextureParameter(std::string_view name, const TexturePtr& value) = 0;
 
 		virtual bool GetTextureParameter(std::string_view name, String& out_value) = 0;
+
+		virtual bool IsWireframe() const = 0;
+
+		virtual void SetWireframe(bool value) = 0;
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -280,6 +284,10 @@ namespace mmo
 
 		std::shared_ptr<Material> AsShared();
 
+		virtual bool IsWireframe() const override { return m_wireframe; }
+
+		virtual void SetWireframe(bool value) override { m_wireframe = value; }
+
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.
 		[[nodiscard]] const std::vector<String>& GetTextureFiles() const noexcept { return m_textureFiles; }
@@ -326,6 +334,8 @@ namespace mmo
 		bool m_pixelShaderChanged { true };
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
+
+		bool m_wireframe{ false };
 
 		std::vector<ScalarParameterValue> m_scalarParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;

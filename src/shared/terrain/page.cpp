@@ -28,6 +28,7 @@ namespace mmo
 			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
 			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
 			static const ChunkMagic AreaChunk = MakeChunkMagic('RACM');
+			static const ChunkMagic VertexShadingChunk = MakeChunkMagic('SVCM');
 		}
 
 		namespace
@@ -91,6 +92,7 @@ namespace mmo
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
 			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
+			m_colors.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0xffffffff);
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -315,6 +317,22 @@ namespace mmo
 			}
 
 			return m_heightmap[x + y * constants::VerticesPerPage];
+		}
+
+		uint32 Page::GetColorAt(size_t x, size_t y) const
+		{
+			if (!IsPrepared())
+			{
+				return 0xffffffff;
+			}
+
+			if (x >= constants::VerticesPerPage ||
+				y >= constants::VerticesPerPage)
+			{
+				return 0xffffffff;
+			}
+
+			return m_colors[x + y * constants::VerticesPerPage];
 		}
 
 		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
@@ -654,6 +672,13 @@ namespace mmo
 				layerChunk.Finish();
 			}
 
+			// Vertex shading
+			{
+				ChunkWriter colorsChunk{ constants::VertexShadingChunk, writer };
+				writer << io::write_range(m_colors);
+				colorsChunk.Finish();
+			}
+
 			// Zones
 			{
 				ChunkWriter areaChunk{ constants::AreaChunk, writer };
@@ -788,6 +813,17 @@ namespace mmo
 			m_changed = true;
 		}
 
+		void Page::SetColorAt(size_t x, size_t y, uint32 color)
+		{
+			if (x >= constants::VerticesPerPage || y >= constants::VerticesPerPage)
+			{
+				return;
+			}
+
+			m_colors[x + y * constants::VerticesPerPage] = color;
+			m_changed = true;
+		}
+
 		void Page::SetLayerAt(const unsigned int x, const unsigned int z, const uint8 layer, const float value)
 		{
 			if (x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
@@ -899,6 +935,7 @@ namespace mmo
 			AddChunkHandler(*constants::NormalChunk, false, *this, &Page::ReadMCNMChunk);
 			AddChunkHandler(*constants::LayerChunk, false, *this, &Page::ReadMCLYChunk);
 			AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
+			AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
 
 			return reader;
 		}
@@ -916,6 +953,12 @@ namespace mmo
 				}
 			}
 
+			return reader;
+		}
+
+		bool Page::ReadMCVSChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			reader >> io::read_range(m_colors);
 			return reader;
 		}
 

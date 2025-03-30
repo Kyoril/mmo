@@ -21,7 +21,7 @@ namespace mmo
 	{
 		for(auto& renderable : m_renderables)
 		{
-			visitor.Visit(*renderable);
+			visitor.Visit(*renderable, m_groupId);
 		}
 	}
 	void RenderPriorityGroup::AddRenderable(Renderable& renderable)
@@ -73,8 +73,9 @@ namespace mmo
 		maxDistanceInFrustum = std::max(maxDistanceInFrustum, camDistToCenter + sphereBounds.GetRadius());
 	}
 
-	RenderQueueGroup::RenderQueueGroup(RenderQueue& queue)
-		: m_queue(queue)
+	RenderQueueGroup::RenderQueueGroup(RenderQueue& queue, const uint32 groupId)
+		: m_groupId(groupId)
+		, m_queue(queue)
 	{
 	}
 
@@ -91,7 +92,7 @@ namespace mmo
 		auto it = m_priorityGroups.find(priority);
 		if (it == m_priorityGroups.end())
 		{
-			it = m_priorityGroups.insert(std::make_pair(priority, std::make_unique<RenderPriorityGroup>())).first;
+			it = m_priorityGroups.insert(std::make_pair(priority, std::make_unique<RenderPriorityGroup>(m_groupId))).first;
 		}
 
 		it->second->AddRenderable(renderable);
@@ -101,7 +102,7 @@ namespace mmo
 		: m_defaultGroup(Main)
 		, m_defaultRenderablePriority(100)
 	{
-		m_groups[Main] = std::make_unique<RenderQueueGroup>(*this);
+		m_groups[Main] = std::make_unique<RenderQueueGroup>(*this, Main);
 	}
 
 	RenderQueue::~RenderQueue()
@@ -119,7 +120,7 @@ namespace mmo
 
 	void RenderQueue::AddRenderable(Renderable& renderable, uint8 groupId, uint16 priority)
 	{
-		auto* group = GetQueueGroup(groupId);
+		RenderQueueGroup* group = GetQueueGroup(groupId);
 		ASSERT(group);
 		
 		if (!renderableQueued(renderable, groupId, priority, *this))
@@ -146,7 +147,7 @@ namespace mmo
 		const auto groupIt = m_groups.find(groupId);
 		if (groupIt == m_groups.end())
 		{
-			m_groups[groupId] = std::make_unique<RenderQueueGroup>(*this);
+			m_groups[groupId] = std::make_unique<RenderQueueGroup>(*this, groupId);
 			return m_groups[groupId].get();
 		}
 

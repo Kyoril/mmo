@@ -312,6 +312,11 @@ namespace mmo
 			m_terrainNode->SetVisible(visible, true);
 		}
 
+		void Terrain::SetWireframeVisible(bool visible)
+		{
+			m_showWireframe = visible;
+		}
+
 		bool Terrain::GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const
 		{
 			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
@@ -970,6 +975,15 @@ namespace mmo
 
 			// Now lets get the actual tile area
 			return page->GetArea(globalTileX % constants::TilesPerPage, globalTileY % constants::TilesPerPage);
+		}
+
+		void Terrain::SetWireframeMaterial(MaterialPtr wireframeMaterial)
+		{
+			ASSERT(wireframeMaterial);
+
+			// Ensure material instance is created and used
+			m_wireframeMaterial = std::make_shared<MaterialInstance>("TerrainGridWireframe", wireframeMaterial);
+			m_wireframeMaterial->SetWireframe(true);
 		}
 
 		void Terrain::GetGlobalPixelWorldPosition(const int x, const int y, float* out_x, float* out_z) const

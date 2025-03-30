@@ -44,6 +44,11 @@ namespace mmo
 	class QueuedRenderableCollection
 	{
 	public:
+		explicit QueuedRenderableCollection(uint32 groupId)
+			: m_groupId(groupId)
+		{
+		}
+
 		enum OrganizationMode
 		{
 			/// Group by pass
@@ -61,23 +66,37 @@ namespace mmo
 
 		void AcceptVisitor(QueuedRenderableVisitor& visitor) const;
 
+		[[nodiscard]] uint32 GetGroupId() const { return m_groupId; }
+
 	protected:
+		uint32 m_groupId;
 		std::vector<Renderable*> m_renderables;
 	};
 
 	class RenderPriorityGroup
 	{
 	public:
+		explicit RenderPriorityGroup(const uint32 groupId)
+			: m_solidCollection(groupId)
+			, m_groupId(groupId)
+		{
+		}
+
+	public:
 		void AddRenderable(Renderable& renderable);
+
 		void Clear();
 
 		[[nodiscard]] const QueuedRenderableCollection& GetSolids() const noexcept { return m_solidCollection; }
+
+		[[nodiscard]] uint32 GetGroupId() const { return m_groupId; }
 
 	private:
 		void AddSolidRenderable(Renderable& renderable);
 
 	private:
 		QueuedRenderableCollection m_solidCollection;
+		uint32 m_groupId;
 	};
 
 	struct VisibleObjectsBoundsInfo
@@ -106,17 +125,20 @@ namespace mmo
         typedef std::map<uint16, std::unique_ptr<RenderPriorityGroup>, std::less<> > PriorityMap;
 
 	public:
-		explicit RenderQueueGroup(RenderQueue& queue);
+		explicit RenderQueueGroup(RenderQueue& queue, uint32 groupId);
 
 	public:
         void Clear();
 
 		void AddRenderable(Renderable& renderable, uint16 priority);
 
+		uint32 GetGroupId() const { return m_groupId; }
+
 		PriorityMap::iterator begin() { return m_priorityGroups.begin(); }
 		PriorityMap::iterator end() { return m_priorityGroups.end(); }
 
 	private:
+		uint32 m_groupId;
 		RenderQueue& m_queue;
 		PriorityMap m_priorityGroups;
 	};

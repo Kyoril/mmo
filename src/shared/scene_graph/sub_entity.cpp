@@ -23,6 +23,7 @@ namespace mmo
 		}
 
 		m_subMesh.PrepareRenderOperation(operation);
+		operation.material = GetMaterial();
 	}
 
 	float SubEntity::GetSquaredViewDepth(const Camera& camera) const

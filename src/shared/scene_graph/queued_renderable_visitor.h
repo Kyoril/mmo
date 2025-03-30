@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "base/typedefs.h"
+
 namespace mmo
 {
 	class Pass;
@@ -29,6 +31,6 @@ namespace mmo
 		
 		virtual bool Visit(const Pass& p) = 0;
 
-		virtual void Visit(Renderable& r) = 0;
+		virtual void Visit(Renderable& r, uint32 groupId) = 0;
 	};
 }

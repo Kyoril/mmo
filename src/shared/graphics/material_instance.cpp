@@ -136,6 +136,7 @@ namespace mmo
 		m_twoSided = m_parent->IsTwoSided();
 		m_depthTest = m_parent->IsDepthTestEnabled();
 		m_depthWrite = m_parent->IsDepthWriteEnabled();
+		m_wireframe = m_parent->IsWireframe();
 	}
 
 	void MaterialInstance::Update()
@@ -180,6 +181,8 @@ namespace mmo
 		{
 			device.SetFaceCullMode(FaceCullMode::Back);
 		}
+
+		device.SetFillMode(m_wireframe ? FillMode::Wireframe : FillMode::Solid);
 	}
 
 	ConstantBufferPtr MaterialInstance::GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device)

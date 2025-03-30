@@ -160,6 +160,7 @@ namespace mmo
 		// Setup terrain
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
+		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension()).string();
@@ -495,6 +496,15 @@ namespace mmo
 					ImGui::EndCombo();
 				}
 
+				if (m_terrain)
+				{
+					bool wireframe = m_terrain->IsWireframeVisible();
+					if (ImGui::Checkbox("Show Wireframe on Top", &wireframe))
+					{
+						m_terrain->SetWireframeVisible(wireframe);
+					}
+				}
+				
 				if (m_hasTerrain)
 				{
 					if (ImGui::BeginDragDropTarget())

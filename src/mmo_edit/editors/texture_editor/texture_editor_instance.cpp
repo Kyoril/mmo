@@ -10,6 +10,7 @@
 #include "graphics/graphics_device.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/render_operation.h"
+#include "scene_graph/render_queue.h"
 
 namespace mmo
 {
@@ -103,7 +104,7 @@ namespace mmo
 		gx.SetTransformMatrix(TransformType::View, Matrix4::Identity);
 		gx.SetTransformMatrix(TransformType::Projection, Matrix4::Identity);
 
-		RenderOperation op{};
+		RenderOperation op{ Main };
 		op.vertexData = m_vertexData.get();
 		op.material = m_previewMaterialInst;
 		op.topology = TopologyType::TriangleList;

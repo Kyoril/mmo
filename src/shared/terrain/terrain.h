@@ -67,6 +67,10 @@ namespace mmo
 
 			void SetVisible(const bool visible) const;
 
+			void SetWireframeVisible(bool visible);
+
+			bool IsWireframeVisible() const { return m_showWireframe; }
+
 			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
 			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
 			bool GetTileIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
@@ -128,6 +132,10 @@ namespace mmo
 			uint32 GetArea(const Vector3& position) const;
 
 			uint32 GetAreaForTile(uint32 globalTileX, uint32 globalTileY) const;
+
+			void SetWireframeMaterial(MaterialPtr wireframeMaterial);
+
+			const MaterialPtr& GetWireframeMaterial() const { return m_wireframeMaterial; }
 
 		private:
 
@@ -273,6 +281,8 @@ namespace mmo
 			int32 m_lastZ;
 			uint32 m_tileSceneQueryFlags = 0;
 			MaterialPtr m_defaultMaterial;
+			bool m_showWireframe = false;
+			MaterialPtr m_wireframeMaterial;
 		};
 	}
 

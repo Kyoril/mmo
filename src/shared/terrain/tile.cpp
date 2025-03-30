@@ -14,6 +14,8 @@ namespace mmo
 {
 	namespace terrain
 	{
+		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::Main + 1;
+
 		Tile::Tile(const String& name, Page& page, size_t startX, size_t startZ)
 			: MovableObject(name)
 			, Renderable()
@@ -66,7 +68,16 @@ namespace mmo
 			operation.vertexData = m_vertexData.get();
 			operation.indexData = m_indexData.get();
 			operation.topology = TopologyType::TriangleList;
-			operation.material = GetMaterial();
+
+			// A little hack to use the wireframe material for rendering instead
+			if (operation.GetRenderGroupId() == WireframeRenderGroupId)
+			{
+				operation.material = m_page.GetTerrain().GetWireframeMaterial();
+			}
+			else
+			{
+				operation.material = GetMaterial();
+			}
 		}
 
 		const Matrix4& Tile::GetWorldTransform() const
@@ -136,6 +147,11 @@ namespace mmo
 		void Tile::PopulateRenderQueue(RenderQueue& queue)
 		{
 			queue.AddRenderable(*this, m_renderQueueId);
+
+			if (m_page.GetTerrain().IsWireframeVisible())
+			{
+				queue.AddRenderable(*this, WireframeRenderGroupId);
+			}
 		}
 
 		Terrain& Tile::GetTerrain() const
@@ -185,7 +201,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = 0xFFFFFFFF;
+					vert->color = m_page.GetColorAt(i, j);
 					vert->v = static_cast<float>(i - m_startX) / static_cast<float>(constants::VerticesPerTile);
 					vert->u = static_cast<float>(j - m_startZ) / static_cast<float>(constants::VerticesPerTile);
 
@@ -281,17 +297,12 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = 0xFFFFFFFF;
+					vert->color = m_page.GetColorAt(i, j);
 					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile - 1);
 					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile - 1);
 
-					if (height < minHeight) {
-						minHeight = height;
-					}
-
-					if (height > maxHeight) {
-						maxHeight = height;
-					}
+					minHeight = std::min(height, minHeight);
+					maxHeight = std::max(height, maxHeight);
 
 					vert++;
 				}

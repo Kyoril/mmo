@@ -10,6 +10,12 @@ namespace mmo
 	class RenderOperation
 	{
 	public:
+		explicit RenderOperation(const uint32 renderGroupId)
+			: m_renderGroupId(renderGroupId)
+		{
+		}
+
+	public:
 		TopologyType topology { TopologyType::TriangleList };
 
 		VertexFormat vertexFormat { VertexFormat::PosColor };
@@ -23,5 +29,10 @@ namespace mmo
 		std::vector<ConstantBuffer*> vertexConstantBuffers{};
 
 		std::vector<ConstantBuffer*> pixelConstantBuffers{};
+
+		uint32 GetRenderGroupId() const { return m_renderGroupId; }
+
+	private:
+		uint32 m_renderGroupId;
 	};
 }

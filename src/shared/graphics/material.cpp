@@ -381,6 +381,8 @@ namespace mmo
 		{
 			device.SetFaceCullMode(FaceCullMode::Back);
 		}
+
+		device.SetFillMode(m_wireframe ? FillMode::Wireframe : FillMode::Solid);
 	}
 
 	void Material::BindShaders(GraphicsDevice& device)

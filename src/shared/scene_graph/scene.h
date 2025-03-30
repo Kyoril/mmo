@@ -30,7 +30,7 @@ namespace mmo
 	public:
 		void Visit(RenderablePass& rp) override;
 		bool Visit(const Pass& p) override;
-		void Visit(Renderable& r) override;
+		void Visit(Renderable& r, uint32 groupId) override;
 
 	public:
 		/// Target SM to send renderables to
@@ -332,7 +332,7 @@ namespace mmo
 
 		void UpdateSceneGraph();
 		
-		void RenderSingleObject(Renderable& renderable);
+		void RenderSingleObject(Renderable& renderable, uint32 groupId);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 

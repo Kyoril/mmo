@@ -25,9 +25,9 @@ namespace mmo
 		return true;
 	}
 
-	void SceneQueuedRenderableVisitor::Visit(Renderable& r)
+	void SceneQueuedRenderableVisitor::Visit(Renderable& r, const uint32 groupId)
 	{
-		targetScene->RenderSingleObject(r);
+		targetScene->RenderSingleObject(r, groupId);
 	}
 
 	Scene::Scene()
@@ -283,9 +283,9 @@ namespace mmo
 		}
 	}
 
-	void Scene::RenderSingleObject(Renderable& renderable)
+	void Scene::RenderSingleObject(Renderable& renderable, uint32 groupId)
 	{
-		RenderOperation op { };
+		RenderOperation op { groupId };
 		renderable.PrepareRenderOperation(op);
 
 		if (op.vertexData == nullptr || op.vertexData->vertexCount == 0)
@@ -296,13 +296,17 @@ namespace mmo
 		auto& gx = GraphicsDevice::Get();
 
 		// Grab material with fallback to default material of the scene
-		auto material = renderable.GetMaterial();
-		if (!material)
+		if (!op.material)
 		{
-			material = m_defaultMaterial;
+			auto material = renderable.GetMaterial();
+			if (!material)
+			{
+				material = m_defaultMaterial;
+			}
+
+			op.material = material;
 		}
 
-		op.material = material;
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
 		// Bind vertex layout

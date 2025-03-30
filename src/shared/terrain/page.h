@@ -64,6 +64,8 @@ namespace mmo
 
 			float GetHeightAt(size_t x, size_t y) const;
 
+			uint32 GetColorAt(size_t x, size_t y) const;
+
 			uint32 GetLayersAt(size_t x, size_t y) const;
 
 			float GetSmoothHeightAt(float x, float y) const;
@@ -104,6 +106,8 @@ namespace mmo
 
 			void SetHeightAt(unsigned int x, unsigned int z, float value);
 
+			void SetColorAt(size_t x, size_t y, uint32 color);
+
 			void SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value);
 
 			uint32 GetArea(uint32 localTileX, uint32 localTileY) const;
@@ -134,6 +138,8 @@ namespace mmo
 
 			bool ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size);
 
+			bool ReadMCVSChunk(io::Reader& reader, uint32 header, uint32 size);
+
 		private:
 			void UpdateBoundingBox();
 
@@ -157,6 +163,7 @@ namespace mmo
 			std::vector<MaterialPtr> m_materials;
 			std::vector<uint32> m_layers;
 			std::vector<uint16> m_tileZones;
+			std::vector<uint32> m_colors;
 
 			int32 m_x;
 			int32 m_z;
