@@ -30,9 +30,19 @@ namespace mmo
 		targetScene->RenderSingleObject(r, groupId);
 	}
 
+	struct alignas(16) PsCameraConstantBuffer
+	{
+		Vector3 cameraPosition;
+		float fogStart;
+		float fogEnd;
+		Vector3 fogColor;
+	};
+
 	Scene::Scene()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
+
+		m_psCameraBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(PsCameraConstantBuffer), nullptr);
 	}
 
 	void Scene::Clear()
@@ -142,6 +152,18 @@ namespace mmo
 	{
 		auto& gx = GraphicsDevice::Get();
 
+		m_activeCamera = &camera;
+
+		ASSERT(m_psCameraBuffer);
+
+		// Update ps constant buffer
+		PsCameraConstantBuffer buffer;
+		buffer.cameraPosition = camera.GetDerivedPosition();
+		buffer.fogStart = m_fogStart;
+		buffer.fogEnd = m_fogEnd;
+		buffer.fogColor = m_fogColor;
+		m_psCameraBuffer->Update(&buffer);
+
 		m_renderableVisitor.targetScene = this;
 		m_renderableVisitor.scissoring = false;
 
@@ -170,6 +192,8 @@ namespace mmo
 		gx.SetTransformMatrix(View, camera.GetViewMatrix());
 
 		RenderVisibleObjects();
+
+		m_activeCamera = nullptr;
 	}
 
 	void Scene::UpdateSceneGraph()
@@ -308,6 +332,9 @@ namespace mmo
 		}
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		ASSERT(m_psCameraBuffer);
+		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
 		// Bind vertex layout
 		renderable.PreRender(*this, gx);

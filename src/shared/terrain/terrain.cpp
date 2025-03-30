@@ -130,6 +130,26 @@ namespace mmo
 			return GetAt(x, z);
 		}
 
+		uint32 Terrain::GetColorAt(uint32 x, uint32 z)
+		{
+			// Validate indices
+			const uint32 totalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= totalVertices || z >= totalVertices)
+			{
+				return 0.0f;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(z, pageY, localVertexY);
+
+			// Retrieve the page at (pageX, pageY)
+			Page* page = GetPage(pageX, pageY); // Implement GetPage accordingly
+
+			return page->GetColorAt(localVertexX, localVertexY);
+		}
+
 		const uint32 Terrain::GetLayersAt(const uint32 x, const uint32 z)
 		{
 			// Validate indices
@@ -764,6 +784,52 @@ namespace mmo
 				});
 		}
 
+		namespace
+		{
+			Vector3 BlendColor(const Vector3& current, const Vector3& target, const float dt)
+			{
+				float newR = current.x + (target.x - current.x) * dt;
+				float newG = current.y + (target.y - current.y) * dt;
+				float newB = current.z + (target.z - current.z) * dt;
+
+				// Clamp to [0, 1]
+				newR = Clamp(newR, 0.0f, 1.0f);
+				newG = Clamp(newG, 0.0f, 1.0f);
+				newB = Clamp(newB, 0.0f, 1.0f);
+				return { newR, newG, newB };
+			}
+		}
+		
+		void Terrain::Color(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, uint32 color)
+		{
+			Vector3 i;
+			i.x = ((color >> 0) & 0xFF) / 255.0f;
+			i.y = ((color >> 8) & 0xFF) / 255.0f;
+			i.z = ((color >> 16) & 0xFF) / 255.0f;
+
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power, i](const int32 vx, const int32 vy, const float factor)
+				{
+					const uint32 c = GetColorAt(vx, vy);
+
+					Vector3 v;
+					v.x = ((c >> 0) & 0xFF) / 255.0f;
+					v.y = ((c >> 8) & 0xFF) / 255.0f;
+					v.z = ((c >> 16) & 0xFF) / 255.0f;
+
+					// Blend current color with input color based on factor
+					const Vector3 blended = BlendColor(v, i, power * factor);
+
+					// Convert back to uint32 BGRA with alpha=0xff
+					const uint32 color =
+						(static_cast<uint32>(blended.x * 255.0f)) |
+						(static_cast<uint32>(blended.y * 255.0f) << 8) |
+						(static_cast<uint32>(blended.z * 255.0f) << 16) |
+						(0xFF << 24);
+
+					SetColorAt(vx, vy, color);
+				});
+		}
+
 		void Terrain::SetHeightAt(const int x, const int y, const float height)
 		{
 			// Determine page
@@ -818,6 +884,64 @@ namespace mmo
 					page->IsPrepared())
 				{
 					page->SetHeightAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, height);
+				}
+			}
+		}
+
+		void Terrain::SetColorAt(int x, int y, uint32 color)
+		{
+			// Determine page
+			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			if (x >= TotalVertices || y >= TotalVertices)
+			{
+				return;
+			}
+
+			// Compute page and local vertex indices
+			uint32 pageX, pageY, localVertexX, localVertexY;
+			GetPageAndLocalVertex(x, pageX, localVertexX);
+			GetPageAndLocalVertex(y, pageY, localVertexY);
+
+			const bool isLeftEdge = localVertexX == 0 && pageX > 0;
+			const bool isTopEdge = localVertexY == 0 && pageY > 0;
+
+			Page* page = GetPage(pageX, pageY);
+			if (page &&
+				page->IsPrepared())
+			{
+				page->SetColorAt(localVertexX, localVertexY, color);
+			}
+
+			// Vertex on left edge
+			if (isLeftEdge)
+			{
+				page = GetPage(pageX - 1, pageY);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetColorAt(constants::VerticesPerPage - 1, localVertexY, color);
+				}
+			}
+
+			// Vertex on top edge
+			if (isTopEdge)
+			{
+				page = GetPage(pageX, pageY - 1);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetColorAt(localVertexX, constants::VerticesPerPage - 1, color);
+				}
+			}
+
+			// All four pages!
+			if (isLeftEdge && isTopEdge)
+			{
+				page = GetPage(pageX - 1, pageY - 1);
+				if (page &&
+					page->IsPrepared())
+				{
+					page->SetColorAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, color);
 				}
 			}
 		}

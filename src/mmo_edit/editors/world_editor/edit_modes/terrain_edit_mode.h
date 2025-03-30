@@ -32,6 +32,9 @@ namespace mmo
 		Area,
 
 
+		VertexShading,
+
+
 		/// The total number of terrain editing types. Always the last element!
 		Count_
 	};
@@ -127,5 +130,7 @@ namespace mmo
 		Vector3 m_brushPosition{};
 
 		uint32 m_selectedArea = 0;
+
+		uint32 m_selectedColor = 0xFFFFFFF;
 	};
 }

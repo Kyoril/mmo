@@ -565,6 +565,15 @@ namespace mmo
 			<< "\treturn expression ? whenTrue : whenFalse;\n"
 			<< "}\n\n";
 
+		m_pixelShaderStream
+			<< "cbuffer CameraParameters\n"
+			<< "{\n"
+			<< "\tfloat3 cameraPos;	// Camera position in world space\n"
+			<< "\tfloat fogStart;	// Distance of fog start\n"
+			<< "\tfloat fogEnd;		// Distance of fog end\n"
+			<< "\tfloat3 fogColor;	// Fog color\n"
+			<< "};\n\n";
+
 		const auto& scalarParams = m_floatParameters;
 		if (!scalarParams.empty())
 		{
@@ -900,6 +909,11 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tcolor = color / (color + 1.0f.xxx);\n"
 				<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+
+			m_pixelShaderStream
+				<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
+				<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
+				<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
 		}
 
 		// Combining it

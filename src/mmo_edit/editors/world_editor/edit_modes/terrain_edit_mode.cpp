@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "frame_ui/color.h"
+
 
 namespace mmo
 {
@@ -12,7 +14,8 @@ namespace mmo
 		"Select",
 		"Deform",
 		"Paint",
-		"Area"
+		"Area",
+		"Vertex Shading"
 	};
 
 	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditType::Count_), "There needs to be one string per enum value to display!");
@@ -94,6 +97,15 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 		}
+		if (m_type == TerrainEditType::VertexShading)
+		{
+			const Color color(m_selectedColor);
+			float rgba[4] = { color.GetRed(), color.GetGreen(), color.GetBlue(), color.GetAlpha() };
+			if (ImGui::ColorPicker4("Vertex Color", rgba, ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_DisplayHSV))
+			{
+				m_selectedColor = Color(rgba[0], rgba[1], rgba[2], rgba[3]);
+			}
+		}
 
 		ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, terrain::constants::VerticesPerTile);
 		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
@@ -171,6 +183,11 @@ namespace mmo
 		else if (m_type == TerrainEditType::Area)
 		{
 			m_terrain.SetArea(m_brushPosition, m_selectedArea);
+		}
+		else if (m_type == TerrainEditType::VertexShading)
+		{
+			m_terrain.Color(m_brushPosition.x, m_brushPosition.z,
+				innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_selectedColor);
 		}
 	}
 

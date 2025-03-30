@@ -47,6 +47,8 @@ namespace mmo
 
 			float GetHeightAt(uint32 x, uint32 z);
 
+			uint32 GetColorAt(uint32 x, uint32 z);
+
 			const uint32 GetLayersAt(uint32 x, uint32 z);
 
 			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value);
@@ -119,7 +121,11 @@ namespace mmo
 
 			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float minSloap, float maxSloap);
 
+			void Color(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, uint32 color);
+
 			void SetHeightAt(int x, int y, float height);
+
+			void SetColorAt(int x, int y, uint32 color);
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 

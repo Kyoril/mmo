@@ -28,7 +28,7 @@
 #pragma comment(lib, "d3dcompiler.lib")
 
 #ifndef MMO_GPU_DEBUG
-#	define MMO_GPU_DEBUG 0
+#	define MMO_GPU_DEBUG 1
 #endif
 
 namespace mmo
@@ -1117,6 +1117,13 @@ namespace mmo
 
 		// Bind additional constant buffers if any
 		int psStartSlot = 0;
+		for (auto& buffer : operation.pixelConstantBuffers)
+		{
+			ASSERT(buffer);
+
+			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
+			m_immContext->PSSetConstantBuffers(psStartSlot++, 1, buffers);
+		}
 		if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
 		{
 			scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);

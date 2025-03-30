@@ -58,7 +58,7 @@ namespace mmo
 			m_coverageTexture->SetFilter(TextureFilter::Anisotropic);
 
 			m_materialInstance = std::make_shared<MaterialInstance>(m_name, page.GetTerrain().GetDefaultMaterial());
-			m_materialInstance->SetTextureParameter("Splatting", m_name);
+			m_materialInstance->SetTextureParameter("Splatting", m_coverageTexture);
 		}
 
 		Tile::~Tile() = default;
@@ -201,7 +201,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = m_page.GetColorAt(i, j);
+					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();
 					vert->v = static_cast<float>(i - m_startX) / static_cast<float>(constants::VerticesPerTile);
 					vert->u = static_cast<float>(j - m_startZ) / static_cast<float>(constants::VerticesPerTile);
 
@@ -297,7 +297,7 @@ namespace mmo
 					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = m_page.GetColorAt(i, j);
+					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();
 					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile - 1);
 					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile - 1);
 

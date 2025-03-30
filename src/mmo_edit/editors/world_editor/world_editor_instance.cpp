@@ -778,7 +778,11 @@ namespace mmo
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform && m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint))))
+			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (
+				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform && 
+				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
+				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
+				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);

@@ -427,5 +427,15 @@ namespace mmo
 		MaterialPtr m_defaultMaterial;
 
 		bool m_frozen{ false };
+
+		Camera* m_activeCamera = nullptr;
+
+		ConstantBufferPtr m_psCameraBuffer;
+
+		Vector3 m_fogColor = Vector3(0.447f, 0.638f, 1.0f);
+
+		float m_fogStart = 185.0f;
+
+		float m_fogEnd = 265.0f;
 	};
 }
