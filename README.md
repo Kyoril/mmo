@@ -2,11 +2,11 @@
 
 If you want, you can support me on [ko-fi](https://ko-fi.com/kyoril)!
 
-Login Screen             |  Character Selection Screen
+Character Selection Screen             |  Ingame
 :-------------------------:|:-------------------------:
-<img src="https://user-images.githubusercontent.com/9358023/85418557-34ccf280-b571-11ea-866c-7e18aaf989b6.png" width="600">  |  <img src="https://cdn.discordapp.com/attachments/679667054424359054/793784839647395850/unknown.png" width="600">
-In the game world        |  Unreal inspired material graph editor with PBR support
-<img src="https://user-images.githubusercontent.com/9358023/148674907-02b033c2-a892-4ffd-b2b6-fead925f39be.png" width="600">  |  <img src="https://user-images.githubusercontent.com/9358023/152792460-112a79e1-33d8-4ee6-8d3e-59cdc24a17b9.png" width="600">
+<img src="./screenshots/char_select.png" width="600">  |  <img src="./screenshots/ingame_01.png" width="600">
+Spawn Editor        |  Unreal inspired material graph editor with PBR support
+<img src="./screenshots/spawn_editor.png" width="600">  |  <img src="./screenshots/material_editor.png" width="600">
 
 
 # What is this project about?
