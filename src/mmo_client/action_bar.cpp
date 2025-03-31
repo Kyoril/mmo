@@ -115,21 +115,29 @@ namespace mmo
 		return nullptr;
 	}
 
-	void ActionBar::UseActionButton(int32 slot) const
+	void ActionBar::UseActionButton(int32 slot)
 	{
-		const ActionButton& button = GetActionButton(slot);
-		if (button.type == action_button_type::Spell)
+		if (g_cursor.GetItemType() == CursorItemType::None)
 		{
-			// Start casting a spell
-			m_spellCast.CastSpell(button.action);
-		}
-		else if (button.type == action_button_type::Item)
-		{
-			// TODO: Use item (inventory class!)
+			const ActionButton& button = GetActionButton(slot);
+			if (button.type == action_button_type::Spell)
+			{
+				// Start casting a spell
+				m_spellCast.CastSpell(button.action);
+			}
+			else if (button.type == action_button_type::Item)
+			{
+				// TODO: Use item (inventory class!)
+			}
+			else
+			{
+				WLOG("Action button is empty, nothing to do!");
+			}
 		}
 		else
 		{
-			WLOG("Action button is empty, nothing to do!");
+			// Pickup action button
+			PickupActionButton(slot);
 		}
 	}
 

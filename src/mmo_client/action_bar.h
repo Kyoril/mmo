@@ -41,7 +41,7 @@ namespace mmo
 
 		[[nodiscard]] const ItemInfo* GetActionButtonItem(int32 slot) const;
 
-		void UseActionButton(int32 slot) const;
+		void UseActionButton(int32 slot);
 
 		void PickupActionButton(int32 slot);
 
