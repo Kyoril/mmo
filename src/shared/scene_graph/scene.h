@@ -321,6 +321,8 @@ namespace mmo
 
 		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
+		void SetFogRange(float start, float end);
+
 	protected:
 		virtual std::unique_ptr<SceneNode> CreateSceneNodeImpl();
 

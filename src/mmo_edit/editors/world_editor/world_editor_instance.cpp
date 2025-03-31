@@ -97,6 +97,8 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
+		m_scene.SetFogRange(128.0f, 165.0f);
+
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
 		m_worldGrid->SetVisible(false);

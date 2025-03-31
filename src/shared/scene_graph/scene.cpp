@@ -464,6 +464,14 @@ namespace mmo
 		return std::move(query);
 	}
 
+	void Scene::SetFogRange(float start, float end)
+	{
+		ASSERT(end >= start);
+
+		m_fogStart = start;
+		m_fogEnd = end;
+	}
+
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()
 	{
 		return std::make_unique<SceneNode>(*this);

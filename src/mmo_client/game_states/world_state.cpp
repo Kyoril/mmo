@@ -622,6 +622,8 @@ namespace mmo
 	{
 		m_scene = std::make_unique<OctreeScene>();
 
+		m_scene->SetFogRange(128.0f, 165.0f);
+
 		m_cloudsEntity = m_scene->CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
 		m_cloudsEntity->SetQueryFlags(0);
