@@ -598,14 +598,14 @@ namespace mmo
 	{
 		m_needsRedraw = true;
 
+		for (auto& child : m_children)
+		{
+			child->Invalidate(includeLayout);
+		}
+
 		if (includeLayout)
 		{
 			m_needsLayout = true;
-
-			for (auto& child : m_children)
-			{
-				child->Invalidate(includeLayout);
-			}
 		}
 	}
 

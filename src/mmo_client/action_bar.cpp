@@ -5,6 +5,7 @@
 #include "spell_cast.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -31,7 +32,51 @@ namespace mmo
 			return false;
 		}
 
-		return GetActionButton(slot).type != action_button_type::None;
+		const ActionButton& actionButton = GetActionButton(slot);
+		if (actionButton.type == action_button_type::None)
+		{
+			// Hacky way to allow empty action buttons
+			return true;
+		}
+
+		switch (actionButton.type)
+		{
+		case action_button_type::Item:
+			return ObjectMgr::GetItemCount(actionButton.action) > 0;
+		case action_button_type::Spell:
+		{
+			const auto* spell = m_spells.getById(actionButton.action);
+			if (!spell)
+			{
+				return false;
+			}
+
+			auto player = ObjectMgr::GetActivePlayer();
+			if (!player)
+			{
+				return false;
+			}
+
+			if (!player->HasSpell(spell->id()))
+			{
+				return false;
+			}
+
+			if (spell->powertype() != player->GetPowerType())
+			{
+				return false;
+			}
+
+			if (spell->cost() > 0 && player->GetPower(spell->powertype()) < spell->cost())
+			{
+				return false;
+			}
+
+			return true;
+		}
+		}
+
+		return false;
 	}
 
 	bool ActionBar::IsActionButtonSpell(int32 slot) const
