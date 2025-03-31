@@ -145,7 +145,7 @@ namespace mmo
 			SendMovementUpdate(forward ? game::client_realm_packet::MoveStartForward : game::client_realm_packet::MoveStartBackward);
 			StartHeartbeatTimer();
 			
-			m_controlFlags |= ControlFlags::MoveSent;
+			SetControlBit(ControlFlags::MoveSent, true);
 			return;
 		}
 
@@ -154,7 +154,8 @@ namespace mmo
 			m_controlledUnit->StopMove();
 			SendMovementUpdate(game::client_realm_packet::MoveStop);
 			StopHeartbeatTimer();
-			m_controlFlags &= ~ControlFlags::MoveSent;
+
+			SetControlBit(ControlFlags::MoveSent, false);
 		}
 	}
 
@@ -194,20 +195,20 @@ namespace mmo
 			SendMovementUpdate(left ? game::client_realm_packet::MoveStartStrafeLeft : game::client_realm_packet::MoveStartStrafeRight);
 			StartHeartbeatTimer();
 
-			m_controlFlags |= ControlFlags::StrafeSent;
+			SetControlBit(ControlFlags::StrafeSent, true);
 			return;
 		}
 
 		if (m_controlFlags & ControlFlags::StrafeSent)
 		{
 			m_controlledUnit->StopStrafe();
-			m_controlFlags &= ~ControlFlags::StrafeSent;
+			SetControlBit(ControlFlags::StrafeSent, false);
 		}
 	}
 
 	void PlayerController::TurnPlayer()
 	{
-		if ((m_controlFlags & ControlFlags::TurnPlayer) == 0)
+		if ((m_controlFlags & ControlFlags::TurnPlayer) == 0 || (m_controlFlags & ControlFlags::TurnSent) != 0)
 		{
 			int direction = ((m_controlFlags & ControlFlags::TurnLeftKey) != 0);
 			if ((m_controlFlags & ControlFlags::TurnRightKey))
@@ -230,13 +231,13 @@ namespace mmo
 				const bool left = direction > 0;
 				m_controlledUnit->StartTurn(left);
 				SendMovementUpdate(left ? game::client_realm_packet::MoveStartTurnLeft : game::client_realm_packet::MoveStartTurnRight);
-				m_controlFlags |= ControlFlags::TurnSent;
+				SetControlBit(ControlFlags::TurnSent, true);
 			}
 			else if (m_controlFlags & ControlFlags::TurnSent)
 			{
 				m_controlledUnit->StopTurn();
 				SendMovementUpdate(game::client_realm_packet::MoveStopTurn);
-				m_controlFlags &= ~ControlFlags::TurnSent;
+				SetControlBit(ControlFlags::TurnSent, false);
 			}
 		}
 	}
