@@ -109,10 +109,14 @@ namespace mmo
 		return m_spells.getById(GetActionButton(slot).action);
 	}
 
-	const ItemInfo* ActionBar::GetActionButtonItem(int32 slot) const
+	const ItemInfo* ActionBar::GetActionButtonItem(const int32 slot) const
 	{
-		// TODO
-		return nullptr;
+		if (!IsActionButtonItem(slot))
+		{
+			return nullptr;
+		}
+
+		return m_items.Get(GetActionButton(slot).action);
 	}
 
 	void ActionBar::UseActionButton(int32 slot)
@@ -128,10 +132,7 @@ namespace mmo
 			else if (button.type == action_button_type::Item)
 			{
 				// TODO: Use item (inventory class!)
-			}
-			else
-			{
-				WLOG("Action button is empty, nothing to do!");
+				DLOG("TODO: Use item from action button slot " << slot);
 			}
 		}
 		else
@@ -162,12 +163,36 @@ namespace mmo
 			return;
 		}
 
+		const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
 		// We do have an item, place it at the action button slot
 		switch (g_cursor.GetItemType())
 		{
 		case CursorItemType::Item:
-			m_actionButtons[slot].type = action_button_type::Item;
-			// TODO: Get item from inventory index
+			{
+				m_actionButtons[slot].type = action_button_type::Item;
+
+				const uint8 bag = static_cast<uint8>(g_cursor.GetCursorItem() >> 8) & 0xFF;
+				const uint8 bagSlot = g_cursor.GetCursorItem() & 0xFF;
+
+				if (bag == player_inventory_slots::Bag_0)
+				{
+					const uint64 itemGuid = player->Get<uint64>(object_fields::InvSlotHead + bagSlot * 2);
+
+					const std::shared_ptr<GameItemC> item = ObjectMgr::Get<GameItemC>(itemGuid);
+					if (item && item->GetEntry())
+					{
+						m_actionButtons[slot].action = static_cast<uint16>(item->GetEntry()->id);
+						ActionButtonChanged(slot);
+					}
+				}
+				else
+				{
+					// TODO: Get item from bag slot
+					DLOG("TODO: Get item from bag slot at bag " << static_cast<int>(bag) << " and slot " << static_cast<int>(bagSlot));
+				}
+			}
 			break;
 		case CursorItemType::Spell:
 			// Assign spell

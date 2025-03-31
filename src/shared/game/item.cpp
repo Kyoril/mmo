@@ -189,8 +189,8 @@ namespace mmo
 
 	const char* ItemInfo::GetIcon() const
 	{
-		// TODO!
-		return nullptr;
+		static const char* s_defaultIcon = "Interface/Icons/Spells/S_Attack.htex";
+		return s_defaultIcon;
 	}
 
 	float ItemInfo::GetMinDamage() const
