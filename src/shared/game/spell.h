@@ -488,6 +488,8 @@ namespace mmo
 		enum Type
 		{
 			MeleeCombatStart = 0x00000001,
+
+			HiddenAura = 0x00000002,
 		};
 	}
 

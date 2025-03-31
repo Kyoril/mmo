@@ -690,6 +690,9 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Start Melee Combat", spell_attributes_b::MeleeCombatStart);
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Aura is Hidden", spell_attributes_b::HiddenAura);
+
 				ImGui::EndTable();
 			}
 		}

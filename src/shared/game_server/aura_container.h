@@ -214,7 +214,8 @@ namespace mmo
 			return
 				IsApplied() && 
 				!IsExpired() &&
-				(m_spell.attributes(0) & spell_attributes::HiddenClientSide) == 0;
+				(m_spell.attributes(0) & spell_attributes::HiddenClientSide) == 0 &&
+				(m_spell.attributes(1) & spell_attributes_b::HiddenAura) == 0;
 		}
 
 		bool IsAreaAura() const { return m_areaAura; }
