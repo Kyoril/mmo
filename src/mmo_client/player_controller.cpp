@@ -677,7 +677,6 @@ namespace mmo
 				if (m_hoveredUnit->GetGuid() != previousSelectedUnit)
 				{
 					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_hoveredUnit->GetGuid()));
-					m_connector.SetSelection(m_hoveredUnit->GetGuid());
 				}
 
 				if (button == MouseButton_Right)

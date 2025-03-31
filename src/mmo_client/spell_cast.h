@@ -37,7 +37,7 @@ namespace mmo
 	public:
 		void CastSpell(uint32 spellId);
 
-		void CancelCast();
+		bool CancelCast();
 
 		bool IsCasting() const;
 

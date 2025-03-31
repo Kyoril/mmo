@@ -95,7 +95,6 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
-
 		m_spellCastId = 0;
 	}
 
@@ -240,16 +239,18 @@ namespace mmo
 		m_connector.CastSpell(spellId, targetMap);
 	}
 
-	void SpellCast::CancelCast()
+	bool SpellCast::CancelCast()
 	{
 		// Check if we are currently casting a spell
 		if (!IsCasting())
 		{
-			return;
+			return false;
 		}
 
 		// Send network packet to stop casting the spell
 		m_connector.CancelCast();
+		m_spellCastId = 0;
+		return true;
 	}
 
 	bool SpellCast::IsCasting() const

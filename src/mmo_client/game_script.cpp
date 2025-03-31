@@ -74,6 +74,20 @@ namespace mmo
 			return cvar->GetStringValue().c_str();
 		}
 
+		bool Script_ClearTarget()
+		{
+			const auto player = ObjectMgr::GetActivePlayer();
+			ASSERT(player);
+
+			if (player->Get<uint64>(object_fields::TargetUnit) != 0)
+			{
+				player->SetTargetUnit(nullptr);
+				return true;
+			}
+
+			return false;
+		}
+
 		const char* Script_GetZoneName()
 		{
 			return s_zoneName.c_str();
@@ -1018,6 +1032,8 @@ namespace mmo
 
 			luabind::def("GetSpell", &Script_GetSpell),
 			luabind::def<std::function<void(int32)>>("CastSpell", [this](int32 spellIndex) { if (const auto* spell = Script_GetSpell(spellIndex)) m_spellCast.CastSpell(spell->id()); }),
+			luabind::def<std::function<bool()>>("SpellStopCasting", [this]() -> bool { return m_spellCast.CancelCast(); }),
+
 			luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
@@ -1041,6 +1057,8 @@ namespace mmo
 			luabind::def("Jump", &Script_Jump),
 
 			luabind::def("GetZoneText", &Script_GetZoneName),
+
+			luabind::def("ClearTarget", &Script_ClearTarget),
 
 			luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
 			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),

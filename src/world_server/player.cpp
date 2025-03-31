@@ -367,6 +367,9 @@ namespace mmo
 		case game::client_realm_packet::CastSpell:
 			OnSpellCast(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CancelCast:
+			OnCancelCast(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::AttackSwing:
 			OnAttackSwing(opCode, buffer.size(), reader);
@@ -1233,6 +1236,11 @@ namespace mmo
 				packet.Finish();
 			});
 		}
+	}
+
+	void Player::OnCancelCast(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		m_character->CancelCast(spell_interrupt_flags::Any, 0);
 	}
 
 	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)
