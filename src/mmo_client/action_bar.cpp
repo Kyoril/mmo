@@ -39,10 +39,40 @@ namespace mmo
 			return true;
 		}
 
+		// Action button is usable if it has a valid action
+		if (actionButton.action == 0)
+		{
+			return true;
+		}
+
 		switch (actionButton.type)
 		{
 		case action_button_type::Item:
-			return ObjectMgr::GetItemCount(actionButton.action) > 0;
+			{
+			auto* entry = m_items.Get(actionButton.action);
+			if (!entry)
+			{
+				return false;
+			}
+
+			if (ObjectMgr::GetItemCount(actionButton.action) == 0)
+			{
+				return false;
+			}
+
+			bool isUsable = false;
+			for (const ItemSpell& spell : entry->spells)
+			{
+				if (spell.triggertype == item_spell_trigger::OnUse)
+				{
+					isUsable = true;
+					break;
+				}
+			}
+
+			return isUsable;
+			}
+			
 		case action_button_type::Spell:
 		{
 			const auto* spell = m_spells.getById(actionButton.action);
@@ -79,7 +109,7 @@ namespace mmo
 		return false;
 	}
 
-	bool ActionBar::IsActionButtonSpell(int32 slot) const
+	bool ActionBar::IsActionButtonSpell(const int32 slot) const
 	{
 		if (!IsValidSlot(slot))
 		{
@@ -89,7 +119,7 @@ namespace mmo
 		return GetActionButton(slot).type == action_button_type::Spell;
 	}
 
-	bool ActionBar::IsActionButtonItem(int32 slot) const
+	bool ActionBar::IsActionButtonItem(const int32 slot) const
 	{
 		if (!IsValidSlot(slot))
 		{
@@ -99,7 +129,7 @@ namespace mmo
 		return GetActionButton(slot).type == action_button_type::Item;
 	}
 
-	const proto_client::SpellEntry* ActionBar::GetActionButtonSpell(int32 slot) const
+	const proto_client::SpellEntry* ActionBar::GetActionButtonSpell(const int32 slot) const
 	{
 		if (!IsActionButtonSpell(slot))
 		{
@@ -119,7 +149,7 @@ namespace mmo
 		return m_items.Get(GetActionButton(slot).action);
 	}
 
-	void ActionBar::UseActionButton(int32 slot)
+	void ActionBar::UseActionButton(const int32 slot)
 	{
 		if (g_cursor.GetItemType() == CursorItemType::None)
 		{
@@ -131,8 +161,15 @@ namespace mmo
 			}
 			else if (button.type == action_button_type::Item)
 			{
-				// TODO: Use item (inventory class!)
-				DLOG("TODO: Use item from action button slot " << slot);
+				uint8 bag, slot;
+				uint64 guid;
+				if (!ObjectMgr::FindItem(button.action, bag, slot, guid))
+				{
+					return;
+				}
+
+				SpellTargetMap targetMap;
+				m_connector.UseItem(bag, slot, guid, targetMap);
 			}
 		}
 		else
@@ -171,26 +208,35 @@ namespace mmo
 		{
 		case CursorItemType::Item:
 			{
-				m_actionButtons[slot].type = action_button_type::Item;
-
 				const uint8 bag = static_cast<uint8>(g_cursor.GetCursorItem() >> 8) & 0xFF;
 				const uint8 bagSlot = g_cursor.GetCursorItem() & 0xFF;
 
+				uint64 itemGuid = 0;
+
 				if (bag == player_inventory_slots::Bag_0)
 				{
-					const uint64 itemGuid = player->Get<uint64>(object_fields::InvSlotHead + bagSlot * 2);
-
-					const std::shared_ptr<GameItemC> item = ObjectMgr::Get<GameItemC>(itemGuid);
-					if (item && item->GetEntry())
-					{
-						m_actionButtons[slot].action = static_cast<uint16>(item->GetEntry()->id);
-						ActionButtonChanged(slot);
-					}
+					itemGuid = player->Get<uint64>(object_fields::InvSlotHead + bagSlot * 2);
 				}
 				else
 				{
-					// TODO: Get item from bag slot
-					DLOG("TODO: Get item from bag slot at bag " << static_cast<int>(bag) << " and slot " << static_cast<int>(bagSlot));
+					if (const uint64 bagGuid = player->Get<uint64>(object_fields::InvSlotHead + bag * 2); bagGuid != 0)
+					{
+						if (const std::shared_ptr<GameBagC> bag = ObjectMgr::Get<GameBagC>(bagGuid); bag && bagSlot < bag->GetBagSlots())
+						{
+							itemGuid = bag->Get<uint64>(object_fields::Slot_1 + bagSlot * 2);
+						}
+					}
+				}
+
+				if (itemGuid != 0)
+				{
+					const std::shared_ptr<GameItemC> item = ObjectMgr::Get<GameItemC>(itemGuid);
+					if (item && item->GetEntry())
+					{
+						m_actionButtons[slot].type = action_button_type::Item;
+						m_actionButtons[slot].action = static_cast<uint16>(item->GetEntry()->id);
+						ActionButtonChanged(slot);
+					}
 				}
 			}
 			break;

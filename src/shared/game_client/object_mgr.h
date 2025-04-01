@@ -80,6 +80,8 @@ namespace mmo
 
 		static std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
 
+		static bool FindItem(uint32 entryId, uint8& out_bag, uint8& out_slot, uint64& out_guid);
+
 		template<typename C>
 		static void ForEachUnit(const C& callback)
 		{

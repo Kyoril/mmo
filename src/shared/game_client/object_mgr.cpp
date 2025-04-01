@@ -170,6 +170,60 @@ namespace mmo
 		return nullptr;
 	}
 
+	bool ObjectMgr::FindItem(uint32 entryId, uint8& out_bag, uint8& out_slot, uint64& out_guid)
+	{
+		const auto player = GetActivePlayer();
+		if (!player)
+		{
+			return false;
+		}
+
+		// Check player inventory
+		for (uint8 slot = player_inventory_pack_slots::Start; slot < player_inventory_pack_slots::End; ++slot)
+		{
+			const uint64 guid = player->Get<uint64>(object_fields::PackSlot_1 + (slot - player_inventory_pack_slots::Start) * 2);
+			if (!guid)
+			{
+				continue;
+			}
+
+			if (const auto item = Get<GameItemC>(guid); item && item->Get<uint32>(object_fields::Entry) == entryId)
+			{
+				out_bag = player_inventory_slots::Bag_0;
+				out_slot = slot;
+				out_guid = guid;
+				return true;
+			}
+		}
+
+		// Check player bags
+		for (uint8 bag = player_inventory_slots::Start; bag < player_inventory_slots::End; ++bag)
+		{
+			const uint64 bagGuid = player->Get<uint64>(object_fields::InvSlotHead + bag * 2);
+			if (const auto bagItem = Get<GameBagC>(bagGuid); bagItem)
+			{
+				for (uint8 slot = 0; slot < bagItem->Get<uint32>(object_fields::NumSlots); ++slot)
+				{
+					const uint64 itemGuid = bagItem->Get<uint64>(object_fields::Slot_1 + slot * 2);
+					if (itemGuid == 0)
+					{
+						continue;
+					}
+
+					if (const auto item = Get<GameItemC>(itemGuid); item && item->Get<uint32>(object_fields::Entry) == entryId)
+					{
+						out_bag = bag;
+						out_slot = slot;
+						out_guid = itemGuid;
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
 	void ObjectMgr::RemoveAllObjects()
 	{
 		ms_itemCount.clear();

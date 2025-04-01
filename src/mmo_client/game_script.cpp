@@ -860,7 +860,7 @@ namespace mmo
 				.def_readonly("class", &ItemInfo::GetItemClassName)
 				.def_readonly("subClass", &ItemInfo::GetItemSubClassName)
 				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
-				.def_readonly("icon", &ItemInfo::GetIcon)
+				.def<std::function<const char* (const ItemInfo*)>>("GetIcon", [this](const ItemInfo* self) -> const char* { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)
 				.def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
 				.def("GetStatType", &ItemInfo::GetStatType)
@@ -1143,6 +1143,7 @@ namespace mmo
 			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
 
 			luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot) { this->UseContainerItem(slot); }),
+			luabind::def<std::function<int32(uint32)>>("GetItemCount", [this](const uint32 id) -> int32 { return ObjectMgr::GetItemCount(id); }),
 
 			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
 			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
