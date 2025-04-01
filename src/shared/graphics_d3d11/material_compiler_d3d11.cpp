@@ -565,8 +565,9 @@ namespace mmo
 			<< "\treturn expression ? whenTrue : whenFalse;\n"
 			<< "}\n\n";
 
+		size_t bufferRegister = 0;
 		m_pixelShaderStream
-			<< "cbuffer CameraParameters\n"
+			<< "cbuffer CameraParameters : register(b" << bufferRegister++ << ")\n"
 			<< "{\n"
 			<< "\tfloat3 cameraPos;	// Camera position in world space\n"
 			<< "\tfloat fogStart;	// Distance of fog start\n"
@@ -578,7 +579,7 @@ namespace mmo
 		if (!scalarParams.empty())
 		{
 			m_pixelShaderStream
-				<< "cbuffer ScalarParameters\n"
+				<< "cbuffer ScalarParameters : register(b" << bufferRegister++ << ")\n"
 				<< "{\n";
 
 			for (const auto& param : scalarParams)
@@ -595,7 +596,7 @@ namespace mmo
 		if (!vectorParams.empty())
 		{
 			m_pixelShaderStream
-				<< "cbuffer VectorParameters\n"
+				<< "cbuffer VectorParameters : register(b" << bufferRegister++ << ")\n"
 				<< "{\n";
 
 			for (const auto& param : vectorParams)
