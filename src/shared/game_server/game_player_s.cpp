@@ -485,7 +485,74 @@ namespace mmo
 
 	bool GamePlayerS::CompleteQuest(uint32 quest)
 	{
-		// TODO
+		// Check all quests in the quest log
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId != quest)
+			{
+				continue;
+			}
+
+			// Verify quest state
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+				continue;
+
+			if (it->second.status != quest_status::Incomplete)
+				continue;
+
+			// Find quest
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+				continue;
+
+			if (!it->second.explored)
+			{
+				if (quest->flags() & quest_flags::Exploration)
+				{
+					it->second.explored = true;
+				}
+			}
+
+			// Counter needed so that the right field is used
+			uint8 reqIndex = 0;
+			for (const auto& req : quest->requirements())
+			{
+				if (req.creatureid() != 0)
+				{
+					// Get current counter
+					if (field.counters[reqIndex] < req.creaturecount())
+					{
+						// Increment and update counter
+						field.counters[reqIndex] = req.creaturecount();
+						it->second.creatures[reqIndex]++;
+					}
+				}
+				else if (req.objectid() != 0)
+				{
+					// Get current counter
+					if (field.counters[reqIndex] < req.objectcount())
+					{
+						// Increment and update counter
+						field.counters[reqIndex] = req.objectcount();
+						it->second.creatures[reqIndex]++;
+					}
+				}
+
+				reqIndex++;
+			}
+
+			// Complete quest
+			it->second.status = quest_status::Complete;
+			field.status = quest_status::Complete;
+
+			// Save quest progress
+			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+			if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+
+			return true;
+		}
 
 		return false;
 	}

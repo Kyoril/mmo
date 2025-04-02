@@ -26,6 +26,19 @@ namespace mmo
 		if (context.owner) strongOwner = context.owner->shared_from_this();
 		auto weakOwner = std::weak_ptr<GameObjectS>(strongOwner);
 
+		if (actionOffset == 0)
+		{
+			if (entry.flags() & trigger_flags::OnlyOneInstance)
+			{
+				// Nothing to do here
+				if (strongOwner && strongOwner->IsTriggerRunning(entry.id()))
+				{
+					WLOG("Trigger " << entry.id() << " is already running on " << log_hex_digit(strongOwner->GetGuid()));
+					return;
+				}
+			}
+		}
+		
 		// Remove all expired delays
 		for (auto it = m_delays.begin(); it != m_delays.end();)
 		{
@@ -56,6 +69,12 @@ namespace mmo
 			std::uniform_int_distribution<uint32> roll(0, 99);
 			if (roll(randomGenerator) > entry.probability())
 				return;	 // Didn't pass probability check
+		}
+
+		// Notify trigger started
+		if (strongOwner)
+		{
+			strongOwner->NotifyTriggerRunning(entry.id());
 		}
 
 		for (int i = actionOffset; i < entry.actions_size(); ++i)
@@ -98,7 +117,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(SetMount)
 				MMO_HANDLE_TRIGGER_ACTION(Despawn)
 
-#undef WOWPP_HANDLE_TRIGGER_ACTION
+#undef MMO_HANDLE_TRIGGER_ACTION
 
 			case trigger_actions::Delay:
 				{
@@ -134,14 +153,22 @@ namespace mmo
 					m_delays.emplace_back(std::move(delayCountdown));
 
 					// Skip the other actions for now
-					i = entry.actions_size();
-					break;
+					return;
 				}
 			default:
 			{
 				WLOG("Unsupported trigger action: " << action.action());
 				break;
 			}
+			}
+
+			if (i >= entry.actions_size() - 1)
+			{
+				// Trigger is done
+				if (strongOwner)
+				{
+					strongOwner->NotifyTriggerEnded(entry.id());
+				}
 			}
 		}
 	}

@@ -12,6 +12,8 @@ namespace mmo
 			AbortOnOwnerDeath	= 0x0001,
 			/// Trigger is only executed while owner is in combat (and is aborted if owner leaves combat).
 			OnlyInCombat		= 0x0002,
+			/// Only one trigger of this type should be running concurrently.
+			OnlyOneInstance		= 0x0004,
 
 			/// Used for automatic enumeration.
 			Count_				= 2

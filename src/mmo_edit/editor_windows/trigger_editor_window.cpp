@@ -731,6 +731,7 @@ namespace mmo
 		{
 			CHECKBOX_FLAG_PROP(flags, "Cancel On Owner Death", trigger_flags::AbortOnOwnerDeath);
 			CHECKBOX_FLAG_PROP(flags, "Only In Combat", trigger_flags::OnlyInCombat);
+			CHECKBOX_FLAG_PROP(flags, "Only One Instance", trigger_flags::OnlyOneInstance);
 		}
 
 		ImGui::Separator();

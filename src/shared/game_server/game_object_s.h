@@ -360,6 +360,12 @@ namespace mmo
 
 		virtual bool HasMovementInfo() const { return false; }
 
+		void NotifyTriggerRunning(const uint32 triggerId) { m_runningTriggers.insert(triggerId); }
+
+		void NotifyTriggerEnded(const uint32 triggerId) { m_runningTriggers.erase(triggerId); }
+
+		bool IsTriggerRunning(const uint32 triggerId) const { return m_runningTriggers.contains(triggerId); }
+
 	public:
 
 		/// Adds a new variable to the list of variables of this object.
@@ -425,6 +431,7 @@ namespace mmo
 		MovementInfo m_movementInfo;
 		WorldInstance* m_worldInstance { nullptr };
 		std::map<uint32, VariableInstance> m_variables;
+		std::set<uint32> m_runningTriggers;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameObjectS const& object);
