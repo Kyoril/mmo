@@ -608,6 +608,7 @@ namespace mmo
 			return;
 		}
 
+		RaiseTrigger(trigger_event::OnDamaged, instigator);
 		threatened(*instigator, damage);
 
 		if (health < damage)
@@ -625,6 +626,10 @@ namespace mmo
 		{
 			instigator->doneDamage(*this, school, damageType);
 		}
+
+		// Notify health dropped below
+		const uint32 healthPercent = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
+		RaiseTrigger(trigger_event::OnHealthDroppedBelow, { healthPercent }, instigator);
 
 		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
@@ -654,6 +659,9 @@ namespace mmo
 		{
 			return 0;
 		}
+
+		// Raise unit trigger
+		RaiseTrigger(trigger_event::OnHealed, instigator);
 
 		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
 		if (health >= maxHealth)
@@ -1726,6 +1734,8 @@ namespace mmo
 		}
 
 		m_auras.clear();
+
+		RaiseTrigger(trigger_event::OnKilled, killer);
 	}
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)
