@@ -9,7 +9,7 @@ ENV CC=gcc-13
 ENV CXX=g++-13
 RUN mkdir -p build && \
 	cd build && \
-	cmake -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release /app && \
+	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release /app && \
 	make -j4 login_server
 
 
