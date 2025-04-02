@@ -732,7 +732,6 @@ namespace mmo
 				if (previousSelectedUnit != 0)
 				{
 					m_controlledUnit->SetTargetUnit(nullptr);
-					m_connector.SetSelection(0);
 				}
 			}
 		}

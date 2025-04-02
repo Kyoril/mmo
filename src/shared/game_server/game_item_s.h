@@ -42,6 +42,8 @@ namespace mmo
 
 		bool IsCompatibleWithSpell(const proto::SpellEntry& spell);
 
+		const String& GetName() const override;
+
 	protected:
 		void PrepareFieldMap() override
 		{

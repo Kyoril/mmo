@@ -288,4 +288,9 @@ namespace mmo
 		Set<float>(object_fields::MinDamage, m_entry->minmeleedmg());
 		Set<float>(object_fields::MaxDamage, m_entry->maxmeleedmg());
 	}
+
+	const String& GameCreatureS::GetName() const
+	{
+		return m_entry ? m_entry->name() : m_originalEntry.name();
+	}
 }

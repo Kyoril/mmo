@@ -501,55 +501,17 @@ namespace mmo
 
 	void Player::LocalChatMessage(ChatType type, const std::string& message)
 	{
-		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-
-		auto position = m_character->GetPosition();
-		float chatDistance = 0.0f;
 		switch (type)
 		{
 		case ChatType::Say:
-			chatDistance = 25.0f;
+			m_character->ChatSay(message);
 			break;
 		case ChatType::Yell:
-			chatDistance = 300.0f;
+			m_character->ChatYell(message);
 			break;
-		case ChatType::Emote:
-			chatDistance = 50.0f;
-			break;
-		default: 
-			return;
+		default:
+			DLOG("TODO: Unsupported local chat type " << static_cast<int32>(type) << "!");
 		}
-
-		// TODO: Flags
-		constexpr uint8 flags = 0;
-
-		std::vector<char> buffer;
-		io::VectorSink sink{ buffer };
-		game::OutgoingPacket outPacket(sink);
-		outPacket.Start(game::realm_client_packet::ChatMessage);
-		outPacket
-			<< io::write_packed_guid(m_character->GetGuid())
-			<< io::write<uint8>(type)
-			<< io::write_range(message)
-			<< io::write<uint8>(0)
-			<< io::write<uint8>(flags);
-		outPacket.Finish();
-
-		// Spawn tile objects
-		ForEachSubscriberInSight(
-			m_worldInstance->GetGrid(),
-			tile.GetPosition(),
-			[&position, chatDistance, &outPacket, &buffer](TileSubscriber& subscriber)
-			{
-				auto& unit = subscriber.GetGameUnit();
-				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
-				if (distanceSquared > chatDistance * chatDistance)
-				{
-					return;
-				}
-
-				subscriber.SendPacket(outPacket, buffer);
-			});
 	}
 
 	bool Player::IsLooting() const

@@ -257,6 +257,8 @@ namespace mmo
 
 		uint32 GetMapId() const;
 
+		virtual const String& GetName() const = 0;
+
 		virtual void Relocate(const Vector3& position, const Radian& facing)
 		{
 			const MovementInfo oldInfo = m_movementInfo;

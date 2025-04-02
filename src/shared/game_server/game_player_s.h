@@ -173,6 +173,8 @@ namespace mmo
 
 		uint32 GetAttributePointsByAttribute(const uint32 attribute) const { ASSERT(attribute < 5); return m_attributePointEnhancements[attribute]; }
 
+		const String& GetName() const override;
+
 	protected:
 		void UpdateStat(int32 stat);
 

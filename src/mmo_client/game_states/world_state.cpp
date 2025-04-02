@@ -1169,22 +1169,46 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_playerNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name) 
+		if (type == ChatType::UnitSay || type == ChatType::UnitEmote || type == ChatType::UnitYell)
 		{
-			String chatMessageType = "SAY";
-			switch (type)
+			String speaker;
+			if (!(packet >> io::read_container<uint8>(speaker)))
 			{
-			case ChatType::Channel: chatMessageType = "CHANNEL"; break;
-			case ChatType::Yell: chatMessageType = "YELL"; break;
-			case ChatType::Group: chatMessageType = "PARTY"; break;
-			case ChatType::Guild: chatMessageType = "GUILD"; break;
-			case ChatType::Whisper: chatMessageType = "WHISPER"; break;
-			case ChatType::Raid: chatMessageType = "RAID"; break;
+				return PacketParseResult::Disconnect;
 			}
 
-			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, name, message);
-		});
+			String chatMessageType;
+			switch (type)
+			{
+			case ChatType::UnitSay: chatMessageType = "UNIT_SAY"; break;
+			case ChatType::UnitYell: chatMessageType = "UNIT_YELL"; break;
+			case ChatType::UnitEmote: chatMessageType = "UNIT_EMOTE"; break;
+			default:
+				UNREACHABLE();
+				break;
+			}
 
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, speaker, message);
+		}
+		else
+		{
+			m_playerNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name)
+				{
+					String chatMessageType = "SAY";
+					switch (type)
+					{
+					case ChatType::Channel: chatMessageType = "CHANNEL"; break;
+					case ChatType::Yell: chatMessageType = "YELL"; break;
+					case ChatType::Group: chatMessageType = "PARTY"; break;
+					case ChatType::Guild: chatMessageType = "GUILD"; break;
+					case ChatType::Whisper: chatMessageType = "WHISPER"; break;
+					case ChatType::Raid: chatMessageType = "RAID"; break;
+					}
+
+					FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, name, message);
+				});
+		}
+		
 		return PacketParseResult::Pass;
 	}
 

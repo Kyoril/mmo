@@ -391,7 +391,7 @@ namespace mmo
 
 		static const char* s_noneEntryString = "<None>";
 
-		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			int32 factionTemplate = currentEntry.factiontemplate();
 
@@ -418,7 +418,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			int32 currentTrainer = currentEntry.trainerentry();
 
@@ -474,7 +474,7 @@ namespace mmo
 			RenderGossipMenus(m_project.gossipMenus, currentEntry);
 		}
 
-		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::InputTextMultiline("Greeting Text", currentEntry.mutable_greeting_text());
 
@@ -596,7 +596,7 @@ namespace mmo
 
 		}
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			SLIDER_FLOAT_PROP(scale, "Scale", 0.01f, 10.0f);
 
@@ -649,7 +649,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::PushID("Level");
 			ImGui::BeginGroupPanel("Level");
@@ -690,7 +690,7 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(regeneration, "Regenerate Power", regeneration_flags::Power);
 		}
 
-		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_None))
+		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static const char* s_itemNone = "<None>";
 
@@ -808,6 +808,119 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Scripting", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			static const char* s_none = "<None>";
+
+			// Display existing triggers in a table
+			if (ImGui::BeginTable("TriggerTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+			{
+				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableHeadersRow();
+
+				for (int i = 0; i < currentEntry.triggers_size(); ++i)
+				{
+					uint32_t triggerId = currentEntry.triggers(i);
+
+					ImGui::TableNextRow();
+					ImGui::PushID(i);
+
+					// ID Column
+					ImGui::TableNextColumn();
+					ImGui::Text("%u", triggerId);
+
+					// Name Column
+					ImGui::TableNextColumn();
+					const auto* trigger = m_project.triggers.getById(triggerId);
+					ImGui::TextUnformatted(trigger ? trigger->name().c_str() : "(Unknown Trigger)");
+
+					// Actions Column
+					ImGui::TableNextColumn();
+					if (ImGui::Button("Remove"))
+					{
+						// Remove trigger
+						auto* triggers = currentEntry.mutable_triggers();
+						triggers->erase(triggers->begin() + i);
+						i--; // Adjust index since we removed an element
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+
+			// Add trigger button
+			if (ImGui::Button("Add Trigger"))
+			{
+				ImGui::OpenPopup("AddTriggerPopup");
+			}
+
+			// Add Trigger Popup
+			if (ImGui::BeginPopupModal("AddTriggerPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				// Static filter to allow user to search triggers by name or ID.
+				static ImGuiTextFilter triggerFilter;
+				triggerFilter.Draw("Filter (by name or ID)", 200.0f);
+
+				ImGui::Text("Select a trigger to add:");
+				ImGui::Separator();
+
+				// Begin a child region for listing triggers
+				ImGui::BeginChild("TriggersList", ImVec2(400, 300), true);
+
+				// Variable to hold the currently selected trigger ID
+				static int selectedTriggerId = -1;
+
+				for (int i = 0; i < m_project.triggers.count(); ++i)
+				{
+					const auto& trigger = m_project.triggers.getTemplates().entry(i);
+					// Build a label combining the ID and name
+					char label[128];
+					snprintf(label, sizeof(label), "%u - %s", trigger.id(), trigger.name().c_str());
+
+					// Only show entries that pass the filter
+					if (!triggerFilter.PassFilter(label))
+						continue;
+
+					// Create a selectable for this trigger.
+					if (ImGui::Selectable(label, selectedTriggerId == trigger.id()))
+					{
+						selectedTriggerId = trigger.id();
+					}
+				}
+
+				ImGui::EndChild();
+
+				ImGui::Separator();
+
+				// Confirm and Cancel buttons
+				if (ImGui::Button("OK", ImVec2(120, 0)))
+				{
+					if (selectedTriggerId != -1)
+					{
+						// Add the selected trigger ID to the creature's triggers.
+						currentEntry.add_triggers(selectedTriggerId);
+					}
+					// Reset selection and close the popup.
+					selectedTriggerId = -1;
+					triggerFilter.Clear();
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0)))
+				{
+					// Reset selection and close the popup.
+					selectedTriggerId = -1;
+					triggerFilter.Clear();
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::EndPopup();
+			}
+		}
 	}
 
 	void CreatureEditorWindow::OnNewEntry(proto::TemplateManager<proto::Units, proto::UnitEntry>::EntryType& entry)

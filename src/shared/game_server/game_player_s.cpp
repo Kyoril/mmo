@@ -1332,6 +1332,13 @@ namespace mmo
 		}
 	}
 
+	const String& GamePlayerS::GetName() const
+	{
+		// TODO!
+		static const String unknown = "Unknown";
+		return unknown;
+	}
+
 	void GamePlayerS::UpdateStat(const int32 stat)
 	{
 		// Validate stat

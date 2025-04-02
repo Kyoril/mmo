@@ -6,6 +6,7 @@
 #include "game_player_s.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
+#include "game/chat_type.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -971,6 +972,74 @@ namespace mmo
 		}
 
 		return total;
+	}
+
+	void GameUnitS::ChatSay(const String& message)
+	{
+		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message);
+	}
+
+	void GameUnitS::ChatYell(const String& message)
+	{
+		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
+	}
+
+	void GameUnitS::DoLocalChatMessage(ChatType type, const String& message)
+	{
+		auto position = GetPosition();
+		float chatDistance = 0.0f;
+		switch (type)
+		{
+		case ChatType::Say:
+		case ChatType::UnitSay:
+			chatDistance = 25.0f;
+			break;
+		case ChatType::Yell:
+		case ChatType::UnitYell:
+			chatDistance = 300.0f;
+			break;
+		case ChatType::Emote:
+			chatDistance = 50.0f;
+			break;
+		default:
+			return;
+		}
+
+		// TODO: Flags
+		constexpr uint8 flags = 0;
+
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		game::OutgoingPacket outPacket(sink);
+		outPacket.Start(game::realm_client_packet::ChatMessage);
+		outPacket
+			<< io::write_packed_guid(GetGuid())
+			<< io::write<uint8>(type)
+			<< io::write_range(message)
+			<< io::write<uint8>(0)
+			<< io::write<uint8>(flags);
+
+		// Add speaker name for unit chat events
+		if (type == ChatType::UnitSay || type == ChatType::UnitYell || type == ChatType::UnitEmote)
+		{
+			outPacket << io::write_dynamic_range<uint8>(GetName());
+		}
+
+		outPacket.Finish();
+
+		// Spawn tile objects
+		ForEachSubscriberInSight(
+			[&position, chatDistance, &outPacket, &buffer](TileSubscriber& subscriber)
+			{
+				auto& unit = subscriber.GetGameUnit();
+				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
+				if (distanceSquared > chatDistance * chatDistance)
+				{
+					return;
+				}
+
+				subscriber.SendPacket(outPacket, buffer);
+			});
 	}
 
 	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS>& victim)

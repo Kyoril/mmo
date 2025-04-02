@@ -75,6 +75,11 @@ namespace mmo
 		return true;
 	}
 
+	const String& GameItemS::GetName() const
+	{
+		return m_entry.name();
+	}
+
 	io::Writer& operator<<(io::Writer& w, GameItemS const& object)
 	{
 		w << reinterpret_cast<GameObjectS const&>(object);

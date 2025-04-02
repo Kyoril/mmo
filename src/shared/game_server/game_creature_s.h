@@ -164,6 +164,8 @@ namespace mmo
 			}
 		}
 
+		const String& GetName() const override;
+
 	private:
 
 		std::unique_ptr<CreatureAI> m_ai;

@@ -3,6 +3,7 @@
 
 #include "frame_ui/frame_mgr.h"
 #include "game/vendor.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -127,7 +128,10 @@ namespace mmo
 		m_vendorItems.clear();
 		m_vendorItems.reserve(listCount);
 		m_vendorGuid = vendorGuid;
-		m_realmConnector.SetSelection(m_vendorGuid);
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+		player->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_vendorGuid));
 
 		for (uint8 i = 0; i < listCount; ++i)
 		{

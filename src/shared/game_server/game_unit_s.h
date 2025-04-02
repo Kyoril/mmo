@@ -12,6 +12,7 @@
 #include "game/spell_target_map.h"
 #include "unit_mover.h"
 #include "base/countdown.h"
+#include "game/chat_type.h"
 #include "game/damage_school.h"
 #include "game/spell.h"
 #include "proto_data/trigger_helper.h"
@@ -516,6 +517,13 @@ namespace mmo
 
 			return T(diff);
 		}
+
+		void ChatSay(const String& message);
+
+		void ChatYell(const String& message);
+
+	protected:
+		virtual void DoLocalChatMessage(ChatType type, const String& message);
 
 	private:
 		void SetVictim(const std::shared_ptr<GameUnitS>& victim);

@@ -169,14 +169,66 @@ namespace mmo
 
 	void TriggerHandler::handleSay(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO: Implement
-		DLOG("TODO: ACTION_SAY");
+		GameObjectS* target = getActionTarget(action, context);
+		if (target == nullptr)
+		{
+			WLOG("TRIGGER_ACTION_SAY: No target found, action will be ignored");
+			return;
+		}
+
+		auto* world = getWorldInstance(target);
+		if (!world)
+		{
+			return;
+		}
+
+		// Verify that "target" extends GameUnit class
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_SAY: Needs a unit target, but target is no unit - action ignored");
+			return;
+		}
+
+		auto triggeringUnit = context.triggeringUnit.lock();
+		target->AsUnit().ChatSay(getActionText(action, 0));
+
+		// Eventually play sound file
+		if (action.data_size() > 0)
+		{
+			playSoundEntry(action.data(0), target);
+		}
 	}
 
 	void TriggerHandler::handleYell(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO
-		DLOG("TODO: ACTION_YELL");
+		GameObjectS* target = getActionTarget(action, context);
+		if (target == nullptr)
+		{
+			WLOG("TRIGGER_ACTION_YELL: No target found, action will be ignored");
+			return;
+		}
+
+		auto* world = getWorldInstance(target);
+		if (!world)
+		{
+			return;
+		}
+
+		// Verify that "target" extends GameUnit class
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_YELL: Needs a unit target, but target is no unit - action ignored");
+			return;
+		}
+
+		auto triggeringUnit = context.triggeringUnit.lock();
+		target->AsUnit().ChatYell(getActionText(action, 0));
+
+		// Eventually play sound file
+		if (action.data_size() > 0)
+		{
+			playSoundEntry(action.data(0), target);
+		}
 	}
 
 	void TriggerHandler::handleSetWorldObjectState(const proto::TriggerAction& action, TriggerContext& context)
@@ -407,8 +459,28 @@ namespace mmo
 
 	void TriggerHandler::handleSetStandState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO
-		DLOG("TODO: ACTION_SET_STAND_STATE");
+		GameObjectS* target = getActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_SET_STAND_STATE: No target found, action will be ignored");
+			return;
+		}
+
+		// Verify that "target" extends GameUnit class
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_SET_STAND_STATE: Needs a unit target - action ignored");
+			return;
+		}
+
+		const uint32 standState = getActionData(action, 0);
+		if (standState >= unit_stand_state::Count_)
+		{
+			WLOG("TRIGGER_ACTION_SET_STAND_STATE: Invalid stand state " << standState << " - action ignored");
+			return;
+		}
+
+		target->AsUnit().SetStandState(static_cast<unit_stand_state::Type>(standState));
 	}
 
 	void TriggerHandler::handleSetVirtualEquipmentSlot(const proto::TriggerAction& action, TriggerContext& context)
