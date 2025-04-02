@@ -235,9 +235,21 @@ namespace mmo
 			for (const auto& triggerEvent : triggerEntry->newevents())
 			{
 				if (triggerEvent.type() != e)
+				{
 					continue;
+				}
 
-				if (triggerEvent.data_size() > 0)
+				if (e == trigger_event::OnGossipAction)
+				{
+					const uint32 menuId = triggerEvent.data_size() > 0 ? triggerEvent.data(0) : 0;
+					const uint32 actionId = triggerEvent.data_size() > 1 ? triggerEvent.data(1) : 0;
+
+					if (data.size() < 2 || data[0] != menuId || data[1] != actionId)
+					{
+						continue;
+					}
+				}
+				else if (triggerEvent.data_size() > 0)
 				{
 					switch (e)
 					{

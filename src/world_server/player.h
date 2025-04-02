@@ -338,7 +338,7 @@ namespace mmo
 	private:
 		const proto::GossipMenuEntry* GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const;
 
-		void HandleGossipAction(const GameCreatureS& unit, const proto::GossipMenuOption& action);
+		void HandleGossipAction(GameCreatureS& unit, uint32 menuId, const proto::GossipMenuOption& action);
 
 		void CloseGossip();
 

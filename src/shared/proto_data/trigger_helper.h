@@ -76,6 +76,9 @@ namespace mmo
 			/// Executed when a unit successfully casted a specific spell.
 			/// Data: <SPELL-ID>;
 			OnSpellCast,
+			/// Executed when a specific gossip action is selected.
+			/// Data: <GOSSIP MENU ID>,<GOSSIP ACTION ID>;
+			OnGossipAction,
 
 			Invalid,
 			Count_ = Invalid

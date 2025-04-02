@@ -18,6 +18,9 @@ namespace mmo
 			/// Shows another gossip menu. Can be used to add multi-paged gossip menus!
 			GossipMenu,
 
+			/// Raises a trigger event.
+			Trigger,
+
 			Count_
 		};
 	}

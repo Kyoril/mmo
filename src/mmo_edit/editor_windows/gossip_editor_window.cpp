@@ -179,7 +179,7 @@ namespace mmo
 					ImGui::InputText("##text", mutableEntry->mutable_text());
 					ImGui::TableNextColumn();
 
-					static const char* s_actionTypeStrings[] = { "None", "Show Vendor Menu", "Show Trainer Menu", "Show Gossip Menu" };
+					static const char* s_actionTypeStrings[] = { "None", "Show Vendor Menu", "Show Trainer Menu", "Show Gossip Menu", "Trigger Event" };
 					static_assert(std::size(s_actionTypeStrings) == gossip_actions::Count_, "Action type strings must match gossip_actions enum");
 
 					int actionType = mutableEntry->action_type();
@@ -204,6 +204,7 @@ namespace mmo
 					case gossip_actions::None:
 					case gossip_actions::Vendor:
 					case gossip_actions::Trainer:
+					case gossip_actions::Trigger:
 						// Nothing to show for these gossip actions as there is no parameter
 						if (mutableEntry->has_action_param())
 						{

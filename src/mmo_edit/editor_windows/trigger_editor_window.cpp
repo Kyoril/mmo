@@ -71,7 +71,8 @@ namespace mmo
 		"Object - On Spell Hit",
 		"Unit - On Spell Aura Removed",
 		"Unit - On Emote",
-		"Unit - On Spell Cast"
+		"Unit - On Spell Cast",
+		"Object - On Gossip Menu Action"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -158,6 +159,9 @@ namespace mmo
 					case trigger_event::OnSpellCast:
 						ImGui::Text("Owning unit successfully casted spell %d", GetTriggerEventData(event, 0));
 						break;
+					case trigger_event::OnGossipAction:
+						ImGui::Text("Player chose gossip menu %d's action %d", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+						break;
 					}
 				}
 
@@ -198,6 +202,27 @@ namespace mmo
 						event.set_data(0, healthPercentage);
 					else
 						event.add_data(healthPercentage);
+				}
+				break;
+			}
+			case trigger_event::OnGossipAction:
+			{
+				// This event requires an Emote ID.
+				int menuId = (event.data_size() > 0) ? event.data(0) : 0;
+				int actionId = (event.data_size() > 1) ? event.data(1) : 0;
+				if (ImGui::InputInt("Gossiup Menu ID", &menuId))
+				{
+					if (event.data_size() > 0)
+						event.set_data(0, menuId);
+					else
+						event.add_data(menuId);
+				}
+				if (ImGui::InputInt("Gossip Menu Action ID", &actionId))
+				{
+					if (event.data_size() > 1)
+						event.set_data(1, actionId);
+					else
+						event.add_data(actionId);
 				}
 				break;
 			}

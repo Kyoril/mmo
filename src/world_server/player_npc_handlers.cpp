@@ -697,7 +697,7 @@ namespace mmo
 		}
 	}
 
-	void Player::HandleGossipAction(const GameCreatureS& unit, const proto::GossipMenuOption& action)
+	void Player::HandleGossipAction(GameCreatureS& unit, uint32 menuId, const proto::GossipMenuOption& action)
 	{
 		switch (action.action_type())
 		{
@@ -741,6 +741,11 @@ namespace mmo
 				SendVendorInventory(*vendor, unit);
 			}
 			break;
+
+		case gossip_actions::Trigger:
+			unit.RaiseTrigger(trigger_event::OnGossipAction, { menuId, action.id() }, m_character.get());
+			CloseGossip();
+			break;
 		}
 	}
 
@@ -764,7 +769,7 @@ namespace mmo
 			return;
 		}
 
-		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(objectGuid);
+		GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(objectGuid);
 		if (!unit)
 		{
 			return;
@@ -804,7 +809,7 @@ namespace mmo
 				}
 
 				// Handle the gossip action
-				HandleGossipAction(*unit, action);
+				HandleGossipAction(*unit, gossipMenu->id(), action);
 				return;
 			}
 		}
