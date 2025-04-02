@@ -366,6 +366,9 @@ namespace mmo
 			// Type of caster already checked above
 			target = caster->AsUnit().GetVictim();
 			break;
+		case trigger_spell_cast_target::TriggeringUnit:
+			target = context.triggeringUnit.lock().get();
+			break;
 		default:
 			ELOG("TRIGGER_ACTION_CAST_SPELL: Invalid spell cast target value of " << dataTarget);
 			return;
@@ -378,6 +381,8 @@ namespace mmo
 			WLOG("TRIGGER_ACTION_CAST_SPELL: Could not find target");
 			return;
 		}
+
+		DLOG("Make unit " << log_hex_digit(caster->GetGuid()) << " cast spell " << log_hex_digit(spell->id()) << " on target " << log_hex_digit(target->GetGuid()));
 
 		// Create spell target map and cast that spell
 		SpellTargetMap targetMap;

@@ -193,6 +193,8 @@ namespace mmo
 			Caster = 0,
 			/// Target is the casting units target. Will fail if the unit does not have a current target.
 			CurrentTarget = 1,
+
+			TriggeringUnit = 2,
 			
 			Invalid,
 			Count_ = Invalid

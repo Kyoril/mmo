@@ -442,6 +442,14 @@ namespace mmo
 					else
 						action.add_data(spellId);
 				}
+				int target = (action.data_size() > 1) ? action.data(1) : 0;
+				if (ImGui::InputInt("Target", &target))
+				{
+					if (action.data_size() > 1)
+						action.set_data(1, target);
+					else
+						action.add_data(target);
+				}
 				break;
 			}
 			case trigger_actions::Delay:
