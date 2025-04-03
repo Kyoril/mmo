@@ -101,6 +101,10 @@ namespace mmo
 		}
 
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
+		if (questGiver->IsUnit())
+		{
+			questGiver->AsUnit().RaiseTrigger(trigger_event::OnQuestAccept, { questId }, m_character.get());
+		}
 
 		// Ensure that the gossip menu is closed
 		CloseGossip();

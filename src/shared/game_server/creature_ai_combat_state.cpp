@@ -122,7 +122,8 @@ namespace mmo
 		m_onMoveTargetChanged.disconnect();
 		m_onUnitStateChanged.disconnect();
 
-		const auto& controlled = GetControlled();
+		auto& controlled = GetControlled();
+		controlled.SetInCombat(false);
 
 		// Stop movement!
 		controlled.GetMover().StopMovement();
@@ -388,10 +389,6 @@ namespace mmo
 				}
 			}
 		}
-		else
-		{
-			GetControlled().Relocate(GetControlled().GetPosition(), GetControlled().GetAngle(target));
-		}
 	}
 
 	void CreatureAICombatState::ChooseNextAction()
@@ -403,7 +400,7 @@ namespace mmo
 
 		// We should have a valid victim here, otherwise there is nothing to do but to reset
 		GameUnitS* victim = controlled.GetVictim();
-		if (!victim)
+		if (!victim || !victim->IsAlive())
 		{
 			// Warning: this will destroy the current AI state.
 			GetAI().Reset();

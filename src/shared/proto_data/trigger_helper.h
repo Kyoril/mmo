@@ -79,6 +79,9 @@ namespace mmo
 			/// Executed when a specific gossip action is selected.
 			/// Data: <GOSSIP MENU ID>,<GOSSIP ACTION ID>;
 			OnGossipAction,
+			/// Executed when a specific quest was accepted.
+			/// Data: <QUEST ID>;
+			OnQuestAccept,
 
 			Invalid,
 			Count_ = Invalid

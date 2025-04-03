@@ -1383,16 +1383,35 @@ namespace mmo
 		auto victim = m_victim.lock();
 		Set<uint64>(object_fields::TargetUnit, targetGuid);
 
-		if (victim && victim->GetGuid() != targetGuid)
+		if (targetGuid == 0)
 		{
-			GameObjectS* object = GetWorldInstance()->FindObjectByGuid(targetGuid);
-			if (object)
-			{
+			// No target, so stop attacking
+			StopAttack();
+			return;
+		}
+
+		if (victim && victim->GetGuid() == targetGuid)
+		{
+			// Target is already the victim, so nothing to do
+			return;
+		}
+
+		GameObjectS* object = GetWorldInstance()->FindObjectByGuid(targetGuid);
+		if (!object || !object->IsUnit())
+		{
+			StopAttack();
+			return;
+		}
+
+		if (UnitIsFriendly(object->AsUnit()))
+		{
+			StopAttack();
+		}
+		else
+		{
+			if (IsAttacking())
+			{	
 				SetVictim(std::dynamic_pointer_cast<GameUnitS>(object->shared_from_this()));
-			}
-			else
-			{
-				StopAttack();
 			}
 		}
 	}

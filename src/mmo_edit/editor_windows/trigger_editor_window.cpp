@@ -72,7 +72,8 @@ namespace mmo
 		"Unit - On Spell Aura Removed",
 		"Unit - On Emote",
 		"Unit - On Spell Cast",
-		"Object - On Gossip Menu Action"
+		"Object - On Gossip Menu Action",
+		"Object - On Quest Accepted"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -162,6 +163,9 @@ namespace mmo
 					case trigger_event::OnGossipAction:
 						ImGui::Text("Player chose gossip menu %d's action %d", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
 						break;
+					case trigger_event::OnQuestAccept:
+						ImGui::Text("Player accepted quest %d", GetTriggerEventData(event, 0));
+						break;
 					}
 				}
 
@@ -202,6 +206,18 @@ namespace mmo
 						event.set_data(0, healthPercentage);
 					else
 						event.add_data(healthPercentage);
+				}
+				break;
+			}
+			case trigger_event::OnQuestAccept:
+			{
+				int questId = (event.data_size() > 0) ? event.data(0) : 0;
+				if (ImGui::InputInt("Quest ID", &questId))
+				{
+					if (event.data_size() > 0)
+						event.set_data(0, questId);
+					else
+						event.add_data(questId);
 				}
 				break;
 			}
