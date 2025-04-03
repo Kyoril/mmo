@@ -394,8 +394,8 @@ namespace mmo::nav
 			m_navQuery.closestPointOnPoly(startPolyRef, recastStart, iterPos, nullptr);
 			m_navQuery.closestPointOnPoly(polys[npolys - 1], recastEnd, targetPos, nullptr);
 
-			static constexpr float STEP_SIZE = 3.0f;
-			static constexpr float SLOP = 0.5f;
+			static constexpr float STEP_SIZE = 1.5f;
+			static constexpr float SLOP = 0.03f;
 
 			dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
 			smoothPathPoints++;
