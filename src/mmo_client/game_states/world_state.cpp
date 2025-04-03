@@ -1118,6 +1118,11 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			if (id == ObjectMgr::GetSelectedObjectGuid())
+			{
+				ObjectMgr::GetActivePlayer()->SetTargetUnit(nullptr);
+			}
+
 			m_partyInfo.OnPlayerDespawned(id);
 
 			if (m_playerController->GetControlledUnit() &&

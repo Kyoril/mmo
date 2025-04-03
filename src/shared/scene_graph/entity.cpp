@@ -112,7 +112,13 @@ namespace mmo
 				continue;
 			}
 
-			renderQueue.AddRenderable(*subEntity, GetRenderQueueGroup());
+			uint8 renderQueueGroup = GetRenderQueueGroup();
+			if (subEntity->GetMaterial() && subEntity->GetMaterial()->IsTranslucent())
+			{
+				renderQueueGroup += 10;
+			}
+
+			renderQueue.AddRenderable(*subEntity, renderQueueGroup);
 		}
 
 		if (HasSkeleton())
