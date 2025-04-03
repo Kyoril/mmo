@@ -10,6 +10,13 @@ namespace mmo
 		explicit GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project);
 		virtual ~GameWorldObjectC_Base() override = default;
 
+		void InitializeFieldMap() override;
+
+		void Deserialize(io::Reader& reader, bool complete) override;
+
+	protected:
+		virtual void SetupSceneObjects();
+
 	public:
 		virtual GameWorldObjectType GetType() const = 0;
 	};

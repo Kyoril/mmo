@@ -5,6 +5,7 @@
 #include "creature_spawner.h"
 #include "each_tile_in_sight.h"
 #include "game_creature_s.h"
+#include "game_world_object_s_base.h"
 #include "world_instance_manager.h"
 #include "regular_update.h"
 #include "tile_subscriber.h"
@@ -111,6 +112,32 @@ namespace mmo
 		}
 
 		m_mapData = std::make_unique<NavMapData>(*m_mapEntry);
+
+		// Add object spawners
+		for (int i = 0; i < m_mapEntry->objectspawns_size(); ++i)
+		{
+			// Create a new spawner
+			const auto& spawn = m_mapEntry->objectspawns(i);
+
+			const auto* objectEntry = m_project.objects.getById(spawn.objectentry());
+			ASSERT(objectEntry);
+
+			std::unique_ptr<WorldObjectSpawner> spawner(new WorldObjectSpawner(
+				*this,
+				*objectEntry,
+				spawn.maxcount(),
+				spawn.respawndelay(),
+				Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()),
+				{ spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz() },
+				spawn.radius(),
+				spawn.animprogress(),
+				spawn.state()));
+			m_objectSpawners.push_back(std::move(spawner));
+			if (!spawn.name().empty())
+			{
+				m_objectSpawnsByName[spawn.name()] = m_objectSpawners.back().get();
+			}
+		}
 
 		// Add creature spawners
 		for (int i = 0; i < m_mapEntry->unitspawns_size(); ++i)
@@ -353,7 +380,7 @@ namespace mmo
 			entry);
 
 		spawned->Initialize();
-		spawned->Set(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
@@ -362,6 +389,21 @@ namespace mmo
 		spawned->SetEntry(entry);
 		
 		return spawned;
+	}
+
+	std::shared_ptr<GameWorldObjectS_Base> WorldInstance::SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position)
+	{
+		// Create the object
+		auto spawned = std::make_shared<GameWorldObjectS_Chest>(m_project, entry);
+
+		spawned->Initialize();
+		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Object));
+		DLOG("Spawned world object: " << log_hex_digit(spawned->GetGuid()));
+		spawned->ApplyMovementInfo(
+			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
+		spawned->SetWorldInstance(this);
+
+		return std::static_pointer_cast<GameWorldObjectS_Base>(spawned);
 	}
 
 	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius)

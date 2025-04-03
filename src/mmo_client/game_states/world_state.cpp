@@ -50,6 +50,7 @@
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
+#include "game_client/game_world_object_c_base.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/octree_scene.h"
@@ -969,6 +970,9 @@ namespace mmo
 				case ObjectTypeId::Container:
 					object = std::make_shared<GameBagC>(*m_scene, *this, m_project);
 					break;
+				case ObjectTypeId::Object:
+					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project);
+					break;
 				default:
 					ASSERT(!! "Unknown object type");
 				}
@@ -1003,7 +1007,6 @@ namespace mmo
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
-					DLOG("Setting player controlled object " << log_hex_digit(object->GetGuid()));
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
 					// Register player field change observers

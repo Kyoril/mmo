@@ -10,6 +10,7 @@
 #include "unit_finder.h"
 #include "game/game.h"
 #include "visibility_grid.h"
+#include "world_object_spawner.h"
 #include "base/id_generator.h"
 #include "shared/proto_data/maps.pb.h"
 
@@ -145,6 +146,8 @@ namespace mmo
 
 		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
 
+		std::shared_ptr<GameWorldObjectS_Base> SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position);
+
 		MapData* GetMapData() const { return m_mapData.get(); }
 
 		/// Creates a temporary creature that the world instance will also keep a strong reference to. The creature will not be spawned and thus
@@ -199,7 +202,10 @@ namespace mmo
 		GameObjectsByGuid m_objectsByGuid;
 
 		typedef std::vector<std::unique_ptr<CreatureSpawner>> CreatureSpawners;
+		typedef std::vector<std::unique_ptr<WorldObjectSpawner>> ObjectSpawners;
 		CreatureSpawners m_creatureSpawners;
 		std::map<String, CreatureSpawner*> m_creatureSpawnsByName;
+		ObjectSpawners m_objectSpawners;
+		std::map<String, WorldObjectSpawner*> m_objectSpawnsByName;
 	};
 }

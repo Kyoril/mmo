@@ -340,8 +340,19 @@ namespace mmo
 		enum WorldObjectFields
 		{
 
+			RotationW = ObjectFieldCount,
 
-			WorldObjectFieldCount = ObjectFieldCount,
+			RotationX,
+
+			RotationY,
+
+			RotationZ,
+
+			AnimProgress,
+
+			State,
+
+			WorldObjectFieldCount = State + 1,
 		};
 	}
 }
