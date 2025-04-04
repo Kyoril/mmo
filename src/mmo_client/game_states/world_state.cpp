@@ -1076,16 +1076,14 @@ namespace mmo
 
 				if (obj->Get<uint32>(object_fields::Type) == static_cast<uint32>(ObjectTypeId::Unit))
 				{
-					if (const auto unit = std::dynamic_pointer_cast<GameUnitC>(obj))
+					if (obj->GetGuid() != ObjectMgr::GetActivePlayerGuid())
 					{
-						if (const uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit); targetGuid != 0)
+						if (const auto unit = std::dynamic_pointer_cast<GameUnitC>(obj))
 						{
-							if (auto targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
-							{
-								unit->SetTargetUnit(targetUnit);
-							}
+							const uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit);
+							unit->SetTargetUnit(targetGuid ? ObjectMgr::Get<GameUnitC>(targetGuid) : nullptr);
 						}
-					}
+					}					
 				}
 			}
 			
