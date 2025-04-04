@@ -320,6 +320,38 @@ namespace mmo
 			}
 		}
 
+		// If this is an item and targets a unit target, check if it's a potion
+		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && m_cast.GetExecuter().IsPlayer())
+		{
+			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();
+			ASSERT(target);
+
+			auto& player = m_cast.GetExecuter().AsPlayer();
+			auto& inv = player.GetInventory();
+
+			if (uint16 itemSlot; inv.FindItemByGUID(m_itemGuid, itemSlot))
+			{
+				const auto item = inv.GetItemAtSlot(itemSlot);
+				ASSERT(item);
+
+				if (item->GetEntry().itemclass() == item_class::Consumable)
+				{
+					if (SpellHasEffect(m_spell, spell_effects::Heal) && target->GetHealth() >= target->GetMaxHealth())
+					{
+						SendEndCast(spell_cast_result::FailedAlreadyAtFullHealth);
+						return false;
+					}
+
+					if (SpellHasEffect(m_spell, spell_effects::Energize) && target->GetPower() >= target->GetMaxPower())
+					{
+						SendEndCast(spell_cast_result::FailedAlreadyAtFullPower);
+						return false;
+					}
+				}
+			}
+
+		}
+
 		// Check if we are trying to cast a spell on a dead target which is not allowed
 		if (unitTarget && !unitTarget->IsAlive() && !HasAttributes(0, spell_attributes::CanTargetDead))
 		{

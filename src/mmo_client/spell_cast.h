@@ -6,6 +6,7 @@
 #include "base/typedefs.h"
 #include "base/signal.h"
 #include "client_data/project.h"
+#include "game/spell_target_map.h"
 
 namespace mmo
 {
@@ -33,6 +34,8 @@ namespace mmo
 		void OnSpellGo(uint32 spellId);
 
 		void OnSpellFailure(uint32 spellId);
+
+		bool SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell);
 
 	public:
 		void CastSpell(uint32 spellId);

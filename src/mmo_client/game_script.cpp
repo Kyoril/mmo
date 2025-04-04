@@ -1370,13 +1370,19 @@ namespace mmo
 			return;
 		}
 
+		const proto_client::SpellEntry* spellToCheck = nullptr;
+
 		bool isUsable = false;
 		for (const ItemSpell& spell : entry->spells)
 		{
 			if (spell.triggertype == item_spell_trigger::OnUse)
 			{
-				isUsable = true;
-				break;
+				spellToCheck = m_project.spells.getById(spell.spellId);
+				if (spellToCheck)
+				{
+					isUsable = true;
+					break;
+				}
 			}
 		}
 
@@ -1387,7 +1393,11 @@ namespace mmo
 		}
 
 		SpellTargetMap targetMap;
-		// TODO: spell target
+		if (!m_spellCast.SetSpellTargetMap(targetMap, *spellToCheck))
+		{
+			ELOG("Unable to set spell target map for item " << item->GetGuid());
+			return;
+		}
 
 		m_realmConnector.UseItem((slot >> 8) & 0xFF, slot & 0xFF, item->GetGuid(), targetMap);
 	}

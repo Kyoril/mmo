@@ -400,6 +400,12 @@ namespace mmo
 		///
 		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit = nullptr);
 
+		uint32 GetPowerType() const { return Get<uint32>(object_fields::PowerType); }
+
+		uint32 GetPower() const { return Get<uint32>(object_fields::Mana + GetPowerType()); }
+
+		uint32 GetMaxPower() const { return Get<uint32>(object_fields::MaxMana + GetPowerType()); }
+
 	public:
 		virtual void SetLevel(uint32 newLevel);
 

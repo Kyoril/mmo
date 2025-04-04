@@ -108,6 +108,49 @@ namespace mmo
 		m_spellCastId = 0;
 	}
 
+	bool SpellCast::SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell)
+	{
+		std::shared_ptr<GamePlayerC> unit = ObjectMgr::GetActivePlayer();
+		const uint64 targetUnitGuid = ObjectMgr::GetSelectedObjectGuid();
+
+		// Check if we need to provide a target unit
+		const uint64 requirements = GetSpellTargetRequirements(spell);
+		if ((requirements & spell_target_requirements::AnyUnitTarget) != 0)
+		{
+			// Validate if target unit exists
+			std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetUnitGuid);
+			if (!targetUnit)
+			{
+				// If friendly unit target is required and we have none, target ourself instead automatically
+				if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0)
+				{
+					targetUnit = unit;
+				}
+				else
+				{
+					return false;
+				}
+			}
+
+			if ((requirements & spell_target_requirements::FriendlyUnitTarget) != 0 && (requirements & spell_target_requirements::HostileUnitTarget) == 0 && !unit->IsFriendlyTo(*targetUnit))
+			{
+				// Target unit is not friendly but spell requires a friendly unit - use fallback to ourself
+				targetUnit = unit;
+			}
+
+			if ((requirements & spell_target_requirements::FriendlyUnitTarget) == 0 && (requirements & spell_target_requirements::HostileUnitTarget) != 0 && unit->IsFriendlyTo(*targetUnit))
+			{
+				return false;
+			}
+
+			// Set target unit
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(targetUnit ? targetUnit->GetGuid() : 0);
+		}
+
+		return true;
+	}
+
 	void SpellCast::CastSpell(uint32 spellId)
 	{
 		// Check if we are currently casting a spell
@@ -130,7 +173,7 @@ namespace mmo
 			return;
 		}
 
-		const uint64 targetUnitGuid = unit->Get<uint64>(object_fields::TargetUnit);
+		const uint64 targetUnitGuid = ObjectMgr::GetSelectedObjectGuid();
 
 		// Is known spell?
 		const auto* spell = m_spells.getById(spellId);
