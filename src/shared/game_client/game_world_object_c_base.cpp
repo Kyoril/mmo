@@ -5,7 +5,9 @@
 #include "scene_graph/scene.h"
 
 #include "net_client.h"
+#include "client_data/project.h"
 #include "game/object_info.h"
+#include "scene_graph/mesh_manager.h"
 
 namespace mmo
 {
@@ -53,7 +55,7 @@ namespace mmo
 				ASSERT(false);
 			}
 
-			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
+			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::ObjectDisplayId))
 			{
 				OnDisplayIdChanged();
 			}
@@ -94,7 +96,7 @@ namespace mmo
 	{
 		m_entry = &data;
 
-		// TODO: Do something special? :)
+		OnDisplayIdChanged();
 	}
 
 	void GameWorldObjectC_Base::SetupSceneObjects()
@@ -109,15 +111,33 @@ namespace mmo
 
 	void GameWorldObjectC_Base::OnDisplayIdChanged()
 	{
-		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		const uint32 displayId = Get<uint32>(object_fields::ObjectDisplayId);
 		if (displayId == 0 && !m_entry)
 		{
 			return;
 		}
 
-		if (m_entry && m_entry->displayId == displayId)
+		const proto_client::ObjectDisplayEntry* displayEntry = m_project.objectDisplays.getById(displayId);
+		if (m_entity) m_entity->SetVisible(displayEntry != nullptr);
+		if (!displayEntry)
 		{
 			return;
+		}
+
+		String meshFile = displayEntry->filename();
+
+		// Update or create entity
+		if (!m_entity)
+		{
+			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), meshFile);
+			m_entity->SetUserObject(this);
+			m_entity->SetQueryFlags(0x00000002);
+			m_entityOffsetNode->AttachObject(*m_entity);
+		}
+		else
+		{
+			// Just update the mesh
+			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
 		}
 	}
 

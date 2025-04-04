@@ -16,6 +16,7 @@ namespace mmo
 		GameObjectS::Initialize();
 
 		Set<uint32>(object_fields::Entry, m_entry.id());
+		Set<uint32>(object_fields::ObjectDisplayId, m_entry.displayid());
 	}
 
 	const String& GameWorldObjectS_Base::GetName() const
