@@ -91,6 +91,20 @@ namespace mmo
 		};
 	}
 
+	namespace game_world_object_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			InUse = 1 << 0,
+
+			Locked = 1 << 1,
+
+			NotInteractable = 1 << 2
+		};
+	}
+
 	// Enumerates available object type ids.
 	enum class ObjectTypeId
 	{
@@ -339,8 +353,11 @@ namespace mmo
 
 		enum WorldObjectFields
 		{
+			ObjectDisplayId = ObjectFieldCount,
 
-			RotationW = ObjectFieldCount,
+			ObjectFlags,
+
+			RotationW,
 
 			RotationX,
 

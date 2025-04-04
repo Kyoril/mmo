@@ -18,6 +18,7 @@
 #include "shared/client_data/proto_client/model_data.pb.h"
 #include "shared/client_data/proto_client/races.pb.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
+#include "shared/client_data/proto_client/object_display.pb.h"
 
 namespace mmo
 {
@@ -33,6 +34,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::FactionTemplates, mmo::proto_client::FactionTemplateEntry> FactionTemplateManager;
 		typedef TemplateManager<mmo::proto_client::Maps, mmo::proto_client::MapEntry> MapManager;
 		typedef TemplateManager<mmo::proto_client::ItemDisplayData, mmo::proto_client::ItemDisplayEntry> ItemDisplayManager;
+		typedef TemplateManager<mmo::proto_client::ObjectDisplayData, mmo::proto_client::ObjectDisplayEntry> ObjectDisplayManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -58,6 +60,7 @@ namespace mmo
 			FactionManager factions;
 			FactionTemplateManager factionTemplates;
 			ItemDisplayManager itemDisplays;
+			ObjectDisplayManager objectDisplays;
 
 		private:
 
@@ -111,6 +114,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("zones", zones));
 				managers.push_back(ManagerEntry("item_displays", itemDisplays));
+				managers.push_back(ManagerEntry("object_displays", objectDisplays));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -150,6 +154,7 @@ namespace mmo
 				managers.emplace_back("races", "races", races);
 				managers.emplace_back("zones", "zones", zones);
 				managers.emplace_back("item_displays", "item_displays", itemDisplays);
+				managers.emplace_back("object_displays", "object_displays", objectDisplays);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

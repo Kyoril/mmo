@@ -278,15 +278,7 @@ namespace mmo
 	std::unique_ptr<VendorClient> s_vendorClient;
 	std::unique_ptr<TrainerClient> s_trainerClient;
 
-	std::unique_ptr<DBItemCache> s_itemCache;
-	std::unique_ptr<DBCreatureCache> s_creatureCache;
-	std::unique_ptr<DBQuestCache> s_questCache;
-	std::unique_ptr<DBNameCache> s_nameCache;
-	std::unique_ptr<DBGuildCache> s_guildCache;
-
-	static const char* const s_itemCacheFilename = "Cache/Items.db";
-	static const char* const s_creatureCacheFilename = "Cache/Creatures.db";
-	static const char* const s_questCacheFilename = "Cache/Quests.db";
+	std::unique_ptr<ClientCache> s_clientCache;
 
 	static std::unique_ptr<ActionBar> s_actionBar;
 	static std::unique_ptr<SpellCast> s_spellCast;
@@ -355,47 +347,26 @@ namespace mmo
 			return false;
 		}
 
-		s_nameCache = std::make_unique<DBNameCache>(*s_realmConnector);
-		s_guildCache = std::make_unique<DBGuildCache>(*s_realmConnector);
-
-		// Initialize item cache (TODO: Try loading cache from file so we maybe won't have to ask the server next time we run the client)
-		s_itemCache = std::make_unique<DBItemCache>(*s_realmConnector);
-		if (const auto itemCacheFile = AssetRegistry::OpenFile(s_itemCacheFilename))
+		s_clientCache = std::make_unique<ClientCache>(*s_realmConnector);
+		if (!s_clientCache->Load())
 		{
-			io::StreamSource source(*itemCacheFile);
-			io::Reader reader(source);
-			s_itemCache->Deserialize(reader);
-		}
-
-		s_creatureCache = std::make_unique<DBCreatureCache>(*s_realmConnector);
-		if (const auto creatureCacheFile = AssetRegistry::OpenFile(s_creatureCacheFilename))
-		{
-			io::StreamSource source(*creatureCacheFile);
-			io::Reader reader(source);
-			s_creatureCache->Deserialize(reader);
-		}
-
-		s_questCache = std::make_unique<DBQuestCache>(*s_realmConnector);
-		if (const auto questCacheFile = AssetRegistry::OpenFile(s_questCacheFilename))
-		{
-			io::StreamSource source(*questCacheFile);
-			io::Reader reader(source);
-			s_questCache->Deserialize(reader);
+			ELOG("Failed to load the client cache!");
+			return false;
 		}
 
 		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
 		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
 
 		// Initialize loot client
-		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, *s_itemCache);
-		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, *s_itemCache);
+		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, s_clientCache->GetItemCache());
+		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, s_clientCache->GetItemCache());
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
-		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, *s_questCache, s_project.spells, *s_itemCache, *s_creatureCache, s_localization);
-		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, *s_nameCache);
-		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, *s_guildCache);
+		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, s_clientCache->GetQuestCache(), s_project.spells, s_clientCache->GetItemCache(), s_clientCache->GetCreatureCache(), s_localization);
+		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, s_clientCache->GetNameCache());
+		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache());
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
-		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, *s_itemCache, *s_spellCast);
+		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
@@ -403,8 +374,8 @@ namespace mmo
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, *s_itemCache, *s_creatureCache, 
-			*s_questCache, *s_nameCache, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_guildCache);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, 
+			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
@@ -441,8 +412,8 @@ namespace mmo
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
-		s_vendorClient.release();
-		s_lootClient.release();
+		s_vendorClient.reset();
+		s_lootClient.reset();
 
 		DestroyFrameUI();
 
@@ -452,25 +423,8 @@ namespace mmo
 		// Destroy the network thread
 		NetDestroy();
 
-		// Serialize caches
-		if (const auto itemCacheFile = AssetRegistry::CreateNewFile(s_itemCacheFilename))
-		{
-			io::StreamSink sink(*itemCacheFile);
-			io::Writer writer(sink);
-			s_itemCache->Serialize(writer);
-		}
-		if (const auto creatureCacheFile = AssetRegistry::CreateNewFile(s_creatureCacheFilename))
-		{
-			io::StreamSink sink(*creatureCacheFile);
-			io::Writer writer(sink);
-			s_creatureCache->Serialize(writer);
-		}
-		if (const auto questCacheFIle = AssetRegistry::CreateNewFile(s_questCacheFilename))
-		{
-			io::StreamSink sink(*questCacheFIle);
-			io::Writer writer(sink);
-			s_questCache->Serialize(writer);
-		}
+		ASSERT(s_clientCache);
+		s_clientCache->Save();
 
 		s_audio.reset();
 

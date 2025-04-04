@@ -39,6 +39,7 @@
 #include "game/quest_info.h"
 
 #include "spell_cast.h"
+#include "game_client/net_client.h"
 
 namespace mmo
 {
@@ -88,10 +89,6 @@ namespace mmo
 			TimerQueue& timers,
 			LootClient& lootClient,
 			VendorClient& vendorClient,
-			DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
-			DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
-			DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
-			DBNameCache& nameCache,
 			ActionBar& actionBar,
 			SpellCast& spellCast,
 			TrainerClient& trainerClient,
@@ -99,8 +96,8 @@ namespace mmo
 			IAudio& audio,
 			PartyInfo& partyInfo,
 			CharSelect& charSelect,
-			GuildClient& guildClient,
-			DBGuildCache& guildCache);
+			GuildClient& guildClient, 
+			ICacheProvider& cache);
 
 	public:
 		/// @brief The default name of the world state
@@ -358,10 +355,7 @@ namespace mmo
 		SceneNode* m_worldRootNode;
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;
 
-		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
-		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& m_creatureCache;
-		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& m_questCache;
-		DBNameCache& m_playerNameCache;
+		ICacheProvider& m_cache;
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;
@@ -407,7 +401,6 @@ namespace mmo
 
 		CharSelect& m_charSelect;
 		GuildClient& m_guildClient;
-		DBGuildCache& m_guildCache;
 
 	private:
 		static IInputControl* s_inputControl;
@@ -439,5 +432,7 @@ namespace mmo
 		void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) override;
 
 		bool GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal) override;
+
+		void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object) override;
 	};
 }

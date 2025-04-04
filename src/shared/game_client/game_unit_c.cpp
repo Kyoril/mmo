@@ -1,6 +1,7 @@
 
 #include "game_unit_c.h"
 
+#include "net_client.h"
 #include "object_mgr.h"
 #include "base/clock.h"
 #include "client_data/project.h"

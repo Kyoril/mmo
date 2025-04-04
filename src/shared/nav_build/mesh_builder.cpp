@@ -22,16 +22,16 @@ namespace mmo
         static constexpr int TileVoxelSize = 112; // number of voxel rows and columns per tile
 
         static constexpr float CellHeight = 0.25f;
-        static constexpr float WalkableHeight = 1.6f; // agent height in world units (units)
-        static constexpr float WalkableRadius = 0.3f; // narrowest allowable hallway in world units (units)
-        static constexpr float WalkableSlope = 50.f; // maximum walkable slope, in degrees
+        static constexpr float WalkableHeight = 1.5f; // agent height in world units (units)
+        static constexpr float WalkableRadius = 0.2f; // narrowest allowable hallway in world units (units)
+        static constexpr float WalkableSlope = 75.f; // maximum walkable slope, in degrees
         static constexpr float WalkableClimb = 0.35f; // maximum 'step' height for which slope is ignored (units)
         static constexpr float DetailSampleDistance = 2.0f; // heightfield detail mesh sample distance (units)
         static constexpr float DetailSampleMaxError = 0.25f; // maximum distance detail mesh surface should deviate from heightfield (units)
 
 		// NOTE: If Recast warns "Walk towards polygon center failed to reach
 		// center", try lowering this value
-        static constexpr float MaxSimplificationError = 0.75f;
+        static constexpr float MaxSimplificationError = 1.8f;
 
         static constexpr int MinRegionSize = 1600;
         static constexpr int MergeRegionSize = 400;

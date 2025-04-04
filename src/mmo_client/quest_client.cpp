@@ -2,6 +2,7 @@
 #include "quest_client.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game/quest_info.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 

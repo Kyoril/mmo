@@ -44,6 +44,8 @@
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
 #include "guild_client.h"
+#include "game/object_info.h"
+#include "game/guild_info.h"
 
 #include "audio.h"
 #include "party_info.h"
@@ -148,17 +150,12 @@ namespace mmo
 
 	IInputControl* WorldState::s_inputControl = nullptr;
 
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache,
-		DBCache<CreatureInfo, game::client_realm_packet::CreatureQuery>& creatureCache,
-		DBCache<QuestInfo, game::client_realm_packet::QuestQuery>& questCache,
-		DBNameCache& nameCache,
-		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, DBGuildCache& guildCache)
+	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient,
+		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
-		, m_itemCache(itemCache)
-		, m_creatureCache(creatureCache)
-		, m_questCache(questCache)
-		, m_playerNameCache(nameCache)
+		, m_audio(audio)
+		, m_cache(cache)
 		, m_project(project)
 		, m_timers(timers)
 		, m_lootClient(lootClient)
@@ -167,11 +164,9 @@ namespace mmo
 		, m_spellCast(spellCast)
 		, m_trainerClient(trainerClient)
 		, m_questClient(questClient)
-		, m_audio(audio)
 		, m_partyInfo(partyInfo)
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
-		, m_guildCache(guildCache)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -971,7 +966,7 @@ namespace mmo
 					object = std::make_shared<GameBagC>(*m_scene, *this, m_project);
 					break;
 				case ObjectTypeId::Object:
-					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project);
+					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project, *this);
 					break;
 				default:
 					ASSERT(!! "Unknown object type");
@@ -1200,7 +1195,7 @@ namespace mmo
 		}
 		else
 		{
-			m_playerNameCache.Get(characterGuid, [this, type, message, flags](uint64, const String& name)
+			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String& name)
 				{
 					String chatMessageType = "SAY";
 					switch (type)
@@ -1244,7 +1239,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_playerNameCache.NotifyObjectResponse(guid, name);
+		m_cache.GetNameCache().NotifyObjectResponse(guid, name);
 
 		if (m_playerController->GetControlledUnit())
 		{
@@ -1295,7 +1290,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		m_creatureCache.NotifyObjectResponse(id, entry);
+		m_cache.GetCreatureCache().NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
 	}
 
@@ -1323,7 +1318,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_itemCache.NotifyObjectResponse(id, entry);
+		m_cache.GetItemCache().NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
 	}
 
@@ -2537,7 +2532,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_playerNameCache.Get(playerGuid, [result, min, max](uint64 guid, const String& playerName)
+		m_cache.GetNameCache().Get(playerGuid, [result, min, max](uint64 guid, const String& playerName)
 			{
 				FrameManager::Get().TriggerLuaEvent("RANDOM_ROLL_RESULT", playerName.c_str(), min, max, result);
 			});
@@ -3113,7 +3108,7 @@ namespace mmo
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
 	{
-		m_playerNameCache.Get(guid, [player](uint64, const String& name)
+		m_cache.GetNameCache().Get(guid, [player](uint64, const String& name)
 		{
 			if (const std::shared_ptr<GamePlayerC> strong = player.lock())
 			{
@@ -3124,7 +3119,7 @@ namespace mmo
 
 	void WorldState::GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature)
 	{
-		m_creatureCache.Get(guid, [creature](uint64, const CreatureInfo& data)
+		m_cache.GetCreatureCache().Get(guid, [creature](uint64, const CreatureInfo& data)
 		{
 			if (const std::shared_ptr<GameUnitC> strong = creature.lock())
 			{
@@ -3135,7 +3130,7 @@ namespace mmo
 
 	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GameItemC> item)
 	{
-		m_itemCache.Get(guid, [item](uint64, const ItemInfo& data)
+		m_cache.GetItemCache().Get(guid, [item](uint64, const ItemInfo& data)
 			{
 				if (const std::shared_ptr<GameItemC> strong = item.lock())
 				{
@@ -3146,7 +3141,7 @@ namespace mmo
 
 	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player)
 	{
-		m_itemCache.Get(guid, [player](uint64, const ItemInfo& data)
+		m_cache.GetItemCache().Get(guid, [player](uint64, const ItemInfo& data)
 			{
 				if (const std::shared_ptr<GamePlayerC> strong = player.lock())
 				{
@@ -3296,7 +3291,7 @@ namespace mmo
 			return;
 		}
 
-		m_guildCache.Get(guildGuid, [player, this](uint64, const GuildInfo& info)
+		m_cache.GetGuildCache().Get(guildGuid, [player, this](uint64, const GuildInfo& info)
 			{
 				if (const auto strong = player.lock())
 				{
@@ -3364,5 +3359,16 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void WorldState::GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object)
+	{
+		m_cache.GetObjectCache().Get(guid, [object](uint64, const ObjectInfo& data)
+			{
+				if (const std::shared_ptr<GameWorldObjectC_Base> strong = object.lock())
+				{
+					strong->NotifyObjectData(data);
+				}
+			});
 	}
 }

@@ -1,0 +1,14 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ObjectDisplayEntry {
+	required uint32 id = 1;
+
+	required string name = 2;
+
+	required string filename = 3;
+}
+
+message ObjectDisplayData {
+	repeated ObjectDisplayEntry entry = 1;
+}

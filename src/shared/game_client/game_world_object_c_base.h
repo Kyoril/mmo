@@ -4,27 +4,42 @@
 
 namespace mmo
 {
+	struct ObjectInfo;
+	class NetClient;
+
 	class GameWorldObjectC_Base : public GameObjectC
 	{
 	public:
-		explicit GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project);
+		explicit GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver);
 		virtual ~GameWorldObjectC_Base() override = default;
 
 		void InitializeFieldMap() override;
 
 		void Deserialize(io::Reader& reader, bool complete) override;
 
+		virtual void NotifyObjectData(const	ObjectInfo& data);
+
+		const ObjectInfo* GetEntry() const noexcept { return m_entry; }
+
 	protected:
 		virtual void SetupSceneObjects();
 
+		virtual void OnDisplayIdChanged();
+
+		virtual void OnEntryChanged();
+
 	public:
 		virtual GameWorldObjectType GetType() const = 0;
+
+	protected:
+		NetClient& m_netDriver;
+		const ObjectInfo* m_entry = nullptr;
 	};
 
 	class GameWorldObjectC_Chest final : public GameWorldObjectC_Base
 	{
 	public:
-		explicit GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project);
+		explicit GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver);
 		~GameWorldObjectC_Chest() override = default;
 
 	public:

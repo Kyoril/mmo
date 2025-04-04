@@ -21,6 +21,7 @@ namespace mmo
 	}
 
 	class Scene;
+	class GameUnitC;
 
 	/// @brief Represents a game object at the client.
 	class GameObjectC : public NonCopyable, public std::enable_shared_from_this<GameObjectC>
@@ -40,6 +41,10 @@ namespace mmo
 		[[nodiscard]] bool IsItem() const noexcept { return IsContainer() || GetTypeId() == ObjectTypeId::Item; }
 
 		[[nodiscard]] bool IsContainer() const noexcept { return GetTypeId() == ObjectTypeId::Container; }
+
+		GameUnitC& AsUnit();
+
+		const GameUnitC& AsUnit() const;
 
 		virtual ObjectTypeId GetTypeId() const
 		{

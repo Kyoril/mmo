@@ -1,6 +1,7 @@
 
 #include "game_player_c.h"
 
+#include "net_client.h"
 #include "object_mgr.h"
 #include "client_data/project.h"
 #include "game/guild_info.h"

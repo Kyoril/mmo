@@ -2,6 +2,7 @@
 #include "game_item_c.h"
 
 #include "game_unit_c.h"
+#include "net_client.h"
 #include "client_data/project.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
 

@@ -4,10 +4,14 @@
 #include "game/movement_info.h"
 #include "scene_graph/scene.h"
 
+#include "net_client.h"
+#include "game/object_info.h"
+
 namespace mmo
 {
-	GameWorldObjectC_Base::GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project)
+	GameWorldObjectC_Base::GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver)
 		: GameObjectC(scene, project)
+		, m_netDriver(netDriver)
 	{
 	}
 
@@ -41,7 +45,6 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
-
 		}
 		else
 		{
@@ -52,7 +55,7 @@ namespace mmo
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
 			{
-				//OnDisplayIdChanged();
+				OnDisplayIdChanged();
 			}
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
@@ -65,7 +68,7 @@ namespace mmo
 
 		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
 		{
-			//OnEntryChanged();
+			OnEntryChanged();
 		}
 
 		m_fieldMap.MarkAllAsUnchanged();
@@ -87,6 +90,13 @@ namespace mmo
 		}
 	}
 
+	void GameWorldObjectC_Base::NotifyObjectData(const ObjectInfo& data)
+	{
+		m_entry = &data;
+
+		// TODO: Do something special? :)
+	}
+
 	void GameWorldObjectC_Base::SetupSceneObjects()
 	{
 		GameObjectC::SetupSceneObjects();
@@ -97,8 +107,38 @@ namespace mmo
 		m_entityOffsetNode->AttachObject(*m_entity);
 	}
 
-	GameWorldObjectC_Chest::GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project)
-		: GameWorldObjectC_Base(scene, project)
+	void GameWorldObjectC_Base::OnDisplayIdChanged()
+	{
+		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		if (displayId == 0 && !m_entry)
+		{
+			return;
+		}
+
+		if (m_entry && m_entry->displayId == displayId)
+		{
+			return;
+		}
+	}
+
+	void GameWorldObjectC_Base::OnEntryChanged()
+	{
+		const uint32 entryId = Get<uint32>(object_fields::Entry);
+		if (entryId == 0 && !m_entry)
+		{
+			return;
+		}
+
+		if (m_entry && m_entry->id == entryId)
+		{
+			return;
+		}
+
+		m_netDriver.GetObjectData(entryId, static_pointer_cast<GameWorldObjectC_Base>(shared_from_this()));
+	}
+
+	GameWorldObjectC_Chest::GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver)
+		: GameWorldObjectC_Base(scene, project, netDriver)
 	{
 	}
 }

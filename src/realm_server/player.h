@@ -165,6 +165,8 @@ namespace mmo
 
 		void OnQueryItem(uint64 entry);
 
+		void OnQueryObject(uint64 entry);
+
 		void OnActionButtons(const ActionButtons& actionButtons);
 
 		typedef std::function<void(bool succeeded, uint32 mapId, Vector3 position, Radian facing)> CharacterLocationAsyncCallback;
@@ -394,4 +396,5 @@ namespace mmo
 		PacketParseResult OnGuildCreate(game::IncomingPacket& packet);
 #endif
 	};
+
 }

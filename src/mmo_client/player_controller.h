@@ -88,7 +88,7 @@ namespace mmo
 
 		void Jump() override;
 
-		void OnHoveredUnitChanged(GameUnitC* previousHoveredUnit);
+		void OnHoveredObjectChanged(GameObjectC* previousHoveredUnit);
 
 	private:
 		Scene& m_scene;
@@ -111,7 +111,7 @@ namespace mmo
 		uint32 m_controlFlags { ControlFlags::None };
 		uint32 m_mouseDownTime = 0;
 		int32 m_x = 0, m_y = 0;
-		GameUnitC* m_hoveredUnit = nullptr;
+		GameObjectC* m_hoveredObject = nullptr;
 		scoped_connection_container m_cvarConnections;
 		scoped_connection m_moveCompleted;
 		GameTime m_nextSetFacing = 0;

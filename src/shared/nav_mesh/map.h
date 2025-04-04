@@ -93,7 +93,7 @@ namespace mmo::nav
 	private:
 		static constexpr int MaxStackedPolys = 128;
 		static constexpr int MaxPathPolys = 256;
-		static constexpr int MaxSmoothPathPoints = 2048;
+		static constexpr int MaxSmoothPathPoints = 1024;
 
 		// this is false when the map is based on a global world object
 		bool m_hasPages = false;

@@ -22,6 +22,7 @@
 #include "base/utilities.h"
 #include "game/chat_type.h"
 #include "game/guild_info.h"
+#include "game/object_info.h"
 #include "game/quest_info.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/game_player_s.h"
@@ -766,6 +767,10 @@ namespace mmo
 
 		case game::client_realm_packet::QuestQuery:
 			OnQueryQuest(guid);
+			break;
+
+		case game::client_realm_packet::ObjectQuery:
+			OnQueryObject(guid);
 			break;
 
 		default:
@@ -1638,6 +1643,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::CreatureQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::ItemQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::QuestQuery, *this, &Player::OnDbQuery);
+			RegisterPacketHandler(game::client_realm_packet::ObjectQuery, *this, &Player::OnDbQuery);
 			RegisterPacketHandler(game::client_realm_packet::SetActionBarButton, *this, &Player::OnSetActionBarButton);
 			RegisterPacketHandler(game::client_realm_packet::GroupInvite, *this, &Player::OnGroupInvite);
 			RegisterPacketHandler(game::client_realm_packet::GroupUninvite, *this, &Player::OnGroupUninvite);
@@ -2156,6 +2162,46 @@ namespace mmo
 				packet.Start(game::realm_client_packet::ItemQueryResult);
 				packet
 					<< io::write_packed_guid(entry)
+					<< io::write<uint8>(true)
+					<< info;
+				packet.Finish();
+			});
+	}
+
+	void Player::OnQueryObject(uint64 entry)
+	{
+		DLOG("Querying for object " << log_hex_digit(entry) << "...");
+
+		const proto::ObjectEntry* object = m_project.objects.getById(entry);
+		if (object == nullptr)
+		{
+			WLOG("Could not find object entry " << log_hex_digit(entry));
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::ObjectQueryResult);
+					packet
+						<< io::write_packed_guid(entry)
+						<< io::write<uint8>(false);
+					packet.Finish();
+				});
+			return;
+		}
+
+		ObjectInfo info;
+		info.id = entry;
+		info.type = object->type();
+		info.displayId = object->displayid();
+		info.name = object->name();
+		for (int32 i = 0; i < 10; ++i)
+		{
+			info.properties[i] = object->data_size() <= i ? 0 : object->data(i);
+		}
+
+		m_connection->sendSinglePacket([&info](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ObjectQueryResult);
+				packet
+					<< io::write_packed_guid(info.id)
 					<< io::write<uint8>(true)
 					<< info;
 				packet.Finish();

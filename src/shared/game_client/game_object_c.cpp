@@ -7,6 +7,7 @@
 #include "binary_io/reader.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/scene.h"
+#include "game_unit_c.h"
 
 namespace mmo
 {
@@ -32,6 +33,20 @@ namespace mmo
 		}
 
 		removed();
+	}
+
+	GameUnitC& GameObjectC::AsUnit()
+	{
+		ASSERT(IsUnit());
+		return static_cast<GameUnitC&>(*this);
+	}
+
+	const GameUnitC& GameObjectC::AsUnit() const
+	{
+		ASSERT(IsUnit());
+
+		const auto unit = static_cast<const GameUnitC*>(this);
+		return *unit;
 	}
 
 	void GameObjectC::InitializeFieldMap()

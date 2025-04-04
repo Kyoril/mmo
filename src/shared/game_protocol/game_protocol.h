@@ -202,6 +202,7 @@ namespace mmo
 				GuildMotd,
 
 				GuildQuery,
+				ObjectQuery,
 
 				/// Counter constant
 				Count_,
@@ -379,6 +380,8 @@ namespace mmo
 				GuildQueryResponse,
 				GuildUninvite,
 				GuildEvent,
+
+				ObjectQueryResult,
 
 				/// Counter constant
 				Count_,

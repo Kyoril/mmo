@@ -458,27 +458,34 @@ namespace mmo
 		StartHeartbeatTimer();
 	}
 
-	void PlayerController::OnHoveredUnitChanged(GameUnitC* previousHoveredUnit)
+	void PlayerController::OnHoveredObjectChanged(GameObjectC* previousHoveredUnit)
 	{
-		if (m_hoveredUnit)
+		if (m_hoveredObject)
 		{
-			if(m_hoveredUnit->CanBeLooted())
+			if(m_hoveredObject->CanBeLooted())
 			{
 				g_cursor.SetCursorType(CursorType::Loot);
 			}
 			else
 			{
-				if (m_hoveredUnit->IsAlive())
+				if (m_hoveredObject->IsUnit())
 				{
-					if (m_hoveredUnit->Get<uint32>(object_fields::NpcFlags) != 0)
+					GameUnitC& unit = m_hoveredObject->AsUnit();
+					if (unit.IsAlive())
 					{
-						g_cursor.SetCursorType(CursorType::Gossip);
+						if (m_hoveredObject->Get<uint32>(object_fields::NpcFlags) != 0)
+						{
+							g_cursor.SetCursorType(CursorType::Gossip);
+						}
+						else
+						{
+							g_cursor.SetCursorType(m_controlledUnit->IsFriendlyTo(unit) ? CursorType::Pointer : CursorType::Attack);
+						}
 					}
 					else
 					{
-						g_cursor.SetCursorType(m_controlledUnit->IsFriendlyTo(*m_hoveredUnit) ? CursorType::Pointer : CursorType::Attack);
+						g_cursor.SetCursorType(CursorType::Pointer);
 					}
-					
 				}
 				else
 				{
@@ -491,10 +498,10 @@ namespace mmo
 			g_cursor.SetCursorType(CursorType::Pointer);
 		}
 
-		if (m_hoveredUnit != previousHoveredUnit)
+		if (m_hoveredObject != previousHoveredUnit)
 		{
-			ObjectMgr::SetHoveredObject(m_hoveredUnit ? m_hoveredUnit->GetGuid() : 0);
-			FrameManager::Get().TriggerLuaEvent("HOVERED_UNIT_CHANGED");
+			ObjectMgr::SetHoveredObject(m_hoveredObject ? m_hoveredObject->GetGuid() : 0);
+			FrameManager::Get().TriggerLuaEvent("HOVERED_OBJECT_CHANGED");
 		}
 	}
 
@@ -592,7 +599,7 @@ namespace mmo
 
 		const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
 
-		GameUnitC* newHoveredUnit = nullptr;
+		GameObjectC* newHoveredObject = nullptr;
 
 		const auto& hitResult = m_selectionSceneQuery->GetLastResult();
 		if (!hitResult.empty())
@@ -600,13 +607,13 @@ namespace mmo
 			Entity* entity = static_cast<Entity*>(hitResult[0].movable);
 			if (entity)
 			{
-				newHoveredUnit = entity->GetUserObject<GameUnitC>();
+				newHoveredObject = entity->GetUserObject<GameObjectC>();
 			}
 		}
 
-		GameUnitC* previousUnit = m_hoveredUnit;
-		m_hoveredUnit = newHoveredUnit;
-		OnHoveredUnitChanged(previousUnit);
+		GameObjectC* previousObject = m_hoveredObject;
+		m_hoveredObject = newHoveredObject;
+		OnHoveredObjectChanged(previousObject);
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -672,57 +679,61 @@ namespace mmo
 		{
 			const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
 
-			if (m_hoveredUnit)
+			if (m_hoveredObject)
 			{
-				if (m_hoveredUnit->GetGuid() != previousSelectedUnit)
+				if (m_hoveredObject->GetGuid() != previousSelectedUnit)
 				{
-					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_hoveredUnit->GetGuid()));
+					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_hoveredObject->GetGuid()));
 				}
 
 				if (button == MouseButton_Right)
 				{
-					if (m_hoveredUnit->CanBeLooted())
+					if (m_hoveredObject->CanBeLooted())
 					{
-						if (m_controlledUnit->IsWithinRange(*m_hoveredUnit, LootDistance))
+						if (m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
 						{
 							// Open the loot dialog if we are close enough
-							m_lootClient.LootObject(*m_hoveredUnit);
+							m_lootClient.LootObject(*m_hoveredObject);
 						}
 						else
 						{
 							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
 						}
 					}
-					else if (m_hoveredUnit->IsAlive())
+					else if (m_hoveredObject->IsUnit())
 					{
-						if (m_controlledUnit->IsFriendlyTo(*m_hoveredUnit) && m_controlledUnit->IsWithinRange(*m_hoveredUnit, LootDistance))
+						GameUnitC& unit = m_hoveredObject->AsUnit();
+						if (unit.IsAlive())
 						{
-							const uint32 npcFlags = m_hoveredUnit->Get<uint32>(object_fields::NpcFlags);
-
-							// Check for explicit flags so we can ask the server for a specific action
-							switch(npcFlags)
+							if (m_controlledUnit->IsFriendlyTo(unit) && m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
 							{
-							case npc_flags::QuestGiver:
-								m_connector.QuestGiverHello(m_hoveredUnit->GetGuid());
-								break;
-							case npc_flags::Trainer:
-								m_connector.TrainerMenu(m_hoveredUnit->GetGuid());
-								break;
-							case npc_flags::Vendor:
-								m_connector.ListInventory(m_hoveredUnit->GetGuid());
-								break;
-							default:
-								// No specific npc flag set, so ask for the gossip dialog
-								if (npcFlags != 0)
+								const uint32 npcFlags = m_hoveredObject->Get<uint32>(object_fields::NpcFlags);
+
+								// Check for explicit flags so we can ask the server for a specific action
+								switch (npcFlags)
 								{
-									m_connector.GossipHello(m_hoveredUnit->GetGuid());
+								case npc_flags::QuestGiver:
+									m_connector.QuestGiverHello(m_hoveredObject->GetGuid());
+									break;
+								case npc_flags::Trainer:
+									m_connector.TrainerMenu(m_hoveredObject->GetGuid());
+									break;
+								case npc_flags::Vendor:
+									m_connector.ListInventory(m_hoveredObject->GetGuid());
+									break;
+								default:
+									// No specific npc flag set, so ask for the gossip dialog
+									if (npcFlags != 0)
+									{
+										m_connector.GossipHello(m_hoveredObject->GetGuid());
+									}
+									break;
 								}
-								break;
 							}
-						}
-						else
-						{
-							m_controlledUnit->Attack(*m_hoveredUnit);
+							else
+							{
+								m_controlledUnit->Attack(unit);
+							}
 						}
 					}
 				}

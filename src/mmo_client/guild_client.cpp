@@ -3,6 +3,7 @@
 
 #include "console/console.h"
 #include "frame_ui/frame_mgr.h"
+#include "game/guild_info.h"
 #include "game_client/object_mgr.h"
 
 namespace mmo
