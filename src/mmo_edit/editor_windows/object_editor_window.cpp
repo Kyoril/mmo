@@ -269,19 +269,19 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
-			int32 modelId = currentEntry.displayid();
+			int32 displayId = currentEntry.displayid();
 
-			const auto* modelEntry = m_project.models.getById(modelId);
-			if (ImGui::BeginCombo("Model", modelEntry != nullptr ? modelEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
+			const auto* displayIdEntry = m_project.objectDisplays.getById(displayId);
+			if (ImGui::BeginCombo("Model", displayIdEntry != nullptr ? displayIdEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
 			{
-				for (int i = 0; i < m_project.models.count(); i++)
+				for (int i = 0; i < m_project.objectDisplays.count(); i++)
 				{
 					ImGui::PushID(i);
-					const bool item_selected = m_project.models.getTemplates().entry(i).id() == modelId;
-					const char* item_text = m_project.models.getTemplates().entry(i).name().c_str();
+					const bool item_selected = m_project.objectDisplays.getTemplates().entry(i).id() == displayId;
+					const char* item_text = m_project.objectDisplays.getTemplates().entry(i).name().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
-						currentEntry.set_displayid(m_project.models.getTemplates().entry(i).id());
+						currentEntry.set_displayid(m_project.objectDisplays.getTemplates().entry(i).id());
 					}
 					if (item_selected)
 					{
