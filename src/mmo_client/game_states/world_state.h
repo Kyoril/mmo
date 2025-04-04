@@ -219,6 +219,8 @@ namespace mmo
 
 		PacketParseResult OnItemQueryResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnObjectQueryResult(game::IncomingPacket& packet);
+
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 
 		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
