@@ -518,9 +518,14 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
 		std::cerr << "Could not open error file for writing: " << tempFile.string() << std::endl;
 	}
 
+	// Flush log file first
+	if (mmo::s_logFile.is_open())
+	{
+		mmo::s_logFile.flush();
+	}
+
 	// Call error sender executable
 	mmo::createProcess("./mmo_error.exe", { tempFile.string(), "./Logs/Client.log" });
-
 	return 0;
 }
 
@@ -539,11 +544,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 
 	// Setup log to print each log entry to the debug output on windows
 #ifdef _DEBUG
-	std::mutex logMutex;
-	mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry & entry) {
-		std::scoped_lock lock{ logMutex };
-		OutputDebugStringA((entry.message + "\n").c_str());
-	});
+	if (IsDebuggerPresent())
+	{
+		std::mutex logMutex;
+		mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry& entry) {
+			std::scoped_lock lock{ logMutex };
+			OutputDebugStringA((entry.message + "\n").c_str());
+			});
+	}
 #endif
 
 	// Split command line arguments
