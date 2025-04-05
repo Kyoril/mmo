@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
+#include "version.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -25,8 +26,8 @@ LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,1,0,985
- PRODUCTVERSION 0,1,0,985
+ FILEVERSION MMO_VERSION_RES
+ PRODUCTVERSION MMO_VERSION_RES
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -41,14 +42,14 @@ BEGIN
     BEGIN
         BLOCK "040704b0"
         BEGIN
-            VALUE "CompanyName", "Unnamed Company"
+            VALUE "CompanyName", "Kyoril"
             VALUE "FileDescription", "MMORPG Launcher"
-            VALUE "FileVersion", "0.1.0.985"
+            VALUE "FileVersion", MMO_VERSION_STR
             VALUE "InternalName", "launcher.exe"
             VALUE "LegalCopyright", "Copyright (C) 2019-2025, Kyoril. All rights reserved."
             VALUE "OriginalFilename", "launcher.exe"
             VALUE "ProductName", "MMORPG Launcher"
-            VALUE "ProductVersion", "0.1.0.985"
+            VALUE "ProductVersion", MMO_VERSION_STR
         END
     END
     BLOCK "VarFileInfo"
