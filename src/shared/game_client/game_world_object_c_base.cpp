@@ -47,6 +47,9 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			ASSERT(GetGuid() > 0);
+			SetupSceneObjects();
 		}
 		else
 		{
@@ -74,12 +77,6 @@ namespace mmo
 		}
 
 		m_fieldMap.MarkAllAsUnchanged();
-
-		ASSERT(GetGuid() > 0);
-		if (complete)
-		{
-			SetupSceneObjects();
-		}
 
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
