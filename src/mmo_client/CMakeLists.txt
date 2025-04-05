@@ -23,7 +23,7 @@ file(GLOB uiSrcFiles "ui/*.cpp" "ui/*.h")
 file(GLOB gsSrcFiles "game_states/*.cpp" "game_states/*.h")
 
 if (WIN32)
-	file(GLOB winSources "win/*.cpp" "win/*.h")
+	file(GLOB winSources "win/*.cpp" "win/*.h" "*.rc")
 	source_group(src\\win FILES ${winSources})
 endif()
 
@@ -39,6 +39,7 @@ source_group(src\\ui FILES ${uiSrcFiles})
 source_group(src\\game_states FILES ${gsSrcFiles})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${PROJECT_BINARY_DIR})  # Include directory where version.h is generated
 
 add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles} ${gsSrcFiles} ${osxSources} ${winSources})
 

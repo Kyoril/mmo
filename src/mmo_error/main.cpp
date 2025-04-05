@@ -7,7 +7,15 @@
 #include <Windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
+#include <VersionHelpers.h> // For Windows version detection
+#include <winver.h>         // For GetFileVersionInfo
 #include "resource.h"
+
+// For RtlGetVersion
+#pragma comment(lib, "ntdll.lib")
+
+// Define the function pointer type for RtlGetVersion
+typedef LONG(WINAPI* RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
 
 #include <iostream>
 #include <fstream>
@@ -36,6 +44,149 @@ std::thread g_sendThread;
 INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 bool SendErrorReport(const std::string& logContent, const std::string& userInput);
 void LoadLogFiles();
+std::string GetWindowsVersion();
+std::string GetClientVersion();
+
+// Get Windows version as a string using RtlGetVersion (not affected by application compatibility)
+std::string GetWindowsVersion()
+{
+    try
+    {
+        // Get RtlGetVersion function from ntdll.dll
+        HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+        if (!ntdll)
+        {
+            return "N/A";
+        }
+
+        RtlGetVersionPtr RtlGetVersion = (RtlGetVersionPtr)GetProcAddress(ntdll, "RtlGetVersion");
+        if (!RtlGetVersion)
+        {
+            return "N/A";
+        }
+
+        RTL_OSVERSIONINFOW osvi;
+        ZeroMemory(&osvi, sizeof(RTL_OSVERSIONINFOW));
+        osvi.dwOSVersionInfoSize = sizeof(RTL_OSVERSIONINFOW);
+
+        if (RtlGetVersion(&osvi) != 0) // STATUS_SUCCESS = 0
+        {
+            return "N/A";
+        }
+
+        // Format the version string based on the major, minor, and build numbers
+        std::stringstream versionStream;
+
+        // Windows 11 is actually Windows 10 with build number >= 22000
+        if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22000)
+        {
+            versionStream << "Windows 11 (Build " << osvi.dwBuildNumber << ")";
+        }
+        else if (osvi.dwMajorVersion == 10)
+        {
+            versionStream << "Windows 10 (Build " << osvi.dwBuildNumber << ")";
+        }
+        else if (osvi.dwMajorVersion == 6)
+        {
+            switch (osvi.dwMinorVersion)
+            {
+            case 3:
+                versionStream << "Windows 8.1 (Build " << osvi.dwBuildNumber << ")";
+                break;
+            case 2:
+                versionStream << "Windows 8 (Build " << osvi.dwBuildNumber << ")";
+                break;
+            case 1:
+                versionStream << "Windows 7 (Build " << osvi.dwBuildNumber << ")";
+                break;
+            case 0:
+                versionStream << "Windows Vista (Build " << osvi.dwBuildNumber << ")";
+                break;
+            default:
+                versionStream << "Windows (Version " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion << ", Build " << osvi.dwBuildNumber << ")";
+                break;
+            }
+        }
+        else
+        {
+            versionStream << "Windows (Version " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion << ", Build " << osvi.dwBuildNumber << ")";
+        }
+
+        return versionStream.str();
+    }
+    catch (...)
+    {
+        // Return N/A if any exception occurs
+        return "N/A";
+    }
+}
+
+// Get client version from mmo_client.exe
+std::string GetClientVersion()
+{
+    try
+    {
+        // Get the directory of the current executable
+        char exePath[MAX_PATH] = {0};
+        if (GetModuleFileNameA(NULL, exePath, MAX_PATH) == 0)
+        {
+            return "N/A";
+        }
+        
+        // Get the directory path
+        std::filesystem::path exeDir = std::filesystem::path(exePath).parent_path();
+        
+        // Path to mmo_client.exe
+        std::filesystem::path clientPath = exeDir / "mmo_client.exe";
+        
+        // Check if the file exists
+        if (!std::filesystem::exists(clientPath))
+        {
+            return "N/A";
+        }
+        
+        // Get file version info size
+        DWORD handle = 0;
+        DWORD versionInfoSize = GetFileVersionInfoSizeA(clientPath.string().c_str(), &handle);
+        if (versionInfoSize == 0)
+        {
+            return "N/A";
+        }
+        
+        // Allocate memory for version info
+        std::vector<BYTE> versionInfo(versionInfoSize);
+        
+        // Get file version info
+        if (!GetFileVersionInfoA(clientPath.string().c_str(), handle, versionInfoSize, versionInfo.data()))
+        {
+            return "N/A";
+        }
+        
+        // Get file version
+        VS_FIXEDFILEINFO* fileInfo = nullptr;
+        UINT fileInfoLen = 0;
+        if (!VerQueryValueA(versionInfo.data(), "\\", (LPVOID*)&fileInfo, &fileInfoLen))
+        {
+            return "N/A";
+        }
+        
+        // Extract version numbers
+        DWORD majorVersion = (fileInfo->dwFileVersionMS >> 16) & 0xFFFF;
+        DWORD minorVersion = fileInfo->dwFileVersionMS & 0xFFFF;
+        DWORD buildNumber = (fileInfo->dwFileVersionLS >> 16) & 0xFFFF;
+        DWORD revisionNumber = fileInfo->dwFileVersionLS & 0xFFFF;
+        
+        // Format version string
+        std::stringstream versionStream;
+        versionStream << majorVersion << "." << minorVersion << "." << buildNumber << "." << revisionNumber;
+        return versionStream.str();
+    }
+    catch (...)
+    {
+        // Return N/A if any exception occurs
+        return "N/A";
+    }
+}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 {
@@ -96,9 +247,9 @@ void LoadLogFiles()
                 if (file)
                 {
                     // Add a header for the log file with a separator line
-                    logStream << "=================================================================\n";
-                    logStream << "=== Log File: " << filePath << "\n";
-                    logStream << "=================================================================\n\n";
+                    logStream << "=================================================================\r\n";
+                    logStream << "=== Log File: " << filePath << "\r\n";
+                    logStream << "=================================================================\r\n\r\n";
                     
                     // Read the file line by line to ensure proper formatting
                     std::string line;
@@ -116,7 +267,7 @@ void LoadLogFiles()
                         logStream << formattedLine << "\r\n";
                     }
                     
-                    logStream << "\n\n";
+                    logStream << "\r\n\r\n";
                 }
                 else
                 {
@@ -170,42 +321,59 @@ bool SendErrorReport(const std::string& logContent, const std::string& userInput
         // Perform SSL handshake without verification (for compatibility)
         socket.handshake(asio::ssl::stream_base::client);
 
+        // Get Windows version and client version
+        std::string windowsVersion = GetWindowsVersion();
+        std::string clientVersion = GetClientVersion();
+
         // Prepare HTTP POST request with the log content and user input
         std::stringstream requestStream;
         std::string boundary = "----WebKitFormBoundaryABC123";
         std::string postData;
 
-        // CRITICAL FIX: The server expects 'log_content', not 'crashReport'
+        // Add log content
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"log_content\"; filename=\"crash-report.txt\"\r\n";
         postData += "Content-Type: text/plain\r\n\r\n";
         postData += logContent + "\r\n";
 
-        // CRITICAL FIX: The server expects 'user_input', not 'additionalInfo'
+        // Add user input
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"user_input\"\r\n\r\n";
         postData += userInput + "\r\n";
 
-        // Add metadata fields
+        // Add client version
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"appVersion\"\r\n\r\n";
-        postData += "0.2.0.1281\r\n";
+        postData += clientVersion + "\r\n";
 
+        // Add Windows version
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"osVersion\"\r\n\r\n";
-        postData += "Windows 10\r\n";
+        postData += windowsVersion + "\r\n";
 
+        // Add device model (using computer name as a placeholder)
+        char computerName[MAX_COMPUTERNAME_LENGTH + 1] = {0};
+        DWORD size = sizeof(computerName);
+        std::string deviceModel = "Unknown Device";
+        if (GetComputerNameA(computerName, &size))
+        {
+            deviceModel = computerName;
+        }
+        
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"deviceModel\"\r\n\r\n";
-        postData += "Test Device\r\n";
+        postData += deviceModel + "\r\n";
 
+        // Add error message (using first log file name as a placeholder)
+        std::string errorMessage = "Crash Report";
+        if (!g_logFiles.empty())
+        {
+            errorMessage = "Crash in " + std::filesystem::path(g_logFiles[0]).filename().string();
+        }
+        
         postData += "--" + boundary + "\r\n";
         postData += "Content-Disposition: form-data; name=\"errorMessage\"\r\n\r\n";
-        postData += "Test Error Message\r\n";
-
-        postData += "--" + boundary + "\r\n";
-        postData += "Content-Disposition: form-data; name=\"userEmail\"\r\n\r\n";
-        postData += "test@example.com\r\n";
+        postData += errorMessage + "\r\n";
 
         // End of form data
         postData += "--" + boundary + "--\r\n";
