@@ -52,6 +52,7 @@
 
 #include "char_create_info.h"
 #include "char_select.h"
+#include "base/create_process.h"
 #include "ui/unit_model_frame.h"
 
 #include "luabind/luabind.hpp"
@@ -470,9 +471,72 @@ namespace mmo
 
 #include "base/win_utility.h"
 
+LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
+{
+	// Implement an exception handler which formulates a readable error message, include a stack trace and some more data about the crash and
+	// then calls an executable to send the error message to some server of us.
+
+	std::ostringstream exceptionMessageBuffer;
+	exceptionMessageBuffer << "Unhandled exception: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionCode << std::endl << std::endl;
+	exceptionMessageBuffer << "Exception address: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionAddress << std::endl;
+	exceptionMessageBuffer << "Exception flags: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionFlags << std::endl;
+
+	exceptionMessageBuffer << "Exception parameters: ";
+	for (size_t i = 0; i < ExceptionInfo->ExceptionRecord->NumberParameters; ++i)
+	{
+		exceptionMessageBuffer << "0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionInformation[i] << " ";
+	}
+	exceptionMessageBuffer << std::endl;
+
+	exceptionMessageBuffer << "Context flags: 0x" << std::hex << ExceptionInfo->ContextRecord->ContextFlags << std::endl;
+	exceptionMessageBuffer << "Context address: 0x" << std::hex << ExceptionInfo->ContextRecord->Rip << std::endl;
+	exceptionMessageBuffer << "Context stack pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rsp << std::endl;
+	exceptionMessageBuffer << "Context base pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rbp << std::endl;
+	exceptionMessageBuffer << "Context instruction pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rip << std::endl;
+
+	// Write to a temporary file
+	std::filesystem::path tempPath = std::filesystem::temp_directory_path();
+
+	// Ensure filename contains current timestamp to make it more unique
+	const auto now = std::chrono::system_clock::now();
+	const auto nowTime = std::chrono::system_clock::to_time_t(now);
+
+	std::tm nowTm;
+	localtime_s(&nowTm, &nowTime);
+	std::ostringstream filename;
+	filename << "mmo_error_" << std::put_time(&nowTm, "%Y%m%d_%H%M%S") << ".txt";
+
+	const std::filesystem::path tempFile = tempPath / filename.str();
+	std::ofstream errorFile(tempFile.string());
+	if (errorFile.is_open())
+	{
+		errorFile << exceptionMessageBuffer.str();
+		errorFile.close();
+	}
+	else
+	{
+		std::cerr << "Could not open error file for writing: " << tempFile.string() << std::endl;
+	}
+
+	// Call error sender executable
+	mmo::createProcess("./mmo_error.exe", { tempFile.string(), "./Logs/Client.log" });
+
+	return 0;
+}
+
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 {
+	// In debug builds, we only want to add an exception handler when no debugger is attached. In release builds, we always set this handler
+#ifdef _DEBUG
+	if (!IsDebuggerPresent())
+	{
+#endif
+		SetUnhandledExceptionFilter(ExceptionFilterWin32);
+#ifdef _DEBUG
+	}
+#endif
+
 	// Setup log to print each log entry to the debug output on windows
 #ifdef _DEBUG
 	std::mutex logMutex;
