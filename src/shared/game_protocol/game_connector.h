@@ -163,9 +163,11 @@ namespace mmo
 			{
 				if (error.code())
 				{
-					assert(GetListener());
-					GetListener()->connectionEstablished(false);
-					this->resetListener();
+					if (GetListener())
+					{
+						GetListener()->connectionEstablished(false);
+						this->resetListener();
+					}
 					return;
 				}
 
@@ -195,19 +197,17 @@ namespace mmo
 			{
 				if (!error.code())
 				{
-					if (GetListener()->connectionEstablished(true))
+					if (GetListener() && GetListener()->connectionEstablished(true))
 					{
 						this->startReceiving();
 					}
 					return;
 				}
-
-				if (error.code() == asio::error::operation_aborted)
+				else if (error.code() == asio::error::operation_aborted)
 				{
 					return;
 				}
-
-				if (iterator == asio::ip::tcp::resolver::iterator())
+				else if (iterator == asio::ip::tcp::resolver::iterator())
 				{
 					if (GetListener())
 					{
