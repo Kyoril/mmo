@@ -11,8 +11,8 @@
 
 namespace mmo
 {
-	GameWorldObjectC_Base::GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver)
-		: GameObjectC(scene, project)
+	GameWorldObjectC_Base::GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
+		: GameObjectC(scene, project, map)
 		, m_netDriver(netDriver)
 	{
 	}
@@ -154,8 +154,8 @@ namespace mmo
 		m_netDriver.GetObjectData(entryId, static_pointer_cast<GameWorldObjectC_Base>(shared_from_this()));
 	}
 
-	GameWorldObjectC_Chest::GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver)
-		: GameWorldObjectC_Base(scene, project, netDriver)
+	GameWorldObjectC_Chest::GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
+		: GameWorldObjectC_Base(scene, project, netDriver, map)
 	{
 	}
 }

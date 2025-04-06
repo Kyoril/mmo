@@ -63,8 +63,8 @@ namespace mmo
 
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
-		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project)
-			: GameObjectC(scene, project)
+		explicit GameUnitC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project, uint32 map)
+			: GameObjectC(scene, project, map)
 			, m_netDriver(netDriver)
 			, m_collisionProvider(collisionProvider)
 		{

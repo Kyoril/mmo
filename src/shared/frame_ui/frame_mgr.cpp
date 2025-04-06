@@ -792,14 +792,17 @@ namespace mmo
 		if (it != m_mouseDownFrames.end())
 		{
 			m_pressedButtons &= ~static_cast<int32>(button);
-			it->second->OnMouseUp(button, m_pressedButtons, position);
-
-			if (button == Left && it->second->IsHovered() && !it->second->GetAbsoluteFrameRect().IsPointInRect(position))
+			if (it->second)
 			{
-				it->second->OnMouseLeave();
-			}
+				it->second->OnMouseUp(button, m_pressedButtons, position);
 
-			m_mouseDownFrames.erase(it);
+				if (button == Left && it->second->IsHovered() && !it->second->GetAbsoluteFrameRect().IsPointInRect(position))
+				{
+					it->second->OnMouseLeave();
+				}
+
+				m_mouseDownFrames.erase(it);
+			}
 		}
 	}
 

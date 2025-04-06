@@ -19,6 +19,10 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 add_definitions("/std:c++latest")
 add_compile_options(/arch:SSE2)
 
+# If in release mode, enable optimizations and link time code generation
+add_compile_options(/Zi)
+add_link_options(/DEBUG)
+
 # We want to use Vista or later API since we need this for
 # GetTickCount64 which is not available on XP and prior
 add_definitions("-D_WIN32_WINNT=0x0A00 -DWIN32_LEAN_AND_MEAN")

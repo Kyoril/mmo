@@ -955,10 +955,10 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(*m_scene, *this, *this, m_project);
+					object = std::make_shared<GameUnitC>(*m_scene, *this, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(*m_scene, *this, *this, m_project);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);
@@ -967,7 +967,7 @@ namespace mmo
 					object = std::make_shared<GameBagC>(*m_scene, *this, m_project);
 					break;
 				case ObjectTypeId::Object:
-					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project, *this);
+					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project, *this, g_mapId);
 					break;
 				default:
 					ASSERT(!! "Unknown object type");

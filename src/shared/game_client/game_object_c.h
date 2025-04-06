@@ -31,7 +31,8 @@ namespace mmo
 		signal<void()> removed;
 
 	public:
-		explicit GameObjectC(Scene& scene, const proto_client::Project& project);
+		explicit GameObjectC(Scene& scene, const proto_client::Project& project, uint32 map);
+
 		~GameObjectC() override;
 
 		[[nodiscard]] bool IsPlayer() const noexcept { return GetTypeId() == ObjectTypeId::Player; }
@@ -41,6 +42,8 @@ namespace mmo
 		[[nodiscard]] bool IsItem() const noexcept { return IsContainer() || GetTypeId() == ObjectTypeId::Item; }
 
 		[[nodiscard]] bool IsContainer() const noexcept { return GetTypeId() == ObjectTypeId::Container; }
+
+		uint32 GetMapId() const noexcept { return m_mapId; }
 
 		GameUnitC& AsUnit();
 
@@ -183,5 +186,6 @@ namespace mmo
 		SceneNode* m_sceneNode { nullptr };
 		SceneNode* m_entityOffsetNode{ nullptr };
 		FieldMap<uint32> m_fieldMap;
+		uint32 m_mapId{ 0 };
 	};
 }

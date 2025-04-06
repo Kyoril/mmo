@@ -9,7 +9,7 @@
 namespace mmo
 {
 	GameItemC::GameItemC(Scene& scene, NetClient& netDriver, const proto_client::Project& project)
-		: GameObjectC(scene, project)
+		: GameObjectC(scene, project, 0)
 		, m_netDriver(netDriver)
 	{
 	}

@@ -7,6 +7,8 @@
 #ifdef _WIN32
 #	define WIN32_LEAN_AND_MEAN
 #	include <Windows.h>
+#   include <DbgHelp.h>
+#   pragma comment(lib, "dbghelp.lib")
 #endif
 
 #include "base/typedefs.h"
@@ -53,6 +55,7 @@
 #include "char_create_info.h"
 #include "char_select.h"
 #include "base/create_process.h"
+#include "game_client/object_mgr.h"
 #include "ui/unit_model_frame.h"
 
 #include "luabind/luabind.hpp"
@@ -468,8 +471,83 @@ namespace mmo
 
 
 #ifdef _WIN32
-
 #include "base/win_utility.h"
+
+// Add this helper function before the ExceptionFilterWin32 function
+void LogStackTrace(CONTEXT* context, std::ostringstream& output)
+{
+	HANDLE process = GetCurrentProcess();
+	HANDLE thread = GetCurrentThread();
+
+	// Initialize symbols
+	SymInitialize(process, NULL, TRUE);
+
+	// Set options
+	SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+
+	// Initialize stack frame
+	STACKFRAME64 stack = {};
+	stack.AddrPC.Offset = context->Rip;
+	stack.AddrPC.Mode = AddrModeFlat;
+	stack.AddrFrame.Offset = context->Rbp;
+	stack.AddrFrame.Mode = AddrModeFlat;
+	stack.AddrStack.Offset = context->Rsp;
+	stack.AddrStack.Mode = AddrModeFlat;
+
+	// Reserve space for symbol info
+	constexpr int MAX_SYMBOL_NAME = 256;
+	constexpr int SIZE_OF_SYMBOL_INFO = sizeof(SYMBOL_INFO) + MAX_SYMBOL_NAME;
+	uint8_t buffer[SIZE_OF_SYMBOL_INFO];
+	SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(buffer);
+	symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+	symbol->MaxNameLen = MAX_SYMBOL_NAME;
+
+	// Line info
+	IMAGEHLP_LINE64 line = {};
+	line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+	DWORD displacement;
+
+	// Walk the stack
+	for (int frameNum = 0; frameNum < 30; frameNum++)
+	{
+		BOOL result = StackWalk64(
+			IMAGE_FILE_MACHINE_AMD64,
+			process,
+			thread,
+			&stack,
+			context,
+			NULL,
+			SymFunctionTableAccess64,
+			SymGetModuleBase64,
+			NULL
+		);
+
+		if (!result || stack.AddrPC.Offset == 0)
+			break;
+
+		output << "Frame " << frameNum << ": ";
+
+		// Try to get symbol name
+		if (SymFromAddr(process, stack.AddrPC.Offset, NULL, symbol))
+		{
+			output << symbol->Name << " (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+		}
+		else
+		{
+			output << "Unknown (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+		}
+
+		// Try to get line info
+		if (SymGetLineFromAddr64(process, stack.AddrPC.Offset, &displacement, &line))
+		{
+			output << " at " << line.FileName << ":" << line.LineNumber;
+		}
+
+		output << "\r\n";
+	}
+
+	SymCleanup(process);
+}
 
 LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
 {
@@ -477,7 +555,36 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
 	// then calls an executable to send the error message to some server of us.
 
 	std::ostringstream exceptionMessageBuffer;
-	exceptionMessageBuffer << "Unhandled exception: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionCode << std::endl << std::endl;
+	exceptionMessageBuffer << "Unhandled exception: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionCode;
+
+	// Get exception name from exception code
+	switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
+	{
+	case EXCEPTION_ACCESS_VIOLATION: exceptionMessageBuffer << " EXCEPTION_ACCESS_VIOLATION"; break;
+	case EXCEPTION_DATATYPE_MISALIGNMENT: exceptionMessageBuffer << " EXCEPTION_DATATYPE_MISALIGNMENT"; break;
+	case EXCEPTION_BREAKPOINT: exceptionMessageBuffer << " EXCEPTION_BREAKPOINT"; break;
+	case EXCEPTION_SINGLE_STEP: exceptionMessageBuffer << " EXCEPTION_SINGLE_STEP"; break;
+	case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: exceptionMessageBuffer << " EXCEPTION_ARRAY_BOUNDS_EXCEEDED"; break;
+	case EXCEPTION_FLT_DENORMAL_OPERAND: exceptionMessageBuffer << " EXCEPTION_FLT_DENORMAL_OPERAND"; break;
+	case EXCEPTION_FLT_DIVIDE_BY_ZERO: exceptionMessageBuffer << " EXCEPTION_FLT_DIVIDE_BY_ZERO"; break;
+	case EXCEPTION_FLT_INEXACT_RESULT: exceptionMessageBuffer << " EXCEPTION_FLT_INEXACT_RESULT"; break;
+	case EXCEPTION_FLT_INVALID_OPERATION: exceptionMessageBuffer << " EXCEPTION_FLT_INVALID_OPERATION"; break;
+	case EXCEPTION_FLT_OVERFLOW: exceptionMessageBuffer << " EXCEPTION_FLT_OVERFLOW"; break;
+	case EXCEPTION_FLT_STACK_CHECK: exceptionMessageBuffer << " EXCEPTION_FLT_STACK_CHECK"; break;
+	case EXCEPTION_FLT_UNDERFLOW: exceptionMessageBuffer << " EXCEPTION_FLT_UNDERFLOW"; break;
+	case EXCEPTION_INT_DIVIDE_BY_ZERO: exceptionMessageBuffer << " EXCEPTION_INT_DIVIDE_BY_ZERO"; break;
+	case EXCEPTION_INT_OVERFLOW: exceptionMessageBuffer << " EXCEPTION_INT_OVERFLOW"; break;
+	case EXCEPTION_PRIV_INSTRUCTION: exceptionMessageBuffer << " EXCEPTION_PRIV_INSTRUCTION"; break;
+	case EXCEPTION_IN_PAGE_ERROR: exceptionMessageBuffer << " EXCEPTION_IN_PAGE_ERROR"; break;
+	case EXCEPTION_ILLEGAL_INSTRUCTION: exceptionMessageBuffer << " EXCEPTION_ILLEGAL_INSTRUCTION"; break;
+	case EXCEPTION_NONCONTINUABLE_EXCEPTION: exceptionMessageBuffer << " EXCEPTION_NONCONTINUABLE_EXCEPTION"; break;
+	case EXCEPTION_STACK_OVERFLOW: exceptionMessageBuffer << " EXCEPTION_STACK_OVERFLOW"; break;
+	case EXCEPTION_INVALID_DISPOSITION: exceptionMessageBuffer << " EXCEPTION_INVALID_DISPOSITION"; break;
+	case EXCEPTION_GUARD_PAGE: exceptionMessageBuffer << " EXCEPTION_GUARD_PAGE"; break;
+	case EXCEPTION_INVALID_HANDLE: exceptionMessageBuffer << " EXCEPTION_INVALID_HANDLE"; break;
+	}
+	exceptionMessageBuffer << std::endl << std::endl;
+
 	exceptionMessageBuffer << "Exception address: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionAddress << std::endl;
 	exceptionMessageBuffer << "Exception flags: 0x" << std::hex << ExceptionInfo->ExceptionRecord->ExceptionFlags << std::endl;
 
@@ -493,6 +600,31 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
 	exceptionMessageBuffer << "Context stack pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rsp << std::endl;
 	exceptionMessageBuffer << "Context base pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rbp << std::endl;
 	exceptionMessageBuffer << "Context instruction pointer: 0x" << std::hex << ExceptionInfo->ContextRecord->Rip << std::endl;
+	exceptionMessageBuffer << std::endl;
+
+	exceptionMessageBuffer << "-----------------------------------------------\r\n";
+	exceptionMessageBuffer << "STACK TRACE\r\n";
+	exceptionMessageBuffer << "-----------------------------------------------\r\n";
+
+	// Get the stack trace
+	LogStackTrace(ExceptionInfo->ContextRecord, exceptionMessageBuffer);
+
+	// Log some player data if available
+	if (mmo::ObjectMgr::GetActivePlayerGuid())
+	{
+		if (const auto player = mmo::ObjectMgr::GetActivePlayer())
+		{
+			exceptionMessageBuffer << "-----------------------------------------------\r\n";
+			exceptionMessageBuffer << "PLAYER DATA\r\n";
+			exceptionMessageBuffer << "-----------------------------------------------\r\n";
+			exceptionMessageBuffer << "Active player GUID: " << mmo::log_hex_digit(player->GetGuid()) << "\r\n";
+			exceptionMessageBuffer << "Active player name: " << player->GetName() << "\r\n";
+			exceptionMessageBuffer << "Active player level: " << player->GetLevel() << "\r\n";
+			exceptionMessageBuffer << "Active player map: " << player->GetMapId() << "\r\n";
+			exceptionMessageBuffer << "Active player location: " << player->GetPosition() << "\r\n";
+			exceptionMessageBuffer << "Active player facing: " << player->GetFacing().GetValueRadians() << "\r\n";
+		}
+	}
 
 	// Write to a temporary file
 	std::filesystem::path tempPath = std::filesystem::temp_directory_path();
@@ -528,6 +660,7 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS* ExceptionInfo)
 	mmo::createProcess("./mmo_error.exe", { tempFile.string(), "./Logs/Client.log" });
 	return 0;
 }
+
 
 /// Procedural entry point on windows platforms.
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
