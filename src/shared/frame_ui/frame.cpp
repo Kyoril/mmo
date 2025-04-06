@@ -496,6 +496,26 @@ namespace mmo
 		Invalidate();
 	}
 
+	const Anchor* Frame::GetAnchor(AnchorPoint point) const
+	{
+		const auto it = m_anchors.find(point);
+		if (it != m_anchors.end())
+		{
+			return it->second.get();
+		}
+		return nullptr;
+	}
+
+	Anchor* Frame::GetAnchor(AnchorPoint point)
+	{
+		const auto it = m_anchors.find(point);
+		if (it != m_anchors.end())
+		{
+			return it->second.get();
+		}
+		return nullptr;
+	}
+
 	void Frame::SetSize(const float width, const float height)
 	{
 		m_pixelSize = Size(width, height);

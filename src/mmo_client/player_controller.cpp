@@ -337,6 +337,11 @@ namespace mmo
 	void PlayerController::HandleCameraCollision()
 	{
 		float zoom = s_cameraZoomCVar->GetFloatValue();
+		if (zoom <= 0.0f)
+		{
+			return;
+		}
+
 		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * zoom);
 		m_cameraNode->SetPosition(m_desiredCameraLocation);
 

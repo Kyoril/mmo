@@ -270,6 +270,10 @@ namespace mmo
 		/// Sets an anchor for this frame.
 		void SetAnchor(AnchorPoint point, AnchorPoint relativePoint = AnchorPoint::None, Pointer relativeTo = nullptr, float offset = 0.0f);
 
+		const Anchor* GetAnchor(AnchorPoint point) const;
+
+		Anchor* GetAnchor(AnchorPoint point);
+
 		void ClearAnchors();
 
 		/// Sets the size for this frame.

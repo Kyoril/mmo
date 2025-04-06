@@ -61,41 +61,110 @@ namespace mmo
 
 		// Inverse scale
 		const float scaleY = 1.0f / FrameManager::Get().GetUIScale().y;
+		const float scaleX = 1.0f / FrameManager::Get().GetUIScale().x;
 
 		// Calculate the new position of the thumb
 		if (m_verticalMovement && std::abs(delta.y) > 0.0f)
 		{
 			// Limit thumb position
-			if (!AnchorsSatisfyYPosition())
-			{
-				auto newPosition = Point(GetPosition().x, GetPosition().y + delta.y * scaleY);
+			auto newPosition = Point(GetPosition().x, GetPosition().y + delta.y * scaleY);
 
-				if (newPosition.y < m_vertMin) newPosition.y = m_vertMin;
-				if (newPosition.y > m_vertMax) newPosition.y = m_vertMax;
+			// Ensure thumb stays within vertical bounds
+			if (newPosition.y < m_vertMin)
+			{
+				newPosition.y = m_vertMin;
+			}
+			else if (newPosition.y > m_vertMax - GetHeight())
+			{
+				newPosition.y = m_vertMax - GetHeight();
+			}
+
+			SetPosition(newPosition);
+
+			if (m_realTimeTracking)
+			{
+				OnThumbPositionChanged();
+			}
+		}
+		
+		// Handle horizontal movement if enabled
+		if (m_horizontalMovement && std::abs(delta.x) > 0.0f)
+		{
+			// Limit thumb position
+			if (!AnchorsSatisfyXPosition())
+			{
+				auto newPosition = Point(GetPosition().x + delta.x * scaleX, GetPosition().y);
+
+				// Ensure thumb stays within horizontal bounds
+				if (newPosition.x < m_horizontalMin) 
+				{
+					newPosition.x = m_horizontalMin;
+				}
+				else if (newPosition.x > m_horizontalMax - GetWidth()) 
+				{
+					newPosition.x = m_horizontalMax - GetWidth();
+				}
 
 				SetPosition(newPosition);
 			}
 			else
 			{
-				// Thumb is anchored
-				auto anchorIt = m_anchors.find(anchor_point::Top);
+				// Handle anchored horizontal movement with bounds checking
+				auto anchorIt = m_anchors.find(anchor_point::Left);
 				if (anchorIt != m_anchors.end())
 				{
-					anchorIt->second->SetOffset(anchorIt->second->GetOffset() + delta.y * scaleY);
+					float newOffset = anchorIt->second->GetOffset() + delta.x * scaleX;
+					
+					// Ensure thumb stays within horizontal bounds
+					if (GetX() + newOffset < m_horizontalMin)
+					{
+						newOffset = m_horizontalMin - GetX();
+					}
+					else if (GetX() + newOffset > m_horizontalMax - GetWidth())
+					{
+						newOffset = m_horizontalMax - GetWidth() - GetX();
+					}
+					
+					anchorIt->second->SetOffset(newOffset);
 				}
 				else
 				{
-					anchorIt = m_anchors.find(anchor_point::Bottom);
+					anchorIt = m_anchors.find(anchor_point::Right);
 					if (anchorIt != m_anchors.end())
 					{
-						anchorIt->second->SetOffset(anchorIt->second->GetOffset() + delta.y * scaleY);
+						float newOffset = anchorIt->second->GetOffset() + delta.x * scaleX;
+						
+						// Ensure thumb stays within horizontal bounds
+						if (GetX() + GetWidth() + newOffset > m_horizontalMax)
+						{
+							newOffset = m_horizontalMax - GetX() - GetWidth();
+						}
+						else if (GetX() + newOffset < m_horizontalMin)
+						{
+							newOffset = m_horizontalMin - GetX();
+						}
+						
+						anchorIt->second->SetOffset(newOffset);
 					}
 					else
 					{
-						anchorIt = m_anchors.find(anchor_point::VerticalCenter);
+						anchorIt = m_anchors.find(anchor_point::HorizontalCenter);
 						if (anchorIt != m_anchors.end())
 						{
-							anchorIt->second->SetOffset(anchorIt->second->GetOffset() + delta.y * scaleY);
+							float newOffset = anchorIt->second->GetOffset() + delta.x * scaleX;
+							
+							// Ensure thumb stays within horizontal bounds
+							float halfWidth = GetWidth() / 2.0f;
+							if (GetX() + halfWidth + newOffset > m_horizontalMax)
+							{
+								newOffset = m_horizontalMax - GetX() - halfWidth;
+							}
+							else if (GetX() - halfWidth + newOffset < m_horizontalMin)
+							{
+								newOffset = m_horizontalMin - GetX() + halfWidth;
+							}
+							
+							anchorIt->second->SetOffset(newOffset);
 						}
 						else
 						{
