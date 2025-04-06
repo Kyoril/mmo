@@ -255,6 +255,12 @@ namespace mmo
 		/// Gets the facing of this object.
 		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
 
+		void SetFacing(const Radian& facing)
+		{
+			m_movementInfo.facing = facing;
+			m_movementInfo.timestamp = GetAsyncTimeMs();
+		}
+
 		uint32 GetMapId() const;
 
 		virtual const String& GetName() const = 0;

@@ -1419,6 +1419,7 @@ namespace mmo
 		GameTime startTime;
 		GameTime endTime;
 		uint32 pathSize;
+		std::optional<Radian> targetRotation;
 
 		if (!(packet 
 			>> io::read_packed_guid(guid)
@@ -1433,6 +1434,23 @@ namespace mmo
 			>> io::read<float>(endPosition.z)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		uint8 hasTargetRotation;
+		if (!(packet >> io::read<uint8>(hasTargetRotation)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (hasTargetRotation)
+		{
+			float rotation;
+			if (!(packet >> io::read<float>(rotation)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			targetRotation = Radian(rotation);
 		}
 
 		// Find unit by guid
@@ -1489,8 +1507,7 @@ namespace mmo
 			}
 		}
 		
-
-		unitPtr->SetMovementPath(path, endTime - startTime);
+		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation);
 
 		return PacketParseResult::Pass;
 	}

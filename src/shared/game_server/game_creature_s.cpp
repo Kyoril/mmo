@@ -27,7 +27,7 @@ namespace mmo
 		ClearFieldChanges();
 
 		// Setup AI
-		m_ai = make_unique<CreatureAI>(*this, CreatureAI::Home(m_movementInfo.position));
+		m_ai = make_unique<CreatureAI>(*this, CreatureAI::Home(m_movementInfo.position, m_movementInfo.facing.GetValueRadians()));
 	}
 
 	void GameCreatureS::Relocate(const Vector3& position, const Radian& facing)

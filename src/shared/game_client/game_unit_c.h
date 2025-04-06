@@ -148,7 +148,7 @@ namespace mmo
 		void SetFacing(const Radian& facing);
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime);
+		void SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime, std::optional<Radian> targetRotation);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 

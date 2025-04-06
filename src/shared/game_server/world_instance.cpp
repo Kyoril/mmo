@@ -379,11 +379,11 @@ namespace mmo
 			m_universe.GetTimers(),
 			entry);
 
-		spawned->Initialize();
-		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
-
+		spawned->Initialize();
+		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		
 		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
 		spawned->SetWorldInstance(this);
 		spawned->SetEntry(entry);
@@ -395,12 +395,11 @@ namespace mmo
 	{
 		// Create the object
 		auto spawned = std::make_shared<GameWorldObjectS_Chest>(m_project, entry);
+		spawned->ApplyMovementInfo(
+			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
 		spawned->Initialize();
 		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Object));
-		DLOG("Spawned world object: " << log_hex_digit(spawned->GetGuid()));
-		spawned->ApplyMovementInfo(
-			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 		spawned->SetWorldInstance(this);
 
 		return std::static_pointer_cast<GameWorldObjectS_Base>(spawned);

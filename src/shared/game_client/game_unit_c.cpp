@@ -884,7 +884,7 @@ void GameUnitC::RefreshUnitName()
 		}
 	}
 
-	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime)
+	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime, std::optional<Radian> targetRotation)
 	{
 		m_movementAnimationTime = 0.0f;
 		m_movementAnimation.reset();
@@ -978,6 +978,14 @@ void GameUnitC::RefreshUnitName()
 		}
 
 		m_movementEnd = prevPosition;
+
+		if (targetRotation)
+		{
+			const auto frame = track->CreateNodeKeyFrame(keyFrameTimes[positions.size() - 1] + 0.1f);
+			frame->SetTranslate(positions.back());
+			frame->SetRotation(Quaternion(*targetRotation, Vector3::UnitY));
+			m_movementAnimation->SetDuration(keyFrameTimes[positions.size() - 1] + 0.1f);
+		}
 
 		if (GetCollisionProvider().GetHeightAt(m_movementEnd + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
 		{

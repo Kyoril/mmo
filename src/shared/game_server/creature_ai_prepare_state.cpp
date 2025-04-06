@@ -22,7 +22,10 @@ namespace mmo
 		CreatureAIState::OnEnter();
 
 		// Update home position
-		GetAI().SetHome(CreatureAI::Home(GetAI().GetControlled().GetPosition()));
+		GetAI().SetHome(
+			CreatureAI::Home(
+			GetAI().GetControlled().GetPosition(),
+			GetAI().GetControlled().GetFacing().GetValueRadians()));
 
 		m_preparation.ended.connect([this]()
 			{

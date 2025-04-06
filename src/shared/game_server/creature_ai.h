@@ -109,5 +109,6 @@ namespace mmo
 		scoped_connection m_onKilled;
 		scoped_connection m_onDespawned;
 		bool m_evading;
+		
 	};
 }

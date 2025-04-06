@@ -59,7 +59,7 @@ namespace mmo
 				// Fire signal since we reached our target
 				targetReached();
 
-				const Radian o = GetMoved().GetAngle(m_target.x, m_target.z);
+				const Radian o = m_customFacing.value_or(GetMoved().GetAngle(m_target.x, m_target.z));
 				auto& target = m_target;
 
 				// Update creatures position
@@ -93,9 +93,9 @@ namespace mmo
 		}
 	}
 
-	bool UnitMover::MoveTo(const Vector3& target, const IShape* clipping/* = nullptr*/)
+	bool UnitMover::MoveTo(const Vector3& target, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
-		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), clipping);
+		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), targetFacing, clipping);
 		m_customSpeed = false;
 		return result;
 	}
@@ -105,6 +105,7 @@ namespace mmo
 		uint64 guid,
 		const Vector3& oldPosition,
 		const std::vector<Vector3>& path,
+		const Radian* targetFacing,
 		GameTime startTime,
 		GameTime endTime
 	)
@@ -129,6 +130,15 @@ namespace mmo
 			<< io::write<float>(pt.y)
 			<< io::write<float>(pt.z);
 
+		if (targetFacing)
+		{
+			out_packet << io::write<uint8>(1) << io::write<float>(targetFacing->GetValueRadians());
+		}
+		else
+		{
+			out_packet << io::write<uint8>(0);
+		}
+
 		// Write points in between (if any)
 		if (path.size() > 1)
 		{
@@ -145,10 +155,11 @@ namespace mmo
 					<< io::write<uint32>(packed);
 			}
 		}
+
 		out_packet.Finish();
 	}
 
-	bool UnitMover::MoveTo(const Vector3& target, float customSpeed, const IShape* clipping/* = nullptr*/)
+	bool UnitMover::MoveTo(const Vector3& target, float customSpeed, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
 		auto& moved = GetMoved();
 
@@ -243,7 +254,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, m_moveStart, m_moveEnd);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, targetFacing, m_moveStart, m_moveEnd);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -252,6 +263,15 @@ namespace mmo
 				{
 					subscriber.SendPacket(packet, buffer);
 				});
+		}
+
+		if (targetFacing)
+		{
+			m_customFacing = *targetFacing;
+		}
+		else
+		{
+			m_customFacing.reset();
 		}
 
 		// Setup update timer if needed
@@ -312,7 +332,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, now, now);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, nullptr, now, now);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -322,6 +342,8 @@ namespace mmo
 					subscriber.SendPacket(packet, buffer);
 				});
 		}
+
+		m_customFacing.reset();
 
 		// Fire this trigger only here, not when movement was updated,
 		// since only then we are really stopping
@@ -366,10 +388,16 @@ namespace mmo
 		if (path.empty())
 			return;
 
+		Radian* customFacing = nullptr;
+		if (m_customFacing)
+		{
+			customFacing = &m_customFacing.value();
+		}
+
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
 		game::Protocol::OutgoingPacket packet(sink);
-		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, now, m_moveEnd);
+		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, customFacing, now, m_moveEnd);
 		subscriber.SendPacket(packet, buffer);
 	}
 }
