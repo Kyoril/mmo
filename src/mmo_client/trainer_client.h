@@ -43,6 +43,8 @@ namespace mmo
 
 		void BuySpell(uint32 index) const;
 
+		void OnSpellLearned(uint32 spellId);
+
 	private:
 		PacketParseResult OnTrainerList(game::IncomingPacket& packet);
 

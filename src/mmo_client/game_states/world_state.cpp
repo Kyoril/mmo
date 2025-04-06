@@ -1541,7 +1541,7 @@ namespace mmo
 				for (int32 i = 0; i < MaxActionButtons; ++i)
 				{
 					// Did we find an empty slot yet?
-					if (emptySlot == -1 && !m_actionBar.IsActionButtonUsable(i))
+					if (emptySlot == -1 && m_actionBar.GetActionButton(i).type == action_button_type::None)
 					{
 						// This is the first empty slot
 						emptySlot = i;
@@ -1562,6 +1562,9 @@ namespace mmo
 					m_actionBar.SetActionButton(emptySlot, { static_cast<uint16>(spellId), action_button_type::Spell });
 				}
 			}
+
+			// Update possible trainer spell list
+			m_trainerClient.OnSpellLearned(spellId);
 
 			FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
 		}

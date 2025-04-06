@@ -89,6 +89,18 @@ namespace mmo
 		m_realmConnector.TrainerBuySpell(m_trainerGuid, m_trainerSpells[index].spell->id());
 	}
 
+	void TrainerClient::OnSpellLearned(const uint32 spellId)
+	{
+		for (auto& trainerSpell : m_trainerSpells)
+		{
+			if (trainerSpell.spell->id() == spellId)
+			{
+				trainerSpell.isKnown = true;
+				break;
+			}
+		}
+	}
+
 	PacketParseResult TrainerClient::OnTrainerList(game::IncomingPacket& packet)
 	{
 		uint64 trainerGuid;
