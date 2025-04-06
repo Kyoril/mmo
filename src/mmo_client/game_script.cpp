@@ -776,7 +776,7 @@ namespace mmo
 		outUsable = false;
 	}
 
-	void GameScript::GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice) const
+	void GameScript::GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice, bool& outKnown) const
 	{
 		const auto& trainerSpells = m_trainerClient.GetTrainerSpells();
 		if (slot < 0 || slot >= trainerSpells.size())
@@ -785,6 +785,7 @@ namespace mmo
 			outName.clear();
 			outIcon.clear();
 			outPrice = 0;
+			outKnown = false;
 			return;
 		}
 
@@ -793,6 +794,7 @@ namespace mmo
 		outName = trainerSpells[slot].spell->name();
 		outIcon = trainerSpells[slot].spell->icon();
 		outPrice = trainerSpells[slot].cost;
+		outKnown = trainerSpells[slot].isKnown;
 	}
 
 	void GameScript::RegisterGlobalFunctions()
@@ -1131,7 +1133,7 @@ namespace mmo
 
 			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
-			luabind::def<std::function<void(int32, int32&, String&, String&, int32&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
+			luabind::def<std::function<void(int32, int32&, String&, String&, int32&, bool&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price, bool& out_known) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price, out_known); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>>()),
 			luabind::def<std::function<void(uint32)>>("BuyTrainerSpell", [this](uint32 slot) { this->m_trainerClient.BuySpell(slot); }),
 			luabind::def<std::function<void()>>("CloseTrainer", [this]() { this->m_trainerClient.CloseTrainer(); }),
 

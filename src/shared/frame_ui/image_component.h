@@ -53,6 +53,7 @@ namespace mmo
 		inline argb_t GetTint() const noexcept { return m_tint; }
 		void SetImageFile(const std::string& filename);
 		void SetImagePropertyName(std::string propertyName);
+		void SetTintPropertyName(std::string propertyName);
 
 		void SetSize(uint16 width, uint16 height);
 
@@ -75,8 +76,10 @@ namespace mmo
 		/// Color tint.
 		Color m_tint = Color::White;
 
-		std::string m_propertyName;
+		std::string m_imagePropertyName;
+		scoped_connection m_imagePropertyConnection;
 
-		scoped_connection_container m_propertyConnection;
+		std::string m_tintPropertyName;
+		scoped_connection m_tintPropertyConnection;
 	};
 }

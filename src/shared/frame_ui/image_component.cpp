@@ -32,7 +32,8 @@ namespace mmo
 		copy->m_tint = m_tint;
 		copy->m_filename = m_filename;
 		copy->m_texture = m_texture;
-		copy->m_propertyName = m_propertyName;
+		copy->m_imagePropertyName = m_imagePropertyName;
+		copy->m_tintPropertyName = m_tintPropertyName;
 		copy->m_width = m_width;
 		copy->m_height = m_height;
 
@@ -43,7 +44,8 @@ namespace mmo
 	{
 		FrameComponent::OnFrameChanged();
 
-		SetImagePropertyName(m_propertyName);
+		SetImagePropertyName(m_imagePropertyName);
+		SetTintPropertyName(m_tintPropertyName);
 	}
 
 	void ImageComponent::Render(const Rect& area, const Color& color)
@@ -151,27 +153,63 @@ namespace mmo
 
 	void ImageComponent::SetImagePropertyName(std::string propertyName)
 	{
-		m_propertyConnection.disconnect();
+		m_imagePropertyConnection.disconnect();
 
-		m_propertyName = std::move(propertyName);
-		if (m_propertyName.empty())
+		m_imagePropertyName = std::move(propertyName);
+		if (m_imagePropertyName.empty())
 		{
 			return;
 		}
 
-		auto* observedProperty = m_frame->GetProperty(m_propertyName);
+		auto* observedProperty = m_frame->GetProperty(m_imagePropertyName);
 		if (observedProperty == nullptr)
 		{
-			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_propertyName);
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_imagePropertyName);
 			return;
 		}
 
-		m_propertyConnection += observedProperty->Changed += [&](const Property& changedProperty)
+		m_imagePropertyConnection = observedProperty->Changed += [&](const Property& changedProperty)
 		{
 			SetImageFile(changedProperty.GetValue());
 		};
 
 		SetImageFile(observedProperty->GetValue());
+	}
+
+	void ImageComponent::SetTintPropertyName(std::string propertyName)
+	{
+		m_tintPropertyConnection.disconnect();
+
+		m_tintPropertyName = std::move(propertyName);
+		if (m_tintPropertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_tintPropertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_tintPropertyName);
+			return;
+		}
+
+		auto handler = [&](const Property& changedProperty)
+			{
+				argb_t argb;
+
+				std::stringstream colorStream;
+				colorStream.str(changedProperty.GetValue());
+				colorStream.clear();
+				colorStream >> std::hex >> argb;
+				SetTint(Color(argb));
+
+				m_frame->Invalidate(false);
+			};
+
+		m_tintPropertyConnection = observedProperty->Changed += handler;
+
+		// Trigger handler to initialize the property value
+		handler(*observedProperty);
 	}
 
 	void ImageComponent::SetSize(uint16 width, uint16 height)

@@ -934,14 +934,21 @@ namespace mmo
 		// Apply tint
 		if (attributes.Exists(ImageComponentTintAttribute))
 		{
-			argb_t argb;
+			if (tint.starts_with('$'))
+			{
+				component->SetTintPropertyName(tint.substr(1));
+			}
+			else
+			{
+				argb_t argb;
 
-			std::stringstream colorStream;
-			colorStream.str(tint);
-			colorStream.clear();
+				std::stringstream colorStream;
+				colorStream.str(tint);
+				colorStream.clear();
 
-			colorStream >> std::hex >> argb;
-			component->SetTint(argb);
+				colorStream >> std::hex >> argb;
+				component->SetTint(argb);
+			}
 		}
 
 		m_component = std::move(component);

@@ -18,6 +18,7 @@ namespace mmo
 			uint32 requiredLevel;
 			uint32 skill;
 			uint32 skillValue;
+			bool isKnown = false;
 		};
 
 	public:

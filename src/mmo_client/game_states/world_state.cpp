@@ -1562,13 +1562,13 @@ namespace mmo
 					m_actionBar.SetActionButton(emptySlot, { static_cast<uint16>(spellId), action_button_type::Spell });
 				}
 			}
+
+			FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
 		}
 		else
 		{
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
 		}
-
-		FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
 
 		return PacketParseResult::Pass;
 	}

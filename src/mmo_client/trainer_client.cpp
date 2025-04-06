@@ -130,6 +130,8 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			// Skip spells already known for now
+			trainerSpellEntry.isKnown = ObjectMgr::GetActivePlayer()->HasSpell(spellId);
 			m_trainerSpells.emplace_back(std::move(trainerSpellEntry));
 		}
 
