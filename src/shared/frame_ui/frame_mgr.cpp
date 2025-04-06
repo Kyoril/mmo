@@ -702,48 +702,58 @@ namespace mmo
 		// hovered frame.
 
 		// Only works if we have a top frame
-		if (m_topFrame != nullptr)
+		if (m_topFrame == nullptr)
 		{
-			// Find the frame at the lowest level for the given point
-			FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
+			return;
+		}
 
-			const Point delta = position - m_mousePos;
-			m_mousePos = position;
+		const Point delta = position - m_mousePos;
+		m_mousePos = position;
 
-			// Trigger mouse moved events
-			Frame* frame = hoverFrame.get();
-			while (frame)
+		// If there is a picked frame, trigger the mouse moved event for it
+		if (m_mouseDownFrames[MouseButton::Left])
+		{
+			m_mouseDownFrames[MouseButton::Left]->OnMouseMoved(m_mousePos, delta);
+			return;
+		}
+
+		// Find the frame at the lowest level for the given point
+		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
+
+
+		// Trigger mouse moved events
+		Frame* frame = hoverFrame.get();
+		while (frame)
+		{
+			frame->OnMouseMoved(m_mousePos, delta);
+			frame = frame->GetParent();
+		}
+
+		if (hoverFrame != m_hoverFrame)
+		{
+			auto prevFrame = m_hoverFrame;
+			m_hoverFrame = std::move(hoverFrame);
+
+			if (prevFrame)
 			{
-				frame->OnMouseMoved(m_mousePos, delta);
-				frame = frame->GetParent();
+				prevFrame->OnMouseLeave();
 			}
 
-			if (hoverFrame != m_hoverFrame)
+			if (m_hoverFrame)
 			{
-				auto prevFrame = m_hoverFrame;
-				m_hoverFrame = std::move(hoverFrame);
+				m_hoverFrame->OnMouseEnter();
+			}
 
-				if (prevFrame)
-				{
-					prevFrame->OnMouseLeave();
-				}
+			// Invalidate the old hover frame if there was any
+			if (prevFrame)
+			{
+				prevFrame->Invalidate(false);
+			}
 
-				if (m_hoverFrame)
-				{
-					m_hoverFrame->OnMouseEnter();
-				}
-
-				// Invalidate the old hover frame if there was any
-				if (prevFrame)
-				{
-					prevFrame->Invalidate(false);
-				}
-
-				// Invalidate the new hover frame if there is any
-				if (m_hoverFrame)
-				{
-					m_hoverFrame->Invalidate(false);
-				}
+			// Invalidate the new hover frame if there is any
+			if (m_hoverFrame)
+			{
+				m_hoverFrame->Invalidate(false);
 			}
 		}
 	}
@@ -783,6 +793,12 @@ namespace mmo
 		{
 			m_pressedButtons &= ~static_cast<int32>(button);
 			it->second->OnMouseUp(button, m_pressedButtons, position);
+
+			if (button == Left && it->second->IsHovered() && !it->second->GetAbsoluteFrameRect().IsPointInRect(position))
+			{
+				it->second->OnMouseLeave();
+			}
+
 			m_mouseDownFrames.erase(it);
 		}
 	}
