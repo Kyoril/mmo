@@ -20,8 +20,8 @@ add_definitions("/std:c++latest")
 add_compile_options(/arch:SSE2)
 
 # If in release mode, enable optimizations and link time code generation
-add_compile_options(/Zi)
-add_link_options(/DEBUG)
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG")
 
 # We want to use Vista or later API since we need this for
 # GetTickCount64 which is not available on XP and prior
