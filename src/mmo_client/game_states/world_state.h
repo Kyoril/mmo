@@ -281,6 +281,8 @@ namespace mmo
 
 		PacketParseResult OnSpellHealLog(game::IncomingPacket& packet);
 
+		PacketParseResult OnItemPushResult(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -318,6 +320,8 @@ namespace mmo
 		void OnAttackSwingErrorTimer();
 
 		void EnqueueNextAttackSwingTimer();
+
+		void OnItemPushCallback(const ItemInfo& itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount);
 
 	public:
 		// Begin NetClient interface
@@ -437,4 +441,5 @@ namespace mmo
 
 		void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object) override;
 	};
+
 }

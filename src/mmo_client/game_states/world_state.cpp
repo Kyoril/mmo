@@ -761,6 +761,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellEnergizeLog, *this, &WorldState::OnSpellEnergizeLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TransferPending, *this, &WorldState::OnTransferPending);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemPushResult, *this, &WorldState::OnItemPushResult);
+		
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
@@ -2618,6 +2620,37 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnItemPushResult(game::IncomingPacket& packet)
+	{
+		uint64 characterGuid;
+		bool wasLooted, wasCreated;
+		uint8 bag, subslot;
+		uint32 itemId;
+		uint16 amount, totalCount;
+
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint8>(wasLooted)
+			>> io::read<uint8>(wasCreated)
+			>> io::read<uint8>(bag)
+			>> io::read<uint8>(subslot)
+			>> io::read<uint32>(itemId)
+			>> io::read<uint16>(amount)
+			>> io::read<uint16>(totalCount)))
+		{
+			ELOG("Failed to read ItemPushResult packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Ask for the item info
+		m_cache.GetItemCache().Get(itemId, [this, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount](uint64, const ItemInfo& itemInfo)
+		{
+			OnItemPushCallback(itemInfo, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount);
+		});
+
+		return PacketParseResult::Pass;
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
 	{
@@ -3032,6 +3065,36 @@ namespace mmo
 			{
 				OnAttackSwingErrorTimer();
 			}, GetAsyncTimeMs() + 500);
+	}
+
+	void WorldState::OnItemPushCallback(const ItemInfo& itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
+	{
+		// TODO: UI events for chat display
+		if (characterGuid == ObjectMgr::GetActivePlayerGuid())
+		{
+			if (wasLooted)
+			{
+				DLOG("You looted item " << itemInfo.name << " x" << amount);
+			}
+			else
+			{
+				DLOG("You received item " << itemInfo.name << " x" << amount);
+			}
+		}
+		else
+		{
+			std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(characterGuid);
+			ASSERT(unit);
+
+			if (wasLooted)
+			{
+				DLOG(unit->GetName() << " looted item " << itemInfo.name << " x" << amount);
+			}
+			else
+			{
+				DLOG(unit->GetName() << " received item " << itemInfo.name << " x" << amount);
+			}
+		}
 	}
 
 	void WorldState::SendAttackStart(const uint64 victim, const GameTime timestamp)

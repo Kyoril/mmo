@@ -78,6 +78,16 @@ namespace mmo
 		// TODO
 	}
 
+	void GamePlayerS::OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated)
+	{
+		if (!m_netPlayerWatcher)
+		{
+			return;
+		}
+
+		m_netPlayerWatcher->OnItemAdded(slot, amount, wasLooted, wasCreated);
+	}
+
 	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
 	{
 		m_configuration = configuration;
@@ -650,11 +660,20 @@ namespace mmo
 		// Second loop needed to actually create the items
 		for (auto& pair : rewardedItems)
 		{
-			auto result = m_inventory.CreateItems(*pair.first, pair.second);
+			std::map<uint16, uint16> addedBySlot;
+			auto result = m_inventory.CreateItems(*pair.first, pair.second, &addedBySlot);
 			if (result != inventory_change_failure::Okay)
 			{
 				//inventoryChangeFailure(result, nullptr, nullptr);
 				return false;
+			}
+
+			if (m_netPlayerWatcher)
+			{
+				for (auto& slot : addedBySlot)
+				{
+					m_netPlayerWatcher->OnItemAdded(slot.first, slot.second, false, false);
+				}
 			}
 		}
 

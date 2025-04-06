@@ -1872,4 +1872,28 @@ namespace mmo
 		// Save character due to quest data change
 		SaveCharacterData();
 	}
+
+	void Player::OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated)
+	{
+		if (std::shared_ptr<GameItemS> inst = m_character->GetInventory().GetItemAtSlot(slot))
+		{
+			uint8 bag = 0, subslot = 0;
+			Inventory::GetRelativeSlots(slot, bag, subslot);
+			const auto totalCount = m_character->GetInventory().GetItemCount(inst->GetEntry().id());
+
+			SendPacket([bag, subslot, amount, totalCount, &inst, wasLooted, wasCreated, this](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::ItemPushResult);
+				packet
+					<< io::write<uint64>(GetCharacterGuid())
+					<< io::write<uint8>(wasLooted ? 1 : 0)
+					<< io::write<uint8>(wasCreated ? 1 : 0)
+					<< io::write<uint8>(bag)
+					<< io::write<uint8>(subslot)
+					<< io::write<uint32>(inst->GetEntry().id())
+					<< io::write<uint16>(amount)
+					<< io::write<uint16>(totalCount);
+				packet.Finish();
+				});
+		}
+	}
 }

@@ -440,6 +440,8 @@ namespace mmo
 
 		void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) override;
 
+		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

@@ -74,16 +74,28 @@ namespace mmo
 
 		for (auto& slot : addedBySlot)
 		{
-			auto inst = inventory.GetItemAtSlot(slot.first);
-			if (inst)
-			{
-				uint8 bag = 0, subslot = 0;
-				Inventory::GetRelativeSlots(slot.first, bag, subslot);
-				const auto totalCount = inventory.GetItemCount(item->id());
+			OnItemAdded(slot.first, slot.second, true, false);
 
-				//sendProxyPacket(
-				//	std::bind(server_write::itemPushResult, std::placeholders::_1,
-				//		m_character->getGuid(), std::cref(*inst), true, false, bag, subslot, slot.second, totalCount));
+			if (m_character->GetGroupId() != 0)
+			{
+				m_character->ForEachSubscriberInSight([&slot, this](TileSubscriber& subscriber)
+					{
+						if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
+						{
+							return;
+						}
+
+						if (!subscriber.GetGameUnit().IsPlayer())
+						{
+							return;
+						}
+
+						auto& player = subscriber.GetGameUnit().AsPlayer();
+						if (player.GetGroupId() == m_character->GetGroupId())
+						{
+							player.OnItemAdded(slot.first, slot.second, true, false);
+						}
+					});
 			}
 		}
 

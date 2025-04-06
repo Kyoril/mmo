@@ -31,6 +31,8 @@ namespace mmo
 		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) = 0;
 
 		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;
+
+		virtual void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) = 0;
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -99,6 +101,8 @@ namespace mmo
 		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit) override;
 
 		void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit) override;
+
+		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated);
 
 	public:
 

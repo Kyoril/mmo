@@ -383,6 +383,8 @@ namespace mmo
 
 				ObjectQueryResult,
 
+				ItemPushResult,
+
 				/// Counter constant
 				Count_,
 			};
