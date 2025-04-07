@@ -210,6 +210,11 @@ namespace mmo
 		// No-op in null device
 	}
 
+	void GraphicsDeviceNull::SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT)
+	{
+		// No-op in null device
+	}
+
 	void GraphicsDeviceNull::SetFillMode(FillMode mode)
 	{
 		GraphicsDevice::SetFillMode(mode);

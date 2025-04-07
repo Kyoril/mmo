@@ -24,6 +24,7 @@ namespace mmo
 			Version_0_1 = 0x0100,
 			Version_0_2 = 0x0200,
 			Version_0_3 = 0x0300,
+			Version_0_4 = 0x0400,
 		};	
 	}
 
@@ -87,5 +88,7 @@ namespace mmo
 
 	private:
 		Material& m_material;
+
+		MaterialVersion m_version{ material_version::Latest };
 	};
 }

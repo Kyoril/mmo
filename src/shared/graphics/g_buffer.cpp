@@ -61,11 +61,13 @@ namespace mmo
 			m_emissiveRT
 		};
 
-		// Set the render targets
-		m_device.SetRenderTargets(renderTargets, 4);
+		// Set the render targets with depth stencil
+		m_device.SetRenderTargetsWithDepthStencil(renderTargets, 4, m_depthRT);
 
 		// Set the viewport to match the G-Buffer size
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
+
+		m_depthRT->Clear(ClearFlags::DepthStencil);
 	}
 
 	void GBuffer::Unbind()

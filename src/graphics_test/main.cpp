@@ -42,22 +42,9 @@ namespace mmo
 
 	void OnPaint()
 	{
+		// Since our deferred renderer renders directly to the back buffer,
+		// we don't need to do any additional rendering here
 		RenderScene();
-
-		GraphicsDevice& gx = GraphicsDevice::Get();
-
-		// Render the final result from the deferred renderer to the screen
-		gx.SetTransformMatrix(World, Matrix4::Identity);
-		gx.SetTransformMatrix(View, Matrix4::Identity);
-		gx.SetTransformMatrix(Projection, Matrix4::Identity);
-		gx.SetVertexFormat(VertexFormat::PosColorTex1);
-		gx.SetTopologyType(TopologyType::TriangleList);
-		gx.SetTextureFilter(TextureFilter::None);
-		gx.SetTextureAddressMode(TextureAddressMode::Clamp);
-		gx.BindTexture(g_deferredRenderer->GetFinalRenderTarget(), ShaderType::PixelShader, 0);
-
-		g_fullScreenQuadBuffer->Set(0);
-		gx.Draw(6);
 	}
 
     scoped_connection_container signals;

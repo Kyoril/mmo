@@ -978,6 +978,29 @@ namespace mmo
 		m_immContext->OMSetRenderTargets(count, rtvs, nullptr);
 	}
 
+	void GraphicsDeviceD3D11::SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT)
+	{
+		ASSERT(count <= D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
+		ASSERT(depthStencilRT);
+
+		// Collect render target views
+		ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+		for (uint32 i = 0; i < count; ++i)
+		{
+			ASSERT(renderTargets[i]);
+			auto* rtd3d11 = static_cast<RenderTextureD3D11*>(renderTargets[i].get());
+			rtvs[i] = rtd3d11->GetRenderTargetView();
+		}
+
+		// Get the depth stencil view
+		auto* depthStencilD3D11 = static_cast<RenderTextureD3D11*>(depthStencilRT.get());
+		ID3D11DepthStencilView* dsv = depthStencilD3D11->GetDepthStencilView();
+		ASSERT(dsv);
+
+		// Set render targets with depth stencil
+		m_immContext->OMSetRenderTargets(count, rtvs, dsv);
+	}
+
 	void GraphicsDeviceD3D11::SetFillMode(const FillMode mode)
 	{
 		if (m_fillMode == mode)

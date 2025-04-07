@@ -26,6 +26,7 @@ namespace mmo
 		/// The stencil buffer is cleared.
 		Stencil = 4,
 
+		DepthStencil = Depth | Depth,
 		ColorDepth = Color | Depth,
 		All = Color | Depth | Stencil,
 	};

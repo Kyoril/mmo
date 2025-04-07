@@ -257,6 +257,12 @@ namespace mmo
 		/// @param count Number of render targets.
 		virtual void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) = 0;
 
+		/// Sets multiple render targets for rendering with a depth stencil buffer.
+		/// @param renderTargets Array of render targets.
+		/// @param count Number of render targets.
+		/// @param depthStencilRT The render texture to use as depth stencil buffer.
+		virtual void SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT) = 0;
+
 		/// Sets the fill mode of polygons.
 		virtual void SetFillMode(FillMode mode);
 

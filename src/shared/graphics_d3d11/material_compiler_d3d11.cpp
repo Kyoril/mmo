@@ -681,47 +681,51 @@ namespace mmo
 				<< "\treturn worldNormal;\n"
 				<< "}\n\n";
 
-			// fresnelSchlick
-			m_pixelShaderStream
-				<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
-				<< "{\n"
-				<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
-				<< "}\n\n";
+			if (type != PixelShaderType::GBuffer)
+			{
+				// fresnelSchlick
+				m_pixelShaderStream
+					<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
+					<< "{\n"
+					<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
+					<< "}\n\n";
 
-			// DistributionGGX
-			m_pixelShaderStream
-				<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
-				<< "{\n"
-				<< "\tfloat a      = roughness*roughness;\n"
-				<< "\tfloat a2     = a*a;\n"
-				<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
-				<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
-				<< "\tfloat num   = a2;\n"
-				<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
-				<< "\tdenom = PI * denom * denom;\n"
-				<< "\treturn num / denom;\n"
-				<< "}\n\n";
+				// DistributionGGX
+				m_pixelShaderStream
+					<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
+					<< "{\n"
+					<< "\tfloat a      = roughness*roughness;\n"
+					<< "\tfloat a2     = a*a;\n"
+					<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
+					<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
+					<< "\tfloat num   = a2;\n"
+					<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+					<< "\tdenom = PI * denom * denom;\n"
+					<< "\treturn num / denom;\n"
+					<< "}\n\n";
 
-			// GeometrySchlickGGX
-			m_pixelShaderStream
-				<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
-				<< "{\n"
-				<< "\tfloat r = (roughness + 1.0);\n"
-				<< "\tfloat k = (r*r) / 8.0;\n"
-				<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
-				<< "\treturn NdotV / denom;\n"
-				<< "}\n\n";
+				// GeometrySchlickGGX
+				m_pixelShaderStream
+					<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
+					<< "{\n"
+					<< "\tfloat r = (roughness + 1.0);\n"
+					<< "\tfloat k = (r*r) / 8.0;\n"
+					<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
+					<< "\treturn NdotV / denom;\n"
+					<< "}\n\n";
 
-			// GeometrySmith
-			m_pixelShaderStream
-				<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
-				<< "{\n"
-				<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
-				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-				<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
-				<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
-				<< "\treturn ggx1 * ggx2;\n"
-				<< "}\n\n";
+				// GeometrySmith
+				m_pixelShaderStream
+					<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
+					<< "{\n"
+					<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
+					<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+					<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
+					<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
+					<< "\treturn ggx1 * ggx2;\n"
+					<< "}\n\n";
+			}
+
 		}
 		
 		for (const auto& [name, code] : m_globalFunctions)
@@ -890,59 +894,66 @@ namespace mmo
 		m_pixelShaderStream
 			<< "\tif (opacity <= 0.333) { clip(-1); }\n";
 
-		m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+		if (type != PixelShaderType::GBuffer)
+		{
+			m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+		}
+
 		m_pixelShaderStream
 			<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
 
-		if (m_lit)
+		if (type != PixelShaderType::GBuffer)
 		{
-			m_pixelShaderStream
-				<< "\tfloat3 F0 = 0.04;\n"
-				<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
+			if (m_lit)
+			{
+				m_pixelShaderStream
+					<< "\tfloat3 F0 = 0.04;\n"
+					<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
 
-			m_pixelShaderStream
-				<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
-				<< "\tfloat3 H = normalize(V + L);\n"				
-				<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
-			
-			m_pixelShaderStream
-				<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
-				<< "\tfloat G   = GeometrySmith(N, V, L, roughness);\n"
-				<< "\tfloat3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);\n";
-			
-			m_pixelShaderStream
-				<< "\tfloat3 kS = F;\n"
-				<< "\tfloat3 kD = 1.0f.xxx - kS;\n"
-				<< "\tkD *= 1.0 - metallic;\n";
-			
-			m_pixelShaderStream
-				<< "\tfloat3 numerator    = NDF * G * F;\n"
-				<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
-				<< "\tfloat3 specularity     = numerator / denominator;\n";
+				m_pixelShaderStream
+					<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
+					<< "\tfloat3 H = normalize(V + L);\n"
+					<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
 
-			m_pixelShaderStream
-				<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-				<< "\tfloat3 Lo = (kD * baseColor / PI + specularity) * radiance * NdotL;\n";
+				m_pixelShaderStream
+					<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
+					<< "\tfloat G   = GeometrySmith(N, V, L, roughness);\n"
+					<< "\tfloat3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);\n";
 
-			m_pixelShaderStream
-				<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
-				<< "\tkD = 1.0f.xxx - kS;\n"
-				<< "\tkD *= 1.0 - metallic;\n"
-				<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
-				<< "\tfloat3 diffuse = irradiance * baseColor;\n"
-				<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
+				m_pixelShaderStream
+					<< "\tfloat3 kS = F;\n"
+					<< "\tfloat3 kD = 1.0f.xxx - kS;\n"
+					<< "\tkD *= 1.0 - metallic;\n";
 
-			m_pixelShaderStream
-				<< "\tfloat3 color = ambient + Lo;\n";
+				m_pixelShaderStream
+					<< "\tfloat3 numerator    = NDF * G * F;\n"
+					<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
+					<< "\tfloat3 specularity     = numerator / denominator;\n";
 
-			m_pixelShaderStream
-				<< "\tcolor = color / (color + 1.0f.xxx);\n"
-				<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+				m_pixelShaderStream
+					<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+					<< "\tfloat3 Lo = (kD * baseColor / PI + specularity) * radiance * NdotL;\n";
 
-			m_pixelShaderStream
-				<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
-				<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
-				<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+				m_pixelShaderStream
+					<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
+					<< "\tkD = 1.0f.xxx - kS;\n"
+					<< "\tkD *= 1.0 - metallic;\n"
+					<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
+					<< "\tfloat3 diffuse = irradiance * baseColor;\n"
+					<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
+
+				m_pixelShaderStream
+					<< "\tfloat3 color = ambient + Lo;\n";
+
+				m_pixelShaderStream
+					<< "\tcolor = color / (color + 1.0f.xxx);\n"
+					<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+
+				m_pixelShaderStream
+					<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
+					<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
+					<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+			}
 		}
 
 		// Combining it
@@ -952,21 +963,43 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tGBufferOutput output;\n";
 			
-			// Albedo
-			m_pixelShaderStream
-				<< "\toutput.albedo = float4(baseColor, opacity);\n";
-			
-			// Normal
-			m_pixelShaderStream
-				<< "\toutput.normal = float4(N * 0.5 + 0.5, 0.0);\n";
-			
-			// Material properties
-			m_pixelShaderStream
-				<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
-			
-			// Emissive (not used yet)
-			m_pixelShaderStream
-				<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+			// For unlit materials, write base color to emissive instead of albedo
+			if (!m_lit)
+			{
+				// Albedo - empty for unlit materials
+				m_pixelShaderStream
+					<< "\toutput.albedo = float4(0.0, 0.0, 0.0, opacity);\n";
+				
+				// Normal - default up vector for unlit materials
+				m_pixelShaderStream
+					<< "\toutput.normal = float4(0.5, 0.5, 1.0, 0.0);\n";
+
+				// Material properties
+				m_pixelShaderStream
+					<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
+				
+				// Emissive - use base color for unlit materials
+				m_pixelShaderStream
+					<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+			}
+			else
+			{
+				// Albedo
+				m_pixelShaderStream
+					<< "\toutput.albedo = float4(baseColor, opacity);\n";
+				
+				// Normal
+				m_pixelShaderStream
+					<< "\toutput.normal = float4(N * 0.5 + 0.5, 0.0);\n";
+				
+				// Material properties
+				m_pixelShaderStream
+					<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
+				
+				// Emissive - empty for lit materials
+				m_pixelShaderStream
+					<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+			}
 			
 			// Return G-Buffer output
 			m_pixelShaderStream

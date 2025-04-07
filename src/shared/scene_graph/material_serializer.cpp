@@ -30,6 +30,7 @@ namespace mmo
 	{
 		uint32 version;
 		reader >> io::read<uint32>(version);
+		m_version = static_cast<MaterialVersion>(version);
 
 		if (reader)
 		{
@@ -266,12 +267,15 @@ namespace mmo
 			// Read shader type (for newer versions)
 			PixelShaderType shaderType = PixelShaderType::Forward;
 
-			uint8 shaderTypeValue;
-			if (reader >> io::read<uint8>(shaderTypeValue))
+			if (m_version >= material_version::Version_0_4)
 			{
-				shaderType = static_cast<PixelShaderType>(shaderTypeValue);
+				uint8 shaderTypeValue;
+				if (reader >> io::read<uint8>(shaderTypeValue))
+				{
+					shaderType = static_cast<PixelShaderType>(shaderTypeValue);
+				}
 			}
-
+			
 			uint32 shaderCodeSize;
 			if (!(reader >> io::read<uint32>(shaderCodeSize)))
 			{
@@ -392,7 +396,7 @@ namespace mmo
 
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_3;
+		version = material_version::Version_0_4;
 		
 		// File version chunk
 		{

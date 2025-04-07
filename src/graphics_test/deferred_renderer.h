@@ -49,11 +49,24 @@ namespace mmo
         /// @param camera The camera to use for rendering.
         void RenderLightingPass(Scene& scene, Camera& camera);
 
+    public:
+        /// @brief Maximum number of lights that can be processed in a single pass.
+        static constexpr uint32 MAX_LIGHTS = 16;
+
     private:
         /// @brief The graphics device.
         GraphicsDevice& m_device;
 
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
+
+        /// @brief The lighting material.
+        MaterialPtr m_lightingMaterial;
+
+        /// @brief The light buffer.
+        ConstantBufferPtr m_lightBuffer;
+
+        /// @brief The ambient light color.
+        Vector3 m_ambientColor { 0.1f, 0.1f, 0.1f };
     };
 }

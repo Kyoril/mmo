@@ -43,6 +43,10 @@ namespace mmo
 		/// @return The render target view.
 		inline ID3D11RenderTargetView* GetRenderTargetView() const { return m_renderTargetView.Get(); }
 
+		/// @brief Gets the depth stencil view.
+		/// @return The depth stencil view.
+		inline ID3D11DepthStencilView* GetDepthStencilView() const { return m_depthStencilView.Get(); }
+
 	private:
 		void CreateResources();
 

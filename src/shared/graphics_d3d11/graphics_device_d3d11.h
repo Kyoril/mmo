@@ -84,6 +84,8 @@ namespace mmo
 
 		void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) override;
 
+		void SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT) override;
+
 		void SetFillMode(FillMode mode) override;
 
 		void SetFaceCullMode(FaceCullMode mode) override;
