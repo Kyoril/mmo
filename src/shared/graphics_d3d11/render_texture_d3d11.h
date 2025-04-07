@@ -15,7 +15,7 @@ namespace mmo
 		, public RenderTargetD3D11
 	{
 	public:
-		RenderTextureD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height);
+		RenderTextureD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height, PixelFormat format = PixelFormat::R8G8B8A8);
 		~RenderTextureD3D11() override;
 
 
@@ -38,6 +38,10 @@ namespace mmo
 
 	public:
 		inline ID3D11ShaderResourceView* GetShaderResourceView() const { return m_shaderResourceView.Get(); }
+
+		/// @brief Gets the render target view.
+		/// @return The render target view.
+		inline ID3D11RenderTargetView* GetRenderTargetView() const { return m_renderTargetView.Get(); }
 
 	private:
 		void CreateResources();

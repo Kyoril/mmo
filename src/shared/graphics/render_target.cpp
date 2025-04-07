@@ -19,6 +19,12 @@ namespace mmo
 		GraphicsDevice::Get().RenderTargetActivated(shared_from_this());
 	}
 
+	void RenderTarget::Resize(uint16 width, uint16 height)
+	{
+		m_width = width;
+		m_height = height;
+	}
+
 	MultiRenderTarget::MultiRenderTarget(std::string name, const uint16 width, const uint16 height, PixelFormat format) noexcept
 		: RenderTarget(std::move(name), width, height)
 	{

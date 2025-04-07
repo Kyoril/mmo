@@ -279,6 +279,23 @@ namespace mmo
 		// Nothing to render
 	}
 
+	void Light::GetLightParameters(Vector3& outDirection, Color& outColor, float& outIntensity) const
+	{
+		// For directional lights, use the derived direction
+		if (GetType() == LightType::Directional)
+		{
+			outDirection = GetDerivedDirection();
+		}
+		// For point and spot lights, we don't use direction in the same way
+		else
+		{
+			outDirection = Vector3::Zero;
+		}
+
+		outColor = GetColor();
+		outIntensity = m_powerScale;
+	}
+
 	void Light::Update() const
 	{
 		if (m_derivedTransformDirty)

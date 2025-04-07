@@ -110,6 +110,16 @@ namespace mmo
 
 		[[nodiscard]] bool IsInLightRange(const AABB& aabb) const;
 
+		/// @brief Gets the light parameters for deferred rendering.
+		/// @param outDirection Output parameter for the light direction.
+		/// @param outColor Output parameter for the light color.
+		/// @param outIntensity Output parameter for the light intensity.
+		virtual void GetLightParameters(Vector3& outDirection, Color& outColor, float& outIntensity) const;
+
+		/// @brief Determines whether this light casts shadows.
+		/// @return True if this light casts shadows, false otherwise.
+		[[nodiscard]] bool CastsShadows() const { return false; } // Default implementation returns false
+
 	public:
 		virtual void NotifyAttachmentChanged(Node* parent, bool isTagPoint) override;
 

@@ -12,6 +12,7 @@
 #include "graphics/render_target.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/octree_scene.h"
+#include "deferred_renderer.h"
 
 namespace mmo
 {
@@ -22,24 +23,13 @@ namespace mmo
 	SceneNode* g_boarNode = nullptr;
 	Entity* g_boarEntity = nullptr;
 
-	RenderTexturePtr g_sceneRenderTarget = nullptr;
 	VertexBufferPtr g_fullScreenQuadBuffer = nullptr;
+	std::unique_ptr<DeferredRenderer> g_deferredRenderer = nullptr;
 
 	void RenderScene()
 	{
-		GraphicsDevice& gx = GraphicsDevice::Get();
-
-		gx.CaptureState();
-
-		// Activate our scene render target
-		g_sceneRenderTarget->Activate();
-		g_sceneRenderTarget->Clear(ClearFlags::All);
-
-		// Render our scene
-		g_scene->Render(*g_camera);
-		g_sceneRenderTarget->Update();
-
-		gx.RestoreState();
+		// Use deferred renderer to render the scene
+		g_deferredRenderer->Render(*g_scene, *g_camera);
 	}
 
 	void OnIdle(float elapsedTime, GameTime time)
@@ -54,7 +44,7 @@ namespace mmo
 
 		GraphicsDevice& gx = GraphicsDevice::Get();
 
-		// Render our full screen quad with the scene render target assigned to it
+		// Render the final result from the deferred renderer to the screen
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(View, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, Matrix4::Identity);
@@ -62,7 +52,7 @@ namespace mmo
 		gx.SetTopologyType(TopologyType::TriangleList);
 		gx.SetTextureFilter(TextureFilter::None);
 		gx.SetTextureAddressMode(TextureAddressMode::Clamp);
-		gx.BindTexture(g_sceneRenderTarget, ShaderType::PixelShader, 0);
+		gx.BindTexture(g_deferredRenderer->GetFinalRenderTarget(), ShaderType::PixelShader, 0);
 
 		g_fullScreenQuadBuffer->Set(0);
 		gx.Draw(6);
@@ -119,9 +109,23 @@ namespace mmo
 		ASSERT(g_boarEntity);
 		g_boarNode->AttachObject(*g_boarEntity);
 
-		// Create the render target for our scene
-		g_sceneRenderTarget = GraphicsDevice::Get().CreateRenderTexture("Scene", 1280, 800);
+		// Create a directional light for the scene
+		Light& directionalLight = g_scene->CreateLight("MainLight", LightType::Directional);
+		directionalLight.SetColor(Color(1.0f, 0.95f, 0.8f)); // Warm sunlight color
+		
+		// Create a light node and attach the light
+		SceneNode& lightNode = g_scene->CreateSceneNode("MainLightNode");
+		lightNode.AttachObject(directionalLight);
+		
+		// Set the light direction (pointing down and slightly to the side)
+		Vector3 direction(-0.5f, -1.0f, -0.3f);
+		direction.Normalize();
+		lightNode.SetDirection(direction);
 
+		// Create deferred renderer
+		g_deferredRenderer = std::make_unique<DeferredRenderer>(1280, 800);
+
+		// Create full screen quad for final rendering
 		const POS_COL_TEX_VERTEX vertices[6] = {
 			{ Vector3(-1.0f, -1.0f, 0.0f), Color::White, {0.0f, 1.0f}},
 			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}},
@@ -162,7 +166,7 @@ namespace mmo
 			g_camera = nullptr;
 		}
 		
-		g_sceneRenderTarget.reset();
+		g_deferredRenderer.reset();
 		g_scene.reset();
 	}
 

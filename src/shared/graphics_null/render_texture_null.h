@@ -15,7 +15,7 @@ namespace mmo
 		, public RenderTargetNull
 	{
 	public:
-		RenderTextureNull(GraphicsDeviceNull& device, std::string name, uint16 width, uint16 height);
+		RenderTextureNull(GraphicsDeviceNull& device, std::string name, uint16 width, uint16 height, PixelFormat format = PixelFormat::R8G8B8A8);
 		~RenderTextureNull() override = default;
 
 	public:

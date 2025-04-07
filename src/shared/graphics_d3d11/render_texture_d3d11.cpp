@@ -12,8 +12,8 @@
 
 namespace mmo
 {
-	RenderTextureD3D11::RenderTextureD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height)
-		: RenderTexture(std::move(name), width, height)
+	RenderTextureD3D11::RenderTextureD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height, PixelFormat format)
+		: RenderTexture(std::move(name), width, height, format)
 		, RenderTargetD3D11(device)
 		, m_resizePending(false)
 	{
@@ -97,6 +97,27 @@ namespace mmo
 		// Obtain the d3d11 device object
 		ID3D11Device& d3d_dev = m_device;
 
+		// Map pixel format to DXGI format
+		DXGI_FORMAT dxgiFormat;
+		switch (m_format)
+		{
+		case PixelFormat::R8G8B8A8:
+			dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case PixelFormat::B8G8R8A8:
+			dxgiFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+			break;
+		case PixelFormat::R16G16B16A16:
+			dxgiFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			break;
+		case PixelFormat::R32G32B32A32:
+			dxgiFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
+			break;
+		default:
+			dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		}
+
 		// Initialize the render target texture description.
 		D3D11_TEXTURE2D_DESC textureDesc;
 		ZeroMemory(&textureDesc, sizeof(textureDesc));
@@ -104,7 +125,7 @@ namespace mmo
 		textureDesc.Height = m_height;
 		textureDesc.MipLevels = 1;
 		textureDesc.ArraySize = 1;
-		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;	// TODO: expose format
+		textureDesc.Format = dxgiFormat;
 		textureDesc.SampleDesc.Count = 1;
 		textureDesc.SampleDesc.Quality = 0;
 		textureDesc.Usage = D3D11_USAGE_DEFAULT;

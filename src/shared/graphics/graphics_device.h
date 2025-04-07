@@ -249,6 +249,14 @@ namespace mmo
 		/// Creates a new render texture.
 		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) = 0;
 
+		/// Creates a new render texture with a specific pixel format.
+		virtual RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format) = 0;
+
+		/// Sets multiple render targets for rendering.
+		/// @param renderTargets Array of render targets.
+		/// @param count Number of render targets.
+		virtual void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) = 0;
+
 		/// Sets the fill mode of polygons.
 		virtual void SetFillMode(FillMode mode);
 

@@ -359,6 +359,10 @@ namespace mmo
 
 		MaterialPtr GetDefaultMaterial();
 
+		/// @brief Gets all lights in the scene.
+		/// @return A vector of all lights in the scene.
+		std::vector<Light*> GetAllLights() const;
+
 	protected:
 		void RenderVisibleObjects();
 		

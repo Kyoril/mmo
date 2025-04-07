@@ -213,6 +213,19 @@ namespace mmo
 		return m_defaultMaterial;
 	}
 
+	std::vector<Light*> Scene::GetAllLights() const
+	{
+		std::vector<Light*> lights;
+		lights.reserve(m_lights.size());
+
+		for (const auto& [name, light] : m_lights)
+		{
+			lights.push_back(light.get());
+		}
+
+		return lights;
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)

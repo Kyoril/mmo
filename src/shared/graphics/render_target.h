@@ -46,7 +46,7 @@ namespace mmo
 		virtual void Clear(ClearFlags flags) = 0;
 
 		/// Resizes the render target to the new size. Note that this might not happen immediately, depending on the render target.
-		virtual void Resize(uint16 width, uint16 height) = 0;
+		virtual void Resize(uint16 width, uint16 height);
 
 		/// Updates the render target. Call after all render operations finished.
 		virtual void Update() = 0;

@@ -955,6 +955,29 @@ namespace mmo
 		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
 	}
 
+	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format)
+	{
+		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height, format);
+	}
+
+	void GraphicsDeviceD3D11::SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count)
+	{
+		ASSERT(count > 0 && count <= D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
+		ASSERT(renderTargets != nullptr);
+
+		// Collect render target views
+		ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+		for (uint32 i = 0; i < count; ++i)
+		{
+			ASSERT(renderTargets[i]);
+			auto* rtd3d11 = static_cast<RenderTextureD3D11*>(renderTargets[i].get());
+			rtvs[i] = rtd3d11->GetRenderTargetView();
+		}
+
+		// Set render targets
+		m_immContext->OMSetRenderTargets(count, rtvs, nullptr);
+	}
+
 	void GraphicsDeviceD3D11::SetFillMode(const FillMode mode)
 	{
 		if (m_fillMode == mode)

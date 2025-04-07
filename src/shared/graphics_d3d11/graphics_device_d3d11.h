@@ -80,6 +80,10 @@ namespace mmo
 
 		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
 
+		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format) override;
+
+		void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) override;
+
 		void SetFillMode(FillMode mode) override;
 
 		void SetFaceCullMode(FaceCullMode mode) override;
