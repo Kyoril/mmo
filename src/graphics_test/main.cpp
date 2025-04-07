@@ -13,6 +13,8 @@
 #include "graphics/render_texture.h"
 #include "scene_graph/octree_scene.h"
 #include "deferred_renderer.h"
+#include "log/default_log.h"
+#include "log/log_entry.h"
 
 namespace mmo
 {
@@ -111,7 +113,7 @@ namespace mmo
 
 		// Create a directional light for the scene
 		Light& directionalLight = g_scene->CreateLight("MainLight", LightType::Directional);
-		directionalLight.SetColor(Color(1.0f, 0.95f, 0.8f)); // Warm sunlight color
+		directionalLight.SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
 		
 		// Create a light node and attach the light
 		SceneNode& lightNode = g_scene->CreateSceneNode("MainLightNode");
@@ -123,16 +125,16 @@ namespace mmo
 		lightNode.SetDirection(direction);
 
 		// Create deferred renderer
-		g_deferredRenderer = std::make_unique<DeferredRenderer>(1280, 800);
+		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 1280, 800);
 
 		// Create full screen quad for final rendering
 		const POS_COL_TEX_VERTEX vertices[6] = {
-			{ Vector3(-1.0f, -1.0f, 0.0f), Color::White, {0.0f, 1.0f}},
-			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}},
-			{ Vector3(-1.0f, 1.0f, 0.0f), Color::White, {0.0f, 0.0f}},
-			{ Vector3(-1.0f, 1.0f, 0.0f), Color::White, {0.0f, 0.0f}},
-			{ Vector3(1.0f, -1.0f, 0.0f), Color::White, {1.0f, 1.0f}},
-			{ Vector3(1.0f, 1.0f, 0.0f), Color::White, {1.0f, 0.0f}}
+			{ Vector3(-1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 1.0f}},
+			{ Vector3(1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 1.0f}},
+			{ Vector3(-1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 0.0f}},
+			{ Vector3(-1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 0.0f}},
+			{ Vector3(1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 1.0f}},
+			{ Vector3(1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 0.0f}}
 		};
 
 		g_fullScreenQuadBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::Static, vertices);
@@ -172,6 +174,12 @@ namespace mmo
 
 	int CommonMain()
 	{
+		std::mutex logMutex;
+		mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry& entry) {
+			std::scoped_lock lock{ logMutex };
+			OutputDebugStringA((entry.message + "\n").c_str());
+			});
+
 		// Setup scene and everything
 		if (InitializeGlobal())
 		{

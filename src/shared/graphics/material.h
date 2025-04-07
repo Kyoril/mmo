@@ -8,6 +8,7 @@
 
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
+#include "graphics/shader_types.h"
 
 #include <span>
 #include <memory>
@@ -46,21 +47,6 @@ namespace mmo
 		Surface,
 
 		UserInterface,
-	};
-
-	enum class VertexShaderType : uint8_t
-	{
-		/// @brief Default vertex shader (no skinning).
-		Default,
-
-		/// @brief Skinning profile with low amount of bones (32).
-		SkinnedLow,
-
-		/// @brief Skinning profile with medium amount of bones (64).
-		SkinnedMedium,
-
-		/// @brief Skinning profile with high amount of bones (128)
-		SkinnedHigh
 	};
 
 	struct ScalarParameterValue
@@ -102,9 +88,9 @@ namespace mmo
 
 		virtual ShaderPtr& GetVertexShader(VertexShaderType type) noexcept = 0;
 
-		virtual ShaderPtr& GetPixelShader() noexcept = 0;
+		virtual ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept = 0;
 
-		virtual void Apply(GraphicsDevice& device, MaterialDomain domain) = 0;
+		virtual void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) = 0;
 
 		virtual ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) = 0;
 
@@ -244,11 +230,11 @@ namespace mmo
 
 		void SetVertexShaderCode(VertexShaderType shaderType, std::span<uint8> code) noexcept;
 
-		void SetPixelShaderCode(std::span<uint8> code) noexcept;
+		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code) noexcept;
 
         [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const noexcept { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
 		
-		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode() const noexcept { return { m_pixelShaderCode }; }
+		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(PixelShaderType type = PixelShaderType::Forward) const noexcept { return { m_pixelShaderCode[static_cast<uint32_t>(type)] }; }
 
 		[[nodiscard]] bool IsDepthTestEnabled() const noexcept override { return m_depthTest; }
 		
@@ -297,9 +283,9 @@ namespace mmo
 
 		ShaderPtr& GetVertexShader(VertexShaderType type) noexcept override { return m_vertexShader[static_cast<uint32_t>(type)]; }
 
-		ShaderPtr& GetPixelShader() noexcept override { return m_pixelShader; }
+		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept override { return m_pixelShader[static_cast<uint32_t>(type)]; }
 
-		void Apply(GraphicsDevice& device, MaterialDomain domain) override;
+		void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) override;
 
 		/// @brief Compiles the material.
 		/// @param compiler The compiler to use for compiling the material.
@@ -324,14 +310,14 @@ namespace mmo
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
 		ShaderPtr m_vertexShader[4];
-		ShaderPtr m_pixelShader;
+		ShaderPtr m_pixelShader[2]; // Forward and GBuffer
 		std::vector<String> m_textureFiles;
 		std::vector<TexturePtr> m_textures;
 		bool m_texturesChanged { true };
 		std::vector<uint8> m_vertexShaderCode[4];
 		bool m_vertexShaderChanged { true };
-		std::vector<uint8> m_pixelShaderCode;
-		bool m_pixelShaderChanged { true };
+		std::vector<uint8> m_pixelShaderCode[2]; // Forward and GBuffer
+		bool m_pixelShaderChanged[2] { true, true };
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 

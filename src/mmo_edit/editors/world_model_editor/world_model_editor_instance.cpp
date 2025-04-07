@@ -187,7 +187,7 @@ namespace mmo
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		m_scene.Render(*m_camera);
+		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		m_transformWidget->Update(m_camera);
 		
 		m_viewportRT->Update();

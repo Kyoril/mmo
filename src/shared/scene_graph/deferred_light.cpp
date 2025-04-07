@@ -4,30 +4,53 @@
 
 namespace mmo
 {
-    DeferredLight::DeferredLight()
-        : Light()
+    namespace
     {
+        const String s_movableType = "DeferredLight";
+        AABB s_boundingBox = AABB(Vector3(-0.5f, -0.5f, -0.5f), Vector3(0.5f, 0.5f, 0.5f));
     }
 
     DeferredLight::DeferredLight(const String& name)
-        : Light(name)
+        : MovableObject(name)
     {
+        // Set default values
+        m_visible = true;
+        m_debugDisplay = false;
+        m_upperDistance = 0.0f;
+        m_squaredUpperDistance = 0.0f;
+        m_minPixelSize = 0.0f;
+        m_beyondFarDistance = false;
     }
 
-    void DeferredLight::GetLightParameters(Vector3& outDirection, Color& outColor, float& outIntensity) const
+    const String& DeferredLight::GetMovableType() const
     {
-        // For directional lights, use the derived direction
-        if (GetType() == LightType::Directional)
+        return s_movableType;
+    }
+
+    const AABB& DeferredLight::GetBoundingBox() const
+    {
+        return s_boundingBox;
+    }
+
+    float DeferredLight::GetBoundingRadius() const
+    {
+        // For point and spot lights, the bounding radius is the range
+        if (m_type == DeferredLightType::Point || m_type == DeferredLightType::Spot)
         {
-            outDirection = GetDerivedDirection();
-        }
-        // For point and spot lights, we don't use direction in the same way
-        else
-        {
-            outDirection = Vector3::Zero;
+            return m_range;
         }
 
-        outColor = GetColor();
-        outIntensity = m_intensity;
+        // For directional lights, the bounding radius is infinite
+        return 0.0f;
+    }
+
+    void DeferredLight::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
+    {
+        // Lights don't have renderables
+    }
+
+    void DeferredLight::PopulateRenderQueue(RenderQueue& queue)
+    {
+        // Lights don't have renderables to add to the render queue
     }
 }

@@ -144,7 +144,7 @@ namespace mmo
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		m_scene.Render(*m_camera);
+		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		
 		m_viewportRT->Update();
 	}

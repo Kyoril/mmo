@@ -553,8 +553,9 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
-	void MaterialCompilerD3D11::GeneratePixelShaderCode()
+	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
+		m_pixelShaderStream.str("");
 		m_pixelShaderStream.clear();
 
 		m_pixelShaderStream
@@ -564,6 +565,19 @@ namespace mmo
 			<< "float select(bool expression, float whenTrue, float whenFalse) {\n"
 			<< "\treturn expression ? whenTrue : whenFalse;\n"
 			<< "}\n\n";
+
+		if (type == PixelShaderType::GBuffer)
+		{
+			// For G-Buffer output
+			m_pixelShaderStream
+				<< "struct GBufferOutput\n"
+				<< "{\n"
+				<< "\tfloat4 albedo : SV_Target0;    // RGB: Albedo, A: Opacity\n"
+				<< "\tfloat4 normal : SV_Target1;    // RGB: Normal, A: Unused\n"
+				<< "\tfloat4 material : SV_Target2;  // R: Metallic, G: Roughness, B: Specular, A: Ambient Occlusion\n"
+				<< "\tfloat4 emissive : SV_Target3;  // RGB: Emissive, A: Unused\n"
+				<< "};\n\n";
+		}
 
 		size_t bufferRegister = 0;
 		m_pixelShaderStream
@@ -720,10 +734,20 @@ namespace mmo
 		}
 		
 		// Start of main function
-		m_pixelShaderStream
-			<< "float4 main(VertexOut input) : SV_Target\n"
-			<< "{\n"
-			<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
+		if (type == PixelShaderType::GBuffer)
+		{
+			m_pixelShaderStream
+				<< "GBufferOutput main(VertexOut input)\n"
+				<< "{\n"
+				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
+		}
+		else
+		{
+			m_pixelShaderStream
+				<< "float4 main(VertexOut input) : SV_Target\n"
+				<< "{\n"
+				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
+		}
 
 		if (m_lit)
 		{
@@ -763,60 +787,64 @@ namespace mmo
 				m_pixelShaderStream
 					<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
 			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat3 N = float3(0.0, 0.0, 1.0);\n\n";
+		}
 
-			// Specular
-			if (m_specularExpression != IndexNone)
+		// Specular
+		if (m_specularExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_specularExpression);
+			if (expression == ExpressionType::Float_1)
 			{
-				const auto expression = GetExpressionType(m_specularExpression);
-				if (expression == ExpressionType::Float_1)
-				{
-					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ");\n\n";
-				}
-				else
-				{
-					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ".r);\n\n";
-				}
+				m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat specular = 0.5;\n\n";
+				m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ".r);\n\n";
 			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat specular = 0.5;\n\n";
+		}
 
-			// Roughness
-			if (m_roughnessExpression != IndexNone)
+		// Roughness
+		if (m_roughnessExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_roughnessExpression);
+			if (expression == ExpressionType::Float_1)
 			{
-				const auto expression = GetExpressionType(m_roughnessExpression);
-				if (expression == ExpressionType::Float_1)
-				{
-					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ");\n\n";
-				}
-				else
-				{
-					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ".r);\n\n";
-				}
+				m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
+				m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ".r);\n\n";
 			}
-			
-			// Metallic
-			if (m_metallicExpression != IndexNone)
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
+		}
+
+		// Metallic
+		if (m_metallicExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_metallicExpression);
+			if (expression == ExpressionType::Float_1)
 			{
-				const auto expression = GetExpressionType(m_metallicExpression);
-				if (expression == ExpressionType::Float_1)
-				{
-					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ");\n\n";
-				}
-				else
-				{
-					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ".r);\n\n";
-				}
+				m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
+				m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ".r);\n\n";
 			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
 		}
 
 		// Opacity
@@ -918,34 +946,66 @@ namespace mmo
 		}
 
 		// Combining it
-		if (m_lit)
+		if (type == PixelShaderType::GBuffer)
 		{
+			// G-Buffer output
 			m_pixelShaderStream
-				<< "\toutputColor = float4(color, opacity);\n";
+				<< "\tGBufferOutput output;\n";
+			
+			// Albedo
+			m_pixelShaderStream
+				<< "\toutput.albedo = float4(baseColor, opacity);\n";
+			
+			// Normal
+			m_pixelShaderStream
+				<< "\toutput.normal = float4(N * 0.5 + 0.5, 0.0);\n";
+			
+			// Material properties
+			m_pixelShaderStream
+				<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
+			
+			// Emissive (not used yet)
+			m_pixelShaderStream
+				<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+			
+			// Return G-Buffer output
+			m_pixelShaderStream
+				<< "\treturn output;\n"
+				<< "}"
+				<< std::endl;
 		}
 		else
 		{
-			m_pixelShaderStream
-				<< "\toutputColor = float4(baseColor, opacity);\n";
-		}
+			// Forward rendering output
+			if (m_lit)
+			{
+				m_pixelShaderStream
+					<< "\toutputColor = float4(color, opacity);\n";
+			}
+			else
+			{
+				m_pixelShaderStream
+					<< "\toutputColor = float4(baseColor, opacity);\n";
+			}
 
-		// End of main function
-		m_pixelShaderStream
-			<< "\treturn outputColor;\n"
-			<< "}"
-			<< std::endl;
+			// End of main function
+			m_pixelShaderStream
+				<< "\treturn outputColor;\n"
+				<< "}"
+				<< std::endl;
+		}
 		
-		m_pixelShaderCode = m_pixelShaderStream.str();
+		m_pixelShaderCode[(int)type] = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
 
 
 #ifdef _DEBUG
 		// Write shader output to asset registry for debug
-		if (const auto filePtr = AssetRegistry::CreateNewFile("PS.hlsl"))
+		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : "PSDeferred.hlsl"))
 		{
 			io::StreamSink sink(*filePtr);
 			io::TextWriter<char> writer(sink);
-			writer.write(m_pixelShaderCode);
+			writer.write(m_pixelShaderCode[(int)type]);
 		}
 #endif
 	}

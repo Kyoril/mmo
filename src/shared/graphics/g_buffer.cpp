@@ -2,82 +2,75 @@
 
 #include "g_buffer.h"
 #include "graphics_device.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
-    GBuffer::GBuffer(uint16 width, uint16 height)
-        : RenderTarget("GBuffer", width, height)
-    {
-        Initialize();
-    }
+	GBuffer::GBuffer(GraphicsDevice& device, uint32 width, uint32 height)
+		: m_device(device)
+		, m_width(width)
+		, m_height(height)
+	{
+		// Create render textures for the G-Buffer
+		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, PixelFormat::R8G8B8A8);
+		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R8G8B8A8);
+		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
+		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
+		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);
 
-    void GBuffer::Initialize()
-    {
-        auto& gx = GraphicsDevice::Get();
+		// Check if all render textures were created successfully
+		if (!m_albedoRT || !m_normalRT || !m_materialRT || !m_emissiveRT || !m_depthRT)
+		{
+			ELOG("Failed to create G-Buffer render textures");
+			throw std::runtime_error("Failed to create G-Buffer render textures");
+		}
+	}
 
-        // Create render textures for the G-Buffer
-        m_albedoRT = gx.CreateRenderTexture("GBuffer_Albedo", m_width, m_height, PixelFormat::R8G8B8A8);
-        m_normalRT = gx.CreateRenderTexture("GBuffer_Normal", m_width, m_height, PixelFormat::R8G8B8A8);
-        m_materialPropertiesRT = gx.CreateRenderTexture("GBuffer_MaterialProperties", m_width, m_height, PixelFormat::R8G8B8A8);
-        m_emissiveRT = gx.CreateRenderTexture("GBuffer_Emissive", m_width, m_height, PixelFormat::R8G8B8A8);
-        m_depthRT = gx.CreateRenderTexture("GBuffer_Depth", m_width, m_height, PixelFormat::R32G32B32A32);
-    }
+	void GBuffer::Resize(uint32 width, uint32 height)
+	{
+		// Skip if the size hasn't changed
+		if (m_width == width && m_height == height)
+			return;
 
-    void GBuffer::Activate()
-    {
-        RenderTarget::Activate();
+		// Update dimensions
+		m_width = width;
+		m_height = height;
 
-        // Set up multiple render targets
-        RenderTexturePtr renderTargets[] = {
-            m_albedoRT,
-            m_normalRT,
-            m_materialPropertiesRT,
-            m_emissiveRT
-        };
+		// Recreate render textures
+		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, PixelFormat::R8G8B8A8);
+		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R8G8B8A8);
+		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
+		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
+		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);
 
-        // Set multiple render targets
-        auto& gx = GraphicsDevice::Get();
-        gx.SetRenderTargets(renderTargets, 4);
-    }
+		// Check if all render textures were created successfully
+		if (!m_albedoRT || !m_normalRT || !m_materialRT || !m_emissiveRT || !m_depthRT)
+		{
+			ELOG("Failed to resize G-Buffer render textures");
+			throw std::runtime_error("Failed to resize G-Buffer render textures");
+		}
+	}
 
-    void GBuffer::Clear(ClearFlags flags)
-    {
-        m_albedoRT->Clear(flags);
-        m_normalRT->Clear(flags);
-        m_materialPropertiesRT->Clear(flags);
-        m_emissiveRT->Clear(flags);
-        m_depthRT->Clear(flags);
-    }
+	void GBuffer::Bind()
+	{
+		// Create an array of render target pointers
+		RenderTexturePtr renderTargets[] = {
+			m_albedoRT,
+			m_normalRT,
+			m_materialRT,
+			m_emissiveRT
+		};
 
-    void GBuffer::Update()
-    {
-        m_albedoRT->Update();
-        m_normalRT->Update();
-        m_materialPropertiesRT->Update();
-        m_emissiveRT->Update();
-        m_depthRT->Update();
-    }
+		// Set the render targets
+		m_device.SetRenderTargets(renderTargets, 4);
 
-    void GBuffer::Resize(uint16 width, uint16 height)
-    {
-        RenderTarget::Resize(width, height);
+		// Set the viewport to match the G-Buffer size
+		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
+	}
 
-        m_albedoRT->Resize(width, height);
-        m_normalRT->Resize(width, height);
-        m_materialPropertiesRT->Resize(width, height);
-        m_emissiveRT->Resize(width, height);
-        m_depthRT->Resize(width, height);
-    }
-
-    void GBuffer::BindForReading()
-    {
-        auto& gx = GraphicsDevice::Get();
-
-        // Bind G-Buffer textures for reading in the lighting pass
-        gx.BindTexture(m_albedoRT, ShaderType::PixelShader, 0);
-        gx.BindTexture(m_normalRT, ShaderType::PixelShader, 1);
-        gx.BindTexture(m_materialPropertiesRT, ShaderType::PixelShader, 2);
-        gx.BindTexture(m_emissiveRT, ShaderType::PixelShader, 3);
-        gx.BindTexture(m_depthRT, ShaderType::PixelShader, 4);
-    }
+	void GBuffer::Unbind()
+	{
+		// Reset render targets
+		m_device.SetRenderTargets(nullptr, 0);
+	}
 }

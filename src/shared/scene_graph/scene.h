@@ -6,6 +6,7 @@
 #include "render_queue.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
+#include "graphics/shader_types.h"
 
 #include "camera.h"
 #include "entity.h"
@@ -330,7 +331,7 @@ namespace mmo
 
 	public:
 		/// Renders the current scene by using a specific camera as the origin.
-		void Render(Camera& camera);
+		void Render(Camera& camera, PixelShaderType shaderType);
 
 		void UpdateSceneGraph();
 		
@@ -443,5 +444,7 @@ namespace mmo
 		float m_fogStart = 185.0f;
 
 		float m_fogEnd = 265.0f;
+
+		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 	};
 }

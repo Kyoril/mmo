@@ -109,8 +109,7 @@ namespace mmo
 
 	Light& Scene::CreateLight(const String& name, LightType type)
 	{
-		auto light = std::make_unique<Light>(name);
-		light->SetType(type);
+		auto light = std::make_unique<Light>(name, type);
 
 		auto [iterator, inserted] = m_lights.emplace(name, std::move(light));
 		return *iterator->second.get();
@@ -148,8 +147,10 @@ namespace mmo
 		m_cameras.clear();
 	}
 
-	void Scene::Render(Camera& camera)
+	void Scene::Render(Camera& camera, PixelShaderType shaderType)
 	{
+		m_pixelShaderType = shaderType;
+
 		auto& gx = GraphicsDevice::Get();
 
 		m_activeCamera = &camera;
@@ -300,7 +301,7 @@ namespace mmo
 			else
 			{
 				// Do a visibility check (culling) for each non directional light
-				lightInfo.range = light->GetAttenuationRange();
+				lightInfo.range = light->GetRange();
 				lightInfo.position = light->GetDerivedPosition();
 
 				const Sphere sphere{lightInfo.position, lightInfo.range};
@@ -324,6 +325,7 @@ namespace mmo
 	{
 		RenderOperation op { groupId };
 		renderable.PrepareRenderOperation(op);
+		op.pixelShaderType = m_pixelShaderType;
 
 		if (op.vertexData == nullptr || op.vertexData->vertexCount == 0)
 		{

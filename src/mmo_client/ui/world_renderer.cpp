@@ -74,7 +74,7 @@ namespace mmo
 		if (m_camera)
 		{
 			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-			m_worldScene.Render(*m_camera);
+			m_worldScene.Render(*m_camera, PixelShaderType::Forward);
 		}
 
 		m_renderTexture->Update();

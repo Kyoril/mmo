@@ -92,7 +92,7 @@ namespace mmo
 		void GenerateVertexShaderCode(VertexShaderType type) override;
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
-		void GeneratePixelShaderCode() override;
+		void GeneratePixelShaderCode(PixelShaderType type = PixelShaderType::Forward) override;
 
 	public:
 		ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture,
@@ -103,8 +103,8 @@ namespace mmo
 		ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
 
 	public:
-		std::vector<ScalarParameterValue> m_floatParameters;
-		std::vector<VectorParameterValue> m_vectorParameters;
-		std::vector<TextureParameterValue> m_textureParameters;
+		std::vector<mmo::ScalarParameterValue> m_floatParameters;
+		std::vector<mmo::VectorParameterValue> m_vectorParameters;
+		std::vector<mmo::TextureParameterValue> m_textureParameters;
 	};
 }

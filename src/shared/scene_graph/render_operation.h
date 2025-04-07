@@ -26,6 +26,8 @@ namespace mmo
 
 		MaterialPtr material{nullptr};
 
+		PixelShaderType pixelShaderType{ PixelShaderType::Forward };
+
 		std::vector<ConstantBuffer*> vertexConstantBuffers{};
 
 		std::vector<ConstantBuffer*> pixelConstantBuffers{};

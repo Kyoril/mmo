@@ -84,7 +84,7 @@ namespace mmo
 		void GenerateVertexShaderCode(VertexShaderType type) override;
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
-		void GeneratePixelShaderCode() override;
+		void GeneratePixelShaderCode(PixelShaderType type = PixelShaderType::Forward) override;
 
 	public:
 		ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture,

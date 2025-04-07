@@ -94,9 +94,9 @@ namespace mmo
 
 		ShaderPtr& GetVertexShader(VertexShaderType type) noexcept override { return m_parent->GetVertexShader(type); }
 
-		ShaderPtr& GetPixelShader() noexcept override { return m_parent->GetPixelShader(); }
+		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept override { return m_parent->GetPixelShader(type); }
 
-		void Apply(GraphicsDevice& device, MaterialDomain domain) override;
+		void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) override;
 
 		ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) override;
 

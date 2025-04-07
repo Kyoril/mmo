@@ -68,21 +68,42 @@ namespace mmo
 			material.SetVertexShaderCode(static_cast<VertexShaderType>(i), { vertexOutput.code.data });
 		}
 		
-		GeneratePixelShaderCode();
+		// Generate forward rendering pixel shader
+		GeneratePixelShaderCode(PixelShaderType::Forward);
 
 		ShaderCompileInput pixelInput;
-		pixelInput.shaderCode = m_pixelShaderCode;
+		pixelInput.shaderCode = m_pixelShaderCode[(int)PixelShaderType::Forward];
 		pixelInput.shaderType = ShaderType::PixelShader;
 		ShaderCompileResult pixelOutput;
 		shaderCompiler.Compile(pixelInput, pixelOutput);
 
 		if (!pixelOutput.succeeded)
 		{
-			ELOG("Error compiling pixel shader: " << pixelOutput.errorMessage);
+			ELOG("Error compiling forward pixel shader: " << pixelOutput.errorMessage);
 		}
 		else
 		{
-			DLOG("Successfully compiled pixel shader. Size: " << pixelOutput.code.data.size());
+			DLOG("Successfully compiled forward pixel shader. Size: " << pixelOutput.code.data.size());
+			// Add shader code to the material
+			material.SetPixelShaderCode(PixelShaderType::Forward, {pixelOutput.code.data });
+		}
+
+		// Generate GBuffer pixel shader
+		GeneratePixelShaderCode(PixelShaderType::GBuffer);
+
+		pixelInput.shaderCode = m_pixelShaderCode[(int)PixelShaderType::GBuffer];
+		pixelInput.shaderType = ShaderType::PixelShader;
+		shaderCompiler.Compile(pixelInput, pixelOutput);
+
+		if (!pixelOutput.succeeded)
+		{
+			ELOG("Error compiling GBuffer pixel shader: " << pixelOutput.errorMessage);
+		}
+		else
+		{
+			DLOG("Successfully compiled GBuffer pixel shader. Size: " << pixelOutput.code.data.size());
+			// Add shader code to the material
+			material.SetPixelShaderCode(PixelShaderType::GBuffer, {pixelOutput.code.data });
 		}
 
 		// Set material textures
@@ -91,9 +112,6 @@ namespace mmo
 		{
 			material.AddTexture(texture);
 		}
-
-		// Add shader code to the material
-		material.SetPixelShaderCode({pixelOutput.code.data });
 
 		m_material = nullptr;
 	}

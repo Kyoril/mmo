@@ -6,8 +6,10 @@
 #include <sstream>
 #include <vector>
 
-#include "material.h"
+#include "shader_types.h"
 #include "base/typedefs.h"
+#include "math/vector4.h"
+#include "graphics/material.h"
 
 namespace mmo
 {
@@ -75,7 +77,7 @@ namespace mmo
 		[[nodiscard]] const String& GetVertexShaderCode() const noexcept { return m_vertexShaderCode; }
 
 		/// @brief Gets the generated high level pixel shader code.
-		[[nodiscard]] const String& GetPixelShaderCode() const noexcept { return m_pixelShaderCode; }
+		[[nodiscard]] const String& GetPixelShaderCode(PixelShaderType type) const noexcept { return m_pixelShaderCode[(int)type]; }
 
 	public:
 		/// @brief Adds a global shader function.
@@ -272,7 +274,7 @@ namespace mmo
 		virtual void GenerateVertexShaderCode(VertexShaderType type) = 0;
 
 		/// @brief Called to generate the pixel shader code.
-		virtual void GeneratePixelShaderCode() = 0;
+		virtual void GeneratePixelShaderCode(PixelShaderType type = PixelShaderType::Forward) = 0;
 
 	protected:
 		std::vector<std::string> m_textures;
@@ -292,7 +294,7 @@ namespace mmo
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
-		String m_pixelShaderCode;
+		String m_pixelShaderCode[2];
 		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 

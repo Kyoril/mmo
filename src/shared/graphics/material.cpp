@@ -33,10 +33,10 @@ namespace mmo
 		m_vertexShaderChanged = true;
 	}
 
-	void Material::SetPixelShaderCode(std::span<uint8> code) noexcept
+	void Material::SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code) noexcept
 	{
-		m_pixelShaderCode.assign(code.begin(), code.end());
-		m_pixelShaderChanged = true;
+		m_pixelShaderCode[static_cast<uint32_t>(shaderType)].assign(code.begin(), code.end());
+		m_pixelShaderChanged[static_cast<uint32_t>(shaderType)] = true;
 	}
 
 	ConstantBufferPtr Material::GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device)
@@ -293,18 +293,21 @@ namespace mmo
 			m_vertexShaderChanged = false;
 		}
 
-		if (m_pixelShaderChanged)
+		for (uint32 i = 0; i < 2; ++i)
 		{
-			if (!m_pixelShaderCode.empty())
+			if (m_pixelShaderChanged[i])
 			{
-				m_pixelShader = GraphicsDevice::Get().CreateShader(ShaderType::PixelShader, m_pixelShaderCode.data(), m_pixelShaderCode.size());
-			}
-			else
-			{
-				m_pixelShader.reset();
-			}
+				if (!m_pixelShaderCode[i].empty())
+				{
+					m_pixelShader[i] = GraphicsDevice::Get().CreateShader(ShaderType::PixelShader, m_pixelShaderCode[i].data(), m_pixelShaderCode[i].size());
+				}
+				else
+				{
+					m_pixelShader[i].reset();
+				}
 
-			m_pixelShaderChanged = false;
+				m_pixelShaderChanged[i] = false;
+			}
 		}
 	}
 
@@ -331,13 +334,14 @@ namespace mmo
 		}
 		
 
-		// Compile pixel shader
+		// Compile pixel shader (forward rendering)
 		ShaderCompileResult pixelOutput;
-		ShaderCompileInput pixelInput { compiler.GetPixelShaderCode(), ShaderType::PixelShader };
+		ShaderCompileInput pixelInput { compiler.GetPixelShaderCode(PixelShaderType::Forward), ShaderType::PixelShader };
 		shaderCompiler.Compile(pixelInput, pixelOutput);
 		if (pixelOutput.succeeded)
 		{
-			m_pixelShaderCode = pixelOutput.code.data;
+			m_pixelShaderCode[static_cast<uint32_t>(PixelShaderType::Forward)] = pixelOutput.code.data;
+			m_pixelShader[static_cast<uint32_t>(PixelShaderType::Forward)] = std::move(GraphicsDevice::Get().CreateShader(ShaderType::PixelShader, pixelOutput.code.data.data(), pixelOutput.code.data.size()));
 		}
 		else
 		{
@@ -348,10 +352,12 @@ namespace mmo
 		return true;
 	}
 
-	void Material::Apply(GraphicsDevice& device, MaterialDomain domain)
+	void Material::Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType)
 	{
 		// TODO: Determine what vertex shader type we need to bind based on the rendering context or from outside
-		BindShaders(device);
+		// Apply
+		if (m_vertexShader[0]) m_vertexShader[0]->Set();
+		if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
 		BindTextures(device);
 
 		// Bind texture parameter textures
@@ -389,7 +395,7 @@ namespace mmo
 	{
 		// Apply
 		if (m_vertexShader[0]) m_vertexShader[0]->Set();
-		if (m_pixelShader) m_pixelShader->Set();
+		if (m_pixelShader[0]) m_pixelShader[0]->Set();
 	}
 
 	void Material::BindTextures(GraphicsDevice& device)

@@ -28,7 +28,7 @@
 #pragma comment(lib, "d3dcompiler.lib")
 
 #ifndef MMO_GPU_DEBUG
-#	define MMO_GPU_DEBUG 0
+#	define MMO_GPU_DEBUG 1
 #endif
 
 namespace mmo
@@ -962,8 +962,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count)
 	{
-		ASSERT(count > 0 && count <= D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
-		ASSERT(renderTargets != nullptr);
+		ASSERT(count <= D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
+		//ASSERT(renderTargets != nullptr);
 
 		// Collect render target views
 		ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
@@ -1096,7 +1096,7 @@ namespace mmo
 		}
 		
 		// Apply material
-		operation.material->Apply(*this, MaterialDomain::Surface);
+		operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
 
 		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
 		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();

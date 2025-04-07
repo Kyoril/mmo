@@ -263,6 +263,15 @@ namespace mmo
 				return false;
 			}
 
+			// Read shader type (for newer versions)
+			PixelShaderType shaderType = PixelShaderType::Forward;
+
+			uint8 shaderTypeValue;
+			if (reader >> io::read<uint8>(shaderTypeValue))
+			{
+				shaderType = static_cast<PixelShaderType>(shaderTypeValue);
+			}
+
 			uint32 shaderCodeSize;
 			if (!(reader >> io::read<uint32>(shaderCodeSize)))
 			{
@@ -289,7 +298,7 @@ namespace mmo
 					return false;
 				}
 
-				m_material.SetPixelShaderCode({ shaderCode });
+				m_material.SetPixelShaderCode(shaderType, { shaderCode });
 			}
 		}
 
@@ -496,11 +505,17 @@ namespace mmo
 			ChunkWriter shaderChunkWriter { MaterialPixelShaderChunk, writer };
 
 			// TODO: Number of shaders to write
-			writer << io::write<uint8>(1);
+			writer << io::write<uint8>(2); // Forward and GBuffer
 
-			// TODO: Shader model
+			// Forward shader
 			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode().begin(), material.GetPixelShaderCode().end());
+			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::Forward));
+			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::Forward).begin(), material.GetPixelShaderCode(PixelShaderType::Forward).end());
+
+			// GBuffer shader
+			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
+			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::GBuffer));
+			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::GBuffer).begin(), material.GetPixelShaderCode(PixelShaderType::GBuffer).end());
 			
 			shaderChunkWriter.Finish();
 		}

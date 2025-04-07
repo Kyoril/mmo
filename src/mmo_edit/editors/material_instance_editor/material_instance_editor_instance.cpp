@@ -38,7 +38,7 @@ namespace mmo
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 		
-		m_scene.Render(*m_camera);
+		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		
 		m_viewportRT->Update();
     }

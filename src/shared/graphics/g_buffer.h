@@ -2,73 +2,93 @@
 
 #pragma once
 
-#include "render_target.h"
+#include "base/non_copyable.h"
 #include "render_texture.h"
+#include "math/vector2.h"
+#include "graphics_device.h"
 
 namespace mmo
 {
-    /// @brief A G-Buffer for deferred rendering.
-    class GBuffer : public RenderTarget
-    {
-    public:
-        /// @brief Creates a new G-Buffer.
-        /// @param width Width of the G-Buffer.
-        /// @param height Height of the G-Buffer.
-        GBuffer(uint16 width, uint16 height);
+	/// @brief Class that represents a G-Buffer for deferred rendering.
+	class GBuffer final : public NonCopyable
+	{
+	public:
+		/// @brief Creates a new instance of the GBuffer class.
+		/// @param device The graphics device to use.
+		/// @param width The width of the G-Buffer.
+		/// @param height The height of the G-Buffer.
+		GBuffer(GraphicsDevice& device, uint32 width, uint32 height);
 
-        /// @brief Destructor.
-        ~GBuffer() override = default;
+		/// @brief Destructor.
+		~GBuffer() override = default;
 
-    public:
-        /// @brief Activates the G-Buffer for rendering.
-        void Activate() override;
+	public:
+		/// @brief Gets the albedo render texture.
+		/// @return The albedo render texture.
+		[[nodiscard]] RenderTexture& GetAlbedoRT() { return *m_albedoRT; }
 
-        /// @brief Clears the G-Buffer.
-        /// @param flags Clear flags.
-        void Clear(ClearFlags flags) override;
+		/// @brief Gets the normal render texture.
+		/// @return The normal render texture.
+		[[nodiscard]] RenderTexture& GetNormalRT() { return *m_normalRT; }
 
-        /// @brief Updates the G-Buffer.
-        void Update() override;
+		/// @brief Gets the material render texture.
+		/// @return The material render texture.
+		[[nodiscard]] RenderTexture& GetMaterialRT() { return *m_materialRT; }
 
-        /// @brief Resizes the G-Buffer.
-        /// @param width New width.
-        /// @param height New height.
-        void Resize(uint16 width, uint16 height) override;
+		/// @brief Gets the emissive render texture.
+		/// @return The emissive render texture.
+		[[nodiscard]] RenderTexture& GetEmissiveRT() { return *m_emissiveRT; }
 
-        /// @brief Binds the G-Buffer textures for reading in the lighting pass.
-        void BindForReading();
+		/// @brief Gets the depth render texture.
+		/// @return The depth render texture.
+		[[nodiscard]] RenderTexture& GetDepthRT() { return *m_depthRT; }
 
-        /// @brief Gets the albedo render texture.
-        /// @return The albedo render texture.
-        RenderTexturePtr GetAlbedoTexture() const { return m_albedoRT; }
+		/// @brief Gets the size of the G-Buffer.
+		/// @return The size of the G-Buffer.
+		[[nodiscard]] Vector2 GetSize() const { return Vector2(static_cast<float>(m_width), static_cast<float>(m_height)); }
 
-        /// @brief Gets the normal render texture.
-        /// @return The normal render texture.
-        RenderTexturePtr GetNormalTexture() const { return m_normalRT; }
+		/// @brief Gets the width of the G-Buffer.
+		/// @return The width of the G-Buffer.
+		[[nodiscard]] uint32 GetWidth() const { return m_width; }
 
-        /// @brief Gets the material properties render texture.
-        /// @return The material properties render texture.
-        RenderTexturePtr GetMaterialPropertiesTexture() const { return m_materialPropertiesRT; }
+		/// @brief Gets the height of the G-Buffer.
+		/// @return The height of the G-Buffer.
+		[[nodiscard]] uint32 GetHeight() const { return m_height; }
 
-        /// @brief Gets the emissive render texture.
-        /// @return The emissive render texture.
-        RenderTexturePtr GetEmissiveTexture() const { return m_emissiveRT; }
+		/// @brief Resizes the G-Buffer.
+		/// @param width The new width of the G-Buffer.
+		/// @param height The new height of the G-Buffer.
+		void Resize(uint32 width, uint32 height);
 
-        /// @brief Gets the depth render texture.
-        /// @return The depth render texture.
-        RenderTexturePtr GetDepthTexture() const { return m_depthRT; }
+		/// @brief Binds the G-Buffer for rendering.
+		void Bind();
 
-    private:
-        /// @brief Initializes the G-Buffer.
-        void Initialize();
+		/// @brief Unbinds the G-Buffer.
+		void Unbind();
 
-    private:
-        RenderTexturePtr m_albedoRT;              // RGB: Albedo, A: Opacity Mask
-        RenderTexturePtr m_normalRT;              // RGB: Normal
-        RenderTexturePtr m_materialPropertiesRT;  // R: Metalness, G: Roughness, B: Specularity, A: AO
-        RenderTexturePtr m_emissiveRT;            // RGB: Emissive
-        RenderTexturePtr m_depthRT;               // R: Depth
-    };
+	private:
+		/// @brief The graphics device.
+		GraphicsDevice& m_device;
 
-    typedef std::shared_ptr<GBuffer> GBufferPtr;
+		/// @brief The width of the G-Buffer.
+		uint32 m_width;
+
+		/// @brief The height of the G-Buffer.
+		uint32 m_height;
+
+		/// @brief The albedo render texture (RGB: Albedo, A: Opacity).
+		RenderTexturePtr m_albedoRT;
+
+		/// @brief The normal render texture (RGB: Normal, A: Unused).
+		RenderTexturePtr m_normalRT;
+
+		/// @brief The material render texture (R: Metallic, G: Roughness, B: Specular, A: Ambient Occlusion).
+		RenderTexturePtr m_materialRT;
+
+		/// @brief The emissive render texture (RGB: Emissive, A: Unused).
+		RenderTexturePtr m_emissiveRT;
+
+		/// @brief The depth render texture.
+		RenderTexturePtr m_depthRT;
+	};
 }

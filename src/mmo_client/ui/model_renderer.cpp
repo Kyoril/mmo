@@ -80,7 +80,7 @@ namespace mmo
 			if (m_modelFrame && m_modelFrame->GetCamera())
 			{
 				m_modelFrame->GetCamera()->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-				m_modelFrame->GetScene().Render(*m_modelFrame->GetCamera());
+				m_modelFrame->GetScene().Render(*m_modelFrame->GetCamera(), PixelShaderType::Forward);
 			}
 
 			// Restore state before drawing the frame's geometry buffer
