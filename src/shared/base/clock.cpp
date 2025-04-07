@@ -1,5 +1,15 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+/**
+ * @file clock.cpp
+ *
+ * @brief Implementation of time-related utilities.
+ *
+ * This file implements the platform-specific time measurement functions
+ * declared in clock.h, providing high-resolution time measurement across
+ * different operating systems.
+ */
+
 #include "clock.h"
 #if defined(WIN32) || defined(_WIN32)
 #	include <Windows.h>
@@ -17,6 +27,16 @@
 
 namespace mmo
 {
+	/**
+	 * @brief Gets the current system time in milliseconds.
+	 * 
+	 * This implementation provides platform-specific high-resolution time measurement:
+	 * - On Windows: Uses QueryPerformanceCounter if available, falls back to GetTickCount64
+	 * - On macOS: Uses gettimeofday
+	 * - On other platforms (Linux): Uses clock_gettime with CLOCK_MONOTONIC
+	 * 
+	 * @return The current system time in milliseconds.
+	 */
 	GameTime GetAsyncTimeMs()
 	{
 #if defined(WIN32) || defined(_WIN32)
