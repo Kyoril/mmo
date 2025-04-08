@@ -962,7 +962,14 @@ namespace mmo
 			// G-Buffer output
 			m_pixelShaderStream
 				<< "\tGBufferOutput output;\n";
-			
+
+
+
+			m_pixelShaderStream << "\tfloat farZ = 1000.0;\n";
+			m_pixelShaderStream << "\tfloat nearZ = 0.01;\n";
+			m_pixelShaderStream
+				<< "\tfloat linearDepth = (2.0 * nearZ) / (farZ + nearZ - (input.pos.z / input.pos.w) * (farZ - nearZ))\n";
+
 			// For unlit materials, write base color to emissive instead of albedo
 			if (!m_lit)
 			{
@@ -972,7 +979,7 @@ namespace mmo
 				
 				// Normal - default up vector for unlit materials
 				m_pixelShaderStream
-					<< "\toutput.normal = float4(0.5, 0.5, 1.0, 0.0);\n";
+					<< "\toutput.normal = float4(0.5, 0.5, 1.0, linearDepth);\n";
 
 				// Material properties
 				m_pixelShaderStream
@@ -990,7 +997,7 @@ namespace mmo
 				
 				// Normal
 				m_pixelShaderStream
-					<< "\toutput.normal = float4(N * 0.5 + 0.5, 0.0);\n";
+					<< "\toutput.normal = float4(N * 0.5 + 0.5, linearDepth);\n";
 				
 				// Material properties
 				m_pixelShaderStream

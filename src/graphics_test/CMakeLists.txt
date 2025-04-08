@@ -18,14 +18,14 @@ ENDIF(APPLE)
 # Add executable
 file(GLOB srcFiles "*.cpp" "*.h")
 
-if (WIN32)
-	file(GLOB winSources "win/*.cpp" "win/*.h")
-	source_group(src\\win FILES ${winSources})
-endif()
-
 if (APPLE)
 	file(GLOB osxSources "macos/*.mm" "macos/*.h" "macos/*.m" "macos/*.cpp")
 	source_group(src\\macos FILES ${osxSources})
+endif()
+
+if (WIN32)
+	file(GLOB winSources "win/*.cpp" "win/*.h")
+	source_group(src\\win FILES ${winSources})
 endif()
 
 source_group(src FILES ${srcFiles})
@@ -33,6 +33,22 @@ source_group(src FILES ${srcFiles})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(graphics_test WIN32 MACOSX_BUNDLE ${srcFiles} ${osxSources} ${winSources})
+
+if (WIN32)
+	file(GLOB d3d11_vs_shaders "shaders/VS_*.hlsl" "shaders/*.hlsli")
+	file(GLOB d3d11_ps_shaders "shaders/PS_*.hlsl")
+
+	target_sources(graphics_test PRIVATE ${d3d11_vs_shaders} ${d3d11_ps_shaders})
+	source_group(src\\shaders FILES ${d3d11_vs_shaders})
+	source_group(src\\shaders FILES ${d3d11_ps_shaders})
+    
+	set_source_files_properties( ${d3d11_vs_shaders} PROPERTIES VS_SHADER_TYPE Vertex VS_SHADER_MODEL 5.0 VS_SHADER_ENTRYPOINT main 
+		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"
+		VS_SHADER_VARIABLE_NAME "g_%(Filename)")
+	set_source_files_properties( ${d3d11_ps_shaders} PROPERTIES VS_SHADER_TYPE Pixel VS_SHADER_MODEL 5.0 VS_SHADER_ENTRYPOINT main 
+		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"
+		VS_SHADER_VARIABLE_NAME "g_%(Filename)")
+endif()
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(graphics_test PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

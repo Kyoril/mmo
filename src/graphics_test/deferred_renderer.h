@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
@@ -67,6 +68,14 @@ namespace mmo
         ConstantBufferPtr m_lightBuffer;
 
         /// @brief The ambient light color.
-        Vector3 m_ambientColor { 0.1f, 0.1f, 0.1f };
+        Vector3 m_ambientColor { 0.1f, 0.2f, 0.3f };
+
+        ShaderPtr m_deferredLightVs;
+
+        ShaderPtr m_deferredLightPs;
+
+        VertexBufferPtr m_quadBuffer;
+
+        RenderTexturePtr m_renderTexture;
     };
 }

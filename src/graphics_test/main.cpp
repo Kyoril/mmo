@@ -8,9 +8,6 @@
 #include "event_loop.h"
 #include "assets/asset_registry.h"
 #include "scene_graph/scene.h"
-#include "graphics/texture.h"
-#include "graphics/render_target.h"
-#include "graphics/render_texture.h"
 #include "scene_graph/octree_scene.h"
 #include "deferred_renderer.h"
 #include "log/default_log.h"
@@ -25,7 +22,12 @@ namespace mmo
 	SceneNode* g_boarNode = nullptr;
 	Entity* g_boarEntity = nullptr;
 
-	VertexBufferPtr g_fullScreenQuadBuffer = nullptr;
+	SceneNode* g_sunLightNode = nullptr;
+	Light* g_sunLight = nullptr;
+	SceneNode* g_pointLightRotator = nullptr;
+	SceneNode* g_pointLightNode = nullptr;
+	Light* g_pointLight = nullptr;
+
 	std::unique_ptr<DeferredRenderer> g_deferredRenderer = nullptr;
 
 	void RenderScene()
@@ -37,7 +39,10 @@ namespace mmo
 	void OnIdle(float elapsedTime, GameTime time)
 	{
 		// Update scene objects and stuff
-
+		if (g_pointLightRotator)
+		{
+			g_pointLightRotator->Yaw(Radian(elapsedTime), TransformSpace::Local);
+		}
 	}
 
 	void OnPaint()
@@ -53,8 +58,8 @@ namespace mmo
 	{
         // Describe our graphics device
         GraphicsDeviceDesc desc {};
-        desc.width = 1280;
-        desc.height = 800;
+        desc.width = 1920;
+        desc.height = 1080;
         desc.windowed = true;
         desc.vsync = true;
 #ifdef _WIN32
@@ -90,7 +95,7 @@ namespace mmo
 		g_cameraNode->AttachObject(*g_camera);
 		g_cameraNode->SetPosition(Vector3(0.0f, 1.5f, 5.0f));
 		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::Parent);
-		g_camera->SetAspectRatio(1280.0f / 800.0f);
+		g_camera->SetAspectRatio(1920.0f / 1080.0f);
 
 		g_boarNode = g_scene->GetRootSceneNode().CreateChildSceneNode("BoarNode");
 		ASSERT(g_boarNode);
@@ -99,32 +104,24 @@ namespace mmo
 		g_boarNode->AttachObject(*g_boarEntity);
 
 		// Create a directional light for the scene
-		Light& directionalLight = g_scene->CreateLight("MainLight", LightType::Directional);
-		directionalLight.SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
-		
-		// Create a light node and attach the light
-		SceneNode& lightNode = g_scene->CreateSceneNode("MainLightNode");
-		lightNode.AttachObject(directionalLight);
-		
-		// Set the light direction (pointing down and slightly to the side)
-		Vector3 direction(-0.5f, -1.0f, -0.3f);
-		direction.Normalize();
-		lightNode.SetDirection(direction);
+		g_sunLight = &g_scene->CreateLight("MainLight", LightType::Directional);
+		g_sunLight->SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
+		g_sunLight->SetIntensity(1.0f);
+		g_sunLightNode = &g_scene->CreateSceneNode("SunLightNode");
+		g_sunLightNode->AttachObject(*g_sunLight);
+		g_sunLightNode->SetDirection({ -0.5f, -1.0f, -0.3f });
+
+		g_pointLightRotator = g_scene->GetRootSceneNode().CreateChildSceneNode("PointLightRotator");
+
+		g_pointLight = &g_scene->CreateLight("PointLight", LightType::Point);
+		g_pointLight->SetColor(Vector4(1.0f, 0.0f, 0.0f, 1.0f)); // Red point light
+		g_pointLight->SetIntensity(15.0f);
+		g_pointLight->SetRange(15.0f);
+		g_pointLightNode = g_pointLightRotator->CreateChildSceneNode("PointLightNode", Vector3::UnitZ * 1.0f);
+		g_pointLightNode->AttachObject(*g_pointLight);
 
 		// Create deferred renderer
-		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 1280, 800);
-
-		// Create full screen quad for final rendering
-		const POS_COL_TEX_VERTEX vertices[6] = {
-			{ Vector3(-1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 1.0f}},
-			{ Vector3(1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 1.0f}},
-			{ Vector3(-1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 0.0f}},
-			{ Vector3(-1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {0.0f, 0.0f}},
-			{ Vector3(1.0f, -1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 1.0f}},
-			{ Vector3(1.0f, 1.0f, 0.0f), 0xFFFFFFFF, {1.0f, 0.0f}}
-		};
-
-		g_fullScreenQuadBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::Static, vertices);
+		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), desc.width, desc.height);
 
 		return true;
 	}
