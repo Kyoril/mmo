@@ -214,13 +214,15 @@ namespace mmo
         m_device.SetTopologyType(TopologyType::TriangleList);
 
         // Render a full screen quad
-		m_device.SetFillMode(FillMode::Solid);
-		m_device.SetFaceCullMode(FaceCullMode::None);
-		m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
     	m_quadBuffer->Set(0);
 
         // Bind buffer to stage
         scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 1);
+
+        m_device.SetFillMode(FillMode::Solid);
+        m_device.SetFaceCullMode(FaceCullMode::None);
+        m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+        m_device.SetTextureFilter(TextureFilter::Trilinear);
 
         // Draw a full-screen quad
         m_device.Draw(6);

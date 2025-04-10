@@ -327,6 +327,7 @@ namespace mmo
 		m_samplerDesc.AddressU = D3D11TextureAddressMode(m_texAddressMode[0]);
 		m_samplerDesc.AddressV = D3D11TextureAddressMode(m_texAddressMode[1]);
 		m_samplerDesc.AddressW = D3D11TextureAddressMode(m_texAddressMode[2]);
+		m_samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		m_samplerDescChanged = true;
 	}
 
@@ -720,6 +721,7 @@ namespace mmo
 	{
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
+		UpdateSamplerState();
 
 		if (m_matrixDirty)
 		{
@@ -737,6 +739,7 @@ namespace mmo
 	{
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
+		UpdateSamplerState();
 		
 		if (m_matrixDirty)
 		{

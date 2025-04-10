@@ -26,6 +26,7 @@ cbuffer Matrices : register(b0)
     column_major matrix matView;
     column_major matrix matProj;
     column_major matrix matInvView;
+    column_major matrix InverseProjection;
 };
 
 // Camera constant buffer
@@ -99,13 +100,12 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     float3 lightDir = light.Position - worldPos;
     float distance = length(lightDir);
 
-    if (distance > light.Range)
-        return float3(0, 0, 0);
+    //if (distance > light.Range)
+    //    return float3(0, 0, 0);
 
     lightDir = normalize(lightDir);
     float3 halfway = normalize(lightDir + viewDir);
     
-
     float NdotL = max(dot(normal, lightDir), 0.0);
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotH = max(dot(normal, halfway), 0.0);
@@ -235,12 +235,12 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     // Reconstruct world position from depth
     float3 worldPos = ReconstructPosition(depth, normalize(input.ViewRay));
-    
+
     // Initialize lighting with ambient and emissive
     float3 lighting = albedo * AmbientColor * ao + emissive;
     
     float3 viewDir = normalize(CameraPosition - worldPos);
-
+    
     // Calculate lighting for each light
     for (uint i = 0; i < LightCount; i++)
     {
