@@ -36,6 +36,7 @@ namespace mmo
 		float fogStart;
 		float fogEnd;
 		Vector3 fogColor;
+		Matrix4 inverseViewMatrix;
 	};
 
 	Scene::Scene()
@@ -115,6 +116,15 @@ namespace mmo
 		return *iterator->second.get();
 	}
 
+	void Scene::DestroyLight(const Light& light)
+	{
+		const auto lightIt = m_lights.find(light.GetName());
+		if (lightIt != m_lights.end())
+		{
+			m_lights.erase(lightIt);
+		}
+	}
+
 	Camera* Scene::GetCamera(const String& name)
 	{
 		const auto cameraIt = m_cameras.find(name);
@@ -158,12 +168,7 @@ namespace mmo
 		ASSERT(m_psCameraBuffer);
 
 		// Update ps constant buffer
-		PsCameraConstantBuffer buffer;
-		buffer.cameraPosition = camera.GetDerivedPosition();
-		buffer.fogStart = m_fogStart;
-		buffer.fogEnd = m_fogEnd;
-		buffer.fogColor = m_fogColor;
-		m_psCameraBuffer->Update(&buffer);
+		RefreshCameraBuffer(camera);
 
 		m_renderableVisitor.targetScene = this;
 		m_renderableVisitor.scissoring = false;
@@ -485,6 +490,17 @@ namespace mmo
 
 		m_fogStart = start;
 		m_fogEnd = end;
+	}
+
+	void Scene::RefreshCameraBuffer(const Camera& camera)
+	{
+		PsCameraConstantBuffer buffer;
+		buffer.cameraPosition = camera.GetDerivedPosition();
+		buffer.fogStart = m_fogStart;
+		buffer.fogEnd = m_fogEnd;
+		buffer.fogColor = m_fogColor;
+		buffer.inverseViewMatrix = camera.GetViewMatrix().Inverse();
+		m_psCameraBuffer->Update(&buffer);
 	}
 
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()

@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+static const float PI = 3.14159265359;
+
 // Input structure from the vertex shader
 struct PS_INPUT
 {
@@ -25,6 +27,7 @@ cbuffer CameraBuffer : register(b0)
     float FogStart;
     float FogEnd;
     float3 FogColor;
+    row_major matrix InverseViewMatrix;
 }
 
 // Light structure
@@ -49,124 +52,153 @@ cbuffer LightBuffer : register(b1)
 }
 
 // Reconstructs world position from depth
-float3 ReconstructPosition(float2 texCoord, float depth, float3 viewRay)
+float3 ReconstructPosition(float linearDepth, float3 viewRay)
 {
-    // Convert from [0,1] to [-1,1] for clip space
-    float z = depth;
-    
-    // Scale the view ray by the depth to get the world position
-    return CameraPosition + viewRay * z;
+    float3 viewPos = viewRay * linearDepth;
+    return mul(float4(viewPos, 1.0), InverseViewMatrix).xyz;
 }
 
+float3 F_Schlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float D_GGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom);
+}
+
+
+float G_SchlickGGX(float NdotV, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+float G_Smith(float NdotV, float NdotL, float roughness)
+{
+    return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
+}
+
+
 // Calculates point light contribution
-float3 CalculatePointLight(Light light, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
+float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
 {
     float3 lightDir = light.Position - worldPos;
     float distance = length(lightDir);
-    
-    // Early out if we're outside the light range
+
     if (distance > light.Range)
         return float3(0, 0, 0);
-    
+
     lightDir = normalize(lightDir);
-    
-    // Calculate attenuation
-    float attenuation = 1.0 - saturate(distance / light.Range);
-    attenuation = attenuation * attenuation;
-    
-    // Calculate diffuse lighting
+    float3 halfway = normalize(lightDir + viewDir);
+
     float NdotL = max(dot(normal, lightDir), 0.0);
-    float3 diffuse = albedo * NdotL;
-    
-    // Calculate view direction and half vector for specular
-    float3 viewDir = normalize(CameraPosition - worldPos);
-    float3 halfVector = normalize(lightDir + viewDir);
-    
-    // Calculate specular lighting (simplified Blinn-Phong)
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float specPower = (1.0 - roughness) * 100.0 + 8.0;
-    float specularIntensity = pow(NdotH, specPower) * specular;
-    
-    // Mix between diffuse and specular based on metallic
-    float3 specularColor = lerp(float3(1, 1, 1), albedo, metallic);
-    float3 result = lerp(diffuse, specularColor * specularIntensity, metallic);
-    
-    // Apply light color and attenuation
-    return result * light.Color * light.Intensity * attenuation;
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotH = max(dot(normal, halfway), 0.0);
+    float VdotH = max(dot(viewDir, halfway), 0.0);
+
+    // Attenuation
+    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0);
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F = F_Schlick(F0, VdotH);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+
+    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001)) * saturate(specular);
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
+    float3 diffuse = albedo / PI;
+
+    float3 radiance = light.Color * light.Intensity * attenuation;
+
+    return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
 // Calculates directional light contribution
-float3 CalculateDirectionalLight(Light light, float3 normal, float3 albedo, float metallic, float roughness, float specular, float3 worldPos)
+float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
 {
     float3 lightDir = -normalize(light.Direction);
-    
-    // Calculate diffuse lighting
+
+    float3 halfway = normalize(lightDir + viewDir);
+
     float NdotL = max(dot(normal, lightDir), 0.0);
-    float3 diffuse = albedo * NdotL;
-    
-    // Calculate view direction and half vector for specular
-    float3 viewDir = normalize(CameraPosition - worldPos);
-    float3 halfVector = normalize(lightDir + viewDir);
-    
-    // Calculate specular lighting (simplified Blinn-Phong)
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float specPower = (1.0 - roughness) * 100.0 + 8.0;
-    float specularIntensity = pow(NdotH, specPower) * specular;
-    
-    // Mix between diffuse and specular based on metallic
-    float3 specularColor = lerp(float3(1, 1, 1), albedo, metallic);
-    float3 result = lerp(diffuse, specularColor * specularIntensity, metallic);
-    
-    // Apply light color
-    return result * light.Color * light.Intensity;
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotH = max(dot(normal, halfway), 0.0);
+    float VdotH = max(dot(viewDir, halfway), 0.0);
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F = F_Schlick(F0, VdotH);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+
+    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001));
+    specularBRDF *= specular;
+
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
+    float3 diffuse = albedo / PI;
+
+    float3 radiance = light.Color * light.Intensity;
+
+    return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
 // Calculates spot light contribution
-float3 CalculateSpotLight(Light light, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
+float3 CalculateSpotLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
 {
     float3 lightDir = light.Position - worldPos;
     float distance = length(lightDir);
-    
-    // Early out if we're outside the light range
+
     if (distance > light.Range)
         return float3(0, 0, 0);
-    
+
     lightDir = normalize(lightDir);
-    
-    // Calculate spot cone attenuation
+
+    // Spot cone
     float spotFactor = dot(lightDir, -normalize(light.Direction));
     float spotCutoff = cos(radians(light.SpotAngle * 0.5));
-    
-    // Early out if outside the spot cone
     if (spotFactor < spotCutoff)
         return float3(0, 0, 0);
-    
-    // Smooth the spot edge
+
     float spotAttenuation = smoothstep(spotCutoff, spotCutoff + 0.1, spotFactor);
-    
-    // Calculate distance attenuation
-    float attenuation = 1.0 - saturate(distance / light.Range);
-    attenuation = attenuation * attenuation * spotAttenuation;
-    
-    // Calculate diffuse lighting
+
+    // Distance attenuation
+    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0) * spotAttenuation;
+
+    // Cook-Torrance lighting
+    float3 halfway = normalize(lightDir + viewDir);
+
     float NdotL = max(dot(normal, lightDir), 0.0);
-    float3 diffuse = albedo * NdotL;
-    
-    // Calculate view direction and half vector for specular
-    float3 viewDir = normalize(CameraPosition - worldPos);
-    float3 halfVector = normalize(lightDir + viewDir);
-    
-    // Calculate specular lighting (simplified Blinn-Phong)
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float specPower = (1.0 - roughness) * 100.0 + 8.0;
-    float specularIntensity = pow(NdotH, specPower) * specular;
-    
-    // Mix between diffuse and specular based on metallic
-    float3 specularColor = lerp(float3(1, 1, 1), albedo, metallic);
-    float3 result = lerp(diffuse, specularColor * specularIntensity, metallic);
-    
-    // Apply light color and attenuation
-    return result * light.Color * light.Intensity * attenuation;
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotH = max(dot(normal, halfway), 0.0);
+    float VdotH = max(dot(viewDir, halfway), 0.0);
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F = F_Schlick(F0, VdotH);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+
+    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001));
+    specularBRDF *= specular;
+
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
+    float3 diffuse = albedo / PI;
+    float3 radiance = light.Color * light.Intensity * attenuation;
+
+    return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
 float4 main(PS_INPUT input) : SV_TARGET
@@ -183,7 +215,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float opacity = albedoData.a;
     
     // Transform normal from [0, 1] to [-1, 1]
-    float3 normal = normalData.rgb * 2.0f - 1.0f;
+    float3 normal = normalize(normalData.rgb * 2.0f - 1.0f);
     
     float metallic = materialData.r;
     float roughness = materialData.g;
@@ -193,11 +225,13 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 emissive = emissiveData.rgb;
     
     // Reconstruct world position from depth
-    float3 worldPos = ReconstructPosition(input.TexCoord, depth, input.ViewRay);
-    
+    float3 worldPos = ReconstructPosition(depth, input.ViewRay);
+
     // Initialize lighting with ambient and emissive
     float3 lighting = albedo * AmbientColor * ao + emissive;
     
+    float3 viewDir = normalize(CameraPosition - worldPos);
+
     // Calculate lighting for each light
     for (uint i = 0; i < LightCount; i++)
     {
@@ -205,24 +239,22 @@ float4 main(PS_INPUT input) : SV_TARGET
         
         if (light.Type == 0) // Point light
         {
-            lighting += CalculatePointLight(light, worldPos, normal, albedo, metallic, roughness, specular);
+            lighting += CalculatePointLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
         }
         else if (light.Type == 1) // Directional light
         {
-            lighting += CalculateDirectionalLight(light, normal, albedo, metallic, roughness, specular, worldPos);
+            lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
         }
         else if (light.Type == 2) // Spot light
         {
-            lighting += CalculateSpotLight(light, worldPos, normal, albedo, metallic, roughness, specular);
-        }
+            lighting += CalculateSpotLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
+        }   
     }
     
     // Apply fog
     float distanceToCamera = length(worldPos - CameraPosition);
     float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);
-
-    lighting = normalData.a;
-
+    
     return float4(lighting, opacity);
 }

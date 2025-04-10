@@ -13,7 +13,7 @@ namespace mmo
 	{
 		// Create render textures for the G-Buffer
 		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, PixelFormat::R8G8B8A8);
-		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R8G8B8A8);
+		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R16G16B16A16);
 		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
 		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
 		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);
@@ -38,7 +38,7 @@ namespace mmo
 
 		// Recreate render textures
 		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, PixelFormat::R8G8B8A8);
-		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R8G8B8A8);
+		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R16G16B16A16);
 		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
 		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
 		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);

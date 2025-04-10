@@ -2,7 +2,7 @@
 
 struct VertexIn
 {
-	float4 pos : SV_POSITION;
+    float4 pos : POSITION;
 #ifdef WITH_COLOR
 	float4 color : COLOR;
 #endif

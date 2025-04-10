@@ -19,6 +19,56 @@ TEST_CASE("RadianToDegreeConversion", "[math]")
 	CHECK(fabsf(r.GetValueDegrees() - testDegree) <= FLT_EPSILON);
 }
 
+TEST_CASE("MatrixInverseWorksAsExpected", "[math]")
+{
+	const Matrix4 a = Matrix4::Identity;
+	const Matrix4 b = a.Inverse();
+
+	const Matrix4 identity = a * b;
+	CHECK(identity.IsNearlyEqual(Matrix4::Identity));
+}
+
+TEST_CASE("MatrixInverse_RotationZ", "[math]")
+{
+	Matrix4 m = {
+		0, -1, 0, 0,
+		1,  0, 0, 0,
+		0,  0, 1, 0,
+		0,  0, 0, 1
+	};
+
+	Matrix4 inv = m.InverseAffine(); // valid here
+	Matrix4 result = m * inv;
+	CHECK(result.IsNearlyEqual(Matrix4::Identity));
+}
+
+TEST_CASE("MatrixInverseWorksWithTranslate", "[math]")
+{
+	const Matrix4 a = {
+		1, 0, 0, 3,
+		0, 1, 0, -2,
+		0, 0, 1, 5,
+		0, 0, 0, 1
+	};
+	const Matrix4 b = a.Inverse();
+	const Matrix4 expected = {
+		1, 0, 0, -3,
+		0, 1, 0, 2,
+		0, 0, 1, -5,
+		0, 0, 0, 1
+	};
+	CHECK(b.IsNearlyEqual(expected));
+}
+
+TEST_CASE("MatrixInverseAffineWorksAsExpected", "[math]")
+{
+	const Matrix4 a = Matrix4::Identity;
+	const Matrix4 b = a.InverseAffine();
+
+	const Matrix4 identity = a * b;
+	CHECK(identity.IsNearlyEqual(Matrix4::Identity));
+}
+
 TEST_CASE("DegreeToRadianConversion", "[math]")
 {
 	const float testRadian = Pi;

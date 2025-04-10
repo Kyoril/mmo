@@ -16,3 +16,4 @@ deps/assimp/
 
 .vscode/cmake-kits.json
 .vscode/ipch/
+/src/graphics_test/shaders/*.h

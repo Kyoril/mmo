@@ -217,6 +217,9 @@ namespace mmo
 		Matrix4 m_inverseView;
 		Matrix4 m_restoreInverseView;
 
+		Matrix4 m_inverseProj;
+		Matrix4 m_restoreInverseProj;
+
 		HCURSOR m_hardwareCursor = nullptr;
 
 		Texture* m_textureSlots[16]{ };

@@ -11,6 +11,7 @@
 #include "scene_graph/octree_scene.h"
 #include "deferred_renderer.h"
 #include "log/default_log.h"
+#include "log/default_log_levels.h"
 #include "log/log_entry.h"
 
 namespace mmo
@@ -28,6 +29,13 @@ namespace mmo
 	SceneNode* g_pointLightNode = nullptr;
 	Light* g_pointLight = nullptr;
 
+	Entity* g_lightDebugEnt = nullptr;
+
+	SceneNode* g_pointLight2Node = nullptr;
+	Light* g_pointLight2 = nullptr;
+
+	AnimationState* g_idleState = nullptr;
+
 	std::unique_ptr<DeferredRenderer> g_deferredRenderer = nullptr;
 
 	void RenderScene()
@@ -41,7 +49,17 @@ namespace mmo
 		// Update scene objects and stuff
 		if (g_pointLightRotator)
 		{
-			g_pointLightRotator->Yaw(Radian(elapsedTime), TransformSpace::Local);
+			g_pointLightRotator->Yaw(Radian(elapsedTime), TransformSpace::World);
+		}
+
+		if (g_pointLight2Node)
+		{
+			g_pointLight2Node->SetPosition(Vector3::UnitY * 3.0f + Vector3::UnitY * 2.0f * ::sin(static_cast<double>(time) / 1000.0));
+		}
+
+		if (g_idleState)
+		{
+			g_idleState->AddTime(elapsedTime);
 		}
 	}
 
@@ -84,7 +102,32 @@ namespace mmo
         signals += EventLoop::Paint.connect(OnPaint);
 
         // Terminate application when escape was pressed
-        signals += EventLoop::KeyDown.connect([](const int32 key, bool repeat) { if (key == 0x1B) { EventLoop::Terminate(0); } return true; });
+        signals += EventLoop::KeyDown.connect([](const int32 key, bool repeat)
+        {
+	        if (key == 0x1B)
+	        {
+		        EventLoop::Terminate(0);
+	        }
+
+			if (key == 'V')
+			{
+				// Toggle directional light
+				g_sunLight->SetVisible(!g_sunLight->IsVisible());
+			}
+
+			if (key == 'R')
+			{
+				// Toggle directional light
+				g_pointLight->SetVisible(!g_pointLight->IsVisible());
+			}
+			if (key == 'G')
+			{
+				// Toggle directional light
+				g_pointLight2->SetVisible(!g_pointLight2->IsVisible());
+			}
+
+        	return true;
+        });
 
 		// Setup scene
 		g_scene = std::make_unique<OctreeScene>();
@@ -93,15 +136,22 @@ namespace mmo
 		g_camera = g_scene->CreateCamera("MainCamera");
 		g_cameraNode = &g_scene->CreateSceneNode("MainCameraNode");
 		g_cameraNode->AttachObject(*g_camera);
-		g_cameraNode->SetPosition(Vector3(0.0f, 1.5f, 5.0f));
+		g_cameraNode->SetPosition(Vector3(0.0f, 1.5f, 7.0f));
 		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::Parent);
 		g_camera->SetAspectRatio(1920.0f / 1080.0f);
 
 		g_boarNode = g_scene->GetRootSceneNode().CreateChildSceneNode("BoarNode");
 		ASSERT(g_boarNode);
-		g_boarEntity = g_scene->CreateEntity("Boar", "Models/Creatures/Boar/Boar.hmsh");
+		g_boarEntity = g_scene->CreateEntity("Boar", "Editor/Sphere.hmsh");	// Models/Creatures/Boar/Boar.hmsh
 		ASSERT(g_boarEntity);
 		g_boarNode->AttachObject(*g_boarEntity);
+
+		if (g_boarEntity->HasAnimationState("Idle"))
+		{
+			g_idleState = g_boarEntity->GetAnimationState("Idle");
+			g_idleState->SetEnabled(true);
+			g_idleState->SetLoop(true);
+		}
 
 		// Create a directional light for the scene
 		g_sunLight = &g_scene->CreateLight("MainLight", LightType::Directional);
@@ -111,14 +161,28 @@ namespace mmo
 		g_sunLightNode->AttachObject(*g_sunLight);
 		g_sunLightNode->SetDirection({ -0.5f, -1.0f, -0.3f });
 
-		g_pointLightRotator = g_scene->GetRootSceneNode().CreateChildSceneNode("PointLightRotator");
+		g_pointLightRotator = g_scene->GetRootSceneNode().CreateChildSceneNode("PointLightRotator", Vector3::UnitY * 1.5f);
 
 		g_pointLight = &g_scene->CreateLight("PointLight", LightType::Point);
 		g_pointLight->SetColor(Vector4(1.0f, 0.0f, 0.0f, 1.0f)); // Red point light
-		g_pointLight->SetIntensity(15.0f);
+		g_pointLight->SetIntensity(3.0f);
 		g_pointLight->SetRange(15.0f);
-		g_pointLightNode = g_pointLightRotator->CreateChildSceneNode("PointLightNode", Vector3::UnitZ * 1.0f);
+		g_pointLightNode = g_pointLightRotator->CreateChildSceneNode("PointLightNode", Vector3::UnitZ * 4.5f);
 		g_pointLightNode->AttachObject(*g_pointLight);
+		g_pointLightNode->SetScale(Vector3::UnitScale * 0.5f);
+
+		g_pointLight2 = &g_scene->CreateLight("PointLight2", LightType::Point);
+		g_pointLight2->SetColor(Vector4(0.0f, 1.0f, 0.0f, 1.0f)); // Green point light
+		g_pointLight2->SetIntensity(2.0f);
+		g_pointLight2->SetRange(15.0f);
+		g_pointLight2Node = g_scene->GetRootSceneNode().CreateChildSceneNode()->CreateChildSceneNode("PointLightNode2", Vector3::UnitY * 3.0f);
+		g_pointLight2Node->AttachObject(*g_pointLight2);
+		g_pointLight2Node->SetScale(Vector3::UnitScale * 0.5f);
+
+
+		g_lightDebugEnt = g_scene->CreateEntity("LightDebug", "Editor/Joint.hmsh");
+		ASSERT(g_lightDebugEnt);
+		g_pointLightNode->AttachObject(*g_lightDebugEnt);
 
 		// Create deferred renderer
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), desc.width, desc.height);
@@ -128,6 +192,37 @@ namespace mmo
 
 	void DestroyGlobal()
 	{
+		if (g_lightDebugEnt)
+		{
+			g_scene->DestroyEntity(*g_lightDebugEnt);
+			g_lightDebugEnt = nullptr;
+		}
+		if (g_pointLight2Node)
+		{
+			g_scene->DestroySceneNode(*g_pointLight2Node);
+			g_pointLight2Node = nullptr;
+		}
+		if (g_pointLight2)
+		{
+			g_scene->DestroyLight(*g_pointLight2);
+			g_pointLight2 = nullptr;
+		}
+		if (g_pointLight)
+		{
+			g_scene->DestroyLight(*g_pointLight);
+			g_pointLight = nullptr;
+		}
+		if (g_pointLightNode)
+		{
+			g_scene->DestroySceneNode(*g_pointLightNode);
+			g_pointLightNode = nullptr;
+		}
+		if (g_pointLightRotator)
+		{
+			g_scene->DestroySceneNode(*g_pointLightRotator);
+			g_pointLightRotator = nullptr;
+		}
+
 		if (g_boarNode)
 		{
 			g_scene->DestroySceneNode(*g_boarNode);

@@ -3,7 +3,7 @@
 // Input structure
 struct VS_INPUT
 {
-    float3 Position : SV_POSITION;
+    float3 Position : POSITION;
     float4 Color : COLOR0;
     float2 TexCoord : TEXCOORD0;
 };
@@ -20,26 +20,30 @@ struct VS_OUTPUT
 // Constant buffer for matrices
 cbuffer MatrixBuffer : register(b0)
 {
-    matrix World;
-    matrix View;
-    matrix Projection;
-    matrix InverseView;
+    column_major matrix World;
+    column_major matrix View;
+    column_major matrix Projection;
+    row_major matrix InverseView;
+    row_major matrix InverseProjection;
 };
 
 VS_OUTPUT main(VS_INPUT input)
 {
     VS_OUTPUT output;
-    
-    // Transform position to clip space
-    output.Position = float4(input.Position, 1.0f);
-    
-    // Pass through color and texture coordinates
+
+    output.Position = float4(input.Position.xy, 0.0f, 1.0f);
     output.Color = input.Color;
     output.TexCoord = input.TexCoord;
-    
-    // Calculate view ray for reconstructing position from depth
-    float4 viewRay = mul(InverseView, float4(input.Position.x, input.Position.y, 1.0f, 0.0f));
-    output.ViewRay = viewRay.xyz;
+
+    // Convert from UV [0,1] to NDC [-1,1]
+    float2 ndc = input.TexCoord * 2.0f - 1.0f;
+
+	// Reconstruct from NDC (Z=1 at far plane)
+    float4 viewRayH = mul(InverseProjection, float4(ndc, 1, 1));
+    float3 viewRay = viewRayH.xyz / viewRayH.w;
+
+	// Don't normalize — let the pixel shader scale it by depth
+    output.ViewRay = viewRay;
     
     return output;
 }

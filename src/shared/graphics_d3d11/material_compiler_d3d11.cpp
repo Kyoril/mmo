@@ -587,6 +587,7 @@ namespace mmo
 			<< "\tfloat fogStart;	// Distance of fog start\n"
 			<< "\tfloat fogEnd;		// Distance of fog end\n"
 			<< "\tfloat3 fogColor;	// Fog color\n"
+			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
 			<< "};\n\n";
 
 		const auto& scalarParams = m_floatParameters;
@@ -968,7 +969,7 @@ namespace mmo
 			m_pixelShaderStream << "\tfloat farZ = 1000.0;\n";
 			m_pixelShaderStream << "\tfloat nearZ = 0.01;\n";
 			m_pixelShaderStream
-				<< "\tfloat linearDepth = (2.0 * nearZ) / (farZ + nearZ - (input.pos.z / input.pos.w) * (farZ - nearZ))\n";
+				<< "\tfloat linearDepth = (2.0 * nearZ) / (farZ + nearZ - (input.pos.z / input.pos.w) * (farZ - nearZ));\n";
 
 			// For unlit materials, write base color to emissive instead of albedo
 			if (!m_lit)
@@ -1212,6 +1213,7 @@ namespace mmo
 			<< "\tcolumn_major matrix matView;\n"
 			<< "\tcolumn_major matrix matProj;\n"
 			<< "\tcolumn_major matrix matInvView;\n"
+			<< "\tcolumn_major matrix InverseProjection;\n"
 			<< "};\n\n";
 
 		if (numBones > 0)

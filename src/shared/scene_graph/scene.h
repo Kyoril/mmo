@@ -288,6 +288,8 @@ namespace mmo
 
 		Light& CreateLight(const String& name, LightType type);
 
+		void DestroyLight(const Light& light);
+
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
 		/// @returns Pointer to the camera or nullptr if the camera does not exist.
@@ -323,6 +325,10 @@ namespace mmo
 		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
 		void SetFogRange(float start, float end);
+
+		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
+
+		void RefreshCameraBuffer(const Camera& camera);
 
 	protected:
 		virtual std::unique_ptr<SceneNode> CreateSceneNodeImpl();

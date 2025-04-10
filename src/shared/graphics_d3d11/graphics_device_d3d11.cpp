@@ -207,14 +207,14 @@ namespace mmo
 
 		// EGxVertexFormat::Pos
 		const D3D11_INPUT_ELEMENT_DESC PosElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
 		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosElements, ARRAYSIZE(PosElements), g_VS_Pos, ARRAYSIZE(g_VS_Pos), &InputLayout)));
 		InputLayouts[VertexFormat::Pos] = InputLayout;
 
 		// EGxVertexFormat::PosColor
 		const D3D11_INPUT_ELEMENT_DESC PosColElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
 		VERIFY(SUCCEEDED(m_device->CreateInputLayout(PosColElements, ARRAYSIZE(PosColElements), g_VS_PosColor, ARRAYSIZE(g_VS_PosColor), &InputLayout)));
@@ -222,7 +222,7 @@ namespace mmo
 
 		// EGxVertexFormat::PosColorNormal
 		const D3D11_INPUT_ELEMENT_DESC PosColNormElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
@@ -231,7 +231,7 @@ namespace mmo
 
 		// EGxVertexFormat::PosColorNormalTex1
 		const D3D11_INPUT_ELEMENT_DESC PosColNormTexElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -241,7 +241,7 @@ namespace mmo
 		
 		// EGxVertexFormat::PosColorNormalBinormalTangentTex1
 		const D3D11_INPUT_ELEMENT_DESC PosColNormBinormalTangentTexElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -253,7 +253,7 @@ namespace mmo
 
 		// EGxVertexFormat::PosColorTex1
 		const D3D11_INPUT_ELEMENT_DESC PosColTexElements[] = {
-			{ "SV_POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
@@ -294,12 +294,13 @@ namespace mmo
 		m_transform[0] = Matrix4::Identity;
 		m_transform[1] = Matrix4::Identity;
 		m_transform[2] = Matrix4::Identity;
-		m_inverseView = Matrix4::Identity;
+		m_inverseView = Matrix4::Identity.Inverse();
+		m_inverseProj = Matrix4::Identity.Inverse();
 
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
 		cbd.Usage = D3D11_USAGE_DYNAMIC;
-		cbd.ByteWidth = sizeof(Matrix4) * 4;
+		cbd.ByteWidth = sizeof(Matrix4) * 5;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 		cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
@@ -475,6 +476,7 @@ namespace mmo
 		{
 			memcpy(mappedResource.pData, m_transform, sizeof(m_transform));
 			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform), &m_inverseView, sizeof(m_inverseView));
+			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform) + sizeof(m_inverseView), &m_inverseProj, sizeof(m_inverseProj));
 			m_immContext->Unmap(m_matrixBuffer.Get(), 0);
 		}
 		else
@@ -843,6 +845,7 @@ namespace mmo
 		GraphicsDevice::CaptureState();
 
 		m_restoreInverseView = m_inverseView;
+		m_restoreInverseProj = m_inverseProj;
 	}
 
 	void GraphicsDeviceD3D11::RestoreState()
@@ -850,6 +853,7 @@ namespace mmo
 		GraphicsDevice::RestoreState();
 		
 		m_inverseView = m_restoreInverseView;
+		m_inverseProj = m_restoreInverseProj;
 
 		m_samplerDescChanged = true;
 		m_lastInputLayout = nullptr;
@@ -875,6 +879,10 @@ namespace mmo
 		if (type == View)
 		{
 			m_inverseView = matrix.Inverse();
+		}
+		else if (type == Projection)
+		{
+			m_inverseProj = matrix.Inverse();
 		}
 
 		m_matrixDirty = true;

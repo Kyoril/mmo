@@ -342,6 +342,18 @@ namespace mmo
 			m[3][0] = 0.0; m[3][1] = 0.0; m[3][2] = 0.0; m[3][3] = 1.0;
 		}
 
+		bool IsNearlyEqual(const Matrix4& matrix4) const
+		{
+			for (size_t i = 0; i < 16; ++i)
+			{
+				if (::fabsf(_m[i] - matrix4._m[i]) > FLT_EPSILON)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
 		static Matrix4 GetTrans(const Vector3& v)
 		{
 			Matrix4 r;

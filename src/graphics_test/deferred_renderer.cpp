@@ -111,6 +111,11 @@ namespace mmo
         // Bind the G-Buffer
         m_gBuffer.Bind();
 
+        m_gBuffer.GetAlbedoRT().Clear(ClearFlags::Color);
+        m_gBuffer.GetNormalRT().Clear(ClearFlags::Color);
+        m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
+        m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
+
         // Render the scene using the camera
         scene.Render(camera, PixelShaderType::GBuffer);
     }
@@ -128,8 +133,9 @@ namespace mmo
         m_device.SetDepthWriteEnabled(false);
 
         m_device.SetTransformMatrix(World, Matrix4::Identity);
-        m_device.SetTransformMatrix(View, Matrix4::Identity);
-        m_device.SetTransformMatrix(Projection, Matrix4::Identity);
+        m_device.SetTransformMatrix(View, camera.GetViewMatrix());
+        m_device.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
+        scene.RefreshCameraBuffer(camera);
 
         // Prepare the light buffer with a single directional light for now
         LightBuffer lightBuffer;
@@ -143,12 +149,17 @@ namespace mmo
 				break;  // Avoid exceeding the maximum number of lights
 			}
 
+            if (!light->IsVisible())
+            {
+                continue;
+            }
+
 			if (light->GetType() != LightType::Directional)
 			{
 				// Check if light is in the camera's view frustum
 				if (!camera.IsVisible(light->GetBoundingBox()))
 				{
-					continue;  // Skip lights that are not in view
+					//continue;  // Skip lights that are not in view
 				}
 			}
 
@@ -160,7 +171,7 @@ namespace mmo
             bufferedLight.intensity = light->GetIntensity();
             bufferedLight.range = light->GetRange();
             bufferedLight.spotAngle = 0.0f;
-            bufferedLight.direction = light->GetDirection().NormalizedCopy();
+            bufferedLight.direction = light->GetDirection();
 
             // Set up a directional light
             switch (light->GetType())
@@ -169,7 +180,6 @@ namespace mmo
                 bufferedLight.position = Vector3(0.0f, 0.0f, 0.0f);
                 bufferedLight.range = 0.0f;  // Directional lights don't have a range
                 bufferedLight.type = 1;
-                bufferedLight.spotAngle = 0.0f;  // Not used for directional lights
                 break;
             case LightType::Point:
                 bufferedLight.type = 0;
@@ -208,6 +218,9 @@ namespace mmo
 		m_device.SetFaceCullMode(FaceCullMode::None);
 		m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
     	m_quadBuffer->Set(0);
+
+        // Bind buffer to stage
+        scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 0);
 
         // Draw a full-screen quad
         m_device.Draw(6);
