@@ -2,7 +2,7 @@
 
 #include "VS_InOut.hlsli"
 
-cbuffer Matrices
+cbuffer Matrices : register(b0)
 {
 	column_major matrix matWorld;
 	column_major matrix matView;

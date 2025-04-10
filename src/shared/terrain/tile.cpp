@@ -192,13 +192,8 @@ namespace mmo
 					vert->normal = m_page.CalculateNormalAt(i, j);
 
 					// Choose an arbitrary vector different from the normal
-					Vector3 arbitrary = { 1, 0, 0 };
-					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f)
-					{
-						arbitrary = { 0, 0, 1 };
-					}
-
-					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
+					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
+					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();
@@ -289,12 +284,8 @@ namespace mmo
 					vert->normal = m_page.GetNormalAt(i, j);
 
 					// Choose an arbitrary vector different from the normal
-					Vector3 arbitrary = { 1, 0, 0 };
-					if (std::abs(vert->normal.x - 1) < 1e-6f && std::abs(vert->normal.y) < 1e-6f && std::abs(vert->normal.z) < 1e-6f) {
-						arbitrary = { 0, 0, 1 };
-					}
-
-					vert->tangent = vert->normal.Cross(arbitrary).NormalizedCopy();
+					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
+					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();

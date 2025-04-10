@@ -614,6 +614,7 @@ namespace mmo
 		// Set the constant buffers
 		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
 		m_immContext->VSSetConstantBuffers(0, 1, Buffers);
+		m_immContext->PSSetConstantBuffers(0, 1, Buffers);
 
 		// Default blend state
 		m_immContext->OMSetBlendState(m_opaqueBlendState.Get(), nullptr, 0xffffffff);
@@ -1170,7 +1171,7 @@ namespace mmo
 		}
 
 		// Bind additional constant buffers if any
-		int psStartSlot = 0;
+		int psStartSlot = 1;
 		for (auto& buffer : operation.pixelConstantBuffers)
 		{
 			ASSERT(buffer);

@@ -13,6 +13,9 @@
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"
+#include "scene_graph/material_manager.h"
+#include "terrain/page.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
@@ -33,6 +36,8 @@ namespace mmo
 
 	SceneNode* g_pointLight2Node = nullptr;
 	Light* g_pointLight2 = nullptr;
+
+	std::unique_ptr<terrain::Terrain> g_terrain;
 
 	AnimationState* g_idleState = nullptr;
 
@@ -136,13 +141,13 @@ namespace mmo
 		g_camera = g_scene->CreateCamera("MainCamera");
 		g_cameraNode = &g_scene->CreateSceneNode("MainCameraNode");
 		g_cameraNode->AttachObject(*g_camera);
-		g_cameraNode->SetPosition(Vector3(0.0f, 1.5f, 7.0f));
+		g_cameraNode->SetPosition(Vector3(0.0f, 5.5f, 7.0f));
 		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::Parent);
 		g_camera->SetAspectRatio(1920.0f / 1080.0f);
 
 		g_boarNode = g_scene->GetRootSceneNode().CreateChildSceneNode("BoarNode");
 		ASSERT(g_boarNode);
-		g_boarEntity = g_scene->CreateEntity("Boar", "Editor/Sphere.hmsh");	// Models/Creatures/Boar/Boar.hmsh
+		g_boarEntity = g_scene->CreateEntity("Boar", "Models/Creatures/Boar/Boar.hmsh");	// Models/Creatures/Boar/Boar.hmsh
 		ASSERT(g_boarEntity);
 		g_boarNode->AttachObject(*g_boarEntity);
 
@@ -179,6 +184,8 @@ namespace mmo
 		g_pointLight2Node->AttachObject(*g_pointLight2);
 		g_pointLight2Node->SetScale(Vector3::UnitScale * 0.5f);
 
+		//g_sunLight->SetVisible(false);
+		//g_pointLight2->SetVisible(false);
 
 		g_lightDebugEnt = g_scene->CreateEntity("LightDebug", "Editor/Joint.hmsh");
 		ASSERT(g_lightDebugEnt);
@@ -187,11 +194,32 @@ namespace mmo
 		// Create deferred renderer
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), desc.width, desc.height);
 
+		g_terrain = std::make_unique<terrain::Terrain>(*g_scene, g_camera, 64, 64);
+		g_terrain->SetBaseFileName("GraphicsTest");
+		g_terrain->SetDefaultMaterial(MaterialManager::Get().Load("Models/Default.hmat"));		// Models/FalwynPlains_Terrain_Forest.hmi
+
+
+		for (uint32 i = 31; i < 33; ++i)
+		{
+			for (uint32 j = 31; j < 33; ++j)
+			{
+				if (terrain::Page* page = g_terrain->GetPage(i, j))
+				{
+					page->Prepare();
+					while (!page->Load())
+					{
+					}
+				}
+			}
+		}
+        
 		return true;
 	}
 
 	void DestroyGlobal()
 	{
+		g_terrain.reset();
+
 		if (g_lightDebugEnt)
 		{
 			g_scene->DestroyEntity(*g_lightDebugEnt);

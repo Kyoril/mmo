@@ -579,7 +579,17 @@ namespace mmo
 				<< "};\n\n";
 		}
 
-		size_t bufferRegister = 0;
+		size_t bufferRegister = 1;
+
+		m_pixelShaderStream
+			<< "cbuffer Matrices : register(b0)\n"
+			<< "{\n"
+			<< "\tcolumn_major matrix matWorld;\n"
+			<< "\tcolumn_major matrix matView;\n"
+			<< "\tcolumn_major matrix matProj;\n"
+			<< "\tcolumn_major matrix matInvView;\n"
+			<< "};\n\n";
+
 		m_pixelShaderStream
 			<< "cbuffer CameraParameters : register(b" << bufferRegister++ << ")\n"
 			<< "{\n"
@@ -964,12 +974,9 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tGBufferOutput output;\n";
 
-
-
-			m_pixelShaderStream << "\tfloat farZ = 1000.0;\n";
-			m_pixelShaderStream << "\tfloat nearZ = 0.01;\n";
 			m_pixelShaderStream
-				<< "\tfloat linearDepth = (2.0 * nearZ) / (farZ + nearZ - (input.pos.z / input.pos.w) * (farZ - nearZ));\n";
+				<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
+				<< "\tfloat linearDepth = -viewPos.z;\n";
 
 			// For unlit materials, write base color to emissive instead of albedo
 			if (!m_lit)

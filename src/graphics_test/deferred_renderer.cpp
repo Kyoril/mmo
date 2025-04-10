@@ -201,7 +201,7 @@ namespace mmo
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
 
         // Bind the light buffer
-        m_lightBuffer->BindToStage(ShaderType::PixelShader, 1);
+        m_lightBuffer->BindToStage(ShaderType::PixelShader, 2);
 
         // Set the vertex format for the full-screen quad
         m_device.SetVertexFormat(VertexFormat::PosColorTex1);
@@ -220,7 +220,7 @@ namespace mmo
     	m_quadBuffer->Set(0);
 
         // Bind buffer to stage
-        scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 0);
+        scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 1);
 
         // Draw a full-screen quad
         m_device.Draw(6);

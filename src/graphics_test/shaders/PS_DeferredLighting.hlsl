@@ -20,8 +20,16 @@ Texture2D EmissiveTexture : register(t3);
 // Samplers
 SamplerState PointSampler : register(s0);
 
+cbuffer Matrices : register(b0)
+{
+    column_major matrix matWorld;
+    column_major matrix matView;
+    column_major matrix matProj;
+    column_major matrix matInvView;
+};
+
 // Camera constant buffer
-cbuffer CameraBuffer : register(b0)
+cbuffer CameraBuffer : register(b1)
 {
     float3 CameraPosition;
     float FogStart;
@@ -44,7 +52,7 @@ struct Light
 };
 
 // Light buffer
-cbuffer LightBuffer : register(b1)
+cbuffer LightBuffer : register(b2)
 {
     uint LightCount;
     float3 AmbientColor;
@@ -55,7 +63,7 @@ cbuffer LightBuffer : register(b1)
 float3 ReconstructPosition(float linearDepth, float3 viewRay)
 {
     float3 viewPos = viewRay * linearDepth;
-    return mul(float4(viewPos, 1.0), InverseViewMatrix).xyz;
+    return mul(float4(viewPos, 1.0), matInvView).xyz;
 }
 
 float3 F_Schlick(float3 F0, float cosTheta)
@@ -96,15 +104,16 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
 
     lightDir = normalize(lightDir);
     float3 halfway = normalize(lightDir + viewDir);
+    
 
     float NdotL = max(dot(normal, lightDir), 0.0);
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotH = max(dot(normal, halfway), 0.0);
     float VdotH = max(dot(viewDir, halfway), 0.0);
-
+    
     // Attenuation
     float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0);
-
+    
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
     float3 F = F_Schlick(F0, VdotH);
     float D = D_GGX(NdotH, roughness);
@@ -225,8 +234,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 emissive = emissiveData.rgb;
     
     // Reconstruct world position from depth
-    float3 worldPos = ReconstructPosition(depth, input.ViewRay);
-
+    float3 worldPos = ReconstructPosition(depth, normalize(input.ViewRay));
+    
     // Initialize lighting with ambient and emissive
     float3 lighting = albedo * AmbientColor * ao + emissive;
     
@@ -252,6 +261,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     }
     
     // Apply fog
+
     float distanceToCamera = length(worldPos - CameraPosition);
     float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);

@@ -119,6 +119,12 @@ namespace mmo
 			}
 			else
 			{
+				EncodedNormal8 encoded = EncodeNormalSNorm8(0.0f, 1.0f, 0.0f);
+				for (size_t i = 0; i < m_normals.size(); ++i)
+				{
+					m_normals[i] = encoded;
+				}
+
 				WLOG("Terrain page file '" << pageFileName << "' is missing, page will be initialized as blank tile");
 				m_changed = true;
 			}

@@ -75,7 +75,8 @@ target_link_libraries(graphics_test
 	tex_v1_0 
 	assets
 	scene_graph
-    frame_ui)
+    frame_ui
+    terrain)
 	
 target_link_libraries(graphics_test graphics_null)
 if (WIN32)
