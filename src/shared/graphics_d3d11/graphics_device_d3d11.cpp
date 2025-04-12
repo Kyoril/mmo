@@ -479,6 +479,12 @@ namespace mmo
 			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform), &m_inverseView, sizeof(m_inverseView));
 			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform) + sizeof(m_inverseView), &m_inverseProj, sizeof(m_inverseProj));
 			m_immContext->Unmap(m_matrixBuffer.Get(), 0);
+
+#if MMO_GPU_DEBUG
+			// Double check here
+			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseView * m_transform[View]));
+			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
+#endif
 		}
 		else
 		{
@@ -602,6 +608,8 @@ namespace mmo
 			m_transform[0] = Matrix4::Identity;
 			m_transform[1] = Matrix4::Identity;
 			m_transform[2] = Matrix4::Identity;
+			m_inverseView = m_transform[1].InverseAffine();
+			m_inverseProj = m_transform[2].Inverse();
 			UpdateMatrixBuffer();
 			m_matrixDirty = false;
 		}
@@ -882,11 +890,19 @@ namespace mmo
 
 		if (type == View)
 		{
-			m_inverseView = matrix.Inverse();
+			m_inverseView = m_transform[View].InverseAffine();
+#if MMO_GPU_DEBUG
+			// First check on set (fail early)
+			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseView * m_transform[View]));			
+#endif
 		}
 		else if (type == Projection)
 		{
-			m_inverseProj = matrix.Inverse();
+			m_inverseProj = m_transform[Projection].Inverse();
+#if MMO_GPU_DEBUG
+			// First check on set (fail early)
+			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
+#endif
 		}
 
 		m_matrixDirty = true;

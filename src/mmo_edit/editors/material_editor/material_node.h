@@ -1471,7 +1471,10 @@ namespace mmo
 		AssetPathValue m_texturePath { "", ".htex" };
 		AssetPathProperty m_texturePathProp { "Texture", m_texturePath };
 
-		PropertyBase* m_properties[1] = { &m_texturePathProp };
+		int m_samplerType = 0;
+		IntProperty m_samplerTypeProp{ "Sampler Type", m_samplerType };
+
+		PropertyBase* m_properties[2] = { &m_texturePathProp, &m_samplerTypeProp };
 
 	    MaterialPin m_uvs = { this, "UVs" };
 
@@ -1521,7 +1524,10 @@ namespace mmo
 		AssetPathProperty m_texturePathProp{ "Texture", m_texturePath };
 		StringProperty m_nameProp{ "Name", m_textureName };
 
-		PropertyBase* m_properties[2] = { &m_nameProp, &m_texturePathProp };
+		int m_samplerType = 0;
+		IntProperty m_samplerTypeProp{ "Sampler Type", m_samplerType };
+
+		PropertyBase* m_properties[3] = { &m_nameProp, &m_texturePathProp, &m_samplerTypeProp };
 
 		MaterialPin m_uvs = { this, "UVs" };
 

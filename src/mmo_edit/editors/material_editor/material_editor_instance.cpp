@@ -366,7 +366,8 @@ namespace mmo
 		m_viewportRT->Clear(mmo::ClearFlags::All);
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
-		
+		m_camera->InvalidateView();
+
 		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		
 		m_viewportRT->Update();

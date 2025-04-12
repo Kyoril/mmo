@@ -170,15 +170,15 @@ namespace mmo
 
 		g_pointLight = &g_scene->CreateLight("PointLight", LightType::Point);
 		g_pointLight->SetColor(Vector4(1.0f, 0.0f, 0.0f, 1.0f)); // Red point light
-		g_pointLight->SetIntensity(3.0f);
+		g_pointLight->SetIntensity(1.0f);
 		g_pointLight->SetRange(15.0f);
-		g_pointLightNode = g_pointLightRotator->CreateChildSceneNode("PointLightNode", Vector3::UnitZ * 4.5f);
+		g_pointLightNode = g_pointLightRotator->CreateChildSceneNode("PointLightNode", Vector3(0.0f, 2.0f, 10.0f));
 		g_pointLightNode->AttachObject(*g_pointLight);
 		g_pointLightNode->SetScale(Vector3::UnitScale * 0.5f);
 
 		g_pointLight2 = &g_scene->CreateLight("PointLight2", LightType::Point);
 		g_pointLight2->SetColor(Vector4(0.0f, 1.0f, 0.0f, 1.0f)); // Green point light
-		g_pointLight2->SetIntensity(2.0f);
+		g_pointLight2->SetIntensity(1.0f);
 		g_pointLight2->SetRange(15.0f);
 		g_pointLight2Node = g_scene->GetRootSceneNode().CreateChildSceneNode()->CreateChildSceneNode("PointLightNode2", Vector3::UnitY * 3.0f);
 		g_pointLight2Node->AttachObject(*g_pointLight2);
@@ -197,7 +197,6 @@ namespace mmo
 		g_terrain = std::make_unique<terrain::Terrain>(*g_scene, g_camera, 64, 64);
 		g_terrain->SetBaseFileName("GraphicsTest");
 		g_terrain->SetDefaultMaterial(MaterialManager::Get().Load("Models/Default.hmat"));		// Models/FalwynPlains_Terrain_Forest.hmi
-
 
 		for (uint32 i = 31; i < 33; ++i)
 		{

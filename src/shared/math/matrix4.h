@@ -15,6 +15,8 @@
 #include "vector4.h"
 
 #include <immintrin.h> // AVX
+#include <intrin.h>
+#include <xmmintrin.h>
 
 namespace mmo
 {
@@ -129,35 +131,56 @@ namespace mmo
 			return m[iRow];
 		}
 
+#        define _mm_madd_ps( a, b, c ) _mm_add_ps( c, _mm_mul_ps( a, b ) )
+
 		Matrix4 Concatenate(const Matrix4& B) const
 		{
-			Matrix4 result;
+#if 0
+			Matrix4 r;
+			__m128 m2[4];
+			m2[0] = _mm_load_ps(&B[0][0]);
+			m2[1] = _mm_load_ps(&B[1][0]);
+			m2[2] = _mm_load_ps(&B[2][0]);
+			m2[3] = _mm_load_ps(&B[3][0]);
 
-			for (int i = 0; i < 4; ++i)
-			{
-				// Load row i of A
-				__m128 row = _mm_load_ps(m[i]); // (A[i][0], A[i][1], A[i][2], A[i][3])
+			__m128 t = _mm_mul_ps(_mm_load_ps1(&m[0][0]), m2[0]);
+			t = _mm_madd_ps(_mm_load_ps1(&m[0][1]), m2[1], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[0][2]), m2[2], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[0][3]), m2[3], t);
+			_mm_store_ps(r._m + 0, t);
 
-				for (int j = 0; j < 4; ++j)
-				{
-					// Build a register holding (B[0][j], B[1][j], B[2][j], B[3][j]) in that order
-					__m128 col = _mm_set_ps(B.m[3][j], B.m[2][j], B.m[1][j], B.m[0][j]);
+			t = _mm_mul_ps(_mm_load_ps1(&m[1][0]), m2[0]);
+			t = _mm_madd_ps(_mm_load_ps1(&m[1][1]), m2[1], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[1][2]), m2[2], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[1][3]), m2[3], t);
+			_mm_store_ps(r._m + 4, t);
 
-					// Multiply them element-wise
-					__m128 mul = _mm_mul_ps(row, col);
+			t = _mm_mul_ps(_mm_load_ps1(&m[2][0]), m2[0]);
+			t = _mm_madd_ps(_mm_load_ps1(&m[2][1]), m2[1], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[2][2]), m2[2], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[2][3]), m2[3], t);
+			_mm_store_ps(r._m + 8, t);
 
-					// Now we want the sum of those 4 products:
-					//    A[i][0]*B[0][j] + A[i][1]*B[1][j] + A[i][2]*B[2][j] + A[i][3]*B[3][j].
-					// The typical SSE trick is to do horizontal adds twice:
-					__m128 sum = _mm_hadd_ps(mul, mul);  // (x+y, z+w, x+y, z+w)
-					sum = _mm_hadd_ps(sum, sum);  // ((x+y)+(z+w), ...)
+			t = _mm_mul_ps(_mm_load_ps1(&m[3][0]), m2[0]);
+			t = _mm_madd_ps(_mm_load_ps1(&m[3][1]), m2[1], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[3][2]), m2[2], t);
+			t = _mm_madd_ps(_mm_load_ps1(&m[3][3]), m2[3], t);
+			_mm_store_ps(r._m + 12, t);
 
-					// Store the single float result
-					result.m[i][j] = _mm_cvtss_f32(sum);
+			return r;
+#else
+			Matrix4 result{};
+			for (int row = 0; row < 4; ++row) {
+				for (int col = 0; col < 4; ++col) {
+					float sum = 0.0f;
+					for (int k = 0; k < 4; ++k) {
+						sum += m[row][k] * B.m[k][col];
+					}
+					result.m[row][col] = sum;
 				}
 			}
-
 			return result;
+#endif
 		}
 
 		Matrix4 operator * (const Matrix4 &m2) const
@@ -167,69 +190,24 @@ namespace mmo
 
 		Vector3 operator * (const Vector3& v) const
 		{
-			// Make (x, y, z, 1)
-			__m128 vec = _mm_set_ps(1.0f, v.z, v.y, v.x);
+			Vector3 r;
 
-			// We'll compute the four dot products for the row 0..3
-			__m128 row0 = _mm_load_ps(m[0]);
-			__m128 row1 = _mm_load_ps(m[1]);
-			__m128 row2 = _mm_load_ps(m[2]);
-			__m128 row3 = _mm_load_ps(m[3]);
+			float fInvW = 1.0f / (m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3]);
 
-			// Dot products using SSE 4.1 _mm_dp_ps
-			__m128 xVec = _mm_dp_ps(row0, vec, 0xF1); // x'
-			__m128 yVec = _mm_dp_ps(row1, vec, 0xF1); // y'
-			__m128 zVec = _mm_dp_ps(row2, vec, 0xF1); // z'
-			__m128 wVec = _mm_dp_ps(row3, vec, 0xF1); // w'
+			r.x = (m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3]) * fInvW;
+			r.y = (m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3]) * fInvW;
+			r.z = (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]) * fInvW;
 
-			// Now wVec holds the 4D dot product in the low float
-			// If we want to divide by w (perspective correct):
-			// Instead of using the approximate rcp instruction,
-			// we can do a single float division or a Newton-Raphson refine:
-			__m128 invW = _mm_div_ps(_mm_set1_ps(1.0f), wVec);
-
-			xVec = _mm_mul_ps(xVec, invW);
-			yVec = _mm_mul_ps(yVec, invW);
-			zVec = _mm_mul_ps(zVec, invW);
-
-			Vector3 out;
-			out.x = _mm_cvtss_f32(xVec);
-			out.y = _mm_cvtss_f32(yVec);
-			out.z = _mm_cvtss_f32(zVec);
-
-			return out;
+			return r;
 		}
 
 		inline Vector4 operator*(const Vector4& v) const
 		{
-			__m128 vec = _mm_set_ps(v.w, v.z, v.y, v.x);
-
-			Vector4 out;
-
-			for (int i = 0; i < 4; ++i)
-			{
-				__m128 row = _mm_load_ps(m[i]);  // (M[i][0], M[i][1], M[i][2], M[i][3])
-				__m128 mul = _mm_mul_ps(row, vec); // element-wise
-				__m128 sum = _mm_hadd_ps(mul, mul);
-				sum = _mm_hadd_ps(sum, sum);
-				out[i] = _mm_cvtss_f32(sum);       // store in out.x/out.y/out.z/out.w
-			}
-			return out;
+			return Vector4(m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
+				m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3] * v.w,
+				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
+				m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3] * v.w);
 		}
-
-		/*inline Plane operator * (const Plane& p) const
-		{
-			Plane ret;
-			Matrix4 invTrans = inverse().transpose();
-			Vector4 v4(p.normal.x, p.normal.y, p.normal.z, p.d);
-			v4 = invTrans * v4;
-			ret.normal.x = v4.x;
-			ret.normal.y = v4.y;
-			ret.normal.z = v4.z;
-			ret.d = v4.w / ret.normal.normalise();
-
-			return ret;
-		}*/
 
 		Matrix4 operator + (const Matrix4 &m2) const
 		{
@@ -346,7 +324,7 @@ namespace mmo
 		{
 			for (size_t i = 0; i < 16; ++i)
 			{
-				if (::fabsf(_m[i] - matrix4._m[i]) > FLT_EPSILON)
+				if (::fabsf(_m[i] - matrix4._m[i]) > 1e-5f)
 				{
 					return false;
 				}
@@ -525,4 +503,13 @@ namespace mmo
 				m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]);
 		}
 	};
+
+	inline std::ostream& operator<<(std::ostream& o, const mmo::Matrix4& b)
+	{
+		return o
+			<< "(" << b.m[0][0] << ", " << b.m[0][1] << ", " << b.m[0][2] << ", " << b.m[0][3] << ",\n"
+			<< "(" << b.m[1][0] << ", " << b.m[1][1] << ", " << b.m[1][2] << ", " << b.m[1][3] << ",\n"
+			<< "(" << b.m[2][0] << ", " << b.m[2][1] << ", " << b.m[2][2] << ", " << b.m[2][3] << ",\n"
+			<< "(" << b.m[3][0] << ", " << b.m[3][1] << ", " << b.m[3][2] << ", " << b.m[3][3] << ")";
+	}
 }

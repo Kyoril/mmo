@@ -115,6 +115,7 @@ namespace mmo
         m_gBuffer.GetNormalRT().Clear(ClearFlags::Color);
         m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
         m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
+        m_gBuffer.GetViewRayRT().Clear(ClearFlags::Color);
 
         // Render the scene using the camera
         scene.Render(camera, PixelShaderType::GBuffer);
@@ -199,6 +200,7 @@ namespace mmo
         m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 1);
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
+        m_gBuffer.GetViewRayRT().Bind(ShaderType::PixelShader, 4);
 
         // Bind the light buffer
         m_lightBuffer->BindToStage(ShaderType::PixelShader, 2);

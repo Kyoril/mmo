@@ -8,7 +8,6 @@ struct PS_INPUT
     float4 Position : SV_POSITION;
     float4 Color : COLOR0;
     float2 TexCoord : TEXCOORD0;
-    float3 ViewRay : TEXCOORD1;
 };
 
 // G-Buffer textures
@@ -16,6 +15,7 @@ Texture2D AlbedoTexture : register(t0);
 Texture2D NormalTexture : register(t1);
 Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
+Texture2D ViewRayTexture : register(t4);
 
 // Samplers
 SamplerState PointSampler : register(s0);
@@ -36,7 +36,7 @@ cbuffer CameraBuffer : register(b1)
     float FogStart;
     float FogEnd;
     float3 FogColor;
-    row_major matrix InverseViewMatrix;
+    column_major matrix InverseViewMatrix;
 }
 
 // Light structure
@@ -93,6 +93,16 @@ float G_Smith(float NdotV, float NdotL, float roughness)
     return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
 }
 
+float3 ACESFilm(float3 x)
+{
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
 
 // Calculates point light contribution
 float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
@@ -100,12 +110,12 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     float3 lightDir = light.Position - worldPos;
     float distance = length(lightDir);
 
-    //if (distance > light.Range)
-    //    return float3(0, 0, 0);
-
+    if (distance > light.Range)
+        return float3(0, 0, 0);
+    
     lightDir = normalize(lightDir);
     float3 halfway = normalize(lightDir + viewDir);
-    
+
     float NdotL = max(dot(normal, lightDir), 0.0);
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotH = max(dot(normal, halfway), 0.0);
@@ -217,14 +227,17 @@ float4 main(PS_INPUT input) : SV_TARGET
     float4 normalData = NormalTexture.Sample(PointSampler, input.TexCoord);
     float4 materialData = MaterialTexture.Sample(PointSampler, input.TexCoord);
     float4 emissiveData = EmissiveTexture.Sample(PointSampler, input.TexCoord);
+    float4 viewRayData = ViewRayTexture.Sample(PointSampler, input.TexCoord);
     float depth = normalData.a;
+    
+    float3 viewRay = normalize(viewRayData.xyz);
     
     // Extract G-Buffer data
     float3 albedo = albedoData.rgb;
     float opacity = albedoData.a;
     
     // Transform normal from [0, 1] to [-1, 1]
-    float3 normal = normalize(normalData.rgb * 2.0f - 1.0f);
+    float3 normal = normalData.rgb * 2.0f - 1.0f;
     
     float metallic = materialData.r;
     float roughness = materialData.g;
@@ -234,7 +247,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 emissive = emissiveData.rgb;
     
     // Reconstruct world position from depth
-    float3 worldPos = ReconstructPosition(depth, normalize(input.ViewRay));
+    float3 worldPos = ReconstructPosition(depth, viewRay);
 
     // Initialize lighting with ambient and emissive
     float3 lighting = albedo * AmbientColor * ao + emissive;
@@ -265,6 +278,9 @@ float4 main(PS_INPUT input) : SV_TARGET
     float distanceToCamera = length(worldPos - CameraPosition);
     float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);
-    
+
+    lighting = ACESFilm(lighting);
+    lighting = pow(lighting, 1.0 / 2.2); // Gamma correction
+
     return float4(lighting, opacity);
 }

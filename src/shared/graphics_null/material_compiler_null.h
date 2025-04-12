@@ -23,7 +23,7 @@ namespace mmo
 		ExpressionIndex AddTextureCoordinate(int32 coordinateIndex) override;
 		
 		/// @copydoc MaterialCompiler::AddTextureSample
-		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) override;
+		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 		
 		/// @copydoc MaterialCompiler::AddMultiply
 		ExpressionIndex AddMultiply(ExpressionIndex first, ExpressionIndex second) override;
@@ -88,7 +88,7 @@ namespace mmo
 
 	public:
 		ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture,
-			ExpressionIndex coordinates, bool srgb) override;
+			ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 
 		ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) override;
 

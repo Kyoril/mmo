@@ -75,7 +75,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates, bool srgb)
+	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		if (texture.empty())
 		{
@@ -96,8 +96,14 @@ namespace mmo
 		{
 			m_textures.emplace_back(texture);
 		}
-		
+
 		std::ostringstream outputStream;
+
+		if (type == SamplerType::Normal)
+		{
+			outputStream << "(";
+		}
+
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -117,6 +123,11 @@ namespace mmo
 		if (srgb)
 		{
 			outputStream << ", 2.2)";
+		}
+
+		if (type == SamplerType::Normal)
+		{
+			outputStream << " * 2.0 - 1.0)";
 		}
 
 		outputStream.flush();
@@ -573,9 +584,10 @@ namespace mmo
 				<< "struct GBufferOutput\n"
 				<< "{\n"
 				<< "\tfloat4 albedo : SV_Target0;    // RGB: Albedo, A: Opacity\n"
-				<< "\tfloat4 normal : SV_Target1;    // RGB: Normal, A: Unused\n"
+				<< "\tfloat4 normal : SV_Target1;    // RGB: Normal, A: Depth\n"
 				<< "\tfloat4 material : SV_Target2;  // R: Metallic, G: Roughness, B: Specular, A: Ambient Occlusion\n"
 				<< "\tfloat4 emissive : SV_Target3;  // RGB: Emissive, A: Unused\n"
+				<< "\tfloat4 viewRay : SV_Target4;  // RGB: ViewRay, A: Unused\n"
 				<< "};\n\n";
 		}
 
@@ -588,6 +600,7 @@ namespace mmo
 			<< "\tcolumn_major matrix matView;\n"
 			<< "\tcolumn_major matrix matProj;\n"
 			<< "\tcolumn_major matrix matInvView;\n"
+			<< "\tcolumn_major matrix matInvProj;\n"
 			<< "};\n\n";
 
 		m_pixelShaderStream
@@ -655,7 +668,8 @@ namespace mmo
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
 		m_pixelShaderStream << "\tfloat3 worldPos : TEXCOORD"<< m_numTexCoordinates << ";\n";
-		m_pixelShaderStream << "\tfloat3 viewDir : TEXCOORD"<< m_numTexCoordinates + 1 << ";\n";
+		m_pixelShaderStream << "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n";
+		m_pixelShaderStream << "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
 		// Add texture samplers
@@ -686,7 +700,7 @@ namespace mmo
 				<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
 				<< "{\n"
 				<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
-				<< "\tfloat3 n = tangentSpaceNormal * 2.0f - 1.0f;\n\n"
+				<< "\tfloat3 n = tangentSpaceNormal /* * 2.0f - 1.0f*/;\n\n"
 				<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
 				<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
 				<< "\treturn worldNormal;\n"
@@ -798,7 +812,8 @@ namespace mmo
 				{
 					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ";\n\n";
 				}
-				
+
+				// We expect normal to be in tangent space: (0.5, 0.5, 1.0) = Z up normal
 				m_pixelShaderStream
 					<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
 			}
@@ -976,7 +991,10 @@ namespace mmo
 
 			m_pixelShaderStream
 				<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
-				<< "\tfloat linearDepth = -viewPos.z;\n";
+				<< "\tfloat linearDepth = length(viewPos);\n";
+
+			m_pixelShaderStream
+				<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
 
 			// For unlit materials, write base color to emissive instead of albedo
 			if (!m_lit)
@@ -1058,7 +1076,7 @@ namespace mmo
 #endif
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb)
+	ExpressionIndex MaterialCompilerD3D11::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		// Ensure parameter exists
 		uint32 paramIndex = 0;
@@ -1079,6 +1097,12 @@ namespace mmo
 		}
 
 		std::ostringstream outputStream;
+
+		if (type == SamplerType::Normal)
+		{
+			outputStream << "(";
+		}
+
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -1098,6 +1122,11 @@ namespace mmo
 		if (srgb)
 		{
 			outputStream << ", 2.2)";
+		}
+
+		if (type == SamplerType::Normal)
+		{
+			outputStream << " * 2.0 - 1.0)";
 		}
 
 		outputStream.flush();
@@ -1196,7 +1225,8 @@ namespace mmo
 		}
 		vertexShaderStream
 			<< "\tfloat3 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n"
-			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n";
+			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n"
+			<< "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
 
 		vertexShaderStream
 			<< "};\n\n";
@@ -1276,6 +1306,7 @@ namespace mmo
 			<< "\toutput.worldPos = output.pos.xyz;\n"
 			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
 			<< "\toutput.pos = mul(output.pos, matView);\n"
+			<< "\toutput.viewPos = output.pos;\n"
 			<< "\toutput.pos = mul(output.pos, matProj);\n"
 			<< "\toutput.color = input.color;\n";
 

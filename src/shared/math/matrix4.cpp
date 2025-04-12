@@ -3,6 +3,10 @@
 #include "matrix4.h"
 #include "quaternion.h"
 
+#ifdef _WIN32
+#include "DirectXMath.h"
+#endif
+
 namespace mmo
 {
 	const Matrix4 Matrix4::Zero(
@@ -65,6 +69,15 @@ namespace mmo
 
 	Matrix4 Matrix4::Inverse() const
 	{
+#ifdef _WIN32
+		DirectX::XMMATRIX m = DirectX::XMMatrixInverse(
+			nullptr,
+			DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(this)));
+
+		Matrix4 out;
+		DirectX::XMStoreFloat4x4(reinterpret_cast<DirectX::XMFLOAT4X4*>(&out), m);
+		return out;
+#else
 		const float m00 = m[0][0], m01 = m[0][1], m02 = m[0][2], m03 = m[0][3];
 		const float m10 = m[1][0], m11 = m[1][1], m12 = m[1][2], m13 = m[1][3];
 		const float m20 = m[2][0], m21 = m[2][1], m22 = m[2][2], m23 = m[2][3];
@@ -82,7 +95,10 @@ namespace mmo
 		const float t20 = +(v4 * m10 - v2 * m11 + v0 * m13);
 		const float t30 = -(v3 * m10 - v1 * m11 + v0 * m12);
 
-		const float invDet = 1 / (t00 * m00 + t10 * m01 + t20 * m02 + t30 * m03);
+		const float det = (t00 * m00 + t10 * m01 + t20 * m02 + t30 * m03);
+		ASSERT(!FloatEqual(det, 0.0f));	//Matrix4::Inverse: Matrix is singular and cannot be inverted.
+
+		const float invDet = 1.0f / det;
 
 		const float d00 = t00 * invDet;
 		const float d10 = t10 * invDet;
@@ -118,11 +134,11 @@ namespace mmo
 		const float d23 = -(v4 * m00 - v2 * m01 + v0 * m03) * invDet;
 		const float d33 = +(v3 * m00 - v1 * m01 + v0 * m02) * invDet;
 
-		return Matrix4(
-			d00, d01, d02, d03,
-			d10, d11, d12, d13,
-			d20, d21, d22, d23,
+		return Matrix4(d00, d01, d02, d03,  //
+			d10, d11, d12, d13,  //
+			d20, d21, d22, d23,  //
 			d30, d31, d32, d33);
+#endif
 	}
 
 	void Matrix4::MakeTransform(const Vector3& position, const Vector3& scale, const Quaternion& orientation)

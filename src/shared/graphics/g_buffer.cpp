@@ -16,6 +16,7 @@ namespace mmo
 		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R32G32B32A32);
 		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
 		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
+		m_viewRayRT = m_device.CreateRenderTexture("GBuffer_ViewRay", width, height, PixelFormat::R32G32B32A32);
 		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);
 
 		// Check if all render textures were created successfully
@@ -37,11 +38,12 @@ namespace mmo
 		m_height = height;
 
 		// Recreate render textures
-		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, PixelFormat::R8G8B8A8);
-		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, PixelFormat::R32G32B32A32);
-		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, PixelFormat::R8G8B8A8);
-		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, PixelFormat::R8G8B8A8);
-		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, PixelFormat::R8G8B8A8);
+		m_albedoRT->Resize(width, height);
+		m_normalRT->Resize(width, height);
+		m_materialRT->Resize(width, height);
+		m_emissiveRT->Resize(width, height);
+		m_viewRayRT->Resize(width, height);
+		m_depthRT->Resize(width, height);
 
 		// Check if all render textures were created successfully
 		if (!m_albedoRT || !m_normalRT || !m_materialRT || !m_emissiveRT || !m_depthRT)
@@ -58,11 +60,12 @@ namespace mmo
 			m_albedoRT,
 			m_normalRT,
 			m_materialRT,
-			m_emissiveRT
+			m_emissiveRT,
+			m_viewRayRT
 		};
 
 		// Set the render targets with depth stencil
-		m_device.SetRenderTargetsWithDepthStencil(renderTargets, 4, m_depthRT);
+		m_device.SetRenderTargetsWithDepthStencil(renderTargets, 5, m_depthRT);
 
 		// Set the viewport to match the G-Buffer size
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);

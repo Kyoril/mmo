@@ -22,7 +22,7 @@ namespace mmo
 		return IndexNone;
 	}
 
-	ExpressionIndex MaterialCompilerNull::AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb)
+	ExpressionIndex MaterialCompilerNull::AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		return IndexNone;
 	}
@@ -128,7 +128,7 @@ namespace mmo
 	}
 
 	ExpressionIndex MaterialCompilerNull::AddTextureParameterSample(std::string_view name, std::string_view texture,
-		ExpressionIndex coordinates, bool srgb)
+		ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		return IndexNone;
 	}

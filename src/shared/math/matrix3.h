@@ -21,14 +21,13 @@ namespace mmo
 		
 	public:
 		Matrix3() = default;
-		explicit Matrix3(const float arr[3][3])
-		{
-			std::memcpy(m, arr, 9 * sizeof(float));
-		}
+		explicit Matrix3(const float arr[3][3]) { memcpy(m, arr, 9 * sizeof(float)); }
+
 		Matrix3(const Matrix3& r)
 		{
 			std::memcpy(m, r.m, 9 * sizeof(float));
 		}
+
 		Matrix3(float m00, float m01, float m02,
 			float m10, float m11, float m12,
 			float m20, float m21, float m22)

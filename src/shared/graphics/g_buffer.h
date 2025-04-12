@@ -39,6 +39,8 @@ namespace mmo
 		/// @return The emissive render texture.
 		[[nodiscard]] RenderTexture& GetEmissiveRT() { return *m_emissiveRT; }
 
+		[[nodiscard]] RenderTexture& GetViewRayRT() { return *m_viewRayRT; }
+
 		/// @brief Gets the depth render texture.
 		/// @return The depth render texture.
 		[[nodiscard]] RenderTexture& GetDepthRT() { return *m_depthRT; }
@@ -87,6 +89,8 @@ namespace mmo
 
 		/// @brief The emissive render texture (RGB: Emissive, A: Unused).
 		RenderTexturePtr m_emissiveRT;
+
+		RenderTexturePtr m_viewRayRT;
 
 		/// @brief The depth render texture.
 		RenderTexturePtr m_depthRT;

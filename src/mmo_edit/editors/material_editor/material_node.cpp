@@ -1205,7 +1205,13 @@ namespace mmo
 				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler, m_uvs.GetLink());
 			}
 
-			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false);
+			if (m_samplerType >= static_cast<int>(SamplerType::Count))
+			{
+				ELOG("Invalid sampler type for texture node: " << m_samplerType);
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddTextureSample(m_texturePath.GetPath(), uvExpression, false, static_cast<SamplerType>(m_samplerType));
 		}
 
 		if (outputPin && outputPin != &m_rgba)
@@ -1246,7 +1252,13 @@ namespace mmo
 				uvExpression = m_uvs.GetLink()->GetNode()->Compile(compiler, m_uvs.GetLink());
 			}
 
-			m_compiledExpressionId = compiler.AddTextureParameterSample(m_textureName, m_texturePath.GetPath(), uvExpression, false);
+			if (m_samplerType >= static_cast<int>(SamplerType::Count))
+			{
+				ELOG("Invalid sampler type for texture parameter node: " << m_samplerType);
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddTextureParameterSample(m_textureName, m_texturePath.GetPath(), uvExpression, false, static_cast<SamplerType>(m_samplerType));
 		}
 
 		if (outputPin && outputPin != &m_rgba)

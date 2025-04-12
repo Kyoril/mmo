@@ -45,6 +45,14 @@ namespace mmo
 		Tangent
 	};
 
+	enum class SamplerType : uint8
+	{
+		Color,
+		Normal,
+
+		Count
+	};
+
 	/// @brief Gets the amount of components for a given expression type. For example, Float4 has 4 components.
 	/// @param type The expression type.
 	/// @return The amount of components for a given expression type.
@@ -145,9 +153,9 @@ namespace mmo
 		/// @param coordinates The texture coordinate expression to use for the sample.
 		/// @param srgb Whether the image uses srgb.
 		/// @return Index of the texture sample expression or IndexNone in case of an error.
-		virtual ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) = 0;
+		virtual ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) = 0;
 
-		virtual ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb) = 0;
+		virtual ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) = 0;
 
 		virtual ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) = 0;
 
