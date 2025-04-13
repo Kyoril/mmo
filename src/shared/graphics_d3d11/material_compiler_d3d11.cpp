@@ -691,96 +691,98 @@ namespace mmo
 		m_pixelShaderStream << "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
-		// Add texture samplers
-		for (size_t i = 0; i < m_textures.size(); ++i)
+		if (type != PixelShaderType::ShadowMap)
 		{
-			m_pixelShaderStream << "// " << m_textures[i] << "\n";
-			m_pixelShaderStream << "Texture2D tex" << i << ";\n";
-			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
-		}
-
-		// Add texture parameter samplers
-		const auto& textureParams = m_textureParameters;
-		if (!textureParams.empty())
-		{
-			for (size_t i = 0; i < textureParams.size(); ++i)
+			// Add texture samplers
+			for (size_t i = 0; i < m_textures.size(); ++i)
 			{
-				m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
+				m_pixelShaderStream << "// " << m_textures[i] << "\n";
+				m_pixelShaderStream << "Texture2D tex" << i << ";\n";
+				m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
+			}
+
+			// Add texture parameter samplers
+			const auto& textureParams = m_textureParameters;
+			if (!textureParams.empty())
+			{
+				for (size_t i = 0; i < textureParams.size(); ++i)
+				{
+					m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
+					m_pixelShaderStream
+						<< "// " << textureParams[i].name << "\n"
+						<< "Texture2D texparam" << i << ";\n"
+						<< "SamplerState paramsampler" << i << ";\n\n";
+				}
+			}
+
+			if (m_lit)
+			{
 				m_pixelShaderStream
-					<< "// " << textureParams[i].name << "\n"
-					<< "Texture2D texparam" << i << ";\n"
-					<< "SamplerState paramsampler" << i << ";\n\n";
+					<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
+					<< "{\n"
+					<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
+					<< "\tfloat3 n = tangentSpaceNormal /* * 2.0f - 1.0f*/;\n\n"
+					<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
+					<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
+					<< "\treturn worldNormal;\n"
+					<< "}\n\n";
+
+				if (type != PixelShaderType::GBuffer)
+				{
+					// fresnelSchlick
+					m_pixelShaderStream
+						<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
+						<< "{\n"
+						<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
+						<< "}\n\n";
+
+					// DistributionGGX
+					m_pixelShaderStream
+						<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
+						<< "{\n"
+						<< "\tfloat a      = roughness*roughness;\n"
+						<< "\tfloat a2     = a*a;\n"
+						<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
+						<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
+						<< "\tfloat num   = a2;\n"
+						<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+						<< "\tdenom = PI * denom * denom;\n"
+						<< "\treturn num / denom;\n"
+						<< "}\n\n";
+
+					// GeometrySchlickGGX
+					m_pixelShaderStream
+						<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
+						<< "{\n"
+						<< "\tfloat r = (roughness + 1.0);\n"
+						<< "\tfloat k = (r*r) / 8.0;\n"
+						<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
+						<< "\treturn NdotV / denom;\n"
+						<< "}\n\n";
+
+					// GeometrySmith
+					m_pixelShaderStream
+						<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
+						<< "{\n"
+						<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
+						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+						<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
+						<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
+						<< "\treturn ggx1 * ggx2;\n"
+						<< "}\n\n";
+				}
+			}
+
+			for (const auto& [name, code] : m_globalFunctions)
+			{
+				m_pixelShaderStream
+					<< "float4 " << name << "(VertexOut input)\n"
+					<< "{\n"
+					<< code << "\n"
+					<< "}\n\n";
 			}
 		}
 
-		if (m_lit)
-		{
-			m_pixelShaderStream
-				<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
-				<< "{\n"
-				<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
-				<< "\tfloat3 n = tangentSpaceNormal /* * 2.0f - 1.0f*/;\n\n"
-				<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
-				<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
-				<< "\treturn worldNormal;\n"
-				<< "}\n\n";
-
-			if (type != PixelShaderType::GBuffer)
-			{
-				// fresnelSchlick
-				m_pixelShaderStream
-					<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
-					<< "{\n"
-					<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
-					<< "}\n\n";
-
-				// DistributionGGX
-				m_pixelShaderStream
-					<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
-					<< "{\n"
-					<< "\tfloat a      = roughness*roughness;\n"
-					<< "\tfloat a2     = a*a;\n"
-					<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
-					<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
-					<< "\tfloat num   = a2;\n"
-					<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
-					<< "\tdenom = PI * denom * denom;\n"
-					<< "\treturn num / denom;\n"
-					<< "}\n\n";
-
-				// GeometrySchlickGGX
-				m_pixelShaderStream
-					<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
-					<< "{\n"
-					<< "\tfloat r = (roughness + 1.0);\n"
-					<< "\tfloat k = (r*r) / 8.0;\n"
-					<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
-					<< "\treturn NdotV / denom;\n"
-					<< "}\n\n";
-
-				// GeometrySmith
-				m_pixelShaderStream
-					<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
-					<< "{\n"
-					<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
-					<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-					<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
-					<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
-					<< "\treturn ggx1 * ggx2;\n"
-					<< "}\n\n";
-			}
-
-		}
-		
-		for (const auto& [name, code] : m_globalFunctions)
-		{
-			m_pixelShaderStream
-				<< "float4 " << name << "(VertexOut input)\n"
-				<< "{\n"
-				<< code << "\n"
-				<< "}\n\n";
-		}
-		
 		// Start of main function
 		if (type == PixelShaderType::GBuffer)
 		{
@@ -788,6 +790,13 @@ namespace mmo
 				<< "GBufferOutput main(VertexOut input)\n"
 				<< "{\n"
 				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
+		}
+		else if (type == PixelShaderType::ShadowMap)
+		{
+			m_pixelShaderStream
+				<< "void main(VertexOut input)\n"
+				<< "{\n"
+				<< "}" << std::endl;
 		}
 		else
 		{
@@ -797,313 +806,315 @@ namespace mmo
 				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 		}
 
-		if (m_lit)
+		if (type != PixelShaderType::ShadowMap)
 		{
-			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
-		}
-
-		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
-		
-		if (m_lit)
-		{
-			m_pixelShaderStream
-				<< "\tfloat3 B = normalize(input.binormal);\n"
-				<< "\tfloat3 T = normalize(input.tangent);\n"
-				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
-		}
-
-		for (const auto& code : m_expressions)
-		{
-			m_pixelShaderStream << "\t" << code;
-		}
-		
-		if (m_lit)
-		{
-			// Normal
-			if (m_normalExpression != IndexNone)
+			if (m_lit)
 			{
-				const auto expression = GetExpressionType(m_normalExpression);
-				if (expression == ExpressionType::Float_4)
+				m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
+			}
+
+			m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
+
+			if (m_lit)
+			{
+				m_pixelShaderStream
+					<< "\tfloat3 B = normalize(input.binormal);\n"
+					<< "\tfloat3 T = normalize(input.tangent);\n"
+					<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
+			}
+
+			for (const auto& code : m_expressions)
+			{
+				m_pixelShaderStream << "\t" << code;
+			}
+
+			if (m_lit)
+			{
+				// Normal
+				if (m_normalExpression != IndexNone)
 				{
-					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ".rgb;\n\n";
+					const auto expression = GetExpressionType(m_normalExpression);
+					if (expression == ExpressionType::Float_4)
+					{
+						m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ".rgb;\n\n";
+					}
+					else
+					{
+						m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ";\n\n";
+					}
+
+					// We expect normal to be in tangent space: (0.5, 0.5, 1.0) = Z up normal
+					m_pixelShaderStream
+						<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat3 N = float3(0.0, 0.0, 1.0);\n\n";
+			}
+
+			// Specular
+			if (m_specularExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_specularExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ");\n\n";
 				}
 				else
 				{
-					m_pixelShaderStream << "\tN = expr_" << m_normalExpression << ";\n\n";
+					m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ".r);\n\n";
 				}
-
-				// We expect normal to be in tangent space: (0.5, 0.5, 1.0) = Z up normal
-				m_pixelShaderStream
-					<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat3 N = float3(0.0, 0.0, 1.0);\n\n";
-		}
-
-		// Specular
-		if (m_specularExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_specularExpression);
-			if (expression == ExpressionType::Float_1)
-			{
-				m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat specular = saturate(expr_" << m_specularExpression << ".r);\n\n";
+				m_pixelShaderStream << "\tfloat specular = 0.5;\n\n";
 			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat specular = 0.5;\n\n";
-		}
 
-		// Roughness
-		if (m_roughnessExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_roughnessExpression);
-			if (expression == ExpressionType::Float_1)
+			// Roughness
+			if (m_roughnessExpression != IndexNone)
 			{
-				m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ");\n\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ".r);\n\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
-		}
-
-		// Metallic
-		if (m_metallicExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_metallicExpression);
-			if (expression == ExpressionType::Float_1)
-			{
-				m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ");\n\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ".r);\n\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
-		}
-
-		// Opacity
-		if (m_opacityExpression != IndexNone)
-		{
-			const auto expression = GetExpressionType(m_opacityExpression);
-			if (expression == ExpressionType::Float_1)
-			{
-				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ");\n\n";
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ".r);\n\n";
-			}
-		}
-		else
-		{
-			m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
-		}
-
-		// BaseColor base
-		m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
-		if (m_baseColorExpression != IndexNone)
-		{
-			const auto expressionType = GetExpressionType(m_baseColorExpression);
-			if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_3)
-			{
-				m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
-			}
-			else
-			{
-				if (expressionType == ExpressionType::Float_2)
+				const auto expression = GetExpressionType(m_roughnessExpression);
+				if (expression == ExpressionType::Float_1)
 				{
-					m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ");\n\n";
 				}
-				else if (expressionType == ExpressionType::Float_4)
+				else
 				{
-					m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ".rgb;\n\n";
+					m_pixelShaderStream << "\tfloat roughness = saturate(expr_" << m_roughnessExpression << ".r);\n\n";
 				}
 			}
-		}
-
-		if (type != PixelShaderType::GBuffer)
-		{
-			m_pixelShaderStream
-				<< "\tif (opacity <= 0.333) discard;\n";
-		}
-		else
-		{
-			m_pixelShaderStream
-				//<< "\tfloat threshold = Dither8x8(input.pos.xy + cameraPos.xy * cameraPos.z);\n"
-				<< "\tif (opacity < 0.333) discard;\n";
-		}
-
-		if (type != PixelShaderType::GBuffer)
-		{
-			m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
-		}
-
-		m_pixelShaderStream
-			<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
-
-		if (type != PixelShaderType::GBuffer)
-		{
-			if (m_lit)
+			else
 			{
-				m_pixelShaderStream
-					<< "\tfloat3 F0 = 0.04;\n"
-					<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
-
-				m_pixelShaderStream
-					<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
-					<< "\tfloat3 H = normalize(V + L);\n"
-					<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
-
-				m_pixelShaderStream
-					<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
-					<< "\tfloat G   = GeometrySmith(N, V, L, roughness);\n"
-					<< "\tfloat3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);\n";
-
-				m_pixelShaderStream
-					<< "\tfloat3 kS = F;\n"
-					<< "\tfloat3 kD = 1.0f.xxx - kS;\n"
-					<< "\tkD *= 1.0 - metallic;\n";
-
-				m_pixelShaderStream
-					<< "\tfloat3 numerator    = NDF * G * F;\n"
-					<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
-					<< "\tfloat3 specularity     = numerator / denominator;\n";
-
-				m_pixelShaderStream
-					<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-					<< "\tfloat3 Lo = (kD * baseColor / PI + specularity) * radiance * NdotL;\n";
-
-				m_pixelShaderStream
-					<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
-					<< "\tkD = 1.0f.xxx - kS;\n"
-					<< "\tkD *= 1.0 - metallic;\n"
-					<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
-					<< "\tfloat3 diffuse = irradiance * baseColor;\n"
-					<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
-
-				m_pixelShaderStream
-					<< "\tfloat3 color = ambient + Lo;\n";
-
-				m_pixelShaderStream
-					<< "\tcolor = color / (color + 1.0f.xxx);\n"
-					<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
-
-				m_pixelShaderStream
-					<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
-					<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
-					<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+				m_pixelShaderStream << "\tfloat roughness = 1.0;\n\n";
 			}
-		}
 
-		// Combining it
-		if (type == PixelShaderType::GBuffer)
-		{
-			// G-Buffer output
-			m_pixelShaderStream
-				<< "\tGBufferOutput output;\n";
+			// Metallic
+			if (m_metallicExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_metallicExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ");\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat metallic = saturate(expr_" << m_metallicExpression << ".r);\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
+			}
 
-			if (m_depthWrite)
+			// Opacity
+			if (m_opacityExpression != IndexNone)
+			{
+				const auto expression = GetExpressionType(m_opacityExpression);
+				if (expression == ExpressionType::Float_1)
+				{
+					m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ");\n\n";
+				}
+				else
+				{
+					m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ".r);\n\n";
+				}
+			}
+			else
+			{
+				m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
+			}
+
+			// BaseColor base
+			m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
+			if (m_baseColorExpression != IndexNone)
+			{
+				const auto expressionType = GetExpressionType(m_baseColorExpression);
+				if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_3)
+				{
+					m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
+				}
+				else
+				{
+					if (expressionType == ExpressionType::Float_2)
+					{
+						m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+					}
+					else if (expressionType == ExpressionType::Float_4)
+					{
+						m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ".rgb;\n\n";
+					}
+				}
+			}
+
+			if (type != PixelShaderType::GBuffer)
 			{
 				m_pixelShaderStream
-					<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
-					<< "\tfloat linearDepth = length(viewPos);\n";
+					<< "\tif (opacity <= 0.333) discard;\n";
 			}
 			else
 			{
 				m_pixelShaderStream
-					<< "\tfloat linearDepth = 0.0f;\n";	// TODO: Is that correct? Or maybe Z-Far?
+					//<< "\tfloat threshold = Dither8x8(input.pos.xy + cameraPos.xy * cameraPos.z);\n"
+					<< "\tif (opacity < 0.333) discard;\n";
 			}
-			
-			m_pixelShaderStream
-				<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
 
-			// For unlit materials, write base color to emissive instead of albedo
-			if (!m_lit)
+			if (type != PixelShaderType::GBuffer)
 			{
-				// Albedo - empty for unlit materials
-				m_pixelShaderStream
-					<< "\toutput.albedo = float4(0.0, 0.0, 0.0, 1.0);\n";
-				
-				// Normal - default up vector for unlit materials
-				m_pixelShaderStream
-					<< "\toutput.normal = float4(0.5, 0.5, 1.0, linearDepth);\n";
+				m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+			}
 
-				// Material properties
+			m_pixelShaderStream
+				<< "\tfloat3 ao = float3(1.0, 1.0, 1.0);\n\n";
+
+			if (type != PixelShaderType::GBuffer)
+			{
+				if (m_lit)
+				{
+					m_pixelShaderStream
+						<< "\tfloat3 F0 = 0.04;\n"
+						<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
+
+					m_pixelShaderStream
+						<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
+						<< "\tfloat3 H = normalize(V + L);\n"
+						<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
+
+					m_pixelShaderStream
+						<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
+						<< "\tfloat G   = GeometrySmith(N, V, L, roughness);\n"
+						<< "\tfloat3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);\n";
+
+					m_pixelShaderStream
+						<< "\tfloat3 kS = F;\n"
+						<< "\tfloat3 kD = 1.0f.xxx - kS;\n"
+						<< "\tkD *= 1.0 - metallic;\n";
+
+					m_pixelShaderStream
+						<< "\tfloat3 numerator    = NDF * G * F;\n"
+						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
+						<< "\tfloat3 specularity     = numerator / denominator;\n";
+
+					m_pixelShaderStream
+						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+						<< "\tfloat3 Lo = (kD * baseColor / PI + specularity) * radiance * NdotL;\n";
+
+					m_pixelShaderStream
+						<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
+						<< "\tkD = 1.0f.xxx - kS;\n"
+						<< "\tkD *= 1.0 - metallic;\n"
+						<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
+						<< "\tfloat3 diffuse = irradiance * baseColor;\n"
+						<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
+
+					m_pixelShaderStream
+						<< "\tfloat3 color = ambient + Lo;\n";
+
+					m_pixelShaderStream
+						<< "\tcolor = color / (color + 1.0f.xxx);\n"
+						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+
+					m_pixelShaderStream
+						<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
+						<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
+						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+				}
+			}
+
+			// Combining it
+			if (type == PixelShaderType::GBuffer)
+			{
+				// G-Buffer output
 				m_pixelShaderStream
-					<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
-				
-				// Emissive - use base color for unlit materials
+					<< "\tGBufferOutput output;\n";
+
+				if (m_depthWrite)
+				{
+					m_pixelShaderStream
+						<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
+						<< "\tfloat linearDepth = length(viewPos);\n";
+				}
+				else
+				{
+					m_pixelShaderStream
+						<< "\tfloat linearDepth = 0.0f;\n";	// TODO: Is that correct? Or maybe Z-Far?
+				}
+
 				m_pixelShaderStream
-					<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+					<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
+
+				// For unlit materials, write base color to emissive instead of albedo
+				if (!m_lit)
+				{
+					// Albedo - empty for unlit materials
+					m_pixelShaderStream
+						<< "\toutput.albedo = float4(0.0, 0.0, 0.0, 1.0);\n";
+
+					// Normal - default up vector for unlit materials
+					m_pixelShaderStream
+						<< "\toutput.normal = float4(0.5, 0.5, 1.0, linearDepth);\n";
+
+					// Material properties
+					m_pixelShaderStream
+						<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
+
+					// Emissive - use base color for unlit materials
+					m_pixelShaderStream
+						<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+				}
+				else
+				{
+					// Albedo
+					m_pixelShaderStream
+						<< "\toutput.albedo = float4(baseColor, 1.0);\n";
+
+					// Normal
+					m_pixelShaderStream
+						<< "\toutput.normal = float4(N * 0.5 + 0.5, linearDepth);\n";
+
+					// Material properties
+					m_pixelShaderStream
+						<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
+
+					// Emissive - empty for lit materials
+					m_pixelShaderStream
+						<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+				}
+
+				// Return G-Buffer output
+				m_pixelShaderStream
+					<< "\treturn output;\n"
+					<< "}"
+					<< std::endl;
 			}
 			else
 			{
-				// Albedo
-				m_pixelShaderStream
-					<< "\toutput.albedo = float4(baseColor, 1.0);\n";
-				
-				// Normal
-				m_pixelShaderStream
-					<< "\toutput.normal = float4(N * 0.5 + 0.5, linearDepth);\n";
-				
-				// Material properties
-				m_pixelShaderStream
-					<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
-				
-				// Emissive - empty for lit materials
-				m_pixelShaderStream
-					<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
-			}
-			
-			// Return G-Buffer output
-			m_pixelShaderStream
-				<< "\treturn output;\n"
-				<< "}"
-				<< std::endl;
-		}
-		else
-		{
-			// Forward rendering output
-			if (m_lit)
-			{
-				m_pixelShaderStream
-					<< "\toutputColor = float4(color, opacity);\n";
-			}
-			else
-			{
-				m_pixelShaderStream
-					<< "\toutputColor = float4(baseColor, opacity);\n";
-			}
+				// Forward rendering output
+				if (m_lit)
+				{
+					m_pixelShaderStream
+						<< "\toutputColor = float4(color, opacity);\n";
+				}
+				else
+				{
+					m_pixelShaderStream
+						<< "\toutputColor = float4(baseColor, opacity);\n";
+				}
 
-			// End of main function
-			m_pixelShaderStream
-				<< "\treturn outputColor;\n"
-				<< "}"
-				<< std::endl;
+				// End of main function
+				m_pixelShaderStream
+					<< "\treturn outputColor;\n"
+					<< "}"
+					<< std::endl;
+			}
 		}
-		
+
 		m_pixelShaderCode[(int)type] = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
 
-
 #ifdef _DEBUG
 		// Write shader output to asset registry for debug
-		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : "PSDeferred.hlsl"))
+		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : type == PixelShaderType::GBuffer ? "PSDeferred.hlsl" : "PSShadow.hlsl"))
 		{
 			io::StreamSink sink(*filePtr);
 			io::TextWriter<char> writer(sink);

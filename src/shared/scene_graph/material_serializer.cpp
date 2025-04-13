@@ -396,7 +396,7 @@ namespace mmo
 
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_4;
+		version = material_version::Version_0_4_1;
 		
 		// File version chunk
 		{
@@ -509,7 +509,7 @@ namespace mmo
 			ChunkWriter shaderChunkWriter { MaterialPixelShaderChunk, writer };
 
 			// TODO: Number of shaders to write
-			writer << io::write<uint8>(2); // Forward and GBuffer
+			writer << io::write<uint8>(3); // Forward and GBuffer
 
 			// Forward shader
 			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
@@ -520,7 +520,12 @@ namespace mmo
 			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
 			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::GBuffer));
 			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::GBuffer).begin(), material.GetPixelShaderCode(PixelShaderType::GBuffer).end());
-			
+
+			// Shadowmap shader
+			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
+			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::ShadowMap));
+			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::ShadowMap).begin(), material.GetPixelShaderCode(PixelShaderType::ShadowMap).end());
+
 			shaderChunkWriter.Finish();
 		}
 	}

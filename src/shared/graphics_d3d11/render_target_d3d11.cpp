@@ -46,14 +46,14 @@ namespace mmo
 
 		// Clear the color buffer?
 		const auto converted = static_cast<uint32>(flags);
-		if ((converted & static_cast<uint32>(ClearFlags::Color)) != 0)
+		if ((converted & static_cast<uint32>(ClearFlags::Color)) != 0 && m_renderTargetView)
 		{			
 			// Clear render target and depth stencil view
 			context.ClearRenderTargetView(m_renderTargetView.Get(), m_clearColorFloat);
 		}
 
 		// Clear depth stencil view
-		if ((converted & static_cast<uint32>(ClearFlags::Depth)) != 0)
+		if ((converted & static_cast<uint32>(ClearFlags::Depth)) != 0 && m_depthStencilView)
 		{
 			context.ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
 		}

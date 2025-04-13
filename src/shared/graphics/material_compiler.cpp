@@ -106,6 +106,24 @@ namespace mmo
 			material.SetPixelShaderCode(PixelShaderType::GBuffer, {pixelOutput.code.data });
 		}
 
+		// Generate GBuffer pixel shader
+		GeneratePixelShaderCode(PixelShaderType::ShadowMap);
+
+		pixelInput.shaderCode = m_pixelShaderCode[(int)PixelShaderType::ShadowMap];
+		pixelInput.shaderType = ShaderType::PixelShader;
+		shaderCompiler.Compile(pixelInput, pixelOutput);
+
+		if (!pixelOutput.succeeded)
+		{
+			ELOG("Error compiling ShadowMap pixel shader: " << pixelOutput.errorMessage);
+		}
+		else
+		{
+			DLOG("Successfully compiled ShadowMap pixel shader. Size: " << pixelOutput.code.data.size());
+			// Add shader code to the material
+			material.SetPixelShaderCode(PixelShaderType::ShadowMap, { pixelOutput.code.data });
+		}
+
 		// Set material textures
 		material.ClearTextures();
 		for (const auto& texture : m_textures)

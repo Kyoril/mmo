@@ -79,6 +79,12 @@ namespace mmo
         // Traverse the scene graph and find all kind of lighting information for the current frame
         FindLights(scene, camera);
 
+        if (m_shadowCastingDirecitonalLight)
+        {
+			// Render the shadow map for the directional light
+			RenderShadowMap(scene, camera);
+        }
+
         // Render the geometry pass
         RenderGeometryPass(scene, camera);
 
@@ -233,7 +239,12 @@ namespace mmo
             return;
         }
 
+        // For now we just render the exact scene just as depth. We need to configure a shadow camera though
+        m_shadowMapRT->Activate();
+		m_shadowMapRT->Clear(ClearFlags::Depth);
 
+        scene.Render(camera, PixelShaderType::ShadowMap);
+        m_shadowMapRT->Update();
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const

@@ -293,9 +293,6 @@ namespace mmo
 
 		void BindTextures(GraphicsDevice& device);
 
-	private:
-		void BindShaders(GraphicsDevice& device);
-
 	public:
 		const std::vector<ScalarParameterValue>& GetScalarParameters() const override { return m_scalarParameters; }
 
@@ -310,14 +307,14 @@ namespace mmo
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
 		ShaderPtr m_vertexShader[4];
-		ShaderPtr m_pixelShader[2]; // Forward and GBuffer
+		ShaderPtr m_pixelShader[3]; // Forward, GBuffer and ShadowMap
 		std::vector<String> m_textureFiles;
 		std::vector<TexturePtr> m_textures;
 		bool m_texturesChanged { true };
 		std::vector<uint8> m_vertexShaderCode[4];
 		bool m_vertexShaderChanged { true };
-		std::vector<uint8> m_pixelShaderCode[2]; // Forward and GBuffer
-		bool m_pixelShaderChanged[2] { true, true };
+		std::vector<uint8> m_pixelShaderCode[3]; // Forward, GBuffer and ShadowMap
+		bool m_pixelShaderChanged[3] { true, true, true };
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 

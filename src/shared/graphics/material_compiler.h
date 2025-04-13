@@ -302,7 +302,7 @@ namespace mmo
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
-		String m_pixelShaderCode[2];
+		String m_pixelShaderCode[3];
 		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 

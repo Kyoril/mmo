@@ -152,17 +152,26 @@ namespace mmo
 
 		// Bind base material static textures
 		auto baseMaterial = GetBaseMaterial();
-		baseMaterial->BindTextures(device);
 
-		// Bind texture parameter override textures
-		uint32 shaderSlot = baseMaterial->GetTextureFiles().size();
-		for (auto& param : m_textureParameters)
+		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
-			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
-		}
+			baseMaterial->BindTextures(device);
+			// Bind texture parameter override textures
+			uint32 shaderSlot = baseMaterial->GetTextureFiles().size();
+			for (auto& param : m_textureParameters)
+			{
+				device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+			}
 
-		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-		device.SetDepthWriteEnabled(m_depthWrite);
+			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+			device.SetDepthWriteEnabled(m_depthWrite);
+		}
+		else
+		{
+			device.SetDepthEnabled(true);
+			device.SetDepthWriteEnabled(true);
+			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
+		}
 
 		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
 		{

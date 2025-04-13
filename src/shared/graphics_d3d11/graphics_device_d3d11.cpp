@@ -626,8 +626,6 @@ namespace mmo
 
 		m_immContext->VSSetShader(nullptr, nullptr, 0);
 		m_immContext->PSSetShader(nullptr, nullptr, 0);
-		m_immContext->VSSetShaderResources(0, 0, nullptr);
-		m_immContext->PSSetShaderResources(0, 0, nullptr);
 
 		// Set the constant buffers
 		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
@@ -1149,10 +1147,10 @@ namespace mmo
 		{
 			return;
 		}
-		
+
 		// Apply material
 		operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
-
+		
 		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
 		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();
 		if (!vertexShader)

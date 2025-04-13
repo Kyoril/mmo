@@ -293,7 +293,7 @@ namespace mmo
 			m_vertexShaderChanged = false;
 		}
 
-		for (uint32 i = 0; i < 2; ++i)
+		for (uint32 i = 0; i < 3; ++i)
 		{
 			if (m_pixelShaderChanged[i])
 			{
@@ -358,17 +358,29 @@ namespace mmo
 		// Apply
 		if (m_vertexShader[0]) m_vertexShader[0]->Set();
 		if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
-		BindTextures(device);
 
-		// Bind texture parameter textures
-		uint32 shaderSlot = m_textures.size();
-		for (auto& param : m_textureParameters)
+		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
-			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+			BindTextures(device);
+			
+			// Bind texture parameter textures
+			uint32 shaderSlot = m_textures.size();
+			for (auto& param : m_textureParameters)
+			{
+				device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+			}
 		}
-		
-		device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-		device.SetDepthWriteEnabled(m_depthWrite);
+
+		if (pixelShaderType != PixelShaderType::ShadowMap)
+		{
+			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+			device.SetDepthWriteEnabled(m_depthWrite);
+		}
+		else
+		{
+			device.SetDepthEnabled(true);
+			device.SetDepthWriteEnabled(true);
+		}
 
 		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
 		{
@@ -389,13 +401,6 @@ namespace mmo
 		}
 
 		device.SetFillMode(m_wireframe ? FillMode::Wireframe : FillMode::Solid);
-	}
-
-	void Material::BindShaders(GraphicsDevice& device)
-	{
-		// Apply
-		if (m_vertexShader[0]) m_vertexShader[0]->Set();
-		if (m_pixelShader[0]) m_pixelShader[0]->Set();
 	}
 
 	void Material::BindTextures(GraphicsDevice& device)

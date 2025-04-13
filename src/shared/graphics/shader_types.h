@@ -13,7 +13,9 @@ namespace mmo
         Forward,
 
         /// @brief Deferred rendering G-Buffer pixel shader.
-        GBuffer
+        GBuffer,
+
+        ShadowMap,
     };
 
     /// @brief Enumerates available vertex shader types.
