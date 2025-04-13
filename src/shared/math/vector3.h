@@ -59,6 +59,14 @@ namespace mmo
 		{
 		}
 
+		inline Vector3(float* ptr)
+		{
+			ASSERT(ptr);
+			x = ptr[0];
+			y = ptr[1];
+			z = ptr[2];
+		}
+
 		[[nodiscard]] float* Ptr() { return &x; }
 		[[nodiscard]] const float* Ptr() const { return &x; }
 

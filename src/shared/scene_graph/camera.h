@@ -35,6 +35,12 @@ namespace mmo
 
 	typedef aabb_visibility::Type AABBVisibility;
 
+	enum class ProjectionType : uint8
+	{
+		Perspective,
+		Orthographic
+	};
+
 	/// This class represents a camera inside of a scene. A camera is a special type
 	/// of movable object, which allows to collect all renderable objects inside of it's
 	/// view frustum.
@@ -65,7 +71,25 @@ namespace mmo
 		void GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const;
 
 		AABBVisibility GetVisibility(const AABB& bound) const;
-		
+
+		void SetFarClipDistance(const float distance) { m_farDist = distance; InvalidateView(); }
+
+		void SetNearClipDistance(const float distance) { m_nearDist = distance; InvalidateView(); }
+
+		void SetProjectionType(const ProjectionType type) { m_projectionType = type; InvalidateView(); }
+
+		ProjectionType GetProjectionType() const { return m_projectionType; }
+
+		void SetOrthoWindow(float w, float h);
+
+		void SetOrthoWindowHeight(float h);
+
+		void SetOrthoWindowWidth(float w);
+
+		float GetOrthoWindowHeight() const { return m_orthoHeight; }
+
+		float GetOrthoWindowWidth() const { return m_orthoHeight * m_aspect; }
+
 	protected:
 		void UpdateFrustum() const;
 
@@ -108,6 +132,15 @@ namespace mmo
 	public:
 		void PopulateRenderQueue(RenderQueue& queue) override {}
 
+		void SetupShadowCamera(Camera& shadowCamera, const Vector3& lightDirection);
+
+		void SetCustomViewMatrix(bool enable, const Matrix4& viewMatrix = Matrix4::Identity);
+
+		bool IsCustomViewMatrixEnabled() const
+		{
+			return m_customViewMatrix;
+		}
+
 	private:
 		Radian m_fovY;
 		float m_farDist { 1000.0f };
@@ -127,5 +160,7 @@ namespace mmo
 		mutable bool m_recalcWorldSpaceCorners { true };
 		bool m_obliqueDepthProjection { false };
 		mutable Plane m_frustumPlanes[6];
+		bool m_customViewMatrix { false };
+		ProjectionType m_projectionType{ ProjectionType::Perspective };
 	};
 }

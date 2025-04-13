@@ -75,6 +75,8 @@ namespace mmo
 			return Angle;
 		}
 
+		static Quaternion FromDirection(const Vector3& forward, const Vector3& up);
+
 		float NormalizeAxis(float Angle) const
 		{
 			// returns Angle in the range [0,360)

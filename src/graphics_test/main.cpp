@@ -213,7 +213,7 @@ namespace mmo
 		g_pointLightNode->AttachObject(*g_lightDebugEnt);
 
 		// Create deferred renderer
-		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), desc.width, desc.height);
+		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
 
 		g_terrain = std::make_unique<terrain::Terrain>(*g_scene, g_camera, 64, 64);
 		g_terrain->SetBaseFileName("GraphicsTest");

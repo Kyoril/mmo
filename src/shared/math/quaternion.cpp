@@ -10,7 +10,36 @@ namespace mmo
 	const float Quaternion::Epsilon = 1e-03f;
 	const Quaternion Quaternion::Zero(0.0f, 0.0f, 0.0f, 0.0f);
 	const Quaternion Quaternion::Identity(1.0f, 0.0f, 0.0f, 0.0f);
-	
+
+	Quaternion Quaternion::FromDirection(const Vector3& forward, const Vector3& up)
+	{
+		Vector3 fwd = forward;
+		fwd.Normalize();
+
+		Vector3 right = up.Cross(fwd);
+		right.Normalize();
+
+		Vector3 realUp = fwd.Cross(right);
+		realUp.Normalize();
+
+		// Create a rotation matrix (column major)
+		Matrix3 rotMatrix;
+		rotMatrix[0][0] = right.x;
+		rotMatrix[1][0] = right.y;
+		rotMatrix[2][0] = right.z;
+
+		rotMatrix[0][1] = realUp.x;
+		rotMatrix[1][1] = realUp.y;
+		rotMatrix[2][1] = realUp.z;
+
+		rotMatrix[0][2] = fwd.x;
+		rotMatrix[1][2] = fwd.y;
+		rotMatrix[2][2] = fwd.z;
+
+		// Convert matrix to quaternion
+		return Quaternion(rotMatrix);
+	}
+
 	void Quaternion::FromRotationMatrix(const Matrix3& kRot)
 	{
 		const auto fTrace = kRot[0][0] + kRot[1][1] + kRot[2][2];

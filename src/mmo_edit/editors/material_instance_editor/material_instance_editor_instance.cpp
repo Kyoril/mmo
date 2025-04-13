@@ -61,7 +61,7 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
-		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 640, 480);
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
 		m_entity = m_scene.CreateEntity(assetPath.string(), "Editor/Sphere.hmsh");
 		if (m_entity)

@@ -19,10 +19,10 @@ namespace mmo
         /// @param device The graphics device to use.
         /// @param width The width of the renderer.
         /// @param height The height of the renderer.
-        DeferredRenderer(GraphicsDevice& device, uint32 width, uint32 height);
+        DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height);
 
         /// @brief Destructor.
-        ~DeferredRenderer() = default;
+        ~DeferredRenderer();
 
     public:
         /// @brief Resizes the renderer.
@@ -62,6 +62,8 @@ namespace mmo
         /// @brief The graphics device.
         GraphicsDevice& m_device;
 
+        Scene& m_scene;
+
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
 
@@ -82,5 +84,9 @@ namespace mmo
         Light* m_shadowCastingDirecitonalLight;
 
         RenderTexturePtr m_shadowMapRT;
+
+		SceneNode* m_shadowCameraNode{ nullptr };
+
+        Camera* m_shadowCamera{ nullptr };
     };
 }

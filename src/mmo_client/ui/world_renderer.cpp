@@ -20,7 +20,7 @@ namespace mmo
 	{
 		m_camera = m_worldScene.GetCamera("Default");
 
-		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 1920, 1080);
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_worldScene, 1920, 1080);
 	}
 
 	void WorldRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)

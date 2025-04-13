@@ -198,7 +198,7 @@ namespace mmo
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_editMode = nullptr;
 
-		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 640, 480);
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
 		// Setup debug draw

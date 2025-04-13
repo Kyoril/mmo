@@ -38,8 +38,9 @@ namespace mmo
         ShaderLight lights[DeferredRenderer::MAX_LIGHTS];
     };
 
-    DeferredRenderer::DeferredRenderer(GraphicsDevice& device, uint32 width, uint32 height)
+    DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
         : m_device(device)
+		, m_scene(scene)
         , m_gBuffer(device, width, height)
     {
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
@@ -65,6 +66,26 @@ namespace mmo
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
 
 		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 2048, 2048, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+
+        // Setup shadow camera
+		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
+		m_shadowCamera = m_scene.CreateCamera("__DeferredShadowCamera__");
+		m_shadowCameraNode->AttachObject(*m_shadowCamera);
+    }
+
+    DeferredRenderer::~DeferredRenderer()
+    {
+        if (m_shadowCamera)
+        {
+            m_scene.DestroyCamera(*m_shadowCamera);
+            m_shadowCamera = nullptr;
+        }
+
+        if (m_shadowCameraNode)
+        {
+            m_scene.DestroySceneNode(*m_shadowCameraNode);
+            m_shadowCameraNode = nullptr;
+        }
     }
 
     void DeferredRenderer::Resize(uint32 width, uint32 height)
@@ -239,11 +260,14 @@ namespace mmo
             return;
         }
 
+        // Setup shadow cam
+        camera.SetupShadowCamera(*m_shadowCamera, m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy());
+
         // For now we just render the exact scene just as depth. We need to configure a shadow camera though
         m_shadowMapRT->Activate();
 		m_shadowMapRT->Clear(ClearFlags::Depth);
 
-        scene.Render(camera, PixelShaderType::ShadowMap);
+        scene.Render(*m_shadowCamera, PixelShaderType::ShadowMap);
         m_shadowMapRT->Update();
     }
 
