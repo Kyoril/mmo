@@ -546,7 +546,7 @@ namespace mmo
 		{
 			if (targetSpace == Space::Tangent)
 			{
-				outputStream << "mul(expr_" << input << ", TBN)";
+				outputStream << "mul(TBN, expr_" << input << ")";
 			}
 			else
 			{
