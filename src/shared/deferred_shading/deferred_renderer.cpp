@@ -4,10 +4,8 @@
 
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
-#include "graphics/material_compiler.h"
 #include "graphics/shader_compiler.h"
 #include "scene_graph/camera.h"
-#include "scene_graph/scene_node.h"
 #include "scene_graph/render_queue.h"
 #include "log/default_log_levels.h"
 
@@ -44,31 +42,8 @@ namespace mmo
         : m_device(device)
         , m_gBuffer(device, width, height)
     {
-        // Create the lighting material
-        auto material = std::make_shared<Material>("DeferredLighting");
-        m_lightingMaterial = material;
-
-        // Create a material compiler
-        auto materialCompiler = m_device.CreateMaterialCompiler();
-        auto shaderCompiler = m_device.CreateShaderCompiler();
-
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
-
-        // Set the material to be unlit (no lighting calculations in the shader)
-        materialCompiler->SetLit(false);
-
-        // Set the material to be two-sided
-        material->SetTwoSided(true);
-
-        // Set the material to be opaque
-        material->SetType(MaterialType::Opaque);
-
-        // Set the material to not write to the depth buffer
-        material->SetDepthWriteEnabled(false);
-
-        // Set the material to not test the depth buffer
-        material->SetDepthTestEnabled(false);
 
         // Create the light buffer
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);

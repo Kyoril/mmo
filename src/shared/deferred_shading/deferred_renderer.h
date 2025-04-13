@@ -65,9 +65,6 @@ namespace mmo
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
 
-        /// @brief The lighting material.
-        MaterialPtr m_lightingMaterial;
-
         /// @brief The light buffer.
         ConstantBufferPtr m_lightBuffer;
 
