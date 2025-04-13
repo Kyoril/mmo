@@ -86,6 +86,7 @@ macro(add_lib_recurse name)
     # This tells CMake to preserve the folder structure you have on disk
     source_group(
         TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+    	PREFIX "src"
         FILES ${headers} ${sources}
     )
 

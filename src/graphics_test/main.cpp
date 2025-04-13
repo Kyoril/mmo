@@ -9,7 +9,7 @@
 #include "assets/asset_registry.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/octree_scene.h"
-#include "deferred_renderer.h"
+#include "deferred_shading/deferred_renderer.h"
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"

@@ -19,6 +19,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	elseif(APPLE)
 		add_subdirectory(graphics_metal)
 	endif()
+	add_subdirectory(deferred_shading)
 	
 	add_subdirectory(xml_handler)
 	add_subdirectory(frame_ui)
