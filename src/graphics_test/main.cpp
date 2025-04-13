@@ -43,10 +43,29 @@ namespace mmo
 
 	std::unique_ptr<DeferredRenderer> g_deferredRenderer = nullptr;
 
+	VertexBufferPtr g_quadBuffer = nullptr;
+
 	void RenderScene()
 	{
+		GraphicsDevice::Get().Reset();
+
 		// Use deferred renderer to render the scene
 		g_deferredRenderer->Render(*g_scene, *g_camera);
+
+		GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();
+
+		// Bind render target to texture stage
+		g_deferredRenderer->GetFinalRenderTarget()->Bind(ShaderType::PixelShader, 0);
+		GraphicsDevice::Get().SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+		GraphicsDevice::Get().SetTextureFilter(TextureFilter::None);
+		GraphicsDevice::Get().SetFillMode(FillMode::Solid);
+		GraphicsDevice::Get().SetFaceCullMode(FaceCullMode::Back);
+		GraphicsDevice::Get().SetVertexFormat(VertexFormat::PosColorTex1);
+		GraphicsDevice::Get().SetTopologyType(TopologyType::TriangleList);
+		g_quadBuffer->Set(0);
+
+		// Draw a full-screen quad
+		GraphicsDevice::Get().Draw(6);
 	}
 
 	void OnIdle(float elapsedTime, GameTime time)
@@ -211,7 +230,19 @@ namespace mmo
 				}
 			}
 		}
-        
+
+		const uint32 color = 0xFFFFFFFF;
+		const POS_COL_TEX_VERTEX vertices[6]{
+			{ { -1.0f,	-1.0f,		0.0f }, color, { 0.0f, 1.0f } },
+			{ { -1.0f,	1.0f,		0.0f }, color, { 0.0f, 0.0f } },
+			{ { 1.0f,	1.0f,		0.0f }, color, { 1.0f, 0.0f } },
+			{ { 1.0f,	1.0f,		0.0f }, color, { 1.0f, 0.0f } },
+			{ { 1.0f,	-1.0f,		0.0f }, color, { 1.0f, 1.0f } },
+			{ { -1.0f,	-1.0f,		0.0f }, color, { 0.0f, 1.0f } }
+		};
+
+		g_quadBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
+
 		return true;
 	}
 

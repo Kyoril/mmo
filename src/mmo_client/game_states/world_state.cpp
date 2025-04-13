@@ -647,7 +647,7 @@ namespace mmo
 
 		// Setup sun light
 		m_sunLight = &m_scene->CreateLight("SunLight", LightType::Directional);
-		m_sunLight->SetDirection(Vector3(1.0f, -0.5f, 1.0f).NormalizedCopy());
+		m_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
 		m_sunLight->SetIntensity(1.0f);
 		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		m_scene->GetRootSceneNode().AttachObject(*m_sunLight);

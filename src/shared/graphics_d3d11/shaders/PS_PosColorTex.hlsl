@@ -10,12 +10,13 @@ cbuffer Matrices : register(b0)
     column_major matrix matView;
     column_major matrix matProj;
     column_major matrix matInvView;
+    column_major matrix matInvProj;
 };
 
 Texture2D tex;
 SamplerState texSampler;
 
-float4 main(VertexIn input) : SV_Target
+float4 main(VertexOut input) : SV_Target
 {
 	return input.color * tex.Sample(texSampler, input.uv0);
 }

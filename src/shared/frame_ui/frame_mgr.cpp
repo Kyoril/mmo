@@ -720,7 +720,6 @@ namespace mmo
 		// Find the frame at the lowest level for the given point
 		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
 
-
 		// Trigger mouse moved events
 		Frame* frame = hoverFrame.get();
 		while (frame)

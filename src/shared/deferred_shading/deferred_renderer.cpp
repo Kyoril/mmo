@@ -74,7 +74,7 @@ namespace mmo
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
 
         // Create the render texture
-        m_renderTexture = GraphicsDevice::Get().CreateRenderTexture("DeferredOutput", width, height);
+        m_renderTexture = m_device.CreateRenderTexture("DeferredOutput", width, height);
         ASSERT(m_renderTexture);
 
         const uint32 color = 0xFFFFFFFF;
@@ -127,7 +127,7 @@ namespace mmo
         m_gBuffer.Unbind();
 
         // Set the render target to the back buffer
-        m_device.GetAutoCreatedWindow()->Activate();
+        m_renderTexture->Activate();
 
         // Disable depth testing and writing
         m_device.SetDepthEnabled(false);
@@ -228,6 +228,8 @@ namespace mmo
 
         // Draw a full-screen quad
         m_device.Draw(6);
+
+        m_renderTexture->Update();
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const
@@ -236,6 +238,6 @@ namespace mmo
         // so we don't have a separate final render target texture.
         // In a more complex implementation, we might render to a separate texture
         // and return that here.
-        return nullptr;
+        return m_renderTexture;
     }
 }

@@ -19,12 +19,14 @@ namespace mmo
 		, m_camera(nullptr)
 	{
 		m_camera = m_worldScene.GetCamera("Default");
+
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 1920, 1080);
 	}
 
 	void WorldRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		// Anything to render here?
-		if (!m_renderTexture || !m_worldFrame)
+		if (!m_deferredRenderer || !m_worldFrame)
 		{
 			return;
 		}
@@ -39,7 +41,7 @@ namespace mmo
 		if (m_lastFrameRect.GetSize() != frameRect.GetSize())
 		{
 			// Resize render target
-			m_renderTexture->Resize(static_cast<uint16>(frameRect.GetWidth()), static_cast<uint16>(frameRect.GetHeight()));
+			m_deferredRenderer->Resize(static_cast<uint16>(frameRect.GetWidth()), static_cast<uint16>(frameRect.GetHeight()));
 		}
 
 		// If frame rect mismatches or buffer empty...
@@ -49,7 +51,7 @@ namespace mmo
 			m_frame->GetGeometryBuffer().Reset();
 
 			// Populate the frame's geometry buffer
-			m_frame->GetGeometryBuffer().SetActiveTexture(m_renderTexture);
+			m_frame->GetGeometryBuffer().SetActiveTexture(m_deferredRenderer->GetFinalRenderTarget());
 			const Color color{ 1.0f, 1.0f, 1.0f };
 			const Rect dst{ 0.0f, 0.0f, frameRect.GetWidth(), frameRect.GetHeight() };
 			const GeometryBuffer::Vertex vertices[6]{
@@ -65,20 +67,14 @@ namespace mmo
 
 		// Capture the old graphics state (including the render target)
 		gx.CaptureState();
+		gx.Reset();
 
-		// Activate render target
-		m_renderTexture->Activate();
-		m_renderTexture->Clear(mmo::ClearFlags::All);
-
-		// Render world scene
 		if (m_camera)
 		{
 			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-			m_worldScene.Render(*m_camera, PixelShaderType::Forward);
+			m_deferredRenderer->Render(m_worldScene, *m_camera);
 		}
-
-		m_renderTexture->Update();
-
+		
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();
 		m_frame->GetGeometryBuffer().Draw();
@@ -101,11 +97,6 @@ namespace mmo
 		// Get the frame's last rectangle and initialize it
 		m_lastFrameRect = m_frame->GetAbsoluteFrameRect();
 
-		// Create the render texture
-		m_renderTexture = GraphicsDevice::Get().CreateRenderTexture(
-			m_frame->GetName(), static_cast<uint16>(m_lastFrameRect.GetWidth()), static_cast<uint16>(m_lastFrameRect.GetHeight()));
-		ASSERT(m_renderTexture);
-
 		// After the frame has been rendered, invalidate it to re-render next frame automatically
 		m_frameRenderEndCon = m_frame->RenderingEnded.connect([this]() {
 			m_frame->Invalidate(false);
@@ -121,7 +112,6 @@ namespace mmo
 		m_frameRenderEndCon.disconnect();
 
 		// Reset the render texture
-		m_renderTexture.reset();
 		m_worldFrame = nullptr;
 	}
 }

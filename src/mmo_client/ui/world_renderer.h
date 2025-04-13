@@ -8,6 +8,8 @@
 #include "graphics/render_texture.h"
 #include "base/signal.h"
 
+#include "deferred_shading/deferred_renderer.h"
+
 
 namespace mmo
 {
@@ -36,12 +38,13 @@ namespace mmo
 		void NotifyFrameDetached() override;
 
 	private:
-		RenderTexturePtr m_renderTexture;
 		Rect m_lastFrameRect;
 		WorldFrame* m_worldFrame;
 		scoped_connection m_frameRenderEndCon;
 
 		Scene& m_worldScene;
 		Camera* m_camera;
+
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 	};
 }

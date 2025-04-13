@@ -9,9 +9,10 @@ cbuffer Matrices : register(b0)
     column_major matrix matView;
     column_major matrix matProj;
     column_major matrix matInvView;
+    column_major matrix matInvProj;
 };
 
-float4 main(VertexIn input) : SV_Target
+float4 main(VertexOut input) : SV_Target
 {
 	return input.color;
 }
