@@ -15,8 +15,6 @@
 #include "vector4.h"
 
 #include <immintrin.h> // AVX
-#include <intrin.h>
-#include <xmmintrin.h>
 
 namespace mmo
 {
@@ -135,7 +133,7 @@ namespace mmo
 
 		Matrix4 Concatenate(const Matrix4& B) const
 		{
-#if 0
+#if 1
 			Matrix4 r;
 			__m128 m2[4];
 			m2[0] = _mm_load_ps(&B[0][0]);
