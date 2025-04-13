@@ -326,6 +326,8 @@ namespace mmo
 
 		void SetFogRange(float start, float end);
 
+		void SetFogColor(const Vector3& color);
+
 		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
 
 		void RefreshCameraBuffer(const Camera& camera);

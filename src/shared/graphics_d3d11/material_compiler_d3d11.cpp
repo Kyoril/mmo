@@ -1182,8 +1182,11 @@ namespace mmo
 			it->value = defaultValue;
 		}
 
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
+
 		std::ostringstream outputStream;
-		outputStream << "s" << name;
+		outputStream << "s" << copy;
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
@@ -1200,6 +1203,9 @@ namespace mmo
 		{
 			it->value = defaultValue;
 		}
+
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
 
 		std::ostringstream outputStream;
 		outputStream << "v" << name;

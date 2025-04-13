@@ -25,22 +25,14 @@ namespace mmo
 {
     void MaterialInstanceEditorInstance::RenderMaterialPreview()
     {
-		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
 		auto& gx = GraphicsDevice::Get();
 
 		// Render the scene first
 		gx.Reset();
-		gx.SetClearColor(Color::Black);
-		m_viewportRT->Activate();
-		m_viewportRT->Clear(mmo::ClearFlags::All);
-		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
-		
-		m_scene.Render(*m_camera, PixelShaderType::Forward);
-		
-		m_viewportRT->Update();
+		m_deferredRenderer->Render(m_scene, *m_camera);
     }
 
 	MaterialInstanceEditorInstance::MaterialInstanceEditorInstance(MaterialInstanceEditor& editor, EditorHost& host, const Path& assetPath)
@@ -60,7 +52,16 @@ namespace mmo
 		m_cameraAnchor->SetOrientation(Quaternion(Degree(-35.0f), Vector3::UnitX));
 		m_cameraAnchor->Yaw(Degree(-45.0f), TransformSpace::World);
 
+		m_lightNode = m_scene.GetRootSceneNode().CreateChildSceneNode("LightNode");
+		m_light = &m_scene.CreateLight("Light", LightType::Directional);
+		m_lightNode->AttachObject(*m_light);
+		m_light->SetDirection(Vector3(-0.5f, -1.0f, -0.3f));
+		m_light->SetIntensity(1.0f);
+		m_light->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
+
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 640, 480);
 
 		m_entity = m_scene.CreateEntity(assetPath.string(), "Editor/Sphere.hmsh");
 		if (m_entity)
@@ -137,19 +138,16 @@ namespace mmo
 				// or resize it if needed
 				const auto availableSpace = ImGui::GetContentRegionAvail();
 				
-				if (m_viewportRT == nullptr)
+				if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 				{
-					m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport_" + GetAssetPath().string(), std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+					m_deferredRenderer->Resize(availableSpace.x, availableSpace.y);
 					m_lastAvailViewportSize = availableSpace;
-				}
-				else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-				{
-					m_viewportRT->Resize(availableSpace.x, availableSpace.y);
-					m_lastAvailViewportSize = availableSpace;
+
+					RenderMaterialPreview();
 				}
 
 				// Render the render target content into the window as image object
-				ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+				ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
 
 				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 				{

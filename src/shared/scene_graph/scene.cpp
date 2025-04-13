@@ -492,6 +492,11 @@ namespace mmo
 		m_fogEnd = end;
 	}
 
+	void Scene::SetFogColor(const Vector3& color)
+	{
+		m_fogColor = color;
+	}
+
 	void Scene::RefreshCameraBuffer(const Camera& camera)
 	{
 		PsCameraConstantBuffer buffer;

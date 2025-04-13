@@ -99,6 +99,9 @@ namespace mmo
 
 		m_scene.SetFogRange(210.0f, 300.0f);
 
+		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
+		m_scene.SetFogColor(fogColor);
+
 		m_sunLightNode = m_scene.GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		m_sunLight = &m_scene.CreateLight("SunLight", LightType::Directional);
 		m_sunLightNode->AttachObject(*m_sunLight);

@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <span>
 
+#include "deferred_shading/deferred_renderer.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
 #include "graphics/material.h"
@@ -42,7 +43,6 @@ namespace mmo
 		MaterialInstanceEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
-		RenderTexturePtr m_viewportRT;
 		Scene m_scene;
 		SceneNode* m_cameraAnchor { nullptr };
 		SceneNode* m_cameraNode { nullptr };
@@ -56,5 +56,10 @@ namespace mmo
 		std::shared_ptr<MaterialInstance> m_material;
 		bool m_initDockLayout { true };
 		ImGuiTextFilter m_assetFilter;
+
+		SceneNode* m_lightNode{ nullptr };
+		Light* m_light{ nullptr };
+
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 	};
 }
