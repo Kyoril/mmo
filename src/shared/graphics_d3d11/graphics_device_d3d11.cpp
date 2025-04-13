@@ -27,8 +27,12 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
+#ifdef _DEBUG
 #ifndef MMO_GPU_DEBUG
-#	define MMO_GPU_DEBUG 1
+#	define MMO_GPU_DEBUG 0
+#endif
+#else
+#	define MMO_GPU_DEBUG 0
 #endif
 
 namespace mmo
