@@ -16,8 +16,28 @@ namespace mmo
 	{
 		ID3D11DeviceContext& context = m_device;
 
-		ID3D11RenderTargetView* RenderTargets[1] = { m_renderTargetView.Get() };
-		context.OMSetRenderTargets(1, RenderTargets, m_depthStencilView.Get());
+		if (m_renderTargetView && m_depthStencilView)
+		{
+			// Color + Depth
+			ID3D11RenderTargetView* renderTargets[1] = { m_renderTargetView.Get() };
+			context.OMSetRenderTargets(1, renderTargets, m_depthStencilView.Get());
+		}
+		else if (!m_renderTargetView && m_depthStencilView)
+		{
+			// Depth only
+			context.OMSetRenderTargets(0, nullptr, m_depthStencilView.Get());
+		}
+		else if (m_renderTargetView && !m_depthStencilView)
+		{
+			// Color only (no depth)
+			ID3D11RenderTargetView* renderTargets[1] = { m_renderTargetView.Get() };
+			context.OMSetRenderTargets(1, renderTargets, nullptr);
+		}
+		else
+		{
+			// Neither color nor depth is available — invalid usage
+			ASSERT(!"RenderTargetD3D11: No valid render or depth target to bind.");
+		}
 	}
 
 	void RenderTargetD3D11::Clear(ClearFlags flags)

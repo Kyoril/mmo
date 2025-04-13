@@ -7,9 +7,11 @@
 
 namespace mmo
 {
-	RenderTexture::RenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format) noexcept
+	RenderTexture::RenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat, PixelFormat depthFormat) noexcept
 		: RenderTarget(std::move(name), width, height)
-		, m_format(format)
+		, m_flags(flags)
+		, m_colorFormat(colorFormat)
+		, m_depthFormat(depthFormat)
 	{
 	}
 }

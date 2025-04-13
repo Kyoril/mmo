@@ -29,7 +29,7 @@
 
 #ifdef _DEBUG
 #ifndef MMO_GPU_DEBUG
-#	define MMO_GPU_DEBUG 0
+#	define MMO_GPU_DEBUG 1
 #endif
 #else
 #	define MMO_GPU_DEBUG 0
@@ -987,14 +987,9 @@ namespace mmo
 		return std::make_shared<RenderWindowD3D11>(*this, std::move(name), width, height, fullScreen);
 	}
 
-	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height)
+	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat, PixelFormat depthFormat)
 	{
-		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height);
-	}
-
-	RenderTexturePtr GraphicsDeviceD3D11::CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format)
-	{
-		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height, format);
+		return std::make_shared<RenderTextureD3D11>(*this, std::move(name), width, height, flags, colorFormat, depthFormat);
 	}
 
 	void GraphicsDeviceD3D11::SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count)

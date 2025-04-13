@@ -8,7 +8,7 @@
 namespace mmo
 {
 RenderTextureNull::RenderTextureNull(GraphicsDeviceNull & device, std::string name, uint16 width, uint16 height, PixelFormat format)
-	: RenderTexture(std::move(name), width, height, format)
+	: RenderTexture(std::move(name), width, height, RenderTextureFlags::None, R8G8B8A8, D32F)
 		, RenderTargetNull(device)
 		, m_resizePending(false)
 	{

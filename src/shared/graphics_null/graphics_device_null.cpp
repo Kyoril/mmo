@@ -195,14 +195,9 @@ namespace mmo
 		return std::make_shared<RenderWindowNull>(*this, std::move(name), width, height, fullScreen);
 	}
 
-	RenderTexturePtr GraphicsDeviceNull::CreateRenderTexture(std::string name, uint16 width, uint16 height)
+	RenderTexturePtr GraphicsDeviceNull::CreateRenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat, PixelFormat depthFormat)
 	{
 		return std::make_shared<RenderTextureNull>(*this, std::move(name), width, height);
-	}
-
-	RenderTexturePtr GraphicsDeviceNull::CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format)
-	{
-		return std::make_shared<RenderTextureNull>(*this, std::move(name), width, height, format);
 	}
 
 	void GraphicsDeviceNull::SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count)

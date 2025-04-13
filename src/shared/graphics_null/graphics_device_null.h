@@ -64,9 +64,7 @@ namespace mmo
 
 		RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height, bool fullScreen) override;
 
-		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
-
-		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height, PixelFormat format) override;
+		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat = PixelFormat::R8G8B8A8, PixelFormat depthFormat = PixelFormat::D32F) override;
 
 		void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) override;
 

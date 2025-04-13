@@ -181,7 +181,7 @@ namespace mmo
 		g_sunLight = &g_scene->CreateLight("MainLight", LightType::Directional);
 		g_sunLight->SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
 		g_sunLight->SetIntensity(1.0f);
-		g_sunLightNode = &g_scene->CreateSceneNode("SunLightNode");
+		g_sunLightNode = g_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		g_sunLightNode->AttachObject(*g_sunLight);
 		g_sunLightNode->SetDirection({ -0.5f, -1.0f, -0.3f });
 

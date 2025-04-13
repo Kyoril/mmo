@@ -28,6 +28,8 @@ namespace mmo
 		DXT3,
 		DXT5,
 
+		D32F,
+
 		Unknown
 	};
 

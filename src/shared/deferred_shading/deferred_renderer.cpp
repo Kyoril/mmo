@@ -74,7 +74,7 @@ namespace mmo
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
 
         // Create the render texture
-        m_renderTexture = m_device.CreateRenderTexture("DeferredOutput", width, height);
+        m_renderTexture = m_device.CreateRenderTexture("DeferredOutput", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView);
         ASSERT(m_renderTexture);
 
         const uint32 color = 0xFFFFFFFF;
@@ -88,6 +88,8 @@ namespace mmo
         };
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
+
+		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 2048, 2048, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
     }
 
     void DeferredRenderer::Resize(uint32 width, uint32 height)
@@ -99,6 +101,9 @@ namespace mmo
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
     {
+        // Traverse the scene graph and find all kind of lighting information for the current frame
+        FindLights(scene, camera);
+
         // Render the geometry pass
         RenderGeometryPass(scene, camera);
 
@@ -138,64 +143,6 @@ namespace mmo
         m_device.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
         scene.RefreshCameraBuffer(camera);
 
-        // Prepare the light buffer with a single directional light for now
-        LightBuffer lightBuffer;
-        lightBuffer.ambientColor = m_ambientColor;
-        lightBuffer.lightCount = 0;
-
-        for (const auto* light : scene.GetAllLights())
-        {
-			if (lightBuffer.lightCount >= MAX_LIGHTS)
-			{
-				break;  // Avoid exceeding the maximum number of lights
-			}
-
-            if (!light->IsVisible())
-            {
-                continue;
-            }
-
-			if (light->GetType() != LightType::Directional)
-			{
-				// Check if light is in the camera's view frustum
-				if (!camera.IsVisible(light->GetBoundingBox()))
-				{
-					//continue;  // Skip lights that are not in view
-				}
-			}
-
-            const Vector4& color = light->GetColor();
-
-            ShaderLight& bufferedLight = lightBuffer.lights[lightBuffer.lightCount++];
-            bufferedLight.position = light->GetDerivedPosition();
-            bufferedLight.color = Vector3(color.x, color.y, color.z);
-            bufferedLight.intensity = light->GetIntensity();
-            bufferedLight.range = light->GetRange();
-            bufferedLight.spotAngle = 0.0f;
-            bufferedLight.direction = light->GetDirection();
-
-            // Set up a directional light
-            switch (light->GetType())
-            {
-            case LightType::Directional:
-                bufferedLight.position = Vector3(0.0f, 0.0f, 0.0f);
-                bufferedLight.range = 0.0f;  // Directional lights don't have a range
-                bufferedLight.type = 1;
-                break;
-            case LightType::Point:
-                bufferedLight.type = 0;
-                break;
-
-            case LightType::Spot:
-                bufferedLight.type = 2;
-                bufferedLight.spotAngle = light->GetOuterConeAngle();  // Not used for directional lights
-                break;
-            }
-        }
-
-        // Update the light buffer
-        m_lightBuffer->Update(&lightBuffer);
-
         m_gBuffer.GetAlbedoRT().Bind(ShaderType::PixelShader, 0);
         m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 1);
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
@@ -230,6 +177,88 @@ namespace mmo
         m_device.Draw(6);
 
         m_renderTexture->Update();
+    }
+
+    void DeferredRenderer::FindLights(Scene& scene, Camera& camera)
+    {
+        m_shadowCastingDirecitonalLight = nullptr;
+
+        // Prepare the light buffer with a single directional light for now
+        LightBuffer lightBuffer;
+        lightBuffer.ambientColor = m_ambientColor;
+        lightBuffer.lightCount = 0;
+
+        for (auto* light : scene.GetAllLights())
+        {
+            if (lightBuffer.lightCount >= MAX_LIGHTS)
+            {
+                break;  // Avoid exceeding the maximum number of lights
+            }
+
+            if (!light->IsVisible())
+            {
+                continue;
+            }
+
+            if (light->GetType() == LightType::Directional && m_shadowCastingDirecitonalLight == nullptr)
+            {
+                // Check if the light is a shadow-casting directional light
+                if (light->IsCastingShadows())
+                {
+                    m_shadowCastingDirecitonalLight = light;
+                }
+            }
+
+            if (light->GetType() != LightType::Directional)
+            {
+                // Check if light is in the camera's view frustum
+                if (!camera.IsVisible(light->GetBoundingBox()))
+                {
+                    continue;  // Skip lights that are not in view
+                }
+            }
+
+            const Vector4& color = light->GetColor();
+
+            ShaderLight& bufferedLight = lightBuffer.lights[lightBuffer.lightCount++];
+            bufferedLight.position = light->GetDerivedPosition();
+            bufferedLight.color = Vector3(color.x, color.y, color.z);
+            bufferedLight.intensity = light->GetIntensity();
+            bufferedLight.range = light->GetRange();
+            bufferedLight.spotAngle = 0.0f;
+            bufferedLight.direction = light->GetDirection();
+
+            // Set up a directional light
+            switch (light->GetType())
+            {
+            case LightType::Directional:
+                bufferedLight.position = Vector3(0.0f, 0.0f, 0.0f);
+                bufferedLight.range = 0.0f;  // Directional lights don't have a range
+                bufferedLight.type = 1;
+                break;
+            case LightType::Point:
+                bufferedLight.type = 0;
+                break;
+
+            case LightType::Spot:
+                bufferedLight.type = 2;
+                bufferedLight.spotAngle = light->GetOuterConeAngle();  // Not used for directional lights
+                break;
+            }
+        }
+
+        // Update the light buffer
+        m_lightBuffer->Update(&lightBuffer);
+    }
+
+    void DeferredRenderer::RenderShadowMap(Scene& scene, Camera& camera)
+    {
+        if (m_shadowCastingDirecitonalLight == nullptr)
+        {
+            return;
+        }
+
+
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const

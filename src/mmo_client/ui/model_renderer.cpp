@@ -111,7 +111,7 @@ namespace mmo
 		if (!m_renderTexture)
 		{
 			m_renderTexture = GraphicsDevice::Get().CreateRenderTexture(
-				m_frame->GetName(), static_cast<uint16>(lastFrameRect.GetWidth()), static_cast<uint16>(lastFrameRect.GetHeight()));
+				m_frame->GetName(), static_cast<uint16>(lastFrameRect.GetWidth()), static_cast<uint16>(lastFrameRect.GetHeight()), RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 			ASSERT(m_renderTexture);
 		}
 		

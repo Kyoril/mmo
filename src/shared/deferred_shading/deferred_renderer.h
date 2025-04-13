@@ -50,6 +50,10 @@ namespace mmo
         /// @param camera The camera to use for rendering.
         void RenderLightingPass(Scene& scene, Camera& camera);
 
+        void FindLights(Scene& scene, Camera& camera);
+
+		void RenderShadowMap(Scene& scene, Camera& camera);
+
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
         static constexpr uint32 MAX_LIGHTS = 16;
@@ -77,5 +81,9 @@ namespace mmo
         VertexBufferPtr m_quadBuffer;
 
         RenderTexturePtr m_renderTexture;
+
+        Light* m_shadowCastingDirecitonalLight;
+
+        RenderTexturePtr m_shadowMapRT;
     };
 }

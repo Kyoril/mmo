@@ -31,7 +31,7 @@ namespace mmo
 
 		if (m_viewportRT == nullptr)
 		{
-			m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("MaterialPreview_RenderTexture", 128, 128);
+			m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("MaterialPreview_RenderTexture", 128, 128, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 		}
 
 		m_renderConnection = m_host.beforeUiUpdate.connect(this, &MaterialPreviewProvider::RenderMaterialPreview);
