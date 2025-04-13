@@ -140,4 +140,15 @@ namespace mmo
 		// Lights don't add themselves to the render queue
 		// They are processed separately during the lighting pass
 	}
+
+	void Light::NotifyAttachmentChanged(Node* parent, bool isTagPoint)
+	{
+		MovableObject::NotifyAttachmentChanged(parent, isTagPoint);
+
+		if (parent)
+		{
+			// Should NOT attach light to root node!!!
+			ASSERT(parent->GetParent() != nullptr);
+		}
+	}
 }

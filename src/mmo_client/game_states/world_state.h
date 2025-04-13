@@ -357,6 +357,7 @@ namespace mmo
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
 		Light* m_sunLight { nullptr };
+		SceneNode* m_sunLightNode{ nullptr };
 
 		SceneNode* m_worldRootNode;
 		std::unique_ptr<ClientWorldInstance> m_worldInstance;

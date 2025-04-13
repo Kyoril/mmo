@@ -579,6 +579,25 @@ namespace mmo
 
 		if (type == PixelShaderType::GBuffer)
 		{
+			m_pixelShaderStream
+				<< "float Dither8x8(int2 pos)\n"
+				<< "{\n"
+				<< "	static const float thresholdMatrix[64] = {\n"
+				<< "		 0, 48, 12, 60,  3, 51, 15, 12,\n"
+				<< "		32, 16, 44, 28, 35, 19, 47, 31,\n"
+				<< "		 8, 44,  4, 30, 11, 22,  7, 55,\n"
+				<< "		40, 24, 36, 20, 43, 27, 39, 23,\n"
+				<< "		 2, 32, 14, 62,  1, 49, 13, 61,\n"
+				<< "		34, 18, 46, 30, 33, 17, 45, 29,\n"
+				<< "		10, 44,  6, 54,  9, 57,  5, 53,\n"
+				<< "		42, 26, 38, 22, 41, 25, 37, 21\n"
+				<< "	};\n"
+				<< "	int x = pos.x % 8;\n"
+				<< "	int y = pos.y % 8;\n"
+				<< "	int index = y * 8 + x;\n"
+				<< "	return thresholdMatrix[index] / 64.0;\n"
+				<< "}\n\n";
+
 			// For G-Buffer output
 			m_pixelShaderStream
 				<< "struct GBufferOutput\n"
@@ -917,8 +936,17 @@ namespace mmo
 			}
 		}
 
-		m_pixelShaderStream
-			<< "\tif (opacity <= 0.333) { clip(-1); }\n";
+		if (type != PixelShaderType::GBuffer)
+		{
+			m_pixelShaderStream
+				<< "\tif (opacity <= 0.333) discard;\n";
+		}
+		else
+		{
+			m_pixelShaderStream
+				//<< "\tfloat threshold = Dither8x8(input.pos.xy + cameraPos.xy * cameraPos.z);\n"
+				<< "\tif (opacity < 0.333) discard;\n";
+		}
 
 		if (type != PixelShaderType::GBuffer)
 		{
@@ -989,10 +1017,18 @@ namespace mmo
 			m_pixelShaderStream
 				<< "\tGBufferOutput output;\n";
 
-			m_pixelShaderStream
-				<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
-				<< "\tfloat linearDepth = length(viewPos);\n";
-
+			if (m_depthWrite)
+			{
+				m_pixelShaderStream
+					<< "\tfloat3 viewPos = mul(float4(input.worldPos, 1.0), matView).xyz;\n"
+					<< "\tfloat linearDepth = length(viewPos);\n";
+			}
+			else
+			{
+				m_pixelShaderStream
+					<< "\tfloat linearDepth = 0.0f;\n";	// TODO: Is that correct? Or maybe Z-Far?
+			}
+			
 			m_pixelShaderStream
 				<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
 
@@ -1001,7 +1037,7 @@ namespace mmo
 			{
 				// Albedo - empty for unlit materials
 				m_pixelShaderStream
-					<< "\toutput.albedo = float4(0.0, 0.0, 0.0, opacity);\n";
+					<< "\toutput.albedo = float4(0.0, 0.0, 0.0, 1.0);\n";
 				
 				// Normal - default up vector for unlit materials
 				m_pixelShaderStream
@@ -1019,7 +1055,7 @@ namespace mmo
 			{
 				// Albedo
 				m_pixelShaderStream
-					<< "\toutput.albedo = float4(baseColor, opacity);\n";
+					<< "\toutput.albedo = float4(baseColor, 1.0);\n";
 				
 				// Normal
 				m_pixelShaderStream

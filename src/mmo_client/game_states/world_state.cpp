@@ -618,7 +618,7 @@ namespace mmo
 	{
 		m_scene = std::make_unique<OctreeScene>();
 
-		m_scene->SetFogRange(128.0f, 165.0f);
+		m_scene->SetFogRange(210.0f, 300.0f);
 
 		m_cloudsEntity = m_scene->CreateEntity("Clouds", "Models/SkySphere.hmsh");
 		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
@@ -646,11 +646,12 @@ namespace mmo
 		m_debugAxis->SetVisible(false);
 
 		// Setup sun light
+		m_sunLightNode = m_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		m_sunLight = &m_scene->CreateLight("SunLight", LightType::Directional);
+		m_sunLightNode->AttachObject(*m_sunLight);
 		m_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
 		m_sunLight->SetIntensity(1.0f);
 		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-		m_scene->GetRootSceneNode().AttachObject(*m_sunLight);
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);

@@ -102,7 +102,6 @@ namespace mmo
 		/// @param direction The new direction of the light.
 		void SetDirection(const Vector3& direction);
 
-
 		/// @brief Gets the derived position of the light in world space.
 		/// @return The derived position of the light in world space.
 		[[nodiscard]] Vector3 GetDerivedPosition() const;
@@ -113,6 +112,8 @@ namespace mmo
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables = false) override;
 		void PopulateRenderQueue(RenderQueue& queue) override;
+
+		void NotifyAttachmentChanged(Node* parent, bool isTagPoint) override;
 
 	private:
 		static const String LIGHT_TYPE_NAME;
