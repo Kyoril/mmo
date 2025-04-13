@@ -43,6 +43,8 @@ namespace mmo
 		/// Activates the render target and makes all following render commands target this render target.
 		virtual void Activate();
 
+		virtual void ApplyPendingResize() {}
+
 		/// Clears the render target.
 		virtual void Clear(ClearFlags flags) = 0;
 

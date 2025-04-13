@@ -28,6 +28,8 @@
 #include "edit_modes/entity_edit_mode.h"
 #include "scene_graph/octree_scene.h"
 
+#include "deferred_shading/deferred_renderer.h"
+
 namespace mmo
 {
 	namespace proto
@@ -201,7 +203,6 @@ namespace mmo
 		WorldEditor& m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
-		RenderTexturePtr m_viewportRT;
 		bool m_wireFrame;
 		OctreeScene m_scene;
 		SceneNode* m_cameraAnchor { nullptr };
@@ -256,6 +257,7 @@ namespace mmo
 		SceneNode* m_cloudsNode{ nullptr };
 		Entity* m_cloudsEntity{ nullptr };
 		Light* m_sunLight{ nullptr };
+		SceneNode* m_sunLightNode{ nullptr };
 
 		std::unique_ptr<TerrainEditMode> m_terrainEditMode;
 		std::unique_ptr<EntityEditMode> m_entityEditMode;
@@ -277,5 +279,7 @@ namespace mmo
 		std::unique_ptr<nav::Map> m_navMap;
 
 		SceneNode* m_navDebugNode{ nullptr };
+
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 	};
 }

@@ -97,8 +97,15 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
-		m_scene.SetFogRange(128.0f, 165.0f);
+		m_scene.SetFogRange(210.0f, 300.0f);
 
+		m_sunLightNode = m_scene.GetRootSceneNode().CreateChildSceneNode("SunLightNode");
+		m_sunLight = &m_scene.CreateLight("SunLight", LightType::Directional);
+		m_sunLightNode->AttachObject(*m_sunLight);
+		m_sunLight->SetDirection(Vector3(-0.5f, -1.0f, -0.3f));
+		m_sunLight->SetIntensity(1.0f);
+		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
 		m_worldGrid->SetVisible(false);
@@ -187,6 +194,8 @@ namespace mmo
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_editMode = nullptr;
+
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), 640, 480);
 
 		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
 		// Setup debug draw
@@ -315,24 +324,18 @@ namespace mmo
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
 		
-		if (!m_viewportRT) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
 		auto& gx = GraphicsDevice::Get();
 
-		// Render the scene first
 		gx.Reset();
-		gx.SetClearColor(Color::Black);
-		m_viewportRT->Activate();
-		m_viewportRT->Clear(mmo::ClearFlags::All);
+
 		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
-
-		m_scene.Render(*m_camera, PixelShaderType::Forward);
+		m_camera->InvalidateView();
+		m_deferredRenderer->Render(m_scene, *m_camera);
 		m_transformWidget->Update(m_camera);
-		
-		m_viewportRT->Update();
 	}
 
 	void WorldEditorInstance::Draw()
@@ -542,19 +545,16 @@ namespace mmo
 			// or resize it if needed
 			const auto availableSpace = ImGui::GetContentRegionAvail();
 			
-			if (m_viewportRT == nullptr)
+			if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 			{
-				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y));
+				m_deferredRenderer->Resize(availableSpace.x, availableSpace.y);
 				m_lastAvailViewportSize = availableSpace;
-			}
-			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-			{
-				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
-				m_lastAvailViewportSize = availableSpace;
+
+				Render();
 			}
 
 			// Render the render target content into the window as image object
-			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+			ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
 
 			m_hovering = ImGui::IsItemHovered();

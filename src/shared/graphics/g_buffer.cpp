@@ -44,13 +44,6 @@ namespace mmo
 		m_emissiveRT->Resize(width, height);
 		m_viewRayRT->Resize(width, height);
 		m_depthRT->Resize(width, height);
-
-		// Check if all render textures were created successfully
-		if (!m_albedoRT || !m_normalRT || !m_materialRT || !m_emissiveRT || !m_depthRT)
-		{
-			ELOG("Failed to resize G-Buffer render textures");
-			throw std::runtime_error("Failed to resize G-Buffer render textures");
-		}
 	}
 
 	void GBuffer::Bind()
@@ -63,6 +56,13 @@ namespace mmo
 			m_emissiveRT,
 			m_viewRayRT
 		};
+
+		m_albedoRT->ApplyPendingResize();
+		m_normalRT->ApplyPendingResize();
+		m_materialRT->ApplyPendingResize();
+		m_emissiveRT->ApplyPendingResize();
+		m_viewRayRT->ApplyPendingResize();
+		m_depthRT->ApplyPendingResize();
 
 		// Set the render targets with depth stencil
 		m_device.SetRenderTargetsWithDepthStencil(renderTargets, 5, m_depthRT);

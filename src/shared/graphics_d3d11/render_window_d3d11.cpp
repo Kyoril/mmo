@@ -75,6 +75,15 @@ namespace mmo
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
 	}
 
+	void RenderWindowD3D11::ApplyPendingResize()
+	{
+		if (m_resizePending)
+		{
+			ApplyInternalResize();
+			m_resizePending = false;
+		}
+	}
+
 	void RenderWindowD3D11::Clear(ClearFlags flags)
 	{
 		RenderTargetD3D11::Clear(flags);
@@ -118,11 +127,7 @@ namespace mmo
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);
 
 		// Apply pending resize
-		if (m_resizePending)
-		{
-			ApplyInternalResize();
-			m_resizePending = false;
-		}
+		ApplyPendingResize();
 	}
 
 	void RenderWindowD3D11::SetTitle(const std::string & title)

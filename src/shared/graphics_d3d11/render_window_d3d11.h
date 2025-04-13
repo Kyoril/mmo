@@ -27,6 +27,7 @@ namespace mmo
 	public:
 		// ~Begin RenderTarget
 		virtual void Activate() final override;
+		virtual void ApplyPendingResize() final override;
 		virtual void Clear(ClearFlags flags) final override;
 		virtual void Resize(uint16 width, uint16 height) final override;
 		virtual void Update() final override;

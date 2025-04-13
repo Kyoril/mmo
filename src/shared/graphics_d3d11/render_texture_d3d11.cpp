@@ -60,6 +60,16 @@ namespace mmo
 
 	void RenderTextureD3D11::Activate()
 	{
+		ApplyPendingResize();
+
+		RenderTarget::Activate();
+		RenderTargetD3D11::Activate();
+
+		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
+	}
+
+	void RenderTextureD3D11::ApplyPendingResize()
+	{
 		if (m_resizePending)
 		{
 			m_resizePending = false;
@@ -73,11 +83,6 @@ namespace mmo
 			// Recreate resources with new dimensions
 			CreateResources();
 		}
-
-		RenderTarget::Activate();
-		RenderTargetD3D11::Activate();
-
-		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
 	}
 
 	void RenderTextureD3D11::Clear(ClearFlags flags)

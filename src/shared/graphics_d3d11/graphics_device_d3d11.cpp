@@ -620,6 +620,11 @@ namespace mmo
 			m_textureSlots[i] = nullptr;
 		}
 
+		m_immContext->VSSetShader(nullptr, nullptr, 0);
+		m_immContext->PSSetShader(nullptr, nullptr, 0);
+		m_immContext->VSSetShaderResources(0, 0, nullptr);
+		m_immContext->PSSetShaderResources(0, 0, nullptr);
+
 		// Set the constant buffers
 		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
 		m_immContext->VSSetConstantBuffers(0, 1, Buffers);

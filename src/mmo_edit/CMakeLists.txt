@@ -112,7 +112,8 @@ target_link_libraries(mmo_edit
 	sql_wrapper
 	mysql_wrapper
 	terrain
-	game)
+	game
+	deferred_shading)
 
 # Link recast, detour and detour debug libraries as we need them to load and visualize navigation data in the world editor	
 target_link_libraries(mmo_edit nav_mesh Recast Detour DebugUtils)
