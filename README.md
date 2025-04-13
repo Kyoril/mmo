@@ -7,6 +7,8 @@ Character Selection Screen             |  Ingame
 <img src="./screenshots/char_select.png" width="600">  |  <img src="./screenshots/ingame_01.png" width="600">
 Spawn Editor        |  Unreal inspired material graph editor with PBR support
 <img src="./screenshots/spawn_editor.png" width="600">  |  <img src="./screenshots/material_editor.png" width="600">
+World Editor with Deferred Shading | 
+<img src="./screenshots/world_editor.png" width="600">  |
 
 
 # What is this project about?
