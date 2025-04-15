@@ -17,8 +17,11 @@ Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
 Texture2D ViewRayTexture : register(t4);
 
+Texture2D ShadowMap : register(t5);
+
 // Samplers
 SamplerState PointSampler : register(s0);
+SamplerComparisonState ShadowSampler : register(s1);
 
 cbuffer Matrices : register(b0)
 {
@@ -59,6 +62,11 @@ cbuffer LightBuffer : register(b2)
     float3 AmbientColor;
     Light Lights[16];
 }
+
+cbuffer ShadowBuffer : register(b3)
+{
+    column_major matrix LightViewProj;
+};
 
 // Reconstructs world position from depth
 float3 ReconstructPosition(float linearDepth, float3 viewRay)
@@ -141,8 +149,25 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
+float SampleShadow(float3 worldPos)
+{
+    // Transform worldPos to light clip space
+    float4 shadowCoord = mul(float4(worldPos, 1.0), LightViewProj);
+
+    // Perspective divide
+    shadowCoord.xyz /= shadowCoord.w;
+
+    // Transform to [0, 1] UV space
+    float2 uv = shadowCoord.xy * 0.5 + 0.5;
+    float depth = shadowCoord.z;
+
+    // Depth bias (you can tweak these)
+    float bias = 0.005;
+    return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, depth - bias);
+}
+
 // Calculates directional light contribution
-float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
+float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular, float shadow)
 {
     float3 lightDir = -normalize(light.Direction);
 
@@ -169,7 +194,7 @@ float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, f
 
     float3 radiance = light.Color * light.Intensity;
 
-    return (kD * diffuse + specularBRDF) * radiance * NdotL;
+    return ((kD * diffuse + specularBRDF) * radiance * NdotL) * shadow;
 }
 
 // Calculates spot light contribution
@@ -265,7 +290,8 @@ float4 main(PS_INPUT input) : SV_TARGET
         }
         else if (light.Type == 1) // Directional light
         {
-            lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
+            float shadow = SampleShadow(worldPos);
+            lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
         }
         else if (light.Type == 2) // Spot light
         {

@@ -66,17 +66,19 @@ namespace mmo
 
 		Ray GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const;
 
-		void InvalidateView() { m_recalcView = true; }
+		void InvalidateView();
+
+		void InvalidateFrustum();
 
 		void GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const;
 
 		AABBVisibility GetVisibility(const AABB& bound) const;
 
-		void SetFarClipDistance(const float distance) { m_farDist = distance; InvalidateView(); }
+		void SetFarClipDistance(const float distance);
 
-		void SetNearClipDistance(const float distance) { m_nearDist = distance; InvalidateView(); }
+		void SetNearClipDistance(const float distance);
 
-		void SetProjectionType(const ProjectionType type) { m_projectionType = type; InvalidateView(); }
+		void SetProjectionType(const ProjectionType type);
 
 		ProjectionType GetProjectionType() const { return m_projectionType; }
 
@@ -89,6 +91,23 @@ namespace mmo
 		float GetOrthoWindowHeight() const { return m_orthoHeight; }
 
 		float GetOrthoWindowWidth() const { return m_orthoHeight * m_aspect; }
+
+		void SetFrustumExtents(float left, float right, float top, float bottom);
+
+		void ResetFrustumExtents();
+
+		void GetFrustumExtents(float& outLeft, float& outRight, float& outTop, float& outBottom) const;
+
+		void SetFOVy(const Radian& fovY);
+
+		const Vector3* GetWorldSpaceCorners() const;
+
+		void SetCustomProjMatrix(bool enable, const Matrix4& projMatrix = Matrix4::Identity);
+
+		bool IsCustomProjMatrixEnabled() const
+		{
+			return m_customProjMatrix;
+		}
 
 	protected:
 		void UpdateFrustum() const;
@@ -109,13 +128,15 @@ namespace mmo
 		
 		void CalcProjectionParameters(float& left, float& right, float& bottom, float& top) const;
 
+		void UpdateWorldSpaceCorners() const;
+
 	public:
 		[[nodiscard]] const String& GetMovableType() const override;
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
 
-		void SetAspectRatio(const float aspect);
+		void SetAspectRatio(float aspect);
 
         const Quaternion& GetDerivedOrientation() const;
 
@@ -160,7 +181,10 @@ namespace mmo
 		mutable bool m_recalcWorldSpaceCorners { true };
 		bool m_obliqueDepthProjection { false };
 		mutable Plane m_frustumPlanes[6];
+		mutable Vector3 m_worldSpaceCorners[8];
 		bool m_customViewMatrix { false };
+		bool m_customProjMatrix{ false };
 		ProjectionType m_projectionType{ ProjectionType::Perspective };
+		bool m_frustumExtentsManuallySet{ false };
 	};
 }

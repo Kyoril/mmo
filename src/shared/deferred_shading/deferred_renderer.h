@@ -9,6 +9,12 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
 
+#ifdef _WIN32
+#   include <d3d11.h>
+#   include <wrl/client.h>
+using Microsoft::WRL::ComPtr;
+#endif
+
 namespace mmo
 {
     /// @brief Class that implements deferred rendering.
@@ -70,6 +76,8 @@ namespace mmo
         /// @brief The light buffer.
         ConstantBufferPtr m_lightBuffer;
 
+        ConstantBufferPtr m_shadowBuffer;
+
         /// @brief The ambient light color.
         Vector3 m_ambientColor{ 0.04f, 0.035f, 0.03f };
 
@@ -88,5 +96,7 @@ namespace mmo
 		SceneNode* m_shadowCameraNode{ nullptr };
 
         Camera* m_shadowCamera{ nullptr };
+
+		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
     };
 }

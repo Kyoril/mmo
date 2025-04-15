@@ -150,6 +150,16 @@ namespace mmo
 				g_pointLight2->SetVisible(!g_pointLight2->IsVisible());
 			}
 
+			if (key == 'P')
+			{
+				// Toggle directional light
+				g_camera->SetProjectionType(ProjectionType::Perspective);
+			}
+			if (key == 'O')
+			{
+				g_camera->SetProjectionType(ProjectionType::Orthographic);
+			}
+
         	return true;
         });
 

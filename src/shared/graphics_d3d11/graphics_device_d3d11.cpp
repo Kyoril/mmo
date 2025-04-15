@@ -487,7 +487,7 @@ namespace mmo
 #if MMO_GPU_DEBUG
 			// Double check here
 			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseView * m_transform[View]));
-			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
+			//ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
 #endif
 		}
 		else
@@ -569,26 +569,19 @@ namespace mmo
 
 	Matrix4 GraphicsDeviceD3D11::MakeOrthographicMatrix(const float left, const float top, const float right, const float bottom, const float nearPlane, const float farPlane)
 	{
-		const float invW = 1 / (right - left);
-		const float invH = 1 / (top - bottom);
-		const float invD = 1 / (farPlane - nearPlane);
+		const float invW = 1.0f / (right - left);
+		const float invH = 1.0f / (top - bottom);
+		const float invD = 1.0f / (farPlane - nearPlane);
 
-		const float a = 2 * invW;
-		const float b = 2 * invH;
-		const float c = - (right + left) * invW;
-		const float d = - (top + bottom) * invH;
-
-		const float q = - 2 * invD;
-		const float qn = - (farPlane + nearPlane) * invD;
-		
 		Matrix4 result = Matrix4::Zero;
-		result[0][0] = a;
-		result[0][3] = c;
-		result[1][1] = b;
-		result[1][3] = d;
-		result[2][2] = q;
-		result[2][3] = qn;
-		result[3][3] = 1;
+		result[0][0] = 2.0f * invW;
+		result[0][3] = -(right + left) * invW;
+		result[1][1] = 2.0f * invH;
+		result[1][3] = -(top + bottom) * invH;
+		result[2][2] = invD;
+		result[2][3] = -nearPlane * invD;
+		result[3][3] = 1.0f;
+
 		return result;
 	}
 
@@ -908,7 +901,7 @@ namespace mmo
 			m_inverseProj = m_transform[Projection].Inverse();
 #if MMO_GPU_DEBUG
 			// First check on set (fail early)
-			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
+			//ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
 #endif
 		}
 

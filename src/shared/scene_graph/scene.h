@@ -437,7 +437,7 @@ namespace mmo
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
-		float m_defaultShadowFarDist { 0.0f };
+		float m_defaultShadowFarDist { 128.0f };
 
 		MaterialPtr m_defaultMaterial;
 

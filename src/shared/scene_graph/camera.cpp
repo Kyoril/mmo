@@ -60,6 +60,20 @@ namespace mmo
 		return Ray(rayOrigin, rayDirection, maxDistance);
 	}
 
+	void Camera::InvalidateView()
+	{
+		m_recalcView = true;
+		m_recalcFrustum = true;
+		m_recalcWorldSpaceCorners = true;
+	}
+
+	void Camera::InvalidateFrustum()
+	{
+		m_recalcFrustum = true;
+		m_recalcFrustumPlanes = true;
+		m_recalcWorldSpaceCorners = true;
+	}
+
 	void Camera::GetNormalizedScreenPosition(const Vector3& worldPosition, float& x, float& y) const
 	{
 		const Matrix4& viewMatrix = GetViewMatrix();
@@ -111,23 +125,89 @@ namespace mmo
 		return aabb_visibility::Partial;
 	}
 
+	void Camera::SetFarClipDistance(const float distance)
+	{
+		m_farDist = distance;
+		InvalidateFrustum();
+	}
+
+	void Camera::SetNearClipDistance(const float distance)
+	{
+		m_nearDist = distance;
+		InvalidateFrustum();
+	}
+
+	void Camera::SetProjectionType(const ProjectionType type)
+	{
+		m_projectionType = type;
+		InvalidateFrustum();
+	}
+
 	void Camera::SetOrthoWindow(float w, float h)
 	{
 		m_orthoHeight = h;
 		m_aspect = w / h;
-		InvalidateView();
+		InvalidateFrustum();
 	}
 
 	void Camera::SetOrthoWindowHeight(float h)
 	{
 		m_orthoHeight = h;
-		InvalidateView();
+		InvalidateFrustum();
 	}
 
 	void Camera::SetOrthoWindowWidth(float w)
 	{
 		m_orthoHeight = w / m_aspect;
-		InvalidateView();
+		InvalidateFrustum();
+	}
+
+	void Camera::SetFrustumExtents(float left, float right, float top, float bottom)
+	{
+		m_frustumExtentsManuallySet = true;
+		m_left = left;
+		m_right = right;
+		m_top = top;
+		m_bottom = bottom;
+
+		InvalidateFrustum();
+	}
+
+	void Camera::ResetFrustumExtents()
+	{
+		m_frustumExtentsManuallySet = false;
+		InvalidateFrustum();
+	}
+
+	void Camera::GetFrustumExtents(float& outLeft, float& outRight, float& outTop, float& outBottom) const
+	{
+		UpdateFrustum();
+		outLeft = m_left;
+		outRight = m_right;
+		outTop = m_top;
+		outBottom = m_bottom;
+	}
+
+	void Camera::SetFOVy(const Radian& fovY)
+	{
+		m_fovY = fovY;
+		InvalidateFrustum();
+	}
+
+	const Vector3* Camera::GetWorldSpaceCorners() const
+	{
+		UpdateWorldSpaceCorners();
+		return m_worldSpaceCorners;
+	}
+
+	void Camera::SetCustomProjMatrix(bool enable, const Matrix4& projMatrix)
+	{
+		m_customProjMatrix = enable;
+		if (enable)
+		{
+			m_projMatrix = projMatrix;
+		}
+		InvalidateFrustum();
 	}
 
 	void Camera::UpdateFrustum() const
@@ -137,11 +217,25 @@ namespace mmo
 			return;
 		}
 
-		float left, right, bottom, top;
-		CalcProjectionParameters(left, right, bottom, top);
+		if (!m_customProjMatrix)
+		{
+			float left, right, bottom, top;
+			CalcProjectionParameters(left, right, bottom, top);
 
-		m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(m_fovY, m_aspect, m_nearDist, m_farDist);
-
+			// Create the appropriate projection matrix based on projection type
+			if (m_projectionType == ProjectionType::Perspective)
+			{
+				m_projMatrix = GraphicsDevice::Get().MakeProjectionMatrix(m_fovY, m_aspect, m_nearDist, m_farDist);
+			}
+			else // ProjectionType::Orthographic
+			{
+				// Use orthographic projection
+				const float halfWidth = GetOrthoWindowWidth() * 0.5f;
+				const float halfHeight = GetOrthoWindowHeight() * 0.5f;
+				m_projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, -halfHeight, halfWidth, halfHeight, m_nearDist, m_farDist);
+			}
+		}
+		
 		if (!m_customViewMatrix)
 		{
 			m_viewMatrix = MakeViewMatrix(GetDerivedPosition(), GetDerivedOrientation());
@@ -259,25 +353,82 @@ namespace mmo
 
 	void Camera::CalcProjectionParameters(float& left, float& right, float& bottom, float& top) const
 	{
-		const Radian thetaY(m_fovY * 0.5f);
-		const float tanThetaY = ::tanf(thetaY.GetValueRadians());
-		const float tanThetaX = tanThetaY * m_aspect;
+		if (m_frustumExtentsManuallySet)
+		{
+			left = m_left;
+			right = m_right;
+			bottom = m_bottom;
+			top = m_top;
+		}
+		else if (m_projectionType == ProjectionType::Perspective)
+		{
+			const Radian thetaY(m_fovY * 0.5f);
+			const float tanThetaY = ::tanf(thetaY.GetValueRadians());
+			const float tanThetaX = tanThetaY * m_aspect;
 
-		const float nearFocal = m_nearDist;
-		const float nearOffsetX = 0.0f * nearFocal;
-		const float nearOffsetY = 0.0f * nearFocal;
-		const float half_w = tanThetaX * m_nearDist;
-		const float half_h = tanThetaY * m_nearDist;
+			const float nearFocal = m_nearDist;
+			const float nearOffsetX = 0.0f * nearFocal;
+			const float nearOffsetY = 0.0f * nearFocal;
+			const float half_w = tanThetaX * m_nearDist;
+			const float half_h = tanThetaY * m_nearDist;
 
-		m_left = -half_w + nearOffsetX;
-		m_top = +half_h + nearOffsetY;
-		m_right = +half_w + nearOffsetX;
-		m_bottom = -half_h + nearOffsetY;
+			m_left = -half_w + nearOffsetX;
+			m_top = +half_h + nearOffsetY;
+			m_right = +half_w + nearOffsetX;
+			m_bottom = -half_h + nearOffsetY;
 
-		left = m_left;
-		right = m_right;
-		bottom = m_bottom;
-		top = m_top;
+			left = m_left;
+			right = m_right;
+			bottom = m_bottom;
+			top = m_top;
+		}
+		else
+		{
+			float half_w = GetOrthoWindowWidth() * 0.5f;
+			float half_h = GetOrthoWindowHeight() * 0.5f;
+
+			left = -half_w;
+			right = +half_w;
+			bottom = -half_h;
+			top = +half_h;
+
+			m_left = left;
+			m_right = right;
+			m_top = top;
+			m_bottom = bottom;
+		}
+		
+	}
+
+	void Camera::UpdateWorldSpaceCorners() const
+	{
+		UpdateView();
+
+		if (m_recalcWorldSpaceCorners)
+		{
+			const Matrix4 eyeToWorld = (GetProjectionMatrix() * GetViewMatrix()).Inverse();
+
+			// NDC cube corners in clip space
+			const Vector4 ndcCorners[8] = {
+				{-1, -1, 0, 1},
+				{ 1, -1, 0, 1},
+				{-1,  1, 0, 1},
+				{ 1,  1, 0, 1},
+				{-1, -1,  1, 1},
+				{ 1, -1,  1, 1},
+				{-1,  1,  1, 1},
+				{ 1,  1,  1, 1},
+			};
+
+			for (int i = 0; i < 8; ++i)
+			{
+				Vector4 corner = eyeToWorld * ndcCorners[i];
+				corner /= corner.w;
+				m_worldSpaceCorners[i] = Vector3(corner.x, corner.y, corner.z);
+			}
+
+			m_recalcWorldSpaceCorners = false;
+		}
 	}
 
 	const String& Camera::GetMovableType() const
@@ -306,7 +457,7 @@ namespace mmo
 	void Camera::SetAspectRatio(const float aspect)
 	{
 		m_aspect = aspect;
-		m_viewInvalid = true;
+		InvalidateFrustum();
 	}
 
 	const Quaternion& Camera::GetDerivedOrientation() const
@@ -356,7 +507,7 @@ namespace mmo
 	{
 		// Null boxes always invisible
 		if (bound.IsNull()) return false;
-
+		
 		// Make any pending updates to the calculated frustum planes
 		UpdateFrustumPlanes();
 

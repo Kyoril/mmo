@@ -2,9 +2,11 @@
 
 #include "deferred_renderer.h"
 
+
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
+#include "graphics_d3d11/graphics_device_d3d11.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/render_queue.h"
 #include "log/default_log_levels.h"
@@ -30,6 +32,11 @@ namespace mmo
         Vector3 padding;
     };
 
+    struct alignas(16) ShadowBuffer
+    {
+        Matrix4 lightViewProjection;
+    };
+
     // Light buffer structure that matches the one in the shader
     struct alignas(16) LightBuffer
     {
@@ -48,6 +55,7 @@ namespace mmo
 
         // Create the light buffer
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
+        m_shadowBuffer = m_device.CreateConstantBuffer(sizeof(ShadowBuffer), nullptr);
 
         // Create the render texture
         m_renderTexture = m_device.CreateRenderTexture("DeferredOutput", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView);
@@ -71,6 +79,20 @@ namespace mmo
 		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
 		m_shadowCamera = m_scene.CreateCamera("__DeferredShadowCamera__");
 		m_shadowCameraNode->AttachObject(*m_shadowCamera);
+
+        // TODO: Fix me: Move me to graphicsd3d11
+        D3D11_SAMPLER_DESC sampDesc = {};
+        sampDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+        sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS;  // Shadow test: fragment depth < stored depth
+        sampDesc.MinLOD = 0;
+        sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
+        ID3D11Device& d3d11dev = d3ddev;
+        d3d11dev.CreateSamplerState(&sampDesc, &m_shadowSampler);
     }
 
     DeferredRenderer::~DeferredRenderer()
@@ -150,9 +172,7 @@ namespace mmo
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
         m_gBuffer.GetViewRayRT().Bind(ShaderType::PixelShader, 4);
-
-        // Bind the light buffer
-        m_lightBuffer->BindToStage(ShaderType::PixelShader, 2);
+        m_shadowMapRT->Bind(ShaderType::PixelShader, 5);
 
         // Set the vertex format for the full-screen quad
         m_device.SetVertexFormat(VertexFormat::PosColorTex1);
@@ -169,11 +189,18 @@ namespace mmo
 
         // Bind buffer to stage
         scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 1);
+        m_lightBuffer->BindToStage(ShaderType::PixelShader, 2);
+        m_shadowBuffer->BindToStage(ShaderType::PixelShader, 3);
 
         m_device.SetFillMode(FillMode::Solid);
         m_device.SetFaceCullMode(FaceCullMode::None);
         m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
         m_device.SetTextureFilter(TextureFilter::Trilinear);
+
+        GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)GraphicsDevice::Get();
+        ID3D11DeviceContext& d3d11ctx = d3ddev;
+		ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
+        d3d11ctx.PSSetSamplers(1, 1, samplers);
 
         // Draw a full-screen quad
         m_device.Draw(6);
@@ -260,13 +287,59 @@ namespace mmo
             return;
         }
 
-        // Setup shadow cam
-        camera.SetupShadowCamera(*m_shadowCamera, m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy());
+        // Get the light direction and position
+        Vector3 lightDirection = m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy();
+        
+        // Position the shadow camera at the center of the visible area, offset in the light direction
+        Vector3 cameraPosition = camera.GetDerivedPosition();
 
-        // For now we just render the exact scene just as depth. We need to configure a shadow camera though
+        // 2. Get camera frustum corners in world space
+        const Vector3* frustumCorners = camera.GetWorldSpaceCorners();
+        Vector3 minCorner(FLT_MAX, FLT_MAX, FLT_MAX), maxCorner(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        for (int i = 0; i < 8; ++i)
+        {
+            const Vector3& corner = frustumCorners[i];
+            minCorner = TakeMinimum(minCorner, corner);
+            maxCorner = TakeMaximum(maxCorner, corner);
+        }
+
+		// Calculate center of the frustum
+		const Vector3 center = (minCorner + maxCorner) * 0.5f;
+
+        // Radius is max distance from the center to one of the corners
+		const float radius = (maxCorner - center).GetLength();
+
+        // Set up orthographic projection for the shadow camera
+        // Calculate a good size for the orthographic frustum based on shadow distance
+        m_shadowCamera->SetProjectionType(ProjectionType::Orthographic);
+
+        // Set shadow camera positions
+        m_shadowCameraNode->SetPosition(cameraPosition - lightDirection * radius);
+        m_shadowCameraNode->LookAt(cameraPosition, TransformSpace::Local, Vector3::NegativeUnitZ);
+        m_shadowCamera->InvalidateView();
+
+    	const Matrix4 lightViewMatrix = m_shadowCamera->GetViewMatrix();
+        Vector3 minViewCorner(FLT_MAX, FLT_MAX, FLT_MAX), maxViewCorner(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        for (int i = 0; i < 8; ++i)
+        {
+            const Vector3& corner = lightViewMatrix * frustumCorners[i];
+            minViewCorner = TakeMinimum(minViewCorner, corner);
+            maxViewCorner = TakeMaximum(maxViewCorner, corner);
+        }
+
+		const Matrix4 projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(
+			minViewCorner.x, minViewCorner.y,
+			maxViewCorner.x, maxViewCorner.y,
+			minViewCorner.z, maxViewCorner.z);
+        m_shadowCamera->SetCustomProjMatrix(true, projMatrix);
+
+        ShadowBuffer buffer;
+		buffer.lightViewProjection = projMatrix * m_shadowCamera->GetViewMatrix();
+		m_shadowBuffer->Update(&buffer);
+
+        // Render the shadow map
         m_shadowMapRT->Activate();
-		m_shadowMapRT->Clear(ClearFlags::Depth);
-
+        m_shadowMapRT->Clear(ClearFlags::Depth);
         scene.Render(*m_shadowCamera, PixelShaderType::ShadowMap);
         m_shadowMapRT->Update();
     }

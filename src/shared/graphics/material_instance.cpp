@@ -182,7 +182,7 @@ namespace mmo
 			device.SetBlendMode(BlendMode::Opaque);
 		}
 
-		if (m_twoSided)
+		if (m_twoSided || pixelShaderType == PixelShaderType::ShadowMap)
 		{
 			device.SetFaceCullMode(FaceCullMode::None);
 		}
