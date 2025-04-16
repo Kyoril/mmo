@@ -50,6 +50,8 @@ namespace mmo
 		, m_scene(scene)
         , m_gBuffer(device, width, height)
     {
+        m_shadowCameraSetup = std::make_shared<DefaultShadowCameraSetup>();
+
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
 
@@ -146,19 +148,8 @@ namespace mmo
         m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
         m_gBuffer.GetViewRayRT().Clear(ClearFlags::Color);
         
-        if (m_shadowCastingDirecitonalLight != nullptr)
-        {
-            // Get the light direction
-            Vector3 lightDirection = m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy();
-
-            // Use the Camera's built-in method to set up the shadow camera
-            camera.SetupShadowCamera(*m_shadowCamera, lightDirection);
-
-            DLOG("Proj matrix: " << m_shadowCamera->GetProjectionMatrix()); 
-        }
-		
         // Render the scene using the camera
-        scene.Render(*m_shadowCamera, PixelShaderType::GBuffer);
+        scene.Render(camera, PixelShaderType::GBuffer);
     }
 
     void DeferredRenderer::RenderLightingPass(Scene& scene, Camera& camera)
@@ -298,11 +289,7 @@ namespace mmo
             return;
         }
 
-        // Get the light direction
-        Vector3 lightDirection = m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy();
-        
-        // Use the Camera's built-in method to set up the shadow camera
-        camera.SetupShadowCamera(*m_shadowCamera, lightDirection);
+        m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirecitonalLight, *m_shadowCamera);
 
         // Update the shadow buffer with the light view-projection matrix
         ShadowBuffer buffer;

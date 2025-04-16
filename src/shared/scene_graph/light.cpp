@@ -1,6 +1,9 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "light.h"
+
+#include "camera.h"
+#include "scene.h"
 #include "scene_node.h"
 #include "math/radian.h"
 #include "math/degree.h"
@@ -19,71 +22,50 @@ namespace mmo
 	{
 	}
 
+	void Light::Update() const
+	{
+		if (m_derivedTransformDirty)
+		{
+			if (m_parentNode)
+			{
+				// Ok, update with SceneNode we're attached to
+				const Quaternion& parentOrientation = m_parentNode->GetDerivedOrientation();
+				const Vector3& parentPosition = m_parentNode->GetDerivedPosition();
+				m_derivedDirection = parentOrientation * m_direction;
+				m_derivedPosition = (parentOrientation * m_position) + parentPosition;
+			}
+			else
+			{
+				m_derivedPosition = m_position;
+				m_derivedDirection = m_direction;
+			}
+
+			m_derivedTransformDirty = false;
+		}
+	}
+
+	void Light::NotifyMoved()
+	{
+		m_derivedTransformDirty = true;
+
+		MovableObject::NotifyMoved();
+	}
+
 	Vector3 Light::GetDirection() const
 	{
-		// For directional and spot lights, the direction is the negative Z axis of the node's orientation
-		if (m_type == LightType::Directional || m_type == LightType::Spot)
-		{
-			if (auto node = GetParentSceneNode())
-			{
-				// Get the node's orientation and transform the negative Z axis
-				return node->GetDerivedOrientation() * Vector3(0.0f, 0.0f, -1.0f);
-			}
-		}
-
-		// Default direction (for point lights or if no parent node)
-		return Vector3(0.0f, 0.0f, -1.0f);
+		return m_direction;
 	}
 
 	void Light::SetDirection(const Vector3& direction)
 	{
-		// For directional and spot lights, set the node's orientation to point in the given direction
-		if (m_type == LightType::Directional || m_type == LightType::Spot)
-		{
-			if (auto node = GetParentSceneNode())
-			{
-				// Create a rotation that aligns the negative Z axis with the given direction
-				Vector3 normalizedDir = direction;
-				normalizedDir.Normalize();
-				Vector3 zAxis = Vector3(0.0f, 0.0f, -1.0f);
-				
-				// If the direction is almost parallel to the Z axis, we need a special case
-				float dot = normalizedDir.Dot(zAxis);
-				if (dot > 0.999f || dot < -0.999f)
-				{
-					if (dot < 0.0f)
-					{
-						// Direction is already aligned with negative Z, no rotation needed
-						node->SetOrientation(Quaternion::Identity);
-					}
-					else
-					{
-						// Direction is opposite to negative Z, rotate 180 degrees around X axis
-						node->SetOrientation(Quaternion(Radian(Degree(180.0f)), Vector3(1.0f, 0.0f, 0.0f)));
-					}
-				}
-				else
-				{
-					// General case: find the rotation from negative Z to the direction
-					Vector3 rotationAxis = zAxis.Cross(normalizedDir);
-					rotationAxis.Normalize();
-					float rotationAngle = std::acos(dot);
-					node->SetOrientation(Quaternion(Radian(rotationAngle), rotationAxis));
-				}
-			}
-		}
+		m_direction = direction;
+		m_derivedTransformDirty = true;
 	}
 
 	Vector3 Light::GetDerivedPosition() const
 	{
-		// Get the position from the parent scene node
-		if (auto node = GetParentSceneNode())
-		{
-			return node->GetDerivedPosition();
-		}
-
-		// Default position if no parent node
-		return Vector3::Zero;
+		Update();
+		return m_derivedPosition;
 	}
 
 	const String& Light::GetMovableType() const
@@ -121,11 +103,9 @@ namespace mmo
 		{
 			return m_range;
 		}
-		else // Directional light
-		{
-			// Directional lights don't have a specific position, so use a small radius
-			return 0.1f;
-		}
+		
+		// Directional lights don't have a specific position, so use a small radius
+		return 0.1f;
 	}
 
 	void Light::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
@@ -145,10 +125,65 @@ namespace mmo
 	{
 		MovableObject::NotifyAttachmentChanged(parent, isTagPoint);
 
+		m_derivedTransformDirty = true;
+
 		if (parent)
 		{
 			// Should NOT attach light to root node!!!
 			ASSERT(parent->GetParent() != nullptr);
 		}
+	}
+
+	float Light::DeriveShadowNearClipDistance(const Camera& camera)
+	{
+		if (m_shadowNearClipDist > 0)
+		{
+			return m_shadowNearClipDist;
+		}
+
+		return camera.GetNearClipDistance();
+	}
+
+	float Light::DeriveShadowFarClipDistance(const Camera& camera)
+	{
+		if (m_shadowFarClipDist >= 0)
+		{
+			return m_shadowFarClipDist;
+		}
+
+		if (m_type == LightType::Directional)
+		{
+			return 100.0f;
+		}
+
+		return m_range;
+	}
+
+	const Vector3& Light::GetDerivedDirection() const
+	{
+		Update();
+		return m_derivedDirection;
+	}
+
+	void Light::SetShadowFarDistance(float distance)
+	{
+		m_ownShadowFarDist = true;
+		m_shadowFarDist = distance;
+		m_shadowFarDistSquared = distance * distance;
+	}
+
+	void Light::ResetShadowFarDistance()
+	{
+		m_ownShadowFarDist = false;
+	}
+
+	float Light::GetShadowFarDistance() const
+	{
+		if (m_ownShadowFarDist)
+		{
+			return m_shadowFarDist;
+		}
+
+		return m_scene->GetShadowFarDistance();
 	}
 }

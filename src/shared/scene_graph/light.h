@@ -37,6 +37,9 @@ namespace mmo
 		/// @brief Virtual destructor.
 		~Light() override = default;
 
+	protected:
+		void Update() const;
+
 	public:
 		/// @brief Gets the type of the light.
 		/// @return The type of the light.
@@ -94,6 +97,12 @@ namespace mmo
 		/// @param cast True if the light should cast shadows, false otherwise.
 		void SetCastShadows(bool cast) noexcept { m_castShadows = cast; }
 
+		const Vector3& GetPosition() const { return m_position; }
+
+		void SetPosition(const Vector3& position) { m_position = position; m_derivedTransformDirty = true; }
+
+		void NotifyMoved() override;
+
 		/// @brief Gets the direction of the light.
 		/// @return The direction of the light.
 		[[nodiscard]] Vector3 GetDirection() const;
@@ -115,6 +124,72 @@ namespace mmo
 
 		void NotifyAttachmentChanged(Node* parent, bool isTagPoint) override;
 
+		float DeriveShadowNearClipDistance(const Camera& camera);
+
+		float DeriveShadowFarClipDistance(const Camera& camera);
+
+		const Vector3& GetDerivedDirection() const;
+
+		/** Sets the maximum distance away from the camera that shadows
+			by this light will be visible.
+		@remarks
+			Shadow techniques can be expensive, therefore it is a good idea
+			to limit them to being rendered close to the camera if possible,
+			and to skip the expense of rendering shadows for distance objects.
+			This method allows you to set the distance at which shadows will no
+			longer be rendered.
+		@note
+			Each shadow technique can interpret this subtely differently.
+			For example, one technique may use this to eliminate casters,
+			another might use it to attenuate the shadows themselves.
+			You should tweak this value to suit your chosen shadow technique
+			and scene setup.
+		*/
+		void SetShadowFarDistance(float distance);
+		/** Tells the light to use the shadow far distance of the SceneManager
+		*/
+		void ResetShadowFarDistance();
+		/** Gets the maximum distance away from the camera that shadows
+			by this light will be visible.
+		*/
+		float GetShadowFarDistance() const;
+		float GetShadowFarDistanceSquared() const;
+
+		/** Set the near clip plane distance to be used by the shadow camera, if
+			this light casts texture shadows.
+		@param nearClip
+			The distance, or -1 to use the main camera setting.
+		*/
+		void SetShadowNearClipDistance(float nearClip) { m_shadowNearClipDist = nearClip; }
+
+		/** Get the near clip plane distance to be used by the shadow camera, if
+			this light casts texture shadows.
+		@remarks
+			May be zero if the light doesn't have it's own near distance set;
+			use _deriveShadowNearDistance for a version guaranteed to give a result.
+		*/
+		float GetShadowNearClipDistance() const { return m_shadowNearClipDist; }
+
+		/** Set the far clip plane distance to be used by the shadow camera, if
+			this light casts texture shadows.
+		@remarks
+			This is different from the 'shadow far distance', which is
+			always measured from the main camera. This distance is the far clip plane
+			of the light camera.
+		@param farClip
+			The distance, or -1 to use the main camera setting.
+		*/
+		void SetShadowFarClipDistance(float farClip) { m_shadowFarClipDist = farClip; }
+
+		/** Get the far clip plane distance to be used by the shadow camera, if
+			this light casts texture shadows.
+		@remarks
+			May be zero if the light doesn't have it's own far distance set;
+			use _deriveShadowfarDistance for a version guaranteed to give a result.
+		*/
+		float GetShadowFarClipDistance() const { return m_shadowFarClipDist; }
+
+
 	private:
 		static const String LIGHT_TYPE_NAME;
 		mutable AABB m_boundingBox;
@@ -125,5 +200,18 @@ namespace mmo
 		float m_innerConeAngle { 0.0f };
 		float m_outerConeAngle { 0.0f };
 		bool m_castShadows { false };
+
+		Vector3 m_position{ Vector3::Zero };
+		Vector3 m_direction{ Vector3::UnitZ };
+		mutable bool m_derivedTransformDirty{ false };
+
+		mutable Vector3 m_derivedPosition{ Vector3::Zero };
+		mutable Vector3 m_derivedDirection { Vector3::UnitZ};
+
+		float m_shadowNearClipDist{-1.0f};
+		float m_shadowFarClipDist{-1.0f};
+		bool m_ownShadowFarDist{false};
+		float m_shadowFarDist {0.0f};
+		float m_shadowFarDistSquared {0.0f};
 	};
 }

@@ -10,6 +10,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/octree_scene.h"
 #include "deferred_shading/deferred_renderer.h"
+#include "deferred_shading/shadow_camera_setup.h"
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"
@@ -158,6 +159,7 @@ namespace mmo
 			if (key == 'O')
 			{
 				g_camera->SetProjectionType(ProjectionType::Orthographic);
+				g_camera->SetOrthoWindow(1920.0f * 0.5f, 1080.0f * 0.5f);
 			}
 
         	return true;
@@ -194,6 +196,7 @@ namespace mmo
 		g_sunLight->SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
 		g_sunLight->SetIntensity(1.0f);
 		g_sunLight->SetCastShadows(true);
+		g_sunLight->SetShadowFarDistance(50.0f);
 
 		g_sunLightNode = g_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		g_sunLightNode->AttachObject(*g_sunLight);

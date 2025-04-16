@@ -111,6 +111,7 @@ namespace mmo
 	Light& Scene::CreateLight(const String& name, LightType type)
 	{
 		auto light = std::make_unique<Light>(name, type);
+		light->SetScene(this);
 
 		auto [iterator, inserted] = m_lights.emplace(name, std::move(light));
 		return *iterator->second.get();

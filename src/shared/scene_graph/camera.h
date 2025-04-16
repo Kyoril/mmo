@@ -142,6 +142,8 @@ namespace mmo
 
         const Vector3& GetDerivedPosition() const;
 
+		Vector3 GetDerivedDirection() const;
+
 		void SetFillMode(const FillMode fillMode) { m_fillMode = fillMode; }
 
 		[[nodiscard]] FillMode GetFillMode() const noexcept { return m_fillMode; }

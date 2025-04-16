@@ -353,7 +353,24 @@ namespace mmo
 
 		[[nodiscard]] float GetShadowFarDistanceSquared() const noexcept { return m_defaultShadowFarDist * m_defaultShadowFarDist; }
 
-		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; }
+		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; m_defaultShadowFarDistSquared = value * value; }
+
+		void SetShadowDirLightTextureOffset(float offset) { m_shadowTextureOffset = offset; }
+
+		void SetShadowDirectionalLightExtrusionDistance(float dist)
+		{
+			m_shadowDirLightExtrudeDist = dist;
+		}
+
+		float GetShadowDirectionalLightExtrusionDistance() const
+		{
+			return m_shadowDirLightExtrudeDist;
+		}
+
+		/** Gets the proportional distance which a texture shadow which is generated from a
+		directional light will be offset into the camera view to make best use of texture space.
+		*/
+		float GetShadowDirLightTextureOffset() const { return m_shadowTextureOffset; }
 
 		/// @brief Freezes or unfreezes the rendering to debug culling. If frozen, the render queue will not be updated any
 		///        more, which will allow to view the scene of the frozen camera perspective with a new camera transformation
@@ -437,7 +454,13 @@ namespace mmo
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
-		float m_defaultShadowFarDist { 128.0f };
+		float m_defaultShadowFarDist { 0.0f };
+		float m_defaultShadowFarDistSquared{ 0.0f };
+		float m_shadowTextureOffset{0.6f};
+		float m_shadowTextureFadeStart{ 0.7f };
+		float m_shadowTextureFadeEnd{ 0.9f };
+		bool m_shadowTextureSelfShadow{ false };
+		float m_shadowDirLightExtrudeDist{ 100.0f };
 
 		MaterialPtr m_defaultMaterial;
 
@@ -454,5 +477,6 @@ namespace mmo
 		float m_fogEnd = 265.0f;
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
+
 	};
 }

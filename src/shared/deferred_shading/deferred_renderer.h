@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "shadow_camera_setup.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -98,5 +99,7 @@ namespace mmo
         Camera* m_shadowCamera{ nullptr };
 
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
+
+        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
     };
 }

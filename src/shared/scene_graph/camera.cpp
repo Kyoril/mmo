@@ -233,7 +233,8 @@ namespace mmo
 				// Use orthographic projection
 				const float halfWidth = GetOrthoWindowWidth() * 0.5f;
 				const float halfHeight = GetOrthoWindowHeight() * 0.5f;
-				m_projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, halfHeight, halfWidth, -halfHeight, m_nearDist, m_farDist);
+				m_projMatrix =					
+					GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, halfHeight, halfWidth, -halfHeight, m_nearDist, m_farDist);
 			}
 		}
 		
@@ -479,6 +480,14 @@ namespace mmo
 		}
 
 		return m_lastParentPosition;
+	}
+
+	Vector3 Camera::GetDerivedDirection() const
+	{
+		// Direction points down -Z
+		UpdateView();
+
+		return GetDerivedOrientation() * Vector3::NegativeUnitZ;
 	}
 
 	bool Camera::IsVisible(const Sphere& sphere) const
