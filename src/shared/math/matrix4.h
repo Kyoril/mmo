@@ -234,6 +234,41 @@ namespace mmo
 			return r;
 		}
 
+		static Matrix4 LookAt(const Vector3& eye, const Vector3& target, const Vector3& up)
+		{
+			Vector3 forward = (target - eye).NormalizedCopy();       // Forward = Z axis
+			Vector3 right = up.Cross(forward).NormalizedCopy();    // Right = X axis
+			Vector3 upFixed = forward.Cross(right);                  // True Up = Y axis
+
+			Matrix4 result;
+
+			// Row 0: right vector
+			result[0][0] = right.x;
+			result[0][1] = right.y;
+			result[0][2] = right.z;
+			result[0][3] = -right.Dot(eye);
+
+			// Row 1: up vector
+			result[1][0] = upFixed.x;
+			result[1][1] = upFixed.y;
+			result[1][2] = upFixed.z;
+			result[1][3] = -upFixed.Dot(eye);
+
+			// Row 2: -forward vector (look along -Z)
+			result[2][0] = forward.x;
+			result[2][1] = forward.y;
+			result[2][2] = forward.z;
+			result[2][3] = -forward.Dot(eye);
+
+			// Row 3: homogeneous row
+			result[3][0] = 0.0f;
+			result[3][1] = 0.0f;
+			result[3][2] = 0.0f;
+			result[3][3] = 1.0f;
+
+			return result;
+		}
+
 		Matrix4 operator - (const Matrix4 &m2) const
 		{
 			Matrix4 r;

@@ -153,17 +153,25 @@ float SampleShadow(float3 worldPos)
 {
     // Transform worldPos to light clip space
     float4 shadowCoord = mul(float4(worldPos, 1.0), LightViewProj);
+    
+	// Clip test first
+    if (shadowCoord.w <= 0)
+        return 1.0f; // no shadow
+    
+	// Perspective divide
+    float3 projCoord = shadowCoord.xyz / shadowCoord.w;
 
-    // Perspective divide
-    shadowCoord.xyz /= shadowCoord.w;
+	// Early reject if outside [0, 1]
+    if (any(projCoord.xy < 0.0) || any(projCoord.xy > 1.0) || projCoord.z > 1.0)
+        return 1.0f;
 
     // Transform to [0, 1] UV space
     float2 uv = shadowCoord.xy * 0.5 + 0.5;
     float depth = shadowCoord.z;
-
-    // Depth bias (you can tweak these)
-    float bias = 0.005;
-    return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, depth - bias);
+    
+	// Sample shadow map
+    float bias = 0.001;
+    return ShadowMap.SampleCmpLevelZero(ShadowSampler, projCoord.xy, projCoord.z - bias);
 }
 
 // Calculates directional light contribution

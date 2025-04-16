@@ -4,6 +4,7 @@
 
 #include "scene_node.h"
 #include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 
 #include "math/sphere.h"
 
@@ -232,7 +233,7 @@ namespace mmo
 				// Use orthographic projection
 				const float halfWidth = GetOrthoWindowWidth() * 0.5f;
 				const float halfHeight = GetOrthoWindowHeight() * 0.5f;
-				m_projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, -halfHeight, halfWidth, halfHeight, m_nearDist, m_farDist);
+				m_projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, halfHeight, halfWidth, -halfHeight, m_nearDist, m_farDist);
 			}
 		}
 		
@@ -535,56 +536,91 @@ namespace mmo
 
 	void Camera::SetupShadowCamera(Camera& shadowCamera, const Vector3& lightDirection)
 	{
-		// Ensure frustum corners are up to date
-		UpdateFrustumPlanes();
-		UpdateFrustum();
+	    // Ensure frustum corners are up to date
+	    UpdateFrustumPlanes();
+	    UpdateFrustum();
 
-		// 1. Transform frustum corners to world space
-		Vector3 worldCorners[8];
-		const Matrix4 invViewProj = (GetProjectionMatrix() * GetViewMatrix()).Inverse();
-		for (int i = 0; i < 8; ++i)
-		{
-			static const Vector3 ndcCorners[8] = {
-				{-1, -1, 0}, {1, -1, 0}, {-1, 1, 0}, {1, 1, 0},
-				{-1, -1, 1}, {1, -1, 1}, {-1, 1, 1}, {1, 1, 1}
+		float clipNear = GetNearClipDistance(); // 0.3f
+		float clipFar = GetFarClipDistance();  // 1000.0f
+
+		float sliceNear = 0.3f;
+		float sliceFar = 50.0f; // units in world space you want shadows for
+
+		float z0 = (sliceNear - clipNear) / (clipFar - clipNear); // convert world z to ndc z
+		float z1 = (sliceFar - clipNear) / (clipFar - clipNear);
+
+	    // 1. Transform frustum corners to world space
+	    Vector3 worldCorners[8];
+	    const Matrix4 invViewProj = (GetProjectionMatrix() * GetViewMatrix()).Inverse();
+	    for (int i = 0; i < 8; ++i)
+	    {
+			static const Vector4 clipCorners[8] = {
+				{-1, -1, z0, 1}, {1, -1, z0, 1}, {-1, 1, z0, 1}, {1, 1, z0, 1},
+				{-1, -1, z1, 1}, {1, -1, z1, 1}, {-1, 1, z1, 1}, {1, 1, z1, 1}
 			};
 
-			Vector4 corner = invViewProj * Vector4(ndcCorners[i], 1.0f);
-			worldCorners[i] = Vector3((corner / corner.w).Ptr());
-		}
+			Vector4 corner = invViewProj * clipCorners[i];
+			worldCorners[i] = Vector3(corner.x / corner.w, corner.y / corner.w, corner.z / corner.w);
+	    }
 
-		// 2. Compute bounding box of the frustum
-		AABB frustumBounds;
+	    // 2. Compute bounding box of the frustum
+	    AABB frustumBounds;
+	    for (int i = 0; i < 8; ++i)
+	    {
+	        frustumBounds.Combine(worldCorners[i]);
+	    }
+
+	    // 3. Build light-space view matrix
+	    Vector3 center = frustumBounds.GetCenter();
+	    
+	    // Use a normalized light direction
+	    Vector3 normalizedLightDir = lightDirection.NormalizedCopy();
+	    
+	    // Pull back from center in light direction - use a larger value for directional lights
+	    Vector3 eye = center - normalizedLightDir * (frustumBounds.GetSize().GetLength());
+	    
+	    // Choose an appropriate up vector that's not parallel to the light direction
+	    Vector3 up = Vector3::UnitY;
+	    if (::fabsf(up.Dot(normalizedLightDir)) > 0.9f)
+	        up = Vector3::UnitZ;
+
+	    // Create the view matrix for the light's perspective
+		Matrix4 lightView = Matrix4::LookAt(eye, center, up);
+
+	    // 4. Project frustum bounds into light space and build orthographic projection
+		Vector3 lightSpaceCorners[8];
+	    AABB lightSpaceBounds;
+		float minZ = FLT_MAX, maxZ = -FLT_MAX;
+	    for (int i = 0; i < 8; ++i)
+	    {
+			lightSpaceCorners[i] = lightView.TransformAffine(worldCorners[i]);
+			lightSpaceBounds.Combine(lightSpaceCorners[i]);
+
+			minZ = std::min(minZ, lightSpaceCorners[i].z);
+			maxZ = std::max(maxZ, lightSpaceCorners[i].z);
+	    }
+
+		// 5. Shift the light view forward so that near plane is at 0 in light space
+		lightView = Matrix4::GetTrans(0.0f, 0.0f, -minZ) * lightView;
+
+		AABB shiftedLightBounds;
 		for (int i = 0; i < 8; ++i)
 		{
-			frustumBounds.Combine(worldCorners[i]);
+			Vector3 shifted = lightView.TransformAffine(worldCorners[i]);
+			shiftedLightBounds.Combine(shifted);
 		}
 
-		// 3. Build light-space view matrix
-		Vector3 center = frustumBounds.GetCenter();
-		Vector3 eye = center - lightDirection * 100.0f;  // pull back from center in light dir
-		Vector3 up = Vector3::UnitY;
-		if (::fabsf(up.Dot(lightDirection)) > 0.9f)  // avoid near-parallel up vectors
-			up = Vector3::UnitZ;
+	    // 5. Create orthographic projection matrix
+		float padding = 5.0f;
+		float nearZ = std::max(0.0f, minZ - padding);
+		float farZ = maxZ + padding;
 
-		Matrix4 lightView = MakeViewMatrix(eye, Quaternion::FromDirection(-lightDirection, up));
-
-		// 4. Project frustum bounds into light space and build orthographic projection
-		AABB lightSpaceBounds;
-		for (int i = 0; i < 8; ++i)
-		{
-			lightSpaceBounds.Combine(lightView.TransformAffine(worldCorners[i]));
-		}
-
-		// 5. Create orthographic projection matrix
-		float minZ = lightSpaceBounds.min.z;
-		float maxZ = lightSpaceBounds.max.z;
-
-		shadowCamera.SetProjectionType(ProjectionType::Orthographic);
-		shadowCamera.SetOrthoWindow(lightSpaceBounds.GetExtents().x, lightSpaceBounds.GetExtents().y);
-		shadowCamera.SetNearClipDistance(minZ);
-		shadowCamera.SetFarClipDistance(maxZ);
-		shadowCamera.SetCustomViewMatrix(true, lightView);
+	    // Set up the shadow camera with the calculated values
+	    shadowCamera.SetProjectionType(ProjectionType::Orthographic);
+	    shadowCamera.SetOrthoWindow(shiftedLightBounds.GetSize().x, shiftedLightBounds.GetSize().y);
+		shadowCamera.SetNearClipDistance(nearZ);
+		shadowCamera.SetFarClipDistance(farZ);
+	    shadowCamera.SetCustomViewMatrix(true, lightView);
 	}
 
 	void Camera::SetCustomViewMatrix(bool enable, const Matrix4& viewMatrix)

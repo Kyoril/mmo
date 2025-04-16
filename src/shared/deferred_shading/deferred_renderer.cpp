@@ -145,9 +145,20 @@ namespace mmo
         m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
         m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
         m_gBuffer.GetViewRayRT().Clear(ClearFlags::Color);
+        
+        if (m_shadowCastingDirecitonalLight != nullptr)
+        {
+            // Get the light direction
+            Vector3 lightDirection = m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy();
 
+            // Use the Camera's built-in method to set up the shadow camera
+            camera.SetupShadowCamera(*m_shadowCamera, lightDirection);
+
+            DLOG("Proj matrix: " << m_shadowCamera->GetProjectionMatrix()); 
+        }
+		
         // Render the scene using the camera
-        scene.Render(camera, PixelShaderType::GBuffer);
+        scene.Render(*m_shadowCamera, PixelShaderType::GBuffer);
     }
 
     void DeferredRenderer::RenderLightingPass(Scene& scene, Camera& camera)
@@ -287,55 +298,16 @@ namespace mmo
             return;
         }
 
-        // Get the light direction and position
+        // Get the light direction
         Vector3 lightDirection = m_shadowCastingDirecitonalLight->GetDirection().NormalizedCopy();
         
-        // Position the shadow camera at the center of the visible area, offset in the light direction
-        Vector3 cameraPosition = camera.GetDerivedPosition();
+        // Use the Camera's built-in method to set up the shadow camera
+        camera.SetupShadowCamera(*m_shadowCamera, lightDirection);
 
-        // 2. Get camera frustum corners in world space
-        const Vector3* frustumCorners = camera.GetWorldSpaceCorners();
-        Vector3 minCorner(FLT_MAX, FLT_MAX, FLT_MAX), maxCorner(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-        for (int i = 0; i < 8; ++i)
-        {
-            const Vector3& corner = frustumCorners[i];
-            minCorner = TakeMinimum(minCorner, corner);
-            maxCorner = TakeMaximum(maxCorner, corner);
-        }
-
-		// Calculate center of the frustum
-		const Vector3 center = (minCorner + maxCorner) * 0.5f;
-
-        // Radius is max distance from the center to one of the corners
-		const float radius = (maxCorner - center).GetLength();
-
-        // Set up orthographic projection for the shadow camera
-        // Calculate a good size for the orthographic frustum based on shadow distance
-        m_shadowCamera->SetProjectionType(ProjectionType::Orthographic);
-
-        // Set shadow camera positions
-        m_shadowCameraNode->SetPosition(cameraPosition - lightDirection * radius);
-        m_shadowCameraNode->LookAt(cameraPosition, TransformSpace::Local, Vector3::NegativeUnitZ);
-        m_shadowCamera->InvalidateView();
-
-    	const Matrix4 lightViewMatrix = m_shadowCamera->GetViewMatrix();
-        Vector3 minViewCorner(FLT_MAX, FLT_MAX, FLT_MAX), maxViewCorner(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-        for (int i = 0; i < 8; ++i)
-        {
-            const Vector3& corner = lightViewMatrix * frustumCorners[i];
-            minViewCorner = TakeMinimum(minViewCorner, corner);
-            maxViewCorner = TakeMaximum(maxViewCorner, corner);
-        }
-
-		const Matrix4 projMatrix = GraphicsDevice::Get().MakeOrthographicMatrix(
-			minViewCorner.x, minViewCorner.y,
-			maxViewCorner.x, maxViewCorner.y,
-			minViewCorner.z, maxViewCorner.z);
-        m_shadowCamera->SetCustomProjMatrix(true, projMatrix);
-
+        // Update the shadow buffer with the light view-projection matrix
         ShadowBuffer buffer;
-		buffer.lightViewProjection = projMatrix * m_shadowCamera->GetViewMatrix();
-		m_shadowBuffer->Update(&buffer);
+        buffer.lightViewProjection = m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix();
+        m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map
         m_shadowMapRT->Activate();

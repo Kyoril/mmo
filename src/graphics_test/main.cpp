@@ -168,6 +168,8 @@ namespace mmo
 
 		// Create a camera
 		g_camera = g_scene->CreateCamera("MainCamera");
+		g_camera->SetNearClipDistance(0.3f);
+		g_camera->SetFarClipDistance(1000.0f);
 		g_cameraNode = &g_scene->CreateSceneNode("MainCameraNode");
 		g_cameraNode->AttachObject(*g_camera);
 		g_cameraNode->SetPosition(Vector3(0.0f, 8.5f, 15.0f));
