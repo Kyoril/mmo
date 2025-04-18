@@ -10,10 +10,10 @@
 
 #ifdef _WIN32
 #include <DirectXMath.h>
+using namespace DirectX;
 #endif
 
 #include "scene_graph/scene.h"
-using namespace DirectX;
 
 using namespace mmo;
 
@@ -23,11 +23,13 @@ static void dumpVec(const char* name, const Vector4& v)
         name, v.x, v.y, v.z, v.w);
 }
 
+#ifdef _WIN32
 static void dumpXVec(const char* name, FXMVECTOR v)
 {
     XMFLOAT4 f; XMStoreFloat4(&f, v);
     printf("%s = (%.4f, %.4f, %.4f, %.4f)\n", name, f.x, f.y, f.z, f.w);
 }
+#endif
 
 static Matrix4 MakeOrthographicMatrix(const float left, const float top, const float right, const float bottom, const float nearPlane, const float farPlane)
 {
