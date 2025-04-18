@@ -37,8 +37,6 @@ namespace mmo
 			}
 			});
 
-		WLOG("Resetting to " << GetAI().GetHome().position << " (facing: " << GetAI().GetHome().orientation << ")");
-
 		const auto facing = Radian(GetAI().GetHome().orientation);
 		controlled.GetMover().MoveTo(GetAI().GetHome().position, &facing);
 	}
