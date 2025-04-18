@@ -359,16 +359,13 @@ namespace mmo
 		if (m_vertexShader[0]) m_vertexShader[0]->Set();
 		if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
 
-		if (pixelShaderType != PixelShaderType::ShadowMap)
+		BindTextures(device);
+		
+		// Bind texture parameter textures
+		uint32 shaderSlot = m_textures.size();
+		for (auto& param : m_textureParameters)
 		{
-			BindTextures(device);
-			
-			// Bind texture parameter textures
-			uint32 shaderSlot = m_textures.size();
-			for (auto& param : m_textureParameters)
-			{
-				device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
-			}
+			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
 		}
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
