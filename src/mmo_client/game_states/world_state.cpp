@@ -79,6 +79,12 @@ namespace mmo
 	{
 		static ConsoleVar* s_debugOutputPathVar = nullptr;
 
+		static ConsoleVar* s_renderShadowsVar = nullptr;
+
+		static ConsoleVar* s_depthBiasVar = nullptr;
+		static ConsoleVar* s_slopeDepthBiasVar = nullptr;
+		static ConsoleVar* s_clampDepthBiasVar = nullptr;
+
 		String MapMouseButton(const MouseButton button)
 		{
 			if ((button & MouseButton::Left) == MouseButton::Left) return "LMB";
@@ -186,7 +192,9 @@ namespace mmo
 
 		// Register world frame type
 		FrameManager::Get().RegisterFrameFactory("World", [](const std::string& name) {
-			return std::make_shared<WorldFrame>(name);
+			auto worldFrame = std::make_shared<WorldFrame>(name);
+			worldFrame->SetAsCurrentWorldFrame();
+			return worldFrame;
 			});
 		
 		// Make the top frame element
@@ -843,6 +851,15 @@ namespace mmo
 	void WorldState::RegisterGameplayCommands()
 	{
 		s_debugOutputPathVar = ConsoleVarMgr::RegisterConsoleVar("DebugTargetPath", "", "0");
+		s_renderShadowsVar = ConsoleVarMgr::RegisterConsoleVar("RenderShadows", "Determines whether or not shadows should be rendered", "1");
+		m_cvarChangedSignals += s_renderShadowsVar->Changed.connect(this, &WorldState::OnRenderShadowsChanged);
+
+		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "250");
+		m_cvarChangedSignals += s_depthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
+		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "1.0");
+		m_cvarChangedSignals += s_slopeDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
+		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0");
+		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
@@ -874,6 +891,12 @@ namespace mmo
 	void WorldState::RemoveGameplayCommands()
 	{
 		ConsoleVarMgr::UnregisterConsoleVar("DebugTargetPath");
+		ConsoleVarMgr::UnregisterConsoleVar("RenderShadows");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowDepthBias");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
+
+		m_cvarChangedSignals.disconnect();
 
 		const String commandsToRemove[] = {
 			command_names::s_toggleAxis,
@@ -3217,6 +3240,43 @@ namespace mmo
 	void WorldState::OnTargetLevelChanged(uint64 monitoredGuid)
 	{
 		FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
+	}
+
+	void WorldState::OnRenderShadowsChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		if (m_sunLight)
+		{
+			m_sunLight->SetCastShadows(var.GetBoolValue());
+		}
+	}
+
+	void WorldState::OnShadowBiasChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer* deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		DLOG("Updating depth bias values");
+		deferred->SetDepthBias(s_depthBiasVar->GetFloatValue(),
+			s_slopeDepthBiasVar->GetFloatValue(),
+			s_clampDepthBiasVar->GetFloatValue());
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

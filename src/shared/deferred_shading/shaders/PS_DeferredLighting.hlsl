@@ -149,9 +149,10 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-float SampleShadow(float3 worldPos)
+float SampleShadow(float3 worldPos, float3 normal, float normalBias)
 {
-    float4 clip = mul(float4(worldPos, 1.0f), LightViewProj);
+    float3 P = worldPos + normal * normalBias; //  normalBias in world units
+    float4 clip = mul(float4(P, 1.0f), LightViewProj);
     
     if (clip.w <= 0.0f)
         return 1.0f;
@@ -165,7 +166,21 @@ float SampleShadow(float3 worldPos)
         return 1.0f;
     
     static const float bias = 0.0005f;
-    return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, ndc.z - bias);
+
+    float shadow = 0.0;
+[unroll]
+    for (int y = -1; y <= 1; ++y)
+[unroll]
+        for (int x = -1; x <= 1; ++x)
+        {
+            shadow += ShadowMap.SampleCmpLevelZero(
+                  ShadowSampler,
+                  uv + float2(x, y) * (1.0f / 2048.0f), ndc.z - bias);
+        }
+    shadow /= 9.0;
+
+    return shadow;
+    //return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, ndc.z - bias);
 }
 
 // Calculates directional light contribution
@@ -292,7 +307,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         }
         else if (light.Type == 1) // Directional light
         {
-            float shadow = SampleShadow(worldPos);
+            float shadow = SampleShadow(worldPos, normal, 0.078125f * 0.2f);
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
         }
         else if (light.Type == 2) // Spot light

@@ -593,6 +593,13 @@ namespace mmo
 		m_vertexFormat = VertexFormat::Last;
 		m_blendMode = BlendMode::Undefined;
 		m_topologyType = TopologyType::Undefined;
+
+		// Reset rasterizer
+		m_rasterizerDesc.DepthBias = 0;
+		m_rasterizerDesc.DepthBiasClamp = 0.0f;
+		m_rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+		m_rasterizerDescChanged = true;
+
 		m_lastInputLayout = nullptr;
 
 		m_lastFrameBatchCount = m_batchCount;
@@ -709,6 +716,24 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	void GraphicsDeviceD3D11::SetDepthBias(float bias)
+	{
+		m_rasterizerDesc.DepthBias = static_cast<int32>(bias);
+		m_rasterizerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetSlopeScaledDepthBias(float bias)
+	{
+		m_rasterizerDesc.SlopeScaledDepthBias = bias;
+		m_rasterizerDescChanged = true;
+	}
+
+	void GraphicsDeviceD3D11::SetDepthBiasClamp(float bias)
+	{
+		m_rasterizerDesc.DepthBiasClamp = bias;
+		m_rasterizerDescChanged = true;
 	}
 
 	void GraphicsDeviceD3D11::UpdateSamplerState()

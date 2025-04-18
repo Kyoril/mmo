@@ -190,6 +190,12 @@ namespace mmo
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
 
+		virtual void SetDepthBias(float bias) {}
+
+		virtual void SetSlopeScaledDepthBias(float bias) {}
+
+		virtual void SetDepthBiasClamp(float bias) {}
+
 		virtual void Render(const RenderOperation& operation) {}
 
 		/// 

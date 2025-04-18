@@ -25,4 +25,14 @@ namespace mmo
 		ASSERT(!s_currentWorldFrame.lock() && "There can't be more than one world frame!");
 		s_currentWorldFrame = std::static_pointer_cast<WorldFrame>(shared_from_this());
 	}
+
+	WorldFrame* WorldFrame::GetWorldFrame()
+	{
+		if (auto worldFrame = s_currentWorldFrame.lock())
+		{
+			return worldFrame.get();
+		}
+
+		return nullptr;
+	}
 }

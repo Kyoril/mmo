@@ -802,22 +802,19 @@ namespace mmo
 				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 		}
 
-		if (type != PixelShaderType::ShadowMap)
+		if (m_lit)
 		{
-			if (m_lit)
-			{
-				m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
-			}
+			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
+		}
 
-			m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
+		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
 
-			if (m_lit)
-			{
-				m_pixelShaderStream
-					<< "\tfloat3 B = normalize(input.binormal);\n"
-					<< "\tfloat3 T = normalize(input.tangent);\n"
-					<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
-			}
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "\tfloat3 B = normalize(input.binormal);\n"
+				<< "\tfloat3 T = normalize(input.tangent);\n"
+				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
 		}
 
 		for (const auto& code : m_expressions)

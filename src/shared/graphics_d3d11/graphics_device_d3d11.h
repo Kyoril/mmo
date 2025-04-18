@@ -48,6 +48,12 @@ namespace mmo
 
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
+		void SetDepthBias(float bias) override;
+
+		void SetSlopeScaledDepthBias(float bias) override;
+
+		void SetDepthBiasClamp(float bias) override;
+
 		void UpdateSamplerState();
 
 		void Draw(uint32 vertexCount, uint32 start = 0) override;

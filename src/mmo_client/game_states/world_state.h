@@ -43,6 +43,11 @@
 
 namespace mmo
 {
+	class ConsoleVar;
+}
+
+namespace mmo
+{
 	class IAudio;
 }
 
@@ -148,6 +153,10 @@ namespace mmo
 		void OnTargetPowerChanged(uint64 monitoredGuid);
 
 		void OnTargetLevelChanged(uint64 monitoredGuid);
+
+		void OnRenderShadowsChanged(ConsoleVar& var, const std::string& oldValue);
+
+		void OnShadowBiasChanged(ConsoleVar& var, const std::string& oldValue);
 
 	private:
 		// EventLoop connections
@@ -408,6 +417,8 @@ namespace mmo
 
 		CharSelect& m_charSelect;
 		GuildClient& m_guildClient;
+
+		scoped_connection_container m_cvarChangedSignals;
 
 	private:
 		static IInputControl* s_inputControl;

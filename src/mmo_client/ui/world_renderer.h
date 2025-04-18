@@ -37,6 +37,8 @@ namespace mmo
 		/// Called to notify the renderer that a frame has been detached.
 		void NotifyFrameDetached() override;
 
+		DeferredRenderer* GetDeferredRenderer() const { return m_deferredRenderer.get(); }
+
 	private:
 		Rect m_lastFrameRect;
 		WorldFrame* m_worldFrame;

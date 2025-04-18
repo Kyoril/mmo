@@ -51,6 +51,13 @@ namespace mmo
             return m_shadowCamera;
         }
 
+        void SetDepthBias(float bias, float slope, float clamp)
+        {
+			m_depthBias = bias;
+			m_slopeScaledDepthBias = slope;
+			m_depthBiasClamp = clamp;
+        }
+
     private:
         /// @brief Renders the geometry pass.
         /// @param scene The scene to render.
@@ -106,5 +113,11 @@ namespace mmo
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 
         std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
+
+        float m_depthBias = 250.0f;
+
+		float m_slopeScaledDepthBias = 1.0f;
+
+		float m_depthBiasClamp = 0.0f;
     };
 }

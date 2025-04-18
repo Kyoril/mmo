@@ -153,40 +153,15 @@ namespace mmo
 			by this light will be visible.
 		*/
 		float GetShadowFarDistance() const;
+
 		float GetShadowFarDistanceSquared() const;
 
-		/** Set the near clip plane distance to be used by the shadow camera, if
-			this light casts texture shadows.
-		@param nearClip
-			The distance, or -1 to use the main camera setting.
-		*/
 		void SetShadowNearClipDistance(float nearClip) { m_shadowNearClipDist = nearClip; }
 
-		/** Get the near clip plane distance to be used by the shadow camera, if
-			this light casts texture shadows.
-		@remarks
-			May be zero if the light doesn't have it's own near distance set;
-			use _deriveShadowNearDistance for a version guaranteed to give a result.
-		*/
 		float GetShadowNearClipDistance() const { return m_shadowNearClipDist; }
 
-		/** Set the far clip plane distance to be used by the shadow camera, if
-			this light casts texture shadows.
-		@remarks
-			This is different from the 'shadow far distance', which is
-			always measured from the main camera. This distance is the far clip plane
-			of the light camera.
-		@param farClip
-			The distance, or -1 to use the main camera setting.
-		*/
 		void SetShadowFarClipDistance(float farClip) { m_shadowFarClipDist = farClip; }
 
-		/** Get the far clip plane distance to be used by the shadow camera, if
-			this light casts texture shadows.
-		@remarks
-			May be zero if the light doesn't have it's own far distance set;
-			use _deriveShadowfarDistance for a version guaranteed to give a result.
-		*/
 		float GetShadowFarClipDistance() const { return m_shadowFarClipDist; }
 
 

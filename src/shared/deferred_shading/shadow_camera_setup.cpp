@@ -15,7 +15,7 @@ namespace mmo
 		shadowCamera.SetCustomViewMatrix(false);
 		shadowCamera.SetCustomProjMatrix(false);
 		shadowCamera.SetNearClipDistance(light.DeriveShadowNearClipDistance(camera));
-		shadowCamera.SetFarClipDistance(scene.GetShadowDirectionalLightExtrusionDistance());
+		shadowCamera.SetFarClipDistance(light.GetShadowFarDistance());
 
 		// get the shadow frustum's far distance
 		float shadowDist = light.GetShadowFarDistance();

@@ -19,5 +19,7 @@ namespace mmo
 		void RenderWorld();
 
 		void SetAsCurrentWorldFrame();
+
+		static WorldFrame* GetWorldFrame();
 	};
 }

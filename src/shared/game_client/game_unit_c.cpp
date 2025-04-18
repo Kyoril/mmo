@@ -152,7 +152,7 @@ namespace mmo
 			if (cam)
 			{
 				m_questGiverNode->SetFixedYawAxis(true);
-				m_questGiverNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World);
+				m_questGiverNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::NegativeUnitZ);
 			}
 		}
 

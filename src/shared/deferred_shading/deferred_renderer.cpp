@@ -295,6 +295,11 @@ namespace mmo
 
         m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirecitonalLight, *m_shadowCamera);
 
+        // Setup some depth bias settings
+        m_device.SetDepthBias(m_depthBias);
+        m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
+        m_device.SetDepthBiasClamp(m_depthBiasClamp);
+
         // Update the shadow buffer with the light view-projection matrix
         ShadowBuffer buffer;
         buffer.lightViewProjection = (m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix());
@@ -305,6 +310,11 @@ namespace mmo
         m_shadowMapRT->Clear(ClearFlags::Depth);
         scene.Render(*m_shadowCamera, PixelShaderType::ShadowMap);
         m_shadowMapRT->Update();
+
+        // Reset
+        m_device.SetDepthBias(0);
+        m_device.SetSlopeScaledDepthBias(0);
+        m_device.SetDepthBiasClamp(0);
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const
