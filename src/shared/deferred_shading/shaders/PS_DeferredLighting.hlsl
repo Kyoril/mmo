@@ -52,7 +52,8 @@ struct Light
     float3 Direction;
     float SpotAngle;
     uint Type;  // 0 = Point, 1 = Directional, 2 = Spot
-    float3 Padding;
+    uint ShadowMap;
+    float2 Padding;
 };
 
 // Light buffer
@@ -168,19 +169,21 @@ float SampleShadow(float3 worldPos, float3 normal, float normalBias)
     static const float bias = 0.0005f;
 
     float shadow = 0.0;
-[unroll]
+
+	[unroll]
     for (int y = -1; y <= 1; ++y)
-[unroll]
+    {
+    	[unroll]
         for (int x = -1; x <= 1; ++x)
         {
             shadow += ShadowMap.SampleCmpLevelZero(
                   ShadowSampler,
                   uv + float2(x, y) * (1.0f / 2048.0f), ndc.z - bias);
         }
+    }
     shadow /= 9.0;
 
     return shadow;
-    //return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, ndc.z - bias);
 }
 
 // Calculates directional light contribution
@@ -307,7 +310,12 @@ float4 main(PS_INPUT input) : SV_TARGET
         }
         else if (light.Type == 1) // Directional light
         {
-            float shadow = SampleShadow(worldPos, normal, 0.078125f * 0.2f);
+            float shadow = 1.0f;
+            if (light.ShadowMap > 0)
+            {
+                shadow = SampleShadow(worldPos, normal, 0.078125f * 0.2f);
+            }
+            
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
         }
         else if (light.Type == 2) // Spot light
@@ -317,7 +325,6 @@ float4 main(PS_INPUT input) : SV_TARGET
     }
     
     // Apply fog
-
     float distanceToCamera = length(worldPos - CameraPosition);
 	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);

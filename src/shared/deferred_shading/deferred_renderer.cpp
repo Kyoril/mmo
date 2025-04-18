@@ -29,7 +29,8 @@ namespace mmo
         Vector3 direction;
         float spotAngle;
         uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
-        Vector3 padding;
+        int32 shadowMap;
+        Vector2 padding;
     };
 
     struct alignas(16) ShadowBuffer
@@ -262,6 +263,7 @@ namespace mmo
             bufferedLight.range = light->GetRange();
             bufferedLight.spotAngle = 0.0f;
             bufferedLight.direction = light->GetDirection();
+            bufferedLight.shadowMap = light->IsCastingShadows() ? 1 : 0;    // TODO: Shadow map index
 
             // Set up a directional light
             switch (light->GetType())
