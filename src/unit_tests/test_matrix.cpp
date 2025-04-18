@@ -8,7 +8,9 @@
 #include "math/radian.h"
 #include "math/degree.h"
 
+#ifdef _WIN32
 #include <DirectXMath.h>
+#endif
 
 #include "scene_graph/scene.h"
 using namespace DirectX;
@@ -45,6 +47,7 @@ static Matrix4 MakeOrthographicMatrix(const float left, const float top, const f
     return result;
 }
 
+#ifdef _WIN32
 TEST_CASE("XMATHWorks", "[matrix]")
 {
     //------------------------------------------------------------------
@@ -113,6 +116,7 @@ TEST_CASE("XMATHWorks", "[matrix]")
     CHECK(n.z >= 0.0f);
 	CHECK(n.z <= 1.0f);
 }
+#endif
 
 TEST_CASE("ProjectionWorks", "[matrix]")
 {
