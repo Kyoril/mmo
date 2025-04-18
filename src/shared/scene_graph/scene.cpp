@@ -237,6 +237,11 @@ namespace mmo
 	{
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
 		{
+			if (m_pixelShaderType == PixelShaderType::ShadowMap && groupId < RenderQueueGroupId::WorldGeometry1)
+			{
+				continue;
+			}
+
 			RenderQueueGroupObjects(*group);
 		}
 	}

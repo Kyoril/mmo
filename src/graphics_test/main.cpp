@@ -10,7 +10,6 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/octree_scene.h"
 #include "deferred_shading/deferred_renderer.h"
-#include "deferred_shading/shadow_camera_setup.h"
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"
@@ -20,6 +19,10 @@
 
 namespace mmo
 {
+	static bool g_lmb = false;
+	static int32 lastX = -1;
+	static int32 lastY = -1;
+
 	std::unique_ptr<Scene> g_scene;
 	Camera* g_camera = nullptr;
 	SceneNode* g_cameraNode = nullptr;
@@ -144,6 +147,7 @@ namespace mmo
 			{
 				// Toggle directional light
 				g_pointLight->SetVisible(!g_pointLight->IsVisible());
+				g_lightDebugEnt->SetVisible(g_pointLight->IsVisible());
 			}
 			if (key == 'G')
 			{
@@ -165,6 +169,47 @@ namespace mmo
         	return true;
         });
 
+		signals += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
+			{
+				lastX = x;
+				lastY = y;
+
+				if (button == MouseButton_Left)
+				{
+					g_lmb = true;
+				}
+				return true;
+			});
+
+
+		signals += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
+			{
+				lastX = x;
+				lastY = y;
+
+				if (button == MouseButton_Left)
+				{
+					g_lmb = false;
+				}
+				return true;
+			});
+
+		signals += EventLoop::MouseMove.connect([](int32 x, int32 y)
+			{
+				if (g_lmb)
+				{
+					if (g_cameraNode)
+					{
+						g_cameraNode->Yaw(Radian(-static_cast<float>(x - lastX) * 0.01f), TransformSpace::Parent);
+						g_cameraNode->Pitch(Radian(-static_cast<float>(y - lastY) * 0.01f), TransformSpace::Local);
+					}
+				}
+
+				lastX = x;
+				lastY = y;
+				return true;
+			});
+
 		// Setup scene
 		g_scene = std::make_unique<OctreeScene>();
 
@@ -172,10 +217,10 @@ namespace mmo
 		g_camera = g_scene->CreateCamera("MainCamera");
 		g_camera->SetNearClipDistance(0.3f);
 		g_camera->SetFarClipDistance(1000.0f);
-		g_cameraNode = &g_scene->CreateSceneNode("MainCameraNode");
+		g_cameraNode = g_scene->GetRootSceneNode().CreateChildSceneNode("MainCameraNode");
 		g_cameraNode->AttachObject(*g_camera);
 		g_cameraNode->SetPosition(Vector3(0.0f, 8.5f, 15.0f));
-		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::Parent);
+		g_cameraNode->LookAt(Vector3::Zero, TransformSpace::World, Vector3::NegativeUnitZ);
 		g_camera->SetAspectRatio(1920.0f / 1080.0f);
 
 		g_boarNode = g_scene->GetRootSceneNode().CreateChildSceneNode("BoarNode");
@@ -196,11 +241,11 @@ namespace mmo
 		g_sunLight->SetColor(Vector4(1.0f, 0.95f, 0.8f, 1.0f)); // Warm sunlight color
 		g_sunLight->SetIntensity(1.0f);
 		g_sunLight->SetCastShadows(true);
-		g_sunLight->SetShadowFarDistance(50.0f);
+		g_sunLight->SetShadowFarDistance(75.0f);
+		g_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
 
 		g_sunLightNode = g_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		g_sunLightNode->AttachObject(*g_sunLight);
-		g_sunLightNode->SetDirection({ -0.5f, -1.0f, -0.3f });
 		
 		g_pointLightRotator = g_scene->GetRootSceneNode().CreateChildSceneNode("PointLightRotator", Vector3::UnitY * 1.5f);
 
@@ -233,6 +278,8 @@ namespace mmo
 		g_terrain = std::make_unique<terrain::Terrain>(*g_scene, g_camera, 64, 64);
 		g_terrain->SetBaseFileName("GraphicsTest");
 		g_terrain->SetDefaultMaterial(MaterialManager::Get().Load("Models/Default.hmat"));		// Models/FalwynPlains_Terrain_Forest.hmi
+
+		DLOG("Camera dir: " << g_camera->GetDerivedDirection());
 
 		for (uint32 i = 31; i < 33; ++i)
 		{

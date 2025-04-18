@@ -652,6 +652,8 @@ namespace mmo
 		m_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
 		m_sunLight->SetIntensity(1.0f);
 		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		m_sunLight->SetCastShadows(true);
+		m_sunLight->SetShadowFarDistance(75.0f);
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);

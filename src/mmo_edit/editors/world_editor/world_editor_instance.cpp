@@ -108,6 +108,8 @@ namespace mmo
 		m_sunLight->SetDirection(Vector3(-0.5f, -1.0f, -0.3f));
 		m_sunLight->SetIntensity(1.0f);
 		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		m_sunLight->SetCastShadows(true);
+		m_sunLight->SetShadowFarDistance(75.0f);
 		
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);

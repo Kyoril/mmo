@@ -46,6 +46,11 @@ namespace mmo
         /// @return The final render target.
         [[nodiscard]] TexturePtr GetFinalRenderTarget() const;
 
+        Camera* GetShadowCamera() const
+        {
+            return m_shadowCamera;
+        }
+
     private:
         /// @brief Renders the geometry pass.
         /// @param scene The scene to render.

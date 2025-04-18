@@ -89,6 +89,10 @@ namespace mmo
         sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
         sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
         sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS;  // Shadow test: fragment depth < stored depth
+        sampDesc.BorderColor[0] = 1.0f;
+        sampDesc.BorderColor[1] = 1.0f;
+        sampDesc.BorderColor[2] = 1.0f;
+        sampDesc.BorderColor[3] = 1.0f;
         sampDesc.MinLOD = 0;
         sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
@@ -293,7 +297,7 @@ namespace mmo
 
         // Update the shadow buffer with the light view-projection matrix
         ShadowBuffer buffer;
-        buffer.lightViewProjection = m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix();
+        buffer.lightViewProjection = (m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix());
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map

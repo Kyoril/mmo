@@ -1,4 +1,4 @@
-
+﻿
 #include "shadow_camera_setup.h"
 
 #include "scene_graph/scene.h"
@@ -15,7 +15,7 @@ namespace mmo
 		shadowCamera.SetCustomViewMatrix(false);
 		shadowCamera.SetCustomProjMatrix(false);
 		shadowCamera.SetNearClipDistance(light.DeriveShadowNearClipDistance(camera));
-		shadowCamera.SetFarClipDistance(light.DeriveShadowFarClipDistance(camera));
+		shadowCamera.SetFarClipDistance(scene.GetShadowDirectionalLightExtrusionDistance());
 
 		// get the shadow frustum's far distance
 		float shadowDist = light.GetShadowFarDistance();
@@ -71,15 +71,15 @@ namespace mmo
 				up = Vector3::UnitZ;
 			}
 
-			// cross twice to re-derive, only direction is unaltered
-			Vector3 left = dir.Cross(up);
-			left.Normalize();
-			up = dir.Cross(left);
+			// 1. build an orthonormal basis that matches DirectX LH look‑at
+			Vector3 right = up.Cross(dir);   //  X  axis  (points right)
+			right.Normalize();
+			up = dir.Cross(right);        //  Y  axis  (re‑derived, keeps it orthogonal)
 			up.Normalize();
 
-			// Derive quaternion from axes
+			// 2. build the quaternion from X,Y,Z
 			Quaternion q;
-			q.FromAxes(left, up, dir);
+			q.FromAxes(right, up, dir);      // q rotates local +Z onto 'dir'
 
 			//convert world space camera position into light space
 			Vector3 lightSpacePos = q.Inverse() * pos;
@@ -91,43 +91,12 @@ namespace mmo
 			//convert back to world space
 			pos = q * lightSpacePos;
 
+			// TODO: Other light types
+			shadowCamera.GetParentNode()->SetPosition(pos);
+			shadowCamera.GetParentSceneNode()->LookAt(target, TransformSpace::World, Vector3::UnitZ);
 		}
-		// TODO: Other light types
 
-		// Finally set position
-		shadowCamera.GetParentNode()->SetPosition(pos);
-
-		// Calculate orientation based on direction calculated above
-		/*
-		// Next section (camera oriented shadow map) abandoned
-		// Always point in the same direction, if we don't do this then
-		// we get 'shadow swimming' as camera rotates
-		// As it is, we get swimming on moving but this is less noticeable
-
-		// calculate up vector, we want it aligned with cam direction
-		Vector3 up = cam->getDerivedDirection();
-		// Check it's not coincident with dir
-		if (up.dotProduct(dir) >= 1.0f)
-		{
-		// Use camera up
-		up = cam->getUp();
-		}
-		*/
-		Vector3 up = Vector3::UnitY;
-		// Check it's not coincident with dir
-		if (::fabsf(up.Dot(dir)) >= 1.0f)
-		{
-			// Use camera up
-			up = Vector3::UnitZ;
-		}
-		// cross twice to rederive, only direction is unaltered
-		Vector3 left = dir.Cross(up);
-		left.Normalize();
-		up = dir.Cross(left);
-		up.Normalize();
-		// Derive quaternion from axes
-		Quaternion q;
-		q.FromAxes(left, up, dir);
-		shadowCamera.GetParentNode()->SetOrientation(q);
+		shadowCamera.InvalidateView();
+		shadowCamera.InvalidateFrustum();
 	}
 }

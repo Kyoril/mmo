@@ -308,12 +308,9 @@ namespace mmo
 		switch (relativeTo)
 		{
 		case TransformSpace::Parent:
-			if (m_inheritOrientation)
+			if (m_parent)
 			{
-				if (m_parent)
-				{
-					targetDir = m_parent->GetDerivedOrientation() * targetDir;
-				}
+				targetDir = m_parent->GetDerivedOrientation() * targetDir;
 			}
 			break;
 		case TransformSpace::Local:

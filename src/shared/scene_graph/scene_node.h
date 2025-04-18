@@ -73,11 +73,11 @@ namespace mmo
 		
 		void Yaw(const Radian& angle, TransformSpace relativeTo) override;
 
-		void SetDirection(const Vector3& vec, TransformSpace relativeTo = TransformSpace::Local, const Vector3& localDirectionVector = Vector3::NegativeUnitZ);
+		void SetDirection(const Vector3& vec, TransformSpace relativeTo = TransformSpace::Local, const Vector3& localDirectionVector = Vector3::UnitZ);
 
-		void LookAt(const Vector3& targetPoint, TransformSpace relativeTo, const Vector3& localDirectionVector = Vector3::NegativeUnitZ);
+		void LookAt(const Vector3& targetPoint, TransformSpace relativeTo, const Vector3& localDirectionVector = Vector3::UnitZ);
 
-		void SetAutoTracking(bool enabled, SceneNode* const target = nullptr, const Vector3& localDirectionVector = Vector3::NegativeUnitZ, const Vector3& offset = Vector3::Zero);
+		void SetAutoTracking(bool enabled, SceneNode* const target = nullptr, const Vector3& localDirectionVector = Vector3::UnitZ, const Vector3& offset = Vector3::Zero);
 
 		SceneNode* GetAutoTrackTarget() const { return m_autoTrackTarget; }
 

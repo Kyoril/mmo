@@ -151,27 +151,21 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
 
 float SampleShadow(float3 worldPos)
 {
-    // Transform worldPos to light clip space
-    float4 shadowCoord = mul(float4(worldPos, 1.0), LightViewProj);
+    float4 clip = mul(float4(worldPos, 1.0f), LightViewProj);
     
-	// Clip test first
-    if (shadowCoord.w <= 0)
-        return 1.0f; // no shadow
-    
-	// Perspective divide
-    float3 projCoord = shadowCoord.xyz / shadowCoord.w;
-
-	// Early reject if outside [0, 1]
-    if (any(projCoord.xy < 0.0) || any(projCoord.xy > 1.0) || projCoord.z > 1.0)
+    if (clip.w <= 0.0f)
         return 1.0f;
 
-    // Transform to [0, 1] UV space
-    float2 uv = shadowCoord.xy * 0.5 + 0.5;
-    float depth = shadowCoord.z;
+    float3 ndc = clip.xyz / clip.w;
+    float2 uv = ndc.xy * float2(1.0f, -1.0f) * 0.5f + 0.5f;
     
-	// Sample shadow map
-    float bias = 0.001;
-    return ShadowMap.SampleCmpLevelZero(ShadowSampler, projCoord.xy, projCoord.z - bias);
+    if (uv.x < 0.0f || uv.x > 1.0f ||
+        uv.y < 0.0f || uv.y > 1.0f ||
+        ndc.z > 1.0f)
+        return 1.0f;
+    
+    static const float bias = 0.0005f;
+    return ShadowMap.SampleCmpLevelZero(ShadowSampler, uv, ndc.z - bias);
 }
 
 // Calculates directional light contribution
@@ -310,7 +304,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     // Apply fog
 
     float distanceToCamera = length(worldPos - CameraPosition);
-    float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
+	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);
 
     lighting = ACESFilm(lighting);

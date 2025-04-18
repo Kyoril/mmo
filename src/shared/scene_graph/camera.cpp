@@ -220,9 +220,6 @@ namespace mmo
 
 		if (!m_customProjMatrix)
 		{
-			float left, right, bottom, top;
-			CalcProjectionParameters(left, right, bottom, top);
-
 			// Create the appropriate projection matrix based on projection type
 			if (m_projectionType == ProjectionType::Perspective)
 			{
@@ -431,6 +428,14 @@ namespace mmo
 
 			m_recalcWorldSpaceCorners = false;
 		}
+	}
+
+	void Camera::NotifyMoved()
+	{
+		MovableObject::NotifyMoved();
+
+		InvalidateView();
+		InvalidateFrustum();
 	}
 
 	const String& Camera::GetMovableType() const

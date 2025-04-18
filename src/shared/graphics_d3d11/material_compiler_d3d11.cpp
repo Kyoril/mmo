@@ -691,96 +691,93 @@ namespace mmo
 		m_pixelShaderStream << "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
-		if (type != PixelShaderType::ShadowMap)
+		// Add texture samplers
+		for (size_t i = 0; i < m_textures.size(); ++i)
 		{
-			// Add texture samplers
-			for (size_t i = 0; i < m_textures.size(); ++i)
-			{
-				m_pixelShaderStream << "// " << m_textures[i] << "\n";
-				m_pixelShaderStream << "Texture2D tex" << i << ";\n";
-				m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
-			}
+			m_pixelShaderStream << "// " << m_textures[i] << "\n";
+			m_pixelShaderStream << "Texture2D tex" << i << ";\n";
+			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
+		}
 
-			// Add texture parameter samplers
-			const auto& textureParams = m_textureParameters;
-			if (!textureParams.empty())
+		// Add texture parameter samplers
+		const auto& textureParams = m_textureParameters;
+		if (!textureParams.empty())
+		{
+			for (size_t i = 0; i < textureParams.size(); ++i)
 			{
-				for (size_t i = 0; i < textureParams.size(); ++i)
-				{
-					m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
-					m_pixelShaderStream
-						<< "// " << textureParams[i].name << "\n"
-						<< "Texture2D texparam" << i << ";\n"
-						<< "SamplerState paramsampler" << i << ";\n\n";
-				}
-			}
-
-			if (m_lit)
-			{
+				m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
 				m_pixelShaderStream
-					<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
+					<< "// " << textureParams[i].name << "\n"
+					<< "Texture2D texparam" << i << ";\n"
+					<< "SamplerState paramsampler" << i << ";\n\n";
+			}
+		}
+
+		if (m_lit)
+		{
+			m_pixelShaderStream
+				<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
+				<< "{\n"
+				<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
+				<< "\tfloat3 n = tangentSpaceNormal /* * 2.0f - 1.0f*/;\n\n"
+				<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
+				<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
+				<< "\treturn worldNormal;\n"
+				<< "}\n\n";
+
+			if (type != PixelShaderType::GBuffer)
+			{
+				// fresnelSchlick
+				m_pixelShaderStream
+					<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
 					<< "{\n"
-					<< "\t// tangentSpaceNormal is usually in range [0,1]. Convert to [-1,1]\n"
-					<< "\tfloat3 n = tangentSpaceNormal /* * 2.0f - 1.0f*/;\n\n"
-					<< "\t// Re-orient using T, B, N. (Assuming T,B,N are all normalized & orthonormal)\n"
-					<< "\tfloat3 worldNormal = normalize(n.x * T + n.y * B + n.z * N);\n"
-					<< "\treturn worldNormal;\n"
+					<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
 					<< "}\n\n";
 
-				if (type != PixelShaderType::GBuffer)
-				{
-					// fresnelSchlick
-					m_pixelShaderStream
-						<< "float3 fresnelSchlick(float cosTheta, float3 F0)\n"
-						<< "{\n"
-						<< "\treturn F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n\n"
-						<< "}\n\n";
-
-					// DistributionGGX
-					m_pixelShaderStream
-						<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
-						<< "{\n"
-						<< "\tfloat a      = roughness*roughness;\n"
-						<< "\tfloat a2     = a*a;\n"
-						<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
-						<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
-						<< "\tfloat num   = a2;\n"
-						<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
-						<< "\tdenom = PI * denom * denom;\n"
-						<< "\treturn num / denom;\n"
-						<< "}\n\n";
-
-					// GeometrySchlickGGX
-					m_pixelShaderStream
-						<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
-						<< "{\n"
-						<< "\tfloat r = (roughness + 1.0);\n"
-						<< "\tfloat k = (r*r) / 8.0;\n"
-						<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
-						<< "\treturn NdotV / denom;\n"
-						<< "}\n\n";
-
-					// GeometrySmith
-					m_pixelShaderStream
-						<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
-						<< "{\n"
-						<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
-						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
-						<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
-						<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
-						<< "\treturn ggx1 * ggx2;\n"
-						<< "}\n\n";
-				}
-			}
-
-			for (const auto& [name, code] : m_globalFunctions)
-			{
+				// DistributionGGX
 				m_pixelShaderStream
-					<< "float4 " << name << "(VertexOut input)\n"
+					<< "float DistributionGGX(float3 N, float3 H, float roughness)\n"
 					<< "{\n"
-					<< code << "\n"
+					<< "\tfloat a      = roughness*roughness;\n"
+					<< "\tfloat a2     = a*a;\n"
+					<< "\tfloat NdotH  = max(dot(N, H), 0.0);\n"
+					<< "\tfloat NdotH2 = NdotH*NdotH;\n\n"
+					<< "\tfloat num   = a2;\n"
+					<< "\tfloat denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+					<< "\tdenom = PI * denom * denom;\n"
+					<< "\treturn num / denom;\n"
+					<< "}\n\n";
+
+				// GeometrySchlickGGX
+				m_pixelShaderStream
+					<< "float GeometrySchlickGGX(float NdotV, float roughness)\n"
+					<< "{\n"
+					<< "\tfloat r = (roughness + 1.0);\n"
+					<< "\tfloat k = (r*r) / 8.0;\n"
+					<< "\tfloat denom = NdotV * (1.0 - k) + k;\n"
+					<< "\treturn NdotV / denom;\n"
+					<< "}\n\n";
+
+				// GeometrySmith
+				m_pixelShaderStream
+					<< "float GeometrySmith(float3 N, float3 V, float3 L, float roughness)\n"
+					<< "{\n"
+					<< "\tfloat NdotV = max(dot(N, V), 0.0);\n"
+					<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
+					<< "\tfloat ggx2  = GeometrySchlickGGX(NdotV, roughness);\n"
+					<< "\tfloat ggx1  = GeometrySchlickGGX(NdotL, roughness);\n"
+					<< "\treturn ggx1 * ggx2;\n"
 					<< "}\n\n";
 			}
+		}
+
+		for (const auto& [name, code] : m_globalFunctions)
+		{
+			m_pixelShaderStream
+				<< "float4 " << name << "(VertexOut input)\n"
+				<< "{\n"
+				<< code << "\n"
+				<< "}\n\n";
 		}
 
 		// Start of main function
@@ -795,8 +792,7 @@ namespace mmo
 		{
 			m_pixelShaderStream
 				<< "void main(VertexOut input)\n"
-				<< "{\n"
-				<< "}" << std::endl;
+				<< "{\n";
 		}
 		else
 		{
@@ -822,12 +818,15 @@ namespace mmo
 					<< "\tfloat3 T = normalize(input.tangent);\n"
 					<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
 			}
+		}
 
-			for (const auto& code : m_expressions)
-			{
-				m_pixelShaderStream << "\t" << code;
-			}
+		for (const auto& code : m_expressions)
+		{
+			m_pixelShaderStream << "\t" << code;
+		}
 
+		if (type != PixelShaderType::ShadowMap)
+		{
 			if (m_lit)
 			{
 				// Normal
@@ -906,25 +905,28 @@ namespace mmo
 			{
 				m_pixelShaderStream << "\tfloat metallic = 0.0;\n\n";
 			}
+		}
 
-			// Opacity
-			if (m_opacityExpression != IndexNone)
+		// Opacity
+		if (m_opacityExpression != IndexNone)
+		{
+			const auto expression = GetExpressionType(m_opacityExpression);
+			if (expression == ExpressionType::Float_1)
 			{
-				const auto expression = GetExpressionType(m_opacityExpression);
-				if (expression == ExpressionType::Float_1)
-				{
-					m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ");\n\n";
-				}
-				else
-				{
-					m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ".r);\n\n";
-				}
+				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ");\n\n";
 			}
 			else
 			{
-				m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
+				m_pixelShaderStream << "\tfloat opacity = saturate(expr_" << m_opacityExpression << ".r);\n\n";
 			}
+		}
+		else
+		{
+			m_pixelShaderStream << "\tfloat opacity = 1.0;\n\n";
+		}
 
+		if (type != PixelShaderType::ShadowMap)
+		{
 			// BaseColor base
 			m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
 			if (m_baseColorExpression != IndexNone)
@@ -946,19 +948,22 @@ namespace mmo
 					}
 				}
 			}
+		}
 
-			if (type != PixelShaderType::GBuffer)
-			{
-				m_pixelShaderStream
-					<< "\tif (opacity <= 0.333) discard;\n";
-			}
-			else
-			{
-				m_pixelShaderStream
-					//<< "\tfloat threshold = Dither8x8(input.pos.xy + cameraPos.xy * cameraPos.z);\n"
-					<< "\tif (opacity < 0.333) discard;\n";
-			}
+		if (type != PixelShaderType::GBuffer)
+		{
+			m_pixelShaderStream
+				<< "\tif (opacity <= 0.333) discard;\n";
+		}
+		else
+		{
+			m_pixelShaderStream
+				//<< "\tfloat threshold = Dither8x8(input.pos.xy + cameraPos.xy * cameraPos.z);\n"
+				<< "\tif (opacity < 0.333) discard;\n";
+		}
 
+		if (type != PixelShaderType::ShadowMap)
+		{
 			if (type != PixelShaderType::GBuffer)
 			{
 				m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
@@ -1108,6 +1113,14 @@ namespace mmo
 					<< std::endl;
 			}
 		}
+		else
+		{
+			// End of main function
+			m_pixelShaderStream
+				<< "\treturn;\n"
+				<< "}"
+				<< std::endl;
+		}
 
 		m_pixelShaderCode[(int)type] = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
@@ -1234,7 +1247,7 @@ namespace mmo
 		vertexShaderStream
 			<< "struct VertexIn\n"
 			<< "{\n"
-			<< "\tfloat4 pos : SV_POSITION;\n"
+			<< "\tfloat3 pos : POSITION;\n"
 			<< "\tfloat4 color : COLOR;\n"
 			<< "\tfloat3 normal : NORMAL;\n"
 			<< "\tfloat3 binormal : BINORMAL;\n"

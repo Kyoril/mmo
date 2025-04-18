@@ -130,6 +130,8 @@ namespace mmo
 
 		void UpdateWorldSpaceCorners() const;
 
+		void NotifyMoved() override;
+
 	public:
 		[[nodiscard]] const String& GetMovableType() const override;
 		[[nodiscard]] const AABB& GetBoundingBox() const override;

@@ -8,6 +8,9 @@
 
 #include <iterator>
 
+#include "assets/asset_registry.h"
+#include "log/default_log_levels.h"
+
 using Microsoft::WRL::ComPtr;
 
 namespace mmo
@@ -18,7 +21,9 @@ namespace mmo
 	{
 		UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
 #if defined( DEBUG ) || defined( _DEBUG )
-		flags |= D3DCOMPILE_DEBUG;
+		flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_DEBUG_NAME_FOR_BINARY;
+#else
+		flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
 #endif
 		
 		String profile;
@@ -60,9 +65,59 @@ namespace mmo
 		{
 			output.code.format = GetShaderFormat();
 
+			ComPtr<ID3DBlob> pPDB;
+			HRESULT t = D3DGetBlobPart(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), D3D_BLOB_PDB, 0, pPDB.GetAddressOf());
+			if (!SUCCEEDED(t))
+			{
+				WLOG("Failed to get PDB part from shader blob");
+			}
+			else
+			{
+				ILOG("Loaded PDB part from blob. PDB size: " << pPDB->GetBufferSize());
+
+				// Now retrieve the suggested name for the debug data file:
+				ComPtr<ID3DBlob> pPDBName;
+				t = D3DGetBlobPart(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), D3D_BLOB_DEBUG_NAME, 0, pPDBName.GetAddressOf());
+				if (!SUCCEEDED(t))
+				{
+					WLOG("Failed to get PDB name part from shader blob");
+				}
+				else
+				{
+					ILOG("Loaded PDB name part from blob. PDB size: " << pPDBName->GetBufferSize());
+
+					// This struct represents the first four bytes of the name blob:
+					struct ShaderDebugName
+					{
+						uint16_t Flags;       // Reserved, must be set to zero.
+						uint16_t NameLength;  // Length of the debug name, without null terminator.
+						// Followed by NameLength bytes of the UTF-8-encoded name.
+						// Followed by a null terminator.
+						// Followed by [0-3] zero bytes to align to a 4-byte boundary.
+					};
+
+					auto pDebugNameData = reinterpret_cast<const ShaderDebugName*>(pPDBName->GetBufferPointer());
+					auto pName = reinterpret_cast<const char*>(pDebugNameData + 1);
+
+					ILOG("PDB Name: " << pName);
+
+					// Write content of pdb to file
+					auto file = AssetRegistry::CreateNewFile("ShadersPDB/" + String(pName));
+					if (!file)
+					{
+						ELOG("Failed to create PDB file: ShaderPDB/" << pName);
+					}
+					else
+					{
+						file->write((const char*)pPDB->GetBufferPointer(), pPDB->GetBufferSize());
+						file->flush();
+					}
+				}
+			}
+
 			output.code.data.clear();
 			std::copy(
-				static_cast<const uint8*>(shaderBlob->GetBufferPointer()), 
+				static_cast<const uint8*>(shaderBlob->GetBufferPointer()),
 				static_cast<const uint8*>(shaderBlob->GetBufferPointer()) + shaderBlob->GetBufferSize(),
 				std::back_inserter(output.code.data));
 		}

@@ -75,7 +75,7 @@ namespace mmo
 	const String& MapSemanticNameD3D11(VertexElementSemantic semantic)
 	{
 		static String semanticNames[8] = {
-			"SV_POSITION",
+			"POSITION",
 			"BLENDWEIGHT",
 			"BLENDINDICES",
 			"NORMAL",
