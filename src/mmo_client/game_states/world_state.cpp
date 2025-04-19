@@ -1302,8 +1302,6 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("Received creature data for entry " << id);
-
 		if (!succeeded)
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");

@@ -1,0 +1,13 @@
+syntax = "proto2";
+package mmo.proto;
+
+message LockTypeEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional string resource_name = 3;
+	optional string verb = 4;
+}
+
+message LockTypes {
+	repeated LockTypeEntry entry = 1;
+}

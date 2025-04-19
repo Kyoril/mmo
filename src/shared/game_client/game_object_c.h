@@ -43,6 +43,8 @@ namespace mmo
 
 		[[nodiscard]] bool IsContainer() const noexcept { return GetTypeId() == ObjectTypeId::Container; }
 
+		[[nodiscard]] bool IsWorldObject() const noexcept { return GetTypeId() == ObjectTypeId::Object; }
+
 		uint32 GetMapId() const noexcept { return m_mapId; }
 
 		GameUnitC& AsUnit();

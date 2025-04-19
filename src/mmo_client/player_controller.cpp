@@ -492,7 +492,12 @@ namespace mmo
 						g_cursor.SetCursorType(CursorType::Pointer);
 					}
 				}
-				else
+				else if (m_hoveredObject->IsWorldObject())
+				{
+					// TODO: Check if object can be interacted with
+					g_cursor.SetCursorType(CursorType::Interact);
+				}
+				else 
 				{
 					g_cursor.SetCursorType(CursorType::Pointer);
 				}
