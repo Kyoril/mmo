@@ -17,12 +17,7 @@ target_link_libraries(unit_tests
 	hpak_v1_0
 	math
 	game
-	game_server
-scene_graph
-graphics
-graphics_null
-tex
-tex_v1_0)
+	game_server)
 
 if (WIN32)
 	target_link_libraries(unit_tests graphics_d3d11)

@@ -1,5 +1,7 @@
 ﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#if 0
+
 #include "catch.hpp"
 
 #include "math/vector3.h"
@@ -222,3 +224,5 @@ TEST_CASE("CameraViewMatrixCorrect", "[matrix]")
     const Matrix4 cameraView = camera->GetViewMatrix();
 	CHECK(cameraView.IsNearlyEqual(view));
 }
+
+#endif

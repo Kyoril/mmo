@@ -1186,6 +1186,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
+			ASSERT(entity->GetMesh());
 			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
@@ -1218,7 +1219,7 @@ namespace mmo
 				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
 				WLOG("No model id assigned!");
 			}
-			else if (const auto* model = project.models.getById(modelId))
+			else if (const auto* model = project.objectDisplays.getById(modelId))
 			{
 				meshFile = model->filename();
 			}
@@ -1236,6 +1237,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
+			ASSERT(entity->GetMesh());
 			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
@@ -1331,6 +1333,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), meshFile);
 		ASSERT(entity);
 
+		ASSERT(entity->GetMesh());
 		entity->SetUserObject(&spawn);
 		entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 		m_spawnEntities.push_back(entity);
@@ -1361,7 +1364,7 @@ namespace mmo
 		ASSERT(object);
 
 		// Load the model
-		const auto* model = m_editor.GetProject().models.getById(object->displayid());
+		const auto* model = m_editor.GetProject().objectDisplays.getById(object->displayid());
 		if (!model)
 		{
 			WLOG("ObjectSpawn has no model");
@@ -1372,6 +1375,7 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity("ObjectSpawn_" + std::to_string(guid), model->filename());
 		ASSERT(entity);
 
+		ASSERT(entity->GetMesh());
 		entity->SetUserObject(&spawn);
 		entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
 		m_spawnEntities.push_back(entity);
