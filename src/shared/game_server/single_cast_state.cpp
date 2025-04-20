@@ -1546,6 +1546,8 @@ namespace mmo
 					{
 						return true;
 					}
+
+					targets.push_back(&unit);
 				}
 				else if (effect.targeta() == spell_effect_targets::NearbyEnemy)
 				{
@@ -1553,6 +1555,8 @@ namespace mmo
 					{
 						return true;
 					}
+
+					targets.push_back(&unit);
 				}
 
 				return true;
@@ -1619,14 +1623,14 @@ namespace mmo
 				{
 				case spell_effect_targets::TargetAlly:
 					// For now we consider all non-hostile units as allies
-					if (m_cast.GetExecuter().UnitIsEnemy(*unit))
+					if (!m_cast.GetExecuter().UnitIsFriendly(*unit))
 					{
 						// Target has to be an ally but is not
 						return false;
 					}
 					break;
 				case spell_effect_targets::TargetEnemy:
-					if (!m_cast.GetExecuter().UnitIsEnemy(*unit))
+					if (m_cast.GetExecuter().UnitIsFriendly(*unit))
 					{
 						// Target has to be an enemy but is not
 						return false;
