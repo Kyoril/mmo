@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message AnimationEntry {
+	required uint32 id = 1;
+	required string name = 2;
+}
+
+message Animations {
+	repeated AnimationEntry entry = 1;
+}
