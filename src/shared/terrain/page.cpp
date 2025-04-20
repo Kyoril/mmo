@@ -937,9 +937,9 @@ namespace mmo
 
 			// Register new chunk readers
 			AddChunkHandler(*constants::MaterialChunk, false, *this, &Page::ReadMCMTChunk);
-			AddChunkHandler(*constants::VertexChunk, false, *this, &Page::ReadMCVTChunk);
-			AddChunkHandler(*constants::NormalChunk, false, *this, &Page::ReadMCNMChunk);
-			AddChunkHandler(*constants::LayerChunk, false, *this, &Page::ReadMCLYChunk);
+			AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunk);
+			AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunk);
+			AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
 			AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
 			AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
 

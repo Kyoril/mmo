@@ -1552,7 +1552,7 @@ void GameUnitC::RefreshUnitName()
 
 	void GameUnitC::UpdateCollider()
 	{
-		constexpr float halfHeight = 1.0f;
+		constexpr float halfHeight = 0.5f;
 
 		m_collider.pointA = GetPosition() + Vector3(0.0f, 1.0f, 0.0f);
 		m_collider.pointB = GetPosition() + Vector3(0.0f, halfHeight * 2.0f, 0.0f);
