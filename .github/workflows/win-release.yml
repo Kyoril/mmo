@@ -34,7 +34,7 @@ jobs:
 
       - name: Build project
         run: |
-          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 --build build --config Release --parallel 4
+          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 --build build --config Release
 
       - name: Package artifacts
         shell: pwsh
