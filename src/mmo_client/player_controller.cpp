@@ -496,9 +496,6 @@ namespace mmo
 				{
 					// TODO: Check if object can be interacted with
 					g_cursor.SetCursorType(CursorType::Interact);
-
-					int* x = 0;
-					*x = 15;
 				}
 				else 
 				{
