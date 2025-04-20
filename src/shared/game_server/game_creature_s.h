@@ -91,9 +91,6 @@ namespace mmo
 
 		void SetHealthPercent(float percent);
 
-		/// Get unit loot.
-		std::shared_ptr<LootInstance> getUnitLoot() const { return m_unitLoot; }
-
 		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
 
 		/// Gets the number of loot recipients.
@@ -174,7 +171,6 @@ namespace mmo
 		scoped_connection m_onSpawned;
 		std::set<uint64> m_combatParticipantGuids;
 		CreatureMovement m_movement;
-		std::shared_ptr<LootInstance> m_unitLoot;
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
 	};

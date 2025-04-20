@@ -696,7 +696,6 @@ namespace mmo
 
 		m_loot = lootInstance;
 		m_lootSource = source;
-		DLOG("Updated loot source ");
 
 		m_character->AddFlag<uint32>(object_fields::Flags, unit_flags::Looting);
 
