@@ -1436,6 +1436,7 @@ namespace mmo
 		m_characterData->maxRage= character.Get<uint32>(object_fields::MaxRage);
 		m_characterData->energy = character.Get<uint32>(object_fields::Energy);
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
+		m_characterData->money = character.Get<uint32>(object_fields::Money);
 
 		m_characterData->attributePointsSpent;
 
