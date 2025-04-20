@@ -5,7 +5,7 @@
 #include "creature_spawner.h"
 #include "each_tile_in_sight.h"
 #include "game_creature_s.h"
-#include "game_world_object_s_base.h"
+#include "game_world_object_s.h"
 #include "world_instance_manager.h"
 #include "regular_update.h"
 #include "tile_subscriber.h"
@@ -391,10 +391,10 @@ namespace mmo
 		return spawned;
 	}
 
-	std::shared_ptr<GameWorldObjectS_Base> WorldInstance::SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position)
+	std::shared_ptr<GameWorldObjectS> WorldInstance::SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position)
 	{
 		// Create the object
-		auto spawned = std::make_shared<GameWorldObjectS_Chest>(m_project, entry);
+		auto spawned = std::make_shared<GameWorldObjectS>(m_project, entry);
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
 
@@ -402,7 +402,7 @@ namespace mmo
 		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Object));
 		spawned->SetWorldInstance(this);
 
-		return std::static_pointer_cast<GameWorldObjectS_Base>(spawned);
+		return std::static_pointer_cast<GameWorldObjectS>(spawned);
 	}
 
 	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius)

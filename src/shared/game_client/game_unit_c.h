@@ -110,6 +110,8 @@ namespace mmo
 
 		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<int32>(object_fields::StandState)); }
 
+		const proto_client::SpellEntry* GetOpenSpell() const;
+
 	protected:
 		virtual void SetupSceneObjects() override;
 

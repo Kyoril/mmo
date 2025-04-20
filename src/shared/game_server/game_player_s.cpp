@@ -88,6 +88,16 @@ namespace mmo
 		m_netPlayerWatcher->OnItemAdded(slot, amount, wasLooted, wasCreated);
 	}
 
+	void GamePlayerS::LootObject(std::weak_ptr<GameObjectS> lootObject)
+	{
+		m_lootObject = lootObject;
+		
+		if (m_netPlayerWatcher)
+		{
+			m_netPlayerWatcher->OnObjectLoot();
+		}
+	}
+
 	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
 	{
 		m_configuration = configuration;

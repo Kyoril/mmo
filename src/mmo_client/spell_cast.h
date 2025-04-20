@@ -10,6 +10,7 @@
 
 namespace mmo
 {
+	class GameObjectC;
 	class RealmConnector;
 
 	/// This class allows for spell casting support.
@@ -38,7 +39,7 @@ namespace mmo
 		bool SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell);
 
 	public:
-		void CastSpell(uint32 spellId);
+		void CastSpell(uint32 spellId, GameObjectC* explicitTarget = nullptr);
 
 		bool CancelCast();
 
@@ -54,7 +55,5 @@ namespace mmo
 		const proto_client::RangeManager& m_ranges;
 
 		uint32 m_spellCastId = 0;
-
-
 	};
 }

@@ -10,6 +10,12 @@ namespace mmo
 		enum Type
 		{
 			Chest = 0,
+
+			Door,
+
+			// TODO: Add additional types here
+
+			Count_,
 		};
 	}
 
@@ -355,7 +361,11 @@ namespace mmo
 		{
 			ObjectDisplayId = ObjectFieldCount,
 
-			ObjectFlags,
+			ObjectTypeId,
+
+			CreatedBy,
+
+			ObjectFlags = CreatedBy + 2,
 
 			RotationW,
 

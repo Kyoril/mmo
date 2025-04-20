@@ -442,6 +442,8 @@ namespace mmo
 
 		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) override;
 
+		void OnObjectLoot() override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

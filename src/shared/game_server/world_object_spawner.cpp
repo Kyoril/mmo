@@ -2,7 +2,7 @@
 #include "world_object_spawner.h"
 #include "world_instance.h"
 #include "world_instance_manager.h"
-#include "game_world_object_s_base.h"
+#include "game_world_object_s.h"
 #include "base/erase_by_move.h"
 #include "log/default_log_levels.h"
 #include "base/utilities.h"
@@ -85,7 +85,7 @@ namespace mmo
 		const auto i = std::find_if(
 			std::begin(m_objects),
 			std::end(m_objects),
-			[&removed](const std::shared_ptr<GameWorldObjectS_Base>& element)
+			[&removed](const std::shared_ptr<GameWorldObjectS>& element)
 			{
 				return (element.get() == &removed);
 			});

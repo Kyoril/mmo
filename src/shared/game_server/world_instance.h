@@ -146,7 +146,7 @@ namespace mmo
 
 		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
 
-		std::shared_ptr<GameWorldObjectS_Base> SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position);
+		std::shared_ptr<GameWorldObjectS> SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position);
 
 		MapData* GetMapData() const { return m_mapData.get(); }
 

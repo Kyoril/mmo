@@ -641,7 +641,7 @@ namespace mmo
 		m_rayQuery->SetQueryMask(1);
 		m_rayQuery->SetDebugHitTestResults(true);
 
-		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient);
+		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient, m_spellCast);
 		s_inputControl = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
@@ -995,7 +995,7 @@ namespace mmo
 					object = std::make_shared<GameBagC>(*m_scene, *this, m_project);
 					break;
 				case ObjectTypeId::Object:
-					object = std::make_shared<GameWorldObjectC_Chest>(*m_scene, m_project, *this, g_mapId);
+					object = std::make_shared<GameWorldObjectC>(*m_scene, m_project, *this, g_mapId);
 					break;
 				default:
 					ASSERT(!! "Unknown object type");
@@ -3532,11 +3532,11 @@ namespace mmo
 		return false;
 	}
 
-	void WorldState::GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object)
+	void WorldState::GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object)
 	{
 		m_cache.GetObjectCache().Get(guid, [object](uint64, const ObjectInfo& data)
 			{
-				if (const std::shared_ptr<GameWorldObjectC_Base> strong = object.lock())
+				if (const std::shared_ptr<GameWorldObjectC> strong = object.lock())
 				{
 					strong->NotifyObjectData(data);
 				}

@@ -13,7 +13,7 @@ namespace mmo
 	class WorldInstance;
 	class GameObjectS;
 	class GameUnitS;
-	class GameWorldObjectS_Base;
+	class GameWorldObjectS;
 
 	namespace proto
 	{
@@ -23,7 +23,7 @@ namespace mmo
 	///
 	class WorldObjectSpawner final
 	{
-		typedef std::vector<std::shared_ptr<GameWorldObjectS_Base>> OwnedObjects;
+		typedef std::vector<std::shared_ptr<GameWorldObjectS>> OwnedObjects;
 
 	public:
 		///

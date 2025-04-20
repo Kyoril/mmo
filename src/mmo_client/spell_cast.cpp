@@ -151,7 +151,7 @@ namespace mmo
 		return true;
 	}
 
-	void SpellCast::CastSpell(uint32 spellId)
+	void SpellCast::CastSpell(uint32 spellId, GameObjectC* explicitTarget)
 	{
 		// Check if we are currently casting a spell
 		if (IsCasting())
@@ -257,6 +257,20 @@ namespace mmo
 				(targetUnit && !targetUnit->IsAlive()))
 			{
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
+				return;
+			}
+		}
+
+		if (requirements & spell_target_requirements::ObjectTarget)
+		{
+			if (explicitTarget)
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Object);
+				targetMap.SetObjectTarget(explicitTarget->GetGuid());
+			}
+			else
+			{
+				FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "SPELL_CAST_FAILED_BAD_TARGETS");
 				return;
 			}
 		}

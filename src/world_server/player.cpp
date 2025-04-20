@@ -696,9 +696,9 @@ namespace mmo
 
 		m_loot = lootInstance;
 		m_lootSource = source;
+		DLOG("Updated loot source ");
 
 		m_character->AddFlag<uint32>(object_fields::Flags, unit_flags::Looting);
-		m_character->CancelCast(spell_interrupt_flags::Any);
 
 		// Watch loot source
 		m_onLootSourceDespawned = source->despawned.connect([this](GameObjectS& object)
@@ -1895,5 +1895,31 @@ namespace mmo
 				packet.Finish();
 				});
 		}
+	}
+
+	void Player::OnObjectLoot()
+	{
+		std::shared_ptr<GameObjectS> lootObject = m_character->GetLootObject();
+		if (!lootObject)
+		{
+			return;
+		}
+
+		std::shared_ptr<LootInstance> loot = lootObject->GetLoot();
+		if (!loot)
+		{
+			SendPacket([&lootObject](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::LootResponse);
+					packet
+						<< io::write<uint64>(lootObject->GetGuid())
+						<< io::write<uint8>(loot_type::None)
+						<< io::write<uint8>(loot_error::Locked);
+					packet.Finish();
+				});
+			return;
+		}
+
+		OpenLootDialog(loot, lootObject);
 	}
 }

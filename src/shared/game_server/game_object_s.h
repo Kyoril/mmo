@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "each_tile_in_sight.h"
+#include "loot_instance.h"
 #include "game/field_map.h"
 #include "base/typedefs.h"
 #include "base/signal.h"
@@ -165,6 +166,8 @@ namespace mmo
 
 		virtual void Initialize();
 
+		void Despawn();
+
 		bool IsUnit() const { return GetTypeId() == ObjectTypeId::Unit || IsPlayer(); }
 
 		bool IsPlayer() const { return GetTypeId() == ObjectTypeId::Player; }
@@ -176,6 +179,8 @@ namespace mmo
 		GamePlayerS& AsPlayer();
 
 		GameUnitS& AsUnit();
+
+		GameWorldObjectS& AsObject();
 
 		bool IsItem() const { return GetTypeId() == ObjectTypeId::Item || IsContainer(); }
 
@@ -372,6 +377,8 @@ namespace mmo
 
 		bool IsTriggerRunning(const uint32 triggerId) const { return m_runningTriggers.contains(triggerId); }
 
+		const std::shared_ptr<LootInstance>& GetLoot() const { return m_loot; }
+
 	public:
 
 		/// Adds a new variable to the list of variables of this object.
@@ -438,6 +445,7 @@ namespace mmo
 		WorldInstance* m_worldInstance { nullptr };
 		std::map<uint32, VariableInstance> m_variables;
 		std::set<uint32> m_runningTriggers;
+		std::shared_ptr<LootInstance> m_loot;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GameObjectS const& object);

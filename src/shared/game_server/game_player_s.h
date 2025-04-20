@@ -33,6 +33,8 @@ namespace mmo
 		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;
 
 		virtual void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) = 0;
+
+		virtual void OnObjectLoot() = 0;
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -103,6 +105,8 @@ namespace mmo
 		void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit) override;
 
 		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated);
+
+		void LootObject(std::weak_ptr<GameObjectS> lootObject);
 
 	public:
 
@@ -179,6 +183,8 @@ namespace mmo
 
 		const String& GetName() const override;
 
+		std::shared_ptr<GameObjectS> GetLootObject() const { return m_lootObject.lock(); }
+
 	protected:
 		void UpdateStat(int32 stat);
 
@@ -213,6 +219,7 @@ namespace mmo
 		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
 		AvatarConfiguration m_configuration;
+		std::weak_ptr<GameObjectS> m_lootObject;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

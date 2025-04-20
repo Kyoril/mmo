@@ -5,6 +5,7 @@
 #include "object_mgr.h"
 #include "client_data/project.h"
 #include "game/guild_info.h"
+#include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"

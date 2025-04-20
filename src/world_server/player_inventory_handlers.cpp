@@ -343,40 +343,8 @@ namespace mmo
 			return;
 		}
 
-		if (lootObject->GetTypeId() != ObjectTypeId::Unit)
-		{
-			SendPacket([objectGuid](game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::LootResponse);
-					packet
-						<< io::write<uint64>(objectGuid)
-						<< io::write<uint8>(loot_type::None)
-						<< io::write<uint8>(loot_error::Locked);
-					packet.Finish();
-				});
-			return;
-		}
-
-		GameCreatureS* creature = reinterpret_cast<GameCreatureS*>(lootObject);
-
-		if (auto loot = creature->getUnitLoot())
-		{
-			OpenLootDialog(loot, creature->shared_from_this());
-		}
-		else
-		{
-			WLOG("Creature " << log_hex_digit(objectGuid) << " has no loot!");
-
-			SendPacket([objectGuid](game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::LootResponse);
-					packet
-						<< io::write<uint64>(objectGuid)
-						<< io::write<uint8>(loot_type::None)
-						<< io::write<uint8>(loot_error::Locked);
-					packet.Finish();
-				});
-		}
+		m_character->CancelCast(spell_interrupt_flags::Any);
+		m_character->LootObject(lootObject->shared_from_this());
 	}
 
 	void Player::OnLootMoney(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -487,7 +455,7 @@ namespace mmo
 		if (m_lootSource &&
 			m_lootSource->GetGuid() != objectGuid)
 		{
-			WLOG("Player tried to close loot dialog which he didn't open!")
+			WLOG("Player tried to close loot dialog for object " << objectGuid << " which he didn't open!")
 				return;
 		}
 

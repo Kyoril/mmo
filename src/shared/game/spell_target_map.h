@@ -170,6 +170,11 @@ namespace mmo
 			m_unitTarget = unitTarget;
 		}
 
+		void SetObjectTarget(const uint64 unitTarget)
+		{
+			m_goTarget = unitTarget;
+		}
+
 	private:
 		uint32 m_targetMap;
 		uint64 m_unitTarget;

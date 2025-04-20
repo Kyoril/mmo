@@ -14,7 +14,7 @@ namespace mmo
 			<< io::write<uint32>(objectInfo.type)
 			<< io::write<uint32>(objectInfo.displayId)
 			<< io::write_dynamic_range<uint8>(objectInfo.name)
-			<< io::write_range(objectInfo.properties);
+			<< io::write_range(std::begin(objectInfo.data), std::end(objectInfo.data));
 
 		return writer;
 	}
@@ -26,7 +26,7 @@ namespace mmo
 			>> io::read<uint32>(outObjectInfo.type)
 			>> io::read<uint32>(outObjectInfo.displayId)
 			>> io::read_container<uint8>(outObjectInfo.name)
-			>> io::read_range(outObjectInfo.properties);
+			>> io::read_range(std::begin(outObjectInfo.data), std::end(outObjectInfo.data));
 
 		return reader;
 	}

@@ -15,6 +15,7 @@
 #include "trainer_client.h"
 
 #include "platform.h"
+#include "spell_cast.h"
 #include "vendor_client.h"
 #include "base/profiler.h"
 #include "console/console.h"
@@ -36,12 +37,13 @@ namespace mmo
 
 	extern Cursor g_cursor;
 
-	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast)
 		: m_scene(scene)
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
 		, m_trainerClient(trainerClient)
 		, m_connector(connector)
+		, m_spellCast(spellCast)
 	{
 		if (!s_mouseSensitivityCVar)
 		{
@@ -744,6 +746,18 @@ namespace mmo
 							{
 								m_controlledUnit->Attack(unit);
 							}
+						}
+					}
+					else if (m_hoveredObject->IsWorldObject())
+					{
+						const proto_client::SpellEntry* unlockSpell = m_controlledUnit->GetOpenSpell();
+						if (!unlockSpell)
+						{
+							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_CANT_OPEN");
+						}
+						else
+						{
+							m_spellCast.CastSpell(unlockSpell->id(), m_hoveredObject);
 						}
 					}
 				}

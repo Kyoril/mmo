@@ -45,7 +45,10 @@ namespace mmo
 		// Switch looted object
 		if (objectGuid != m_requestedLootObject)
 		{
-			m_realmConnector.LootRelease(m_requestedLootObject);
+			if (m_requestedLootObject != 0)
+			{
+				m_realmConnector.LootRelease(m_requestedLootObject);
+			}
 			m_requestedLootObject = objectGuid;
 		}
 

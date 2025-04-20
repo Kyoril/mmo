@@ -451,7 +451,7 @@ namespace mmo
 
 		bool GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal) override;
 
-		void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object) override;
+		void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object) override;
 	};
 
 }

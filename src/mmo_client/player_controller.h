@@ -18,12 +18,13 @@ namespace mmo
 	class SceneNode;
 	class Camera;
 	class RealmConnector;
+	class SpellCast;
 
 	/// @brief This class controls a player entity.
 	class PlayerController final : public IInputControl
 	{
 	public:
-		PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient);
+		PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast);
 
 		~PlayerController() override;
 
@@ -97,6 +98,7 @@ namespace mmo
 		TrainerClient& m_trainerClient;
 		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
+		SpellCast& m_spellCast;
 		Camera* m_defaultCamera { nullptr };
 		SceneNode* m_cameraOffsetNode{ nullptr };
 		SceneNode* m_cameraAnchorNode { nullptr };

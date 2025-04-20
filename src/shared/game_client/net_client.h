@@ -10,7 +10,7 @@ namespace mmo
 	class GamePlayerC;
 	class GameUnitC;
 	class GameItemC;
-	class GameWorldObjectC_Base;
+	class GameWorldObjectC;
 
 	/// @brief An interface for handling client network events related to units.
 	class NetClient : public NonCopyable
@@ -33,7 +33,7 @@ namespace mmo
 
 		virtual void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) = 0;
 
-		virtual void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC_Base> object) = 0;
+		virtual void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object) = 0;
 
 		virtual void OnMoveFallLand(GameUnitC& unit) = 0;
 

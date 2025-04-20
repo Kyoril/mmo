@@ -1,17 +1,18 @@
 #pragma once
 
 #include "game_object_c.h"
+#include "game_world_object_c_type_base.h"
 
 namespace mmo
 {
 	struct ObjectInfo;
 	class NetClient;
 
-	class GameWorldObjectC_Base : public GameObjectC
+	class GameWorldObjectC : public GameObjectC
 	{
 	public:
-		explicit GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map);
-		virtual ~GameWorldObjectC_Base() override = default;
+		explicit GameWorldObjectC(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map);
+		virtual ~GameWorldObjectC() override = default;
 
 		void InitializeFieldMap() override;
 
@@ -29,20 +30,11 @@ namespace mmo
 		virtual void OnEntryChanged();
 
 	public:
-		virtual GameWorldObjectType GetType() const = 0;
+		virtual GameWorldObjectType GetType() const { return static_cast<GameWorldObjectType>(Get<uint32>(object_fields::ObjectTypeId)); }
 
 	protected:
 		NetClient& m_netDriver;
 		const ObjectInfo* m_entry = nullptr;
-	};
-
-	class GameWorldObjectC_Chest final : public GameWorldObjectC_Base
-	{
-	public:
-		explicit GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map);
-		~GameWorldObjectC_Chest() override = default;
-
-	public:
-		GameWorldObjectType GetType() const override { return game_world_object_type::Chest; }
+		std::unique_ptr<GameWorldObjectC_Type_Base> m_typeData;
 	};
 }

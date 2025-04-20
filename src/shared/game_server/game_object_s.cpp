@@ -8,6 +8,7 @@
 
 #include <cmath>
 
+#include "game_world_object_s.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -27,6 +28,16 @@ namespace mmo
 	void GameObjectS::Initialize()
 	{
 		PrepareFieldMap();
+	}
+
+	void GameObjectS::Despawn()
+	{
+		if (!m_worldInstance)
+		{
+			return;
+		}
+
+		m_worldInstance->RemoveGameObject(*this);
 	}
 
 	GamePlayerS& GameObjectS::AsPlayer() const
@@ -51,6 +62,12 @@ namespace mmo
 	{
 		ASSERT(IsUnit());
 		return *static_cast<GameUnitS*>(this);
+	}
+
+	GameWorldObjectS& GameObjectS::AsObject()
+	{
+		ASSERT(IsWorldObject());
+		return *static_cast<GameWorldObjectS*>(this);
 	}
 
 	uint32 GameObjectS::GetMapId() const

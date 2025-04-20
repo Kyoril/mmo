@@ -2193,9 +2193,9 @@ namespace mmo
 		info.type = object->type();
 		info.displayId = object->displayid();
 		info.name = object->name();
-		for (int32 i = 0; i < 10; ++i)
+		for (int32 i = 0; i < 16; ++i)
 		{
-			info.properties[i] = object->data_size() <= i ? 0 : object->data(i);
+			info.data[i] = object->data_size() <= i ? 0 : object->data(i);
 		}
 
 		m_connection->sendSinglePacket([&info](game::OutgoingPacket& packet)

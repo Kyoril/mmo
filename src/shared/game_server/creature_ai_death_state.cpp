@@ -1,5 +1,7 @@
 
 #include "creature_ai_death_state.h"
+
+#include <algorithm>
 #include "creature_ai.h"
 #include "game_creature_s.h"
 #include "loot_instance.h"
@@ -112,10 +114,7 @@ namespace mmo
 				if (controlled.GetLevel() > maxLevelCharacter->GetLevel())
 				{
 					float levelDiff = controlled.GetLevel() - maxLevelCharacter->GetLevel();
-					if (levelDiff > 4) 
-					{
-						levelDiff = 4;
-					}
+					levelDiff = std::min<float>(levelDiff, 4);
 
 					const float factor = 1.0f + 0.05f * levelDiff;
 					xp *= factor;

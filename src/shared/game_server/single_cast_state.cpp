@@ -3,6 +3,7 @@
 
 #include "game_item_s.h"
 #include "game_player_s.h"
+#include "game_world_object_s.h"
 #include "no_cast_state.h"
 
 #include "base/utilities.h"
@@ -1141,6 +1142,26 @@ namespace mmo
 
 	void SingleCastState::SpellEffectOpenLock(const proto::SpellEffect& effect)
 	{
+		if (!m_cast.GetExecuter().IsPlayer())
+		{
+			WLOG("Only players can open locks!");
+			return;
+		}
+
+		std::vector<GameObjectS*> effectTargets;
+		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
+		{
+			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+			return;
+		}
+
+		for (auto* targetObject : effectTargets)
+		{
+			if (targetObject->IsWorldObject())
+			{
+				targetObject->AsObject().Use(m_cast.GetExecuter().AsPlayer());
+			}
+		}
 	}
 
 	void SingleCastState::SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect)
@@ -1445,6 +1466,23 @@ namespace mmo
 		if (effect.targeta() == spell_effect_targets::Caster)
 		{
 			targets.push_back(&m_cast.GetExecuter());
+			return true;
+		}
+
+		if (effect.targeta() == spell_effect_targets::ObjectTarget)
+		{
+			if (!m_target.HasGOTarget())
+			{
+				return false;
+			}
+
+			GameObjectS* target = m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetGOTarget());
+			if (!target)
+			{
+				return false;
+			}
+
+			targets.push_back(target);
 			return true;
 		}
 

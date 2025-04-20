@@ -1668,4 +1668,21 @@ void GameUnitC::RefreshUnitName()
 			m_nameComponent->SetVisible(show);
 		}
 	}
+
+	const proto_client::SpellEntry* GameUnitC::GetOpenSpell() const
+	{
+		for (const auto* spell : m_spells)
+		{
+			for (const auto& effect : spell->effects())
+			{
+				if (effect.type() == spell_effects::OpenLock)
+				{
+					return spell;
+				}
+			}
+		}
+
+		return nullptr;
+	}
+
 }

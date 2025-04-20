@@ -11,18 +11,18 @@
 
 namespace mmo
 {
-	GameWorldObjectC_Base::GameWorldObjectC_Base(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
+	GameWorldObjectC::GameWorldObjectC(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
 		: GameObjectC(scene, project, map)
 		, m_netDriver(netDriver)
 	{
 	}
 
-	void GameWorldObjectC_Base::InitializeFieldMap()
+	void GameWorldObjectC::InitializeFieldMap()
 	{
 		m_fieldMap.Initialize(object_fields::WorldObjectFieldCount);
 	}
 
-	void GameWorldObjectC_Base::Deserialize(io::Reader& reader, bool complete)
+	void GameWorldObjectC::Deserialize(io::Reader& reader, bool complete)
 	{
 		uint32 updateFlags = 0;
 		if (!(reader >> io::read<uint32>(updateFlags)))
@@ -48,6 +48,19 @@ namespace mmo
 				ASSERT(false);
 			}
 
+			switch (GetType())
+			{
+			case GameWorldObjectType::Chest:
+				m_typeData = std::make_unique<GameWorldObjectC_Type_Chest>();
+				break;
+			case GameWorldObjectType::Door:
+				m_typeData = std::make_unique<GameWorldObjectC_Type_Chest>();
+				break;
+			default:
+				ASSERT(false);
+				break;
+			}
+
 			ASSERT(GetGuid() > 0);
 			SetupSceneObjects();
 		}
@@ -57,6 +70,9 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			// This field has to be constant!
+			ASSERT(!m_fieldMap.IsFieldMarkedAsChanged(object_fields::ObjectTypeId));
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::ObjectDisplayId))
 			{
@@ -89,14 +105,14 @@ namespace mmo
 		}
 	}
 
-	void GameWorldObjectC_Base::NotifyObjectData(const ObjectInfo& data)
+	void GameWorldObjectC::NotifyObjectData(const ObjectInfo& data)
 	{
 		m_entry = &data;
 
 		OnDisplayIdChanged();
 	}
 
-	void GameWorldObjectC_Base::SetupSceneObjects()
+	void GameWorldObjectC::SetupSceneObjects()
 	{
 		GameObjectC::SetupSceneObjects();
 
@@ -106,7 +122,7 @@ namespace mmo
 		m_entityOffsetNode->AttachObject(*m_entity);
 	}
 
-	void GameWorldObjectC_Base::OnDisplayIdChanged()
+	void GameWorldObjectC::OnDisplayIdChanged()
 	{
 		const uint32 displayId = Get<uint32>(object_fields::ObjectDisplayId);
 		if (displayId == 0 && !m_entry)
@@ -138,7 +154,7 @@ namespace mmo
 		}
 	}
 
-	void GameWorldObjectC_Base::OnEntryChanged()
+	void GameWorldObjectC::OnEntryChanged()
 	{
 		const uint32 entryId = Get<uint32>(object_fields::Entry);
 		if (entryId == 0 && !m_entry)
@@ -151,11 +167,6 @@ namespace mmo
 			return;
 		}
 
-		m_netDriver.GetObjectData(entryId, static_pointer_cast<GameWorldObjectC_Base>(shared_from_this()));
-	}
-
-	GameWorldObjectC_Chest::GameWorldObjectC_Chest(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
-		: GameWorldObjectC_Base(scene, project, netDriver, map)
-	{
+		m_netDriver.GetObjectData(entryId, static_pointer_cast<GameWorldObjectC>(shared_from_this()));
 	}
 }
