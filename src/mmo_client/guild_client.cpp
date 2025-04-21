@@ -127,6 +127,11 @@ namespace mmo
 			});
 	}
 
+	bool GuildClient::IsInGuild() const
+	{
+		return m_guildId != 0;
+	}
+
 	void GuildClient::AcceptGuild()
 	{
 		if (m_inviteGuildName.empty())

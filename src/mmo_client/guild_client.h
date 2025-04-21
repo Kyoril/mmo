@@ -38,6 +38,8 @@ namespace mmo
 
 		void DeclineGuild();
 
+		bool IsInGuild() const;
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
