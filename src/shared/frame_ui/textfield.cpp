@@ -3,6 +3,7 @@
 #include "textfield.h"
 
 #include "frame_mgr.h"
+#include "inline_color.h"
 #include "text_component.h"
 
 #include "log/default_log_levels.h"
@@ -18,10 +19,10 @@ namespace mmo
 		, m_cursor(-1)
 		, m_horzAlign(HorizontalAlignment::Left)
 		, m_vertAlign(VerticalAlignment::Center)
-		, m_textAreaOffset(Point(10.0f, 10.0f), Size())
-		, m_acceptsTab(false)
 		, m_enabledColor(1.0f, 1.0f, 1.0f)
 		, m_disabledColor(0.5f, 0.5f, 0.5f)
+		, m_textAreaOffset(Point(10.0f, 10.0f), Size())
+		, m_acceptsTab(false)
 	{
 		// Add the masked property
 		m_propConnections += AddProperty("Masked", "false").Changed.connect(this, &TextField::OnMaskedPropChanged);
@@ -74,6 +75,35 @@ namespace mmo
 				m_needsRedraw = true;
 			}
 		}
+	}
+
+	float TextField::GetCaretPixelOffset(float uiScale) const
+	{
+		const FontPtr font = GetFont();
+		if (!font) return 0.0f;
+
+		float   offset = 0.0f;
+		argb_t  dummyColor = 0;   // width calculation ignores colour
+
+		for (std::size_t c = 0; c < m_caretIndex && c < m_text.length(); /* inc. in loop */)
+		{
+			if (ConsumeColourTag(m_text, c, dummyColor, dummyColor))
+			{
+				continue; // colour token has zero width
+			}
+
+			std::size_t iterations = 1;
+			char g = m_text[c++];
+
+			if (g == '	') { g = ' '; iterations = 4; }
+
+			if (const FontGlyph* glyph = font->GetGlyphData(g))
+			{
+				offset += glyph->GetAdvance(uiScale) * iterations;
+			}
+		}
+
+		return offset;
 	}
 
 	const std::string & TextField::GetVisualText() const

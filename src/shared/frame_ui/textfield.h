@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -37,6 +37,13 @@ namespace mmo
 
 		/// Sets the mask code point to use when rendering the text masked.
 		void SetMaskCodePoint(std::string::value_type value);
+
+		/// Pixel distance from the left edge of the text‑area to the caret, after
+		/// stripping inline color codes.
+		float GetCaretPixelOffset(float uiScale) const;
+
+		/// Logical position in the underlying string (the index the user is editing). Existing accessor - unchanged.
+		std::size_t GetCaretIndex() const { return m_caretIndex; }
 
 		/// 
 		virtual const std::string& GetVisualText() const override;
@@ -99,5 +106,6 @@ namespace mmo
 		Rect m_textAreaOffset;
 
 		bool m_acceptsTab;
+		std::size_t m_caretIndex{ 0 };  // logical cursor index in m_editBuffer
 	};
 }

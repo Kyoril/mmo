@@ -1,13 +1,13 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "font.h"
 
 #include "base/macros.h"
 #include "assets/asset_registry.h"
 #include "graphics/graphics_device.h"
+#include "frame_ui/inline_color.h"
 
 #include <atomic>
-#include <fstream>
 
 #include FT_STROKER_H
 
@@ -28,7 +28,6 @@ namespace mmo
 	static FT_Library s_freeTypeLib;
 	/// Usage counter of free type library handle.
 	static std::atomic<int32> s_freeTypeUsageCount = 0;
-
 
 	Font::Font()
 		: m_pointSize(0.0f)
@@ -519,49 +518,48 @@ namespace mmo
 
 	float Font::GetTextWidth(const std::string & text, float scale)
 	{
-		float curWidth = 0.0f, advWidth = 0.0f, width = 0.0f;
+		float curLineWidth = 0.0f; // longest line so far
+		float advWidth = 0.0f; // running width of current line
 
-		// Iterate through all characters of the string
-		for (size_t c = 0; c < text.length(); ++c)
+		argb_t dummyColour = 0;    // not used - needed for helper signature
+
+		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
 		{
-			size_t iterations = 1;
+			// Skip any inline‑colour directive
+			if (ConsumeColourTag(text, c, dummyColour, dummyColour))
+				continue;
 
-			// Grab the glyph from string
-			char g = text[c];
+			std::size_t iterations = 1;
+			char g = text[c++]; // advance here so 'continue' does not double‑increment
+
 			if (g == '\t')
 			{
 				g = ' ';
-
 				iterations = 4;
 			}
 			else if (g == '\n')
 			{
+				curLineWidth = std::max(curLineWidth, advWidth);
 				advWidth = 0.0f;
 				continue;
 			}
 
-			// Get the glyph data
-			const FontGlyph* glyph = GetGlyphData(g);
-			if (glyph)
+			if (const FontGlyph* glyph = GetGlyphData(g))
 			{
-				// Adjust the width
-				width = glyph->GetRenderedAdvance(scale);
-				for (size_t i = 0; i < iterations; ++i)
+				const float width = glyph->GetRenderedAdvance(scale);
+
+				for (std::size_t i = 0; i < iterations; ++i)
 				{
-					if (advWidth + width > curWidth)
-					{
-						curWidth = advWidth + width;
-					}
-					
+					curLineWidth = std::max(curLineWidth, advWidth + width);
 					advWidth += glyph->GetAdvance(scale);
 				}
 			}
 		}
 
-		return std::max(advWidth, curWidth);
+		return std::max(curLineWidth, advWidth);
 	}
 
-	const FontGlyph * Font::GetGlyphData(uint32 codepoint)
+	const FontGlyph * Font::GetGlyphData(const uint32 codepoint)
 	{
 		if (codepoint > m_maxCodepoint)
 			return nullptr;
@@ -578,21 +576,26 @@ namespace mmo
 				codepoint | (GLYPHS_PER_PAGE - 1));
 		}
 
-		// Fint the glyph data
-		auto it = m_glyphMap.find(codepoint);
+		// Find the glyph data
+		const auto it = m_glyphMap.find(codepoint);
 		return (it != m_glyphMap.end()) ? &it->second : nullptr;
 	}
 
 	void Font::DrawText(const std::string & text, const Point & position, GeometryBuffer& buffer, float scale, argb_t color)
 	{
-		float baseY = position.y + GetBaseline(scale);
+		const float baseline = position.y + GetBaseline(scale);
 		Point glyphPos(position);
 
-		for (size_t c = 0; c < text.length(); ++c)
-		{
-			size_t iterations = 1;
+		argb_t currentColour = color;
 
-			char g = text[c];
+		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		{
+			if (ConsumeColourTag(text, c, currentColour, color))
+				continue;
+
+			std::size_t iterations = 1;
+			char g = text[c++];
+
 			if (g == '\t')
 			{
 				g = ' ';
@@ -601,83 +604,89 @@ namespace mmo
 			else if (g == '\n')
 			{
 				glyphPos.x = position.x;
-				baseY += GetHeight(scale);
+				glyphPos.y = (glyphPos.y - baseline) + GetHeight(scale) + baseline;
 				continue;
 			}
 
-			const FontGlyph* glyph = nullptr;
-			if ((glyph = GetGlyphData(g)))
+			if (const FontGlyph* glyph = GetGlyphData(g))
 			{
-				const FontImage* const image = glyph->GetImage();
-				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
+				const FontImage* img = glyph->GetImage();
+				const Point drawPos = {
+					glyphPos.x,
+					baseline - (img->GetOffsetY() - img->GetOffsetY() * scale) + 4.0f
+				};
 
-				// Draw drop shadow?
 				if (m_shadowX != 0.0f || m_shadowY != 0.0f)
 				{
-					image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, buffer, Color(0.0f, 0.0f, 0.0f, Color(color).GetAlpha()));
+					img->Draw(drawPos + Point(m_shadowX, m_shadowY), img->GetSize() * scale, buffer,
+						Color(0.0f, 0.0f, 0.0f, Color(currentColour).GetAlpha()));
 				}
 
-				image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, buffer, color);
+				img->Draw(drawPos, img->GetSize() * scale, buffer, currentColour);
 
-				for (size_t i = 0; i < iterations; ++i)
-				{
-					glyphPos.x += glyph->GetAdvance(scale);
-				}
+				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 			}
 		}
 	}
 
 	int Font::DrawText(const std::string& text, const Rect& area, GeometryBuffer* buffer, float scale, argb_t color)
 	{
-		int lineCount = 1;
-		
-		const float height = GetHeight(scale);
-		const float baseline = GetBaseline(scale);
-		const Point position = area.GetPosition();
+		int   lineCount = 1;
+		float height = GetHeight(scale);
+		float baseline = GetBaseline(scale);
 
-		float baseY = position.y + baseline;
-		Point glyphPos(position);
+		const Point startPos = area.GetPosition();
+		Point glyphPos(startPos);
+		float baseY = startPos.y + baseline;
 
-		for (size_t c = 0; c < text.length(); ++c)
+		argb_t currentColour = color;
+
+		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
 		{
-			size_t iterations = 1;
+			if (ConsumeColourTag(text, c, currentColour, color))
+				continue;
 
-			char g = text[c];
+			std::size_t iterations = 1;
+			char g = text[c++];
+
 			if (g == '\t')
 			{
 				g = ' ';
 				iterations = 4;
 			}
-			else if(g == '\n')
+			else if (g == '\n')
 			{
 				++lineCount;
-				glyphPos.x = position.x;
+				glyphPos.x = startPos.x;
 				baseY += height;
 				continue;
 			}
 
-			const FontGlyph* glyph = nullptr;
-			if ((glyph = GetGlyphData(g)))
+			if (const FontGlyph* glyph = GetGlyphData(g))
 			{
-				const FontImage* const image = glyph->GetImage();
-				glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * scale) + 4;
+				const FontImage* img = glyph->GetImage();
+				Point drawPos = {
+					glyphPos.x,
+					baseY - (img->GetOffsetY() - img->GetOffsetY() * scale) + 4.0f
+				};
 
-				if (buffer) 
+				if (buffer)
 				{
-					// Draw drop shadow?
 					if (m_shadowX != 0.0f || m_shadowY != 0.0f)
 					{
-						image->Draw(glyphPos + Point(m_shadowX, m_shadowY), glyph->GetImage()->GetSize() * scale, *buffer, Color(0.0f, 0.0f, 0.0f, Color(color).GetAlpha()));
+						img->Draw(drawPos + Point(m_shadowX, m_shadowY), img->GetSize() * scale, *buffer,
+							Color(0.0f, 0.0f, 0.0f, Color(currentColour).GetAlpha()));
 					}
 
-					image->Draw(glyphPos, glyph->GetImage()->GetSize() * scale, *buffer, color);
+					img->Draw(drawPos, img->GetSize() * scale, *buffer, currentColour);
 				}
 
 				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 
+				// Word‑wrap inside the area
 				if (glyphPos.x >= area.right)
 				{
-					glyphPos.x = position.x;
+					glyphPos.x = startPos.x;
 					baseY += height;
 					++lineCount;
 				}
@@ -691,47 +700,50 @@ namespace mmo
 	{
 		int lineCount = 1;
 
-		const Point position = area.GetPosition();
-		Point glyphPos(position);
-		size_t lastWordIndex = 0;
-		
-		for (size_t c = 0; c < text.length(); ++c)
-		{
-			size_t iterations = 1;
+		const Point startPos = area.GetPosition();
+		Point glyphPos(startPos);
 
-			char g = text[c];
+		std::size_t lastWordIndex = 0;
+
+		argb_t dummyColour = 0; // colour not required for counting
+
+		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		{
+			if (ConsumeColourTag(text, c, dummyColour, dummyColour))
+				continue;
+
+			std::size_t iterations = 1;
+			char g = text[c++];
+
 			if (g == '\t')
 			{
 				lastWordIndex = c;
 				g = ' ';
 				iterations = 4;
 			}
-			else if(g == ' ')
+			else if (g == ' ')
 			{
 				lastWordIndex = c;
 			}
-			else if(g == '\n')
+			else if (g == '\n')
 			{
 				lastWordIndex = c;
-				glyphPos.x = position.x;
-				lineCount++;
+				glyphPos.x = startPos.x;
+				++lineCount;
 				continue;
 			}
 
-			if (const FontGlyph* glyph; (glyph = GetGlyphData(g)))
+			if (const FontGlyph* glyph = GetGlyphData(g))
 			{
 				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 
 				if (glyphPos.x > area.right)
 				{
-					glyphPos.x = position.x;
-
+					glyphPos.x = startPos.x;
 					++lineCount;
 
 					if (wordWrap)
-					{
-						c = lastWordIndex;
-					}
+						c = lastWordIndex; // restart from last breakable point
 				}
 			}
 		}

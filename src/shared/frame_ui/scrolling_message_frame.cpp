@@ -1,6 +1,7 @@
-
+﻿
 #include "scrolling_message_frame.h"
 #include "frame_mgr.h"
+#include "frame_ui/inline_color.h"
 
 #include <algorithm>
 
@@ -154,7 +155,7 @@ namespace mmo
 		const float textScale = FrameManager::Get().GetUIScale().y;
 		const float lineHeight = GetFont()->GetHeight(textScale);
 
-		int linesRendered = GetFont()->DrawText(line.line, frameRect, &m_geometryBuffer, textScale, Color(line.message->r, line.message->g, line.message->b, 1.0f));
+		int linesRendered = GetFont()->DrawText(line.line, frameRect + Rect(0.0f, 0.0f, 1024.0f, 0.0), &m_geometryBuffer, textScale, Color(line.message->r, line.message->g, line.message->b, 1.0f));
 		frameRect.top += lineHeight * linesRendered;
 
 		return linesRendered;
@@ -168,49 +169,62 @@ namespace mmo
 
 		if (const FontPtr font = GetFont())
 		{
-			const Rect contentRect = GetAbsoluteFrameRect();
+			const Rect  contentRect = GetAbsoluteFrameRect();
+			const Point position = contentRect.GetPosition();
+
 			m_visibleLineCount = contentRect.GetHeight() / font->GetHeight(textScale);
 
 			for (const auto& message : m_messages)
 			{
-				int lineCount = 1;
+				float      glyphPos = position.x;
+				std::string line;
 
-				const float height = font->GetHeight(textScale);
-				const float baseline = font->GetBaseline(textScale);
-				const Point position = contentRect.GetPosition();
+				argb_t      dummyColor = 0;  // not needed for width calc
+				argb_t      currentColor = dummyColor;
+				std::string currentTag;        // active |c... token (empty => default)
 
-				float baseY = position.y + baseline;
-				Point glyphPos(position);
-
-				String line;
-
-				for (size_t c = 0; c < message.message.length(); ++c)
+				for (std::size_t c = 0; c < message.message.length(); /* inc. in loop */)
 				{
-					size_t iterations = 1;
+					const std::size_t tokenStart = c;
+					if (ConsumeColourTag(message.message, c, currentColor, dummyColor))
+					{
+						// copy the whole colour token verbatim
+						line.append(message.message, tokenStart, c - tokenStart);
 
-					char g = message.message[c];
+						// remember current colour so we can continue it after wraps
+						if (message.message[tokenStart + 1] == 'c' || message.message[tokenStart + 1] == 'C')
+							currentTag = message.message.substr(tokenStart, 10);
+						else
+							currentTag.clear(); // |r
+
+						continue;
+					}
+
+					std::size_t iterations = 1;
+					char g = message.message[c++];
+
 					if (g == '\t')
 					{
 						g = ' ';
 						iterations = 4;
 					}
 
-					const FontGlyph* glyph = nullptr;
-					if ((glyph = font->GetGlyphData(g)))
+					if (const FontGlyph* glyph = font->GetGlyphData(g))
 					{
-						const FontImage* const image = glyph->GetImage();
-						glyphPos.y = baseY - (image->GetOffsetY() - image->GetOffsetY() * textScale) + 4;
-						glyphPos.x += glyph->GetAdvance(textScale) * iterations;
+						glyphPos += glyph->GetAdvance(textScale) * iterations;
 
-						if (glyphPos.x >= contentRect.right)
+						if (glyphPos >= contentRect.right)
 						{
-							m_lineCache.push_back({ line, &message });
+							// push finished line
+							m_lineCache.push_back({ .line= line, .message= &message});
 
+							// start new line with current colour
 							line.clear();
+							if (!currentTag.empty())
+								line += currentTag;
 							line.push_back(g);
 
-							glyphPos.x = position.x;
-							baseY += height;
+							glyphPos = position.x;
 						}
 						else
 						{
@@ -221,8 +235,7 @@ namespace mmo
 
 				if (!line.empty())
 				{
-					m_lineCache.push_back({ line, &message });
-					line.clear();
+					m_lineCache.push_back({ .line = line, .message = &message });
 				}
 			}
 		}

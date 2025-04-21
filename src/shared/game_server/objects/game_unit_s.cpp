@@ -2124,6 +2124,21 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetVisibility(UnitVisibility x)
+	{
+		m_visibility = x;
+
+		if (m_worldInstance)
+		{
+			UpdateVisibilityAndView();
+		}
+	}
+
+	void GameUnitS::UpdateVisibilityAndView()
+	{
+
+	}
+
 	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)
 	{
 		w << reinterpret_cast<GameObjectS const&>(object);

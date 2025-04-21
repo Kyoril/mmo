@@ -50,6 +50,26 @@ namespace mmo
 
 	typedef unit_mod_type::Type UnitModType;
 
+	namespace unit_visibility
+	{
+		enum Type
+		{
+			/// The unit is absolutely invisible for everyone else except game masters. The unit can see all other non-invisible units.
+			Off,
+
+			/// Default state. Unit is simply visible.
+			On,
+
+			/// Unit is in stealth mode but can be seen by group members.
+			GroupStealth,
+
+			/// Unit is invisible but can be seen by other group members.
+			GroupInvisibility
+		};
+	}
+
+	typedef unit_visibility::Type UnitVisibility;
+
 	namespace unit_mods
 	{
 		enum Type
@@ -990,6 +1010,13 @@ namespace mmo
 		/// @returns true if the unit is sitting, false otherwise.
 		bool IsSitting() const { return GetStandState() == unit_stand_state::Sit; }
 
+		// Visibility system
+		[[nodiscard]] UnitVisibility GetVisibility() const { return m_visibility; }
+
+		void SetVisibility(UnitVisibility x);
+
+		virtual void UpdateVisibilityAndView();
+
 	protected:
 		/// Prepares the field map for the unit.
 		virtual void PrepareFieldMap() override
@@ -1069,6 +1096,8 @@ namespace mmo
 		std::map<uint8, float> m_baseSpeeds;
 
 		uint32 m_regeneration = regeneration_flags::None;
+
+		UnitVisibility m_visibility = UnitVisibility::On;
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.
