@@ -1,4 +1,3 @@
-
 #include "game_unit_c.h"
 
 #include "net_client.h"
@@ -353,6 +352,7 @@ namespace mmo
 	{
 		auto* playerNode = GetSceneNode();
 
+		// Handle turning regardless of falling state
 		if (m_movementInfo.IsTurning())
 		{
 			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
@@ -366,7 +366,51 @@ namespace mmo
 			m_movementInfo.facing = GetSceneNode()->GetDerivedOrientation().GetYaw();
 		}
 
-		if (m_movementInfo.IsMoving())
+		// Adjust for collision and gravity
+		float groundHeight = 0.0f;
+		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
+
+		if (m_movementInfo.movementFlags & movement_flags::Falling)
+		{
+			// Apply gravity to vertical movement
+			constexpr float gravity = 19.291105f;
+			m_movementInfo.jumpVelocity -= gravity * deltaTime;
+			m_movementInfo.position.y += m_movementInfo.jumpVelocity * deltaTime;
+
+			// Apply horizontal movement based on jump direction
+			if (m_movementInfo.jumpXZSpeed > 0.0f)
+			{
+				// Use jumpSinAngle and jumpCosAngle to determine the direction
+				const float sinAngle = m_movementInfo.jumpSinAngle;
+				const float cosAngle = m_movementInfo.jumpCosAngle;
+				
+				// Apply horizontal movement in world space
+				m_movementInfo.position.x += cosAngle * m_movementInfo.jumpXZSpeed * deltaTime;
+				m_movementInfo.position.z += sinAngle * m_movementInfo.jumpXZSpeed * deltaTime;
+			}
+
+			// Check if we've landed
+			if (hasGroundHeight && m_movementInfo.position.y <= groundHeight && m_movementInfo.jumpVelocity <= 0.0f)
+			{
+				// Reset movement info on landing
+				m_movementInfo.position.y = groundHeight;
+				m_movementInfo.movementFlags &= ~movement_flags::Falling;
+				m_movementInfo.jumpVelocity = 0.0f;
+				m_movementInfo.jumpXZSpeed = 0.0f;
+				m_movementInfo.jumpSinAngle = 0.0f;
+				m_movementInfo.jumpCosAngle = 0.0f;
+				playerNode->SetPosition(m_movementInfo.position);
+				m_netDriver.OnMoveFallLand(*this);
+			}
+			else
+			{
+				playerNode->SetPosition(m_movementInfo.position);
+			}
+
+			UpdateCollider();
+		}
+		// Normal ground movement
+		else if (m_movementInfo.IsMoving())
 		{
 			Vector3 movementVector;
 
@@ -394,48 +438,38 @@ namespace mmo
 			// Check the slope at the new position. Let's assume a max slope of 50 degrees.
 			if (CanWalkOnSlope(potentialPosition, 50.0f))
 			{
-				// Option 1: Simply do not apply movement if the slope is too steep.
+				// Apply movement if slope is walkable
 				playerNode->Translate(desiredMovement, TransformSpace::Local);
 				m_movementInfo.position = playerNode->GetDerivedPosition();
 				UpdateCollider();
 			}
-		}
-
-		// Adjust for collision
-		float groundHeight = 0.0f;
-		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
-
-		if (m_movementInfo.movementFlags & movement_flags::Falling)
-		{
-			constexpr float gravity = 19.291105f;
-			m_movementInfo.jumpVelocity -= gravity * deltaTime;
-			m_movementInfo.position.y += m_movementInfo.jumpVelocity * deltaTime;
-
-			if (hasGroundHeight && m_movementInfo.position.y <= groundHeight && m_movementInfo.jumpVelocity <= 0.0f)
-			{
-				// Reset movement info
-				m_movementInfo.position.y = groundHeight;
-				m_movementInfo.movementFlags &= ~movement_flags::Falling;
-				m_movementInfo.jumpVelocity = 0.0f;
-				m_movementInfo.jumpXZSpeed = 0.0f;
-				playerNode->SetPosition(m_movementInfo.position);
-				m_netDriver.OnMoveFallLand(*this);
-			}
-			else
-			{
-				playerNode->SetPosition(m_movementInfo.position);
-			}
-
-			UpdateCollider();
-		}
-		else if (m_movementInfo.movementFlags & movement_flags::PositionChanging)
-		{
+			
+			// Check if we should start falling (walking off an edge)
 			if (!hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f)
 			{
-				// We need to start falling down!
+				// Start falling with minimal downward velocity
 				m_movementInfo.movementFlags |= movement_flags::Falling;
 				m_movementInfo.jumpVelocity = -0.01f;
-				m_movementInfo.jumpXZSpeed = 0.0f;
+				
+				// Calculate horizontal movement direction based on current movement
+				if (!movementVector.IsNearlyEqual(Vector3::Zero))
+				{
+					// Normalize the movement vector
+					movementVector.Normalize();
+					
+					// Calculate the angle in world space
+					const Radian facing = m_movementInfo.facing;
+					const float sinFacing = std::sin(facing.GetValueRadians());
+					const float cosFacing = std::cos(facing.GetValueRadians());
+					
+					// Store the sin and cos of the jump angle
+					m_movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
+					m_movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
+					
+					// Set jump speed to current movement speed
+					m_movementInfo.jumpXZSpeed = GetSpeed(movementType);
+				}
+				
 				playerNode->SetPosition(m_movementInfo.position);
 				m_netDriver.OnMoveFall(*this);
 			}
@@ -447,6 +481,7 @@ namespace mmo
 			}
 		}
 
+		// Handle collisions with world objects
 		if (m_movementInfo.movementFlags & movement_flags::PositionChanging)
 		{
 			std::vector<const Entity*> potentialTrees;

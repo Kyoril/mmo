@@ -426,14 +426,14 @@ namespace mmo
 			return;
 		}
 
-		// TODO
+		// Set jump velocity
 		movementInfo.jumpVelocity = 7.98f;
 		movementInfo.movementFlags |= movement_flags::Falling;
-
-		// Calculate jump velocity
+		
+		// Calculate jump velocity and direction
+		Vector3 movementVector = Vector3::Zero;
 		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
 		{
-			Vector3 movementVector;
 			if (movementInfo.movementFlags & movement_flags::Forward)
 			{
 				movementVector.x += 1.0f;
@@ -457,7 +457,24 @@ namespace mmo
 				movementType = movement_type::Backwards;
 			}
 
-			movementInfo.jumpXZSpeed = m_controlledUnit->GetSpeed(movementType);
+			// Only calculate angles if there's actual movement
+			if (!movementVector.IsNearlyEqual(Vector3::Zero))
+			{
+				// Normalize the movement vector
+				movementVector.Normalize();
+
+				// Calculate the angle in world space, taking into account the player's facing
+				const Radian facing = m_controlledUnit->GetMovementInfo().facing;
+				const float sinFacing = std::sin(facing.GetValueRadians());
+				const float cosFacing = std::cos(facing.GetValueRadians());
+				
+				// Store the sin and cos of the jump angle
+				movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
+				movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
+
+				// Set the jump XZ speed
+				movementInfo.jumpXZSpeed = m_controlledUnit->GetSpeed(movementType);
+			}
 		}
 
 		m_controlledUnit->ApplyMovementInfo(movementInfo);
