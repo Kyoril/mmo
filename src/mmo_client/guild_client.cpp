@@ -162,7 +162,6 @@ namespace mmo
 			return false;
 		}
 
-		ASSERT(m_guildRank >= 0);
 		return m_guildRank == 0;
 	}
 
