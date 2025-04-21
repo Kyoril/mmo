@@ -4,13 +4,13 @@
 
 #include <map>
 
-#include "aura_container.h"
-#include "game_unit_s.h"
-#include "spell_cast.h"
-#include "tile_subscriber.h"
+#include "game_server/spells/aura_container.h"
+#include "game_server/objects/game_unit_s.h"
+#include "game_server/spells/spell_cast.h"
+#include "game_server/tile_subscriber.h"
 #include "binary_io/vector_sink.h"
 #include "game_protocol/game_protocol.h"
-#include "each_tile_in_sight.h"
+#include "game_server/each_tile_in_sight.h"
 #include "game/spell.h"
 
 namespace mmo

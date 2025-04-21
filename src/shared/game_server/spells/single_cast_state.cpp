@@ -1,10 +1,10 @@
 
 #include "single_cast_state.h"
 
-#include "game_item_s.h"
-#include "game_player_s.h"
-#include "game_world_object_s.h"
-#include "no_cast_state.h"
+#include "game_server/objects/game_item_s.h"
+#include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_world_object_s.h"
+#include "game_server/spells/no_cast_state.h"
 
 #include "base/utilities.h"
 #include "proto_data/project.h"

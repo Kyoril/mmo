@@ -5,10 +5,10 @@
 #include <memory>
 #include <set>
 
-#include "game_server/aura_container.h"
+#include "game_server/spells/aura_container.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
-#include "game_server/spell_cast.h"
+#include "game_server/spells/spell_cast.h"
 #include "game/spell_target_map.h"
 #include "game_server/unit_mover.h"
 #include "base/countdown.h"
