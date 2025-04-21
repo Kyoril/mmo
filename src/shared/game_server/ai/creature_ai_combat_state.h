@@ -33,7 +33,6 @@ namespace mmo
 		typedef std::map<uint64, scoped_connection_container> UnitSignals2;
 
 	public:
-
 		/// Initializes a new instance of the CreatureAIIdleState class.
 		/// @param ai The ai class instance this state belongs to.
 		explicit CreatureAICombatState(CreatureAI& ai, GameUnitS& victim);
@@ -41,6 +40,7 @@ namespace mmo
 		/// Default destructor.
 		~CreatureAICombatState() override;
 
+	public:
 		/// @copydoc CreatureAIState::OnEnter()
 		virtual void OnEnter() override;
 

@@ -13,30 +13,42 @@ namespace mmo
 	class PlayerGroup final : public NonCopyable
 	{
 	public:
-		explicit PlayerGroup(uint64 guid)
-			: m_guid(guid)
+		/// Creates a new instance of the PlayerGroup class and initializes it with a group GUID.
+		/// @param groupId The id of this group.
+		explicit PlayerGroup(const uint64 groupId)
+			: m_guid(groupId)
 		{
 		}
 
+		/// Default destructor.
 		~PlayerGroup() override = default;
 
 	public:
+		/// Returns the group GUID.
+		/// @returns The unique group identifier as uint64.
 		[[nodiscard]] uint64 GetId() const noexcept
 		{
 			return m_guid;
 		}
 
-		void AddMember(uint64 playerGuid)
+		/// Adds a player to the group (referenced by player id). Does nothing if the player is already a group member.
+		/// @param playerGuid The player GUID.
+		void AddMember(const uint64 playerGuid)
 		{
 			m_members.insert(playerGuid);
 		}
 
-		void RemoveMember(uint64 playerGuid)
+		/// Removes a player from the group (referenced by player id). Does nothing if the player is not a group member.
+		/// @param playerGuid The player GUID.
+		void RemoveMember(const uint64 playerGuid)
 		{
 			m_members.erase(playerGuid);
 		}
 
-		bool IsMember(uint64 playerGuid) const noexcept { return m_members.contains(playerGuid); }
+		/// Determines whether a player is a member of the group.
+		/// @param playerGuid The player GUID to check.
+		/// @returns true if the player is a member, false otherwise.
+		[[nodiscard]] bool IsMember(const uint64 playerGuid) const noexcept { return m_members.contains(playerGuid); }
 
 	private:
 		uint64 m_guid;

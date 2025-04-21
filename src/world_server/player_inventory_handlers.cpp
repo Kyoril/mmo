@@ -365,7 +365,7 @@ namespace mmo
 			return;
 		}
 
-		uint32 lootGold = m_loot->getGold();
+		uint32 lootGold = m_loot->GetGold();
 		if (lootGold == 0)
 		{
 			WLOG("No gold to loot!");
@@ -428,7 +428,7 @@ namespace mmo
 
 				// TODO: Put this packet into the LootInstance class or in an event callback maybe
 				if (m_lootSource &&
-					m_lootSource->GetGuid() == m_loot->getLootGuid())
+					m_lootSource->GetGuid() == m_loot->GetLootGuid())
 				{
 					player->SendPacket([lootGold](game::OutgoingPacket& packet)
 						{

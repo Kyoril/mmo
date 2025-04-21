@@ -17,7 +17,7 @@ namespace mmo
         auto* cond = m_data.getById(conditionId);
         if (!cond)
         {
-			ELOG("Tried to validate non existant condition " << conditionId);
+			ELOG("Tried to validate non existent condition " << conditionId);
             return false;
         }
 
@@ -80,8 +80,8 @@ namespace mmo
         case proto::Condition_ConditionType_LEVEL_CHECK:
             // e.g. param1 = minLevel, param2 = maxLevel
         {
-            uint32 lvl = player.GetLevel();
-            uint32 minLvl = cond->param1();
+            const uint32 lvl = player.GetLevel();
+            const uint32 minLvl = cond->param1();
             uint32 maxLvl = cond->param2();
             if (maxLvl == 0)
             {

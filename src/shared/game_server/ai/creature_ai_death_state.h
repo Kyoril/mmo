@@ -13,16 +13,17 @@ namespace mmo
 	class CreatureAIDeathState : public CreatureAIState
 	{
 	public:
-
 		/// Initializes a new instance of the CreatureAIIdleState class.
 		/// @param ai The ai class instance this state belongs to.
 		explicit CreatureAIDeathState(CreatureAI& ai);
 		/// Default destructor.
 		virtual ~CreatureAIDeathState();
 
-		///
+	public:
+		/// @copydoc CreatureAIState::OnEnter
 		virtual void OnEnter() override;
-		///
+
+		/// @copydoc CreatureAIState::OnLeave
 		virtual void OnLeave() override;
 
 	private:

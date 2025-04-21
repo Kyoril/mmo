@@ -80,11 +80,11 @@ namespace mmo
 		for (int i = actionOffset; i < entry.actions_size(); ++i)
 		{
 			// Abort trigger on owner death?
-			if (!checkOwnerAliveFlag(entry, strongOwner.get()))
+			if (!CheckOwnerAliveFlag(entry, strongOwner.get()))
 				return;
 
 			// Abort trigger if not in combat
-			if (!checkInCombatFlag(entry, strongOwner.get()))
+			if (!CheckInCombatFlag(entry, strongOwner.get()))
 				return;
 
 			const auto& action = entry.actions(i);
@@ -92,7 +92,7 @@ namespace mmo
 			{
 #define MMO_HANDLE_TRIGGER_ACTION(name) \
 			case trigger_actions::name: \
-				handle##name(action, context); \
+				Handle##name(action, context); \
 				break;
 
 				MMO_HANDLE_TRIGGER_ACTION(Trigger)
@@ -121,7 +121,7 @@ namespace mmo
 
 			case trigger_actions::Delay:
 				{
-					uint32 timeMS = getActionData(action, 0);
+					uint32 timeMS = GetActionData(action, 0);
 					if (timeMS == 0)
 					{
 						WLOG("Delay with 0 ms ignored");
@@ -173,14 +173,14 @@ namespace mmo
 		}
 	}
 
-	void TriggerHandler::handleTrigger(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleTrigger(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		if (action.target() != trigger_action_target::None)
 		{
 			WLOG("Unsupported target provided for TRIGGER_ACTION_TRIGGER - has no effect");
 		}
 
-		uint32 data = getActionData(action, 0);
+		uint32 data = GetActionData(action, 0);
 
 		// Find that trigger
 		const auto* trigger = m_project.triggers.getById(data);
@@ -194,16 +194,16 @@ namespace mmo
 		ExecuteTrigger(*trigger, context, 0);
 	}
 
-	void TriggerHandler::handleSay(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSay(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			WLOG("TRIGGER_ACTION_SAY: No target found, action will be ignored");
 			return;
 		}
 
-		auto* world = getWorldInstance(target);
+		auto* world = GetWorldInstance(target);
 		if (!world)
 		{
 			return;
@@ -217,25 +217,25 @@ namespace mmo
 		}
 
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatSay(getActionText(action, 0));
+		target->AsUnit().ChatSay(GetActionText(action, 0));
 
 		// Eventually play sound file
 		if (action.data_size() > 0)
 		{
-			playSoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target);
 		}
 	}
 
-	void TriggerHandler::handleYell(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleYell(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			WLOG("TRIGGER_ACTION_YELL: No target found, action will be ignored");
 			return;
 		}
 
-		auto* world = getWorldInstance(target);
+		auto* world = GetWorldInstance(target);
 		if (!world)
 		{
 			return;
@@ -249,23 +249,23 @@ namespace mmo
 		}
 
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatYell(getActionText(action, 0));
+		target->AsUnit().ChatYell(GetActionText(action, 0));
 
 		// Eventually play sound file
 		if (action.data_size() > 0)
 		{
-			playSoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target);
 		}
 	}
 
-	void TriggerHandler::handleSetWorldObjectState(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetWorldObjectState(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		DLOG("TODO: ACTION_SET_WORLD_OBJECT_STATE");
 	}
 
-	void TriggerHandler::handleSetSpawnState(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetSpawnState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto world = getWorldInstance(context.owner);
+		auto world = GetWorldInstance(context.owner);
 		if (!world)
 		{
 			return;
@@ -287,7 +287,7 @@ namespace mmo
 				return;
 			}
 
-			const bool isActive = (getActionData(action, 0) != 0);
+			const bool isActive = (GetActionData(action, 0) != 0);
 			spawner->SetState(isActive);
 		}
 		else
@@ -297,9 +297,9 @@ namespace mmo
 		}
 	}
 
-	void TriggerHandler::handleSetRespawnState(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetRespawnState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto world = getWorldInstance(context.owner);
+		auto world = GetWorldInstance(context.owner);
 		if (!world)
 		{
 			return;
@@ -321,7 +321,7 @@ namespace mmo
 				return;
 			}
 
-			const bool isEnabled = (getActionData(action, 0) == 0 ? false : true);
+			const bool isEnabled = (GetActionData(action, 0) == 0 ? false : true);
 			spawner->SetRespawn(isEnabled);
 		}
 		else
@@ -331,10 +331,10 @@ namespace mmo
 		}
 	}
 
-	void TriggerHandler::handleCastSpell(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleCastSpell(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		// Determine caster
-		GameObjectS* caster = getActionTarget(action, context);
+		GameObjectS* caster = GetActionTarget(action, context);
 		if (!caster)
 		{
 			ELOG("TRIGGER_ACTION_CAST_SPELL: No valid target found");
@@ -347,7 +347,7 @@ namespace mmo
 		}
 
 		// Resolve spell id
-		const auto* spell = m_project.spells.getById(getActionData(action, 0));
+		const auto* spell = m_project.spells.getById(GetActionData(action, 0));
 		if (!spell)
 		{
 			ELOG("TRIGGER_ACTION_CAST_SPELL: Invalid spell index or spell not found");
@@ -355,7 +355,7 @@ namespace mmo
 		}
 
 		// Determine spell target
-		uint32 dataTarget = getActionData(action, 1);
+		uint32 dataTarget = GetActionData(action, 1);
 		GameObjectS* target = nullptr;
 		switch (dataTarget)
 		{
@@ -395,9 +395,9 @@ namespace mmo
 		reinterpret_cast<GameUnitS*>(caster)->CastSpell(std::move(targetMap), *spell, spell->casttime());
 	}
 
-	void TriggerHandler::handleMoveTo(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleMoveTo(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_MOVE_TO: No target found, action will be ignored");
@@ -422,16 +422,16 @@ namespace mmo
 
 		mover.MoveTo(
 			Vector3(
-				static_cast<float>(getActionData(action, 0)),
-				static_cast<float>(getActionData(action, 1)),
-				static_cast<float>(getActionData(action, 2))
+				static_cast<float>(GetActionData(action, 0)),
+				static_cast<float>(GetActionData(action, 1)),
+				static_cast<float>(GetActionData(action, 2))
 			)
 		);
 	}
 
-	void TriggerHandler::handleSetCombatMovement(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetCombatMovement(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_SET_COMBAT_MOVEMENT: No target found, action will be ignored");
@@ -450,9 +450,9 @@ namespace mmo
 			getActionData(action, 0) != 0);*/
 	}
 
-	void TriggerHandler::handleStopAutoAttack(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleStopAutoAttack(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_STOP_AUTO_ATTACK: No target found, action will be ignored");
@@ -470,9 +470,9 @@ namespace mmo
 		reinterpret_cast<GameUnitS*>(target)->StopAttack();
 	}
 
-	void TriggerHandler::handleCancelCast(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleCancelCast(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_CANCEL_CAST: No target found, action will be ignored");
@@ -489,9 +489,9 @@ namespace mmo
 		reinterpret_cast<GameUnitS*>(target)->CancelCast(spell_interrupt_flags::Any);
 	}
 
-	void TriggerHandler::handleSetStandState(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetStandState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_SET_STAND_STATE: No target found, action will be ignored");
@@ -505,7 +505,7 @@ namespace mmo
 			return;
 		}
 
-		const uint32 standState = getActionData(action, 0);
+		const uint32 standState = GetActionData(action, 0);
 		if (standState >= unit_stand_state::Count_)
 		{
 			WLOG("TRIGGER_ACTION_SET_STAND_STATE: Invalid stand state " << standState << " - action ignored");
@@ -515,20 +515,20 @@ namespace mmo
 		target->AsUnit().SetStandState(static_cast<unit_stand_state::Type>(standState));
 	}
 
-	void TriggerHandler::handleSetVirtualEquipmentSlot(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetVirtualEquipmentSlot(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		// TODO
 		DLOG("TODO: ACTION_SET_VIRTUAL_EQUIPMENT_SLOT");
 	}
 
-	void TriggerHandler::handleSetPhase(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetPhase(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		WLOG("TODO: ACTION_SET_PHASE");
 	}
 
-	void TriggerHandler::handleSetSpellCooldown(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetSpellCooldown(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_SET_SPELL_COOLDOWN: No target found, action will be ignored");
@@ -542,12 +542,12 @@ namespace mmo
 			return;
 		}
 
-		reinterpret_cast<GameUnitS*>(target)->SetCooldown(getActionData(action, 0), getActionData(action, 1));
+		reinterpret_cast<GameUnitS*>(target)->SetCooldown(GetActionData(action, 0), GetActionData(action, 1));
 	}
 
-	void TriggerHandler::handleQuestKillCredit(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleQuestKillCredit(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_QUEST_KILL_CREDIT: No target found, action will be ignored");
@@ -561,7 +561,7 @@ namespace mmo
 			return;
 		}
 
-		uint32 entryId = getActionData(action, 0);
+		uint32 entryId = GetActionData(action, 0);
 		if (!entryId)
 		{
 			WLOG("TRIGGER_ACTION_QUEST_KILL_CREDIT: Needs a valid unit entry - action ignored");
@@ -584,9 +584,9 @@ namespace mmo
 		target->AsPlayer().OnQuestKillCredit(context.owner->GetGuid(), *entry);
 	}
 
-	void TriggerHandler::handleQuestEventOrExploration(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleQuestEventOrExploration(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_QUEST_EVENT_OR_EXPLORATION: No target found, action will be ignored");
@@ -600,13 +600,13 @@ namespace mmo
 			return;
 		}
 
-		uint32 questId = getActionData(action, 0);
+		uint32 questId = GetActionData(action, 0);
 		target->AsPlayer().CompleteQuest(questId);
 	}
 
-	void TriggerHandler::handleSetVariable(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetVariable(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_SET_VARIABLE: No target found, action will be ignored");
@@ -614,7 +614,7 @@ namespace mmo
 		}
 
 		// Get variable
-		uint32 entryId = getActionData(action, 0);
+		uint32 entryId = GetActionData(action, 0);
 		if (entryId == 0)
 		{
 			WLOG("TRIGGER_ACTION_SET_VARIABLE: Needs a valid variable entry - action ignored");
@@ -636,32 +636,32 @@ namespace mmo
 		case proto::VariableEntry::kLongvalue:
 		case proto::VariableEntry::kFloatvalue:
 		{
-			target->SetVariable(entryId, static_cast<int64>(getActionData(action, 1)));
+			target->SetVariable(entryId, static_cast<int64>(GetActionData(action, 1)));
 			break;
 		}
 		case proto::VariableEntry::kStringvalue:
 		{
-			target->SetVariable(entryId, getActionText(action, 0));
+			target->SetVariable(entryId, GetActionText(action, 0));
 			break;
 		}
 		}
 	}
 
-	void TriggerHandler::handleDismount(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleDismount(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		// TODO
 		DLOG("TODO: ACTION_DISMOUNT");
 	}
 
-	void TriggerHandler::handleSetMount(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleSetMount(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		// TODO
 		DLOG("TODO: ACTION_SET_MOUNT");
 	}
 
-	void TriggerHandler::handleDespawn(const proto::TriggerAction& action, TriggerContext& context)
+	void TriggerHandler::HandleDespawn(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		GameObjectS* target = getActionTarget(action, context);
+		GameObjectS* target = GetActionTarget(action, context);
 		if (target == nullptr)
 		{
 			ELOG("TRIGGER_ACTION_DESPAWN: No target found, action will be ignored");
@@ -695,7 +695,7 @@ namespace mmo
 			});
 	}
 
-	bool TriggerHandler::checkInCombatFlag(const proto::TriggerEntry& entry, const GameObjectS* owner)
+	bool TriggerHandler::CheckInCombatFlag(const proto::TriggerEntry& entry, const GameObjectS* owner)
 	{
 		if (entry.flags() & trigger_flags::OnlyInCombat)
 		{
@@ -720,7 +720,7 @@ namespace mmo
 		return true;
 	}
 
-	bool TriggerHandler::checkOwnerAliveFlag(const proto::TriggerEntry& entry, const GameObjectS* owner)
+	bool TriggerHandler::CheckOwnerAliveFlag(const proto::TriggerEntry& entry, const GameObjectS* owner)
 	{
 		if (entry.flags() & trigger_flags::AbortOnOwnerDeath)
 		{
@@ -745,7 +745,7 @@ namespace mmo
 		return true;
 	}
 
-	int32 TriggerHandler::getActionData(const proto::TriggerAction& action, uint32 index) const
+	int32 TriggerHandler::GetActionData(const proto::TriggerAction& action, uint32 index) const
 	{
 		// Return default value (0) if not enough data provided
 		if (static_cast<int>(index) >= action.data_size())
@@ -754,7 +754,7 @@ namespace mmo
 		return action.data(index);
 	}
 
-	const String& TriggerHandler::getActionText(const proto::TriggerAction& action, uint32 index) const
+	const String& TriggerHandler::GetActionText(const proto::TriggerAction& action, uint32 index) const
 	{
 		// Return default string (empty) if not enough data provided
 		if (static_cast<int>(index) >= action.texts_size())
@@ -766,7 +766,7 @@ namespace mmo
 		return action.texts(index);
 	}
 
-	WorldInstance* TriggerHandler::getWorldInstance(GameObjectS* owner) const
+	WorldInstance* TriggerHandler::GetWorldInstance(GameObjectS* owner) const
 	{
 		WorldInstance* world = nullptr;
 		if (owner)
@@ -782,7 +782,7 @@ namespace mmo
 		return world;
 	}
 
-	bool TriggerHandler::playSoundEntry(uint32 sound, GameObjectS* source)
+	bool TriggerHandler::PlaySoundEntry(uint32 sound, GameObjectS* source)
 	{
 		if (sound)
 		{
@@ -792,7 +792,7 @@ namespace mmo
 		return true;
 	}
 
-	GameObjectS* TriggerHandler::getActionTarget(const proto::TriggerAction& action, TriggerContext& context)
+	GameObjectS* TriggerHandler::GetActionTarget(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		switch (action.target())
 		{
@@ -804,7 +804,7 @@ namespace mmo
 			return (context.owner && context.owner->IsUnit() ? context.owner->AsUnit().GetVictim() : nullptr);
 		case trigger_action_target::NamedWorldObject:
 		{
-			auto* world = getWorldInstance(context.owner);
+			auto* world = GetWorldInstance(context.owner);
 			if (!world) return nullptr;
 
 			// Need to provide a name
@@ -820,7 +820,7 @@ namespace mmo
 		}
 		case trigger_action_target::NamedCreature:
 		{
-			auto* world = getWorldInstance(context.owner);
+			auto* world = GetWorldInstance(context.owner);
 			if (!world) return nullptr;
 
 			// Need to provide a name

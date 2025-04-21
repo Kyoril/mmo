@@ -53,6 +53,7 @@ namespace mmo
 
 		///
 		void SetState(bool active);
+
 		///
 		void SetRespawn(bool enabled);
 

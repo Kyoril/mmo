@@ -21,25 +21,37 @@ namespace mmo
 		/// Default destructor.
 		virtual ~CreatureAIState();
 
+	public:
 		/// Gets a reference of the AI this state belongs to.
 		CreatureAI& GetAI() const;
+
 		/// Gets a reference of the controlled creature.
 		GameCreatureS& GetControlled() const;
+
 		/// Executed when the AI state is activated.
 		virtual void OnEnter();
+
 		/// Executed when the AI state becomes inactive.
 		virtual void OnLeave();
+
 		/// Executed when the controlled unit was damaged by a known attacker (not executed when
 		/// the attacker is unknown, for example in case of Auras where the caster is despawned)
+		/// @param attacker The unit which damaged the controlled unit.
 		virtual void OnDamage(GameUnitS& attacker);
+
 		/// Executed when the controlled unit was healed by a known healer (same as onDamage).
+		/// @param healer The unit which healed the controlled unit.
 		virtual void OnHeal(GameUnitS& healer);
+
 		/// Executed when the controlled unit dies.
 		virtual void OnControlledDeath();
+
 		/// Executed when combat movement for the controlled unit is enabled or disabled.
 		virtual void OnCombatMovementChanged();
+
 		/// 
 		virtual void OnCreatureMovementChanged();
+
 		/// Executed when the controlled unit moved.
 		virtual void OnControlledMoved();
 

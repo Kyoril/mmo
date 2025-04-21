@@ -727,7 +727,7 @@ namespace mmo
 		{
 			packet.Start(game::realm_client_packet::LootResponse);
 			packet
-				<< io::write<uint64>(m_loot->getLootGuid())
+				<< io::write<uint64>(m_loot->GetLootGuid())
 				<< io::write<uint8>(loot_type::Corpse);
 			lootInstance->Serialize(packet, m_character->GetGuid());
 			packet.Finish();
@@ -750,7 +750,7 @@ namespace mmo
 		SendPacket([&](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::LootReleaseResponse);
-			packet << io::write<uint64>(m_loot->getLootGuid());
+			packet << io::write<uint64>(m_loot->GetLootGuid());
 			packet.Finish();
 		});
 

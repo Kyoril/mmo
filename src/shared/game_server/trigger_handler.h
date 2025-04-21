@@ -27,12 +27,12 @@ namespace mmo
 		explicit TriggerContext(GameObjectS* owner_, GameUnitS* triggering);
 	};
 
-
+	/// Interface for trigger handlers.
 	class ITriggerHandler : public NonCopyable
 	{
 	public:
-		ITriggerHandler() {};
-		virtual ~ITriggerHandler() {};
+		explicit ITriggerHandler() = default;
+		virtual ~ITriggerHandler() override = default;
 
 		/// Executes a unit trigger.
 		/// @param entry The trigger to execute.

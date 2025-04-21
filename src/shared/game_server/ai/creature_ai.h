@@ -62,9 +62,10 @@ namespace mmo
 		GameCreatureS& GetControlled() const;
 
 		/// Gets a reference of the controlled units home.
-		const Home& GetHome() const;
+		[[nodiscard]] const Home& GetHome() const;
 
 		/// Sets a new home position
+		/// @param home The new home position of the controlled unit.
 		void SetHome(Home home);
 
 		/// Enters the idle state.

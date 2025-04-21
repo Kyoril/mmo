@@ -20,9 +20,11 @@ namespace mmo
 		/// Default destructor.
 		~CreatureAIResetState() override;
 
-		///
+	public:
+		/// @copydoc CreatureAIState::OnEnter
 		virtual void OnEnter() override;
-		///
+
+		/// @copydoc CreatureAIState::OnLeave
 		virtual void OnLeave() override;
 
 	private:

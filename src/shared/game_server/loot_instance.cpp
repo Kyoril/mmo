@@ -7,15 +7,15 @@
 
 namespace mmo
 {
-	LootInstance::LootInstance(const proto::ItemManager& items, uint64 lootGuid)
+	LootInstance::LootInstance(const proto::ItemManager& items, const uint64 lootGuid)
 		: m_itemManager(items)
 		, m_lootGuid(lootGuid)
 		, m_gold(0)
 	{
 	}
 
-	LootInstance::LootInstance(const proto::ItemManager& items, uint64 lootGuid, const proto::LootEntry* entry,
-		uint32 minGold, uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients)
+	LootInstance::LootInstance(const proto::ItemManager& items, const uint64 lootGuid, const proto::LootEntry* entry,
+		const uint32 minGold, const uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients)
 		: m_itemManager(items)
 		, m_lootGuid(lootGuid)
 		, m_gold(0)
@@ -245,24 +245,24 @@ namespace mmo
 		return &m_items[slot];
 	}
 
-	void LootInstance::TakeItem(uint8 slot, uint64 receiver)
+	bool LootInstance::TakeItem(uint8 slot, uint64 receiver)
 	{
 		// Check if slot is valid
 		if (slot >= m_items.size()) {
-			return;
+			return false;
 		}
 
 		// Check if item was already looted
 		if (m_items[slot].isLooted)
 		{
-			return;
+			return false;
 		}
 
 		// Request item entry for more data
 		const auto* entry = m_itemManager.getById(m_items[slot].definition.item());
 		if (!entry)
 		{
-			return;
+			return false;
 		}
 
 		// If this item is a party-shared item...
@@ -287,28 +287,29 @@ namespace mmo
 		{
 			cleared();
 		}
+
+		return true;
 	}
 
-	void LootInstance::Serialize(io::Writer& writer, uint64 receiver) const
+	void LootInstance::Serialize(io::Writer& writer, const uint64 receiver) const
 	{
 		// Write gold
 		writer
 			<< io::write<uint32>(m_gold);
 
 		// Write placeholder item count (real value will be overwritten later)
-		const size_t itemCountpos = writer.Sink().Position();
+		const size_t itemCountPos = writer.Sink().Position();
 		writer
 			<< io::write<uint8>(m_items.size());
 
-		auto dataIt = m_playerLootData.find(receiver);
+		const auto dataIt = m_playerLootData.find(receiver);
 
 		// Iterate through all loot items...
 		uint8 realCount = 0;
 		uint8 slot = 0;
 		for (const auto& def : m_items)
 		{
-			const auto* itemEntry = m_itemManager.getById(def.definition.item());
-			if (itemEntry)
+			if (const auto* itemEntry = m_itemManager.getById(def.definition.item()))
 			{
 				bool isLooted = def.isLooted;
 				if (!isLooted &&					// Not yet looted
@@ -342,7 +343,7 @@ namespace mmo
 		}
 
 		// Overwrite real item count
-		writer.WritePOD(itemCountpos, realCount);
+		writer.WritePOD(itemCountPos, realCount);
 	}
 
 	void LootInstance::AddLootItem(const proto::LootDefinition& def)
@@ -370,6 +371,6 @@ namespace mmo
 			dropCount = 1;
 		}
 
-		m_items.emplace_back(LootItem(dropCount, def));
+		m_items.emplace_back(dropCount, def);
 	}
 }
