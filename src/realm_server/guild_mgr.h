@@ -48,6 +48,8 @@ namespace mmo
 
 		bool DemoteMember(uint64 playerGuid, const String& demoterName, const String& demotedName);
 
+		void WriteRoster(io::Writer& writer);
+
 		const std::vector<GuildMember>& GetMembers() const { return m_members; }
 		std::vector<GuildMember>& GetMembersRef() { return m_members; }
 

@@ -471,6 +471,12 @@ namespace mmo
 		}
 	}
 
+	void WorldState::OnPlayerGuildChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		m_guildClient.NotifyGuildChanged(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::Guild));
+	}
+
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
@@ -1074,6 +1080,8 @@ namespace mmo
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Guild, 2, *this, &WorldState::OnPlayerGuildChanged);
+
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 						{
@@ -1099,6 +1107,12 @@ namespace mmo
 					m_questClient.UpdateQuestLog(*std::static_pointer_cast<GamePlayerC>(object));
 
 					OnCombatModeChanged(object->GetGuid());
+
+					// Trigger guild change notification
+					if (object->Get<uint64>(object_fields::Guild) != 0)
+					{
+						OnPlayerGuildChanged(object->GetGuid());
+					}
 				}
 			}
 			else

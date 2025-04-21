@@ -1086,6 +1086,32 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnGuildRoster(game::IncomingPacket& packet)
+	{
+		if (!m_characterData || m_characterData->guildId == 0)
+		{
+			WLOG("Player requested guild roster without being in a guild!");
+			return PacketParseResult::Pass;
+		}
+
+		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		if (!guild)
+		{
+			WLOG("Player requested guild roster for a guild that doesn't exist!");
+			return PacketParseResult::Pass;
+		}
+
+		SendPacket([guild](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::GuildRoster);
+				guild->WriteRoster(packet);
+				packet.Finish();
+			}
+		);
+
+		return PacketParseResult::Pass;
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
 	{
@@ -1647,6 +1673,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GuildMotd, *this, &Player::OnGuildMotd);
 			RegisterPacketHandler(game::client_realm_packet::GuildAccept, *this, &Player::OnGuildAccept);
 			RegisterPacketHandler(game::client_realm_packet::GuildDecline, *this, &Player::OnGuildDecline);
+			RegisterPacketHandler(game::client_realm_packet::GuildRoster, *this, &Player::OnGuildRoster);
 			
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);

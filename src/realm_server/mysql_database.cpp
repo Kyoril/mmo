@@ -296,7 +296,11 @@ namespace mmo
 				}
 
 				// Load guild member ids
-				mysql::Select memberSelect(m_connection, "SELECT `guid`, `rank` FROM `guild_members` WHERE `guild_id` = '" + std::to_string(info.id) + "' ORDER BY `rank` DESC LIMIT 100");
+				mysql::Select memberSelect(m_connection, "SELECT gm.`guid`, gm.`rank`, c.`name`, c.`level`, c.`race`, c.`class` "
+                    "FROM `guild_members` gm "
+                    "JOIN `characters` c ON c.`id` = gm.`guid` "
+					"WHERE gm.`guild_id` = '" + std::to_string(info.id) + "' "
+					"ORDER BY gm.`rank` DESC LIMIT 100");
 				if (memberSelect.Success())
 				{
 					mysql::Row memberRow(memberSelect);
@@ -305,6 +309,10 @@ namespace mmo
 						GuildMember member;
 						memberRow.GetField(0, member.guid);
 						memberRow.GetField(1, member.rank);
+						memberRow.GetField(2, member.name);
+						memberRow.GetField(3, member.level);
+						memberRow.GetField(4, member.raceId);
+						memberRow.GetField(5, member.classId);
 						info.members.push_back(member);
 
 						memberRow = mysql::Row::Next(memberSelect);

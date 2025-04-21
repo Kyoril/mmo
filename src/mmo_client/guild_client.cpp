@@ -22,6 +22,8 @@ namespace mmo
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildDecline, *this, &GuildClient::OnGuildDecline);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildUninvite, *this, &GuildClient::OnGuildUninvite);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildEvent, *this, &GuildClient::OnGuildEvent);
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildRoster, *this, &GuildClient::OnGuildRoster);
+		
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("guildcreate", [this](const std::string& cmd, const std::string& args) { Command_GuildCreate(cmd, args); }, ConsoleCommandCategory::Gm, "Creates a new guild with yourself as the leader.");
@@ -139,8 +141,7 @@ namespace mmo
 			return 0;
 		}
 
-		// TODO
-		return 0;
+		return m_guildMembers.size();
 	}
 
 	int32 GuildClient::GetNumRanks() const
@@ -160,8 +161,9 @@ namespace mmo
 		{
 			return false;
 		}
-		// TODO
-		return false;
+
+		ASSERT(m_guildRank >= 0);
+		return m_guildRank == 0;
 	}
 
 	bool GuildClient::CanGuildInvite() const
@@ -170,6 +172,12 @@ namespace mmo
 		{
 			return false;
 		}
+
+		if (IsGuildLeader())
+		{
+			return true;
+		}
+
 		// TODO
 		return false;
 	}
@@ -180,6 +188,12 @@ namespace mmo
 		{
 			return false;
 		}
+
+		if (IsGuildLeader())
+		{
+			return true;
+		}
+
 		// TODO
 		return false;
 	}
@@ -190,6 +204,12 @@ namespace mmo
 		{
 			return false;
 		}
+
+		if (IsGuildLeader())
+		{
+			return true;
+		}
+
 		// TODO
 		return false;
 	}
@@ -200,6 +220,12 @@ namespace mmo
 		{
 			return false;
 		}
+
+		if (IsGuildLeader())
+		{
+			return true;
+		}
+
 		// TODO
 		return false;
 	}
@@ -212,6 +238,16 @@ namespace mmo
 		}
 
 		return &m_guildMembers[index];
+	}
+
+	void GuildClient::GuildRoster()
+	{
+		m_connector.GuildRoster();
+	}
+
+	void GuildClient::NotifyGuildChanged(uint64 guildId)
+	{
+		m_guildId = guildId;
 	}
 
 	void GuildClient::AcceptGuild()
@@ -371,6 +407,56 @@ namespace mmo
 		const char* arg2 = args.size() >= 2 ? args[1].c_str() : nullptr;
 		const char* arg3 = args.size() >= 3 ? args[2].c_str() : nullptr;
 		FrameManager::Get().TriggerLuaEvent("GUILD_EVENT", s_eventStrings[static_cast<size_t>(event)], arg1, arg2, arg3);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult GuildClient::OnGuildRoster(game::IncomingPacket& packet)
+	{
+		uint32 memberCount;
+		uint32 rankCount;
+		if (!(packet >> io::read<uint32>(memberCount) >> io::read<uint32>(rankCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rankCount; ++i)
+		{
+			uint32 permissions;
+			if (!(packet >> io::read<uint32>(permissions)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		m_guildMembers.resize(memberCount);
+		for (auto& member : m_guildMembers)
+		{
+			uint32 classId, raceId;
+			if (!(packet
+				>> io::read<uint64>(member.guid)
+				>> io::read<uint8>(member.online)
+				>> io::read_container<uint8>(member.name)
+				>> io::read<uint32>(member.rankIndex)
+				>> io::read<uint32>(member.level)
+				>> io::read<uint32>(classId)
+				>> io::read<uint32>(raceId)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (member.guid == ObjectMgr::GetActivePlayerGuid())
+			{
+				m_guildRank = member.rankIndex;
+			}
+
+			member.rank = "UNKNOWN";
+			member.className = "UNKNOWN";
+			member.raceName = "UNKNOWN";
+		}
+
+		// Notify the UI that the roster updated
+		FrameManager::Get().TriggerLuaEvent("GUILD_ROSTER_UPDATE");
 
 		return PacketParseResult::Pass;
 	}

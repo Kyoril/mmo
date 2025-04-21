@@ -91,6 +91,12 @@ namespace mmo
 
 		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
 
+		[[nodiscard]] uint32 GetCharacterLevel() const { return m_characterData->level; }
+
+		[[nodiscard]] uint32 GetCharacterRace() const { return m_characterData->raceId; }
+
+		[[nodiscard]] uint32 GetCharacterClass() const { return m_characterData->classId; }
+
 		// Inititalizes a character transfer to a new map.
 		bool InitializeTransfer(uint32 map, const Vector3& location, float o, bool shouldLeaveNode = false);
 
@@ -390,6 +396,7 @@ namespace mmo
 		PacketParseResult OnGuildMotd(game::IncomingPacket& packet);
 		PacketParseResult OnGuildAccept(game::IncomingPacket& packet);
 		PacketParseResult OnGuildDecline(game::IncomingPacket& packet);
+		PacketParseResult OnGuildRoster(game::IncomingPacket& packet);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);

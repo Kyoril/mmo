@@ -147,6 +147,8 @@ namespace mmo
 
 		void OnCombatModeChanged(uint64 monitoredGuid);
 
+		void OnPlayerGuildChanged(uint64 monitoredGuid);
+
 	private:
 		// Selected Target Mirror Handlers (called when certain field map values of the selected target object were changed by the server)
 

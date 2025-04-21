@@ -1160,6 +1160,7 @@ namespace mmo
 			luabind::def<std::function<bool()>>("CanGuildDemote", [this]() { return this->m_guildClient.CanGuildDemote(); }),
 			luabind::def<std::function<bool()>>("CanGuildInvite", [this]() { return this->m_guildClient.CanGuildInvite(); }),
 			luabind::def<std::function<bool()>>("CanGuildRemove", [this]() { return this->m_guildClient.CanGuildRemove(); }),
+			luabind::def<std::function<void()>>("GuildRoster", [this]() { this->m_guildClient.GuildRoster(); }),
 				
 			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),

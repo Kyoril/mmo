@@ -463,27 +463,50 @@ namespace mmo
 
 	void ScrollBar::UpdateScrollButtons()
 	{
-		if (m_upFrame)
+		if (m_maximum == m_minimum)
 		{
-			if (m_value == GetMinimumValue())
+			if (m_upFrame)
 			{
 				m_upFrame->Disable();
 			}
-			else
-			{
-				m_upFrame->Enable();
-			}
-		}
-
-		if (m_downFrame)
-		{
-			if (m_value == GetMaximumValue())
+			if (m_downFrame)
 			{
 				m_downFrame->Disable();
 			}
-			else
+			if (m_thumbFrame)
 			{
-				m_downFrame->Enable();
+				m_thumbFrame->Disable();
+			}
+		}
+		else
+		{
+			if (m_thumbFrame)
+			{
+				m_thumbFrame->Enable();
+			}
+
+			if (m_upFrame)
+			{
+				if (m_value == GetMinimumValue())
+				{
+					m_upFrame->Disable();
+				}
+				else
+				{
+					m_upFrame->Enable();
+				}
+			}
+
+			if (m_downFrame)
+			{
+				if (m_value == GetMaximumValue())
+				{
+					m_downFrame->Disable();
+				}
+				else
+				{
+					m_downFrame->Enable();
+				}
 			}
 		}
 	}

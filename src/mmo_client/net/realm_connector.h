@@ -417,6 +417,8 @@ namespace mmo
 
 		void Logout();
 
+		void GuildRoster();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

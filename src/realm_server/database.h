@@ -100,6 +100,14 @@ namespace mmo
 		uint64 guid;
 
 		uint32 rank;
+
+		String name;
+
+		uint32 level;
+
+		uint32 raceId;
+
+		uint32 classId;
 	};
 
 	struct GuildData

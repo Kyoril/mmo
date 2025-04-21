@@ -845,4 +845,13 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::GuildRoster()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::GuildRoster);
+				packet.Finish();
+			});
+	}
 }

@@ -244,10 +244,23 @@ namespace mmo
 			return false;
 		}
 
+		// Check if player is online right now
+		Player* player = m_playerManager.GetPlayerByCharacterGuid(playerGuid);
+		if (!player)
+		{
+			ELOG("Failed to add member " << playerGuid << " to guild " << m_id << ": player is not online");
+			return false;
+		}
+
+		const String name = player->GetCharacterName();
+		const uint32 level = player->GetCharacterLevel();
+		const uint32 raceId = player->GetCharacterRace();
+		const uint32 classId = player->GetCharacterClass();
+
 		std::weak_ptr weak = shared_from_this();
-		auto handler = [weak, playerGuid, rank](bool success)
+		auto handler = [weak, playerGuid, rank, name, level, raceId, classId](bool success)
 			{
-				auto strong = weak.lock();
+				const auto strong = weak.lock();
 				if (!strong)
 				{
 					return;
@@ -256,7 +269,7 @@ namespace mmo
 				ASSERT(success);
 
 				// Add the member
-				strong->m_members.emplace_back(playerGuid, rank);
+				strong->m_members.emplace_back(playerGuid, rank, name, level, raceId, classId);
 			};
 
 		// Update the database
@@ -393,6 +406,37 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
 
 		return true;
+	}
+
+	void Guild::WriteRoster(io::Writer& writer)
+	{
+		writer
+			<< io::write<uint32>(m_members.size())
+			<< io::write<uint32>(m_ranks.size());
+
+		for (const auto& rank : m_ranks)
+		{
+			writer << io::write<uint32>(rank.permissions);
+		}
+
+		for (auto& member : m_members)
+		{
+			Player* player = m_playerManager.GetPlayerByCharacterGuid(member.guid);
+			if (player)
+			{
+				// Ensure data is up to date
+				member.level = player->GetCharacterLevel();
+			}
+
+			writer
+				<< io::write<uint64>(member.guid)
+				<< io::write<uint8>(player != nullptr)
+				<< io::write_dynamic_range<uint8>(member.name)
+				<< io::write<uint32>(member.rank)
+				<< io::write<uint32>(member.level)
+				<< io::write<uint32>(member.classId)
+				<< io::write<uint32>(member.raceId);
+		}
 	}
 
 	uint32 Guild::GetLowestRank() const

@@ -206,6 +206,8 @@ namespace mmo
 
 				LogoutRequest,
 
+				GuildRoster,
+
 				/// Counter constant
 				Count_,
 			};
@@ -388,6 +390,7 @@ namespace mmo
 				ItemPushResult,
 
 				LogoutResponse,
+				GuildRoster,
 
 				/// Counter constant
 				Count_,

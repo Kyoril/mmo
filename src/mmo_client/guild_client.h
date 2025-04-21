@@ -69,6 +69,10 @@ namespace mmo
 
 		const GuildMemberInfo* GetGuildMemberInfo(int32 index) const;
 
+		void GuildRoster();
+
+		void NotifyGuildChanged(uint64 guildId);
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
@@ -81,6 +85,8 @@ namespace mmo
 		PacketParseResult OnGuildUninvite(game::IncomingPacket& packet);
 
 		PacketParseResult OnGuildEvent(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildRoster(game::IncomingPacket& packet);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		void Command_GuildCreate(const std::string& cmd, const std::string& args) const;
@@ -95,6 +101,7 @@ namespace mmo
 		String m_inviteGuildName;
 
 		uint64 m_guildId = 0;
+		int32 m_guildRank = -1;
 
 		std::vector<GuildMemberInfo> m_guildMembers;
 	};
