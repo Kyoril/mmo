@@ -415,6 +415,8 @@ namespace mmo
 
 		void CreateGuild(const String& guildName);
 
+		void Logout();
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

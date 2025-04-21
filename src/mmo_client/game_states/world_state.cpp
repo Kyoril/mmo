@@ -796,6 +796,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellHealLog, *this, &WorldState::OnSpellHealLog);
+
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -2691,6 +2693,16 @@ namespace mmo
 		{
 			OnItemPushCallback(itemInfo, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount);
 		});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnLogoutResponse(game::IncomingPacket& packet)
+	{
+		ILOG("Successfully logged out of the game...");
+
+		// Go back to the login state
+		m_gameStateMgr.SetGameState(LoginState::Name);
 
 		return PacketParseResult::Pass;
 	}

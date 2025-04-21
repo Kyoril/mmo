@@ -294,6 +294,8 @@ namespace mmo
 
 		PacketParseResult OnItemPushResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

@@ -646,6 +646,7 @@ namespace mmo
 		}
 
 		m_playerManager.RemovePlayer(player);
+		NotifyWorldInstanceLeft(characterGuid, reason);
 
 		return PacketParseResult::Pass;
 	}

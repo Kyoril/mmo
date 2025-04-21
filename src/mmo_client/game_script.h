@@ -127,6 +127,8 @@ namespace mmo
 
 		void TargetNearestEnemy();
 
+		void OnLogout();
+
 	private:
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
@@ -170,4 +172,5 @@ namespace mmo
 	private:
 		void Script_ReviveMe() const;
 	};
+
 }

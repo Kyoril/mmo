@@ -204,7 +204,7 @@ namespace mmo
 			if (handlerIt == m_packetHandlers.end())
 			{
 				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
-				return PacketParseResult::Disconnect;
+				return PacketParseResult::Pass;
 			}
 
 			handler = handlerIt->second;
@@ -1003,6 +1003,30 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket& packet)
+	{
+		if (!m_characterData)
+		{
+			ELOG("Player tried to logout without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player wants to log out");
+
+		// TODO: In the future we should check if the player can logout (is in combat etc.) and implement a logout timer
+		// but for simplicity we enable instant logout everywhere for now
+		if (const auto world = GetWorld())
+		{
+			world->Leave(m_characterData->characterId, auth::world_left_reason::Logout);
+		}
+		else
+		{
+			Destroy();
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnGuildAccept(game::IncomingPacket& packet)
 	{
 		if (m_pendingGuildInvite == 0)
@@ -1650,6 +1674,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupUninvite, *this, &Player::OnGroupUninvite);
 			RegisterPacketHandler(game::client_realm_packet::GroupAccept, *this, &Player::OnGroupAccept);
 			RegisterPacketHandler(game::client_realm_packet::GroupDecline, *this, &Player::OnGroupDecline);
+			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -1823,7 +1848,17 @@ namespace mmo
 		switch (reason)
 		{
 		case auth::world_left_reason::Logout:
-			DLOG("TODO!");
+			m_characterData.reset();
+			EnableProxyPackets(false);
+			EnableEnterWorldPacket(true);
+			ILOG("Successfully logged out");
+
+			m_connection->sendSinglePacket([this, reason](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::LogoutResponse);
+					outPacket.Finish();
+				});
+
 			break;
 
 		case auth::world_left_reason::Teleport:

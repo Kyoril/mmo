@@ -204,6 +204,8 @@ namespace mmo
 				GuildQuery,
 				ObjectQuery,
 
+				LogoutRequest,
+
 				/// Counter constant
 				Count_,
 			};
@@ -384,6 +386,8 @@ namespace mmo
 				ObjectQueryResult,
 
 				ItemPushResult,
+
+				LogoutResponse,
 
 				/// Counter constant
 				Count_,

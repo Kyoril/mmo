@@ -83,7 +83,7 @@ namespace mmo
 			if (handlerIt == m_packetHandlers.end())
 			{
 				WLOG("Packet 0x" << std::hex << static_cast<uint32>(packetId) << " is either unhandled or simply currently not handled");
-				return PacketParseResult::Disconnect;
+				return PacketParseResult::Pass;
 			}
 
 			handler = handlerIt->second;

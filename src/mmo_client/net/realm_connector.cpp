@@ -836,4 +836,13 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::Logout()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::LogoutRequest);
+				packet.Finish();
+			});
+	}
 }

@@ -17,6 +17,7 @@
 #include "char_create_info.h"
 #include "char_select.h"
 #include "cursor.h"
+#include "event_loop.h"
 #include "guild_client.h"
 #include "loot_client.h"
 #include "platform.h"
@@ -716,6 +717,11 @@ namespace mmo
 		{
 			return (spell->attributes(0) & spell_attributes::Passive) != 0;
 		}
+
+		void Script_Quit()
+		{
+			EventLoop::Terminate(0);
+		}
 	}
 
 
@@ -979,6 +985,9 @@ namespace mmo
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
 				.def_readonly("icon", &proto_client::SpellEntry::icon)),
 				
+			luabind::def("Quit", &Script_Quit),
+			luabind::def<std::function<void()>>("Logout", [this]() { OnLogout(); }),
+
 			luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 			luabind::def<std::function<int32()>>("GetPartySize", [this]() { return m_partyInfo.GetMemberCount(); }),
@@ -1304,6 +1313,19 @@ namespace mmo
 		ObjectMgr::SetSelectedObjectGuid(units[nextIndex]->GetGuid());
 		player->SetTargetUnit(units[nextIndex]);
 		m_realmConnector.SetSelection(units[nextIndex]->GetGuid());
+	}
+
+	void GameScript::OnLogout()
+	{
+		if (ObjectMgr::GetActivePlayer())
+		{
+			ILOG("Requesting logout from the server...");
+			m_realmConnector.Logout();
+		}
+		else
+		{
+			ELOG("No active player character, can't logout!");
+		}
 	}
 
 	void GameScript::PickupContainerItem(uint32 slot) const
