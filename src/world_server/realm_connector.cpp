@@ -559,10 +559,6 @@ namespace mmo
 		characterObject->SetGender(characterData.gender);
 		characterObject->SetLevel(characterData.level);
 		characterObject->Set<uint32>(object_fields::Xp, characterData.xp);
-		characterObject->Set<uint32>(object_fields::Health, Clamp(characterData.hp, 0u, characterObject->Get<uint32>(object_fields::MaxHealth)));
-		characterObject->Set<uint32>(object_fields::Mana, Clamp(characterData.mana, 0u, characterObject->Get<uint32>(object_fields::MaxMana)));
-		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
-		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
 		characterObject->Set<uint64>(object_fields::Guild, characterData.guildId);
 
@@ -604,6 +600,12 @@ namespace mmo
 		{
 			characterObject->GetInventory().AddRealmData(itemData);
 		}
+
+		// Apply health and powers after binding attribute points
+		characterObject->Set<uint32>(object_fields::Health, Clamp(characterData.hp, 0u, characterObject->Get<uint32>(object_fields::MaxHealth)));
+		characterObject->Set<uint32>(object_fields::Mana, Clamp(characterData.mana, 0u, characterObject->Get<uint32>(object_fields::MaxMana)));
+		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
+		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 
 		characterObject->ClearFieldChanges();
 

@@ -536,15 +536,19 @@ namespace mmo
 
 		m_worldInstance = &instance;
 
-		// Self spawn
-		std::vector<GameObjectS*> objects;
-
 		// Ensure the inventory is initialized
+		std::vector<GameObjectS*> objects;
 		m_character->GetInventory().ConstructFromRealmData(objects);
 		objects.push_back(m_character.get());
 
 		// Notify player about spawned objects
 		NotifyObjectsSpawned(objects);
+
+		// Once again update health and power values after constructing inventory
+		m_character->Set<uint32>(object_fields::Health, Clamp(m_characterData.hp, 0u, m_character->Get<uint32>(object_fields::MaxHealth)));
+		m_character->Set<uint32>(object_fields::Mana, Clamp(m_characterData.mana, 0u, m_character->Get<uint32>(object_fields::MaxMana)));
+		m_character->Set<uint32>(object_fields::Rage, m_characterData.rage);
+		m_character->Set<uint32>(object_fields::Energy, m_characterData.energy);
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 		tile.GetWatchers().add(this);
