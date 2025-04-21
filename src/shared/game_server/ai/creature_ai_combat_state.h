@@ -4,7 +4,7 @@
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
 #include "base/countdown.h"
-#include "game_unit_s.h"
+#include "objects/game_unit_s.h"
 
 namespace mmo
 {

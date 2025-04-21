@@ -3,7 +3,7 @@
 
 #include "vector_sink.h"
 #include "base/utilities.h"
-#include "game_server/game_creature_s.h"
+#include "game_server/objects/game_creature_s.h"
 #include "game_server/universe.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"

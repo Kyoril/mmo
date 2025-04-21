@@ -14,7 +14,7 @@
 #include "base/timer_queue.h"
 #include "game_server/character_data.h"
 #include "game/chat_type.h"
-#include "game_server/game_player_s.h"
+#include "game_server/objects/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"

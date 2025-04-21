@@ -25,7 +25,7 @@
 #include "game/object_info.h"
 #include "game/quest_info.h"
 #include "game/character_customization/customizable_avatar_definition.h"
-#include "game_server/game_player_s.h"
+#include "game_server/objects/game_player_s.h"
 
 
 namespace mmo

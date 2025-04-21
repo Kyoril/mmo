@@ -8,8 +8,8 @@
 #include <memory>
 #include <variant>
 
-#include "each_tile_in_sight.h"
-#include "loot_instance.h"
+#include "game_server/each_tile_in_sight.h"
+#include "game_server/loot_instance.h"
 #include "game/field_map.h"
 #include "base/typedefs.h"
 #include "base/signal.h"
@@ -23,7 +23,7 @@
 
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
-#include "world_instance.h"
+#include "game_server/world_instance.h"
 #include "shared/proto_data/variables.pb.h"
 
 namespace mmo

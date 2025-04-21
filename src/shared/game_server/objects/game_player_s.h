@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "game_unit_s.h"
-#include "inventory.h"
+#include "game_server/inventory.h"
 #include "game/quest.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 

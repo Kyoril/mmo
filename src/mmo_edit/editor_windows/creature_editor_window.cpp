@@ -7,7 +7,7 @@
 
 #include "assets/asset_registry.h"
 #include "game/object_type_id.h"
-#include "game_server/game_unit_s.h"
+#include "game_server/objects/game_unit_s.h"
 #include "log/default_log_levels.h"
 
 namespace ImGui

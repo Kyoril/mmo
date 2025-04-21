@@ -5,8 +5,8 @@
 #include "creature_ai_combat_state.h"
 #include "creature_ai_reset_state.h"
 #include "creature_ai_death_state.h"
-#include "game_creature_s.h"
-#include "game_unit_s.h"
+#include "objects/game_creature_s.h"
+#include "objects/game_unit_s.h"
 #include "world_instance.h"
 #include "universe.h"
 

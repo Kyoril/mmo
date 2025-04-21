@@ -2,7 +2,7 @@
 
 #include "catch.hpp"
 
-#include "game_server/game_unit_s.h"
+#include "game_server/objects/game_unit_s.h"
 #include "proto_data/project.h"
 
 #include <memory>

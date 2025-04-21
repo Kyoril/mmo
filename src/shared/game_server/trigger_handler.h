@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "game_unit_s.h"
+#include "objects/game_unit_s.h"
 
 namespace mmo
 {

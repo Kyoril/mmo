@@ -18,7 +18,7 @@
 #include "base/utilities.h"
 #include "game/game.h"
 #include "game_protocol/game_outgoing_packet.h"
-#include "game_server/game_player_s.h"
+#include "game_server/objects/game_player_s.h"
 #include "proto_data/project.h"
 
 

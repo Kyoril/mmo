@@ -5,12 +5,12 @@
 #include <memory>
 #include <set>
 
-#include "aura_container.h"
+#include "game_server/aura_container.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
-#include "spell_cast.h"
+#include "game_server/spell_cast.h"
 #include "game/spell_target_map.h"
-#include "unit_mover.h"
+#include "game_server/unit_mover.h"
 #include "base/countdown.h"
 #include "game/chat_type.h"
 #include "game/damage_school.h"

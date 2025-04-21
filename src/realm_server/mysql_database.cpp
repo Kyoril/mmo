@@ -18,7 +18,7 @@
 
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/character_data.h"
-#include "game_server/game_player_s.h"
+#include "game_server/objects/game_player_s.h"
 
 namespace mmo
 {

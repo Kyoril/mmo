@@ -25,7 +25,7 @@ public:
 
 // Include after ASSERT macro definition to prevent setting this macro
 #include "game/field_map.h"
-#include "game_server/game_object_s.h"
+#include "game_server/objects/game_object_s.h"
 
 using namespace mmo;
 

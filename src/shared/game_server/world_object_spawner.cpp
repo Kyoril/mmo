@@ -2,7 +2,7 @@
 #include "world_object_spawner.h"
 #include "world_instance.h"
 #include "world_instance_manager.h"
-#include "game_world_object_s.h"
+#include "objects/game_world_object_s.h"
 #include "base/erase_by_move.h"
 #include "log/default_log_levels.h"
 #include "base/utilities.h"
@@ -33,7 +33,7 @@ namespace mmo
 		, m_animProgress(animProgress)
 		, m_state(state)
 	{
-		// Immediatly spawn all objects
+		// Immediately spawn all objects
 		for (size_t i = 0; i < m_maxCount; ++i)
 		{
 			SpawnOne();

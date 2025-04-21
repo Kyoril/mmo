@@ -4,9 +4,9 @@
 
 #include "player_manager.h"
 #include "base/utilities.h"
-#include "game_server/game_creature_s.h"
-#include "game_server/game_object_s.h"
-#include "game_server/game_player_s.h"
+#include "game_server/objects/game_creature_s.h"
+#include "game_server/objects/game_object_s.h"
+#include "game_server/objects/game_player_s.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
 
