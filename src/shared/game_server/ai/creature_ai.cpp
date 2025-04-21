@@ -7,8 +7,8 @@
 #include "creature_ai_death_state.h"
 #include "objects/game_creature_s.h"
 #include "objects/game_unit_s.h"
-#include "world_instance.h"
-#include "universe.h"
+#include "game_server/world/world_instance.h"
+#include "game_server/world/universe.h"
 
 namespace mmo
 {

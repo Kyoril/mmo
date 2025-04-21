@@ -1,7 +1,7 @@
 
-#include "game_creature_s.h"
+#include "game_server/objects/game_creature_s.h"
 #include "proto_data/project.h"
-#include "world_instance.h"
+#include "game_server/world/world_instance.h"
 #include "binary_io/vector_sink.h"
 
 namespace mmo

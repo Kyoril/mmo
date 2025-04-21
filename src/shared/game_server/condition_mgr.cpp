@@ -1,6 +1,6 @@
 
-#include "condition_mgr.h"
-#include "game_player_s.h"
+#include "game_server/condition_mgr.h"
+#include "game_server/objects/game_player_s.h"
 #include "log/default_log_levels.h"
 
 namespace mmo

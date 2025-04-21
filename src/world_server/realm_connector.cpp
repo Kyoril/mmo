@@ -4,8 +4,8 @@
 
 #include "player.h"
 #include "player_manager.h"
-#include "game_server/world_instance_manager.h"
-#include "game_server/world_instance.h"
+#include "game_server/world/world_instance_manager.h"
+#include "game_server/world/world_instance.h"
 #include "version.h"
 
 #include "base/utilities.h"

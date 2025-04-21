@@ -2,7 +2,7 @@
 #pragma once
 
 #include "creature_ai_state.h"
-#include "unit_watcher.h"
+#include "game_server/world/unit_watcher.h"
 #include "base/countdown.h"
 
 namespace mmo

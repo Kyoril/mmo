@@ -9,7 +9,7 @@
 #include "game/aura.h"
 #include "game/spell.h"
 #include "game/zone.h"
-#include "game_server/spell_cast.h"
+#include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 #include "proto_data/trigger_helper.h"

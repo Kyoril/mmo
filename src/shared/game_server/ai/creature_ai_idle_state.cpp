@@ -1,9 +1,9 @@
 
-#include "creature_ai_idle_state.h"
-#include "creature_ai.h"
+#include "game_server/ai/creature_ai_idle_state.h"
+#include "game_server/ai/creature_ai.h"
 #include "objects/game_creature_s.h"
-#include "universe.h"
-#include "world_instance.h"
+#include "game_server/world/universe.h"
+#include "game_server/world/world_instance.h"
 
 namespace mmo
 {

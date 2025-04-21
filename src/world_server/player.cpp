@@ -4,10 +4,10 @@
 
 #include "player_manager.h"
 #include "base/utilities.h"
-#include "game_server/each_tile_in_region.h"
-#include "game_server/each_tile_in_sight.h"
+#include "game_server/world/each_tile_in_region.h"
+#include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_creature_s.h"
-#include "game_server/visibility_tile.h"
+#include "game_server/world/visibility_tile.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game/spell_target_map.h"
@@ -15,7 +15,7 @@
 #include "proto_data/project.h"
 #include "game/loot.h"
 #include "game/vendor.h"
-#include "game_server/universe.h"
+#include "game_server/world/universe.h"
 #include "game_server/condition_mgr.h"
 
 namespace mmo

@@ -1,7 +1,7 @@
 
 #include "game_item_s.h"
 
-#include "spell_cast.h"
+#include "game_server/spells/spell_cast.h"
 #include "shared/proto_data/items.pb.h"
 
 namespace mmo

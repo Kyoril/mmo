@@ -1,7 +1,7 @@
 
-#include "loot_instance.h"
+#include "game_server/loot_instance.h"
 
-#include "game_player_s.h"
+#include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
 
 namespace mmo

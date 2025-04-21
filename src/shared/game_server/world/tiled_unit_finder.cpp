@@ -1,7 +1,7 @@
 
 #include "tiled_unit_finder.h"
 
-#include "game_unit_s.h"
+#include "game_server/objects/game_unit_s.h"
 #include "tiled_unit_finder_tile.h"
 #include "tiled_unit_watcher.h"
 

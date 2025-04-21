@@ -11,7 +11,7 @@
 #include "auth_protocol/auth_server.h"
 #include "configuration.h"
 #include "realm_connector.h"
-#include "game_server/world_instance_manager.h"
+#include "game_server/world/world_instance_manager.h"
 #include "player_manager.h"
 #include "game_server/condition_mgr.h"
 #include "trigger_handler.h"
@@ -26,7 +26,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
-#include "game_server/universe.h"
+#include "game_server/world/universe.h"
 #include "proto_data/project.h"
 #include "assets/asset_registry.h"
 

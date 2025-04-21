@@ -1,13 +1,13 @@
 
 #include "unit_mover.h"
 #include "game/circle.h"
-#include "game_unit_s.h"
-#include "world_instance.h"
-#include "universe.h"
+#include "game_server/objects/game_unit_s.h"
+#include "game_server/world/world_instance.h"
+#include "game_server/world/universe.h"
 #include "binary_io/vector_sink.h"
 #include "game_protocol/game_protocol.h"
-#include "each_tile_in_sight.h"
-#include "tile_subscriber.h"
+#include "game_server/world/each_tile_in_sight.h"
+#include "game_server/world/tile_subscriber.h"
 #include "log/default_log_levels.h"
 
 namespace mmo

@@ -1,7 +1,7 @@
 
-#include "creature_ai_state.h"
-#include "creature_ai.h"
-#include "game_creature_s.h"
+#include "game_server/ai/creature_ai_state.h"
+#include "game_server/ai/creature_ai.h"
+#include "game_server/objects/game_creature_s.h"
 #include "base/macros.h"
 
 namespace mmo

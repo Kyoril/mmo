@@ -2,8 +2,8 @@
 
 #include "game_unit_s.h"
 
-#include "each_tile_in_sight.h"
-#include "game_player_s.h"
+#include "game_server/world/each_tile_in_sight.h"
+#include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"

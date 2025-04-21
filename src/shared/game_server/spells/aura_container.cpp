@@ -1,10 +1,10 @@
 
-#include "aura_container.h"
+#include "game_server/spells/aura_container.h"
 
-#include "game_player_s.h"
-#include "game_unit_s.h"
-#include "spell_cast.h"
-#include "universe.h"
+#include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_unit_s.h"
+#include "game_server/spells/spell_cast.h"
+#include "game_server/world/universe.h"
 #include "base/clock.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"

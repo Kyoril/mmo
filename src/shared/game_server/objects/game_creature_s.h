@@ -2,10 +2,10 @@
 #pragma once
 
 #include "game_server/ai/creature_ai.h"
-#include "game_player_s.h"
-#include "game_unit_s.h"
+#include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_unit_s.h"
 #include "game_server/loot_instance.h"
-#include "game_server/world_instance.h"
+#include "game_server/world/world_instance.h"
 #include "base/linear_set.h"
 #include "game/quest.h"
 

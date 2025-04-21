@@ -1,9 +1,9 @@
 
 #include "inventory.h"
 
-#include "game_bag_s.h"
-#include "game_item_s.h"
-#include "game_player_s.h"
+#include "game_server/objects/game_bag_s.h"
+#include "game_server/objects/game_item_s.h"
+#include "game_server/objects/game_player_s.h"
 #include "base/linear_set.h"
 #include "binary_io/reader.h"
 #include "binary_io/vector_sink.h"

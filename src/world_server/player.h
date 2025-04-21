@@ -9,8 +9,8 @@
 #include "game/vendor.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
-#include "game_server/tile_index.h"
-#include "game_server/tile_subscriber.h"
+#include "game_server/world/tile_index.h"
+#include "game_server/world/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
 
 namespace mmo

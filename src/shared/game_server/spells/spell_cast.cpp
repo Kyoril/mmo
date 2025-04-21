@@ -1,8 +1,8 @@
 
-#include "spell_cast.h"
+#include "game_server/spells/spell_cast.h"
 
-#include "each_tile_in_region.h"
-#include "game_unit_s.h"
+#include "game_server/world/each_tile_in_region.h"
+#include "game_server/objects/game_unit_s.h"
 #include "no_cast_state.h"
 #include "single_cast_state.h"
 #include "log/default_log_levels.h"

@@ -1,10 +1,10 @@
 
-#include "creature_ai_death_state.h"
+#include "game_server/ai/creature_ai_death_state.h"
 
 #include <algorithm>
-#include "creature_ai.h"
-#include "game_creature_s.h"
-#include "loot_instance.h"
+#include "game_server/ai/creature_ai.h"
+#include "game_server/objects/game_creature_s.h"
+#include "game_server/loot_instance.h"
 #include "game/experience.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
