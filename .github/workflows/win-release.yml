@@ -30,11 +30,20 @@ jobs:
           Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include *.dll
 
       - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_BUILD_CLIENT=ON -DMMO_BUILD_EDITOR=ON -DMMO_BUILD_LAUNCHER=ON -DMMO_BUILD_TOOLS=ON -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+        shell: pwsh                      # keep PowerShell
+        run: |
+          cmake -S . -B build `
+            '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
+            '-DMMO_BUILD_CLIENT=ON' `
+            '-DMMO_BUILD_EDITOR=ON' `
+            '-DMMO_BUILD_LAUNCHER=ON' `
+            '-DMMO_BUILD_TOOLS=ON' `
+            '-DMMO_WITH_DEV_COMMANDS=ON' `
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build project
         run: |
-          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 --build build --config Release
+          cmake --build build --config Release --parallel 4
 
       - name: Package artifacts
         shell: pwsh
