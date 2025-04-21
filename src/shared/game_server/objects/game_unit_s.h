@@ -329,129 +329,271 @@ namespace mmo
 		};
 	}
 
-	/// @brief Represents a living object (unit) in the game world.
+	/// Represents a living object (unit) in the game world.
+	/// Units can move, cast spells, fight, and interact with other objects.
 	class GameUnitS : public GameObjectS
 	{
 	public:
-
-		/// Fired when this unit was killed. Parameter: GameUnit* killer (may be nullptr if killer
-		/// information is not available (for example due to environmental damage))
+		/// Signal fired when this unit is killed.
+		/// @param killer The unit that killed this unit (may be nullptr).
 		signal<void(GameUnitS*)> killed;
+		/// Signal fired when this unit is threatened by another unit.
+		/// @param threatSource The unit that is threatening this unit.
+		/// @param threatAmount The amount of threat generated.
 		signal<void(GameUnitS&, float)> threatened;
+		/// Signal fired when this unit takes damage.
+		/// @param attacker The unit that caused the damage (may be nullptr).
+		/// @param school The damage school type.
+		/// @param damageType The type of damage taken.
 		signal<void(GameUnitS*, uint32, DamageType)> takenDamage;
+		/// Signal fired when this unit deals damage to another unit.
+		/// @param victim The unit that received damage from this unit.
+		/// @param school The damage school type.
+		/// @param damageType The type of damage dealt.
 		signal<void(GameUnitS&, uint32, DamageType)> doneDamage;
+		/// Signal fired when this unit begins casting a spell.
+		/// @param spell The spell entry being cast.
 		signal<void(const proto::SpellEntry&)> startedCasting;
-
-		/// Fired when a unit trigger should be executed.
+		/// Signal fired when a unit trigger should be executed.
+		/// @param trigger The trigger entry to be executed.
+		/// @param unit The unit that is affected by the trigger.
+		/// @param source The unit that caused the trigger (may be nullptr).
 		signal<void(const proto::TriggerEntry&, GameUnitS&, GameUnitS*)> unitTrigger;
-
+		/// Signal fired when this unit completes a melee attack.
+		/// @param victim The unit that was attacked.
 		signal<void(GameUnitS&)> meleeAttackDone;
 
 	public:
+		/// Constructs a new unit object.
+		/// @param project The project containing game configuration.
+		/// @param timers The timer queue for scheduling timed events.
 		GameUnitS(const proto::Project& project, TimerQueue& timers);
 
+		/// Destructor. Removes all auras before destroying the unit.
 		virtual ~GameUnitS() override;
 
+		/// Initializes the unit's state with default values.
 		virtual void Initialize() override;
 
+		/// Sets a timer after which the unit will be despawned.
+		/// @param despawnDelay Time in milliseconds after which the unit will be despawned.
 		void TriggerDespawnTimer(GameTime despawnDelay);
 
+		/// Writes object update information to the provided writer for network transmission.
+		/// @param writer The writer to write the update information to.
+		/// @param creation Whether this is an update for object creation.
 		virtual void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
 
+		/// Writes value update information to the provided writer for network transmission.
+		/// @param writer The writer to write the update information to.
+		/// @param creation Whether this is an update for object creation.
 		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const override;
 
+		/// Determines if this unit has movement information.
+		/// @returns Always true for units, as they can move.
 		virtual bool HasMovementInfo() const override { return true; }
 
+		/// Refreshes the unit's stats after a change in attributes or equipment.
 		virtual void RefreshStats();
 
+		/// Sets the network unit watcher for this unit.
+		/// @param watcher Pointer to the network unit watcher.
 		void SetNetUnitWatcher(NetUnitWatcherS* watcher) { m_netUnitWatcher = watcher; }
 
+		/// Gets the current position of the unit.
+		/// @returns The position vector of the unit.
 		const Vector3& GetPosition() const noexcept override;
 
 		/// Gets the specified unit modifier value.
+		/// @param mod The unit modifier to retrieve.
+		/// @param type The type of the modifier value to retrieve.
+		/// @returns The modifier value as a float.
 		float GetModifierValue(UnitMods mod, UnitModType type) const;
 
+		/// Gets the calculated unit modifier value after applying all modifications.
+		/// @param mod The unit modifier to calculate.
+		/// @returns The calculated modifier value as a float.
 		float GetCalculatedModifierValue(UnitMods mod) const;
 
 		/// Sets the unit modifier value to the given value.
+		/// @param mod The unit modifier to set.
+		/// @param type The type of modifier value to set.
+		/// @param value The new value to set.
 		void SetModifierValue(UnitMods mod, UnitModType type, float value);
 
 		/// Modifies the given unit modifier value by adding or subtracting it from the current value.
+		/// @param mod The unit modifier to update.
+		/// @param type The type of modifier value to update.
+		/// @param amount The amount to add or subtract.
+		/// @param apply If true, adds the amount; if false, subtracts it.
 		void UpdateModifierValue(UnitMods mod, UnitModType type, float amount, bool apply);
 
 		/// Gets the next pending movement change and removes it from the queue of pending movement changes.
-		/// You need to make sure that there are any pending changes before calling this method.
+		/// @returns The pending movement change that was removed from the queue.
 		PendingMovementChange PopPendingMovementChange();
 
+		/// Adds a new pending movement change to the queue.
+		/// @param change The movement change to add to the queue.
 		void PushPendingMovementChange(PendingMovementChange change);
 
+		/// Checks if there are any pending movement changes in the queue.
+		/// @returns true if there are pending movement changes, false otherwise.
 		bool HasPendingMovementChange() const { return !m_pendingMoveChanges.empty(); }
 
 		/// Determines whether there is a timed out pending movement change.
+		/// @returns true if there is a timed out movement change, false otherwise.
 		bool HasTimedOutPendingMovementChange() const;
 
+		/// Checks if this unit can be interacted with by the specified unit.
+		/// @param interactor The unit attempting to interact with this unit.
+		/// @returns true if interaction is possible, false otherwise.
 		virtual bool IsInteractable(const GameUnitS& interactor) const override;
 
+		/// Gets the maximum distance at which this unit can be interacted with.
+		/// @returns The interaction distance as a float.
 		virtual float GetInteractionDistance() const;
 
 		///
+		/// Raises a trigger event for this unit.
+		/// @param e The type of trigger event.
+		/// @param triggeringUnit The unit that triggered the event (may be nullptr).
 		virtual void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit = nullptr);
 
 		///
+		/// Raises a trigger event with additional data for this unit.
+		/// @param e The type of trigger event.
+		/// @param data Additional data for the trigger event.
+		/// @param triggeringUnit The unit that triggered the event (may be nullptr).
 		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit = nullptr);
 
+		/// Gets the current power type of this unit (mana, rage, energy, etc.).
+		/// @returns The power type as a uint32.
 		uint32 GetPowerType() const { return Get<uint32>(object_fields::PowerType); }
 
+		/// Gets the current amount of power for the current power type.
+		/// @returns The amount of power as a uint32.
 		uint32 GetPower() const { return Get<uint32>(object_fields::Mana + GetPowerType()); }
 
+		/// Gets the maximum amount of power for the current power type.
+		/// @returns The maximum amount of power as a uint32.
 		uint32 GetMaxPower() const { return Get<uint32>(object_fields::MaxMana + GetPowerType()); }
 
 	public:
+		/// Sets the level of the unit.
+		/// @param newLevel The new level to set.
 		virtual void SetLevel(uint32 newLevel);
 
+		/// Relocates the unit to a new position and facing direction.
+		/// @param position The new position vector.
+		/// @param facing The new facing direction.
 		virtual void Relocate(const Vector3& position, const Radian& facing) override;
 
+		/// Applies movement information to the unit.
+		/// @param info The movement information to apply.
 		virtual void ApplyMovementInfo(const MovementInfo& info) override;
 
 	public:
+		/// Gets the power type associated with a unit modifier.
+		/// @param mod The unit modifier.
+		/// @returns The power type as a PowerType enum.
 		static PowerType GetPowerTypeByUnitMod(UnitMods mod);
 
+		/// Gets the unit modifier associated with a stat.
+		/// @param stat The stat index.
+		/// @returns The unit modifier as a UnitMods enum.
 		static UnitMods GetUnitModByStat(uint8 stat);
 
+		/// Gets the unit modifier associated with a power type.
+		/// @param power The power type.
+		/// @returns The unit modifier as a UnitMods enum.
 		static UnitMods GetUnitModByPower(PowerType power);
 
+		/// Checks if a spell has a cooldown.
+		/// @param spellId The ID of the spell.
+		/// @param spellCategory The category of the spell.
+		/// @returns true if the spell has a cooldown, false otherwise.
 		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
 
+		/// Checks if the unit has a specific spell.
+		/// @param spellId The ID of the spell.
+		/// @returns true if the unit has the spell, false otherwise.
 		bool HasSpell(uint32 spellId) const;
 
+		/// Sets the initial spells for the unit.
+		/// @param spellIds A vector of spell IDs to set.
 		void SetInitialSpells(const std::vector<uint32>& spellIds);
 
+		/// Adds a spell to the unit.
+		/// @param spellId The ID of the spell to add.
 		void AddSpell(uint32 spellId);
 
+		/// Removes a spell from the unit.
+		/// @param spellId The ID of the spell to remove.
 		void RemoveSpell(uint32 spellId);
 
+		/// Gets the set of spells known by the unit.
+		/// @returns A set of pointers to spell entries.
 		const std::set<const proto::SpellEntry*>& GetSpells() const;
 
+		/// Sets the cooldown for a spell.
+		/// @param spellId The ID of the spell.
+		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetCooldown(uint32 spellId, GameTime cooldownTimeMs);
 
+		/// Sets the cooldown for a spell category.
+		/// @param spellCategory The category of the spell.
+		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
 
+		/// Casts a spell.
+		/// @param target The target map for the spell.
+		/// @param spell The spell entry to cast.
+		/// @param castTimeMs The cast time in milliseconds.
+		/// @param isProc Whether the spell is a proc.
+		/// @param itemGuid The GUID of the item used to cast the spell (optional).
+		/// @returns The result of the spell cast.
 		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
 
+		/// Cancels the current spell cast.
+		/// @param reason The reason for the interruption.
+		/// @param interruptCooldown The cooldown time for the interruption (optional).
 		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 
+		/// Deals damage to the unit.
+		/// @param damage The amount of damage to deal.
+		/// @param school The damage school type.
+		/// @param instigator The unit that caused the damage.
+		/// @param damageType The type of damage.
 		void Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType);
 
+		/// Heals the unit.
+		/// @param amount The amount of healing to apply.
+		/// @param instigator The unit that caused the healing.
+		/// @returns The actual amount of healing applied.
 		int32 Heal(uint32 amount, GameUnitS* instigator);
 
+		/// Logs spell damage dealt by the unit.
+		/// @param targetGuid The GUID of the target unit.
+		/// @param amount The amount of damage dealt.
+		/// @param school The damage school type.
+		/// @param flags The damage flags.
+		/// @param spell The spell entry used to deal the damage.
 		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell);
 
+		/// Kills the unit.
+		/// @param killer The unit that killed this unit.
 		void Kill(GameUnitS* killer);
 
+		/// Gets the current health of the unit.
+		/// @returns The current health as a uint32.
 		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
 
+		/// Gets the maximum health of the unit.
+		/// @returns The maximum health as a uint32.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
 
+		/// Checks if the unit is alive.
+		/// @returns true if the unit is alive, false otherwise.
 		bool IsAlive() const { return GetHealth() > 0; }
 
 		/// Starts the regeneration countdown.
@@ -460,26 +602,49 @@ namespace mmo
 		/// Stops the regeneration countdown.
 		void StopRegeneration() const;
 
+		/// Applies an aura to the unit.
+		/// @param aura The aura container to apply.
 		void ApplyAura(std::shared_ptr<AuraContainer>&& aura);
 
+		/// Removes all auras applied by a specific item.
+		/// @param itemGuid The GUID of the item.
 		void RemoveAllAurasDueToItem(uint64 itemGuid);
 
+		/// Removes all auras applied by a specific caster.
+		/// @param casterGuid The GUID of the caster.
 		void RemoveAllAurasFromCaster(uint64 casterGuid);
 
+		/// Removes a specific aura from the unit.
+		/// @param aura The aura container to remove.
 		void RemoveAura(const std::shared_ptr<AuraContainer>& aura);
 
+		/// Checks if the unit has an aura from a specific caster.
+		/// @param spellId The ID of the spell.
+		/// @param casterId The GUID of the caster.
+		/// @returns true if the unit has the aura, false otherwise.
 		bool HasAuraSpellFromCaster(uint32 spellId, uint64 casterId);
 
+		/// Builds an aura packet for network transmission.
+		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer& writer) const;
 
+		/// Notifies that mana has been used.
 		void NotifyManaUsed();
 
+		/// Sets the regeneration flags for the unit.
+		/// @param regenerationFlags The regeneration flags to set.
 		void SetRegeneration(uint32 regenerationFlags) { m_regeneration = regenerationFlags; }
 
+		/// Gets the regeneration flags for the unit.
+		/// @returns The regeneration flags as a uint32.
 		uint32 GetRegeneration() const { return m_regeneration; }
 
+		/// Checks if the unit regenerates health.
+		/// @returns true if the unit regenerates health, false otherwise.
 		bool RegeneratesHealth() const { return (m_regeneration & regeneration_flags::Health) != 0; }
 
+		/// Checks if the unit regenerates power.
+		/// @returns true if the unit regenerates power, false otherwise.
 		bool RegeneratesPower() const { return (m_regeneration & regeneration_flags::Power) != 0; }
 
 		/// Executed when an attack was successfully parried.
@@ -492,8 +657,14 @@ namespace mmo
 		virtual void OnBlock();
 
 		/// Teleports the unit to a new location on the same map.
+		/// @param position The new position vector.
+		/// @param facing The new facing direction.
 		void TeleportOnMap(const Vector3& position, const Radian& facing);
 
+		/// Teleports the unit to a new location on a different map.
+		/// @param mapId The ID of the new map.
+		/// @param position The new position vector.
+		/// @param facing The new facing direction.
 		virtual void Teleport(uint32 mapId, const Vector3& position, const Radian& facing);
 
 		/// Modifies the character spell modifiers by applying or misapplying a new mod.
@@ -502,9 +673,13 @@ namespace mmo
 		void ModifySpellMod(const SpellModifier& mod, bool apply);
 
 		/// Gets the total amount of spell mods for one type and one spell.
+		/// @param type The spell modifier type.
+		/// @param op The spell modifier operation.
+		/// @param spellId The ID of the spell.
+		/// @returns The total amount of spell mods as an int32.
 		int32 GetTotalSpellMods(SpellModType type, SpellModOp op, uint32 spellId) const;
 
-		/// Applys all matching spell mods of this character to a given value.
+		/// Applies all matching spell mods of this character to a given value.
 		/// @param op The spell modifier operation to apply.
 		/// @param spellId Id of the spell, to know which modifiers do match.
 		/// @param ref_value Reference of the base value, which will be modified by this method.
@@ -524,34 +699,70 @@ namespace mmo
 			return T(diff);
 		}
 
+		/// Sends a chat message of type "say" from the unit.
+		/// @param message The message to send.
 		void ChatSay(const String& message);
 
+		/// Sends a chat message of type "yell" from the unit.
+		/// @param message The message to send.
 		void ChatYell(const String& message);
 
 	protected:
+		/// Sends a local chat message from the unit.
+		/// @param type The type of chat message.
+		/// @param message The message to send.
 		virtual void DoLocalChatMessage(ChatType type, const String& message);
 
 	private:
+		/// Sets the current victim of the unit.
+		/// @param victim The new victim.
 		void SetVictim(const std::shared_ptr<GameUnitS>& victim);
 
+		/// Called when the current victim is killed.
+		/// @param killer The unit that killed the victim.
 		void VictimKilled(GameUnitS* killer);
 
+		/// Called when the current victim despawns.
+		/// @param victim The victim that despawned.
 		void VictimDespawned(GameObjectS&);
 
 	protected:
+		/// Gets the miss chance for the unit.
+		/// @returns The miss chance as a float.
 		virtual float GetUnitMissChance() const;
 
+		/// Checks if the unit has an offhand weapon.
+		/// @returns true if the unit has an offhand weapon, false otherwise.
 		virtual bool HasOffhandWeapon() const;
 
+		/// Checks if the unit can dual wield weapons.
+		/// @returns true if the unit can dual wield, false otherwise.
 		bool CanDualWield() const;
 
+		/// Gets the maximum skill value for a given level.
+		/// @param level The level to check.
+		/// @returns The maximum skill value as an int32.
 		int32 GetMaxSkillValueForLevel(uint32 level) const;
 
+		/// Rolls the outcome of a melee attack against a victim.
+		/// @param victim The victim of the attack.
+		/// @param attackType The type of weapon attack.
+		/// @returns The outcome of the melee attack.
 		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS& victim, WeaponAttack attackType) const;
 
 	public:
+		/// Gets the miss chance for a melee attack against a victim.
+		/// @param victim The victim of the attack.
+		/// @param attackType The type of weapon attack.
+		/// @param skillDiff The skill difference between the attacker and the victim.
+		/// @param spellId The ID of the spell used in the attack.
+		/// @returns The miss chance as a float.
 		float MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
 
+		/// Gets the critical hit chance for a melee attack against a victim.
+		/// @param victim The victim of the attack.
+		/// @param attackType The type of weapon attack.
+		/// @returns The critical hit chance as a float.
 		float CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const;
 
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
@@ -595,34 +806,66 @@ namespace mmo
 		///	which is not a constant complexity operation.
 		bool HasSpellEffect(SpellEffect type) const;
 
+		/// Checks if the unit is currently attacking a specific victim.
+		/// @param victim The victim to check.
+		/// @returns true if the unit is attacking the victim, false otherwise.
 		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
 
+		/// Checks if the unit is currently attacking any victim.
+		/// @returns true if the unit is attacking, false otherwise.
 		bool IsAttacking() const { return GetVictim() != nullptr; }
 
+		/// Gets the current victim of the unit.
+		/// @returns A pointer to the current victim.
 		GameUnitS* GetVictim() const { return m_victim.lock().get(); }
 
+		/// Starts attacking a specific victim.
+		/// @param victim The victim to attack.
 		void StartAttack(const std::shared_ptr<GameUnitS>& victim);
 
+		/// Stops attacking the current victim.
 		void StopAttack();
 
+		/// Sets the target of the unit.
+		/// @param targetGuid The GUID of the target.
 		void SetTarget(uint64 targetGuid);
 
+		/// Checks if the unit is in combat.
+		/// @returns true if the unit is in combat, false otherwise.
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
+		/// Sets the combat state of the unit.
+		/// @param inCombat true to set the unit in combat, false to set it out of combat.
 		void SetInCombat(bool inCombat);
 
+		/// Gets the melee reach of the unit.
+		/// @returns The melee reach as a float.
 		float GetMeleeReach() const { return 5.0f; /* TODO */ }
 
+		/// Adds an attacking unit to the list of attackers.
+		/// @param attacker The unit that is attacking.
 		void AddAttackingUnit(const GameUnitS& attacker);
 
+		/// Removes an attacking unit from the list of attackers.
+		/// @param attacker The unit to remove.
 		void RemoveAttackingUnit(const GameUnitS& attacker);
 
+		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
 
+		/// Gets the base speed for a specific movement type.
+		/// @param type The movement type.
+		/// @returns The base speed as a float.
 		float GetBaseSpeed(const MovementType type) const;
 
+		/// Sets the base speed for a specific movement type.
+		/// @param type The movement type.
+		/// @param speed The new base speed.
 		void SetBaseSpeed(const MovementType type, float speed);
 
+		/// Gets the current speed for a specific movement type.
+		/// @param type The movement type.
+		/// @returns The current speed as a float.
 		float GetSpeed(const MovementType type) const;
 
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
@@ -633,81 +876,145 @@ namespace mmo
 
 		/// Immediately applies a speed change for this unit. Never call this method directly
 		/// unless you know what you're doing.
+		/// @param type The movement type.
+		/// @param speed The new speed value.
+		/// @param initial Whether this is the initial speed change.
 		void ApplySpeedChange(MovementType type, float speed, bool initial = false);
 
+		/// Calculates the damage reduced by armor.
+		/// @param attackerLevel The level of the attacker.
+		/// @param damage The initial damage amount.
+		/// @returns The reduced damage amount.
 		uint32 CalculateArmorReducedDamage(uint32 attackerLevel, uint32 damage) const;
 
-		/// If this returns true, the other unit is an enemy and we can attack it.
+		/// Checks if another unit is an enemy.
+		/// @param other The other unit to check.
+		/// @returns true if the other unit is an enemy, false otherwise.
 		bool UnitIsEnemy(const GameUnitS& other) const;
 
-		/// If this returns true, the unit is a friend of us and thus we can not attack it.
+		/// Checks if another unit is friendly.
+		/// @param other The other unit to check.
+		/// @returns true if the other unit is friendly, false otherwise.
 		bool UnitIsFriendly(const GameUnitS& other) const;
 
+		/// Gets the faction template of the unit.
+		/// @returns A pointer to the faction template entry.
 		const proto::FactionTemplateEntry* GetFactionTemplate() const;
 
+		/// Gets the level of the unit.
+		/// @returns The level as a uint32.
 		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
 
+		/// Sets the binding location of the unit.
+		/// @param mapId The ID of the map.
+		/// @param position The position vector.
+		/// @param facing The facing direction.
 		void SetBinding(uint32 mapId, const Vector3& position, const Radian& facing);
 
+		/// Gets the map ID of the binding location.
+		/// @returns The map ID as a uint32.
 		uint32 GetBindMap() const { return m_bindMap; }
 
+		/// Gets the position of the binding location.
+		/// @returns The position vector.
 		const Vector3& GetBindPosition() const { return m_bindPosition; }
 
+		/// Gets the facing direction of the binding location.
+		/// @returns The facing direction.
 		const Radian& GetBindFacing() const { return m_bindFacing; }
 
 	protected:
+		/// Called when the unit is killed.
+		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS* killer);
 
+		/// Called when a spell is learned by the unit.
+		/// @param spell The spell entry that was learned.
 		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
 
+		/// Called when a spell is unlearned by the unit.
+		/// @param spell The spell entry that was unlearned.
 		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
 
+		/// Called when a spell cast ends.
+		/// @param succeeded Whether the spell cast succeeded.
 		virtual void OnSpellCastEnded(bool succeeded);
 
+		/// Called when the unit regenerates.
 		virtual void OnRegeneration();
 
+		/// Regenerates the unit's health.
 		virtual void RegenerateHealth();
 
+		/// Regenerates the unit's power.
+		/// @param powerType The type of power to regenerate.
 		virtual void RegeneratePower(PowerType powerType);
 
+		/// Adds power to the unit.
+		/// @param powerType The type of power to add.
+		/// @param amount The amount of power to add.
 		virtual void AddPower(PowerType powerType, int32 amount);
 
+		/// Called when an attack swing event occurs.
+		/// @param attackSwingEvent The attack swing event.
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
 
 	public:
+		/// Gets the maximum base points for a specific aura type.
+		/// @param type The aura type.
+		/// @returns The maximum base points as an int32.
 		int32 GetMaximumBasePoints(AuraType type) const;
 
+		/// Gets the minimum base points for a specific aura type.
+		/// @param type The aura type.
+		/// @returns The minimum base points as an int32.
 		int32 GetMinimumBasePoints(AuraType type) const;
 
+		/// Gets the total multiplier for a specific aura type.
+		/// @param type The aura type.
+		/// @returns The total multiplier as a float.
 		float GetTotalMultiplier(AuraType type) const;
 
+		/// Called when an attack swing occurs.
 		void OnAttackSwing();
 
+		/// Sets the stand state of the unit.
+		/// @param standState The new stand state.
 		void SetStandState(const unit_stand_state::Type standState) { Set<uint32>(object_fields::StandState, standState); }
 
+		/// Gets the stand state of the unit.
+		/// @returns The stand state as a unit_stand_state::Type enum.
 		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<uint32>(object_fields::StandState)); }
 
+		/// Checks if the unit is sitting.
+		/// @returns true if the unit is sitting, false otherwise.
 		bool IsSitting() const { return GetStandState() == unit_stand_state::Sit; }
 
 	protected:
+		/// Prepares the field map for the unit.
 		virtual void PrepareFieldMap() override
 		{
 			m_fields.Initialize(object_fields::UnitFieldCount);
 		}
 
 	private:
-
-		/// 
+		/// Called when the despawn timer expires.
 		void OnDespawnTimer();
 
+		/// Triggers the next auto attack.
 		void TriggerNextAutoAttack();
 
 	public:
+		/// Gets the timer queue for the unit.
+		/// @returns A reference to the timer queue.
 		TimerQueue& GetTimers() const { return m_timers; }
 
+		/// Gets the unit mover for the unit.
+		/// @returns A reference to the unit mover.
 		UnitMover& GetMover() const { return *m_mover; }
 
-		/// Generates the next client ack id for this unit.
+		/// Generates the next client ack ID for the unit.
+		/// @returns The next client ack ID as a uint32.
 		inline uint32 GenerateAckId() { return m_ackGenerator.GenerateId(); }
 
 	protected:
@@ -764,7 +1071,18 @@ namespace mmo
 		uint32 m_regeneration = regeneration_flags::None;
 
 	private:
+		/// Serializes a GameUnitS object to a Writer for binary serialization.
+		/// Used to convert the object state into a binary format for storage or network transmission.
+		/// @param w The Writer to write to.
+		/// @param object The GameUnitS object to serialize.
+		/// @returns Reference to the Writer for chaining.
 		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);
+
+		/// Deserializes a GameUnitS object from a Reader during binary deserialization.
+		/// Used to reconstruct the object state from a binary format after storage or network transmission.
+		/// @param r The Reader to read from.
+		/// @param object The GameUnitS object to deserialize into.
+		/// @returns Reference to the Reader for chaining.
 		friend io::Reader& operator >> (io::Reader& r, GameUnitS& object);
 	};
 

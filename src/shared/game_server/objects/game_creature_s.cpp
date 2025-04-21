@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_server/objects/game_creature_s.h"
 #include "proto_data/project.h"

@@ -12,7 +12,7 @@
 #include <vector>
 #include <mutex>
 
-#include "trigger_handler.h"
+#include "game_server/trigger_handler.h"
 #include "base/signal.h"
 
 namespace mmo

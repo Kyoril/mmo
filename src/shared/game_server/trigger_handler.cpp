@@ -1,5 +1,6 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "trigger_handler.h"
+#include "game_server/trigger_handler.h"
 
 namespace mmo
 {

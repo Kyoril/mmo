@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_object_spawner.h"
 #include "world_instance.h"
