@@ -73,6 +73,7 @@ namespace mmo
 		static const char* s_toggleGrid = "ToggleGrid";
 		static const char* s_toggleWire = "ToggleWire";
 		static const char* s_freezeCulling = "ToggleCullingFreeze";
+		static const char* s_reload = "reload";
 	}
 
 	namespace
@@ -197,16 +198,7 @@ namespace mmo
 			return worldFrame;
 			});
 		
-		// Make the top frame element
-		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
-		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
-		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
-		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
-		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
-		FrameManager::Get().SetTopFrame(topFrame);
-
-		// Load ui file
-		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
+		ReloadUI();
 
 		// Load bindings
 		m_bindings.Initialize(*m_playerController);
@@ -332,6 +324,28 @@ namespace mmo
 	std::string_view WorldState::GetName() const
 	{
 		return Name;
+	}
+
+	void WorldState::ReloadUI()
+	{
+		// Reset the logo frame ui
+		FrameManager::Get().ResetTopFrame();
+
+		// Make the top frame element
+		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
+		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
+		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
+		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
+		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
+		FrameManager::Get().SetTopFrame(topFrame);
+
+		// Load ui file
+		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
+
+		if (ObjectMgr::GetActivePlayerGuid())
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
+		}
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
@@ -861,6 +875,11 @@ namespace mmo
 		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
+		Console::RegisterCommand(command_names::s_reload, [this](const std::string&, const std::string&)
+			{
+				ReloadUI();
+			}, ConsoleCommandCategory::Debug, "Reloads the user interface.");
+
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
 		{
 			ToggleAxisVisibility();
@@ -902,7 +921,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
-			command_names::s_freezeCulling
+			command_names::s_freezeCulling,
+			command_names::s_reload
 		};
 
 		for (const auto& command : commandsToRemove)

@@ -121,6 +121,8 @@ namespace mmo
 	private:
 		// Player Mirror Handlers (called when certain field map values of the controlled player character were changed by the server)
 
+		void ReloadUI();
+
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
 		void OnMoneyChanged(uint64 monitoredGuid);
