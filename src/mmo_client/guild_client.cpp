@@ -132,6 +132,88 @@ namespace mmo
 		return m_guildId != 0;
 	}
 
+	int32 GuildClient::GetNumGuildMembers() const
+	{
+		if (!IsInGuild())
+		{
+			return 0;
+		}
+
+		// TODO
+		return 0;
+	}
+
+	int32 GuildClient::GetNumRanks() const
+	{
+		if (!IsInGuild())
+		{
+			return 0;
+		}
+
+		// TODO
+		return 0;
+	}
+
+	bool GuildClient::IsGuildLeader() const
+	{
+		if (!IsInGuild())
+		{
+			return false;
+		}
+		// TODO
+		return false;
+	}
+
+	bool GuildClient::CanGuildInvite() const
+	{
+		if (!IsInGuild())
+		{
+			return false;
+		}
+		// TODO
+		return false;
+	}
+
+	bool GuildClient::CanGuildPromote() const
+	{
+		if (!IsInGuild())
+		{
+			return false;
+		}
+		// TODO
+		return false;
+	}
+
+	bool GuildClient::CanGuildDemote() const
+	{
+		if (!IsInGuild())
+		{
+			return false;
+		}
+		// TODO
+		return false;
+	}
+
+	bool GuildClient::CanGuildRemove() const
+	{
+		if (!IsInGuild())
+		{
+			return false;
+		}
+		// TODO
+		return false;
+	}
+
+	const GuildMemberInfo* GuildClient::GetGuildMemberInfo(int32 index) const
+	{
+		if (!IsInGuild() || index < 0 || index >= GetNumGuildMembers())
+		{
+			return nullptr;
+		}
+
+		return &m_guildMembers[index];
+	}
+
 	void GuildClient::AcceptGuild()
 	{
 		if (m_inviteGuildName.empty())

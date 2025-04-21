@@ -972,7 +972,17 @@ namespace mmo
 				.def("GetStatType", &ItemHandle::GetStatType)
 				.def("GetStatValue", &ItemHandle::GetStatValue)
 			),
-
+			
+			luabind::scope(
+				luabind::class_<GuildMemberInfo>("GuildMemberInfo")
+				.def_readonly("name", &GuildMemberInfo::name)
+				.def_readonly("rank", &GuildMemberInfo::rank)
+				.def_readonly("rankIndex", &GuildMemberInfo::rankIndex)
+				.def_readonly("className", &GuildMemberInfo::className)
+				.def_readonly("raceName", &GuildMemberInfo::raceName)
+				.def_readonly("level", &GuildMemberInfo::level)
+				.def_readonly("online", &GuildMemberInfo::online)),
+				
 			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
@@ -1141,7 +1151,16 @@ namespace mmo
 			luabind::def<std::function<void()>>("DeclineGuild", [this]() { return this->m_guildClient.DeclineGuild(); }),
 
 			luabind::def<std::function<bool()>>("IsInGuild", [this]() { return this->m_guildClient.IsInGuild(); }),
-
+			luabind::def<std::function<int32()>>("GetNumGuildMembers", [this]() { return this->m_guildClient.GetNumGuildMembers(); }),
+			luabind::def<std::function<int32()>>("GetNumRanks", [this]() { return this->m_guildClient.GetNumRanks(); }),
+			luabind::def<std::function<const GuildMemberInfo*(int32)>>("GetGuildMemberInfo", [this](int32 index) { return this->m_guildClient.GetGuildMemberInfo(index); }),
+				
+			luabind::def<std::function<bool()>>("IsGuildLeader", [this]() { return this->m_guildClient.IsGuildLeader(); }),
+			luabind::def<std::function<bool()>>("CanGuildPromote", [this]() { return this->m_guildClient.CanGuildPromote(); }),
+			luabind::def<std::function<bool()>>("CanGuildDemote", [this]() { return this->m_guildClient.CanGuildDemote(); }),
+			luabind::def<std::function<bool()>>("CanGuildInvite", [this]() { return this->m_guildClient.CanGuildInvite(); }),
+			luabind::def<std::function<bool()>>("CanGuildRemove", [this]() { return this->m_guildClient.CanGuildRemove(); }),
+				
 			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
 			luabind::def<std::function<void(int32, int32&, String&, String&, int32&, bool&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price, bool& out_known) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price, out_known); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>>()),

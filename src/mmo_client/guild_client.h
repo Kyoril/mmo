@@ -7,6 +7,19 @@
 
 namespace mmo
 {
+	struct GuildMemberInfo
+	{
+		uint64 guid;
+		String name;
+		String rank;
+		uint32 rankIndex;
+		uint32 level;
+		String className;
+		String raceName;
+		String zoneName;
+		bool online;
+	};
+
 	class GuildClient final : public NonCopyable
 	{
 	public:
@@ -40,6 +53,22 @@ namespace mmo
 
 		bool IsInGuild() const;
 
+		int32 GetNumGuildMembers() const;
+
+		int32 GetNumRanks() const;
+
+		bool IsGuildLeader() const;
+
+		bool CanGuildInvite() const;
+
+		bool CanGuildPromote() const;
+
+		bool CanGuildDemote() const;
+
+		bool CanGuildRemove() const;
+
+		const GuildMemberInfo* GetGuildMemberInfo(int32 index) const;
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
@@ -66,5 +95,7 @@ namespace mmo
 		String m_inviteGuildName;
 
 		uint64 m_guildId = 0;
+
+		std::vector<GuildMemberInfo> m_guildMembers;
 	};
 }
