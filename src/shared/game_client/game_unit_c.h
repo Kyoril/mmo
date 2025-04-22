@@ -316,6 +316,13 @@ namespace mmo
 
 		void SetUnitNameVisible(bool show);
 
+	private:
+		/// Handles collision detection and response against world objects
+		void HandleCollision();
+		
+		/// Handles sliding along steep slopes when the unit can't walk on them
+		void HandleSlopeSliding(const Vector3& desiredMovement);
+
 	protected:
 		NetClient& m_netDriver;
 		MovementInfo m_movementInfo;

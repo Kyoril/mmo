@@ -2469,9 +2469,11 @@ namespace mmo
 
 		// Find unit
 		std::shared_ptr<GameUnitC> questgiverUnit = ObjectMgr::Get<GameUnitC>(questgiverGuid);
-		ASSERT(questgiverUnit);
+		if (questgiverUnit)
+		{
+			questgiverUnit->SetQuestgiverStatus(status);
+		}
 
-		questgiverUnit->SetQuestgiverStatus(status);
 		return PacketParseResult::Pass;
 	}
 
