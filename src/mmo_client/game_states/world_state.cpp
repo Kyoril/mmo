@@ -3434,7 +3434,7 @@ namespace mmo
 
 	void WorldState::GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities)
 	{
-		// TODO: Do check against terrain?
+			// TODO: Do check against terrain?
 
 		// TODO: Make more performant check
 		for (const Entity* entity : m_scene->GetAllEntities())

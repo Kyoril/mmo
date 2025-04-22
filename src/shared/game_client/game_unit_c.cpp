@@ -354,6 +354,9 @@ namespace mmo
 
 		// Define max movement per step to prevent tunneling
 		constexpr float maxStepDistance = 0.1f;
+		
+		// Store initial position to calculate total movement at the end
+		Vector3 initialFramePosition = m_movementInfo.position;
 
 		// Handle turning regardless of falling state
 		if (m_movementInfo.IsTurning())
@@ -375,9 +378,10 @@ namespace mmo
 
 		if (m_movementInfo.movementFlags & movement_flags::Falling)
 		{
-			// Apply gravity to vertical movement
+			// Apply gravity to vertical movement with more stable terminal velocity
 			constexpr float gravity = 19.291105f;
-			m_movementInfo.jumpVelocity -= gravity * deltaTime;
+			constexpr float terminalVelocity = -55.0f; // Max falling speed
+			m_movementInfo.jumpVelocity = std::max(m_movementInfo.jumpVelocity - gravity * deltaTime, terminalVelocity);
 
 			// Calculate the total movement for this frame
 			Vector3 totalMovement = Vector3(0.0f, m_movementInfo.jumpVelocity * deltaTime, 0.0f);
@@ -389,18 +393,22 @@ namespace mmo
 				const float sinAngle = m_movementInfo.jumpSinAngle;
 				const float cosAngle = m_movementInfo.jumpCosAngle;
 
+					// Apply some air drag to horizontal movement
+					m_movementInfo.jumpXZSpeed = std::max(0.0f, m_movementInfo.jumpXZSpeed - 0.5f * deltaTime);
+
 				// Calculate horizontal movement
 				totalMovement.x = cosAngle * m_movementInfo.jumpXZSpeed * deltaTime;
 				totalMovement.z = sinAngle * m_movementInfo.jumpXZSpeed * deltaTime;
 			}
 
-			// Calculate the number of steps needed based on total movement
+			// Calculate the number of steps needed based on total movement (more steps for faster movement)
 			float totalDistance = totalMovement.GetLength();
 			int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
 			Vector3 stepMovement = totalMovement / static_cast<float>(steps);
 
 			// Apply movement in steps to avoid tunneling
-			for (int i = 0; i < steps; ++i)
+			bool landed = false;
+			for (int i = 0; i < steps && !landed; ++i)
 			{
 				// Apply a single step of movement
 				m_movementInfo.position += stepMovement;
@@ -428,7 +436,7 @@ namespace mmo
 						// If we've landed on a steep slope, keep the falling flag and continue sliding
 						if (slopeAngleRadians > maxSlopeRadians)
 						{
-							// Position to the ground
+							// Ensure position is at ground level
 							m_movementInfo.position.y = currentGroundHeight;
 
 							// Make sure the normal is pointing upward for consistent calculation
@@ -440,9 +448,6 @@ namespace mmo
 							// Calculate downhill direction
 							// The downhill direction is perpendicular to the UP vector, in the direction
 							// of the steepest descent along the slope
-							Vector3 slopeDirection;
-
-							// First get the cross product of the ground normal and world up to get a vector along the slope
 							Vector3 slopeRight = Vector3::UnitY.Cross(groundNormal);
 							slopeRight.Normalize();
 
@@ -462,17 +467,15 @@ namespace mmo
 								}
 
 								// Calculate steepness factor (0 = flat, 1 = vertical)
-								// This gives us a value between 0 and 1 indicating how steep the slope is
 								float steepnessFactor = 1.0f - slopeAngleDot;  // Higher value = steeper slope
 
 								// Physics-based sliding with acceleration based on gravity and slope angle
 								// The steeper the slope, the faster the acceleration
 								constexpr float baseSlideSpeed = 3.0f;
-								constexpr float maxSlideSpeed = 15.0f;    // Maximum sliding speed
-								constexpr float slideAcceleration = 5.0f; // Base acceleration factor
+								constexpr float maxSlideSpeed = 15.0f;  
+								constexpr float slideAcceleration = 5.0f; 
 
 								// Calculate acceleration based on slope steepness
-								// Steeper slopes have higher acceleration
 								float accelerationFactor = slideAcceleration * steepnessFactor * steepnessFactor;
 
 								// Get current slide speed or initialize it
@@ -481,14 +484,11 @@ namespace mmo
 									currentSpeed = baseSlideSpeed;
 								}
 
-								// Apply acceleration to current speed
-								currentSpeed += accelerationFactor * deltaTime;
-
-								// Cap at max slide speed
-								currentSpeed = std::min(currentSpeed, maxSlideSpeed);
+								// Apply acceleration to current speed with smoother transition
+								float targetSpeed = currentSpeed + accelerationFactor * deltaTime;
+								currentSpeed = std::min(targetSpeed, maxSlideSpeed);
 
 								// Set movement for continuing to slide down the slope
-								// Stronger downward velocity for steeper slopes
 								m_movementInfo.jumpXZSpeed = currentSpeed;
 								m_movementInfo.jumpSinAngle = downhillDir.z;
 								m_movementInfo.jumpCosAngle = downhillDir.x;
@@ -502,7 +502,7 @@ namespace mmo
 					}
 
 					// Normal landing on walkable ground
-					m_movementInfo.position.y = currentGroundHeight;
+					m_movementInfo.position.y = currentGroundHeight + 0.001f; // Slight offset to avoid z-fighting
 					m_movementInfo.movementFlags &= ~movement_flags::Falling;
 					m_movementInfo.jumpVelocity = 0.0f;
 					m_movementInfo.jumpXZSpeed = 0.0f;
@@ -510,6 +510,7 @@ namespace mmo
 					m_movementInfo.jumpCosAngle = 0.0f;
 					playerNode->SetPosition(m_movementInfo.position);
 					m_netDriver.OnMoveFallLand(*this);
+					landed = true;
 					break;
 				}
 			}
@@ -556,10 +557,13 @@ namespace mmo
 			int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
 			Vector3 stepMovement = totalMovement / static_cast<float>(steps);
 
+			// Track if movement was completely blocked to avoid micro-stuttering
+			int successfulSteps = 0;
+
 			// Apply movement in steps
 			for (int i = 0; i < steps; ++i)
 			{
-				Vector3 initialPosition = m_movementInfo.position;
+				Vector3 initialStepPosition = m_movementInfo.position;
 				Vector3 potentialPosition = m_movementInfo.position + playerNode->GetOrientation() * stepMovement;
 
 				// Check the slope at the new position
@@ -571,16 +575,74 @@ namespace mmo
 					// Check for collisions and adjust position if needed
 					HandleCollision();
 
-					// If we didn't make any progress (stuck against a wall), stop trying
-					if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.0001f))
+					// If we made even slight progress, count it as a successful step
+					if (!m_movementInfo.position.IsNearlyEqual(initialStepPosition, 0.0001f))
 					{
-						break;
+						successfulSteps++;
+					}
+					
+					// If we didn't make any progress (completely stuck against a wall), try sliding
+					if (m_movementInfo.position.IsNearlyEqual(initialStepPosition, 0.0001f))
+					{
+						// Try sliding along the wall - find an alternative direction
+						Vector3 alternateDirection = Vector3::Zero;
+						
+						// Try moving perpendicular to the blocked direction
+						Vector3 worldStepDir = playerNode->GetOrientation() * stepMovement;
+						Vector3 sideDir(worldStepDir.z, 0, -worldStepDir.x); // 90 degrees to the side
+						
+						// Try both sides
+						Vector3 leftPosition = initialStepPosition + sideDir * 0.5f * stepMovement.GetLength();
+						Vector3 rightPosition = initialStepPosition - sideDir * 0.5f * stepMovement.GetLength();
+						
+						// Check which side has more room
+						bool canMoveLeft = CanWalkOnSlope(leftPosition, 50.0f);
+						bool canMoveRight = CanWalkOnSlope(rightPosition, 50.0f);
+						
+						if (canMoveLeft && !canMoveRight) {
+							m_movementInfo.position = leftPosition;
+							HandleCollision();
+						}
+						else if (canMoveRight && !canMoveLeft) {
+							m_movementInfo.position = rightPosition;
+							HandleCollision();
+						}
+						else if (canMoveLeft && canMoveRight) {
+							// Choose the side that has more clearance
+							m_movementInfo.position = leftPosition;
+							HandleCollision();
+							Vector3 leftResult = m_movementInfo.position;
+							
+							m_movementInfo.position = rightPosition;
+							HandleCollision();
+							Vector3 rightResult = m_movementInfo.position;
+							
+							// Keep the position that moved the most
+							if ((leftResult - initialStepPosition).GetLength() > 
+								(rightResult - initialStepPosition).GetLength()) {
+								m_movementInfo.position = leftResult;
+							}
+							else {
+								m_movementInfo.position = rightResult;
+							}
+						}
+						
+						// If we still made no progress, stop trying further steps
+						if (m_movementInfo.position.IsNearlyEqual(initialStepPosition, 0.0001f)) {
+							break;
+						}
 					}
 				}
 				else
 				{
 					// Can't walk on this slope, try sliding along it
 					HandleSlopeSliding(stepMovement);
+					
+					// If we made progress, count it
+					if (!m_movementInfo.position.IsNearlyEqual(initialStepPosition, 0.0001f))
+					{
+						successfulSteps++;
+					}
 				}
 			}
 
@@ -589,40 +651,45 @@ namespace mmo
 			UpdateCollider();
 
 			// Check if we should start falling (walking off an edge)
-			if (!hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f)
+			// Only do this check if we made some progress to avoid edge cases
+			if (successfulSteps > 0)
 			{
-				const bool wasFalling = (m_movementInfo.movementFlags & movement_flags::Falling) != 0;
-
-				// Start falling with minimal downward velocity
-				m_movementInfo.movementFlags |= movement_flags::Falling;
-				m_movementInfo.jumpVelocity = -0.01f;
-
-				// Calculate horizontal movement direction based on current movement
-				if (!movementVector.IsNearlyEqual(Vector3::Zero))
+				bool noGroundBelow = !hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f;
+				if (noGroundBelow)
 				{
-					// Calculate the angle in world space
-					const Radian facing = m_movementInfo.facing;
-					const float sinFacing = std::sin(facing.GetValueRadians());
-					const float cosFacing = std::cos(facing.GetValueRadians());
+					const bool wasFalling = (m_movementInfo.movementFlags & movement_flags::Falling) != 0;
 
-					// Store the sin and cos of the jump angle
-					m_movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
-					m_movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
+					// Start falling with minimal downward velocity
+					m_movementInfo.movementFlags |= movement_flags::Falling;
+					m_movementInfo.jumpVelocity = -0.01f;
 
-					// Set jump speed to current movement speed
-					m_movementInfo.jumpXZSpeed = GetSpeed(movementType);
+					// Calculate horizontal movement direction based on current movement
+					if (!movementVector.IsNearlyEqual(Vector3::Zero))
+					{
+						// Calculate the angle in world space
+						const Radian facing = m_movementInfo.facing;
+						const float sinFacing = std::sin(facing.GetValueRadians());
+						const float cosFacing = std::cos(facing.GetValueRadians());
+
+						// Store the sin and cos of the jump angle
+						m_movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
+						m_movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
+
+						// Set jump speed to current movement speed
+						m_movementInfo.jumpXZSpeed = GetSpeed(movementType);
+					}
+
+					if (!wasFalling)
+					{
+						m_netDriver.OnMoveFall(*this);
+					}
 				}
-
-				if (!wasFalling)
+				else if (hasGroundHeight)
 				{
-					m_netDriver.OnMoveFall(*this);
+					m_movementInfo.position.y = groundHeight + 0.001f;
+					playerNode->SetPosition(m_movementInfo.position);
+					UpdateCollider();
 				}
-			}
-			else if (hasGroundHeight)
-			{
-				m_movementInfo.position.y = groundHeight;
-				playerNode->SetPosition(m_movementInfo.position);
-				UpdateCollider();
 			}
 		}
 	}
@@ -1904,21 +1971,97 @@ namespace mmo
 		potentialTrees.reserve(8);
 		GetCollisionProvider().GetCollisionTrees(colliderBounds, potentialTrees);
 
-		if (potentialTrees.empty())
-		{
-			return;
-		}
-
 		// Track if we need to adjust position
 		bool collisionDetected = false;
 		Vector3 totalCorrection(0, 0, 0);
 		float minPenetration = std::numeric_limits<float>::max();
 		Vector3 mainCollisionNormal = Vector3::Zero;
+		
+		// Keep track of all collision points and normals for better sliding
+		struct CollisionData {
+			Vector3 point;
+			Vector3 normal;
+			float penetration;
+		};
+		std::vector<CollisionData> collisions;
+		collisions.reserve(8);
 
 		// Ray we'll use for AABB tree traversal - will be reset for each entity
 		Ray tempRay;
 		tempRay.hitDistance = std::numeric_limits<float>::max();
 
+		// Perform terrain collision first - use triangles directly instead of trying to use terrain as entities
+		const Capsule& capsule = GetCollider();
+		// Create multiple test points around the capsule for terrain collision
+		const Vector3 capsuleBottom = capsule.pointA;
+		const Vector3 capsuleTop = capsule.pointB;
+		const Vector3 capsuleDirection = (capsuleTop - capsuleBottom).NormalizedCopy();
+		const float capsuleHeight = (capsuleTop - capsuleBottom).GetLength();
+		
+		// Check points at different heights along the capsule axis
+		constexpr int numVerticalPoints = 5;
+		for (int i = 0; i < numVerticalPoints; i++) {
+			const float heightFraction = i / static_cast<float>(numVerticalPoints - 1);
+			const Vector3 center = capsuleBottom + capsuleDirection * (capsuleHeight * heightFraction);
+			
+			// Check points around the capsule radius
+			constexpr int numRadialPoints = 6;
+			for (int j = 0; j < numRadialPoints; j++) {
+				const float angle = j * (2.0f * Pi / numRadialPoints);
+				// Get a vector perpendicular to capsule direction
+				Vector3 radialDir = Vector3::UnitY;
+				if (std::abs(capsuleDirection.Dot(radialDir)) > 0.9f) {
+					radialDir = Vector3::UnitX; // Use X if Y is too close to capsule direction
+				}
+				// Generate perpendicular vectors
+				Vector3 perpDir1 = capsuleDirection.Cross(radialDir).NormalizedCopy();
+				Vector3 perpDir2 = capsuleDirection.Cross(perpDir1).NormalizedCopy();
+				
+				// Calculate offset vector for this point
+				Vector3 offset = (perpDir1 * std::cos(angle) + perpDir2 * std::sin(angle)) * capsule.radius;
+				Vector3 testPoint = center + offset;
+				
+				// Check for terrain collision (cast ray down)
+				Ray terrainRay(testPoint + Vector3::UnitY * 1.0f, Vector3::UnitY * -1.0f);
+				terrainRay.origin.y += 1.0f; // Start above to ensure we hit the terrain
+				float groundHeight = 0.0f;
+				Vector3 groundNormal;
+				
+				// Use terrain height and normal checks for collision detection
+				if (GetCollisionProvider().GetHeightAt(testPoint, 2.0f, groundHeight) && 
+					GetCollisionProvider().GetGroundNormalAt(testPoint, 2.0f, groundNormal)) {
+					
+					if (testPoint.y < groundHeight + 0.1f) { // Small threshold
+						// Calculate penetration depth (how far inside terrain we are)
+						float penetrationDepth = groundHeight - testPoint.y + 0.1f;
+						
+						// Only consider valid penetrations
+						if (penetrationDepth > 0.0f && penetrationDepth < 1.0f) {
+							// Ensure normal is pointing upward (flip if necessary)
+							if (groundNormal.y < 0) {
+								groundNormal = -groundNormal;
+							}
+							groundNormal.Normalize();
+							
+							Vector3 collisionPoint = testPoint;
+							collisionPoint.y = groundHeight;
+							
+							// Save the collision
+							collisions.push_back({ collisionPoint, groundNormal, penetrationDepth });
+							collisionDetected = true;
+							
+							// Track minimum penetration for step up logic
+							if (penetrationDepth < minPenetration) {
+								minPenetration = penetrationDepth;
+								mainCollisionNormal = groundNormal;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Now handle entity collisions as before
 		// Iterate over potential collision entities
 		for (const Entity* entity : potentialTrees)
 		{
@@ -1982,6 +2125,10 @@ namespace mmo
 								mainCollisionNormal = collisionNormal;
 							}
 
+							// Save all collisions for better resolution
+							collisions.push_back({ collisionPoint, collisionNormal, penetrationDepth });
+							collisionDetected = true;
+
 							// If the collision normal is pointing up significantly, it's likely a ground collision
 							// which we may want to handle differently (e.g., snap to ground)
 							float upDot = collisionNormal.Dot(Vector3::UnitY);
@@ -2013,19 +2160,22 @@ namespace mmo
 										// Only apply horizontal correction for wall collisions
 										correction.y = 0;
 
+										// Scale down the correction to reduce bouncing
+										correction *= 0.9f;
+
 										totalCorrection += correction;
-										collisionDetected = true;
 
 										// Adjust horizontal movement to slide along wall
 										// Reset the horizontal velocity to preserve downward motion but prevent wall climbing
 										float prevJumpXZSpeed = m_movementInfo.jumpXZSpeed;
 										if (prevJumpXZSpeed > 0.1f) // Only if we have significant horizontal speed
 										{
-											// Reduce horizontal velocity when hitting walls while falling
-											m_movementInfo.jumpXZSpeed *= 0.8f;
+											// Reduce horizontal velocity when hitting walls while falling - less aggressive reduction
+											m_movementInfo.jumpXZSpeed *= 0.9f;
 
 											// Update direction to slide along the wall
-											Vector3 slideDirection = horizontalMovement - wallPlaneNormal * moveIntoWall;
+											Vector3 slideDirection = horizontalMovement - wallPlaneNormal * moveIntoWall * 1.05f;
+
 											if (!slideDirection.IsNearlyEqual(Vector3::Zero, 0.001f))
 											{
 												slideDirection.Normalize();
@@ -2041,36 +2191,26 @@ namespace mmo
 							// Handle regular ground collisions
 							if (upDot > 0.7f)  // We're colliding with the ground
 							{
-								// Just adjust the height directly
-								m_movementInfo.position.y = collisionPoint.y;
+								// Just adjust the height directly with slight offset to avoid z-fighting
+								m_movementInfo.position.y = collisionPoint.y + 0.001f;
 								continue;
 							}
 
 							// If collision is mostly horizontal, check if we can step up instead
-							if (std::abs(upDot) < 0.3f && penetrationDepth < 0.5f && CanStepUp(collisionNormal, penetrationDepth))
+							if (std::abs(upDot) < 0.3f && penetrationDepth < 0.6f && CanStepUp(collisionNormal, penetrationDepth))
 							{
-								// Try to step up over small obstacles
-								Vector3 stepUpOffset = Vector3::UnitY * (penetrationDepth + 0.1f);
+								// Try to step up over small obstacles, but don't overshoot
+								float stepUpHeight = penetrationDepth + 0.05f;
+								Vector3 stepUpOffset = Vector3::UnitY * stepUpHeight;
 								m_movementInfo.position += stepUpOffset;
 
 								// Don't add horizontal correction when stepping up
-								collisionDetected = true;
 								continue;
 							}
 
-							// Normal collision response
-							collisionDetected = true;
-
-							// Calculate correction vector (away from the collision)
-							Vector3 correction = collisionNormal * penetrationDepth;
-
-							// Ensure correction is mostly horizontal (don't push too much vertically)
-							if (std::abs(correction.y) > std::abs(correction.x) + std::abs(correction.z))
-							{
-								correction.y *= 0.2f;  // Reduce vertical component
-							}
-
-							totalCorrection += correction;
+							// For normal collision response, store the correction but don't apply yet
+							// We'll process all collisions together for smoother response
+							Vector3 correction = collisionNormal * penetrationDepth * 0.95f; // Slightly reduced to prevent overshooting
 						}
 					}
 				}
@@ -2082,6 +2222,7 @@ namespace mmo
 					// Transform child bounds
 					AABB leftBounds = leftChild.bounds;
 					leftBounds.Transform(matrix);
+
 					AABB rightBounds = rightChild.bounds;
 					rightBounds.Transform(matrix);
 
@@ -2105,10 +2246,66 @@ namespace mmo
 			}
 		}
 
-		if (collisionDetected)
+		// Process all collisions to create a better response
+		if (!collisions.empty())
 		{
-			// Apply the accumulated correction
-			m_movementInfo.position += totalCorrection;
+			// If multiple collisions, compute a weighted average correction
+			if (collisions.size() > 1) 
+			{
+				Vector3 averageNormal = Vector3::Zero;
+				float totalWeight = 0.0f;
+	            
+				// First pass: compute weighted average normal
+				for (const auto& collision : collisions) 
+				{
+					// Weight by inverse penetration (less penetration = higher weight)
+					float weight = 1.0f / (collision.penetration + 0.1f);
+					averageNormal += collision.normal * weight;
+					totalWeight += weight;
+				}
+	            
+				if (totalWeight > 0.0f) 
+				{
+					averageNormal /= totalWeight;
+					averageNormal.Normalize();
+	                
+					// Find the maximum penetration in the average normal direction
+					float maxPenetration = 0.0f;
+					for (const auto& collision : collisions) 
+					{
+						float projection = collision.penetration * std::max(0.0f, collision.normal.Dot(averageNormal));
+						maxPenetration = std::max(maxPenetration, projection);
+					}
+	                
+					// Apply a single correction in the average direction
+					Vector3 correction = averageNormal * maxPenetration * 0.9f; // 90% to avoid overshooting
+
+					// Ensure correction is mostly horizontal for non-ground collisions
+					if (averageNormal.Dot(Vector3::UnitY) < 0.7f) {
+						if (std::abs(correction.y) > std::abs(correction.x) + std::abs(correction.z)) {
+							correction.y *= 0.2f;  // Reduce vertical component
+						}
+					}
+	                
+					m_movementInfo.position += correction;
+				}
+			} 
+			else if (collisionDetected) 
+			{
+				// For a single collision, apply the correction directly (already computed above)
+				// but with a smoothing factor to prevent bouncing
+				Vector3 correction = collisions[0].normal * collisions[0].penetration * 0.95f;
+	            
+				// Ensure correction is mostly horizontal for non-ground collisions
+				float upDot = collisions[0].normal.Dot(Vector3::UnitY);
+				if (upDot < 0.7f) {
+					if (std::abs(correction.y) > std::abs(correction.x) + std::abs(correction.z)) {
+						correction.y *= 0.2f;  // Reduce vertical component
+					}
+				}
+	            
+				m_movementInfo.position += correction;
+			}
 		}
 	}
 
