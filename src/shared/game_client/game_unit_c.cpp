@@ -352,187 +352,279 @@ namespace mmo
 	{
 		auto* playerNode = GetSceneNode();
 
-			// Define max movement per step to prevent tunneling
-			constexpr float maxStepDistance = 0.1f;
-			
-			// Handle turning regardless of falling state
-			if (m_movementInfo.IsTurning())
+		// Define max movement per step to prevent tunneling
+		constexpr float maxStepDistance = 0.1f;
+
+		// Handle turning regardless of falling state
+		if (m_movementInfo.IsTurning())
+		{
+			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
-				if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
-				{
-					playerNode->Yaw(Radian(GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
-				}
-				else if (m_movementInfo.movementFlags & movement_flags::TurnRight)
-				{
-					playerNode->Yaw(Radian(-GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
-				}
-				m_movementInfo.facing = GetSceneNode()->GetDerivedOrientation().GetYaw();
+				playerNode->Yaw(Radian(GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
+			}
+			else if (m_movementInfo.movementFlags & movement_flags::TurnRight)
+			{
+				playerNode->Yaw(Radian(-GetSpeed(movement_type::Turn)) * deltaTime, TransformSpace::World);
+			}
+			m_movementInfo.facing = GetSceneNode()->GetDerivedOrientation().GetYaw();
+		}
+
+		// Adjust for collision and gravity
+		float groundHeight = 0.0f;
+		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
+
+		if (m_movementInfo.movementFlags & movement_flags::Falling)
+		{
+			// Apply gravity to vertical movement
+			constexpr float gravity = 19.291105f;
+			m_movementInfo.jumpVelocity -= gravity * deltaTime;
+
+			// Calculate the total movement for this frame
+			Vector3 totalMovement = Vector3(0.0f, m_movementInfo.jumpVelocity * deltaTime, 0.0f);
+
+			// Apply horizontal movement based on jump direction
+			if (m_movementInfo.jumpXZSpeed > 0.0f)
+			{
+				// Use jumpSinAngle and jumpCosAngle to determine the direction
+				const float sinAngle = m_movementInfo.jumpSinAngle;
+				const float cosAngle = m_movementInfo.jumpCosAngle;
+
+				// Calculate horizontal movement
+				totalMovement.x = cosAngle * m_movementInfo.jumpXZSpeed * deltaTime;
+				totalMovement.z = sinAngle * m_movementInfo.jumpXZSpeed * deltaTime;
 			}
 
-			// Adjust for collision and gravity
-			float groundHeight = 0.0f;
-			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, groundHeight);
+			// Calculate the number of steps needed based on total movement
+			float totalDistance = totalMovement.GetLength();
+			int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
+			Vector3 stepMovement = totalMovement / static_cast<float>(steps);
 
-			if (m_movementInfo.movementFlags & movement_flags::Falling)
+			// Apply movement in steps to avoid tunneling
+			for (int i = 0; i < steps; ++i)
 			{
-				// Apply gravity to vertical movement
-				constexpr float gravity = 19.291105f;
-				m_movementInfo.jumpVelocity -= gravity * deltaTime;
-				
-				// Calculate the total movement for this frame
-				Vector3 totalMovement = Vector3(0.0f, m_movementInfo.jumpVelocity * deltaTime, 0.0f);
-				
-				// Apply horizontal movement based on jump direction
-				if (m_movementInfo.jumpXZSpeed > 0.0f)
+				// Apply a single step of movement
+				m_movementInfo.position += stepMovement;
+
+				// Check for collision after each step
+				HandleCollision();
+
+				// Check if we've landed
+				float currentGroundHeight = 0.0f;
+				bool foundGround = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, currentGroundHeight);
+
+				if (foundGround && m_movementInfo.position.y <= currentGroundHeight && m_movementInfo.jumpVelocity <= 0.0f)
 				{
-					// Use jumpSinAngle and jumpCosAngle to determine the direction
-					const float sinAngle = m_movementInfo.jumpSinAngle;
-					const float cosAngle = m_movementInfo.jumpCosAngle;
-					
-					// Calculate horizontal movement
-					totalMovement.x = cosAngle * m_movementInfo.jumpXZSpeed * deltaTime;
-					totalMovement.z = sinAngle * m_movementInfo.jumpXZSpeed * deltaTime;
-				}
-				
-				// Calculate the number of steps needed based on total movement
-				float totalDistance = totalMovement.GetLength();
-				int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
-				Vector3 stepMovement = totalMovement / static_cast<float>(steps);
-				
-				// Apply movement in steps to avoid tunneling
-				for (int i = 0; i < steps; ++i)
-				{
-					// Apply a single step of movement
-					m_movementInfo.position += stepMovement;
-					
-					// Check for collision after each step
-					HandleCollision();
-					
-					// Check if we've landed
-					float currentGroundHeight = 0.0f;
-					bool foundGround = GetCollisionProvider().GetHeightAt(m_movementInfo.position + Vector3::UnitY * 0.25f, 1.0f, currentGroundHeight);
-					
-					if (foundGround && m_movementInfo.position.y <= currentGroundHeight && m_movementInfo.jumpVelocity <= 0.0f)
+					// Check the slope of the terrain we've landed on
+					Vector3 groundNormal;
+					bool hasNormal = GetCollisionProvider().GetGroundNormalAt(m_movementInfo.position + Vector3::UnitY * 0.55f, 1.0f, groundNormal);
+
+					if (hasNormal)
 					{
-						// Reset movement info on landing
-						m_movementInfo.position.y = currentGroundHeight;
-						m_movementInfo.movementFlags &= ~movement_flags::Falling;
-						m_movementInfo.jumpVelocity = 0.0f;
-						m_movementInfo.jumpXZSpeed = 0.0f;
-						m_movementInfo.jumpSinAngle = 0.0f;
-						m_movementInfo.jumpCosAngle = 0.0f;
-						playerNode->SetPosition(m_movementInfo.position);
-						m_netDriver.OnMoveFallLand(*this);
+						// Calculate slope angle
+						float slopeAngleDot = groundNormal.Dot(Vector3::UnitY);
+						float slopeAngleRadians = std::acos(Clamp(slopeAngleDot, -1.0f, 1.0f));
+						float maxSlopeRadians = 50.0f * 0.0174533f; // Convert max walkable slope to radians
+
+						// If we've landed on a steep slope, keep the falling flag and continue sliding
+						if (slopeAngleRadians > maxSlopeRadians)
+						{
+							// Position to the ground
+							m_movementInfo.position.y = currentGroundHeight;
+
+							// Make sure the normal is pointing upward for consistent calculation
+							if (groundNormal.y < 0.0f)
+							{
+								groundNormal = -groundNormal;
+							}
+
+							// Calculate downhill direction
+							// The downhill direction is perpendicular to the UP vector, in the direction
+							// of the steepest descent along the slope
+							Vector3 slopeDirection;
+
+							// First get the cross product of the ground normal and world up to get a vector along the slope
+							Vector3 slopeRight = Vector3::UnitY.Cross(groundNormal);
+							slopeRight.Normalize();
+
+							// Then get the true downhill direction (perpendicular to both the normal and the right vector)
+							Vector3 downhillDir = groundNormal.Cross(slopeRight);
+
+							// If the slope is nearly horizontal, we don't need to slide
+							if (!downhillDir.IsNearlyEqual(Vector3::Zero, 0.001f))
+							{
+								// Normalize the downhill direction
+								downhillDir.Normalize();
+
+								// We need to ensure it points downhill, not uphill
+								if (downhillDir.y > 0.0f)
+								{
+									downhillDir = -downhillDir;
+								}
+
+								// Calculate steepness factor (0 = flat, 1 = vertical)
+								// This gives us a value between 0 and 1 indicating how steep the slope is
+								float steepnessFactor = 1.0f - slopeAngleDot;  // Higher value = steeper slope
+
+								// Physics-based sliding with acceleration based on gravity and slope angle
+								// The steeper the slope, the faster the acceleration
+								constexpr float baseSlideSpeed = 3.0f;
+								constexpr float maxSlideSpeed = 15.0f;    // Maximum sliding speed
+								constexpr float slideAcceleration = 5.0f; // Base acceleration factor
+
+								// Calculate acceleration based on slope steepness
+								// Steeper slopes have higher acceleration
+								float accelerationFactor = slideAcceleration * steepnessFactor * steepnessFactor;
+
+								// Get current slide speed or initialize it
+								float currentSpeed = m_movementInfo.jumpXZSpeed;
+								if (currentSpeed < baseSlideSpeed) {
+									currentSpeed = baseSlideSpeed;
+								}
+
+								// Apply acceleration to current speed
+								currentSpeed += accelerationFactor * deltaTime;
+
+								// Cap at max slide speed
+								currentSpeed = std::min(currentSpeed, maxSlideSpeed);
+
+								// Set movement for continuing to slide down the slope
+								// Stronger downward velocity for steeper slopes
+								m_movementInfo.jumpXZSpeed = currentSpeed;
+								m_movementInfo.jumpSinAngle = downhillDir.z;
+								m_movementInfo.jumpCosAngle = downhillDir.x;
+
+								// Update position
+								playerNode->SetPosition(m_movementInfo.position);
+								UpdateCollider();
+								continue; // Skip stopping the fall
+							}
+						}
+					}
+
+					// Normal landing on walkable ground
+					m_movementInfo.position.y = currentGroundHeight;
+					m_movementInfo.movementFlags &= ~movement_flags::Falling;
+					m_movementInfo.jumpVelocity = 0.0f;
+					m_movementInfo.jumpXZSpeed = 0.0f;
+					m_movementInfo.jumpSinAngle = 0.0f;
+					m_movementInfo.jumpCosAngle = 0.0f;
+					playerNode->SetPosition(m_movementInfo.position);
+					m_netDriver.OnMoveFallLand(*this);
+					break;
+				}
+			}
+
+			// Update player node position
+			playerNode->SetPosition(m_movementInfo.position);
+			UpdateCollider();
+		}
+		// Normal ground movement
+		else if (m_movementInfo.IsMoving())
+		{
+			Vector3 movementVector;
+
+			if (m_movementInfo.movementFlags & movement_flags::Forward)
+			{
+				movementVector.x += 1.0f;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::Backward)
+			{
+				movementVector.x -= 1.0f;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				movementVector.z -= 1.0f;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				movementVector.z += 1.0f;
+			}
+
+			if (movementVector.IsNearlyEqual(Vector3::Zero))
+			{
+				return;
+			}
+
+			const MovementType movementType = (movementVector.x < 0.0f) ? movement_type::Backwards : movement_type::Run;
+			movementVector.Normalize();
+
+			// Calculate total movement for this frame
+			Vector3 totalMovement = movementVector * GetSpeed(movementType) * deltaTime;
+			float totalDistance = totalMovement.GetLength();
+
+			// Calculate number of steps to avoid tunneling
+			int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
+			Vector3 stepMovement = totalMovement / static_cast<float>(steps);
+
+			// Apply movement in steps
+			for (int i = 0; i < steps; ++i)
+			{
+				Vector3 initialPosition = m_movementInfo.position;
+				Vector3 potentialPosition = m_movementInfo.position + playerNode->GetOrientation() * stepMovement;
+
+				// Check the slope at the new position
+				if (CanWalkOnSlope(potentialPosition, 50.0f))
+				{
+					// Apply the movement if slope is walkable
+					m_movementInfo.position = potentialPosition;
+
+					// Check for collisions and adjust position if needed
+					HandleCollision();
+
+					// If we didn't make any progress (stuck against a wall), stop trying
+					if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.0001f))
+					{
 						break;
 					}
 				}
-				
-				// Update player node position
-				playerNode->SetPosition(m_movementInfo.position);
-				UpdateCollider();
+				else
+				{
+					// Can't walk on this slope, try sliding along it
+					HandleSlopeSliding(stepMovement);
+				}
 			}
-			// Normal ground movement
-			else if (m_movementInfo.IsMoving())
+
+			// Update scene node position
+			playerNode->SetPosition(m_movementInfo.position);
+			UpdateCollider();
+
+			// Check if we should start falling (walking off an edge)
+			if (!hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f)
 			{
-				Vector3 movementVector;
+				const bool wasFalling = (m_movementInfo.movementFlags & movement_flags::Falling) != 0;
 
-				if (m_movementInfo.movementFlags & movement_flags::Forward)
-				{
-					movementVector.x += 1.0f;
-				}
-				if (m_movementInfo.movementFlags & movement_flags::Backward)
-				{
-					movementVector.x -= 1.0f;
-				}
-				if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
-				{
-					movementVector.z -= 1.0f;
-				}
-				if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
-				{
-					movementVector.z += 1.0f;
-				}
+				// Start falling with minimal downward velocity
+				m_movementInfo.movementFlags |= movement_flags::Falling;
+				m_movementInfo.jumpVelocity = -0.01f;
 
-				if (movementVector.IsNearlyEqual(Vector3::Zero))
+				// Calculate horizontal movement direction based on current movement
+				if (!movementVector.IsNearlyEqual(Vector3::Zero))
 				{
-					return;
+					// Calculate the angle in world space
+					const Radian facing = m_movementInfo.facing;
+					const float sinFacing = std::sin(facing.GetValueRadians());
+					const float cosFacing = std::cos(facing.GetValueRadians());
+
+					// Store the sin and cos of the jump angle
+					m_movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
+					m_movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
+
+					// Set jump speed to current movement speed
+					m_movementInfo.jumpXZSpeed = GetSpeed(movementType);
 				}
 
-				const MovementType movementType = (movementVector.x < 0.0f) ? movement_type::Backwards : movement_type::Run;
-				movementVector.Normalize();
-				
-				// Calculate total movement for this frame
-				Vector3 totalMovement = movementVector * GetSpeed(movementType) * deltaTime;
-				float totalDistance = totalMovement.GetLength();
-				
-				// Calculate number of steps to avoid tunneling
-				int steps = std::max(1, static_cast<int>(totalDistance / maxStepDistance));
-				Vector3 stepMovement = totalMovement / static_cast<float>(steps);
-				
-				// Apply movement in steps
-				for (int i = 0; i < steps; ++i)
+				if (!wasFalling)
 				{
-					Vector3 initialPosition = m_movementInfo.position;
-					Vector3 potentialPosition = m_movementInfo.position + playerNode->GetOrientation() * stepMovement;
-					
-					// Check the slope at the new position
-					if (CanWalkOnSlope(potentialPosition, 50.0f))
-					{
-						// Apply the movement if slope is walkable
-						m_movementInfo.position = potentialPosition;
-						
-						// Check for collisions and adjust position if needed
-						HandleCollision();
-						
-						// If we didn't make any progress (stuck against a wall), stop trying
-						if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.0001f))
-						{
-							break;
-						}
-					}
-					else
-					{
-						// Can't walk on this slope, try sliding along it
-						HandleSlopeSliding(stepMovement);
-					}
-				}
-				
-				// Update scene node position
-				playerNode->SetPosition(m_movementInfo.position);
-				UpdateCollider();
-				
-				// Check if we should start falling (walking off an edge)
-				if (!hasGroundHeight || groundHeight <= m_movementInfo.position.y - 0.25f)
-				{
-					// Start falling with minimal downward velocity
-					m_movementInfo.movementFlags |= movement_flags::Falling;
-					m_movementInfo.jumpVelocity = -0.01f;
-					
-					// Calculate horizontal movement direction based on current movement
-					if (!movementVector.IsNearlyEqual(Vector3::Zero))
-					{
-						// Calculate the angle in world space
-						const Radian facing = m_movementInfo.facing;
-						const float sinFacing = std::sin(facing.GetValueRadians());
-						const float cosFacing = std::cos(facing.GetValueRadians());
-						
-						// Store the sin and cos of the jump angle
-						m_movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
-						m_movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
-						
-						// Set jump speed to current movement speed
-						m_movementInfo.jumpXZSpeed = GetSpeed(movementType);
-					}
-					
 					m_netDriver.OnMoveFall(*this);
 				}
-				else if (hasGroundHeight)
-				{
-					m_movementInfo.position.y = groundHeight;
-					playerNode->SetPosition(m_movementInfo.position);
-					UpdateCollider();
-				}
 			}
+			else if (hasGroundHeight)
+			{
+				m_movementInfo.position.y = groundHeight;
+				playerNode->SetPosition(m_movementInfo.position);
+				UpdateCollider();
+			}
+		}
 	}
 
 	bool GameUnitC::CanWalkOnSlope(const Vector3& position, float maxSlopeDegrees) const
@@ -540,16 +632,80 @@ namespace mmo
 		Vector3 groundNormal;
 
 		if (GetCollisionProvider().GetGroundNormalAt(position + Vector3::UnitY * 0.55f, 1.0f, groundNormal))
-		{			
+		{
 			// Compute the angle between the ground normal and the up vector.
 			// Dot product gives cos(angle) so acos(dot) is the angle in radians.
-			float angleRadians = std::acos(Clamp(groundNormal.Dot(Vector3::UnitY), -1.0f, 1.0f));
+			float upDot = groundNormal.Dot(Vector3::UnitY);
+			float angleRadians = std::acos(Clamp(upDot, -1.0f, 1.0f));
 			// Convert maximum slope from degrees to radians.
 			float maxSlopeRadians = maxSlopeDegrees * 0.0174533f;
-			return angleRadians <= maxSlopeRadians;
+
+			// Check if the slope is walkable based on steepness
+			bool slopeIsTooSteep = angleRadians > maxSlopeRadians;
+
+			// If the slope is walkable, we're good
+			if (!slopeIsTooSteep) {
+				return true;
+			}
+
+			// If the slope is too steep, check if we're moving downhill
+			// Get the movement direction
+			Vector3 movement = Vector3::Zero;
+			if (m_movementInfo.movementFlags & movement_flags::Forward)
+			{
+				movement += GetSceneNode()->GetOrientation() * Vector3::UnitX;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::Backward)
+			{
+				movement -= GetSceneNode()->GetOrientation() * Vector3::UnitX;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				movement -= GetSceneNode()->GetOrientation() * Vector3::UnitZ;
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				movement += GetSceneNode()->GetOrientation() * Vector3::UnitZ;
+			}
+
+			// If we're not moving, don't allow walking on too steep slopes
+			if (movement.IsNearlyEqual(Vector3::Zero))
+			{
+				return false;
+			}
+
+			// Project ground normal onto horizontal plane
+			Vector3 horizontalNormal = groundNormal;
+			horizontalNormal.y = 0;
+
+			// If the projected normal is nearly zero, we're on a flat surface or vertical wall
+			if (horizontalNormal.IsNearlyEqual(Vector3::Zero, 0.001f))
+			{
+				return false; // Don't allow walking on extremely steep or vertical surfaces
+			}
+
+			horizontalNormal.Normalize();
+
+			// Project movement vector onto the horizontal plane
+			Vector3 horizontalMovement = movement;
+			horizontalMovement.y = 0;
+			horizontalMovement.Normalize();
+
+			// Dot product between movement and normal indicates direction
+			// Positive: moving uphill, Negative: moving downhill
+			float movementDotNormal = horizontalMovement.Dot(horizontalNormal);
+
+			// If we're moving downhill on a steep slope, allow it to trigger falling
+			if (movementDotNormal < -0.1f && slopeIsTooSteep)
+			{
+				return false; // This will cause the player to start falling instead
+			}
+
+			// For all other cases (uphill on steep slopes), don't allow movement
+			return false;
 		}
 
-		// If no ground normal could be determined, assume the slope is okay.
+		// If no ground normal could be determined, allow movement (will likely fall)
 		return true;
 	}
 
@@ -591,7 +747,7 @@ namespace mmo
 		const String exclamationMesh = "Models/QuestExclamationMark.hmsh";
 		const String rewardMesh = "Models/QuestCompleteMark.hmsh";
 
-		switch(status)
+		switch (status)
 		{
 		case questgiver_status::Unavailable:
 			SetQuestGiverMesh(exclamationMesh);
@@ -701,10 +857,30 @@ namespace mmo
 
 	bool GameUnitC::CanStepUp(const Vector3& collisionNormal, float penetrationDepth)
 	{
+		// Don't attempt to step up if we're falling
+		if (m_movementInfo.movementFlags & movement_flags::Falling)
+		{
+			return false;
+		}
+
 		// Only attempt to step up if the obstacle is in front
 		if (collisionNormal.y > 0.0f)
 		{
 			// The collision is with the ground or a slope, not a vertical obstacle
+			return false;
+		}
+
+		// Only step up if the collision is truly horizontal (wall-like)
+		// Calculate the angle between collision normal and horizontal plane
+		float horizontalDot = Vector3(collisionNormal.x, 0.0f, collisionNormal.z).NormalizedCopy().Dot(collisionNormal);
+		if (horizontalDot < 0.8f) // Allow some tolerance, but mostly horizontal obstacles
+		{
+			return false;
+		}
+
+		// Limit step up height
+		if (penetrationDepth > 0.6f)
+		{
 			return false;
 		}
 
@@ -792,65 +968,65 @@ namespace mmo
 		}
 	}
 
-void GameUnitC::RefreshUnitName()
-{
-	// Ensure name component is updated to display the correct name
-	if (m_nameComponent)
+	void GameUnitC::RefreshUnitName()
 	{
-		std::ostringstream strm;
-		strm << GetName();
-
-		if (!m_creatureInfo.subname.empty())
+		// Ensure name component is updated to display the correct name
+		if (m_nameComponent)
 		{
-			strm << "\n<" << m_creatureInfo.subname << ">";
-		}
+			std::ostringstream strm;
+			strm << GetName();
 
-		m_nameComponent->SetText(strm.str());
-
-		// Set the text color based on the unit's relationship to the player
-		Color textColor = Color::White;  // Default color
-
-		// Check if this is a party member
-		bool isPartyMember = false;
-		if (IsPlayer())
-		{
-			// Check if this player is in the active player's party
-			auto activePlayer = ObjectMgr::GetActivePlayer();
-			if (activePlayer && activePlayer->GetGuid() != GetGuid())
+			if (!m_creatureInfo.subname.empty())
 			{
-				// TODO: Check if this player is in the active player's party
-				// For now, we'll just check if it's a friendly player
-				if (activePlayer->IsFriendlyTo(*this))
+				strm << "\n<" << m_creatureInfo.subname << ">";
+			}
+
+			m_nameComponent->SetText(strm.str());
+
+			// Set the text color based on the unit's relationship to the player
+			Color textColor = Color::White;  // Default color
+
+			// Check if this is a party member
+			bool isPartyMember = false;
+			if (IsPlayer())
+			{
+				// Check if this player is in the active player's party
+				auto activePlayer = ObjectMgr::GetActivePlayer();
+				if (activePlayer && activePlayer->GetGuid() != GetGuid())
 				{
-					isPartyMember = true;
+					// TODO: Check if this player is in the active player's party
+					// For now, we'll just check if it's a friendly player
+					if (activePlayer->IsFriendlyTo(*this))
+					{
+						isPartyMember = true;
+					}
 				}
 			}
-		}
 
-		if (isPartyMember || (IsPlayer() && IsFriendly()))
-		{
-			// Blue for party members and friendly players
-			textColor.Set(0.0f, 0.5f, 1.0f, 1.0f);
-		}
-		else if (IsHostile())
-		{
-			// Red for hostile units
-			textColor.Set(1.0f, 0.0f, 0.0f, 1.0f);
-		}
-		else if (IsFriendly())
-		{
-			// Green for friendly units
-			textColor.Set(0.0f, 1.0f, 0.0f, 1.0f);
-		}
-		else
-		{
-			// Yellow for neutral units
-			textColor.Set(1.0f, 1.0f, 0.0f, 1.0f);
-		}
+			if (isPartyMember || (IsPlayer() && IsFriendly()))
+			{
+				// Blue for party members and friendly players
+				textColor.Set(0.0f, 0.5f, 1.0f, 1.0f);
+			}
+			else if (IsHostile())
+			{
+				// Red for hostile units
+				textColor.Set(1.0f, 0.0f, 0.0f, 1.0f);
+			}
+			else if (IsFriendly())
+			{
+				// Green for friendly units
+				textColor.Set(0.0f, 1.0f, 0.0f, 1.0f);
+			}
+			else
+			{
+				// Yellow for neutral units
+				textColor.Set(1.0f, 1.0f, 0.0f, 1.0f);
+			}
 
-		m_nameComponent->SetFontColor(textColor);
+			m_nameComponent->SetFontColor(textColor);
+		}
 	}
-}
 
 	void GameUnitC::StartMove(const bool forward)
 	{
@@ -1742,7 +1918,7 @@ void GameUnitC::RefreshUnitName()
 		// Ray we'll use for AABB tree traversal - will be reset for each entity
 		Ray tempRay;
 		tempRay.hitDistance = std::numeric_limits<float>::max();
-			
+
 		// Iterate over potential collision entities
 		for (const Entity* entity : potentialTrees)
 		{
@@ -1753,54 +1929,54 @@ void GameUnitC::RefreshUnitName()
 			}
 
 			const auto matrix = entity->GetParentNodeFullTransform();
-			
+
 			// Use stack-based traversal of AABB tree instead of checking every triangle
 			struct StackEntry {
 				unsigned int nodeIndex;
 				float distance;
 			};
-			
+
 			// Max depth is typically log(n) where n is number of triangles, so 50 is very conservative
 			StackEntry stack[50];
 			unsigned int stackCount = 0;
-			
+
 			// Start with root node
 			if (!tree.GetNodes().empty()) {
-				stack[stackCount++] = {0, 0.0f};
+				stack[stackCount++] = { 0, 0.0f };
 			}
-			
+
 			// Process nodes in tree
 			while (stackCount > 0) {
 				// Pop node from stack
 				StackEntry& entry = stack[--stackCount];
 				const auto& node = tree.GetNodes()[entry.nodeIndex];
-				
+
 				// Transform node bounds by entity matrix
 				AABB nodeBounds = node.bounds;
 				nodeBounds.Transform(matrix);
-				
+
 				// Skip if this node doesn't intersect with capsule
 				if (!nodeBounds.Intersects(colliderBounds)) {
 					continue;
 				}
-				
+
 				if (node.numFaces > 0) {
 					// Leaf node - check triangles
 					for (uint32 i = 0; i < node.numFaces; i++) {
 						uint32 faceIndex = node.startFace + i;
 						uint32 indexBase = faceIndex * 3;
-						
+
 						const Vector3& v0 = matrix * tree.GetVertices()[tree.GetIndices()[indexBase]];
 						const Vector3& v1 = matrix * tree.GetVertices()[tree.GetIndices()[indexBase + 1]];
 						const Vector3& v2 = matrix * tree.GetVertices()[tree.GetIndices()[indexBase + 2]];
-						
+
 						Vector3 collisionPoint, collisionNormal;
 						float penetrationDepth;
-						
+
 						if (CapsuleTriangleIntersection(GetCollider(), v0, v1, v2, collisionPoint, collisionNormal, penetrationDepth))
 						{
 							// Store the collision with the least penetration for step up logic
-							if (penetrationDepth < minPenetration) 
+							if (penetrationDepth < minPenetration)
 							{
 								minPenetration = penetrationDepth;
 								mainCollisionNormal = collisionNormal;
@@ -1809,6 +1985,60 @@ void GameUnitC::RefreshUnitName()
 							// If the collision normal is pointing up significantly, it's likely a ground collision
 							// which we may want to handle differently (e.g., snap to ground)
 							float upDot = collisionNormal.Dot(Vector3::UnitY);
+
+							// When in falling state, handle collisions differently
+							if (m_movementInfo.movementFlags & movement_flags::Falling)
+							{
+								// When falling, don't let the player slide up walls
+								// First determine if this is a wall collision (mostly horizontal normal)
+								bool isWallCollision = std::abs(upDot) < 0.5f; // Normal is mostly horizontal
+
+								if (isWallCollision)
+								{
+									// For wall collisions when falling, only allow movement away from the wall
+									// Calculate horizontal movement direction
+									Vector3 horizontalMovement(m_movementInfo.jumpCosAngle, 0, m_movementInfo.jumpSinAngle);
+									float moveIntoWall = horizontalMovement.Dot(Vector3(collisionNormal.x, 0, collisionNormal.z));
+
+									// If moving into the wall, remove the velocity component in that direction
+									if (moveIntoWall < 0)
+									{
+										// Project movement onto the wall plane
+										Vector3 wallPlaneNormal(collisionNormal.x, 0, collisionNormal.z);
+										wallPlaneNormal.Normalize();
+
+										// Calculate correction to prevent sliding up walls
+										Vector3 correction = collisionNormal * penetrationDepth;
+
+										// Only apply horizontal correction for wall collisions
+										correction.y = 0;
+
+										totalCorrection += correction;
+										collisionDetected = true;
+
+										// Adjust horizontal movement to slide along wall
+										// Reset the horizontal velocity to preserve downward motion but prevent wall climbing
+										float prevJumpXZSpeed = m_movementInfo.jumpXZSpeed;
+										if (prevJumpXZSpeed > 0.1f) // Only if we have significant horizontal speed
+										{
+											// Reduce horizontal velocity when hitting walls while falling
+											m_movementInfo.jumpXZSpeed *= 0.8f;
+
+											// Update direction to slide along the wall
+											Vector3 slideDirection = horizontalMovement - wallPlaneNormal * moveIntoWall;
+											if (!slideDirection.IsNearlyEqual(Vector3::Zero, 0.001f))
+											{
+												slideDirection.Normalize();
+												m_movementInfo.jumpSinAngle = slideDirection.z;
+												m_movementInfo.jumpCosAngle = slideDirection.x;
+											}
+										}
+									}
+									continue;
+								}
+							}
+
+							// Handle regular ground collisions
 							if (upDot > 0.7f)  // We're colliding with the ground
 							{
 								// Just adjust the height directly
@@ -1822,7 +2052,7 @@ void GameUnitC::RefreshUnitName()
 								// Try to step up over small obstacles
 								Vector3 stepUpOffset = Vector3::UnitY * (penetrationDepth + 0.1f);
 								m_movementInfo.position += stepUpOffset;
-								
+
 								// Don't add horizontal correction when stepping up
 								collisionDetected = true;
 								continue;
@@ -1830,16 +2060,16 @@ void GameUnitC::RefreshUnitName()
 
 							// Normal collision response
 							collisionDetected = true;
-							
+
 							// Calculate correction vector (away from the collision)
 							Vector3 correction = collisionNormal * penetrationDepth;
-							
+
 							// Ensure correction is mostly horizontal (don't push too much vertically)
 							if (std::abs(correction.y) > std::abs(correction.x) + std::abs(correction.z))
 							{
 								correction.y *= 0.2f;  // Reduce vertical component
 							}
-							
+
 							totalCorrection += correction;
 						}
 					}
@@ -1848,28 +2078,28 @@ void GameUnitC::RefreshUnitName()
 					// Internal node - add children to stack
 					const auto& leftChild = tree.GetNodes()[node.children];
 					const auto& rightChild = tree.GetNodes()[node.children + 1];
-					
+
 					// Transform child bounds
 					AABB leftBounds = leftChild.bounds;
 					leftBounds.Transform(matrix);
 					AABB rightBounds = rightChild.bounds;
 					rightBounds.Transform(matrix);
-					
+
 					// If both children are valid, prioritize the closer one
 					bool leftValid = leftBounds.Intersects(colliderBounds);
 					bool rightValid = rightBounds.Intersects(colliderBounds);
-					
+
 					if (leftValid && rightValid) {
 						// Put right child first (will be processed second)
-						stack[stackCount++] = {node.children + 1, 0.0f};
+						stack[stackCount++] = { node.children + 1, 0.0f };
 						// Put left child second (will be processed first)
-						stack[stackCount++] = {node.children, 0.0f};
+						stack[stackCount++] = { node.children, 0.0f };
 					}
 					else if (leftValid) {
-						stack[stackCount++] = {node.children, 0.0f};
+						stack[stackCount++] = { node.children, 0.0f };
 					}
 					else if (rightValid) {
-						stack[stackCount++] = {node.children + 1, 0.0f};
+						stack[stackCount++] = { node.children + 1, 0.0f };
 					}
 				}
 			}
@@ -1890,40 +2120,111 @@ void GameUnitC::RefreshUnitName()
 		{
 			return;  // No ground detected, can't slide
 		}
-		
-		// Project the desired movement onto the slope plane
-		// First, normalize the ground normal
+
+		// Normalize the ground normal
 		groundNormal.Normalize();
-		
+
 		// Ensure the normal is pointing upward (flip if necessary)
 		if (groundNormal.y < 0)
 		{
 			groundNormal = -groundNormal;
 		}
-		
+
+		// Calculate slope angle to determine if we should start falling instead of sliding sideways
+		float slopeAngleDot = groundNormal.Dot(Vector3::UnitY);
+		float slopeAngleRadians = std::acos(Clamp(slopeAngleDot, -1.0f, 1.0f));
+		float maxSlopeRadians = 50.0f * 0.0174533f; // Convert max walkable slope to radians
+
+		// Calculate the direction the player wants to go
+		Vector3 playerIntendedDirection = desiredMovement;
+		playerIntendedDirection.Normalize();
+
+		// Calculate the forward vector in world space
+		Vector3 playerForward = GetSceneNode()->GetOrientation() * Vector3::UnitX;
+		playerForward.y = 0;
+		playerForward.Normalize();
+
+		// Calculate dot product to determine if player is trying to move downhill
+		Vector3 horizontalNormal = groundNormal;
+		horizontalNormal.y = 0;
+
+		// Skip if almost flat
+		if (horizontalNormal.IsNearlyEqual(Vector3::Zero, 0.001f))
+		{
+			// On flat ground, just continue normal movement
+			return;
+		}
+
+		horizontalNormal.Normalize();
+		float movingDownhill = -playerForward.Dot(horizontalNormal); // Negative because we want downhill direction
+
+		// If slope is very steep and player is moving mostly downhill, start falling instead of sliding sideways
+		if (slopeAngleRadians > maxSlopeRadians && movingDownhill > 0.3f)
+		{
+			// Calculate horizontal movement direction based on current movement
+			Vector3 movement = desiredMovement;
+			movement.Normalize();
+
+			// Calculate the angle in world space
+			const Radian facing = m_movementInfo.facing;
+			const float sinFacing = std::sin(facing.GetValueRadians());
+			const float cosFacing = std::cos(facing.GetValueRadians());
+
+			// Prepare movement info but don't set the flag yet
+			// We need to notify the server first, then set the flag
+			float jumpXZSpeed = GetSpeed(movement_type::Run);
+			float jumpSinAngle = movement.z * cosFacing - movement.x * sinFacing;
+			float jumpCosAngle = movement.x * cosFacing + movement.z * sinFacing;
+
+			const bool wasFalling = (m_movementInfo.movementFlags & movement_flags::Falling) != 0;
+
+			// Now set the falling flag and update movement parameters
+			m_movementInfo.movementFlags |= movement_flags::Falling;
+			m_movementInfo.jumpVelocity = -0.1f;
+			m_movementInfo.jumpXZSpeed = jumpXZSpeed;
+			m_movementInfo.jumpSinAngle = jumpSinAngle;
+			m_movementInfo.jumpCosAngle = jumpCosAngle;
+
+			// Notify the server about fall start
+			// This will send the movement info in its current state
+			if (!wasFalling)
+			{
+				m_netDriver.OnMoveFall(*this);
+			}
+			return;
+		}
+
 		// The formula for projecting a vector onto a plane with normal n is:
 		// projection = v - (v·n)n
 		float dot = desiredMovement.Dot(groundNormal);
 		Vector3 projectedMovement = desiredMovement - groundNormal * dot;
-		
-		// Scale the projected movement to preserve energy
-		if (!projectedMovement.IsNearlyEqual(Vector3::Zero, 0.001f))
+
+		// If the projected movement is very small, don't bother sliding
+		if (projectedMovement.IsNearlyEqual(Vector3::Zero, 0.01f))
 		{
-			projectedMovement.Normalize();
-			projectedMovement *= desiredMovement.GetLength() * 0.8f;  // 80% energy preservation
-			
-			// Apply the sliding movement
-			Vector3 initialPosition = m_movementInfo.position;
-			m_movementInfo.position += projectedMovement;
-			
-			// Check for collisions after sliding
-			HandleCollision();
-			
-			// If we didn't make any progress, we're probably stuck
-			if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.001f))
-			{
-				return;
-			}
+			return;
+		}
+
+		// Mix of original direction and projected direction to make movement feel more natural
+		// More downhill = more following the original direction
+		float blendFactor = Clamp(movingDownhill, 0.0f, 1.0f) * 0.7f;
+		Vector3 blendedMovement = projectedMovement * (1.0f - blendFactor) + desiredMovement * blendFactor;
+
+		// Scale the movement to preserve energy
+		blendedMovement.Normalize();
+		blendedMovement *= desiredMovement.GetLength() * 0.9f;  // 90% energy preservation
+
+		// Apply the sliding movement
+		Vector3 initialPosition = m_movementInfo.position;
+		m_movementInfo.position += blendedMovement;
+
+		// Check for collisions after sliding
+		HandleCollision();
+
+		// If we didn't make any progress, we're probably stuck
+		if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.001f))
+		{
+			return;
 		}
 	}
 
