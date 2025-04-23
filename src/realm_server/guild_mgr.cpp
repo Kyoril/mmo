@@ -50,6 +50,13 @@ namespace mmo
 			return false;
 		}
 
+		Player* player = m_playerManager.GetPlayerByCharacterGuid(leaderGuid);
+		if (!player)
+		{
+			ELOG("Leader is not online, guild can not be created");
+			return false;
+		}
+
 		std::vector<GuildRank> defaultRanks;
 		defaultRanks.emplace_back("Guild Master", guild_rank_permissions::All);
 		defaultRanks.emplace_back("Officer", guild_rank_permissions::All);
@@ -57,8 +64,13 @@ namespace mmo
 		defaultRanks.emplace_back("Member", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
 		defaultRanks.emplace_back("Initiate", guild_rank_permissions::ReadGuildChat | guild_rank_permissions::WriteGuildChat);
 
+		const String characterName = player->GetCharacterName();
+		const uint32 level = player->GetCharacterLevel();
+		const uint32 classId = player->GetCharacterClass();
+		const uint32 raceId = player->GetCharacterRace();
+
 		const uint64 guildId = m_idGenerator.GenerateId();
-		auto handler = [guildId, name, leaderGuid, this, callback, defaultRanks](bool success)
+		auto handler = [guildId, name, leaderGuid, this, callback, defaultRanks, characterName, level, classId, raceId](bool success)
 			{
 				if (!success)
 				{
@@ -66,13 +78,13 @@ namespace mmo
 					return;
 				}
 
-				auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, name, leaderGuid);
+				const auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, characterName, leaderGuid);
 				for (const auto& rank : defaultRanks)
 				{
 					guild->GetRanksRef().push_back(rank);
 				}
 
-				guild->GetMembersRef().emplace_back(leaderGuid, 0);
+				guild->GetMembersRef().emplace_back(leaderGuid, 0, name, level, raceId, classId);
 
 				m_guildIdsByName[name] = guild->GetId();
 				m_guildsById[guildId] = guild;
@@ -80,7 +92,7 @@ namespace mmo
 			};
 
 		std::vector<GuildMember> members;
-		members.emplace_back(leaderGuid, 0);
+		members.emplace_back(leaderGuid, 0, name, level, raceId, classId);
 
 		m_asyncDatabase.asyncRequest(std::move(handler), &IDatabase::CreateGuild, guildId, name, leaderGuid, defaultRanks, members);
 
