@@ -102,6 +102,8 @@ namespace mmo
         // Call listener (note, only called if there's something to do)
         if (different)
         {
+			m_worldAABBDirty = true;
+
             if (m_parentNode)
             {
 	            objectAttached(*this);
@@ -154,6 +156,7 @@ namespace mmo
 	void MovableObject::NotifyMoved()
 	{
 		objectMoved(*this);
+		m_worldAABBDirty = true;
 	}
 
 	void MovableObject::SetCurrentCamera(Camera& cam)
@@ -171,10 +174,11 @@ namespace mmo
 
 	const AABB& MovableObject::GetWorldBoundingBox(bool derive) const
 	{
-		if (derive)
+		if (derive && m_worldAABBDirty)
         {
             m_worldAABB = GetBoundingBox();
             m_worldAABB.Transform(GetParentNodeFullTransform());
+			m_worldAABBDirty = false;
         }
 
         return m_worldAABB;
