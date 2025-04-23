@@ -639,6 +639,7 @@ namespace mmo
 			Glancing = 0x00000020,
 			Crushing = 0x00000040,
 			NoAction = 0x00000080,
+			Block = 0x00000100,
 		};
 	}
 
