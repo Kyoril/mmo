@@ -246,9 +246,23 @@ namespace mmo
 		m_connector.GuildRoster();
 	}
 
-	void GuildClient::NotifyGuildChanged(uint64 guildId)
+	void GuildClient::NotifyGuildChanged(const uint64 guildId)
 	{
 		m_guildId = guildId;
+
+		if (m_guildId != 0)
+		{
+			m_guildCache.Get(m_guildId, [this](const uint64 guildId, const GuildInfo& guild)
+				{
+					if (guildId != m_guildId)
+					{
+						return;
+					}
+
+					m_guildName = guild.name;
+					m_guildMotd = "TODO";
+				});
+		}
 	}
 
 	void GuildClient::AcceptGuild()

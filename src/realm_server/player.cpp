@@ -2583,7 +2583,6 @@ namespace mmo
 		}
 
 		DLOG("Player wants to remove " << playerName << " from guild");
-
 		if (!m_characterData)
 		{
 			ELOG("Player tried to remove player from guild without having character data");
@@ -2596,7 +2595,7 @@ namespace mmo
 			SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
-
+		
 		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
@@ -2609,6 +2608,13 @@ namespace mmo
 		if (!guild->HasPermission(m_characterData->characterId, guild_rank_permissions::Remove))
 		{
 			ELOG("Player tried to remove player from guild without having permission to remove members");
+			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::NotAllowed, "");
+			return PacketParseResult::Pass;
+		}
+
+		if (playerName == m_characterData->name)
+		{
+			ELOG("Player tried to remove himself from guild");
 			SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::NotAllowed, "");
 			return PacketParseResult::Pass;
 		}

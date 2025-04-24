@@ -74,6 +74,10 @@ namespace mmo
 
 		void NotifyGuildChanged(uint64 guildId);
 
+		const String& GetGuildName() const { return m_guildName; }
+
+		const String& GetGuildMOTD() const { return m_guildMotd; }
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
@@ -100,6 +104,8 @@ namespace mmo
 
 		String m_invitePlayerName;
 		String m_inviteGuildName;
+		String m_guildName;
+		String m_guildMotd;
 
 		uint64 m_guildId = 0;
 		int32 m_guildRank = -1;
