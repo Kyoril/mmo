@@ -76,7 +76,9 @@ namespace mmo
             Crushing,
 
             /// The attack was a normal hit for 100% damage.
-            Normal
+            Normal,
+
+            Immune,
 	    };
     }
 

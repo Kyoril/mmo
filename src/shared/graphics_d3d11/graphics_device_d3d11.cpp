@@ -39,62 +39,45 @@ namespace mmo
 {
 	namespace
 	{
-		D3D11_FILL_MODE D3D11FillMode(const FillMode mode)
+		constexpr D3D11_FILL_MODE D3D11FillMode(const FillMode mode) noexcept
 		{
-			switch (mode)
-			{
-			case FillMode::Wireframe:
-				return D3D11_FILL_WIREFRAME;
-			}
-
-			return D3D11_FILL_SOLID;
+			return (mode == FillMode::Wireframe) ? D3D11_FILL_WIREFRAME : D3D11_FILL_SOLID;
 		}
 
-		D3D11_CULL_MODE D3D11CullMode(const FaceCullMode mode)
+		constexpr D3D11_CULL_MODE D3D11CullMode(const FaceCullMode mode) noexcept
 		{
 			switch (mode)
 			{
-			case FaceCullMode::Back:
-				return D3D11_CULL_BACK;
-			case FaceCullMode::Front:
-				return D3D11_CULL_FRONT;
+			case FaceCullMode::Back: return D3D11_CULL_BACK;
+			case FaceCullMode::Front: return D3D11_CULL_FRONT;
+			default: return D3D11_CULL_NONE;
 			}
-
-			return D3D11_CULL_NONE;
 		}
 
-		D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(const TextureAddressMode mode)
-		{
-			switch (mode)
-			{
-			case TextureAddressMode::Clamp:
-				return D3D11_TEXTURE_ADDRESS_CLAMP;
-			case TextureAddressMode::Wrap:
-				return D3D11_TEXTURE_ADDRESS_WRAP;
-			case TextureAddressMode::Border:
-				return D3D11_TEXTURE_ADDRESS_BORDER;
-			case TextureAddressMode::Mirror:
-				return D3D11_TEXTURE_ADDRESS_MIRROR;
-			}
+		// Use a lookup table for TextureAddressMode
+		constexpr D3D11_TEXTURE_ADDRESS_MODE TextureAddressModeTable[] = {
+			D3D11_TEXTURE_ADDRESS_CLAMP,  // TextureAddressMode::Clamp
+			D3D11_TEXTURE_ADDRESS_WRAP,   // TextureAddressMode::Wrap
+			D3D11_TEXTURE_ADDRESS_BORDER, // TextureAddressMode::Border
+			D3D11_TEXTURE_ADDRESS_MIRROR  // TextureAddressMode::Mirror
+		};
 
-			return D3D11_TEXTURE_ADDRESS_CLAMP;
+		constexpr D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(const TextureAddressMode mode) noexcept
+		{
+			return (static_cast<int>(mode) >= 0 && static_cast<int>(mode) < std::size(TextureAddressModeTable)) ? TextureAddressModeTable[static_cast<int>(mode)] : D3D11_TEXTURE_ADDRESS_CLAMP;
 		}
 
-		D3D11_FILTER D3D11TextureFilter(const TextureFilter mode)
-		{
-			switch (mode)
-			{
-			case TextureFilter::None:
-				return D3D11_FILTER_MIN_MAG_MIP_POINT;
-			case TextureFilter::Bilinear:
-				return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
-			case TextureFilter::Trilinear:
-				return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-			case TextureFilter::Anisotropic:
-				return D3D11_FILTER_ANISOTROPIC;
-			}
+		// Use a lookup table for TextureFilter
+		constexpr D3D11_FILTER TextureFilterTable[] = {
+			D3D11_FILTER_MIN_MAG_MIP_POINT,       // TextureFilter::None
+			D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, // TextureFilter::Bilinear
+			D3D11_FILTER_MIN_MAG_MIP_LINEAR,      // TextureFilter::Trilinear
+			D3D11_FILTER_ANISOTROPIC              // TextureFilter::Anisotropic
+		};
 
-			return D3D11_FILTER_ANISOTROPIC;
+		constexpr D3D11_FILTER D3D11TextureFilter(const TextureFilter mode) noexcept
+		{
+			return (static_cast<int>(mode) >= 0 && static_cast<int>(mode) < std::size(TextureFilterTable)) ? TextureFilterTable[static_cast<int>(mode)] : D3D11_FILTER_ANISOTROPIC;
 		}
 	}
 

@@ -1,31 +1,6 @@
 syntax = "proto2";
 package mmo.proto_client;
 
-message ActionButton {
-	required uint32 action = 1;
-	optional uint32 type = 2;
-	optional uint32 misc = 3;
-	enum ActionButtonUpdateState {
-		UNCHANGED	= 0;
-		CHANGED		= 1;
-		NEW			= 2;
-		DELETED		= 3;
-	}
-	optional ActionButtonUpdateState state = 4 [default = UNCHANGED];
-}
-
-message InitialActionButtons {
-	map<uint32, ActionButton> actionButtons = 1;
-}
-
-message InitialSpells {
-	repeated uint32 spells = 1;
-}
-
-message InitialItems {
-	repeated uint32 items = 1;
-}
-
 message RaceEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -33,17 +8,6 @@ message RaceEntry {
 	required uint32 malemodel = 4;
 	required uint32 femalemodel = 5;
 	required uint32 baselanguage = 6;
-	required uint32 startingtaximask = 7;
-	required uint32 cinematic = 8;
-	map<uint32, InitialSpells> initialSpells = 9;
-	map<uint32, InitialActionButtons> initialActionButtons = 10;
-	map<uint32, InitialItems> initialItems = 11;
-	required uint32 startmap = 12;
-	required uint32 startzone = 13;
-	required float startposx = 14;
-	required float startposy = 15;
-	required float startposz = 16;
-	required float startrotation = 17;
 }
 
 message Races {

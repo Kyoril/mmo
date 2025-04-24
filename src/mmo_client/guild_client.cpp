@@ -8,9 +8,11 @@
 
 namespace mmo
 {
-	GuildClient::GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache)
+	GuildClient::GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache, const proto_client::RaceManager& races, const proto_client::ClassManager& classes)
 		: m_connector(realmConnector)
 		, m_guildCache(guildCache)
+		, m_races(races)
+		, m_classes(classes)
 	{
 	}
 
@@ -244,9 +246,23 @@ namespace mmo
 		m_connector.GuildRoster();
 	}
 
-	void GuildClient::NotifyGuildChanged(uint64 guildId)
+	void GuildClient::NotifyGuildChanged(const uint64 guildId)
 	{
 		m_guildId = guildId;
+
+		if (m_guildId != 0)
+		{
+			m_guildCache.Get(m_guildId, [this](const uint64 guildId, const GuildInfo& guild)
+				{
+					if (guildId != m_guildId)
+					{
+						return;
+					}
+
+					m_guildName = guild.name;
+					m_guildMotd = "TODO";
+				});
+		}
 	}
 
 	void GuildClient::AcceptGuild()
@@ -450,8 +466,12 @@ namespace mmo
 			}
 
 			member.rank = "UNKNOWN";
-			member.className = "UNKNOWN";
-			member.raceName = "UNKNOWN";
+
+			const proto_client::RaceEntry* race = m_races.getById(raceId);
+			member.raceName = race ? race->name() : "UNKNOWN";
+
+			const proto_client::ClassEntry* classEntry = m_classes.getById(classId);
+			member.className = classEntry ? classEntry->name() : "UNKNOWN";
 		}
 
 		// Notify the UI that the roster updated

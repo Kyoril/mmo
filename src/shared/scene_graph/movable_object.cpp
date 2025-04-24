@@ -103,6 +103,8 @@ namespace mmo
         // Call listener (note, only called if there's something to do)
         if (different)
         {
+			m_worldAABBDirty = true;
+
             if (m_parentNode)
             {
 	            objectAttached(*this);

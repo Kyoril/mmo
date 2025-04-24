@@ -1082,44 +1082,103 @@ namespace mmo
 
 		float missChance = victim.GetUnitMissChance();
 
-		// Off hand attacks have an additional 19% miss chance
-		if (!spellId && HasOffhandWeapon() && attackType != weapon_attack::RangedAttack)
+		// Level difference penalty - use defense/weapon skill difference
+		if (skillDiff < 0)
+		{
+			// Negative skill diff means victim has higher defense than attacker's weapon skill
+			// Each point of skill diff increases miss chance
+			if (skillDiff > -10)
+			{
+				// Small skill difference: 0.1% per point
+				missChance += -skillDiff * 0.1f;
+			}
+			else
+			{
+				// Large skill difference: 0.1% for first 10 points, then 0.4% per additional point
+				missChance += 1.0f + (-skillDiff - 10) * 0.4f;
+			}
+		}
+
+		// Dual wield penalty (additional 19% miss chance)
+		if (!spellId && HasOffhandWeapon() && attackType == weapon_attack::OffhandAttack)
 		{
 			missChance += 19.0f;
 		}
-
-		// Calculate skill diff
-		int32 diff = -skillDiff;
-		missChance += diff > 10 ? 1 + (diff - 10) * 0.4f : diff * 0.1f;
-
+			
+		// Apply hit rating bonus (reduces miss chance)
+		// TODO: Implement hit rating from gear
+		float hitRatingBonus = 0.0f;
+		missChance -= hitRatingBonus;
+			
 		return std::min(std::max(missChance, 0.0f), 100.0f);
 	}
 
 	float GameUnitS::CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const
 	{
-		// TODO
-		return 5.0f;
+		// Base crit chance from agility and weapon skill
+		float critChance = 5.0f;  // Base 5%
+    
+		// Add agility contribution - formula approximates classic wow
+		// For most classes: 20 agi = 1% crit
+		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
+		critChance += agiContribution;
+		
+		// Add weapon skill contribution if applicable
+		// TODO: Add weapon skill bonuses when equipment system is implemented
+		
+		// Level difference penalty (lower chance to crit higher level targets)
+		int32 levelDiff = static_cast<int32>(victim.GetLevel()) - static_cast<int32>(GetLevel());
+		if (levelDiff > 0)
+		{
+			critChance -= levelDiff * 0.2f;
+		}
+		
+		// Apply crit chance modifiers from talents/buffs
+		critChance += GetTotalSpellMods(spell_mod_type::Flat, spell_mod_op::CritChance, 0);
+		critChance *= (1.0f + GetTotalSpellMods(spell_mod_type::Pct, spell_mod_op::CritChance, 0) / 100.0f);
+		
+		return std::max(0.0f, std::min(critChance, 100.0f));
 	}
 
 	float GameUnitS::DodgeChance() const
 	{
 		if (!CanDodge()) return 0.0f;
 
-		return 5.0f;
+		// Base dodge chance
+		float dodgeChance = 5.0f;
+		
+		// Add agility contribution - approximately 20 agility = 1% dodge
+		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
+		dodgeChance += agiContribution;
+		
+		// Add dodge rating when equipment system is implemented
+		// TODO: Add equipment dodge rating
+		
+		return std::max(0.0f, std::min(dodgeChance, 100.0f));
 	}
 
 	float GameUnitS::ParryChance() const
 	{
 		if (!CanParry()) return 0.0f;
 
-		return 5.0f;
+		// Base parry chance (only available with certain weapon types)
+		float parryChance = 5.0f;
+		
+		// TODO: Apply parry rating from equipment when implemented
+		
+		return std::max(0.0f, std::min(parryChance, 100.0f));
 	}
 
 	float GameUnitS::BlockChance() const
 	{
 		if (!CanBlock()) return 0.0f;
 
-		return 5.0f;
+		// Base block chance (only available when equipped with a shield)
+		float blockChance = 5.0f;
+		
+		// TODO: Apply block rating from shield when equipment system is implemented
+		
+		return std::max(0.0f, std::min(blockChance, 100.0f));
 	}
 
 	void GameUnitS::NotifyCanBlock(const bool gainedEffect)
@@ -1187,8 +1246,12 @@ namespace mmo
 		// Base miss chance is 5%
 		float miss_chance = 5.0f;
 
-		// TODO: Maybe increase this for players based on their defense skill
-
+		// Players gain additional miss chance from defense rating
+		if (IsPlayer())
+		{
+			// TODO: Add miss chance from defense rating when implemented
+		}
+		
 		return miss_chance;
 	}
 
@@ -1209,6 +1272,8 @@ namespace mmo
 
 	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS& victim, const WeaponAttack attackType) const
 	{
+		// TODO: Add check for melee immunity
+
 		const int32 attackerMaxSkillValueForLevel = GetMaxSkillValueForLevel(GetLevel());
 		const int32 victimMaxSkillValueForLevel = GetMaxSkillValueForLevel(victim.GetLevel());
 
@@ -1219,65 +1284,87 @@ namespace mmo
 		// Calculate miss chance
 		const float missChance = MeleeMissChance(victim, attackType, attackerWeaponSkill - victimDefenseSkill, 0);
 
-		// Calculate crit chance
-		const float critChance = CriticalHitChance(victim, attackType);
-
-		const float dodgeChance = victim.DodgeChance();
-		const float blockChance  = victim.BlockChance();
-		const float parryChance = victim.ParryChance();
-
-		// Order of checks: Miss -> Dodge -> Parry -> Glancing -> Block -> Crushing -> Crit -> Normal
-
-		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
+		// The order of combat table is:
+		// 1. Miss
+		// 2. Dodge
+		// 3. Parry
+		// 4. Block (only reduces damage, doesn't prevent hit)
+		// 5. Glancing blow (only happens when attacking higher level mobs)
+		// 6. Critical strike
+		// 7. Crushing blow (only happens when attacking lower level mobs)
+		// 8. Normal hit
+		
 		std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
-		if (chanceDistribution(randomGenerator) < missChance)
+		const float roll = chanceDistribution(randomGenerator);
+		float chance = missChance;
+		
+		// Check for miss
+		if (roll < chance)
 		{
 			return MeleeAttackOutcome::Miss;
 		}
-
-		if (victim.CanDodge() && chanceDistribution(randomGenerator) < dodgeChance)
+			
+		// Check for dodge (only if target is facing attacker)
+		if (victim.IsFacingTowards(*this))
 		{
-			return MeleeAttackOutcome::Dodge;
-		}
-
-		if (victim.CanParry() && chanceDistribution(randomGenerator) < parryChance)
-		{
-			// Could be a parry. But last check: We need to be in front of the target to be parried
-			if (victim.IsFacingTowards(*this))
+			const float dodgeChance = victim.DodgeChance();
+			chance += dodgeChance;
+			
+			if (roll < chance)
 			{
-				// We are in front of the target, so it's a parry
+				return MeleeAttackOutcome::Dodge;
+			}
+		}
+			
+		// Check for parry (only if target is facing attacker and has a weapon)
+		if (victim.IsFacingTowards(*this) && victim.CanParry())
+		{
+			const float parryChance = victim.ParryChance();
+			chance += parryChance;
+			
+			if (roll < chance)
+			{
 				return MeleeAttackOutcome::Parry;
 			}
 		}
-
-		// Glancing check only if target is at our or higher level
+			
+		// Check for glancing blow (only happens when attacking higher level targets)
 		if (GetLevel() <= victim.GetLevel())
 		{
-			// Per skill diff, 5% chance up to 40%
-			const float glancingChance = std::min((attackerWeaponSkill - victimDefenseSkill) * 5.0f, 40.0f);
-			if (chanceDistribution(randomGenerator) < glancingChance)
+			// Glancing blow chance formula (approximation)
+			float glancingChance = 10.0f + (victim.GetLevel() - GetLevel()) * 5.0f;
+			glancingChance = std::min(glancingChance, 40.0f);
+			
+			chance += glancingChance;
+			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Glancing;
 			}
 		}
-
-		// Crushing check if our level is 4 or more above the target
+			
+		// Check for critical strike
+		const float critChance = CriticalHitChance(victim, attackType);
+		chance += critChance;
+		
+		if (roll < chance)
+		{
+			return MeleeAttackOutcome::Crit;
+		}
+			
+		// Check for crushing blow (only happens when attacking lower level targets)
 		if (GetLevel() >= victim.GetLevel() + 4)
 		{
-			// Per skill diff, 2% chance
-			const float crushChance = std::min((attackerWeaponSkill - victimDefenseSkill) * 2.0f, 0.0f);
-			if (chanceDistribution(randomGenerator) < crushChance)
+			// Crushing blow chance (approximation)
+			float crushingChance = 15.0f + (GetLevel() - victim.GetLevel() - 3) * 2.0f;
+			crushingChance = std::min(crushingChance, 25.0f);
+			
+			chance += crushingChance;
+			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Crushing;
 			}
 		}
-
-		// Crit check last
-		if (chanceDistribution(randomGenerator) < critChance)
-		{
-			return MeleeAttackOutcome::Crit;
-		}
-
+		
 		return MeleeAttackOutcome::Normal;
 	}
 
@@ -1428,7 +1515,18 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::AddAttackingUnit(const GameUnitS& attacker)
+    float GameUnitS::GetMeleeReach() const
+    {
+		// Base melee range is 2.0 yards
+		float reach = 2.0f;
+		
+		// Add unit's bounding radius (approximated from unit scale)
+		reach += Get<float>(object_fields::Scale) * 0.5f;
+		
+		return reach;
+    }
+
+    void GameUnitS::AddAttackingUnit(const GameUnitS& attacker)
 	{
 		m_attackingUnits.add(&attacker);
 		SetInCombat(true);
@@ -1618,15 +1716,29 @@ namespace mmo
 	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const
 	{
 		float armor = static_cast<float>(Get<uint32>(object_fields::Armor));
+			
+		// Apply armor penetration effects
+		float armorPenetrationPct = 0.0f;
+		// TODO: Get armor penetration from attacker's auras/talents
+		
+		if (armorPenetrationPct > 0.0f)
+		{
+			armor *= (1.0f - std::min(armorPenetrationPct, 100.0f) / 100.0f);
+		}
+		
 		if (armor < 0.0f)
 		{
 			armor = 0.0f;
 		}
 
-		float factor = armor / (armor + 400.0f + attackerLevel * 85.0f);
-		factor = Clamp(factor, 0.0f, 0.75f);
-
-		return damage - static_cast<uint32>(damage * factor);
+		// Damage reduction = armor / (armor + 400 + 85 * attacker_level)
+		// Maximum damage reduction from armor is 75%
+		float armorFactor = armor / (armor + 400.0f + 85.0f * attackerLevel);
+		armorFactor = Clamp(armorFactor, 0.0f, 0.75f);
+		
+		// Apply the damage reduction
+		uint32 reducedDamage = damage - static_cast<uint32>(damage * armorFactor);
+		return reducedDamage;
 	}
 
 	bool GameUnitS::UnitIsEnemy(const GameUnitS& other) const
@@ -2016,50 +2128,102 @@ namespace mmo
 
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
-		uint32 totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), static_cast<uint32>(distribution(randomGenerator)));
+		float rawDamage = distribution(randomGenerator);
+		uint32 totalDamage = static_cast<uint32>(rawDamage);
 
 		uint32 hitInfo = HitInfo::NormalSwing;
 		uint32 victimState = VictimState::Normal;
 
 		bool hit = true;
-		if (outcome == MeleeAttackOutcome::Crit)
+		
+		switch(outcome)
 		{
-			hitInfo |= hit_info::CriticalHit;
-			totalDamage *= 2;
-		}
-		else if(outcome == melee_attack_outcome::Crushing)
-		{
-			hitInfo |= hit_info::Crushing;
-			totalDamage *= 4;
-		}
-		else if (outcome == melee_attack_outcome::Glancing)
-		{
-			hitInfo |= hit_info::Glancing;
-			totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) * 0.15f);
-		}
-		else if (outcome == melee_attack_outcome::Miss ||
-			outcome == melee_attack_outcome::Parry ||
-			outcome == melee_attack_outcome::Dodge)
-		{
-			if (outcome == melee_attack_outcome::Miss)
-			{
+			case MeleeAttackOutcome::Crit:
+				hitInfo |= hit_info::CriticalHit;
+				// crits are 2x damage before armor
+				totalDamage *= 2;
+				break;
+				
+			case MeleeAttackOutcome::Crushing:
+				hitInfo |= hit_info::Crushing;
+				// Crushing blows do 150% damage
+				totalDamage = static_cast<uint32>(totalDamage * 1.5f);
+				break;
+				
+			case MeleeAttackOutcome::Glancing:
+				hitInfo |= hit_info::Glancing;
+				// Glancing blows do 70%-85% damage based on skill difference
+				{
+					const int32 skillDiff = victim->GetMaxSkillValueForLevel(victim->GetLevel()) - GetMaxSkillValueForLevel(GetLevel());
+					// Normalize to 30% reduction at maximum skill diff
+					float damageReduction = std::min(30.0f, static_cast<float>(skillDiff) * 0.6f);
+					float glancingMod = 1.0f - (damageReduction / 100.0f);
+					totalDamage = static_cast<uint32>(totalDamage * glancingMod);
+				}
+				break;
+				
+			case MeleeAttackOutcome::Miss:
 				hitInfo |= hit_info::Miss;
-			}
-			else if (outcome == melee_attack_outcome::Parry)
-			{
+				victimState = victim_state::Normal;
+				hit = false;
+				totalDamage = 0;
+				break;
+				
+			case MeleeAttackOutcome::Parry:
+				hitInfo |= hit_info::Miss;
 				victimState = victim_state::Parry;
-			}
-			else if (outcome == melee_attack_outcome::Dodge)
-			{
+				hit = false;
+				totalDamage = 0;
+				break;
+				
+			case MeleeAttackOutcome::Dodge:
+				hitInfo |= hit_info::Miss;
 				victimState = victim_state::Dodge;
-			}
-			else if (outcome == melee_attack_outcome::Block)
-			{
-				victimState = victim_state::Blocks;
-			}
+				hit = false;
+				totalDamage = 0;
+				break;
+				
+			case MeleeAttackOutcome::Normal:
+				// Normal hit, no special flags needed
+				break;
+		}
 
-			hit = false;
-			totalDamage = 0;
+		// Check for block (in Classic, block applies after hit determination)
+		uint32 blockedDamage = 0;
+		if (hit && victim->CanBlock() && victim->IsFacingTowards(*this))
+		{
+			std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
+			if (blockChanceDist(randomGenerator) < victim->BlockChance())
+			{
+				// Calculate block amount
+				// In Classic: base block value from shield + strength bonus
+				uint32 blockValue = 30; // Default block value, replace with actual shield block value
+				blockedDamage = std::min(blockValue, totalDamage);
+				totalDamage -= blockedDamage;
+				
+				hitInfo |= hit_info::Block;
+				victimState = victim_state::Blocks;
+				
+				// Notify block event
+				victim->OnBlock();
+			}
+		}
+			
+		// Apply armor reduction
+		if (hit && totalDamage > 0)
+		{
+			totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), totalDamage);
+		}
+			
+		// Apply damage absorb effects
+		uint32 absorbedDamage = 0;
+		// TODO: Implement damage absorption from auras
+		totalDamage -= absorbedDamage;
+			
+		// Damage events
+		if (hit && totalDamage > 0)
+		{
+			victim->Damage(totalDamage, spell_school::Normal, this, damage_type::AttackSwing);
 		}
 
 		// Trigger defense events
@@ -2067,17 +2231,11 @@ namespace mmo
 		{
 			victim->OnParry();
 		}
-		else if (outcome == melee_attack_outcome::Block)
-		{
-			victim->OnBlock();
-		}
 		else if(outcome == melee_attack_outcome::Dodge)
 		{
 			victim->OnDodge();
 		}
-
-		victim->Damage(totalDamage, spell_school::Normal, this, damage_type::AttackSwing);
-
+			
 		// Notify all subscribers
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
@@ -2090,9 +2248,9 @@ namespace mmo
 			<< io::write<uint32>(victimState)
 			<< io::write<uint32>(totalDamage)
 			<< io::write<uint32>(spell_school::Normal)
-			<< io::write<uint32>(0)	// Absorbed damage
+			<< io::write<uint32>(absorbedDamage)	// Absorbed damage
 			<< io::write<uint32>(0)	// Resisted damage
-			<< io::write<uint32>(0);	// Blocked damage
+			<< io::write<uint32>(blockedDamage);	// Blocked damage
 		packet.Finish();
 		ForEachSubscriberInSight(
 			[&packet, &buffer](TileSubscriber& subscriber)
@@ -2100,14 +2258,13 @@ namespace mmo
 				subscriber.SendPacket(packet, buffer);
 			});
 
-		if (totalDamage > 0 &&
-			Get<uint32>(object_fields::PowerType) == power_type::Rage)
+		// Generate rage based on damage done
+		if (totalDamage > 0 && Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
-			const uint32 level = Get<uint32>(object_fields::Level);
-			const float C = 3.0f;
-			const float B = 5.0f;	// TODO: Maybe make this depend on weapon speed
-
-			int32 rageGenerated = static_cast<int32>((static_cast<float>(totalDamage) / (C * static_cast<float>(level))) + B);
+			// Rage from damage done: 7.5 * damage / c
+			// where c is a constant related to level
+			const float levelFactor = 40.0f + GetLevel() * 2.0f;
+			int32 rageGenerated = static_cast<int32>((7.5f * static_cast<float>(totalDamage)) / levelFactor);
 			if (rageGenerated < 1) rageGenerated = 1;
 
 			AddPower(power_type::Rage, rageGenerated);
@@ -2115,7 +2272,7 @@ namespace mmo
 
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
 		OnAttackSwingEvent(AttackSwingEvent::Success);
-		TriggerNextAutoAttack();
+    	TriggerNextAutoAttack();
 
 		// Trigger proc events
 		if (hit)

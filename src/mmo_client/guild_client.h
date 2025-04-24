@@ -3,6 +3,7 @@
 
 #include "client_cache.h"
 #include "base/non_copyable.h"
+#include "client_data/project.h"
 #include "net/realm_connector.h"
 
 namespace mmo
@@ -24,7 +25,7 @@ namespace mmo
 	{
 	public:
 
-		explicit GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache);
+		explicit GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache, const proto_client::RaceManager& races, const proto_client::ClassManager& classes);
 
 	public:
 		void Initialize();
@@ -73,6 +74,10 @@ namespace mmo
 
 		void NotifyGuildChanged(uint64 guildId);
 
+		const String& GetGuildName() const { return m_guildName; }
+
+		const String& GetGuildMOTD() const { return m_guildMotd; }
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
@@ -99,10 +104,15 @@ namespace mmo
 
 		String m_invitePlayerName;
 		String m_inviteGuildName;
+		String m_guildName;
+		String m_guildMotd;
 
 		uint64 m_guildId = 0;
 		int32 m_guildRank = -1;
 
 		std::vector<GuildMemberInfo> m_guildMembers;
+
+		const proto_client::RaceManager& m_races;
+		const proto_client::ClassManager& m_classes;
 	};
 }

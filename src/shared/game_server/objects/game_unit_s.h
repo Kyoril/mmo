@@ -860,7 +860,7 @@ namespace mmo
 
 		/// Gets the melee reach of the unit.
 		/// @returns The melee reach as a float.
-		float GetMeleeReach() const { return 5.0f; /* TODO */ }
+		float GetMeleeReach() const;
 
 		/// Adds an attacking unit to the list of attackers.
 		/// @param attacker The unit that is attacking.
