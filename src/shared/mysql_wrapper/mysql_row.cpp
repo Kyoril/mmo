@@ -35,6 +35,28 @@ namespace mmo
 			return m_row[index];
 		}
 
+		template <>
+		bool Row::GetField<std::string, std::string>(std::size_t index, std::string& value) const
+		{
+			try
+			{
+				const char *const field = GetField(index);
+				if (!field)
+				{
+					return false;
+				}
+                    
+				// Simply assign the entire field as the string value
+				value = field;
+			}
+			catch(...)
+			{
+				return false;
+			}
+                
+			return true;
+		}
+
 		Row Row::Next(Select &select)
 		{
 			return Row(select);
