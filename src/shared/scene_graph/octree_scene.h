@@ -2,10 +2,29 @@
 
 #include "scene.h"
 #include "octree.h"
+#include "math/plane.h"
+#include <array>
 
 namespace mmo
 {
 	class OctreeNode;
+	class Camera;
+
+	// Cache for camera frustum planes to avoid recalculating them for each node
+	struct CachedFrustumPlanes 
+	{
+		std::array<Plane, 6> planes;
+		float farDistance;
+		
+		// Extract and cache the frustum planes from a camera
+		explicit CachedFrustumPlanes(const Camera& camera);
+		
+		// Check if an AABB is visible using the cached planes
+		AABBVisibility GetVisibility(const AABB& bound) const;
+		
+		// Check if an AABB is visible (simple bool version)
+		bool IsVisible(const AABB& bound) const;
+	};
 
 	class OctreeScene : public Scene
 	{
@@ -33,14 +52,14 @@ namespace mmo
 	protected:
 		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds) override;
 
-		void WalkOctree(Camera&, RenderQueue&, Octree&, VisibleObjectsBoundsInfo& visibleBounds, bool foundVisible, bool onlyShadowCasters);
+		void WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, VisibleObjectsBoundsInfo& visibleBounds, 
+			bool foundVisible, bool onlyShadowCasters, const CachedFrustumPlanes& cachedPlanes);
 
 		std::unique_ptr<SceneNode> CreateSceneNodeImpl() override;
 
 		std::unique_ptr<SceneNode> CreateSceneNodeImpl(const String& name) override;
 
 	protected:
-
 		/// The root octree
 		std::unique_ptr<Octree> m_octree;
 

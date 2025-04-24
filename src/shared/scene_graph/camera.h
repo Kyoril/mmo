@@ -109,6 +109,24 @@ namespace mmo
 			return m_customProjMatrix;
 		}
 
+        // Get a specific frustum plane for caching purposes
+        // This is const but calls UpdateFrustumPlanes() which updates internal state
+        const Plane& GetFrustumPlane(int planeIndex) const 
+        {
+            UpdateFrustumPlanes();
+            return m_frustumPlanes[planeIndex];
+        }
+
+        // Get all frustum planes at once for efficient caching
+        void ExtractFrustumPlanes(Plane* outPlanes) const
+        {
+            UpdateFrustumPlanes();
+            for (int i = 0; i < 6; ++i)
+            {
+                outPlanes[i] = m_frustumPlanes[i];
+            }
+        }
+        
 	protected:
 		void UpdateFrustum() const;
 

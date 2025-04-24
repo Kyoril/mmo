@@ -1,10 +1,83 @@
-
 #include "octree_scene.h"
-
 #include "octree_node.h"
+#include "camera.h"
 
 namespace mmo
 {
+	// Implementation of CachedFrustumPlanes
+	CachedFrustumPlanes::CachedFrustumPlanes(const Camera& camera)
+		: farDistance(camera.GetFarClipDistance())
+	{
+		// Extract all frustum planes at once for caching
+		camera.ExtractFrustumPlanes(&planes[0]);
+	}
+
+	AABBVisibility CachedFrustumPlanes::GetVisibility(const AABB& bound) const
+	{
+		if (bound.IsNull())
+		{
+			return aabb_visibility::None;
+		}
+
+		// Get center of the box
+		const Vector3 center = bound.GetCenter();
+
+		// Get the half-size of the box
+		const Vector3 halfSize = bound.GetExtents();
+
+		bool allInside = true;
+
+		for (int plane = 0; plane < 6; ++plane)
+		{
+			// Skip far plane if infinite view frustum
+			if (plane == FrustumPlaneFar && farDistance == 0)
+				continue;
+				
+			// Check against each frustum plane
+			const Plane::Side side = planes[plane].GetSide(center, halfSize);
+			if (side == Plane::NegativeSide) return aabb_visibility::None;
+
+			// We can't return now as the box could be later on the negative side of a plane.
+			if (side == Plane::BothSides)
+			{
+				allInside = false;
+			}
+		}
+
+		if (allInside)
+		{
+			return aabb_visibility::Full;
+		}
+
+		return aabb_visibility::Partial;
+	}
+	
+	bool CachedFrustumPlanes::IsVisible(const AABB& bound) const
+	{
+		// Null boxes always invisible
+		if (bound.IsNull()) return false;
+
+		const Vector3 center = bound.GetCenter();
+		const Vector3 halfSize = bound.GetExtents();
+
+		// For each plane, see if all points are on the negative side
+		// If so, object is not visible
+		for (int plane = 0; plane < 6; ++plane)
+		{
+			// Skip far plane if infinite view frustum
+			if (plane == FrustumPlaneFar && farDistance == 0)
+				continue;
+
+			Plane::Side side = planes[plane].GetSide(center, halfSize);
+			if (side == Plane::NegativeSide)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	OctreeScene::OctreeScene()
 	{
 		const AABB bounds({ -17100.0f, -17100.0f, -17100.0f }, { 17100.0f, 17100.0f, 17100.0f });
@@ -49,8 +122,6 @@ namespace mmo
 		const Vector3 min = box.min;
 		const Vector3 max = box.max;
 		m_octree->m_halfSize = (max - min) / 2.0f;
-
-
 	}
 
 	void OctreeScene::UpdateOctreeNode(OctreeNode& node)
@@ -190,17 +261,23 @@ namespace mmo
 	{
 		GetRenderQueue().Clear();
 
-		// walk the octree, adding all visible Octree nodes to the render queue.
-		WalkOctree(camera, GetRenderQueue(), *m_octree, visibleObjectBounds, false, false);
+		// Cache the camera frustum planes for this frame to avoid recomputing them
+		CachedFrustumPlanes cachedPlanes(camera);
+		
+		// Walk the octree, adding all visible Octree nodes to the render queue
+		WalkOctree(camera, GetRenderQueue(), *m_octree, visibleObjectBounds, false, false, cachedPlanes);
 	}
 
-	void OctreeScene::WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, VisibleObjectsBoundsInfo& visibleBounds, const bool foundVisible, const bool onlyShadowCasters)
+	void OctreeScene::WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, 
+		VisibleObjectsBoundsInfo& visibleBounds, const bool foundVisible, 
+		const bool onlyShadowCasters, const CachedFrustumPlanes& cachedPlanes)
 	{
 		if (octant.GetNumNodes() == 0)
 		{
 			return;
 		}
 
+		// Determine visibility using cached frustum planes
 		AABBVisibility v = aabb_visibility::None;
 		if (foundVisible)
 		{
@@ -214,7 +291,7 @@ namespace mmo
 		{
 			AABB box;
 			octant.GetCullBounds(box);
-			v = camera.GetVisibility(box);
+			v = cachedPlanes.GetVisibility(box);
 		}
 
 		// Not visible, nothing to do
@@ -223,9 +300,10 @@ namespace mmo
 			return;
 		}
 
-		// Add stuff to be rendered;
+		// Add stuff to be rendered
 		bool vis = true;
 
+		// Process nodes in this octant
 		auto it = octant.m_nodes.begin();
 		while (it != octant.m_nodes.end())
 		{
@@ -235,7 +313,7 @@ namespace mmo
 			// scene nodes attached directly to this level.
 			if (v == aabb_visibility::Partial)
 			{
-				vis = camera.IsVisible(sn->GetWorldAABB());
+				vis = cachedPlanes.IsVisible(sn->GetWorldAABB());
 			}
 
 			if (vis)
@@ -246,47 +324,36 @@ namespace mmo
 			++it;
 		}
 
-		// Iterate through octree children
-		Octree* child;
-		bool childFoundVisible = (v == aabb_visibility::Full);
-		if ((child = octant.m_children[0][0][0].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
+		// Recursively process child octants
+		const bool childFoundVisible = (v == aabb_visibility::Full);
+		
+		// Calculate camera position relative to octant center for front-to-back traversal
+		const Vector3 octantCenter = (octant.m_box.min + octant.m_box.max) * 0.5f;
+		const Vector3 camPos = camera.GetDerivedPosition();
+		const bool camIsInFront[3] = {
+			camPos.x <= octantCenter.x,
+			camPos.y <= octantCenter.y,
+			camPos.z <= octantCenter.z
+		};
 
-		if ((child = octant.m_children[1][0][0].get()))
+		// Visit children in front-to-back order based on camera position
+		// This improves culling efficiency by processing closer nodes first
+		for (int i = 0; i < 2; ++i)
 		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[0][1][0].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[1][1][0].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[0][0][1].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[1][0][1].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[0][1][1].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
-		}
-
-		if ((child = octant.m_children[1][1][1].get()))
-		{
-			WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters);
+			const int x = camIsInFront[0] ? i : 1 - i;
+			for (int j = 0; j < 2; ++j)
+			{
+				const int y = camIsInFront[1] ? j : 1 - j;
+				for (int k = 0; k < 2; ++k)
+				{
+					const int z = camIsInFront[2] ? k : 1 - k;
+					
+					if (Octree* child = octant.m_children[x][y][z].get())
+					{
+						WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters, cachedPlanes);
+					}
+				}
+			}
 		}
 	}
 
