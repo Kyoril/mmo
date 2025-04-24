@@ -48,6 +48,7 @@ namespace mmo
 		uint32 m_visibilityFlags { 0xffffffff };
 		mutable AABB m_worldAABB;
 		mutable Sphere m_worldBoundingSphere;
+		mutable bool m_worldAABBDirty{ true };
 		bool m_renderingDisabled;
 
 		static uint32 m_defaultQueryFlags;
