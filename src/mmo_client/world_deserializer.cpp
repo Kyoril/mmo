@@ -57,6 +57,10 @@ namespace mmo
 		Entity* entity = m_scene.CreateEntity("Entity_" + std::to_string(m_entityIdGenerator.GenerateId()), meshName);
 		node->AttachObject(*entity);
 		entity->SetQueryFlags(1);
+
+		// TODO: Save distance or take from mesh
+		entity->SetRenderingDistance(256.0f);
+
 		m_entities.push_back(entity);
 
 		return entity;

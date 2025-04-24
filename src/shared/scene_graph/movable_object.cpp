@@ -162,12 +162,15 @@ namespace mmo
 
 	void MovableObject::SetCurrentCamera(Camera& cam)
 	{
+		m_beyondFarDistance = false;
+
 		if (m_parentNode)
 		{
-			m_beyondFarDistance = false;
-
-			// TODO: Calculate visibility
-			
+			const float squaredDist = m_parentNode->GetSquaredViewDepth(cam);
+			if (m_upperDistance > 0)
+			{
+				m_beyondFarDistance = squaredDist > m_squaredUpperDistance;
+			}
 		}
 
         m_renderingDisabled = !objectRendering(*this, cam);
