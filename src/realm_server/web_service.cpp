@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "web_service.h"
+#include "motd_manager.h"
 
 namespace mmo
 {
@@ -9,11 +10,13 @@ namespace mmo
 	    uint16 port,
 	    String password,
 	    PlayerManager &playerManager,
-		IDatabase &database
+		IDatabase &database,
+		MOTDManager &motdManager
 	)
 		: web::WebService(service, port)
 		, m_playerManager(playerManager)
 		, m_database(database)
+		, m_motdManager(motdManager)
 		, m_startTime(GetAsyncTimeMs())
 		, m_password(std::move(password))
 	{

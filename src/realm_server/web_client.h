@@ -28,6 +28,8 @@ namespace mmo
 
 		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void handleCreateWorld(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleGetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		WebService& m_service;

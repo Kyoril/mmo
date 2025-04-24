@@ -391,6 +391,9 @@ namespace mmo
 
 				LogoutResponse,
 				GuildRoster,
+				
+				/// Message of the day packet sent to the client
+				MessageOfTheDay,
 
 				/// Counter constant
 				Count_,

@@ -2,6 +2,7 @@
 
 #include "player_manager.h"
 #include "player.h"
+#include "motd_manager.h"
 
 #include "binary_io/string_sink.h"
 
@@ -11,9 +12,13 @@
 namespace mmo
 {
 	PlayerManager::PlayerManager(
-	    size_t playerCapacity)
+	    size_t playerCapacity,
+		MOTDManager& motdManager)
 		: m_playerCapacity(playerCapacity)
+		, m_motdManager(motdManager)
 	{
+		// Subscribe to MOTD changes
+		m_motdChangedConnection = motdManager.motdChanged.connect(this, &PlayerManager::BroadcastMessageOfTheDay);
 	}
 
 	PlayerManager::~PlayerManager()
@@ -141,5 +146,32 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	const String& PlayerManager::GetMessageOfTheDay() const
+	{
+		return m_motdManager.GetMessageOfTheDay();
+	}
+
+	void PlayerManager::ForEachPlayer(std::function<void(Player&)> callback) const
+	{
+		std::scoped_lock playerLock{ m_playerMutex };
+
+		for (auto& player : m_players)
+		{
+			callback(*player);
+		}
+	}
+
+	void PlayerManager::BroadcastMessageOfTheDay(const String& motd)
+	{
+		// Send MOTD to all connected players who have loaded a character
+		ForEachPlayer([&motd](Player& player) {
+			// Only send to players that have loaded a character and are in the world
+			if (player.HasCharacterGuid())
+			{
+				player.SendMessageOfTheDay(motd);
+			}
+		});
 	}
 }

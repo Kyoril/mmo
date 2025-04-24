@@ -212,6 +212,14 @@ namespace mmo
 		virtual void DisbandGuild(uint64 guildId) = 0;
 
 		virtual void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
+
+		/// Gets the current Message of the Day.
+		/// @returns The current MOTD string or default message if not set.
+		virtual std::optional<String> GetMessageOfTheDay() = 0;
+
+		/// Sets a new Message of the Day.
+		/// @param motd The new Message of the Day text.
+		virtual void SetMessageOfTheDay(const std::string& motd) = 0;
 	};
 
 

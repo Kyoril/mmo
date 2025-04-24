@@ -11,6 +11,7 @@ namespace mmo
 {
 	class PlayerManager;
 	struct IDatabase;
+	class MOTDManager;
 
 	class WebService 
 		: public web::WebService
@@ -22,11 +23,13 @@ namespace mmo
 		    uint16 port,
 		    String password,
 		    PlayerManager &playerManager,
-			IDatabase &database
+			IDatabase &database,
+			MOTDManager &motdManager
 		);
 
 		PlayerManager &GetPlayerManager() const { return m_playerManager; }
 		IDatabase &GetDatabase() const { return m_database; }
+		MOTDManager &GetMOTDManager() const { return m_motdManager; }
 		GameTime GetStartTime() const;
 		const String &GetPassword() const;
 
@@ -36,6 +39,7 @@ namespace mmo
 
 		PlayerManager &m_playerManager;
 		IDatabase &m_database;
+		MOTDManager &m_motdManager;
 		const GameTime m_startTime;
 		const String m_password;
 	};

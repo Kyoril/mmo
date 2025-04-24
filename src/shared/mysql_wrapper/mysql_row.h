@@ -47,6 +47,29 @@ namespace mmo
 
 				return true;
 			}
+            
+            // Specialization for std::string to properly handle spaces
+            template<>
+            bool GetField<std::string>(std::size_t index, std::string &value) const
+            {
+                try
+                {
+                    const char *const field = GetField(index);
+                    if (!field)
+                    {
+                        return false;
+                    }
+                    
+                    // Simply assign the entire field as the string value
+                    value = field;
+                }
+                catch(...)
+                {
+                    return false;
+                }
+                
+                return true;
+            }
 
 			template <class T>
 			void TryGetField(std::size_t index, T &value) const

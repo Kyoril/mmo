@@ -1361,9 +1361,9 @@ namespace mmo
 	void MySQLDatabase::RemoveGuildMember(uint64 guildId, uint64 memberGuid)
 	{
 		if (!m_connection.Execute(std::format(
-			"DELETE FROM `guild_members` WHERE `guild_id` = '{0}' AND `guid` = '{1}' LIMIT 1"
-			, guildId
-			, memberGuid
+					"DELETE FROM `guild_members` WHERE `guild_id` = '{0}' AND `guid` = '{1}' LIMIT 1"
+					, guildId
+					, memberGuid
 		)))
 		{
 			PrintDatabaseError();
@@ -1391,6 +1391,37 @@ namespace mmo
 			, guildId
 			, memberGuid
 		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
+	{
+		mysql::Select select(m_connection, "SELECT `message` FROM `realm_motd` WHERE `id` = 1 LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				String message;
+				row.GetField(0, message);
+				return message;
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+		}
+
+		return std::nullopt;
+	}
+
+	void MySQLDatabase::SetMessageOfTheDay(const std::string& motd)
+	{
+		if (!m_connection.Execute("UPDATE `realm_motd` SET `message` = '" + m_connection.EscapeString(motd) + "' WHERE id = 1 LIMIT 1"))
 		{
 			PrintDatabaseError();
 			throw mysql::Exception(m_connection.GetErrorMessage());

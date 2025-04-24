@@ -298,6 +298,8 @@ namespace mmo
 
 		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
 
+		PacketParseResult OnMessageOfTheDay(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

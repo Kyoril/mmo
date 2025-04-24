@@ -135,6 +135,9 @@ namespace mmo
 		
 		void SendProxyPacket(uint16 packetId, const std::vector<char> &buffer);
 
+		/// Sends the Message of the Day to the player
+		void SendMessageOfTheDay(const std::string& motd);
+
 		void OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason);
 
 		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3& position, const Radian& facing);

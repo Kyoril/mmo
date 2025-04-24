@@ -96,6 +96,10 @@ namespace mmo
 
 		void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) override;
 
+		std::optional<String> GetMessageOfTheDay() override;
+
+		void SetMessageOfTheDay(const std::string& motd) override;
+
 	private:
 		void PrintDatabaseError();
 

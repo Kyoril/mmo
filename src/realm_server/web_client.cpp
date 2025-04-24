@@ -3,6 +3,7 @@
 #include "web_client.h"
 
 #include "database.h"
+#include "motd_manager.h"
 #include "web_service.h"
 #include "base/clock.h"
 #include "http/http_incoming_request.h"
@@ -54,6 +55,10 @@ namespace mmo
 					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
 					SendJsonResponse(response, message.str());
 				}
+				else if (url == "/motd")
+				{
+					handleGetMotd(request, response);
+				}
 				else
 				{
 					response.setStatus(net::http::OutgoingAnswer::NotFound);
@@ -73,6 +78,10 @@ namespace mmo
 				else if (url == "/create-world")
 				{
 					handleCreateWorld(request, response);
+				}
+				else if (url == "/motd")
+				{
+					handleSetMotd(request, response);
 				}
 				else
 				{
@@ -167,5 +176,48 @@ namespace mmo
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
 		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+	}
+	
+	void WebClient::handleGetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const String& motd = m_service.GetMOTDManager().GetMessageOfTheDay();
+		
+		std::ostringstream jsonStream;
+		jsonStream << "{\"message\":\"" << motd << "\"}";
+		SendJsonResponse(response, jsonStream.str());
+	}
+	
+	void WebClient::handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const 
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto messageIt = arguments.find("message");
+
+		if (messageIt == arguments.end())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'message'\"}");
+			return;
+		}
+		
+		try
+		{
+			// Update the MOTD through the manager
+			// Player notifications are now handled via signal/slot
+			if (m_service.GetMOTDManager().SetMessageOfTheDay(messageIt->second))
+			{
+				SendJsonResponse(response, "{\"status\":\"SUCCESS\", \"message\":\"MOTD updated successfully\"}");
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update MOTD\"}");
+			}
+		}
+		catch (const std::exception& ex)
+		{
+			ELOG("Failed to update MOTD: " << ex.what());
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update MOTD\"}");
+		}
 	}
 }

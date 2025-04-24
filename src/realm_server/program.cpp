@@ -11,6 +11,7 @@
 #include "version.h"
 #include "web_service.h"
 #include "guild_mgr.h"
+#include "motd_manager.h"
 
 #include "asio.hpp"
 
@@ -158,7 +159,10 @@ namespace mmo
 		// Create the world service
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		
-		PlayerManager playerManager{ config.maxPlayers };
+		// Create the MOTD manager
+		auto motdManager = std::make_unique<MOTDManager>(asyncDatabase);
+
+		PlayerManager playerManager{ config.maxPlayers, *motdManager };
 
 		// Initialize asset registry
 		AssetRegistry::Initialize(config.dataFolder, {});
@@ -230,6 +234,8 @@ namespace mmo
 		// Load all guilds
 		GuildMgr guildMgr{ asyncDatabase, playerManager };
 		guildMgr.LoadGuilds();
+
+		
 
 		// Wait for all guilds to load
 		while (!guildMgr.GuildsLoaded())
@@ -310,7 +316,8 @@ namespace mmo
 			config.webPort,
 			config.webPassword,
 			playerManager,
-			*database
+			*database,
+			*motdManager
 		);
 
 

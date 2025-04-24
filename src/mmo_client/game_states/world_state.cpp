@@ -804,6 +804,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellHealLog, *this, &WorldState::OnSpellHealLog);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -2719,6 +2720,20 @@ namespace mmo
 
 		// Go back to the login state
 		m_gameStateMgr.SetGameState(LoginState::Name);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMessageOfTheDay(game::IncomingPacket& packet)
+	{
+		String motd;
+		if (!(packet >> io::read_container<uint16>(motd, 512)))
+		{
+			ELOG("Failed to read MessageOfTheDay packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("MOTD", motd.c_str());
 
 		return PacketParseResult::Pass;
 	}

@@ -1778,7 +1778,14 @@ namespace mmo
 				<< io::write<float>(m_characterData->facing.GetValueRadians())
 			;
 			outPacket.Finish();
-		});
+			});
+
+		// Send Message of the Day to the player
+		String motd = GetManager().GetMessageOfTheDay();
+		if (!motd.empty())
+		{
+			SendMessageOfTheDay(motd);
+		}
 
 		// Check if we are in a guild
 		if (m_characterData->guildId != 0)
@@ -2969,5 +2976,17 @@ namespace mmo
 		ELOG("Set guild MOTD functionality not implemented yet");
 
 		return PacketParseResult::Pass;
+	}
+
+	void Player::SendMessageOfTheDay(const std::string& motd)
+	{
+		ASSERT(m_characterData);
+
+		SendPacket([&motd](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MessageOfTheDay);
+				packet << io::write_dynamic_range<uint16>(motd);
+				packet.Finish();
+			});
 	}
 }

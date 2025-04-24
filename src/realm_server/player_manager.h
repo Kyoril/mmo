@@ -4,13 +4,16 @@
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
+#include "base/signal.h"
 #include <memory>
 #include <mutex>
 #include <list>
+#include <functional>
 
 namespace mmo
 {
 	class Player;
+	class MOTDManager;
 
 	/// Manages all connected players.
 	class PlayerManager final : public NonCopyable
@@ -24,7 +27,8 @@ namespace mmo
 		/// Initializes a new instance of the player manager class.
 		/// @param playerCapacity The maximum number of connections that can be connected at the same time.
 		explicit PlayerManager(
-		    size_t playerCapacity
+		    size_t playerCapacity,
+			MOTDManager& motdManager
 		);
 		~PlayerManager();
 
@@ -47,10 +51,21 @@ namespace mmo
 
 		Player* GetPlayerByCharacterName(const String& characterName);
 
+		/// Gets the current Message of the Day from the MOTD manager.
+		const String& GetMessageOfTheDay() const;
+
+		/// Execute a function for each connected player.
+		void ForEachPlayer(std::function<void(Player&)> callback) const;
+
+		/// Broadcasts the Message of the Day to all connected players.
+		void BroadcastMessageOfTheDay(const String& motd);
+
 	private:
 
 		Players m_players;
 		size_t m_playerCapacity;
-		std::mutex m_playerMutex;
+		mutable std::mutex m_playerMutex;
+		MOTDManager& m_motdManager;
+		scoped_connection m_motdChangedConnection;
 	};
 }
