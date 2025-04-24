@@ -8,9 +8,11 @@
 
 namespace mmo
 {
-	GuildClient::GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache)
+	GuildClient::GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache, const proto_client::RaceManager& races, const proto_client::ClassManager& classes)
 		: m_connector(realmConnector)
 		, m_guildCache(guildCache)
+		, m_races(races)
+		, m_classes(classes)
 	{
 	}
 
@@ -450,8 +452,12 @@ namespace mmo
 			}
 
 			member.rank = "UNKNOWN";
-			member.className = "UNKNOWN";
-			member.raceName = "UNKNOWN";
+
+			const proto_client::RaceEntry* race = m_races.getById(raceId);
+			member.raceName = race ? race->name() : "UNKNOWN";
+
+			const proto_client::ClassEntry* classEntry = m_classes.getById(classId);
+			member.className = classEntry ? classEntry->name() : "UNKNOWN";
 		}
 
 		// Notify the UI that the roster updated

@@ -78,13 +78,13 @@ namespace mmo
 					return;
 				}
 
-				const auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, characterName, leaderGuid);
+				const auto guild = std::make_shared<Guild>(*this, m_playerManager, m_asyncDatabase, guildId, name, leaderGuid);
 				for (const auto& rank : defaultRanks)
 				{
 					guild->GetRanksRef().push_back(rank);
 				}
 
-				guild->GetMembersRef().emplace_back(leaderGuid, 0, name, level, raceId, classId);
+				guild->GetMembersRef().emplace_back(leaderGuid, 0, characterName, level, raceId, classId);
 
 				m_guildIdsByName[name] = guild->GetId();
 				m_guildsById[guildId] = guild;

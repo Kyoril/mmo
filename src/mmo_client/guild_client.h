@@ -3,6 +3,7 @@
 
 #include "client_cache.h"
 #include "base/non_copyable.h"
+#include "client_data/project.h"
 #include "net/realm_connector.h"
 
 namespace mmo
@@ -24,7 +25,7 @@ namespace mmo
 	{
 	public:
 
-		explicit GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache);
+		explicit GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache, const proto_client::RaceManager& races, const proto_client::ClassManager& classes);
 
 	public:
 		void Initialize();
@@ -104,5 +105,8 @@ namespace mmo
 		int32 m_guildRank = -1;
 
 		std::vector<GuildMemberInfo> m_guildMembers;
+
+		const proto_client::RaceManager& m_races;
+		const proto_client::ClassManager& m_classes;
 	};
 }
