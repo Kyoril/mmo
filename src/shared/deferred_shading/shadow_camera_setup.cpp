@@ -14,7 +14,7 @@ namespace mmo
 		// reset custom view / projection matrix in case already set
 		shadowCamera.SetCustomViewMatrix(false);
 		shadowCamera.SetCustomProjMatrix(false);
-		shadowCamera.SetNearClipDistance(light.DeriveShadowNearClipDistance(camera));
+		shadowCamera.SetNearClipDistance(0.01f);
 		shadowCamera.SetFarClipDistance(light.GetShadowFarDistance());
 
 		// get the shadow frustum's far distance
@@ -25,7 +25,7 @@ namespace mmo
 			shadowDist = camera.GetNearClipDistance() * 300;
 		}
 
-		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset());
+		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset() * 0.5f);
 
 		// Directional lights 
 		if (light.GetType() == LightType::Directional)
@@ -65,7 +65,7 @@ namespace mmo
 			Vector3 up = Vector3::UnitY;
 
 			// Check it's not coincident with dir
-			if (::fabsf(up.Dot(dir)) >= 1.0f)
+			if (::fabsf(up.Dot(dir)) >= 0.99f)
 			{
 				// Use camera up
 				up = Vector3::UnitZ;
@@ -85,8 +85,8 @@ namespace mmo
 			Vector3 lightSpacePos = q.Inverse() * pos;
 
 			//snap to nearest texel
-			lightSpacePos.x -= fmod(lightSpacePos.x, worldTexelSize);
-			lightSpacePos.y -= fmod(lightSpacePos.y, worldTexelSize);
+			lightSpacePos.x = std::floor(lightSpacePos.x / worldTexelSize) * worldTexelSize;
+			lightSpacePos.y = std::floor(lightSpacePos.y / worldTexelSize) * worldTexelSize;
 
 			//convert back to world space
 			pos = q * lightSpacePos;

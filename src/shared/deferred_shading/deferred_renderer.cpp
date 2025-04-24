@@ -76,7 +76,7 @@ namespace mmo
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
 
-		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 2048, 2048, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 4096, 4096, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 
         // Setup shadow camera
 		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
@@ -89,13 +89,15 @@ namespace mmo
         sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
         sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
         sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS;  // Shadow test: fragment depth < stored depth
+        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;  // Shadow test: fragment depth < stored depth
         sampDesc.BorderColor[0] = 1.0f;
         sampDesc.BorderColor[1] = 1.0f;
         sampDesc.BorderColor[2] = 1.0f;
         sampDesc.BorderColor[3] = 1.0f;
         sampDesc.MinLOD = 0;
         sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+        sampDesc.MaxAnisotropy = 1;
+        sampDesc.MipLODBias = 0;
 
 		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
         ID3D11Device& d3d11dev = d3ddev;

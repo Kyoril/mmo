@@ -876,11 +876,11 @@ namespace mmo
 		s_renderShadowsVar = ConsoleVarMgr::RegisterConsoleVar("RenderShadows", "Determines whether or not shadows should be rendered", "1");
 		m_cvarChangedSignals += s_renderShadowsVar->Changed.connect(this, &WorldState::OnRenderShadowsChanged);
 
-		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "250");
+		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "50");
 		m_cvarChangedSignals += s_depthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "1.0");
+		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "0.25");
 		m_cvarChangedSignals += s_slopeDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0");
+		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.005");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string&, const std::string&)

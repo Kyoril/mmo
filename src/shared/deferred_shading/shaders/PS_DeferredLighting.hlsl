@@ -178,7 +178,7 @@ float SampleShadow(float3 worldPos, float3 normal, float normalBias)
         {
             shadow += ShadowMap.SampleCmpLevelZero(
                   ShadowSampler,
-                  uv + float2(x, y) * (1.0f / 2048.0f), ndc.z - bias);
+                  uv + float2(x, y) * (1.0f / 4096.0f), ndc.z - bias);
         }
     }
     shadow /= 9.0;

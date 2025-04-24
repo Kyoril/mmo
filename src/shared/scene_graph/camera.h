@@ -157,8 +157,6 @@ namespace mmo
 	public:
 		void PopulateRenderQueue(RenderQueue& queue) override {}
 
-		void SetupShadowCamera(Camera& shadowCamera, const Vector3& lightDirection);
-
 		void SetCustomViewMatrix(bool enable, const Matrix4& viewMatrix = Matrix4::Identity);
 
 		bool IsCustomViewMatrixEnabled() const
