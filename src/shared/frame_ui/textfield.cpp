@@ -5,6 +5,7 @@
 #include "frame_mgr.h"
 #include "inline_color.h"
 #include "text_component.h"
+#include "utf8_utils.h"
 
 #include "log/default_log_levels.h"
 
@@ -82,25 +83,50 @@ namespace mmo
 		const FontPtr font = GetFont();
 		if (!font) return 0.0f;
 
-		float   offset = 0.0f;
-		argb_t  dummyColor = 0;   // width calculation ignores colour
+		float offset = 0.0f;
+		argb_t dummyColor = 0;   // width calculation ignores colour
 
-		for (std::size_t c = 0; c < m_caretIndex && c < m_text.length(); /* inc. in loop */)
+		// Process each character up to the caret position
+		std::size_t byteIndex = 0;
+		std::size_t charIndex = 0;
+		
+		while (charIndex < m_caretIndex && byteIndex < m_text.length())
 		{
-			if (ConsumeColourTag(m_text, c, dummyColor, dummyColor))
+			if (ConsumeColourTag(m_text, byteIndex, dummyColor, dummyColor))
 			{
 				continue; // colour token has zero width
 			}
 
 			std::size_t iterations = 1;
-			char g = m_text[c++];
+			uint32_t codepoint;
+			
+			// Handle special ASCII control characters
+			if (byteIndex < m_text.length() && m_text[byteIndex] == '\t')
+			{
+				codepoint = ' ';
+				iterations = 4;
+				byteIndex++;
+			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(m_text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
 
-			if (g == '	') { g = ' '; iterations = 4; }
-
-			if (const FontGlyph* glyph = font->GetGlyphData(g))
+			if (const FontGlyph* glyph = font->GetGlyphData(codepoint))
 			{
 				offset += glyph->GetAdvance(uiScale) * iterations;
 			}
+			
+			// Increment character index (one Unicode codepoint = one character)
+			charIndex++;
 		}
 
 		return offset;
@@ -114,12 +140,13 @@ namespace mmo
 			{
 				m_maskText.clear();
 
-				const std::string& text = GetText();
-				m_maskText.reserve(text.length());
-
-				for (const auto& c : text)
+				// Count the number of Unicode characters in the text
+				size_t charCount = utf8::length(m_text);
+				
+				// Create a string with the mask character repeated for each Unicode character
+				for (size_t i = 0; i < charCount; ++i)
 				{
-					m_maskText.push_back(m_maskCodePoint);
+					utf8::append_codepoint(m_maskText, static_cast<uint32_t>(m_maskCodePoint));
 				}
 
 				m_maskTextDirty = false;
@@ -149,37 +176,72 @@ namespace mmo
 		}
 		if (position.x >= GetAbsoluteFrameRect().GetWidth() - m_textAreaOffset.right)
 		{
-			return m_text.length();
+			return utf8::length(m_text);
 		}
 
 		// Now iterate the string value
 		float x = m_textAreaOffset.left;
-
-		// Index
-		int32 index = 0;
-
-		// Iterate
-		for (const auto& codepoint : m_text)
+		
+		// Character index (not byte index)
+		int32 charIndex = 0;
+		
+		// Iterate through UTF-8 string
+		for (std::size_t byteIndex = 0; byteIndex < m_text.length();)
 		{
-			const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
-			if (glyph != nullptr)
-			{				
-				// Advance offset
-				const float advance = glyph->GetAdvance(textScale);
-				if (x + advance > position.x)
-				{
-					return index;
+			uint32_t codepoint;
+			
+			// Handle tab character separately
+			if (m_text[byteIndex] == '\t')
+			{
+				codepoint = ' '; // Use space as substitute for width calculation
+				byteIndex++;
+				
+				// Get glyph information
+				const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
+				if (glyph != nullptr)
+				{                
+					// Calculate width with tab's 4x space
+					const float advance = glyph->GetAdvance(textScale) * 4;
+					if (x + advance > position.x)
+					{
+						return charIndex;
+					}
+					// Advance position
+					x += advance;
 				}
-
-				// Advance
-				x += advance;
+			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(m_text, byteIndex);
+				
+				// Skip if invalid codepoint
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+				
+				// Get glyph information
+				const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
+				if (glyph != nullptr)
+				{                
+					// Advance offset
+					const float advance = glyph->GetAdvance(textScale);
+					if (x + advance > position.x)
+					{
+						return charIndex;
+					}
+					// Advance position
+					x += advance;
+				}
 			}
 
-			// Increase index
-			index++;
+			// Increase character index
+			charIndex++;
 		}
 
-		return index;
+		return charIndex;
 	}
 
 	void TextField::SetHorzAlignment(HorizontalAlignment value) noexcept
@@ -229,29 +291,62 @@ namespace mmo
 		}
 
 		float x = m_textAreaOffset.left * textScale;
-
-		int index = 0;
-
-		// Iterate
-		for (const auto& codepoint : m_text)
+		
+		// Character index (not byte index)
+		std::size_t charIndex = 0;
+		
+		// Iterate through UTF-8 string
+		for (std::size_t byteIndex = 0; byteIndex < m_text.length();)
 		{
-			if (index == m_cursor)
+			if (charIndex == m_cursor)
 			{
 				return x;
 			}
-
-			const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint);
-			if (glyph != nullptr)
+			
+			// Skip color tags
+			argb_t dummyColor = 0; // colour not required for counting
+			if (ConsumeColourTag(m_text, byteIndex, dummyColor, dummyColor))
 			{
-				// Advance offset
-				const float advance = glyph->GetAdvance(textScale);
-
-				// Advance
-				x += advance;
+				continue;
+			}
+			
+			std::size_t iterations = 1;
+			uint32_t codepoint;
+			
+			// Handle special ASCII control characters
+			if (byteIndex < m_text.length() && m_text[byteIndex] == '\t')
+			{
+				codepoint = ' ';
+				iterations = 4;
+				byteIndex++;
+			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(m_text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
 			}
 
-			// Increase index
-			index++;
+			if (const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint))
+			{
+				// Advance offset
+				x += glyph->GetAdvance(textScale) * iterations;
+			}
+			
+			// Increment character index
+			charIndex++;
+		}
+		
+		// If cursor is at the end of the text
+		if (charIndex == m_cursor)
+		{
+			return x;
 		}
 
 		return x;
@@ -287,30 +382,49 @@ namespace mmo
 	{
 		abort_emission();
 
-		if (!AcceptsTab() && key == 0x09)		// VK_TAB
+		if (!AcceptsTab() && key == 0x09)        // VK_TAB
 		{
 			return;
 		}
 
-		if (key == 0x0D)	// VK_RETURN
+		if (key == 0x0D)    // VK_RETURN
 		{
 			return;
 		}
 		
-		if (key == 0x08)		// VK_BACKSPACE
+		if (key == 0x08)        // VK_BACKSPACE
 		{
 			if (m_text.empty())
 				return;
 
-			if (m_cursor == -1 || m_cursor >= m_text.length())
+			if (m_cursor == -1 || m_cursor >= utf8::length(m_text))
 			{
-				m_text.pop_back();
-				m_cursor = m_text.length();
+				// Remove the last character (which might be multiple bytes)
+				size_t lastCharStart = m_text.length();
+				
+				// Find the start of the last UTF-8 character
+				do {
+					lastCharStart--;
+				} while (lastCharStart > 0 && (m_text[lastCharStart] & 0xC0) == 0x80);
+				
+				// Remove the last character
+				m_text.erase(lastCharStart);
+				m_cursor = utf8::length(m_text);
 			}
-			else if(m_cursor > 0)
+			else if (m_cursor > 0)
 			{
-				m_text.erase(m_text.begin() + m_cursor - 1);
-				m_cursor = std::max(0, m_cursor - 1);
+				// Convert character position to byte position
+				size_t bytePos = utf8::byte_index(m_text, m_cursor);
+				size_t prevCharBytePos = bytePos;
+				
+				// Find the start byte of the previous character
+				do {
+					prevCharBytePos--;
+				} while (prevCharBytePos > 0 && (m_text[prevCharBytePos] & 0xC0) == 0x80);
+				
+				// Delete the character
+				m_text.erase(prevCharBytePos, bytePos - prevCharBytePos);
+				m_cursor--;
 			}
 			else
 			{
@@ -329,27 +443,34 @@ namespace mmo
 	{
 		abort_emission();
 
-		if (!AcceptsTab() && codepoint == 0x09)		// VK_TAB
+		if (!AcceptsTab() && codepoint == 0x09)     // VK_TAB
 		{
 			return;
 		}
 
-		if (codepoint == 0x0D)	// VK_RETURN
+		if (codepoint == 0x0D)  // VK_RETURN
 		{
 			return;
 		}
 		
-		if (codepoint == 0x8)
+		if (codepoint == 0x8)   // VK_BACKSPACE
 			return;
 
-		if (m_cursor == -1 || m_cursor >= m_text.length())
+		// Convert the 16-bit codepoint to UTF-8 and insert it at the cursor position
+		std::string utf8Char;
+		utf8::append_codepoint(utf8Char, codepoint);
+		
+		if (m_cursor == -1 || m_cursor >= utf8::length(m_text))
 		{
-			m_text.push_back(static_cast<char>(codepoint & 0xFF));
-			m_cursor = m_text.length();
+			// If cursor is at the end or beyond, append the character
+			m_text.append(utf8Char);
+			m_cursor = utf8::length(m_text);
 		}
 		else
 		{
-			m_text.insert(m_text.begin() + m_cursor, static_cast<char>(codepoint & 0xFF));
+			// Otherwise, insert at the cursor position by converting char index to byte index
+			size_t byteIndex = utf8::byte_index(m_text, m_cursor);
+			m_text.insert(byteIndex, utf8Char);
 			m_cursor++;
 		}
 

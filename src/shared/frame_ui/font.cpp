@@ -6,6 +6,7 @@
 #include "assets/asset_registry.h"
 #include "graphics/graphics_device.h"
 #include "frame_ui/inline_color.h"
+#include "frame_ui/utf8_utils.h"
 
 #include <atomic>
 
@@ -523,28 +524,43 @@ namespace mmo
 
 		argb_t dummyColour = 0;    // not used - needed for helper signature
 
-		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		for (std::size_t byteIndex = 0; byteIndex < text.length(); /* increment inside loop */)
 		{
 			// Skip any inline‑colour directive
-			if (ConsumeColourTag(text, c, dummyColour, dummyColour))
+			if (ConsumeColourTag(text, byteIndex, dummyColour, dummyColour))
 				continue;
 
 			std::size_t iterations = 1;
-			char g = text[c++]; // advance here so 'continue' does not double‑increment
-
-			if (g == '\t')
+			uint32 codepoint;
+			
+			// Handle special ASCII control characters
+			if (text[byteIndex] == '\t')
 			{
-				g = ' ';
+				codepoint = ' ';
 				iterations = 4;
+				byteIndex++;
 			}
-			else if (g == '\n')
+			else if (text[byteIndex] == '\n')
 			{
 				curLineWidth = std::max(curLineWidth, advWidth);
 				advWidth = 0.0f;
+				byteIndex++;
 				continue;
 			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
 
-			if (const FontGlyph* glyph = GetGlyphData(g))
+			if (const FontGlyph* glyph = GetGlyphData(codepoint))
 			{
 				const float width = glyph->GetRenderedAdvance(scale);
 
@@ -588,27 +604,42 @@ namespace mmo
 
 		argb_t currentColour = color;
 
-		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		for (std::size_t byteIndex = 0; byteIndex < text.length(); /* increment inside loop */)
 		{
-			if (ConsumeColourTag(text, c, currentColour, color))
+			if (ConsumeColourTag(text, byteIndex, currentColour, color))
 				continue;
 
 			std::size_t iterations = 1;
-			char g = text[c++];
-
-			if (g == '\t')
+			uint32 codepoint;
+			
+			// Handle special ASCII control characters
+			if (text[byteIndex] == '\t')
 			{
-				g = ' ';
+				codepoint = ' ';
 				iterations = 4;
+				byteIndex++;
 			}
-			else if (g == '\n')
+			else if (text[byteIndex] == '\n')
 			{
 				glyphPos.x = position.x;
 				glyphPos.y = (glyphPos.y - baseline) + GetHeight(scale) + baseline;
+				byteIndex++;
 				continue;
 			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
 
-			if (const FontGlyph* glyph = GetGlyphData(g))
+			if (const FontGlyph* glyph = GetGlyphData(codepoint))
 			{
 				const FontImage* img = glyph->GetImage();
 				const Point drawPos = {
@@ -641,28 +672,43 @@ namespace mmo
 
 		argb_t currentColour = color;
 
-		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		for (std::size_t byteIndex = 0; byteIndex < text.length(); /* increment inside loop */)
 		{
-			if (ConsumeColourTag(text, c, currentColour, color))
+			if (ConsumeColourTag(text, byteIndex, currentColour, color))
 				continue;
 
 			std::size_t iterations = 1;
-			char g = text[c++];
-
-			if (g == '\t')
+			uint32 codepoint;
+			
+			// Handle special ASCII control characters
+			if (text[byteIndex] == '\t')
 			{
-				g = ' ';
+				codepoint = ' ';
 				iterations = 4;
+				byteIndex++;
 			}
-			else if (g == '\n')
+			else if (text[byteIndex] == '\n')
 			{
 				++lineCount;
 				glyphPos.x = startPos.x;
 				baseY += height;
+				byteIndex++;
 				continue;
 			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
 
-			if (const FontGlyph* glyph = GetGlyphData(g))
+			if (const FontGlyph* glyph = GetGlyphData(codepoint))
 			{
 				const FontImage* img = glyph->GetImage();
 				Point drawPos = {
@@ -707,33 +753,50 @@ namespace mmo
 
 		argb_t dummyColour = 0; // colour not required for counting
 
-		for (std::size_t c = 0; c < text.length(); /* increment inside loop */)
+		for (std::size_t byteIndex = 0; byteIndex < text.length(); /* increment inside loop */)
 		{
-			if (ConsumeColourTag(text, c, dummyColour, dummyColour))
+			if (ConsumeColourTag(text, byteIndex, dummyColour, dummyColour))
 				continue;
 
 			std::size_t iterations = 1;
-			char g = text[c++];
-
-			if (g == '\t')
+			uint32 codepoint;
+			
+			// Handle special ASCII control characters
+			if (text[byteIndex] == '\t')
 			{
-				lastWordIndex = c;
-				g = ' ';
+				lastWordIndex = byteIndex + 1;
+				codepoint = ' ';
 				iterations = 4;
+				byteIndex++;
 			}
-			else if (g == ' ')
+			else if (text[byteIndex] == ' ')
 			{
-				lastWordIndex = c;
+				lastWordIndex = byteIndex + 1;
+				codepoint = ' ';
+				byteIndex++;
 			}
-			else if (g == '\n')
+			else if (text[byteIndex] == '\n')
 			{
-				lastWordIndex = c;
+				lastWordIndex = byteIndex + 1;
 				glyphPos.x = startPos.x;
 				++lineCount;
+				byteIndex++;
 				continue;
 			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(text, byteIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
 
-			if (const FontGlyph* glyph = GetGlyphData(g))
+			if (const FontGlyph* glyph = GetGlyphData(codepoint))
 			{
 				glyphPos.x += glyph->GetAdvance(scale) * iterations;
 
@@ -743,7 +806,7 @@ namespace mmo
 					++lineCount;
 
 					if (wordWrap)
-						c = lastWordIndex; // restart from last breakable point
+						byteIndex = lastWordIndex; // restart from last breakable point
 				}
 			}
 		}
