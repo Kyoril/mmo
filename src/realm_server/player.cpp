@@ -242,15 +242,16 @@ namespace mmo
 
 		// Setup a weak callback handler
 		std::weak_ptr weakThis{ shared_from_this() };
-		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const BigNumber& sessionKey) {
+		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber& sessionKey) {
 			// Obtain strong reference to see if the client connection is still valid
 			if (const auto strongThis = weakThis.lock())
 			{
 				// Handle success cases
 				if (succeeded)
 				{
-					// Store session key
+					// Store session key and GM level
 					strongThis->m_accountId = accountId;
+					strongThis->m_gmLevel = gmLevel;
 					strongThis->InitializeSession(sessionKey);
 				}
 				else
@@ -517,6 +518,40 @@ namespace mmo
 			WLOG("Received proxy packet from character without a world!");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Check for GM commands that require specific GM levels
+#ifdef MMO_WITH_DEV_COMMANDS
+		// This is where we will restrict certain commands based on GM level
+		switch(packet.GetId())
+		{
+			case game::client_realm_packet::CheatFaceMe:
+			case game::client_realm_packet::CheatFollowMe:
+			case game::client_realm_packet::CheatSpeed:
+			case game::client_realm_packet::CheatWorldPort:
+			case game::client_realm_packet::CheatTeleportToPlayer:
+				// Require GM level 1 (basic GM)
+				if (!HasGMLevel(1))
+				{
+					WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
+					return PacketParseResult::Pass;
+				}
+				break;
+			case game::client_realm_packet::CheatLearnSpell:
+			case game::client_realm_packet::CheatRecharge:
+			case game::client_realm_packet::CheatCreateMonster:
+			case game::client_realm_packet::CheatDestroyMonster:
+			case game::client_realm_packet::CheatLevelUp:
+			case game::client_realm_packet::CheatGiveMoney:
+			case game::client_realm_packet::CheatAddItem:
+				// Require GM level 2
+				if (!HasGMLevel(2))
+				{
+					WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
+					return PacketParseResult::Pass;
+				}
+				break;
+		}
+#endif
 
 		const auto characterId = m_characterData->characterId;
 		strongWorld->GetConnection().sendSinglePacket([characterId, &packet](auth::OutgoingPacket& outPacket)
@@ -1115,6 +1150,13 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
 	{
+		// Require GM level 1 for teleport commands
+		if (!HasGMLevel(1))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use teleport command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
 		{
@@ -1173,6 +1215,13 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket& packet)
 	{
+		// Require GM level 2 for teleport commands
+		if (!HasGMLevel(2))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use summon command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
 		{

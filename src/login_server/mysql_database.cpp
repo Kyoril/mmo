@@ -187,15 +187,18 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<std::pair<uint64, std::string>> MySQLDatabase::GetAccountSessionKey(std::string accountName)
+	std::optional<std::tuple<uint64, std::string, uint8>> MySQLDatabase::GetAccountSessionKey(std::string accountName)
 	{
-		mysql::Select select(m_connection, "SELECT id,k FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id, k, gm_level FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
 			if (row)
 			{
-				return std::make_pair<uint64, std::string>(std::atoll(row.GetField(0)), std::string(row.GetField(1)));
+				return std::make_tuple<uint64, std::string, uint8>(
+					std::atoll(row.GetField(0)), 
+					std::string(row.GetField(1)), 
+					static_cast<uint8>(std::atoi(row.GetField(2))));
 			}
 		}
 		else
@@ -353,6 +356,30 @@ namespace mmo
 		}
 
 		transaction.Commit();
+	}
+
+	bool MySQLDatabase::SetAccountGMLevel(std::string accountName, uint8 gmLevel)
+	{
+		try
+		{
+			// The correct way to execute a query is to use m_connection.Execute() directly
+			const std::string query = "UPDATE account SET gm_level = " + std::to_string(gmLevel) + 
+				" WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1";
+				
+			if (!m_connection.Execute(query))
+			{
+				PrintDatabaseError();
+				return false;
+			}
+			
+			// Check if any row was actually updated
+			return mysql_affected_rows(m_connection.GetHandle()) > 0;
+		}
+		catch (const mysql::Exception& ex)
+		{
+			ELOG("Database error when setting GM level: " << ex.what());
+			return false;
+		}
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

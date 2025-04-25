@@ -27,7 +27,14 @@ namespace mmo
 
 		std::optional<RealmAuthData> GetRealmAuthData(std::string name) override;
 
-		std::optional<std::pair<uint64, std::string>> GetAccountSessionKey(std::string accountName) override;
+		/// Retrieves the session key, account id, and GM level by name.
+		/// @param accountName Name of the account.
+		std::optional<std::tuple<uint64, std::string, uint8>> GetAccountSessionKey(std::string accountName) override;
+
+		/// Sets the GM level for an account.
+		/// @param accountName Name of the account.
+		/// @param gmLevel New GM level to set.
+		bool SetAccountGMLevel(std::string accountName, uint8 gmLevel) override;
 
 		void PlayerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) override;
 

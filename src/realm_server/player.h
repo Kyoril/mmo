@@ -89,6 +89,12 @@ namespace mmo
 
 		uint64 GetAccountId() const { return m_accountId; }
 
+		/// Gets the GM level of the player.
+		uint8 GetGMLevel() const { return m_gmLevel; }
+
+		/// Checks if the player has a specific GM level or higher.
+		bool HasGMLevel(uint8 level) const { return m_gmLevel >= level; }
+
 		[[nodiscard]] const String& GetCharacterName() const { return m_characterData->name; }
 
 		[[nodiscard]] uint32 GetCharacterLevel() const { return m_characterData->level; }
@@ -320,7 +326,7 @@ namespace mmo
 		SHA1Hash m_clientHash;
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
-		uint8 m_gmLevel = 0;
+		uint8 m_gmLevel = 0;     // GM level of the player account (0: normal player, 1+: GM levels)
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;
 		InstanceId m_instanceId{};

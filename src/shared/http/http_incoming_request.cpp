@@ -165,10 +165,15 @@ namespace mmo
 					// Split arguments
 					std::string::size_type lastPos = 0;
 					std::vector<String> arguments;
-					for (std::string::size_type i = argumentStrings.find(' ', lastPos); i != std::string::npos; i = argumentStrings.find(' ', lastPos))
+					for (std::string::size_type i = argumentStrings.find('&', lastPos); i != std::string::npos; i = argumentStrings.find('&', lastPos))
 					{
 						arguments.push_back(argumentStrings.substr(lastPos, i));
 						lastPos = i + 1;
+					}
+
+					if (lastPos < argumentStrings.size())
+					{
+						arguments.push_back(argumentStrings.substr(lastPos));
 					}
 
 					// Fill in argument map

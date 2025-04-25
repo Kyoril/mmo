@@ -82,9 +82,14 @@ namespace mmo
 		/// @param name Name of the realm.
 		virtual std::optional<RealmAuthData> GetRealmAuthData(std::string name) = 0;
 
-		/// Retrieves the session key and the account id by name.
+		/// Retrieves the session key, account id, and GM level by name.
 		/// @param accountName Name of the account.
-		virtual std::optional<std::pair<uint64, std::string>> GetAccountSessionKey(std::string accountName) = 0;
+		virtual std::optional<std::tuple<uint64, std::string, uint8>> GetAccountSessionKey(std::string accountName) = 0;
+
+		/// Sets the GM level for an account.
+		/// @param accountName Name of the account.
+		/// @param gmLevel New GM level to set.
+		virtual bool SetAccountGMLevel(std::string accountName, uint8 gmLevel) = 0;
 
 		/// Writes player session and login data to the database. This also writes the current timestamp
 		/// to the last_login field.

@@ -33,8 +33,8 @@ namespace mmo
 		, public auth::IConnectorListener
 	{
 	public:
-		/// Callback for ClientAuthSession results.
-		typedef std::function<void(bool success, uint64 accountId, const BigNumber& sessionKey)> ClientAuthSessionCallback;
+		/// Represents a callback for pending client auth session responses from the login server.
+		typedef std::function<void(bool, uint64, uint8, BigNumber)> ClientAuthSessionCallback;
 
 	private:
 		/// Contains data passed by a ClientAuthSession packet.

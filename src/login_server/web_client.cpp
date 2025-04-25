@@ -58,6 +58,10 @@ namespace mmo
 					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
 					SendJsonResponse(response, message.str());
 				}
+				else if (url == "/gm-level")
+				{
+					handleGetGMLevel(request, response);
+				}
 				else
 				{
 					response.setStatus(net::http::OutgoingAnswer::NotFound);
@@ -90,11 +94,16 @@ namespace mmo
 				{
 					handleUnbanAccount(request, response);
 				}
+				else if (url == "/gm-level")
+				{
+					handleSetGMLevel(request, response);
+				}
 				else
 				{
 					const String message = "The command '" + url + "' does not exist";
 					response.finishWithContent("text/html", message.data(), message.size());
 				}
+				break;
 			}
 			default:
 			{
@@ -354,6 +363,130 @@ namespace mmo
 		{
 			m_service.GetDatabase().UnbanAccountByName(name, reason);
 			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
+	}
+
+	void WebClient::handleGetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPathArguments();
+		const auto accountNameIt = arguments.find("account_name");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+
+		try
+		{
+			// First check if the account exists
+			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
+			if (!account)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				return;
+			}
+
+			// Get the account session key which includes GM level
+			auto result = m_service.GetDatabase().GetAccountSessionKey(name);
+			if (result)
+			{
+				// The third element in the tuple is the GM level
+				uint8 gmLevel = std::get<2>(*result);
+				std::ostringstream message;
+				message << "{\"status\":\"SUCCESS\", \"account_name\":\"" << name << "\", \"gm_level\":" << static_cast<int>(gmLevel) << "}";
+				SendJsonResponse(response, message.str());
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to retrieve GM level information\"}");
+			}
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		}
+	}
+
+	void WebClient::handleSetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto accountNameIt = arguments.find("account_name");
+		const auto gmLevelIt = arguments.find("gm_level");
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			return;
+		}
+
+		if (gmLevelIt == arguments.end() || gmLevelIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'gm_level'\"}");
+			return;
+		}
+
+		const String name = accountNameIt->second;
+		int gmLevel = 0;
+		
+		try
+		{
+			gmLevel = std::stoi(gmLevelIt->second);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'gm_level' must be a valid integer number\"}");
+			return;
+		}
+
+		if (gmLevel < 0 || gmLevel > 255)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'gm_level' must be between 0 and 255\"}");
+			return;
+		}
+
+		try
+		{
+			// First check if the account exists
+			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
+			if (!account)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				return;
+			}
+
+			// Update the GM level in the database
+			if (m_service.GetDatabase().SetAccountGMLevel(name, static_cast<uint8>(gmLevel)))
+			{
+				// Notify players who might be connected that their GM level changed
+				// We need to kick by account ID, not by name
+				m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
+				
+				std::ostringstream message;
+				message << "{\"status\":\"SUCCESS\", \"account_name\":\"" << name << "\", \"gm_level\":" << gmLevel << "}";
+				SendJsonResponse(response, message.str());
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update GM level\"}");
+			}
 		}
 		catch (...)
 		{

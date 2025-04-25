@@ -147,6 +147,69 @@ Removes a ban from an existing account.
 }
 ```
 
+### GM Level Management
+
+#### GET /gm-level
+
+Retrieves the GM level for an account.
+
+**Request Parameters:**
+- `account_name` (required): The account name to check
+
+**Response Status Codes:**
+- `200 OK`: Successfully retrieved GM level
+- `400 Bad Request`: Missing required parameters
+- `404 Not Found`: Account does not exist
+- `500 Internal Server Error`: Failed to retrieve GM level
+
+**Success Response Example:**
+```json
+{
+  "status": "SUCCESS",
+  "account_name": "admin",
+  "gm_level": 3
+}
+```
+
+**Error Response Example:**
+```json
+{
+  "status": "ACCOUNT_DOES_NOT_EXIST",
+  "message": "An account with the name 'unknown' does not exist!"
+}
+```
+
+#### POST /gm-level
+
+Sets the GM level for an account. If the account is currently logged in, the player will be kicked to apply the new GM level.
+
+**Request Parameters:**
+- `account_name` (required): The account name to modify
+- `gm_level` (required): The new GM level (integer between 0 and 255)
+
+**Response Status Codes:**
+- `200 OK`: GM level successfully updated
+- `400 Bad Request`: Missing required parameters or invalid GM level
+- `404 Not Found`: Account does not exist
+- `500 Internal Server Error`: Failed to update GM level
+
+**Success Response Example:**
+```json
+{
+  "status": "SUCCESS",
+  "account_name": "admin",
+  "gm_level": 3
+}
+```
+
+**Error Response Example:**
+```json
+{
+  "status": "INVALID_PARAMETER",
+  "message": "Parameter 'gm_level' must be between 0 and 255"
+}
+```
+
 ### Server Control
 
 #### POST /shutdown

@@ -124,7 +124,7 @@ namespace mmo
 		/// Send auth proof result to the realm server.
 		void SendAuthProof(auth::AuthResult result);
 		/// Send the auth session result back to the realm server.
-		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, BigNumber sessionKey);
+		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey);
 
 		void QueueNextPingTimeoutCheck();
 

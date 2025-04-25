@@ -118,7 +118,7 @@ namespace mmo
 		});
 	}
 
-	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, BigNumber sessionKey)
+	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey)
 	{
 		if (result == auth::auth_result::Success)
 		{
@@ -133,7 +133,7 @@ namespace mmo
 		}
 
 		// Send response packet to the realm server
-		m_connection->sendSinglePacket([requestId, result, accountId, &sessionKey](auth::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([requestId, result, accountId, gmLevel, &sessionKey](auth::OutgoingPacket& packet) {
 			packet.Start(auth::login_realm_packet::ClientAuthSessionResponse);
 			packet
 				<< io::write<uint64>(requestId)
@@ -143,6 +143,7 @@ namespace mmo
 			{
 				packet
 					<< io::write<uint64>(accountId)
+					<< io::write<uint8>(gmLevel)  // Add GM level to the packet
 					<< io::write_dynamic_range<uint16>(sessionKey.asByteArray());
 			}
 
@@ -468,23 +469,29 @@ namespace mmo
 
 		// Database handler method will validate the client hash
 		std::weak_ptr<Realm> weakThis{ shared_from_this() };
-		auto handler = [weakThis, requestId, accountName, clientSeed, serverSeed, clientHash](std::optional<std::pair<uint64, std::string>> result)
+		auto handler = [weakThis, requestId, accountName, clientSeed, serverSeed, clientHash](std::optional<std::tuple<uint64, std::string, uint8>> result)
 		{
 			if (auto strongThis = weakThis.lock())
 			{
 				// This will store the session key
 				BigNumber sessionKey;
+				uint64 accountId = 0;
+				uint8 gmLevel = 0;
 
 				// The result that will be sent
 				auth::AuthResult authResult = auth::auth_result::Success;
 				if (result.has_value())
 				{
+					accountId = std::get<0>(*result);
+					std::string sessionKeyStr = std::get<1>(*result);
+					gmLevel = std::get<2>(*result);
+
 					// Reconstruct the client hash to verify that the data sent is valid
 					HashGeneratorSha1 gen;
 					gen.update(accountName.data(), accountName.length());
 					gen.update(serverSeed);
 					gen.update(clientSeed);
-					Sha1_Add_BigNumbers(gen, { BigNumber(result->second) });
+					Sha1_Add_BigNumbers(gen, { BigNumber(sessionKeyStr) });
 					SHA1Hash checkHash = gen.finalize();
 
 					// Verify that both hashes match
@@ -495,7 +502,7 @@ namespace mmo
 					else
 					{
 						// Store the session key on match
-						sessionKey.setHexStr(result->second);
+						sessionKey.setHexStr(sessionKeyStr);
 					}
 				}
 				else
@@ -504,7 +511,7 @@ namespace mmo
 				}
 
 				// Send the response
-				strongThis->SendAuthSessionResult(requestId, authResult, result->first, sessionKey);
+				strongThis->SendAuthSessionResult(requestId, authResult, accountId, gmLevel, sessionKey);
 			}
 		};
 

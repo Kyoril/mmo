@@ -31,6 +31,8 @@ namespace mmo
 		void handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleGetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void handleSetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		WebService& m_service;

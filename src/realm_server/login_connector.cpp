@@ -86,7 +86,7 @@ namespace mmo
 			// Execute all callbacks with "false" result
 			for (const auto& pair : m_pendingClientAuthSessionReqs)
 			{
-				pair.second.callback(false, 0, emptyKey);
+				pair.second.callback(false, 0, 0, emptyKey);
 			}
 
 			// Finally clear pending requests
@@ -371,6 +371,8 @@ namespace mmo
 		uint64 requestId = 0;
 		uint8 result = 0;
 		uint64 accountId = 0;
+		uint8 gmLevel = 0;
+		
 		if (!(packet
 			>> io::read<uint64>(requestId)
 			>> io::read<uint8>(result)))
@@ -382,7 +384,9 @@ namespace mmo
 		// Read account id on success
 		if (result == auth::auth_result::Success)
 		{
-			if (!(packet >> io::read<uint64>(accountId)))
+			if (!(packet 
+				>> io::read<uint64>(accountId)
+				>> io::read<uint8>(gmLevel)))
 			{
 				ELOG("Failed to read ClientAuthSessionResponse packet from login server!");
 				return PacketParseResult::Disconnect;
@@ -437,7 +441,7 @@ namespace mmo
 		// Execute the callback
 		if (callback)
 		{
-			callback(result == auth::auth_result::Success, accountId, sessionKey);
+			callback(result == auth::auth_result::Success, accountId, gmLevel, sessionKey);
 		}
 
 		return PacketParseResult::Pass;
