@@ -48,10 +48,6 @@ namespace mmo
 				return true;
 			}
             
-            // Specialization for std::string to properly handle spaces
-            template<>
-            bool GetField<std::string>(std::size_t index, std::string &value) const;
-
 			template <class T>
 			void TryGetField(std::size_t index, T &value) const
 			{
@@ -81,5 +77,28 @@ namespace mmo
 			MYSQL_ROW m_row;
 			std::size_t m_length;
 		};
+
+		// Specialization for std::string to properly handle spaces
+		template <>
+		inline bool Row::GetField<std::string>(std::size_t index, std::string& value) const
+		{
+			try
+			{
+				const char* const field = GetField(index);
+				if (!field)
+				{
+					return false;
+				}
+
+				value = field; // Directly assign the field to the string
+			}
+			catch (...)
+			{
+				return false;
+			}
+
+			return true;
+		}
+
 	}
 }
