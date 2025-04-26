@@ -2590,6 +2590,12 @@ namespace mmo
 			m_landState->SetTimePosition(0.0f);
 			PlayOneShotAnimation(m_landState);
 		}
+
+		// Also ensure jump start state is reset
+		if (m_jumpStartState)
+		{
+			m_jumpStartState->SetTimePosition(0.0f);
+		}
 	}
 
 }
