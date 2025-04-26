@@ -253,8 +253,19 @@ namespace mmo
 			// Check if we should track a target
 			if (auto target = m_targetUnit.lock(); !IsPlayer() && target)
 			{
-				GetSceneNode()->SetFixedYawAxis(true);
-				GetSceneNode()->LookAt(target->GetSceneNode()->GetDerivedPosition(), TransformSpace::World, Vector3::UnitX);
+				// Only rotate around the Y axis (yaw) to face the target
+				// Calculate the direction vector to the target in the horizontal plane
+				Vector3 targetPos = target->GetSceneNode()->GetDerivedPosition();
+				Vector3 myPos = GetSceneNode()->GetDerivedPosition();
+				
+				// Project positions to the XZ plane (ignore Y component)
+				targetPos.y = myPos.y;
+				
+				// Calculate the angle to face the target
+				Radian yawToTarget = GetAngle(myPos.x, myPos.z, targetPos.x, targetPos.z);
+				
+				// Set orientation using only the yaw component
+				GetSceneNode()->SetOrientation(Quaternion(yawToTarget, Vector3::UnitY));
 			}
 
 			// TODO: This needs to be managed differently or it will explode in complexity here!
