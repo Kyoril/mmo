@@ -138,6 +138,25 @@ namespace mmo
 	{
 		GameObjectC::Update(deltaTime);
 
+		UpdateQuestGiverAndNameVisuals(deltaTime);
+
+		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
+		
+		if (m_movementAnimation)
+		{
+			UpdateMovementAnimation(deltaTime, isDead);
+		}
+		else if (!isDead)
+		{
+			UpdateNormalMovement(deltaTime);
+		}
+
+		UpdateAnimationStates(deltaTime, isDead);
+	}
+	
+	void GameUnitC::UpdateQuestGiverAndNameVisuals(const float deltaTime)
+	{
+		// Update quest giver icon
 		if (m_questGiverNode != nullptr)
 		{
 			if (!m_questOffset.IsNearlyEqual(m_questGiverNode->GetPosition()))
@@ -155,6 +174,7 @@ namespace mmo
 			}
 		}
 
+		// Update name component to face camera
 		if (m_nameComponent && m_nameComponent->IsVisible())
 		{
 			Camera* cam = m_scene.GetCamera(0);
@@ -164,161 +184,156 @@ namespace mmo
 				m_nameComponentNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::UnitZ);
 			}
 		}
-
-		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
-		if (m_movementAnimation)
+	}
+	
+	void GameUnitC::UpdateMovementAnimation(const float deltaTime, const bool isDead)
+	{
+		bool animationFinished = false;
+		if (!isDead)
 		{
-			bool animationFinished = false;
-			if (!isDead)
-			{
-				SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
-			}
-
-			m_movementAnimationTime += deltaTime;
-			if (m_movementAnimationTime >= m_movementAnimation->GetDuration())
-			{
-				m_movementAnimationTime = m_movementAnimation->GetDuration();
-				animationFinished = true;
-			}
-
-			m_sceneNode->SetPosition(m_movementStart);
-			m_sceneNode->SetOrientation(m_movementStartRot);
-			m_movementAnimation->Apply(m_movementAnimationTime);
-
-			// Continuously adjust height to terrain to prevent floating
-			float groundHeight = 0.0f;
-			float rayHeight = 0.5f; // Higher ray starting point to detect both terrain and geometry
-			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * rayHeight, 3.5f, groundHeight);
-			
-			// If ground found and we're slightly above it (floating), adjust position
-			if (hasGroundHeight && (m_sceneNode->GetDerivedPosition().y > groundHeight + 0.05f || 
-			                         m_sceneNode->GetDerivedPosition().y < groundHeight - 0.01f))
-			{
-				// Use a smooth adjustment when not too far from ground
-				float heightDiff = groundHeight - m_sceneNode->GetDerivedPosition().y;
-				if (std::abs(heightDiff) < 1.0f)
-				{
-					// Faster adjustment when farther from ground, but not instant to avoid popping
-					float adjustSpeed = std::min(5.0f * deltaTime, 1.0f) * std::min(std::abs(heightDiff) * 2.0f, 1.0f);
-					Vector3 newPos = m_sceneNode->GetDerivedPosition();
-					newPos.y += heightDiff * adjustSpeed;
-					m_sceneNode->SetPosition(newPos);
-				}
-				else
-				{
-					// If too far from ground (likely a significant terrain change), snap directly
-					m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
-				}
-			}
-
-			// Update movement info
-			m_movementInfo.position = m_sceneNode->GetDerivedPosition();
-			m_movementInfo.movementFlags = 0;
-
-			if (animationFinished)
-			{
-				if (!isDead)
-				{
-					const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-
-					AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
-					SetTargetAnimState(m_casting ? m_castingState : idleAnim);
-				}
-				
-				// Final height adjustment at the end of path
-				Vector3 endPosition = m_movementEnd;
-				if (GetCollisionProvider().GetHeightAt(endPosition + Vector3::UnitY * rayHeight, 3.5f, groundHeight))
-				{
-					endPosition.y = groundHeight;
-				}
-
-				m_sceneNode->SetDerivedPosition(endPosition);
-
-				// Reset movement info
-				m_movementInfo.position = endPosition;
-				m_movementInfo.timestamp = GetAsyncTimeMs();
-				m_movementInfo.movementFlags = 0;
-
-				movementEnded(*this, m_movementInfo);
-
-				// End animation
-				m_movementAnimation.reset();
-				m_movementAnimationTime = 0.0f;
-			}
+			SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
 		}
-		else if (!isDead)
+
+		m_movementAnimationTime += deltaTime;
+		if (m_movementAnimationTime >= m_movementAnimation->GetDuration())
 		{
-			ApplyLocalMovement(deltaTime);
+			m_movementAnimationTime = m_movementAnimation->GetDuration();
+			animationFinished = true;
+		}
 
-			// Check if we should track a target
-			if (auto target = m_targetUnit.lock(); !IsPlayer() && target)
-			{
-				// Only rotate around the Y axis (yaw) to face the target
-				// Calculate the direction vector to the target in the horizontal plane
-				Vector3 targetPos = target->GetSceneNode()->GetDerivedPosition();
-				Vector3 myPos = GetSceneNode()->GetDerivedPosition();
-				
-				// Project positions to the XZ plane (ignore Y component)
-				targetPos.y = myPos.y;
-				
-				// Calculate the angle to face the target
-				Radian yawToTarget = GetAngle(myPos.x, myPos.z, targetPos.x, targetPos.z);
-				
-				// Set orientation using only the yaw component
-				GetSceneNode()->SetOrientation(Quaternion(yawToTarget, Vector3::UnitY));
-			}
+		m_sceneNode->SetPosition(m_movementStart);
+		m_sceneNode->SetOrientation(m_movementStartRot);
+		m_movementAnimation->Apply(m_movementAnimationTime);
 
-			// TODO: This needs to be managed differently or it will explode in complexity here!
-			if (m_movementInfo.IsMoving())
+		// Continuously adjust height to terrain to prevent floating
+		AdjustHeightToTerrain(deltaTime);
+
+		// Update movement info
+		m_movementInfo.position = m_sceneNode->GetDerivedPosition();
+		m_movementInfo.movementFlags = 0;
+
+		if (animationFinished)
+		{
+			FinishMovementAnimation(isDead);
+		}
+	}
+	
+	void GameUnitC::FinishMovementAnimation(const bool isDead)
+	{
+		if (!isDead)
+		{
+			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
+			AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+			SetTargetAnimState(m_casting ? m_castingState : idleAnim);
+		}
+		
+		// Final height adjustment at the end of path
+		Vector3 endPosition = m_movementEnd;
+		float groundHeight = 0.0f;
+		if (GetCollisionProvider().GetHeightAt(endPosition + Vector3::UnitY * 0.5f, 3.5f, groundHeight))
+		{
+			endPosition.y = groundHeight;
+		}
+
+		m_sceneNode->SetDerivedPosition(endPosition);
+
+		// Reset movement info
+		m_movementInfo.position = endPosition;
+		m_movementInfo.timestamp = GetAsyncTimeMs();
+		m_movementInfo.movementFlags = 0;
+
+		movementEnded(*this, m_movementInfo);
+
+		// End animation
+		m_movementAnimation.reset();
+		m_movementAnimationTime = 0.0f;
+	}
+	
+	void GameUnitC::AdjustHeightToTerrain(const float deltaTime)
+	{
+		float groundHeight = 0.0f;
+		float rayHeight = 0.5f; // Higher ray starting point to detect both terrain and geometry
+		const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * rayHeight, 3.5f, groundHeight);
+		
+		// If ground found and we're slightly above it (floating), adjust position
+		if (hasGroundHeight && (m_sceneNode->GetDerivedPosition().y > groundHeight + 0.05f || 
+								m_sceneNode->GetDerivedPosition().y < groundHeight - 0.01f))
+		{
+			// Use a smooth adjustment when not too far from ground
+			float heightDiff = groundHeight - m_sceneNode->GetDerivedPosition().y;
+			if (std::abs(heightDiff) < 1.0f)
 			{
-				SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
+				// Faster adjustment when farther from ground, but not instant to avoid popping
+				float adjustSpeed = std::min(5.0f * deltaTime, 1.0f) * std::min(std::abs(heightDiff) * 2.0f, 1.0f);
+				Vector3 newPos = m_sceneNode->GetDerivedPosition();
+				newPos.y += heightDiff * adjustSpeed;
+				m_sceneNode->SetPosition(newPos);
 			}
 			else
 			{
-				const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-				AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
-
-				SetTargetAnimState(m_casting ? m_castingState : idleAnim);
+				// If too far from ground (likely a significant terrain change), snap directly
+				m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
 			}
 		}
+	}
+	
+	void GameUnitC::UpdateNormalMovement(const float deltaTime)
+	{
+		ApplyLocalMovement(deltaTime);
 
-		// Play back one shot animations
+		// Update target tracking for NPCs
+		UpdateTargetTracking();
+
+		// Update animation state based on movement
+		UpdateMovementBasedAnimation();
+	}
+	
+	void GameUnitC::UpdateTargetTracking()
+	{
+		// Check if we should track a target
+		if (auto target = m_targetUnit.lock(); !IsPlayer() && target)
+		{
+			// Only rotate around the Y axis (yaw) to face the target
+			// Calculate the direction vector to the target in the horizontal plane
+			Vector3 targetPos = target->GetSceneNode()->GetDerivedPosition();
+			Vector3 myPos = GetSceneNode()->GetDerivedPosition();
+			
+			// Project positions to the XZ plane (ignore Y component)
+			targetPos.y = myPos.y;
+			
+			// Calculate the angle to face the target
+			Radian yawToTarget = GetAngle(myPos.x, myPos.z, targetPos.x, targetPos.z);
+			
+			// Set orientation using only the yaw component
+			GetSceneNode()->SetOrientation(Quaternion(yawToTarget, Vector3::UnitY));
+		}
+	}
+	
+	void GameUnitC::UpdateMovementBasedAnimation()
+	{
+		// TODO: This needs to be managed differently or it will explode in complexity here!
+		if (m_movementInfo.IsMoving())
+		{
+			SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
+		}
+		else
+		{
+			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
+			AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+
+			SetTargetAnimState(m_casting ? m_castingState : idleAnim);
+		}
+	}
+	
+	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
+	{
+		// Handle one-shot animations
 		if (m_oneShotState)
 		{
-			if (m_currentState) m_currentState->SetWeight(0.0f);
-			if (m_targetState) m_targetState->SetWeight(0.0f);
-
-			if (m_oneShotState->HasEnded())
-			{
-				// Transition back to current state
-				m_oneShotState->SetWeight(m_oneShotState->GetWeight() - deltaTime * 4.0f);
-				if (m_targetState)
-				{
-					m_targetState->SetWeight(1.0f - m_oneShotState->GetWeight());
-				}
-				else if (m_currentState)
-				{
-					m_currentState->SetWeight(1.0f - m_oneShotState->GetWeight());
-				}
-
-				if (m_oneShotState->GetWeight() <= 0.0f)
-				{
-					if (m_targetState)
-					{
-						m_targetState->SetWeight(1.0f);
-					}
-					else if (m_currentState)
-					{
-						m_currentState->SetWeight(1.0f);
-					}
-
-					m_oneShotState->SetEnabled(false);
-					m_oneShotState->SetWeight(0.0f);
-					m_oneShotState = nullptr;
-				}
-			}
+			UpdateOneShotAnimation(deltaTime);
 		}
 
+		// Control animation state visibility based on one-shot state
 		if (m_currentState != nullptr)
 		{
 			m_currentState->SetEnabled(m_oneShotState == nullptr || m_oneShotState->HasEnded());
@@ -339,37 +354,94 @@ namespace mmo
 			SetTargetAnimState(m_deathState);
 		}
 
-		// Interpolate
-		if (!m_oneShotState)
-		{
-			if (m_targetState != m_currentState)
-			{
-				if (m_targetState && !m_currentState)
-				{
-					m_currentState = m_targetState;
-					m_targetState = nullptr;
+		// Handle animation transitions
+		UpdateAnimationTransitions(deltaTime);
 
-					m_currentState->SetWeight(1.0f);
-					m_currentState->SetEnabled(true);
-				}
+		// Update animation time positions
+		AdvanceAnimationTimes(deltaTime);
+	}
+	
+	void GameUnitC::UpdateOneShotAnimation(const float deltaTime)
+	{
+		// Hide regular animations while one-shot is playing
+		if (m_currentState) m_currentState->SetWeight(0.0f);
+		if (m_targetState) m_targetState->SetWeight(0.0f);
+
+		// Handle transition back after one-shot animation has ended
+		if (m_oneShotState->HasEnded())
+		{
+			// Transition back to current state
+			m_oneShotState->SetWeight(m_oneShotState->GetWeight() - deltaTime * 4.0f);
+			if (m_targetState)
+			{
+				m_targetState->SetWeight(1.0f - m_oneShotState->GetWeight());
+			}
+			else if (m_currentState)
+			{
+				m_currentState->SetWeight(1.0f - m_oneShotState->GetWeight());
 			}
 
-			if (m_currentState && m_targetState)
+			// Once transition is complete, disable one-shot animation
+			if (m_oneShotState->GetWeight() <= 0.0f)
 			{
-				m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
-				m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
-
-				if (m_targetState->GetWeight() >= 1.0f)
+				if (m_targetState)
 				{
-					m_currentState->SetWeight(0.0f);
-					m_currentState->SetEnabled(false);
-
-					m_currentState = m_targetState;
-					m_targetState = nullptr;
+					m_targetState->SetWeight(1.0f);
 				}
+				else if (m_currentState)
+				{
+					m_currentState->SetWeight(1.0f);
+				}
+
+				m_oneShotState->SetEnabled(false);
+				m_oneShotState->SetWeight(0.0f);
+				m_oneShotState = nullptr;
+			}
+		}
+	}
+	
+	void GameUnitC::UpdateAnimationTransitions(const float deltaTime)
+	{
+		// Skip transitions if one-shot animation is playing
+		if (m_oneShotState)
+		{
+			return;
+		}
+
+		// Handle transition to target state
+		if (m_targetState != m_currentState)
+		{
+			// If we have a target but no current state, just set target as current
+			if (m_targetState && !m_currentState)
+			{
+				m_currentState = m_targetState;
+				m_targetState = nullptr;
+
+				m_currentState->SetWeight(1.0f);
+				m_currentState->SetEnabled(true);
 			}
 		}
 
+		// Handle crossfade between current and target states
+		if (m_currentState && m_targetState)
+		{
+			m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
+			m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
+
+			// Once transition is complete, make target the new current state
+			if (m_targetState->GetWeight() >= 1.0f)
+			{
+				m_currentState->SetWeight(0.0f);
+				m_currentState->SetEnabled(false);
+
+				m_currentState = m_targetState;
+				m_targetState = nullptr;
+			}
+		}
+	}
+	
+	void GameUnitC::AdvanceAnimationTimes(const float deltaTime)
+	{
 		// Update animation states
 		if (m_currentState && m_currentState->IsEnabled())
 		{

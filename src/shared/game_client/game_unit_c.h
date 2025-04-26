@@ -84,6 +84,39 @@ namespace mmo
 
 		/// @brief Updates the unit. Should be called once per frame per unit.
 		virtual void Update(float deltaTime) override;
+		
+		/// @brief Updates quest giver icon and unit name visuals
+		void UpdateQuestGiverAndNameVisuals(const float deltaTime);
+		
+		/// @brief Updates movement animation
+		void UpdateMovementAnimation(const float deltaTime, const bool isDead);
+		
+		/// @brief Completes movement animation and resets state
+		void FinishMovementAnimation(const bool isDead);
+		
+		/// @brief Adjusts unit height to match terrain
+		void AdjustHeightToTerrain(const float deltaTime);
+		
+		/// @brief Updates normal movement (not animation-based)
+		void UpdateNormalMovement(const float deltaTime);
+		
+		/// @brief Makes NPCs face their targets
+		void UpdateTargetTracking();
+		
+		/// @brief Updates animation based on movement state
+		void UpdateMovementBasedAnimation();
+		
+		/// @brief Updates animation states (transitions, blending, etc.)
+		void UpdateAnimationStates(const float deltaTime, const bool isDead);
+		
+		/// @brief Updates one-shot animations
+		void UpdateOneShotAnimation(const float deltaTime);
+		
+		/// @brief Handles transitions between animation states
+		void UpdateAnimationTransitions(const float deltaTime);
+		
+		/// @brief Updates animation timing
+		void AdvanceAnimationTimes(const float deltaTime);
 
 		virtual void ApplyLocalMovement(float deltaTime);
 
