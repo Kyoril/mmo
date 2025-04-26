@@ -144,6 +144,7 @@ namespace mmo
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
 		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
+		m_debugBoundingBox->SetCastShadows(false);
 
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 

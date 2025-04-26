@@ -11,15 +11,18 @@
 namespace mmo
 {
 	const String Light::LIGHT_TYPE_NAME = "Light";
+
 	Light::Light(LightType type)
 		: m_type(type)
 	{
+		SetCastShadows(false);
 	}
 
 	Light::Light(const String& name, LightType type)
 		: MovableObject(name)
 		, m_type(type)
 	{
+		SetCastShadows(false);
 	}
 
 	void Light::Update() const

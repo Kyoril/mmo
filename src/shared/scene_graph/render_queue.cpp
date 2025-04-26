@@ -160,11 +160,11 @@ namespace mmo
 		// TODO
 	}
 
-	void RenderQueue::ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds)
+	void RenderQueue::ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds, bool onlyShadowCasters)
 	{
 		movableObject.SetCurrentCamera(camera);
 
-		if (!movableObject.IsVisible())
+		if (!movableObject.IsVisible() || (onlyShadowCasters && !movableObject.IsCastingShadows()))
 		{
 			return;
 		}

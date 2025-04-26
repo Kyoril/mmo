@@ -14,6 +14,9 @@ namespace mmo
 		, m_text(text)
 		, m_material(materialPtr)
 	{
+		// Unit names dont display shadows!
+		SetCastShadows(false);
+
 		m_textInvalidated = true;
 		ASSERT(materialPtr);
 

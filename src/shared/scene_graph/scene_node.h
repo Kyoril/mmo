@@ -59,7 +59,8 @@ namespace mmo
 
 		virtual void RemoveAllChildren() override;
 
-		virtual void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren);
+		virtual void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren,
+			bool onlyShadowCasters);
 
 		const AABB& GetWorldAABB() const noexcept { return m_worldAABB; }
 

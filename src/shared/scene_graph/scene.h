@@ -396,7 +396,7 @@ namespace mmo
 
 		void PrepareRenderQueue();
 
-		virtual void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds);
+		virtual void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters);
 
 		void RenderObjects(const QueuedRenderableCollection& objects);
 

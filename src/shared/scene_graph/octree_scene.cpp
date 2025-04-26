@@ -257,7 +257,7 @@ namespace mmo
 		}
 	}
 
-	void OctreeScene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds)
+	void OctreeScene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
 		GetRenderQueue().Clear();
 
@@ -265,7 +265,7 @@ namespace mmo
 		CachedFrustumPlanes cachedPlanes(camera);
 		
 		// Walk the octree, adding all visible Octree nodes to the render queue
-		WalkOctree(camera, GetRenderQueue(), *m_octree, visibleObjectBounds, false, false, cachedPlanes);
+		WalkOctree(camera, GetRenderQueue(), *m_octree, visibleObjectBounds, false, onlyShadowCasters, cachedPlanes);
 	}
 
 	void OctreeScene::WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, 

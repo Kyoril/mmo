@@ -77,7 +77,7 @@ namespace mmo
 		while (mit != m_objectsByName.end())
 		{
 			MovableObject* mo = mit->second;
-			renderQueue.ProcessVisibleObject(*mo, camera, boundsInfo);
+			renderQueue.ProcessVisibleObject(*mo, camera, boundsInfo, onlyShadowCasters);
 
 			++mit;
 		}

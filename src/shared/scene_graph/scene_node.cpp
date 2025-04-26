@@ -8,20 +8,20 @@
 
 namespace mmo
 {
-	void SceneNode::FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren)
+	void SceneNode::FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren, bool onlyShadowCasters)
 	{
 		// TODO: Check if this object is visible itself
 
 		for (auto& [name, object] : m_objectsByName)
 		{
-			renderQueue.ProcessVisibleObject(*object, camera, visibleObjectBounds);
+			renderQueue.ProcessVisibleObject(*object, camera, visibleObjectBounds, onlyShadowCasters);
 		}
 
 		if (includeChildren)
 		{
 			for (const auto& [name, child] : m_children)
 			{
-				static_cast<SceneNode*>(child)->FindVisibleObjects(camera, renderQueue, visibleObjectBounds, includeChildren);
+				static_cast<SceneNode*>(child)->FindVisibleObjects(camera, renderQueue, visibleObjectBounds, includeChildren, onlyShadowCasters);
 			}
 		}
 	}

@@ -50,6 +50,7 @@ namespace mmo
 		mutable Sphere m_worldBoundingSphere;
 		mutable bool m_worldAABBDirty{ true };
 		bool m_renderingDisabled;
+		bool m_castShadows{ true };
 
 		static uint32 m_defaultQueryFlags;
 		static uint32 m_defaultVisibilityFlags;
@@ -141,5 +142,9 @@ namespace mmo
 
 		/// @brief Method by which the movable must add Renderable instances to the rendering queue.
 		virtual void PopulateRenderQueue(RenderQueue& queue) = 0;
+
+		void SetCastShadows(bool enable) { m_castShadows = enable; }
+
+		[[nodiscard]] bool IsCastingShadows() const { return m_castShadows; }
 	};
 }

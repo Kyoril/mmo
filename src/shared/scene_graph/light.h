@@ -89,14 +89,6 @@ namespace mmo
 		/// @param angle The new outer cone angle of the spot light in radians.
 		void SetOuterConeAngle(float angle) noexcept { m_outerConeAngle = angle; }
 
-		/// @brief Gets whether the light casts shadows.
-		/// @return True if the light casts shadows, false otherwise.
-		[[nodiscard]] bool IsCastingShadows() const noexcept { return m_castShadows; }
-
-		/// @brief Sets whether the light casts shadows.
-		/// @param cast True if the light should cast shadows, false otherwise.
-		void SetCastShadows(bool cast) noexcept { m_castShadows = cast; }
-
 		const Vector3& GetPosition() const { return m_position; }
 
 		void SetPosition(const Vector3& position) { m_position = position; m_derivedTransformDirty = true; }
@@ -174,7 +166,6 @@ namespace mmo
 		float m_range { 10.0f };
 		float m_innerConeAngle { 0.0f };
 		float m_outerConeAngle { 0.0f };
-		bool m_castShadows { false };
 
 		Vector3 m_position{ Vector3::Zero };
 		Vector3 m_direction{ Vector3::UnitZ };

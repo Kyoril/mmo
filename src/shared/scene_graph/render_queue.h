@@ -180,7 +180,7 @@ namespace mmo
 
 		void Combine(const RenderQueue& other);
 
-		void ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds);
+		void ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds, bool onlyShadowCasters);
 
 
 		RenderQueueGroupMap::iterator begin() { return m_groups.begin(); }

@@ -183,7 +183,7 @@ namespace mmo
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
 			visibleObjectsIt->second.Reset();
-			FindVisibleObjects(camera, visibleObjectsIt->second);
+			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
 		}
 		
 		// Clear current render target
@@ -262,9 +262,9 @@ namespace mmo
 		renderQueue.Clear();
 	}
 
-	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds)
+	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
-		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true);
+		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true, onlyShadowCasters);
 	}
 
 	void Scene::RenderObjects(const QueuedRenderableCollection& objects)

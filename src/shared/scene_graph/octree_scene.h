@@ -50,7 +50,7 @@ namespace mmo
 		void AddOctreeNode(OctreeNode& node, Octree& octant, size_t depth = 0);
 
 	protected:
-		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds) override;
+		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters) override;
 
 		void WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, VisibleObjectsBoundsInfo& visibleBounds, 
 			bool foundVisible, bool onlyShadowCasters, const CachedFrustumPlanes& cachedPlanes);

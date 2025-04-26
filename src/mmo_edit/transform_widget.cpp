@@ -346,6 +346,7 @@ namespace mmo
 
 		// Setup axis lines
 		m_axisLines = m_scene.CreateManualRenderObject("__TransformAxisLines__");
+		m_axisLines->SetCastShadows(false);
 		m_axisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		m_axisLines->SetQueryFlags(0);
 
@@ -415,16 +416,19 @@ namespace mmo
 		m_yzPlaneNode->Roll(Degree(90.0f), TransformSpace::Local);
 
 		Entity* plane1 = m_scene.CreateEntity("AxisPlaneXZ", m_translateAxisPlanes);
+		plane1->SetCastShadows(false);
 		plane1->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane1->SetMaterial(m_axisPlaneMaterial);
 		plane1->SetQueryFlags(0);
 
 		Entity* plane2 = m_scene.CreateEntity("AxisPlaneXY", m_translateAxisPlanes);
+		plane2->SetCastShadows(false);
 		plane2->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane2->SetMaterial(m_axisPlaneMaterial);
 		plane2->SetQueryFlags(0);
 
 		Entity* plane3 = m_scene.CreateEntity("AxisPlaneYZ", m_translateAxisPlanes);
+		plane3->SetCastShadows(false);
 		plane3->SetRenderQueueGroupAndPriority(Overlay, 1000);
 		plane3->SetMaterial(m_axisPlaneMaterial);
 		plane3->SetQueryFlags(0);
@@ -595,16 +599,19 @@ namespace mmo
 		*/
 
 		m_xCircle = m_scene.CreateEntity("XCircle", m_circleMesh);
+		m_xCircle->SetCastShadows(false);
 		m_xCircle->SetQueryFlags(0);
 		m_xCircle->SetRenderQueueGroup(Overlay - 1);
 		m_xCircle->SetMaterial(m_xAxisMaterial);
 
 		m_yCircle = m_scene.CreateEntity("YCircle", m_circleMesh);
+		m_yCircle->SetCastShadows(false);
 		m_yCircle->SetQueryFlags(0);
 		m_yCircle->SetRenderQueueGroup(Overlay - 1);
 		m_yCircle->SetMaterial(m_yAxisMaterial);
 
 		m_zCircle = m_scene.CreateEntity("ZCircle", m_circleMesh);
+		m_zCircle->SetCastShadows(false);
 		m_zCircle->SetQueryFlags(0);
 		m_zCircle->SetRenderQueueGroup(Overlay - 1);
 		m_zCircle->SetMaterial(m_zAxisMaterial);
@@ -973,6 +980,7 @@ namespace mmo
 		}
 
 		ManualRenderObject* planeObject = m_scene.CreateManualRenderObject("__AxisPlane__");
+		planeObject->SetCastShadows(false);
 		planeObject->SetRenderQueueGroupAndPriority(Overlay, 1000);
 
 		{
