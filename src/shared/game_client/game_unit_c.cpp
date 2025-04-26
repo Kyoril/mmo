@@ -311,7 +311,31 @@ namespace mmo
 	
 	void GameUnitC::UpdateMovementBasedAnimation()
 	{
-		// TODO: This needs to be managed differently or it will explode in complexity here!
+			// Handle jumping animations first
+		if (m_movementInfo.movementFlags & movement_flags::Falling)
+		{
+			// If the jumping velocity is positive, we're in the jump up phase
+			if (m_movementInfo.jumpVelocity > 0.0f)
+			{
+				// If we have a jump start animation, use it. Otherwise, use falling
+				if (m_jumpStartState && !m_jumpStartState->HasEnded())
+				{
+					SetTargetAnimState(m_jumpStartState);
+				}
+				else if (m_fallingState)
+				{
+					SetTargetAnimState(m_fallingState);
+				}
+			}
+			// If velocity is negative, we're falling
+			else if (m_fallingState)
+			{
+				SetTargetAnimState(m_fallingState);
+			}
+			return;
+		}
+		
+		// Regular movement animations
 		if (m_movementInfo.IsMoving())
 		{
 			SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
@@ -619,6 +643,7 @@ namespace mmo
 					m_movementInfo.jumpCosAngle = 0.0f;
 					playerNode->SetPosition(m_movementInfo.position);
 					m_netDriver.OnMoveFallLand(*this);
+					PlayLandAnimation(); // Play landing animation when touching ground
 					landed = true;
 					break;
 				}
@@ -1829,6 +1854,9 @@ namespace mmo
 		m_targetState = nullptr;
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
+		m_jumpStartState = nullptr;
+		m_fallingState = nullptr;
+		m_landState = nullptr;
 		m_customizationDefinition = nullptr;
 
 		String meshFile = modelEntry->filename();
@@ -1927,6 +1955,25 @@ namespace mmo
 			m_damageHitState = m_entity->GetAnimationState("Hit");
 			m_damageHitState->SetLoop(false);
 			m_damageHitState->SetTimePosition(0.0f);
+		}
+
+		// Initialize jump animation states
+		if (m_entity->HasAnimationState("JumpStart"))
+		{
+			m_jumpStartState = m_entity->GetAnimationState("JumpStart");
+			m_jumpStartState->SetLoop(false);
+		}
+
+		if (m_entity->HasAnimationState("Falling"))
+		{
+			m_fallingState = m_entity->GetAnimationState("Falling");
+			m_fallingState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("Land"))
+		{
+			m_landState = m_entity->GetAnimationState("Land");
+			m_landState->SetLoop(false);
 		}
 
 		if (m_entity)
@@ -2531,6 +2578,17 @@ namespace mmo
 		if (m_movementInfo.position.IsNearlyEqual(initialPosition, 0.001f))
 		{
 			return;
+		}
+	}
+
+	void GameUnitC::PlayLandAnimation()
+	{
+		// Play landing animation if available
+		if (m_landState)
+		{
+			// Reset animation state to beginning
+			m_landState->SetTimePosition(0.0f);
+			PlayOneShotAnimation(m_landState);
 		}
 	}
 

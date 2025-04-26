@@ -355,6 +355,9 @@ namespace mmo
 		
 		/// Handles sliding along steep slopes when the unit can't walk on them
 		void HandleSlopeSliding(const Vector3& desiredMovement);
+		
+		/// Plays the landing animation when transitioning from falling to ground
+		void PlayLandAnimation();
 
 	protected:
 		NetClient& m_netDriver;
@@ -401,6 +404,10 @@ namespace mmo
 		AnimationState* m_castReleaseState{ nullptr };
 		AnimationState* m_castingState{ nullptr };
 		AnimationState* m_damageHitState{ nullptr };
+		// Jump animation states
+		AnimationState* m_jumpStartState{ nullptr };
+		AnimationState* m_fallingState{ nullptr };
+		AnimationState* m_landState{ nullptr };
 
 		AnimationState* m_targetState = nullptr;
 		AnimationState* m_currentState = nullptr;
