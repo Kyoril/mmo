@@ -7,8 +7,8 @@
 
 namespace mmo
 {
-    RenderTextureMetal::RenderTextureMetal(GraphicsDeviceMetal & device, std::string name, uint16 width, uint16 height)
-		: RenderTexture(std::move(name), width, height)
+    RenderTextureMetal::RenderTextureMetal(GraphicsDeviceMetal & device, std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat, PixelFormat depthFormat)
+		: RenderTexture(std::move(name), width, height, flags, colorFormat, depthFormat)
 		, RenderTargetMetal(device)
 		, m_resizePending(false)
 	{

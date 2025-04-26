@@ -15,7 +15,7 @@ namespace mmo
 		, public RenderTargetMetal
 	{
 	public:
-		RenderTextureMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height);
+		RenderTextureMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat = PixelFormat::R8G8B8A8, PixelFormat depthFormat = PixelFormat::D32F);
 		virtual ~RenderTextureMetal() = default;
 
 	public:

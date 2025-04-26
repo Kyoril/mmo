@@ -110,8 +110,10 @@ namespace mmo
 
         Camera* m_shadowCamera{ nullptr };
 
+#ifdef _WIN32
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
-
+#endif
+        
         std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
 
         float m_depthBias = 250.0f;

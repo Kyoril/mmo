@@ -215,9 +215,9 @@ namespace mmo
 		return std::make_shared<RenderWindowMetal>(*this, std::move(name), width, height, fullScreen);
 	}
 
-	RenderTexturePtr GraphicsDeviceMetal::CreateRenderTexture(std::string name, uint16 width, uint16 height)
+	RenderTexturePtr GraphicsDeviceMetal::CreateRenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat, PixelFormat depthFormat)
 	{
-		return std::make_shared<RenderTextureMetal>(*this, std::move(name), width, height);
+		return std::make_shared<RenderTextureMetal>(*this, std::move(name), width, height, flags, colorFormat, depthFormat);
 	}
 
 	void GraphicsDeviceMetal::SetFillMode(FillMode mode)
@@ -264,6 +264,17 @@ namespace mmo
 	{
 		return std::make_unique<MaterialCompilerMetal>();
 	}
+
+    void GraphicsDeviceMetal::SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count)
+    {
+        
+    }
+
+    void GraphicsDeviceMetal::SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT)
+    {
+    
+    }
+
 
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceMetal::CreateShaderCompiler()
 	{

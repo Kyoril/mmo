@@ -21,7 +21,7 @@ if (WIN32)
 endif()
 
 if (APPLE)
-    target_link_libraries(game "-framework CoreFoundation")
+    target_link_libraries(deferred_shading "-framework CoreFoundation")
 endif()
 
 # Put the library into the shared solution folder
