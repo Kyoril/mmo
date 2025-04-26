@@ -345,13 +345,12 @@ namespace mmo
 	{
 		const float combatRange = GetControlled().GetMeleeReach();
 
-		Vector3 currentLocation;
 		auto& mover = GetControlled().GetMover();
 
 		// If we are moving, check if the current TARGET LOCATION is not in range instead of checking
 		// if the current location is not in attack range. Only THEN we need to calculate a new movement
 		// path.
-		currentLocation = mover.GetTarget();
+		Vector3 currentLocation = mover.GetTarget();
 
 		const Vector3 currentUnitLoc = target.GetPredictedPosition();
 		const float distance = (currentUnitLoc - currentLocation).GetSquaredLength();

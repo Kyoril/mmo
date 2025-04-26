@@ -185,11 +185,30 @@ namespace mmo
 			m_sceneNode->SetOrientation(m_movementStartRot);
 			m_movementAnimation->Apply(m_movementAnimationTime);
 
+			// Continuously adjust height to terrain to prevent floating
 			float groundHeight = 0.0f;
-			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * 0.25f, 3.5f, groundHeight);
-			if (hasGroundHeight && m_sceneNode->GetDerivedPosition().y <= groundHeight + 0.05f)
+			float rayHeight = 0.5f; // Higher ray starting point to detect both terrain and geometry
+			const bool hasGroundHeight = GetCollisionProvider().GetHeightAt(m_sceneNode->GetDerivedPosition() + Vector3::UnitY * rayHeight, 3.5f, groundHeight);
+			
+			// If ground found and we're slightly above it (floating), adjust position
+			if (hasGroundHeight && (m_sceneNode->GetDerivedPosition().y > groundHeight + 0.05f || 
+			                         m_sceneNode->GetDerivedPosition().y < groundHeight - 0.01f))
 			{
-				m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
+				// Use a smooth adjustment when not too far from ground
+				float heightDiff = groundHeight - m_sceneNode->GetDerivedPosition().y;
+				if (std::abs(heightDiff) < 1.0f)
+				{
+					// Faster adjustment when farther from ground, but not instant to avoid popping
+					float adjustSpeed = std::min(5.0f * deltaTime, 1.0f) * std::min(std::abs(heightDiff) * 2.0f, 1.0f);
+					Vector3 newPos = m_sceneNode->GetDerivedPosition();
+					newPos.y += heightDiff * adjustSpeed;
+					m_sceneNode->SetPosition(newPos);
+				}
+				else
+				{
+					// If too far from ground (likely a significant terrain change), snap directly
+					m_sceneNode->SetPosition(Vector3(m_sceneNode->GetDerivedPosition().x, groundHeight, m_sceneNode->GetDerivedPosition().z));
+				}
 			}
 
 			// Update movement info
@@ -205,11 +224,18 @@ namespace mmo
 					AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
 					SetTargetAnimState(m_casting ? m_castingState : idleAnim);
 				}
+				
+				// Final height adjustment at the end of path
+				Vector3 endPosition = m_movementEnd;
+				if (GetCollisionProvider().GetHeightAt(endPosition + Vector3::UnitY * rayHeight, 3.5f, groundHeight))
+				{
+					endPosition.y = groundHeight;
+				}
 
-				m_sceneNode->SetDerivedPosition(m_movementEnd);
+				m_sceneNode->SetDerivedPosition(endPosition);
 
 				// Reset movement info
-				m_movementInfo.position = m_movementEnd;
+				m_movementInfo.position = endPosition;
 				m_movementInfo.timestamp = GetAsyncTimeMs();
 				m_movementInfo.movementFlags = 0;
 
@@ -1204,7 +1230,7 @@ namespace mmo
 		float totalDistance = 0.0f;
 		for (auto point : points)
 		{
-			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
+			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.5f, 3.5f, groundHeight))
 			{
 				point.y = groundHeight;
 			}

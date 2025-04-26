@@ -1529,7 +1529,7 @@ namespace mmo
 		(void)isPlayer;
 
 		// Ensure we are at the start position
-		unitPtr->GetSceneNode()->SetPosition(startPosition);
+		//unitPtr->GetSceneNode()->SetPosition(startPosition);
 
 		if (pathSize > 1)
 		{
@@ -1566,7 +1566,6 @@ namespace mmo
 			else
 			{
 				// Ensure it is not visible
-
 			}
 		}
 		
