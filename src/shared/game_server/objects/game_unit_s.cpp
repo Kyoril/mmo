@@ -631,18 +631,12 @@ namespace mmo
 		const uint32 healthPercent = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
 		RaiseTrigger(trigger_event::OnHealthDroppedBelow, { healthPercent }, instigator);
 
+		// Generate rage when taking damage if rage is the power type
 		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
-			const uint32 maxHealth = GetMaxHealth();
-			const float K = 30.0f;
-
-			int32 rageGenerated = static_cast<int32>((damage / maxHealth) * K);
-			if (rageGenerated < 1)
-			{
-				rageGenerated = 1;
-			}
-
-			AddPower(power_type::Rage, rageGenerated);
+			const float rageConversion = static_cast<float>((0.0091107836 * GetLevel() * GetLevel()) + 3.225598133 * GetLevel()) + 4.2652911f;
+			const float addRage = (static_cast<float>(damage) / rageConversion) * 2.5f;
+			AddPower(power_type::Rage, addRage);
 		}
 
 		// Kill event
@@ -2261,13 +2255,9 @@ namespace mmo
 		// Generate rage based on damage done
 		if (totalDamage > 0 && Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
-			// Rage from damage done: 7.5 * damage / c
-			// where c is a constant related to level
-			const float levelFactor = 40.0f + GetLevel() * 2.0f;
-			int32 rageGenerated = static_cast<int32>((7.5f * static_cast<float>(totalDamage)) / levelFactor);
-			if (rageGenerated < 1) rageGenerated = 1;
-
-			AddPower(power_type::Rage, rageGenerated);
+			const float rageConversion = static_cast<float>((0.0091107836 * GetLevel() * GetLevel()) + 3.225598133 * GetLevel()) + 4.2652911f;
+			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * 7.5f;
+			AddPower(power_type::Rage, addRage);
 		}
 
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
