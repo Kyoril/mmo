@@ -84,4 +84,9 @@ namespace mmo
         // Optional: To reflect the new position without any inertia
         CGAssociateMouseAndMouseCursorPosition(true);
     }
+
+    bool PlatformOsX::IsShiftKeyDown()
+    {
+        return false;
+    }
 }

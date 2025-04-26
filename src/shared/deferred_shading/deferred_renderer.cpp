@@ -6,7 +6,6 @@
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
-#include "graphics_d3d11/graphics_device_d3d11.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/render_queue.h"
 #include "log/default_log_levels.h"
@@ -15,6 +14,7 @@
 #   include <Windows.h>
 #   include "shaders/VS_DeferredLighting.h"
 #   include "shaders/PS_DeferredLighting.h"
+#   include "graphics_d3d11/graphics_device_d3d11.h"
 #endif
 
 namespace mmo
@@ -53,9 +53,11 @@ namespace mmo
     {
         m_shadowCameraSetup = std::make_shared<DefaultShadowCameraSetup>();
 
+#ifdef WIN32
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
-
+#endif
+        
         // Create the light buffer
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
         m_shadowBuffer = m_device.CreateConstantBuffer(sizeof(ShadowBuffer), nullptr);
@@ -83,6 +85,7 @@ namespace mmo
 		m_shadowCamera = m_scene.CreateCamera("__DeferredShadowCamera__");
 		m_shadowCameraNode->AttachObject(*m_shadowCamera);
 
+#ifdef WIN32
         // TODO: Fix me: Move me to graphicsd3d11
         D3D11_SAMPLER_DESC sampDesc = {};
         sampDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
@@ -102,6 +105,7 @@ namespace mmo
 		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
         ID3D11Device& d3d11dev = d3ddev;
         d3d11dev.CreateSamplerState(&sampDesc, &m_shadowSampler);
+#endif
     }
 
     DeferredRenderer::~DeferredRenderer()
@@ -206,11 +210,13 @@ namespace mmo
         m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
         m_device.SetTextureFilter(TextureFilter::Trilinear);
 
+#ifdef WIN32
         GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)GraphicsDevice::Get();
         ID3D11DeviceContext& d3d11ctx = d3ddev;
 		ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
         d3d11ctx.PSSetSamplers(1, 1, samplers);
-
+#endif
+        
         // Draw a full-screen quad
         m_device.Draw(6);
 

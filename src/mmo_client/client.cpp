@@ -27,7 +27,11 @@
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 
-#include "fmod_audio.h"
+#ifdef _WIN32
+#   include "fmod_audio.h"
+#else
+#   include "null_audio.h"
+#endif
 
 #include <iostream>
 #include <fstream>
@@ -331,7 +335,11 @@ namespace mmo
 		// Initialize network threads
 		NetInit();
 
+#ifdef _WIN32
 		s_audio = std::make_unique<FMODAudio>();
+#else
+        s_audio = std::make_unique<NullAudio>();
+#endif
 		s_audio->Create();
 
 		// Run service

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "db_cache.h"
+#include "game/guild_info.h"
+#include "game/object_info.h"
 
 namespace mmo
 {
-	struct ObjectInfo;
-	struct GuildInfo;
 	struct QuestInfo;
 	struct CreatureInfo;
 	struct ItemInfo;

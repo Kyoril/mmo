@@ -23,7 +23,7 @@ namespace mmo
 		ExpressionIndex AddTextureCoordinate(int32 coordinateIndex) override;
 		
 		/// @copydoc MaterialCompiler::AddTextureSample
-		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb) override;
+		ExpressionIndex AddTextureSample(std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 		
 		/// @copydoc MaterialCompiler::AddMultiply
 		ExpressionIndex AddMultiply(ExpressionIndex first, ExpressionIndex second) override;
@@ -79,7 +79,7 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddTransform
 		ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) override;
 
-        ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb) override;
+        ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 
         ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) override;
 
@@ -90,6 +90,6 @@ namespace mmo
 		void GenerateVertexShaderCode(VertexShaderType type) override;
 		
 		/// @copydoc MaterialCompiler::GeneratePixelShaderCode
-		void GeneratePixelShaderCode() override;
+		void GeneratePixelShaderCode(PixelShaderType type) override;
 	};
 }

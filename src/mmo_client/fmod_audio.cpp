@@ -1,6 +1,8 @@
 
 #include "fmod_audio.h"
 
+#ifdef _WIN32
+
 #include "assets/asset_registry.h"
 
 #include "log/default_log_levels.h"
@@ -485,3 +487,6 @@ namespace mmo
 	}
 
 }
+
+#endif
+

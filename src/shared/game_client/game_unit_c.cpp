@@ -166,7 +166,7 @@ namespace mmo
 			}
 
 			// TODO: Get rotation to the current camera and yaw the icon to face it!
-			Camera* cam = m_scene.GetCamera(0);
+			Camera* cam = m_scene.GetCamera((uint32)0);
 			if (cam)
 			{
 				m_questGiverNode->SetFixedYawAxis(true);
@@ -177,7 +177,7 @@ namespace mmo
 		// Update name component to face camera
 		if (m_nameComponent && m_nameComponent->IsVisible())
 		{
-			Camera* cam = m_scene.GetCamera(0);
+			Camera* cam = m_scene.GetCamera((uint32)0);
 			if (cam)
 			{
 				m_nameComponentNode->SetFixedYawAxis(true);

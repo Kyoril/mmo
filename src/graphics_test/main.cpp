@@ -375,12 +375,14 @@ namespace mmo
 
 	int CommonMain()
 	{
+#if defined(_WIN32) && defined(_DEBUG)
 		std::mutex logMutex;
 		mmo::g_DefaultLog.signal().connect([&logMutex](const mmo::LogEntry& entry) {
 			std::scoped_lock lock{ logMutex };
 			OutputDebugStringA((entry.message + "\n").c_str());
 			});
-
+#endif
+        
 		// Setup scene and everything
 		if (InitializeGlobal())
 		{

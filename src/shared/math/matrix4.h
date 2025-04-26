@@ -14,7 +14,11 @@
 #include "quaternion.h"
 #include "vector4.h"
 
+// Only include AVX intrinsics for x86/x64 architectures, not for ARM (Apple Silicon)
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
 #include <immintrin.h> // AVX
+#define MMO_USE_AVX_INTRINSICS
+#endif
 
 namespace mmo
 {
@@ -129,11 +133,13 @@ namespace mmo
 			return m[iRow];
 		}
 
+#        ifdef MMO_USE_AVX_INTRINSICS
 #        define _mm_madd_ps( a, b, c ) _mm_add_ps( c, _mm_mul_ps( a, b ) )
+#        endif
 
 		Matrix4 Concatenate(const Matrix4& B) const
 		{
-#if 1
+#ifdef MMO_USE_AVX_INTRINSICS
 			Matrix4 r;
 			__m128 m2[4];
 			m2[0] = _mm_load_ps(&B[0][0]);
@@ -167,6 +173,7 @@ namespace mmo
 
 			return r;
 #else
+			// Standard matrix multiplication for platforms without AVX support (like ARM)
 			Matrix4 result{};
 			for (int row = 0; row < 4; ++row) {
 				for (int col = 0; col < 4; ++col) {

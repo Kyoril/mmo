@@ -72,7 +72,7 @@ namespace mmo
 
 		RenderWindowPtr CreateRenderWindow(std::string name, uint16 width, uint16 height, bool fullScreen) override;
 
-		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height) override;
+		RenderTexturePtr CreateRenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat = PixelFormat::R8G8B8A8, PixelFormat depthFormat = PixelFormat::D32F) override;
 
 		void SetFillMode(FillMode mode) override;
 
@@ -91,6 +91,17 @@ namespace mmo
 		std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() override;
 
 		std::unique_ptr<ShaderCompiler> CreateShaderCompiler() override;
+
+        /// Sets multiple render targets for rendering.
+        /// @param renderTargets Array of render targets.
+        /// @param count Number of render targets.
+        void SetRenderTargets(RenderTexturePtr* renderTargets, uint32 count) override;
+
+        /// Sets multiple render targets for rendering with a depth stencil buffer.
+        /// @param renderTargets Array of render targets.
+        /// @param count Number of render targets.
+        /// @param depthStencilRT The render texture to use as depth stencil buffer.
+        void SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT) override;
 
 		uint64 GetBatchCount() const override { return 0; }
 		// ~ End GraphicsDevice
