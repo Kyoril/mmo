@@ -427,7 +427,7 @@ namespace mmo
 		}
 
 		// Set jump velocity
-		movementInfo.jumpVelocity = 7.98f;
+		movementInfo.jumpVelocity += 7.9555473f;
 		movementInfo.movementFlags |= movement_flags::Falling;
 		
 		// Calculate jump velocity and direction

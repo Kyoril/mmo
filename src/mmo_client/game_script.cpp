@@ -1007,7 +1007,7 @@ namespace mmo
 			luabind::def<std::function<void(Frame*)>>("SetCharCustomizeFrame", [this](Frame* frame) { m_charCreateInfo.SetCharacterCreationFrame(frame); }),
 			luabind::def<std::function<void(int32)>>("SetCharacterClass", [this](int32 classId) { m_charCreateInfo.SetSelectedClass(classId); }),
 			luabind::def<std::function<void(int32)>>("SetCharacterGender", [this](int32 genderId) { m_charCreateInfo.SetSelectedGender(genderId); }),
-			luabind::def<std::function<void(int32)>>("SetCharacterRace", [this](int32 raceId) { m_charCreateInfo.SetSelectedGender(raceId); }),
+			luabind::def<std::function<void(int32)>>("SetCharacterRace", [this](int32 raceId) { m_charCreateInfo.SetSelectedRace(raceId); }),
 			luabind::def<std::function<int32()>>("GetCharacterRace", [this]() { return m_charCreateInfo.GetSelectedRace(); }),
 			luabind::def<std::function<int32()>>("GetCharacterGender", [this]() { return m_charCreateInfo.GetSelectedGender(); }),
 			luabind::def<std::function<int32()>>("GetCharacterClass", [this]() { return m_charCreateInfo.GetSelectedClass(); }),
