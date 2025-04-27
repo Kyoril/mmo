@@ -706,21 +706,22 @@ namespace mmo
 
 			// Transform mode buttons
 			ImGui::SetCursorPos(ImVec2(availableSpace.x - 80, 16));
-
-			ImGui::BeginTooltip();
-			ImGui::Text("Translate selected objects along X, Y and Z axis.");
-			ImGui::Text("Keyboard Shortcut:");
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-			ImGui::SameLine();
-			ImGui::Text("1");
-			ImGui::PopStyleColor();
-			ImGui::EndTooltip();
-
 			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
 			if (ImGui::ImageButton(s_translateIcon ? s_translateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				m_transformWidget->SetTransformMode(TransformMode::Translate);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("Translate selected objects along X, Y and Z axis.");
+				ImGui::Text("Keyboard Shortcut:");
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+				ImGui::SameLine();
+				ImGui::Text("1");
+				ImGui::PopStyleColor();
+				ImGui::EndTooltip();	
 			}
 
 			ImGui::PopStyleColor(2);
@@ -732,6 +733,17 @@ namespace mmo
 			{
 				m_transformWidget->SetTransformMode(TransformMode::Rotate);
 			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("Rotate selected objects.");
+				ImGui::Text("Keyboard Shortcut:");
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+				ImGui::SameLine();
+				ImGui::Text("2");
+				ImGui::PopStyleColor();
+				ImGui::EndTooltip();
+			}
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine(0, 0);
 
@@ -741,6 +753,17 @@ namespace mmo
 			if (ImGui::ImageButton(s_scaleIcon ? s_scaleIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				//m_transformWidget->SetTransformMode(TransformMode::Scale);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("Scale selected objects.");
+				ImGui::Text("Keyboard Shortcut:");
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+				ImGui::SameLine();
+				ImGui::Text("2");
+				ImGui::PopStyleColor();
+				ImGui::EndTooltip();
 			}
 			ImGui::PopStyleColor(2);
 			ImGui::EndDisabled();
