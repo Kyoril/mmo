@@ -58,7 +58,7 @@ namespace mmo
 
 	public:
 		void Compile() const;
-		void Save() const;
+		bool Save() override;
 
 	public:
 		/// @copydoc EditorInstance::Draw

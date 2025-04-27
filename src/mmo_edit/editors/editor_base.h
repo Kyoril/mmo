@@ -31,8 +31,11 @@ namespace mmo
 		/// @brief Virtual default destructor because of inheritance
 		virtual ~EditorBase() override = default;
 
+
 	public:
 		void Draw();
+
+		virtual bool Save();
 
 	protected:
 		virtual void DrawImpl() {};

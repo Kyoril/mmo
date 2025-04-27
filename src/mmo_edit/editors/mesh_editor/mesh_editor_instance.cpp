@@ -529,13 +529,13 @@ namespace mmo
 		m_lastMouseY = y;
 	}
 
-	void MeshEditorInstance::Save()
+	bool MeshEditorInstance::Save()
 	{
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
 			ELOG("Failed to open mesh file " << GetAssetPath() << " for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink { *file };
@@ -543,7 +543,9 @@ namespace mmo
 		
 		MeshSerializer serializer;
 		serializer.Serialize(m_mesh, writer);
-		ILOG("Successfully saved mesh");
+
+		ILOG("Successfully saved mesh " << GetAssetPath());
+		return true;
 	}
 
 	void MeshEditorInstance::SetAnimationState(AnimationState* animState)

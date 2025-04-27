@@ -24,7 +24,7 @@ namespace mmo
 		~MaterialInstanceEditorInstance() override;
 
 	public:
-		void Save() const;
+		bool Save() override;
 
 	public:
 		/// @copydoc EditorInstance::Draw

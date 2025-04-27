@@ -36,6 +36,8 @@ namespace mmo
 
 		virtual void OnMouseMoved(uint16 x, uint16 y) {}
 
+		virtual bool Save() = 0;
+
 	public:
 		[[nodiscard]] const Path& GetAssetPath() const noexcept { return m_assetPath; }
 

@@ -706,13 +706,23 @@ namespace mmo
 
 			// Transform mode buttons
 			ImGui::SetCursorPos(ImVec2(availableSpace.x - 80, 16));
-						
+
+			ImGui::BeginTooltip();
+			ImGui::Text("Translate selected objects along X, Y and Z axis.");
+			ImGui::Text("Keyboard Shortcut:");
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+			ImGui::SameLine();
+			ImGui::Text("1");
+			ImGui::PopStyleColor();
+			ImGui::EndTooltip();
+
 			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
 			if (ImGui::ImageButton(s_translateIcon ? s_translateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				m_transformWidget->SetTransformMode(TransformMode::Translate);
 			}
+
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine(0, 0);
 
@@ -871,7 +881,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::Save()
+	bool WorldEditorInstance::Save()
 	{
 		// Build mesh name index map
 		std::map<String, uint32> entityNames;
@@ -891,7 +901,7 @@ namespace mmo
 		if (!streamPtr)
 		{
 			ELOG("Failed to save file '" << GetAssetPath() << "': Unable to open file for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink{ *streamPtr };
@@ -998,6 +1008,8 @@ namespace mmo
 				}
 			}
 		}
+
+		return true;
 	}
 
 	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)

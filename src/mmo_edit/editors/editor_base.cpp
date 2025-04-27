@@ -3,6 +3,7 @@
 #include "editor_host.h"
 
 #include "imgui.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -41,6 +42,22 @@ namespace mmo
 
 			return !visible;
 		});
+	}
+
+	bool EditorBase::Save()
+	{
+		bool success = true;
+
+		for (auto& instance : m_instances)
+		{
+			if (!instance->Save())
+			{
+				ELOG("Failed to save editor instance " << instance->GetAssetPath());
+				success = false;
+			}
+		}
+
+		return success;
 	}
 
 	bool EditorBase::OpenAsset(const Path& asset)

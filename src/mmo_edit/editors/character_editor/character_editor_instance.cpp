@@ -194,20 +194,21 @@ namespace mmo
 		m_lastMouseY = y;
 	}
 
-	void CharacterEditorInstance::Save()
+	bool CharacterEditorInstance::Save()
 	{
 		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
 		if (!file)
 		{
 			ELOG("Failed to open character file " << GetAssetPath() << " for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink { *file };
 		io::Writer writer { sink };
 		m_avatarDefinition->Serialize(writer);
 
-		ILOG("Successfully saved character data");
+		ILOG("Successfully saved character data " << GetAssetPath());
+		return true;
 	}
 
 	void CharacterEditorInstance::DrawDetails(const String& id)

@@ -88,7 +88,7 @@ namespace mmo
 		m_scene.Clear();
 	}
 
-	void MaterialInstanceEditorInstance::Save() const
+	bool MaterialInstanceEditorInstance::Save()
 	{
 		m_material->SetName(GetAssetPath().string());
 
@@ -96,7 +96,7 @@ namespace mmo
 		if (!file)
 		{
 			ELOG("Failed to open material file " << GetAssetPath() << " for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink { *file };
@@ -105,9 +105,10 @@ namespace mmo
 		MaterialInstanceSerializer serializer;
 		serializer.Export(*m_material, writer);
 
-		ILOG("Successfully saved material");
+		ILOG("Successfully saved material instance " << GetAssetPath());
 
     	m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
+		return true;
 	}
 
 	void MaterialInstanceEditorInstance::Draw()

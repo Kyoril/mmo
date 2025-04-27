@@ -564,7 +564,7 @@ namespace mmo
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 	}
 
-	void WorldModelEditorInstance::Save()
+	bool WorldModelEditorInstance::Save()
 	{
 		// Build mesh name index map
 		std::map<String, uint32> entityNames;
@@ -584,7 +584,7 @@ namespace mmo
 		if (!streamPtr)
 		{
 			ELOG("Failed to save file '" << GetAssetPath() << "': Unable to open file for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink{ *streamPtr };
@@ -608,6 +608,7 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world model file " << GetAssetPath());
+		return true;
 	}
 
 	void WorldModelEditorInstance::UpdateDebugAABB(const AABB& aabb)

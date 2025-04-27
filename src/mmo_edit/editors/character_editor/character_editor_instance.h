@@ -39,9 +39,9 @@ namespace mmo
 
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
-	private:
-		void Save();
+		bool Save() override;
 
+	private:
 		void DrawDetails(const String& id);
 
 		void DrawViewport(const String& id);

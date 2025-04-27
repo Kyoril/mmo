@@ -242,9 +242,15 @@ namespace mmo
 		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
 
-		if (ImGui::Button("Save Project", ImVec2(0, 37)))
+		if (ImGui::Button("Save All", ImVec2(0, 37)))
 		{
 			m_project.save(m_config.projectPath);
+
+			// Save all open editors as well
+			for (auto& editor : m_editors)
+			{
+				editor->Save();
+			}
 		}
 
 		ImGui::SameLine();

@@ -731,7 +731,7 @@ namespace mmo
 		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
 	}
 
-	void MaterialEditorInstance::Save() const
+	bool MaterialEditorInstance::Save()
 	{
 		ed::SetCurrentEditor(m_context);
 		
@@ -744,7 +744,7 @@ namespace mmo
 		if (!file)
 		{
 			ELOG("Failed to open material file " << GetAssetPath() << " for writing!");
-			return;
+			return false;
 		}
 
 		io::StreamSink sink { *file };
@@ -756,8 +756,9 @@ namespace mmo
 		// Serialize the material graph as well
 		m_graph->Serialize(writer);
 
-		ILOG("Successfully saved material");
+		ILOG("Successfully saved material " << GetAssetPath());
 		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
+		return true;
 	}
 
 	void MaterialEditorInstance::Draw()

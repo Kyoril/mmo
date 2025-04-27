@@ -25,9 +25,9 @@ namespace mmo
 
 		void Render();
 
-	private:
-		void Save();
+		bool Save() override;
 
+	private:
 		void DrawDetails(const String& id);
 
 		void DrawViewport(const String& id);

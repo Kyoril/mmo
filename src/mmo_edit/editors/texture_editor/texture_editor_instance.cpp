@@ -114,8 +114,10 @@ namespace mmo
 		m_viewportRT->Update();
 	}
 
-	void TextureEditorInstance::Save()
+	bool TextureEditorInstance::Save()
 	{
+		// TODO
+		return true;
 	}
 
 	void TextureEditorInstance::DrawDetails(const String& id)

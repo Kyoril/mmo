@@ -127,9 +127,10 @@ namespace mmo
 
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
-	private:
-		void Save();
+		bool Save() override;
 
+	private:
+		
 		void UpdateDebugAABB(const AABB& aabb);
 
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
