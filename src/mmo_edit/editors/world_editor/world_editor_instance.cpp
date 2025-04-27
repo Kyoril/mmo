@@ -169,7 +169,6 @@ namespace mmo
 		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
 		m_debugBoundingBox->SetCastShadows(false);
-
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
 		PagePosition worldSize(64, 64);
@@ -757,7 +756,7 @@ namespace mmo
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::BeginTooltip();
-				ImGui::Text("Scale selected objects.");
+				ImGui::Text("selected objects.");
 				ImGui::Text("Keyboard Shortcut:");
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
 				ImGui::SameLine();

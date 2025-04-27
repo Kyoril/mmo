@@ -87,6 +87,7 @@ namespace mmo
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
+		m_worldAABBDirty = true;
 
 		return *result;
 	}
@@ -97,6 +98,7 @@ namespace mmo
 		const auto result = operation.get();
 
 		m_operations.emplace_back(std::move(operation));
+		m_worldAABBDirty = true;
 
 		return *result;
 	}
@@ -107,6 +109,7 @@ namespace mmo
 
 		m_worldAABB.SetNull();
 		m_boundingRadius = 0.0f;
+		m_worldAABBDirty = true;
 	}
 
 	MeshPtr ManualRenderObject::ConvertToMesh(const String& meshName) const
