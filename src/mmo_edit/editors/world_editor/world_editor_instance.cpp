@@ -20,6 +20,7 @@
 #include "game/object_type_id.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
+#include "graphics/texture_mgr.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
@@ -48,6 +49,10 @@ namespace mmo
 	static const ImVec4 ButtonSelected = ImVec4(0.15f, 0.55f, 0.83f, 0.78f);
 	static const ImVec4 ButtonHovered = ImVec4(0.24f, 0.52f, 0.88f, 0.40f);
 	static const ImVec4 ButtonNormal = ImVec4(0.20f, 0.41f, 0.68f, 0.31f);
+
+	TexturePtr WorldEditorInstance::s_translateIcon;
+	TexturePtr WorldEditorInstance::s_rotateIcon;
+	TexturePtr WorldEditorInstance::s_scaleIcon;
 
 	struct MapEntityChunkContent
 	{
@@ -92,6 +97,20 @@ namespace mmo
 		, m_editor(editor)
 		, m_wireFrame(false)
 	{
+
+		if (!s_translateIcon)
+		{
+			s_translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
+		}
+		if (!s_rotateIcon)
+		{
+			s_rotateIcon = TextureManager::Get().CreateOrRetrieve("Editor/rotate.htex");
+		}
+		if (!s_scaleIcon)
+		{
+			s_scaleIcon = TextureManager::Get().CreateOrRetrieve("Editor/scale.htex");
+		}
+
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
 		m_cameraAnchor->AddChild(*m_cameraNode);
@@ -686,11 +705,11 @@ namespace mmo
 			}
 
 			// Transform mode buttons
-			ImGui::SetCursorPos(ImVec2(availableSpace.x - 220, 16));
+			ImGui::SetCursorPos(ImVec2(availableSpace.x - 80, 16));
 						
 			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-			if (ImGui::Button("Translate"))
+			if (ImGui::ImageButton(s_translateIcon ? s_translateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				m_transformWidget->SetTransformMode(TransformMode::Translate);
 			}
@@ -699,7 +718,7 @@ namespace mmo
 
 			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Rotate ? ButtonSelected : ButtonNormal);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-			if (ImGui::Button("Rotate"))
+			if (ImGui::ImageButton(s_rotateIcon ? s_rotateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				m_transformWidget->SetTransformMode(TransformMode::Rotate);
 			}
@@ -709,7 +728,7 @@ namespace mmo
 			ImGui::BeginDisabled(true);
 			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Scale ? ButtonSelected : ButtonNormal);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-			if (ImGui::Button("Scale"))
+			if (ImGui::ImageButton(s_scaleIcon ? s_scaleIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 			{
 				//m_transformWidget->SetTransformMode(TransformMode::Scale);
 			}

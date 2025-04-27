@@ -281,5 +281,9 @@ namespace mmo
 		SceneNode* m_navDebugNode{ nullptr };
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
+
+		static TexturePtr s_translateIcon;
+		static TexturePtr s_rotateIcon;
+		static TexturePtr s_scaleIcon;
 	};
 }
