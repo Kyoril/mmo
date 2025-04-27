@@ -177,7 +177,7 @@ namespace mmo
 			};
 
 			float minHeight = std::numeric_limits<float>::max();
-			float maxHeight = std::numeric_limits<float>::min();
+			float maxHeight = std::numeric_limits<float>::lowest();
 
 			VertexStruct* vert = (VertexStruct*)m_mainBuffer->Map(LockOptions::Normal);
 			for (size_t j = m_startZ; j < endZ; ++j)
@@ -209,6 +209,7 @@ namespace mmo
 			m_bounds.max.y = maxHeight;
 			m_center = m_bounds.GetCenter();
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
+			m_worldAABBDirty = true;
 		}
 
 		void Tile::UpdateCoverageMap()

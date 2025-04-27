@@ -44,6 +44,11 @@ namespace mmo
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
 	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
 
+	// UI transform mode button styles
+	static const ImVec4 ButtonSelected = ImVec4(0.15f, 0.55f, 0.83f, 0.78f);
+	static const ImVec4 ButtonHovered = ImVec4(0.24f, 0.52f, 0.88f, 0.40f);
+	static const ImVec4 ButtonNormal = ImVec4(0.20f, 0.41f, 0.68f, 0.31f);
+
 	struct MapEntityChunkContent
 	{
 		uint32 uniqueId;
@@ -679,6 +684,37 @@ namespace mmo
 					ImGui::EndCombo();
 				}
 			}
+
+			// Transform mode buttons
+			ImGui::SetCursorPos(ImVec2(availableSpace.x - 220, 16));
+						
+			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
+			if (ImGui::Button("Translate"))
+			{
+				m_transformWidget->SetTransformMode(TransformMode::Translate);
+			}
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine(0, 0);
+
+			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Rotate ? ButtonSelected : ButtonNormal);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
+			if (ImGui::Button("Rotate"))
+			{
+				m_transformWidget->SetTransformMode(TransformMode::Rotate);
+			}
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine(0, 0);
+
+			ImGui::BeginDisabled(true);
+			ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Scale ? ButtonSelected : ButtonNormal);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
+			if (ImGui::Button("Scale"))
+			{
+				//m_transformWidget->SetTransformMode(TransformMode::Scale);
+			}
+			ImGui::PopStyleColor(2);
+			ImGui::EndDisabled();
 		}
 		ImGui::End();
 		
@@ -1096,7 +1132,7 @@ namespace mmo
 		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
 		if (terrain::Tile* tile = hitResult.second.tile)
 		{
-			UpdateDebugAABB(tile->GetWorldBoundingBox());
+			UpdateDebugAABB(tile->GetWorldBoundingBox(true));
 			m_debugBoundingBox->SetVisible(true);
 		}
 		else
