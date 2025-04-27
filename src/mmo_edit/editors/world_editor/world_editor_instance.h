@@ -130,6 +130,19 @@ namespace mmo
 		bool Save() override;
 
 	private:
+		// UI related methods
+		void HandleKeyboardShortcuts();
+		void DrawDetailsPanel(const String& detailsId);
+		void DrawEditModeSelector();
+		void DrawSelectionDetails();
+		void DrawWorldSettingsPanel(const String& worldSettingsId);
+		void DrawViewportPanel(const String& viewportId);
+		void HandleViewportInteractions(const ImVec2& availableSpace);
+		void DrawViewportToolbar(const ImVec2& availableSpace);
+		void DrawSnapSettings();
+		void DrawTransformButtons(const ImVec2& availableSpace);
+		void HandleViewportDragDrop();
+		void InitializeDockLayout(ImGuiID dockspaceId, const String& viewportId, const String& detailsId, const String& worldSettingsId);
 		
 		void UpdateDebugAABB(const AABB& aabb);
 
