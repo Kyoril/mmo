@@ -40,7 +40,7 @@ namespace mmo
 
 		m_nextActionCountdown.ended.connect(this, &CreatureAICombatState::ChooseNextAction);
 
-		controlled.SetInCombat(true);
+		controlled.SetInCombat(true, false);
 
 		// Watch for threat events
 		m_onThreatened = controlled.threatened.connect([this](GameUnitS& threatener, float amount)
@@ -124,7 +124,7 @@ namespace mmo
 		m_onUnitStateChanged.disconnect();
 
 		auto& controlled = GetControlled();
-		controlled.SetInCombat(false);
+		controlled.SetInCombat(false, false);
 
 		// Stop movement!
 		controlled.GetMover().StopMovement();
@@ -137,7 +137,6 @@ namespace mmo
 				threatener->RemoveAttackingUnit(GetControlled());
 			}
 		}
-
 	}
 
 	void CreatureAICombatState::OnDamage(GameUnitS& attacker)

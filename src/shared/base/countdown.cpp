@@ -101,6 +101,9 @@ namespace mmo
 
 	void Countdown::Cancel() const
 	{
-		m_impl->Cancel();
+		if (m_running)
+		{
+			m_impl->Cancel();
+		}
 	}
 }

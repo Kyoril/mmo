@@ -856,7 +856,7 @@ namespace mmo
 
 		/// Sets the combat state of the unit.
 		/// @param inCombat true to set the unit in combat, false to set it out of combat.
-		void SetInCombat(bool inCombat);
+		void SetInCombat(bool inCombat, bool pvp);
 
 		/// Gets the melee reach of the unit.
 		/// @returns The melee reach as a float.
@@ -998,6 +998,8 @@ namespace mmo
 		/// Called when an attack swing occurs.
 		void OnAttackSwing();
 
+		void OnPvpCombatTimer();
+
 		/// Sets the stand state of the unit.
 		/// @param standState The new stand state.
 		void SetStandState(const unit_stand_state::Type standState) { Set<uint32>(object_fields::StandState, standState); }
@@ -1098,6 +1100,8 @@ namespace mmo
 		uint32 m_regeneration = regeneration_flags::None;
 
 		UnitVisibility m_visibility = UnitVisibility::On;
+
+		Countdown m_pvpCombatCountdown;
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.

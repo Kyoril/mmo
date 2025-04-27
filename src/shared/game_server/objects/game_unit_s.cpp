@@ -52,6 +52,7 @@ namespace mmo
 		, m_despawnCountdown(timers)
 		, m_attackSwingCountdown(timers)
 		, m_regenCountdown(timers)
+		, m_pvpCombatCountdown(timers)
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
@@ -62,6 +63,7 @@ namespace mmo
 		m_regenCountdown.ended.connect(this, &GameUnitS::OnRegeneration);
 		m_despawnCountdown.ended.connect(this, &GameUnitS::OnDespawnTimer);
 		m_attackSwingCountdown.ended.connect(this, &GameUnitS::OnAttackSwing);
+		m_pvpCombatCountdown.ended.connect(this, &GameUnitS::OnPvpCombatTimer);
 	}
 
 	GameUnitS::~GameUnitS()
@@ -606,6 +608,12 @@ namespace mmo
 		if (health < 1)
 		{
 			return;
+		}
+
+		if (IsPlayer() && instigator && instigator->IsPlayer())
+		{
+			SetInCombat(true, true);
+			instigator->SetInCombat(true, true);
 		}
 
 		RaiseTrigger(trigger_event::OnDamaged, instigator);
@@ -1497,15 +1505,21 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::SetInCombat(bool inCombat)
+	void GameUnitS::SetInCombat(bool inCombat, bool pvp)
 	{
 		if (inCombat)
 		{
 			AddFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+			if (pvp)
+			{
+				// 6 seconds pvp combat duration
+				m_pvpCombatCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 6));
+			}
 		}
 		else
 		{
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+			m_pvpCombatCountdown.Cancel();
 		}
 	}
 
@@ -1523,7 +1537,7 @@ namespace mmo
     void GameUnitS::AddAttackingUnit(const GameUnitS& attacker)
 	{
 		m_attackingUnits.add(&attacker);
-		SetInCombat(true);
+		SetInCombat(true, attacker.IsPlayer());
 	}
 
 	void GameUnitS::RemoveAttackingUnit(const GameUnitS& attacker)
@@ -1531,14 +1545,14 @@ namespace mmo
 		m_attackingUnits.remove(&attacker);
 		if (m_attackingUnits.empty())
 		{
-			SetInCombat(false);
+			SetInCombat(false, attacker.IsPlayer());
 		}
 	}
 
 	void GameUnitS::RemoveAllAttackingUnits()
 	{
 		m_attackingUnits.clear();
-		SetInCombat(false);
+		SetInCombat(false, false);
 	}
 
 	float GameUnitS::GetBaseSpeed(const MovementType type) const
@@ -2268,6 +2282,15 @@ namespace mmo
 		if (hit)
 		{
 			meleeAttackDone(*victim);
+		}
+	}
+
+	void GameUnitS::OnPvpCombatTimer()
+	{
+		// Leave combat when no other attacking units
+		if (m_attackingUnits.empty())
+		{
+			SetInCombat(false, true);
 		}
 	}
 
