@@ -15,6 +15,10 @@ IF(APPLE)
     )
 ENDIF(APPLE)
 
+if (MMO_WITH_DISCORD_RPC)
+    add_definitions("-DMMO_WITH_DISCORD_RPC")
+endif()
+
 # Add executable
 file(GLOB srcFiles "*.cpp" "*.h")
 file(GLOB consoleSrcFiles "console/*.cpp" "console/*.h")
@@ -126,6 +130,10 @@ ENDIF(APPLE)
 target_link_libraries(mmo_client lua)
 target_link_libraries(mmo_client ${OPENSSL_LIBRARIES})
 target_link_libraries(mmo_client ${EXTRA_LIBS})
+
+if (MMO_WITH_DISCORD_RPC)
+    target_link_libraries(mmo_client discord-rpc)
+endif()
 
 # Add project to a solution folder for better organization
 set_property(TARGET mmo_client PROPERTY FOLDER "client")

@@ -2,6 +2,7 @@
 
 #include "login_state.h"
 
+#include "discord.h"
 #include "game_state_mgr.h"
 #include "loading_screen.h"
 #include "platform.h"
@@ -43,12 +44,13 @@ namespace mmo
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, Discord& discord)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_timers(timers)
 		, m_audio(audio)
+		, m_discord(discord)
 	{
 	}
 
@@ -246,6 +248,8 @@ namespace mmo
 
 			ASSERT(s_lastRealmVar);
 			s_lastRealmVar->Set(static_cast<int32>(m_realmConnector.GetRealmId()));
+
+			m_discord.NotifyRealmChanged(m_realmConnector.GetRealmName());
 
 			FrameManager::Get().TriggerLuaEvent("REALM_AUTH_SUCCESS");
 		}

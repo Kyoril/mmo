@@ -19,6 +19,7 @@ namespace mmo
 	class CharacterView;
 	class LoginConnector;
 	class RealmConnector;
+	class Discord;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -26,7 +27,7 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, Discord& discord);
 
 	public:
 		/// The default name of the login state
@@ -80,6 +81,7 @@ namespace mmo
 		scoped_connection_container m_loginConnections;
 		TimerQueue& m_timers;
 		IAudio& m_audio;
+		Discord& m_discord;
 
 		SoundIndex m_musicSound = InvalidSound;
 		ChannelIndex m_musicChannel = InvalidChannel;

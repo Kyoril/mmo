@@ -57,6 +57,8 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/octree_scene.h"
 
+#include "discord.h"
+
 namespace mmo
 {
 	const std::string WorldState::Name = "world";
@@ -158,7 +160,7 @@ namespace mmo
 	IInputControl* WorldState::s_inputControl = nullptr;
 
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient,
-		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache)
+		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache, Discord& discord)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -174,6 +176,7 @@ namespace mmo
 		, m_partyInfo(partyInfo)
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
+		, m_discord(discord)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -261,6 +264,22 @@ namespace mmo
 		// Play ambience
 		m_ambienceSound = m_audio.CreateSound("Sound/Ambience/ZoneAmbience/ForestNormalDay.wav", SoundType::SoundLooped2D);
 		m_audio.PlaySound(m_ambienceSound, &m_ambienceChannel);
+
+		// Initialize rich presence
+		const mmo::CharacterView* character = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
+		ASSERT(character);
+		if (character)
+		{
+			const proto_client::RaceEntry* race = m_project.races.getById(character->GetRaceId());
+			const proto_client::ClassEntry* classEntry = m_project.classes.getById(character->GetClassId());
+			m_discord.NotifyCharacterData(
+				character->GetName(),
+				character->GetLevel(),
+				classEntry ? classEntry->name() : "UNKNOWN",
+				race ? race->name() : "UNKNOWN"
+			);
+		}
+
 	}
 
 	void WorldState::OnLeave()
@@ -319,6 +338,9 @@ namespace mmo
 		m_bindings.Shutdown();
 
 		m_scene.reset();
+
+		// Go back to realm list
+		m_discord.NotifyRealmChanged(m_realmConnector.GetRealmName());
 	}
 
 	std::string_view WorldState::GetName() const
@@ -631,13 +653,32 @@ namespace mmo
 			const proto_client::ZoneEntry* zone = m_project.zones.getById(s_zoneId);
 			if (zone)
 			{
-				s_zoneName = zone->name();
+				if (zone->parentzone() != 0)
+				{
+					const proto_client::ZoneEntry* parentZone = m_project.zones.getById(zone->parentzone());
+					if (parentZone)
+					{
+						s_zoneName = parentZone->name();
+						s_subZoneName = zone->name();
+					}
+					else
+					{
+						s_zoneName = zone->name();
+						s_subZoneName.clear();
+					}
+				}
+				else
+				{
+					s_zoneName = zone->name();
+					s_subZoneName.clear();
+				}
 			}
 			else
 			{
 				s_zoneName = "Unknown";
 			}
 
+			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
 	}
@@ -1096,6 +1137,7 @@ namespace mmo
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
 							}
 						});
+									
 
 					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");

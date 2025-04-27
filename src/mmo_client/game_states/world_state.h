@@ -73,6 +73,7 @@ namespace mmo
 	class TrainerClient;
 	class PartyInfo;
 	class GuildClient;
+	class Discord;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -102,7 +103,8 @@ namespace mmo
 			PartyInfo& partyInfo,
 			CharSelect& charSelect,
 			GuildClient& guildClient, 
-			ICacheProvider& cache);
+			ICacheProvider& cache,
+			Discord& discord);
 
 	public:
 		/// @brief The default name of the world state
@@ -427,6 +429,8 @@ namespace mmo
 		GuildClient& m_guildClient;
 
 		scoped_connection_container m_cvarChangedSignals;
+
+		Discord& m_discord;
 
 	private:
 		static IInputControl* s_inputControl;

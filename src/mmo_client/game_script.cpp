@@ -53,6 +53,7 @@ namespace mmo
 	Cursor g_cursor;
 
 	extern std::string s_zoneName;
+	extern std::string s_subZoneName;
 
 	// Static script methods
 	namespace
@@ -93,7 +94,17 @@ namespace mmo
 		{
 			return s_zoneName.c_str();
 		}
-				
+
+		const char* Script_GetSubZoneName()
+		{
+			if (s_subZoneName.empty())
+			{
+				return nullptr;
+			}
+
+			return s_subZoneName.c_str();
+		}
+
 		void Script_Print(const std::string& text)
 		{
 			ILOG(text);
@@ -1078,6 +1089,7 @@ namespace mmo
 			luabind::def("Jump", &Script_Jump),
 
 			luabind::def("GetZoneText", &Script_GetZoneName),
+			luabind::def("GetSubZoneText", &Script_GetSubZoneName),
 
 			luabind::def("ClearTarget", &Script_ClearTarget),
 

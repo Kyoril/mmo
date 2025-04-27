@@ -31,6 +31,11 @@ if (WIN32 OR APPLE)
 	option(MMO_BUILD_LAUNCHER "If checked, will try to build the launcher." OFF)
 endif()
 
+option(MMO_WITH_DISCORD_RPC "If checked, will try to build the discord rpc and integrate it into the game client." OFF)
+if (MMO_WITH_DISCORD_RPC)
+	set(MMO_DISCORD_APP_ID "123456789" CACHE STRING "Discord application ID for the game client.")
+endif()
+
 # If enabled, the editor will be built. The editor can be used to modify static game data like creature spawns etc.
 # However, it's a heavy tool with heavy dependencies and thus you might not want to build this yourself, so this option is 
 # turned OFF by default.

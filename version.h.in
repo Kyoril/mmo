@@ -19,3 +19,10 @@ namespace mmo
 
 #define MMO_VERSION_RES 0,1,0,@MMO_GIT_REVISION@
 #define MMO_VERSION_STR "0.1.0.@MMO_GIT_REVISION@"
+
+#ifdef MMO_WITH_DISCORD_RPC
+namespace mmo
+{
+	const char* const DiscordClientId = "@MMO_DISCORD_APP_ID@";
+}
+#endif

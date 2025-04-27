@@ -11,6 +11,8 @@
 #   pragma comment(lib, "dbghelp.lib")
 #endif
 
+#include "discord.h"
+
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
@@ -297,6 +299,8 @@ namespace mmo
 	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
 	static std::unique_ptr<CharSelect> s_charSelect;
 
+	static std::unique_ptr<Discord> s_discord;
+
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -366,6 +370,9 @@ namespace mmo
 			return false;
 		}
 
+		s_discord = std::make_unique<Discord>();
+		s_discord->Initialize();
+
 		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
 		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
 
@@ -383,11 +390,11 @@ namespace mmo
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio, *s_discord);
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, 
-			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache);
+			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
