@@ -756,6 +756,12 @@ namespace mmo
 
 		void NotifyRootChanged();
 
+		void NotifyStunChanged();
+
+		void NotifySleepChanged();
+
+		void NotifyFearChanged();
+
 		/// Determines if a unit is rooted and should be able to move.
 		bool IsRooted() const
 		{

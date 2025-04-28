@@ -92,6 +92,15 @@ namespace mmo
 		case AuraType::ModRoot:
 			HandleModRoot(apply);
 			break;
+		case AuraType::ModSleep:
+			HandleModSleep(apply);
+			break;
+		case AuraType::ModStun:
+			HandleModStun(apply);
+			break;
+		case AuraType::ModFear:
+			HandleModFear(apply);
+			break;
 
 		case AuraType::PeriodicTriggerSpell:
 		case AuraType::PeriodicHeal:
@@ -388,6 +397,42 @@ namespace mmo
 				if (const auto owner = weakOwner.lock())
 				{
 					owner->NotifyRootChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModStun(bool apply) const
+	{
+		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
+		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifyStunChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModFear(bool apply) const
+	{
+		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
+		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifyFearChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModSleep(bool apply) const
+	{
+		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
+		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifySleepChanged();
 				}
 			});
 	}

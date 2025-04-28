@@ -1057,6 +1057,18 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::NotifyStunChanged()
+	{
+	}
+
+	void GameUnitS::NotifySleepChanged()
+	{
+	}
+
+	void GameUnitS::NotifyFearChanged()
+	{
+	}
+
 	void GameUnitS::DoLocalChatMessage(ChatType type, const String& message)
 	{
 		auto position = GetPosition();

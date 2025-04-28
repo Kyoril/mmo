@@ -100,6 +100,12 @@ namespace mmo
 
 		void HandleModRoot(bool apply) const;
 
+		void HandleModStun(bool apply) const;
+
+		void HandleModFear(bool apply) const;
+
+		void HandleModSleep(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 

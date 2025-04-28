@@ -117,6 +117,9 @@ namespace mmo
 			ModDamageTakenPct,
 
 			ModRoot,
+			ModSleep,
+			ModStun,
+			ModFear,
 
 			Count_,
 			Invalid_ = Count_
