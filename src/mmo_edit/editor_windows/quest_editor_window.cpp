@@ -5,12 +5,77 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "game/object_type_id.h"
 #include "game/quest.h"
 #include "log/default_log_levels.h"
 #include "math/clamp.h"
 
 namespace mmo
 {
+	namespace
+	{
+		float GetBasePercent(int32 questLevel)
+		{
+			if (questLevel <= 5) return 0.17f;
+			if (questLevel <= 10) return 0.13f;
+			if (questLevel <= 15) return 0.09f;
+			return 0.06f;
+		}
+
+		int32 GetXPToNextLevel(int32 questLevel)
+		{
+			// TODO: Derive from table
+			int32 xpToNextLevel[] = {
+				400,
+				900,
+				1400,
+				2100,
+				2800,
+				3600,
+				4500,
+				5400,
+				6500,
+				7600,
+				8800,
+				10100,
+				11400,
+				12900,
+				14400,
+				16000,
+				17700,
+				19400,
+				21300,
+				23200
+			};
+
+			if (questLevel < 0)
+			{
+				return xpToNextLevel[0];
+			}
+
+			if (questLevel >= std::size(xpToNextLevel))
+			{
+				return xpToNextLevel[std::size(xpToNextLevel) - 1];
+			}
+
+			return xpToNextLevel[questLevel];
+		}
+
+		int32 RoundToNearest5(const float value)
+		{
+			return static_cast<int>((value + 2.5f) / 5.0f) * 5;
+		}
+
+		int32 GetSuggestedQuestXP(int32 questLevel, float difficultyMultiplier)
+		{
+			int xpToNextLevel = GetXPToNextLevel(questLevel);
+			float basePercent = GetBasePercent(questLevel);
+			float baseReward = xpToNextLevel * basePercent * difficultyMultiplier;
+			return RoundToNearest5(baseReward);
+		}
+
+	}
+
 	QuestEditorWindow::QuestEditorWindow(const String& name, proto::Project& project, EditorHost& host)
 		: EditorEntryWindowBase(project, project.quests, name)
 		, m_host(host)
@@ -179,6 +244,9 @@ namespace mmo
 				currentEntry.set_prevquestid(0);
 				prevQuestId = 0;
 			}
+
+			// Suggested player size
+			SLIDER_UINT32_PROP(suggestedplayers, "Suggested Player Count", 0, 40);
 
 			const auto* questEntry = m_project.quests.getById(prevQuestId);
 			if (ImGui::BeginCombo("Previous Quest", questEntry != nullptr ? questEntry->name().c_str() : "(None)", ImGuiComboFlags_None))
@@ -436,6 +504,33 @@ namespace mmo
 		{
 			SLIDER_UINT32_PROP(rewardxp, "Rewarded Xp", 0, std::numeric_limits<int32>::max());
 			SLIDER_UINT32_PROP(rewardmoney, "Rewarded Money", 0, std::numeric_limits<int32>::max());
+
+			if (ImGui::Button("Suggest XP Reward"))
+			{
+				float difficultyMultiplier = 1.0f;
+
+				if (currentEntry.requirements_size() == 0 && (currentEntry.flags() & quest_flags::Exploration) == 0)
+				{
+					difficultyMultiplier = 0.25f;
+				}
+				else
+				{
+					if (currentEntry.suggestedplayers() >= 5)
+					{
+						difficultyMultiplier = 2.0f;
+					}
+					else if (currentEntry.suggestedplayers() >= 3)
+					{
+						difficultyMultiplier = 1.5f;
+					}
+					else if (currentEntry.suggestedplayers() >= 2)
+					{
+						difficultyMultiplier = 1.25f;
+					}
+				}
+
+				currentEntry.set_rewardxp(GetSuggestedQuestXP(currentEntry.questlevel(), difficultyMultiplier));
+			}
 
 			// Add button
 			if (ImGui::Button("Add", ImVec2(-1, 0)))
