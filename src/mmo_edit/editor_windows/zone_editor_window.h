@@ -32,5 +32,6 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		ImGuiTextFilter m_parentZoneFilter;
+		ImGuiTextFilter m_owningFactionFilter;
 	};
 }

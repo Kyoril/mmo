@@ -8,7 +8,7 @@ message ZoneEntry {
 	optional uint32 map = 4;
 	optional uint32 explore = 5;
 	optional uint32 flags = 6;
-	optional uint32 team = 7;
+	optional uint32 owning_faction = 7;
 	optional int32 level = 8;
 }
 

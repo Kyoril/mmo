@@ -143,6 +143,54 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+
+			const proto::FactionEntry* owningFaction = nullptr;
+			if (currentEntry.owning_faction() != 0)
+			{
+				owningFaction = m_project.factions.getById(currentEntry.owning_faction());
+			}
+
+			if (ImGui::BeginCombo("Owning Faction", owningFaction ? owningFaction->name().c_str() : "(None)", ImGuiComboFlags_HeightLargest))
+			{
+				if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+				{
+					ImGui::SetKeyboardFocusHere(0);
+				}
+
+				m_owningFactionFilter.Draw("##owning_faction_filter", -1.0f);
+
+				if (ImGui::Selectable("(None)"))
+				{
+					currentEntry.set_owning_faction(0);
+					m_owningFactionFilter.Clear();
+					ImGui::CloseCurrentPopup();
+				}
+
+				if (ImGui::BeginChild("##owning_faction_scroll_area", ImVec2(0, 400)))
+				{
+					for (const auto& faction : m_project.factions.getTemplates().entry())
+					{
+						// Skipped due to filter
+						if (m_owningFactionFilter.IsActive() && !m_owningFactionFilter.PassFilter(faction.name().c_str()))
+						{
+							continue;
+						}
+
+						ImGui::PushID(faction.id());
+						if (ImGui::Selectable(faction.name().c_str()))
+						{
+							currentEntry.set_owning_faction(faction.id());
+
+							m_owningFactionFilter.Clear();
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::PopID();
+					}
+				}
+				ImGui::EndChild();
+
+				ImGui::EndCombo();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Flags", ImGuiTreeNodeFlags_None))
