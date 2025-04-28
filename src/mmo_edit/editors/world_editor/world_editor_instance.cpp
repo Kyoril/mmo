@@ -616,9 +616,10 @@ namespace mmo
 			ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
 
+			HandleViewportDragDrop();
+
 			HandleViewportInteractions(availableSpace);
 			DrawViewportToolbar(availableSpace);
-			HandleViewportDragDrop();
 		}
 		ImGui::End();
 	}
