@@ -846,6 +846,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);		
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -2776,6 +2777,36 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("MOTD", motd.c_str());
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveRoot(game::IncomingPacket& packet)
+	{
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read MoveRoot packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveRootAck(ackId, info);
 		return PacketParseResult::Pass;
 	}
 

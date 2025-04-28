@@ -494,6 +494,7 @@ namespace mmo
 		case game::client_realm_packet::ForceSetFlightSpeedAck:
 		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
 		case game::client_realm_packet::MoveTeleportAck:
+		case game::client_realm_packet::MoveRootAck:
 			OnClientAck(opCode, buffer.size(), reader);
 			break;
 		}
@@ -999,9 +1000,26 @@ namespace mmo
 			return;
 		}
 
+		const MovementInfo prevMovementInfo = m_character->GetMovementInfo();
 		if (characterGuid != m_character->GetGuid())
 		{
 			ELOG("User is trying to move a different character than himself")
+			return;
+		}
+
+		if ((prevMovementInfo.movementFlags & movement_flags::Rooted) != 0 &&
+			(info.movementFlags & movement_flags::Rooted) == 0)
+		{
+			ELOG("Player tried to remove roots!");
+			Kick();
+			return;
+		}
+
+		if ((prevMovementInfo.movementFlags & movement_flags::Rooted) != 0 &&
+			!prevMovementInfo.position.IsNearlyEqual(info.position))
+		{
+			ELOG("Player tried to move while being rooted!");
+			Kick();
 			return;
 		}
 
@@ -1027,14 +1045,14 @@ namespace mmo
 		}
 
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
-		if (info.IsFalling() && !m_character->GetMovementInfo().IsFalling() && opCode != game::client_realm_packet::MoveJump)
+		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
 		{
 			ELOG("Client tried to apply FALLING flag in non-jump packet!");
 			Kick();
 			return;
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
-		if (!info.IsFalling() && m_character->GetMovementInfo().IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
+		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
 		{
 			ELOG("Client tried to remove FALLING flag in non-jump packet!");
 			Kick();
@@ -1043,7 +1061,7 @@ namespace mmo
 
 		if (opCode == game::client_realm_packet::MoveJump)
 		{
-			if (m_character->GetMovementInfo().IsFalling() || !info.IsFalling())
+			if (prevMovementInfo.IsFalling() || !info.IsFalling())
 			{
 				ELOG("Jump packet did not add FALLING movement flag or was executed while already falling");
 				Kick();
@@ -1052,7 +1070,7 @@ namespace mmo
 		}
 		else if (opCode == game::client_realm_packet::MoveFallLand)
 		{
-			if (!m_character->GetMovementInfo().IsFalling() || info.IsFalling())
+			if (!prevMovementInfo.IsFalling() || info.IsFalling())
 			{
 				ELOG("Landing packet did not remove FALLING movement flag or was executed while not falling")
 				Kick();
@@ -1094,7 +1112,7 @@ namespace mmo
 				//return;
 			}
 		}
-		else if (!m_character->GetMovementInfo().IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
+		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
 			if (info.position != m_character->GetPosition())
 			{
@@ -1107,7 +1125,7 @@ namespace mmo
 
 		if (opCode == game::realm_client_packet::MoveStartForward)
 		{
-			if (m_character->GetMovementInfo().movementFlags & movement_flags::Forward)
+			if (prevMovementInfo.movementFlags & movement_flags::Forward)
 			{
 				ELOG("User starts moving forward but was already moving forward")
 				return;
@@ -1115,7 +1133,7 @@ namespace mmo
 		}
 		else if (opCode == game::realm_client_packet::MoveStartBackward)
 		{
-			if (m_character->GetMovementInfo().movementFlags & movement_flags::Backward)
+			if (prevMovementInfo.movementFlags & movement_flags::Backward)
 			{
 				ELOG("User starts moving backward but was already moving backward")
 				return;
@@ -1123,7 +1141,7 @@ namespace mmo
 		}
 		else if (opCode == game::realm_client_packet::MoveStop)
 		{
-			if ((m_character->GetMovementInfo().movementFlags & movement_flags::Moving) == 0)
+			if ((prevMovementInfo.movementFlags & movement_flags::Moving) == 0)
 			{
 				ELOG("User stops movement but was not moving")
 				return;
@@ -1373,7 +1391,6 @@ namespace mmo
 		
 		// TODO: Validate movement speed
 
-
 		// Used by speed change acks
 		MovementType typeSent = movement_type::Count;
 		float receivedSpeed = 0.0f;
@@ -1436,7 +1453,27 @@ namespace mmo
 				receivedSpeed /= baseSpeed;
 				break;
 			}
-
+		case game::client_realm_packet::MoveRootAck:
+			// When acknowledging root the client has to apply the root flag
+			if (change.changeType == MovementChangeType::Root)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked root but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked root but player is not unrooted");
+					Kick();
+					return;
+				}
+			}
+			break;
 		case game::client_realm_packet::MoveTeleportAck:
 			if (change.changeType != MovementChangeType::Teleport)
 			{
@@ -1447,12 +1484,16 @@ namespace mmo
 
 			if (!(info.movementFlags & movement_flags::Falling))
 			{
-				WLOG("Teleport ack received but player is not falling while it should be!");
+				ELOG("Teleport ack received but player is not falling while it should be!");
+				Kick();
+				return;
 			}
 
 			if (info.movementFlags & (movement_flags::Moving | movement_flags::Turning | movement_flags::Strafing))
 			{
-				WLOG("Teleport ack received but player is moving");
+				ELOG("Teleport ack received but player is moving");
+				Kick();
+				return;
 			}
 
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
@@ -1924,5 +1965,17 @@ namespace mmo
 		}
 
 		OpenLootDialog(loot, lootObject);
+	}
+
+	void Player::OnRootChanged(bool applied, uint32 ackId)
+	{
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveRoot);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
 	}
 }

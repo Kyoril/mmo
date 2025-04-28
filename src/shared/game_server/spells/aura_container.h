@@ -98,6 +98,8 @@ namespace mmo
 
 		void HandleAddModifier(bool apply) const;
 
+		void HandleModRoot(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 

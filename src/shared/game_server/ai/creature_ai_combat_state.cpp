@@ -342,6 +342,12 @@ namespace mmo
 
 	void CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
+		// Nothing to do when our unit is rooted
+		if (GetControlled().IsRooted())
+		{
+			return;
+		}
+
 		const float combatRange = GetControlled().GetMeleeReach();
 
 		auto& mover = GetControlled().GetMover();
@@ -352,10 +358,10 @@ namespace mmo
 		Vector3 currentLocation = mover.GetTarget();
 
 		const Vector3 currentUnitLoc = target.GetPredictedPosition();
-		const float distance = (currentUnitLoc - currentLocation).GetSquaredLength();
+		const float squaredDistance = (currentUnitLoc - currentLocation).GetSquaredLength();
 
 		// Check distance and whether we need to move
-		if (distance > (combatRange * 0.75f) * (combatRange * 0.75f))
+		if (squaredDistance > (combatRange * 0.75f) * (combatRange * 0.75f))
 		{
 			Vector3 newTargetLocation = target.GetPredictedPosition();
 			Vector3 direction = (newTargetLocation - currentLocation);

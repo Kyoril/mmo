@@ -302,6 +302,8 @@ namespace mmo
 
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket& packet);
 
+		PacketParseResult OnMoveRoot(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

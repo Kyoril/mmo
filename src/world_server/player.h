@@ -444,6 +444,8 @@ namespace mmo
 
 		void OnObjectLoot() override;
 
+		void OnRootChanged(bool applied, uint32 ackId) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

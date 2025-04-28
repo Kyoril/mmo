@@ -130,7 +130,7 @@ namespace mmo
 			++movementDirection;
 		}
 
-		if (!m_controlledUnit->IsAlive())
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted())
 		{
 			movementDirection = 0;
 		}
@@ -180,7 +180,7 @@ namespace mmo
 		}
 
 
-		if (!m_controlledUnit->IsAlive())
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted())
 		{
 			direction = 0;
 		}
@@ -415,6 +415,12 @@ namespace mmo
 	void PlayerController::Jump()
 	{
 		if (!m_controlledUnit)
+		{
+			return;
+		}
+
+		// Can't jump when dead or rooted
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted())
 		{
 			return;
 		}

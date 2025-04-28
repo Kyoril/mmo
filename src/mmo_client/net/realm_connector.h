@@ -275,6 +275,8 @@ namespace mmo
 
 		void SendMoveTeleportAck(uint32 ackId, const MovementInfo& movementInfo);
 
+		void SendMoveRootAck(uint32 ackId, const MovementInfo& movementInfo);
+
 		void AutoStoreLootItem(uint8 lootSlot);
 
 		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);

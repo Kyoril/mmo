@@ -208,6 +208,8 @@ namespace mmo
 
 				GuildRoster,
 
+				MoveRootAck,
+
 				/// Counter constant
 				Count_,
 			};
@@ -394,6 +396,8 @@ namespace mmo
 				
 				/// Message of the day packet sent to the client
 				MessageOfTheDay,
+
+				MoveRoot,
 
 				/// Counter constant
 				Count_,

@@ -164,7 +164,7 @@ namespace mmo
 	{
 		auto& moved = GetMoved();
 
-		if (!moved.IsAlive() /*|| moved.IsStunned() || moved.IsRootedForMovement()*/)
+		if (!moved.IsAlive() || moved.IsRooted())
 		{
 			return false;
 		}

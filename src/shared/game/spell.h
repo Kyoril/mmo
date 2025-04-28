@@ -41,6 +41,37 @@ namespace mmo
 
 	typedef power_type::Type PowerType;
 
+	namespace spell_mechanic
+	{
+		enum Type
+		{
+			None = 0,
+
+			Charm,
+			Disorient,
+			Disarm,
+			Distract,
+			Fear,
+			Root,
+			Silence,
+			Sleep,
+			Snare,
+			Stun,
+			Freeze,
+			Knockout,
+			Bleed,
+			Polymorph,
+			Banish,
+			Shield,
+			Mount,
+			Daze,
+
+			Count_
+		};
+	}
+
+	typedef spell_mechanic::Type SpellMechanic;
+
 	namespace spell_power_bonus_type
 	{
 		enum Type

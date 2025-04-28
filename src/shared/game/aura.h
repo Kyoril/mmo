@@ -116,6 +116,8 @@ namespace mmo
 			ModDamageDonePct,
 			ModDamageTakenPct,
 
+			ModRoot,
+
 			Count_,
 			Invalid_ = Count_
 		};

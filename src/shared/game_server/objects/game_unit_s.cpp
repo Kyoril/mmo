@@ -994,6 +994,69 @@ namespace mmo
 		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
 	}
 
+	void GameUnitS::NotifyRootChanged()
+	{
+		const bool wasRooted = IsRooted();
+		const bool isRooted = HasAuraEffect(aura_type::ModRoot);
+		if (isRooted)
+		{
+			m_state |= unit_state::Rooted;
+		}
+		else
+		{
+			m_state &= ~unit_state::Rooted;
+		}
+
+		if (wasRooted && !isRooted)
+		{
+			// Remove rooted movement flag
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+
+				// Expect ack opcode
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Root;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+
+				m_netUnitWatcher->OnRootChanged(false, ackId);
+			}
+			else
+			{
+				// Immediately unrooted because not player controlled
+				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+			}
+		}
+		else if (!wasRooted && isRooted)
+		{
+			// Stop unit movement immediately
+			m_mover->StopMovement();
+
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+
+				// Expect ack opcode
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Root;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+
+				m_netUnitWatcher->OnRootChanged(true, ackId);
+			}
+			else
+			{
+				// Immediately rooted because not player controlled
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+			}
+		}
+	}
+
 	void GameUnitS::DoLocalChatMessage(ChatType type, const String& message)
 	{
 		auto position = GetPosition();

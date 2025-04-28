@@ -230,7 +230,7 @@ namespace mmo
 			targetMap.SetUnitTarget(targetUnit ? targetUnit->GetGuid() : 0);
 
 			// Power check
-			if (spell->powertype() != unit->GetPowerType() ||
+			if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
 				spell->cost() > unit->GetPower(unit->GetPowerType()))
 			{
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");

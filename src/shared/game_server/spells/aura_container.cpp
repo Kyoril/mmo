@@ -89,6 +89,10 @@ namespace mmo
 			HandleAddModifier(apply);
 			break;
 
+		case AuraType::ModRoot:
+			HandleModRoot(apply);
+			break;
+
 		case AuraType::PeriodicTriggerSpell:
 		case AuraType::PeriodicHeal:
 		case AuraType::PeriodicEnergize:
@@ -374,6 +378,18 @@ namespace mmo
 		}
 
 		m_container.GetOwner().ModifySpellMod(mod, apply);
+	}
+
+	void AuraEffect::HandleModRoot(bool apply) const
+	{
+		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
+		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifyRootChanged();
+				}
+			});
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

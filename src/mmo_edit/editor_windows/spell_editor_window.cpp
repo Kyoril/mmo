@@ -84,7 +84,31 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
-	
+
+	static String s_spellMechanicNames[] = {
+		"None",
+		"Charm",
+		"Disorient",
+		"Disarm",
+		"Distract",
+		"Fear",
+		"Root",
+		"Silence",
+		"Sleep",
+		"Snare",
+		"Stun",
+		"Freeze",
+		"Knockout",
+		"Bleed",
+		"Polymorph",
+		"Banish",
+		"Shield",
+		"Mount",
+		"Daze"
+	};
+
+	static_assert(std::size(s_spellMechanicNames) == spell_mechanic::Count_, "Each spell mechanic must have a string representation!");
+
 	static String s_auraTypeNames[] = {
 		"None",
 		"Dummy",
@@ -114,7 +138,9 @@ namespace mmo
 		"ModHealingTaken",
 
 		"ModDamageDonePct",
-		"ModDamageTakenPct"
+		"ModDamageTakenPct",
+
+		"ModRoot"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -360,6 +386,21 @@ namespace mmo
 				}, nullptr, IM_ARRAYSIZE(s_spellSchoolNames), -1))
 			{
 				currentEntry.set_spellschool(currentSchool);
+			}
+
+			int currentMechanic = currentEntry.mechanic();
+			if (ImGui::Combo("Spell Mechanic", &currentMechanic, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellMechanicNames))
+					{
+						return false;
+					}
+
+					*out_text = s_spellMechanicNames[idx].c_str();
+					return true;
+				}, nullptr, IM_ARRAYSIZE(s_spellMechanicNames), -1))
+			{
+				currentEntry.set_mechanic(currentMechanic);
 			}
 		}
 

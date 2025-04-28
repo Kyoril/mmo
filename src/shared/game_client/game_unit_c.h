@@ -79,6 +79,8 @@ namespace mmo
 			return ObjectTypeId::Unit;
 		}
 
+		bool IsRooted() const { return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0; }
+
 		/// @brief Deserializes the unit from the given reader.
 		virtual void Deserialize(io::Reader& reader, bool complete) override;
 

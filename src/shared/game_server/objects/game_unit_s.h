@@ -20,6 +20,31 @@
 
 namespace mmo
 {
+	/// Enumerates crowd control states of a unit, which do affect control over the unit.
+	namespace unit_state
+	{
+		enum Type
+		{
+			/// Default state - no effect applied.
+			Default = 0,
+
+			/// Unit is stunned.
+			Stunned = 1 << 0,
+
+			/// Unit is confused.
+			Confused = 1 << 1,
+
+			/// Unit is rooted.
+			Rooted = 1 << 2,
+
+			/// Unit is charmed by another unit.
+			Charmed = 1 << 3,
+
+			/// Unit is feared.
+			Feared = 1 << 4
+		};
+	}
+
 	namespace regeneration_flags
 	{
 		enum Type
@@ -236,6 +261,8 @@ namespace mmo
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
 		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
+
+		virtual void OnRootChanged(bool applied, uint32 ackId) = 0;
 
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
 
@@ -727,6 +754,14 @@ namespace mmo
 		/// @param message The message to send.
 		void ChatYell(const String& message);
 
+		void NotifyRootChanged();
+
+		/// Determines if a unit is rooted and should be able to move.
+		bool IsRooted() const
+		{
+			return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0;
+		}
+
 	protected:
 		/// Sends a local chat message from the unit.
 		/// @param type The type of chat message.
@@ -1102,6 +1137,7 @@ namespace mmo
 		UnitVisibility m_visibility = UnitVisibility::On;
 
 		Countdown m_pvpCombatCountdown;
+		uint32 m_state = 0;
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.
