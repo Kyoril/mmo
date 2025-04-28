@@ -1439,7 +1439,7 @@ namespace mmo
 				if (typeSent >= MovementType::Count ||
 					opCode != speedAckOpCodes[typeSent])
 				{
-					WLOG("Wrong movement type in speed ack packet!");
+					WLOG("Wrong movement type (" << typeSent << ") in speed ack packet (opcode: " << opCode << ")!");
 					Kick();
 					return;
 				}

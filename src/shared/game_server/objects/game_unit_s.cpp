@@ -1664,7 +1664,38 @@ namespace mmo
 	{
 		float speed = 1.0f;
 
-		MovementChangeType changeType = MovementChangeType::SpeedChangeRun;
+		auto changeType = MovementChangeType::Invalid;
+		switch (type)
+		{
+		case movement_type::Backwards:
+			changeType = MovementChangeType::SpeedChangeRunBack;
+			break;
+		case movement_type::Walk:
+			changeType = MovementChangeType::SpeedChangeWalk;
+			break;
+		case movement_type::Run:
+			changeType = MovementChangeType::SpeedChangeRun;
+			break;
+		case movement_type::Swim:
+			changeType = MovementChangeType::SpeedChangeSwim;
+			break;
+		case movement_type::SwimBackwards:
+			changeType = MovementChangeType::SpeedChangeSwimBack;
+			break;
+		case movement_type::Turn:
+			changeType = MovementChangeType::SpeedChangeTurnRate;
+			break;
+		case movement_type::Flight:
+			changeType = MovementChangeType::SpeedChangeFlightSpeed;
+			break;
+		case movement_type::FlightBackwards:
+			changeType = MovementChangeType::SpeedChangeFlightBackSpeed;
+			break;
+		default:
+			ELOG("Invalid speed change type!");
+			UNREACHABLE();
+			return;
+		}
 
 		// Apply speed buffs
 		int32 mainSpeedMod = 0;
@@ -1701,7 +1732,6 @@ namespace mmo
 				{
 					if (it->changeType == changeType)
 					{
-						DLOG("Found pending move change for type " << type << ": using this as old value");
 						oldBonus = it->speed / GetBaseSpeed(type);
 						break;
 					}

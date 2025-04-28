@@ -916,6 +916,12 @@ namespace mmo
 			return;
 		}
 
+		if (effectTargets.empty())
+		{
+			WLOG("No targets found to for spell " << m_spell.id() << " [" << m_spell.name() << "] effect " << effect.index());
+			return;
+		}
+
 		for (auto* targetObject : effectTargets)
 		{
 			if (!targetObject->IsUnit())
@@ -1576,6 +1582,43 @@ namespace mmo
 
 			// For these effects, the spell needs to have a range set!
 			const auto& position = targetObject->GetPosition();
+			if (effect.radius() <= 0.0f)
+			{
+				ELOG("Spell " << m_spell.id() << " (" << m_spell.name() << ") effect has no radius >= 0 set");
+				return false;
+			}
+
+			m_cast.GetExecuter().GetWorldInstance()->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &effect, &targets](GameUnitS& unit)
+				{
+					// Already too many targets
+					if (m_spell.maxtargets() > 0 && targets.size() >= m_spell.maxtargets())
+					{
+						return true;
+					}
+
+					if (!(m_spell.attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
+					{
+						return true;
+					}
+
+					if (m_cast.GetExecuter().UnitIsFriendly(unit))
+					{
+						return true;
+					}
+
+					targets.push_back(&unit);
+					return true;
+				});
+
+			return true;
+		}
+
+		if (effect.targeta() == spell_effect_targets::SourceAreaEnemy)
+		{
+			GameUnitS& sourceObject = m_cast.GetExecuter();
+
+			// For these effects, the spell needs to have a range set!
+			const auto& position = sourceObject.GetPosition();
 			if (effect.radius() <= 0.0f)
 			{
 				ELOG("Spell " << m_spell.id() << " (" << m_spell.name() << ") effect has no radius >= 0 set");
