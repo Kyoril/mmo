@@ -817,6 +817,7 @@ namespace mmo
 			Charge,
 
 			ApplyAreaAura,
+			InterruptSpellCast,
 
 			Count_,
 			Invalid_ = 0

@@ -186,7 +186,7 @@ namespace mmo
 		void SpellEffectAttackMe(const proto::SpellEffect& effect);
 		void SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect);
 		void SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect);
-		void SpellEffectInterruptCast(const proto::SpellEffect& effect);
+		void SpellEffectInterruptSpellCast(const proto::SpellEffect& effect);
 		void SpellEffectLearnSpell(const proto::SpellEffect& effect);
 		void SpellEffectScriptEffect(const proto::SpellEffect& effect);
 		void SpellEffectDispelMechanic(const proto::SpellEffect& effect);

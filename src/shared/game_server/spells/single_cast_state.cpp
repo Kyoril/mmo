@@ -668,7 +668,8 @@ namespace mmo
 			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)},
 			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)},
 			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)},
-			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)}
+			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)},
+			{se::InterruptSpellCast,		std::bind(&SingleCastState::SpellEffectInterruptSpellCast, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1257,8 +1258,25 @@ namespace mmo
 	{
 	}
 
-	void SingleCastState::SpellEffectInterruptCast(const proto::SpellEffect& effect)
+	void SingleCastState::SpellEffectInterruptSpellCast(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> effectTargets;
+		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
+		{
+			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+			return;
+		}
+
+		for (auto* targetObject : effectTargets)
+		{
+			if (!targetObject->IsUnit())
+			{
+				continue;
+			}
+
+			// Interrupt spell cast (and apply cooldown)
+			targetObject->AsUnit().CancelCast(spell_interrupt_flags::Interrupt, m_spell.duration());
+		}
 	}
 
 	void SingleCastState::SpellEffectLearnSpell(const proto::SpellEffect& effect)
