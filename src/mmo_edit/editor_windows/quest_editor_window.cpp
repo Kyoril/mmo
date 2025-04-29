@@ -14,7 +14,7 @@ namespace mmo
 {
 	namespace
 	{
-		float GetBasePercent(int32 questLevel)
+		float GetBasePercent(const int32 questLevel)
 		{
 			if (questLevel <= 5) return 0.17f;
 			if (questLevel <= 10) return 0.13f;
@@ -22,10 +22,11 @@ namespace mmo
 			return 0.06f;
 		}
 
-		int32 GetXPToNextLevel(int32 questLevel)
+		int32 GetXPToNextLevel(const int32 questLevel)
 		{
 			// TODO: Derive from table
-			int32 xpToNextLevel[] = {
+			int32 xpToNextLevel[] = 
+			{
 				400,
 				900,
 				1400,
@@ -66,11 +67,11 @@ namespace mmo
 			return static_cast<int>((value + 2.5f) / 5.0f) * 5;
 		}
 
-		int32 GetSuggestedQuestXP(int32 questLevel, float difficultyMultiplier)
+		int32 GetSuggestedQuestXP(const int32 questLevel, const float difficultyMultiplier)
 		{
-			int xpToNextLevel = GetXPToNextLevel(questLevel);
-			float basePercent = GetBasePercent(questLevel);
-			float baseReward = xpToNextLevel * basePercent * difficultyMultiplier;
+			const int32 xpToNextLevel = GetXPToNextLevel(questLevel);
+			const float basePercent = GetBasePercent(questLevel);
+			const float baseReward = xpToNextLevel * basePercent * difficultyMultiplier;
 			return RoundToNearest5(baseReward);
 		}
 

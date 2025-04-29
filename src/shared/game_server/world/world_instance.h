@@ -18,6 +18,7 @@
 
 namespace mmo
 {
+	class ConditionMgr;
 	class ITriggerHandler;
 }
 
@@ -93,7 +94,7 @@ namespace mmo
 	class WorldInstance
 	{
 	public:
-		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler);
+		explicit WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr);
 	
 	public:
 		
@@ -173,6 +174,8 @@ namespace mmo
 
 		IdGenerator<uint64>& GetItemIdGenerator() { return m_itemIdGenerator; }
 
+		const ConditionMgr& GetConditionMgr() const { return m_conditionMgr; }
+
 	protected:
 
 		void UpdateObject(GameObjectS& object) const;
@@ -207,5 +210,7 @@ namespace mmo
 		std::map<String, CreatureSpawner*> m_creatureSpawnsByName;
 		ObjectSpawners m_objectSpawners;
 		std::map<String, WorldObjectSpawner*> m_objectSpawnsByName;
+
+		const ConditionMgr& m_conditionMgr;
 	};
 }

@@ -135,7 +135,7 @@ namespace mmo
 		TimerQueue timer(ioService);
 		Universe universe(ioService, timer);
 		IdGenerator<uint64> objectIdGenerator(0x01);
-		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator, triggerHandler };
+		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator, triggerHandler, conditionMgr };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup

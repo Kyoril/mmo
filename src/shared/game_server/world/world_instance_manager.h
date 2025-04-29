@@ -36,7 +36,7 @@ namespace mmo
 		///	@param ioContext The global async io context to use.
 		explicit WorldInstanceManager(asio::io_context& ioContext,
 			Universe& universe, const proto::Project& project,
-			IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler);
+			IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr);
 
 	public:
 		/// Creates a new world instance using a specific map id.
@@ -63,6 +63,7 @@ namespace mmo
 		Universe& m_universe;
 		const proto::Project& m_project;
 		IdGenerator<uint64>& m_objectIdGenerator;
+		const ConditionMgr& m_conditionMgr;
 
 		typedef std::vector<std::unique_ptr<WorldInstance>> WorldInstances;
 		asio::high_resolution_timer m_updateTimer;

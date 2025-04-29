@@ -165,7 +165,8 @@ namespace mmo
 					weakRecipients.push_back(recipient.second);
 				}
 
-				auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), weakRecipients);
+				ASSERT(controlled.GetWorldInstance());
+				auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetWorldInstance()->GetConditionMgr(), controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), weakRecipients);
 
 				// 3 Minutes of despawn delay if creature still has loot
 				despawnDelay = constants::OneMinute * 3;

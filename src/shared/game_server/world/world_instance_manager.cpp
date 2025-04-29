@@ -17,10 +17,11 @@ namespace mmo
 	WorldInstanceManager::WorldInstanceManager(asio::io_context& ioContext,
 		Universe& universe,
 		const proto::Project& project, 
-		IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler)
+		IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)
 		: m_universe(universe)
-		, m_objectIdGenerator(objectIdGenerator)
 		, m_project(project)
+		, m_objectIdGenerator(objectIdGenerator)
+		, m_conditionMgr(conditionMgr)
 		, m_updateTimer(ioContext)
 		, m_lastTick(GetAsyncTimeMs())
 		, m_triggerHandler(triggerHandler)
@@ -36,7 +37,7 @@ namespace mmo
 		const auto createdInstance = m_worldInstances.emplace_back(std::make_unique<WorldInstance>(*this, m_universe, m_objectIdGenerator, m_project, mapId,
 			std::make_unique<SolidVisibilityGrid>(makeVector(maxWorldSize, maxWorldSize)),
 			std::make_unique<TiledUnitFinder>(33.3333f),
-			m_triggerHandler)).get();
+			m_triggerHandler, m_conditionMgr)).get();
 
 		instanceCreated(createdInstance->GetId());
 

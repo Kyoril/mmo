@@ -21,7 +21,7 @@ namespace mmo
 		EditorWindowBase::SetVisible(false);
 
 		m_hasToolbarButton = true;
-		m_toolbarButtonText = "Unit Loot";
+		m_toolbarButtonText = "Loot";
 	}
 
 	void UnitLootEditorWindow::DrawDetailsImpl(proto::LootEntry& currentEntry)
@@ -160,13 +160,14 @@ namespace mmo
 						auto* definition = group.add_definitions();
 					}
 
-					if (ImGui::BeginTable("groupItems", 6, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+					if (ImGui::BeginTable("groupItems", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 					{
 						ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
 						ImGui::TableSetupColumn("Chance", ImGuiTableColumnFlags_WidthStretch);
 						ImGui::TableSetupColumn("Min Count", ImGuiTableColumnFlags_WidthStretch);
 						ImGui::TableSetupColumn("Max Count", ImGuiTableColumnFlags_WidthStretch);
 						ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed);
+						ImGui::TableSetupColumn("Condition", ImGuiTableColumnFlags_WidthFixed);
 						ImGui::TableSetupColumn("Remove", ImGuiTableColumnFlags_WidthFixed);
 						ImGui::TableHeadersRow();
 
@@ -241,6 +242,47 @@ namespace mmo
 							}
 
 							ImGui::SameLine();
+
+							ImGui::TableNextColumn();
+
+
+							// Draw condition selection
+							int conditionid = definition->condition();
+							const auto* condition = m_project.conditions.getById(conditionid);
+
+							if (ImGui::BeginCombo("##lootItemCondition", condition ? condition->name().c_str() : "<None>", ImGuiComboFlags_None))
+							{
+								ImGui::PushID(-1);
+								if (ImGui::Selectable("<None>", conditionid == 0))
+								{
+									definition->set_condition(0);
+								}
+								if (conditionid == 0)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+								ImGui::PopID();
+
+
+								for (int i = 0; i < m_project.conditions.count(); i++)
+								{
+									ImGui::PushID(i);
+									const bool item_selected = m_project.conditions.getTemplates().entry(i).id() == definition->condition();
+									const char* item_text = m_project.conditions.getTemplates().entry(i).name().c_str();
+									if (ImGui::Selectable(item_text, item_selected))
+									{
+										definition->set_condition(m_project.conditions.getTemplates().entry(i).id());
+									}
+									if (item_selected)
+									{
+										ImGui::SetItemDefaultFocus();
+									}
+									ImGui::PopID();
+								}
+
+								ImGui::EndCombo();
+							}
+
 
 							ImGui::TableNextColumn();
 

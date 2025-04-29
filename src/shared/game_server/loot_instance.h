@@ -9,6 +9,7 @@
 
 #include <map>
 
+#include "condition_mgr.h"
 #include "proto_data/project.h"
 
 namespace io
@@ -71,9 +72,9 @@ namespace mmo
 
 	public:
 		/// Initializes a new instance of the loot instance.
-		explicit LootInstance(const proto::ItemManager& items, uint64 lootGuid);
+		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid);
 
-		explicit LootInstance(const proto::ItemManager& items, uint64 lootGuid, const proto::LootEntry* entry, uint32 minGold, uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients);
+		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid, const proto::LootEntry* entry, uint32 minGold, uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients);
 
 	public:
 		/// Returns the id of this loot instance.
@@ -117,6 +118,7 @@ namespace mmo
 	private:
 
 		const proto::ItemManager& m_itemManager;
+		const ConditionMgr& m_conditionMgr;
 		uint64 m_lootGuid;
 		uint32 m_gold;
 		std::vector<LootItem> m_items;

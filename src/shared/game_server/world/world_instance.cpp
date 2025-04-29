@@ -91,7 +91,7 @@ namespace mmo
 		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
 	}
 
-	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler)
+	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)
 		, m_manager(manager)
@@ -100,6 +100,7 @@ namespace mmo
 		, m_visibilityGrid(std::move(visibilityGrid))
 		, m_unitFinder(std::move(unitFinder))
 		, m_triggerHandler(triggerHandler)
+		, m_conditionMgr(conditionMgr)
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();

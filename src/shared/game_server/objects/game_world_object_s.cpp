@@ -32,8 +32,10 @@ namespace mmo
 	{
 		if (!m_loot)
 		{
+			ASSERT(m_worldInstance);
+
 			const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
-			m_loot = std::make_shared<LootInstance>(m_project.items, GetGuid(), m_project.unitLoot.getById(m_entry.objectlootentry()), 0, 0, std::vector{ weakPlayer });
+			m_loot = std::make_shared<LootInstance>(m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(), m_project.unitLoot.getById(m_entry.objectlootentry()), 0, 0, std::vector{ weakPlayer });
 
 			auto weakThis = std::weak_ptr(shared_from_this());
 			m_lootSignals += m_loot->closed.connect(this, &GameWorldObjectS::OnLootClosed);
@@ -55,7 +57,10 @@ namespace mmo
 
 	void GameWorldObjectS::OnLootClosed(uint64 lootGuid)
 	{
-		// TODO
+		if (m_loot->IsEmpty())
+		{
+			Despawn();
+		}
 	}
 
 	void GameWorldObjectS::OnLootCleared()

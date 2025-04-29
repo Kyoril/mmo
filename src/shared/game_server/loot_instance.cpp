@@ -4,19 +4,22 @@
 
 #include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
+#include "game_server/condition_mgr.h"
 
 namespace mmo
 {
-	LootInstance::LootInstance(const proto::ItemManager& items, const uint64 lootGuid)
+	LootInstance::LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, const uint64 lootGuid)
 		: m_itemManager(items)
+		, m_conditionMgr(conditionMgr)
 		, m_lootGuid(lootGuid)
 		, m_gold(0)
 	{
 	}
 
-	LootInstance::LootInstance(const proto::ItemManager& items, const uint64 lootGuid, const proto::LootEntry* entry,
+	LootInstance::LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, const uint64 lootGuid, const proto::LootEntry* entry,
 		const uint32 minGold, const uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients)
 		: m_itemManager(items)
+		, m_conditionMgr(conditionMgr)
 		, m_lootGuid(lootGuid)
 		, m_gold(0)
 	{
@@ -38,9 +41,6 @@ namespace mmo
 				std::uniform_real_distribution<float> lootDistribution(0.0f, 100.0f);
 				float groupRoll = lootDistribution(randomGenerator);
 
-				//auto shuffled = group;
-				//TODO std::shuffle(shuffled.definitions().begin(), shuffled.definitions().end(), randomGenerator);
-
 				std::vector<const proto::LootDefinition*> equalChanced;
 				std::vector<const proto::LootDefinition*> nonEqualChanced;
 				for (int i = 0; i < group.definitions_size(); ++i)
@@ -48,25 +48,24 @@ namespace mmo
 					const auto& def = group.definitions(i);
 
 					// Is quest item?
-					if (def.conditiontype() == 9)
+					if (def.condition() != 0)
 					{
-						uint32 questItemCount = 0;
-						uint32 questId = def.conditionvala();
-						for (const auto& recipient : lootRecipients)
+						bool skipItem = true;
+						for (const auto& weakPlayer : lootRecipients)
 						{
-							/*if (recipient &&
-								recipient->needsQuestItem(def.item()))
+							if (auto strongPlayer = weakPlayer.lock())
 							{
-								if (recipient->getQuestStatus(questId) == game::quest_status::Incomplete)
+								if (m_conditionMgr.PlayerMeetsCondition(*strongPlayer, def.condition()))
 								{
-									questItemCount++;
-									break;		// Later...
+									// At least one player meets the condition - do not skip the item
+									skipItem = false;
+									break;
 								}
-							}*/
+							}
 						}
 
-						// Skip this quest item
-						if (questItemCount == 0)
+						// Skip this item if no eligible player meets the condition at all
+						if (skipItem)
 						{
 							continue;
 						}

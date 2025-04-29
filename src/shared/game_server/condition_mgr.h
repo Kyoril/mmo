@@ -20,7 +20,7 @@ namespace mmo
 		/// @param player The player to check.
 		/// @param conditionId The ID of the condition to check.
 		/// @returns true if condition is fulfilled, false if not or condition does not exist.
-		bool PlayerMeetsCondition(GamePlayerS& player, uint32 conditionId);
+		bool PlayerMeetsCondition(GamePlayerS& player, uint32 conditionId) const;
 
 	private:
 		const proto::ConditionManager& m_data;

@@ -12,7 +12,7 @@ namespace mmo
 		DLOG("Condition Manager set up - loaded " << m_data.count() << " conditions!");
 	}
 
-	bool ConditionMgr::PlayerMeetsCondition(GamePlayerS& player, uint32 conditionId)
+	bool ConditionMgr::PlayerMeetsCondition(GamePlayerS& player, uint32 conditionId) const
 	{
         auto* cond = m_data.getById(conditionId);
         if (!cond)
