@@ -78,16 +78,32 @@ namespace mmo
 			return m_entity;
 		}
 
-		uint32 GetUniqueId() const
+		uint64 GetUniqueId() const
 		{
 			return m_uniqueId;
+		}
+
+		void ClearReferencePosition()
+		{
+			m_referencePagePosition.reset();
+		}
+
+		void SetReferencePagePosition(const PagePosition& position)
+		{
+			m_referencePagePosition = position;
+		}
+
+		const std::optional<PagePosition>& GetReferencePagePosition() const
+		{
+			return m_referencePagePosition;
 		}
 
 	private:
 		Scene& m_scene;
 		SceneNode& m_sceneNode;
 		Entity& m_entity;
-		uint32 m_uniqueId;
+		uint64 m_uniqueId;
+		std::optional<PagePosition> m_referencePagePosition;
 	};
 
 	struct WorldPage
@@ -154,7 +170,7 @@ namespace mmo
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
-		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId) override;
+		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) override;
 
 		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
 
@@ -212,6 +228,15 @@ namespace mmo
 		bool HasTerrain() const override { return m_hasTerrain; }
 
 		terrain::Terrain* GetTerrain() const override { return m_terrain.get(); }
+
+	private:
+		uint16 BuildPageIndex(uint8 x, uint8 y) const;
+
+		bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8& x, uint8& y) const;
+
+		void LoadPageEntities(uint8 x, uint8 y);
+
+		void UnloadPageEntities(uint8 x, uint8 y);
 
 	private:
 		WorldEditor& m_editor;

@@ -66,6 +66,12 @@ namespace mmo
 		m_file.reset();
 	}
 
+	bool HPAKArchive::RemoveFile(const String& filename)
+	{
+		// Delete not supported in HPAK files
+		return false;
+	}
+
 	const std::string & HPAKArchive::GetName() const
 	{
 		return m_name;

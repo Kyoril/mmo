@@ -3,10 +3,13 @@
 #include "base/chunk_reader.h"
 #include <vector>
 #include <string>
+#include <functional>
+#include <asio/io_service.hpp>
 
 #include "base/id_generator.h"
 #include "math/quaternion.h"
 #include "math/vector3.h"
+#include "paging/page.h"
 #include "terrain/terrain.h"
 
 namespace mmo
@@ -24,36 +27,66 @@ namespace mmo
 			Version_0_0_0_1 = 0x0001,
 
 			Version_0_0_0_2 = 0x0002,
+
+			Version_0_0_0_3 = 0x0003,
 		};
 	}
 
 	typedef world_version::Type WorldVersion;
 
-	class ClientWorldInstance
+	class ClientWorldInstance : public std::enable_shared_from_this<ClientWorldInstance>
 	{
 	public:
 		friend class ClientWorldInstanceDeserializer;
 
 	public:
-		explicit ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name);
+		explicit ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name, asio::io_service& workQueue, asio::io_service& dispatcher);
 		~ClientWorldInstance();
 
 		bool HasTerrain() const { return m_terrain != nullptr; }
 
 		terrain::Terrain* GetTerrain() const { return m_terrain.get(); }
 
+		void LoadPageEntities(uint8 x, uint8 y);
+
+		void UnloadPageEntities(uint8 x, uint8 y);
+
 	protected:
-		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
+		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
+
+		static uint16 BuildPageIndex(uint8 x, const uint8 y)
+		{
+			return (x << 8) | y;
+		}
+
+		static PagePosition GetPagePosition(const Vector3& pos)
+		{
+			return PagePosition(static_cast<uint32>(
+				floor(pos.x / terrain::constants::PageSize)) + 32,
+				static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+		}
+
+		void InternalLoadPageEntity(uint16 pageIndex, const String& filename);
 
 	private:
+		asio::io_service& m_workQueue;
+		asio::io_service& m_dispatcher;
 		String m_name;
 		Scene& m_scene;
 		SceneNode& m_rootNode;
 		IdGenerator<uint64> m_entityIdGenerator{ 1 };
 		std::unique_ptr<terrain::Terrain> m_terrain;
 
-		std::vector<Entity*> m_entities;
-		std::vector<SceneNode*> m_sceneNodes;
+		struct EntityPlacement
+		{
+			uint16 pageIndex;
+			Entity* entity;
+			SceneNode* node;
+		};
+
+		std::map<uint64, EntityPlacement> m_entities;
+
+		std::set<uint16> m_loadedPages;
 	};
 
 	/// @brief Supports deserializing a world from a file.
@@ -78,7 +111,7 @@ namespace mmo
 
 		struct MapEntityChunkContent
 		{
-			uint32 uniqueId;
+			uint64 uniqueId;
 			uint32 meshNameIndex;
 			Vector3 position;
 			Quaternion rotation;

@@ -381,7 +381,7 @@ namespace mmo
 		SceneNode* m_sunLightNode{ nullptr };
 
 		SceneNode* m_worldRootNode;
-		std::unique_ptr<ClientWorldInstance> m_worldInstance;
+		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 
 		ICacheProvider& m_cache;
 

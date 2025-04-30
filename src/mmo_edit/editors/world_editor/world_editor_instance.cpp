@@ -20,6 +20,7 @@
 #include "game/object_type_id.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
+#include "game_client/world_entity_loader.h"
 #include "graphics/texture_mgr.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
@@ -44,6 +45,9 @@ namespace mmo
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
 	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
+
+	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
+	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
 
 	// UI transform mode button styles
 	static const ImVec4 ButtonSelected = ImVec4(0.15f, 0.55f, 0.83f, 0.78f);
@@ -985,7 +989,7 @@ namespace mmo
 		writer
 			<< io::write<uint32>(*versionChunk)
 			<< io::write<uint32>(sizeof(uint32))
-			<< io::write<uint32>(2);
+			<< io::write<uint32>(3);
 
 		uint32 meshSize = 0;
 		std::vector<const String*> sortedNames(entityNames.size());
@@ -1018,6 +1022,9 @@ namespace mmo
 		{
 			writer << io::write_range(*name) << io::write<uint8>(0);
 		}
+		sink.Flush();
+
+		ILOG("Successfully saved world file " << GetAssetPath());
 
 		struct MaterialOverride
 		{
@@ -1025,49 +1032,89 @@ namespace mmo
 			String materialName;
 		};
 
-		// Write entities
+		// Save paged object locations as well
 		for (const auto& ent : m_mapEntities)
 		{
-			ChunkWriter chunkWriter(entityChunk, writer);
+			// Determine page of entity based on position
+			const auto pos = ent->GetSceneNode().GetDerivedPosition();
+			const auto pagePos = PagePosition(
+				static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
+				static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
 
-			MapEntityChunkContent content;
-			content.meshNameIndex = entityNames[String(ent->GetEntity().GetMesh()->GetName())];
-			content.position = ent->GetSceneNode().GetDerivedPosition();
-			content.rotation = ent->GetSceneNode().GetDerivedOrientation();
-			content.scale = ent->GetSceneNode().GetDerivedScale();
-			content.uniqueId = ent->GetUniqueId();
-			writer.WritePOD(content);
-
-			std::vector<MaterialOverride> materialOverrides;
-
-			// Write number of material overrides
-			for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
+			// Ensure old ref file is deleted
+			if (const auto refPos = ent->GetReferencePagePosition())
 			{
-				SubEntity* sub = ent->GetEntity().GetSubEntity(i);
-				ASSERT(sub);
+				String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(pagePos.x(), pagePos.y()))).string();
+				std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
+				AssetRegistry::RemoveFile(oldFilename);
+			}
 
-				SubMesh& submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
-				if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
+			// Create new file
+			String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(pagePos.x(), pagePos.y()))).string();
+			std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+			auto filePtr = AssetRegistry::CreateNewFile(baseFileName + "/" + std::to_string(ent->GetUniqueId()) + ".wobj");
+			if (!filePtr)
+			{
+				ELOG("Failed to write file " << baseFileName + "/" + std::to_string(ent->GetUniqueId()) + ".wobj");
+				continue;
+			}
+
+			io::StreamSink fileSink{ *filePtr };
+			io::Writer fileWriter{ fileSink };
+
+			{
+				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
+				fileWriter << io::write<uint32>(1);
+				chunkWriter.Finish();
+			}
+
+			{
+				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
+				const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
+				const Vector3 scale = ent->GetSceneNode().GetScale();
+				const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
+				const String mesh = ent->GetEntity().GetMesh()->GetName().data();
+				fileWriter
+					<< io::write<uint64>(ent->GetUniqueId())
+					<< io::write_dynamic_range<uint16>(mesh)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(rotation.w)
+					<< io::write<float>(rotation.x)
+					<< io::write<float>(rotation.y)
+					<< io::write<float>(rotation.z)
+					<< io::write<float>(scale.x)
+					<< io::write<float>(scale.y)
+					<< io::write<float>(scale.z);
+
+				// Collect material overrides
+				std::vector<MaterialOverride> materialOverrides;
+				for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
 				{
-					materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
+					SubEntity* sub = ent->GetEntity().GetSubEntity(i);
+					ASSERT(sub);
+
+					SubMesh& submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
+					if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
+					{
+						materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
+					}
 				}
-			}
 
-			// Serialize material overrides
-			writer << io::write<uint8>(materialOverrides.size());
-			for (uint8 i = 0; i < materialOverrides.size(); ++i)
-			{
-				writer
-					<< io::write<uint8>(materialOverrides[i].materialIndex)
-					<< io::write_dynamic_range<uint16>(materialOverrides[i].materialName);
+				// Serialize material overrides
+				fileWriter << io::write<uint8>(materialOverrides.size());
+				for (auto& materialOverride : materialOverrides)
+				{
+					fileWriter
+						<< io::write<uint8>(materialOverride.materialIndex)
+						<< io::write_dynamic_range<uint16>(materialOverride.materialName);
+				}
+
+				chunkWriter.Finish();
 			}
-			chunkWriter.Finish();
 		}
-		
-		// TODO
-		sink.Flush();
-
-		ILOG("Successfully saved world file " << GetAssetPath());
 
 		// Save terrain
 		for (uint32 x = 0; x < 64; ++x)
@@ -1249,14 +1296,21 @@ namespace mmo
 		m_debugEntity->SetVisible(true);
 	}
 
-	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId)
+	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId)
 	{
 		if (objectId == 0)
 		{
-			objectId = m_objectIdGenerator.GenerateId();
+			objectId = GenerateUniqueId();
 		}
 
 		const String uniqueId = "Entity_" + std::to_string(objectId);
+
+		// Entity already exists? This is an error!
+		if (m_scene.HasEntity(uniqueId))
+		{
+			return m_scene.GetEntity(uniqueId);
+		}
+
 		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
 		{
@@ -1270,6 +1324,10 @@ namespace mmo
 			node.SetScale(scale);
 
 			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
+			mapEntity->SetReferencePagePosition(
+				PagePosition(
+					static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
+					static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
 			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
@@ -1543,6 +1601,75 @@ namespace mmo
 		return *m_camera;
 	}
 
+	uint16 WorldEditorInstance::BuildPageIndex(uint8 x, const uint8 y) const
+	{
+		return (x << 8) | y;
+	}
+
+	bool WorldEditorInstance::GetPageCoordinatesFromIndex(const uint16 pageIndex, uint8& x, uint8& y) const
+	{
+		if (pageIndex > 0xFFFF)
+		{
+			return false;
+		}
+
+		x = static_cast<uint8>(pageIndex >> 8);
+		y = static_cast<uint8>(pageIndex & 0xFF);
+		return true;
+	}
+
+	void WorldEditorInstance::LoadPageEntities(const uint8 x, const uint8 y)
+	{
+		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(x, y))).string();
+		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+		const auto& files = AssetRegistry::ListFiles(baseFileName, ".wobj");
+		for (const auto& file : files)
+		{
+			std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(file);
+			if (!filePtr)
+			{
+				ELOG("Failed to open file " << file << "!");
+				continue;
+			}
+
+			io::StreamSource source{ *filePtr };
+			io::Reader reader{ source };
+			WorldEntityLoader loader;
+			if (!loader.Read(reader))
+			{
+				ELOG("Failed to read file " << file << "!");
+				continue;
+			}
+
+			const auto& entity = loader.GetEntity();
+			Entity* object = CreateMapEntity(
+				entity.meshName,
+				entity.position,
+				entity.rotation,
+				entity.scale,
+				entity.uniqueId
+			);
+
+			// Apply material overrides
+			for (const auto& materialOverride : entity.materialOverrides)
+			{
+				if (materialOverride.materialIndex >= object->GetNumSubEntities())
+				{
+					WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+					continue;
+				}
+
+				object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+			}
+		}
+	}
+
+	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
+	{
+
+	}
+
 	void WorldEditorInstance::RemoveAllUnitSpawns()
 	{
 		for (auto* entity : m_spawnEntities)
@@ -1584,9 +1711,13 @@ namespace mmo
 		{
 			terrainPage->Prepare();
 			EnsurePageIsLoaded(pos);
+
+			LoadPageEntities(pos.x(), pos.y());
 		}
 		else
 		{
+			UnloadPageEntities(pos.x(), pos.y());
+
 			terrainPage->Unload();
 		}
 	}
@@ -1913,7 +2044,7 @@ namespace mmo
 			return false;
 		}
 
-		if (m_worldFileVersion < 1 || m_worldFileVersion > 2)
+		if (m_worldFileVersion < 1 || m_worldFileVersion > 3)
 		{
 			ELOG("Detected unsuppoted file format version!");
 			return false;
@@ -1930,11 +2061,11 @@ namespace mmo
 		ASSERT(chunkHeader == *meshChunk);
 
 		// Only when we have read mesh names we support reading entity chunks otherwise entities would refer to meshes which we don't know about!
-		if (m_worldFileVersion >= 2)
+		if (m_worldFileVersion == 2)
 		{
 			AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunkV2);
 		}
-		else
+		else if (m_worldFileVersion < 2)
 		{
 			AddChunkHandler(*entityChunk, false, *this, &WorldEditorInstance::ReadEntityChunk);
 		}

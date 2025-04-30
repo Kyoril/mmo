@@ -551,7 +551,13 @@ namespace mmo
 	{
 		PROFILE_BEGIN_FRAME();
 
-		m_dispatcher.poll();
+		for (size_t i = 0; i < 20; ++i)
+		{
+			if (!m_dispatcher.poll_one())
+			{
+				break;
+			}
+		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
 		if (m_playerController->GetControlledUnit())
@@ -3154,7 +3160,7 @@ namespace mmo
 		const std::string assetPath = "Worlds/" + map->directory() + "/" + map->directory();
 		DLOG("Loading map " << assetPath << ".hwld...");
 
-		m_worldInstance = std::make_unique<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath);
+		m_worldInstance = std::make_shared<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath, m_workQueue, m_dispatcher);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
@@ -3310,6 +3316,15 @@ namespace mmo
 	{
 		const auto& mainPage = page.GetMainPage();
 		const PagePosition& pos = mainPage.GetPosition();
+
+		if (isAvailable)
+		{
+			m_worldInstance->LoadPageEntities(pos.x(), pos.y());
+		}
+		else
+		{
+			m_worldInstance->UnloadPageEntities(pos.x(), pos.y());
+		}
 
 		if (m_worldInstance->HasTerrain())
 		{

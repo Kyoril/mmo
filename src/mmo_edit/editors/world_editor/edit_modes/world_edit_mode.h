@@ -43,7 +43,7 @@ namespace mmo
 
 		virtual float GetTranslateGridSnapSize() const = 0;
 
-		virtual Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint32 objectId) = 0;
+		virtual Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) = 0;
 
 		virtual bool HasTerrain() const = 0;
 

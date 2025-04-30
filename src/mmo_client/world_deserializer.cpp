@@ -1,7 +1,12 @@
 
 #include "world_deserializer.h"
 
+#include <filesystem>
+#include <utility>
+
+#include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "game_client/world_entity_loader.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/entity.h"
@@ -20,50 +25,167 @@ namespace mmo
 		: ChunkReader()
 		, m_world(world)
 	{
+		m_ignoreUnhandledChunks = true;
+
 		AddChunkHandler(*VersionChunkMagic, true, *this, &ClientWorldInstanceDeserializer::ReadVersionChunk);
 	}
 
 	ClientWorldInstance::~ClientWorldInstance()
 	{
-		for (auto* entity : m_entities)
+		// Ensure all are unloaded properly
+		for (auto it = m_entities.begin(); it != m_entities.end(); ++it)
 		{
+			Entity* entity = it->second.entity;
+			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
 			m_scene.DestroyEntity(*entity);
-		}
-		for (auto* node : m_sceneNodes)
-		{
-			node->RemoveFromParent();
 			m_scene.DestroySceneNode(*node);
 		}
+
+		m_entities.clear();
 	}
 
-	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name)
-		: m_scene(scene)
-		, m_rootNode(rootNode)
+	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name, asio::io_service& workQueue, asio::io_service& dispatcher)
+		: m_workQueue(workQueue)
+		, m_dispatcher(dispatcher)
 		, m_name(name)
+		, m_scene(scene)
+		, m_rootNode(rootNode)
 	{
 	}
 
-	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
+	void ClientWorldInstance::LoadPageEntities(uint8 x, uint8 y)
 	{
+		const uint16 pageIndex = BuildPageIndex(x, y);
+
+		String baseFileName = (std::filesystem::path(m_name) / "Entities" / std::to_string(pageIndex)).string();
+		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+		auto files = AssetRegistry::ListFiles(baseFileName, ".wobj");
+
+		for (const auto& file : files)
+		{
+			std::weak_ptr weak = weak_from_this();
+			m_workQueue.post([weak, pageIndex, file]()
+				{
+					const auto strong = weak.lock();
+					if (!strong)
+					{
+						return;
+					}
+
+					strong->InternalLoadPageEntity(pageIndex, file);
+				});
+		}
+
+		m_loadedPages.insert(pageIndex);
+	}
+
+	void ClientWorldInstance::UnloadPageEntities(uint8 x, uint8 y)
+	{
+		const uint16 pageIndex = BuildPageIndex(x, y);
+
+		for (auto it = m_entities.begin(); it != m_entities.end();)
+		{
+			if (it->second.pageIndex != pageIndex)
+			{
+				++it;
+				continue;
+			}
+
+			Entity* entity = it->second.entity;
+			SceneNode* node = it->second.node;
+			entity->DetachFromParent();
+			m_scene.DestroyEntity(*entity);
+			m_scene.DestroySceneNode(*node);
+			it = m_entities.erase(it);
+		}
+
+		m_loadedPages.erase(BuildPageIndex(x, y));
+	}
+
+	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
+	{
+		const String entityName = "Entity_" + std::to_string(uniqueId);
+		if (m_scene.HasEntity(entityName))
+		{
+			return m_scene.GetEntity(entityName);
+		}
+
 		// Create scene node
 		SceneNode* node = m_rootNode.CreateChildSceneNode();
 		node->SetPosition(position);
 		node->SetOrientation(orientation);
 		node->SetScale(scale);
-		m_sceneNodes.push_back(node);
 
 		// Create entity
-		Entity* entity = m_scene.CreateEntity("Entity_" + std::to_string(m_entityIdGenerator.GenerateId()), meshName);
+		Entity* entity = m_scene.CreateEntity(entityName, meshName);
 		node->AttachObject(*entity);
 		entity->SetQueryFlags(1);
 
 		// TODO: Save distance or take from mesh
 		entity->SetRenderingDistance(256.0f);
 
-		m_entities.push_back(entity);
+		const PagePosition page = GetPagePosition(position);
+		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
 
 		return entity;
+	}
+
+	void ClientWorldInstance::InternalLoadPageEntity(uint16 pageIndex, const String& filename)
+	{
+		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(filename);
+		if (!filePtr)
+		{
+			ELOG("Failed to open file " << filename << "!");
+			return;
+		}
+
+		io::StreamSource source{ *filePtr };
+		io::Reader reader{ source };
+		WorldEntityLoader loader;
+		if (!loader.Read(reader))
+		{
+			ELOG("Failed to read file " << filename << "!");
+			return;
+		}
+
+		const auto& entity = loader.GetEntity();
+
+		std::weak_ptr weak = weak_from_this();
+		m_dispatcher.post([weak, pageIndex, entity]()
+			{
+				auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				if (!strong->m_loadedPages.contains(pageIndex))
+				{
+					return;
+				}
+
+				Entity* object = strong->CreateMapEntity(
+					entity.meshName,
+					entity.position,
+					entity.rotation,
+					entity.scale,
+					entity.uniqueId
+				);
+
+				// Apply material overrides
+				for (const auto& materialOverride : entity.materialOverrides)
+				{
+					if (materialOverride.materialIndex >= object->GetNumSubEntities())
+					{
+						WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+						continue;
+					}
+
+					object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+				}
+			});
 	}
 
 	bool ClientWorldInstanceDeserializer::ReadVersionChunk(io::Reader& reader, const uint32 chunkHeader, const uint32 chunkSize)
@@ -96,7 +218,7 @@ namespace mmo
 		{
 			AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunk);
 		}
-		else if (m_version >= world_version::Version_0_0_0_2)
+		else if (m_version == world_version::Version_0_0_0_2)
 		{
 			AddChunkHandler(*EntityChunkMagic, false, *this, &ClientWorldInstanceDeserializer::ReadEntityChunkV2);
 		}
@@ -153,7 +275,7 @@ namespace mmo
 			return false;
 		}
 
-		m_world.CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale);
+		m_world.CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale, content.uniqueId);
 		return reader;
 	}
 
@@ -226,7 +348,7 @@ namespace mmo
 			}
 		}
 
-		if (Entity* entity = m_world.CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale))
+		if (Entity* entity = m_world.CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale, uniqueId))
 		{
 			// Apply material overrides
 			for (const auto& materialOverride : materialOverrides)

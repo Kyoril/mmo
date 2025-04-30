@@ -16,10 +16,13 @@ namespace mmo
 {
 	/// The base path for assets.
 	static std::filesystem::path s_basePath;
+
 	/// The list of loaded archives.
 	static std::list<std::shared_ptr<IArchive>> s_archives;
+
 	/// Hashed file name list
 	static std::map<std::string, std::shared_ptr<IArchive>, StrCaseIComp> s_files;
+
 	/// The filesystem archive pointing to the base path.
 	static std::shared_ptr<FileSystemArchive> s_filesystemArchive;
 
@@ -181,6 +184,20 @@ namespace mmo
 		return it != s_files.end();
 	}
 
+	bool AssetRegistry::RemoveFile(const std::string& filename)
+	{
+		std::unique_lock lock{ s_fileLock };
+
+		// Try to find the requested file
+		const auto it = s_files.find(filename);
+		if (it == s_files.end())
+		{
+			return false;
+		}
+
+		return it->second->RemoveFile(filename);
+	}
+
 	std::unique_ptr<std::ostream> AssetRegistry::CreateNewFile(const std::string& filename)
 	{
 		std::unique_lock lock { s_fileLock };
@@ -217,6 +234,22 @@ namespace mmo
 		for (const auto& file : s_files)
 		{
 			result.push_back(file.first);
+		}
+
+		return result;
+	}
+
+	std::vector<std::string> AssetRegistry::ListFiles(const std::string& prefix, const std::string& extension)
+	{
+		std::unique_lock lock{ s_fileLock };
+		std::vector<std::string> result;
+
+		for (const auto& file : s_files)
+		{
+			if (file.first.starts_with(prefix) && (extension.empty() || file.first.ends_with(extension)))
+			{
+				result.push_back(file.first);
+			}
 		}
 
 		return result;

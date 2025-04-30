@@ -290,6 +290,10 @@ namespace mmo
 
 		void DestroyLight(const Light& light);
 
+		bool HasEntity(const String& name) const;
+
+		Entity* GetEntity(const String& name) const;
+
 		/// Tries to find a camera by name.
 		/// @param name Name of the searched camera.
 		/// @returns Pointer to the camera or nullptr if the camera does not exist.

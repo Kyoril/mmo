@@ -28,6 +28,17 @@ namespace mmo
 		// Nothing to do here
 	}
 
+	bool FileSystemArchive::RemoveFile(const std::string& filename)
+	{
+		if (GetMode() == ArchiveMode::ReadOnly)
+		{
+			ILOG("Cannot delete file " << filename << " from read-only archive " << m_name);
+			return false;
+		}
+
+		return std::filesystem::remove(std::filesystem::path(m_name) / filename);
+	}
+
 	const std::string & FileSystemArchive::GetName() const
 	{
 		return m_name;

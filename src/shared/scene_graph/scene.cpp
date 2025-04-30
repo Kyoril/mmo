@@ -126,6 +126,18 @@ namespace mmo
 		}
 	}
 
+	bool Scene::HasEntity(const String& name) const
+	{
+		return m_entities.find(name) != m_entities.end();
+	}
+
+	Entity* Scene::GetEntity(const String& name) const
+	{
+		const auto entityIt = m_entities.find(name);
+		ASSERT(entityIt != m_entities.end());
+		return entityIt->second.get();
+	}
+
 	Camera* Scene::GetCamera(const String& name)
 	{
 		const auto cameraIt = m_cameras.find(name);

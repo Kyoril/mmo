@@ -24,6 +24,8 @@ namespace mmo
 		virtual void Load() = 0;
 		/// Unloads the archive.
 		virtual void Unload() = 0;
+
+		virtual bool RemoveFile(const std::string& filename) = 0;
 		/// Gets the archive name.
 		[[nodiscard]] virtual const std::string& GetName() const = 0;
 		/// Gets the archive mode.

@@ -24,6 +24,7 @@ namespace mmo
 	public:
 		void Load() override;
 		void Unload() override;
+		bool RemoveFile(const String& filename) override;
 		const std::string& GetName() const override;
 		[[nodiscard]] ArchiveMode GetMode() const override;
 		std::unique_ptr<std::istream> Open(const std::string& filename) override;
