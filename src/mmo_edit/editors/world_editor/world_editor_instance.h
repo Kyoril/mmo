@@ -98,12 +98,28 @@ namespace mmo
 			return m_referencePagePosition;
 		}
 
+		bool IsModified() const
+		{
+			return m_modified;
+		}
+
+		void MarkModified()
+		{
+			m_modified = true;
+		}
+
+		void MarkAsUnmodified()
+		{
+			m_modified = false;
+		}
+
 	private:
 		Scene& m_scene;
 		SceneNode& m_sceneNode;
 		Entity& m_entity;
 		uint64 m_uniqueId;
 		std::optional<PagePosition> m_referencePagePosition;
+		bool m_modified{ false };
 	};
 
 	struct WorldPage
@@ -289,6 +305,12 @@ namespace mmo
 		IdGenerator<uint64> m_objectSpawnIdGenerator{ 1 };
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
+		struct DeletedEntityRef
+		{
+			uint64 entityId;
+			uint16 pageId;
+		};
+		std::vector<DeletedEntityRef> m_deletedEntities;
 		ImVec2 m_lastContentRectMin{};
 
 		std::map<uint16, WorldPage> m_pages;

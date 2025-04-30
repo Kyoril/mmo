@@ -381,7 +381,7 @@ namespace mmo
 		{
 			// Ensure terrain is created
 			m_world.m_terrain = std::make_unique<terrain::Terrain>(m_world.m_scene, nullptr, 64, 64);
-			m_world.m_terrain->SetBaseFileName(m_world.m_name);
+			m_world.m_terrain->SetBaseFileName(m_world.m_name + "/Terrain");
 		}
 
 		// Read terrain default material

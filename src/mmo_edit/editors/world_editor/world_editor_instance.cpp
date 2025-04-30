@@ -205,7 +205,7 @@ namespace mmo
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 
 		// Replace all \ with /
-		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension()).string();
+		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
@@ -1032,9 +1032,28 @@ namespace mmo
 			String materialName;
 		};
 
-		// Save paged object locations as well
-		for (const auto& ent : m_mapEntities)
+		// Delete all removed entities
+		for (const auto& ent : m_deletedEntities)
 		{
+			String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(ent.pageId) / std::to_string(ent.entityId)).string() + ".wobj";
+			std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
+			if (!AssetRegistry::RemoveFile(oldFilename))
+			{
+				ELOG("Failed to delete file " << oldFilename);
+			}
+		}
+
+		m_deletedEntities.clear();
+
+		// Save paged object locations as well
+		for (auto& ent : m_mapEntities)
+		{
+			// Skip unmodified entities
+			if (!ent->IsModified())
+			{
+				continue;
+			}
+
 			// Determine page of entity based on position
 			const auto pos = ent->GetSceneNode().GetDerivedPosition();
 			const auto pagePos = PagePosition(
@@ -1044,10 +1063,16 @@ namespace mmo
 			// Ensure old ref file is deleted
 			if (const auto refPos = ent->GetReferencePagePosition())
 			{
-				String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(pagePos.x(), pagePos.y()))).string();
-				std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
-				AssetRegistry::RemoveFile(oldFilename);
+				if (*refPos != pagePos)
+				{
+					String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(refPos->x(), refPos->y())) / std::to_string(ent->GetUniqueId())).string() + ".wobj";
+					std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
+					AssetRegistry::RemoveFile(oldFilename);
+				}
 			}
+
+			// Ensure we are using the new ref pose now
+			ent->SetReferencePagePosition(pagePos);
 
 			// Create new file
 			String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(pagePos.x(), pagePos.y()))).string();
@@ -1329,6 +1354,7 @@ namespace mmo
 					static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
 					static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
 			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+			mapEntity->MarkModified();
 			entity->SetUserObject(m_mapEntities.back().get());
 		}
 
@@ -1458,10 +1484,30 @@ namespace mmo
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
 	{
-		m_mapEntities.erase(std::remove_if(m_mapEntities.begin(), m_mapEntities.end(), [&entity](const auto& mapEntity)
+		std::erase_if(m_mapEntities, [&](const auto& mapEntity)
 		{
-			return mapEntity.get() == &entity;
-		}), m_mapEntities.end());
+			if (mapEntity.get() == &entity)
+			{
+				const Vector3 pos = entity.GetSceneNode().GetDerivedPosition();
+				const auto pagePos = PagePosition(
+					static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
+					static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+
+				// Ensure we delete the previous reference page pos
+				if (entity.GetReferencePagePosition() && *entity.GetReferencePagePosition() != pagePos)
+				{
+					m_deletedEntities.emplace_back(entity.GetUniqueId(), BuildPageIndex(
+						entity.GetReferencePagePosition()->x(),
+						entity.GetReferencePagePosition()->y()));
+				}
+
+				// As well as the current one
+				m_deletedEntities.emplace_back(entity.GetUniqueId(), BuildPageIndex(pagePos.x(), pagePos.y()));
+				return true;
+			}
+
+			return false;
+		});
 	}
 
 	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
@@ -1651,6 +1697,11 @@ namespace mmo
 				entity.uniqueId
 			);
 
+			// We just loaded the object - it has not been modified
+			MapEntity* mapEntity = object->GetUserObject<MapEntity>();
+			ASSERT(mapEntity);
+			mapEntity->MarkAsUnmodified();
+
 			// Apply material overrides
 			for (const auto& materialOverride : entity.materialOverrides)
 			{
@@ -1769,6 +1820,7 @@ namespace mmo
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 				{
 					entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
+					mapEntity.MarkModified();
 				}
 
 				ImGui::EndDragDropTarget();
@@ -1809,6 +1861,7 @@ namespace mmo
 				if (ImGui::Checkbox("##overridden", &isOverridden))
 				{
 					sub->SetMaterial(submesh.GetMaterial());
+					mapEntity.MarkModified();
 				}
 				ImGui::EndDisabled();
 
@@ -1825,11 +1878,13 @@ namespace mmo
 					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
 					{
 						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						mapEntity.MarkModified();
 					}
 
 					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
 					{
 						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						mapEntity.MarkModified();
 					}
 
 					ImGui::EndDragDropTarget();

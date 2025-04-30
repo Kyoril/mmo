@@ -15,18 +15,21 @@ namespace mmo
     void SelectedMapEntity::Translate(const Vector3& delta)
     {
         m_entity.GetSceneNode().Translate(delta, TransformSpace::World);
+        m_entity.MarkModified();
         positionChanged(*this);
     }
 
     void SelectedMapEntity::Rotate(const Quaternion& delta)
     {
         m_entity.GetSceneNode().Rotate(delta, TransformSpace::Parent);
+        m_entity.MarkModified();
         rotationChanged(*this);
     }
 
     void SelectedMapEntity::Scale(const Vector3& delta)
     {
         m_entity.GetSceneNode().Scale(delta);
+        m_entity.MarkModified();
         scaleChanged(*this);
     }
 
@@ -58,18 +61,21 @@ namespace mmo
     void SelectedMapEntity::SetPosition(const Vector3& position) const
     {
         m_entity.GetSceneNode().SetPosition(position);
+    	m_entity.MarkModified();
 		positionChanged(*this);
     }
 
     void SelectedMapEntity::SetOrientation(const Quaternion& orientation) const
     {
         m_entity.GetSceneNode().SetOrientation(orientation);
+        m_entity.MarkModified();
         rotationChanged(*this);
     }
 
     void SelectedMapEntity::SetScale(const Vector3& scale) const
     {
 		m_entity.GetSceneNode().SetScale(scale);
+        m_entity.MarkModified();
 		scaleChanged(*this);
     }
 
