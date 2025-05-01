@@ -12,6 +12,9 @@
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
 #include "preview_providers/material_preview_provider.h"
+#include "preview_providers/mesh_preview_provider.h"
+#include "preview_providers/skeleton_preview_provider.h"
+#include "preview_providers/interface_preview_providers.h"
 
 #include "editor_windows/asset_window.h"
 #include "editor_windows/log_window.h"
@@ -62,6 +65,10 @@ namespace mmo
 	{
 		manager.AddPreviewProvider(std::make_unique<mmo::TexturePreviewProvider>());
 		manager.AddPreviewProvider(std::make_unique<mmo::MaterialPreviewProvider>(host));
+		manager.AddPreviewProvider(std::make_unique<mmo::MeshPreviewProvider>(host));
+		manager.AddPreviewProvider(std::make_unique<mmo::SkeletonPreviewProvider>());
+		manager.AddPreviewProvider(std::make_unique<mmo::LuaPreviewProvider>());
+		manager.AddPreviewProvider(std::make_unique<mmo::XmlPreviewProvider>());
 	}
 }
 
@@ -169,6 +176,5 @@ int main(int argc, char* arg[])
 	dbService.stop();
 	dbThread.join();
 
-	// Successfully terminated the editor
 	return 0;
 }

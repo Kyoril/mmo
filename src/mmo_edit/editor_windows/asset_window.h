@@ -42,6 +42,28 @@ namespace mmo
 		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);
 		
 		void AddAssetToMap(AssetEntry& parent, const std::string& assetPath);
+		
+		bool SearchEntryByPath(const AssetEntry& entry, const std::string& path)
+		{
+			// Check if this is the entry we're looking for
+			if (entry.fullPath == path)
+			{
+				m_selectedEntry = &entry;
+				m_host.SetCurrentPath(entry.fullPath);
+				return true;
+			}
+			
+			// Recursively search in children
+			for (const auto& [childName, childEntry] : entry.children)
+			{
+				if (SearchEntryByPath(childEntry, path))
+				{
+					return true;
+				}
+			}
+			
+			return false;
+		}
 
 	private:
 		PreviewProviderManager& m_previewProviderManager;
