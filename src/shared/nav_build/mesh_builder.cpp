@@ -317,7 +317,7 @@ namespace mmo
 			for (int32 x = terrain::constants::MaxPages - 1; x >= 0; --x)
 			{
                 std::stringstream strm;
-				strm << "Worlds/" << m_worldPath << "/" << m_worldPath << "/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
+				strm << "Worlds/" << m_worldPath << "/" << m_worldPath << "/Terrain/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
 
 				if (!AssetRegistry::HasFile(strm.str()))
 				{

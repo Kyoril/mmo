@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "base/utilities.h"
+#include "game_client/world_entity_loader.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/mesh_serializer.h"
 
@@ -110,7 +111,7 @@ namespace mmo
         // We should separate page loading and data holding from the visual representation!
         Scene scene;
         terrain::Terrain terrain(scene, nullptr, terrain::constants::MaxPages, terrain::constants::MaxPages);
-        terrain.SetBaseFileName("Worlds/" + map->Name + "/" + map->Name);
+        terrain.SetBaseFileName("Worlds/" + map->Name + "/" + map->Name + "/Terrain");
 
         terrain::Page* page = terrain.GetPage(x, y);
         ASSERT(page);
@@ -253,11 +254,53 @@ namespace mmo
                 for (uint32 x = 0; x < terrain::constants::MaxPages; ++x)
                 {
                     std::stringstream strm;
-                    strm << "Worlds/" << Name << "/" << Name << "/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
+                    strm << "Worlds/" << Name << "/" << Name << "/Terrain/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
                     m_hasPage[x][y] = AssetRegistry::HasFile(strm.str());
                 }
             }
         }
+
+        // Load entities
+        DLOG("Loading map entities...");
+		const std::vector<std::string> entities = AssetRegistry::ListFiles("Worlds/" + Name + "/" + Name + "/Entities/", "wobj");
+        for (const auto& entityFilename : entities)
+        {
+			std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(entityFilename);
+            if (!filePtr)
+            {
+				ELOG("Failed to load entity file " << entityFilename << ": File can not be opened");
+                continue;
+            }
+
+			io::StreamSource entitySource{ *filePtr };
+			io::Reader entityReader{ entitySource };
+            WorldEntityLoader loader;
+			if (!loader.Read(entityReader))
+			{
+				ELOG("Failed to load entity file " << entityFilename << ": Failed to read file");
+				continue;
+			}
+
+			const auto& placement = loader.GetEntity();
+            if (GetMapEntityInstance(placement.uniqueId) != nullptr)
+            {
+                WLOG("Duplicate entity id found: " << placement.uniqueId);
+                continue;
+            }
+
+            const MapEntity* entity = GetMapEntity(placement.meshName);
+            ASSERT(entity);
+
+            Matrix4 transform;
+            transform.MakeTransform(placement.position, placement.scale, placement.rotation);
+
+            AABB bounds = entity->Bounds;
+            bounds.Transform(transform);
+
+            InsertMapEntityInstance(placement.uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+        }
+
+		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities!");
     }
 
     bool Map::HasPage(int x, int y) const
@@ -373,12 +416,27 @@ namespace mmo
         m_version = 0;
         reader >> io::read<uint32>(m_version);
 
-        // Check if version is supported
-        if (m_version >= world_version::Version_0_0_0_1)
+        if (m_version <= world_version::Version_0_0_0_3)
         {
-            AddChunkHandler(*MeshNamesChunkMagic, false, *this, &Map::ReadMeshNamesChunk);
-            AddChunkHandler(*TerrainChunkMagic, false, *this, &Map::ReadTerrainChunk);
-            return true;
+            // Check if version is supported
+            if (m_version >= world_version::Version_0_0_0_1)
+            {
+                AddChunkHandler(*MeshNamesChunkMagic, false, *this, &Map::ReadMeshNamesChunk);
+
+                if (m_version == world_version::Version_0_0_0_1)
+                {
+                    AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunk);
+                    WLOG("World file " << m_version << " is deprecated, please update to the latest version!");
+                }
+                else if (m_version == world_version::Version_0_0_0_2)
+                {
+                    AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunkV2);
+                    WLOG("World file " << m_version << " is deprecated, please update to the latest version!");
+                }
+
+                AddChunkHandler(*TerrainChunkMagic, false, *this, &Map::ReadTerrainChunk);
+                return true;
+            }
         }
 
         ELOG("Unsupported world version: " << m_version);
@@ -395,7 +453,7 @@ namespace mmo
         {
             AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunk);
         }
-        else if (m_version >= world_version::Version_0_0_0_2)
+        else if (m_version == world_version::Version_0_0_0_2)
         {
             AddChunkHandler(*EntityChunkMagic, false, *this, &Map::ReadEntityChunkV2);
         }
