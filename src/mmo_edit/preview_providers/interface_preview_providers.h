@@ -29,4 +29,28 @@ namespace mmo
 		/// @copydoc AssetPreviewProvider::GetSupportedExtensions
 		[[nodiscard]] const std::set<String>& GetSupportedExtensions() const override;
 	};
+
+	/// @brief Implementation of the AssetPreviewProvider class which provides previews of xml files.
+	class TocPreviewProvider final : public StaticTexturePreviewProvider
+	{
+	public:
+		TocPreviewProvider();
+		~TocPreviewProvider() override = default;
+
+	public:
+		/// @copydoc AssetPreviewProvider::GetSupportedExtensions
+		[[nodiscard]] const std::set<String>& GetSupportedExtensions() const override;
+	};
+
+	/// @brief Implementation of the AssetPreviewProvider class which provides previews of xml files.
+	class AudioPreviewProvider final : public StaticTexturePreviewProvider
+	{
+	public:
+		AudioPreviewProvider();
+		~AudioPreviewProvider() override = default;
+
+	public:
+		/// @copydoc AssetPreviewProvider::GetSupportedExtensions
+		[[nodiscard]] const std::set<String>& GetSupportedExtensions() const override;
+	};
 }

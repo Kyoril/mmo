@@ -64,10 +64,81 @@ namespace mmo
 	{
 		m_host.assetImported.connect([&](const Path& p)
 		{
-			m_selectedEntry = nullptr;
+			// Store the current path before rebuilding
+			std::string currentPath = m_selectedEntry ? m_selectedEntry->fullPath : "";
+			
+			// We need to clear and rebuild, but we'll restore the selection afterwards
 			m_assets.clear();
 
+			// Rebuild the asset list, but don't reset the selection yet
+			// Using a temporary variable to hold the old selection
+			const AssetEntry* oldSelection = m_selectedEntry;
+			m_selectedEntry = nullptr;
 			RebuildAssetList();
+			
+			// Try to restore the previous selection if a path was selected
+			if (!currentPath.empty())
+			{
+				// For each top-level entry, try to find the path
+				bool found = false;
+				for (const auto& [name, entry] : m_assets)
+				{
+					// Check this top level entry
+					if (entry.fullPath == currentPath)
+					{
+						m_selectedEntry = &entry;
+						m_host.SetCurrentPath(entry.fullPath);
+						found = true;
+						break;
+					}
+					
+					// Search recursively in children
+					if (SearchEntryByPath(entry, currentPath))
+					{
+						found = true;
+						break;
+					}
+				}
+				
+				// If the entry wasn't found but we had a selection, try to find the closest parent directory
+				if (!found && !currentPath.empty())
+				{
+					std::string parentPath = currentPath;
+					while (!parentPath.empty() && !found)
+					{
+						// Find the last slash and remove everything after it
+						size_t lastSlash = parentPath.find_last_of('/');
+						if (lastSlash != std::string::npos)
+						{
+							// Get the parent path
+							parentPath = parentPath.substr(0, lastSlash);
+							
+							// Look for this parent path
+							for (const auto& [name, entry] : m_assets)
+							{
+								if (entry.fullPath == parentPath)
+								{
+									m_selectedEntry = &entry;
+									m_host.SetCurrentPath(entry.fullPath);
+									found = true;
+									break;
+								}
+								
+								if (SearchEntryByPath(entry, parentPath))
+								{
+									found = true;
+									break;
+								}
+							}
+						}
+						else
+						{
+							// No more slashes, can't go up any further
+							break;
+						}
+					}
+				}
+			}
 		});
 
 		m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
@@ -173,9 +244,8 @@ namespace mmo
 					m_selectedEntry = nullptr;
 					m_host.SetCurrentPath("");
 				}
-				
 				// Display path components as a breadcrumb when we're not at root
-				if (!m_selectedEntry->fullPath.empty())
+				else if (!m_selectedEntry->fullPath.empty())
 				{
 					std::string fullPath = m_selectedEntry->fullPath;
 					std::vector<std::string> pathComponents;
@@ -259,18 +329,55 @@ namespace mmo
 			
 			// Now continue with the rest of the UI (two-column layout)
 			ImGui::Columns(2, nullptr, true);
-			static bool widthSet = false;
-			if (!widthSet)
+			
+			// Set initial column width on first frame or after window resize
+			static bool firstFrame = true;
+			static float lastWindowWidth = ImGui::GetWindowWidth();
+			float currentWindowWidth = ImGui::GetWindowWidth();
+			
+			// Only force the column width when the window is first created or resized
+			if (firstFrame || std::abs(currentWindowWidth - lastWindowWidth) > 1.0f)
 			{
-				ImGui::SetColumnWidth(ImGui::GetColumnIndex(), 350.0f);
-				widthSet = true;
+				ImGui::SetColumnWidth(0, m_columnWidth);
+				lastWindowWidth = currentWindowWidth;
+				firstFrame = false;
 			}
+			else
+			{
+				// Store the user's manually adjusted column width
+				float currentColumnWidth = ImGui::GetColumnWidth(0);
+				if (std::abs(currentColumnWidth - m_columnWidth) > 1.0f) // Tolerance for floating point comparison
+				{
+					m_columnWidth = currentColumnWidth;
+				}
+			}
+			
+			// Add a folder filter search bar at the top of the left panel
+			static char folderSearchBuffer[256] = "";
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+			ImGui::InputTextWithHint("##FolderSearch", "Filter folders...", folderSearchBuffer, IM_ARRAYSIZE(folderSearchBuffer));
+			std::string folderSearchString = folderSearchBuffer;
+			std::transform(folderSearchString.begin(), folderSearchString.end(), folderSearchString.begin(), ::tolower);
 
 			ImGui::BeginChild("assetFolderScrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 			
 			const std::string path;
 			for (const auto& [name, entry]: m_assets)
 			{
+				// Skip folders that don't match the search filter
+				if (!folderSearchString.empty())
+				{
+					std::string lowerName = name;
+					std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+					
+					// Skip if the folder name doesn't contain the search string and no children match
+					if (lowerName.find(folderSearchString) == std::string::npos && 
+					    !FolderContainsSearchString(entry, folderSearchString))
+					{
+						continue;
+					}
+				}
+				
 				RenderAssetEntry(name, entry, path);
 			}
 			ImGui::EndChild();

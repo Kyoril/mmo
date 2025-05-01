@@ -69,6 +69,8 @@ namespace mmo
 		manager.AddPreviewProvider(std::make_unique<mmo::SkeletonPreviewProvider>());
 		manager.AddPreviewProvider(std::make_unique<mmo::LuaPreviewProvider>());
 		manager.AddPreviewProvider(std::make_unique<mmo::XmlPreviewProvider>());
+		manager.AddPreviewProvider(std::make_unique<mmo::TocPreviewProvider>());
+		manager.AddPreviewProvider(std::make_unique<mmo::AudioPreviewProvider>());
 	}
 }
 

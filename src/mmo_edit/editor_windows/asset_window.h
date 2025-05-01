@@ -64,6 +64,25 @@ namespace mmo
 			
 			return false;
 		}
+		
+		bool FolderContainsSearchString(const AssetEntry& entry, const std::string& searchString)
+		{
+			// Check if any of the children match the search string
+			for (const auto& [childName, childEntry] : entry.children)
+			{
+				std::string lowerName = childName;
+				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+				
+				// If this child matches or any of its children match, return true
+				if (lowerName.find(searchString) != std::string::npos || 
+				    FolderContainsSearchString(childEntry, searchString))
+				{
+					return true;
+				}
+			}
+			
+			return false;
+		}
 
 	private:
 		PreviewProviderManager& m_previewProviderManager;
@@ -72,6 +91,6 @@ namespace mmo
 		std::map<std::string, AssetEntry> m_assets;
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
-		float m_columnWidth { 350.0f };
+		float m_columnWidth { 150.0f };
 	};
 }
