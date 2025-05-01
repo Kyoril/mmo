@@ -1212,7 +1212,7 @@ namespace mmo
 					String asset = entity->GetMesh()->GetName().data();
 					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
 					{
-						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), m_objectIdGenerator.GenerateId());
+						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), GenerateUniqueId());
 					}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 				}
