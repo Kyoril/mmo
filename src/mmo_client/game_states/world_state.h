@@ -40,6 +40,7 @@
 
 #include "spell_cast.h"
 #include "game_client/net_client.h"
+#include "debug_path_visualizer.h"
 
 namespace mmo
 {
@@ -433,6 +434,8 @@ namespace mmo
 		scoped_connection_container m_cvarChangedSignals;
 
 		Discord& m_discord;
+
+		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
 
 	private:
 		static IInputControl* s_inputControl;

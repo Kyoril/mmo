@@ -227,21 +227,32 @@ namespace mmo
 				}
 			}
 
-			m_vertexData = std::make_unique<VertexData>();
-			m_vertexData->vertexCount = vertices.size();
-			m_vertexData->vertexStart = 0;
+			if (!m_vertexData)
+			{
+				m_vertexData = std::make_unique<VertexData>();
+				m_vertexData->vertexCount = vertices.size();
+				m_vertexData->vertexStart = 0;
 
-			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
-			decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
-			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
-			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
-			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
-			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
-			decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
+				VertexDeclaration* decl = m_vertexData->vertexDeclaration;
+				decl->AddElement(0, 0, VertexElementType::Float3, VertexElementSemantic::Position);
+				decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Color, VertexElementSemantic::Diffuse);
+				decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Normal);
+				decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Binormal);
+				decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float3, VertexElementSemantic::Tangent);
+				decl->AddElement(0, decl->GetVertexSize(0), VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
 
-			const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
-			m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+				const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::Static, vertices.data());
+				m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+			}
+			else
+			{
+				m_vertexData->vertexCount = vertices.size();
+				m_vertexData->vertexStart = 0;
 
+				const VertexBufferPtr vertexBuffer = m_device.CreateVertexBuffer(m_vertexData->vertexCount, m_vertexData->vertexDeclaration->GetVertexSize(0), BufferUsage::Static, vertices.data());
+				m_vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+			}
+			
 			ManualRenderOperation::Finish();
 		}
 

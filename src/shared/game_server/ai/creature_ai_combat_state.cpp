@@ -352,47 +352,47 @@ namespace mmo
 
 		auto& mover = GetControlled().GetMover();
 
-		// If we are moving, check if the current TARGET LOCATION is not in range instead of checking
-		// if the current location is not in attack range. Only THEN we need to calculate a new movement
-		// path.
-		Vector3 currentLocation = mover.GetTarget();
-
-		const Vector3 currentUnitLoc = target.GetPredictedPosition();
-		const float squaredDistance = (currentUnitLoc - currentLocation).GetSquaredLength();
-
-		// Check distance and whether we need to move
-		if (squaredDistance > (combatRange * 0.75f) * (combatRange * 0.75f))
+		// Are we moving at all?
+		if (!mover.IsMoving())
 		{
-			Vector3 newTargetLocation = target.GetPredictedPosition();
-			Vector3 direction = (newTargetLocation - currentLocation);
-			if (direction.Normalize() != 0.0f)
+			// Not moving: Check if we are in hit range to the target
+			if (target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true) <= combatRange)
 			{
-				// Adjust target location since we don't want to stand IN the target
-				newTargetLocation = newTargetLocation - (direction * 2.0);
+				// We are in combat range, no need to move
+				return;
 			}
+		}
+		else
+		{
+			// Are we on our way to a location where we can hit the target?
+			if (target.GetSquaredDistanceTo(mover.GetTarget(), true) <= combatRange)
+			{
+				// We are, no need to adjust current movement path
+				return;
+			}
+		}
 
-			// Check if target location is too far away from home
-			if (m_canReset && newTargetLocation.GetSquaredDistanceTo(GetAI().GetHome().position) > 60.0f * 60.0f)
-			{
-				// We are too far away from home, reset AI
-				GetAI().Reset();
-				return; // Important: ResetAI might destroy this AI state
-			}
+		// Check if target location is too far away from home
+		if (m_canReset && target.GetSquaredDistanceTo(GetAI().GetHome().position, false) > 60.0f * 60.0f)
+		{
+			// We are too far away from home, reset AI
+			GetAI().Reset();
+			return; // Important: ResetAI might destroy this AI state
+		}
 
-			// Chase the target
-			if (GetControlled().GetMover().MoveTo(newTargetLocation))
-			{
-				m_stuckCounter = 0;
-			}
-			else
-			{
-				if (++m_stuckCounter > 20)
-				{
-					// We are stuck, reset AI
-					GetAI().Reset();
-					return; // Important: ResetAI might destroy this AI state
-				}
-			}
+		// We need to move!
+		if (mover.MoveTo(target.GetPosition()))
+		{
+			// Successfully moving, reset stuck counter
+			m_stuckCounter = 0;
+			return;
+		}
+
+		if (++m_stuckCounter > 20)
+		{
+			// We are stuck, reset AI
+			GetAI().Reset();
+			return; // Important: ResetAI might destroy this AI state
 		}
 	}
 

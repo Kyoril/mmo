@@ -304,7 +304,7 @@ namespace mmo::nav
 			float* outPoints = 0, int* outPointCount = 0)
 		{
 			// Find steer target.
-			static const int MAX_STEER_POINTS = 3;
+			static const int MAX_STEER_POINTS = 10;
 			float steerPath[MAX_STEER_POINTS * 3];
 			unsigned char steerPathFlags[MAX_STEER_POINTS];
 			dtPolyRef steerPathPolys[MAX_STEER_POINTS];
@@ -337,13 +337,18 @@ namespace mmo::nav
 				return false;
 
 			dtVcopy(steerPos, &steerPath[ns * 3]);
-			steerPos[1] = startPos[1];
+
+			float h;
+			if (dtStatusSucceed(navQuery->getPolyHeight(steerPosRef, steerPos, &h)))
+				steerPos[1] = h;
+
 			steerPosFlag = steerPathFlags[ns];
 			steerPosRef = steerPathPolys[ns];
 
 			return true;
 		}
 	}
+
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
 		constexpr float extents[] = { 5.f, 3.5f, 5.f };
@@ -402,8 +407,8 @@ namespace mmo::nav
 			m_navQuery.closestPointOnPoly(startPolyRef, recastStart, iterPos, nullptr);
 			m_navQuery.closestPointOnPoly(polys[npolys - 1], recastEnd, targetPos, nullptr);
 
-			static constexpr float STEP_SIZE = 1.0f; // Smaller step in tight spaces
-			static constexpr float SLOP = 0.03f;     // Relax the slop to avoid frequent redirects
+			static constexpr float STEP_SIZE = 3.0f; // Smaller step in tight spaces
+			static constexpr float SLOP = 0.5f;     // Relax the slop to avoid frequent redirects
 
 			dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
 			smoothPathPoints++;
@@ -449,7 +454,7 @@ namespace mmo::nav
 				m_navQuery.moveAlongSurface(polys[0], iterPos, moveTgt, &m_queryFilter, result, visited, &nvisited, 16);
 
 				npolys = dtMergeCorridorStartMoved(polys, npolys, MaxPathPolys, visited, nvisited);
-				npolys = FixupShortcuts(polys, npolys, &m_navQuery);
+				//npolys = FixupShortcuts(polys, npolys, &m_navQuery);
 
 				float h = 0;
 				m_navQuery.getPolyHeight(polys[0], result, &h);

@@ -188,6 +188,8 @@ namespace mmo
 
 		SetupWorldScene();
 
+		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
+
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
 			{
@@ -284,6 +286,8 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_debugPathVisualizer.reset();
+
 		m_audio.StopSound(&m_backgroundMusicChannel);
 		m_backgroundMusicChannel = InvalidChannel;
 		m_backgroundMusicSound = InvalidSound;
@@ -550,6 +554,11 @@ namespace mmo
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_BEGIN_FRAME();
+
+		if (m_debugPathVisualizer)
+		{
+			m_debugPathVisualizer->Update(deltaSeconds);
+		}
 
 		for (size_t i = 0; i < 20; ++i)
 		{
@@ -1574,11 +1583,10 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		path.push_back(startPosition);
+
 		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
 		(void)isPlayer;
-
-		// Ensure we are at the start position
-		//unitPtr->GetSceneNode()->SetPosition(startPosition);
 
 		if (pathSize > 1)
 		{
@@ -1601,20 +1609,12 @@ namespace mmo
 		// Check whether we should update the output debug path
 		if (guid == ObjectMgr::GetSelectedObjectGuid())
 		{
-			if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
+			if (m_debugPathVisualizer)
 			{
-				// Update it!
-				DLOG("Creature path received (Size: " << path.size() << ")");
-
-				size_t index = 0;
-				for (auto& p : path)
+				if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
 				{
-					DLOG("\t#" << index++ << ": " << p);
+					m_debugPathVisualizer->ShowPath(path);
 				}
-			}
-			else
-			{
-				// Ensure it is not visible
 			}
 		}
 		
