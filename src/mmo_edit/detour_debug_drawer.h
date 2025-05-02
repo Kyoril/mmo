@@ -29,6 +29,8 @@ namespace mmo
 
         void Steep(bool steep) { m_steep = steep; }
 
+        void Clear();
+
     public:
         void depthMask(bool /*state*/) override {}
         void texture(bool /*state*/) override {}
@@ -42,5 +44,6 @@ namespace mmo
 
     private:
         std::unique_ptr<ManualRenderOperationRef<ManualTriangleListOperation>> m_triangleOp;
+        std::unique_ptr<ManualRenderOperationRef<ManualLineListOperation>> m_lineOp;
     };
 }

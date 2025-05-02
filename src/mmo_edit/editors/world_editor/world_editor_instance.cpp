@@ -26,6 +26,7 @@
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
+#include "edit_modes/navigation_edit_mode.h"
 
 namespace mmo
 {
@@ -67,34 +68,6 @@ namespace mmo
 		Vector3 scale;
 	};
 
-	namespace
-	{
-		void duDebugDrawNavMeshPolysWithoutFlags(struct duDebugDraw* dd,
-			const dtNavMesh& mesh,
-			const unsigned short polyFlags,
-			const unsigned int col)
-		{
-			if (!dd)
-				return;
-
-			for (int i = 0; i < mesh.getMaxTiles(); ++i)
-			{
-				const dtMeshTile* tile = mesh.getTile(i);
-				if (!tile->header)
-					continue;
-				dtPolyRef base = mesh.getPolyRefBase(tile);
-
-				for (int j = 0; j < tile->header->polyCount; ++j)
-				{
-					const dtPoly* p = &tile->polys[j];
-					if ((p->flags & polyFlags) != 0)
-						continue;
-					duDebugDrawNavMeshPoly(dd, mesh, base | (dtPolyRef)j, col);
-				}
-			}
-		}
-	}
-	
 
 	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
@@ -230,13 +203,8 @@ namespace mmo
 
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
-		// TODO: Instead of hard coded loading a specific map here, lets load the nav map of the currently loaded world!
-		// Setup debug draw
-		//m_detourDebugDraw = std::make_unique<DetourDebugDraw>(m_scene, MaterialManager::Get().Load("Models/Engine/DetourDebug.hmat"));
-		//m_navMap = std::make_unique<nav::Map>("Test");
-		//m_navMap->LoadPage(31, 31);
-		//m_navMap->LoadPage(31, 32);
-		//duDebugDrawNavMesh(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), 0);
+		// Add navigation edit mode
+		m_navigationEditMode = std::make_unique<NavigationEditMode>(*this);
 
 		// TODO: Load map file
 		std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(GetAssetPath().string());
@@ -266,9 +234,6 @@ namespace mmo
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
-
-		m_navMap.reset();
-		m_detourDebugDraw.reset();
 
 		m_transformWidget.reset();
 		m_mapEntities.clear();
@@ -428,6 +393,10 @@ namespace mmo
 		{
 			SetEditMode(m_spawnEditMode.get());
 		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F5))
+		{
+			SetEditMode(m_navigationEditMode.get());
+		}
 	}
 
 	void WorldEditorInstance::DrawDetailsPanel(const String& detailsId)
@@ -474,7 +443,13 @@ namespace mmo
 		{
 			if (ImGui::Selectable("None", m_editMode == nullptr)) SetEditMode(nullptr);
 
-			WorldEditMode* modes[] = { m_entityEditMode.get(), m_terrainEditMode.get(), m_spawnEditMode.get() };
+			WorldEditMode* modes[] = { 
+				m_entityEditMode.get(), 
+				m_terrainEditMode.get(), 
+				m_spawnEditMode.get(),
+				m_navigationEditMode.get() 
+			};
+			
 			for (size_t i = 0; i < std::size(modes); ++i)
 			{
 				if (ImGui::Selectable(modes[i]->GetName(), m_editMode == modes[i])) SetEditMode(modes[i]);
@@ -557,7 +532,7 @@ namespace mmo
 				}
 
 				if (ImGui::BeginCombo("Terrain Default Material", previewString))
-				{
+							{
 					ImGui::EndCombo();
 				}
 
@@ -2133,7 +2108,7 @@ namespace mmo
 		{
 			const size_t contentStart = reader.getSource()->position();
 			while (reader.getSource()->position() - contentStart < chunkSize)
-			{
+					{
 				String meshName;
 				if (!(reader >> io::read_string(meshName)))
 				{

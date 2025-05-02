@@ -4,6 +4,7 @@
 
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
+#include "base/filesystem.h"
 
 namespace mmo
 {
@@ -29,6 +30,8 @@ namespace mmo
 		virtual ~IWorldEditor() = default;
 
 	public:
+		virtual const std::filesystem::path GetWorldPath() const = 0;
+
 		virtual void ClearSelection() = 0;
 
 		virtual void RemoveAllUnitSpawns() = 0;

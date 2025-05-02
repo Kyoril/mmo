@@ -63,6 +63,8 @@ namespace mmo
 		{
 			// Initialize the asset registry using the given path
 			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
+
+			AssetRegistry::AddArchivePackage(std::filesystem::path(config.projectPath).parent_path() / "nav");
 		}
 		else
 		{

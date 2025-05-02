@@ -60,6 +60,8 @@ namespace mmo::nav
 
 		int32 LoadAllPages();
 
+		void UnloadAllPages();
+
 		bool FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial = false) const;
 
 		//bool FindHeight(const Vector3& source, float x, float z, float& y) const;

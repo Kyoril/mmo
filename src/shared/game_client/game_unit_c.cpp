@@ -1338,7 +1338,7 @@ namespace mmo
 		float totalDistance = 0.0f;
 		for (auto point : points)
 		{
-			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.5f, 3.5f, groundHeight))
+			if (GetCollisionProvider().GetHeightAt(point + Vector3::UnitY * 0.25f, 3.0f, groundHeight))
 			{
 				point.y = groundHeight;
 			}

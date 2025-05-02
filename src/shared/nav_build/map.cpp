@@ -6,6 +6,7 @@
 #include "terrain/page.h"
 #include "scene_graph/scene.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
@@ -152,24 +153,11 @@ namespace mmo
                         position.x += Bounds.min.x;
                         position.z += Bounds.min.z;
 
-                        if (height < m_chunks[y][x]->m_minY)
-                        {
-                            m_chunks[y][x]->m_minY = height;
-                        }
+                        m_chunks[y][x]->m_minY = std::min(height, m_chunks[y][x]->m_minY);
+                        m_chunks[y][x]->m_maxY = std::max(height, m_chunks[y][x]->m_maxY);
 
-                        if (height > m_chunks[y][x]->m_maxY)
-                        {
-                            m_chunks[y][x]->m_maxY = height;
-                        }
-
-                        if (height < Bounds.min.y)
-                        {
-                            Bounds.min.y = height;
-                        }
-                        if (height > Bounds.max.y)
-                        {
-                            Bounds.max.y = height;
-                        }
+                        Bounds.min.y = std::min(height, Bounds.min.y);
+                        Bounds.max.y = std::max(height, Bounds.max.y);
 
                         // Save height and vertex
                         m_chunks[y][x]->m_terrainVertices.push_back(position);
@@ -208,16 +196,12 @@ namespace mmo
                     const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
                     const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
 
-                    if (m_chunks[y][x]->m_minY > minY)
-                    {
-                        //DLOG("Adjusted minY to " << minY << " because " << instance->Model->Filename);
-						m_chunks[y][x]->m_minY = minY;
-                    }
-                    if (m_chunks[y][x]->m_maxY < maxY)
-                    {
-                        //DLOG("Adjusted maxY to " << minY << " because " << instance->Model->Filename);
-                        m_chunks[y][x]->m_maxY = maxY;
-                    }
+                    m_chunks[y][x]->m_minY = std::min(m_chunks[y][x]->m_minY, minY);
+                    m_chunks[y][x]->m_maxY = std::max(m_chunks[y][x]->m_maxY, maxY);
+
+                    // Adjust tile bounds
+                    Bounds.min.y = std::min(Bounds.min.y, minY);
+                    Bounds.max.y = std::min(Bounds.max.y, maxY);
                 }
             }
         }

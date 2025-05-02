@@ -19,22 +19,22 @@ namespace mmo
 {
     namespace settings
     {
-        static constexpr int TileVoxelSize = 96; // number of voxel rows and columns per tile
+        static constexpr int TileVoxelSize = 128; // number of voxel rows and columns per tile
 
-        static constexpr float CellHeight = 0.2f;
+        static constexpr float CellHeight = 0.25f;
         static constexpr float WalkableHeight = 1.6f; // agent height in world units (units)
         static constexpr float WalkableRadius = 0.3f; // narrowest allowable hallway in world units (units)
-        static constexpr float WalkableSlope = 55.f; // maximum walkable slope, in degrees
-        static constexpr float WalkableClimb = 0.45f; // maximum 'step' height for which slope is ignored (units)
-        static constexpr float DetailSampleDistance = 3.0f; // heightfield detail mesh sample distance (units)
-        static constexpr float DetailSampleMaxError = 1.0f; // maximum distance detail mesh surface should deviate from heightfield (units)
+        static constexpr float WalkableSlope = 75.f; // maximum walkable slope, in degrees
+        static constexpr float WalkableClimb = 0.5f; // maximum 'step' height for which slope is ignored (units)
+        static constexpr float DetailSampleDistance = 2.0f; // heightfield detail mesh sample distance (units)
+        static constexpr float DetailSampleMaxError = 0.6f; // maximum distance detail mesh surface should deviate from heightfield (units)
 
 		// NOTE: If Recast warns "Walk towards polygon center failed to reach
 		// center", try lowering this value
-        static constexpr float MaxSimplificationError = 1.8f;
+        static constexpr float MaxSimplificationError = 0.8f;
 
-        static constexpr int MinRegionSize = 1600;
-        static constexpr int MergeRegionSize = 400;
+        static constexpr int MinRegionSize = 400;
+        static constexpr int MergeRegionSize = 200;
         static constexpr int VerticesPerPolygon = 6;
 
         static constexpr float TileSize = terrain::constants::TileSize;
@@ -57,24 +57,26 @@ namespace mmo
         // multiple chunks are often required even though a tile is guaranteed to be no
         // bigger than a chunk. this is because recast requires geometry from
         // neighboring tiles to produce accurate results.
-        void ComputeRequiredChunks(Map& map, int32 tileX, int32 tileY, std::vector<TileIndex>& chunks)
+        void ComputeRequiredChunks(const Map& map, int32 tileX, int32 tileY, std::vector<TileIndex>& chunks)
         {
             chunks.clear();
+			chunks.reserve(9); // 3x3 grid of chunks
 
             // NOTE: these are global chunk coordinates, not page or tile
-            auto const startX = (std::max)(0, tileX - 1);
-            auto const startY = (std::max)(0, tileY - 1);
-            auto const stopX = tileX + 1;
-            auto const stopY = tileY + 1;
+            int32 const startX = (std::max)(0, tileX - 1);
+            int32 const startY = (std::max)(0, tileY - 1);
+            int32 const stopX = tileX + 1;
+            int32 const stopY = tileY + 1;
 
-            for (auto y = startY; y <= stopY; ++y)
+            chunks.emplace_back(tileX, tileY);
+
+            for (int32 y = startY; y <= stopY; ++y)
             {
-                for (auto x = startX; x <= stopX; ++x)
+                for (int32 x = startX; x <= stopX; ++x)
                 {
-                    auto const pageX = x / terrain::constants::TilesPerPage;
-                    auto const pageY = y / terrain::constants::TilesPerPage;
-
-                    if (pageX < 0 || pageY < 0 || pageX >= terrain::constants::MaxPages || pageY >= terrain::constants::MaxPages)
+                    int32 const pageX = x / static_cast<int32>(terrain::constants::TilesPerPage);
+                    int32 const pageY = y / static_cast<int32>(terrain::constants::TilesPerPage);
+                    if (pageX < 0 || pageY < 0 || pageX >= static_cast<int32>(terrain::constants::MaxPages) || pageY >= static_cast<int32>(terrain::constants::MaxPages))
                     {
                         continue;
                     }
@@ -85,13 +87,9 @@ namespace mmo
 					}
 
                     // put the chunk for the requested tile at the start of the results
-                    if (x == tileX && y == tileY)
+                    if (x != tileX || y != tileY)
                     {
-                        chunks.insert(chunks.begin(), { x, y });
-                    }
-                    else
-                    {
-                        chunks.push_back({ x, y });
+                        chunks.emplace_back( x, y );
                     }
                 }
 			}
@@ -145,38 +143,45 @@ namespace mmo
                 return true;
             }
 
-            // Recast wants its vertex data as a sequence of floats of x,y,z in memory.
             std::vector<float> recastVertices;
-            VerticesToRecast(vertices, recastVertices);
+            std::vector<int> cleanedIndices;
+            std::vector<uint8> cleanedAreas;
 
-            std::vector areas(indices.size() / 3, areaFlags);
+            recastVertices.reserve(vertices.size() * 3);
+            cleanedIndices.reserve(indices.size());
+            cleanedAreas.reserve(indices.size() / 3);
 
-            // if these triangles are terrain, mark steep
-            /*if (areaFlags & poly_flags::Ground)
+            for (const Vector3& v : vertices)
             {
-                rcMarkWalkableTriangles(
-                    &ctx, slope, recastVertices.data(), static_cast<int>(vertices.size()),
-                    indices.data(), static_cast<int>(indices.size() / 3), areas.data());
+                recastVertices.push_back(v.x);
+                recastVertices.push_back(v.y);
+                recastVertices.push_back(v.z);
+            }
 
-                // this will override the area for all walkable triangles, but what we
-                // want is to flag the unwalkable ones. So a little massaging of flags
-                // is necessary here
-                for (auto& a : areas)
+            for (size_t i = 0; i < indices.size(); i += 3)
+            {
+                const Vector3& a = vertices[indices[i + 0]];
+                const Vector3& b = vertices[indices[i + 1]];
+                const Vector3& c = vertices[indices[i + 2]];
+
+                // This is the critical degenerate triangle filter
+                if ((b - a).Cross(c - a).GetSquaredLength() < 1e-5f)
                 {
-                    if (a == RC_WALKABLE_AREA)
-                    {
-                        a = areaFlags;
-                    }
-                    else
-                    {
-                        a = areaFlags | poly_flags::Steep;
-                    }
+                    continue;  // Skip flat/invalid triangle
                 }
-            }*/
+
+                cleanedIndices.push_back(indices[i + 0]);
+                cleanedIndices.push_back(indices[i + 1]);
+                cleanedIndices.push_back(indices[i + 2]);
+                cleanedAreas.push_back(areaFlags);
+            }
+
+            if (cleanedIndices.empty())
+                return true;  // No valid triangles
 
             return rcRasterizeTriangles(
-                &ctx, recastVertices.data(), static_cast<int>(vertices.size()), indices.data(),
-                areas.data(), static_cast<int>(indices.size() / 3), heightField, -1);
+                &ctx, recastVertices.data(), static_cast<int>(vertices.size()), cleanedIndices.data(),
+                cleanedAreas.data(), static_cast<int>(cleanedIndices.size() / 3), heightField, -1);
         }
 
         bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out)
@@ -204,7 +209,7 @@ namespace mmo
 
             SmartContourSetPtr contourSet(rcAllocContourSet(), rcFreeContourSet);
 
-            if (!rcBuildContours(&ctx, *chf, config.maxSimplificationError, config.maxEdgeLen, *contourSet))
+            if (!rcBuildContours(&ctx, *chf, config.maxSimplificationError, config.maxEdgeLen, *contourSet, /*RC_CONTOUR_TESS_WALL_EDGES | RC_CONTOUR_TESS_AREA_EDGES*/0))
             {
                 return false;
             }
@@ -372,7 +377,7 @@ namespace mmo
 
 	bool MeshBuilder::BuildAndSerializeTerrainTile(const TileIndex& tile)
 	{
-        float minY = (std::numeric_limits<float>::max)(), maxY = std::numeric_limits<float>::lowest();
+        float minY = std::numeric_limits<float>::max(), maxY = std::numeric_limits<float>::lowest();
 
         // regardless of tile size, we only need the surrounding page chunks
         std::vector<const TerrainChunk*> chunks;
@@ -421,22 +426,23 @@ namespace mmo
 			return false;
 		}
 
-        // bounding box of tile for culling world meshes
-        const AABB tileBounds(
-            { -config.bmax[2], -config.bmax[0], config.bmin[1] },
-            { -config.bmin[2], -config.bmin[0], config.bmax[1] });
-
         // erode mesh tile boundaries to force recast to examine obstacles on or near the tile boundary
-        config.bmin[0] -= config.borderSize * config.cs;
-        config.bmin[2] -= config.borderSize * config.cs;
-        config.bmax[0] += config.borderSize * config.cs;
-        config.bmax[2] += config.borderSize * config.cs;
+		const float erodedMin[] = {
+			config.bmin[0] - config.borderSize * config.cs,
+			config.bmin[1],
+			config.bmin[2] - config.borderSize * config.cs
+		};
+        const float erodedMax[] = {
+			config.bmax[0] + config.borderSize * config.cs,
+			config.bmax[1],
+			config.bmax[2] + config.borderSize * config.cs
+        };
 
         RecastContext ctx(RC_LOG_WARNING);
 
         SmartHeightFieldPtr solid(rcAllocHeightfield(), rcFreeHeightField);
 
-        if (!rcCreateHeightfield(&ctx, *solid, config.width, config.height, config.bmin, config.bmax, config.cs, config.ch))
+        if (!rcCreateHeightfield(&ctx, *solid, config.width, config.height, erodedMin, erodedMax, config.cs, config.ch))
         {
             return false;
         }

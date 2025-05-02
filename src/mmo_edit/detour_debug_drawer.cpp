@@ -16,6 +16,11 @@ namespace mmo
 		m_scene.GetRootSceneNode().AttachObject(*m_object);
 	}
 
+	void DetourDebugDraw::Clear()
+	{
+		m_object->Clear();
+	}
+
 	void DetourDebugDraw::begin(duDebugDrawPrimitives prim, float size)
 	{
 		m_type = prim;
@@ -35,27 +40,49 @@ namespace mmo
 
 	void DetourDebugDraw::vertex(const float x, const float y, const float z, unsigned int color)
 	{
-		if (m_type != DU_DRAW_TRIS)
+		if (m_type == DU_DRAW_TRIS)
 		{
-			return;
+			m_vertices.emplace_back(x, y, z);
+			m_colors.push_back(color);
+
+			if (m_vertices.size() == 3)
+			{
+				ASSERT(m_triangleOp);
+
+				const auto& op = *m_triangleOp;
+
+				auto& triangle = op->AddTriangle(m_vertices[0], m_vertices[1], m_vertices[2]);
+				triangle.SetStartColor(0, m_colors[0]);
+				triangle.SetStartColor(1, m_colors[1]);
+				triangle.SetStartColor(2, m_colors[2]);
+
+				m_vertices.clear();
+				m_colors.clear();
+			}
 		}
-
-		m_vertices.emplace_back(x, y, z);
-		m_colors.push_back(color);
-
-		if (m_vertices.size() == 3)
+		else if (m_type == DU_DRAW_LINES)
 		{
-			ASSERT(m_triangleOp);
+			if (!m_lineOp)
+			{
+				m_lineOp = std::make_unique<ManualRenderOperationRef<ManualLineListOperation>>(m_object->AddLineListOperation(m_material));
+			}
 
-			const auto& op = *m_triangleOp;
+			m_vertices.emplace_back(x, y, z);
+			m_colors.push_back(color);
 
-			auto& triangle = op->AddTriangle(m_vertices[0], m_vertices[1], m_vertices[2]);
-			triangle.SetStartColor(0, m_colors[0]);
-			triangle.SetStartColor(1, m_colors[1]);
-			triangle.SetStartColor(2, m_colors[2]);
+			if (m_vertices.size() == 2)
+			{
+				ASSERT(m_lineOp);
 
-			m_vertices.clear();
-			m_colors.clear();
+				const auto& op = *m_lineOp;
+
+				auto& line = op->AddLine(m_vertices[0], m_vertices[1]);
+				line.SetStartColor(m_colors[0]);
+				line.SetEndColor(m_colors[1]);
+
+				m_vertices.clear();
+				m_colors.clear();
+			}
 		}
 	}
 
@@ -71,15 +98,23 @@ namespace mmo
 
 	void DetourDebugDraw::end()
 	{
-		if (m_type != DU_DRAW_TRIS)
+		if (m_type == DU_DRAW_TRIS)
 		{
-			return;
+			ASSERT(m_triangleOp);
+			const auto& op = *m_triangleOp;
+			op->Finish();
+
+			m_triangleOp.reset();
 		}
-
-		ASSERT(m_triangleOp);
-		const auto& op = *m_triangleOp;
-		op->Finish();
-
-		m_triangleOp.reset();
+		else if (m_type == DU_DRAW_LINES)
+		{
+			if (m_lineOp)
+			{
+				const auto& op = *m_lineOp;
+				op->Finish();
+			}
+			
+			m_lineOp.reset();
+		}
 	}
 }

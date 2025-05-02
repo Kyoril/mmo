@@ -29,6 +29,7 @@
 #include "scene_graph/octree_scene.h"
 
 #include "deferred_shading/deferred_renderer.h"
+#include "edit_modes/navigation_edit_mode.h"
 
 namespace mmo
 {
@@ -254,6 +255,9 @@ namespace mmo
 
 		void UnloadPageEntities(uint8 x, uint8 y);
 
+	public:
+		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
+
 	private:
 		WorldEditor& m_editor;
 		scoped_connection m_renderConnection;
@@ -323,6 +327,7 @@ namespace mmo
 		std::unique_ptr<TerrainEditMode> m_terrainEditMode;
 		std::unique_ptr<EntityEditMode> m_entityEditMode;
 		std::unique_ptr<SpawnEditMode> m_spawnEditMode;
+		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
 		WorldEditMode* m_editMode{ nullptr };
 
 		// Spawn edit mode
@@ -335,9 +340,6 @@ namespace mmo
 		std::vector<String> m_meshNames;
 
 		uint32 m_worldFileVersion;
-
-		std::unique_ptr<DetourDebugDraw> m_detourDebugDraw;
-		std::unique_ptr<nav::Map> m_navMap;
 
 		SceneNode* m_navDebugNode{ nullptr };
 

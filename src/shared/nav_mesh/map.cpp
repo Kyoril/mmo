@@ -237,6 +237,19 @@ namespace mmo::nav
 		return result;
 	}
 
+	void Map::UnloadAllPages()
+	{
+		for (auto y = 0; y < terrain::constants::MaxPages; ++y)
+		{
+			for (auto x = 0; x < terrain::constants::MaxPages; ++x)
+			{
+				m_loadedPage[x][y] = false;
+			}
+		}
+
+		m_tiles.clear();
+	}
+
 
 	namespace
 	{
