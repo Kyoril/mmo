@@ -1232,7 +1232,7 @@ namespace mmo
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
 		m_raySceneQuery->SetRay(ray);
 		m_raySceneQuery->SetSortByDistance(true);
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_UnitSpawns);
+		m_raySceneQuery->SetQueryMask(SceneQueryFlags_UnitSpawns | SceneQueryFlags_ObjectSpawns);
 		m_raySceneQuery->ClearResult();
 		m_raySceneQuery->Execute();
 
@@ -1245,30 +1245,63 @@ namespace mmo
 			Entity* entity = (Entity*)hitResult[0].movable;
 			if (entity)
 			{
-				proto::UnitSpawnEntry* spawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
-				if (spawnEntry)
+				if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
 				{
-					// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
-					m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*spawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, spawnEntry](Selectable& selected)
-						{
-							// TODO: Implement
-						}, [this](const proto::UnitSpawnEntry& spawn)
-						{
-							auto* map = m_spawnEditMode->GetMapEntry();
-							if (map)
+					proto::UnitSpawnEntry* unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
+					if (unitSpawnEntry)
+					{
+						// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
+						m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*unitSpawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, unitSpawnEntry](Selectable& selected)
 							{
-								const auto it = std::find_if(map->mutable_unitspawns()->begin(), map->mutable_unitspawns()->end(), [&spawn](const proto::UnitSpawnEntry& entry)
+								// TODO: Implement
+							}, [this](const proto::UnitSpawnEntry& spawn)
+								{
+									auto* map = m_spawnEditMode->GetMapEntry();
+									if (map)
 									{
-										return &entry == &spawn;
-									});
-								if (it != map->mutable_unitspawns()->end())
-								{	
-									map->mutable_unitspawns()->erase(it);
-								}
-								
-							}
-						}));
-					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+										const auto it = std::find_if(map->mutable_unitspawns()->begin(), map->mutable_unitspawns()->end(), [&spawn](const proto::UnitSpawnEntry& entry)
+											{
+												return &entry == &spawn;
+											});
+										if (it != map->mutable_unitspawns()->end())
+										{
+											map->mutable_unitspawns()->erase(it);
+										}
+
+									}
+								}));
+							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+							return;
+					}
+				}
+				
+
+				if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
+				{
+					proto::ObjectSpawnEntry* objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
+					if (objectSpawnEntry)
+					{
+						// TODO: Getting the proper scene node is a hack, same as with unit spawns
+						m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(*objectSpawnEntry, m_editor.GetProject().objects, m_editor.GetProject().objectDisplays, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, objectSpawnEntry](Selectable& selected)
+							{
+								// TODO: Implement duplication
+							}, [this](const proto::ObjectSpawnEntry& spawn)
+								{
+									auto* map = m_spawnEditMode->GetMapEntry();
+									if (map)
+									{
+										const auto it = std::find_if(map->mutable_objectspawns()->begin(), map->mutable_objectspawns()->end(), [&spawn](const proto::ObjectSpawnEntry& entry)
+											{
+												return &entry == &spawn;
+											});
+										if (it != map->mutable_objectspawns()->end())
+										{
+											map->mutable_objectspawns()->erase(it);
+										}
+									}
+								}));
+							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+					}
 				}
 			}
 		}
@@ -1471,7 +1504,7 @@ namespace mmo
 		if (entity)
 		{
 			ASSERT(entity->GetMesh());
-			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
+			entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
 
 			auto& node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
@@ -2088,6 +2121,25 @@ namespace mmo
 			if (ImGui::InputScalar("Respawn Delay (ms)", ImGuiDataType_U64, &respawnDelay))
 			{
 				selectable.GetEntry().set_respawndelay(respawnDelay);
+			}
+
+			uint32 maxCount = selectable.GetEntry().maxcount();
+			if (ImGui::InputScalar("Max Count", ImGuiDataType_U32, &maxCount))
+			{
+				selectable.GetEntry().set_maxcount(maxCount);
+			}
+
+			uint32 state = selectable.GetEntry().state();
+			if (ImGui::InputScalar("State", ImGuiDataType_U32, &state))
+			{
+				selectable.GetEntry().set_state(state);
+			}
+			
+			// Allow editing animation progress
+			uint32 animProgress = selectable.GetEntry().animprogress();
+			if (ImGui::SliderInt("Animation Progress", (int*)&animProgress, 0, 100))
+			{
+				selectable.GetEntry().set_animprogress(animProgress);
 			}
 		}
 	}

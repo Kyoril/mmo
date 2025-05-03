@@ -249,7 +249,7 @@ namespace mmo
     }
 
 
-    SelectedObjectSpawn::SelectedObjectSpawn(proto::ObjectSpawnEntry& entry, const proto::ObjectManager& objects, const proto::ModelDataManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication,
+    SelectedObjectSpawn::SelectedObjectSpawn(proto::ObjectSpawnEntry& entry, const proto::ObjectManager& objects, const proto::ObjectDisplayManager& models, SceneNode& node, Entity& entity, const std::function<void(Selectable&)>& duplication,
         const std::function<void(const proto::ObjectSpawnEntry&)>& removal)
         : Selectable()
         , m_entry(entry)
@@ -364,7 +364,7 @@ namespace mmo
             return;
         }
 
-        const proto::ModelDataEntry* model = m_models.getById(modelId);
+        const proto::ObjectDisplayEntry* model = m_models.getById(modelId);
         if (!model)
         {
             return;

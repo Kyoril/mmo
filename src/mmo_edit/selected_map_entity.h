@@ -147,7 +147,7 @@ namespace mmo
 	class SelectedObjectSpawn final : public Selectable
 	{
 	public:
-		SelectedObjectSpawn(proto::ObjectSpawnEntry& entry, const proto::ObjectManager& objects, const proto::ModelDataManager& models, SceneNode& node, Entity& entity,
+		SelectedObjectSpawn(proto::ObjectSpawnEntry& entry, const proto::ObjectManager& objects, const proto::ObjectDisplayManager& models, SceneNode& node, Entity& entity,
 			const std::function<void(Selectable&)>& duplication, const std::function<void(const proto::ObjectSpawnEntry&)>& removal);
 
 		void Visit(SelectableVisitor& visitor) override;
@@ -185,7 +185,7 @@ namespace mmo
 	private:
 		proto::ObjectSpawnEntry& m_entry;
 		const proto::ObjectManager& m_units;
-		const proto::ModelDataManager& m_models;
+		const proto::ObjectDisplayManager& m_models;
 		SceneNode& m_node;
 		Entity& m_entity;
 		std::function<void(Selectable&)> m_duplication;
