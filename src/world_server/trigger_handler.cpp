@@ -425,7 +425,8 @@ namespace mmo
 				static_cast<float>(GetActionData(action, 0)),
 				static_cast<float>(GetActionData(action, 1)),
 				static_cast<float>(GetActionData(action, 2))
-			)
+			),
+			0.0f
 		);
 	}
 

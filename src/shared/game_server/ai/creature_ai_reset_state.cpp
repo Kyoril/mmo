@@ -39,7 +39,7 @@ namespace mmo
 			});
 
 		const auto facing = Radian(GetAI().GetHome().orientation);
-		controlled.GetMover().MoveTo(GetAI().GetHome().position, &facing);
+		controlled.GetMover().MoveTo(GetAI().GetHome().position, 0.0f, &facing);
 	}
 
 	void CreatureAIResetState::OnLeave()

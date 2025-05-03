@@ -90,13 +90,13 @@ namespace mmo
 			m_moveReached.IsRunning())
 		{
 			// Restart move command
-			MoveTo(m_target);
+			MoveTo(m_target, 0.0f);
 		}
 	}
 
-	bool UnitMover::MoveTo(const Vector3& target, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
+	bool UnitMover::MoveTo(const Vector3& target, float acceptanceRadius, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
-		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), targetFacing, clipping);
+		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), acceptanceRadius, targetFacing, clipping);
 		m_customSpeed = false;
 		return result;
 	}
@@ -160,7 +160,7 @@ namespace mmo
 		out_packet.Finish();
 	}
 
-	bool UnitMover::MoveTo(const Vector3& target, float customSpeed, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
+	bool UnitMover::MoveTo(const Vector3& target, float customSpeed, float acceptanceRadius, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
 		auto& moved = GetMoved();
 
@@ -226,6 +226,25 @@ namespace mmo
 		if (m_debugOutputEnabled)
 		{
 			DLOG("Move start: " << m_moveStart << " ( with speed: " << customSpeed << ")");
+		}
+
+		if (acceptanceRadius > 0.0f && path.size() >= 2)
+		{
+			// Add acceptance radius to the last point
+			Vector3& lastPoint = path.back();
+			const Vector3& prevPoint = path[path.size() - 2];
+			const Vector3 diff = lastPoint - prevPoint;
+			const float dist = diff.GetLength();
+
+			// Close enough? Then just drop the last point from path entirely
+			if (dist <= acceptanceRadius)
+			{
+				path.pop_back();
+			}
+			else
+			{
+				lastPoint -= diff * (acceptanceRadius / dist);
+			}
 		}
 
 		GameTime moveTime = m_moveStart;

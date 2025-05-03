@@ -381,7 +381,7 @@ namespace mmo
 		}
 
 		// We need to move!
-		if (mover.MoveTo(target.GetPosition()))
+		if (mover.MoveTo(target.GetPosition(), combatRange * 0.75f))
 		{
 			// Successfully moving, reset stuck counter
 			m_stuckCounter = 0;

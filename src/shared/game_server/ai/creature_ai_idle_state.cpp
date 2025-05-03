@@ -174,7 +174,7 @@ namespace mmo
 
 		if (Vector3 position; map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position))
 		{
-			mover.MoveTo(position);
+			mover.MoveTo(position, 0.0f);
 		}
 		else
 		{

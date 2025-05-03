@@ -48,11 +48,11 @@ namespace mmo
 
 		/// Moves this unit to a specific location if possible. This does not teleport
 		/// the unit, but makes it walk / fly / swim to the target.
-		bool MoveTo(const Vector3& target, const Radian* targetFacing = nullptr, const IShape* clipping = nullptr);
+		bool MoveTo(const Vector3& target, float acceptanceRadius, const Radian* targetFacing = nullptr, const IShape* clipping = nullptr);
 
 		/// Moves this unit to a specific location if possible. This does not teleport
 		/// the unit, but makes it walk / fly / swim to the target.
-		bool MoveTo(const Vector3& target, float customSpeed, const Radian* targetFacing = nullptr, const IShape* clipping = nullptr);
+		bool MoveTo(const Vector3& target, float customSpeed, float acceptanceRadius, const Radian* targetFacing = nullptr, const IShape* clipping = nullptr);
 
 		/// Stops the current movement if any.
 		void StopMovement();
