@@ -45,11 +45,12 @@ namespace mmo
 			std::map<uint64, std::shared_ptr<GamePlayerS>> lootRecipients;
 			controlled.ForEachLootRecipient([&controlled, &lootRecipients, &sumLevel, &maxLevelCharacter](const std::shared_ptr<GamePlayerS>& character)
 				{
+					// First add this to the sum of levels
 					const uint32 characterLevel = character->GetLevel();
 					sumLevel += characterLevel;
 
 					const uint32 xpCutoffLevel = xp::GetExpCutoffLevel(characterLevel);
-					if (controlled.Get<uint32>(object_fields::Level) > xpCutoffLevel)
+					if (controlled.GetLevel() > xpCutoffLevel)
 					{
 						if (!maxLevelCharacter || maxLevelCharacter->GetLevel() < characterLevel)
 						{
@@ -68,23 +69,43 @@ namespace mmo
 					const Vector3 location(controlled.GetPosition());
 
 					// Find nearby group members and make them loot recipients, too
-					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, 100.0f), [&lootRecipients, &controlled, groupId](GameUnitS& unit) -> bool
+					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, 100.0f), [&lootRecipients, &controlled, groupId, &maxLevelCharacter, &sumLevel](GameUnitS& unit) -> bool
 						{
+							// Not even a player? Only players get rewards
 							if (!unit.IsPlayer())
 							{
 								return true;
 							}
 
+							// Already rewarded?
 							if (lootRecipients.contains(unit.GetGuid()))
 							{
 								return true;
 							}
 
-							// Check characters group
+							// Check player group id
 							const auto player = std::static_pointer_cast<GamePlayerS>(unit.shared_from_this());
-							if (player->GetGroupId() == groupId)
+							if (player->GetGroupId() != groupId)
 							{
-								lootRecipients[player->GetGuid()] = player;
+								// Not in our group (we already checked that we are in a group before so this check is enough)
+								return true;
+							}
+
+							// Alright, this player needs to be considered for rewards as well, increase the sumLevel
+							const uint32 characterLevel = unit.GetLevel();
+							sumLevel += characterLevel;
+
+							// Remember we rewarded the player
+							lootRecipients[player->GetGuid()] = player;
+
+							// Check if this is the max level character if it
+							const uint32 xpCutoffLevel = xp::GetExpCutoffLevel(characterLevel);
+							if (controlled.GetLevel() > xpCutoffLevel)
+							{
+								if (!maxLevelCharacter || maxLevelCharacter->GetLevel() < characterLevel)
+								{
+									maxLevelCharacter = player.get();
+								}
 							}
 
 							return true;
@@ -146,12 +167,14 @@ namespace mmo
 				}
 
 				const uint32 cutoffLevel = xp::GetExpCutoffLevel(character.second->GetLevel());
-				if (controlled.GetLevel() <= cutoffLevel) {
+				if (controlled.GetLevel() <= cutoffLevel)
+				{
 					continue;
 				}
 
-				const float rate = groupModifier * static_cast<float>(character.second->GetLevel()) / sumLevel;
-				character.second->RewardExperience(xp * rate);
+				character.second->RewardExperience(
+					xp * groupModifier *
+						(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel)));
 			}
 
 			const auto* lootEntry = controlled.GetProject().unitLoot.getById(entry.unitlootentry());
@@ -179,7 +202,6 @@ namespace mmo
 
 				controlled.SetUnitLoot(std::move(loot));
 			}
-
 		}
 
 		// Activate despawn timer

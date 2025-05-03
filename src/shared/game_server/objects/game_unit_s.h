@@ -963,8 +963,16 @@ namespace mmo
 		const proto::FactionTemplateEntry* GetFactionTemplate() const;
 
 		/// Gets the level of the unit.
-		/// @returns The level as a uint32.
+		/// @returns The level as uint32.
 		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
+
+		/// Gets the max level of the unit.
+		/// @returns The max level as uint32.
+		uint32 GetMaxLevel() const { return Get<uint32>(object_fields::MaxLevel); }
+
+		/// Gets the amount of xp required to reach the next level (not the remaining xp, but the total amount).
+		/// @returns The next level xp as uint32.
+		uint32 GetNextLevelXp() const { return Get<uint32>(object_fields::NextLevelXp); }
 
 		/// Sets the binding location of the unit.
 		/// @param mapId The ID of the map.

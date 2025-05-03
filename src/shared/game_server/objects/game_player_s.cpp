@@ -2,6 +2,8 @@
 
 #include "game_player_s.h"
 
+#include <algorithm>
+
 #include "game_item_s.h"
 #include "quest_status_data.h"
 #include "proto_data/project.h"
@@ -1129,8 +1131,13 @@ namespace mmo
 
 	void GamePlayerS::RewardExperience(const uint32 xp)
 	{
-		// At max level we can't gain any more xp
-		if (Get<uint32>(object_fields::Level) >= Get<uint32>(object_fields::MaxLevel))
+		if (xp == 0)
+		{
+			return;
+		}
+
+		// At max level we can't gain anymore xp
+		if (GetLevel() >= GetMaxLevel())
 		{
 			return;
 		}
@@ -1141,7 +1148,7 @@ namespace mmo
 		// Levelup as often as required
 		while(currentXp >= Get<uint32>(object_fields::NextLevelXp))
 		{
-			if (GetLevel() < Get<uint32>(object_fields::MaxLevel))
+			if (GetLevel() < GetMaxLevel())
 			{
 				if (m_netUnitWatcher)
 				{
@@ -1160,12 +1167,12 @@ namespace mmo
 					);
 				}
 				
-				currentXp -= Get<uint32>(object_fields::NextLevelXp);
+				currentXp -= GetNextLevelXp();
 				SetLevel(GetLevel() + 1);
 			}
 		}
 
-		// Store remaining xp after potential levelups
+		// Store remaining xp after potential level ups
 		Set<uint32>(object_fields::Xp, currentXp);
 
 		// Send packet
@@ -1233,7 +1240,7 @@ namespace mmo
 		Set<uint32>(object_fields::MaxHealth, maxHealth);
 
 		// Ensure health is properly capped by max health
-		if (Get<uint32>(object_fields::Health) > maxHealth)
+		if (GetHealth() > maxHealth)
 		{
 			Set<uint32>(object_fields::Health, maxHealth);
 		}
@@ -1252,20 +1259,14 @@ namespace mmo
 			m_healthRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / m_classEntry->spiritperhealthregen());
 		}
 		m_healthRegenPerTick += m_classEntry->healthregenpertick();
-		if (m_healthRegenPerTick < 0.0f)
-		{
-			m_healthRegenPerTick = 0.0f;
-		}
-		
+		m_healthRegenPerTick = std::max(m_healthRegenPerTick, 0.0f);
+
 		if (m_classEntry->spiritpermanaregen() != 0.0f)
 		{
 			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / m_classEntry->spiritpermanaregen());
 		}
 		m_manaRegenPerTick += m_classEntry->basemanaregenpertick();
-		if (m_manaRegenPerTick < 0.0f)
-		{
-			m_manaRegenPerTick = 0.0f;
-		}
+		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
 
 		UpdateDamage();
 	}
