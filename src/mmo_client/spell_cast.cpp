@@ -192,6 +192,14 @@ namespace mmo
 
 		SpellTargetMap targetMap{};
 
+		// Power check
+		if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
+			spell->cost() > unit->GetPower(unit->GetPowerType()))
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
+			return;
+		}
+
 		// Check if we need to provide a target unit
 		uint64 requirements = GetSpellTargetRequirements(*spell);
 		if ((requirements & spell_target_requirements::AnyUnitTarget) != 0)
@@ -229,14 +237,6 @@ namespace mmo
 			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 			targetMap.SetUnitTarget(targetUnit ? targetUnit->GetGuid() : 0);
 
-			// Power check
-			if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
-				spell->cost() > unit->GetPower(unit->GetPowerType()))
-			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
-				return;
-			}
-
 			// Range check
 			if (targetUnit && spell->rangetype() != 0)
 			{
@@ -265,6 +265,21 @@ namespace mmo
 		{
 			if (explicitTarget)
 			{
+				// Range check
+				if (spell->rangetype() != 0)
+				{
+					// Check if we are in range of the target unit
+					if (const auto* range = m_ranges.getById(spell->rangetype()))
+					{
+						const float distanceSquared = unit->GetPosition().GetSquaredDistanceTo(explicitTarget->GetPosition());
+						if (distanceSquared > range->range() * range->range())
+						{
+							FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
+							return;
+						}
+					}
+				}
+
 				targetMap.SetTargetMap(spell_cast_target_flags::Object);
 				targetMap.SetObjectTarget(explicitTarget->GetGuid());
 			}

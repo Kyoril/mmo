@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include <algorithm>
+
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
 #include "objects/game_creature_s.h"
@@ -164,25 +166,12 @@ namespace mmo
 	void CreatureAICombatState::OnControlledMoved()
 	{
 		CreatureAIState::OnControlledMoved();
-
-		GameUnitS* victim = GetControlled().GetVictim();
-		if (victim)
-		{
-			// Reached the target - stop
-			if (GetControlled().GetSquaredDistanceTo(victim->GetPosition(), true) <= 4.0f * 4.0f)
-			{
-				GetControlled().GetMover().StopMovement();
-			}
-		}
 	}
 
 	void CreatureAICombatState::AddThreat(GameUnitS& threatener, float amount)
 	{
 		// No negative threat
-		if (amount < 0.0f) 
-		{
-			amount = 0.0f;
-		}
+		amount = std::max(amount, 0.0f);
 
 		// No aggro on dead units
 		if (!threatener.IsAlive())

@@ -1241,7 +1241,7 @@ namespace mmo
 			const Radian orientation = unitTarget.GetAngle(m_cast.GetExecuter());
 
 			const Vector3 target = unitTarget.GetMover().GetCurrentLocation().GetRelativePosition(orientation.GetValueRadians(), m_cast.GetExecuter().GetMeleeReach() * 0.5f);
-			mover.MoveTo(target, 35.0f);
+			mover.MoveTo(target, 35.0f, m_cast.GetExecuter().GetMeleeReach() * 0.8f);
 		}
 	}
 
