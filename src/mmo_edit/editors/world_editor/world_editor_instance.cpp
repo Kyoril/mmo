@@ -1254,7 +1254,7 @@ namespace mmo
 						m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*unitSpawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, unitSpawnEntry](Selectable& selected)
 							{
 								// TODO: Implement
-							}, [this](const proto::UnitSpawnEntry& spawn)
+							}, [this, entity](const proto::UnitSpawnEntry& spawn)
 								{
 									auto* map = m_spawnEditMode->GetMapEntry();
 									if (map)
@@ -1268,13 +1268,16 @@ namespace mmo
 											map->mutable_unitspawns()->erase(it);
 										}
 
+										// Ensure it is removed from the scene
+										ASSERT(entity);
+										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
+										m_scene.DestroyEntity(*entity);
 									}
 								}));
 							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 							return;
 					}
 				}
-				
 
 				if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
 				{
@@ -1285,7 +1288,7 @@ namespace mmo
 						m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(*objectSpawnEntry, m_editor.GetProject().objects, m_editor.GetProject().objectDisplays, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, objectSpawnEntry](Selectable& selected)
 							{
 								// TODO: Implement duplication
-							}, [this](const proto::ObjectSpawnEntry& spawn)
+							}, [this, entity](const proto::ObjectSpawnEntry& spawn)
 								{
 									auto* map = m_spawnEditMode->GetMapEntry();
 									if (map)
@@ -1298,6 +1301,11 @@ namespace mmo
 										{
 											map->mutable_objectspawns()->erase(it);
 										}
+
+										// Ensure it is removed from the scene
+										ASSERT(entity);
+										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
+										m_scene.DestroyEntity(*entity);
 									}
 								}));
 							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
