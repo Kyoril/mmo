@@ -15,7 +15,7 @@ namespace mmo
 	{
 		EditorWindowBase::SetVisible(false);
 
-		m_hasToolbarButton = true;
+		m_hasToolbarButton = false;
 		m_toolbarButtonText = "Faction Templates";
 	}
 

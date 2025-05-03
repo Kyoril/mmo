@@ -41,6 +41,7 @@
 #include "editor_windows/variable_editor_window.h"
 #include "editor_windows/trigger_editor_window.h"
 #include "editor_windows/animation_editor_window.h"
+#include "editor_windows/data_navigator_window.h"
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
@@ -148,6 +149,27 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TriggerEditorWindow>("Trigger Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::AnimationEditorWindow>("Animation Editor", project, mainWindow));
+
+	auto dataNavigatorWindow = std::make_unique<mmo::DataNavigatorWindow>("Data Navigator", project, mainWindow);
+	
+	// Set up the type-based window opening callback
+	dataNavigatorWindow->SetOpenEditorWindowCallback([&mainWindow](std::type_index windowType) {
+		// Find all editor windows and check their type
+		for (int i = 0; i < mainWindow.GetWindowCount(); ++i)
+		{
+			mmo::EditorWindowBase* window = mainWindow.GetWindow(i);
+			if (window) 
+			{
+				// Use runtime type information to check if this window matches the requested type
+				if (std::type_index(typeid(*window)) == windowType)
+				{
+					window->SetVisible(true);
+					break;
+				}
+			}
+		}
+		});
+	mainWindow.AddEditorWindow(std::move(dataNavigatorWindow));
 
 	mainWindow.AddImport(std::make_unique<mmo::TextureImport>());
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));

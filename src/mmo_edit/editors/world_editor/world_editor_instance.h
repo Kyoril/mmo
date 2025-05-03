@@ -341,8 +341,6 @@ namespace mmo
 
 		uint32 m_worldFileVersion;
 
-		SceneNode* m_navDebugNode{ nullptr };
-
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 
 		static TexturePtr s_translateIcon;

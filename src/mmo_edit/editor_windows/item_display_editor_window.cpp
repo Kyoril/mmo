@@ -21,7 +21,7 @@ namespace mmo
 	{
 		EditorWindowBase::SetVisible(false);
 
-		m_hasToolbarButton = true;
+		m_hasToolbarButton = false;
 		m_toolbarButtonText = "Item Displays";
 
 		std::vector<std::string> files = AssetRegistry::ListFiles();

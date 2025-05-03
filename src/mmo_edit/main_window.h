@@ -80,6 +80,10 @@ namespace mmo
 	public:
 		void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow) override;
 
+		EditorWindowBase* GetWindow(size_t index) const;
+
+		size_t GetWindowCount() const noexcept { return m_editorWindows.size(); }
+
 		void RemoveEditorWindow(const String& name) override;
 
 		void AddImport(std::unique_ptr<ImportBase> import);
