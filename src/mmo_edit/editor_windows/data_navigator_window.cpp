@@ -36,7 +36,6 @@ namespace mmo
         , m_project(project)
         , m_host(host)
     {
-        EditorWindowBase::SetVisible(true);
         m_hasToolbarButton = true;
         m_toolbarButtonText = "Data Navigator";
         

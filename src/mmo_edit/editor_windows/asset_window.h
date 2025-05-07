@@ -91,6 +91,6 @@ namespace mmo
 		std::map<std::string, AssetEntry> m_assets;
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
-		float m_columnWidth { 150.0f };
+		float m_columnWidth { 200.0f };
 	};
 }

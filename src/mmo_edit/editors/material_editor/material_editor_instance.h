@@ -20,6 +20,7 @@ namespace ax
 
 namespace mmo
 {
+	class PropertyBase;
 	class MaterialEditor;
 	struct NodeTypeInfo;
 	class MaterialGraph;
@@ -65,18 +66,29 @@ namespace mmo
 		void Draw() override;
 		
 		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y) override;
-
 		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y) override;
-
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 	private:
+		// Panel drawing methods
+		void DrawPreviewPanel(const String& panelId);
+		void DrawDetailsPanel(const String& panelId);
+		void DrawGraphPanel(const String& panelId);
+
+		// UI component methods
+		void DrawPreviewToolbar();
+		void DrawPreviewViewport();
+		void DrawPropertyTable();
+		void DrawNodeProperties(GraphNode* node);
+		void DrawPropertyEditor(PropertyBase* prop);
+		
+		// Layout management
+		void InitializeDockLayout(ImGuiID dockspaceId, const String& previewId, const String& detailsId, const String& graphId);
+
+		// Action handling methods
 		void HandleCreateAction(MaterialGraph& material);
-
 		void RenderMaterialPreview();
-
 		static void HandleDeleteAction(MaterialGraph& material);
-
 		void HandleContextMenuAction(MaterialGraph& material);
 
 	private:

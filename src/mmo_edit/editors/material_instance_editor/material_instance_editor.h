@@ -50,10 +50,15 @@ namespace mmo
 		/// @brief Called when a new material should be created.
 		void CreateNewMaterial();
 
+		/// @brief Called when a new material function should be created.
+		void CreateNewMaterialFunction();
+
 	private:
 		PreviewProviderManager& m_previewManager;
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showMaterialNameDialog { false };
+		bool m_showMaterialFunctionNameDialog { false };
 		String m_materialName;
+		String m_materialFunctionName;
 	};
 }

@@ -43,6 +43,36 @@ namespace mmo
 		virtual void AddPostLoadAction(PostLoadAction&& action) = 0;
 	};
 
+	/// @brief Private default implementation of the IMaterialGraphLoadContext interface. Allows executing
+	///	       actual collected post-load actions,
+	class ExecutableMaterialGraphLoadContext final : public IMaterialGraphLoadContext, public NonCopyable
+	{
+	public:
+		/// @copydoc IMaterialGraphLoadContext::AddPostLoadAction
+		void AddPostLoadAction(PostLoadAction&& action) override
+		{
+			m_loadLater.emplace_back(std::move(action));
+		}
+
+		/// @brief Performs all post-load actions in order. If any of them returns false, the function will stop and return false as well.
+		/// @return true on success of all actions, false otherwise.
+		bool PerformAfterLoadActions() const
+		{
+			for (const auto& action : m_loadLater)
+			{
+				if (!action())
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+	private:
+		std::vector<PostLoadAction> m_loadLater;
+	};
+
 	/// @brief This class manages a material graph, which contains nodes with instructions of a material. It is used by a
 	///	       MaterialCompiler instance to generate required shaders. This is an editor-only class, although the content's
 	///		   of the MaterialGraph will be stored in the Material asset files. They might be removed during content deployment

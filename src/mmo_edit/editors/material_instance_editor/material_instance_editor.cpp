@@ -37,6 +37,35 @@ namespace mmo
 
 	void MaterialInstanceEditor::DrawImpl()
 	{
+		if (m_showMaterialNameDialog)
+		{
+			ImGui::OpenPopup("Create New Material Instance");
+			m_showMaterialNameDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Create New Material Instance", nullptr, ImGuiWindowFlags_NoResize))
+		{
+			ImGui::Text("Enter a name for the new material instance:");
+
+			ImGui::InputText("##field", &m_materialName);
+			ImGui::SameLine();
+			ImGui::Text(MaterialInstanceExtension.c_str());
+			
+			if (ImGui::Button("Create"))
+			{
+				CreateNewMaterial();
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 	}
 
 	std::shared_ptr<EditorInstance> MaterialInstanceEditor::OpenAssetImpl(const Path& asset)

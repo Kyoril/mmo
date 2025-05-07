@@ -24,6 +24,7 @@ namespace mmo
 	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 MaterialFunctionOutputNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 MaterialFunctionNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 MaterialFunctionInputNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 SineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 CosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 TangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
@@ -1284,35 +1285,6 @@ namespace mmo
 				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
 			}
 		}
-
-		return m_compiledExpressionId;
-	}
-
-	ExpressionIndex MaterialFunctionOutputNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
-	{
-		// TODO!
-
-		return IndexNone;
-	}
-
-	std::span<Pin*> MaterialFunctionNode::GetInputPins()
-	{
-		return {};
-	}
-
-	std::span<Pin*> MaterialFunctionNode::GetOutputPins()
-	{
-		return {};
-	}
-
-	std::string_view MaterialFunctionNode::GetName() const
-	{
-		return m_name;
-	}
-
-	ExpressionIndex MaterialFunctionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
-	{
-		// TODO: Add material function ref
 
 		return m_compiledExpressionId;
 	}

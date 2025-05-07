@@ -108,9 +108,15 @@ namespace mmo
 			m_requiredChunkHandlers.clear();
 		}
 
+		void SetIgnoreUnhandledChunks(bool ignore)
+		{
+			m_ignoreUnhandledChunks = ignore;
+		}
+
 	protected:
 		/// @brief Whether unhandled chunks should be ignored or make the Read call fail.
 		bool m_ignoreUnhandledChunks { false };
+
 		/// @brief List of registered chunk handlers.
 		std::map<uint32, ChunkReadCallback> m_chunkHandlers;
 

@@ -213,11 +213,11 @@ namespace mmo
 		{
 			// Breadcrumb navigation menu at the top of the entire window
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.12f, 1.0f)); // Dark background for the breadcrumb bar
-			ImGui::BeginChild("BreadcrumbBar", ImVec2(ImGui::GetContentRegionAvail().x, 36), false, 
+			ImGui::BeginChild("BreadcrumbBar", ImVec2(ImGui::GetContentRegionAvail().x, 24), false, 
 			                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 			
 			// Center the breadcrumb contents vertically
-			ImGui::SetCursorPosY((36 - ImGui::GetTextLineHeightWithSpacing()) * 0.5f);
+			ImGui::SetCursorPosY((20 - ImGui::GetTextLineHeightWithSpacing()) * 0.5f);
 			
 			// Add some left padding for aesthetics
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8);

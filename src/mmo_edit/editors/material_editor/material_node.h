@@ -17,6 +17,7 @@
 #include "node_type_info.h"
 #include "base/signal.h"
 #include "graphics/material_compiler.h"
+#include "material_function.h"
 
 namespace ed = ax::NodeEditor;
 
@@ -30,7 +31,6 @@ namespace mmo
 {
 	class IMaterialGraphLoadContext;
 	class MaterialCompiler;
-	class MaterialGraph;
 
 	/// @brief Enumerates possible pin types.
 	enum class PinType : uint8
@@ -83,7 +83,7 @@ namespace mmo
 	    uint32 m_id = 0;
 		GraphNode* m_node = nullptr;
 		PinType m_type = PinType::Material;
-	    std::string_view m_name;
+	    String m_name;
 		mutable const Pin* m_link = nullptr;
 
 	public:
@@ -125,6 +125,8 @@ namespace mmo
 		[[nodiscard]] uint32 GetId() const { return m_id; }
 
 	    [[nodiscard]] std::string_view GetName() const { return m_name; }
+
+		void SetName(const String& name) { m_name = name; }
 	};
 	
 	class MaterialPin final : public Pin
@@ -368,6 +370,95 @@ namespace mmo
 		io::Reader& Deserialize(io::Reader& reader) override;
 	};
 
+	/// @brief Enum implementation of a node property.
+	template<typename TEnum>
+	class EnumProperty final : public Property<int32>
+	{
+	public:
+		using EnumType = TEnum;
+		
+		/// Represents an enum option in the property UI
+		struct EnumOption
+		{
+			EnumType value;
+			String displayName;
+		};
+
+		/// @brief Constructor with enum reference and list of options
+		/// @param name The name of the property
+		/// @param ref Reference to the enum value
+		/// @param options Available options for this enum
+		EnumProperty(std::string_view name, TEnum& ref, std::initializer_list<EnumOption> options)
+			: Property(name, reinterpret_cast<int32&>(ref))
+			, m_enumRef(ref)
+			, m_options(options)
+		{
+		}
+		
+	public:
+		/// @brief Sets the value of this property using the enum value
+		/// @param value The new enum value
+		void SetEnumValue(TEnum value) noexcept
+		{
+			m_enumRef = value;
+			PropertyBase::SetValue(static_cast<int32>(value));
+		}
+		
+		/// @brief Gets the current enum value
+		/// @return The current enum value
+		TEnum GetEnumValue() const noexcept
+		{
+			return m_enumRef;
+		}
+		
+		/// @brief Gets all available options for this enum
+		/// @return The list of enum options
+		const std::vector<EnumOption>& GetOptions() const noexcept
+		{
+			return m_options;
+		}
+		
+		/// @brief Find the display name for a specific enum value
+		/// @param value The enum value to look up
+		/// @return The display name for the enum value, or empty string if not found
+		String GetDisplayName(TEnum value) const noexcept
+		{
+			for (const auto& option : m_options)
+			{
+				if (option.value == value)
+				{
+					return option.displayName;
+				}
+			}
+			return "";
+		}
+		
+		/// @brief Get the display name for the current enum value
+		/// @return The display name of the current value
+		String GetCurrentDisplayName() const noexcept
+		{
+			return GetDisplayName(m_enumRef);
+		}
+
+		io::Writer& Serialize(io::Writer& writer) override
+		{
+			writer << static_cast<int32>(m_enumRef);
+			return writer;
+		}
+
+		io::Reader& Deserialize(io::Reader& reader) override
+		{
+			int32 value;
+			reader >> value;
+			m_enumRef = static_cast<TEnum>(value);
+			return reader;
+		}
+
+	private:
+		TEnum& m_enumRef;
+		std::vector<EnumOption> m_options;
+	};
+
 	/// @brief Base class of a node in a MaterialGraph.
 	class GraphNode
 	{
@@ -503,6 +594,99 @@ namespace mmo
 		MaterialPin m_normal = { this, "Normal" };
 
 	    Pin* m_surfaceInputPins[8] = { &m_baseColor, &m_metallic, &m_specular, &m_roughness, &m_emissive, &m_opacity, &m_opacityMask, &m_normal };
+	};
+
+	/// @brief A node which adds a material function input expression.
+	class MaterialFunctionInputNode final : public GraphNode
+	{
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(MaterialFunctionInputNode, "Function Input")
+
+		MaterialFunctionInputNode(MaterialGraph& material)
+			: GraphNode(material)
+			, m_name("Input")
+			, m_description("")
+			, m_sortPriority(0)
+			, m_paramType(MaterialFunctionParamType::Float3)
+			, m_defaultValue(0.0f)
+		{
+			m_nameChanged = m_nameProp.OnValueChanged.connect([this] { UpdatePinNames(); });
+			m_paramTypeChanged = m_paramTypeProp.OnValueChanged.connect([this] { UpdatePinNames(); });
+		}
+
+		~MaterialFunctionInputNode() override
+		{
+			m_nameChanged.disconnect();
+			m_paramTypeChanged.disconnect();
+		}
+
+		std::span<Pin*> GetInputPins() override { return {}; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		std::string_view GetName() const override { return m_name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		void UpdatePinNames()
+		{
+			m_output.SetName(m_name);
+		}
+
+		/// @brief Gets the parameter name for this input
+		[[nodiscard]] std::string_view GetParameterName() const { return m_name; }
+		
+		/// @brief Gets the parameter description
+		[[nodiscard]] std::string_view GetParameterDescription() const { return m_description; }
+		
+		/// @brief Gets the sort priority for this parameter
+		[[nodiscard]] int32 GetSortPriority() const { return m_sortPriority; }
+		
+		/// @brief Gets the parameter type
+		[[nodiscard]] MaterialFunctionParamType GetParameterType() const { return m_paramType; }
+		
+		/// @brief Gets the default value for this parameter
+		[[nodiscard]] float GetDefaultValue() const { return m_defaultValue; }
+
+		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context) override;
+
+	private:
+		String m_name;
+		String m_description;
+		int32 m_sortPriority;
+		MaterialFunctionParamType m_paramType;
+		float m_defaultValue;
+		
+		StringProperty m_nameProp{ "Name", m_name };
+		StringProperty m_descriptionProp{ "Description", m_description };
+		IntProperty m_sortPriorityProp{ "Sort Priority", m_sortPriority };
+		EnumProperty<MaterialFunctionParamType> m_paramTypeProp{ "Parameter Type", m_paramType, {
+			{ MaterialFunctionParamType::Float, "Float (1D)" },
+			{ MaterialFunctionParamType::Float2, "Float2 (2D)" },
+			{ MaterialFunctionParamType::Float3, "Float3 (3D/Color)" },
+			{ MaterialFunctionParamType::Float4, "Float4 (4D)" },
+			{ MaterialFunctionParamType::Texture, "Texture" }
+		}};
+		FloatProperty m_defaultValueProp{ "Default Value", m_defaultValue };
+		
+		scoped_connection m_nameChanged;
+		scoped_connection m_paramTypeChanged;
+
+		MaterialPin m_output = { this, m_name };
+		Pin* m_outputPins[1] = { &m_output };
+		
+		PropertyBase* m_properties[5] = { 
+			&m_nameProp, 
+			&m_descriptionProp, 
+			&m_sortPriorityProp,
+			&m_paramTypeProp,
+			&m_defaultValueProp 
+		};
 	};
 
 	/// @brief A node which adds a constant float expression.
@@ -1554,9 +1738,23 @@ namespace mmo
 		: GraphNode(material)
 		, m_name("Result")
 		{
+			// Connect the property change event
+			m_nameChanged = m_nameProp.OnValueChanged.connect([this] { 
+				RefreshOutputPins();
+			});
+			
+			// Initialize with a default output pin
+			RefreshOutputPins();
+		}
+
+		~MaterialFunctionOutputNode() override
+		{
+			m_nameChanged.disconnect();
 		}
 
 		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return {}; }
 
 		[[nodiscard]] uint32 GetColor() override { return Color; }
 
@@ -1566,13 +1764,63 @@ namespace mmo
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
+		/// @brief Gets the parameter type
+		[[nodiscard]] MaterialFunctionParamType GetParameterType() const { return m_paramType; }
+
+		void RefreshOutputPins()
+		{
+			// Clear existing pins
+			for (auto pin : m_inputPins)
+			{
+				if (pin && pin->IsLinked())
+				{
+					pin->Unlink();
+				}
+			}
+			m_inputPins.clear();
+			
+			// Create a new input pin with the name from the property
+			auto newPin = new MaterialPin(this, m_name);
+			m_inputPins.push_back(newPin);
+		}
+
+		// Add a method to get all function output connections
+		std::vector<std::pair<String, ExpressionIndex>> GetFunctionOutputs(MaterialCompiler& compiler)
+		{
+			std::vector<std::pair<String, ExpressionIndex>> outputs;
+			
+			// For each input pin, get its node and compile it
+			for (auto pin : m_inputPins)
+			{
+				if (pin && pin->IsLinked())
+				{
+					auto linkedPin = pin->GetLink();
+					auto linkedNode = linkedPin->GetNode();
+					auto expressionIndex = linkedNode->Compile(compiler, linkedPin);
+					outputs.emplace_back(pin->GetName(), expressionIndex);
+				}
+			}
+			
+			return outputs;
+		}
+
 	private:
 		String m_name;
-		StringProperty m_nameProp{ "Name", m_name };
-		PropertyBase* m_properties[1] = { &m_nameProp };
+		StringProperty m_nameProp{ "Output Name", m_name };
 
-		MaterialPin m_input = { this, "" };
-		Pin* m_inputPins[1] = { &m_input };
+		MaterialFunctionParamType m_paramType = MaterialFunctionParamType::Float3;
+		EnumProperty<MaterialFunctionParamType> m_paramTypeProp{ "Parameter Type", m_paramType, {
+			{ MaterialFunctionParamType::Float, "Float (1D)" },
+			{ MaterialFunctionParamType::Float2, "Float2 (2D)" },
+			{ MaterialFunctionParamType::Float3, "Float3 (3D/Color)" },
+			{ MaterialFunctionParamType::Float4, "Float4 (4D)" },
+			{ MaterialFunctionParamType::Texture, "Texture" }
+		} };
+
+		PropertyBase* m_properties[2] = { &m_nameProp, &m_paramTypeProp };
+
+		std::vector<Pin*> m_inputPins;
+		scoped_connection m_nameChanged;
 	};
 
 	/// @brief A node which adds a material function expression.
@@ -1587,7 +1835,13 @@ namespace mmo
 		: GraphNode(material)
 		, m_name("Material Function")
 		{
-			m_materialFunctionChanged = m_materialFunctionPathProp.OnValueChanged.connect([this] { m_name = std::filesystem::path(m_materialFunctionPath.GetPath()).filename().replace_extension().string(); });
+			m_materialFunctionChanged = m_materialFunctionPathProp.OnValueChanged.connect([this] { 
+				m_name = std::filesystem::path(m_materialFunctionPath.GetPath()).filename().replace_extension().string(); 
+				// Clear cached expressions when the material function changes
+				m_compiledExpressionCache.clear();
+				// Refresh pins based on the material function's inputs/outputs
+				RefreshPins();
+			});
 		}
 
 		std::span<Pin*> GetInputPins() override;
@@ -1605,11 +1859,34 @@ namespace mmo
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
 
+		void RefreshPins();
+
+		void NotifyCompilationStarted() override 
+		{ 
+			m_compiledExpressionCache.clear(); 
+			GraphNode::NotifyCompilationStarted();
+		}
+
+		io::Writer& Serialize(io::Writer& writer) override;
+		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context) override;
+
 	private:
 		String m_name;
 		AssetPathValue m_materialFunctionPath{ "", ".hmf" };
 		AssetPathProperty m_materialFunctionPathProp{ "Material Function", m_materialFunctionPath };
 		scoped_connection m_materialFunctionChanged;
+
+		// Output pin to expression index mapping for caching
+		struct CompiledExpression
+		{
+			const Pin* outputPin;
+			ExpressionIndex expressionId;
+		};
+		std::vector<CompiledExpression> m_compiledExpressionCache;
+
+		// Input and output pins that will be dynamically updated based on the material function
+		std::vector<Pin*> m_inputPins;
+		std::vector<Pin*> m_outputPins;
 
 		PropertyBase* m_properties[1] = { &m_materialFunctionPathProp };
 	};

@@ -232,6 +232,7 @@ namespace mmo
 	{
 		auto currentPath = m_host.GetCurrentPath();
 		currentPath /= m_materialInstanceName + ".hmi";
+		m_materialInstanceName.clear();
 
 		const auto file = AssetRegistry::CreateNewFile(currentPath.string());
 		if (!file)
@@ -240,9 +241,14 @@ namespace mmo
 			return;
 		}
 
-		const auto instance = std::make_shared<MaterialInstance>(m_materialInstanceName, m_selectedMaterial);
+		const auto instance = std::make_shared<MaterialInstance>(currentPath.string(), m_selectedMaterial);
+		instance->SetName(currentPath.string());
+		instance->DerivePropertiesFromParent();
+		instance->RefreshParametersFromBase();
+		instance->Update();
+
 		io::StreamSink sink(*file);
-		io::Writer writer(sink);
+		io::Writer writer{sink};
 
 		MaterialInstanceSerializer serializer;
 		serializer.Export(*instance, writer);
@@ -250,6 +256,5 @@ namespace mmo
 		file->flush();
 
 		m_host.assetImported(m_host.GetCurrentPath());
-		m_materialInstanceName.clear();
 	}
 }
