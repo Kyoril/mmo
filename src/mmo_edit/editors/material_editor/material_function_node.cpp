@@ -63,7 +63,6 @@ namespace mmo
         }
 
         // Load the material function asset
-        MaterialGraph* functionGraph = nullptr;
         ExecutableMaterialGraphLoadContext loadContext;
 
         // Load the material function file
@@ -76,7 +75,11 @@ namespace mmo
 
         // Create a new graph
         auto newGraph = std::make_unique<MaterialGraph>();
-        functionGraph = newGraph.get();
+
+        // Custom nodes only available in material functions
+		auto registry = newGraph->GetNodeRegistry();
+        registry->RegisterNodeType(MaterialFunctionOutputNode::GetStaticTypeInfo());
+        registry->RegisterNodeType(MaterialFunctionInputNode::GetStaticTypeInfo());
         
         // Deserialize the graph
         io::StreamSource source(*file);
@@ -93,17 +96,16 @@ namespace mmo
         });
         
         // Read the chunks
-        if (!chunkReader.Read(reader))
+        if (!chunkReader.Read(reader) || !loadContext.PerformAfterLoadActions())
         {
             ELOG("Failed to load material function graph from file: " << m_materialFunctionPath.GetPath());
             return IndexNone;
         }
-        
+
         // Find the input and output nodes in the function graph
         std::vector<MaterialFunctionInputNode*> inputNodes;
         std::vector<MaterialFunctionOutputNode*> outputNodes;
-        
-        for (auto node : functionGraph->GetNodes())
+        for (auto node : newGraph->GetNodes())
         {
             if (auto* inputNode = dynamic_cast<MaterialFunctionInputNode*>(node))
             {
@@ -141,9 +143,8 @@ namespace mmo
                 float defaultValue = inputNodes[i]->GetDefaultValue();
                 inputExpr = compiler.AddExpression(std::to_string(defaultValue), ExpressionType::Float_1);
             }
-            
-            // Store the input expression for this input node
-            inputExpressionMap[inputNodes[i]->GetId()] = inputExpr;
+
+            inputNodes[i]->SetExpressionId(inputExpr);
         }
         
         // Set up a node compiler wrapper that uses our input expressions
@@ -153,7 +154,6 @@ namespace mmo
             FunctionNodeCompiler(MaterialCompiler& compiler, const std::map<uint32, ExpressionIndex>& inputExpressions)
                 : m_compiler(compiler)
                 , m_inputExpressions(inputExpressions)
-                , m_expressionCache()
             {
             }
             
@@ -239,86 +239,128 @@ namespace mmo
 
     void MaterialFunctionNode::RefreshPins()
     {
-        // Clear existing pins
-        for (auto pin : m_inputPins)
-        {
-            if (pin && pin->IsLinked())
-            {
-                pin->Unlink();
-            }
-            delete pin;
-        }
-        m_inputPins.clear();
-
-        for (auto pin : m_outputPins)
-        {
-            if (pin && pin->IsLinked())
-            {
-                pin->Unlink();
-            }
-            delete pin;
-        }
-        m_outputPins.clear();
-
         // If no material function is set, return
-        if (m_materialFunctionPath.GetPath().empty())
+        if (!m_materialFunctionPath.GetPath().empty())
         {
-            return;
+            // Try to load the material function
+            const auto materialFunction = MaterialFunctionManager::Get().Load(m_materialFunctionPath.GetPath());
+            if (!materialFunction)
+            {
+                ELOG("Failed to load material function: " << m_materialFunctionPath.GetPath());
+                return;
+            }
+
+            // Set the node name based on the function name
+            m_name = std::filesystem::path(m_materialFunctionPath.GetPath()).filename().replace_extension().string();
+
+            // Add input pins based on the material function's input parameters
+            for (const auto& input : materialFunction->GetInputParams())
+            {
+                // Find input pin
+				auto it = std::find_if(m_inputPins.begin(), m_inputPins.end(), [&input](const Pin* pin) {
+					return pin->GetName() == input.name;
+					});
+
+				if (it == m_inputPins.end())
+				{
+					// If not found, create a new input pin
+					MaterialPin* inputPin = new MaterialPin(this, input.name);
+					m_inputPins.push_back(inputPin);
+				}
+				else
+				{
+					// If found, update the existing pin
+					(*it)->SetName(input.name);
+				}
+            }
+
+            // Remove all non-referenced input and output pins
+            for (auto it = m_inputPins.begin(); it != m_inputPins.end();)
+            {
+                if (std::none_of(materialFunction->GetInputParams().begin(), materialFunction->GetInputParams().end(), [&it](const MaterialFunctionParam& param) { return param.name == (*it)->GetName(); }))
+                {
+                    if (*it && (*it)->IsLinked())
+                    {
+                        (*it)->Unlink();
+                    }
+
+                    delete* it;
+                    it = m_inputPins.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+
+            // Add an output pin for the material function's output
+            for (const auto& output : materialFunction->GetOutputs())
+            {
+                // Find output pin
+				auto it = std::find_if(m_outputPins.begin(), m_outputPins.end(), [&output](const Pin* pin) {
+					return pin->GetName() == output.name;
+					});
+
+				if (it == m_outputPins.end())
+				{
+					// If not found, create a new output pin
+					MaterialPin* outputPin = new MaterialPin(this, output.name);
+					m_outputPins.push_back(outputPin);
+				}
+				else
+				{
+					// If found, update the existing pin
+					(*it)->SetName(output.name);
+				}
+            }
+
+            for (auto it = m_outputPins.begin(); it != m_outputPins.end();)
+            {
+                if (std::none_of(materialFunction->GetOutputs().begin(), materialFunction->GetOutputs().end(), [&it](const MaterialFunctionParam& param) { return param.name == (*it)->GetName(); }))
+                {
+                    if (*it && (*it)->IsLinked())
+                    {
+                        (*it)->Unlink();
+                    }
+
+                    delete* it;
+                    it = m_outputPins.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
         }
 
-        // Try to load the material function
-        auto materialFunction = MaterialFunctionManager::Get().Load(m_materialFunctionPath.GetPath());
-        if (!materialFunction)
-        {
-            ELOG("Failed to load material function: " << m_materialFunctionPath.GetPath());
-            return;
-        }
-
-        // Set the node name based on the function name
-        m_name = std::filesystem::path(m_materialFunctionPath.GetPath()).filename().replace_extension().string();
-
-        // Add input pins based on the material function's input parameters
-        for (const auto& input : materialFunction->GetInputParams())
-        {
-            MaterialPin* inputPin = new MaterialPin(this, input.name);
-            m_inputPins.push_back(inputPin);
-        }
-
-        // Add an output pin for the material function's output
-
-        for (const auto& output : materialFunction->GetOutputs())
-        {
-            MaterialPin* outputPin = new MaterialPin(this, output.name);
-            m_outputPins.push_back(outputPin);
-        }
     }
 
     io::Writer& MaterialFunctionNode::Serialize(io::Writer& writer)
     {
-        GraphNode::Serialize(writer);
-
         // Write the material function path
         writer << io::write_dynamic_range<uint16>(m_materialFunctionPath.GetPath());
+
+        GraphNode::Serialize(writer);
 
         return writer;
     }
 
     io::Reader& MaterialFunctionNode::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
     {
-        GraphNode::Deserialize(reader, context);
-
         // Read the material function path
         std::string path;
         reader >> io::read_container<uint16>(path);
         m_materialFunctionPath.SetPath(path);
 
+        // Refresh the pins based on the loaded material function
+        RefreshPins();
+
+        GraphNode::Deserialize(reader, context);
+
         // Update the material function path property
         m_materialFunctionChanged = m_materialFunctionPathProp.OnValueChanged.connect([this]() {
             RefreshPins();
         });
-
-        // Refresh the pins based on the loaded material function
-        RefreshPins();
 
         return reader;
     }

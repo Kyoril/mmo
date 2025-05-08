@@ -14,7 +14,9 @@ namespace mmo
 	    NodeRegistry();
 
 	public:
-	    [[nodiscard]] uint32 RegisterNodeType(std::string_view name, NodeTypeInfo::Factory factory);
+	    [[nodiscard]] uint32 RegisterNodeType(std::string_view name, std::string_view displayName, NodeTypeInfo::Factory factory);
+
+		void RegisterNodeType(const NodeTypeInfo& typeInfo);
 
 	    void UnregisterNodeType(std::string_view name);
 		
@@ -33,6 +35,4 @@ namespace mmo
 
 	    std::vector<NodeTypeInfo*> m_Types;
 	};
-
-
 }

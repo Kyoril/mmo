@@ -65,27 +65,16 @@ namespace mmo
 		{
 			output.code.format = GetShaderFormat();
 
+#if defined( DEBUG ) || defined( _DEBUG )
 			ComPtr<ID3DBlob> pPDB;
 			HRESULT t = D3DGetBlobPart(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), D3D_BLOB_PDB, 0, pPDB.GetAddressOf());
-			if (!SUCCEEDED(t))
+			if (SUCCEEDED(t))
 			{
-				WLOG("Failed to get PDB part from shader blob");
-			}
-			else
-			{
-				ILOG("Loaded PDB part from blob. PDB size: " << pPDB->GetBufferSize());
-
 				// Now retrieve the suggested name for the debug data file:
 				ComPtr<ID3DBlob> pPDBName;
 				t = D3DGetBlobPart(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), D3D_BLOB_DEBUG_NAME, 0, pPDBName.GetAddressOf());
-				if (!SUCCEEDED(t))
+				if (SUCCEEDED(t))
 				{
-					WLOG("Failed to get PDB name part from shader blob");
-				}
-				else
-				{
-					ILOG("Loaded PDB name part from blob. PDB size: " << pPDBName->GetBufferSize());
-
 					// This struct represents the first four bytes of the name blob:
 					struct ShaderDebugName
 					{
@@ -99,21 +88,16 @@ namespace mmo
 					auto pDebugNameData = reinterpret_cast<const ShaderDebugName*>(pPDBName->GetBufferPointer());
 					auto pName = reinterpret_cast<const char*>(pDebugNameData + 1);
 
-					ILOG("PDB Name: " << pName);
-
 					// Write content of pdb to file
 					auto file = AssetRegistry::CreateNewFile("ShadersPDB/" + String(pName));
-					if (!file)
-					{
-						ELOG("Failed to create PDB file: ShaderPDB/" << pName);
-					}
-					else
+					if (file)
 					{
 						file->write((const char*)pPDB->GetBufferPointer(), pPDB->GetBufferSize());
 						file->flush();
 					}
 				}
 			}
+#endif
 
 			output.code.data.clear();
 			std::copy(

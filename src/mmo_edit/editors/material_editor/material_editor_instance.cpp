@@ -613,41 +613,68 @@ namespace mmo
 		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
 		m_graph = std::make_unique<MaterialGraph>();
 
+		std::shared_ptr<NodeRegistry> registry = m_graph->GetNodeRegistry();
+		ASSERT(registry);
+
 		// Ensure material root node is created
 		if (assetPath.extension() != ".hmf")
 		{
+			// Custom nodes only available in materials
+			registry->RegisterNodeType(MaterialNode::GetStaticTypeInfo());
+
 			m_graph->CreateNode<MaterialNode>(true);
 		}
 		else
 		{
+			// Custom nodes only available in material functions
+			registry->RegisterNodeType(MaterialFunctionOutputNode::GetStaticTypeInfo());
+			registry->RegisterNodeType(MaterialFunctionInputNode::GetStaticTypeInfo());
+
 			m_graph->CreateNode<MaterialFunctionOutputNode>(false);
 		}
 
 		ExecutableMaterialGraphLoadContext context;
-
-		MaterialDeserializer deserializer { *m_material };
-		deserializer.AddChunkHandler(*ChunkMagic({'G', 'R', 'P', 'H'}), false, [this, &context](io::Reader& reader, uint32, uint32) -> bool
-		{
-			return m_graph->Deserialize(reader, context);
-		});
 
 		if (const auto file = AssetRegistry::OpenFile(assetPath.string()))
 		{
 			io::StreamSource source { *file };
 			io::Reader reader { source };
 
-			if (!(deserializer.Read(reader)) || !context.PerformAfterLoadActions())
+			if (assetPath.extension() != ".hmf")
 			{
-				ELOG("Unable to read material file!");
+				MaterialDeserializer deserializer{ *m_material };
+				deserializer.AddChunkHandler(*ChunkMagic({ 'G', 'R', 'P', 'H' }), false, [this, &context](io::Reader& reader, uint32, uint32) -> bool
+					{
+						return m_graph->Deserialize(reader, context);
+					});
+
+				if (!deserializer.Read(reader) || !context.PerformAfterLoadActions())
+				{
+					ELOG("Unable to read material file!");
+				}
+				else
+				{
+					m_material->Update();
+				}
 			}
 			else
 			{
-				m_material->Update();
+				ChunkReader chunkReader;
+				chunkReader.SetIgnoreUnhandledChunks(true);
+				chunkReader.AddChunkHandler(*ChunkMagic({ 'G', 'R', 'P', 'H' }), false, [this, &context](io::Reader& reader, uint32, uint32) -> bool
+					{
+						return m_graph->Deserialize(reader, context);
+					});
+
+				if (!chunkReader.Read(reader) || !context.PerformAfterLoadActions())
+				{
+					ELOG("Unable to read material function file!");
+				}
 			}
 		}
 		else
 		{
-			ELOG("Unable to load material file " << assetPath << ": File does not exist!");
+			ELOG("Unable to load file " << assetPath << ": File does not exist!");
 		}
 		
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
@@ -666,8 +693,15 @@ namespace mmo
 		{
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
 			m_cameraNode->SetPosition(Vector3::UnitZ * m_entity->GetBoundingRadius() * 2.0f);
-			
-			m_entity->SetMaterial(m_material);
+
+			if (m_material->GetVertexShader(VertexShaderType::Default))
+			{
+				m_entity->SetMaterial(m_material);
+			}
+			else
+			{
+				m_entity->SetMaterial(m_scene.GetDefaultMaterial());
+			}
 		}
 
 		m_renderConnection = host.beforeUiUpdate.connect(this, &MaterialEditorInstance::RenderMaterialPreview);

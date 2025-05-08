@@ -11,7 +11,6 @@ namespace mmo
 		: m_BuildInNodes(
 		{
 			ConstFloatNode::GetStaticTypeInfo(),
-			MaterialNode::GetStaticTypeInfo(),
 			TextureNode::GetStaticTypeInfo(),
 			TextureCoordNode::GetStaticTypeInfo(),
 			MultiplyNode::GetStaticTypeInfo(),
@@ -37,8 +36,6 @@ namespace mmo
 			TextureParameterNode::GetStaticTypeInfo(),
 			ScalarParameterNode::GetStaticTypeInfo(),
 			VectorParameterNode::GetStaticTypeInfo(),
-			MaterialFunctionOutputNode::GetStaticTypeInfo(),
-			MaterialFunctionInputNode::GetStaticTypeInfo(),
 			IfNode::GetStaticTypeInfo(),
 			SineNode::GetStaticTypeInfo(),
 			CosineNode::GetStaticTypeInfo(),
@@ -50,28 +47,32 @@ namespace mmo
 		RebuildTypes();
 	}
 
-	uint32 NodeRegistry::RegisterNodeType(std::string_view name, NodeTypeInfo::Factory factory)
+	uint32 NodeRegistry::RegisterNodeType(std::string_view name, std::string_view displayName, NodeTypeInfo::Factory factory)
 	{
 		auto id = detail::fnv_1a_hash(name.data(), name.size());
 
-		const auto it = std::find_if(m_CustomNodes.begin(), m_CustomNodes.end(), [id](const NodeTypeInfo& typeInfo)
-		{
-			return typeInfo.id == id;
-		});
+		NodeTypeInfo typeInfo;
+		typeInfo.id = id;
+		typeInfo.name = name;
+		typeInfo.displayName = displayName;
+		typeInfo.factory = factory;
+		RegisterNodeType(typeInfo);
 
-	    if (it != m_CustomNodes.end())
-	        m_CustomNodes.erase(it);
+		return id;
+	}
 
-	    NodeTypeInfo typeInfo;
-	    typeInfo.id       = id;
-	    typeInfo.name     = name;
-	    typeInfo.factory  = factory;
+	void NodeRegistry::RegisterNodeType(const NodeTypeInfo& typeInfo)
+	{
+		const auto it = std::find_if(m_CustomNodes.begin(), m_CustomNodes.end(), [typeInfo](const NodeTypeInfo& info)
+			{
+				return info.id == typeInfo.id;
+			});
 
-	    m_CustomNodes.emplace_back(std::move(typeInfo));
+		if (it != m_CustomNodes.end())
+			m_CustomNodes.erase(it);
 
-	    RebuildTypes();
-
-	    return id;
+		m_CustomNodes.push_back(typeInfo);
+		RebuildTypes();
 	}
 
 	void NodeRegistry::UnregisterNodeType(std::string_view name)
@@ -124,7 +125,7 @@ namespace mmo
 
 	void NodeRegistry::RebuildTypes()
 	{
-		 m_Types.resize(0);
+		m_Types.resize(0);
 	    m_Types.reserve(m_CustomNodes.size() + std::distance(std::begin(m_BuildInNodes), std::end(m_BuildInNodes)));
 
 	    for (auto& typeInfo : m_CustomNodes)

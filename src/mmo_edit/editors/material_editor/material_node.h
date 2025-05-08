@@ -213,6 +213,11 @@ namespace mmo
 		String m_filter;
 	};
 
+	inline bool operator==(const AssetPathValue& lhs, const AssetPathValue& rhs) noexcept
+	{
+		return lhs.GetPath() == rhs.GetPath() && lhs.GetFilter() == rhs.GetFilter();
+	}
+
 	/// @brief Non-generic base class of a node property.
 	class PropertyBase
 	{
@@ -247,7 +252,15 @@ namespace mmo
 
 		/// @brief Sets the value of this property.
 		/// @param value The new value to use.
-		virtual void SetValue(const ValueType& value) noexcept { m_value = value; OnValueChanged(); }
+		virtual void SetValue(const ValueType& value) noexcept
+		{
+			if (m_value == value)
+			{
+				return;
+			}
+
+			m_value = value; OnValueChanged();
+		}
 
 	protected:
 		std::string m_name;
@@ -655,12 +668,17 @@ namespace mmo
 
 		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context) override;
 
+		void SetExpressionId(ExpressionIndex expressionId) { m_userExpression = expressionId; }
+
+		[[nodiscard]] ExpressionIndex GetExpressionId() const { return m_userExpression; }
+
 	private:
 		String m_name;
 		String m_description;
 		int32 m_sortPriority;
 		MaterialFunctionParamType m_paramType;
 		float m_defaultValue;
+		ExpressionIndex m_userExpression = IndexNone;
 		
 		StringProperty m_nameProp{ "Name", m_name };
 		StringProperty m_descriptionProp{ "Description", m_description };
@@ -1740,16 +1758,11 @@ namespace mmo
 		{
 			// Connect the property change event
 			m_nameChanged = m_nameProp.OnValueChanged.connect([this] { 
-				RefreshOutputPins();
+				m_inputPin.SetName(m_name);
 			});
-			
-			// Initialize with a default output pin
-			RefreshOutputPins();
-		}
 
-		~MaterialFunctionOutputNode() override
-		{
-			m_nameChanged.disconnect();
+			m_inputPin.SetName(m_name);
+			m_inputPins.push_back(&m_inputPin);
 		}
 
 		std::span<Pin*> GetInputPins() override { return m_inputPins; }
@@ -1766,23 +1779,6 @@ namespace mmo
 
 		/// @brief Gets the parameter type
 		[[nodiscard]] MaterialFunctionParamType GetParameterType() const { return m_paramType; }
-
-		void RefreshOutputPins()
-		{
-			// Clear existing pins
-			for (auto pin : m_inputPins)
-			{
-				if (pin && pin->IsLinked())
-				{
-					pin->Unlink();
-				}
-			}
-			m_inputPins.clear();
-			
-			// Create a new input pin with the name from the property
-			auto newPin = new MaterialPin(this, m_name);
-			m_inputPins.push_back(newPin);
-		}
 
 		// Add a method to get all function output connections
 		std::vector<std::pair<String, ExpressionIndex>> GetFunctionOutputs(MaterialCompiler& compiler)
@@ -1818,6 +1814,8 @@ namespace mmo
 		} };
 
 		PropertyBase* m_properties[2] = { &m_nameProp, &m_paramTypeProp };
+
+		MaterialPin m_inputPin { this, "" };
 
 		std::vector<Pin*> m_inputPins;
 		scoped_connection m_nameChanged;

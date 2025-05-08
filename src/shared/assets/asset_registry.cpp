@@ -219,8 +219,6 @@ namespace mmo
 			// Register file
 			auto archive = std::static_pointer_cast<IArchive>(s_filesystemArchive);
 			s_files.emplace(converted, std::move(archive));
-
-			DLOG("Successfully created new file " << converted << " in asset registry");
 		}
 
 		return filePtr;

@@ -6,8 +6,7 @@ namespace mmo
 {
 	ExpressionIndex MaterialFunctionInputNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
-        // TODO?
-        return IndexNone;
+        return m_userExpression;
 	}
 
     io::Reader& MaterialFunctionInputNode::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)

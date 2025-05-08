@@ -6,8 +6,6 @@
 
 namespace mmo
 {
-	
-
 	void DrawIcon(ImDrawList* drawList, const ImVec2& a, const ImVec2& b, IconType type, bool filled, ImU32 color, ImU32 innerColor)
 	{
 		auto rect           = ImRect(a, b);
