@@ -9,7 +9,7 @@
 #include "world_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
-#include "editors/material_editor/node_layout.h"
+#include "editors/material_editor/node_editor/node_layout.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/material_manager.h"
@@ -1543,7 +1543,7 @@ namespace mmo
 		// TODO: Update spawn placement objects
 
 		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
-			// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
+		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
 
 	}
 

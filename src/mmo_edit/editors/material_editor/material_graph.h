@@ -4,7 +4,7 @@
 
 #include <functional>
 
-#include "node_registry.h"
+#include "node_editor/node_registry.h"
 
 #include "base/id_generator.h"
 

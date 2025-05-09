@@ -3,7 +3,7 @@
 #include "texture_editor.h"
 #include "texture_editor_instance.h"
 
-#include "editors/material_editor/item_builder.h"
+#include "editors/material_editor/node_editor/item_builder.h"
 #include "log/default_log_levels.h"
 
 namespace mmo

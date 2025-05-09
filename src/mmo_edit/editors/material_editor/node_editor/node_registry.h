@@ -1,6 +1,6 @@
 #pragma once
 
-#include "material_node.h"
+#include "editors/material_editor/material_node.h"
 
 #include "base/typedefs.h"
 

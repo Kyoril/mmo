@@ -46,6 +46,7 @@ endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${ASSIMPSDK_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/editors/material_editor/node_editor)
 
 source_group(src\\imgui FILES ${imgui_src})
 source_group(src\\imgui\\platform FILES ${imgui_platform_src})

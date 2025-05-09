@@ -1,4 +1,3 @@
-
 #include "node_pin_icons.h"
 
 # define IMGUI_DEFINE_MATH_OPERATORS

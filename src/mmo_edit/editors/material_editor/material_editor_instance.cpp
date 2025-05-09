@@ -8,13 +8,13 @@
 #include "imgui_node_editor_internal.inl"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
-#include "item_builder.h"
-#include "item_deleter.h"
-#include "material_graph.h"
-#include "material_node.h"
-#include "node_header_renderer.h"
-#include "node_layout.h"
-#include "node_pin_icons.h"
+#include "node_editor/item_builder.h"
+#include "node_editor/item_deleter.h"
+#include "editors/material_editor/material_graph.h"
+#include "editors/material_editor/material_node.h"
+#include "node_editor/node_header_renderer.h"
+#include "node_editor/node_layout.h"
+#include "node_editor/node_pin_icons.h"
 
 #include <cinttypes>
 
@@ -27,8 +27,8 @@
 #include "scene_graph/material_manager.h"
 #include "graphics/shader_compiler.h"
 #include "preview_providers/preview_provider_manager.h"
-#include "node_builder.h"
-#include "link_builder.h"
+#include "node_editor/node_builder.h"
+#include "node_editor/link_builder.h"
 
 // Add namespace alias for the node editor
 namespace ed = ax::NodeEditor;

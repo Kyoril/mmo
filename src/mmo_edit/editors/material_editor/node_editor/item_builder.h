@@ -3,8 +3,8 @@
 #pragma once
 
 #include <imgui_node_editor.h>
-#include "node_editor/node_builder.h"
-#include "node_editor/link_builder.h"
+#include "editors/material_editor/node_editor/node_builder.h"
+#include "editors/material_editor/node_editor/link_builder.h"
 
 namespace mmo
 {

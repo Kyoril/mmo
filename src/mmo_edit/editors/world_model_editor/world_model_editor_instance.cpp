@@ -8,7 +8,7 @@
 #include "world_model_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
-#include "editors/material_editor/node_layout.h"
+#include "editors/material_editor/node_editor/node_layout.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/material_manager.h"

@@ -13,8 +13,8 @@
 #include "frame_ui/color.h"
 
 #include "imgui_node_editor.h"
-#include "link_query_result.h"
-#include "node_type_info.h"
+#include "node_editor/link_query_result.h"
+#include "node_editor/node_type_info.h"
 #include "base/signal.h"
 #include "graphics/material_compiler.h"
 #include "material_function.h"
