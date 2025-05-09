@@ -144,6 +144,154 @@ macro(add_gui_exe name)
 	endif()
 endmacro()
 
+# Recursively add an executable target, respecting platform-specific folders
+macro(add_exe_recurse name)
+    # Gather all source files recursively
+    file(GLOB_RECURSE sources
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.m"
+    )
+    # Gather all header files recursively
+    file(GLOB_RECURSE headers
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+    )
+    # Filter out platform-specific folders
+    set(filtered_sources)
+    set(filtered_headers)
+    foreach(f ${sources})
+        if(f MATCHES "/macos/" AND NOT APPLE)
+            continue()
+        endif()
+        if(f MATCHES "/win/" AND NOT WIN32)
+            continue()
+        endif()
+        list(APPEND filtered_sources ${f})
+    endforeach()
+    foreach(f ${headers})
+        if(f MATCHES "/macos/" AND NOT APPLE)
+            continue()
+        endif()
+        if(f MATCHES "/win/" AND NOT WIN32)
+            continue()
+        endif()
+        list(APPEND filtered_headers ${f})
+    endforeach()
+    if(MMO_UNITY_BUILD)
+        message(STATUS "Unity build enabled for ${name}")
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+        enable_unity_build(${name} filtered_sources)
+    endif()
+    add_executable(${name} ${filtered_headers} ${filtered_sources})
+    source_group(
+        TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+        PREFIX "src"
+        FILES ${filtered_headers} ${filtered_sources}
+    )
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+        target_link_libraries(${name} stdc++fs)
+        target_link_libraries(${name} ${OPENSSL_LIBRARIES})
+    endif()
+endmacro()
+
+# Recursively add a GUI executable target, respecting platform-specific folders
+function(filter_files_under_dir out_var dir)
+    set(result)
+    foreach(f ${ARGN})
+        file(TO_CMAKE_PATH "${f}" f_norm)
+        string(FIND "${f_norm}" "${dir}" pos)
+        if(pos EQUAL 0)
+            list(APPEND result "${f}")
+        endif()
+    endforeach()
+    set(${out_var} ${result} PARENT_SCOPE)
+endfunction()
+
+macro(add_gui_exe_recurse name)
+    set(add_sources ${ARGN})
+    file(GLOB_RECURSE sources
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.m"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.mm"
+    )
+    file(GLOB_RECURSE headers
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+    )
+    file(GLOB_RECURSE resources
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.rc"
+    )
+    # Filter out platform-specific folders
+    set(filtered_sources)
+    set(filtered_headers)
+    set(filtered_resources)
+    foreach(f ${sources})
+        if(f MATCHES "/macos/" AND NOT APPLE)
+            continue()
+        endif()
+        if(f MATCHES "/win/" AND NOT WIN32)
+            continue()
+        endif()
+        list(APPEND filtered_sources ${f})
+    endforeach()
+    foreach(f ${headers})
+        if(f MATCHES "/macos/" AND NOT APPLE)
+            continue()
+        endif()
+        if(f MATCHES "/win/" AND NOT WIN32)
+            continue()
+        endif()
+        list(APPEND filtered_headers ${f})
+    endforeach()
+    foreach(f ${resources})
+        if(f MATCHES "/macos/" AND NOT APPLE)
+            continue()
+        endif()
+        if(f MATCHES "/win/" AND NOT WIN32)
+            continue()
+        endif()
+        list(APPEND filtered_resources ${f})
+    endforeach()
+    list(LENGTH add_sources num_add_sources)
+    if (${num_add_sources} GREATER 0)
+        list(APPEND filtered_sources ${add_sources})
+    endif()
+    if(MMO_UNITY_BUILD)
+        message(STATUS "Unity build enabled for ${name}")
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+        enable_unity_build(${name} filtered_sources)
+    endif()
+    add_executable(${name} WIN32 MACOSX_BUNDLE ${filtered_resources} ${filtered_headers} ${filtered_sources})
+    # Only group files under the current source dir as a tree
+    filter_files_under_dir(tree_files "${CMAKE_CURRENT_SOURCE_DIR}" ${filtered_headers} ${filtered_sources} ${filtered_resources})
+    source_group(
+        TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+        PREFIX "src"
+        FILES ${tree_files}
+    )
+    # Group extra files (e.g. from deps) in a flat group
+    set(extra_files)
+    foreach(f ${filtered_headers} ${filtered_sources} ${filtered_resources})
+        list(FIND tree_files "${f}" idx)
+        if(idx EQUAL -1)
+            list(APPEND extra_files "${f}")
+        endif()
+    endforeach()
+    if(extra_files)
+        source_group("external" FILES ${extra_files})
+    endif()
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+        target_link_libraries(${name} stdc++fs)
+    endif()
+endmacro()
+
 MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 	GET_FILENAME_COMPONENT(_name ${_input} NAME)
 	get_filename_component(_name_no_ext ${_name} NAME_WE)

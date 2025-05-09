@@ -27,6 +27,8 @@
 #include "scene_graph/material_manager.h"
 #include "graphics/shader_compiler.h"
 #include "preview_providers/preview_provider_manager.h"
+#include "node_builder.h"
+#include "link_builder.h"
 
 // Add namespace alias for the node editor
 namespace ed = ax::NodeEditor;
