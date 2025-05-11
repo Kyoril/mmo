@@ -98,8 +98,7 @@ namespace mmo
         ImGui::TextDisabled("(Middle-click and drag to pan, scroll wheel to zoom)");
           // Reserve space for time labels above and value labels on the left of the canvas
         const float timeLabelsHeight = 20.0f;
-        const float valueLabelsWidth = 40.0f;
-          ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+        const float valueLabelsWidth = 40.0f;          ImVec2 canvasPos = ImGui::GetCursorScreenPos();
         // Adjust canvasPos to make space for labels
         canvasPos.x += valueLabelsWidth;
         canvasPos.y += timeLabelsHeight;
@@ -112,14 +111,19 @@ namespace mmo
         // Handle zoom and pan
         HandleZoomAndPan(canvasPos, canvasSize);
         
-        // Capture mouse interactions
-        HandleInteraction(canvasPos, canvasSize, modified);
-        
-        // Handle context menu
-        HandleContextMenu(canvasPos, canvasSize, modified);
-        
         // Get the draw list to render our custom UI
         ImDrawList* drawList = ImGui::GetWindowDrawList();
+        
+        // Only process interactions when mouse is hovering over the control
+        // This reduces the amount of processing when the user is not interacting
+        if (ImGui::IsItemHovered() || m_draggingKey || m_draggingTangent || m_draggingCanvas)
+        {
+            // Capture mouse interactions
+            HandleInteraction(canvasPos, canvasSize, modified);
+            
+            // Handle context menu
+            HandleContextMenu(canvasPos, canvasSize, modified);
+        }
           // Draw time labels at the top of the canvas
         DrawTimeLabels(drawList, canvasPos, canvasSize);
         
@@ -306,9 +310,7 @@ namespace mmo
         ImGui::PopID();
         
         return modified;
-    }
-
-    void ColorCurveImGuiEditor::DrawCurve(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize, float curveThickness)
+    }    void ColorCurveImGuiEditor::DrawCurve(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize, float curveThickness)
     {
         const int numSamples = static_cast<int>(canvasSize.x);
         
@@ -317,21 +319,28 @@ namespace mmo
             return;
         }
         
-        // Calculate points for each color component
-        std::vector<ImVec2> redPoints;
-        std::vector<ImVec2> greenPoints;
-        std::vector<ImVec2> bluePoints;
-        std::vector<ImVec2> alphaPoints;
+        // Maintain persistent vectors to avoid reallocating every frame
+        static thread_local std::vector<ImVec2> redPoints;
+        static thread_local std::vector<ImVec2> greenPoints;
+        static thread_local std::vector<ImVec2> bluePoints;
+        static thread_local std::vector<ImVec2> alphaPoints;
         
-        redPoints.reserve(numSamples);
-        greenPoints.reserve(numSamples);
-        bluePoints.reserve(numSamples);
-        alphaPoints.reserve(numSamples);
+        // Resize vectors only when necessary
+        if (redPoints.size() != static_cast<size_t>(numSamples)) 
+        {
+            redPoints.resize(numSamples);
+            greenPoints.resize(numSamples);
+            bluePoints.resize(numSamples);
+            alphaPoints.resize(numSamples);
+        }
+          // Pre-calculate values that are constant throughout this loop
+        const float xScale = 1.0f / static_cast<float>(numSamples - 1);
+        const float timeRange = m_viewMaxX - m_viewMinX;
           for (int i = 0; i < numSamples; ++i)
         {
-            // Map sample point from screen to view space
-            float normalizedX = static_cast<float>(i) / static_cast<float>(numSamples - 1);
-            float viewSpaceT = m_viewMinX + normalizedX * (m_viewMaxX - m_viewMinX);
+            // Map sample point from screen to view space (optimized calculation)
+            float normalizedX = static_cast<float>(i) * xScale;
+            float viewSpaceT = m_viewMinX + normalizedX * timeRange;
             
             // Clamp to valid curve range
             float t = std::max(0.0f, std::min(viewSpaceT, 1.0f));
@@ -340,49 +349,38 @@ namespace mmo
             // Map back to screen space
             float x = canvasPos.x + normalizedX * canvasSize.x;
             
-            redPoints.push_back(ImVec2(x, ValueToY(color.x, canvasPos, canvasSize)));
-            greenPoints.push_back(ImVec2(x, ValueToY(color.y, canvasPos, canvasSize)));
-            bluePoints.push_back(ImVec2(x, ValueToY(color.z, canvasPos, canvasSize)));
+            redPoints[i] = ImVec2(x, ValueToY(color.x, canvasPos, canvasSize));
+            greenPoints[i] = ImVec2(x, ValueToY(color.y, canvasPos, canvasSize));
+            bluePoints[i] = ImVec2(x, ValueToY(color.z, canvasPos, canvasSize));
             if (m_showAlpha)
             {
-                alphaPoints.push_back(ImVec2(x, ValueToY(color.w, canvasPos, canvasSize)));
+                alphaPoints[i] = ImVec2(x, ValueToY(color.w, canvasPos, canvasSize));
             }
-        }            // Clip polylines to canvas bounds
+        }
+              // Clip polylines to canvas bounds
         ImVec2 clipMin = canvasPos;
         ImVec2 clipMax = ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y);
         
         // Draw curve for each color component
-        if (redPoints.size() >= 2)
-        {
-            drawList->PushClipRect(clipMin, clipMax, true);
-            drawList->AddPolyline(redPoints.data(), static_cast<int>(redPoints.size()), 
-                               ImGui::ColorConvertFloat4ToU32(m_redColor), 0, curveThickness);
-            drawList->PopClipRect();
-        }
+        drawList->PushClipRect(clipMin, clipMax, true);
         
-        if (greenPoints.size() >= 2)
-        {
-            drawList->PushClipRect(clipMin, clipMax, true);
-            drawList->AddPolyline(greenPoints.data(), static_cast<int>(greenPoints.size()), 
-                               ImGui::ColorConvertFloat4ToU32(m_greenColor), 0, curveThickness);
-            drawList->PopClipRect();
-        }
+        // Draw all curves with a single clip rectangle push/pop for better performance
+        drawList->AddPolyline(redPoints.data(), numSamples, 
+                           ImGui::ColorConvertFloat4ToU32(m_redColor), 0, curveThickness);
         
-        if (bluePoints.size() >= 2)
-        {
-            drawList->PushClipRect(clipMin, clipMax, true);
-            drawList->AddPolyline(bluePoints.data(), static_cast<int>(bluePoints.size()), 
-                               ImGui::ColorConvertFloat4ToU32(m_blueColor), 0, curveThickness);
-            drawList->PopClipRect();
-        }
+        drawList->AddPolyline(greenPoints.data(), numSamples, 
+                           ImGui::ColorConvertFloat4ToU32(m_greenColor), 0, curveThickness);
         
-        if (m_showAlpha && alphaPoints.size() >= 2)
+        drawList->AddPolyline(bluePoints.data(), numSamples, 
+                           ImGui::ColorConvertFloat4ToU32(m_blueColor), 0, curveThickness);
+        
+        if (m_showAlpha)
         {
-            drawList->PushClipRect(clipMin, clipMax, true);
-            drawList->AddPolyline(alphaPoints.data(), static_cast<int>(alphaPoints.size()), 
+            drawList->AddPolyline(alphaPoints.data(), numSamples, 
                                ImGui::ColorConvertFloat4ToU32(m_alphaColor), 0, curveThickness);
-            drawList->PopClipRect();
         }
+        
+        drawList->PopClipRect();
     }
 
     void ColorCurveImGuiEditor::DrawKeys(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
@@ -644,40 +642,48 @@ namespace mmo
                 );
             }
         }
-    }
-
-    void ColorCurveImGuiEditor::DrawColorPreview(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    }    void ColorCurveImGuiEditor::DrawColorPreview(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
-        const int numSegments = static_cast<int>(canvasSize.x);
-        
-        if (numSegments <= 1)
-        {
-            return;
-        }
-        
         // Draw preview at the bottom
         const float previewHeight = 20.0f;
         
         if (canvasSize.y <= previewHeight)
-        {
             return;
-        }
-        
+            
         const float previewY = canvasPos.y + canvasSize.y - previewHeight;
+        
+        // Use a lower number of segments for the preview to improve performance
+        // We don't need as many segments for the preview as for the main curve
+        const int numSegments = static_cast<int>(std::min(canvasSize.x / 4.0f, 128.0f));
+        
+        if (numSegments <= 1)
+            return;
+            
+        // Precompute values that are constant within the loop
+        const float segmentWidth = canvasSize.x / static_cast<float>(numSegments);
+        const float timeRange = m_viewMaxX - m_viewMinX;
+        const float invNumSegments = 1.0f / static_cast<float>(numSegments - 1);
+        
+        // Use push/pop clip rect only once for better performance
+        drawList->PushClipRect(
+            ImVec2(canvasPos.x, previewY),
+            ImVec2(canvasPos.x + canvasSize.x, previewY + previewHeight),
+            true
+        );
         
         // For proper representation of color curve values in view space
         for (int i = 0; i < numSegments; ++i)
         {
-            // Map sample point from screen to view space
-            float normalizedX = static_cast<float>(i) / static_cast<float>(numSegments - 1);
-            float viewSpaceT = m_viewMinX + normalizedX * (m_viewMaxX - m_viewMinX);
+            // Map sample point from screen to view space (optimized calculation)
+            float normalizedX = static_cast<float>(i) * invNumSegments;
+            float viewSpaceT = m_viewMinX + normalizedX * timeRange;
             
             // Clamp to valid curve range
             float t = std::max(0.0f, std::min(viewSpaceT, 1.0f));
             Vector4 color = m_colorCurve.Evaluate(t);
             
             float x0 = canvasPos.x + normalizedX * canvasSize.x;
-            float x1 = canvasPos.x + (i + 1.0f) / static_cast<float>(numSegments - 1) * canvasSize.x;
+            float x1 = x0 + segmentWidth + 0.5f; // Add 0.5 to avoid gaps between segments
             
             drawList->AddRectFilled(
                 ImVec2(x0, previewY),
@@ -692,6 +698,8 @@ namespace mmo
             ImVec2(canvasPos.x + canvasSize.x, previewY + previewHeight),
             ImGui::ColorConvertFloat4ToU32(ImVec4(0.3f, 0.3f, 0.3f, 1.0f))
         );
+        
+        drawList->PopClipRect();
     }
 
     void ColorCurveImGuiEditor::DrawTooltip(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
@@ -982,33 +990,48 @@ namespace mmo
     ImVec4 ColorCurveImGuiEditor::ColorToImVec4(const Vector4& color) const
     {
         return ImVec4(color.x, color.y, color.z, color.w);
-    }
-
-    bool ColorCurveImGuiEditor::FindClosestKey(const ImVec2& mousePos, const ImVec2& canvasPos, 
+    }    bool ColorCurveImGuiEditor::FindClosestKey(const ImVec2& mousePos, const ImVec2& canvasPos, 
                                           const ImVec2& canvasSize, size_t& outKeyIndex, 
                                           float maxDistance) const
     {
         const size_t keyCount = m_colorCurve.GetKeyCount();
         
+        // Early out if no keys
+        if (keyCount == 0)
+            return false;
+            
+        // Square the max distance for faster comparison (avoiding square root)
         float closestDist = maxDistance * maxDistance;
         size_t closestIndex = static_cast<size_t>(-1);
+        
+        // First check: do a quick test based on X coordinate only 
+        // This avoids calculating Y coordinates for keys far away horizontally
+        float mouseX = mousePos.x;
+        float xThreshold = maxDistance * 2.0f; // Be a bit more generous with horizontal distance
         
         for (size_t i = 0; i < keyCount; ++i)
         {
             const ColorKey& key = m_colorCurve.GetKey(i);
-            
             float x = TimeToX(key.time, canvasPos, canvasSize);
             
+            // If key is too far horizontally, skip the detailed distance calculation
+            if (std::abs(x - mouseX) > xThreshold)
+                continue;
+                
             // Calculate distance to red, green, blue, and alpha points
             float redY = ValueToY(key.color.x, canvasPos, canvasSize);
             float greenY = ValueToY(key.color.y, canvasPos, canvasSize);
             float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
             float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
             
-            float redDist = std::pow(x - mousePos.x, 2) + std::pow(redY - mousePos.y, 2);
-            float greenDist = std::pow(x - mousePos.x, 2) + std::pow(greenY - mousePos.y, 2);
-            float blueDist = std::pow(x - mousePos.x, 2) + std::pow(blueY - mousePos.y, 2);
-            float alphaDist = std::pow(x - mousePos.x, 2) + std::pow(alphaY - mousePos.y, 2);
+            // Use squared distance for efficiency (avoid square root)
+            float dx = x - mousePos.x;
+            float dx2 = dx * dx;
+            
+            float redDist = dx2 + std::pow(redY - mousePos.y, 2);
+            float greenDist = dx2 + std::pow(greenY - mousePos.y, 2);
+            float blueDist = dx2 + std::pow(blueY - mousePos.y, 2);
+            float alphaDist = dx2 + std::pow(alphaY - mousePos.y, 2);
             
             // Find the minimum distance
             float minDist = redDist;
@@ -1035,17 +1058,27 @@ namespace mmo
         }
         
         return false;
-    }
-
-    bool ColorCurveImGuiEditor::FindHoveredTangent(const ImVec2& mousePos, const ImVec2& canvasPos, 
+    }    bool ColorCurveImGuiEditor::FindHoveredTangent(const ImVec2& mousePos, const ImVec2& canvasPos, 
                                const ImVec2& canvasSize, size_t& outKeyIndex, 
                                bool& outIsInTangent, int& outComponent, 
                                float maxDistance) const
     {
+        // Early out if not showing tangents
+        if (!m_showTangents)
+            return false;
+            
         const size_t keyCount = m_colorCurve.GetKeyCount();
         
+        // Early out if no keys
+        if (keyCount == 0)
+            return false;
+            
+        // Square the distance for faster comparison
         float closestDist = maxDistance * maxDistance;
         bool foundTangent = false;
+        
+        // Quick test based on screen area where tangents are likely to be
+        float quickTestDist = maxDistance * 5.0f; // More generous for quick test
         
         for (size_t i = 0; i < keyCount; ++i)
         {
@@ -1053,20 +1086,21 @@ namespace mmo
             
             // Skip if not in manual tangent mode
             if (key.tangentMode != 1)
-            {
                 continue;
-            }
             
             float keyX = TimeToX(key.time, canvasPos, canvasSize);
             
+            // Quick check if mouse is within reasonable distance of key's X position
+            // Tangents are always horizontally aligned with keys
+            if (std::abs(keyX - mousePos.x) > quickTestDist)
+                continue;
+                
             // Check for red, green, blue, and alpha tangent handles
             for (int comp = 0; comp < 4; ++comp)
             {
                 // Skip alpha if not showing
                 if (comp == 3 && !m_showAlpha)
-                {
                     continue;
-                }
                 
                 float keyY = 0.0f;
                 Vector4 inTangent, outTangent;

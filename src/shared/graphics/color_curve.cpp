@@ -154,45 +154,38 @@ namespace mmo
     bool ColorCurve::UpdateKey(size_t index, const ColorKey& key)
     {
         return UpdateKey(index, key.time, key.color, key.inTangent, key.outTangent, key.tangentMode);
-    }
-
-    Vector4 ColorCurve::Evaluate(float time) const
+    }    Vector4 ColorCurve::Evaluate(float time) const
     {
+        // Handle edge cases efficiently
         if (m_keys.empty())
-        {
             return Vector4(0.0f, 0.0f, 0.0f, 1.0f);
-        }
         
         if (m_keys.size() == 1)
-        {
             return m_keys[0].color;
-        }
         
         // Return first key color if time is before the first key
         if (time <= m_keys[0].time)
-        {
             return m_keys[0].color;
-        }
         
         // Return last key color if time is after or equal to the last key
         if (time >= m_keys.back().time)
-        {
             return m_keys.back().color;
-        }
         
-        size_t leftIndex = 0;
-        size_t rightIndex = 0;
+        // Binary search to find the appropriate key interval
+        // This is faster than the previous FindKeyIndicesForTime method for larger key counts
+        auto it = std::upper_bound(m_keys.begin(), m_keys.end(), time,
+            [](float t, const ColorKey& key) { return t < key.time; });
         
-        if (FindKeyIndicesForTime(time, leftIndex, rightIndex))
-        {
-            const ColorKey& leftKey = m_keys[leftIndex];
-            const ColorKey& rightKey = m_keys[rightIndex];
+        if (it == m_keys.begin())
+            return m_keys[0].color;
             
-            return HermiteInterpolate(leftKey, rightKey, time);
-        }
+        if (it == m_keys.end())
+            return m_keys.back().color;
+            
+        const ColorKey& rightKey = *it;
+        const ColorKey& leftKey = *(it - 1);
         
-        // Fallback if we couldn't find valid indices
-        return m_keys[0].color;
+        return HermiteInterpolate(leftKey, rightKey, time);
     }
 
     void ColorCurve::SortKeys()
@@ -399,31 +392,42 @@ namespace mmo
         outLeftIndex = outRightIndex - 1;
         
         return true;
-    }
-
-    Vector4 ColorCurve::HermiteInterpolate(const ColorKey& key1, const ColorKey& key2, float time) const
+    }    Vector4 ColorCurve::HermiteInterpolate(const ColorKey& key1, const ColorKey& key2, float time) const
     {
         // Calculate normalized t in [0,1] range between the two keys
         float deltaTime = key2.time - key1.time;
         if (deltaTime <= 0.0f)
-        {
             return key1.color;
-        }
         
         float t = (time - key1.time) / deltaTime;
         
+        // For very small t values, return the first key color (optimization)
+        if (t < 0.001f)
+            return key1.color;
+            
+        // For t values very close to 1, return the second key color (optimization)
+        if (t > 0.999f)
+            return key2.color;
+            
         // Scale the tangents by the time difference
         Vector4 m0 = key1.outTangent * deltaTime;
         Vector4 m1 = key2.inTangent * deltaTime;
         
-        // Perform cubic interpolation for each component
-        Vector4 result;
-        result.x = CubicInterpolate(key1.color.x, key2.color.x, m0.x, m1.x, t);
-        result.y = CubicInterpolate(key1.color.y, key2.color.y, m0.y, m1.y, t);
-        result.z = CubicInterpolate(key1.color.z, key2.color.z, m0.z, m1.z, t);
-        result.w = CubicInterpolate(key1.color.w, key2.color.w, m0.w, m1.w, t);
+        // Precompute Hermite basis coefficients (optimization)
+        float t2 = t * t;
+        float t3 = t2 * t;
+        float h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
+        float h10 = t3 - 2.0f * t2 + t;
+        float h01 = -2.0f * t3 + 3.0f * t2;
+        float h11 = t3 - t2;
         
-        return result;
+        // Perform cubic interpolation for all components at once (optimization)
+        return Vector4(
+            h00 * key1.color.x + h10 * m0.x + h01 * key2.color.x + h11 * m1.x,
+            h00 * key1.color.y + h10 * m0.y + h01 * key2.color.y + h11 * m1.y,
+            h00 * key1.color.z + h10 * m0.z + h01 * key2.color.z + h11 * m1.z,
+            h00 * key1.color.w + h10 * m0.w + h01 * key2.color.w + h11 * m1.w
+        );
     }
 
     float ColorCurve::CubicInterpolate(float p0, float p1, float m0, float m1, float t) const
