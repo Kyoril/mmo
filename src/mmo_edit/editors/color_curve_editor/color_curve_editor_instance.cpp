@@ -33,19 +33,21 @@ namespace mmo
         m_colorCurveEditor = std::make_unique<ColorCurveImGuiEditor>(assetPath.filename().string().c_str(), m_colorCurve);
     }
 
-    ColorCurveEditorInstance::~ColorCurveEditorInstance() = default;
-
-    void ColorCurveEditorInstance::Draw()
+    ColorCurveEditorInstance::~ColorCurveEditorInstance() = default;    void ColorCurveEditorInstance::Draw()
     {
-        if (ImGui::GetCurrentContext()->FrameCount == 1)
-        {
-            ImGuiID dockspaceId = ImGui::GetID("ColorCurveDockSpace");
-            InitializeDockLayout(dockspaceId, "ColorCurveEditor", "ColorCurvePreview");
-        }
-
+        // Initialize dock space if it's the first frame or if docking isn't set up
+        static bool firstTime = true;
+        
         ImGuiID dockspaceId = ImGui::GetID("ColorCurveDockSpace");
+        
+        if (firstTime)
+        {
+            InitializeDockLayout(dockspaceId, "ColorCurveEditor", "ColorCurvePreview");
+            firstTime = false;
+        }
+        
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-
+        
         DrawEditorPanel("ColorCurveEditor");
         DrawPreviewPanel("ColorCurvePreview");
     }
@@ -72,33 +74,62 @@ namespace mmo
 
         m_modified = false;
         return true;
-    }
-
-    void ColorCurveEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& editorId, const String& previewId)
+    }    void ColorCurveEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& editorId, const String& previewId)
     {
+        // Clear any existing dock layout
         ImGui::DockBuilderRemoveNode(dockspaceId);
         ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
 
-        ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+        // Set the size to use the entire available area
+        ImVec2 availSize = ImGui::GetMainViewport()->Size;
+        ImGui::DockBuilderSetNodeSize(dockspaceId, availSize);
 
+        // Create a split with the editor panel taking 70% of the width
         ImGuiID editorDock;
         ImGuiID previewDock;
-
         ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, 0.7f, &editorDock, &previewDock);
-
+        
+        // Assign windows to docks
         ImGui::DockBuilderDockWindow(editorId.c_str(), editorDock);
         ImGui::DockBuilderDockWindow(previewId.c_str(), previewDock);
-
+        
+        // Finalize layout
         ImGui::DockBuilderFinish(dockspaceId);
-    }
-
-    void ColorCurveEditorInstance::DrawEditorPanel(const String& panelId)
+        
+        // Force windows to become visible in their dock nodes
+        ImGuiWindow* editorWindow = ImGui::FindWindowByName(editorId.c_str());
+        if (editorWindow) editorWindow->DockOrder = -1;
+        
+        ImGuiWindow* previewWindow = ImGui::FindWindowByName(previewId.c_str());
+        if (previewWindow) previewWindow->DockOrder = -1;
+    }    void ColorCurveEditorInstance::DrawEditorPanel(const String& panelId)
     {
         if (ImGui::Begin(panelId.c_str()))
         {
             ImGui::Text("Color Curve Editor - %s", m_assetPath.filename().string().c_str());
             ImGui::Separator();
 
+            // Add reset view button and instructions for navigation
+            if (ImGui::Button("Reset View"))
+            {
+                m_colorCurveEditor->ResetView();
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Navigation Controls:");
+                ImGui::BulletText("Middle-click and drag to pan");
+                ImGui::BulletText("Mouse wheel to zoom in/out");
+                ImGui::BulletText("Left-click to select key points");
+                ImGui::BulletText("Drag key points to adjust them");
+                ImGui::BulletText("Right-click for context menu");
+                ImGui::EndTooltip();
+            }
+            
+            ImGui::Separator();
+            
             // Create the editor UI
             if (m_colorCurveEditor->Draw())
             {

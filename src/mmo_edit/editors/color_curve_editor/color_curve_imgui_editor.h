@@ -2,9 +2,14 @@
 
 #include "graphics/color_curve.h"
 #include <imgui.h>
+#include <imgui_internal.h> // Needed for additional ImGui features
 
 namespace mmo
 {
+    // Constants for the editor
+    constexpr float KEY_SIZE = 8.0f;
+    constexpr float TANGENT_SIZE = 6.0f;
+
     /**
      * @class ColorCurveImGuiEditor
      * @brief ImGui-based editor widget for ColorCurve objects.
@@ -81,8 +86,12 @@ namespace mmo
         /**
          * @brief Sets the thickness of the curve lines
          * @param thickness The thickness in pixels
+         */        void SetCurveThickness(float thickness) { m_curveThickness = thickness; }
+
+        /**
+         * @brief Resets the view to the default position and zoom level
          */
-        void SetCurveThickness(float thickness) { m_curveThickness = thickness; }
+        void ResetView();
 
         /**
          * @brief Sets the snap increment for time values when dragging keys
@@ -181,14 +190,21 @@ namespace mmo
          * @return Color component value [0..1]
          */
         float YToValue(float y, const ImVec2& canvasPos, const ImVec2& canvasSize) const;
-        
-        /**
+          /**
          * @brief Handles mouse interactions with the curve editor
          * @param canvasPos Top-left position of the canvas
          * @param canvasSize Size of the canvas
          * @param modified Output parameter set to true if the curve was modified
          */
         void HandleInteraction(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified);
+        
+        /**
+         * @brief Handles right-click context menu
+         * @param canvasPos Top-left position of the canvas
+         * @param canvasSize Size of the canvas
+         * @param modified Output parameter set to true if the curve was modified
+         */
+        void HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified);
         
         /**
          * @brief Converts a Vector4 color to ImGui color format
@@ -250,15 +266,34 @@ namespace mmo
          * @brief Distributes selected keys evenly in time
          * @return True if any keys were modified, false otherwise
          */
-        bool DistributeKeysEvenly();
-
-        /**
-         * @brief Renders the context menu for the editor
+        bool DistributeKeysEvenly();        /**
+         * @brief Handles zoom and pan interactions
          * @param canvasPos Top-left position of the canvas
          * @param canvasSize Size of the canvas
-         * @param modified Output parameter set to true if the curve was modified
          */
-        void HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified);
+        void HandleZoomAndPan(const ImVec2& canvasPos, const ImVec2& canvasSize);
+        
+        /**
+         * @brief Draws visual indicators for keys that are outside the visible area
+         * @param drawList ImGui draw list to render to
+         * @param canvasPos Top-left position of the canvas
+         * @param canvasSize Size of the canvas
+         */
+        void DrawOffscreenIndicators(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
+        
+        /**
+         * @brief Draws an indicator for an off-screen curve component
+         * @param drawList ImGui draw list to render to
+         * @param value The component value
+         * @param x The x-coordinate for the indicator
+         * @param canvasPos Top-left position of the canvas
+         * @param canvasSize Size of the canvas
+         * @param color The color of the indicator
+         * @param arrowSize The size of the indicator arrow
+         */
+        void DrawComponentOffscreenIndicator(ImDrawList* drawList, float value, float x, 
+                                            const ImVec2& canvasPos, const ImVec2& canvasSize, 
+                                            const ImVec4& color, float arrowSize);
 
     private:
         std::string m_label;         ///< The label for this editor instance
@@ -270,6 +305,13 @@ namespace mmo
         bool m_draggingTangent;      ///< Whether a tangent handle is currently being dragged
         bool m_tangentIsIn;          ///< Whether the dragged tangent is an in-tangent
         int m_draggedComponent;      ///< The color component being dragged (0=R, 1=G, 2=B, 3=A)
+        bool m_draggingCanvas;       ///< Whether the canvas is being panned
+        ImVec2 m_dragStartPos;       ///< Starting position for dragging operations
+          float m_viewMinX;            ///< Minimum X value in view (time)
+        float m_viewMaxX;            ///< Maximum X value in view (time)
+        float m_viewMinY;            ///< Minimum Y value in view (value)
+        float m_viewMaxY;            ///< Maximum Y value in view (value)
+        float m_zoomLevel;           ///< Current zoom level
         
         bool m_showAlpha;            ///< Whether to show the alpha channel
         bool m_showTangents;         ///< Whether to show tangent handles
@@ -292,8 +334,5 @@ namespace mmo
         ImVec4 m_keyColor;           ///< Color for key points
         ImVec4 m_selectedKeyColor;   ///< Color for selected key points
         ImVec4 m_tangentHandleColor; ///< Color for tangent handles
-        
-        static constexpr float KEY_SIZE = 8.0f;       ///< Size of key points in pixels
-        static constexpr float TANGENT_SIZE = 6.0f;   ///< Size of tangent handles in pixels
     };
 }

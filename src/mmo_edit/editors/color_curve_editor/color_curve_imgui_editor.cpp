@@ -3,10 +3,11 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <imgui.h>
+#include <imgui_internal.h>
 
 namespace mmo
-{
-    ColorCurveImGuiEditor::ColorCurveImGuiEditor(const char* label, ColorCurve& colorCurve)
+{    ColorCurveImGuiEditor::ColorCurveImGuiEditor(const char* label, ColorCurve& colorCurve)
         : m_label(label)
         , m_colorCurve(colorCurve)
         , m_selectedKeyIndex(static_cast<size_t>(-1))
@@ -15,6 +16,12 @@ namespace mmo
         , m_draggingTangent(false)
         , m_tangentIsIn(false)
         , m_draggedComponent(0)
+        , m_draggingCanvas(false)
+        , m_viewMinX(0.0f)
+        , m_viewMaxX(1.0f)
+        , m_viewMinY(0.0f)
+        , m_viewMaxY(1.0f)
+        , m_zoomLevel(1.0f)
         , m_showAlpha(true)
         , m_showTangents(true)
         , m_showHorizontalGrid(true)
@@ -33,9 +40,17 @@ namespace mmo
         , m_selectedKeyColor(ImVec4(1.0f, 0.9f, 0.2f, 1.0f))
         , m_tangentHandleColor(ImVec4(0.7f, 0.7f, 0.7f, 1.0f))
     {
+        ResetView();
     }
-
-    bool ColorCurveImGuiEditor::Draw(float width, float height)
+    
+    void ColorCurveImGuiEditor::ResetView()
+    {
+        m_viewMinX = -0.05f;  // Show a bit outside the 0-1 range for better visibility
+        m_viewMaxX = 1.05f;
+        m_viewMinY = -0.05f;
+        m_viewMaxY = 1.05f;
+        m_zoomLevel = 1.0f;
+    }    bool ColorCurveImGuiEditor::Draw(float width, float height)
     {
         if (width <= 0.0f)
         {
@@ -49,10 +64,23 @@ namespace mmo
         // Create the frame for the curve editor
         ImGui::BeginGroup();
         
+        // Add zoom/pan toolbar
+        if (ImGui::Button("Reset View"))
+        {
+            ResetView();
+        }
+        ImGui::SameLine();
+        ImGui::Text("Zoom: %.1fx", m_zoomLevel);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(Middle-click and drag to pan, scroll wheel to zoom)");
+        
         // Reserve space for the canvas
         ImVec2 canvasPos = ImGui::GetCursorScreenPos();
         ImVec2 canvasSize = ImVec2(width, height);
         ImGui::InvisibleButton("canvas", canvasSize);
+        
+        // Handle zoom and pan
+        HandleZoomAndPan(canvasPos, canvasSize);
         
         // Capture mouse interactions
         HandleInteraction(canvasPos, canvasSize, modified);
@@ -84,6 +112,9 @@ namespace mmo
         
         // Draw the key points
         DrawKeys(drawList, canvasPos, canvasSize);
+        
+        // Draw indicators for off-screen keys
+        DrawOffscreenIndicators(drawList, canvasPos, canvasSize);
         
         // Draw the tangent handles if enabled
         if (m_showTangents)
@@ -323,17 +354,33 @@ namespace mmo
             float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
             float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
             
+            // Check if any component is in view before drawing
+            bool redInView = (key.color.x >= m_viewMinY && key.color.x <= m_viewMaxY);
+            bool greenInView = (key.color.y >= m_viewMinY && key.color.y <= m_viewMaxY);
+            bool blueInView = (key.color.z >= m_viewMinY && key.color.z <= m_viewMaxY);
+            bool alphaInView = (key.color.w >= m_viewMinY && key.color.w <= m_viewMaxY);
+            
             ImU32 keyColorRed = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_redColor);
             ImU32 keyColorGreen = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_greenColor);
             ImU32 keyColorBlue = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_blueColor);
             ImU32 keyColorAlpha = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_alphaColor);
+              // Draw the key points
+            if (redInView)
+            {
+                drawList->AddCircleFilled(ImVec2(x, redY), KEY_SIZE/2, keyColorRed);
+            }
             
-            // Draw the key points
-            drawList->AddCircleFilled(ImVec2(x, redY), KEY_SIZE/2, keyColorRed);
-            drawList->AddCircleFilled(ImVec2(x, greenY), KEY_SIZE/2, keyColorGreen);
-            drawList->AddCircleFilled(ImVec2(x, blueY), KEY_SIZE/2, keyColorBlue);
+            if (greenInView)
+            {
+                drawList->AddCircleFilled(ImVec2(x, greenY), KEY_SIZE/2, keyColorGreen);
+            }
             
-            if (m_showAlpha)
+            if (blueInView)
+            {
+                drawList->AddCircleFilled(ImVec2(x, blueY), KEY_SIZE/2, keyColorBlue);
+            }
+            
+            if (m_showAlpha && alphaInView)
             {
                 drawList->AddCircleFilled(ImVec2(x, alphaY), KEY_SIZE/2, keyColorAlpha);
             }
@@ -451,23 +498,52 @@ namespace mmo
                 drawList->AddCircleFilled(ImVec2(alphaOutX, alphaOutY), TANGENT_SIZE/2, alphaColor);
             }
         }
-    }
-
-    void ColorCurveImGuiEditor::DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    }    void ColorCurveImGuiEditor::DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
         ImU32 gridColor = ImGui::ColorConvertFloat4ToU32(m_gridColor);
+        ImU32 mainAxisColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+            m_gridColor.x * 1.5f, 
+            m_gridColor.y * 1.5f, 
+            m_gridColor.z * 1.5f, 
+            m_gridColor.w * 1.5f
+        ));
         
+        // Calculate the grid spacing based on zoom level
+        const float baseGridStep = 0.1f; // Base grid step at zoom level 1
+        float adaptiveStep = baseGridStep;
+        
+        // Adjust grid density based on zoom level
+        if (m_zoomLevel < 0.5f)
+            adaptiveStep = 0.25f;
+        else if (m_zoomLevel > 3.0f)
+            adaptiveStep = 0.05f;
+        else if (m_zoomLevel > 6.0f)
+            adaptiveStep = 0.025f;
+            
         // Draw horizontal grid lines
         if (m_showHorizontalGrid)
         {
-            const int numHLines = 4; // Draw lines at 0.0, 0.25, 0.5, 0.75, 1.0
-            for (int i = 0; i <= numHLines; ++i)
+            // Calculate grid lines positions
+            float viewHeight = m_viewMaxY - m_viewMinY;
+            
+            // Find the starting grid line position
+            float startValue = std::floor(m_viewMinY / adaptiveStep) * adaptiveStep;
+            
+            for (float value = startValue; value <= m_viewMaxY; value += adaptiveStep)
             {
-                float y = canvasPos.y + (1.0f - static_cast<float>(i) / numHLines) * canvasSize.y;
+                if (value < m_viewMinY || value > m_viewMaxY)
+                    continue;
+                
+                float y = ValueToY(value, canvasPos, canvasSize);
+                
+                // Use main axis color for the 0.0, 0.5, and 1.0 lines
+                bool isMainAxis = std::abs(value) < 0.001f || std::abs(value - 0.5f) < 0.001f || std::abs(value - 1.0f) < 0.001f;
+                    
                 drawList->AddLine(
                     ImVec2(canvasPos.x, y), 
                     ImVec2(canvasPos.x + canvasSize.x, y), 
-                    gridColor
+                    isMainAxis ? mainAxisColor : gridColor,
+                    isMainAxis ? 1.5f : 1.0f
                 );
             }
         }
@@ -475,14 +551,27 @@ namespace mmo
         // Draw vertical grid lines
         if (m_showVerticalGrid)
         {
-            const int numVLines = 4; // Draw lines at 0.0, 0.25, 0.5, 0.75, 1.0
-            for (int i = 0; i <= numVLines; ++i)
+            // Calculate grid lines positions
+            float viewWidth = m_viewMaxX - m_viewMinX;
+            
+            // Find the starting grid line position
+            float startTime = std::floor(m_viewMinX / adaptiveStep) * adaptiveStep;
+            
+            for (float time = startTime; time <= m_viewMaxX; time += adaptiveStep)
             {
-                float x = canvasPos.x + static_cast<float>(i) / numVLines * canvasSize.x;
+                if (time < m_viewMinX || time > m_viewMaxX)
+                    continue;
+                    
+                float x = TimeToX(time, canvasPos, canvasSize);
+                
+                // Use main axis color for the 0.0, 0.5, and 1.0 lines
+                bool isMainAxis = std::abs(time) < 0.001f || std::abs(time - 0.5f) < 0.001f || std::abs(time - 1.0f) < 0.001f;
+                
                 drawList->AddLine(
                     ImVec2(x, canvasPos.y), 
                     ImVec2(x, canvasPos.y + canvasSize.y), 
-                    gridColor
+                    isMainAxis ? mainAxisColor : gridColor,
+                    isMainAxis ? 1.5f : 1.0f
                 );
             }
         }
@@ -564,38 +653,32 @@ namespace mmo
         );
         
         ImGui::EndTooltip();
-    }
-
-    float ColorCurveImGuiEditor::TimeToX(float time, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    }    float ColorCurveImGuiEditor::TimeToX(float time, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
-        return canvasPos.x + time * canvasSize.x;
+        if (m_viewMaxX == m_viewMinX) return canvasPos.x;
+        return canvasPos.x + (time - m_viewMinX) / (m_viewMaxX - m_viewMinX) * canvasSize.x;
     }
 
     float ColorCurveImGuiEditor::ValueToY(float value, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
-        // Convert value [0..1] to Y coordinate (inverted because Y increases downward)
-        return canvasPos.y + (1.0f - value) * canvasSize.y;
+        if (m_viewMaxY == m_viewMinY) return canvasPos.y;
+        // Y is inverted in screen space (0 is top, canvasSize.y is bottom)
+        return canvasPos.y + (1.0f - (value - m_viewMinY) / (m_viewMaxY - m_viewMinY)) * canvasSize.y;
     }
-
+    
     float ColorCurveImGuiEditor::XToTime(float x, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
-        if (canvasSize.x <= 0.0f)
-        {
-            return 0.0f;
-        }
-        
-        return (x - canvasPos.x) / canvasSize.x;
+        if (canvasSize.x <= 0.0f) return m_viewMinX;
+        float t = (x - canvasPos.x) / canvasSize.x;
+        return m_viewMinX + t * (m_viewMaxX - m_viewMinX);
     }
-
+    
     float ColorCurveImGuiEditor::YToValue(float y, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
-        if (canvasSize.y <= 0.0f)
-        {
-            return 0.0f;
-        }
-        
-        // Convert Y coordinate to value [0..1] (inverted because Y increases downward)
-        return 1.0f - (y - canvasPos.y) / canvasSize.y;
+        if (canvasSize.y <= 0.0f) return m_viewMinY;
+        // Y is inverted in screen space (0 is top, canvasSize.y is bottom)
+        float v = 1.0f - (y - canvasPos.y) / canvasSize.y;
+        return m_viewMinY + v * (m_viewMaxY - m_viewMinY);
     }
 
     void ColorCurveImGuiEditor::HandleInteraction(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
@@ -1076,9 +1159,7 @@ namespace mmo
         }
         
         return modified;
-    }
-
-    void ColorCurveImGuiEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
+    }    void ColorCurveImGuiEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
     {
         if (ImGui::BeginPopupContextItem("ColorCurveContextMenu"))
         {
@@ -1101,6 +1182,38 @@ namespace mmo
                 m_selectedKeyIndex = newIndex;
                 modified = true;
             }
+            
+            ImGui::Separator();
+            
+            if (ImGui::MenuItem("Reset View"))
+            {
+                ResetView();
+            }
+            
+            if (ImGui::MenuItem("Zoom to Selection", nullptr, false, m_selectedKeyIndex != static_cast<size_t>(-1)))
+            {
+                if (m_selectedKeyIndex != static_cast<size_t>(-1))
+                {
+                    const ColorKey& key = m_colorCurve.GetKey(m_selectedKeyIndex);
+                    
+                    // Zoom in on the selected key with padding
+                    float padding = 0.2f;
+                    m_viewMinX = key.time - padding;
+                    m_viewMaxX = key.time + padding;
+                    
+                    // Calculate vertical range based on key colors
+                    float minY = std::min({key.color.x, key.color.y, key.color.z, key.color.w}) - padding;
+                    float maxY = std::max({key.color.x, key.color.y, key.color.z, key.color.w}) + padding;
+                    
+                    m_viewMinY = minY;
+                    m_viewMaxY = maxY;
+                    
+                    // Update zoom level
+                    m_zoomLevel = 4.0f;
+                }
+            }
+            
+            ImGui::Separator();
             
             if (ImGui::MenuItem("Reset All Tangents", nullptr, false, m_colorCurve.GetKeyCount() > 0))
             {
@@ -1160,6 +1273,155 @@ namespace mmo
             }
             
             ImGui::EndPopup();
+        }
+    }
+
+    void ColorCurveImGuiEditor::HandleZoomAndPan(const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        const ImVec2 mousePos = ImGui::GetMousePos();
+        const bool isHovered = ImGui::IsItemHovered();
+        
+        // Handle panning with middle mouse button
+        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+        {
+            m_draggingCanvas = true;
+            m_dragStartPos = mousePos;
+        }
+        
+        if (m_draggingCanvas && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+        {
+            // Calculate delta in screen space
+            const float deltaX = mousePos.x - m_dragStartPos.x;
+            const float deltaY = mousePos.y - m_dragStartPos.y;
+            
+            // Convert to view space
+            const float viewWidth = m_viewMaxX - m_viewMinX;
+            const float viewHeight = m_viewMaxY - m_viewMinY;
+            
+            const float scaleX = viewWidth / canvasSize.x;
+            const float scaleY = viewHeight / canvasSize.y;
+            
+            // Move the view (negative because drag moves the opposite way of the view)
+            m_viewMinX -= deltaX * scaleX;
+            m_viewMaxX -= deltaX * scaleX;
+            m_viewMinY += deltaY * scaleY; // Y is flipped in screen space
+            m_viewMaxY += deltaY * scaleY;
+            
+            // Update drag start position for next frame
+            m_dragStartPos = mousePos;
+        }
+        
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+        {
+            m_draggingCanvas = false;
+        }
+        
+        // Handle zooming with mouse wheel
+        if (isHovered && ImGui::GetIO().MouseWheel != 0)
+        {
+            // Calculate cursor position in view space
+            const float cursorTimePos = XToTime(mousePos.x, canvasPos, canvasSize);
+            const float cursorValuePos = YToValue(mousePos.y, canvasPos, canvasSize);
+            
+            // Calculate zoom factor based on mouse wheel delta
+            const float zoomFactor = ImGui::GetIO().MouseWheel > 0 ? 0.8f : 1.25f;
+            
+            // Update zoom level
+            m_zoomLevel *= (ImGui::GetIO().MouseWheel > 0) ? 1.25f : 0.8f;
+            m_zoomLevel = std::max(0.25f, std::min(m_zoomLevel, 10.0f)); // Limit zoom range
+            
+            // Adjust view size
+            const float viewWidth = m_viewMaxX - m_viewMinX;
+            const float viewHeight = m_viewMaxY - m_viewMinY;
+            
+            const float newViewWidth = viewWidth * zoomFactor;
+            const float newViewHeight = viewHeight * zoomFactor;
+            
+            // Calculate position adjustment to zoom around cursor
+            const float tRatio = (cursorTimePos - m_viewMinX) / viewWidth;
+            const float vRatio = (cursorValuePos - m_viewMinY) / viewHeight;
+            
+            // Apply new view bounds, centered on cursor position
+            m_viewMinX = cursorTimePos - tRatio * newViewWidth;
+            m_viewMaxX = cursorTimePos + (1.0f - tRatio) * newViewWidth;
+            m_viewMinY = cursorValuePos - vRatio * newViewHeight;
+            m_viewMaxY = cursorValuePos + (1.0f - vRatio) * newViewHeight;
+        }
+    }
+
+    void ColorCurveImGuiEditor::DrawOffscreenIndicators(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        const float arrowSize = 10.0f;
+        
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            const ColorKey& key = m_colorCurve.GetKey(i);
+            
+            // Check if key is outside view
+            bool isOutsideX = (key.time < m_viewMinX || key.time > m_viewMaxX);
+            bool redOutsideY = (key.color.x < m_viewMinY || key.color.x > m_viewMaxY);
+            bool greenOutsideY = (key.color.y < m_viewMinY || key.color.y > m_viewMaxY);
+            bool blueOutsideY = (key.color.z < m_viewMinY || key.color.z > m_viewMaxY);
+            bool alphaOutsideY = m_showAlpha && (key.color.w < m_viewMinY || key.color.w > m_viewMaxY);
+            
+            if (!isOutsideX && !redOutsideY && !greenOutsideY && !blueOutsideY && !alphaOutsideY)
+            {
+                continue; // Key is fully visible
+            }
+            
+            // Calculate clamped position
+            float x = TimeToX(key.time, canvasPos, canvasSize);
+            
+            // Clamp X position to canvas edges with a small margin
+            x = std::max(canvasPos.x + arrowSize, std::min(x, canvasPos.x + canvasSize.x - arrowSize));
+            
+            // Draw indicators for each component that's off-screen
+            DrawComponentOffscreenIndicator(drawList, key.color.x, x, canvasPos, canvasSize, m_redColor, arrowSize);
+            DrawComponentOffscreenIndicator(drawList, key.color.y, x, canvasPos, canvasSize, m_greenColor, arrowSize);
+            DrawComponentOffscreenIndicator(drawList, key.color.z, x, canvasPos, canvasSize, m_blueColor, arrowSize);
+            
+            if (m_showAlpha)
+            {
+                DrawComponentOffscreenIndicator(drawList, key.color.w, x, canvasPos, canvasSize, m_alphaColor, arrowSize);
+            }
+        }
+    }
+
+    void ColorCurveImGuiEditor::DrawComponentOffscreenIndicator(ImDrawList* drawList, float value, float x, 
+                                                          const ImVec2& canvasPos, const ImVec2& canvasSize, 
+                                                          const ImVec4& color, float arrowSize)
+    {
+        if (value >= m_viewMinY && value <= m_viewMaxY)
+        {
+            return; // Component is visible
+        }
+        
+        ImU32 arrowColor = ImGui::ColorConvertFloat4ToU32(color);
+        
+        if (value < m_viewMinY)
+        {
+            // Component is below the visible area, draw down arrow
+            float y = canvasPos.y + canvasSize.y - arrowSize * 2;
+            
+            drawList->AddTriangleFilled(
+                ImVec2(x, y + arrowSize * 2),
+                ImVec2(x - arrowSize, y),
+                ImVec2(x + arrowSize, y),
+                arrowColor
+            );
+        }
+        else
+        {
+            // Component is above the visible area, draw up arrow
+            float y = canvasPos.y + arrowSize;
+            
+            drawList->AddTriangleFilled(
+                ImVec2(x, y - arrowSize),
+                ImVec2(x - arrowSize, y + arrowSize),
+                ImVec2(x + arrowSize, y + arrowSize),
+                arrowColor
+            );
         }
     }
 }
