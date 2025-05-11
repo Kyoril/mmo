@@ -2,6 +2,9 @@
 
 #include "base/typedefs.h"
 #include "base/clock.h"
+#include <sstream>
+#include <iomanip>
+#include <string>
 
 namespace mmo
 {

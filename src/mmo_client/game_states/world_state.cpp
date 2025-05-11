@@ -549,8 +549,7 @@ namespace mmo
 		}
 
 		return true;
-	}
-	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
+	}	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_BEGIN_FRAME();
 
@@ -567,87 +566,13 @@ namespace mmo
 			}
 		}
 
-		// Update game time
-		m_gameTime.Update(timestamp);
+		// Update sky component (handles day/night cycle and lighting)
+		m_skyComponent->Update(deltaSeconds, timestamp);
 		
-		// Update sun light direction based on time of day if the sun light exists
-		if (m_sunLight && m_sunLightNode)
+		// Set the sky dome position to follow the player
+		if (m_playerController->GetRootNode())
 		{
-			const float normalizedTime = m_gameTime.GetNormalizedTimeOfDay(); // 0.0–1.0
-
-			// Configuration
-			const float arcMin = -Pi / 2.0f; // sunrise/sunset horizon
-			const float arcMax = +Pi / 2.0f; // overhead noon
-			const float transitionStart = 0.20f;
-			const float dayStart = 0.30f;
-			const float dayEnd = 0.70f;
-			const float transitionEnd = 0.80f;
-
-			float blendSun = 0.0f;
-			if (normalizedTime >= dayStart && normalizedTime <= dayEnd)
-			{
-				blendSun = 1.0f; // Full sun
-			}
-			else if (normalizedTime >= transitionStart && normalizedTime < dayStart)
-			{
-				blendSun = (normalizedTime - transitionStart) / (dayStart - transitionStart);
-			}
-			else if (normalizedTime > dayEnd && normalizedTime <= transitionEnd)
-			{
-				blendSun = 1.0f - (normalizedTime - dayEnd) / (transitionEnd - dayEnd);
-			}
-
-			float blendMoon = 1.0f - blendSun;
-
-			// Time within active arc (0 to 1 range for day or night)
-			float timeInArc;
-			bool isDay = blendSun > 0.5f;
-			if (isDay)
-			{
-				timeInArc = (normalizedTime - transitionStart) / (transitionEnd - transitionStart); // 0 to 1
-			}
-			else
-			{
-				float moonTime = (normalizedTime < transitionStart)
-					? normalizedTime + (1.0f - transitionEnd) // wrap-around for night
-					: normalizedTime - transitionEnd;
-				timeInArc = moonTime / (transitionStart + (1.0f - transitionEnd)); // 0 to 1
-			}
-
-			// Angle across the arc (from left horizon to right horizon)
-			float angleRadians = arcMin + timeInArc * (arcMax - arcMin); // -90° to +90°
-
-			// Build light direction: always above (negative Y)
-			const float x = -std::sin(angleRadians);
-			const float y = -std::cos(angleRadians); // always <= 0
-			const float z = -0.3f;
-
-			Vector3 lightDir = Vector3(x, y, z).NormalizedCopy();
-
-			// Light color & intensity
-			Vector4 sunColor(1.0f, 0.95f, 0.9f, 1.0f);
-			float sunIntensity = 1.0f;
-
-			Vector4 moonColor(0.4f, 0.5f, 0.7f, 1.0f);
-			float moonIntensity = 0.2f;
-
-			Vector4 blendedColor = sunColor * blendSun + moonColor * blendMoon;
-			float blendedIntensity = sunIntensity * blendSun + moonIntensity * blendMoon;
-
-			// Apply to shared light
-			m_sunLight->SetDirection(lightDir);
-			m_sunLight->SetColor(blendedColor);
-			m_sunLight->SetIntensity(blendedIntensity);
-
-			// Update light direction in material
-			m_skyMatInst->SetVectorParameter("LightDirection", Vector4(lightDir.x, lightDir.y, lightDir.z, 0.0f));
-			m_skyMatInst->SetScalarParameter("SunHeight", std::max(0.0f, 1.0f - std::abs(normalizedTime)));
-
-			const Vector4 horizonColor = m_horizonColorCurve->Evaluate(normalizedTime);
-			const Vector4 zenithColor = m_zenithColorCurve->Evaluate(normalizedTime);
-			m_skyMatInst->SetVectorParameter("HorizonColor", horizonColor);
-			m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
-			m_scene->SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));
+			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
 		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
@@ -670,17 +595,16 @@ namespace mmo
 			if (projectile->HasHit())
 			{
 				it = EraseByMove(m_spellProjectiles, it);
-			}
-			else
+			}			else
 			{
 				++it;
 			}
 		}
 
-		if (m_cloudsNode && m_playerController->GetRootNode())
+		// Position the sky dome to follow the player
+		if (m_skyComponent && m_playerController->GetRootNode())
 		{
-			m_cloudsNode->SetPosition(m_playerController->GetRootNode()->GetPosition());
-			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.0025f), TransformSpace::World);
+			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
 		}
 
 		const auto pos = GetPagePositionFromCamera();
@@ -779,45 +703,13 @@ namespace mmo
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
 	}
-
 	void WorldState::SetupWorldScene()
 	{
-		m_horizonColorCurve = std::make_unique<ColorCurve>();
-		if (const auto file = AssetRegistry::OpenFile("Models/HorizonColor.hccv"))
-		{
-			io::StreamSource stream(*file);
-			io::Reader reader(stream);
-			if (!m_horizonColorCurve->Deserialize(reader))
-			{
-				ASSERT(false);
-			}
-		}
-
-		m_zenithColorCurve = std::make_unique<ColorCurve>();
-		if (const auto file = AssetRegistry::OpenFile("Models/ZenithColor.hccv"))
-		{
-			io::StreamSource stream(*file);
-			io::Reader reader(stream);
-			if (!m_zenithColorCurve->Deserialize(reader))
-			{
-				ASSERT(false);
-			}
-		}
-		
 		m_scene = std::make_unique<OctreeScene>();
 		m_scene->SetFogRange(210.0f, 300.0f);
-
-		m_cloudsEntity = m_scene->CreateEntity("Clouds", "Models/SkySphere.hmsh");
-		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
-		m_cloudsEntity->SetQueryFlags(0);
-		m_cloudsNode = &m_scene->CreateSceneNode("Clouds");
-		m_cloudsNode->AttachObject(*m_cloudsEntity);
-		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
-		m_scene->GetRootSceneNode().AddChild(*m_cloudsNode);
-
-		ASSERT(m_cloudsEntity->GetNumSubEntities() > 0);
-		m_skyMatInst = std::make_shared<MaterialInstance>("__Sky__", m_cloudsEntity->GetSubEntity(0)->GetMaterial());
-		m_cloudsEntity->GetSubEntity(0)->SetMaterial(m_skyMatInst);
+		
+		// Create sky component to manage the sky dome and day/night cycle
+		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
 
 		m_rayQuery = std::move(m_scene->CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);
@@ -835,16 +727,6 @@ namespace mmo
 		m_debugAxis = std::make_unique<AxisDisplay>(*m_scene, "WorldDebugAxis");
 		m_scene->GetRootSceneNode().AddChild(m_debugAxis->GetSceneNode());
 		m_debugAxis->SetVisible(false);
-
-		// Setup sun light
-		m_sunLightNode = m_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
-		m_sunLight = &m_scene->CreateLight("SunLight", LightType::Directional);
-		m_sunLightNode->AttachObject(*m_sunLight);
-		m_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
-		m_sunLight->SetIntensity(1.0f);
-		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-		m_sunLight->SetCastShadows(true);
-		m_sunLight->SetShadowFarDistance(75.0f);
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
@@ -3493,12 +3375,15 @@ namespace mmo
 	{
 		FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
 	}
-
 	void WorldState::OnRenderShadowsChanged(ConsoleVar& var, const std::string& oldValue)
 	{
-		if (m_sunLight)
+		if (m_skyComponent)
 		{
-			m_sunLight->SetCastShadows(var.GetBoolValue());
+			Light* sunLight = m_skyComponent->GetSunLight();
+			if (sunLight)
+			{
+				sunLight->SetCastShadows(var.GetBoolValue());
+			}
 		}
 	}
 

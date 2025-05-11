@@ -27,9 +27,11 @@
 #include "edit_modes/spawn_edit_mode.h"
 #include "edit_modes/entity_edit_mode.h"
 #include "scene_graph/octree_scene.h"
+#include "graphics/sky_component.h"
 
 #include "deferred_shading/deferred_renderer.h"
 #include "edit_modes/navigation_edit_mode.h"
+#include "edit_modes/sky_edit_mode.h"
 
 namespace mmo
 {
@@ -319,15 +321,12 @@ namespace mmo
 
 		std::map<uint16, WorldPage> m_pages;
 
-		SceneNode* m_cloudsNode{ nullptr };
-		Entity* m_cloudsEntity{ nullptr };
-		Light* m_sunLight{ nullptr };
-		SceneNode* m_sunLightNode{ nullptr };
-
 		std::unique_ptr<TerrainEditMode> m_terrainEditMode;
 		std::unique_ptr<EntityEditMode> m_entityEditMode;
 		std::unique_ptr<SpawnEditMode> m_spawnEditMode;
 		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
+		std::unique_ptr<SkyEditMode> m_skyEditMode;
+		std::unique_ptr<SkyComponent> m_skyComponent;
 		WorldEditMode* m_editMode{ nullptr };
 
 		// Spawn edit mode

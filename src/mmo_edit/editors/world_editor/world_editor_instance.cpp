@@ -101,15 +101,6 @@ namespace mmo
 		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
 		m_scene.SetFogColor(fogColor);
 
-		m_sunLightNode = m_scene.GetRootSceneNode().CreateChildSceneNode("SunLightNode");
-		m_sunLight = &m_scene.CreateLight("SunLight", LightType::Directional);
-		m_sunLightNode->AttachObject(*m_sunLight);
-		m_sunLight->SetDirection(Vector3(-0.5f, -1.0f, -0.3f));
-		m_sunLight->SetIntensity(1.0f);
-		m_sunLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-		m_sunLight->SetCastShadows(true);
-		m_sunLight->SetShadowFarDistance(75.0f);
-		
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
 		m_worldGrid->SetVisible(false);
@@ -180,23 +171,20 @@ namespace mmo
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
-		m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
-		m_cloudsEntity->SetRenderQueueGroup(SkiesEarly);
-		m_cloudsEntity->SetQueryFlags(0);
-		m_cloudsNode = &m_scene.CreateSceneNode("Clouds");
-		m_cloudsNode->AttachObject(*m_cloudsEntity);
-		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
-		m_scene.GetRootSceneNode().AddChild(*m_cloudsNode);
-
 		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		m_debugEntity = m_scene.CreateEntity("TerrainDebug", "Editor/Joint.hmsh");
 		m_debugNode->AttachObject(*m_debugEntity);
 		m_debugEntity->SetVisible(false);
 
+		// Setup sky component for day/night cycle control
+		m_skyComponent = std::make_unique<SkyComponent>(m_scene);
+		m_skyComponent->SetTimeSpeed(0.0f);  // Start with time paused in editor
+
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
+		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_editMode = nullptr;
 
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
@@ -302,9 +290,11 @@ namespace mmo
 			}
 		}
 
-		if (m_cloudsNode)
+		// Update sky component for day/night cycle
+		if (m_skyComponent)
 		{
-			m_cloudsNode->SetPosition(m_camera->GetDerivedPosition());
+			m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
+			m_skyComponent->Update(deltaTimeSeconds, 0);
 		}
 
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
@@ -391,6 +381,10 @@ namespace mmo
 		{
 			SetEditMode(m_spawnEditMode.get());
 		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F5))
+		{
+			SetEditMode(m_skyEditMode.get());
+		}
 	}
 
 	void WorldEditorInstance::DrawDetailsPanel(const String& detailsId)
@@ -435,13 +429,12 @@ namespace mmo
 		const char* editModePreview = "None";
 		if (ImGui::BeginCombo("Mode", m_editMode ? m_editMode->GetName() : editModePreview, ImGuiComboFlags_None))
 		{
-			if (ImGui::Selectable("None", m_editMode == nullptr)) SetEditMode(nullptr);
-
-			WorldEditMode* modes[] = { 
+			if (ImGui::Selectable("None", m_editMode == nullptr)) SetEditMode(nullptr);			WorldEditMode* modes[] = { 
 				m_entityEditMode.get(), 
 				m_terrainEditMode.get(), 
 				m_spawnEditMode.get(),
-				m_navigationEditMode.get() 
+				m_navigationEditMode.get(),
+                m_skyEditMode.get()
 			};
 			
 			for (size_t i = 0; i < std::size(modes); ++i)

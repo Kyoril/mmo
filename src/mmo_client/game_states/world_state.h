@@ -14,6 +14,7 @@
 
 #include "base/signal.h"
 #include "game/game_time_component.h"
+#include "graphics/sky_component.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -376,24 +377,19 @@ namespace mmo
 		scoped_connection_container m_inputConnections;
 		std::unique_ptr<Scene> m_scene;
 		std::unique_ptr<PlayerController> m_playerController;
-		std::unique_ptr<AxisDisplay> m_debugAxis;
-		std::unique_ptr<WorldGrid> m_worldGrid;
+		std::unique_ptr<AxisDisplay> m_debugAxis;		std::unique_ptr<WorldGrid> m_worldGrid;
 		IdGenerator<uint64> m_objectIdGenerator{ 1 };
 		IAudio& m_audio;
 
 		bool m_combatMode = false;
 
-		SceneNode* m_cloudsNode { nullptr };
-		Entity* m_cloudsEntity { nullptr };
-		Light* m_sunLight { nullptr };
-		SceneNode* m_sunLightNode{ nullptr };
-		std::shared_ptr<MaterialInstance> m_skyMatInst;
-
 		SceneNode* m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
-		
-		// Game time component for day/night cycle
+				// Game time component for day/night cycle
 		GameTimeComponent m_gameTime;
+		
+		// Sky component for day/night cycle
+		std::unique_ptr<SkyComponent> m_skyComponent;
 
 		ICacheProvider& m_cache;
 
@@ -443,13 +439,9 @@ namespace mmo
 		GuildClient& m_guildClient;
 
 		scoped_connection_container m_cvarChangedSignals;
-
 		Discord& m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
-
-		std::unique_ptr<ColorCurve> m_horizonColorCurve;
-		std::unique_ptr<ColorCurve> m_zenithColorCurve;
 
 	private:
 		static IInputControl* s_inputControl;
