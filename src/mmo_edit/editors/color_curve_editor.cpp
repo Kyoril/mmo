@@ -1,0 +1,1177 @@
+#include "color_curve_editor.h"
+
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
+namespace mmo
+{    ColorCurveEditor::ColorCurveEditor(const char* label, ColorCurve& colorCurve)
+        : m_label(label)
+        , m_colorCurve(colorCurve)
+        , m_selectedKeyIndex(static_cast<size_t>(-1))
+        , m_hoveredKeyIndex(static_cast<size_t>(-1))
+        , m_draggingKey(false)
+        , m_draggingTangent(false)
+        , m_tangentIsIn(false)
+        , m_draggedComponent(0)
+        , m_showAlpha(true)
+        , m_showTangents(true)
+        , m_showHorizontalGrid(true)
+        , m_showVerticalGrid(true)
+        , m_showColorPreview(true)
+        , m_curveThickness(2.0f)
+        , m_timeSnapIncrement(0.0f)
+        , m_valueSnapIncrement(0.0f)
+        , m_backgroundColor(ImVec4(0.15f, 0.15f, 0.15f, 1.0f))
+        , m_gridColor(ImVec4(0.4f, 0.4f, 0.4f, 0.25f))
+        , m_redColor(ImVec4(0.9f, 0.2f, 0.2f, 1.0f))
+        , m_greenColor(ImVec4(0.2f, 0.9f, 0.2f, 1.0f))
+        , m_blueColor(ImVec4(0.2f, 0.4f, 0.9f, 1.0f))
+        , m_alphaColor(ImVec4(0.8f, 0.8f, 0.8f, 1.0f))
+        , m_keyColor(ImVec4(0.8f, 0.8f, 0.8f, 1.0f))
+        , m_selectedKeyColor(ImVec4(1.0f, 0.9f, 0.2f, 1.0f))
+        , m_tangentHandleColor(ImVec4(0.7f, 0.7f, 0.7f, 1.0f))
+    {
+    }    bool ColorCurveEditor::Draw(float width, float height)
+    {
+        if (width <= 0.0f)
+        {
+            width = ImGui::GetContentRegionAvail().x;
+        }
+        
+        bool modified = false;
+        
+        ImGui::PushID(m_label.c_str());
+        
+        // Create the frame for the curve editor
+        ImGui::BeginGroup();
+        
+        // Reserve space for the canvas
+        ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+        ImVec2 canvasSize = ImVec2(width, height);
+        ImGui::InvisibleButton("canvas", canvasSize);
+        
+        // Capture mouse interactions
+        HandleInteraction(canvasPos, canvasSize, modified);
+        
+        // Handle context menu
+        HandleContextMenu(canvasPos, canvasSize, modified);
+        
+        // Get the draw list to render our custom UI
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        
+        // Draw the background
+        drawList->AddRectFilled(
+            canvasPos, 
+            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), 
+            ImGui::ColorConvertFloat4ToU32(m_backgroundColor)
+        );
+        
+        // Draw grid
+        DrawGrid(drawList, canvasPos, canvasSize);
+        
+        // Draw color preview gradient if enabled
+        if (m_showColorPreview)
+        {
+            DrawColorPreview(drawList, canvasPos, canvasSize);
+        }
+        
+        // Draw the curve
+        DrawCurve(drawList, canvasPos, canvasSize, m_curveThickness);
+        
+        // Draw the key points
+        DrawKeys(drawList, canvasPos, canvasSize);
+        
+        // Draw the tangent handles if enabled
+        if (m_showTangents)
+        {
+            DrawTangents(drawList, canvasPos, canvasSize);
+        }
+        
+        // Draw a border around the canvas
+        drawList->AddRect(
+            canvasPos, 
+            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), 
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.3f, 0.3f, 0.3f, 1.0f))
+        );
+          // Current time display
+        if (ImGui::IsItemHovered() && !m_draggingKey && !m_draggingTangent)
+        {
+            DrawTooltip(drawList, canvasPos, canvasSize);
+        }
+        
+        // Draw time and value indicators for the selected key
+        if (m_selectedKeyIndex != static_cast<size_t>(-1) && m_selectedKeyIndex < m_colorCurve.GetKeyCount())
+        {
+            const ColorKey& key = m_colorCurve.GetKey(m_selectedKeyIndex);
+            
+            float timeX = TimeToX(key.time, canvasPos, canvasSize);
+            
+            // Draw time indicator
+            drawList->AddLine(
+                ImVec2(timeX, canvasPos.y),
+                ImVec2(timeX, canvasPos.y + canvasSize.y),
+                ImGui::ColorConvertFloat4ToU32(ImVec4(0.7f, 0.7f, 0.7f, 0.5f)),
+                1.0f
+            );
+        }
+        
+        // Add controls for the selected key point
+        if (m_selectedKeyIndex != static_cast<size_t>(-1) && m_selectedKeyIndex < m_colorCurve.GetKeyCount())
+        {
+            ImGui::Spacing();
+            
+            ColorKey key = m_colorCurve.GetKey(m_selectedKeyIndex);
+            
+            ImGui::PushItemWidth(80);
+            
+            // Time control
+            float time = key.time;
+            if (ImGui::DragFloat("Time", &time, 0.01f, 0.0f, 1.0f))
+            {
+                // Don't allow first and last keys to change time
+                if ((m_selectedKeyIndex > 0 && m_selectedKeyIndex < m_colorCurve.GetKeyCount() - 1) ||
+                    (m_colorCurve.GetKeyCount() <= 2))
+                {
+                    key.time = time;
+                    m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                    modified = true;
+                }
+            }
+            
+            ImGui::SameLine();
+            
+            // Color control
+            float color[4] = { key.color.x, key.color.y, key.color.z, key.color.w };
+            if (ImGui::ColorEdit4("Color", color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar))
+            {
+                key.color = Vector4(color[0], color[1], color[2], color[3]);
+                m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                modified = true;
+            }
+            
+            // Tangent mode
+            const char* modes[] = { "Auto", "Manual" };
+            int mode = key.tangentMode;
+            if (ImGui::Combo("Tangent Mode", &mode, modes, IM_ARRAYSIZE(modes)))
+            {
+                key.tangentMode = static_cast<uint8>(mode);
+                m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                if (mode == 0) // Auto mode
+                {
+                    m_colorCurve.CalculateTangents();
+                }
+                modified = true;
+            }
+            
+            // Tangent controls (only in manual mode)
+            if (key.tangentMode == 1)
+            {
+                ImGui::Text("In Tangent:");
+                float inTangent[4] = { key.inTangent.x, key.inTangent.y, key.inTangent.z, key.inTangent.w };
+                if (ImGui::DragFloat4("##InTangent", inTangent, 0.01f))
+                {
+                    key.inTangent = Vector4(inTangent[0], inTangent[1], inTangent[2], inTangent[3]);
+                    m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                    modified = true;
+                }
+                
+                ImGui::Text("Out Tangent:");
+                float outTangent[4] = { key.outTangent.x, key.outTangent.y, key.outTangent.z, key.outTangent.w };
+                if (ImGui::DragFloat4("##OutTangent", outTangent, 0.01f))
+                {
+                    key.outTangent = Vector4(outTangent[0], outTangent[1], outTangent[2], outTangent[3]);
+                    m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                    modified = true;
+                }
+            }
+            
+            ImGui::PopItemWidth();
+            
+            // Add/Remove key buttons
+            ImGui::Spacing();
+            
+            // Don't allow removing first or last key if there are only two keys
+            bool disableRemove = m_colorCurve.GetKeyCount() <= 2;
+            
+            if (disableRemove)
+            {
+                ImGui::BeginDisabled();
+            }
+            
+            if (ImGui::Button("Remove Key"))
+            {
+                if (m_colorCurve.RemoveKey(m_selectedKeyIndex))
+                {
+                    m_selectedKeyIndex = static_cast<size_t>(-1);
+                    modified = true;
+                }
+            }
+            
+            if (disableRemove)
+            {
+                ImGui::EndDisabled();
+            }
+        }
+        
+        // Add a key at the current mouse position button
+        if (ImGui::Button("Add Key"))
+        {
+            ImVec2 mousePos = ImGui::GetMousePos();
+            float time = XToTime(mousePos.x, canvasPos, canvasSize);
+            
+            // Clamp time to curve range
+            time = std::max(0.0f, std::min(time, 1.0f));
+            
+            // Sample the curve at the mouse position to get the color
+            Vector4 color = m_colorCurve.Evaluate(time);
+            
+            // Add the new key
+            size_t newIndex = m_colorCurve.AddKey(time, color);
+            m_selectedKeyIndex = newIndex;
+            modified = true;
+        }
+        
+        ImGui::EndGroup();
+        ImGui::PopID();
+        
+        return modified;
+    }
+
+    void ColorCurveEditor::DrawCurve(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize, float curveThickness)
+    {
+        const int numSamples = static_cast<int>(canvasSize.x);
+        
+        if (numSamples <= 1)
+        {
+            return;
+        }
+        
+        // Calculate points for each color component
+        std::vector<ImVec2> redPoints;
+        std::vector<ImVec2> greenPoints;
+        std::vector<ImVec2> bluePoints;
+        std::vector<ImVec2> alphaPoints;
+        
+        redPoints.reserve(numSamples);
+        greenPoints.reserve(numSamples);
+        bluePoints.reserve(numSamples);
+        alphaPoints.reserve(numSamples);
+        
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(numSamples - 1);
+            Vector4 color = m_colorCurve.Evaluate(t);
+            
+            float x = canvasPos.x + t * canvasSize.x;
+            
+            redPoints.push_back(ImVec2(x, ValueToY(color.x, canvasPos, canvasSize)));
+            greenPoints.push_back(ImVec2(x, ValueToY(color.y, canvasPos, canvasSize)));
+            bluePoints.push_back(ImVec2(x, ValueToY(color.z, canvasPos, canvasSize)));
+            if (m_showAlpha)
+            {
+                alphaPoints.push_back(ImVec2(x, ValueToY(color.w, canvasPos, canvasSize)));
+            }
+        }
+        
+        // Draw curve for each color component
+        if (redPoints.size() >= 2)
+        {
+            drawList->AddPolyline(redPoints.data(), static_cast<int>(redPoints.size()), 
+                               ImGui::ColorConvertFloat4ToU32(m_redColor), 0, curveThickness);
+        }
+        
+        if (greenPoints.size() >= 2)
+        {
+            drawList->AddPolyline(greenPoints.data(), static_cast<int>(greenPoints.size()), 
+                               ImGui::ColorConvertFloat4ToU32(m_greenColor), 0, curveThickness);
+        }
+        
+        if (bluePoints.size() >= 2)
+        {
+            drawList->AddPolyline(bluePoints.data(), static_cast<int>(bluePoints.size()), 
+                               ImGui::ColorConvertFloat4ToU32(m_blueColor), 0, curveThickness);
+        }
+        
+        if (m_showAlpha && alphaPoints.size() >= 2)
+        {
+            drawList->AddPolyline(alphaPoints.data(), static_cast<int>(alphaPoints.size()), 
+                               ImGui::ColorConvertFloat4ToU32(m_alphaColor), 0, curveThickness);
+        }
+    }
+
+    void ColorCurveEditor::DrawKeys(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            const ColorKey& key = m_colorCurve.GetKey(i);
+            
+            float x = TimeToX(key.time, canvasPos, canvasSize);
+            
+            bool isSelected = (i == m_selectedKeyIndex);
+            bool isHovered = (i == m_hoveredKeyIndex);
+            
+            // Draw key points for each color component
+            float redY = ValueToY(key.color.x, canvasPos, canvasSize);
+            float greenY = ValueToY(key.color.y, canvasPos, canvasSize);
+            float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
+            float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
+            
+            ImU32 keyColorRed = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_redColor);
+            ImU32 keyColorGreen = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_greenColor);
+            ImU32 keyColorBlue = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_blueColor);
+            ImU32 keyColorAlpha = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_alphaColor);
+            
+            // Draw the key points
+            drawList->AddCircleFilled(ImVec2(x, redY), KEY_SIZE/2, keyColorRed);
+            drawList->AddCircleFilled(ImVec2(x, greenY), KEY_SIZE/2, keyColorGreen);
+            drawList->AddCircleFilled(ImVec2(x, blueY), KEY_SIZE/2, keyColorBlue);
+            
+            if (m_showAlpha)
+            {
+                drawList->AddCircleFilled(ImVec2(x, alphaY), KEY_SIZE/2, keyColorAlpha);
+            }
+            
+            // Draw outlines for selected or hovered keys
+            if (isSelected || isHovered)
+            {
+                float outlineSize = isSelected ? 2.0f : 1.0f;
+                ImU32 outlineColor = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_keyColor);
+                
+                drawList->AddCircle(ImVec2(x, redY), KEY_SIZE/2 + 1, outlineColor, 0, outlineSize);
+                drawList->AddCircle(ImVec2(x, greenY), KEY_SIZE/2 + 1, outlineColor, 0, outlineSize);
+                drawList->AddCircle(ImVec2(x, blueY), KEY_SIZE/2 + 1, outlineColor, 0, outlineSize);
+                
+                if (m_showAlpha)
+                {
+                    drawList->AddCircle(ImVec2(x, alphaY), KEY_SIZE/2 + 1, outlineColor, 0, outlineSize);
+                }
+            }
+        }
+    }
+
+    void ColorCurveEditor::DrawTangents(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            const ColorKey& key = m_colorCurve.GetKey(i);
+            
+            // Skip if not in manual tangent mode
+            if (key.tangentMode != 1)
+            {
+                continue;
+            }
+            
+            float x = TimeToX(key.time, canvasPos, canvasSize);
+            
+            bool isSelected = (i == m_selectedKeyIndex);
+            
+            // Get point positions
+            float redY = ValueToY(key.color.x, canvasPos, canvasSize);
+            float greenY = ValueToY(key.color.y, canvasPos, canvasSize);
+            float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
+            float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
+            
+            // Calculate tangent handle positions
+            // Scale by 0.1 to make the handles a reasonable distance
+            float tangentScale = canvasSize.x * 0.1f;
+            
+            // In-tangent handles (left)
+            float redInX = x - key.inTangent.x * tangentScale;
+            float greenInX = x - key.inTangent.y * tangentScale;
+            float blueInX = x - key.inTangent.z * tangentScale;
+            float alphaInX = x - key.inTangent.w * tangentScale;
+            
+            float redInY = redY - key.inTangent.x * tangentScale;
+            float greenInY = greenY - key.inTangent.y * tangentScale;
+            float blueInY = blueY - key.inTangent.z * tangentScale;
+            float alphaInY = alphaY - key.inTangent.w * tangentScale;
+            
+            // Out-tangent handles (right)
+            float redOutX = x + key.outTangent.x * tangentScale;
+            float greenOutX = x + key.outTangent.y * tangentScale;
+            float blueOutX = x + key.outTangent.z * tangentScale;
+            float alphaOutX = x + key.outTangent.w * tangentScale;
+            
+            float redOutY = redY + key.outTangent.x * tangentScale;
+            float greenOutY = greenY + key.outTangent.y * tangentScale;
+            float blueOutY = blueY + key.outTangent.z * tangentScale;
+            float alphaOutY = alphaY + key.outTangent.w * tangentScale;
+            
+            // Draw tangent lines
+            ImU32 redColor = ImGui::ColorConvertFloat4ToU32(m_redColor);
+            ImU32 greenColor = ImGui::ColorConvertFloat4ToU32(m_greenColor);
+            ImU32 blueColor = ImGui::ColorConvertFloat4ToU32(m_blueColor);
+            ImU32 alphaColor = ImGui::ColorConvertFloat4ToU32(m_alphaColor);
+            
+            // In-tangents
+            drawList->AddLine(ImVec2(x, redY), ImVec2(redInX, redInY), redColor, 1.0f);
+            drawList->AddLine(ImVec2(x, greenY), ImVec2(greenInX, greenInY), greenColor, 1.0f);
+            drawList->AddLine(ImVec2(x, blueY), ImVec2(blueInX, blueInY), blueColor, 1.0f);
+            if (m_showAlpha)
+            {
+                drawList->AddLine(ImVec2(x, alphaY), ImVec2(alphaInX, alphaInY), alphaColor, 1.0f);
+            }
+            
+            // Out-tangents
+            drawList->AddLine(ImVec2(x, redY), ImVec2(redOutX, redOutY), redColor, 1.0f);
+            drawList->AddLine(ImVec2(x, greenY), ImVec2(greenOutX, greenOutY), greenColor, 1.0f);
+            drawList->AddLine(ImVec2(x, blueY), ImVec2(blueOutX, blueOutY), blueColor, 1.0f);
+            if (m_showAlpha)
+            {
+                drawList->AddLine(ImVec2(x, alphaY), ImVec2(alphaOutX, alphaOutY), alphaColor, 1.0f);
+            }
+            
+            // Draw tangent handles
+            ImU32 handleColor = ImGui::ColorConvertFloat4ToU32(isSelected ? m_selectedKeyColor : m_tangentHandleColor);
+            
+            // In-tangent handles
+            drawList->AddCircleFilled(ImVec2(redInX, redInY), TANGENT_SIZE/2, redColor);
+            drawList->AddCircleFilled(ImVec2(greenInX, greenInY), TANGENT_SIZE/2, greenColor);
+            drawList->AddCircleFilled(ImVec2(blueInX, blueInY), TANGENT_SIZE/2, blueColor);
+            if (m_showAlpha)
+            {
+                drawList->AddCircleFilled(ImVec2(alphaInX, alphaInY), TANGENT_SIZE/2, alphaColor);
+            }
+            
+            // Out-tangent handles
+            drawList->AddCircleFilled(ImVec2(redOutX, redOutY), TANGENT_SIZE/2, redColor);
+            drawList->AddCircleFilled(ImVec2(greenOutX, greenOutY), TANGENT_SIZE/2, greenColor);
+            drawList->AddCircleFilled(ImVec2(blueOutX, blueOutY), TANGENT_SIZE/2, blueColor);
+            if (m_showAlpha)
+            {
+                drawList->AddCircleFilled(ImVec2(alphaOutX, alphaOutY), TANGENT_SIZE/2, alphaColor);
+            }
+        }
+    }
+
+    void ColorCurveEditor::DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        ImU32 gridColor = ImGui::ColorConvertFloat4ToU32(m_gridColor);
+        
+        // Draw horizontal grid lines
+        if (m_showHorizontalGrid)
+        {
+            const int numHLines = 4; // Draw lines at 0.0, 0.25, 0.5, 0.75, 1.0
+            for (int i = 0; i <= numHLines; ++i)
+            {
+                float y = canvasPos.y + (1.0f - static_cast<float>(i) / numHLines) * canvasSize.y;
+                drawList->AddLine(
+                    ImVec2(canvasPos.x, y), 
+                    ImVec2(canvasPos.x + canvasSize.x, y), 
+                    gridColor
+                );
+            }
+        }
+        
+        // Draw vertical grid lines
+        if (m_showVerticalGrid)
+        {
+            const int numVLines = 4; // Draw lines at 0.0, 0.25, 0.5, 0.75, 1.0
+            for (int i = 0; i <= numVLines; ++i)
+            {
+                float x = canvasPos.x + static_cast<float>(i) / numVLines * canvasSize.x;
+                drawList->AddLine(
+                    ImVec2(x, canvasPos.y), 
+                    ImVec2(x, canvasPos.y + canvasSize.y), 
+                    gridColor
+                );
+            }
+        }
+    }
+
+    void ColorCurveEditor::DrawColorPreview(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        const int numSegments = static_cast<int>(canvasSize.x);
+        
+        if (numSegments <= 1)
+        {
+            return;
+        }
+        
+        // Draw preview at the bottom
+        const float previewHeight = 20.0f;
+        
+        if (canvasSize.y <= previewHeight)
+        {
+            return;
+        }
+        
+        const float previewY = canvasPos.y + canvasSize.y - previewHeight;
+        
+        for (int i = 0; i < numSegments; ++i)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(numSegments - 1);
+            Vector4 color = m_colorCurve.Evaluate(t);
+            
+            float x0 = canvasPos.x + t * canvasSize.x;
+            float x1 = canvasPos.x + (i + 1.0f) / static_cast<float>(numSegments - 1) * canvasSize.x;
+            
+            drawList->AddRectFilled(
+                ImVec2(x0, previewY),
+                ImVec2(x1, previewY + previewHeight),
+                ImGui::ColorConvertFloat4ToU32(ColorToImVec4(color))
+            );
+        }
+        
+        // Draw a border around the preview
+        drawList->AddRect(
+            ImVec2(canvasPos.x, previewY),
+            ImVec2(canvasPos.x + canvasSize.x, previewY + previewHeight),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.3f, 0.3f, 0.3f, 1.0f))
+        );
+    }
+
+    float ColorCurveEditor::TimeToX(float time, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    {
+        return canvasPos.x + time * canvasSize.x;
+    }
+
+    float ColorCurveEditor::ValueToY(float value, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    {
+        // Convert value [0..1] to Y coordinate (inverted because Y increases downward)
+        return canvasPos.y + (1.0f - value) * canvasSize.y;
+    }
+
+    float ColorCurveEditor::XToTime(float x, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    {
+        if (canvasSize.x <= 0.0f)
+        {
+            return 0.0f;
+        }
+        
+        return (x - canvasPos.x) / canvasSize.x;
+    }
+
+    float ColorCurveEditor::YToValue(float y, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    {
+        if (canvasSize.y <= 0.0f)
+        {
+            return 0.0f;
+        }
+        
+        // Convert Y coordinate to value [0..1] (inverted because Y increases downward)
+        return 1.0f - (y - canvasPos.y) / canvasSize.y;
+    }
+
+    void ColorCurveEditor::HandleInteraction(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
+    {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        bool isHovered = ImGui::IsItemHovered();
+        
+        // Reset hovered key index
+        m_hoveredKeyIndex = static_cast<size_t>(-1);
+        
+        // Handle key selection and dragging
+        if (isHovered)
+        {
+            // Find the closest key point to the mouse cursor
+            size_t closestKeyIndex;
+            bool foundKey = FindClosestKey(mousePos, canvasPos, canvasSize, closestKeyIndex);
+            
+            if (foundKey)
+            {
+                m_hoveredKeyIndex = closestKeyIndex;
+                
+                if (ImGui::IsMouseClicked(0))
+                {
+                    m_selectedKeyIndex = closestKeyIndex;
+                    m_draggingKey = true;
+                }
+            }
+            else if (ImGui::IsMouseClicked(0) && m_showTangents)
+            {
+                // Check if we clicked on a tangent handle
+                size_t keyIndex;
+                bool isInTangent;
+                int component;
+                if (FindHoveredTangent(mousePos, canvasPos, canvasSize, keyIndex, isInTangent, component))
+                {
+                    m_selectedKeyIndex = keyIndex;
+                    m_draggingTangent = true;
+                    m_tangentIsIn = isInTangent;
+                    m_draggedComponent = component;
+                }
+            }
+            else if (ImGui::IsMouseClicked(0) && !m_draggingKey && !m_draggingTangent)
+            {
+                // If clicking empty space, clear selection
+                m_selectedKeyIndex = static_cast<size_t>(-1);
+            }
+        }
+        
+        // Handle dragging of keys
+        if (m_draggingKey && ImGui::IsMouseDown(0))
+        {
+            if (m_selectedKeyIndex != static_cast<size_t>(-1) && m_selectedKeyIndex < m_colorCurve.GetKeyCount())
+            {
+                ColorKey key = m_colorCurve.GetKey(m_selectedKeyIndex);
+                  // Calculate new time value
+                float time = XToTime(mousePos.x, canvasPos, canvasSize);
+                time = std::max(0.0f, std::min(time, 1.0f));
+                
+                // Apply time snapping if enabled
+                time = SnapTime(time);
+                
+                // Don't allow the first or last key to move horizontally if there are only 2 keys
+                if ((m_colorCurve.GetKeyCount() > 2) || 
+                    (m_selectedKeyIndex > 0 && m_selectedKeyIndex < m_colorCurve.GetKeyCount() - 1))
+                {
+                    key.time = time;
+                }
+                
+                // Calculate which component is being dragged based on closest distance
+                const float thresholdDistance = 10.0f;
+                
+                float redY = ValueToY(key.color.x, canvasPos, canvasSize);
+                float greenY = ValueToY(key.color.y, canvasPos, canvasSize);
+                float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
+                float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
+                
+                float redDist = std::abs(mousePos.y - redY);
+                float greenDist = std::abs(mousePos.y - greenY);
+                float blueDist = std::abs(mousePos.y - blueY);
+                float alphaDist = std::abs(mousePos.y - alphaY);
+                
+                // Find the closest component
+                float minDist = redDist;
+                int component = 0;
+                
+                if (greenDist < minDist)
+                {
+                    minDist = greenDist;
+                    component = 1;
+                }
+                
+                if (blueDist < minDist)
+                {
+                    minDist = blueDist;
+                    component = 2;
+                }
+                
+                if (m_showAlpha && alphaDist < minDist)
+                {
+                    minDist = alphaDist;
+                    component = 3;
+                }
+                
+                // Only modify the component if it's close to the mouse
+                if (minDist <= thresholdDistance)
+                {                    float value = YToValue(mousePos.y, canvasPos, canvasSize);
+                    value = std::max(0.0f, std::min(value, 1.0f));
+                    
+                    // Apply value snapping if enabled
+                    value = SnapValue(value);
+                    
+                    // Update the appropriate component
+                    if (component == 0)
+                    {
+                        key.color.x = value;
+                    }
+                    else if (component == 1)
+                    {
+                        key.color.y = value;
+                    }
+                    else if (component == 2)
+                    {
+                        key.color.z = value;
+                    }
+                    else if (component == 3)
+                    {
+                        key.color.w = value;
+                    }
+                }
+                
+                m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                modified = true;
+            }
+        }
+        else if (m_draggingTangent && ImGui::IsMouseDown(0))
+        {
+            if (m_selectedKeyIndex != static_cast<size_t>(-1) && m_selectedKeyIndex < m_colorCurve.GetKeyCount())
+            {
+                ColorKey key = m_colorCurve.GetKey(m_selectedKeyIndex);
+                
+                // Convert to manual mode if not already
+                if (key.tangentMode != 1)
+                {
+                    key.tangentMode = 1;
+                }
+                
+                // Calculate new tangent value
+                float x = mousePos.x;
+                float y = mousePos.y;
+                
+                float keyX = TimeToX(key.time, canvasPos, canvasSize);
+                float keyY = 0.0f;
+                
+                // Get Y position of the key point for the component being dragged
+                if (m_draggedComponent == 0)
+                {
+                    keyY = ValueToY(key.color.x, canvasPos, canvasSize);
+                }
+                else if (m_draggedComponent == 1)
+                {
+                    keyY = ValueToY(key.color.y, canvasPos, canvasSize);
+                }
+                else if (m_draggedComponent == 2)
+                {
+                    keyY = ValueToY(key.color.z, canvasPos, canvasSize);
+                }
+                else if (m_draggedComponent == 3)
+                {
+                    keyY = ValueToY(key.color.w, canvasPos, canvasSize);
+                }
+                
+                // Calculate tangent vector
+                float dx = (x - keyX) / (canvasSize.x * 0.1f); // Scale back to tangent space
+                float dy = (keyY - y) / (canvasSize.y * 0.1f); // Y is flipped
+                
+                if (m_tangentIsIn)
+                {
+                    dx = -dx; // Invert X for in-tangent
+                }
+                
+                // Set the tangent for the dragged component
+                if (m_draggedComponent == 0)
+                {
+                    if (m_tangentIsIn)
+                        key.inTangent.x = dx;
+                    else
+                        key.outTangent.x = dx;
+                }
+                else if (m_draggedComponent == 1)
+                {
+                    if (m_tangentIsIn)
+                        key.inTangent.y = dx;
+                    else
+                        key.outTangent.y = dx;
+                }
+                else if (m_draggedComponent == 2)
+                {
+                    if (m_tangentIsIn)
+                        key.inTangent.z = dx;
+                    else
+                        key.outTangent.z = dx;
+                }
+                else if (m_draggedComponent == 3)
+                {
+                    if (m_tangentIsIn)
+                        key.inTangent.w = dx;
+                    else
+                        key.outTangent.w = dx;
+                }
+                
+                m_colorCurve.UpdateKey(m_selectedKeyIndex, key);
+                modified = true;
+            }
+        }
+        
+        // End dragging when mouse button is released
+        if (!ImGui::IsMouseDown(0))
+        {
+            m_draggingKey = false;
+            m_draggingTangent = false;
+        }
+    }
+
+    ImVec4 ColorCurveEditor::ColorToImVec4(const Vector4& color) const
+    {
+        return ImVec4(color.x, color.y, color.z, color.w);
+    }
+
+    bool ColorCurveEditor::FindClosestKey(const ImVec2& mousePos, const ImVec2& canvasPos, 
+                                          const ImVec2& canvasSize, size_t& outKeyIndex, 
+                                          float maxDistance) const
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        
+        float closestDist = maxDistance * maxDistance;
+        size_t closestIndex = static_cast<size_t>(-1);
+        
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            const ColorKey& key = m_colorCurve.GetKey(i);
+            
+            float x = TimeToX(key.time, canvasPos, canvasSize);
+            
+            // Calculate distance to red, green, blue, and alpha points
+            float redY = ValueToY(key.color.x, canvasPos, canvasSize);
+            float greenY = ValueToY(key.color.y, canvasPos, canvasSize);
+            float blueY = ValueToY(key.color.z, canvasPos, canvasSize);
+            float alphaY = ValueToY(key.color.w, canvasPos, canvasSize);
+            
+            float redDist = std::pow(x - mousePos.x, 2) + std::pow(redY - mousePos.y, 2);
+            float greenDist = std::pow(x - mousePos.x, 2) + std::pow(greenY - mousePos.y, 2);
+            float blueDist = std::pow(x - mousePos.x, 2) + std::pow(blueY - mousePos.y, 2);
+            float alphaDist = std::pow(x - mousePos.x, 2) + std::pow(alphaY - mousePos.y, 2);
+            
+            // Find the minimum distance
+            float minDist = redDist;
+            minDist = std::min(minDist, greenDist);
+            minDist = std::min(minDist, blueDist);
+            
+            if (m_showAlpha)
+            {
+                minDist = std::min(minDist, alphaDist);
+            }
+            
+            // Update closest key if this one is closer
+            if (minDist < closestDist)
+            {
+                closestDist = minDist;
+                closestIndex = i;
+            }
+        }
+        
+        if (closestIndex != static_cast<size_t>(-1))
+        {
+            outKeyIndex = closestIndex;
+            return true;
+        }
+        
+        return false;
+    }
+
+    bool ColorCurveEditor::FindHoveredTangent(const ImVec2& mousePos, const ImVec2& canvasPos, 
+                               const ImVec2& canvasSize, size_t& outKeyIndex, 
+                               bool& outIsInTangent, int& outComponent, 
+                               float maxDistance) const
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        
+        float closestDist = maxDistance * maxDistance;
+        bool foundTangent = false;
+        
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            const ColorKey& key = m_colorCurve.GetKey(i);
+            
+            // Skip if not in manual tangent mode
+            if (key.tangentMode != 1)
+            {
+                continue;
+            }
+            
+            float keyX = TimeToX(key.time, canvasPos, canvasSize);
+            
+            // Check for red, green, blue, and alpha tangent handles
+            for (int comp = 0; comp < 4; ++comp)
+            {
+                // Skip alpha if not showing
+                if (comp == 3 && !m_showAlpha)
+                {
+                    continue;
+                }
+                
+                float keyY = 0.0f;
+                Vector4 inTangent, outTangent;
+                
+                // Get key position and tangents for this component
+                switch (comp)
+                {
+                    case 0: // Red
+                        keyY = ValueToY(key.color.x, canvasPos, canvasSize);
+                        inTangent = Vector4(key.inTangent.x, 0.0f, 0.0f, 0.0f);
+                        outTangent = Vector4(key.outTangent.x, 0.0f, 0.0f, 0.0f);
+                        break;
+                    
+                    case 1: // Green
+                        keyY = ValueToY(key.color.y, canvasPos, canvasSize);
+                        inTangent = Vector4(key.inTangent.y, 0.0f, 0.0f, 0.0f);
+                        outTangent = Vector4(key.outTangent.y, 0.0f, 0.0f, 0.0f);
+                        break;
+                    
+                    case 2: // Blue
+                        keyY = ValueToY(key.color.z, canvasPos, canvasSize);
+                        inTangent = Vector4(key.inTangent.z, 0.0f, 0.0f, 0.0f);
+                        outTangent = Vector4(key.outTangent.z, 0.0f, 0.0f, 0.0f);
+                        break;
+                    
+                    case 3: // Alpha
+                        keyY = ValueToY(key.color.w, canvasPos, canvasSize);
+                        inTangent = Vector4(key.inTangent.w, 0.0f, 0.0f, 0.0f);
+                        outTangent = Vector4(key.outTangent.w, 0.0f, 0.0f, 0.0f);
+                        break;
+                }
+                
+                // Calculate in-tangent handle position
+                float tangentScale = canvasSize.x * 0.1f; // Scale for display
+                
+                float inTangentX = keyX - inTangent.x * tangentScale;
+                float inTangentY = keyY - inTangent.y * tangentScale;
+                
+                // Calculate distance to in-tangent handle
+                float inDist = std::pow(inTangentX - mousePos.x, 2) + std::pow(inTangentY - mousePos.y, 2);
+                
+                if (inDist < closestDist)
+                {
+                    closestDist = inDist;
+                    outKeyIndex = i;
+                    outIsInTangent = true;
+                    outComponent = comp;
+                    foundTangent = true;
+                }
+                
+                // Calculate out-tangent handle position
+                float outTangentX = keyX + outTangent.x * tangentScale;
+                float outTangentY = keyY - outTangent.y * tangentScale;
+                
+                // Calculate distance to out-tangent handle
+                float outDist = std::pow(outTangentX - mousePos.x, 2) + std::pow(outTangentY - mousePos.y, 2);
+                
+                if (outDist < closestDist)
+                {
+                    closestDist = outDist;
+                    outKeyIndex = i;
+                    outIsInTangent = false;
+                    outComponent = comp;
+                    foundTangent = true;
+                }
+            }
+        }
+        
+        return foundTangent;
+    }
+
+    void ColorCurveEditor::DrawTooltip(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        float time = XToTime(mousePos.x, canvasPos, canvasSize);
+        
+        // Clamp time to curve range
+        time = std::max(0.0f, std::min(time, 1.0f));
+        
+        // Sample the curve at the mouse position
+        Vector4 color = m_colorCurve.Evaluate(time);
+        
+        // Display a tooltip
+        ImGui::BeginTooltip();
+        ImGui::Text("Time: %.3f", time);
+        ImGui::Text("R: %.3f", color.x);
+        ImGui::Text("G: %.3f", color.y);
+        ImGui::Text("B: %.3f", color.z);
+        if (m_showAlpha)
+        {
+            ImGui::Text("A: %.3f", color.w);
+        }
+        
+        // Draw color swatch in the tooltip
+        ImVec2 swatchSize(80, 20);
+        ImVec2 swatchPos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##colorswatch", swatchSize);
+        
+        drawList->AddRectFilled(
+            swatchPos,
+            ImVec2(swatchPos.x + swatchSize.x, swatchPos.y + swatchSize.y),
+            ImGui::ColorConvertFloat4ToU32(ColorToImVec4(color))
+        );
+        
+        ImGui::EndTooltip();
+    }
+
+    float ColorCurveEditor::SnapTime(float time) const
+    {
+        if (m_timeSnapIncrement <= 0.0f)
+        {
+            return time;
+        }
+        
+        return std::round(time / m_timeSnapIncrement) * m_timeSnapIncrement;
+    }
+
+    float ColorCurveEditor::SnapValue(float value) const
+    {
+        if (m_valueSnapIncrement <= 0.0f)
+        {
+            return value;
+        }
+        
+        return std::round(value / m_valueSnapIncrement) * m_valueSnapIncrement;
+    }
+
+    bool ColorCurveEditor::ResetAllTangents()
+    {
+        if (m_colorCurve.GetKeyCount() <= 0)
+        {
+            return false;
+        }
+        
+        // Set all keys to auto tangent mode
+        bool modified = false;
+        
+        for (size_t i = 0; i < m_colorCurve.GetKeyCount(); ++i)
+        {
+            ColorKey key = m_colorCurve.GetKey(i);
+            
+            if (key.tangentMode != 0) // Not auto mode
+            {
+                key.tangentMode = 0; // Set to auto mode
+                m_colorCurve.UpdateKey(i, key);
+                modified = true;
+            }
+        }
+        
+        if (modified)
+        {
+            m_colorCurve.CalculateTangents();
+        }
+        
+        return modified;
+    }
+
+    bool ColorCurveEditor::DistributeKeysEvenly()
+    {
+        const size_t keyCount = m_colorCurve.GetKeyCount();
+        
+        if (keyCount <= 2) // Can't distribute if there are just start/end keys
+        {
+            return false;
+        }
+        
+        std::vector<ColorKey> keys;
+        keys.reserve(keyCount);
+        
+        // Gather all keys
+        for (size_t i = 0; i < keyCount; ++i)
+        {
+            keys.push_back(m_colorCurve.GetKey(i));
+        }
+        
+        // Sort keys by time (should already be sorted in the ColorCurve, but just to be safe)
+        std::sort(keys.begin(), keys.end(), [](const ColorKey& a, const ColorKey& b) {
+            return a.time < b.time;
+        });
+        
+        // First and last keys keep their positions
+        float startTime = keys.front().time;
+        float endTime = keys.back().time;
+        float range = endTime - startTime;
+        
+        if (range <= 0.0f)
+        {
+            return false;
+        }
+        
+        bool modified = false;
+        
+        // Distribute interior keys evenly
+        for (size_t i = 1; i < keyCount - 1; ++i)
+        {
+            float newTime = startTime + (static_cast<float>(i) / (keyCount - 1)) * range;
+            
+            if (newTime != keys[i].time)
+            {
+                keys[i].time = newTime;
+                modified = true;
+            }
+        }
+        
+        if (modified)
+        {
+            // Update the keys in the curve
+            m_colorCurve.Clear();
+            
+            for (const auto& key : keys)
+            {
+                m_colorCurve.AddKey(key);
+            }
+            
+            m_colorCurve.SortKeys();
+            
+            // Recalculate tangents if keys were modified
+            m_colorCurve.CalculateTangents();
+        }
+        
+        return modified;
+    }
+
+    void ColorCurveEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
+    {
+        if (ImGui::BeginPopupContextItem("ColorCurveContextMenu"))
+        {
+            ImGui::Text("Color Curve Actions");
+            ImGui::Separator();
+            
+            if (ImGui::MenuItem("Add Key at Cursor"))
+            {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float time = XToTime(mousePos.x, canvasPos, canvasSize);
+                
+                // Clamp time to curve range
+                time = std::max(0.0f, std::min(time, 1.0f));
+                
+                // Sample the curve at the mouse position to get the color
+                Vector4 color = m_colorCurve.Evaluate(time);
+                
+                // Add the new key
+                size_t newIndex = m_colorCurve.AddKey(time, color);
+                m_selectedKeyIndex = newIndex;
+                modified = true;
+            }
+            
+            if (ImGui::MenuItem("Reset All Tangents", nullptr, false, m_colorCurve.GetKeyCount() > 0))
+            {
+                if (ResetAllTangents())
+                {
+                    modified = true;
+                }
+            }
+            
+            if (ImGui::MenuItem("Distribute Keys Evenly", nullptr, false, m_colorCurve.GetKeyCount() > 2))
+            {
+                if (DistributeKeysEvenly())
+                {
+                    modified = true;
+                }
+            }
+            
+            ImGui::Separator();
+            
+            if (ImGui::BeginMenu("Display Options"))
+            {
+                ImGui::MenuItem("Show Alpha Channel", nullptr, &m_showAlpha);
+                ImGui::MenuItem("Show Tangent Handles", nullptr, &m_showTangents);
+                ImGui::MenuItem("Show Color Preview", nullptr, &m_showColorPreview);
+                ImGui::MenuItem("Show Horizontal Grid", nullptr, &m_showHorizontalGrid);
+                ImGui::MenuItem("Show Vertical Grid", nullptr, &m_showVerticalGrid);
+                
+                ImGui::Separator();
+                
+                // Curve thickness slider
+                float thickness = m_curveThickness;
+                if (ImGui::SliderFloat("Curve Thickness", &thickness, 1.0f, 5.0f, "%.1f"))
+                {
+                    m_curveThickness = thickness;
+                }
+                
+                ImGui::EndMenu();
+            }
+            
+            if (ImGui::BeginMenu("Snapping"))
+            {
+                // Time snap settings
+                float timeSnap = m_timeSnapIncrement;
+                if (ImGui::SliderFloat("Time Snap", &timeSnap, 0.0f, 0.25f, timeSnap > 0.0f ? "%.3f" : "Off"))
+                {
+                    m_timeSnapIncrement = timeSnap;
+                }
+                
+                // Value snap settings
+                float valueSnap = m_valueSnapIncrement;
+                if (ImGui::SliderFloat("Value Snap", &valueSnap, 0.0f, 0.25f, valueSnap > 0.0f ? "%.3f" : "Off"))
+                {
+                    m_valueSnapIncrement = valueSnap;
+                }
+                
+                ImGui::EndMenu();
+            }
+            
+            ImGui::EndPopup();
+        }
+    }
+}
