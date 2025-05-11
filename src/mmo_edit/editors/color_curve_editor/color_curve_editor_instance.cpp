@@ -107,15 +107,8 @@ namespace mmo
         if (ImGui::Begin(panelId.c_str()))
         {
             ImGui::Text("Color Curve Editor - %s", m_assetPath.filename().string().c_str());
-            ImGui::Separator();
-
-            // Add reset view button and instructions for navigation
-            if (ImGui::Button("Reset View"))
-            {
-                m_colorCurveEditor->ResetView();
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
+            ImGui::Separator();            // Add navigation instructions tooltip
+            ImGui::TextDisabled("(?) Navigation Help");
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();

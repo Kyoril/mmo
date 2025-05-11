@@ -52,9 +52,14 @@ namespace mmo
         m_zoomLevel = 1.0f;
     }    bool ColorCurveImGuiEditor::Draw(float width, float height)
     {
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
         if (width <= 0.0f)
         {
-            width = ImGui::GetContentRegionAvail().x;
+            width = availSize.x;
+        }
+        if (height <= 0.0f)
+        {
+            height = availSize.y - ImGui::GetFrameHeightWithSpacing(); // Leave space for the toolbar and controls
         }
         
         bool modified = false;
@@ -70,14 +75,18 @@ namespace mmo
             ResetView();
         }
         ImGui::SameLine();
-        ImGui::Text("Zoom: %.1fx", m_zoomLevel);
-        ImGui::SameLine();
+        ImGui::Text("Zoom: %.1fx", m_zoomLevel);        ImGui::SameLine();
         ImGui::TextDisabled("(Middle-click and drag to pan, scroll wheel to zoom)");
         
-        // Reserve space for the canvas
+        // Reserve space for time labels above the canvas (20px padding for labels)
+        const float timeLabelsHeight = 20.0f;
         ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-        ImVec2 canvasSize = ImVec2(width, height);
-        ImGui::InvisibleButton("canvas", canvasSize);
+        // Adjust canvasPos to make space for time labels
+        canvasPos.y += timeLabelsHeight;
+        ImVec2 canvasSize = ImVec2(width, height - timeLabelsHeight);
+        
+        // Create the invisible button for interaction that includes the time labels area
+        ImGui::InvisibleButton("canvas", ImVec2(width, height));
         
         // Handle zoom and pan
         HandleZoomAndPan(canvasPos, canvasSize);
@@ -90,6 +99,9 @@ namespace mmo
         
         // Get the draw list to render our custom UI
         ImDrawList* drawList = ImGui::GetWindowDrawList();
+        
+        // Draw time labels first at the top of the canvas
+        DrawTimeLabels(drawList, canvasPos, canvasSize);
         
         // Draw the background
         drawList->AddRectFilled(
@@ -292,13 +304,18 @@ namespace mmo
         greenPoints.reserve(numSamples);
         bluePoints.reserve(numSamples);
         alphaPoints.reserve(numSamples);
-        
-        for (int i = 0; i < numSamples; ++i)
+          for (int i = 0; i < numSamples; ++i)
         {
-            float t = static_cast<float>(i) / static_cast<float>(numSamples - 1);
+            // Map sample point from screen to view space
+            float normalizedX = static_cast<float>(i) / static_cast<float>(numSamples - 1);
+            float viewSpaceT = m_viewMinX + normalizedX * (m_viewMaxX - m_viewMinX);
+            
+            // Clamp to valid curve range
+            float t = std::max(0.0f, std::min(viewSpaceT, 1.0f));
             Vector4 color = m_colorCurve.Evaluate(t);
             
-            float x = canvasPos.x + t * canvasSize.x;
+            // Map back to screen space
+            float x = canvasPos.x + normalizedX * canvasSize.x;
             
             redPoints.push_back(ImVec2(x, ValueToY(color.x, canvasPos, canvasSize)));
             greenPoints.push_back(ImVec2(x, ValueToY(color.y, canvasPos, canvasSize)));
@@ -307,31 +324,41 @@ namespace mmo
             {
                 alphaPoints.push_back(ImVec2(x, ValueToY(color.w, canvasPos, canvasSize)));
             }
-        }
+        }            // Clip polylines to canvas bounds
+        ImVec2 clipMin = canvasPos;
+        ImVec2 clipMax = ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y);
         
         // Draw curve for each color component
         if (redPoints.size() >= 2)
         {
+            drawList->PushClipRect(clipMin, clipMax, true);
             drawList->AddPolyline(redPoints.data(), static_cast<int>(redPoints.size()), 
                                ImGui::ColorConvertFloat4ToU32(m_redColor), 0, curveThickness);
+            drawList->PopClipRect();
         }
         
         if (greenPoints.size() >= 2)
         {
+            drawList->PushClipRect(clipMin, clipMax, true);
             drawList->AddPolyline(greenPoints.data(), static_cast<int>(greenPoints.size()), 
                                ImGui::ColorConvertFloat4ToU32(m_greenColor), 0, curveThickness);
+            drawList->PopClipRect();
         }
         
         if (bluePoints.size() >= 2)
         {
+            drawList->PushClipRect(clipMin, clipMax, true);
             drawList->AddPolyline(bluePoints.data(), static_cast<int>(bluePoints.size()), 
                                ImGui::ColorConvertFloat4ToU32(m_blueColor), 0, curveThickness);
+            drawList->PopClipRect();
         }
         
         if (m_showAlpha && alphaPoints.size() >= 2)
         {
+            drawList->PushClipRect(clipMin, clipMax, true);
             drawList->AddPolyline(alphaPoints.data(), static_cast<int>(alphaPoints.size()), 
                                ImGui::ColorConvertFloat4ToU32(m_alphaColor), 0, curveThickness);
+            drawList->PopClipRect();
         }
     }
 
@@ -1422,6 +1449,75 @@ namespace mmo
                 ImVec2(x + arrowSize, y + arrowSize),
                 arrowColor
             );
+        }
+    }
+
+    void ColorCurveImGuiEditor::DrawTimeLabels(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        ImU32 textColor = ImGui::ColorConvertFloat4ToU32(ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+        
+        // Calculate the grid spacing based on zoom level
+        const float baseGridStep = 0.1f; // Base grid step at zoom level 1
+        float adaptiveStep = baseGridStep;
+        
+        // Adjust grid density based on zoom level
+        if (m_zoomLevel < 0.5f)
+            adaptiveStep = 0.25f;
+        else if (m_zoomLevel > 3.0f)
+            adaptiveStep = 0.05f;
+        else if (m_zoomLevel > 6.0f)
+            adaptiveStep = 0.025f;
+        
+        // Find the starting grid line position
+        float startTime = std::floor(m_viewMinX / adaptiveStep) * adaptiveStep;
+        
+        for (float time = startTime; time <= m_viewMaxX; time += adaptiveStep)
+        {
+            if (time < m_viewMinX || time > m_viewMaxX)
+                continue;
+                
+            float x = TimeToX(time, canvasPos, canvasSize);
+            
+            // Only draw labels at key positions (0.0, 0.5, 1.0) or at major divisions
+            bool isKeyPosition = 
+                std::abs(time) < 0.001f || 
+                std::abs(time - 0.5f) < 0.001f || 
+                std::abs(time - 1.0f) < 0.001f ||
+                std::abs(time + 0.5f) < 0.001f ||
+                std::abs(time + 1.0f) < 0.001f ||
+                std::abs(std::fmod(time, 0.5f)) < 0.001f;
+            
+            // Format time value string
+            char label[16];
+            if (isKeyPosition)
+            {
+                // Ticks at key positions
+                drawList->AddLine(
+                    ImVec2(x, canvasPos.y - 5),
+                    ImVec2(x, canvasPos.y),
+                    textColor,
+                    1.5f
+                );
+                
+                // Format with better precision for key positions
+                sprintf(label, "%.1f", time);
+                ImVec2 textSize = ImGui::CalcTextSize(label);
+                drawList->AddText(
+                    ImVec2(x - textSize.x / 2, canvasPos.y - textSize.y - 8),
+                    textColor,
+                    label
+                );
+            }
+            else if (std::fmod(std::abs(time), 0.2f) < 0.001f)
+            {
+                // Smaller ticks at intermediate positions
+                drawList->AddLine(
+                    ImVec2(x, canvasPos.y - 3),
+                    ImVec2(x, canvasPos.y),
+                    textColor,
+                    1.0f
+                );
+            }
         }
     }
 }

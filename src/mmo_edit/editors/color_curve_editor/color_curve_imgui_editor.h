@@ -130,14 +130,21 @@ namespace mmo
          * @param canvasSize Size of the canvas
          */
         void DrawTangents(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
-        
-        /**
+          /**
          * @brief Renders the background grid
          * @param drawList ImGui draw list to render to
          * @param canvasPos Top-left position of the canvas
          * @param canvasSize Size of the canvas
          */
         void DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
+        
+        /**
+         * @brief Renders time labels at the top of the canvas
+         * @param drawList ImGui draw list to render to
+         * @param canvasPos Top-left position of the canvas
+         * @param canvasSize Size of the canvas
+         */
+        void DrawTimeLabels(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
         
         /**
          * @brief Renders a curve preview showing the color gradient
