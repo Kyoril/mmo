@@ -36,6 +36,7 @@
 #include "game_client/game_player_c.h"
 #include "game_client/item_handle.h"
 #include "game_client/unit_handle.h"
+#include "game/game_time_component.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
@@ -736,7 +737,7 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient, GameTimeComponent& gameTime)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -752,6 +753,7 @@ namespace mmo
 		, m_charCreateInfo(charCreateInfo)
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
+		, m_gameTime(gameTime)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -1199,6 +1201,8 @@ namespace mmo
 			luabind::def<std::function<const ItemInfo*(int32)>>("GetLootSlotItem", [this](int32 slot) { return this->GetLootSlotItem(slot); }),
 			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
 			luabind::def<std::function<void(int32, String&, String&, int32&)>>("GetLootSlotInfo", [this](int32 slot, String& out_icon, String& out_text, int32& out_count) { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+			
+			luabind::def<std::function<void(int32&, int32&)>>("GetGameTime", [this](int32& out_hour, int32& out_minute) { out_hour = m_gameTime.GetHour(); out_minute = m_gameTime.GetMinute(); }, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 
 			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); }),
 			

@@ -109,7 +109,8 @@ namespace mmo
 			CharSelect& charSelect,
 			GuildClient& guildClient, 
 			ICacheProvider& cache,
-			Discord& discord);
+			Discord& discord,
+			GameTimeComponent& gameTime);
 
 	public:
 		/// @brief The default name of the world state
@@ -385,8 +386,9 @@ namespace mmo
 
 		SceneNode* m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
-				// Game time component for day/night cycle
-		GameTimeComponent m_gameTime;
+
+		// Game time component for day/night cycle
+		GameTimeComponent& m_gameTime;
 		
 		// Sky component for day/night cycle
 		std::unique_ptr<SkyComponent> m_skyComponent;

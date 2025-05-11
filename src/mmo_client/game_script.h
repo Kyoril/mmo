@@ -35,6 +35,7 @@ namespace mmo
 	class VendorClient;
 	class LootClient;
 	class IAudio;
+	class GameTimeComponent;
 
 	namespace proto_client
 	{
@@ -77,7 +78,8 @@ namespace mmo
 			PartyInfo& partyInfo,
 			CharCreateInfo& charCreateInfo,
 			CharSelect& charSelect,
-			GuildClient& guildClient);
+			GuildClient& guildClient,
+			GameTimeComponent& gameTime);
 
 	public:
 		/// Gets the current lua state
@@ -168,6 +170,8 @@ namespace mmo
 		CharSelect& m_charSelect;
 
 		GuildClient& m_guildClient;
+
+		GameTimeComponent& m_gameTime;
 
 	private:
 		void Script_ReviveMe() const;
