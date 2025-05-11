@@ -393,11 +393,13 @@ namespace mmo
 
 				LogoutResponse,
 				GuildRoster,
-				
-				/// Message of the day packet sent to the client
+						/// Message of the day packet sent to the client
 				MessageOfTheDay,
 
 				MoveRoot,
+                
+                /// Game time notification packet sent to the client
+                GameTimeInfo,
 
 				/// Counter constant
 				Count_,

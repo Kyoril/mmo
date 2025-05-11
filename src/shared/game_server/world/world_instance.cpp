@@ -99,8 +99,9 @@ namespace mmo
 		, m_project(project)
 		, m_visibilityGrid(std::move(visibilityGrid))
 		, m_unitFinder(std::move(unitFinder))
+		, m_gameTime(0, 1.0f)
 		, m_triggerHandler(triggerHandler)
-		, m_conditionMgr(conditionMgr)
+		, m_conditionMgr(conditionMgr) // Initialize with default time (midnight) and normal speed
 	{
 		uuids::uuid_system_generator generator;
 		m_id = generator();
@@ -111,6 +112,14 @@ namespace mmo
 			ELOG("Failed to load map data for map id " << m_mapId << ": Map not found!");
 			return;
 		}
+
+		// Get current time of day and apply game time
+		const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+
+		// Game time is milliseconds, so calculate total milliseconds of now
+		auto nowTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+		auto nowGameTime = nowTime % constants::OneDay;
+		m_gameTime.SetTime(nowGameTime);
 
 		m_mapData = std::make_unique<NavMapData>(*m_mapEntry);
 
@@ -162,10 +171,23 @@ namespace mmo
 			}
 		}
 	}
-
 	void WorldInstance::Update(const RegularUpdate& update)
 	{
 		m_updating = true;
+
+		// Update game time
+		m_gameTime.Update(update.GetTimestamp());
+
+		// Check if we need to broadcast game time (every 5 minutes of real time)
+		constexpr GameTime TimeUpdateInterval = 5 * constants::OneMinute; // Every 5 minutes
+		if (update.GetTimestamp() - m_lastTimeUpdateBroadcast >= TimeUpdateInterval)
+		{
+			if (HasPlayers())
+			{
+				BroadcastGameTime();
+			}
+			m_lastTimeUpdateBroadcast = update.GetTimestamp();
+		}
 
 		for (const auto& object : m_objectUpdates)
 		{

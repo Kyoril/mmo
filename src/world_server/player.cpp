@@ -569,7 +569,7 @@ namespace mmo
 			packet.Start(game::realm_client_packet::InitialSpells);
 			packet << io::write_dynamic_range<uint16>(m_characterData.spellIds);
 			packet.Finish();
-		});
+		}, false);
 
 		// Cast passive spells after spawn, so that SpellMods are sent AFTER the spawn packet
 		SpellTargetMap target;
@@ -590,6 +590,9 @@ namespace mmo
 		{
 			UpdateCharacterGroup(m_characterData.groupId);
 		}
+
+		// Send current game time to player
+		SendGameTimeInfo();
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
@@ -1977,5 +1980,28 @@ namespace mmo
 					<< io::write<uint8>(applied);
 				packet.Finish();
 			});
+	}
+
+	void Player::SendGameTimeInfo() const
+	{
+		if (!m_worldInstance)
+		{
+			WLOG("No world instance found when sending game time info");
+			return;
+		}
+
+		// Get the current game time from the world instance
+		const auto& gameTime = m_worldInstance->GetGameTime();
+		
+		SendPacket([&gameTime](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::GameTimeInfo);
+			packet
+				<< io::write<uint64>(gameTime.GetTime())
+				<< io::write<float>(gameTime.GetTimeSpeed());
+			packet.Finish();
+		});
+		
+		DLOG("Sent game time to player: " << gameTime.GetTimeString() << " (speed: " << gameTime.GetTimeSpeed() << "x)");
 	}
 }

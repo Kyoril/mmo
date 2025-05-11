@@ -550,7 +550,6 @@ namespace mmo
 
 		return true;
 	}
-
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_BEGIN_FRAME();
@@ -566,6 +565,59 @@ namespace mmo
 			{
 				break;
 			}
+		}
+
+		// Update game time
+		m_gameTime.Update(timestamp);
+		
+		// Update sun light direction based on time of day if the sun light exists
+		if (m_sunLight && m_sunLightNode)
+		{
+			// Calculate the sun direction based on time of day
+			// Normalized time: 0.0 = midnight, 0.25 = dawn (6:00), 0.5 = noon (12:00), 0.75 = dusk (18:00)
+			const float normalizedTime = m_gameTime.GetNormalizedTimeOfDay();
+			
+			// Convert to angle in radians (0.0 to 2*PI)
+			const float angleRadians = normalizedTime * 2.0f * 3.14159f;
+			
+			// Calculate sun position along a circle in the sky
+			// At noon (0.5), sun is highest in the sky (-Y direction)
+			// At midnight (0.0/1.0), sun is lowest (reversed direction, +Y)
+			const float sunX = -std::sin(angleRadians);
+			const float sunY = -std::cos(angleRadians);
+			const float sunZ = -0.3f; // Gives the sun a slight angle from straight overhead
+			
+			// Set the sun direction - this is where the light is coming FROM
+			m_sunLight->SetDirection(Vector3(sunX, sunY, sunZ));
+			
+			// Adjust light color and intensity based on time of day
+			// Brighter during day, dimmer with warmer colors at dawn/dusk, dark at night
+			float intensity = 1.0f;
+			Vector4 color(1.0f, 1.0f, 1.0f, 1.0f);
+			
+			if (normalizedTime < 0.25f) { // Midnight to dawn - dark to light
+				const float t = normalizedTime / 0.25f;
+				intensity = 0.2f + t * 0.5f;
+				color = Vector4(0.5f + t * 0.5f, 0.5f + t * 0.5f, 0.8f + t * 0.2f, 1.0f);
+			}
+			else if (normalizedTime < 0.5f) { // Dawn to noon - warming up
+				const float t = (normalizedTime - 0.25f) / 0.25f;
+				intensity = 0.7f + t * 0.3f;
+				color = Vector4(1.0f, 0.9f + t * 0.1f, 1.0f, 1.0f);
+			}
+			else if (normalizedTime < 0.75f) { // Noon to dusk - cooling down
+				const float t = (normalizedTime - 0.5f) / 0.25f;
+				intensity = 1.0f - t * 0.3f;
+				color = Vector4(1.0f, 1.0f - t * 0.1f, 1.0f - t * 0.2f, 1.0f);
+			}
+			else { // Dusk to midnight - getting dark
+				const float t = (normalizedTime - 0.75f) / 0.25f;
+				intensity = 0.7f - t * 0.5f;
+				color = Vector4(1.0f - t * 0.5f, 0.9f - t * 0.4f, 0.8f - t * 0.3f, 1.0f);
+			}
+			
+			m_sunLight->SetIntensity(intensity);
+			m_sunLight->SetColor(color);
 		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
@@ -861,7 +913,8 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);		
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1704,11 +1757,7 @@ namespace mmo
 		}
 
 		const auto* spell = m_project.spells.getById(spellId);
-		if (!spell)
-		{
-			ELOG("Unknown spell " << spellId << " was cast!");
-			return PacketParseResult::Disconnect;
-		}
+		ASSERT(spell);
 
 		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 		{
@@ -3691,5 +3740,36 @@ namespace mmo
 					strong->NotifyObjectData(data);
 				}
 			});
+	}
+
+	// Required implementation of OnGameTimeInfo packet handler for WorldState
+	PacketParseResult WorldState::OnGameTimeInfo(game::IncomingPacket& packet)
+	{
+		GameTime gameTime;
+		float timeSpeed;
+
+		if (!(packet
+			>> io::read<uint64>(gameTime)
+			>> io::read<float>(timeSpeed)))
+		{
+			ELOG("Failed to read GameTimeInfo packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Update our game time component with server values
+		m_gameTime.SetTime(gameTime);
+		m_gameTime.SetTimeSpeed(timeSpeed);
+
+		// Trigger a Lua event to notify the UI about the time change
+		FrameManager::Get().TriggerLuaEvent("GAME_TIME_UPDATED",
+			m_gameTime.GetHour(),
+			m_gameTime.GetMinute(),
+			m_gameTime.GetSecond(),
+			m_gameTime.GetTimeSpeed());
+
+		// Log for debugging
+		DLOG("Received game time update: " << m_gameTime.GetTimeString() << " (speed: " << timeSpeed << "x)");
+
+		return PacketParseResult::Pass;
 	}
 }

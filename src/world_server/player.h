@@ -89,6 +89,9 @@ namespace mmo
 		void OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot);
 
 		void OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot);
+		
+		/// @brief Sends the current game time information to the client.
+		void SendGameTimeInfo() const;
 
 		void UpdateCharacterGroup(uint64 groupId);
 
@@ -381,19 +384,19 @@ namespace mmo
 		/// Handles the client's request to increase the selected players level by a specific amount. This will increase the players level and adjust the players stats accordingly.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
-		/// @param contentReader Reader object used to read the packets content bytes.
+		///	@param contentReader Reader object used to read the packets content bytes.
 		void OnCheatLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to increase the selected players money by a specific amount.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
-		/// @param contentReader Reader object used to read the packets content bytes.
+		///	@param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGiveMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to add an item to the selected players inventory. This might create multiple stacks of this item depending on the amount to give.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
-		/// @param contentReader Reader object used to read the packets content bytes.
+		///	@param contentReader Reader object used to read the packets content bytes.
 		void OnCheatAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);

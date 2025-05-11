@@ -9,6 +9,7 @@
 #include "creature_spawner.h"
 #include "unit_finder.h"
 #include "game/game.h"
+#include "game/game_time_component.h"
 #include "visibility_grid.h"
 #include "world_object_spawner.h"
 #include "base/id_generator.h"
@@ -173,15 +174,28 @@ namespace mmo
 		bool IsPvP() const { return IsArena() || IsBattleground(); }
 
 		IdGenerator<uint64>& GetItemIdGenerator() { return m_itemIdGenerator; }
-
 		const ConditionMgr& GetConditionMgr() const { return m_conditionMgr; }
+
+		/// @brief Gets the game time component.
+		/// @return Reference to the game time component.
+		GameTimeComponent& GetGameTime() { return m_gameTime; }
+
+		/// @brief Gets the game time component.
+		/// @return Constant reference to the game time component.
+		const GameTimeComponent& GetGameTime() const { return m_gameTime; }
+
+		/// @brief Checks for players in the world instance.
+		/// @return True if there are players in the world instance, false otherwise.
+		[[nodiscard]] bool HasPlayers() const;
+	
+		/// @brief Broadcasts the current game time to all players in the world.
+		void BroadcastGameTime();
 
 	protected:
 
 		void UpdateObject(GameObjectS& object) const;
 
 		void OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo) const;
-
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;
@@ -197,6 +211,10 @@ namespace mmo
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;
 		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
 		std::unique_ptr<UnitFinder> m_unitFinder;
+		GameTimeComponent m_gameTime;
+		
+		/// Last time when game time update was broadcast to players
+		GameTime m_lastTimeUpdateBroadcast { 0 };
 
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
 		ITriggerHandler& m_triggerHandler;

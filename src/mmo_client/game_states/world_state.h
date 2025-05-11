@@ -13,6 +13,7 @@
 
 
 #include "base/signal.h"
+#include "game/game_time_component.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -302,8 +303,12 @@ namespace mmo
 		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
 
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket& packet);
-
 		PacketParseResult OnMoveRoot(game::IncomingPacket& packet);
+
+		/// @brief Handles the GameTimeInfo packet.
+		/// @param packet The incoming packet.
+		/// @return The packet parse result.
+		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
 
 	private:
 
@@ -378,11 +383,13 @@ namespace mmo
 
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
-		Light* m_sunLight { nullptr };
-		SceneNode* m_sunLightNode{ nullptr };
+		Light* m_sunLight { nullptr };		SceneNode* m_sunLightNode{ nullptr };
 
 		SceneNode* m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
+		
+		// Game time component for day/night cycle
+		GameTimeComponent m_gameTime;
 
 		ICacheProvider& m_cache;
 
