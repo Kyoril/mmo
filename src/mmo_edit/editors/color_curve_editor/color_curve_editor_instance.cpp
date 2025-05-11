@@ -82,12 +82,10 @@ namespace mmo
 
         // Set the size to use the entire available area
         ImVec2 availSize = ImGui::GetMainViewport()->Size;
-        ImGui::DockBuilderSetNodeSize(dockspaceId, availSize);
-
-        // Create a split with the editor panel taking 70% of the width
+        ImGui::DockBuilderSetNodeSize(dockspaceId, availSize);        // Create a split with the editor panel taking 75% of the width
         ImGuiID editorDock;
         ImGuiID previewDock;
-        ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, 0.7f, &editorDock, &previewDock);
+        ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, 0.75f, &editorDock, &previewDock);
         
         // Assign windows to docks
         ImGui::DockBuilderDockWindow(editorId.c_str(), editorDock);
@@ -107,7 +105,9 @@ namespace mmo
         if (ImGui::Begin(panelId.c_str()))
         {
             ImGui::Text("Color Curve Editor - %s", m_assetPath.filename().string().c_str());
-            ImGui::Separator();            // Add navigation instructions tooltip
+            ImGui::Separator();
+
+            // Add navigation instructions tooltip
             ImGui::TextDisabled("(?) Navigation Help");
             if (ImGui::IsItemHovered())
             {
@@ -123,8 +123,11 @@ namespace mmo
             
             ImGui::Separator();
             
-            // Create the editor UI
-            if (m_colorCurveEditor->Draw())
+            // Get available space for the editor
+            ImVec2 availSize = ImGui::GetContentRegionAvail();
+            
+            // Create the editor UI, passing explicit width and height of 0 to use available space
+            if (m_colorCurveEditor->Draw(0.0f, 0.0f))
             {
                 m_modified = true;
             }
@@ -137,12 +140,12 @@ namespace mmo
         if (ImGui::Begin(panelId.c_str()))
         {
             ImGui::Text("Color Preview");
-            ImGui::Separator();
-
-            // Draw a color strip to visualize the curve
+            ImGui::Separator();            // Draw a color strip to visualize the curve
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImVec2 size(ImGui::GetContentRegionAvail().x, 80.0f);
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            // Use a larger height for the preview to make better use of vertical space
+            ImVec2 size(avail.x, std::min(120.0f, avail.y * 0.8f));
 
             // Draw a background grid for the preview
             const ImU32 gridColor = IM_COL32(80, 80, 80, 100);
@@ -157,23 +160,17 @@ namespace mmo
             const int segments = static_cast<int>(size.x);
             for (int i = 0; i < segments; ++i)
             {
-                const float t = static_cast<float>(i) / static_cast<float>(segments - 1);
+                float t = static_cast<float>(i) / static_cast<float>(segments - 1);
+                t = std::max(0.0f, std::min(t, 1.0f));
                 Vector4 color = m_colorCurve.Evaluate(t);
                 
                 const float x0 = pos.x + i * (size.x / segments);
                 const float x1 = pos.x + (i + 1) * (size.x / segments);
                 
-                ImU32 imColor = IM_COL32(
-                    static_cast<int>(color.x * 255.0f),
-                    static_cast<int>(color.y * 255.0f),
-                    static_cast<int>(color.z * 255.0f),
-                    static_cast<int>(color.w * 255.0f)
-                );
-                
                 drawList->AddRectFilled(
                     ImVec2(x0, pos.y),
                     ImVec2(x1, pos.y + size.y),
-                    imColor
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(color.x, color.y, color.z, color.w))
                 );
             }
 

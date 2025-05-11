@@ -302,6 +302,14 @@ namespace mmo
                                             const ImVec2& canvasPos, const ImVec2& canvasSize, 
                                             const ImVec4& color, float arrowSize);
 
+        /**
+         * @brief Renders value labels on the left side of the canvas
+         * @param drawList ImGui draw list to render to
+         * @param canvasPos Top-left position of the canvas
+         * @param canvasSize Size of the canvas
+         */
+        void DrawValueLabels(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
+
     private:
         std::string m_label;         ///< The label for this editor instance
         ColorCurve& m_colorCurve;    ///< Reference to the color curve being edited
