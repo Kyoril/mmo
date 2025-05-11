@@ -53,6 +53,7 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_model_editor/world_model_editor.h"
+#include "editors/color_curve_editor/color_curve_editor.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -177,10 +178,10 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::CharacterEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));
-	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
+	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
+	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 
 	// Run the database service thread
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };

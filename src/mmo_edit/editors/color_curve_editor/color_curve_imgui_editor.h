@@ -6,13 +6,13 @@
 namespace mmo
 {
     /**
-     * @class ColorCurveEditor
+     * @class ColorCurveImGuiEditor
      * @brief ImGui-based editor widget for ColorCurve objects.
      * 
      * Provides a GUI for editing and visualizing color curves directly in the editor.
      * Supports adding, removing, and adjusting keyframes as well as tangents.
      */
-    class ColorCurveEditor
+    class ColorCurveImGuiEditor
     {
     public:
         /**
@@ -20,7 +20,7 @@ namespace mmo
          * @param label The label for this editor instance
          * @param colorCurve Reference to the color curve being edited
          */
-        ColorCurveEditor(const char* label, ColorCurve& colorCurve);
+        ColorCurveImGuiEditor(const char* label, ColorCurve& colorCurve);
         
         /**
          * @brief Renders the color curve editor UI

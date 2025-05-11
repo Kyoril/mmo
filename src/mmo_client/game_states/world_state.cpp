@@ -573,56 +573,81 @@ namespace mmo
 		// Update sun light direction based on time of day if the sun light exists
 		if (m_sunLight && m_sunLightNode)
 		{
-			// Calculate the sun direction based on time of day
-			// Normalized time: 0.0 = midnight, 0.25 = dawn (6:00), 0.5 = noon (12:00), 0.75 = dusk (18:00)
-			const float normalizedTime = m_gameTime.GetNormalizedTimeOfDay();
+			const float normalizedTime = m_gameTime.GetNormalizedTimeOfDay(); // 0.0–1.0
 
-			// Offset by -0.5 so that noon (0.5) -> 0 radians (highest point), midnight -> PI (lowest)
-			const float angleRadians = (normalizedTime - 0.5f) * 2.0f * Pi;
-			
-			// Calculate sun position along a circle in the sky
-			// At noon (0.5), sun is highest in the sky (-Y direction)
-			// At midnight (0.0/1.0), sun is lowest (reversed direction, +Y)
-			const float sunX = -std::sin(angleRadians);
-			const float sunY = -std::cos(angleRadians);
-			const float sunZ = -0.3f; // Gives the sun a slight angle from straight overhead
-			
-			// Set the sun direction - this is where the light is coming FROM
-			const Vector3 sunDirection(sunX, sunY, sunZ);
-			m_sunLight->SetDirection(sunDirection);
+			// Configuration
+			const float arcMin = -Pi / 2.0f; // sunrise/sunset horizon
+			const float arcMax = +Pi / 2.0f; // overhead noon
+			const float transitionStart = 0.20f;
+			const float dayStart = 0.30f;
+			const float dayEnd = 0.70f;
+			const float transitionEnd = 0.80f;
+
+			float blendSun = 0.0f;
+			if (normalizedTime >= dayStart && normalizedTime <= dayEnd)
+			{
+				blendSun = 1.0f; // Full sun
+			}
+			else if (normalizedTime >= transitionStart && normalizedTime < dayStart)
+			{
+				blendSun = (normalizedTime - transitionStart) / (dayStart - transitionStart);
+			}
+			else if (normalizedTime > dayEnd && normalizedTime <= transitionEnd)
+			{
+				blendSun = 1.0f - (normalizedTime - dayEnd) / (transitionEnd - dayEnd);
+			}
+
+			float blendMoon = 1.0f - blendSun;
+
+			// Time within active arc (0 to 1 range for day or night)
+			float timeInArc;
+			bool isDay = blendSun > 0.5f;
+			if (isDay)
+			{
+				timeInArc = (normalizedTime - transitionStart) / (transitionEnd - transitionStart); // 0 to 1
+			}
+			else
+			{
+				float moonTime = (normalizedTime < transitionStart)
+					? normalizedTime + (1.0f - transitionEnd) // wrap-around for night
+					: normalizedTime - transitionEnd;
+				timeInArc = moonTime / (transitionStart + (1.0f - transitionEnd)); // 0 to 1
+			}
+
+			// Angle across the arc (from left horizon to right horizon)
+			float angleRadians = arcMin + timeInArc * (arcMax - arcMin); // -90° to +90°
+
+			// Build light direction: always above (negative Y)
+			const float x = -std::sin(angleRadians);
+			const float y = -std::cos(angleRadians); // always <= 0
+			const float z = -0.3f;
+
+			Vector3 lightDir = Vector3(x, y, z).NormalizedCopy();
+
+			// Light color & intensity
+			Vector4 sunColor(1.0f, 0.95f, 0.9f, 1.0f);
+			float sunIntensity = 1.0f;
+
+			Vector4 moonColor(0.4f, 0.5f, 0.7f, 1.0f);
+			float moonIntensity = 0.2f;
+
+			Vector4 blendedColor = sunColor * blendSun + moonColor * blendMoon;
+			float blendedIntensity = sunIntensity * blendSun + moonIntensity * blendMoon;
+
+			// Apply to shared light
+			m_sunLight->SetDirection(lightDir);
+			m_sunLight->SetColor(blendedColor);
+			m_sunLight->SetIntensity(blendedIntensity);
 
 			// Update light direction in material
-			m_skyMatInst->SetVectorParameter("LightDirection", Vector4(sunDirection.x, sunDirection.y, sunDirection.z, 0.0f));
+			m_skyMatInst->SetVectorParameter("LightDirection", Vector4(lightDir.x, lightDir.y, lightDir.z, 0.0f));
 			m_skyMatInst->SetScalarParameter("SunHeight", std::max(0.0f, 1.0f - std::abs(normalizedTime)));
 
-			// Adjust light color and intensity based on time of day
-			// Brighter during day, dimmer with warmer colors at dawn/dusk, dark at night
-			float intensity = 1.0f;
-			Vector4 color(1.0f, 1.0f, 1.0f, 1.0f);
-			
-			if (normalizedTime < 0.25f) { // Midnight to dawn - dark to light
-				const float t = normalizedTime / 0.25f;
-				intensity = 0.2f + t * 0.5f;
-				color = Vector4(0.5f + t * 0.5f, 0.5f + t * 0.5f, 0.8f + t * 0.2f, 1.0f);
-			}
-			else if (normalizedTime < 0.5f) { // Dawn to noon - warming up
-				const float t = (normalizedTime - 0.25f) / 0.25f;
-				intensity = 0.7f + t * 0.3f;
-				color = Vector4(1.0f, 0.9f + t * 0.1f, 1.0f, 1.0f);
-			}
-			else if (normalizedTime < 0.75f) { // Noon to dusk - cooling down
-				const float t = (normalizedTime - 0.5f) / 0.25f;
-				intensity = 1.0f - t * 0.3f;
-				color = Vector4(1.0f, 1.0f - t * 0.1f, 1.0f - t * 0.2f, 1.0f);
-			}
-			else { // Dusk to midnight - getting dark
-				const float t = (normalizedTime - 0.75f) / 0.25f;
-				intensity = 0.7f - t * 0.5f;
-				color = Vector4(1.0f - t * 0.5f, 0.9f - t * 0.4f, 0.8f - t * 0.3f, 1.0f);
-			}
-			
-			m_sunLight->SetIntensity(intensity);
-			m_sunLight->SetColor(color);
+			const Vector4 horizonColor = m_horizonColorCurve->Evaluate(normalizedTime);
+			const Vector4 zenithColor = m_zenithColorCurve->Evaluate(normalizedTime);
+			m_skyMatInst->SetVectorParameter("HorizonColor", horizonColor);
+			m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
+			m_scene->SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));
 		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
@@ -757,8 +782,29 @@ namespace mmo
 
 	void WorldState::SetupWorldScene()
 	{
-		m_scene = std::make_unique<OctreeScene>();
+		m_horizonColorCurve = std::make_unique<ColorCurve>();
+		if (const auto file = AssetRegistry::OpenFile("Models/HorizonColor.hccv"))
+		{
+			io::StreamSource stream(*file);
+			io::Reader reader(stream);
+			if (!m_horizonColorCurve->Deserialize(reader))
+			{
+				ASSERT(false);
+			}
+		}
 
+		m_zenithColorCurve = std::make_unique<ColorCurve>();
+		if (const auto file = AssetRegistry::OpenFile("Models/ZenithColor.hccv"))
+		{
+			io::StreamSource stream(*file);
+			io::Reader reader(stream);
+			if (!m_zenithColorCurve->Deserialize(reader))
+			{
+				ASSERT(false);
+			}
+		}
+		
+		m_scene = std::make_unique<OctreeScene>();
 		m_scene->SetFogRange(210.0f, 300.0f);
 
 		m_cloudsEntity = m_scene->CreateEntity("Clouds", "Models/SkySphere.hmsh");

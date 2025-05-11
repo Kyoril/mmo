@@ -42,6 +42,7 @@
 #include "spell_cast.h"
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
+#include "graphics/color_curve.h"
 #include "graphics/material_instance.h"
 
 namespace mmo
@@ -446,6 +447,9 @@ namespace mmo
 		Discord& m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
+
+		std::unique_ptr<ColorCurve> m_horizonColorCurve;
+		std::unique_ptr<ColorCurve> m_zenithColorCurve;
 
 	private:
 		static IInputControl* s_inputControl;

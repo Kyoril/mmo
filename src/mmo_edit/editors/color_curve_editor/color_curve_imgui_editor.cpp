@@ -1,11 +1,12 @@
-#include "color_curve_editor.h"
+#include "color_curve_imgui_editor.h"
 
 #include <vector>
 #include <algorithm>
 #include <cmath>
 
 namespace mmo
-{    ColorCurveEditor::ColorCurveEditor(const char* label, ColorCurve& colorCurve)
+{
+    ColorCurveImGuiEditor::ColorCurveImGuiEditor(const char* label, ColorCurve& colorCurve)
         : m_label(label)
         , m_colorCurve(colorCurve)
         , m_selectedKeyIndex(static_cast<size_t>(-1))
@@ -32,7 +33,9 @@ namespace mmo
         , m_selectedKeyColor(ImVec4(1.0f, 0.9f, 0.2f, 1.0f))
         , m_tangentHandleColor(ImVec4(0.7f, 0.7f, 0.7f, 1.0f))
     {
-    }    bool ColorCurveEditor::Draw(float width, float height)
+    }
+
+    bool ColorCurveImGuiEditor::Draw(float width, float height)
     {
         if (width <= 0.0f)
         {
@@ -94,7 +97,8 @@ namespace mmo
             ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), 
             ImGui::ColorConvertFloat4ToU32(ImVec4(0.3f, 0.3f, 0.3f, 1.0f))
         );
-          // Current time display
+        
+        // Current time display
         if (ImGui::IsItemHovered() && !m_draggingKey && !m_draggingTangent)
         {
             DrawTooltip(drawList, canvasPos, canvasSize);
@@ -238,7 +242,7 @@ namespace mmo
         return modified;
     }
 
-    void ColorCurveEditor::DrawCurve(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize, float curveThickness)
+    void ColorCurveImGuiEditor::DrawCurve(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize, float curveThickness)
     {
         const int numSamples = static_cast<int>(canvasSize.x);
         
@@ -300,7 +304,7 @@ namespace mmo
         }
     }
 
-    void ColorCurveEditor::DrawKeys(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    void ColorCurveImGuiEditor::DrawKeys(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
         const size_t keyCount = m_colorCurve.GetKeyCount();
         
@@ -352,7 +356,7 @@ namespace mmo
         }
     }
 
-    void ColorCurveEditor::DrawTangents(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    void ColorCurveImGuiEditor::DrawTangents(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
         const size_t keyCount = m_colorCurve.GetKeyCount();
         
@@ -449,7 +453,7 @@ namespace mmo
         }
     }
 
-    void ColorCurveEditor::DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    void ColorCurveImGuiEditor::DrawGrid(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
         ImU32 gridColor = ImGui::ColorConvertFloat4ToU32(m_gridColor);
         
@@ -484,7 +488,7 @@ namespace mmo
         }
     }
 
-    void ColorCurveEditor::DrawColorPreview(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    void ColorCurveImGuiEditor::DrawColorPreview(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
     {
         const int numSegments = static_cast<int>(canvasSize.x);
         
@@ -526,18 +530,54 @@ namespace mmo
         );
     }
 
-    float ColorCurveEditor::TimeToX(float time, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    void ColorCurveImGuiEditor::DrawTooltip(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
+    {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        float time = XToTime(mousePos.x, canvasPos, canvasSize);
+        
+        // Clamp time to curve range
+        time = std::max(0.0f, std::min(time, 1.0f));
+        
+        // Sample the curve at the mouse position
+        Vector4 color = m_colorCurve.Evaluate(time);
+        
+        // Display a tooltip
+        ImGui::BeginTooltip();
+        ImGui::Text("Time: %.3f", time);
+        ImGui::Text("R: %.3f", color.x);
+        ImGui::Text("G: %.3f", color.y);
+        ImGui::Text("B: %.3f", color.z);
+        if (m_showAlpha)
+        {
+            ImGui::Text("A: %.3f", color.w);
+        }
+        
+        // Draw color swatch in the tooltip
+        ImVec2 swatchSize(80, 20);
+        ImVec2 swatchPos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##colorswatch", swatchSize);
+        
+        drawList->AddRectFilled(
+            swatchPos,
+            ImVec2(swatchPos.x + swatchSize.x, swatchPos.y + swatchSize.y),
+            ImGui::ColorConvertFloat4ToU32(ColorToImVec4(color))
+        );
+        
+        ImGui::EndTooltip();
+    }
+
+    float ColorCurveImGuiEditor::TimeToX(float time, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
         return canvasPos.x + time * canvasSize.x;
     }
 
-    float ColorCurveEditor::ValueToY(float value, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    float ColorCurveImGuiEditor::ValueToY(float value, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
         // Convert value [0..1] to Y coordinate (inverted because Y increases downward)
         return canvasPos.y + (1.0f - value) * canvasSize.y;
     }
 
-    float ColorCurveEditor::XToTime(float x, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    float ColorCurveImGuiEditor::XToTime(float x, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
         if (canvasSize.x <= 0.0f)
         {
@@ -547,7 +587,7 @@ namespace mmo
         return (x - canvasPos.x) / canvasSize.x;
     }
 
-    float ColorCurveEditor::YToValue(float y, const ImVec2& canvasPos, const ImVec2& canvasSize) const
+    float ColorCurveImGuiEditor::YToValue(float y, const ImVec2& canvasPos, const ImVec2& canvasSize) const
     {
         if (canvasSize.y <= 0.0f)
         {
@@ -558,7 +598,7 @@ namespace mmo
         return 1.0f - (y - canvasPos.y) / canvasSize.y;
     }
 
-    void ColorCurveEditor::HandleInteraction(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
+    void ColorCurveImGuiEditor::HandleInteraction(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
     {
         ImVec2 mousePos = ImGui::GetMousePos();
         bool isHovered = ImGui::IsItemHovered();
@@ -610,7 +650,8 @@ namespace mmo
             if (m_selectedKeyIndex != static_cast<size_t>(-1) && m_selectedKeyIndex < m_colorCurve.GetKeyCount())
             {
                 ColorKey key = m_colorCurve.GetKey(m_selectedKeyIndex);
-                  // Calculate new time value
+                
+                // Calculate new time value
                 float time = XToTime(mousePos.x, canvasPos, canvasSize);
                 time = std::max(0.0f, std::min(time, 1.0f));
                 
@@ -661,7 +702,8 @@ namespace mmo
                 
                 // Only modify the component if it's close to the mouse
                 if (minDist <= thresholdDistance)
-                {                    float value = YToValue(mousePos.y, canvasPos, canvasSize);
+                {
+                    float value = YToValue(mousePos.y, canvasPos, canvasSize);
                     value = std::max(0.0f, std::min(value, 1.0f));
                     
                     // Apply value snapping if enabled
@@ -779,12 +821,12 @@ namespace mmo
         }
     }
 
-    ImVec4 ColorCurveEditor::ColorToImVec4(const Vector4& color) const
+    ImVec4 ColorCurveImGuiEditor::ColorToImVec4(const Vector4& color) const
     {
         return ImVec4(color.x, color.y, color.z, color.w);
     }
 
-    bool ColorCurveEditor::FindClosestKey(const ImVec2& mousePos, const ImVec2& canvasPos, 
+    bool ColorCurveImGuiEditor::FindClosestKey(const ImVec2& mousePos, const ImVec2& canvasPos, 
                                           const ImVec2& canvasSize, size_t& outKeyIndex, 
                                           float maxDistance) const
     {
@@ -837,7 +879,7 @@ namespace mmo
         return false;
     }
 
-    bool ColorCurveEditor::FindHoveredTangent(const ImVec2& mousePos, const ImVec2& canvasPos, 
+    bool ColorCurveImGuiEditor::FindHoveredTangent(const ImVec2& mousePos, const ImVec2& canvasPos, 
                                const ImVec2& canvasSize, size_t& outKeyIndex, 
                                bool& outIsInTangent, int& outComponent, 
                                float maxDistance) const
@@ -938,43 +980,7 @@ namespace mmo
         return foundTangent;
     }
 
-    void ColorCurveEditor::DrawTooltip(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize)
-    {
-        ImVec2 mousePos = ImGui::GetMousePos();
-        float time = XToTime(mousePos.x, canvasPos, canvasSize);
-        
-        // Clamp time to curve range
-        time = std::max(0.0f, std::min(time, 1.0f));
-        
-        // Sample the curve at the mouse position
-        Vector4 color = m_colorCurve.Evaluate(time);
-        
-        // Display a tooltip
-        ImGui::BeginTooltip();
-        ImGui::Text("Time: %.3f", time);
-        ImGui::Text("R: %.3f", color.x);
-        ImGui::Text("G: %.3f", color.y);
-        ImGui::Text("B: %.3f", color.z);
-        if (m_showAlpha)
-        {
-            ImGui::Text("A: %.3f", color.w);
-        }
-        
-        // Draw color swatch in the tooltip
-        ImVec2 swatchSize(80, 20);
-        ImVec2 swatchPos = ImGui::GetCursorScreenPos();
-        ImGui::InvisibleButton("##colorswatch", swatchSize);
-        
-        drawList->AddRectFilled(
-            swatchPos,
-            ImVec2(swatchPos.x + swatchSize.x, swatchPos.y + swatchSize.y),
-            ImGui::ColorConvertFloat4ToU32(ColorToImVec4(color))
-        );
-        
-        ImGui::EndTooltip();
-    }
-
-    float ColorCurveEditor::SnapTime(float time) const
+    float ColorCurveImGuiEditor::SnapTime(float time) const
     {
         if (m_timeSnapIncrement <= 0.0f)
         {
@@ -984,7 +990,7 @@ namespace mmo
         return std::round(time / m_timeSnapIncrement) * m_timeSnapIncrement;
     }
 
-    float ColorCurveEditor::SnapValue(float value) const
+    float ColorCurveImGuiEditor::SnapValue(float value) const
     {
         if (m_valueSnapIncrement <= 0.0f)
         {
@@ -994,7 +1000,7 @@ namespace mmo
         return std::round(value / m_valueSnapIncrement) * m_valueSnapIncrement;
     }
 
-    bool ColorCurveEditor::ResetAllTangents()
+    bool ColorCurveImGuiEditor::ResetAllTangents()
     {
         if (m_colorCurve.GetKeyCount() <= 0)
         {
@@ -1007,10 +1013,9 @@ namespace mmo
         for (size_t i = 0; i < m_colorCurve.GetKeyCount(); ++i)
         {
             ColorKey key = m_colorCurve.GetKey(i);
-            
-            if (key.tangentMode != 0) // Not auto mode
+            if (key.tangentMode != 0)
             {
-                key.tangentMode = 0; // Set to auto mode
+                key.tangentMode = 0;
                 m_colorCurve.UpdateKey(i, key);
                 modified = true;
             }
@@ -1024,73 +1029,56 @@ namespace mmo
         return modified;
     }
 
-    bool ColorCurveEditor::DistributeKeysEvenly()
+    bool ColorCurveImGuiEditor::DistributeKeysEvenly()
     {
         const size_t keyCount = m_colorCurve.GetKeyCount();
-        
-        if (keyCount <= 2) // Can't distribute if there are just start/end keys
+        if (keyCount <= 2)
         {
             return false;
         }
         
+        // Get all keys
         std::vector<ColorKey> keys;
         keys.reserve(keyCount);
         
-        // Gather all keys
         for (size_t i = 0; i < keyCount; ++i)
         {
             keys.push_back(m_colorCurve.GetKey(i));
         }
         
-        // Sort keys by time (should already be sorted in the ColorCurve, but just to be safe)
+        // Sort by time (should already be sorted, but just in case)
         std::sort(keys.begin(), keys.end(), [](const ColorKey& a, const ColorKey& b) {
             return a.time < b.time;
         });
         
-        // First and last keys keep their positions
-        float startTime = keys.front().time;
-        float endTime = keys.back().time;
-        float range = endTime - startTime;
-        
-        if (range <= 0.0f)
-        {
-            return false;
-        }
+        // Keep first and last key times fixed, redistribute others evenly
+        const float startTime = keys.front().time;
+        const float endTime = keys.back().time;
+        const float timeRange = endTime - startTime;
+        const float step = timeRange / (keyCount - 1);
         
         bool modified = false;
         
-        // Distribute interior keys evenly
         for (size_t i = 1; i < keyCount - 1; ++i)
         {
-            float newTime = startTime + (static_cast<float>(i) / (keyCount - 1)) * range;
-            
-            if (newTime != keys[i].time)
+            const float newTime = startTime + i * step;
+            if (keys[i].time != newTime)
             {
                 keys[i].time = newTime;
+                m_colorCurve.UpdateKey(i, keys[i]);
                 modified = true;
             }
         }
         
         if (modified)
         {
-            // Update the keys in the curve
-            m_colorCurve.Clear();
-            
-            for (const auto& key : keys)
-            {
-                m_colorCurve.AddKey(key);
-            }
-            
-            m_colorCurve.SortKeys();
-            
-            // Recalculate tangents if keys were modified
             m_colorCurve.CalculateTangents();
         }
         
         return modified;
     }
 
-    void ColorCurveEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
+    void ColorCurveImGuiEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
     {
         if (ImGui::BeginPopupContextItem("ColorCurveContextMenu"))
         {
