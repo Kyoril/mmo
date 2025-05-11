@@ -3700,6 +3700,9 @@ namespace mmo
 		m_gameTime.SetTime(gameTime);
 		m_gameTime.SetTimeSpeed(timeSpeed);
 
+		// Setup sky component
+		m_skyComponent->SetNormalizedTimeOfDay(m_gameTime.GetNormalizedTimeOfDay());
+
 		// Trigger a Lua event to notify the UI about the time change
 		FrameManager::Get().TriggerLuaEvent("GAME_TIME_UPDATED",
 			m_gameTime.GetHour(),
