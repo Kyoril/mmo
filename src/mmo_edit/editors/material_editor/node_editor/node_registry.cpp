@@ -41,7 +41,8 @@ namespace mmo
 			CosineNode::GetStaticTypeInfo(),
 			TangentNode::GetStaticTypeInfo(),
 			ArcTangent2Node::GetStaticTypeInfo(),
-			FracNode::GetStaticTypeInfo()
+			FracNode::GetStaticTypeInfo(),
+			LengthNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

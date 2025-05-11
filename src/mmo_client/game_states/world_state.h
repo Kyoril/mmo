@@ -42,6 +42,7 @@
 #include "spell_cast.h"
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
+#include "graphics/material_instance.h"
 
 namespace mmo
 {
@@ -383,7 +384,9 @@ namespace mmo
 
 		SceneNode* m_cloudsNode { nullptr };
 		Entity* m_cloudsEntity { nullptr };
-		Light* m_sunLight { nullptr };		SceneNode* m_sunLightNode{ nullptr };
+		Light* m_sunLight { nullptr };
+		SceneNode* m_sunLightNode{ nullptr };
+		std::shared_ptr<MaterialInstance> m_skyMatInst;
 
 		SceneNode* m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;

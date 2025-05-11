@@ -576,9 +576,9 @@ namespace mmo
 			// Calculate the sun direction based on time of day
 			// Normalized time: 0.0 = midnight, 0.25 = dawn (6:00), 0.5 = noon (12:00), 0.75 = dusk (18:00)
 			const float normalizedTime = m_gameTime.GetNormalizedTimeOfDay();
-			
-			// Convert to angle in radians (0.0 to 2*PI)
-			const float angleRadians = normalizedTime * 2.0f * 3.14159f;
+
+			// Offset by -0.5 so that noon (0.5) -> 0 radians (highest point), midnight -> PI (lowest)
+			const float angleRadians = (normalizedTime - 0.5f) * 2.0f * Pi;
 			
 			// Calculate sun position along a circle in the sky
 			// At noon (0.5), sun is highest in the sky (-Y direction)
@@ -588,8 +588,13 @@ namespace mmo
 			const float sunZ = -0.3f; // Gives the sun a slight angle from straight overhead
 			
 			// Set the sun direction - this is where the light is coming FROM
-			m_sunLight->SetDirection(Vector3(sunX, sunY, sunZ));
-			
+			const Vector3 sunDirection(sunX, sunY, sunZ);
+			m_sunLight->SetDirection(sunDirection);
+
+			// Update light direction in material
+			m_skyMatInst->SetVectorParameter("LightDirection", Vector4(sunDirection.x, sunDirection.y, sunDirection.z, 0.0f));
+			m_skyMatInst->SetScalarParameter("SunHeight", std::max(0.0f, 1.0f - std::abs(normalizedTime)));
+
 			// Adjust light color and intensity based on time of day
 			// Brighter during day, dimmer with warmer colors at dawn/dusk, dark at night
 			float intensity = 1.0f;
@@ -650,7 +655,7 @@ namespace mmo
 		if (m_cloudsNode && m_playerController->GetRootNode())
 		{
 			m_cloudsNode->SetPosition(m_playerController->GetRootNode()->GetPosition());
-			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.025f), TransformSpace::World);
+			m_cloudsNode->Yaw(Radian(deltaSeconds * 0.0025f), TransformSpace::World);
 		}
 
 		const auto pos = GetPagePositionFromCamera();
@@ -763,6 +768,10 @@ namespace mmo
 		m_cloudsNode->AttachObject(*m_cloudsEntity);
 		m_cloudsNode->SetScale(Vector3::UnitScale * 40.0f);
 		m_scene->GetRootSceneNode().AddChild(*m_cloudsNode);
+
+		ASSERT(m_cloudsEntity->GetNumSubEntities() > 0);
+		m_skyMatInst = std::make_shared<MaterialInstance>("__Sky__", m_cloudsEntity->GetSubEntity(0)->GetMaterial());
+		m_cloudsEntity->GetSubEntity(0)->SetMaterial(m_skyMatInst);
 
 		m_rayQuery = std::move(m_scene->CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);

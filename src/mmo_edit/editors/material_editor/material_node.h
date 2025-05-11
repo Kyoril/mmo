@@ -807,6 +807,36 @@ namespace mmo
 		Pin* m_OutputPins[1] = { &m_outputPin };
 	};
 
+	/// @brief A node which adds a length expression.
+	class LengthNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(LengthNode, "Length")
+
+		LengthNode(MaterialGraph& material)
+		: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		MaterialPin m_inputPin = { this };
+		MaterialPin m_outputPin = { this };
+
+		Pin* m_inputPins[1] = { &m_inputPin };
+		Pin* m_OutputPins[1] = { &m_outputPin };
+	};
+
 	/// @brief A node which adds a tangent expression.
 	class TangentNode final : public GraphNode
 	{

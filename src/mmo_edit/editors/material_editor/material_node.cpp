@@ -34,6 +34,7 @@ namespace mmo
 	const uint32 TangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ArcTangent2Node::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 FracNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 LengthNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -593,6 +594,23 @@ namespace mmo
 			}
 
 			m_compiledExpressionId = compiler.AddExpression("cos(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex LengthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for cosine node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("length(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
 		}
 
 		return m_compiledExpressionId;
