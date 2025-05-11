@@ -34,12 +34,17 @@ namespace mmo
          * @return True if the curve was modified, false otherwise
          */
         bool Draw(float width = 0.0f, float height = 280.0f);
-        
-        /**
+          /**
          * @brief Sets whether the alpha channel should be visible
          * @param showAlpha True to show alpha channel, false to hide it
          */
         void SetShowAlpha(bool showAlpha) { m_showAlpha = showAlpha; }
+        
+        /**
+         * @brief Gets whether the alpha channel is visible
+         * @return True if alpha channel is visible, false otherwise
+         */
+        bool GetShowAlpha() const { return m_showAlpha; }
         
         /**
          * @brief Sets whether the tangent handles should be visible
@@ -48,10 +53,22 @@ namespace mmo
         void SetShowTangents(bool showTangents) { m_showTangents = showTangents; }
         
         /**
+         * @brief Gets whether the tangent handles are visible
+         * @return True if tangent handles are visible, false otherwise
+         */
+        bool GetShowTangents() const { return m_showTangents; }
+        
+        /**
          * @brief Sets the editor's background color
          * @param color The background color
          */
         void SetBackgroundColor(const ImVec4& color) { m_backgroundColor = color; }
+        
+        /**
+         * @brief Gets the editor's background color
+         * @return The background color
+         */
+        const ImVec4& GetBackgroundColor() const { return m_backgroundColor; }
         
         /**
          * @brief Sets the grid color
@@ -60,16 +77,34 @@ namespace mmo
         void SetGridColor(const ImVec4& color) { m_gridColor = color; }
         
         /**
+         * @brief Gets the grid color
+         * @return The grid color
+         */
+        const ImVec4& GetGridColor() const { return m_gridColor; }
+        
+        /**
          * @brief Sets whether the horizontal grid should be visible
          * @param showHorizontalGrid True to show horizontal grid lines, false to hide them
          */
         void SetShowHorizontalGrid(bool showHorizontalGrid) { m_showHorizontalGrid = showHorizontalGrid; }
         
         /**
+         * @brief Gets whether the horizontal grid is visible
+         * @return True if horizontal grid is visible, false otherwise
+         */
+        bool GetShowHorizontalGrid() const { return m_showHorizontalGrid; }
+        
+        /**
          * @brief Sets whether the vertical grid should be visible
          * @param showVerticalGrid True to show vertical grid lines, false to hide them
          */
         void SetShowVerticalGrid(bool showVerticalGrid) { m_showVerticalGrid = showVerticalGrid; }
+        
+        /**
+         * @brief Gets whether the vertical grid is visible
+         * @return True if vertical grid is visible, false otherwise
+         */
+        bool GetShowVerticalGrid() const { return m_showVerticalGrid; }
         
         /**
          * @brief Returns the label of this editor instance
@@ -84,26 +119,49 @@ namespace mmo
         void SetShowColorPreview(bool showPreview) { m_showColorPreview = showPreview; }
 
         /**
+         * @brief Gets whether the color preview strip is visible
+         * @return True if color preview is visible, false otherwise
+         */
+        bool GetShowColorPreview() const { return m_showColorPreview; }
+
+        /**
          * @brief Sets the thickness of the curve lines
          * @param thickness The thickness in pixels
-         */        void SetCurveThickness(float thickness) { m_curveThickness = thickness; }
+         */
+        void SetCurveThickness(float thickness) { m_curveThickness = thickness; }
+        
+        /**
+         * @brief Gets the thickness of the curve lines
+         * @return The thickness in pixels
+         */
+        float GetCurveThickness() const { return m_curveThickness; }
 
         /**
          * @brief Resets the view to the default position and zoom level
          */
-        void ResetView();
-
-        /**
+        void ResetView();        /**
          * @brief Sets the snap increment for time values when dragging keys
          * @param increment The snap increment value (0 to disable snapping)
          */
         void SetTimeSnap(float increment) { m_timeSnapIncrement = increment; }
+        
+        /**
+         * @brief Gets the snap increment for time values
+         * @return The time snap increment value
+         */
+        float GetTimeSnap() const { return m_timeSnapIncrement; }
 
         /**
          * @brief Sets the snap increment for color values when dragging keys
          * @param increment The snap increment value (0 to disable snapping)
          */
         void SetValueSnap(float increment) { m_valueSnapIncrement = increment; }
+        
+        /**
+         * @brief Gets the snap increment for color values
+         * @return The value snap increment value
+         */
+        float GetValueSnap() const { return m_valueSnapIncrement; }
         
     private:
         /**

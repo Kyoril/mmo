@@ -187,48 +187,53 @@ namespace mmo
             ImGui::SameLine(160.0f);
             ImGui::TextColored(ImVec4(0.2f, 0.4f, 0.9f, 1.0f), "Blue");
             ImGui::SameLine(240.0f);
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Alpha");
-
-            // Show editor options
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Alpha");            // Show editor options
             ImGui::Separator();
             ImGui::Text("Editor Options");
 
-            bool showAlpha = true;
+            // Get current values from the editor
+            bool showAlpha = m_colorCurveEditor->GetShowAlpha();
             if (ImGui::Checkbox("Show Alpha Channel", &showAlpha))
             {
                 m_colorCurveEditor->SetShowAlpha(showAlpha);
+                m_modified = true;
             }
 
-            bool showTangents = true;
+            bool showTangents = m_colorCurveEditor->GetShowTangents();
             if (ImGui::Checkbox("Show Tangent Handles", &showTangents))
             {
                 m_colorCurveEditor->SetShowTangents(showTangents);
+                m_modified = true;
             }
 
-            bool showPreview = true;
+            bool showPreview = m_colorCurveEditor->GetShowColorPreview();
             if (ImGui::Checkbox("Show Color Preview", &showPreview))
             {
                 m_colorCurveEditor->SetShowColorPreview(showPreview);
+                m_modified = true;
             }
 
             // Add curve thickness control
-            float thickness = 2.0f;
+            float thickness = m_colorCurveEditor->GetCurveThickness();
             if (ImGui::SliderFloat("Curve Thickness", &thickness, 1.0f, 5.0f, "%.1f"))
             {
                 m_colorCurveEditor->SetCurveThickness(thickness);
+                m_modified = true;
             }
 
             // Add snapping options
-            float timeSnap = 0.0f;
+            float timeSnap = m_colorCurveEditor->GetTimeSnap();
             if (ImGui::SliderFloat("Time Snapping", &timeSnap, 0.0f, 0.25f, timeSnap > 0.0f ? "%.3f" : "Off"))
             {
                 m_colorCurveEditor->SetTimeSnap(timeSnap);
+                m_modified = true;
             }
 
-            float valueSnap = 0.0f;
+            float valueSnap = m_colorCurveEditor->GetValueSnap();
             if (ImGui::SliderFloat("Value Snapping", &valueSnap, 0.0f, 0.25f, valueSnap > 0.0f ? "%.3f" : "Off"))
             {
                 m_colorCurveEditor->SetValueSnap(valueSnap);
+                m_modified = true;
             }
         }
         ImGui::End();
