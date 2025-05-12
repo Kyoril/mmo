@@ -116,6 +116,22 @@ namespace mmo
                 m_ambientColorCurve->CalculateTangents();
             }
         }
+
+		m_cloudColorCurve = std::make_unique<ColorCurve>();
+        if (const auto file = AssetRegistry::OpenFile("Models/CloudColor.hccv"))
+        {
+            io::StreamSource stream(*file);
+            io::Reader reader(stream);
+            if (!m_cloudColorCurve->Deserialize(reader))
+            {
+                ELOG("Failed to load cloud color curve");
+                // Create default curve
+                m_cloudColorCurve->Clear();
+                m_cloudColorCurve->AddKey(0.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));    // Night
+                m_cloudColorCurve->AddKey(1.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));    // Night
+                m_cloudColorCurve->CalculateTangents();
+            }
+        }
     }
 
     void SkyComponent::Update(float deltaSeconds, GameTime timestamp)
@@ -301,8 +317,10 @@ namespace mmo
         const Vector4 horizonColor = m_horizonColorCurve->Evaluate(normalizedTime);
         const Vector4 zenithColor = m_zenithColorCurve->Evaluate(normalizedTime);
 		const Vector4 ambientColor = m_ambientColorCurve->Evaluate(normalizedTime);
+		const Vector4 cloudColor = m_cloudColorCurve->Evaluate(normalizedTime);
         m_skyMatInst->SetVectorParameter("HorizonColor", horizonColor);
         m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
+        m_skyMatInst->SetVectorParameter("CloudColor", cloudColor);
         
         // Update fog color based on horizon color
         m_scene.SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));

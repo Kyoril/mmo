@@ -35,6 +35,9 @@ namespace mmo
 	const uint32 ArcTangent2Node::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 FracNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 LengthNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcCosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcSineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcTangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -594,6 +597,57 @@ namespace mmo
 			}
 
 			m_compiledExpressionId = compiler.AddExpression("cos(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ArcCosineNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for arc cosine node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("acos(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ArcSineNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for arc sine node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("asin(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ArcTangentNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			const ExpressionIndex inputExpression = m_inputPin.GetLink()->GetNode()->Compile(compiler, m_inputPin.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Missing input for arc tangent node!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddExpression("atan(expr_" + std::to_string(inputExpression) + ")", compiler.GetExpressionType(inputExpression));
 		}
 
 		return m_compiledExpressionId;

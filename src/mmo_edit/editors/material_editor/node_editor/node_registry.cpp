@@ -42,7 +42,10 @@ namespace mmo
 			TangentNode::GetStaticTypeInfo(),
 			ArcTangent2Node::GetStaticTypeInfo(),
 			FracNode::GetStaticTypeInfo(),
-			LengthNode::GetStaticTypeInfo()
+			LengthNode::GetStaticTypeInfo(),
+			ArcCosineNode::GetStaticTypeInfo(),
+			ArcSineNode::GetStaticTypeInfo(),
+			ArcTangentNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();
