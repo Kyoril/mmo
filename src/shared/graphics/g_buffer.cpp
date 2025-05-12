@@ -12,10 +12,10 @@ namespace mmo
 		, m_height(height)
 	{
 		// Create render textures for the G-Buffer
-		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R8G8B8A8);
+		m_albedoRT = m_device.CreateRenderTexture("GBuffer_Albedo", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R16G16B16A16);
 		m_normalRT = m_device.CreateRenderTexture("GBuffer_Normal", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R32G32B32A32);
 		m_materialRT = m_device.CreateRenderTexture("GBuffer_Material", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R8G8B8A8);
-		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R8G8B8A8);
+		m_emissiveRT = m_device.CreateRenderTexture("GBuffer_Emissive", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R16G16B16A16);
 		m_viewRayRT = m_device.CreateRenderTexture("GBuffer_ViewRay", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, PixelFormat::R32G32B32A32);
 		m_depthRT = m_device.CreateRenderTexture("GBuffer_Depth", width, height, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 
