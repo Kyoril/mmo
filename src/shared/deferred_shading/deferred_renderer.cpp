@@ -59,11 +59,6 @@ namespace mmo
     {
         m_shadowCameraSetup = std::make_shared<DefaultShadowCameraSetup>();
         
-        // Configure shadow camera setup for better small object detail
-        auto* defaultSetup = static_cast<DefaultShadowCameraSetup*>(m_shadowCameraSetup.get());
-        defaultSetup->SetFocusOnSmallObjects(true);
-        defaultSetup->SetSmallObjectFocusSize(50.0f); // Adjust this value to control shadow map coverage
-
 #ifdef WIN32
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
@@ -87,9 +82,8 @@ namespace mmo
         };
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
-
 		// Create a high-resolution shadow map for better detail
-		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 8192, 8192, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", m_shadowMapSize, m_shadowMapSize, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 
         // Setup shadow camera
 		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
@@ -346,10 +340,18 @@ namespace mmo
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const
     {
-        // In this implementation, we're rendering directly to the back buffer,
-        // so we don't have a separate final render target texture.
-        // In a more complex implementation, we might render to a separate texture
-        // and return that here.
         return m_renderTexture;
+    }
+
+    void DeferredRenderer::SetShadowMapSize(const uint16 size)
+    {
+        if (m_shadowMapSize == size || size == 0)
+        {
+            return;
+        }
+
+        m_shadowMapSize = size;
+        m_shadowMapRT->Resize(m_shadowMapSize, m_shadowMapSize);
+        m_shadowMapRT->ApplyPendingResize();
     }
 }

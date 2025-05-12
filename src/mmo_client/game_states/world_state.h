@@ -170,6 +170,8 @@ namespace mmo
 
 		void OnShadowBiasChanged(ConsoleVar& var, const std::string& oldValue);
 
+		void OnShadowTextureSizeChanged(ConsoleVar& var, const std::string& oldValue);
+
 	private:
 		// EventLoop connections
 		

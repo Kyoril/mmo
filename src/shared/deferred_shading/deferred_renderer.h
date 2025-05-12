@@ -68,9 +68,11 @@ namespace mmo
 
         void SetBlockerSearchRadius(float radius) { m_blockerSearchRadius = radius; }
         float GetBlockerSearchRadius() const { return m_blockerSearchRadius; }
-        
-        void SetLightSize(float size) { m_lightSize = size; }
+          void SetLightSize(float size) { m_lightSize = size; }
         float GetLightSize() const { return m_lightSize; }
+        
+        void SetShadowMapSize(uint16 size);
+        uint16 GetShadowMapSize() const { return m_shadowMapSize; }
 
     private:
         /// @brief Renders the geometry pass.
@@ -131,9 +133,10 @@ namespace mmo
 
         // Advanced shadow parameters
         float m_shadowBias = 0.0005f;         // Depth bias in shadow space
-        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor
+        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor        float m_shadowSoftness = 1.0f;        // Overall shadow softness
         float m_shadowSoftness = 1.0f;        // Overall shadow softness
         float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
-        float m_lightSize = 0.0025f;             // Size of the virtual light
+        float m_lightSize = 0.0025f;          // Size of the virtual light
+        uint16 m_shadowMapSize = 8192;        // Size of the shadow map texture (default 8k)
     };
 }

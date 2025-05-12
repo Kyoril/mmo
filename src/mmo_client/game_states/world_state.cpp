@@ -87,6 +87,7 @@ namespace mmo
 		static ConsoleVar* s_depthBiasVar = nullptr;
 		static ConsoleVar* s_slopeDepthBiasVar = nullptr;
 		static ConsoleVar* s_clampDepthBiasVar = nullptr;
+		static ConsoleVar* s_shadowTextureSizeVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -933,6 +934,9 @@ namespace mmo
 		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.005");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
+		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "2");
+		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string&, const std::string&)
 			{
 				ReloadUI();
@@ -972,6 +976,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowDepthBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
 
 		m_cvarChangedSignals.disconnect();
 
@@ -3416,6 +3421,41 @@ namespace mmo
 		deferred->SetDepthBias(s_depthBiasVar->GetFloatValue(),
 			s_slopeDepthBiasVar->GetFloatValue(),
 			s_clampDepthBiasVar->GetFloatValue());
+	}
+
+	void WorldState::OnShadowTextureSizeChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer* deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const uint16 s_shadowTexSizes[] = {
+			1024,
+			2048,
+			4096,
+			8192
+		};
+
+		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
+		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
+		deferred->SetShadowMapSize(shadowTextureSize);
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
