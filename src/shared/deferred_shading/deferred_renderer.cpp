@@ -31,7 +31,9 @@ namespace mmo
         uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
         int32 shadowMap;
         Vector2 padding;
-    };    struct alignas(16) ShadowBuffer
+    };
+
+	struct alignas(16) ShadowBuffer
     {
         Matrix4 lightViewProjection;
         float shadowBias;           // Depth bias to prevent shadow acne
@@ -50,12 +52,17 @@ namespace mmo
         ShaderLight lights[DeferredRenderer::MAX_LIGHTS];
     };
 
-    DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
+	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
         : m_device(device)
 		, m_scene(scene)
         , m_gBuffer(device, width, height)
     {
         m_shadowCameraSetup = std::make_shared<DefaultShadowCameraSetup>();
+        
+        // Configure shadow camera setup for better small object detail
+        auto* defaultSetup = static_cast<DefaultShadowCameraSetup*>(m_shadowCameraSetup.get());
+        defaultSetup->SetFocusOnSmallObjects(true);
+        defaultSetup->SetSmallObjectFocusSize(50.0f); // Adjust this value to control shadow map coverage
 
 #ifdef WIN32
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
