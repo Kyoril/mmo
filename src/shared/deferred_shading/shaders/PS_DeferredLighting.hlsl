@@ -23,6 +23,35 @@ Texture2D ShadowMap : register(t5);
 SamplerState PointSampler : register(s0);
 SamplerComparisonState ShadowSampler : register(s1);
 
+// Bayer matrix for ordered dithering
+static const float BAYER_PATTERN[16] = {
+    0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
+    12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
+    3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
+    15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0
+};
+
+// Apply dithering to break up color banding
+float3 ApplyDithering(float3 color, float2 screenPos)
+{
+    // Get screen pixel coordinates
+    uint x = uint(screenPos.x) % 4;
+    uint y = uint(screenPos.y) % 4;
+    
+    // Add subtle noise based on the bayer pattern
+    float bayerValue = BAYER_PATTERN[y * 4 + x];
+    
+    // The strength of dithering should be proportional to the darkness of the area
+    // More aggressive in darker areas, subtler in bright areas
+    float ditherStrength = 1.0 / 255.0;  // One step in 8-bit color space
+    
+    // Apply stronger dithering to darker areas
+    ditherStrength *= max(0.5, 1.0 - dot(color, float3(0.299, 0.587, 0.114)));
+    
+    // Apply the dither
+    return color + (bayerValue * 2.0 - 1.0) * ditherStrength;
+}
+
 cbuffer Matrices : register(b0)
 {
     column_major matrix matWorld;
@@ -323,14 +352,19 @@ float4 main(PS_INPUT input) : SV_TARGET
             lighting += CalculateSpotLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
         }   
     }
-    
-    // Apply fog
+      // Apply fog
     float distanceToCamera = length(worldPos - CameraPosition);
 	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);
 
+    // Apply ACES tone mapping
     lighting = ACESFilm(lighting);
-    lighting = pow(lighting, 1.0 / 2.2); // Gamma correction
+    
+    // Apply dithering before gamma correction to break up color banding in dark areas
+    lighting = ApplyDithering(lighting, input.Position.xy);
+    
+    // Apply gamma correction
+    lighting = pow(lighting, 1.0 / 2.2);
 
     return float4(lighting, opacity);
 }
