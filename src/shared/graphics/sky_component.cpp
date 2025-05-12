@@ -194,53 +194,85 @@ namespace mmo
     GameTimeComponent* SkyComponent::GetGameTimeComponent()
     {
         return m_gameTime;
-    }
-
-    void SkyComponent::UpdateLighting(float normalizedTime)
+    }    void SkyComponent::UpdateLighting(float normalizedTime)
     {
         if (!m_sunLight || !m_sunLightNode)
             return;
 
+        // Define the time points for the day/night cycle
+        // Day cycle runs from m_transitionStart to m_transitionEnd (day is in the middle)
+        // Night cycle runs from m_transitionEnd to m_transitionStart (with potential wrap around at 1.0/0.0)
+        
         // Calculate sun/moon blend factors
         float blendSun = 0.0f;
         if (normalizedTime >= m_dayStart && normalizedTime <= m_dayEnd)
         {
-            blendSun = 1.0f; // Full sun
+            blendSun = 1.0f; // Full sun during day
         }
         else if (normalizedTime >= m_transitionStart && normalizedTime < m_dayStart)
         {
+            // Dawn transition (increasing sun)
             blendSun = (normalizedTime - m_transitionStart) / (m_dayStart - m_transitionStart);
         }
         else if (normalizedTime > m_dayEnd && normalizedTime <= m_transitionEnd)
         {
+            // Dusk transition (decreasing sun)
             blendSun = 1.0f - (normalizedTime - m_dayEnd) / (m_transitionEnd - m_dayEnd);
         }
 
         float blendMoon = 1.0f - blendSun;
-
-        // Time within active arc (0 to 1 range for day or night)
-        float timeInArc;
-        bool isDay = blendSun > 0.5f;
-        if (isDay)
+        
+        // Calculate position along the arc for sun (daytime)
+        float sunTimeInArc;
+        if (normalizedTime >= m_transitionStart && normalizedTime <= m_transitionEnd)
         {
-            timeInArc = (normalizedTime - m_transitionStart) / (m_transitionEnd - m_transitionStart); // 0 to 1
+            // Map time from dawn to dusk to 0.0 - 1.0 for the sun arc
+            sunTimeInArc = (normalizedTime - m_transitionStart) / (m_transitionEnd - m_transitionStart);
         }
         else
         {
-            float moonTime = (normalizedTime < m_transitionStart)
-                ? normalizedTime + (1.0f - m_transitionEnd) // wrap-around for night
-                : normalizedTime - m_transitionEnd;
-            timeInArc = moonTime / (m_transitionStart + (1.0f - m_transitionEnd)); // 0 to 1
+            // Sun is below horizon during night hours
+            sunTimeInArc = (normalizedTime < m_transitionStart) ? 0.0f : 1.0f;
+        }
+        
+        // Calculate position along the arc for moon (nighttime) - opposite direction from sun
+        float moonTimeInArc;
+        if (normalizedTime < m_transitionStart || normalizedTime > m_transitionEnd)
+        {
+            // Handle night time wrapping from end of day back to beginning
+            float nightDuration = m_transitionStart + (1.0f - m_transitionEnd);
+            
+            // Adjust for the wrap around at midnight
+            float adjustedTime;
+            if (normalizedTime > m_transitionEnd)
+            {
+                adjustedTime = normalizedTime - m_transitionEnd;
+            }
+            else // normalizedTime < m_transitionStart
+            {
+                adjustedTime = normalizedTime + (1.0f - m_transitionEnd);
+            }
+            
+            // Normalize to 0.0 - 1.0 for night arc (but reversed direction from sun)
+            moonTimeInArc = 1.0f - (adjustedTime / nightDuration);
+        }
+        else
+        {
+            // Moon is below horizon during day hours
+            moonTimeInArc = (normalizedTime < 0.5f) ? 1.0f : 0.0f;
         }
 
-        // Angle across the arc (from left horizon to right horizon)
-        float angleRadians = m_arcMin + timeInArc * (m_arcMax - m_arcMin); // -90° to +90°
-
-        // Build light direction: always above (negative Y)
+        // Use sun or moon arc time based on which is dominant
+        float timeInArc = (blendSun >= blendMoon) ? sunTimeInArc : moonTimeInArc;
+        
+        // Convert the time in arc to an angle in radians (from -90° to +90°)
+        float angleRadians = m_arcMin + timeInArc * (m_arcMax - m_arcMin);
+        
+        // Build light direction
         const float x = -std::sin(angleRadians);
         const float y = -std::cos(angleRadians); // always <= 0
         const float z = -0.3f;
-
+        
         Vector3 lightDir = Vector3(x, y, z).NormalizedCopy();
 
         // Light color & intensity
