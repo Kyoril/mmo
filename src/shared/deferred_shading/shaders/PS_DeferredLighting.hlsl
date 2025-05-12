@@ -23,6 +23,26 @@ Texture2D ShadowMap : register(t5);
 SamplerState PointSampler : register(s0);
 SamplerComparisonState ShadowSampler : register(s1);
 
+// Poisson disk samples for shadow sampling
+static const float2 POISSON_DISK[16] = {
+    float2(-0.94201624, -0.39906216),
+    float2(0.94558609, -0.76890725),
+    float2(-0.094184101, -0.92938870),
+    float2(0.34495938, 0.29387760),
+    float2(-0.91588581, 0.45771432),
+    float2(-0.81544232, -0.87912464),
+    float2(-0.38277543, 0.27676845),
+    float2(0.97484398, 0.75648379),
+    float2(0.44323325, -0.97511554),
+    float2(0.53742981, -0.47373420),
+    float2(-0.26496911, -0.41893023),
+    float2(0.79197514, 0.19090188),
+    float2(-0.24188840, 0.99706507),
+    float2(-0.81409955, 0.91437590),
+    float2(0.19984126, 0.78641367),
+    float2(0.14383161, -0.14100790)
+};
+
 // Bayer matrix for ordered dithering
 static const float BAYER_PATTERN[16] = {
     0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
@@ -96,6 +116,13 @@ cbuffer LightBuffer : register(b2)
 cbuffer ShadowBuffer : register(b3)
 {
     column_major matrix LightViewProj;
+    
+    // Shadow filter parameters
+    float ShadowBias;           // Depth bias to prevent shadow acne
+    float NormalBiasScale;      // Bias scale factor based on normal
+    float ShadowSoftness;       // Controls general softness of shadows
+    float BlockerSearchRadius;  // Search radius for the blocker search phase
+    float LightSize;            // Controls the size of the virtual light (larger = softer shadows)
 };
 
 // Reconstructs world position from depth
@@ -179,40 +206,115 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-float SampleShadow(float3 worldPos, float3 normal, float normalBias)
+// Helper function to find average blocker depth
+float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out float numBlockers)
 {
-    float3 P = worldPos + normal * normalBias; //  normalBias in world units
-    float4 clip = mul(float4(P, 1.0f), LightViewProj);
+    float blockerSum = 0.0f;
+    numBlockers = 0.0f;
     
-    if (clip.w <= 0.0f)
-        return 1.0f;
-
-    float3 ndc = clip.xyz / clip.w;
-    float2 uv = ndc.xy * float2(1.0f, -1.0f) * 0.5f + 0.5f;
+    // Generate a random rotation angle to reduce banding artifacts
+    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
+    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
     
-    if (uv.x < 0.0f || uv.x > 1.0f ||
-        uv.y < 0.0f || uv.y > 1.0f ||
-        ndc.z > 1.0f)
-        return 1.0f;
-    
-    static const float bias = 0.0005f;
-
-    float shadow = 0.0;
-
-	[unroll]
-    for (int y = -1; y <= 1; ++y)
+    // Sample potential blockers
+    for (int i = 0; i < 16; i++)
     {
-    	[unroll]
-        for (int x = -1; x <= 1; ++x)
+        float2 offset = mul(rot, POISSON_DISK[i]) * searchRadius;
+        float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
+        
+        // If the depth is less than the receiver's depth, it's a blocker
+        if (shadowMapDepth < receiverDepth - ShadowBias)
         {
-            shadow += ShadowMap.SampleCmpLevelZero(
-                  ShadowSampler,
-                  uv + float2(x, y) * (1.0f / 4096.0f), ndc.z - bias);
+            blockerSum += shadowMapDepth;
+            numBlockers++;
         }
     }
-    shadow /= 9.0;
+    
+    if (numBlockers > 0.0f)
+        return blockerSum / numBlockers;
+        
+    return 1.0f;
+}
 
-    return shadow;
+// Percentage-Closer Filtering with variable filter size
+float PCF_Filter(float2 uv, float receiverDepth, float filterRadius)
+{
+    float sum = 0.0f;
+    
+    // Generate a random rotation angle to reduce banding artifacts
+    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
+    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    
+    // Higher sample count for larger filter radius
+    int sampleCount = lerp(16, 32, saturate(filterRadius * 10.0));
+    sampleCount = min(sampleCount, 16); // Cap at 16 samples for performance
+    
+    for (int i = 0; i < sampleCount; i++)
+    {
+        float2 offset = mul(rot, POISSON_DISK[i % 16]) * filterRadius;
+        sum += ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
+    }
+    
+    return sum / float(sampleCount);
+}
+
+// Advanced shadow sampling using PCSS (Percentage Closer Soft Shadows)
+float SampleShadow(float3 worldPos, float3 normal, float normalBias)
+{
+    // Apply normal-based bias to reduce shadow acne on sloped surfaces
+    float adjustedNormalBias = normalBias * NormalBiasScale;
+    float3 biasedWorldPos = worldPos + normal * adjustedNormalBias;
+    
+    // Transform to light space
+    float4 lightSpacePos = mul(float4(biasedWorldPos, 1.0f), LightViewProj);
+    
+    if (lightSpacePos.w <= 0.0f)
+        return 1.0f;
+        
+    // Perspective division
+    float3 ndc = lightSpacePos.xyz / lightSpacePos.w;
+    
+    // Convert to texture coordinates
+    float2 uv = ndc.xy * float2(1.0f, -1.0f) * 0.5f + 0.5f;
+    float receiverDepth = ndc.z;
+    
+    // Early out if outside shadow map
+    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z > 1.0f)
+        return 1.0f;
+    
+    // Check if surface is facing light
+    float NdotL = dot(normal, -normalize(Lights[0].Direction));
+    if (NdotL <= 0.0f)
+        return 0.0f;  // Surface faces away from light
+    
+    // ------------------------
+    // STEP 1: Blocker search
+    // ------------------------
+    float numBlockers;
+    float searchRadius = BlockerSearchRadius / lightSpacePos.w; // Scale with depth
+    float avgBlockerDepth = FindBlockerDepth(uv, receiverDepth, searchRadius, numBlockers);
+    
+    // Early out if no blockers found
+    if (numBlockers < 1.0f)
+        return 1.0f;
+    
+    // ------------------------
+    // STEP 2: Penumbra estimation
+    // ------------------------
+    // Estimate penumbra size based on blocker distance
+    float penumbraRatio = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    float filterRadius = penumbraRatio * LightSize * ShadowSoftness;
+    
+    // Adjust filter radius based on distance to avoid excessive blurring for distant objects
+    filterRadius = min(filterRadius, 0.01f);
+    
+    // Ensure minimum filter size to prevent hard shadow edges
+    filterRadius = max(filterRadius, 1.0f / 4096.0f);
+    
+    // ------------------------
+    // STEP 3: Filtering
+    // ------------------------
+    return PCF_Filter(uv, receiverDepth, filterRadius);
 }
 
 // Calculates directional light contribution

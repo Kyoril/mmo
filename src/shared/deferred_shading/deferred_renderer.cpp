@@ -31,11 +31,15 @@ namespace mmo
         uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
         int32 shadowMap;
         Vector2 padding;
-    };
-
-    struct alignas(16) ShadowBuffer
+    };    struct alignas(16) ShadowBuffer
     {
         Matrix4 lightViewProjection;
+        float shadowBias;           // Depth bias to prevent shadow acne
+        float normalBiasScale;      // Bias scale factor based on normal
+        float shadowSoftness;       // Controls general softness of shadows  
+        float blockerSearchRadius;  // Search radius for the blocker search phase
+        float lightSize;            // Controls the size of the virtual light (larger = softer shadows)
+        Vector3 padding;
     };
 
     // Light buffer structure that matches the one in the shader
@@ -77,28 +81,32 @@ namespace mmo
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
 
-		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 4096, 4096, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+		// Create a high-resolution shadow map for better detail
+		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", 8192, 8192, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
 
         // Setup shadow camera
 		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
 		m_shadowCamera = m_scene.CreateCamera("__DeferredShadowCamera__");
 		m_shadowCameraNode->AttachObject(*m_shadowCamera);
 
-#ifdef WIN32
-        // TODO: Fix me: Move me to graphicsd3d11
+#ifdef WIN32        // TODO: Fix me: Move me to graphicsd3d11
         D3D11_SAMPLER_DESC sampDesc = {};
-        sampDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
-        sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-        sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-        sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        // Using anisotropic filtering for better quality at oblique angles
+        sampDesc.Filter = D3D11_FILTER_COMPARISON_ANISOTROPIC;
+        // Use border addressing to avoid shadow edge artifacts
+        sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+        sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+        sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
         sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;  // Shadow test: fragment depth < stored depth
+        // White border color to avoid darkening at edges
         sampDesc.BorderColor[0] = 1.0f;
         sampDesc.BorderColor[1] = 1.0f;
         sampDesc.BorderColor[2] = 1.0f;
         sampDesc.BorderColor[3] = 1.0f;
         sampDesc.MinLOD = 0;
         sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-        sampDesc.MaxAnisotropy = 1;
+        // Increase anisotropy level for better quality
+        sampDesc.MaxAnisotropy = 4;
         sampDesc.MipLODBias = 0;
 
 		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
@@ -307,11 +315,14 @@ namespace mmo
         // Setup some depth bias settings
         m_device.SetDepthBias(m_depthBias);
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
-        m_device.SetDepthBiasClamp(m_depthBiasClamp);
-
-        // Update the shadow buffer with the light view-projection matrix
+        m_device.SetDepthBiasClamp(m_depthBiasClamp);        // Update the shadow buffer with the light view-projection matrix and shadow parameters
         ShadowBuffer buffer;
         buffer.lightViewProjection = (m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix());
+        buffer.shadowBias = m_shadowBias;
+        buffer.normalBiasScale = m_normalBiasScale;
+        buffer.shadowSoftness = m_shadowSoftness;
+        buffer.blockerSearchRadius = m_blockerSearchRadius;
+        buffer.lightSize = m_lightSize;
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map

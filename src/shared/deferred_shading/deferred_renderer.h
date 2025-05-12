@@ -49,14 +49,28 @@ namespace mmo
         Camera* GetShadowCamera() const
         {
             return m_shadowCamera;
-        }
-
-        void SetDepthBias(float bias, float slope, float clamp)
+        }        void SetDepthBias(float bias, float slope, float clamp)
         {
 			m_depthBias = bias;
 			m_slopeScaledDepthBias = slope;
 			m_depthBiasClamp = clamp;
         }
+
+        // Advanced shadow parameters getters and setters
+        void SetShadowBias(float bias) { m_shadowBias = bias; }
+        float GetShadowBias() const { return m_shadowBias; }
+
+        void SetNormalBiasScale(float scale) { m_normalBiasScale = scale; }
+        float GetNormalBiasScale() const { return m_normalBiasScale; }
+
+        void SetShadowSoftness(float softness) { m_shadowSoftness = softness; }
+        float GetShadowSoftness() const { return m_shadowSoftness; }
+
+        void SetBlockerSearchRadius(float radius) { m_blockerSearchRadius = radius; }
+        float GetBlockerSearchRadius() const { return m_blockerSearchRadius; }
+        
+        void SetLightSize(float size) { m_lightSize = size; }
+        float GetLightSize() const { return m_lightSize; }
 
     private:
         /// @brief Renders the geometry pass.
@@ -111,12 +125,15 @@ namespace mmo
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 #endif
         
-        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
-
-        float m_depthBias = 250.0f;
-
+        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;        float m_depthBias = 250.0f;
 		float m_slopeScaledDepthBias = 1.0f;
-
 		float m_depthBiasClamp = 0.0f;
+
+        // Advanced shadow parameters
+        float m_shadowBias = 0.0005f;         // Depth bias in shadow space
+        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor
+        float m_shadowSoftness = 1.0f;        // Overall shadow softness
+        float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
+        float m_lightSize = 0.0025f;             // Size of the virtual light
     };
 }

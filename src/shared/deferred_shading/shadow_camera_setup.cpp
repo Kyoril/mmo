@@ -25,7 +25,9 @@ namespace mmo
 			shadowDist = camera.GetNearClipDistance() * 300;
 		}
 
-		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset() * 0.5f);
+		// Calculate shadow offset - this controls where we center the shadow texture
+		// Smaller value brings shadow focus closer to camera for better quality on nearby objects
+		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset() * 0.3f);
 
 		// Directional lights 
 		if (light.GetType() == LightType::Directional)
