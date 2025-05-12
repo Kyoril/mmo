@@ -393,6 +393,13 @@ namespace mmo
 		/// @return A vector of all lights in the scene.
 		std::vector<Light*> GetAllLights() const;
 
+		const Vector3& GetAmbientColor() const { return m_ambientColor; }
+
+		void SetAmbientColor(const Vector3& color)
+		{
+			m_ambientColor = color;
+		}
+
 	protected:
 		void RenderVisibleObjects();
 		
@@ -482,5 +489,6 @@ namespace mmo
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 
+		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 	};
 }

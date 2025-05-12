@@ -102,11 +102,16 @@ namespace mmo
         // Adjust canvasPos to make space for labels
         canvasPos.x += valueLabelsWidth;
         canvasPos.y += timeLabelsHeight;
-        ImVec2 canvasSize = ImVec2(width - valueLabelsWidth, height - timeLabelsHeight);
-        
-        // Create the invisible button for interaction that spans the entire canvas + label areas
+        ImVec2 canvasSize = ImVec2(width - valueLabelsWidth, height - timeLabelsHeight);        // Create the invisible button for interaction that spans the entire canvas + label areas
         // This needs to use the full width and height to capture all mouse events
         ImGui::InvisibleButton("canvas", ImVec2(width, height), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+        
+        // Open context menu on right-click
+        if (ImGui::BeginPopupContextItem("canvas"))
+        {
+            HandleContextMenu(canvasPos, canvasSize, modified);
+            ImGui::EndPopup();
+        }
         
         // Handle zoom and pan
         HandleZoomAndPan(canvasPos, canvasSize);
@@ -120,9 +125,6 @@ namespace mmo
         {
             // Capture mouse interactions
             HandleInteraction(canvasPos, canvasSize, modified);
-            
-            // Handle context menu
-            HandleContextMenu(canvasPos, canvasSize, modified);
         }
           // Draw time labels at the top of the canvas
         DrawTimeLabels(drawList, canvasPos, canvasSize);
@@ -1270,27 +1272,25 @@ namespace mmo
         return modified;
     }    void ColorCurveImGuiEditor::HandleContextMenu(const ImVec2& canvasPos, const ImVec2& canvasSize, bool& modified)
     {
-        if (ImGui::BeginPopupContextItem("ColorCurveContextMenu"))
+        ImGui::Text("Color Curve Actions");
+        ImGui::Separator();
+        
+        if (ImGui::MenuItem("Add Key at Cursor"))
         {
-            ImGui::Text("Color Curve Actions");
-            ImGui::Separator();
+            ImVec2 mousePos = ImGui::GetMousePos();
+            float time = XToTime(mousePos.x, canvasPos, canvasSize);
             
-            if (ImGui::MenuItem("Add Key at Cursor"))
-            {
-                ImVec2 mousePos = ImGui::GetMousePos();
-                float time = XToTime(mousePos.x, canvasPos, canvasSize);
-                
-                // Clamp time to curve range
-                time = std::max(0.0f, std::min(time, 1.0f));
-                
-                // Sample the curve at the mouse position to get the color
-                Vector4 color = m_colorCurve.Evaluate(time);
-                
-                // Add the new key
-                size_t newIndex = m_colorCurve.AddKey(time, color);
-                m_selectedKeyIndex = newIndex;
-                modified = true;
-            }
+            // Clamp time to curve range
+            time = std::max(0.0f, std::min(time, 1.0f));
+            
+            // Sample the curve at the mouse position to get the color
+            Vector4 color = m_colorCurve.Evaluate(time);
+            
+            // Add the new key
+            size_t newIndex = m_colorCurve.AddKey(time, color);
+            m_selectedKeyIndex = newIndex;
+            modified = true;
+        }
             
             ImGui::Separator();
             
@@ -1377,12 +1377,8 @@ namespace mmo
                 {
                     m_valueSnapIncrement = valueSnap;
                 }
-                
-                ImGui::EndMenu();
+                  ImGui::EndMenu();
             }
-            
-            ImGui::EndPopup();
-        }
     }
 
     void ColorCurveImGuiEditor::HandleZoomAndPan(const ImVec2& canvasPos, const ImVec2& canvasSize)

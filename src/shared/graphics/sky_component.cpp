@@ -100,6 +100,22 @@ namespace mmo
                 m_zenithColorCurve->CalculateTangents();
             }
         }
+
+		m_ambientColorCurve = std::make_unique<ColorCurve>();
+        if (const auto file = AssetRegistry::OpenFile("Models/AmbientColor.hccv"))
+        {
+            io::StreamSource stream(*file);
+            io::Reader reader(stream);
+            if (!m_ambientColorCurve->Deserialize(reader))
+            {
+                ELOG("Failed to load ambient color curve");
+                // Create default curve
+                m_ambientColorCurve->Clear();
+                m_ambientColorCurve->AddKey(0.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
+                m_ambientColorCurve->AddKey(1.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
+                m_ambientColorCurve->CalculateTangents();
+            }
+        }
     }
 
     void SkyComponent::Update(float deltaSeconds, GameTime timestamp)
@@ -279,8 +295,8 @@ namespace mmo
         Vector4 sunColor(1.0f, 0.95f, 0.9f, 1.0f);
         float sunIntensity = 1.0f;
 
-        Vector4 moonColor(0.4f, 0.5f, 0.7f, 1.0f);
-        float moonIntensity = 0.2f;
+        Vector4 moonColor(0.3f, 0.4f, 0.65f, 1.0f);
+        float moonIntensity = 0.12f;
 
         Vector4 blendedColor = sunColor * blendSun + moonColor * blendMoon;
         float blendedIntensity = sunIntensity * blendSun + moonIntensity * blendMoon;
@@ -292,15 +308,17 @@ namespace mmo
 
         // Update light direction in material
         m_skyMatInst->SetVectorParameter("LightDirection", Vector4(lightDir.x, lightDir.y, lightDir.z, 0.0f));
-        m_skyMatInst->SetScalarParameter("SunHeight", std::max(0.0f, 1.0f - std::abs(normalizedTime - 0.5f) * 2.0f));
+        m_skyMatInst->SetScalarParameter("SunHeight", blendMoon);
 
         // Get colors from curves and apply to sky material
         const Vector4 horizonColor = m_horizonColorCurve->Evaluate(normalizedTime);
         const Vector4 zenithColor = m_zenithColorCurve->Evaluate(normalizedTime);
+		const Vector4 ambientColor = m_ambientColorCurve->Evaluate(normalizedTime);
         m_skyMatInst->SetVectorParameter("HorizonColor", horizonColor);
         m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
         
         // Update fog color based on horizon color
         m_scene.SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));
+        m_scene.SetAmbientColor(Vector3(ambientColor.x, ambientColor.y, ambientColor.z));
     }
 }

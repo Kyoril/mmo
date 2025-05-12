@@ -91,9 +91,6 @@ namespace mmo
 
         ConstantBufferPtr m_shadowBuffer;
 
-        /// @brief The ambient light color.
-        Vector3 m_ambientColor{ 0.04f, 0.035f, 0.03f };
-
         ShaderPtr m_deferredLightVs;
 
         ShaderPtr m_deferredLightPs;

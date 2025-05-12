@@ -229,7 +229,7 @@ namespace mmo
 
         // Prepare the light buffer with a single directional light for now
         LightBuffer lightBuffer;
-        lightBuffer.ambientColor = m_ambientColor;
+        lightBuffer.ambientColor = m_scene.GetAmbientColor();
         lightBuffer.lightCount = 0;
 
         for (auto* light : scene.GetAllLights())
