@@ -588,10 +588,10 @@ namespace mmo
 			TakenSpellMagicDmgClassNeg = 0x00020000,
 
 			/// On periodic tick done.
-			DonePeriodic = 0x00040000,
+			DonePeriodicDamage = 0x00040000,
 
 			/// On periodic tick received.
-			TakenPeriodic = 0x00080000,
+			TakenPeriodicDamage = 0x00080000,
 
 			/// On any damage taken.
 			TakenDamage = 0x00100000,
@@ -606,7 +606,11 @@ namespace mmo
 			DoneOffhandAttack = 0x00800000,
 
 			/// Died in any way.
-			Death = 0x01000000
+			Death = 0x01000000,
+
+			DonePeriodicHeal = 0x02000000,
+
+			TakenPeriodicHeal = 0x04000000,
 		};
 	}
 

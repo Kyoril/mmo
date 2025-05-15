@@ -831,12 +831,14 @@ namespace mmo
 			if (spellDamage > 0.0f && effect.powerbonusfactor() > 0.0f)
 			{
 				damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
-			}
-
-			unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility);
+			}			unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility);
 
 			// Log spell damage to client
 			m_cast.GetExecuter().SpellDamageLog(unitTarget.GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
+			
+			// Trigger proc events for spell damage
+			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &m_cast.GetExecuter(), damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
 		}
 	}
 
@@ -989,9 +991,11 @@ namespace mmo
 			else
 			{
 				healingAmount = 0;
-			}
+			}			unitTarget.Heal(healingAmount, &m_cast.GetExecuter());
 
-			unitTarget.Heal(healingAmount, &m_cast.GetExecuter());
+			// Trigger proc events for healing
+			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &m_cast.GetExecuter(), healingAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
 
 			GameUnitS& caster = m_cast.GetExecuter();
 			const uint32 spellId = m_spell.id();
@@ -1751,6 +1755,10 @@ namespace mmo
 		// Log spell damage to client
 		unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter(), damage_type::PhysicalAbility);
 		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
+
+		// Trigger proc events for spell damage
+		m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, unitTarget.get(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+		unitTarget->TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &m_cast.GetExecuter(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
 	}
 
 	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)
@@ -1920,9 +1928,8 @@ namespace mmo
 		{
 			ApplyAllEffects();
 		}
-
 		m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
-
+		
 		if (!IsChanneled())
 		{
 			// may destroy this, too

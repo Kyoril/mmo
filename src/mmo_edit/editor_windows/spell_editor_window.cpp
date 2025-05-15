@@ -592,8 +592,8 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(procflags, "TakenSpellMagicDmgClassPos", spell_proc_flags::TakenSpellMagicDmgClassPos);
 			CHECKBOX_FLAG_PROP(procflags, "DoneSpellMagicDmgClassNeg", spell_proc_flags::DoneSpellMagicDmgClassNeg);
 			CHECKBOX_FLAG_PROP(procflags, "TakenSpellMagicDmgClassNeg", spell_proc_flags::TakenSpellMagicDmgClassNeg);
-			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Done", spell_proc_flags::DonePeriodic);
-			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Taken", spell_proc_flags::TakenPeriodic);
+			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Done", spell_proc_flags::DonePeriodicDamage);
+			CHECKBOX_FLAG_PROP(procflags, "On Periodic Damage Taken", spell_proc_flags::TakenPeriodicDamage);
 			CHECKBOX_FLAG_PROP(procflags, "On Damage Taken", spell_proc_flags::TakenDamage);
 			CHECKBOX_FLAG_PROP(procflags, "When Main Hand Weapon Attack Performed", spell_proc_flags::DoneMainhandAttack);
 			CHECKBOX_FLAG_PROP(procflags, "When Off Hand Weapon Attack Performed", spell_proc_flags::DoneOffhandAttack);

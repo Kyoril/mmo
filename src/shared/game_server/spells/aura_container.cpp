@@ -8,6 +8,7 @@
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/spell_cast.h"
 #include "base/clock.h"
+#include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "proto_data/project.h"
 
@@ -23,6 +24,17 @@ namespace mmo
 		, m_areaAuraTick(owner.GetTimers())
 	{
 		m_areaAuraTickConnection = m_areaAuraTick.ended.connect(this, &AuraContainer::HandleAreaAuraTick);
+
+		// Apply proc chance
+		m_procChance = m_spell.procchance();
+		GetCaster()->ApplySpellMod(spell_mod_op::ChanceOfSuccess, spell.id(), m_procChance);
+
+		// Initialize proc charges if applicable
+		if (m_spell.proccharges() > 0)
+		{
+			m_baseProcCharges = m_spell.proccharges();
+			m_procCharges = m_baseProcCharges;
+		}
 	}
 
 	AuraContainer::~AuraContainer()
@@ -74,8 +86,7 @@ namespace mmo
 
 		// Does this aura expire?
 		if (apply)
-		{
-			// Start ticking area auras
+		{			// Start ticking area auras
 			if (IsAreaAura())
 			{
 				// Do an initial tick
@@ -83,6 +94,28 @@ namespace mmo
 			}
 
 			m_ownerEventConnections += m_owner.takenDamage.connect(this, &AuraContainer::OnOwnerDamaged);
+
+			// Register aura for proc events if needed
+			if (CanProc() && !m_procRegistered)
+			{
+				// Register proc handlers based on which proc flags are set
+				const uint32 procFlags = GetProcFlags();
+
+				// Reset proc charges if applicable
+				if (m_baseProcCharges > 0)
+				{
+					m_procCharges = m_baseProcCharges;
+				}
+
+				// Connect to the owner's proc events
+				if (procFlags != 0)
+				{
+					// Connect to all applicable proc events
+					// Specific proc connections would be added here based on proc flags
+					// These would connect to GameUnitS event signals
+					m_procRegistered = true;
+				}
+			}
 
 			if (m_duration > 0)
 			{
@@ -101,8 +134,7 @@ namespace mmo
 				m_expiration = GetAsyncTimeMs() + m_duration;
 				m_expirationCountdown.SetEnd(m_expiration);
 			}
-		}
-		else
+		}		else
 		{
 			m_ownerEventConnections.disconnect();
 			m_expirationCountdown.Cancel();
@@ -112,6 +144,12 @@ namespace mmo
 			if (IsAreaAura())
 			{
 				m_areaAuraTick.Cancel();
+			}
+
+			// Clean up proc registration
+			if (m_procRegistered)
+			{
+				m_procRegistered = false;
 			}
 		}
 
@@ -432,5 +470,125 @@ namespace mmo
 		}
 		
 		return strongCaster.get();
+	}
+
+	bool AuraContainer::HandleProc(uint32 procFlags, uint32 procEx, GameUnitS* target, uint32 damage, uint8 school, bool triggerByAura, uint64 familyFlags)
+	{
+		// First check if the aura can proc at all
+		if (!IsApplied() || !CanProc())
+		{
+			return false;
+		}
+
+		// Check if we already triggered by another proc to avoid infinite loops
+		if (triggerByAura)
+		{
+			return false;
+		}
+
+		// Check cooldown
+		if (GetProcCooldown() > 0)
+		{
+			const uint32 currentTime = GetAsyncTimeMs();
+			if (currentTime < m_lastProcTime + GetProcCooldown())
+			{
+				return false;
+			}
+		}
+
+		// Check if this proc type matches our proc flags
+		if (!CheckProcFlags(procFlags))
+		{
+			return false;
+		}
+
+		// Check if the school matches if a specific school was specified
+		if (GetProcSchool() != 0 && school != 0 && GetProcSchool() != school)
+		{
+			return false;
+		}
+
+		// Check proc family flags if applicable
+		if (GetProcFamily() != 0 && !CheckProcFamilyFlags(familyFlags))
+		{
+			return false;
+		}
+
+		// Roll the proc chance
+		const uint32 procChance = GetProcChance();
+		if (procChance == 0)
+		{
+			return false;
+		}
+
+		// Random roll (0-100)
+		std::uniform_real_distribution<float> distribution(0.0f, 100.0f);
+		const float roll = distribution(randomGenerator);
+		if (roll > static_cast<float>(procChance))
+		{
+			return false;  // Failed the proc chance roll
+		}
+
+		// We passed all checks - the proc will activate!
+		m_lastProcTime = GetAsyncTimeMs();
+
+		// Execute the proc effects
+		ExecuteProcEffects(target);
+
+		// If we have charges, decrease them and check if we need to remove the aura
+		if (m_baseProcCharges > 0)
+		{
+			if (m_procCharges > 0)
+			{
+				--m_procCharges;
+
+				// If charges are depleted, remove the aura
+				if (m_procCharges == 0)
+				{
+					RemoveSelf();
+					return true;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	bool AuraContainer::CheckProcFlags(uint32 eventFlags) const
+	{
+		// If no proc flags set on aura, it can't proc
+		if (GetProcFlags() == 0)
+		{
+			return false;
+		}
+
+		// Check if any of the event flags match our proc flags
+		return (GetProcFlags() & eventFlags) != 0;
+	}
+
+	bool AuraContainer::CheckProcFamilyFlags(uint64 familyFlags) const
+	{
+		// If no proc family flags set, any spell can trigger
+		if (GetProcFamily() == 0 || familyFlags == 0)
+		{
+			return true;
+		}
+
+		// We need to check that the trigger was a spell with the given flag set
+		if ((m_spell.procfamily() & familyFlags) == 0)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	void AuraContainer::ExecuteProcEffects(GameUnitS* target)
+	{
+		// Check each aura effect to see if it's a proc effect
+		for (const auto& aura : m_auras)
+		{
+			aura->HandleProcEffect(target);
+		}
 	}
 }

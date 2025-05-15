@@ -60,6 +60,8 @@ namespace mmo
 			return m_isPeriodic;
 		}
 
+		void HandleProcEffect(GameUnitS* instigator);
+
 	public:
 		void HandleEffect(bool apply);
 
@@ -68,8 +70,6 @@ namespace mmo
 		void HandlePeriodicBase();
 
 		void HandleModStat(bool apply) const;
-
-		void HandleProcTriggerSpell(bool apply);
 
 		void HandleModDamageDone(bool apply) const;
 
@@ -112,8 +112,6 @@ namespace mmo
 
 		void HandleProcForUnitTarget(GameUnitS& unit);
 
-		bool RollProcChance() const;
-
 		void ForEachProcTarget(const proto::SpellEffect& effect, GameUnitS* instigator, const std::function<bool(GameUnitS&)>& proc);
 
 		bool ExecuteSpellProc(const proto::SpellEntry* procSpell, const GameUnitS& unit) const;
@@ -128,12 +126,9 @@ namespace mmo
 		uint32 m_tickCount = 0;
 		scoped_connection m_onTick;
 		bool m_isPeriodic = false;
-		float m_procChance = 0;
 
 		float m_casterSpellPower = 0.0f;
 		float m_casterSpellHeal = 0.0f;
-
-		scoped_connection_container m_procEffects;
 
 	private:
 
@@ -141,5 +136,4 @@ namespace mmo
 
 		void OnTick();
 	};
-
 }

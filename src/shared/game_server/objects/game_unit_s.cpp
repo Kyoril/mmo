@@ -646,7 +646,7 @@ namespace mmo
 			const float addRage = (static_cast<float>(damage) / rageConversion) * 2.5f;
 			AddPower(power_type::Rage, addRage);
 		}
-
+		
 		// Kill event
 		if (health < 1)
 		{
@@ -2386,7 +2386,36 @@ namespace mmo
 		// Trigger proc events
 		if (hit)
 		{
-			meleeAttackDone(*victim);
+			// Attacker procs (done)
+			uint32 procEx = 0;
+			if (hitInfo & hit_info::CriticalHit)
+			{
+				procEx |= proc_ex_flags::CriticalHit;
+			}
+			else if (hit)
+			{
+				procEx |= proc_ex_flags::NormalHit;
+			}
+			
+			// Check for specific victim states
+			if (victimState == victim_state::Dodge)
+			{
+				procEx |= proc_ex_flags::Dodge;
+			}
+			else if (victimState == victim_state::Parry)
+			{
+				procEx |= proc_ex_flags::Parry;
+			}
+			else if (victimState == victim_state::Blocks)
+			{
+				procEx |= proc_ex_flags::Block;
+			}
+			
+			// Trigger attacker procs
+			TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, victim.get(), totalDamage, procEx, spell_school::Normal, false);
+			
+			// Trigger victim procs
+			victim->TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, this, totalDamage, procEx, spell_school::Normal, false);
 		}
 	}
 
@@ -2412,6 +2441,33 @@ namespace mmo
 	void GameUnitS::UpdateVisibilityAndView()
 	{
 
+	}
+
+	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)
+	{
+		// Don't process procs from proc events to avoid infinite loops
+		if (isProc)
+		{
+			return;
+		}
+
+		// Don't process procs if we're dead (except for death event)
+		if (!IsAlive() && eventFlags != spell_proc_flags::Death)
+		{
+			return;
+		}
+
+		// Check all applied auras to see if they can proc
+		for (const auto& aura : m_auras)
+		{
+			if (!aura->IsApplied() || !aura->CanProc())
+			{
+				continue;
+			}
+
+			// Try to handle the proc with each aura
+			aura->HandleProc(eventFlags, procEx, target, damage, school, isProc, familyFlags);
+		}
 	}
 
 	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)

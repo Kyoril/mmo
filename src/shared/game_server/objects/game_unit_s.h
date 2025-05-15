@@ -196,6 +196,36 @@ namespace mmo
 
 	typedef spell_mod_type::Type SpellModType;
 
+	// Add procex (extra proc flags) namespace for tracking proc details
+	namespace proc_ex_flags
+	{
+		enum Type
+		{
+			None             = 0x0000,      // No flags
+			
+			// Types of damage
+			NormalHit        = 0x0001,      // Normal hit
+			CriticalHit      = 0x0002,      // Critical hit
+			MissHit          = 0x0004,      // Miss
+			Absorb           = 0x0008,      // Absorbed damage
+			Resist           = 0x0010,      // Resisted damage
+			Dodge            = 0x0020,      // Dodged attack
+			Parry            = 0x0040,      // Parried attack
+			Block            = 0x0080,      // Blocked attack
+			Evade            = 0x0100,      // Evaded attack
+			Immune           = 0x0200,      // Immune to damage
+			Reflect          = 0x0400,      // Reflected damage
+			Interrupt        = 0x0800,      // Interrupt cast
+			
+			// Result masks
+			SuccessHit       = NormalHit | CriticalHit,
+			AvoidAttack      = MissHit | Dodge | Parry | Evade,
+			ReduceDamage     = Absorb | Resist | Block
+		};
+	}
+
+	typedef proc_ex_flags::Type ProcExFlags;
+
 	/// Represents a spell modifier which is used to modify spells for a GameCharacter.
 	/// This is only(?) used by talents, and is thus only available for characters.
 	struct SpellModifier final
@@ -766,7 +796,10 @@ namespace mmo
 		bool IsRooted() const
 		{
 			return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0;
-		}
+			}
+
+		/// Called when a proc event occurs to check if any auras should proc
+		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
 
 	protected:
 		/// Sends a local chat message from the unit.

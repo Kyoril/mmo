@@ -2,6 +2,8 @@
 
 #include "aura_effect.h"
 
+#include <algorithm>
+
 #include "aura_container.h"
 #include "spell_cast.h"
 #include "vector_sink.h"
@@ -48,7 +50,7 @@ namespace mmo
 		case AuraType::ModMana:
 			break;
 		case AuraType::ProcTriggerSpell:
-			HandleProcTriggerSpell(apply);
+			// Nothing to be done here
 			break;
 		case AuraType::ModDamageDone:
 		case AuraType::ModDamageDonePct:
@@ -170,121 +172,31 @@ namespace mmo
 		return true;
 	}
 
-	void AuraEffect::HandleProcTriggerSpell(const bool apply)
+	void AuraEffect::HandleProcEffect(GameUnitS* instigator)
 	{
-		if (!apply)
+		switch (m_effect.aura())
 		{
-			m_procEffects.disconnect();
-			return;
-		}
-
-		const proto::SpellEntry& spell = m_container.GetSpell();
-		const proto::SpellEntry* procSpell = m_container.GetOwner().GetProject().spells.getById(m_effect.triggerspell());
-		if (!procSpell)
-		{
-			ELOG("Unable to find proc trigger spell " << m_effect.triggerspell() << "!");
-			return;
-		}
-
-		m_procChance = spell.procchance();
-		if (m_container.GetCaster())
-		{
-			m_container.GetCaster()->ApplySpellMod(spell_mod_op::ChanceOfSuccess, spell.id(), m_procChance);
-			DLOG("Spell " << spell.id() << " has modified proc chance " << m_procChance);
-		}
-
-		if (m_procChance == 0)
-		{
-			return;
-		}
-
-		const uint32 procFlags = spell.procflags();
-		const uint32 procSchool = spell.procschool();
-
-		std::weak_ptr weakThis = shared_from_this();
-
-		if (procFlags & (spell_proc_flags::Death | spell_proc_flags::Killed))
-		{
-			m_procEffects += m_container.GetOwner().killed.connect([weakThis, procSpell](GameUnitS* killer)
+		case aura_type::ProcTriggerSpell:
+			{
+				const proto::SpellEntry& spell = m_container.GetSpell();
+				const proto::SpellEntry* procSpell = m_container.GetOwner().GetProject().spells.getById(m_effect.triggerspell());
+				if (!procSpell)
 				{
-					auto strongThis = weakThis.lock();
-					if (!strongThis)
-					{
-						return;
-					}
+					ELOG("Unable to find proc trigger spell " << m_effect.triggerspell() << "!");
+					return;
+				}
 
-					if (!strongThis->m_container.GetCaster())
+				// Apply to all targets
+				ForEachProcTarget(m_effect,
+					instigator,
+					[&](const GameUnitS& unit)
 					{
-						return;
-					}
-
-					if (strongThis->RollProcChance())
-					{
-						strongThis->ForEachProcTarget(strongThis->m_effect, killer, [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
-					}
-				});
+						return ExecuteSpellProc(procSpell, unit);
+					});
+			}
+			break;
 		}
 
-		if (procFlags & (spell_proc_flags::TakenDamage |
-			spell_proc_flags::TakenMeleeAutoAttack |
-			spell_proc_flags::TakenSpellMagicDmgClassNeg |
-			spell_proc_flags::TakenRangedAutoAttack |
-			spell_proc_flags::TakenPeriodic))
-		{
-			m_procEffects += m_container.GetOwner().takenDamage.connect([weakThis, procFlags, procSchool, procSpell](GameUnitS* instigator, uint32 school, DamageType type)
-				{
-					auto strongThis = weakThis.lock();
-					if (!strongThis)
-					{
-						return;
-					}
-
-					if (!strongThis->m_container.GetCaster())
-					{
-						return;
-					}
-
-					bool shouldProc = false;
-
-					if (procFlags & spell_proc_flags::TakenDamage) shouldProc = true;
-					else if (procFlags & spell_proc_flags::TakenMeleeAutoAttack && type == damage_type::AttackSwing) shouldProc = true;
-					else if (procFlags & spell_proc_flags::TakenSpellMagicDmgClassNeg && type == damage_type::MagicalAbility && school == procSpell->procschool()) shouldProc = true;
-					else if (procFlags & spell_proc_flags::TakenRangedAutoAttack && type == damage_type::RangedAttack) shouldProc = true;
-					else if (procFlags & spell_proc_flags::TakenPeriodic && type == damage_type::Periodic && school == procSpell->procschool()) shouldProc = true;
-
-					if (!shouldProc)
-					{
-						return;
-					}
-
-					if (strongThis->RollProcChance())
-					{
-						strongThis->ForEachProcTarget(strongThis->m_effect, instigator, [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
-					}
-				});
-		}
-
-		if (spell.procflags() & spell_proc_flags::DoneMeleeAutoAttack)
-		{
-			m_procEffects += m_container.GetOwner().meleeAttackDone.connect([weakThis, procSpell](GameUnitS& victim)
-				{
-					auto strongThis = weakThis.lock();
-					if (!strongThis)
-					{
-						return;
-					}
-
-					if (!strongThis->m_container.GetCaster())
-					{
-						return;
-					}
-
-					if (strongThis->RollProcChance())
-					{
-						strongThis->ForEachProcTarget(strongThis->m_effect, &strongThis->m_container.GetOwner(), [strongThis, procSpell](const GameUnitS& unit) { return strongThis->ExecuteSpellProc(procSpell, unit); });
-					}
-				});
-		}
 	}
 
 	void AuraEffect::HandleModDamageDone(const bool apply) const
@@ -470,9 +382,15 @@ namespace mmo
 			{
 				subscriber.SendPacket(packet, buffer, true);
 			});
-
 		// Update health
 		m_container.GetOwner().Damage(damage, school, m_container.GetCaster(), damage_type::Periodic);
+		
+		// Trigger proc events for periodic damage
+		if (m_container.GetCaster())
+		{
+			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicDamage, &m_container.GetOwner(), damage, proc_ex_flags::NormalHit, school, false, m_container.GetSpell().familyflags());
+		}
+		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicDamage, m_container.GetCaster(), damage, proc_ex_flags::NormalHit, school, false, m_container.GetSpell().familyflags());
 	}
 
 	void AuraEffect::HandlePeriodicHeal() const
@@ -491,10 +409,7 @@ namespace mmo
 			heal += static_cast<int32>(healingTakenBonus / static_cast<float>(m_totalTicks));
 		}
 
-		if (heal < 0)
-		{
-			heal = 0;
-		}
+		heal = std::max(heal, 0);
 
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;
@@ -517,6 +432,13 @@ namespace mmo
 
 		// Update health
 		m_container.GetOwner().Heal(heal, m_container.GetCaster());
+		
+		// Trigger proc events for periodic healing
+		if (m_container.GetCaster())
+		{
+			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicHeal, &m_container.GetOwner(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
+		}
+		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicHeal, m_container.GetCaster(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
 	}
 
 	void AuraEffect::HandlePeriodicEnergize()
@@ -530,7 +452,7 @@ namespace mmo
 		uint32 power = GetBasePoints();
 
 		uint32 curPower = m_container.GetOwner().Get<uint32>(object_fields::Mana + powerType);
-		uint32 maxPower = m_container.GetOwner().Get<uint32>(object_fields::MaxMana + powerType);
+		const uint32 maxPower = m_container.GetOwner().Get<uint32>(object_fields::MaxMana + powerType);
 		if (curPower + power > maxPower)
 		{
 			power = maxPower - curPower;
@@ -590,17 +512,6 @@ namespace mmo
 	void AuraEffect::HandleProcForUnitTarget(GameUnitS& unit)
 	{
 
-	}
-
-	bool AuraEffect::RollProcChance() const
-	{
-		if (m_procChance == 0)
-		{
-			return false;
-		}
-
-		std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
-		return chanceDistribution(randomGenerator) < m_procChance;
 	}
 
 	void AuraEffect::ForEachProcTarget(const proto::SpellEffect& effect, GameUnitS* instigator, const std::function<bool(GameUnitS&)>& proc)

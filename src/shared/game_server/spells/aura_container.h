@@ -52,6 +52,9 @@ namespace mmo
 
 		void NotifyOwnerMoved();
 
+		// Called when a proc event occurs to check if this aura should proc
+		bool HandleProc(uint32 procFlags, uint32 procEx, GameUnitS* target, uint32 damage, uint8 school = 0, bool triggerByAura = false, uint64 familyFlags = 0);
+
 	private:
 		void HandleAreaAuraTick();
 
@@ -60,6 +63,15 @@ namespace mmo
 		bool ShouldRemoveAreaAuraDueToCasterConditions(const std::shared_ptr<GameUnitS>& caster, uint64 ownerGroupId, const Vector3& position, float range) const;
 
 		void OnOwnerDamaged(GameUnitS* instigator, uint32 school, DamageType type);
+
+		// Executes the proc effects if available
+		void ExecuteProcEffects(GameUnitS* target);
+		
+		// Checks if the spell procFlags match the triggered event
+		bool CheckProcFlags(uint32 eventFlags) const;
+		
+		// Checks if the proc family flags match (if applicable)
+		bool CheckProcFamilyFlags(uint64 familyFlags) const;
 
 	public:
 		/// Gets the owning unit of this aura (the target of the aura).
@@ -104,8 +116,25 @@ namespace mmo
 				(m_spell.attributes(0) & spell_attributes::HiddenClientSide) == 0 &&
 				(m_spell.attributes(1) & spell_attributes_b::HiddenAura) == 0;
 		}
-
 		bool IsAreaAura() const { return m_areaAura; }
+
+		/// Determines if this aura container should react to proc events
+		bool CanProc() const { return m_procChance > 0; }
+
+		/// Gets the proc flags of the aura container's spell
+		uint32 GetProcFlags() const { return m_spell.procflags(); }
+
+		/// Gets the proc chance of the aura container's spell
+		uint32 GetProcChance() const { return m_procChance; }
+
+		/// Gets the proc cooldown of the aura container's spell
+		uint32 GetProcCooldown() const { return m_spell.proccooldown(); }
+
+		/// Gets the proc family of the aura container's spell (0 means no family restrictions)
+		uint64 GetProcFamily() const { return m_spell.procfamily(); }
+
+		/// Gets the school that can trigger this proc (or 0 for any school)
+		uint32 GetProcSchool() const { return m_spell.procschool(); }
 
 		/// Gets the maximum number of base points for a specific aura type.
 		int32 GetMaximumBasePoints(AuraType type) const;
@@ -156,11 +185,17 @@ namespace mmo
 		scoped_connection m_expiredConnection;
 
 		bool m_areaAura = false;
-
 		Countdown m_areaAuraTick;
 
 		scoped_connection m_areaAuraTickConnection;
 
 		scoped_connection_container m_ownerEventConnections;
+
+		// Proc-related variables
+		uint32 m_procCharges = 0;                   // Current remaining proc charges
+		uint32 m_baseProcCharges = 0;               // Initial proc charges from the spell
+		uint32 m_lastProcTime = 0;                  // Last time the aura proc'ed (for cooldown)
+		bool m_procRegistered = false;              // Whether this aura has been registered for proc events
+		uint32 m_procChance = 0;
 	};
 }
