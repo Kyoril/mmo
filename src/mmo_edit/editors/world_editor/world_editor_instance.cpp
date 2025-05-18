@@ -183,6 +183,20 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
+		
+		// Create scene outline window
+		m_sceneOutlineWindow = std::make_unique<SceneOutlineWindow>(m_selection, m_scene);
+		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id) {
+			// Find and remove the entity with this ID
+			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
+				if ((*it)->GetUniqueId() == id) {
+					(*it)->remove(*it->get());
+					break;
+				}
+			}
+			m_selection.Clear();
+			m_sceneOutlineWindow->Update();
+		});
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_editMode = nullptr;
@@ -323,7 +337,6 @@ namespace mmo
 		m_deferredRenderer->Render(m_scene, *m_camera);
 		m_transformWidget->Update(m_camera);
 	}
-
 	void WorldEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());
@@ -334,11 +347,13 @@ namespace mmo
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
+		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
 		DrawDetailsPanel(detailsId);
 		DrawWorldSettingsPanel(worldSettingsId);
 		DrawViewportPanel(viewportId);
+		DrawSceneOutlinePanel(sceneOutlineId);
 		
 		if (m_initDockLayout)
 		{
@@ -602,20 +617,24 @@ namespace mmo
 
 			const auto mousePos = ImGui::GetMousePos();
 			const auto contentRectMin = ImGui::GetWindowPos();
-			m_lastContentRectMin = contentRectMin;
-
-			if (ImGui::IsKeyPressed(ImGuiKey_Delete))
-			{
-				if (!m_selection.IsEmpty())
+			m_lastContentRectMin = contentRectMin;				if (ImGui::IsKeyPressed(ImGuiKey_Delete))
 				{
-					for (auto& selected : m_selection.GetSelectedObjects())
+					if (!m_selection.IsEmpty())
 					{
-						selected->Remove();
-					}
+						for (auto& selected : m_selection.GetSelectedObjects())
+						{
+							selected->Remove();
+						}
 
-					m_selection.Clear();
+						m_selection.Clear();
+						
+						// Update scene outline when objects are deleted
+						if (m_sceneOutlineWindow)
+						{
+							m_sceneOutlineWindow->Update();
+						}
+					}
 				}
-			}
 		}
 	}
 
@@ -788,18 +807,25 @@ namespace mmo
 				ImGui::EndDragDropTarget();
 			}
 		}
-	}
-
-	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& viewportId, const String& detailsId, const String& worldSettingsId)
+	}	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& viewportId, const String& detailsId, const String& worldSettingsId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
 		ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
 
 		auto mainId = dockspaceId;
-		const auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
+		ImGuiID sideId;
+		ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, &sideId, &mainId);
+		
+		// Split the side panel to create space for the scene outline above the details panel
+		ImGuiID sideTopId;
+		ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 0.3f, &sideTopId, &sideId);
+
+		// Create the scene outline ID string
+		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
 
 		ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
+		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
 		
@@ -1171,12 +1197,17 @@ namespace mmo
 				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
 				if (mapEntity)
 				{
-					String asset = entity->GetMesh()->GetName().data();
-					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
+					String asset = entity->GetMesh()->GetName().data();					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
 					{
 						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), GenerateUniqueId());
 					}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+					
+					// Update scene outline when selection changes
+					if (m_sceneOutlineWindow)
+					{
+						m_sceneOutlineWindow->Update();
+					}
 				}
 			}
 		}
@@ -1356,9 +1387,14 @@ namespace mmo
 				PagePosition(
 					static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
 					static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
-			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
-			mapEntity->MarkModified();
+			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);			mapEntity->MarkModified();
 			entity->SetUserObject(m_mapEntities.back().get());
+			
+			// Update scene outline when a new entity is created
+			if (m_sceneOutlineWindow)
+			{
+				m_sceneOutlineWindow->Update();
+			}
 		}
 
 		return entity;
@@ -1437,7 +1473,7 @@ namespace mmo
 		proto::Project& project = m_editor.GetProject();
 
 		// TODO: Use different mesh file?
-		String meshFile = "Editor/Joint.hmsh";
+	 String meshFile = "Editor/Joint.hmsh";
 
 		if (const auto* object = project.objects.getById(spawn.objectentry()))
 		{
@@ -2156,8 +2192,8 @@ namespace mmo
 			const size_t contentStart = reader.getSource()->position();
 			while (reader.getSource()->position() - contentStart < chunkSize)
 					{
-				String meshName;
-				if (!(reader >> io::read_string(meshName)))
+			 String meshName;
+			 if (!(reader >> io::read_string(meshName)))
 				{
 					ELOG("Failed to read world file: Unexpected end of file");
 					return false;
@@ -2360,5 +2396,14 @@ namespace mmo
 	{
 		m_debugBoundingBox->SetVisible(false);
 		m_selection.Clear();
+	}
+
+	void WorldEditorInstance::DrawSceneOutlinePanel(const String& sceneOutlineId)
+	{
+		// Update the scene outline window regularly, especially when selection changes
+		if (m_sceneOutlineWindow) 
+		{
+			m_sceneOutlineWindow->Draw(sceneOutlineId.c_str());
+		}
 	}
 }

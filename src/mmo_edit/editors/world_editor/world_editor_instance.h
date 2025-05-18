@@ -32,6 +32,7 @@
 #include "deferred_shading/deferred_renderer.h"
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
+#include "scene_outline_window.h"
 
 namespace mmo
 {
@@ -163,7 +164,6 @@ namespace mmo
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 		bool Save() override;
-
 	private:
 		// UI related methods
 		void HandleKeyboardShortcuts();
@@ -172,6 +172,7 @@ namespace mmo
 		void DrawSelectionDetails();
 		void DrawWorldSettingsPanel(const String& worldSettingsId);
 		void DrawViewportPanel(const String& viewportId);
+		void DrawSceneOutlinePanel(const String& sceneOutlineId);
 		void HandleViewportInteractions(const ImVec2& availableSpace);
 		void DrawViewportToolbar(const ImVec2& availableSpace);
 		void DrawSnapSettings();
@@ -341,9 +342,10 @@ namespace mmo
 		uint32 m_worldFileVersion;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
-
 		static TexturePtr s_translateIcon;
 		static TexturePtr s_rotateIcon;
 		static TexturePtr s_scaleIcon;
+
+		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 	};
 }
