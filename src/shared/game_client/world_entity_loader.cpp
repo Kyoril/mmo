@@ -43,7 +43,7 @@ namespace mmo
 			return false;
 		}
 
-		if (m_version != 0x00001)
+		if (m_version < 0x00001 || m_version > 0x00002)
 		{
 			ELOG("Unsupported world entity version " << m_version);
 			return false;
@@ -96,6 +96,26 @@ namespace mmo
 		if (m_entity.uniqueId == 0)
 		{
 			m_entity.uniqueId = GenerateUniqueId();
+		}
+
+		if (m_version > 0x00001)
+		{
+			if (!(reader >> io::read_container<uint8>(m_entity.name)))
+			{
+				ELOG("Failed to read map entity name, unexpected end of file!");
+				return false;
+			}
+
+			if (!(reader >> io::read_container<uint16>(m_entity.category)))
+			{
+				ELOG("Failed to read map entity category, unexpected end of file!");
+				return false;
+			}
+		}
+		else
+		{
+			m_entity.name.clear();
+			m_entity.category.clear();
 		}
 
 		return reader;

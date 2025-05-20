@@ -117,6 +117,28 @@ namespace mmo
 			m_modified = false;
 		}
 
+		const String& GetDisplayName() const
+		{
+			return m_name;
+		}
+
+		const String& GetCategory() const
+		{
+			return m_category;
+		}
+
+		void SetDisplayName(const String& name)
+		{
+			m_name = name;
+			m_modified = true;
+		}
+
+		void SetCategory(const String& category)
+		{
+			m_category = category;
+			m_modified = true;
+		}
+
 	private:
 		Scene& m_scene;
 		SceneNode& m_sceneNode;
@@ -124,6 +146,8 @@ namespace mmo
 		uint64 m_uniqueId;
 		std::optional<PagePosition> m_referencePagePosition;
 		bool m_modified{ false };
+		String m_name;
+		String m_category;
 	};
 
 	struct WorldPage

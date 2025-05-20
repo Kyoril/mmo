@@ -183,9 +183,10 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
-		
-		// Create scene outline window
+				// Create scene outline window
 		m_sceneOutlineWindow = std::make_unique<SceneOutlineWindow>(m_selection, m_scene);
+		
+		// Set up delete callback
 		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id) {
 			// Find and remove the entity with this ID
 			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
@@ -195,6 +196,30 @@ namespace mmo
 				}
 			}
 			m_selection.Clear();
+			m_sceneOutlineWindow->Update();
+		});
+		
+		// Set up rename callback
+		m_sceneOutlineWindow->SetRenameCallback([this](uint64 id, const std::string& newName) {
+			// Find the entity with this ID and rename it
+			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
+				if ((*it)->GetUniqueId() == id) {
+					(*it)->SetDisplayName(newName);
+					break;
+				}
+			}
+			m_sceneOutlineWindow->Update();
+		});
+		
+		// Set up category change callback
+		m_sceneOutlineWindow->SetCategoryChangeCallback([this](uint64 id, const std::string& newCategory) {
+			// Find the entity with this ID and change its category
+			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
+				if ((*it)->GetUniqueId() == id) {
+					(*it)->SetCategory(newCategory);
+					break;
+				}
+			}
 			m_sceneOutlineWindow->Update();
 		});
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
@@ -1078,7 +1103,7 @@ namespace mmo
 
 			{
 				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
-				fileWriter << io::write<uint32>(1);
+				fileWriter << io::write<uint32>(2);
 				chunkWriter.Finish();
 			}
 
@@ -1124,6 +1149,11 @@ namespace mmo
 						<< io::write<uint8>(materialOverride.materialIndex)
 						<< io::write_dynamic_range<uint16>(materialOverride.materialName);
 				}
+
+				// Write name and category
+				fileWriter
+					<< io::write_dynamic_range<uint8>(ent->GetDisplayName())
+					<< io::write_dynamic_range<uint16>(ent->GetCategory());
 
 				chunkWriter.Finish();
 			}
@@ -1739,6 +1769,8 @@ namespace mmo
 			// We just loaded the object - it has not been modified
 			MapEntity* mapEntity = object->GetUserObject<MapEntity>();
 			ASSERT(mapEntity);
+			mapEntity->SetDisplayName(entity.name);
+			mapEntity->SetCategory(entity.category);
 			mapEntity->MarkAsUnmodified();
 
 			// Apply material overrides

@@ -25,6 +25,8 @@ namespace mmo
 			Vector3 scale;
 			uint64 uniqueId;
 			std::vector<MaterialOverride> materialOverrides;
+			String name;
+			String category;
 		};
 
 	public:
