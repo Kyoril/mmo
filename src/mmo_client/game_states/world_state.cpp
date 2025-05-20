@@ -2584,6 +2584,8 @@ namespace mmo
 		ILOG("Transfer to map " << mapId << " completed! Loading map...");
 		g_mapId = mapId;
 
+		m_worldInstance->UnloadAllEntities();
+
 		// Load new map
 		LoadMap();
 
@@ -2601,6 +2603,8 @@ namespace mmo
 						while (!terrainPage->Load());
 					}
 				}
+
+				m_worldInstance->LoadPageEntities(page.x(), page.y());
 			}
 		);
 

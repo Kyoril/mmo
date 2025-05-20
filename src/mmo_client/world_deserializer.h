@@ -51,6 +51,8 @@ namespace mmo
 
 		void UnloadPageEntities(uint8 x, uint8 y);
 
+		void UnloadAllEntities();
+
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 

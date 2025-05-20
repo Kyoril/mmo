@@ -104,6 +104,21 @@ namespace mmo
 		m_loadedPages.erase(BuildPageIndex(x, y));
 	}
 
+	void ClientWorldInstance::UnloadAllEntities()
+	{
+		for (auto it = m_entities.begin(); it != m_entities.end();)
+		{
+			Entity* entity = it->second.entity;
+			SceneNode* node = it->second.node;
+			entity->DetachFromParent();
+			m_scene.DestroyEntity(*entity);
+			m_scene.DestroySceneNode(*node);
+			it = m_entities.erase(it);
+		}
+
+		m_loadedPages.clear();
+	}
+
 	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
 	{
 		const String entityName = "Entity_" + std::to_string(uniqueId);
