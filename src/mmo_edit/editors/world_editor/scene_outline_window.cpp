@@ -72,13 +72,14 @@ namespace mmo
             if (ImGui::InputText("##SearchFilter", searchBuffer, IM_ARRAYSIZE(searchBuffer)))
             {
                 // No need to rebuild the list, we'll filter during display
-            }
-
-            // Create a list box with filtered entities
+            }            // Create a list box with filtered entities
             ImGui::Separator();
 
-            // Use child window to get scrolling
-            ImGui::BeginChild("SceneObjectsList", ImVec2(0, 0), true);
+            // Reserve space at the bottom for the status text (entity count)
+            const float statusBarHeight = ImGui::GetTextLineHeight() + ImGui::GetStyle().ItemSpacing.y * 2;
+            
+            // Use child window to get scrolling, but leave room at the bottom for the status text
+            ImGui::BeginChild("SceneObjectsList", ImVec2(0, -statusBarHeight), true);
             
             // Get the search string as lowercase for case-insensitive comparison
             std::string searchString = searchBuffer;
@@ -294,21 +295,31 @@ namespace mmo
                     
                     ImGui::TreePop();
                 }
-            };
-            
-            // Display root categories
+            };            // Display root categories
             auto rootCategories = getDirectSubcategories("", m_categoryToEntriesMap);
             for (const auto& category : rootCategories) 
             {
                 displayCategory(category, visibleEntities);
             }
-              // Show count of displayed entities
+            ImGui::EndChild();
+            
+            // Display entity count in the reserved space below the scroll view
+            // Add subtle visual separation
             ImGui::Separator();
-            ImGui::Text("Displaying %d entities", visibleEntities);
-
-            ImGui::EndChild();            // Handle the category change modal outside of any entity processing loop
+            
+            // Center the status text
+            float windowWidth = ImGui::GetWindowWidth();
+            std::string statusText = "Displaying " + std::to_string(visibleEntities) + " entities";
+            float textWidth = ImGui::CalcTextSize(statusText.c_str()).x;
+            ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+            
+            // Display with slightly different styling to make it stand out
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "%s", statusText.c_str());
+            
+            // Handle the category change modal outside of any entity processing loop
             // This is important because ImGui modals need to be processed at a consistent place in the UI hierarchy
             
+
             // If the popup flag is set, explicitly open the popup
             if (m_openCategoryChangePopup) {
                 ImGui::OpenPopup("Change Category");
@@ -643,7 +654,8 @@ namespace mmo
             ImGui::PopStyleColor(2);
         }
         else 
-        {            // Normal display mode
+        {
+        	// Normal display mode
             bool nodeOpen = ImGui::TreeNodeEx(displayText.c_str(), flags);
             
             // Double-click to rename
@@ -699,7 +711,8 @@ namespace mmo
             {
                 // Only show these options for map entities
                 if (entry.entityPtr) 
-                {                	if (ImGui::MenuItem("Rename")) 
+                {
+                	if (ImGui::MenuItem("Rename")) 
                     {
                         m_editingId = entry.id;
                         strncpy(m_nameBuffer, entry.displayName.c_str(), sizeof(m_nameBuffer) - 1);
