@@ -15,6 +15,7 @@ using Microsoft::WRL::ComPtr;
 
 namespace mmo
 {
+	class VertexShaderD3D11;
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
 
 	/// This is the d3d11 implementation of the graphics device class.
@@ -131,6 +132,12 @@ namespace mmo
 
 		bool IsVSyncEnabled() const noexcept { return m_vsync; }
 
+		// Method to get or create an input layout
+		ID3D11InputLayout* GetOrCreateInputLayout(
+			const VertexDeclaration* vertexDecl, 
+			VertexShaderD3D11* shader,
+			const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements);
+
 	public:
 		operator ID3D11Device&() const { return *m_device.Get(); }
 
@@ -173,6 +180,26 @@ namespace mmo
 		ID3D11SamplerState* GetCurrentSamplerState();
 
 		void UpdateMatrixBuffer();
+
+		// Structure to identify a unique vertex declaration + shader combination
+		struct InputLayoutCacheKey
+		{
+			size_t vertexDeclHash;
+			VertexShaderD3D11* shader;
+
+			bool operator<(const InputLayoutCacheKey& other) const
+			{
+				if (vertexDeclHash != other.vertexDeclHash)
+				{
+					return vertexDeclHash < other.vertexDeclHash;
+				}
+
+				return shader < other.shader;
+			}
+		};
+				
+		// The global input layout cache
+		std::map<InputLayoutCacheKey, ComPtr<ID3D11InputLayout>> m_inputLayoutCache;
 
 	private:
 		/// The d3d11 device object.

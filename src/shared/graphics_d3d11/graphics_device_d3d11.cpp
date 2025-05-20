@@ -479,6 +479,43 @@ namespace mmo
 		}
 	}
 
+	ID3D11InputLayout* GraphicsDeviceD3D11::GetOrCreateInputLayout(
+		const VertexDeclaration* vertexDecl, 
+		VertexShaderD3D11* shader,
+		const std::vector<D3D11_INPUT_ELEMENT_DESC>& elements)
+	{
+		// Create the cache key
+		InputLayoutCacheKey key{vertexDecl->GetHash(), shader};
+		
+		// Check if we already have this input layout
+		auto it = m_inputLayoutCache.find(key);
+		if (it != m_inputLayoutCache.end())
+		{
+			return it->second.Get();
+		}
+		
+		// Create a new input layout
+		ComPtr<ID3D11InputLayout> inputLayout;
+		const auto& microcode = shader->GetByteCode();
+		
+		HRESULT hr = m_device->CreateInputLayout(
+			elements.data(), 
+			elements.size(), 
+			microcode.data(), 
+			microcode.size(), 
+			&inputLayout);
+			
+		if (SUCCEEDED(hr))
+		{
+			// Add to cache and return
+			m_inputLayoutCache[key] = inputLayout;
+			return inputLayout.Get();
+		}
+		
+		// Return null on failure
+		return nullptr;
+	}
+	
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options)
 	{
 		switch(options)

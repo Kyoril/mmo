@@ -198,6 +198,21 @@ namespace mmo
 		virtual VertexDeclaration* Clone(GraphicsDevice* device = nullptr) const;
 
 	public:
+	size_t GetHash() const
+	{
+		size_t hash = m_elementList.size();
+		for (const auto& element : m_elementList)
+		{
+			// Combine all element properties into the hash
+			hash = hash * 31 + static_cast<size_t>(element.GetSemantic());
+			hash = hash * 31 + element.GetIndex();
+			hash = hash * 31 + static_cast<size_t>(element.GetType());
+			hash = hash * 31 + element.GetSource();
+			hash = hash * 31 + element.GetOffset();
+		}
+		return hash;
+	}
+
 		bool operator== (const VertexDeclaration& rhs) const
 		{
 			if (m_elementList.size() != rhs.m_elementList.size())

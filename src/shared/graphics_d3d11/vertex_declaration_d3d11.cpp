@@ -91,20 +91,20 @@ namespace mmo
 
 	ID3D11InputLayout* VertexDeclarationD3D11::GetILayoutByShader(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding)
 	{
+		// For backward compatibility, check the local map first
 		if (const auto it = m_shaderToILayoutMap.find(&boundVertexProgram); it != m_shaderToILayoutMap.end())
 		{
 			return it->second.Get();
 		}
-
-		ComPtr<ID3D11InputLayout> inputLayout;
-
-		std::vector< D3D11_INPUT_ELEMENT_DESC> inputElements;
+		
+		// Create the input element descriptions
+		std::vector<D3D11_INPUT_ELEMENT_DESC> inputElements;
 		inputElements.reserve(m_elementList.size());
-
+		
 		for (auto element : m_elementList)
 		{
 			D3D11_INPUT_ELEMENT_DESC elementDesc;
-
+			
 			elementDesc.SemanticName = MapSemanticNameD3D11(element.GetSemantic()).c_str();
 			elementDesc.SemanticIndex = element.GetIndex();
 			elementDesc.Format = MapDeclarationFormatD3D11(element.GetType());
@@ -114,14 +114,18 @@ namespace mmo
 			elementDesc.InstanceDataStepRate = 0;
 			inputElements.push_back(elementDesc);
 		}
-
-		const auto& microcode = boundVertexProgram.GetByteCode();
-
-		ID3D11Device& d3dDevice = m_device;
-		VERIFY(SUCCEEDED(d3dDevice.CreateInputLayout(inputElements.data(), inputElements.size(), microcode.data(), microcode.size(), &inputLayout)));
-		m_shaderToILayoutMap[&boundVertexProgram] = inputLayout;
-
-		return inputLayout.Get();
+		
+		// Get the input layout from the global cache
+		ID3D11InputLayout* layout = m_device.GetOrCreateInputLayout(
+			this, &boundVertexProgram, inputElements);
+		
+		if (layout)
+		{
+			// Store in the local map for backward compatibility
+			m_shaderToILayoutMap[&boundVertexProgram] = layout;
+		}
+		
+		return layout;
 	}
 
 	const VertexElement& VertexDeclarationD3D11::AddElement(uint16 source, uint32 offset, VertexElementType theType, VertexElementSemantic semantic, uint16 index)
