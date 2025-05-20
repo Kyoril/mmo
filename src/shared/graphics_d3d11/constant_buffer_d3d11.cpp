@@ -80,7 +80,5 @@ namespace mmo
         {
             // Handle the error (e.g., log it)
         }
-
-		//m_context.UpdateSubresource(m_buffer.Get(), 0, nullptr, data, 0, 0);
 	}
 }
