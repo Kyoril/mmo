@@ -16,16 +16,29 @@ namespace mmo
         , m_editingId(0)
         , m_categoryChangeEntityId(0)
         , m_openCategoryChangePopup(false)
+        , m_isDragging(false)
+        , m_draggedEntityId(0)
     {
         // Initialize buffers
         m_nameBuffer[0] = '\0';
         m_categoryBuffer[0] = '\0';
-    }    void SceneOutlineWindow::Draw(const std::string& title)
-    {
-        // We'll handle the popup opening in the main body now
-        
-        if (ImGui::Begin(title.c_str()))
+    }void SceneOutlineWindow::Draw(const std::string& title)
+    {        if (ImGui::Begin(title.c_str()))
         {
+            // Handle the category change popup
+            if (m_openCategoryChangePopup)
+            {
+                ImGui::OpenPopup("Change Category");
+                m_openCategoryChangePopup = false;
+            }
+            // Make sure the current frame knows about any active rename operations
+            // This helps with proper focus handling between frames
+            if (m_editingId != 0)
+            {
+                ImGui::PushID("RenameOperation");
+                ImGui::PopID();
+            }
+            
             // Add a refresh button at the top
             if (ImGui::Button("Refresh"))
             {
@@ -178,15 +191,72 @@ namespace mmo
                 if (!hasSubcategories) {
                     flags |= ImGuiTreeNodeFlags_Leaf;
                 }
-                
-                // Special handling for root categories to be initially open
+                  // Special handling for root categories to be initially open
                 bool isRootCategory = category.find('/') == std::string::npos;
                 if (isRootCategory) {
                     ImGui::SetNextItemOpen(true, ImGuiCond_Once);
                 }
                 
+                // Apply highlighting style if an entity is being dragged and we're hovering over this category
+                bool isDragHovered = m_isDragging && ImGui::IsMouseHoveringRect(ImGui::GetCursorScreenPos(), 
+                    ImVec2(ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x, 
+                           ImGui::GetCursorScreenPos().y + ImGui::GetFrameHeight()));
+                if (isDragHovered) {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetColorU32(ImGuiCol_ButtonActive));
+                }
+                  
                 // Display the category
                 bool nodeOpen = ImGui::TreeNode(displayName.c_str());
+                
+                // Pop temporary style colors if we applied them
+                if (isDragHovered) {
+                    ImGui::PopStyleColor(2);
+                }
+                
+                // Add drop target functionality for the category
+                if (ImGui::BeginDragDropTarget())
+                {
+                    // Accept drop of an entity onto this category
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_ENTITY_ITEM"))
+                    {
+                        // Extract the entity ID from the payload
+                        uint64 entityId = *(const uint64*)payload->Data;
+                        
+                        // Find the entity in our entries to get current details
+                        for (const auto& entry : m_entries)
+                        {
+                            if (entry.id == entityId)
+                            {
+                                // Skip if the entity is already in this category to avoid unnecessary updates
+                                if (entry.category != category)
+                                {
+                                    // Call the category change callback
+                                    if (m_categoryChangeCallback)
+                                    {
+                                        m_categoryChangeCallback(entityId, category);
+                                        m_needsUpdate = true;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        
+                        // Reset drag state immediately after successful drop
+                        m_isDragging = false;
+                        m_draggedEntityId = 0;
+                        m_draggedEntityName.clear();
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                
+                // Reset drag state when the mouse is released
+                if (ImGui::IsMouseReleased(0) && m_isDragging)
+                {
+                    m_isDragging = false;
+                    m_draggedEntityId = 0;
+                    m_draggedEntityName.clear();
+                }
                 
                 if (nodeOpen) 
                 {
@@ -250,21 +320,43 @@ namespace mmo
             if (ImGui::BeginPopupModal("Change Category", &isOpen, ImGuiWindowFlags_AlwaysAutoResize)) 
             {
                 // Set keyboard focus to input field when modal opens
-                static bool setFocus = true;
-                if (setFocus) {
+                static bool modalFirstFrame = true;
+                if (modalFirstFrame) {
                     ImGui::SetKeyboardFocusHere();
-                    setFocus = false;
+                    modalFirstFrame = false;
                 }
-                  ImGui::Text("Enter category path (e.g. Haven/Buildings):");
+                
+                // If the popup was closed without using the buttons, reset state
+                if (!isOpen) {
+                    m_categoryChangeEntityId = 0;
+                    modalFirstFrame = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                
+                ImGui::Text("Enter category path (e.g. Haven/Buildings):");
+                
+                // Highlight the input field
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::GetColorU32(ImGuiCol_FrameBgHovered));
                 
                 // Add AutoSelectAll flag to select all text when focused
                 bool inputActivated = ImGui::InputText("##category", m_categoryBuffer, IM_ARRAYSIZE(m_categoryBuffer), 
                                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
                 
+                // Remove highlighting after input field
+                ImGui::PopStyleColor();
+                
                 // Explicitly handle keyboard focus 
                 if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)) && ImGui::IsItemActive())
                 {
                     ImGui::SetKeyboardFocusHere(1); // Move focus to next widget (OK button)
+                }
+                
+                // Handle Escape to cancel
+                if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+                {
+                    m_categoryChangeEntityId = 0;
+                    modalFirstFrame = true;
+                    ImGui::CloseCurrentPopup();
                 }
                 
                 if (inputActivated) 
@@ -276,13 +368,15 @@ namespace mmo
                         m_needsUpdate = true;
                     }
                     m_categoryChangeEntityId = 0;
-                    setFocus = true;
+                    modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
                 
                 ImGui::Separator();
+                  // Make the buttons more noticeable
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
                 
-                if (ImGui::Button("OK", ImVec2(120, 0)) || (!isOpen)) 
+                if (ImGui::Button("OK", ImVec2(120, 0))) 
                 {
                     if (m_categoryChangeCallback && m_categoryChangeEntityId != 0) 
                     {
@@ -293,31 +387,40 @@ namespace mmo
                         m_needsUpdate = true;
                     }
                     m_categoryChangeEntityId = 0; // Reset the tracking ID
-                    setFocus = true;
+                    modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
                 
+                ImGui::PopStyleColor();
                 ImGui::SameLine();
                 
                 if (ImGui::Button("Cancel", ImVec2(120, 0))) 
                 {
                     m_categoryChangeEntityId = 0; // Reset the tracking ID
-                    setFocus = true;
+                    modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
-                
-                ImGui::EndPopup();
+                  ImGui::EndPopup();
+            }
+            
+            // Global check for mouse release to properly reset drag state
+            // This handles the case when user drops outside of a valid target
+            if (ImGui::IsMouseReleased(0) && m_isDragging)
+            {
+                m_isDragging = false;
+                m_draggedEntityId = 0;
+                m_draggedEntityName.clear();
             }
         }
         ImGui::End();
     }
 
     void SceneOutlineWindow::Update()
-{
-    // Set the flag for update, but the actual update will happen in Draw
-    // if enough time has passed since the last update
-    m_needsUpdate = true;
-}
+	{
+	    // Set the flag for update, but the actual update will happen in Draw
+	    // if enough time has passed since the last update
+	    m_needsUpdate = true;
+	}
 
     void SceneOutlineWindow::ClearSelection()
     {
@@ -476,35 +579,55 @@ namespace mmo
         }
 
         // Create display text with icon and name
-        std::string displayText = entry.displayName;            // Handle renaming
+        std::string displayText = entry.displayName;
+            
+        // Handle renaming - Check if this entry is currently being renamed
         if (m_editingId == entry.id) 
         {
-            // Editing mode - help the user know we're in edit mode
-            ImGui::PushStyleColor(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgActive));
+            // Editing mode - highlight and visually indicate that we're in edit mode
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::GetColorU32(ImGuiCol_FrameBgActive));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImGui::GetColorU32(ImGuiCol_HeaderActive));
+            
+            // Make the input field fill the available width
             ImGui::SetNextItemWidth(-1);
             bool finishedEdit = false;
             
-            // Set focus to the input field on the first frame
-            static bool setFocus = true;
-            if (setFocus)
+            // Set focus to the input field - using a static flag that's scoped to this entity ID
+            static uint64 lastEditId = 0;
+            if (lastEditId != entry.id)
             {
+                // This is a new edit for a different entity, force focus
                 ImGui::SetKeyboardFocusHere();
-                setFocus = false;
+                lastEditId = entry.id;
             }
             
-            if (ImGui::InputText("##rename", m_nameBuffer, IM_ARRAYSIZE(m_nameBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) 
+            // Handle the input field
+            if (ImGui::InputText(("##rename" + std::to_string(entry.id)).c_str(), m_nameBuffer, 
+                               IM_ARRAYSIZE(m_nameBuffer), 
+                               ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) 
             {
                 finishedEdit = true;
-                setFocus = true; // Reset for next time
+                lastEditId = 0; // Reset for next time
             }
             
-            // Handle focus loss as commit
-            if (!ImGui::IsItemActive() && m_editingId != 0) 
+            // Handle ESC key to cancel
+            if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+            {
+                m_editingId = 0;
+                lastEditId = 0; // Reset the focus tracker
+                finishedEdit = false;
+                ImGui::SetWindowFocus(); // Return focus to the window
+            }
+            
+            // Handle focus loss as commit after a short delay to avoid accidental commits
+            if (!ImGui::IsItemActive() && m_editingId != 0 && lastEditId == entry.id) 
             {
                 finishedEdit = true;
-                setFocus = true; // Reset for next time
+                lastEditId = 0; // Reset the focus tracker
             }
-              if (finishedEdit) 
+            
+            // Apply the name change if we've finished editing
+            if (finishedEdit) 
             {
                 if (m_renameCallback && entry.entityPtr) 
                 {
@@ -516,12 +639,11 @@ namespace mmo
                 m_editingId = 0;
             }
             
-            // Clean up the style color
-            ImGui::PopStyleColor();
+            // Clean up the style colors
+            ImGui::PopStyleColor(2);
         }
         else 
-        {
-            // Normal display mode
+        {            // Normal display mode
             bool nodeOpen = ImGui::TreeNodeEx(displayText.c_str(), flags);
             
             // Double-click to rename
@@ -534,7 +656,25 @@ namespace mmo
                     m_nameBuffer[sizeof(m_nameBuffer) - 1] = '\0';
                 }
             }
-              // Handle selection on click
+            
+            // Begin drag source for category changes
+            if (entry.entityPtr && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) 
+            {
+                // Set the drag data - we'll use the entity ID and name as the payload
+                ImGui::SetDragDropPayload("SCENE_ENTITY_ITEM", &entry.id, sizeof(uint64));
+                
+                // Display what's being dragged
+                ImGui::Text("Moving: %s", entry.displayName.c_str());
+                
+                // Store drag state for reference elsewhere
+                m_isDragging = true;
+                m_draggedEntityId = entry.id;
+                m_draggedEntityName = entry.displayName;
+                
+                ImGui::EndDragDropSource();
+            }
+              
+            // Handle selection on click
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) 
             {
                 Entity* entity = m_scene.GetEntity(entry.name);
@@ -559,12 +699,14 @@ namespace mmo
             {
                 // Only show these options for map entities
                 if (entry.entityPtr) 
-                {
-                	if (ImGui::MenuItem("Rename")) 
+                {                	if (ImGui::MenuItem("Rename")) 
                     {
                         m_editingId = entry.id;
                         strncpy(m_nameBuffer, entry.displayName.c_str(), sizeof(m_nameBuffer) - 1);
                         m_nameBuffer[sizeof(m_nameBuffer) - 1] = '\0';
+                        
+                        // This forces ImGui to set focus to the rename field in the next frame
+                        ImGui::SetNextWindowFocus();
                         
                         // Close the context menu immediately after selecting rename
                         ImGui::CloseCurrentPopup();

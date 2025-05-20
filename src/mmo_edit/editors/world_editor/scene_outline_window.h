@@ -64,6 +64,11 @@ namespace mmo
         char m_categoryBuffer[256] = {0};
         bool m_openCategoryChangePopup = false; // Flag to open category change popup
         
+        // Drag and drop state tracking
+        bool m_isDragging = false;
+        uint64 m_draggedEntityId = 0;
+        std::string m_draggedEntityName;
+        
         // Map of categories to their entries for hierarchical display
         std::map<std::string, std::vector<size_t>> m_categoryToEntriesMap;
     };
