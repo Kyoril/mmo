@@ -4,21 +4,15 @@
 #include <algorithm>
 #include <cctype>
 #include "scene_graph/entity.h"
-#include "scene_graph/scene_node.h"
 #include "world_editor_instance.h" // Include this for MapEntity definition
 #include "graphics/texture_mgr.h" // For the folder icon
 
 namespace mmo
-{    SceneOutlineWindow::SceneOutlineWindow(Selection& selection, Scene& scene)
+{
+    SceneOutlineWindow::SceneOutlineWindow(Selection& selection, Scene& scene)
         : m_selection(selection)
         , m_scene(scene)
         , m_needsUpdate(true)
-        , m_lastRebuildTime()
-        , m_editingId(0)
-        , m_categoryChangeEntityId(0)
-        , m_openCategoryChangePopup(false)
-        , m_isDragging(false)
-        , m_draggedEntityId(0)
     {
         // Initialize buffers
         m_nameBuffer[0] = '\0';
@@ -258,11 +252,10 @@ namespace mmo
                 {
                     ImGui::PopStyleColor(2);
                 }
-                
-                // Add drop target functionality for the category
+                  // Add drop target functionality for the category
                 if (ImGui::BeginDragDropTarget())
                 {
-                    // Accept drop of an entity onto this category
+                    // Accept drop of a single entity onto this category (backward compatibility)
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_ENTITY_ITEM"))
                     {
                         // Extract the entity ID from the payload
@@ -293,6 +286,45 @@ namespace mmo
                         m_draggedEntityId = 0;
                         m_draggedEntityName.clear();
                     }
+                    
+                    // Accept drop of multiple entities onto this category
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_ENTITY_ITEMS"))
+                    {
+                        // Extract the entity IDs from the payload
+                        const uint64* entityIds = (const uint64*)payload->Data;
+                        size_t entityCount = payload->DataSize / sizeof(uint64);
+                        
+                        // Process each entity in the selection
+                        for (size_t i = 0; i < entityCount; ++i)
+                        {
+                            uint64 entityId = entityIds[i];
+                            
+                            // Find the entity in our entries to get current details
+                            for (const auto& entry : m_entries)
+                            {
+                                if (entry.id == entityId)
+                                {
+                                    // Skip if the entity is already in this category to avoid unnecessary updates
+                                    if (entry.category != category)
+                                    {
+                                        // Call the category change callback
+                                        if (m_categoryChangeCallback)
+                                        {
+                                            m_categoryChangeCallback(entityId, category);
+                                            m_needsUpdate = true;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Reset drag state immediately after successful drop
+                        m_isDragging = false;
+                        m_draggedEntityId = 0;
+                        m_draggedEntityName.clear();
+                    }
+                    
                     ImGui::EndDragDropTarget();
                 }
                 
@@ -382,11 +414,10 @@ namespace mmo
                     ImGui::SetKeyboardFocusHere();
                     modalFirstFrame = false;
                 }
-                
-                // If the popup was closed without using the buttons, reset state
+                  // If the popup was closed without using the buttons, reset state
                 if (!isOpen)
                 {
-                    m_categoryChangeEntityId = 0;
+                    m_categoryChangeEntityIds.clear();
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
@@ -408,25 +439,27 @@ namespace mmo
                 {
                     ImGui::SetKeyboardFocusHere(1); // Move focus to next widget (OK button)
                 }
-                
-                // Handle Escape to cancel
+                  // Handle Escape to cancel
                 if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
                 {
-                    m_categoryChangeEntityId = 0;
+                    m_categoryChangeEntityIds.clear();
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
-                
-                if (inputActivated) 
+                  if (inputActivated) 
                 {
                     // Handle Enter key as OK button press
-                    if (m_categoryChangeCallback && m_categoryChangeEntityId != 0) 
+                    if (m_categoryChangeCallback && !m_categoryChangeEntityIds.empty()) 
                     {
-                        m_categoryChangeCallback(m_categoryChangeEntityId, m_categoryBuffer);
+                        // Apply category change to all selected entities
+                        for (const auto& entityId : m_categoryChangeEntityIds)
+                        {
+                            m_categoryChangeCallback(entityId, m_categoryBuffer);
+                        }
                         m_needsUpdate = true;
                     }
 
-                    m_categoryChangeEntityId = 0;
+                    m_categoryChangeEntityIds.clear();
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
@@ -434,31 +467,32 @@ namespace mmo
                 ImGui::Separator();
                   // Make the buttons more noticeable
                 ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
-                
-                if (ImGui::Button("OK", ImVec2(120, 0))) 
+                  if (ImGui::Button("OK", ImVec2(120, 0))) 
                 {
-                    if (m_categoryChangeCallback && m_categoryChangeEntityId != 0) 
+                    if (m_categoryChangeCallback && !m_categoryChangeEntityIds.empty()) 
                     {
-                        // Use the stored entity ID instead of the current entry
-                        m_categoryChangeCallback(m_categoryChangeEntityId, m_categoryBuffer);
+                        // Apply category change to all selected entities
+                        for (const auto& entityId : m_categoryChangeEntityIds)
+                        {
+                            m_categoryChangeCallback(entityId, m_categoryBuffer);
+                        }
                         
                         // Flag for update to reflect the changes immediately
                         m_needsUpdate = true;
                     }
                     
-                    // Reset the tracking ID
-                    m_categoryChangeEntityId = 0; 
+                    // Reset the tracking IDs
+                    m_categoryChangeEntityIds.clear();
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
                 
                 ImGui::PopStyleColor();
                 ImGui::SameLine();
-                
-                if (ImGui::Button("Cancel", ImVec2(120, 0))) 
+                  if (ImGui::Button("Cancel", ImVec2(120, 0))) 
                 {
-                    // Reset the tracking ID
-                    m_categoryChangeEntityId = 0;
+                    // Reset the tracking IDs
+                    m_categoryChangeEntityIds.clear();
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
@@ -475,7 +509,7 @@ namespace mmo
                 m_draggedEntityName.clear();
             }
         }
-        
+
         ImGui::End();
     }
 
@@ -485,10 +519,12 @@ namespace mmo
 	    // if enough time has passed since the last update
 	    m_needsUpdate = true;
 	}
-
+    
     void SceneOutlineWindow::ClearSelection()
     {
         m_selection.Clear();
+        m_selectedEntityIds.clear();
+        m_lastSelectedEntityId = 0;
         Update();
     }
 
@@ -505,10 +541,13 @@ namespace mmo
     void SceneOutlineWindow::SetCategoryChangeCallback(std::function<void(uint64, const std::string&)> callback)
     {
         m_categoryChangeCallback = std::move(callback);
-    }    void SceneOutlineWindow::BuildEntryList()
+    }
+    
+    void SceneOutlineWindow::BuildEntryList()
     {
         m_entries.clear();
         m_categoryToEntriesMap.clear();
+        m_selectedEntityIds.clear(); // Clear selected entity IDs before rebuilding
         
         // First, add a special "Uncategorized" category
         m_categoryToEntriesMap["Uncategorized"] = {};
@@ -600,8 +639,7 @@ namespace mmo
                     }
                 }
             }
-            
-            // Check if this entity is selected
+              // Check if this entity is selected
             const auto& selectedObjects = m_selection.GetSelectedObjects();
             for (const auto& selectedObject : selectedObjects)
 			{
@@ -610,6 +648,11 @@ namespace mmo
                     if (mapEntitySelectable->GetEntity().GetUniqueId() == entry.id)
                     {
                         entry.selected = true;
+                        // Add to the list of selected entity IDs if not already present
+                        if (std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), entry.id) == m_selectedEntityIds.end())
+                        {
+                            m_selectedEntityIds.push_back(entry.id);
+                        }
                         break;
                     }
                 }
@@ -633,7 +676,9 @@ namespace mmo
                 return m_entries[a].displayName < m_entries[b].displayName;
             });
         }
-    }    void SceneOutlineWindow::DisplayEntry(const SceneOutlineEntry& entry)
+    }
+    
+    void SceneOutlineWindow::DisplayEntry(const SceneOutlineEntry& entry)
     {
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
         
@@ -721,15 +766,44 @@ namespace mmo
                     m_nameBuffer[sizeof(m_nameBuffer) - 1] = '\0';
                 }
             }
-            
+
             // Begin drag source for category changes
             if (entry.entityPtr && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) 
             {
-                // Set the drag data - we'll use the entity ID and name as the payload
-                ImGui::SetDragDropPayload("SCENE_ENTITY_ITEM", &entry.id, sizeof(uint64));
+                // For multi-drag, check if the currently dragged item is selected
+                bool isSelected = std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), entry.id) != m_selectedEntityIds.end();
+                
+                // If dragging a non-selected item, clear selection and select just this item
+                if (!isSelected && !ImGui::GetIO().KeyCtrl)
+                {
+                    m_selection.Clear();
+                    m_selectedEntityIds.clear();
+                    
+                    if (entry.entityPtr)
+                    {
+                        m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                        m_selectedEntityIds.push_back(entry.id);
+                        m_lastSelectedEntityId = entry.id;
+                    }
+                }
+                
+                // Create payload structure to hold all selected entity IDs
+                static std::vector<uint64> dragPayload;
+                dragPayload = m_selectedEntityIds;
+                
+                // Set payload data - pass the vector of entity IDs
+                ImGui::SetDragDropPayload("SCENE_ENTITY_ITEMS", dragPayload.data(), dragPayload.size() * sizeof(uint64));
                 
                 // Display what's being dragged
-                ImGui::Text("Moving: %s", entry.displayName.c_str());
+                int itemCount = static_cast<int>(m_selectedEntityIds.size());
+                if (itemCount == 1)
+                {
+                    ImGui::Text("Moving: %s", entry.displayName.c_str());
+                }
+                else
+                {
+                    ImGui::Text("Moving %d items", itemCount);
+                }
                 
                 // Store drag state for reference elsewhere
                 m_isDragging = true;
@@ -738,24 +812,161 @@ namespace mmo
                 
                 ImGui::EndDragDropSource();
             }
-              
             // Handle selection on click
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) 
             {
                 Entity* entity = m_scene.GetEntity(entry.name);
                 if (entity) 
                 {
-                    if (!ImGui::GetIO().KeyCtrl) 
+                    const bool isCtrlPressed = ImGui::GetIO().KeyCtrl;
+                    const bool isShiftPressed = ImGui::GetIO().KeyShift;
+                    
+                    if (!isCtrlPressed && !isShiftPressed) 
                     {
+                        // Regular click - select only this item
                         m_selection.Clear();
+                        m_selectedEntityIds.clear();
+                        
+                        // Add the clicked entity
+                        if (entry.entityPtr) 
+                        {
+                            m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                            m_selectedEntityIds.push_back(entry.id);
+                            m_lastSelectedEntityId = entry.id;
+                        }
+                    }
+                    else if (isCtrlPressed)
+                    {
+                        // Ctrl+click - toggle selection status of this item
+                        auto it = std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), entry.id);
+                        if (it != m_selectedEntityIds.end())
+                        {
+                            // Already selected, so deselect it
+                            m_selectedEntityIds.erase(it);
+                            
+                            // Find and remove from Selection
+                            const auto& selectedObjects = m_selection.GetSelectedObjects();
+                            size_t index = 0;
+                            for (auto selObject = selectedObjects.begin(); selObject != selectedObjects.end(); ++selObject, ++index)
+                            {
+                                if (auto* mapEntitySelectable = dynamic_cast<SelectedMapEntity*>(selObject->get()))
+                                {
+                                    if (mapEntitySelectable->GetEntity().GetUniqueId() == entry.id)
+                                    {
+                                        m_selection.RemoveSelectable(index);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Not selected, so select it
+                            if (entry.entityPtr)
+                            {
+                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                                m_selectedEntityIds.push_back(entry.id);
+                                m_lastSelectedEntityId = entry.id;
+                            }
+                        }
+                    }
+                    else if (isShiftPressed && m_lastSelectedEntityId != 0)
+                    {
+                        // Shift+click - select a range of items
+                        if (entry.entityPtr)
+                        {
+                            // Find the indices of the last selected item and the current item
+                            size_t lastSelectedIndex = 0;
+                            size_t currentIndex = 0;
+                            bool foundLast = false;
+                            bool foundCurrent = false;
+                            
+                            // First, find the category of both items
+                            std::string lastSelectedCategory;
+                            std::string currentCategory = entry.category;
+                            
+                            for (const auto& e : m_entries)
+                            {
+                                if (e.id == m_lastSelectedEntityId)
+                                {
+                                    lastSelectedCategory = e.category;
+                                    break;
+                                }
+                            }
+                            
+                            // Only do range selection if both items are in the same category
+                            if (lastSelectedCategory == currentCategory)
+                            {
+                                // Find the indices in the same category
+                                const auto& categoryEntries = m_categoryToEntriesMap[currentCategory];
+                                
+                                for (size_t i = 0; i < categoryEntries.size(); ++i)
+                                {
+                                    const auto& e = m_entries[categoryEntries[i]];
+                                    if (e.id == m_lastSelectedEntityId)
+                                    {
+                                        lastSelectedIndex = i;
+                                        foundLast = true;
+                                    }
+                                    if (e.id == entry.id)
+                                    {
+                                        currentIndex = i;
+                                        foundCurrent = true;
+                                    }
+                                    if (foundLast && foundCurrent)
+                                    {
+                                        break;
+                                    }
+                                }
+                                
+                                // If both items were found, select everything between them
+                                if (foundLast && foundCurrent)
+                                {
+                                    // Get the min and max indices for the range
+                                    size_t startIdx = std::min(lastSelectedIndex, currentIndex);
+                                    size_t endIdx = std::max(lastSelectedIndex, currentIndex);
+                                    
+                                    // Clear existing selection if shift wasn't held with ctrl
+                                    if (!isCtrlPressed)
+                                    {
+                                        m_selection.Clear();
+                                        m_selectedEntityIds.clear();
+                                    }
+                                    
+                                    // Select all items in the range
+                                    for (size_t i = startIdx; i <= endIdx; ++i)
+                                    {
+                                        const auto& e = m_entries[categoryEntries[i]];
+                                        if (e.entityPtr)
+                                        {
+                                            // Check if this item is already selected
+                                            if (std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), e.id) == m_selectedEntityIds.end())
+                                            {
+                                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*e.entityPtr, [](Selectable&) {}));
+                                                m_selectedEntityIds.push_back(e.id);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Different categories, just select the current item
+                                if (!isCtrlPressed)
+                                {
+                                    m_selection.Clear();
+                                    m_selectedEntityIds.clear();
+                                }
+                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                                m_selectedEntityIds.push_back(entry.id);
+                            }
+                            
+                            m_lastSelectedEntityId = entry.id;
+                        }
                     }
                     
-                    // If it's a map entity, find it and select it
-                    if (entry.entityPtr) 
-                    {
-                        m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
-                    }
-                    // Other entity types can be handled here
+                    // Flag for update to reflect the changes immediately
+                    m_needsUpdate = true;
                 }
             }
             
@@ -777,10 +988,21 @@ namespace mmo
                         // Close the context menu immediately after selecting rename
                         ImGui::CloseCurrentPopup();
                     }
+
                 	if (ImGui::MenuItem("Change Category")) 
                     {
-                        // Store which entity we're changing
-                        m_categoryChangeEntityId = entry.id;
+                        // If this entity is selected, change category for all selected items
+                        if (std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), entry.id) != m_selectedEntityIds.end())
+                        {
+                            // Using selection list for multiple items
+                            m_categoryChangeEntityIds = m_selectedEntityIds;
+                        }
+                        else
+                        {
+                            // Just for this single entity
+                            m_categoryChangeEntityIds.clear();
+                            m_categoryChangeEntityIds.push_back(entry.id);
+                        }
                         
                         // Copy category to buffer
                         strncpy(m_categoryBuffer, entry.category.c_str(), sizeof(m_categoryBuffer) - 1);

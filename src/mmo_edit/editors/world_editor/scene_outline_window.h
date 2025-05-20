@@ -61,11 +61,12 @@ namespace mmo
         std::function<void(uint64, const std::string&)> m_categoryChangeCallback;
         std::chrono::steady_clock::time_point m_lastRebuildTime;
         TexturePtr m_folderTexture;  // Folder icon texture
-        
-        // UI state tracking variables
+          // UI state tracking variables
         uint64 m_editingId = 0; // Entity being renamed
         char m_nameBuffer[256] = {0};
-        uint64 m_categoryChangeEntityId = 0; // Entity having its category changed
+        
+        // Category change state
+        std::vector<uint64> m_categoryChangeEntityIds; // Entities having their categories changed
         char m_categoryBuffer[256] = {0};
         bool m_openCategoryChangePopup = false; // Flag to open category change popup
         
@@ -76,5 +77,10 @@ namespace mmo
         
         // Map of categories to their entries for hierarchical display
         std::map<std::string, std::vector<size_t>> m_categoryToEntriesMap;
+        
+        // Vector to store multiple selected entity IDs
+        std::vector<uint64> m_selectedEntityIds;
+        // Last selected entity ID for shift-select range functionality
+        uint64 m_lastSelectedEntityId = 0;
     };
 }
