@@ -8,11 +8,13 @@
 #include <vector>
 #include <chrono>
 
+#include "preview_providers/static_texture_preview_provider.h"
+
 namespace mmo
 {
     class MapEntity;  // Forward declaration of MapEntity
 
-    class SceneOutlineWindow : public NonCopyable
+    class SceneOutlineWindow final : public NonCopyable
     {
     public:
         SceneOutlineWindow(Selection& selection, Scene& scene);
@@ -32,9 +34,7 @@ namespace mmo
         void SetRenameCallback(std::function<void(uint64, const std::string&)> callback);
 
         // Set the callback to be called when an object's category is changed
-        void SetCategoryChangeCallback(std::function<void(uint64, const std::string&)> callback);
-
-    private:
+        void SetCategoryChangeCallback(std::function<void(uint64, const std::string&)> callback);    private:
         struct SceneOutlineEntry 
         {
             uint64 id;
@@ -46,8 +46,12 @@ namespace mmo
         };
 
         void BuildEntryList();
-        void DisplayEntry(const SceneOutlineEntry& entry);    
-      private:        
+        void DisplayEntry(const SceneOutlineEntry& entry);   
+        
+        // Get ImGui texture ID for folder icon
+        ImTextureID GetFolderIconTexture() const;
+
+    private:        
         Selection& m_selection;
         Scene& m_scene;
         std::vector<SceneOutlineEntry> m_entries;
@@ -56,6 +60,7 @@ namespace mmo
         std::function<void(uint64, const std::string&)> m_renameCallback;
         std::function<void(uint64, const std::string&)> m_categoryChangeCallback;
         std::chrono::steady_clock::time_point m_lastRebuildTime;
+        TexturePtr m_folderTexture;  // Folder icon texture
         
         // UI state tracking variables
         uint64 m_editingId = 0; // Entity being renamed

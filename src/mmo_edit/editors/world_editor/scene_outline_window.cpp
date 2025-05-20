@@ -6,6 +6,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
 #include "world_editor_instance.h" // Include this for MapEntity definition
+#include "graphics/texture_mgr.h" // For the folder icon
 
 namespace mmo
 {    SceneOutlineWindow::SceneOutlineWindow(Selection& selection, Scene& scene)
@@ -22,8 +23,19 @@ namespace mmo
         // Initialize buffers
         m_nameBuffer[0] = '\0';
         m_categoryBuffer[0] = '\0';
-    }void SceneOutlineWindow::Draw(const std::string& title)
-    {        if (ImGui::Begin(title.c_str()))
+        
+        // Load the folder icon texture
+        m_folderTexture = TextureManager::Get().CreateOrRetrieve("Editor/Folder_BaseHi_256x.htex");
+    }
+    
+    ImTextureID SceneOutlineWindow::GetFolderIconTexture() const
+    {
+        return m_folderTexture ? m_folderTexture->GetTextureObject() : nullptr;
+    }
+    
+    void SceneOutlineWindow::Draw(const std::string& title)
+    {
+        if (ImGui::Begin(title.c_str()))
         {
             // Handle the category change popup
             if (m_openCategoryChangePopup)
@@ -72,7 +84,9 @@ namespace mmo
             if (ImGui::InputText("##SearchFilter", searchBuffer, IM_ARRAYSIZE(searchBuffer)))
             {
                 // No need to rebuild the list, we'll filter during display
-            }            // Create a list box with filtered entities
+            }
+            
+            // Create a list box with filtered entities
             ImGui::Separator();
 
             // Reserve space at the bottom for the status text (entity count)
@@ -206,12 +220,42 @@ namespace mmo
                     ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
                     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetColorU32(ImGuiCol_ButtonActive));
                 }
-                  
-                // Display the category
-                bool nodeOpen = ImGui::TreeNode(displayName.c_str());
+                
+                // First get folder icon texture
+                ImTextureID folderIcon = GetFolderIconTexture();
+                
+                // Variable to track if node is open
+                bool nodeOpen = false;
+                
+                // Display folder icon + tree node
+                if (folderIcon)
+                {
+                    // Use a simpler approach - use PushID to create a unique ID context
+                    ImGui::PushID(category.c_str());  // Use category as unique identifier
+                    
+                    // Get sizing information
+                    const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeight();
+                    const float ICON_SIZE = TEXT_BASE_HEIGHT;
+                    const float SPACING = ImGui::GetStyle().ItemInnerSpacing.x;
+                    
+                    // Start with the folder icon
+                    ImGui::Image(folderIcon, ImVec2(ICON_SIZE, ICON_SIZE));
+                    ImGui::SameLine(0, SPACING);
+                    
+                    // Then display the tree node with just the text
+                    nodeOpen = ImGui::TreeNode(displayName.c_str());
+                    
+                    ImGui::PopID();
+                }
+                else
+                {
+                    // Fallback if no icon is available
+                    nodeOpen = ImGui::TreeNodeEx(displayName.c_str(), flags);
+                }
                 
                 // Pop temporary style colors if we applied them
-                if (isDragHovered) {
+                if (isDragHovered)
+                {
                     ImGui::PopStyleColor(2);
                 }
                 
@@ -239,6 +283,7 @@ namespace mmo
                                         m_needsUpdate = true;
                                     }
                                 }
+
                                 break;
                             }
                         }
@@ -319,9 +364,9 @@ namespace mmo
             // Handle the category change modal outside of any entity processing loop
             // This is important because ImGui modals need to be processed at a consistent place in the UI hierarchy
             
-
             // If the popup flag is set, explicitly open the popup
-            if (m_openCategoryChangePopup) {
+            if (m_openCategoryChangePopup)
+            {
                 ImGui::OpenPopup("Change Category");
                 m_openCategoryChangePopup = false;
             }
@@ -332,13 +377,15 @@ namespace mmo
             {
                 // Set keyboard focus to input field when modal opens
                 static bool modalFirstFrame = true;
-                if (modalFirstFrame) {
+                if (modalFirstFrame)
+                {
                     ImGui::SetKeyboardFocusHere();
                     modalFirstFrame = false;
                 }
                 
                 // If the popup was closed without using the buttons, reset state
-                if (!isOpen) {
+                if (!isOpen)
+                {
                     m_categoryChangeEntityId = 0;
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
@@ -378,6 +425,7 @@ namespace mmo
                         m_categoryChangeCallback(m_categoryChangeEntityId, m_categoryBuffer);
                         m_needsUpdate = true;
                     }
+
                     m_categoryChangeEntityId = 0;
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
@@ -397,7 +445,9 @@ namespace mmo
                         // Flag for update to reflect the changes immediately
                         m_needsUpdate = true;
                     }
-                    m_categoryChangeEntityId = 0; // Reset the tracking ID
+                    
+                    // Reset the tracking ID
+                    m_categoryChangeEntityId = 0; 
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
@@ -407,11 +457,13 @@ namespace mmo
                 
                 if (ImGui::Button("Cancel", ImVec2(120, 0))) 
                 {
-                    m_categoryChangeEntityId = 0; // Reset the tracking ID
+                    // Reset the tracking ID
+                    m_categoryChangeEntityId = 0;
                     modalFirstFrame = true;
                     ImGui::CloseCurrentPopup();
                 }
-                  ImGui::EndPopup();
+                
+                ImGui::EndPopup();
             }
             
             // Global check for mouse release to properly reset drag state
@@ -423,6 +475,7 @@ namespace mmo
                 m_draggedEntityName.clear();
             }
         }
+        
         ImGui::End();
     }
 
