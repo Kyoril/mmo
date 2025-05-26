@@ -1,4 +1,4 @@
-![Linux Servers](https://github.com/Kyoril/mmo/workflows/Linux%20Servers/badge.svg)
+![Linux Servers](https://github.com/Kyoril/mmo/workflows/Linux%20Servers/badge.svg)  ![Discord](https://img.shields.io/discord/914458874034135072?label=discord)
 
 If you want, you can support me on [ko-fi](https://ko-fi.com/kyoril)!
 
