@@ -1,6 +1,8 @@
 
 #include "fmod_audio.h"
 
+#include <unordered_set>
+
 #ifdef _WIN32
 
 #include "assets/asset_registry.h"
@@ -45,6 +47,7 @@ namespace mmo
 		return m_Sound;
 	}
 
+
 	FMODChannelInstance::FMODChannelInstance()
 	{
 		Clear();
@@ -52,15 +55,74 @@ namespace mmo
 
 	FMODChannelInstance::~FMODChannelInstance()
 	{
+		if (m_channel)
+		{
+			m_channel->stop();
+			m_channel = nullptr;
+		}
+		Clear();
 	}
 
 	void FMODChannelInstance::Clear()
 	{
-		
+		m_channel = nullptr;
+		m_priority = 0.0f;
+		m_lastPlayTime = 0;
+		m_isPlaying = false;
+		m_soundIndex = InvalidSound;
+	}
+
+	bool FMODChannelInstance::IsPlaying() const
+	{
+		if (!m_channel) return false;
+
+		bool isPlaying = false;
+		m_channel->isPlaying(&isPlaying);
+		return isPlaying;
+	}
+
+	float FMODChannelInstance::GetPriority() const
+	{
+		return m_priority;
+	}
+
+	void FMODChannelInstance::SetPriority(float priority)
+	{
+		m_priority = priority;
+	}
+
+	uint64_t FMODChannelInstance::GetLastPlayTime() const
+	{
+		return m_lastPlayTime;
+	}
+
+	void FMODChannelInstance::SetLastPlayTime(uint64_t time)
+	{
+		m_lastPlayTime = time;
+	}
+
+	FMOD::Channel* FMODChannelInstance::GetFMODChannel() const
+	{
+		return m_channel;
+	}
+
+	void FMODChannelInstance::SetFMODChannel(FMOD::Channel* channel)
+	{
+		m_channel = channel;
+	}
+
+	SoundIndex FMODChannelInstance::GetSoundIndex() const
+	{
+		return m_soundIndex;
+	}
+
+	void FMODChannelInstance::SetSoundIndex(SoundIndex soundIndex)
+	{
+		m_soundIndex = soundIndex;
 	}
 
 	FMODAudio::FMODAudio()
-		: m_system(nullptr)
+		: m_system(nullptr), m_lastCleanupTime(0), m_currentTime(0)
 	{
 		ILOG("Using FMOD audio system");
 
@@ -159,11 +221,31 @@ namespace mmo
 		listenerVelocity.z = vectorVelocity.z;
 
 		m_system->set3DListenerAttributes(0, &listenerPosition, &listenerVelocity, &listenerForward, &listenerUp);
-		m_system->update();
-		
-		m_prevListenerPosition = listenerPos;
 
-		// TODO: Channel update
+		// Increment current time
+		m_currentTime++;
+
+		// Periodically clean up unused sounds
+		CleanupUnusedSounds();
+
+		// Update channel status
+		for (int i = 0; i < MaximumSoundChannels; i++)
+		{
+			if (m_channelArray[i].GetFMODChannel())
+			{
+				bool isPlaying = false;
+				m_channelArray[i].GetFMODChannel()->isPlaying(&isPlaying);
+
+				if (!isPlaying)
+				{
+					m_channelArray[i].Clear();
+				}
+			}
+		}
+
+		m_system->update();
+
+		m_prevListenerPosition = listenerPos;
 	}
 
 	SoundIndex FMODAudio::CreateSound(const String& fileName)
@@ -188,6 +270,14 @@ namespace mmo
 
 	SoundIndex FMODAudio::CreateSound(const String& fileName, SoundType type)
 	{
+		// Check cache first
+		String cacheKey = fileName + "_" + std::to_string(static_cast<int>(type));
+		auto it = m_soundCache.find(cacheKey);
+		if (it != m_soundCache.end())
+		{
+			return it->second;
+		}
+
 		FMOD_RESULT result;
 		FMOD::Sound *sound;
 		String fullPathName;
@@ -245,46 +335,77 @@ namespace mmo
 		}
 		
 		newSoundInstance->SetFMODSound(sound);
+
+		// Add to cache
+		m_soundCache[cacheKey] = soundIndex;
+
 		return m_nextSoundInstanceIndex;
 	}
 
-	void FMODAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex)
+	void FMODAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority)
 	{
 		if (sound == InvalidSound)
 		{
 			return;
 		}
 
-		int channelIndexTemp;
-		FMOD::Channel* channel;
+		// Increment time for channel tracking
+		m_currentTime++;
 
-		if (channelIndex)
+		// Find a suitable channel
+		ChannelIndex channelIndexTemp;
+		if (channelIndex && *channelIndex != InvalidChannel)
 		{
+			// Use the specified channel if provided, but first stop any sound playing on it
 			channelIndexTemp = *channelIndex;
+			if (m_channelArray[channelIndexTemp].IsPlaying())
+			{
+				FMOD::Channel* oldChannel = m_channelArray[channelIndexTemp].GetFMODChannel();
+				if (oldChannel)
+				{
+					oldChannel->stop();
+				}
+				m_channelArray[channelIndexTemp].Clear();
+			}
 		}
 		else
 		{
-			channelIndexTemp = InvalidChannel;
+			// Find an available channel based on priority
+			channelIndexTemp = FindAvailableChannel(priority);
+			if (channelIndexTemp == InvalidChannel)
+			{
+				WLOG("Could not find available channel for sound with priority " << priority);
+				if (channelIndex) *channelIndex = InvalidChannel;
+				return;
+			}
 		}
 
+		FMOD::Channel* channel;
 		assert((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.capacity()));
 
-		FMODSoundInstance &instance = m_soundInstanceVector[sound];
+		FMODSoundInstance& instance = m_soundInstanceVector[sound];
 		FMOD_RESULT result = m_system->playSound(instance.GetFMODSound(), nullptr, true, &channel);
 		if (result != FMOD_OK)
 		{
 			ELOG("Could not play sound (" << result << "): " << FMOD_ErrorString(result));
-			if (channelIndex)
-			{
-				*channelIndex = InvalidChannel;
-			}
-
+			if (channelIndex) *channelIndex = InvalidChannel;
 			return;
 		}
 
-		channel->getIndex(&channelIndexTemp);
+		// Configure the channel
 		channel->setVolume(1.0);
 		channel->setPaused(false);
+
+		// Store the sound index with the channel for proper tracking
+		int channelIndex32;
+		channel->getIndex(&channelIndex32);
+		channelIndexTemp = static_cast<ChannelIndex>(channelIndex32);
+
+		// Update channel tracking info
+		m_channelArray[channelIndexTemp].SetFMODChannel(channel);
+		m_channelArray[channelIndexTemp].SetPriority(priority);
+		m_channelArray[channelIndexTemp].SetLastPlayTime(m_currentTime);
+		m_channelArray[channelIndexTemp].SetSoundIndex(sound);
 
 		if (channelIndex)
 		{
@@ -301,12 +422,38 @@ namespace mmo
 			return;
 		}
 
-		FMOD::Channel *soundChannel;
-		assert((*channelIndex > 0) && (*channelIndex < MaximumSoundChannels));
+		// Validate channel index is within bounds
+		assert(*channelIndex < MaximumSoundChannels);
 
-		m_system->getChannel(*channelIndex, &soundChannel);
-		soundChannel->stop();
+		// Get the channel from our tracking array first
+		FMOD::Channel* channel = m_channelArray[*channelIndex].GetFMODChannel();
 
+		// Only try to stop if we have a valid channel pointer
+		if (channel)
+		{
+			bool isPlaying = false;
+			channel->isPlaying(&isPlaying);
+
+			if (isPlaying)
+			{
+				FMOD_RESULT result = channel->stop();
+				if (result != FMOD_OK)
+				{
+					WLOG("Failed to stop channel " << *channelIndex << " (" << result << "): " << FMOD_ErrorString(result));
+				}
+			}
+		}
+		else
+		{
+			// Try to get the channel directly from FMOD if our tracking failed
+			FMOD_RESULT result = m_system->getChannel(*channelIndex, &channel);
+			if (result == FMOD_OK && channel)
+			{
+				channel->stop();
+			}
+		}
+
+		// Always clear our tracking info for this channel
 		m_channelArray[*channelIndex].Clear();
 		*channelIndex = InvalidChannel;
 	}
@@ -486,6 +633,117 @@ namespace mmo
 		return FMOD_OK;
 	}
 
+	ChannelIndex FMODAudio::FindAvailableChannel(float priority)
+	{
+		// First try to find an inactive channel
+		for (ChannelIndex i = 0; i < MaximumSoundChannels; i++)
+		{
+			if (!m_channelArray[i].IsPlaying())
+			{
+				return i;
+			}
+		}
+
+		// If all channels are active, find the oldest, lowest priority channel
+		ChannelIndex oldestChannel = 0;
+		float lowestPriority = std::numeric_limits<float>::max();
+		uint64_t oldestTime = m_currentTime;
+
+		for (ChannelIndex i = 0; i < MaximumSoundChannels; i++)
+		{
+			// Skip channels with higher priority than the requested sound
+			if (m_channelArray[i].GetPriority() > priority)
+				continue;
+
+			// Find the oldest channel with the lowest priority
+			if (m_channelArray[i].GetPriority() < lowestPriority ||
+				(m_channelArray[i].GetPriority() == lowestPriority &&
+					m_channelArray[i].GetLastPlayTime() < oldestTime))
+			{
+				lowestPriority = m_channelArray[i].GetPriority();
+				oldestTime = m_channelArray[i].GetLastPlayTime();
+				oldestChannel = i;
+			}
+		}
+
+		// If we found a channel with lower priority, stop it and reuse
+		if (lowestPriority < priority || oldestTime < m_currentTime)
+		{
+			FMOD::Channel* channel = m_channelArray[oldestChannel].GetFMODChannel();
+			if (channel)
+			{
+				channel->stop();
+			}
+
+			m_channelArray[oldestChannel].Clear();
+			return oldestChannel;
+		}
+
+		// No suitable channel found
+		return InvalidChannel;
+	}
+
+	SoundIndex FMODAudio::AllocateSoundIndex()
+	{
+		if (!m_freeSoundIndices.empty())
+		{
+			SoundIndex index = m_freeSoundIndices.back();
+			m_freeSoundIndices.pop_back();
+			return index;
+		}
+
+		IncrementNextSoundInstanceIndex();
+		return m_nextSoundInstanceIndex;
+	}
+
+	void FMODAudio::ReleaseSoundIndex(SoundIndex index)
+	{
+		if (index != InvalidSound && index < m_soundInstanceVector.capacity())
+		{
+			m_soundInstanceVector[index].Clear();
+			m_freeSoundIndices.push_back(index);
+		}
+	}
+
+	void FMODAudio::CleanupUnusedSounds(bool forceCleanup)
+	{
+		if (!forceCleanup && (m_currentTime - m_lastCleanupTime < CleanupInterval))
+			return;
+
+		m_lastCleanupTime = m_currentTime;
+
+		// Check which sounds are not being used by any channel
+		std::unordered_set<SoundIndex> activeSounds;
+
+		for (int i = 0; i < MaximumSoundChannels; i++)
+		{
+			if (m_channelArray[i].IsPlaying())
+			{
+				// Determine which sound this channel is playing
+				// This would require tracking the sound index in the channel
+				// For now, we'll skip this optimization
+			}
+		}
+
+		// For cached sounds that haven't been used recently, release them
+		std::vector<String> soundsToRemove;
+		for (const auto& pair : m_soundCache)
+		{
+			// If sound is not active and hasn't been played recently, remove it
+			// You'd need additional tracking for "last used time"
+			// For now, we'll keep this as a placeholder
+		}
+
+		for (const auto& soundName : soundsToRemove)
+		{
+			auto it = m_soundCache.find(soundName);
+			if (it != m_soundCache.end())
+			{
+				ReleaseSoundIndex(it->second);
+				m_soundCache.erase(it);
+			}
+		}
+	}
 }
 
 #endif

@@ -19,6 +19,7 @@
 #include "race_editor_window.h"
 #include "faction_editor_window.h"
 #include "faction_template_editor_window.h"
+#include "gossip_editor_window.h"
 #include "model_editor_window.h"
 #include "item_display_editor_window.h"
 #include "object_display_editor_window.h"
@@ -316,6 +317,13 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(VendorEditorWindow))); },
             static_cast<int>(m_project.vendors.count())
         });
+
+        miscCategory.editors.push_back({
+            std::type_index(typeid(GossipEditorWindow)),
+            "Gossip",
+            [this]() { OpenEditorWindow(std::type_index(typeid(GossipEditorWindow))); },
+            static_cast<int>(m_project.gossipMenus.count())
+            });
         
         // Add all categories to the main list
         m_categories.push_back(std::move(gameplayCategory));

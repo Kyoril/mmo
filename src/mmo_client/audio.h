@@ -59,7 +59,7 @@ namespace mmo
 		virtual SoundIndex CreateLoopedSound(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedStream(const String &fileName) = 0;
 		virtual SoundIndex CreateSound(const String& fileName, SoundType type) = 0;
-		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex) = 0;
+		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) = 0;
 		virtual void StopSound(ChannelIndex *channelIndex) = 0;
 		virtual void StopAllSounds() = 0;
 		virtual SoundIndex FindSound(const String& fileName, SoundType type) = 0;

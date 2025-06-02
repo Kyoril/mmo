@@ -1,5 +1,6 @@
 
 #pragma once
+#include <unordered_map>
 
 #ifdef _WIN32
 
@@ -68,6 +69,26 @@ namespace mmo
 
 	public:
 		void Clear() override;
+
+	public:
+		bool IsPlaying() const;
+		float GetPriority() const;
+		void SetPriority(float priority);
+		uint64_t GetLastPlayTime() const;
+		void SetLastPlayTime(uint64_t time);
+		FMOD::Channel* GetFMODChannel() const;
+		void SetFMODChannel(FMOD::Channel* channel);
+
+		// Add sound tracking
+		SoundIndex GetSoundIndex() const;
+		void SetSoundIndex(SoundIndex soundIndex);
+
+	private:
+		FMOD::Channel* m_channel = nullptr;
+		float m_priority = 0.0f;
+		uint64_t m_lastPlayTime = 0;
+		bool m_isPlaying = false;
+		SoundIndex m_soundIndex = -1;  // Track which sound this channel is playing
 	};
 
 	
@@ -94,7 +115,7 @@ namespace mmo
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
-		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex) override;
+		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) override;
 
 		void StopSound(ChannelIndex *channelIndex) override;
 
@@ -127,6 +148,22 @@ namespace mmo
 		static FMOD_RESULT F_CALLBACK FMODFileCloseCallback(void *handle, void *userdata);
 		static FMOD_RESULT F_CALLBACK FMODFileReadCallback(void *handle, void *buffer, unsigned int sizebytes, unsigned int *bytesread, void *userdata);
 		static FMOD_RESULT F_CALLBACK FMODFileSeekCallback(void *handle, unsigned int pos, void *userdata);
+
+	private:
+		ChannelIndex FindAvailableChannel(float priority);
+
+		uint64_t m_currentTime; // For tracking playing times
+
+	private:
+		std::unordered_map<String, SoundIndex> m_soundCache;
+		std::vector<SoundIndex> m_freeSoundIndices;
+
+		SoundIndex AllocateSoundIndex();
+		void ReleaseSoundIndex(SoundIndex index);
+
+		void CleanupUnusedSounds(bool forceCleanup = false);
+		uint64_t m_lastCleanupTime;
+		static const uint64_t CleanupInterval = 1000; // Cleanup every 1000 updates
 	};
 }
 

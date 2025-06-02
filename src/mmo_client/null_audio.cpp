@@ -78,7 +78,7 @@ namespace mmo
 		return m_nextSoundInstanceIndex;
 	}
 
-	void NullAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex)
+	void NullAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority)
 	{
 		if (sound == InvalidSound)
 		{

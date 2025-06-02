@@ -84,7 +84,7 @@ namespace mmo
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
-		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex) override;
+		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) override;
 
 		void StopSound(ChannelIndex *channelIndex) override;
 
