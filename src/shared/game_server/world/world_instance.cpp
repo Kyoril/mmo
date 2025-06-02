@@ -171,6 +171,7 @@ namespace mmo
 			}
 		}
 	}
+
 	void WorldInstance::Update(const RegularUpdate& update)
 	{
 		m_updating = true;
@@ -237,8 +238,12 @@ namespace mmo
 					continue;
 				}
 
-				DLOG("Notifying subscriber " << log_hex_digit(subscriber->GetGameUnit().GetGuid()) << " about spawn of character " << log_hex_digit(added.GetGuid()));
-		    	subscriber->NotifyObjectsSpawned(objects);
+				if (added.IsUnit() && !added.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+				{
+					continue; // Skip subscribers that cannot see this unit
+				}
+
+				subscriber->NotifyObjectsSpawned(objects);
 			}
 		});
 
@@ -265,11 +270,9 @@ namespace mmo
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
 		if (it == m_objectsByGuid.end())
 		{
-			ELOG("Could not find object!");
 			return;
 		}
 
-		DLOG("Removing object " << log_hex_digit(remove.GetGuid()) << " from world instance ...");
 		m_objectsByGuid.erase(it);
 
 		// Clear update
@@ -312,6 +315,12 @@ namespace mmo
 					std::vector objects{ &remove };
 					for (auto* subscriber : tile.GetWatchers())
 					{
+						// Only despawn if we were visible before
+						if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+						{
+							continue; // Skip subscribers that cannot see this unit
+						}
+
 						subscriber->NotifyObjectsDespawned(objects);
 					}
 				});
@@ -462,9 +471,15 @@ namespace mmo
 		ForEachSubscriberInSight(
 			*m_visibilityGrid,
 			center,
-			[&objects](TileSubscriber& subscriber)
+			[&objects, &object](TileSubscriber& subscriber)
 			{
 				auto& character = subscriber.GetGameUnit();
+
+				if (object.IsUnit() && !object.AsUnit().CanBeSeenBy(character))
+				{
+					return; // Skip subscribers that cannot see this unit
+				}
+
 				subscriber.NotifyObjectsUpdated(objects);
 			});
 

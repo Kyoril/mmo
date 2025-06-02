@@ -246,6 +246,12 @@ namespace mmo
 
 	bool GameUnitS::IsInteractable(const GameUnitS& interactor) const
 	{
+		// Check visibility first
+		if (!CanBeSeenBy(interactor))
+		{
+			return false;
+		}
+
 		if (!interactor.IsAlive())
 		{
 			WLOG("Can't interact while dead");
@@ -2220,6 +2226,13 @@ namespace mmo
 			return;
 		}
 
+		// Stop attacking if target can no longer be seen
+		if (!victim->CanBeSeenBy(*this))
+		{
+			StopAttack();
+			return;
+		}
+
 		// Turn to target if not an attacking player
 		if (GetTypeId() != ObjectTypeId::Player)
 		{
@@ -2447,8 +2460,12 @@ namespace mmo
 
 	void GameUnitS::SetVisibility(UnitVisibility x)
 	{
-		m_visibility = x;
+		if (m_visibility == x)
+		{
+			return; // No change
+		}
 
+		m_visibility = x;
 		if (m_worldInstance)
 		{
 			UpdateVisibilityAndView();
@@ -2457,7 +2474,55 @@ namespace mmo
 
 	void GameUnitS::UpdateVisibilityAndView()
 	{
+		// Get current world instance and verify it exists
+		auto* worldInstance = GetWorldInstance();
+		if (!worldInstance)
+		{
+			return;
+		}
 
+		// Signal visibility change to world instance
+		// This will force an update of which clients can see this unit
+		bool isVisible = (m_visibility == unit_visibility::On);
+		
+		// Build visibility list based on current visibility state
+		std::vector<TileSubscriber*> visibleTo;
+		std::vector<TileSubscriber*> notVisibleTo;
+		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber& subscriber)
+		{
+			// Always visible to GMs
+			GamePlayerS* player = dynamic_cast<GamePlayerS*>(&subscriber);
+			if (player && (player->IsGameMaster() || CanBeSeenBy(*player)))
+			{
+				visibleTo.push_back(&subscriber);
+			}
+			else
+			{
+				notVisibleTo.push_back(&subscriber);
+			}
+		});
+
+		std::vector<GameObjectS*> objects { 1, this };
+
+		// Find subscribers who previously saw this unit but shouldn't anymore
+		// and remove this unit from their visible objects
+		for (auto it = notVisibleTo.begin(); it != notVisibleTo.end(); ++it)
+		{
+			// This subscriber should no longer see this unit
+			// Send despawn packet
+			TileSubscriber* subscriber = *it;
+			subscriber->NotifyObjectsDespawned(objects);
+		}
+		
+		// Add this unit to new subscribers' visible objects
+		for (auto* subscriber : visibleTo)
+		{
+			// Send spawn packet to new subscriber
+			std::vector<GameObjectS*> objects = { this };
+			subscriber->NotifyObjectsSpawned(objects);
+		}
+		
+		// TODO: Stop attacking units from attacking
 	}
 
 	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)
