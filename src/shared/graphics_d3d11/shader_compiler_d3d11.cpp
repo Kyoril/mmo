@@ -20,7 +20,7 @@ namespace mmo
 	void ShaderCompilerD3D11::Compile(const ShaderCompileInput& input, ShaderCompileResult& output)
 	{
 		UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
-#if defined( DEBUG ) || defined( _DEBUG )
+#if (defined( DEBUG ) || defined( _DEBUG )) && 0
 		flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_DEBUG_NAME_FOR_BINARY;
 #else
 		flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
@@ -65,7 +65,7 @@ namespace mmo
 		{
 			output.code.format = GetShaderFormat();
 
-#if defined( DEBUG ) || defined( _DEBUG )
+#if (defined( DEBUG ) || defined( _DEBUG )) && 0
 			ComPtr<ID3DBlob> pPDB;
 			HRESULT t = D3DGetBlobPart(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), D3D_BLOB_PDB, 0, pPDB.GetAddressOf());
 			if (SUCCEEDED(t))

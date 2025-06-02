@@ -1122,7 +1122,8 @@ namespace mmo
 		m_pixelShaderCode[(int)type] = m_pixelShaderStream.str();
 		m_pixelShaderStream.clear();
 
-#ifdef _DEBUG
+#if 0
+#	ifdef _DEBUG
 		// Write shader output to asset registry for debug
 		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : type == PixelShaderType::GBuffer ? "PSDeferred.hlsl" : "PSShadow.hlsl"))
 		{
@@ -1130,6 +1131,7 @@ namespace mmo
 			io::TextWriter<char> writer(sink);
 			writer.write(m_pixelShaderCode[(int)type]);
 		}
+#	endif
 #endif
 	}
 
@@ -1396,6 +1398,7 @@ namespace mmo
 		m_vertexShaderCode = vertexShaderStream.str();
 		vertexShaderStream.clear();
 
+#if 0
 #ifdef _DEBUG
 		// Write shader output to asset registry for debug
 		if (const auto filePtr = AssetRegistry::CreateNewFile("VS_" + std::to_string(static_cast<int>(type)) + ".hlsl"))
@@ -1404,6 +1407,7 @@ namespace mmo
 			io::TextWriter<char> writer(sink);
 			writer.write(m_vertexShaderCode);
 		}
+#endif
 #endif
 	}
 }
