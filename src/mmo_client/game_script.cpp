@@ -1704,7 +1704,7 @@ namespace mmo
 
 		if (const SoundIndex index = m_audio.CreateSound(sound, SoundType::Sound2D); index != InvalidSound)
 		{
-			ChannelIndex channel;
+			ChannelIndex channel = InvalidChannel;
 			m_audio.PlaySound(index, &channel);
 		}
 	}
