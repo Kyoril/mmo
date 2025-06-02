@@ -121,6 +121,8 @@ namespace mmo
 			ModStun,
 			ModFear,
 
+			ModVisibility,
+
 			Count_,
 			Invalid_ = Count_
 		};

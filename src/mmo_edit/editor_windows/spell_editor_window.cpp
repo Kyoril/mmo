@@ -144,7 +144,9 @@ namespace mmo
 		"ModRoot",
 		"ModSleep",
 		"ModStun",
-		"ModFear"
+		"ModFear",
+
+		"ModVisibility"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");

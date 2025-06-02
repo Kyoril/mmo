@@ -340,6 +340,12 @@ namespace mmo
 
 	bool GameUnitS::CanBeSeenBy(const GameUnitS& other) const
 	{
+		// Can always see yourself!
+		if (&other == this)
+		{
+			return true; 
+		}
+
 		switch (m_visibility)
 		{
 		case unit_visibility::On:
@@ -968,6 +974,19 @@ namespace mmo
 				}
 			}
 		}
+	}
+
+	void GameUnitS::NotifyVisibilityChanged()
+	{
+		// Determine if we should be visible or not
+
+		// By default we should be visible if we don't have a visibility modification aura active
+		bool shouldBeVisible = !HasAuraEffect(aura_type::ModVisibility);
+
+		// TODO: Maybe add other conditions here
+
+		// Apply visibility change (this method is idempotent and does nothing if the value is already set)
+		SetVisibility(shouldBeVisible ? unit_visibility::On : unit_visibility::Off);
 	}
 
 	int32 GameUnitS::GetTotalSpellMods(const SpellModType type, const SpellModOp op, const uint32 spellId) const
@@ -2490,11 +2509,13 @@ namespace mmo
 		std::vector<TileSubscriber*> notVisibleTo;
 		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber& subscriber)
 		{
-			// Always visible to GMs
-			GamePlayerS* player = dynamic_cast<GamePlayerS*>(&subscriber);
-			if (player && (player->IsGameMaster() || CanBeSeenBy(*player)))
+			if (CanBeSeenBy(subscriber.GetGameUnit()))
 			{
-				visibleTo.push_back(&subscriber);
+				// And prevent self respawn
+				if (&subscriber.GetGameUnit() != this)
+				{
+					visibleTo.push_back(&subscriber);
+				}
 			}
 			else
 			{

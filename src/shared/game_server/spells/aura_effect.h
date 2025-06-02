@@ -101,6 +101,8 @@ namespace mmo
 
 		void HandleModSleep(bool apply) const;
 
+		void HandleModVisibility(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 
@@ -136,4 +138,5 @@ namespace mmo
 
 		void OnTick();
 	};
+
 }

@@ -755,6 +755,8 @@ namespace mmo
 		/// @param apply Whether to apply or misapply the spell mod.
 		void ModifySpellMod(const SpellModifier& mod, bool apply);
 
+		void NotifyVisibilityChanged();
+
 		/// Gets the total amount of spell mods for one type and one spell.
 		/// @param type The spell modifier type.
 		/// @param op The spell modifier operation.

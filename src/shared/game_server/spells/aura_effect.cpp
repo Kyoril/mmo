@@ -103,6 +103,10 @@ namespace mmo
 			HandleModFear(apply);
 			break;
 
+		case AuraType::ModVisibility:
+			HandleModVisibility(apply);
+			break;
+
 		case AuraType::PeriodicTriggerSpell:
 		case AuraType::PeriodicHeal:
 		case AuraType::PeriodicEnergize:
@@ -344,6 +348,18 @@ namespace mmo
 				if (const auto owner = weakOwner.lock())
 				{
 					owner->NotifySleepChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModVisibility(bool apply) const
+	{
+		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
+		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifyVisibilityChanged();
 				}
 			});
 	}
