@@ -606,6 +606,7 @@ namespace mmo
 		characterObject->Set<uint32>(object_fields::Mana, Clamp(characterData.mana, 0u, characterObject->Get<uint32>(object_fields::MaxMana)));
 		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
+		characterObject->SetIsGameMaster(characterData.isGameMaster);
 
 		characterObject->ClearFieldChanges();
 

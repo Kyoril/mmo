@@ -318,7 +318,15 @@ namespace mmo
 
 		if (newVictim && newVictim != victim)
 		{
-			controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
+			if (!newVictim->CanBeSeenBy(controlled))
+			{
+				controlled.StopAttack();
+				controlled.SetTarget(0);
+			}
+			else
+			{
+				controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
+			}
 		}
 		else if (!newVictim)
 		{

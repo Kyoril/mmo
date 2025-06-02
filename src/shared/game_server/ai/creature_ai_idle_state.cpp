@@ -46,6 +46,12 @@ namespace mmo
 				{
 					return true;
 				}
+			
+				// Should we even be allowed to see this unit based on its current visibility state?
+				if (!unit.CanBeSeenBy(controlled))
+				{
+					return true;
+				}
 
 				const float dist = sqrtf(controlled.GetSquaredDistanceTo(unit.GetPosition(), true));
 

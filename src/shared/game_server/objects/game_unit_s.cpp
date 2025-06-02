@@ -332,6 +332,18 @@ namespace mmo
 		GameObjectS::ApplyMovementInfo(info);
 	}
 
+	bool GameUnitS::CanBeSeenBy(const GameUnitS& other) const
+	{
+		switch (m_visibility)
+		{
+		case unit_visibility::On:
+			return true;
+		// TODO: Handle other values here except the default
+		default:
+			return other.IsGameMaster();
+		}
+	}
+
 	PowerType GameUnitS::GetPowerTypeByUnitMod(UnitMods mod)
 	{
 		switch (mod)
@@ -1485,10 +1497,15 @@ namespace mmo
 			return;
 		}
 
+		if (!victim->CanBeSeenBy(*this))
+		{
+			return;
+		}
+
 		SetTarget(victim ? victim->GetGuid() : 0);
 		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
 		{
-			// Unit is not an enemy, so we wont attack
+			// Unit is not an enemy, so we won't attack
 			StopAttack();
 			return;
 		}

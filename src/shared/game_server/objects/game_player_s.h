@@ -187,6 +187,10 @@ namespace mmo
 
 		std::shared_ptr<GameObjectS> GetLootObject() const { return m_lootObject.lock(); }
 
+		bool IsGameMaster() const override;
+
+		void SetIsGameMaster(bool isGameMaster);
+
 	protected:
 		void UpdateStat(int32 stat);
 
@@ -222,6 +226,7 @@ namespace mmo
 		uint64 m_groupId = 0;
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;
+		bool m_isGameMaster = false;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);

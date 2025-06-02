@@ -84,6 +84,7 @@ namespace mmo
 		AvatarConfiguration configuration;
 
 		uint64 guildId = 0;
+		bool isGameMaster = false;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -117,7 +118,8 @@ namespace mmo
 			>> io::read_container<uint16>(data.rewardedQuestIds)
 			>> io::read<uint64>(data.groupId)
 			>> io::read<uint64>(data.guildId)
-			>> data.configuration))
+			>> data.configuration
+			>> io::read<uint8>(data.isGameMaster)))
 		{
 			return reader;
 		}
@@ -174,7 +176,8 @@ namespace mmo
 			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds)
 			<< io::write<uint64>(data.groupId)
 			<< io::write<uint64>(data.guildId)
-			<< data.configuration;
+			<< data.configuration
+			<< io::write<uint8>(data.isGameMaster);
 
 		writer << io::write<uint16>(data.questStatus.size());
 		for (auto const& [questId, questData] : data.questStatus)

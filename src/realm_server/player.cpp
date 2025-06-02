@@ -1556,6 +1556,7 @@ namespace mmo
 		m_characterData->bindPosition = character.GetBindPosition();
 		m_characterData->bindFacing = character.GetBindFacing();
 		m_characterData->items = character.GetInventory().GetItemData();
+		m_characterData->isGameMaster = (m_gmLevel > 0);
 	}
 
 	void Player::SendAuthChallenge()
@@ -1972,6 +1973,7 @@ namespace mmo
 		}
 
 		m_characterData = characterData;
+		m_characterData->isGameMaster = (m_gmLevel > 0);
 
 		if (m_characterData->groupId != 0)
 		{

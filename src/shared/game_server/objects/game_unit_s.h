@@ -569,6 +569,12 @@ namespace mmo
 		/// @param info The movement information to apply.
 		virtual void ApplyMovementInfo(const MovementInfo& info) override;
 
+		/// Determines if this unit is a game master.
+		/// @returns true if the unit is a game master, false otherwise.
+		virtual bool IsGameMaster() const { return false;}
+
+		bool CanBeSeenBy(const GameUnitS& other) const;
+
 	public:
 		/// Gets the power type associated with a unit modifier.
 		/// @param mod The unit modifier.

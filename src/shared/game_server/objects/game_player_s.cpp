@@ -1436,6 +1436,18 @@ namespace mmo
 		return unknown;
 	}
 
+	bool GamePlayerS::IsGameMaster() const
+	{
+		// TODO: Implement a proper check for game master status
+
+		return false;
+	}
+
+	void GamePlayerS::SetIsGameMaster(bool isGameMaster)
+	{
+		m_isGameMaster = isGameMaster;
+	}
+
 	void GamePlayerS::UpdateStat(const int32 stat)
 	{
 		// Validate stat
