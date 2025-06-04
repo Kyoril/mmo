@@ -1,0 +1,14 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message TalentEntry {
+	required uint32 id = 1;
+	required uint32 tab = 2;
+	required uint32 row = 3;
+	required uint32 column = 4;
+	repeated uint32 ranks = 5;	// Spell-IDs
+}
+
+message Talents {
+	repeated TalentEntry entry = 1;
+}

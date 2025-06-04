@@ -10,10 +10,12 @@
 #include "log/default_log_levels.h"
 
 namespace mmo
-{
-    TalentEditorWindow::TalentEditorWindow(const String& name, proto::Project& project, EditorHost& host)
+{    TalentEditorWindow::TalentEditorWindow(const String& name, proto::Project& project, EditorHost& host)
         : EditorEntryWindowBase(project, project.talentTabs, name)
         , m_host(host)
+        , m_isDragging(false)
+        , m_draggedTalentId(0)
+        , m_dragStartPos(0, 0)
     {
         // Register the window with the editor host
         m_hasToolbarButton = false;
@@ -26,134 +28,106 @@ namespace mmo
         // Generate a new unique ID for the entry - m_manager will auto-assign the next available ID
         entry.set_name("New Talent Tab");
         entry.set_class_id(0); // Default to first class
-    }    void TalentEditorWindow::DrawDetailsImpl(proto::TalentTabEntry& currentEntry)
+    }
+
+	void TalentEditorWindow::DrawDetailsImpl(proto::TalentTabEntry& currentEntry)
     {
-        // Create a side-by-side layout with talent tree on the left and details on the right
-        ImGui::Columns(2, "TalentEditorColumns", true);
-        
-        // Set column widths: 60% for tree, 40% for details
-        static bool columnWidthSet = false;
-        if (!columnWidthSet) {
-            ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() * 0.6f);
-            columnWidthSet = true;
-        }
-        
-        // Left column - Talent Tree Grid
+        // Basic tab properties
+        if (ImGui::CollapsingHeader("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            // Basic tab properties
-            if (ImGui::CollapsingHeader("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("ID:"); ImGui::SameLine();
+            ImGui::Text("%u", currentEntry.id());
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Name:"); ImGui::SameLine();
+            std::string name = currentEntry.name();
+            if (ImGui::InputText("##Name", &name))
             {
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("ID:"); ImGui::SameLine();
-                ImGui::Text("%u", currentEntry.id());
-                
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("Name:"); ImGui::SameLine();
-                std::string name = currentEntry.name();
-                if (ImGui::InputText("##Name", &name))
-                {
-                    currentEntry.set_name(name);
-                }
-                
-                // Class dropdown
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("Class:"); ImGui::SameLine();
-                
-                int classId = static_cast<int>(currentEntry.class_id());
-                if (ImGui::BeginCombo("##Class", m_project.classes.getById(currentEntry.class_id())->name().c_str()))
-                {
-                    for (int i = 0; i < m_project.classes.count(); ++i)
-                    {
-                        const auto& classEntry = m_project.classes.getTemplates().entry(i);
-                        const bool isSelected = (classId == classEntry.id());
-                        if (ImGui::Selectable(classEntry.name().c_str(), isSelected))
-                        {
-                            classId = classEntry.id();
-                            currentEntry.set_class_id(classId);
-                        }
-                        
-                        if (isSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                
-                // Icon selection
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("Icon:"); ImGui::SameLine();
-                std::string icon = currentEntry.has_icon() ? currentEntry.icon() : "";
-                if (ImGui::InputText("##Icon", &icon))
-                {
-                    if (icon.empty())
-                    {
-                        if (currentEntry.has_icon())
-                            currentEntry.clear_icon();
-                    }
-                    else
-                    {
-                        currentEntry.set_icon(icon);
-                    }
-                }
-                
-                // Background image selection
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("Background:"); ImGui::SameLine();
-                std::string background = currentEntry.has_background() ? currentEntry.background() : "";
-                if (ImGui::InputText("##Background", &background))
-                {
-                    if (background.empty())
-                    {
-                        if (currentEntry.has_background())
-                            currentEntry.clear_background();
-                    }
-                    else
-                    {
-                        currentEntry.set_background(background);
-                    }
-                }
+                currentEntry.set_name(name);
             }
-            
-            ImGui::Separator();
-            
-            // Talent Tree Grid
-            if (ImGui::CollapsingHeader("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
+
+            // Class dropdown
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Class:"); ImGui::SameLine();
+
+            int classId = static_cast<int>(currentEntry.class_id());
+            if (ImGui::BeginCombo("##Class", m_project.classes.getById(currentEntry.class_id())->name().c_str()))
+            {
+                for (int i = 0; i < m_project.classes.count(); ++i)
+                {
+                    const auto& classEntry = m_project.classes.getTemplates().entry(i);
+                    const bool isSelected = (classId == classEntry.id());
+                    if (ImGui::Selectable(classEntry.name().c_str(), isSelected))
+                    {
+                        classId = classEntry.id();
+                        currentEntry.set_class_id(classId);
+                    }
+
+                    if (isSelected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+        }
+
+        ImGui::Separator();
+
+        // Talent Tree Grid
+        if (ImGui::CollapsingHeader("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // Create a side-by-side layout with talent tree on the left and details on the right
+            ImGui::Columns(2, "TalentEditorColumns", true);
+
+            // Set column widths: 60% for tree, 40% for details
+            static bool columnWidthSet = false;
+            if (!columnWidthSet) {
+                ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() * 0.6f);
+                columnWidthSet = true;
+            }
+
+            // Left column - Talent Tree Grid
             {
                 DrawTalentTreeGrid(currentEntry);
             }
-        }
-        
-        // Right column - Talent Details (if selected)
-        ImGui::NextColumn();
-        
-        if (m_selectedTalentId >= 0)
-        {
-            auto* talent = m_project.talents.getById(m_selectedTalentId);
-            if (talent != nullptr)
+
+            // Right column - Talent Details (if selected)
+            ImGui::NextColumn();
+
+            if (m_selectedTalentId >= 0)
             {
-                ImGui::Text("Selected Talent (ID: %u)", talent->id());
-                ImGui::Separator();
-                
-                DrawTalentNodeEditor(*talent);
+                auto* talent = m_project.talents.getById(m_selectedTalentId);
+                if (talent != nullptr)
+                {
+                    ImGui::Text("Selected Talent (ID: %u)", talent->id());
+                    ImGui::Separator();
+
+                    DrawTalentNodeEditor(*talent);
+                }
+                else
+                {
+                    m_selectedTalentId = -1;
+                    ImGui::Text("No talent selected");
+                }
             }
             else
             {
-                m_selectedTalentId = -1;
                 ImGui::Text("No talent selected");
             }
+
+            ImGui::Columns(1);
         }
-        else
-        {
-            ImGui::Text("No talent selected");
-        }
-        
-        ImGui::Columns(1);
     }
 
-    void TalentEditorWindow::DrawTalentTreeGrid(const proto::TalentTabEntry& currentTab)
+	void TalentEditorWindow::DrawTalentTreeGrid(const proto::TalentTabEntry& currentTab)
     {
         const float nodeSize = 64.0f; // Size of each talent node
         const float nodeSpacingX = 32.0f; // Horizontal spacing between nodes
         const float nodeSpacingY = 48.0f; // Vertical spacing between tiers
+        
+        // Variables to track potential drop target position when dragging
+        int hoverRow = -1;
+        int hoverCol = -1;
         
         // Background for the talent grid
         ImVec2 gridSize((nodeSize + nodeSpacingX) * MAX_GRID_WIDTH + nodeSpacingX,
@@ -249,7 +223,8 @@ namespace mmo
                             if (m_iconCache.contains(iconPath)) {
                                 TexturePtr texture = m_iconCache[iconPath];
                                 if (texture) {
-                                    ImGui::SetCursorScreenPos(ImVec2(x, y));                                    ImGui::Image(
+                                    ImGui::SetCursorScreenPos(ImVec2(x, y));
+                                    ImGui::Image(
                                         texture->GetTextureObject(),
                                         ImVec2(nodeSize, nodeSize)
                                     );
@@ -266,8 +241,7 @@ namespace mmo
                             rankText.c_str()
                         );
                     }
-                    
-                    // Handle node selection
+                      // Handle node selection and drag & drop
                     ImGui::SetCursorScreenPos(ImVec2(x, y));
                     ImGui::InvisibleButton(
                         ("talent_" + std::to_string(talent.id())).c_str(),
@@ -276,6 +250,41 @@ namespace mmo
                     
                     if (ImGui::IsItemClicked()) {
                         m_selectedTalentId = talent.id();
+                    }
+                    
+                    // Begin drag operation
+                    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !m_isDragging) {
+                        m_isDragging = true;
+                        m_draggedTalentId = talent.id();
+                        m_dragStartPos = ImGui::GetMousePos();
+                    }
+                    
+                    // Store information about the dragged talent for later rendering
+                    if (m_isDragging && m_draggedTalentId == talent.id()) {
+                        ImVec2 mousePos = ImGui::GetMousePos();
+                        
+                        // Calculate hover row and column for highlighting drop target
+                        hoverRow = -1;
+                        hoverCol = -1;
+                        
+                        // Find which grid cell the mouse is currently over
+                        for (uint32_t r = 0; r < MAX_GRID_HEIGHT; ++r) {
+                            for (uint32_t c = 0; c < MAX_GRID_WIDTH; ++c) {
+                                float cellX = canvasPos.x + (nodeSize + nodeSpacingX) * c + nodeSpacingX;
+                                float cellY = canvasPos.y + (nodeSize + nodeSpacingY) * r + nodeSpacingY;
+                                
+                                if (mousePos.x >= cellX && mousePos.x < cellX + nodeSize &&
+                                    mousePos.y >= cellY && mousePos.y < cellY + nodeSize) {
+                                    hoverRow = r;
+                                    hoverCol = c;
+                                    break;
+                                }
+                            }
+                            if (hoverRow != -1) break;
+                        }
+                        
+                        // We'll draw the dragged talent at the end to ensure it's on top
+                        // Just keep track of the dragged talent info for now
                     }
                 }
             }
@@ -311,9 +320,120 @@ namespace mmo
                 }
             }
         }
-          // End the grid child window - talent details are now displayed in the right column
+
+		// Handle dropping talents and ending drag operations
+        if (m_isDragging && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            ImVec2 mousePos = ImGui::GetMousePos();
+            bool dropped = false;
+
+            // Calculate which grid cell the mouse is over
+            int targetRow = -1;
+            int targetCol = -1;
+            
+            // Calculate the grid cell based on mouse position
+            for (uint32_t row = 0; row < MAX_GRID_HEIGHT; ++row) {
+                for (uint32_t col = 0; col < MAX_GRID_WIDTH; ++col) {
+                    float cellX = canvasPos.x + (nodeSize + nodeSpacingX) * col + nodeSpacingX;
+                    float cellY = canvasPos.y + (nodeSize + nodeSpacingY) * row + nodeSpacingY;
+                    
+                    if (mousePos.x >= cellX && mousePos.x < cellX + nodeSize &&
+                        mousePos.y >= cellY && mousePos.y < cellY + nodeSize) {
+                        targetRow = row;
+                        targetCol = col;
+                        break;
+                    }
+                }
+                if (targetRow != -1) break; // Found the cell, exit outer loop
+            }
+
+            if (targetRow != -1 && targetCol != -1) {
+                // Check if the dragged talent is valid
+                auto* draggedTalent = m_project.talents.getById(m_draggedTalentId);
+                
+                if (draggedTalent) {
+                    // Only handle if the talent belongs to the current tab
+                    if (draggedTalent->tab() == tabId) {
+                        // Check if there's already a talent at the target position
+                        proto::TalentEntry* targetTalent = nullptr;
+                        
+                        for (int i = 0; i < m_project.talents.count(); ++i) {
+                            auto& talent = *m_project.talents.getTemplates().mutable_entry(i);
+                            
+                            if (talent.tab() == tabId && 
+                                talent.row() == targetRow && 
+                                talent.column() == targetCol &&
+                                talent.id() != m_draggedTalentId) {
+                                targetTalent = &talent;
+                                break;
+                            }
+                        }
+                        
+                        uint32_t originalRow = draggedTalent->row();
+                        uint32_t originalColumn = draggedTalent->column();
+                        
+                        if (targetTalent) {
+                            // Swap positions with the target talent
+                            targetTalent->set_row(originalRow);
+                            targetTalent->set_column(originalColumn);
+                            
+                            draggedTalent->set_row(targetRow);
+                            draggedTalent->set_column(targetCol);
+                            
+                            dropped = true;
+                        } else {
+                            // No talent at target position, just move the dragged talent
+                            draggedTalent->set_row(targetRow);
+                            draggedTalent->set_column(targetCol);
+                            dropped = true;
+                        }
+                    }
+                }
+            }
+
+        	// Reset drag state
+            m_isDragging = false;
+            m_draggedTalentId = 0;
+        }
+        
+        // Draw drop target highlight if we're dragging and hovering over a valid cell
+        if (m_isDragging && hoverRow != -1 && hoverCol != -1) {
+            float x = canvasPos.x + (nodeSize + nodeSpacingX) * hoverCol + nodeSpacingX;
+            float y = canvasPos.y + (nodeSize + nodeSpacingY) * hoverRow + nodeSpacingY;
+            
+            // Use a glowing effect for the drop target
+            ImU32 highlightColor = IM_COL32(180, 220, 255, 100); // Light blue semi-transparent
+            ImU32 highlightBorderColor = IM_COL32(100, 200, 255, 200); // Brighter blue for border
+            
+            // Fill with subtle highlight
+            drawList->AddRectFilled(
+                ImVec2(x - 2, y - 2),
+                ImVec2(x + nodeSize + 2, y + nodeSize + 2),
+                highlightColor,
+                6.0f
+            );
+            
+            // Draw a pulsing border (thicker)
+            static float pulsingValue = 0.0f;
+            pulsingValue += ImGui::GetIO().DeltaTime * 3.0f;  // Adjust speed as needed
+            
+            float pulseAlpha = 0.5f + 0.5f * sinf(pulsingValue); // Oscillate between 0.5 and 1.0
+            ImU32 pulsingBorderColor = ImColor(0.4f, 0.8f, 1.0f, pulseAlpha);
+            
+            drawList->AddRect(
+                ImVec2(x - 3, y - 3),
+                ImVec2(x + nodeSize + 3, y + nodeSize + 3),
+                pulsingBorderColor,
+                6.0f,
+                0,
+                3.0f  // Thicker border
+            );
+        }
+          
+        // End the grid child window - talent details are now displayed in the right column
         ImGui::EndChild();
-    }    void TalentEditorWindow::DrawTalentNodeEditor(proto::TalentEntry& talent)
+    }
+
+	void TalentEditorWindow::DrawTalentNodeEditor(proto::TalentEntry& talent)
     {
         ImGui::BeginChild("TalentNodeEditor", ImVec2(0, 0), true);
         
@@ -477,7 +597,9 @@ namespace mmo
         }
         
         ImGui::EndChild();
-    }void TalentEditorWindow::CreateNewTalent(uint32_t tabId, uint32_t row, uint32_t column)
+    }
+
+	void TalentEditorWindow::CreateNewTalent(uint32_t tabId, uint32_t row, uint32_t column)
     {
         auto* newTalent = m_project.talents.add();
         

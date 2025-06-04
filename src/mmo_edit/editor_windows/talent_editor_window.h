@@ -50,8 +50,13 @@ namespace mmo
         // Currently selected talent (if any)
         int32_t m_selectedTalentId = -1;
         
-        // Maximum dimensions of the talent grid
+    // Maximum dimensions of the talent grid
         static constexpr uint32_t MAX_GRID_WIDTH = 4;
         static constexpr uint32_t MAX_GRID_HEIGHT = 7; // Reasonable maximum for talent tiers
+        
+        // Drag and drop support
+        bool m_isDragging = false;
+        uint32_t m_draggedTalentId = 0;
+        ImVec2 m_dragStartPos;
     };
 }

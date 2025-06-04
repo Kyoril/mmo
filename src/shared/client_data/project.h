@@ -21,6 +21,8 @@
 #include "shared/client_data/proto_client/item_display.pb.h"
 #include "shared/client_data/proto_client/object_display.pb.h"
 #include "shared/client_data/proto_client/animations.pb.h"
+#include "shared/client_data/proto_client/talents.pb.h"
+#include "shared/client_data/proto_client/talent_tabs.pb.h"
 
 namespace mmo
 {
@@ -39,6 +41,8 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::ItemDisplayData, mmo::proto_client::ItemDisplayEntry> ItemDisplayManager;
 		typedef TemplateManager<mmo::proto_client::ObjectDisplayData, mmo::proto_client::ObjectDisplayEntry> ObjectDisplayManager;
 		typedef TemplateManager<mmo::proto_client::Animations, mmo::proto_client::AnimationEntry> AnimationManager;
+		typedef TemplateManager<mmo::proto_client::Talents, mmo::proto_client::TalentEntry> TalentManager;
+		typedef TemplateManager<mmo::proto_client::TalentTabs, mmo::proto_client::TalentTabEntry> TalentTabManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -67,6 +71,8 @@ namespace mmo
 			ItemDisplayManager itemDisplays;
 			ObjectDisplayManager objectDisplays;
 			AnimationManager animations;
+			TalentManager talents;
+			TalentTabManager talentTabs;
 
 		private:
 
@@ -123,6 +129,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_displays", itemDisplays));
 				managers.push_back(ManagerEntry("object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("animations", animations));
+				managers.push_back(ManagerEntry("talents", talents));
+				managers.push_back(ManagerEntry("talent_tabs", talentTabs));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -165,6 +173,8 @@ namespace mmo
 				managers.emplace_back("item_displays", "item_displays", itemDisplays);
 				managers.emplace_back("object_displays", "object_displays", objectDisplays);
 				managers.emplace_back("animations", "animations", animations);
+				managers.emplace_back("talents", "talents", talents);
+				managers.emplace_back("talent_tabs", "talent_tabs", talentTabs);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

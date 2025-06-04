@@ -114,7 +114,8 @@ namespace mmo
 			ItemLootManager itemLoot;
 			SkinningLootManager skinningLoot;
 			SpellManager spells;
-			SkillManager skills;			TrainerManager trainers;
+			SkillManager skills;
+			TrainerManager trainers;
 			VendorManager vendors;
 			TalentManager talents;
 			TalentTabManager talentTabs;

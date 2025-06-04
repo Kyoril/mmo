@@ -210,12 +210,7 @@ namespace mmo
 			ImGui::NextColumn();
 
 			// Second column - Details view
-			{
-				// Add title to match the height of the buttons in the first column
-				ImGui::Text("Details");
-				ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Selected Item").x);
-				ImGui::Text("Selected Item");
-				
+			{				
 				T2* currentEntry = nullptr;
 				if (currentItem != -1 && currentItem < m_manager.count())
 				{
