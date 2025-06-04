@@ -20,6 +20,7 @@
 #include "shared/proto_data/objects.pb.h"
 #include "shared/proto_data/skills.pb.h"
 #include "shared/proto_data/talents.pb.h"
+#include "shared/proto_data/talent_tabs.pb.h"
 #include "shared/proto_data/vendors.pb.h"
 #include "shared/proto_data/trainers.pb.h"
 #include "shared/proto_data/triggers.pb.h"
@@ -61,6 +62,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Trainers, mmo::proto::TrainerEntry> TrainerManager;
 		typedef TemplateManager<mmo::proto::Vendors, mmo::proto::VendorEntry> VendorManager;
 		typedef TemplateManager<mmo::proto::Talents, mmo::proto::TalentEntry> TalentManager;
+		typedef TemplateManager<mmo::proto::TalentTabs, mmo::proto::TalentTabEntry> TalentTabManager;
 		typedef TemplateManager<mmo::proto::Items, mmo::proto::ItemEntry> ItemManager;
 		typedef TemplateManager<mmo::proto::ItemSets, mmo::proto::ItemSetEntry> ItemSetManager;
 		typedef TemplateManager<mmo::proto::Classes, mmo::proto::ClassEntry> ClassManager;
@@ -112,10 +114,10 @@ namespace mmo
 			ItemLootManager itemLoot;
 			SkinningLootManager skinningLoot;
 			SpellManager spells;
-			SkillManager skills;
-			TrainerManager trainers;
+			SkillManager skills;			TrainerManager trainers;
 			VendorManager vendors;
 			TalentManager talents;
+			TalentTabManager talentTabs;
 			ItemManager items;
 			ItemSetManager itemSets;
 			ClassManager classes;
@@ -198,6 +200,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("trainers", trainers));
 				managers.push_back(ManagerEntry("vendors", vendors));
 				managers.push_back(ManagerEntry("talents", talents));
+				managers.push_back(ManagerEntry("talent_tabs", talentTabs));
 				managers.push_back(ManagerEntry("items", items));
 				managers.push_back(ManagerEntry("item_sets", itemSets));
 				managers.push_back(ManagerEntry("classes", classes));
@@ -269,6 +272,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("trainers", "trainers", trainers));
 				managers.push_back(ManagerEntry("vendors", "vendors", vendors));
 				managers.push_back(ManagerEntry("talents", "talents", talents));
+				managers.push_back(ManagerEntry("talent_tabs", "talent_tabs", talentTabs));
 				managers.push_back(ManagerEntry("items", "items", items));
 				managers.push_back(ManagerEntry("item_sets", "item_sets", itemSets));
 				managers.push_back(ManagerEntry("classes", "classes", classes));

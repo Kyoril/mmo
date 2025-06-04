@@ -1,0 +1,14 @@
+syntax = "proto2";
+package mmo.proto;
+
+message TalentTabEntry {
+    required uint32 id = 1;
+    required string name = 2;
+    required uint32 class_id = 3;  // Class this tab belongs to
+    optional string icon = 4;      // Path to the tab icon texture
+    optional string background = 5; // Path to the background image for this talent tree
+}
+
+message TalentTabs {
+    repeated TalentTabEntry entry = 1;
+}

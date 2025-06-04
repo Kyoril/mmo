@@ -41,6 +41,7 @@
 #include "editor_windows/variable_editor_window.h"
 #include "editor_windows/trigger_editor_window.h"
 #include "editor_windows/animation_editor_window.h"
+#include "editor_windows/talent_editor_window.h"
 #include "editor_windows/data_navigator_window.h"
 
 #include "import/texture_import.h"
@@ -150,6 +151,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TriggerEditorWindow>("Trigger Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::AnimationEditorWindow>("Animation Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::TalentEditorWindow>("Talent Editor", project, mainWindow));
 
 	auto dataNavigatorWindow = std::make_unique<mmo::DataNavigatorWindow>("Data Navigator", project, mainWindow);
 	
