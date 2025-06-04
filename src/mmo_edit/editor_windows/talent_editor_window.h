@@ -8,7 +8,10 @@
 
 #include "editor_host.h"
 #include "graphics/texture.h"
+#include "graphics/texture_mgr.h"
 #include "proto_data/project.h"
+
+#include <algorithm> // For std::transform
 
 namespace mmo
 {

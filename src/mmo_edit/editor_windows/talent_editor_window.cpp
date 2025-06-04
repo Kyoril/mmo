@@ -26,90 +26,127 @@ namespace mmo
         // Generate a new unique ID for the entry - m_manager will auto-assign the next available ID
         entry.set_name("New Talent Tab");
         entry.set_class_id(0); // Default to first class
-    }
-
-    void TalentEditorWindow::DrawDetailsImpl(proto::TalentTabEntry& currentEntry)
+    }    void TalentEditorWindow::DrawDetailsImpl(proto::TalentTabEntry& currentEntry)
     {
-        // Basic tab properties
-        if (ImGui::CollapsingHeader("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
+        // Create a side-by-side layout with talent tree on the left and details on the right
+        ImGui::Columns(2, "TalentEditorColumns", true);
+        
+        // Set column widths: 60% for tree, 40% for details
+        static bool columnWidthSet = false;
+        if (!columnWidthSet) {
+            ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() * 0.6f);
+            columnWidthSet = true;
+        }
+        
+        // Left column - Talent Tree Grid
         {
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("ID:"); ImGui::SameLine();
-            ImGui::Text("%u", currentEntry.id());
-            
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Name:"); ImGui::SameLine();
-            std::string name = currentEntry.name();
-            if (ImGui::InputText("##Name", &name))
+            // Basic tab properties
+            if (ImGui::CollapsingHeader("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                currentEntry.set_name(name);
-            }
-            
-            // Class dropdown
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Class:"); ImGui::SameLine();
-            
-            int classId = static_cast<int>(currentEntry.class_id());
-            if (ImGui::BeginCombo("##Class", m_project.classes.getById(currentEntry.class_id())->name().c_str()))
-            {
-                for (int i = 0; i < m_project.classes.count(); ++i)
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("ID:"); ImGui::SameLine();
+                ImGui::Text("%u", currentEntry.id());
+                
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Name:"); ImGui::SameLine();
+                std::string name = currentEntry.name();
+                if (ImGui::InputText("##Name", &name))
                 {
-                    const auto& classEntry = m_project.classes.getTemplates().entry(i);
-                    const bool isSelected = (classId == classEntry.id());
-                    if (ImGui::Selectable(classEntry.name().c_str(), isSelected))
+                    currentEntry.set_name(name);
+                }
+                
+                // Class dropdown
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Class:"); ImGui::SameLine();
+                
+                int classId = static_cast<int>(currentEntry.class_id());
+                if (ImGui::BeginCombo("##Class", m_project.classes.getById(currentEntry.class_id())->name().c_str()))
+                {
+                    for (int i = 0; i < m_project.classes.count(); ++i)
                     {
-                        classId = classEntry.id();
-                        currentEntry.set_class_id(classId);
+                        const auto& classEntry = m_project.classes.getTemplates().entry(i);
+                        const bool isSelected = (classId == classEntry.id());
+                        if (ImGui::Selectable(classEntry.name().c_str(), isSelected))
+                        {
+                            classId = classEntry.id();
+                            currentEntry.set_class_id(classId);
+                        }
+                        
+                        if (isSelected)
+                            ImGui::SetItemDefaultFocus();
                     }
-                    
-                    if (isSelected)
-                        ImGui::SetItemDefaultFocus();
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
+                
+                // Icon selection
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Icon:"); ImGui::SameLine();
+                std::string icon = currentEntry.has_icon() ? currentEntry.icon() : "";
+                if (ImGui::InputText("##Icon", &icon))
+                {
+                    if (icon.empty())
+                    {
+                        if (currentEntry.has_icon())
+                            currentEntry.clear_icon();
+                    }
+                    else
+                    {
+                        currentEntry.set_icon(icon);
+                    }
+                }
+                
+                // Background image selection
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Background:"); ImGui::SameLine();
+                std::string background = currentEntry.has_background() ? currentEntry.background() : "";
+                if (ImGui::InputText("##Background", &background))
+                {
+                    if (background.empty())
+                    {
+                        if (currentEntry.has_background())
+                            currentEntry.clear_background();
+                    }
+                    else
+                    {
+                        currentEntry.set_background(background);
+                    }
+                }
             }
             
-            // Icon selection
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Icon:"); ImGui::SameLine();
-            std::string icon = currentEntry.has_icon() ? currentEntry.icon() : "";
-            if (ImGui::InputText("##Icon", &icon))
-            {
-                if (icon.empty())
-                {
-                    if (currentEntry.has_icon())
-                        currentEntry.clear_icon();
-                }
-                else
-                {
-                    currentEntry.set_icon(icon);
-                }
-            }
+            ImGui::Separator();
             
-            // Background image selection
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Background:"); ImGui::SameLine();
-            std::string background = currentEntry.has_background() ? currentEntry.background() : "";
-            if (ImGui::InputText("##Background", &background))
+            // Talent Tree Grid
+            if (ImGui::CollapsingHeader("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                if (background.empty())
-                {
-                    if (currentEntry.has_background())
-                        currentEntry.clear_background();
-                }
-                else
-                {
-                    currentEntry.set_background(background);
-                }
+                DrawTalentTreeGrid(currentEntry);
             }
         }
         
-        ImGui::Separator();
+        // Right column - Talent Details (if selected)
+        ImGui::NextColumn();
         
-        // Talent Tree Grid
-        if (ImGui::CollapsingHeader("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
+        if (m_selectedTalentId >= 0)
         {
-            DrawTalentTreeGrid(currentEntry);
+            auto* talent = m_project.talents.getById(m_selectedTalentId);
+            if (talent != nullptr)
+            {
+                ImGui::Text("Selected Talent (ID: %u)", talent->id());
+                ImGui::Separator();
+                
+                DrawTalentNodeEditor(*talent);
+            }
+            else
+            {
+                m_selectedTalentId = -1;
+                ImGui::Text("No talent selected");
+            }
         }
+        else
+        {
+            ImGui::Text("No talent selected");
+        }
+        
+        ImGui::Columns(1);
     }
 
     void TalentEditorWindow::DrawTalentTreeGrid(const proto::TalentTabEntry& currentTab)
@@ -168,10 +205,9 @@ namespace mmo
                     
                     float x = canvasPos.x + (nodeSize + nodeSpacingX) * column + nodeSpacingX;
                     float y = canvasPos.y + (nodeSize + nodeSpacingY) * row + nodeSpacingY;
-                    
-                    bool isSelected = (m_selectedTalentId == talent.id());
+                      bool isSelected = (m_selectedTalentId == talent.id());
                     ImU32 nodeColor = isSelected ? IM_COL32(100, 150, 250, 255) : IM_COL32(70, 70, 70, 255);
-                    ImU32 borderColor = isSelected ? IM_COL32(200, 200, 255, 255) : IM_COL32(130, 130, 130, 255);
+                    ImU32 borderColor = isSelected ? IM_COL32(255, 215, 0, 255) : IM_COL32(130, 130, 130, 255); // Gold border for selected talent
                     
                     // Draw node background
                     drawList->AddRectFilled(
@@ -198,13 +234,15 @@ namespace mmo
                         
                         if (spellEntry && spellEntry->has_icon()) {
                             std::string iconPath = spellEntry->icon();
-                            
-                            // Try to get the icon texture from cache or load it                            if (m_iconCache.find(iconPath) == m_iconCache.end()) {
-                            try {
-                                m_iconCache[iconPath] = TextureManager::Get().CreateOrRetrieve(iconPath);
-                            }
-                            catch (...) {
-                                ELOG("Failed to load texture: " << iconPath);
+
+                        	// Try to get the icon texture from cache or load it
+                            if (m_iconCache.find(iconPath) == m_iconCache.end()) {
+                                try {
+                                    m_iconCache[iconPath] = TextureManager::Get().CreateOrRetrieve(iconPath);
+                                }
+                                catch (...) {
+                                    ELOG("Failed to load texture: " << iconPath);
+                                }
                             }
                             
                             // Draw the icon if available
@@ -273,31 +311,11 @@ namespace mmo
                 }
             }
         }
-        
-        // If a talent is selected, show its properties
-        if (m_selectedTalentId >= 0) {
-            auto* talent = m_project.talents.getById(m_selectedTalentId);
-            if (talent != nullptr) {
-                ImGui::EndChild();  // End the grid child window
-                
-                ImGui::Separator();
-                ImGui::Text("Selected Talent (ID: %u)", talent->id());
-                
-                DrawTalentNodeEditor(*talent);
-            }
-            else {
-                m_selectedTalentId = -1;
-                ImGui::EndChild();
-            }
-        }
-        else {
-            ImGui::EndChild();
-        }
-    }
-
-    void TalentEditorWindow::DrawTalentNodeEditor(proto::TalentEntry& talent)
+          // End the grid child window - talent details are now displayed in the right column
+        ImGui::EndChild();
+    }    void TalentEditorWindow::DrawTalentNodeEditor(proto::TalentEntry& talent)
     {
-        ImGui::BeginChild("TalentNodeEditor", ImVec2(0, 300), true);
+        ImGui::BeginChild("TalentNodeEditor", ImVec2(0, 0), true);
         
         // Basic properties
         ImGui::Text("Position: Row %u, Column %u", talent.row(), talent.column());
@@ -305,27 +323,134 @@ namespace mmo
         // Spell ranks editor
         ImGui::Text("Spell Ranks:");
         
+        static char spellSearchBuffer[128] = "";
+        static bool showSpellSelector = false;
+        static int currentRankEditing = -1;
+        
         // List all current ranks
         for (int i = 0; i < talent.ranks_size(); ++i) {
             uint32_t spellId = talent.ranks(i);
             ImGui::PushID(i);
             
             auto spellEntry = m_project.spells.getById(spellId);
-            std::string spellName = spellEntry ? spellEntry->name() : "Unknown Spell";
+            std::string spellName;
+            std::string rankText;
             
-            ImGui::Text("Rank %d: [%u] %s", i+1, spellId, spellName.c_str());
+            if (spellEntry) {
+                spellName = spellEntry->name();
+                if (spellEntry->has_rank())
+                    rankText = " (Rank " + std::to_string(spellEntry->rank()) + ")";
+            }
+            else {
+                spellName = "Unknown Spell";
+                rankText = "";
+            }
             
+            // Prepare the label for the combo box
+            std::string comboLabel = "[" + std::to_string(spellId) + "] " + spellName + rankText;
+            
+            ImGui::Text("Rank %d:", i+1);
             ImGui::SameLine();
-            if (ImGui::Button("Change")) {
-                // Open a spell selection modal
-                // For now, we'll just allow directly editing the spell ID
-                uint32_t newSpellId = spellId;
-                if (ImGui::InputScalar("Spell ID", ImGuiDataType_U32, &newSpellId)) {
-                    talent.set_ranks(i, newSpellId);
+            
+            // Create a combo box for spell selection
+            if (ImGui::BeginCombo(("##SpellSelect" + std::to_string(i)).c_str(), comboLabel.c_str()))
+            {
+                // First display the search box
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputTextWithHint("##SpellSearch", "Search spells...", spellSearchBuffer, IM_ARRAYSIZE(spellSearchBuffer));
+                
+                std::string searchText = spellSearchBuffer;
+                std::transform(searchText.begin(), searchText.end(), searchText.begin(),
+                    [](unsigned char c) { return std::tolower(c); });
+                
+                // Add a dummy item for clearing the selection
+                if (ImGui::Selectable("Clear Selection", false))
+                {
+                    talent.set_ranks(i, 0);
                 }
+                
+                // Display filtered spell list
+                int matchCount = 0;
+                const int MAX_DISPLAYED_ITEMS = 200; // Limit displayed items for performance
+                
+                for (int spellIdx = 0; spellIdx < m_project.spells.count(); ++spellIdx)
+                {
+                    const auto& spell = m_project.spells.getTemplates().entry(spellIdx);
+                    
+                    // Skip if doesn't match search
+                    if (!searchText.empty())
+                    {
+                        std::string spellLower = spell.name();
+                        std::transform(spellLower.begin(), spellLower.end(), spellLower.begin(),
+                            [](unsigned char c) { return std::tolower(c); });
+                        
+                        // Check if spell name or ID contains search text
+                        std::string idStr = std::to_string(spell.id());
+                        if (spellLower.find(searchText) == std::string::npos &&
+                            idStr.find(searchText) == std::string::npos)
+                        {
+                            continue;
+                        }
+                    }
+                    
+                    // Format the spell display with ID, name and rank
+                    std::string spellDisplayName = "[" + std::to_string(spell.id()) + "] " + spell.name();
+                    if (spell.has_rank())
+                        spellDisplayName += " (Rank " + std::to_string(spell.rank()) + ")";
+                    
+                    // Try to get spell icon
+                    bool hasIcon = false;
+                    if (spell.has_icon()) {
+                        std::string iconPath = spell.icon();
+
+                    	if (m_iconCache.find(iconPath) == m_iconCache.end()) {
+                            try {
+                                m_iconCache[iconPath] = TextureManager::Get().CreateOrRetrieve(iconPath);
+                            }
+                            catch (...) {
+                                // Icon loading failed, continue without icon
+                            }
+                        }
+                        
+                        // Display icon if available
+                        if (m_iconCache.contains(iconPath) && m_iconCache[iconPath]) {
+                            ImGui::Image(m_iconCache[iconPath]->GetTextureObject(), ImVec2(20, 20));
+                            ImGui::SameLine();
+                            hasIcon = true;
+                        }
+                    }
+                    
+                    if (!hasIcon) {
+                        // Add a placeholder space for better alignment when some spells have icons
+                        ImGui::Dummy(ImVec2(20, 20));
+                        ImGui::SameLine();
+                    }
+                    
+                    // Display the selectable with the spell information
+                    bool isSelected = (spell.id() == spellId);
+                    if (ImGui::Selectable(spellDisplayName.c_str(), isSelected)) {
+                        talent.set_ranks(i, spell.id());
+                    }
+                    
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                    
+                    // Limit the number of displayed spells for performance
+                    matchCount++;
+                    if (matchCount >= MAX_DISPLAYED_ITEMS) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+                            "Too many matches, showing first %d. Please refine your search.", 
+                            MAX_DISPLAYED_ITEMS);
+                        break;
+                    }
+                }
+                
+                ImGui::EndCombo();
             }
             
             ImGui::SameLine();
+
             if (ImGui::Button("Remove")) {
                 // Remove this rank
                 for (int j = i; j < talent.ranks_size() - 1; ++j) {
@@ -340,7 +465,7 @@ namespace mmo
         
         // Add new rank button
         if (ImGui::Button("Add New Rank")) {
-            talent.add_ranks(0); // Add a default spell ID, user will need to select the appropriate one
+            talent.add_ranks(0); // Add a default spell ID
         }
         
         ImGui::Separator();
@@ -352,7 +477,7 @@ namespace mmo
         }
         
         ImGui::EndChild();
-    }    void TalentEditorWindow::CreateNewTalent(uint32_t tabId, uint32_t row, uint32_t column)
+    }void TalentEditorWindow::CreateNewTalent(uint32_t tabId, uint32_t row, uint32_t column)
     {
         auto* newTalent = m_project.talents.add();
         
