@@ -394,8 +394,7 @@ namespace mmo
             m_isDragging = false;
             m_draggedTalentId = 0;
         }
-        
-        // Draw drop target highlight if we're dragging and hovering over a valid cell
+          // Draw drop target highlight if we're dragging and hovering over a valid cell
         if (m_isDragging && hoverRow != -1 && hoverCol != -1) {
             float x = canvasPos.x + (nodeSize + nodeSpacingX) * hoverCol + nodeSpacingX;
             float y = canvasPos.y + (nodeSize + nodeSpacingY) * hoverRow + nodeSpacingY;
@@ -427,6 +426,72 @@ namespace mmo
                 0,
                 3.0f  // Thicker border
             );
+        }
+        
+        // Draw the talent being dragged at the mouse cursor position
+        if (m_isDragging && m_draggedTalentId != 0) {
+            auto* draggedTalent = m_project.talents.getById(m_draggedTalentId);
+            if (draggedTalent) {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float x = mousePos.x - (nodeSize / 2.0f);
+                float y = mousePos.y - (nodeSize / 2.0f);
+                
+                // Draw node background with semi-transparency
+                ImU32 dragNodeColor = IM_COL32(100, 150, 250, 200);
+                ImU32 dragBorderColor = IM_COL32(255, 255, 255, 200);
+                
+                // Draw node background
+                drawList->AddRectFilled(
+                    ImVec2(x, y),
+                    ImVec2(x + nodeSize, y + nodeSize),
+                    dragNodeColor,
+                    4.0f
+                );
+                
+                // Draw node border
+                drawList->AddRect(
+                    ImVec2(x, y),
+                    ImVec2(x + nodeSize, y + nodeSize),
+                    dragBorderColor,
+                    4.0f,
+                    0,
+                    2.0f
+                );
+                
+                // If the talent has spell ranks, try to draw the icon
+                if (draggedTalent->ranks_size() > 0) {
+                    uint32_t spellId = draggedTalent->ranks(0);
+                    auto spellEntry = m_project.spells.getById(spellId);
+                    
+                    if (spellEntry && spellEntry->has_icon()) {
+                        std::string iconPath = spellEntry->icon();
+                        
+                        // Draw the icon if available
+                        if (m_iconCache.contains(iconPath)) {
+                            TexturePtr texture = m_iconCache[iconPath];
+                            if (texture) {
+                                ImGui::SetCursorScreenPos(ImVec2(x, y));
+                                ImGui::Image(
+                                    texture->GetTextureObject(),
+                                    ImVec2(nodeSize, nodeSize),
+                                    ImVec2(0, 0),
+                                    ImVec2(1, 1),
+                                    ImVec4(1, 1, 1, 0.8f)  // Semi-transparent
+                                );
+                            }
+                        }
+                    }
+                    
+                    // Draw max ranks
+                    std::string rankText = std::to_string(draggedTalent->ranks_size());
+                    ImVec2 textSize = ImGui::CalcTextSize(rankText.c_str());
+                    drawList->AddText(
+                        ImVec2(x + nodeSize - textSize.x - 4, y + nodeSize - textSize.y - 2),
+                        IM_COL32(255, 255, 255, 255),
+                        rankText.c_str()
+                    );
+                }
+            }
         }
           
         // End the grid child window - talent details are now displayed in the right column
