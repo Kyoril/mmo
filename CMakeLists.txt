@@ -36,6 +36,13 @@ if(NOT protobuf_POPULATED)
   set_property(TARGET protoc PROPERTY FOLDER "deps")
 endif()
 
+# Add the JSON library (header-only)
+# Only build the library, not the tests or examples
+set(JSON_BuildTests OFF CACHE BOOL "Build the JSON tests" FORCE)
+set(JSON_MultipleHeaders OFF CACHE BOOL "Use non-amalgamated version of the library" FORCE)
+add_subdirectory(deps/json)
+include_directories(deps/json/include)
+
 set(Protobuf_INCLUDE_DIR ${protobuf_SOURCE_DIR}/src)
 
 # Include output directory which will contain auto generated header files

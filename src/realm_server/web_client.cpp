@@ -11,13 +11,19 @@
 #include "player.h"
 #include "log/default_log_levels.h"
 
+#include "nlohmann/json.hpp"
+
+// Add a namespace alias for convenience
+using json = nlohmann::json;
+
 namespace mmo
 {
 	namespace
 	{
-		void SendJsonResponse(web::WebResponse &response, const String &json)
+		void SendJsonResponse(web::WebResponse& response, const json& jsonObject)
 		{
-			response.finishWithContent("application/json", json.data(), json.size());
+			const std::string jsonStr = jsonObject.dump();
+			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
 		}
 	}
 
@@ -51,9 +57,9 @@ namespace mmo
 				{
 					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
 
-					std::ostringstream message;
-					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
-					SendJsonResponse(response, message.str());
+					json jsonResponse;
+					jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
+					SendJsonResponse(response, jsonResponse);
 				}
 				else if (url == "/motd")
 				{
@@ -137,17 +143,23 @@ namespace mmo
 		const auto accountIdIt = arguments.find("id");
 		const auto accountPassIt = arguments.find("password");
 
+		json jsonResponse;
+
 		if (accountIdIt == arguments.end() || accountIdIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'id'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'id'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (accountPassIt == arguments.end() || accountPassIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'password'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'password'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 		
@@ -157,34 +169,36 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		const auto result = m_service.GetDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr());
-		if (result)
+		if (const auto result = m_service.GetDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr()))
 		{
 			if (*result == WorldCreationResult::WorldNameAlreadyInUse)
 			{
 				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				SendJsonResponse(response, "{\"status\":\"WORLD_NAME_ALREADY_IN_USE\", \"message\":\"World name already in use\"}");
+				jsonResponse["status"] = "WORLD_NAME_ALREADY_IN_USE";
+				jsonResponse["message"] = "World name already in use";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
 			if (*result == WorldCreationResult::Success)
 			{
-				SendJsonResponse(response, "");
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 		}
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+		SendJsonResponse(response, jsonResponse);
 	}
 	
 	void WebClient::handleGetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const
 	{
 		const String& motd = m_service.GetMOTDManager().GetMessageOfTheDay();
-		
-		std::ostringstream jsonStream;
-		jsonStream << "{\"message\":\"" << motd << "\"}";
-		SendJsonResponse(response, jsonStream.str());
+
+		json jsonResponse;
+		jsonResponse["message"] = motd;
+		SendJsonResponse(response, jsonResponse);
 	}
 	
 	void WebClient::handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const 
@@ -192,10 +206,14 @@ namespace mmo
 		const auto& arguments = request.getPostFormArguments();
 		const auto messageIt = arguments.find("message");
 
+		json jsonResponse;
+
 		if (messageIt == arguments.end())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'message'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'message'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 		
@@ -205,19 +223,25 @@ namespace mmo
 			// Player notifications are now handled via signal/slot
 			if (m_service.GetMOTDManager().SetMessageOfTheDay(messageIt->second))
 			{
-				SendJsonResponse(response, "{\"status\":\"SUCCESS\", \"message\":\"MOTD updated successfully\"}");
+				jsonResponse["status"] = "SUCCESS";
+				jsonResponse["message"] = "MOTD updated successfully";
+				SendJsonResponse(response, jsonResponse);
 			}
 			else
 			{
 				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update MOTD\"}");
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				jsonResponse["message"] = "Failed to update MOTD";
+				SendJsonResponse(response, jsonResponse);
 			}
 		}
 		catch (const std::exception& ex)
 		{
 			ELOG("Failed to update MOTD: " << ex.what());
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update MOTD\"}");
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			jsonResponse["message"] = "Failed to update MOTD due to an exception";
+			SendJsonResponse(response, jsonResponse);
 		}
 	}
 }

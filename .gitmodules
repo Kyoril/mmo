@@ -17,3 +17,6 @@
 [submodule "deps/recastnavigation"]
 	path = deps/recastnavigation
 	url = https://github.com/Kyoril/recastnavigation.git
+[submodule "deps/json"]
+	path = deps/json
+	url = https://github.com/nlohmann/json.git

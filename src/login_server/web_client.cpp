@@ -9,19 +9,23 @@
 #include "player_manager.h"
 #include "player.h"
 #include "log/default_log_levels.h"
+#include "realm_manager.h"
 
 #include <regex>
+#include "nlohmann/json.hpp"
 
-#include "realm_manager.h"
+// Add a namespace alias for convenience
+using json = nlohmann::json;
 
 namespace mmo
 {
 	namespace
 	{
-		void SendJsonResponse(web::WebResponse &response, const String &json)
-		{
-			response.finishWithContent("application/json", json.data(), json.size());
-		}
+		void SendJsonResponse(web::WebResponse &response, const json &jsonObject)
+        {
+            const std::string jsonStr = jsonObject.dump();
+            response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
+        }
 	}
 
 	WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
@@ -54,9 +58,9 @@ namespace mmo
 				{
 					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
 
-					std::ostringstream message;
-					message << "{\"uptime\":" << gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime) << "}";
-					SendJsonResponse(response, message.str());
+					json jsonResponse;
+					jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
+					SendJsonResponse(response, jsonResponse);
 				}
 				else if (url == "/gm-level")
 				{
@@ -153,17 +157,23 @@ namespace mmo
 		const auto accountIdIt = arguments.find("id");
 		const auto accountPassIt = arguments.find("password");
 
+		json jsonResponse;
+
 		if (accountIdIt == arguments.end())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'id'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'id'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (accountPassIt == arguments.end())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'password'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'password'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -179,19 +189,22 @@ namespace mmo
 			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
 			{
 				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_NAME_ALREADY_IN_USE\", \"message\":\"Account name already in use\"}");
+				jsonResponse["status"] = "ACCOUNT_NAME_ALREADY_IN_USE";
+				jsonResponse["message"] = "Account name already in use";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
 			if(*result == AccountCreationResult::Success)
 			{
-				SendJsonResponse(response, "");
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 		}
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+		SendJsonResponse(response, jsonResponse);
 	}
 
 	void WebClient::handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const
@@ -202,31 +215,41 @@ namespace mmo
 		const auto addressIt = arguments.find("address");
 		const auto portIt = arguments.find("port");
 
+		json jsonResponse;
+
 		if (accountIdIt == arguments.end() || accountIdIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'id'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'id'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (accountPassIt == arguments.end() || accountPassIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'password'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'password'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (addressIt == arguments.end() || addressIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'address'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'address'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (portIt == arguments.end() || portIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'port'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'port'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -245,19 +268,22 @@ namespace mmo
 			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
 			{
 				response.setStatus(net::http::OutgoingAnswer::Conflict);
-                                SendJsonResponse(response, "{\"status\":\"" + ErrorCodes::RealmNameAlreadyInUse + "\", \"message\":\"Realm name already in use\"}");
+				jsonResponse["status"] = "REALM_NAME_ALREADY_IN_USE";
+				jsonResponse["message"] = "Realm name already in use";
+                SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
 			if (*result == RealmCreationResult::Success)
 			{
-				SendJsonResponse(response, "");
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 		}
 
 		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-		SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+		jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+		SendJsonResponse(response, jsonResponse);
 	}
 
 	namespace
@@ -280,24 +306,31 @@ namespace mmo
 		const auto expirationIt = arguments.find("expiration");
 		const auto reasonIt = arguments.find("reason");
 
+		json jsonResponse;
 		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_name'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (expirationIt != arguments.end() && !isValidDateTime(expirationIt->second))
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'\"}");
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'reason' must not exceed a length of 256 characters!";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -311,19 +344,24 @@ namespace mmo
 			if (!account)
 			{
 				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
+				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
 			if (account->banned != BanState::None)
 			{
 				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_ALREADY_BANNED\", \"message\":\"The account is already banned right now!\"}");
+				jsonResponse["status"] = "ACCOUNT_ALREADY_BANNED";
+				jsonResponse["message"] = "The account '" + name + "' is already banned!";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
 			m_service.GetDatabase().BanAccountByName(name, expiration, reason);
-			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+			jsonResponse["status"] = "SUCCESS";
+			SendJsonResponse(response, jsonResponse);
 
 			// Notify subscribers
 			m_service.GetRealmManager().NotifyAccountBanned(account->id);
@@ -332,7 +370,8 @@ namespace mmo
 		catch(...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
 		}
 	}
 
@@ -342,17 +381,23 @@ namespace mmo
 		const auto accountNameIt = arguments.find("account_name");
 		const auto reasonIt = arguments.find("reason");
 
+		json jsonResponse;
+
 		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_name'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'reason' must not exceed a length of 256 characters!\"}");
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'reason' must not exceed a length of 256 characters!";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -362,12 +407,14 @@ namespace mmo
 		try
 		{
 			m_service.GetDatabase().UnbanAccountByName(name, reason);
-			SendJsonResponse(response, "{\"status\":\"SUCCESS\"}");
+			jsonResponse["status"] = "SUCCESS";
+			SendJsonResponse(response, jsonResponse);
 		}
 		catch (...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
 		}
 	}
 
@@ -376,10 +423,14 @@ namespace mmo
 		const auto& arguments = request.getPathArguments();
 		const auto accountNameIt = arguments.find("account_name");
 
+		json jsonResponse;
+
 		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_name'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -392,7 +443,9 @@ namespace mmo
 			if (!account)
 			{
 				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
+				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
@@ -402,20 +455,25 @@ namespace mmo
 			{
 				// The third element in the tuple is the GM level
 				uint8 gmLevel = std::get<2>(*result);
-				std::ostringstream message;
-				message << "{\"status\":\"SUCCESS\", \"account_name\":\"" << name << "\", \"gm_level\":" << static_cast<int>(gmLevel) << "}";
-				SendJsonResponse(response, message.str());
+
+				jsonResponse["status"] = "SUCCESS";
+				jsonResponse["account_name"] = name;
+				jsonResponse["gm_level"] = static_cast<int>(gmLevel);
+				SendJsonResponse(response, jsonResponse);
 			}
 			else
 			{
 				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to retrieve GM level information\"}");
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				jsonResponse["message"] = "Failed to retrieve GM level information";
+				SendJsonResponse(response, jsonResponse);
 			}
 		}
 		catch (...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
 		}
 	}
 
@@ -425,17 +483,23 @@ namespace mmo
 		const auto accountNameIt = arguments.find("account_name");
 		const auto gmLevelIt = arguments.find("gm_level");
 
+		json jsonResponse;
+
 		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'account_name'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_name'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (gmLevelIt == arguments.end() || gmLevelIt->second.empty())
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"MISSING_PARAMETER\", \"message\":\"Missing parameter 'gm_level'\"}");
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'gm_level'";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -449,14 +513,18 @@ namespace mmo
 		catch (...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'gm_level' must be a valid integer number\"}");
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'gm_level' must be a valid integer number";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
 		if (gmLevel < 0 || gmLevel > 255)
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			SendJsonResponse(response, "{\"status\":\"INVALID_PARAMETER\", \"message\":\"Parameter 'gm_level' must be between 0 and 255\"}");
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'gm_level' must be between 0 and 255";
+			SendJsonResponse(response, jsonResponse);
 			return;
 		}
 
@@ -467,7 +535,9 @@ namespace mmo
 			if (!account)
 			{
 				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_DOES_NOT_EXIST\", \"message\":\"An account with the name '"+name+"' does not exist!\"}");
+				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
+				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
 				return;
 			}
 
@@ -477,21 +547,25 @@ namespace mmo
 				// Notify players who might be connected that their GM level changed
 				// We need to kick by account ID, not by name
 				m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
-				
-				std::ostringstream message;
-				message << "{\"status\":\"SUCCESS\", \"account_name\":\"" << name << "\", \"gm_level\":" << gmLevel << "}";
-				SendJsonResponse(response, message.str());
+
+				jsonResponse["status"] = "SUCCESS";
+				jsonResponse["account_name"] = name;
+				jsonResponse["gm_level"] = gmLevel;
+				SendJsonResponse(response, jsonResponse);
 			}
 			else
 			{
 				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-				SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\", \"message\":\"Failed to update GM level\"}");
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				jsonResponse["message"] = "Failed to update GM level for account '" + name + "'";
+				SendJsonResponse(response, jsonResponse);
 			}
 		}
 		catch (...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			SendJsonResponse(response, "{\"status\":\"INTERNAL_SERVER_ERROR\"}");
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
 		}
 	}
 }
