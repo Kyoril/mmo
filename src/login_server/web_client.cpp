@@ -245,7 +245,7 @@ namespace mmo
 			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
 			{
 				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				SendJsonResponse(response, "{\"status\":\"ACCOUNT_NAME_ALREADY_IN_USE\", \"message\":\"Realm name already in use\"}");
+                                SendJsonResponse(response, "{\"status\":\"REALM_NAME_ALREADY_IN_USE\", \"message\":\"Realm name already in use\"}");
 				return;
 			}
 
