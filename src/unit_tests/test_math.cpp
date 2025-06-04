@@ -191,7 +191,7 @@ TEST_CASE("Vector3Transform", "[math]")
 	const Vector3 v1{ 1.0f, 0.0f, 3.0f };
 	REQUIRE(v1.IsValid());
 
-	// Identity matrix should not motify the vector
+	// Identity matrix should not modify the vector
 	Vector3 test = Matrix4::Identity * v1;
 	CHECK(test.IsNearlyEqual(v1));
 	
