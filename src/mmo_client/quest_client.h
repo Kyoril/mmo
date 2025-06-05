@@ -6,6 +6,8 @@
 #include "game/quest.h"
 #include "net/realm_connector.h"
 
+struct lua_State;
+
 namespace mmo
 {
 	class Localization;
@@ -82,6 +84,8 @@ namespace mmo
 		void Initialize();
 
 		void Shutdown();
+
+		void RegisterScriptFunctions(lua_State* luaState);
 
 		void CloseQuest();
 

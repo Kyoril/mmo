@@ -7,6 +7,8 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "ui/model_frame.h"
 
+struct lua_State;
+
 namespace mmo
 {
 	class RealmConnector;
@@ -26,6 +28,8 @@ namespace mmo
 		~CharCreateInfo() override = default;
 
 	public:
+		void RegisterScriptFunctions(lua_State* lua);
+
 		void ResetCharacterCreation();
 
 		void SetCharacterCreationFrame(Frame* frame);

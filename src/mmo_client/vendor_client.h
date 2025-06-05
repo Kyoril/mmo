@@ -5,6 +5,8 @@
 #include "game/item.h"
 #include "net/realm_connector.h"
 
+struct lua_State;
+
 namespace mmo
 {
 	class VendorClient final : public NonCopyable
@@ -32,6 +34,8 @@ namespace mmo
 		void Initialize();
 
 		void Shutdown();
+
+		void RegisterScriptFunctions(lua_State* lua);
 
 	public:
 		bool HasVendor() const { return m_vendorGuid != 0; }

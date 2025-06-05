@@ -4,6 +4,8 @@
 #include "game/character_view.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 
+struct lua_State;
+
 namespace mmo
 {
 	class Frame;
@@ -24,6 +26,8 @@ namespace mmo
 		~CharSelect() override = default;
 
 	public:
+		void RegisterScriptFunctions(lua_State* lua);
+
 		void SetModelFrame(Frame* frame);
 
 		void SelectCharacter(int32 index);

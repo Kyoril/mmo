@@ -6,19 +6,21 @@
 #include "client_data/project.h"
 #include "net/realm_connector.h"
 
+struct lua_State;
+
 namespace mmo
 {
 	struct GuildMemberInfo
 	{
-		uint64 guid;
-		String name;
-		String rank;
-		uint32 rankIndex;
-		uint32 level;
-		String className;
-		String raceName;
-		String zoneName;
-		bool online;
+		uint64 guid = 0;
+		String name {};
+		String rank{};
+		uint32 rankIndex = 0;
+		uint32 level = 0;
+		String className{};
+		String raceName{};
+		String zoneName{};
+		bool online = false;
 	};
 
 	class GuildClient final : public NonCopyable
@@ -31,6 +33,8 @@ namespace mmo
 		void Initialize();
 
 		void Shutdown();
+
+		void RegisterScriptFunctions(lua_State* lua);
 
 		void GuildInviteByName(const String& name);
 

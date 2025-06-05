@@ -9,12 +9,25 @@
 #include "scene_graph/material_manager.h"
 #include "ui/model_frame.h"
 
+#include "luabind_lambda.h"
+
 namespace mmo
 {
 	CharSelect::CharSelect(const proto_client::Project& project, RealmConnector& realmConnector)
 		: m_project(project)
 		, m_realmConnector(realmConnector)
 	{
+	}
+
+	void CharSelect::RegisterScriptFunctions(lua_State* lua)
+	{
+		luabind::module(lua)
+		[
+			luabind::def_lambda("SetCharSelectModelFrame", [this](Frame* frame) { SetModelFrame(frame); }),
+			luabind::def_lambda("GetNumCharacters", [this]() { return GetNumCharacters(); }),
+			luabind::def_lambda("GetCharacterInfo", [this](int32 index) { return GetCharacterView(index); }),
+			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); })
+		];
 	}
 
 	void CharSelect::SetModelFrame(Frame* frame)

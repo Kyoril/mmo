@@ -6,6 +6,8 @@
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 
+#include "luabind_lambda.h"
+
 namespace mmo
 {
 	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization)
@@ -39,6 +41,70 @@ namespace mmo
 		m_packetHandlers.Clear();
 
 		CloseQuest();
+	}
+
+	void QuestClient::RegisterScriptFunctions(lua_State* luaState)
+	{
+		luabind::module(luaState)
+		[
+			luabind::scope(
+				luabind::class_<QuestListEntry>("QuestListEntry")
+				.def_readonly("id", &QuestListEntry::questId)
+				.def_readonly("title", &QuestListEntry::questTitle)
+				.def_readonly("icon", &QuestListEntry::menuIcon)
+				.def_readonly("isActive", &QuestListEntry::isActive)),
+
+			luabind::scope(
+				luabind::class_<QuestInfo>("Quest")
+				.def_readonly("id", &QuestInfo::id)
+				.def_readonly("title", &QuestInfo::title)
+				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)),
+
+			luabind::scope(
+				luabind::class_<QuestLogEntry>("QuestLogEntry")
+				.def_readonly("id", &QuestLogEntry::questId)
+				.def_readonly("quest", &QuestLogEntry::quest)
+				.def_readonly("status", &QuestLogEntry::status)),
+
+			luabind::scope(
+				luabind::class_<GossipMenuAction>("GossipMenuAction")
+				.def_readonly("id", &GossipMenuAction::id)
+				.def_readonly("text", &GossipMenuAction::text)
+				.def_readonly("icon", &GossipMenuAction::icon)),
+
+			luabind::scope(
+				luabind::class_<QuestDetails>("QuestDetails")
+				.def_readonly("id", &QuestDetails::questId)
+				.def_readonly("title", &QuestDetails::questTitle)
+				.def_readonly("details", &QuestDetails::questDetails)
+				.def_readonly("objectives", &QuestDetails::questObjectives)
+				.def_readonly("offerReward", &QuestDetails::questOfferRewardText)
+				.def_readonly("requestItems", &QuestDetails::questRequestItemsText)
+				.def_readonly("rewardedXp", &QuestDetails::rewardXp)
+				.def_readonly("rewardedMoney", &QuestDetails::rewardMoney)
+				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)),
+
+			luabind::def_lambda("GetGreetingText", [this]() { return GetGreetingText(); }),
+			luabind::def_lambda("GetNumAvailableQuests", [this]() { return GetNumAvailableQuests(); }),
+			luabind::def_lambda("GetAvailableQuest", [this](uint32 index) { return GetAvailableQuest(index); }),
+			luabind::def_lambda("QueryQuestDetails", [this](uint32 questId) { QueryQuestDetails(questId); }),
+			luabind::def_lambda("GetQuestDetails", [this]() { return GetQuestDetails(); }),
+			luabind::def_lambda("AcceptQuest", [this](uint32 questId) { AcceptQuest(questId); }),
+			luabind::def_lambda("GetNumQuestLogEntries", [this]() { return GetNumQuestLogEntries(); }),
+			luabind::def_lambda("GetQuestLogEntry", [this](uint32 index) { return GetQuestLogEntry(index); }),
+			luabind::def_lambda("GetNumGossipActions", [this]() { return GetNumGossipActions(); }),
+			luabind::def_lambda("GetGossipAction", [this](int32 index) { return GetGossipAction(index); }),
+			luabind::def_lambda("AbandonQuest", [this](uint32 questId) { AbandonQuest(questId); }),
+			luabind::def_lambda("GetQuestReward", [this](uint32 rewardChoice) { GetQuestReward(rewardChoice); }),
+			luabind::def_lambda("QuestLogSelectQuest", [this](uint32 questId) { QuestLogSelectQuest(questId); }),
+			luabind::def_lambda("GetQuestLogSelection", [this]() { return GetSelectedQuestLogQuest(); }),
+			luabind::def_lambda("GetQuestObjectiveCount", [this]() { return GetQuestObjectiveCount(); }),
+			luabind::def_lambda("GetQuestObjectiveText", [this](uint32 index) { return GetQuestObjectiveText(index); }),
+			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
+			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
+			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; })
+
+		];
 	}
 
 	void QuestClient::CloseQuest()

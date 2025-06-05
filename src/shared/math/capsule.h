@@ -8,6 +8,6 @@ namespace mmo
 	{
 		Vector3 pointA;
 		Vector3 pointB;
-		float radius;
+		float radius = 0.0f;
 	};
 }

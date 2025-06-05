@@ -4,8 +4,12 @@
 #include "client_data/project.h"
 #include "scene_graph/material_manager.h"
 #include "game/character_customization/avatar_definition_mgr.h"
+#include "luabind/function.hpp"
+#include "luabind/scope.hpp"
 #include "net/realm_connector.h"
 #include "ui/model_frame.h"
+
+#include "luabind_lambda.h"
 
 namespace mmo
 {
@@ -13,6 +17,35 @@ namespace mmo
 		: m_project(project)
 		, m_realmConnector(realmConnector)
 	{
+	}
+
+	void CharCreateInfo::RegisterScriptFunctions(lua_State* lua)
+	{
+		luabind::module(lua)
+		[
+			luabind::def_lambda("CreateCharacter", [this](const String& name) { CreateCharacter(name); }),
+			luabind::def_lambda("SetCharCustomizeFrame", [this](Frame* frame) { SetCharacterCreationFrame(frame); }),
+			luabind::def_lambda("SetCharacterClass", [this](int32 classId) { SetSelectedClass(classId); }),
+			luabind::def_lambda("SetCharacterGender", [this](int32 genderId) { SetSelectedGender(genderId); }),
+			luabind::def_lambda("SetCharacterRace", [this](int32 raceId) { SetSelectedRace(raceId); }),
+			luabind::def_lambda("GetCharacterRace", [this]() { return GetSelectedRace(); }),
+			luabind::def_lambda("GetCharacterGender", [this]() { return GetSelectedGender(); }),
+			luabind::def_lambda("GetCharacterClass", [this]() { return GetSelectedClass(); }),
+			luabind::def_lambda("ResetCharCustomize", [this]() { ResetCharacterCreation(); }),
+			luabind::def_lambda("GetCustomizationValue", [this](const String& name) { return GetCustomizationValue(name); }),
+			luabind::def_lambda("CycleCustomizationProperty", [this](const String& property, bool forward) { CycleCustomizationProperty(property, forward, true); }),
+			luabind::def_lambda("GetNumCustomizationProperties", [this]() { return static_cast<int32>(GetPropertyNames().size()); }),
+			luabind::def_lambda("GetCustomizationProperty", [this](int32 index) -> const char*
+				{
+					const auto& names = GetPropertyNames();
+					if (index < 0 || index >= names.size())
+					{
+						return nullptr;
+					}
+
+					return names[index].c_str();
+				})
+		];
 	}
 
 	void CharCreateInfo::ResetCharacterCreation()

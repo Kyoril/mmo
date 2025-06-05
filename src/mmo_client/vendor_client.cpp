@@ -5,6 +5,8 @@
 #include "game/vendor.h"
 #include "game_client/object_mgr.h"
 
+#include "luabind_lambda.h"
+
 namespace mmo
 {
 	VendorClient::VendorClient(RealmConnector& connector, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache)
@@ -26,6 +28,15 @@ namespace mmo
 	void VendorClient::Shutdown()
 	{
 		m_packetHandlerConnections.Clear();
+	}
+
+	void VendorClient::RegisterScriptFunctions(lua_State* lua)
+	{
+		luabind::module(lua)
+		[
+			luabind::def_lambda("GetVendorNumItems", [this]() { return GetNumVendorItems(); }),
+			luabind::def_lambda("CloseVendor", [this]() { CloseVendor(); })
+		];
 	}
 
 	void VendorClient::SellItem(uint64 itemGuid) const

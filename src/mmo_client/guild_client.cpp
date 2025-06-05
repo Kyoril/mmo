@@ -6,8 +6,22 @@
 #include "game/guild_info.h"
 #include "game_client/object_mgr.h"
 
+#include "luabind_lambda.h"
+
 namespace mmo
 {
+	namespace
+	{
+		template<typename Ret, typename Class, typename... Args>
+		auto bind_this(Ret(Class::* method)(Args...), Class* instance)
+		{
+			return [=](Args... args) -> Ret
+			{
+				return (instance->*method)(std::forward<Args>(args)...);
+			};
+		}
+	}
+
 	GuildClient::GuildClient(RealmConnector& realmConnector, DBGuildCache& guildCache, const proto_client::RaceManager& races, const proto_client::ClassManager& classes)
 		: m_connector(realmConnector)
 		, m_guildCache(guildCache)
@@ -38,6 +52,54 @@ namespace mmo
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::UnregisterCommand("guildcreate");
+#endif
+	}
+
+	void GuildClient::RegisterScriptFunctions(lua_State* lua)
+	{
+#ifdef __INTELLISENSE__
+#pragma warning(disable: 28)  // Suppress IntelliSense warning about operator[]
+#endif
+		// Register common functions
+		luabind::module(lua)
+		[
+			luabind::scope(
+				luabind::class_<GuildMemberInfo>("GuildMemberInfo")
+				.def_readonly("name", &GuildMemberInfo::name)
+				.def_readonly("rank", &GuildMemberInfo::rank)
+				.def_readonly("rankIndex", &GuildMemberInfo::rankIndex)
+				.def_readonly("className", &GuildMemberInfo::className)
+				.def_readonly("raceName", &GuildMemberInfo::raceName)
+				.def_readonly("level", &GuildMemberInfo::level)
+				.def_readonly("online", &GuildMemberInfo::online)),
+
+			luabind::def_lambda("GuildInviteByName", [this](const String& name) { return GuildInviteByName(name); }),
+			luabind::def_lambda("GuildUninviteByName", [this](const String& name) { return GuildUninviteByName(name); }),
+			luabind::def_lambda("GuildPromoteByName", [this](const String& name) { return GuildPromoteByName(name); }),
+			luabind::def_lambda("GuildDemoteByName", [this](const String& name) { return GuildDemoteByName(name); }),
+			luabind::def_lambda("GuildSetLeaderByName", [this](const String& name) { return GuildSetLeaderByName(name); }),
+			luabind::def_lambda("GuildSetMOTD", [this](const String& motd) { return GuildSetMOTD(motd); }),
+			luabind::def_lambda("GuildLeave", [this]() { return GuildLeave(); }),
+			luabind::def_lambda("GuildDisband", [this]() { return GuildDisband(); }),
+			luabind::def_lambda("AcceptGuild", [this]() { return AcceptGuild(); }),
+			luabind::def_lambda("DeclineGuild", [this]() { return DeclineGuild(); }),
+
+			luabind::def_lambda("IsInGuild", [this]() { return IsInGuild(); }),
+			luabind::def_lambda("GetNumGuildMembers", [this]() { return GetNumGuildMembers(); }),
+			luabind::def_lambda("GetNumRanks", [this]() { return GetNumRanks(); }),
+			luabind::def_lambda("GetGuildMemberInfo", [this](int32 index) { return GetGuildMemberInfo(index); }),
+
+			luabind::def_lambda("IsGuildLeader", [this]() { return IsGuildLeader(); }),
+			luabind::def_lambda("CanGuildPromote", [this]() { return CanGuildPromote(); }),
+			luabind::def_lambda("CanGuildDemote", [this]() { return CanGuildDemote(); }),
+			luabind::def_lambda("CanGuildInvite", [this]() { return CanGuildInvite(); }),
+			luabind::def_lambda("CanGuildRemove", [this]() { return CanGuildRemove(); }),
+			luabind::def_lambda("GuildRoster", [this]() { GuildRoster(); }),
+			luabind::def_lambda("GetGuildName", [this]() { return GetGuildName().c_str(); }),
+			luabind::def_lambda("GetGuildMOTD", [this]() { return GetGuildMOTD().c_str(); })
+		];
+#ifdef __INTELLISENSE__
+#pragma warning(default: 28)  // Restore IntelliSense warning
 #endif
 	}
 

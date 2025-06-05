@@ -62,7 +62,7 @@ namespace mmo
 
 	struct GuildInfo
 	{
-		uint64 id;
+		uint64 id = 0;
 
 		String name;
 	};

@@ -20,6 +20,7 @@
 #include "event_loop.h"
 #include "guild_client.h"
 #include "loot_client.h"
+#include "luabind_lambda.h"
 #include "platform.h"
 #include "quest_client.h"
 #include "trainer_client.h"
@@ -890,43 +891,6 @@ namespace mmo
 				.def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)),
 
 			luabind::scope(
-				luabind::class_<QuestListEntry>("QuestListEntry")
-				.def_readonly("id", &QuestListEntry::questId)
-				.def_readonly("title", &QuestListEntry::questTitle)
-				.def_readonly("icon", &QuestListEntry::menuIcon)
-				.def_readonly("isActive", &QuestListEntry::isActive)),
-
-			luabind::scope(
-				luabind::class_<QuestInfo>("Quest")
-				.def_readonly("id", &QuestInfo::id)
-				.def_readonly("title", &QuestInfo::title)
-				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)),
-
-			luabind::scope(
-				luabind::class_<QuestLogEntry>("QuestLogEntry")
-				.def_readonly("id", &QuestLogEntry::questId)
-				.def_readonly("quest", &QuestLogEntry::quest)
-				.def_readonly("status", &QuestLogEntry::status)),
-
-			luabind::scope(
-				luabind::class_<GossipMenuAction>("GossipMenuAction")
-				.def_readonly("id", &GossipMenuAction::id)
-				.def_readonly("text", &GossipMenuAction::text)
-				.def_readonly("icon", &GossipMenuAction::icon)),
-
-			luabind::scope(
-				luabind::class_<QuestDetails>("QuestDetails")
-				.def_readonly("id", &QuestDetails::questId)
-				.def_readonly("title", &QuestDetails::questTitle)
-				.def_readonly("details", &QuestDetails::questDetails)
-				.def_readonly("objectives", &QuestDetails::questObjectives)
-				.def_readonly("offerReward", &QuestDetails::questOfferRewardText)
-				.def_readonly("requestItems", &QuestDetails::questRequestItemsText)
-				.def_readonly("rewardedXp", &QuestDetails::rewardXp)
-				.def_readonly("rewardedMoney", &QuestDetails::rewardMoney)
-				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)),
-
-			luabind::scope(
 				luabind::class_<UnitHandle>("UnitHandle")
 				.def("GetHealth", &UnitHandle::GetHealth)
 				.def("GetMaxHealth", &UnitHandle::GetMaxHealth)
@@ -987,16 +951,6 @@ namespace mmo
 			),
 			
 			luabind::scope(
-				luabind::class_<GuildMemberInfo>("GuildMemberInfo")
-				.def_readonly("name", &GuildMemberInfo::name)
-				.def_readonly("rank", &GuildMemberInfo::rank)
-				.def_readonly("rankIndex", &GuildMemberInfo::rankIndex)
-				.def_readonly("className", &GuildMemberInfo::className)
-				.def_readonly("raceName", &GuildMemberInfo::raceName)
-				.def_readonly("level", &GuildMemberInfo::level)
-				.def_readonly("online", &GuildMemberInfo::online)),
-				
-			luabind::scope(
 				luabind::class_<proto_client::SpellEntry>("Spell")
 				.def_readonly("id", &proto_client::SpellEntry::id)
 				.def_readonly("name", &proto_client::SpellEntry::name)
@@ -1014,36 +968,6 @@ namespace mmo
 			luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
 			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
 			luabind::def<std::function<int32()>>("GetPartySize", [this]() { return m_partyInfo.GetMemberCount(); }),
-
-			// Char Creation
-			luabind::def<std::function<void(const String&)>>("CreateCharacter", [this](const String& name) { m_charCreateInfo.CreateCharacter(name); }),
-			luabind::def<std::function<void(Frame*)>>("SetCharCustomizeFrame", [this](Frame* frame) { m_charCreateInfo.SetCharacterCreationFrame(frame); }),
-			luabind::def<std::function<void(int32)>>("SetCharacterClass", [this](int32 classId) { m_charCreateInfo.SetSelectedClass(classId); }),
-			luabind::def<std::function<void(int32)>>("SetCharacterGender", [this](int32 genderId) { m_charCreateInfo.SetSelectedGender(genderId); }),
-			luabind::def<std::function<void(int32)>>("SetCharacterRace", [this](int32 raceId) { m_charCreateInfo.SetSelectedRace(raceId); }),
-			luabind::def<std::function<int32()>>("GetCharacterRace", [this]() { return m_charCreateInfo.GetSelectedRace(); }),
-			luabind::def<std::function<int32()>>("GetCharacterGender", [this]() { return m_charCreateInfo.GetSelectedGender(); }),
-			luabind::def<std::function<int32()>>("GetCharacterClass", [this]() { return m_charCreateInfo.GetSelectedClass(); }),
-			luabind::def<std::function<void()>>("ResetCharCustomize", [this]() { m_charCreateInfo.ResetCharacterCreation(); }),
-			luabind::def<std::function<const char*(const String&)>>("GetCustomizationValue", [this](const String& name) { return m_charCreateInfo.GetCustomizationValue(name); }),
-			luabind::def<std::function<void(const String&, bool)>>("CycleCustomizationProperty", [this](const String& property, bool forward) { m_charCreateInfo.CycleCustomizationProperty(property, forward, true); }),
-			luabind::def<std::function<int32()>>("GetNumCustomizationProperties", [this]() { return static_cast<int32>(m_charCreateInfo.GetPropertyNames().size()); }),
-			luabind::def<std::function<const char*(int32)>>("GetCustomizationProperty", [this](int32 index) -> const char*
-			{
-				const auto& names = m_charCreateInfo.GetPropertyNames();
-				if (index < 0 || index >= names.size())
-				{
-					return nullptr;
-				}
-
-				return names[index].c_str();
-			}),
-
-			// Char Select
-			luabind::def<std::function<void(Frame*)>>("SetCharSelectModelFrame", [this](Frame* frame) { m_charSelect.SetModelFrame(frame); }),
-			luabind::def<std::function<int32()>>("GetNumCharacters", [this]() { return m_charSelect.GetNumCharacters(); }),
-			luabind::def<std::function<const mmo::CharacterView*(int32)>>("GetCharacterInfo", [this](int32 index) { return m_charSelect.GetCharacterView(index); }),
-			luabind::def<std::function<void(int32)>>("SelectCharacter", [this](int32 index) { return m_charSelect.SelectCharacter(index); }),
 
 			luabind::def<std::function<void()>>("TargetNearestEnemy", [this]() { TargetNearestEnemy(); }),
 
@@ -1112,28 +1036,6 @@ namespace mmo
 
 			luabind::def("GetTime", &GetAsyncTimeMs),
 
-			// Quest
-			luabind::def<std::function<String()>>("GetGreetingText", [this]() { return m_questClient.GetGreetingText(); }),
-			luabind::def<std::function<int32()>>("GetNumAvailableQuests", [this]() { return m_questClient.GetNumAvailableQuests(); }),
-			luabind::def<std::function<const QuestListEntry*(uint32)>>("GetAvailableQuest", [this](uint32 index) { return m_questClient.GetAvailableQuest(index); }),
-			luabind::def<std::function<void(uint32)>>("QueryQuestDetails", [this](uint32 questId) { m_questClient.QueryQuestDetails(questId); }),
-			luabind::def<std::function<const QuestDetails*()>>("GetQuestDetails", [this]() { return m_questClient.GetQuestDetails(); }),
-			luabind::def<std::function<void(uint32)>>("AcceptQuest", [this](uint32 questId) { m_questClient.AcceptQuest(questId); }),
-			luabind::def<std::function<uint32()>>("GetNumQuestLogEntries", [this]() { return m_questClient.GetNumQuestLogEntries(); }),
-			luabind::def<std::function<const QuestLogEntry*(uint32)>>("GetQuestLogEntry", [this](uint32 index) { return m_questClient.GetQuestLogEntry(index); }),
-			luabind::def<std::function<uint32()>>("GetNumGossipActions", [this]() { return m_questClient.GetNumGossipActions(); }),
-			luabind::def<std::function<const GossipMenuAction* (int32)>>("GetGossipAction", [this](int32 index) { return m_questClient.GetGossipAction(index); }),
-			luabind::def<std::function<void(uint32)>>("AbandonQuest", [this](uint32 questId) { m_questClient.AbandonQuest(questId); }),
-			luabind::def<std::function<void(uint32)>>("GetQuestReward", [this](uint32 rewardChoice) { m_questClient.GetQuestReward(rewardChoice); }),
-			luabind::def<std::function<void(uint32)>>("QuestLogSelectQuest", [this](uint32 questId) { m_questClient.QuestLogSelectQuest(questId); }),
-			luabind::def<std::function<uint32()>>("GetQuestLogSelection", [this]() { return m_questClient.GetSelectedQuestLogQuest(); }),
-			luabind::def<std::function<uint32()>>("GetQuestObjectiveCount", [this]() { return m_questClient.GetQuestObjectiveCount(); }),
-			luabind::def<std::function<const char*(uint32)>>("GetQuestObjectiveText", [this](uint32 index) { return m_questClient.GetQuestObjectiveText(index); }),
-			luabind::def<std::function<void(int32)>>("GossipAction", [this](int32 index) { return m_questClient.ExecuteGossipAction(index); }),
-
-			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; m_questClient.ProcessQuestText(questText); return questText; }),
-			luabind::def<std::function<String(const QuestInfo* quest)>>("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; m_questClient.ProcessQuestText(questText); return questText; }),
-
 			// Spellbook
 			luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell) { g_cursor.SetSpell(spell); }),
 
@@ -1146,38 +1048,9 @@ namespace mmo
 			luabind::def<std::function<const proto_client::SpellEntry*(int32)>>("GetActionButtonSpell", [this](int32 slot) { return this->m_actionBar.GetActionButtonSpell(slot); }),
 			luabind::def<std::function<const ItemInfo*(int32)>>("GetActionButtonItem", [this](int32 slot) { return this->m_actionBar.GetActionButtonItem(slot); }),
 
-			// Vendor
-			luabind::def<std::function<uint32()>>("GetVendorNumItems", [this]() { return this->m_vendorClient.GetNumVendorItems(); }),
 			luabind::def<std::function<void(int32, const ItemInfo*&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo*& out_item, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
-			luabind::def<std::function<void(uint32)>>("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
-			luabind::def<std::function<void()>>("CloseVendor", [this]() { this->m_vendorClient.CloseVendor(); }),
+			luabind::def_lambda("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
 
-			// Guild
-			luabind::def<std::function<void(const String&)>>("GuildInviteByName", [this](const String& name) { return this->m_guildClient.GuildInviteByName(name); }),
-			luabind::def<std::function<void(const String&)>>("GuildUninviteByName", [this](const String& name) { return this->m_guildClient.GuildUninviteByName(name); }),
-			luabind::def<std::function<void(const String&)>>("GuildPromoteByName", [this](const String& name) { return this->m_guildClient.GuildPromoteByName(name); }),
-			luabind::def<std::function<void(const String&)>>("GuildDemoteByName", [this](const String& name) { return this->m_guildClient.GuildDemoteByName(name); }),
-			luabind::def<std::function<void(const String&)>>("GuildSetLeaderByName", [this](const String& name) { return this->m_guildClient.GuildSetLeaderByName(name); }),
-			luabind::def<std::function<void(const String&)>>("GuildSetMOTD", [this](const String& motd) { return this->m_guildClient.GuildSetMOTD(motd); }),
-			luabind::def<std::function<void()>>("GuildLeave", [this]() { return this->m_guildClient.GuildLeave(); }),
-			luabind::def<std::function<void()>>("GuildDisband", [this]() { return this->m_guildClient.GuildDisband(); }),
-			luabind::def<std::function<void()>>("AcceptGuild", [this]() { return this->m_guildClient.AcceptGuild(); }),
-			luabind::def<std::function<void()>>("DeclineGuild", [this]() { return this->m_guildClient.DeclineGuild(); }),
-
-			luabind::def<std::function<bool()>>("IsInGuild", [this]() { return this->m_guildClient.IsInGuild(); }),
-			luabind::def<std::function<int32()>>("GetNumGuildMembers", [this]() { return this->m_guildClient.GetNumGuildMembers(); }),
-			luabind::def<std::function<int32()>>("GetNumRanks", [this]() { return this->m_guildClient.GetNumRanks(); }),
-			luabind::def<std::function<const GuildMemberInfo*(int32)>>("GetGuildMemberInfo", [this](int32 index) { return this->m_guildClient.GetGuildMemberInfo(index); }),
-				
-			luabind::def<std::function<bool()>>("IsGuildLeader", [this]() { return this->m_guildClient.IsGuildLeader(); }),
-			luabind::def<std::function<bool()>>("CanGuildPromote", [this]() { return this->m_guildClient.CanGuildPromote(); }),
-			luabind::def<std::function<bool()>>("CanGuildDemote", [this]() { return this->m_guildClient.CanGuildDemote(); }),
-			luabind::def<std::function<bool()>>("CanGuildInvite", [this]() { return this->m_guildClient.CanGuildInvite(); }),
-			luabind::def<std::function<bool()>>("CanGuildRemove", [this]() { return this->m_guildClient.CanGuildRemove(); }),
-			luabind::def<std::function<void()>>("GuildRoster", [this]() { this->m_guildClient.GuildRoster(); }),
-			luabind::def<std::function<const char*()>>("GetGuildName", [this]() { return this->m_guildClient.GetGuildName().c_str(); }),
-			luabind::def<std::function<const char* ()>>("GetGuildMOTD", [this]() { return this->m_guildClient.GetGuildMOTD().c_str(); }),
-				
 			// Trainer
 			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
 			luabind::def<std::function<void(int32, int32&, String&, String&, int32&, bool&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price, bool& out_known) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price, out_known); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>>()),
@@ -1220,6 +1093,12 @@ namespace mmo
 			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),
 			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); })
 		];
+
+		m_charSelect.RegisterScriptFunctions(m_luaState.get());
+		m_charCreateInfo.RegisterScriptFunctions(m_luaState.get());
+		m_vendorClient.RegisterScriptFunctions(m_luaState.get());
+		m_guildClient.RegisterScriptFunctions(m_luaState.get());
+		m_questClient.RegisterScriptFunctions(m_luaState.get());
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
