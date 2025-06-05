@@ -362,6 +362,7 @@ namespace mmo
 		m_deferredRenderer->Render(m_scene, *m_camera);
 		m_transformWidget->Update(m_camera);
 	}
+
 	void WorldEditorInstance::Draw()
 	{
 		ImGui::PushID(GetAssetPath().c_str());

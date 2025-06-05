@@ -58,6 +58,7 @@
 #include "scene_graph/octree_scene.h"
 
 #include "discord.h"
+#include "loading_screen.h"
 
 namespace mmo
 {
@@ -187,6 +188,8 @@ namespace mmo
 
 	void WorldState::OnEnter()
 	{
+		LoadingScreen::Show();
+
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		SetupWorldScene();
@@ -1034,6 +1037,34 @@ namespace mmo
 		}
 	}
 
+	void WorldState::WaitForWorldLoading()
+	{
+		ASSERT(m_playerController);
+		const auto position = m_playerController->GetControlledUnit()->GetPosition();
+
+		// Ensure terrain is properly reloaded
+		PagePosition worldSize(64, 64);
+		const auto pagePos = PagePosition(static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32, static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32);
+		ForEachPageInSquare(
+			worldSize, pagePos, 1, [this](const PagePosition& page)
+			{
+				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
+				if (terrainPage)
+				{
+					if (terrainPage->Prepare())
+					{
+						while (!terrainPage->Load());
+					}
+				}
+
+				m_worldInstance->LoadPageEntities(page.x(), page.y());
+			}
+		);
+
+		// Hide loading screen
+		LoadingScreen::Hide();
+	}
+
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
 	{
 		uint16 numObjectUpdates;
@@ -1150,7 +1181,6 @@ namespace mmo
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
 							}
 						});
-									
 
 					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
@@ -1169,6 +1199,11 @@ namespace mmo
 					{
 						OnPlayerGuildChanged(object->GetGuid());
 					}
+
+					ILOG("Received spawn packet for player controlled unit");
+
+					// Ensure world is loaded entirely
+					WaitForWorldLoading();
 				}
 			}
 			else
@@ -2553,6 +2588,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		LoadingScreen::Show();
+
 		g_mapId = mapId;
 
 		m_worldChangeHandlers.Clear();
@@ -2588,25 +2625,6 @@ namespace mmo
 
 		// Load new map
 		LoadMap();
-
-		// Ensure terrain is properly reloaded
-		PagePosition worldSize(64, 64);
-		const auto pagePos = PagePosition(static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32, static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32);
-		ForEachPageInSquare(
-			worldSize, pagePos, 1, [this](const PagePosition& page)
-			{
-				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
-				if (terrainPage)
-				{
-					if (terrainPage->Prepare())
-					{
-						while (!terrainPage->Load());
-					}
-				}
-
-				m_worldInstance->LoadPageEntities(page.x(), page.y());
-			}
-		);
 
 		// Acknowledge the new world
 		m_realmConnector.SendMoveWorldPortAck();
@@ -3755,9 +3773,6 @@ namespace mmo
 			m_gameTime.GetMinute(),
 			m_gameTime.GetSecond(),
 			m_gameTime.GetTimeSpeed());
-
-		// Log for debugging
-		DLOG("Received game time update: " << m_gameTime.GetTimeString() << " (speed: " << timeSpeed << "x)");
 
 		return PacketParseResult::Pass;
 	}

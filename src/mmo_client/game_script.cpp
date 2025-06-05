@@ -18,6 +18,7 @@
 #include "char_creation/char_select.h"
 #include "cursor.h"
 #include "event_loop.h"
+#include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/loot_client.h"
 #include "luabind_lambda.h"
@@ -862,10 +863,6 @@ namespace mmo
 	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
 
 			luabind::scope(
-				luabind::class_<LoginState>("LoginState")
-					.def("EnterWorld", &LoginState::EnterWorld)),
-
-			luabind::scope(
 				luabind::class_<ItemInfo>("Item")
 				.def_readonly("id", &ItemInfo::id)
 				.def_readonly("name", &ItemInfo::name)
@@ -973,7 +970,19 @@ namespace mmo
 
 			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 			luabind::def("GetCVar", &Script_GetConsoleVar),
-			luabind::def<std::function<void()>>("EnterWorld", [this] { GameStateMgr::Get().SetGameState(WorldState::Name); }),
+
+			luabind::def<std::function<void()>>("EnterWorld", [this]
+			{
+				// Ensure loading screen is visible before doing anything heavy
+				LoadingScreen::LoadingScreenShown.connect([]()
+				{
+					// Switch game state now
+					GameStateMgr::Get().SetGameState(WorldState::Name);
+				});
+
+				LoadingScreen::Show();
+			}),
+
 			luabind::def("print", &Script_Print),
 
 			luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
@@ -1102,7 +1111,6 @@ namespace mmo
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
-		luabind::globals(m_luaState.get())["loginState"] = m_loginState.get();
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
 
 		// Functions now registered

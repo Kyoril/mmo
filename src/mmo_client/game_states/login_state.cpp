@@ -97,6 +97,9 @@ namespace mmo
 		// Play background music
 		m_musicSound = m_audio.CreateLoopedStream("Sound/Music/Genesis.ogg");
 		m_audio.PlaySound(m_musicSound, &m_musicChannel);
+
+		// Ensure the loading screen is hidden
+		LoadingScreen::Hide();
 	}
 
 	void LoginState::OnLeave()
@@ -124,16 +127,6 @@ namespace mmo
 	std::string_view LoginState::GetName() const
 	{
 		return Name;
-	}
-
-	void LoginState::EnterWorld(const CharacterView& character)
-	{
-		// TODO: Load data
-		LoadingScreen::Show();
-
-		// Send packet
-		m_realmConnector.EnterWorld(character);
-		GameStateMgr::Get().SetGameState(WorldState::Name);
 	}
 
 	void LoginState::OnPaint()

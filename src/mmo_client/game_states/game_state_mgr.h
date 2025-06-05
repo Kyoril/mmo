@@ -28,10 +28,13 @@ namespace mmo
 	public:
 		/// Adds a new game state to the list of available game states.
 		void AddGameState(std::shared_ptr<GameState> gameState);
+
 		/// Removes a game state from the list of available game states.
 		void RemoveGameState(const std::string& name);
+
 		/// Destroys the game state manager.
 		void RemoveAllGameStates();
+
 		/// Sets the current game state.
 		void SetGameState(const std::string& name);
 

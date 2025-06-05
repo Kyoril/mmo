@@ -41,8 +41,6 @@ namespace mmo
 
 		[[nodiscard]] std::string_view GetName() const override;
 		
-		void EnterWorld(const CharacterView & character);
-	
 	private:
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();

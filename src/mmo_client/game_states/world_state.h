@@ -223,6 +223,8 @@ namespace mmo
 
 		void ToggleWireframe() const;
 
+		void WaitForWorldLoading();
+
 	private:
 		// Network packet handlers
 

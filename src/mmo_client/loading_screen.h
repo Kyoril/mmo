@@ -2,18 +2,28 @@
 
 #pragma once
 
+#include "base/signal.h"
+#include "base/typedefs.h"
 
 namespace mmo
 {
 	class LoadingScreen
 	{
 	public:
+		static signal<void()> LoadingScreenShown;
+
+	public:
 		static void Init();
+
 		static void Destroy();
+
+		static void SetLoadingScreenTexture(const String& texture);
+
 		static void Paint();
 		
 		static void Show();
-		static void Hide();	
+
+		static void Hide();
 	};
 	
 }
