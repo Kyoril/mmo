@@ -27,7 +27,8 @@
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "systems/party_info.h"
-#include "party_unit_handle.h"
+#include "systems/talent_client.h"
+#include "systems/talent_client.h"
 #include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -739,7 +740,8 @@ namespace mmo
 	}
 
 
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient, GameTimeComponent& gameTime)
+	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient, GameTimeComponent& gameTime,
+		TalentClient& talentClient)
 		: m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_lootClient(lootClient)
@@ -756,6 +758,7 @@ namespace mmo
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
 		, m_gameTime(gameTime)
+		, m_talentClient(talentClient)
 	{
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
@@ -1108,6 +1111,7 @@ namespace mmo
 		m_vendorClient.RegisterScriptFunctions(m_luaState.get());
 		m_guildClient.RegisterScriptFunctions(m_luaState.get());
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
+		m_talentClient.RegisterScriptFunctions(m_luaState.get());
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;

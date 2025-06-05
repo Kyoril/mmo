@@ -17,16 +17,9 @@ namespace mmo
 	class GuildClient;
 	class CharSelect;
 	class CharCreateInfo;
-}
-
-namespace mmo
-{
+	class TalentClient;
 	class UnitHandle;
 	class PartyInfo;
-}
-
-namespace mmo
-{
 	class QuestClient;
 	class TrainerClient;
 	class SpellCast;
@@ -79,7 +72,8 @@ namespace mmo
 			CharCreateInfo& charCreateInfo,
 			CharSelect& charSelect,
 			GuildClient& guildClient,
-			GameTimeComponent& gameTime);
+			GameTimeComponent& gameTime,
+			TalentClient& talentClient);
 
 	public:
 		/// Gets the current lua state
@@ -172,6 +166,8 @@ namespace mmo
 		GuildClient& m_guildClient;
 
 		GameTimeComponent& m_gameTime;
+
+		TalentClient& m_talentClient;
 
 	private:
 		void Script_ReviveMe() const;

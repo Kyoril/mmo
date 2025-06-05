@@ -57,6 +57,7 @@
 #include "systems/quest_client.h"
 #include "systems/party_info.h"
 #include "systems/guild_client.h"
+#include "systems/talent_client.h"
 
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
@@ -298,6 +299,7 @@ namespace mmo
 
 	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
 	static std::unique_ptr<CharSelect> s_charSelect;
+	static std::unique_ptr<TalentClient> s_talentClient;
 
 	static std::unique_ptr<Discord> s_discord;
 
@@ -388,6 +390,7 @@ namespace mmo
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
+		s_talentClient = std::make_unique<TalentClient>();
 
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 
@@ -396,11 +399,11 @@ namespace mmo
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, 
-			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord, s_gameTime);
+			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, s_gameTime);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, s_gameTime, *s_talentClient);
 		
 		// Setup FrameUI library
 		if (!InitializeFrameUi())

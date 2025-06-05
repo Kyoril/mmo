@@ -78,6 +78,7 @@ namespace mmo
 	class TrainerClient;
 	class PartyInfo;
 	class GuildClient;
+	class TalentClient;
 	class Discord;
 
 	/// This class represents the initial game state where the player is asked to enter
@@ -110,7 +111,8 @@ namespace mmo
 			GuildClient& guildClient, 
 			ICacheProvider& cache,
 			Discord& discord,
-			GameTimeComponent& gameTime);
+			GameTimeComponent& gameTime,
+			TalentClient& talentClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -448,6 +450,8 @@ namespace mmo
 		Discord& m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
+
+		TalentClient& m_talentClient;
 
 	private:
 		static IInputControl* s_inputControl;
