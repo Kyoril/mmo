@@ -1,7 +1,7 @@
 #pragma once
 
 #include "connection.h"
-#include "db_cache.h"
+#include "data/db_cache.h"
 #include "base/typedefs.h"
 #include "base/signal.h"
 #include "game/item.h"

@@ -45,7 +45,8 @@ source_group(src\\game_states FILES ${gsSrcFiles})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${PROJECT_BINARY_DIR})  # Include directory where version.h is generated
 
-add_executable(mmo_client WIN32 MACOSX_BUNDLE ${srcFiles} ${consoleSrcFiles} ${netSrcFiles} ${uiSrcFiles} ${gsSrcFiles} ${osxSources} ${winSources})
+# Add executable
+add_gui_exe_recurse(mmo_client ${imgui_src} ${imgui_platform_src})
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_client PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

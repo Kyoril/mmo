@@ -2,7 +2,7 @@
 
 #include "world_state.h"
 #include "client.h"
-#include "loot_client.h"
+#include "systems/loot_client.h"
 
 #include "event_loop.h"
 #include "game_state_mgr.h"
@@ -20,12 +20,12 @@
 #include <algorithm>
 #include <zstr/zstr.hpp>
 
-#include "action_bar.h"
-#include "quest_client.h"
+#include "systems/action_bar.h"
+#include "systems/quest_client.h"
 #include "game_client/object_mgr.h"
 #include "spell_projectile.h"
-#include "trainer_client.h"
-#include "vendor_client.h"
+#include "systems/trainer_client.h"
+#include "systems/vendor_client.h"
 #include "world_deserializer.h"
 #include "base/erase_by_move.h"
 #include "base/profiler.h"
@@ -43,12 +43,12 @@
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
-#include "guild_client.h"
+#include "systems/guild_client.h"
 #include "game/object_info.h"
 #include "game/guild_info.h"
 
-#include "audio.h"
-#include "party_info.h"
+#include "audio/audio.h"
+#include "systems/party_info.h"
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"

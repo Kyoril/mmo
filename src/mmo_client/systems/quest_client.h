@@ -1,6 +1,6 @@
 #pragma once
 
-#include "client_cache.h"
+#include "data/client_cache.h"
 #include "spell_cast.h"
 #include "base/non_copyable.h"
 #include "game/quest.h"

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "audio.h"
+#include "mmo_client/audio/audio.h"
 #include "connection.h"
 #include "game_states/game_state.h"
 

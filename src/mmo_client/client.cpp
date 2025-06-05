@@ -30,9 +30,9 @@
 #include "ui/model_renderer.h"
 
 #ifdef _WIN32
-#   include "fmod_audio.h"
+#   include "audio/fmod_audio.h"
 #else
-#   include "null_audio.h"
+#   include "audio/null_audio.h"
 #endif
 
 #include <iostream>
@@ -40,26 +40,26 @@
 #include <thread>
 #include <memory>
 
-#include "client_cache.h"
+#include "data/client_cache.h"
 #include "cursor.h"
-#include "loot_client.h"
+#include "systems/loot_client.h"
 #include "stream_sink.h"
-#include "vendor_client.h"
+#include "systems/vendor_client.h"
 #include "game_states/world_state.h"
 #include "base/timer_queue.h"
 
 #include "base/executable_path.h"
 #include "client_data/project.h"
 
-#include "action_bar.h"
-#include "spell_cast.h"
-#include "trainer_client.h"
-#include "quest_client.h"
-#include "party_info.h"
-#include "guild_client.h"
+#include "systems/action_bar.h"
+#include "systems/spell_cast.h"
+#include "systems/trainer_client.h"
+#include "systems/quest_client.h"
+#include "systems/party_info.h"
+#include "systems/guild_client.h"
 
-#include "char_create_info.h"
-#include "char_select.h"
+#include "char_creation/char_create_info.h"
+#include "char_creation/char_select.h"
 #include "base/create_process.h"
 #include "game_client/object_mgr.h"
 #include "ui/unit_model_frame.h"

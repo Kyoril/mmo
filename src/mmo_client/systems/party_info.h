@@ -1,10 +1,11 @@
 #pragma once
-#include "client_cache.h"
+
+#include "mmo_client/data/client_cache.h"
 #include "base/non_copyable.h"
 #include "game/group.h"
 #include "game/spell.h"
 #include "game_client/game_player_c.h"
-#include "net/realm_connector.h"
+#include "mmo_client/net/realm_connector.h"
 
 namespace mmo
 {

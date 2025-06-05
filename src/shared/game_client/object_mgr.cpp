@@ -5,8 +5,8 @@
 #include "unit_handle.h"
 #include "base/macros.h"
 #include "client_data/project.h"
-#include "mmo_client/party_info.h"
 #include "mmo_client/party_unit_handle.h"
+#include "mmo_client/systems/party_info.h"
 
 namespace mmo
 {

@@ -9,7 +9,7 @@
 #include <functional>
 #include <unordered_map>
 
-#include "net/realm_connector.h"
+#include "mmo_client/net/realm_connector.h"
 
 namespace mmo
 {

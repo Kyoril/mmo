@@ -2,11 +2,11 @@
 
 #pragma once
 
-#include "audio.h"
-#include "char_select.h"
-#include "client_cache.h"
+#include "mmo_client/audio/audio.h"
+#include "mmo_client/char_creation//char_select.h"
+#include "mmo_client/data/client_cache.h"
 #include "connection.h"
-#include "db_cache.h"
+#include "mmo_client/data/db_cache.h"
 #include "player_controller.h"
 #include "screen.h"
 #include "game_states/game_state.h"
@@ -40,7 +40,7 @@
 #include "game/creature_data.h"
 #include "game/quest_info.h"
 
-#include "spell_cast.h"
+#include "mmo_client/systems/spell_cast.h"
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
 #include "graphics/color_curve.h"
