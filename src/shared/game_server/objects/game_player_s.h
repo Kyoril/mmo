@@ -181,6 +181,8 @@ namespace mmo
 
 		void UpdateAttributePoints();
 
+		void UpdateTalentPoints();
+
 		uint32 GetAttributePointsByAttribute(const uint32 attribute) const { ASSERT(attribute < 5); return m_attributePointEnhancements[attribute]; }
 
 		const String& GetName() const override;
@@ -220,6 +222,7 @@ namespace mmo
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
+		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
 		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher* m_netPlayerWatcher = nullptr;

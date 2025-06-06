@@ -210,6 +210,8 @@ namespace mmo
 
 				MoveRootAck,
 
+				LearnTalent,
+
 				/// Counter constant
 				Count_,
 			};
@@ -400,6 +402,8 @@ namespace mmo
                 
                 /// Game time notification packet sent to the client
                 GameTimeInfo,
+
+				SpellSuperceeded,
 
 				/// Counter constant
 				Count_,

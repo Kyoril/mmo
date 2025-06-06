@@ -1195,6 +1195,7 @@ namespace mmo
 
 		// Adjust stats
 		UpdateAttributePoints();
+		UpdateTalentPoints();
 
 		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
 		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, levelStats->stamina() + m_attributePointEnhancements[0]);
@@ -1290,6 +1291,13 @@ namespace mmo
 		for (uint32 i = 0; i < newLevel; ++i)
 		{
 			m_totalAvailablePointsAtLevel += m_classEntry->levelbasevalues(i).attributepoints();
+		}
+
+		// Calculate total talent points available at level
+		m_totalTalentPointsAtLevel = 0;
+		for (uint32 i = 0; i < newLevel; ++i)
+		{
+			m_totalTalentPointsAtLevel += m_classEntry->levelbasevalues(i).talentpoints();
 		}
 
 		// Adjust stats
@@ -1428,6 +1436,17 @@ namespace mmo
 			const uint8 cost = CalculateAttributeCost(m_attributePointEnhancements[i]);
 			SetAttributeCost(i, cost);
 		}
+	}
+
+	void GamePlayerS::UpdateTalentPoints()
+	{
+		// Calculate available attribute points
+		uint32 availableTalentPoints = m_totalTalentPointsAtLevel;
+
+		// TODO: Calculate points spent in talents so far
+
+		// Update available attribute points
+		Set<uint32>(object_fields::TalentPoints, availableTalentPoints);
 	}
 
 	const String& GamePlayerS::GetName() const
