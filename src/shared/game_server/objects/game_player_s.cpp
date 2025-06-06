@@ -48,6 +48,7 @@ namespace mmo
 		Set<int32>(object_fields::Xp, 0, false);
 		Set<int32>(object_fields::NextLevelXp, 400, false);
 		Set<int32>(object_fields::Level, 1, false);
+		Set(object_fields::TalentPoints, 0);
 
 		m_attributePointEnhancements.fill(0);
 		m_attributePointsSpent.fill(0);

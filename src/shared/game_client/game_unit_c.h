@@ -223,7 +223,15 @@ namespace mmo
 		uint32 GetNextLevelXp() const { return Get<uint32>(object_fields::NextLevelXp); }
 
 		/// 
-		uint32 GetAvailableAttributePoints() const { return Get<uint32>(object_fields::AvailableAttributePoints); }
+		virtual uint32 GetAvailableAttributePoints() const
+		{
+			return 0;
+		} 
+		
+		virtual uint32 GetTalentPoints() const
+		{
+			return 0;
+		}
 
 		int32 GetPower(int32 powerType) const;
 

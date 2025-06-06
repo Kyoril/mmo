@@ -265,8 +265,10 @@ namespace mmo
 
 			AttributePointCost,
 
+			TalentPoints = AttributePointCost + 2,
+
 			// Visible item fields
-			VISIBLE_ITEM_FIELDS(1, AttributePointCost + 2),
+			VISIBLE_ITEM_FIELDS(1, TalentPoints),
 			VISIBLE_ITEM_FIELDS_NEXT(2, 1),
 			VISIBLE_ITEM_FIELDS_NEXT(3, 2),
 			VISIBLE_ITEM_FIELDS_NEXT(4, 3),

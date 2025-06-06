@@ -191,6 +191,12 @@ namespace mmo
 		return Get()->GetAvailableAttributePoints();
 	}
 
+	int32 UnitHandle::GetTalentPoints() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetTalentPoints();
+	}
+
 	bool UnitHandle::IsAlive() const
 	{
 		if (!CheckNonNull()) return false;

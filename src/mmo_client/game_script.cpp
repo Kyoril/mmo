@@ -906,6 +906,7 @@ namespace mmo
 				.def("GetAttackTime", &UnitHandle::GetAttackTime)
 				.def("GetAttackPower", &UnitHandle::GetAttackPower)
 				.def("GetArmor", &UnitHandle::GetArmor)
+				.def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 				.def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
 				.def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)
 				.def("GetStat", &UnitHandle::GetStat)

@@ -42,6 +42,17 @@ namespace mmo
 
 		void NotifyGuildInfo(const GuildInfo* guild);
 
+		uint32 GetAvailableAttributePoints() const override
+		{
+			return Get<uint32>(object_fields::AvailableAttributePoints);
+		}
+
+		uint32 GetTalentPoints() const override
+		{
+			return Get<uint32>(object_fields::TalentPoints);
+		}
+
+
 	protected:
 		virtual void SetupSceneObjects() override;
 

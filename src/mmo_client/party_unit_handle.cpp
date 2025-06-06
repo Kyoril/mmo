@@ -1,6 +1,6 @@
 
 #include "party_unit_handle.h"
-#include "party_info.h"
+#include "mmo_client/systems/party_info.h"
 #include "game_client/game_unit_c.h"
 
 namespace mmo

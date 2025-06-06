@@ -61,6 +61,7 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetArmor() const;
 		[[nodiscard]] virtual float GetArmorReductionFactor() const;
 		[[nodiscard]] virtual int32 GetAvailableAttributePoints() const;
+		[[nodiscard]] virtual int32 GetTalentPoints() const;
 		[[nodiscard]] virtual bool IsAlive() const;
 		[[nodiscard]] virtual bool IsFriendly() const;
 		[[nodiscard]] virtual bool IsHostile() const;
