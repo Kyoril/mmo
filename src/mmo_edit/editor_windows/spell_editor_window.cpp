@@ -81,7 +81,8 @@ namespace mmo
 		"Heal Percentage",
 		"Charge",
 		"Apply Area Aura",
-		"Interrupt Spell Cast"
+		"Interrupt Spell Cast",
+		"Reset Talents"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");

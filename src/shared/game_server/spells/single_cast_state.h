@@ -201,6 +201,7 @@ namespace mmo
 		void SpellEffectDodge(const proto::SpellEffect& effect);
 		void SpellEffectHealPct(const proto::SpellEffect& effect);
 		void SpellEffectAddExtraAttacks(const proto::SpellEffect& effect);
+		void SpellEffectResetTalents(const proto::SpellEffect& effect);
 
 	private:
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);

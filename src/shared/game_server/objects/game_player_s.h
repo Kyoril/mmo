@@ -88,6 +88,8 @@ namespace mmo
 
 		void ResetAttributePoints();
 
+		void ResetTalents();
+
 		static uint8 CalculateAttributeCost(uint32 pointsSpent);
 
 		bool HasMoney(uint32 amount) const;

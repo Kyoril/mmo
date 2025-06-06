@@ -669,7 +669,8 @@ namespace mmo
 			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)},
 			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)},
 			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)},
-			{se::InterruptSpellCast,		std::bind(&SingleCastState::SpellEffectInterruptSpellCast, this, std::placeholders::_1)}
+			{se::InterruptSpellCast,		std::bind(&SingleCastState::SpellEffectInterruptSpellCast, this, std::placeholders::_1)},
+			{se::ResetTalents,			std::bind(&SingleCastState::SpellEffectResetTalents, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1485,6 +1486,35 @@ namespace mmo
 		{
 			m_affectedTargets.insert(m_cast.GetExecuter().shared_from_this());
 			m_cast.GetExecuter().OnAttackSwing();
+		}
+	}
+
+	void SingleCastState::SpellEffectResetTalents(const proto::SpellEffect& effect)
+	{
+		std::vector<GameObjectS*> effectTargets;
+		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
+		{
+			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+			return;
+		}
+
+		for (auto* targetObject : effectTargets)
+		{
+			if (!targetObject->IsUnit())
+			{
+				continue;
+			}
+
+			m_affectedTargets.insert(targetObject->shared_from_this());
+
+			if (targetObject->IsPlayer())
+			{
+				targetObject->AsPlayer().ResetTalents();
+			}
+			else
+			{
+				WLOG("Target is not a player character!");
+			}
 		}
 	}
 

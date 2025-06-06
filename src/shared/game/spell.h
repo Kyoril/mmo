@@ -823,6 +823,8 @@ namespace mmo
 			ApplyAreaAura,
 			InterruptSpellCast,
 
+			ResetTalents,
+
 			Count_,
 			Invalid_ = 0
 		};

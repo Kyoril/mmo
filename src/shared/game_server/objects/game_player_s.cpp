@@ -288,6 +288,12 @@ namespace mmo
 		RefreshStats();
 	}
 
+	void GamePlayerS::ResetTalents()
+	{
+		// TODO: Unlearn all talents
+		RefreshStats();
+	}
+
 	uint8 GamePlayerS::CalculateAttributeCost(const uint32 pointsSpent)
 	{
 		const double a = 1.5;  // Initial growth multiplier
