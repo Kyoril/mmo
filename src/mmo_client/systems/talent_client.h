@@ -11,6 +11,8 @@ struct lua_State;
 
 namespace mmo
 {
+	class RealmConnector;
+
 	struct TalentInfo
 	{
 		uint32 id = 0;
@@ -19,7 +21,7 @@ namespace mmo
 		uint32 column = 0;
 		uint32 spellId = 0;
 		const proto_client::SpellEntry* spell = nullptr;
-		uint32 rank = 0;
+		int32 rank = -1;
 		uint32 maxRank = 0;
 		String icon;
 		String name;
@@ -29,7 +31,7 @@ namespace mmo
 	{
 	public:
 		TalentClient(const proto_client::TalentTabManager& tabManager, const proto_client::TalentManager& talentManager,
-			const proto_client::SpellManager& spellManager);
+			const proto_client::SpellManager& spellManager, RealmConnector& realmConnector);
 
 	public:
 
@@ -48,10 +50,13 @@ namespace mmo
 
 		const TalentInfo* GetTalentInfo(int32 tabId, int32 index);
 
+		bool LearnTalent(uint32 tabId, int32 index);
+
 	private:
 		const proto_client::TalentTabManager& m_tabManager;
 		const proto_client::TalentManager& m_talentManager;
 		const proto_client::SpellManager& m_spellManager;
 		std::unordered_map<uint32, std::vector<TalentInfo>> m_talentsByTreeId;
+		RealmConnector& m_realmConnector;
 	};
 }

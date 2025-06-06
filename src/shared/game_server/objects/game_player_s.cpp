@@ -6,6 +6,7 @@
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game/item.h"
 
@@ -290,7 +291,25 @@ namespace mmo
 
 	void GamePlayerS::ResetTalents()
 	{
-		// TODO: Unlearn all talents
+		// Remove all talent spells
+		for (int i = 0; i < m_project.talents.count(); ++i)
+		{
+			const auto& talent = m_project.talents.getTemplates().entry(i);
+
+			// Check if player has any rank in this talent
+			uint32 currentRank = GetTalentRank(talent.id());
+			if (currentRank > 0)
+			{
+				// Unlearn all ranks of this talent
+				for (int rank = 0; rank < currentRank && rank < talent.ranks_size(); ++rank)
+				{
+					RemoveSpell(talent.ranks(rank));
+				}
+			}
+		}
+
+		// Clear talent data
+		m_talents.clear();
 		RefreshStats();
 	}
 
@@ -1116,6 +1135,122 @@ namespace mmo
 		}
 	}
 
+	bool GamePlayerS::LearnTalent(uint32 talentId, uint32 rank)
+	{
+		const auto* talentEntry = m_project.talents.getById(talentId);
+		if (!talentEntry)
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn non existing talent " << talentId);
+			return false;
+		}
+
+		// Check if we may even learn this talent at all
+		const auto* talentTab = m_project.talentTabs.getById(talentEntry->tab());
+		if (!talentTab)
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " but it refers to non existing tab " << talentEntry->tab());
+			return false;
+		}
+
+		if (!m_classEntry || talentTab->class_id() != m_classEntry->id())
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " which is not intended for his class!");
+			return false;
+		}
+
+		// Get current rank (0 if not learned yet)
+		const uint32 currentRank = GetTalentRank(talentId);
+		if (currentRank >= talentEntry->ranks_size())
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
+			return false; // Already at max rank
+		}
+
+		// Always need at least one talent point for higher ranks
+		const uint32 talentPointCost = (rank - currentRank) + 1;
+
+		// Check if player has enough talent points
+		uint32 availablePoints = GetAvailableTalentPoints();
+		if (availablePoints < talentPointCost)
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " but has not enough talent points!");
+			return false; // Not enough points
+		}
+
+		// Check prerequisites (if any)
+
+		// Unlearn previous rank's spell if needed
+		if (currentRank > 0)
+		{
+			RemoveSpell(talentEntry->ranks(currentRank - 1));
+
+			// TODO: Maybe we should remove all previous spell ranks just to be 100% sure
+		}
+
+		// Learn the spell for this rank
+		uint32 spellId = talentEntry->ranks(currentRank);
+		AddSpell(spellId);
+
+		// Update talent data
+		m_talents[talentId] = currentRank + 1;
+
+		// Update available points
+		UpdateTalentPoints();
+
+		return true;
+	}
+
+	uint32 GamePlayerS::GetTalentRank(const uint32 talentId) const
+	{
+		const auto it = m_talents.find(talentId);
+		if (it == m_talents.end())
+		{
+			return 0;
+		}
+
+		return it->second;
+	}
+
+	uint32 GamePlayerS::GetTalentPointsSpent() const
+	{
+		// TODO: Maybe we should cache this value
+		uint32 pointsSpent = 0;
+
+		for (const auto& it : m_talents)
+		{
+			// Remember: First rank is 0, but it still costs 1 Talent Point to learn this rank
+			pointsSpent += (it.second + 1);
+		}
+
+		return pointsSpent;
+	}
+
+	uint32 GamePlayerS::GetAvailableTalentPoints() const
+	{
+		// TODO: Should we really use the field map directly here? We own it, so it should be okay but it feels kinda wrong
+		return Get<uint32>(object_fields::TalentPoints);
+	}
+
+	bool GamePlayerS::HasTalent(uint32 talentId, uint32 rank) const
+	{
+		// Do we know the talent at all?
+		const auto it = m_talents.find(talentId);
+		if (it == m_talents.end())
+		{
+			return false;
+		}
+
+		// Do we have at least the specified rank?
+		if (it->second < rank)
+		{
+			// No, we have the talent but a lower rank
+			return false;
+		}
+
+		// Yes, we have AT LEAST the searched rank
+		return true;
+	}
+
 	bool GamePlayerS::AddAttributePoint(const uint32 attribute)
 	{
 		// First determine attribute point cost
@@ -1447,12 +1582,25 @@ namespace mmo
 	void GamePlayerS::UpdateTalentPoints()
 	{
 		// Calculate available attribute points
-		uint32 availableTalentPoints = m_totalTalentPointsAtLevel;
+		const uint32 availableTalentPoints = m_totalTalentPointsAtLevel;
 
-		// TODO: Calculate points spent in talents so far
+		// Calculate points spent in talents
+		uint32 spentPoints = 0;
+		for (const auto& [talentId, rank] : m_talents)
+		{
+			spentPoints += rank;
+		}
+
+		// Did we somehow exceed the available talent points? If so, we force a talent point reset here
+		// because obviously something changed
+		if (spentPoints > availableTalentPoints)
+		{
+			ResetTalents();
+			spentPoints = 0;
+		}
 
 		// Update available attribute points
-		Set<uint32>(object_fields::TalentPoints, availableTalentPoints);
+		Set<uint32>(object_fields::TalentPoints, availableTalentPoints - spentPoints);
 	}
 
 	const String& GamePlayerS::GetName() const

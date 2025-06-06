@@ -421,6 +421,8 @@ namespace mmo
 
 		void GuildRoster();
 
+		void LearnTalent(uint32 talentId, uint8 rank);
+
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 

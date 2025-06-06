@@ -2,13 +2,15 @@
 #include "talent_client.h"
 
 #include "luabind_lambda.h"
+#include "net/realm_connector.h"
 
 namespace mmo
 {
-	TalentClient::TalentClient(const proto_client::TalentTabManager& tabManager, const proto_client::TalentManager& talentManager, const proto_client::SpellManager& spellManager)
+	TalentClient::TalentClient(const proto_client::TalentTabManager& tabManager, const proto_client::TalentManager& talentManager, const proto_client::SpellManager& spellManager, RealmConnector& realmConnector)
 		: m_tabManager(tabManager)
 		, m_talentManager(talentManager)
 		, m_spellManager(spellManager)
+		, m_realmConnector(realmConnector)
 	{
 		for (const proto_client::TalentEntry& talent : m_talentManager.getTemplates().entry())
 		{
@@ -73,7 +75,8 @@ namespace mmo
 			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),
 
 			luabind::def_lambda("GetNumTalents", [this](int32 tabId) { return GetNumTalents(tabId); }),
-			luabind::def_lambda("GetTalentInfo", [this](int32 tabId, int32 index) { return GetTalentInfo(tabId, index); })
+			luabind::def_lambda("GetTalentInfo", [this](int32 tabId, int32 index) { return GetTalentInfo(tabId, index); }),
+			luabind::def_lambda("LearnTalent", [this](int32 tabId, int32 index) { return LearnTalent(tabId, index); })
 		];
 	}
 
@@ -119,5 +122,24 @@ namespace mmo
 		}
 
 		return &it->second[index];
+	}
+
+	bool TalentClient::LearnTalent(const uint32 tabId, const int32 index)
+	{
+		const TalentInfo* info = GetTalentInfo(tabId, index);
+		if (!info)
+		{
+			ELOG("Failed to learn talent: Unknown talent");
+			return false;
+		}
+
+		if (info->rank >= info->maxRank)
+		{
+			WLOG("Unable to learn talent: Max rank already reached");
+			return false;
+		}
+
+		m_realmConnector.LearnTalent(info->id, info->rank + 1);
+		return true;
 	}
 }

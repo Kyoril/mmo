@@ -466,6 +466,9 @@ namespace mmo
 		case game::client_realm_packet::GossipAction:
 			OnGossipAction(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::LearnTalent:
+			OnLearnTalent(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:

@@ -863,4 +863,15 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::LearnTalent(uint32 talentId, uint8 rank)
+	{
+		sendSinglePacket([talentId, rank](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::LearnTalent);
+				packet << io::write<uint32>(talentId)
+					<< io::write<uint8>(rank);
+				packet.Finish();
+			});
+	}
 }

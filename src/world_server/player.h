@@ -338,6 +338,8 @@ namespace mmo
 
 		void OnGossipAction(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		void OnLearnTalent(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		const proto::GossipMenuEntry* GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const;
 

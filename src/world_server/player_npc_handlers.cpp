@@ -821,6 +821,25 @@ namespace mmo
 		ELOG("Player tried to execute gossip action " << actionId << " but menu " << menuId << " does not offer this action for the player");
 	}
 
+	void Player::OnLearnTalent(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 talentId, rank;
+		if (!(contentReader >> io::read<uint32>(talentId) >> io::read<uint8>(rank)))
+		{
+			ELOG("Failed to read learn talent packet!");
+			return;
+		}
+
+		if (!m_character->LearnTalent(talentId, rank))
+		{
+			ELOG("Failed to learn talent " << talentId << " rank " << rank << " for player");
+		}
+		else
+		{
+			DLOG("Player learned talent " << talentId << " rank " << rank);
+		}
+	}
+
 	const proto::GossipMenuEntry* Player::GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const
 	{
 		// Lets search for npc's gossip menu entries and check conditions

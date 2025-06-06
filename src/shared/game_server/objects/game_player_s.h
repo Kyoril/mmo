@@ -164,6 +164,42 @@ namespace mmo
 
 		void SetQuestData(uint32 questId, const QuestStatusData& data);
 
+		/// Tries to learn a given rank of a talent.
+		///
+		/// This will fail if the talent is already known, a higher or even rank is already known or the talent
+		/// does not exist or cant be learned by the current player class OR if any other requirement is not met,
+		/// like having enough talent points available to spend.
+		///
+		/// @param talentId Id of the talent to learn.
+		/// @param rank Rank to learn.
+		/// @return true if the talent was learned, false otherwise.
+		bool LearnTalent(uint32 talentId, uint32 rank);
+
+		/// Determines if a rank of specific talent has been learned. If rank is 0 it basically checks if
+		/// the given talent is learned at all.
+		///
+		/// @param talentId Id of the talent to search.
+		/// @param rank Min rank to check against.
+		/// @returns true if at least the given rank is learned. Returns false if not or the talent is not known at all.
+		bool HasTalent(uint32 talentId, uint32 rank = 0) const;
+
+		/// Returns the current rank of the given talent id.
+		///
+		/// CAREFUL: This returns 0 if the talent is not known. So you can NOT use this function to
+		/// check if a talent is learned at all. For this check, use the HasTalent function instead!
+		///
+		/// @param talentId Id of the talent to look for.
+		/// @returns rank of the talent. Also returns 0 if talent is not known or at first rank.
+		uint32 GetTalentRank(uint32 talentId) const;
+
+		/// Returns the amount of talent points spent in total.
+		///
+		/// @return Number of talent points spent in total.
+		uint32 GetTalentPointsSpent() const;
+
+		/// Gets the amount of available talent points to spend.
+		uint32 GetAvailableTalentPoints() const;
+
 	protected:
 
 		float GetUnitMissChance() const override;
@@ -232,6 +268,7 @@ namespace mmo
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;
 		bool m_isGameMaster = false;
+		std::unordered_map<uint32, uint32> m_talents;
 
 	private:
 		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);
