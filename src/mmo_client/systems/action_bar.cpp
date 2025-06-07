@@ -187,7 +187,10 @@ namespace mmo
 			return;
 		}
 
-		// Do we already have an item?
+		const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		// Do we have something picked up already?
 		if (g_cursor.GetItemType() == CursorItemType::None)
 		{
 			// No, so pick up the action button if there is one
@@ -196,12 +199,27 @@ namespace mmo
 				return;
 			}
 
-			g_cursor.SetActionButton(slot);
+			switch (m_actionButtons[slot].type)
+			{
+			case action_button_type::Spell:
+				g_cursor.SetSpell(m_actionButtons[slot].action);
+				break;
+			case action_button_type::Item:
+				uint8 bag, bagSlot;
+				uint64 guid;
+				if (!ObjectMgr::FindItem(m_actionButtons[slot].action, bag, bagSlot, guid))
+				{
+					return;
+				}
+
+				g_cursor.SetItem((static_cast<uint16>(bag) << 8) | bagSlot);
+				break;
+			}
+
+			ClearActionButton(slot);
+			FrameManager::Get().TriggerLuaEvent("ACTION_BAR_CHANGED");
 			return;
 		}
-
-		const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
 
 		// We do have an item, place it at the action button slot
 		switch (g_cursor.GetItemType())
@@ -245,15 +263,6 @@ namespace mmo
 			m_actionButtons[slot].type = action_button_type::Spell;
 			m_actionButtons[slot].action = static_cast<uint16>(g_cursor.GetCursorItem());
 			ActionButtonChanged(slot);
-			break;
-		case CursorItemType::ActionButton:
-			// Flip action buttons if they are not the same
-			if (g_cursor.GetCursorItem() != slot)
-			{
-				std::swap(m_actionButtons[slot], m_actionButtons[g_cursor.GetCursorItem()]);
-				ActionButtonChanged(slot);
-				ActionButtonChanged(g_cursor.GetCursorItem());
-			}
 			break;
 		}
 

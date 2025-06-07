@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "checkbox_renderer.h"
+#include "geometry_helper.h"
 #include "progress_bar.h"
 #include "expat/lib/expat.h"
 #include "lua/lua.hpp"
@@ -343,7 +344,23 @@ namespace mmo
 		}
 	}
 
+	void FrameManager::SetCursorIcon(TexturePtr cursorIconTexture, const Size size)
+	{
+		m_cursorIconTexture = cursorIconTexture;
+		m_cursorIconSize = size;
 
+		m_cursorIconBuffer.Reset();
+		if (m_cursorIconTexture)
+		{
+			m_cursorIconBuffer.SetActiveTexture(m_cursorIconTexture);
+			GeometryHelper::CreateRect(m_cursorIconBuffer,
+				Color::White,
+				Rect(0.0f, 0.0f, m_cursorIconSize.width, m_cursorIconSize.height),
+				Rect(0.0f, m_cursorIconTexture->GetHeight(), m_cursorIconTexture->GetWidth(), 0.0f),
+				m_cursorIconTexture->GetWidth(),
+				m_cursorIconTexture->GetHeight());
+		}
+	}
 
 	void FrameManager::Initialize(lua_State* luaState, const Localization& localization)
 	{
@@ -683,7 +700,7 @@ namespace mmo
 		m_topFrame.reset();
 	}
 
-	void FrameManager::Draw() const
+	void FrameManager::Draw()
 	{
 		// Disable depth test & write
 		GraphicsDevice::Get().SetDepthEnabled(false);
@@ -694,6 +711,14 @@ namespace mmo
 		if (m_topFrame != nullptr)
 		{
 			m_topFrame->Render();
+		}
+
+		if (m_cursorIconTexture)
+		{
+			// Ensure the cursor icon is drawn at the cursor location
+			const Matrix4 world = Matrix4::GetTrans(m_mousePos.x, m_mousePos.y, 0.0f) * Matrix4::GetScale(m_uiScale.x, m_uiScale.y, 1.0f);
+			GraphicsDevice::Get().SetTransformMatrix(World, world);
+			m_cursorIconBuffer.Draw();
 		}
 	}
 

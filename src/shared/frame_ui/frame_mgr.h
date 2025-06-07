@@ -81,6 +81,8 @@ namespace mmo
 
 		const Size& GetNativeResolution() const noexcept { return m_nativeResolution; }
 
+		void SetCursorIcon(TexturePtr cursorIconTexture, const Size size);
+
 	public:
 		/// Contains info about a font map.
 		struct FontMap final
@@ -104,7 +106,7 @@ namespace mmo
 
 		void ResetTopFrame();
 
-		void Draw() const;
+		void Draw();
 
 		void Update(float elapsedSeconds);
 		
@@ -228,5 +230,11 @@ namespace mmo
 		Point m_uiScale { 1.0f, 1.0f };
 
 		Point m_mousePos;
+
+		TexturePtr m_cursorIconTexture;
+
+		Size m_cursorIconSize{ 32.0f, 32.0f };
+
+		GeometryBuffer m_cursorIconBuffer;
 	};
 }

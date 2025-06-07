@@ -1478,10 +1478,10 @@ namespace mmo
 			{
 				hovered->OnDrop(m_dragButton, position);
 			}
-
-			m_isDragging = false;
-			m_dragButton = MouseButton::None;
 		}
+
+		m_isDragging = false;
+		m_dragButton = MouseButton::None;
 		
 		if (m_onClick.is_valid())
 		{

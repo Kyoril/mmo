@@ -1,6 +1,7 @@
 
 #include "cursor.h"
 
+#include "frame_ui/frame_mgr.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
@@ -134,24 +135,32 @@ namespace mmo
 	{
 		m_type = CursorItemType::None;
 		m_itemSlot = -1;
+
+		FrameManager::Get().SetCursorIcon(nullptr, Size(32.0f, 32.0f));
 	}
 
 	void Cursor::SetItem(uint32 slot)
 	{
 		m_type = CursorItemType::Item;
 		m_itemSlot = slot;
+
+		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
 	}
 
 	void Cursor::SetSpell(uint32 spell)
 	{
 		m_type = CursorItemType::Spell;
 		m_itemSlot = spell;
+
+		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
 	}
 
 	void Cursor::SetActionButton(uint32 slot)
 	{
 		m_type = CursorItemType::ActionButton;
 		m_itemSlot = slot;
+
+		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
 	}
 
 	uint32 Cursor::GetCursorItem() const
