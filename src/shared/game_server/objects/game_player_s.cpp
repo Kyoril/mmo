@@ -131,7 +131,8 @@ namespace mmo
 				break;
 			}
 
-			// TODO: Should we use this method here?
+			// Reduce cost for log and learn the respective rank
+			talentPoints -= talentPointCost;
 			LearnTalent(talentId, rank);
 		}
 
@@ -1198,7 +1199,7 @@ namespace mmo
 
 		// Get current rank (0 if not learned yet)
 		const uint32 currentRank = GetTalentRank(talentId);
-		if (currentRank >= talentEntry->ranks_size())
+		if (currentRank >= talentEntry->ranks_size() - rank)
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
 			return false; // Already at max rank
@@ -1218,19 +1219,19 @@ namespace mmo
 		// Check prerequisites (if any)
 
 		// Unlearn previous rank's spell if needed
-		if (currentRank > 0)
+		if (rank > 0)
 		{
-			RemoveSpell(talentEntry->ranks(currentRank - 1));
+			RemoveSpell(talentEntry->ranks(rank - 1));
 
 			// TODO: Maybe we should remove all previous spell ranks just to be 100% sure
 		}
 
 		// Learn the spell for this rank
-		uint32 spellId = talentEntry->ranks(currentRank);
+		uint32 spellId = talentEntry->ranks(rank);
 		AddSpell(spellId);
 
 		// Update talent data
-		m_talents[talentId] = currentRank + 1;
+		m_talents[talentId] = rank;
 
 		// Update available points
 		UpdateTalentPoints();

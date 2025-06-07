@@ -554,7 +554,7 @@ namespace mmo
 		OnSpellUnlearned(*spell);
 	}
 
-	const std::set<const proto::SpellEntry*>& GameUnitS::GetSpells() const
+	const std::unordered_set<const proto::SpellEntry*>& GameUnitS::GetSpells() const
 	{
 		return m_spells;
 	}

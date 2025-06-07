@@ -89,7 +89,6 @@ namespace mmo
 
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
-		m_character->InitializeTalents(m_characterData.talentRanks);
 	}
 
 	Player::~Player()
@@ -567,11 +566,24 @@ namespace mmo
 			SpawnTileObjects(tile);
 		});
 
+		m_character->InitializeTalents(m_characterData.talentRanks);
+
 		// Send initial spells
 		SendPacket([&](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::InitialSpells);
-			packet << io::write_dynamic_range<uint16>(m_characterData.spellIds);
+
+			const auto& spells = m_character->GetSpells();
+			packet << io::write<uint16>(spells.size());
+			for (const auto* spell : spells)
+			{
+				if (!spell)
+				{
+					continue;
+				}
+
+				packet << io::write<uint32>(spell->id());
+			}
 			packet.Finish();
 		}, false);
 

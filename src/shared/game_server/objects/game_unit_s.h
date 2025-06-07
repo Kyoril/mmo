@@ -616,7 +616,7 @@ namespace mmo
 
 		/// Gets the set of spells known by the unit.
 		/// @returns A set of pointers to spell entries.
-		const std::set<const proto::SpellEntry*>& GetSpells() const;
+		const std::unordered_set<const proto::SpellEntry*>& GetSpells() const;
 
 		/// Sets the cooldown for a spell.
 		/// @param spellId The ID of the spell.
@@ -1149,7 +1149,7 @@ namespace mmo
 
 		std::weak_ptr<GameUnitS> m_victim;
 
-		std::set<const proto::SpellEntry*> m_spells;
+		std::unordered_set<const proto::SpellEntry*> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;
 
 		std::map<uint32, GameTime> m_spellCooldowns;
