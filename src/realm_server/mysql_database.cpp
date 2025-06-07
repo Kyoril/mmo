@@ -632,6 +632,30 @@ namespace mmo
 					throw mysql::Exception("Could not load character quests");
 				}
 
+				// Load talent data
+				mysql::Select talentSelect(m_connection, "SELECT `talent`, `rank` FROM `character_talents` WHERE `character`=" + std::to_string(characterId));
+				if (talentSelect.Success())
+				{
+					mysql::Row talentRow(talentSelect);
+					while (talentRow)
+					{
+						// Read item data
+						uint32 talentId = 0;
+						uint8 rank;
+						talentRow.GetField(0, talentId);
+						talentRow.GetField<uint8, uint16>(1, rank);
+						result.talentRanks[talentId] = rank;
+
+						// Next row
+						talentRow = mysql::Row::Next(talentSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character talents");
+				}
+
 				// Load guild membership
 				mysql::Select guildSelect(m_connection, std::format("SELECT `guild_id` FROM `guild_members` WHERE `guid`='{0}' LIMIT 1", characterId));
 				if (guildSelect.Success())

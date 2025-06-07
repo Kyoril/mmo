@@ -296,15 +296,10 @@ namespace mmo
 		{
 			const auto& talent = m_project.talents.getTemplates().entry(i);
 
-			// Check if player has any rank in this talent
-			uint32 currentRank = GetTalentRank(talent.id());
-			if (currentRank > 0)
+			// Unlearn all ranks of this talent
+			for (int rank = 0; rank < talent.ranks_size(); ++rank)
 			{
-				// Unlearn all ranks of this talent
-				for (int rank = 0; rank < currentRank && rank < talent.ranks_size(); ++rank)
-				{
-					RemoveSpell(talent.ranks(rank));
-				}
+				RemoveSpell(talent.ranks(rank));
 			}
 		}
 

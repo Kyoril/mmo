@@ -529,7 +529,6 @@ namespace mmo
 
 		if (m_spells.erase(spell) < 1)
 		{
-			WLOG("Unable to remove spell " << spellId << " from unit " << log_hex_digit(GetGuid()) << ": spell was not known");
 			return;
 		}
 

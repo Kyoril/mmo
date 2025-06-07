@@ -75,6 +75,7 @@ namespace mmo
 
 		std::vector<uint32> rewardedQuestIds;
 		std::map<uint32, QuestStatusData> questStatus;
+		std::map<uint32, uint8> talentRanks;
 
 		uint32 bindMap;
 		Vector3 bindPosition;
@@ -142,6 +143,24 @@ namespace mmo
 			data.questStatus[questId] = questData;
 		}
 
+		uint8 numTalents;
+		if (!(reader >> io::read<uint8>(numTalents)))
+		{
+			return reader;
+		}
+
+		for (uint8 i = 0; i < numTalents; ++i)
+		{
+			uint32 talentId;
+			uint8 rank;
+			if (!(reader >> io::read<uint32>(talentId) >> io::read<uint8>(rank)))
+			{
+				return reader;
+			}
+
+			data.talentRanks[talentId] = rank;
+		}
+
 		return reader;
 	}
 	
@@ -185,6 +204,12 @@ namespace mmo
 			writer
 				<< io::write<uint32>(questId)
 				<< questData;
+		}
+
+		writer << io::write<uint8>(data.talentRanks.size());
+		for (const auto& [talentId, rank] : data.talentRanks)
+		{
+			writer << io::write<uint32>(talentId) << io::write<uint8>(rank);
 		}
 
 		return writer;
