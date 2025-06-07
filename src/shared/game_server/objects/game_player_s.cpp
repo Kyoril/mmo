@@ -118,7 +118,7 @@ namespace mmo
 
 		Set<int32>(object_fields::MaxLevel, classEntry.levelbasevalues_size());
 		Set<int32>(object_fields::PowerType, classEntry.powertype());
-
+		Set<int32>(object_fields::Class, classEntry.id());
 		RefreshStats();
 	}
 

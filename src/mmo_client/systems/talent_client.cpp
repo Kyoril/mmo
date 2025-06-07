@@ -2,6 +2,7 @@
 #include "talent_client.h"
 
 #include "luabind_lambda.h"
+#include "game_client/object_mgr.h"
 #include "net/realm_connector.h"
 
 namespace mmo
@@ -12,36 +13,6 @@ namespace mmo
 		, m_spellManager(spellManager)
 		, m_realmConnector(realmConnector)
 	{
-		for (const proto_client::TalentEntry& talent : m_talentManager.getTemplates().entry())
-		{
-			// Skip empty talent or talent tabs
-			if (talent.tab() <= 0 || talent.ranks_size() == 0)
-			{
-				WLOG("Talent " << talent.id() << " has no tab or ranks, skipping it!");
-				continue;
-			}
-
-			const proto_client::SpellEntry* spell = m_spellManager.getById(talent.ranks(0));
-			if (spell == nullptr)
-			{
-				WLOG("Talent " << talent.id() << " has unknown spell " << talent.ranks(0) << " for rank 0, skipping it!");
-				continue;
-			}
-
-			auto& entry = m_talentsByTreeId[talent.tab()];
-			entry.emplace_back(
-				talent.id(),
-				talent.tab(),
-				talent.row(),
-				talent.column(),
-				spell->id(),
-				spell,
-				0,
-				static_cast<uint32>(talent.ranks_size()),
-				spell->icon(),
-				spell->name()
-			);
-		}
 	}
 
 	void TalentClient::Initialize()
@@ -80,6 +51,61 @@ namespace mmo
 		];
 	}
 
+	void TalentClient::NotifyCharacterClassChanged()
+	{
+		RebuildTalentTrees();
+	}
+
+	void TalentClient::RebuildTalentTrees()
+	{
+		m_talentsByTreeId.clear();
+
+		std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return;
+		}
+
+		const uint32 playerClass = player->Get<uint32>(object_fields::Class);
+
+		for (const proto_client::TalentEntry& talent : m_talentManager.getTemplates().entry())
+		{
+			// Skip empty talent or talent tabs
+			if (talent.tab() <= 0 || talent.ranks_size() == 0)
+			{
+				WLOG("Talent " << talent.id() << " has no tab or ranks, skipping it!");
+				continue;
+			}
+
+			const proto_client::TalentTabEntry* tab = m_tabManager.getById(talent.tab());
+			if (!tab || tab->class_id() != playerClass)
+			{
+				continue;
+			}
+
+			const proto_client::SpellEntry* spell = m_spellManager.getById(talent.ranks(0));
+			if (spell == nullptr)
+			{
+				WLOG("Talent " << talent.id() << " has unknown spell " << talent.ranks(0) << " for rank 0, skipping it!");
+				continue;
+			}
+
+			auto& entry = m_talentsByTreeId[talent.tab()];
+			entry.emplace_back(
+				talent.id(),
+				talent.tab(),
+				talent.row(),
+				talent.column(),
+				spell->id(),
+				spell,
+				0,
+				static_cast<uint32>(talent.ranks_size() - 1),
+				spell->icon(),
+				spell->name()
+			);
+		}
+	}
+
 	int32 TalentClient::GetNumTalentTabs()
 	{
 		return m_talentsByTreeId.size();
@@ -92,14 +118,37 @@ namespace mmo
 			return nullptr;
 		}
 
-		// TODO
-		static const char* s_talentTabName = "DEFAULT";
-		return s_talentTabName;
+		auto it = m_talentsByTreeId.begin();
+		if (it == m_talentsByTreeId.end())
+		{
+			return nullptr;
+		}
+
+		std::advance(it, index);
+		if (it == m_talentsByTreeId.end())
+		{
+			return nullptr;
+		}
+
+		const proto_client::TalentTabEntry* tab = m_tabManager.getById(it->first);
+		if (!tab)
+		{
+			return nullptr;
+		}
+
+		return tab->name().c_str();
 	}
 
 	int32 TalentClient::GetNumTalents(const int32 tabId)
 	{
-		const auto it = m_talentsByTreeId.find(tabId);
+		auto it = m_talentsByTreeId.begin();
+		if (it == m_talentsByTreeId.end())
+		{
+			return 0;
+		}
+
+		std::advance(it, tabId);
+
 		if (it == m_talentsByTreeId.end())
 		{
 			return 0;
@@ -110,7 +159,14 @@ namespace mmo
 
 	const TalentInfo* TalentClient::GetTalentInfo(const int32 tabId, const int32 index)
 	{
-		const auto it = m_talentsByTreeId.find(tabId);
+		auto it = m_talentsByTreeId.begin();
+		if (it == m_talentsByTreeId.end())
+		{
+			return nullptr;
+		}
+
+		std::advance(it, tabId);
+
 		if (it == m_talentsByTreeId.end())
 		{
 			return nullptr;

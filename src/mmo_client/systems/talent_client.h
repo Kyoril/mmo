@@ -34,14 +34,17 @@ namespace mmo
 			const proto_client::SpellManager& spellManager, RealmConnector& realmConnector);
 
 	public:
-
 		void Initialize();
 
 		void Shutdown();
 
 		void RegisterScriptFunctions(lua_State* luaState);
 
+		void NotifyCharacterClassChanged();
+
 	private:
+		void RebuildTalentTrees();
+
 		int32 GetNumTalentTabs();
 
 		const char* GetTalentTabName(int32 index);

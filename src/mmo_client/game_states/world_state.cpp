@@ -1208,6 +1208,9 @@ namespace mmo
 
 					// Ensure world is loaded entirely
 					WaitForWorldLoading();
+
+					// Update talent trees
+					m_talentClient.NotifyCharacterClassChanged();
 				}
 			}
 			else
