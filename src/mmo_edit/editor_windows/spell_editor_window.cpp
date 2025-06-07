@@ -741,6 +741,9 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Aura is Hidden", spell_attributes_b::HiddenAura);
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Is Talent", spell_attributes_b::Talent);
+
 				ImGui::EndTable();
 			}
 		}

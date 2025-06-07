@@ -668,7 +668,15 @@ namespace mmo
 		spellIds.reserve(player.GetSpells().size());
 		for (const auto& spell : player.GetSpells())
 		{
+			// Don't save unknown spells
 			if (!spell) continue;
+
+			// Don't save talent spells
+			if (spell->attributes_size() > 0 && spell->attributes(1) & spell_attributes_b::Talent)
+			{
+				continue;
+			}
+
 			spellIds.push_back(spell->id());
 		}
 

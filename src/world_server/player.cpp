@@ -89,6 +89,7 @@ namespace mmo
 
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
+		m_character->InitializeTalents(m_characterData.talentRanks);
 	}
 
 	Player::~Player()
@@ -596,10 +597,13 @@ namespace mmo
 
 		// Send current game time to player
 		SendGameTimeInfo();
+		m_spawned = true;
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
 	{
+		m_spawned = false;
+
 		// No longer watch for network events
 		m_character->SetNetUnitWatcher(nullptr);
 
@@ -1551,6 +1555,12 @@ namespace mmo
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
 	{
+		// Don't notify if we are not spawned yet
+		if (!m_spawned)
+		{
+			return;
+		}
+
 		SendPacket([&spellEntry](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::LearnedSpell);
@@ -1561,6 +1571,12 @@ namespace mmo
 
 	void Player::OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
 	{
+		// Don't notify if we are not spawned yet
+		if (!m_spawned)
+		{
+			return;
+		}
+
 		SendPacket([&spellEntry](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::UnlearnedSpell);

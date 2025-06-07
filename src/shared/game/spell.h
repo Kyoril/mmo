@@ -518,9 +518,11 @@ namespace mmo
 	{
 		enum Type
 		{
-			MeleeCombatStart = 0x00000001,
+			MeleeCombatStart = 1 << 0,
 
-			HiddenAura = 0x00000002,
+			HiddenAura = 1 << 1,
+
+			Talent = 1 << 2
 		};
 	}
 

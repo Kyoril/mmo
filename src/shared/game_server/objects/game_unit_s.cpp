@@ -478,7 +478,6 @@ namespace mmo
 
 		if (m_spells.contains(spell))
 		{
-			WLOG("Spell " << spellId << " is already known by unit " << log_hex_digit(GetGuid()));
 			return;
 		}
 

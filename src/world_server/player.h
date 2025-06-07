@@ -469,5 +469,7 @@ namespace mmo
 		Countdown m_groupUpdate;
 
 		ConditionMgr& m_conditionMgr;
+
+		bool m_spawned{ false };
 	};
 }

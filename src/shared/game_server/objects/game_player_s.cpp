@@ -102,6 +102,49 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerS::InitializeTalents(const std::map<uint32, uint8>& talentRanks)
+	{
+		// Ensure we start fresh
+		ASSERT(m_talents.empty());
+
+		// TODO: Remove all spells which we should not be able to know at this point?
+
+		uint32 talentPoints = m_totalTalentPointsAtLevel;
+		bool resetTalents = false;
+
+		for (const auto& [talentId, rank] : talentRanks)
+		{
+			// Ensure this talent exists
+			if (!m_project.talents.getById(talentId))
+			{
+				WLOG("Found unknown talent in character talent data - resetting talents")
+				resetTalents = true;
+				break;
+			}
+
+			// Learning this rank costs this much talent points
+			const uint32 talentPointCost = rank + 1;
+			if (talentPointCost > talentPoints)
+			{
+				WLOG("Player does not have enough talent points to learn talents set in database - resetting talents");
+				m_talents.clear();
+				break;
+			}
+
+			// TODO: Should we use this method here?
+			LearnTalent(talentId, rank);
+		}
+
+		if (resetTalents)
+		{
+			// This ensures that all spells are also unlearned which might have been learned already
+			ResetTalents();
+			return;
+		}
+
+		DLOG("Initialize talents. Talent points spent: " << (m_totalTalentPointsAtLevel - talentPoints) << " / " << m_totalTalentPointsAtLevel);
+	}
+
 	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
 	{
 		m_configuration = configuration;

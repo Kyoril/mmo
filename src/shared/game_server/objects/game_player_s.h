@@ -112,6 +112,8 @@ namespace mmo
 
 		void LootObject(std::weak_ptr<GameObjectS> lootObject);
 
+		void InitializeTalents(const std::map<uint32, uint8>& talentRanks);
+
 	public:
 
 		/// Gets the current status of a given quest by its id.
