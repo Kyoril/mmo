@@ -366,7 +366,9 @@ namespace mmo
 
 	void AuraEffect::HandlePeriodicDamage() const
 	{
-		const uint32 school = m_container.GetSpell().spellschool();
+		auto strongContainer = m_container.shared_from_this();
+
+		const uint32 school = strongContainer->GetSpell().spellschool();
 		int32 damage = m_basePoints;
 
 		// Apply spell power bonus damage but divide it by number of ticks
@@ -384,9 +386,9 @@ namespace mmo
 
 		packet.Start(game::realm_client_packet::PeriodicAuraLog);
 		packet
-			<< io::write_packed_guid(m_container.GetOwner().GetGuid())
-			<< io::write_packed_guid(m_container.GetCasterId())
-			<< io::write<uint32>(m_container.GetSpell().id())
+			<< io::write_packed_guid(strongContainer->GetOwner().GetGuid())
+			<< io::write_packed_guid(strongContainer->GetCasterId())
+			<< io::write<uint32>(strongContainer->GetSpell().id())
 			<< io::write<uint32>(GetType())
 			<< io::write<uint32>(damage)
 			<< io::write<uint32>(school)
@@ -394,19 +396,21 @@ namespace mmo
 			<< io::write<uint32>(0); // Resisted
 		packet.Finish();
 
-		m_container.GetOwner().ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
+		strongContainer->GetOwner().ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
 			{
 				subscriber.SendPacket(packet, buffer, true);
 			});
+
 		// Update health
-		m_container.GetOwner().Damage(damage, school, m_container.GetCaster(), damage_type::Periodic);
+		strongContainer->GetOwner().Damage(damage, school, strongContainer->GetCaster(), damage_type::Periodic);
 		
 		// Trigger proc events for periodic damage
-		if (m_container.GetCaster())
+		if (strongContainer->GetCaster())
 		{
-			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicDamage, &m_container.GetOwner(), damage, proc_ex_flags::NormalHit, school, false, m_container.GetSpell().familyflags());
+			strongContainer->GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicDamage, &strongContainer->GetOwner(), damage, proc_ex_flags::NormalHit, school, false, strongContainer->GetSpell().familyflags());
 		}
-		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicDamage, m_container.GetCaster(), damage, proc_ex_flags::NormalHit, school, false, m_container.GetSpell().familyflags());
+
+		strongContainer->GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicDamage, strongContainer->GetCaster(), damage, proc_ex_flags::NormalHit, school, false, strongContainer->GetSpell().familyflags());
 	}
 
 	void AuraEffect::HandlePeriodicHeal() const

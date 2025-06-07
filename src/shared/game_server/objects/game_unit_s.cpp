@@ -675,6 +675,10 @@ namespace mmo
 		if (health < 1)
 		{
 			OnKilled(instigator);
+			if (instigator)
+			{
+				instigator->TriggerProcEvent(spell_proc_flags::Kill, this, damage, 0, school, false, 0);
+			}
 		}
 	}
 
@@ -2002,6 +2006,9 @@ namespace mmo
 
 	void GameUnitS::OnKilled(GameUnitS* killer)
 	{
+		TriggerProcEvent(spell_proc_flags::Death, this, 0, 0, 0, false, 0);
+		TriggerProcEvent(spell_proc_flags::Killed, killer, 0, 0, 0, false, 0);
+
 		m_spellCast->StopCast(spell_interrupt_flags::Any);
 
 		StopAttack();
