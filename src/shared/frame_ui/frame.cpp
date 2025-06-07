@@ -66,7 +66,12 @@ namespace mmo
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
 		other.m_onClick = m_onClick;
+
+		const bool isButtonTmpl = m_name == "ActionBarButtonTemplate";
+		const bool hasDrag = m_onDrag.is_valid();
+		const bool otherHasDrag = other.m_onDrag.is_valid();
 		other.m_onDrag = m_onDrag;
+
 		other.m_onDrop = m_onDrop;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
@@ -909,7 +914,7 @@ namespace mmo
 
 	void Frame::OnDrop(const MouseButton button, const Point& position)
 	{
-		if (m_onDrop)
+		if (m_onDrop.is_valid())
 		{
 			const char* buttonName = nullptr;
 			switch (button)
@@ -937,7 +942,7 @@ namespace mmo
 
 	void Frame::OnDrag(const MouseButton button, const Point& position)
 	{
-		if (m_onDrag)
+		if (m_onDrag.is_valid())
 		{
 			const char* buttonName = nullptr;
 			switch (button)
@@ -997,6 +1002,11 @@ namespace mmo
 			m_onEscapePressed(this);
 			abort_emission();
 		}
+	}
+
+	void Frame::SetOnDrag(const luabind::object& func)
+	{
+		m_onDrag = func;
 	}
 
 	void Frame::SetOnClick(const luabind::object& func)

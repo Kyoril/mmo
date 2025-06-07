@@ -439,6 +439,15 @@ namespace mmo
 					.def("GetButtonState", &Button::GetButtonState)),
 
 			luabind::scope(
+				luabind::class_<Point>("Point")
+				.def(luabind::constructor())
+				.def(luabind::constructor<float, float>())
+				.def(luabind::constructor<const Point&>())
+				.property("x", &Point::x, &Point::x)
+				.property("y", &Point::y, &Point::y)
+				.def("__eq", &Point::operator==)),
+
+			luabind::scope(
 				luabind::class_<Rect>("Rect")
 					.def(luabind::constructor())
 					.def(luabind::constructor<float, float, float, float>())
@@ -714,7 +723,6 @@ namespace mmo
 		if (m_mouseDownFrames[MouseButton::Left])
 		{
 			m_mouseDownFrames[MouseButton::Left]->OnMouseMoved(m_mousePos, delta);
-			return;
 		}
 
 		// Find the frame at the lowest level for the given point

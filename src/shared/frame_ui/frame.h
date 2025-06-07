@@ -430,7 +430,7 @@ namespace mmo
 
 		void SetOnHide(const luabind::object& func) { m_onHide = func; }
 
-		void SetOnDrag(const luabind::object& func) { m_onDrag = func; }
+		void SetOnDrag(const luabind::object& func);
 
 		void SetOnDrop(const luabind::object& func) { m_onDrop = func; }
 
