@@ -382,7 +382,7 @@ namespace mmo
 		/// 
 		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
 
-		virtual void OnMouseMoved(const Point& position, const Point& delta) {}
+		virtual void OnMouseMoved(const Point& position, const Point& delta);
 
 		/// 
 		virtual void OnKeyDown(Key key) {}
@@ -392,6 +392,10 @@ namespace mmo
 
 		/// 
 		virtual void OnKeyUp(Key key);
+
+		virtual void OnDrag(MouseButton button, const Point& position);
+
+		virtual void OnDrop(MouseButton button, const Point& position);
 
 	public:
 		virtual Rect GetRelativeFrameRect(bool withScale = true);
@@ -403,8 +407,11 @@ namespace mmo
 		FontPtr GetFont() const;
 
 		inline uint32 GetFlags() const noexcept { return m_flags; }
+
 		inline void AddFlags(uint32 flags) noexcept { m_flags |= flags; }
+
 		inline void RemoveFlags(uint32 flags) noexcept { m_flags &= ~flags; }
+
 		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
 
 		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
@@ -423,11 +430,23 @@ namespace mmo
 
 		void SetOnHide(const luabind::object& func) { m_onHide = func; }
 
+		void SetOnDrag(const luabind::object& func) { m_onDrag = func; }
+
+		void SetOnDrop(const luabind::object& func) { m_onDrop = func; }
+
 		void SetOnClick(const luabind::object& func);
 
 		void SetClickable(const bool clickable) { m_clickable = clickable; }
 
 		bool IsClickable() const { return m_clickable; }
+
+		void SetDragEnabled(bool enabled);
+
+		void SetDropEnabled(bool enabled);
+
+		bool IsDragEnabled() const;
+
+		bool IsDropEnabled() const;
 
 		virtual void OnShow();
 
@@ -491,6 +510,10 @@ namespace mmo
 
 		void OnClickablePropertyChanged(const Property& property);
 
+		void OnDragEnabledPropertyChanged(const Property& property);
+
+		void OnDropEnabledPropertyChanged(const Property& property);
+
 	protected:
 		typedef std::vector<Pointer> ChildList;
 
@@ -549,6 +572,10 @@ namespace mmo
 
 		luabind::object m_onHide{};
 
+		luabind::object m_onDrag{};
+
+		luabind::object m_onDrop{};
+
 		uint32 m_flags = 0;
 
 		bool m_loaded = false;
@@ -575,9 +602,20 @@ namespace mmo
 
 		bool m_clickable = true;
 
+		bool m_dragEnabled = false;
+
+		bool m_dropEnabled = false;
+
+		bool m_isDragging = false;
+
+		MouseButton m_dragButton{ MouseButton::None };
+
+		Point m_dragStartPosition{ };
+
 	protected:
 		scoped_connection_container m_propConnections;
 	};
+
 
 	/// A shared pointer of a frame.
 	typedef Frame::Pointer FramePtr;

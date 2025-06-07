@@ -12,6 +12,8 @@
 
 namespace mmo
 {
+	static const char* s_buttonNames[] = { "LEFT", "RIGHT", "MIDDLE", "BUTTON4", "BUTTON5" };
+
 	Frame::Frame(const std::string& type, const std::string& name)
 		: m_type(type)
 		, m_name(name)
@@ -32,6 +34,8 @@ namespace mmo
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
 		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
 		m_propConnections += AddProperty("Clickable").Changed.connect(this, &Frame::OnClickablePropertyChanged);
+		m_propConnections += AddProperty("DragEnabled").Changed.connect(this, &Frame::OnDragEnabledPropertyChanged);
+		m_propConnections += AddProperty("DropEnabled").Changed.connect(this, &Frame::OnDropEnabledPropertyChanged);
 	}
 
 	void Frame::Copy(Frame & other)
@@ -62,10 +66,14 @@ namespace mmo
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
 		other.m_onClick = m_onClick;
+		other.m_onDrag = m_onDrag;
+		other.m_onDrop = m_onDrop;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.m_clickable = m_clickable;
 		other.m_opacity = m_opacity;
+		other.m_dragEnabled = m_dragEnabled;
+		other.m_dropEnabled = m_dropEnabled;
 		other.RemoveAllChildren();
 		
 		// Set all properties
@@ -846,7 +854,7 @@ namespace mmo
 		}
 	}
 
-	void Frame::AddChild(Frame::Pointer frame)
+	void Frame::AddChild(const Frame::Pointer frame)
 	{
 		// We can't add ourself as child frame
 		if (frame.get() == this)
@@ -877,7 +885,7 @@ namespace mmo
 		m_needsRedraw = true;
 	}
 
-	void Frame::OnKeyUp(Key key)
+	void Frame::OnKeyUp(const Key key)
 	{
 		// Tab
 		if (key == 9)
@@ -897,7 +905,62 @@ namespace mmo
 		{
 			OnEscapePressed();
 		}
+	}
 
+	void Frame::OnDrop(const MouseButton button, const Point& position)
+	{
+		if (m_onDrop)
+		{
+			const char* buttonName = nullptr;
+			switch (button)
+			{
+			case Left:
+				buttonName = s_buttonNames[0];
+				break;
+			case Right:
+				buttonName = s_buttonNames[1];
+				break;
+			case Middle:
+				buttonName = s_buttonNames[2];
+				break;
+			case Button4:
+				buttonName = s_buttonNames[3];
+				break;
+			case Button5:
+				buttonName = s_buttonNames[4];
+				break;
+			}
+
+			m_onDrop(this, buttonName, position);
+		}
+	}
+
+	void Frame::OnDrag(const MouseButton button, const Point& position)
+	{
+		if (m_onDrag)
+		{
+			const char* buttonName = nullptr;
+			switch (button)
+			{
+			case Left:
+				buttonName = s_buttonNames[0];
+				break;
+			case Right:
+				buttonName = s_buttonNames[1];
+				break;
+			case Middle:
+				buttonName = s_buttonNames[2];
+				break;
+			case Button4:
+				buttonName = s_buttonNames[3];
+				break;
+			case Button5:
+				buttonName = s_buttonNames[4];
+				break;
+			}
+
+			m_onDrag(this, buttonName, position);
+		}
 	}
 
 	void Frame::OnTabPressed()
@@ -944,6 +1007,26 @@ namespace mmo
 		{
 			m_focusable = true;
 		}
+	}
+
+	void Frame::SetDragEnabled(const bool enabled)
+	{
+		SetProperty("DragEnabled", enabled ? "true" : "false");
+	}
+
+	void Frame::SetDropEnabled(const bool enabled)
+	{
+		SetProperty("DragEnabled", enabled ? "true" : "false");
+	}
+
+	bool Frame::IsDragEnabled() const
+	{
+		return m_dragEnabled;
+	}
+
+	bool Frame::IsDropEnabled() const
+	{
+		return m_dropEnabled;
 	}
 
 	void Frame::OnShow()
@@ -1018,8 +1101,6 @@ namespace mmo
 
 	void Frame::OnClick(MouseButton button)
 	{
-		static const char* buttonNames[] = { "LEFT", "RIGHT", "MIDDLE", "BUTTON4", "BUTTON5" };
-
 		if (m_onClick.is_valid())
 		{
 			try
@@ -1028,19 +1109,19 @@ namespace mmo
 				switch(button)
 				{
 				case Left:
-					buttonName = buttonNames[0];
+					buttonName = s_buttonNames[0];
 					break;
 				case Right:
-					buttonName = buttonNames[1];
+					buttonName = s_buttonNames[1];
 					break;
 				case Middle:
-					buttonName = buttonNames[2];
+					buttonName = s_buttonNames[2];
 					break;
 				case Button4:
-					buttonName = buttonNames[3];
+					buttonName = s_buttonNames[3];
 					break;
 				case Button5:
-					buttonName = buttonNames[4];
+					buttonName = s_buttonNames[4];
 					break;
 				}
 
@@ -1331,6 +1412,16 @@ namespace mmo
 		m_clickable = property.GetBoolValue();
 	}
 
+	void Frame::OnDragEnabledPropertyChanged(const Property& property)
+	{
+		m_dragEnabled = property.GetBoolValue();
+	}
+
+	void Frame::OnDropEnabledPropertyChanged(const Property& property)
+	{
+		m_dropEnabled = property.GetBoolValue();
+	}
+
 	GeometryBuffer & Frame::GetGeometryBuffer()
 	{ 
 		return m_geometryBuffer;
@@ -1342,6 +1433,12 @@ namespace mmo
 		if (m_focusable)
 		{
 			CaptureInput();
+		}
+
+		if (!m_isDragging)
+		{
+			m_dragButton = button;
+			m_dragStartPosition = position;
 		}
 
 		// Simply raise the signal
@@ -1364,9 +1461,35 @@ namespace mmo
 		// Simply raise the signal
 		MouseUp(MouseEventArgs(buttons, position.x, position.y));
 
+		if (m_isDragging)
+		{
+			FramePtr hovered = FrameManager::Get().GetHoveredFrame();
+			if (hovered && hovered->IsDropEnabled())
+			{
+				hovered->OnDrop(m_dragButton, position);
+			}
+
+			m_isDragging = false;
+			m_dragButton = MouseButton::None;
+		}
+		
 		if (m_onClick.is_valid())
 		{
 			abort_emission();
+		}
+	}
+
+	void Frame::OnMouseMoved(const Point& position, const Point& delta)
+	{
+		if (m_isDragging || !IsDragEnabled() || m_dragButton == None)
+		{
+			return;
+		}
+
+		if (position.DistanceTo(m_dragStartPosition) > 16.0f)
+		{
+			m_isDragging = true;
+			OnDrag(m_dragButton, m_dragStartPosition);
 		}
 	}
 }

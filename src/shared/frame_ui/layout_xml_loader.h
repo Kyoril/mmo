@@ -97,6 +97,14 @@ namespace mmo
 		void ElementOnShowEnd();
 		void ElementOnHideStart(const XmlAttributes& attributes);
 		void ElementOnHideEnd();
+		void ElementOnEnterStart(const XmlAttributes& attributes);
+		void ElementOnEnterEnd();
+		void ElementOnLeaveStart(const XmlAttributes& attributes);
+		void ElementOnLeaveEnd();
+		void ElementOnDragStart(const XmlAttributes& attributes);
+		void ElementOnDragEnd();
+		void ElementOnDropStart(const XmlAttributes& attributes);
+		void ElementOnDropEnd();
 
 	private:
 		/// Stack of added frames.

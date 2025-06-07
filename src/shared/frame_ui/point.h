@@ -31,6 +31,18 @@ namespace mmo
 		{
 		}
 
+		inline float DistanceTo(const Point& other) const noexcept
+		{
+			float dx = x - other.x;
+			float dy = y - other.y;
+			if (std::abs(dx) < FLT_EPSILON && std::abs(dy) < FLT_EPSILON)
+			{
+				return 0.0f;
+			}
+			
+			return std::sqrt(dx * dx + dy * dy);
+		}
+
 	public:
 		inline Point& operator+=(const Point& rhs) noexcept
 		{

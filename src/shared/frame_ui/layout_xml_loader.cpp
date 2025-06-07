@@ -69,6 +69,8 @@ namespace mmo
 	static const std::string OnHideElement("OnHide");
 	static const std::string OnEnterElement("OnEnter");
 	static const std::string OnLeaveElement("OnLeave");
+	static const std::string OnDragElement("OnDrag");
+	static const std::string OnDropElement("OnDrop");
 
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
@@ -250,6 +252,22 @@ namespace mmo
 			{
 				ElementOnHideStart(attributes);
 			}
+			else if (element == OnEnterElement)
+			{
+				ElementOnEnterStart(attributes);
+			}
+			else if (element == OnLeaveElement)
+			{
+				ElementOnLeaveStart(attributes);
+			}
+			else if (element == OnDragElement)
+			{
+				ElementOnDragStart(attributes);
+			}
+			else if (element == OnDropElement)
+			{
+				ElementOnDropStart(attributes);
+			}
 			else if (element == OnTabPressedElement)
 			{
 				ElementOnTabPressedStart(attributes);
@@ -408,6 +426,22 @@ namespace mmo
 			else if (element == OnHideElement)
 			{
 				ElementOnHideEnd();
+			}
+			else if (element == OnEnterElement)
+			{
+				ElementOnEnterEnd();
+			}
+			else if (element == OnLeaveElement)
+			{
+				ElementOnLeaveEnd();
+			}
+			else if (element == OnDragElement)
+			{
+				ElementOnDragEnd();
+			}
+			else if (element == OnDropElement)
+			{
+				ElementOnDropEnd();
 			}
 		}
 	}
@@ -1364,6 +1398,86 @@ namespace mmo
 			{
 				const luabind::object onHide = FrameManager::Get().CompileFunction(frame->GetName() + ":OnHide", script);
 				frame->SetOnHide(onHide);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnEnterStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnEnterElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnEnterEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onEnter = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEnter", script);
+				frame->SetOnEnter(onEnter);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnLeaveStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnLeaveElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnLeaveEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onLeave = FrameManager::Get().CompileFunction(frame->GetName() + ":OnLeave", script);
+				frame->SetOnLeave(onLeave);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnDragStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnDragElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnDragEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onDrag = FrameManager::Get().CompileFunction(frame->GetName() + ":OnDrag", script);
+				frame->SetOnDrag(onDrag);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnDropStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnDropElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnDropEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onDrop = FrameManager::Get().CompileFunction(frame->GetName() + ":OnDrop", script);
+				frame->SetOnDrop(onDrop);
 			});
 	}
 }

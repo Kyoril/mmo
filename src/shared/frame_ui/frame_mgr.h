@@ -197,24 +197,34 @@ namespace mmo
 	private:
 		/// A map of mouse-down frames.
 		std::map<MouseButton, FramePtr> m_mouseDownFrames;
+
 		/// A map of all frames, keyed by their case insensitive name.
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;
+
 		/// The current root frame that is the one frame that is rendered.
 		FramePtr m_topFrame;
+
 		/// The currently hovered frame.
 		FramePtr m_hoverFrame;
+
 		/// Pressed mouse buttons.
 		int32 m_pressedButtons;
+
 		/// The lua state instance.
 		lua_State* m_luaState;
+
 		/// The frame that is currently capturing input events.
 		FramePtr m_inputCapture;
+
 		/// A map of font infos, keyed by a unique name. This is useful to make
 		/// setting fonts in xml easier.
 		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
+
 		/// The localization data.
 		const Localization& m_localization;
+
 		Size m_nativeResolution { 3840.0f, 2160.0f };
+
 		Point m_uiScale { 1.0f, 1.0f };
 
 		Point m_mousePos;
