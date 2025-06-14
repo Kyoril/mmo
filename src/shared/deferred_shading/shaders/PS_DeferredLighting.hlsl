@@ -17,7 +17,11 @@ Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
 Texture2D ViewRayTexture : register(t4);
 
-Texture2D ShadowMap : register(t5);
+// Cascade shadow maps
+Texture2D CascadeShadowMap0 : register(t5);
+Texture2D CascadeShadowMap1 : register(t6);
+Texture2D CascadeShadowMap2 : register(t7);
+Texture2D CascadeShadowMap3 : register(t8);
 
 // Samplers
 SamplerState PointSampler : register(s0);
@@ -141,6 +145,20 @@ cbuffer ShadowBuffer : register(b3)
     float LightSize;            // Controls the size of the virtual light (larger = softer shadows)
 };
 
+// CSM Shadow buffer for cascaded shadow maps
+cbuffer CSMShadowBuffer : register(b4)
+{
+    column_major matrix CascadeViewProj[4];  // Up to 4 cascade view-projection matrices
+    float4 CascadeSplits;                    // Split distances (x,y,z,w for cascades 1-4)
+    float CSMShadowBias;
+    float CSMNormalBiasScale;
+    float CSMShadowSoftness;
+    float CSMBlockerSearchRadius;
+    float CSMLightSize;
+    uint CSMCascadeCount;
+    float2 CSMPadding;
+};
+
 // Reconstructs world position from depth
 float3 ReconstructPosition(float linearDepth, float3 viewRay)
 {
@@ -201,7 +219,6 @@ float CalculateAdaptiveShadowBias(float3 normal, float3 lightDir, float baseBias
     return baseBias * (1.0f + slopeFactor * 0.5f);
 }
 
-
 // Calculates point light contribution
 float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
 {
@@ -239,213 +256,139 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-// Advanced multi-scale blocker search for precise contact hardening
-float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out float numBlockers, float adaptiveBias)
+// Calculates directional light contribution
+float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular, float shadow)
 {
-    float blockerSum = 0.0f;
-    numBlockers = 0.0f;
+    float3 lightDir = -normalize(light.Direction);
+    float3 halfway = normalize(lightDir + viewDir);
+
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotH = max(dot(normal, halfway), 0.0);
+    float VdotH = max(dot(viewDir, halfway), 0.0);
     
-    // Multi-scale search: combine coarse and fine sampling
-    // This provides better detection of blockers at various distances
-    
-    // Coarse search first (larger area, fewer samples)
-    uint rotIndex = uint(fmod(dot(uv, float2(456.7, 234.8)), 16.0));
-    float2x2 searchRotations[16] = {
-        float2x2(1.0, 0.0, 0.0, 1.0),                      // 0°
-        float2x2(0.965926, -0.258819, 0.258819, 0.965926), // 15°
-        float2x2(0.866025, -0.5, 0.5, 0.866025),           // 30°
-        float2x2(0.707107, -0.707107, 0.707107, 0.707107), // 45°
-        float2x2(0.5, -0.866025, 0.866025, 0.5),           // 60°
-        float2x2(0.258819, -0.965926, 0.965926, 0.258819), // 75°
-        float2x2(0.0, -1.0, 1.0, 0.0),                     // 90°
-        float2x2(-0.258819, -0.965926, 0.965926, -0.258819), // 105°
-        float2x2(-0.5, -0.866025, 0.866025, -0.5),         // 120°
-        float2x2(-0.707107, -0.707107, 0.707107, -0.707107), // 135°
-        float2x2(-0.866025, -0.5, 0.5, -0.866025),         // 150°
-        float2x2(-0.965926, -0.258819, 0.258819, -0.965926), // 165°
-        float2x2(-1.0, 0.0, 0.0, -1.0),                    // 180°
-        float2x2(-0.965926, 0.258819, -0.258819, -0.965926), // 195°
-        float2x2(-0.866025, 0.5, -0.5, -0.866025),         // 210°
-        float2x2(-0.707107, 0.707107, -0.707107, -0.707107)  // 225°
-    };
-    float2x2 rot = searchRotations[rotIndex];
-    
-    // Primary blocker search with weighted sampling
-    float weightedBlockerSum = 0.0f;
-    float totalWeight = 0.0f;
-    for (int i = 0; i < 20; i++) // Increased for better accuracy
-    {
-        float2 offset = mul(rot, POISSON_DISK[i % 32]) * searchRadius;
-        float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
-        
-        // More precise blocker detection with depth gradient consideration
-        float depthThreshold = 0.00002f; // Tighter threshold for precision
-        if (shadowMapDepth < receiverDepth - depthThreshold)
-        {
-            // Weight blockers based on distance - closer blockers have more influence
-            float weight = 1.0f - length(offset) / searchRadius;
-            weight = weight * weight; // Quadratic weighting
-            
-            weightedBlockerSum += shadowMapDepth * weight;
-            totalWeight += weight;
-            numBlockers++;
-        }
-    }
-    
-    // Fine search near detected blockers (if any found)
-    if (numBlockers > 0.0f)
-    {
-        float avgBlockerDepth = weightedBlockerSum / max(totalWeight, 0.001f);
-        float2x2 fineRot = searchRotations[(rotIndex + 8) % 16];
-        float fineRadius = searchRadius * 0.4f;
-        
-        float fineBlockerSum = 0.0f;
-        float fineBlockerCount = 0.0f;
-        
-        for (int j = 0; j < 12; j++)
-        {
-            float2 offset = mul(fineRot, POISSON_DISK[j]) * fineRadius;
-            float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
-            
-            if (shadowMapDepth < receiverDepth - 0.00001f)
-            {
-                fineBlockerSum += shadowMapDepth;
-                fineBlockerCount++;
-            }
-        }
-        
-        // Blend coarse and fine results for optimal precision
-        if (fineBlockerCount > 0.0f)
-        {
-            float fineAvg = fineBlockerSum / fineBlockerCount;
-            float blendFactor = fineBlockerCount / 12.0f; // More fine samples = more weight
-            return lerp(avgBlockerDepth, fineAvg, blendFactor * 0.6f);
-        }
-        
-        return avgBlockerDepth;
-    }
-    
-    return receiverDepth; // No blockers found
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F = F_Schlick(F0, VdotH);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+
+    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001)) * saturate(specular);
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
+    float3 diffuse = albedo / PI;
+
+    float3 radiance = light.Color * light.Intensity;
+
+    return (kD * diffuse + specularBRDF) * radiance * NdotL * shadow;
 }
 
-// Production-Quality Anti-Aliased Shadow Filtering using Hybrid VSM + Advanced PCF
-float PCF_Filter(float2 uv, float receiverDepth, float filterRadius, float adaptiveBias)
+// CalculateSpotLight function (if needed for spot lights)
+float3 CalculateSpotLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
 {
-    // Use the actual high-resolution shadow map
-    float2 texelSize = 1.0f / 8192.0f; // Match increased resolution
+    float3 lightToPixel = worldPos - light.Position;
+    float distance = length(lightToPixel);
+
+    if (distance > light.Range)
+        return float3(0, 0, 0);
     
-    // STEP 1: Adaptive super-sampling based on screen-space derivatives
-    // This detects when we need more samples to hide texel structure
-    float2 uvDDX = ddx(uv);
-    float2 uvDDY = ddy(uv);
-    float screenSpaceDerivative = length(uvDDX) + length(uvDDY);
+    float3 lightDir = normalize(-lightToPixel);
+    float3 lightDirNorm = normalize(light.Direction);
     
-    // Increase sample count when magnification would reveal texel structure
-    int baseSamples = 24;
-    int maxSamples = 64;
-    float magnificationFactor = saturate(screenSpaceDerivative * 1000.0f);
-    int sampleCount = int(lerp(float(baseSamples), float(maxSamples), magnificationFactor));
+    // Calculate spot light cone attenuation
+    float spotEffect = dot(lightDirNorm, -lightDir);
+    float spotCutoff = cos(light.SpotAngle * 0.5f);
     
-    // STEP 2: Multi-frequency rotation matrices to break up regular patterns
-    float2x2 rotations[8] =
-    {
-        float2x2(1.0, 0.0, 0.0, 1.0), // 0°
-        float2x2(0.707107, -0.707107, 0.707107, 0.707107), // 45°
-        float2x2(0.0, -1.0, 1.0, 0.0), // 90°
-        float2x2(-0.707107, -0.707107, 0.707107, -0.707107), // 135°
-        float2x2(-1.0, 0.0, 0.0, -1.0), // 180°
-        float2x2(-0.707107, 0.707107, -0.707107, -0.707107), // 225°
-        float2x2(0.0, 1.0, -1.0, 0.0), // 270°
-        float2x2(0.707107, 0.707107, -0.707107, 0.707107) // 315°
-    };
+    if (spotEffect < spotCutoff)
+        return float3(0, 0, 0);
     
-    // Use screen-space position for stable rotation selection
-    uint rotIndex = uint(fmod(dot(uv, float2(127.1, 311.7)) * 43758.5453, 8.0));
-    float2x2 rot = rotations[rotIndex];
+    float3 halfway = normalize(lightDir + viewDir);
+
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotH = max(dot(normal, halfway), 0.0);
+    float VdotH = max(dot(viewDir, halfway), 0.0);
     
-    // STEP 3: Multi-scale filtering to eliminate mosaic patterns
-    float totalShadow = 0.0f;
-    float totalWeight = 0.0f;
+    // Distance attenuation
+    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0);
     
-    // Primary filtering pass with larger radius
-    float primaryRadius = filterRadius;
-    for (int i = 0; i < sampleCount; i++)
-    {
-        float2 offset = mul(rot, POISSON_DISK[i % 32]) * primaryRadius;
-        
-        // Add slight sub-texel jitter to break up regular sampling
-        float2 jitter = (frac(sin(dot(uv + offset, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * texelSize * 0.5f;
-        offset += jitter;
-        
-        float comparison = receiverDepth - adaptiveBias;
-        float shadowValue = ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, comparison);
-        
-        // Distance-based weighting for smooth transitions
-        float weight = 1.0f - saturate(length(offset) / primaryRadius);
-        weight = weight * weight; // Quadratic falloff
-        
-        totalShadow += shadowValue * weight;
-        totalWeight += weight;
-    }
+    // Spot light cone attenuation
+    float spotAttenuation = saturate((spotEffect - spotCutoff) / (1.0f - spotCutoff));
     
-    float primaryResult = totalShadow / max(totalWeight, 0.001f);
-    
-    // STEP 4: Secondary micro-filtering pass to eliminate remaining artifacts
-    float microShadow = 0.0f;
-    float microWeight = 0.0f;
-    float microRadius = filterRadius * 0.3f;
-    
-    // Use different rotation for micro pass
-    float2x2 microRot = rotations[(rotIndex + 4) % 8];
-    
-    for (int j = 0; j < 16; j++)
-    {
-        float2 offset = mul(microRot, POISSON_DISK[j]) * microRadius;
-        
-        // More aggressive sub-texel jittering for micro pass
-        float2 microJitter = (frac(sin(dot(uv + offset, float2(93.9, 67.1))) * 47583.2947) - 0.5) * texelSize;
-        offset += microJitter;
-        
-        float comparison = receiverDepth - adaptiveBias * 0.9f;
-        float shadowValue = ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, comparison);
-        
-        microShadow += shadowValue;
-        microWeight += 1.0f;
-    }
-    
-    float microResult = microShadow / microWeight;
-    
-    // STEP 5: Blend results based on magnification to eliminate mosaic
-    float blendFactor = saturate(magnificationFactor * 0.6f);
-    return lerp(primaryResult, microResult, blendFactor);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F = F_Schlick(F0, VdotH);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+
+    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001)) * saturate(specular);
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
+    float3 diffuse = albedo / PI;
+
+    float3 radiance = light.Color * light.Intensity * attenuation * spotAttenuation;
+
+    return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-// Production-Quality PCSS with Contact Hardening - STABLE VERSION
-float SampleShadow(float3 worldPos, float3 normal, float normalBias)
+// Determine which cascade to use for CSM
+int GetCascadeIndex(float viewDepth)
 {
-    // Calculate light direction
-    float3 lightDir = -normalize(Lights[0].Direction);
+    // Compare view depth against cascade splits
+    if (viewDepth <= CascadeSplits.x) return 0;
+    if (viewDepth <= CascadeSplits.y) return 1;
+    if (viewDepth <= CascadeSplits.z) return 2;
+    if (viewDepth <= CascadeSplits.w) return 3;
+    return -1; // Beyond all cascades
+}
+
+// Sample the appropriate cascade shadow map
+float SampleCascadeShadowMap(int cascadeIndex, float2 uv, float comparison)
+{
+    switch (cascadeIndex)
+    {
+        case 0: return CascadeShadowMap0.SampleCmpLevelZero(ShadowSampler, uv, comparison);
+        case 1: return CascadeShadowMap1.SampleCmpLevelZero(ShadowSampler, uv, comparison);
+        case 2: return CascadeShadowMap2.SampleCmpLevelZero(ShadowSampler, uv, comparison);
+        case 3: return CascadeShadowMap3.SampleCmpLevelZero(ShadowSampler, uv, comparison);
+        default: return 1.0f; // No shadow
+    }
+}
+
+// Sample cascade shadow map with regular point sampling (for blocker search)
+float SampleCascadeShadowMapDepth(int cascadeIndex, float2 uv)
+{
+    switch (cascadeIndex)
+    {
+        case 0: return CascadeShadowMap0.SampleLevel(PointSampler, uv, 0).r;
+        case 1: return CascadeShadowMap1.SampleLevel(PointSampler, uv, 0).r;
+        case 2: return CascadeShadowMap2.SampleLevel(PointSampler, uv, 0).r;
+        case 3: return CascadeShadowMap3.SampleLevel(PointSampler, uv, 0).r;
+        default: return 1.0f;
+    }
+}
+
+// CSM shadow sampling with PCSS
+float SampleCSMShadow(float3 worldPos, float3 normal, float normalBias)
+{
+    // Transform world position to view space to get depth
+    float4 viewPos = mul(float4(worldPos, 1.0f), matView);
+    float viewDepth = -viewPos.z; // Negative because we're looking down -Z
     
-    // Use simpler, more stable bias calculation
-    float NdotL = saturate(dot(normal, lightDir));
+    // Determine which cascade to use
+    int cascadeIndex = GetCascadeIndex(viewDepth);
+    if (cascadeIndex < 0 || cascadeIndex >= (int)CSMCascadeCount)
+    {
+        return 1.0f; // No shadow beyond cascades
+    }
     
-    // Early out for back-facing surfaces
-    if (NdotL < 0.05f)
-        return 0.0f;
+    // Apply normal bias
+    float3 biasedWorldPos = worldPos + normal * (normalBias * CSMNormalBiasScale);
     
-    // Conservative bias - prioritize stability over eliminating all acne
-    float baseBias = ShadowBias;
-    float slopeBias = (1.0f - NdotL) * 0.001f;
-    float totalBias = baseBias + slopeBias;
-    
-    // Apply minimal normal bias to prevent peter panning
-    float adjustedNormalBias = normalBias * NormalBiasScale * 0.5f; // Reduced by half
-    adjustedNormalBias = min(adjustedNormalBias, 0.002f); // Very conservative limit
-    
-    float3 biasedWorldPos = worldPos + normal * adjustedNormalBias;
-    
-    // Transform to light space
-    float4 lightSpacePos = mul(float4(biasedWorldPos, 1.0f), LightViewProj);
+    // Transform to light space using the appropriate cascade matrix
+    float4 lightSpacePos = mul(float4(biasedWorldPos, 1.0f), CascadeViewProj[cascadeIndex]);
     
     if (lightSpacePos.w <= 0.0f)
         return 1.0f;
@@ -461,101 +404,22 @@ float SampleShadow(float3 worldPos, float3 normal, float normalBias)
     if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z > 1.0f)
         return 1.0f;
     
-    // STEP 1: Blocker Search for Contact Hardening
-    float searchWidth = LightSize * 0.5f; // Conservative search radius
-    float numBlockers = 0.0f;
-    float avgBlockerDepth = FindBlockerDepth(uv, receiverDepth, searchWidth, numBlockers, totalBias);
+    // Simple PCF for CSM (can be enhanced with PCSS later)
+    float shadow = 0.0f;
+    float2 texelSize = 1.0f / 2048.0f; // Cascade resolution
+    int pcfSamples = 5;
     
-    // If no blockers found, no shadow
-    if (numBlockers < 1.0f)
-        return 1.0f;
+    for (int x = -pcfSamples/2; x <= pcfSamples/2; ++x)
+    {
+        for (int y = -pcfSamples/2; y <= pcfSamples/2; ++y)
+        {
+            float2 offset = float2(x, y) * texelSize;
+            float comparison = receiverDepth - CSMShadowBias;
+            shadow += SampleCascadeShadowMap(cascadeIndex, uv + offset, comparison);
+        }
+    }
     
-    // STEP 2: Contact Hardening - calculate penumbra size
-    // Smaller penumbra for contact shadows, larger for distant shadows
-    float penumbraSize = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
-    penumbraSize = clamp(penumbraSize * LightSize * 2.0f, 0.001f, 0.004f); // Tighter limits
-    
-    // STEP 3: High-Quality PCF with adaptive radius
-    return PCF_Filter(uv, receiverDepth, penumbraSize, totalBias);
-}
-
-// Calculates directional light contribution
-float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular, float shadow)
-{
-    float3 lightDir = -normalize(light.Direction);
-
-    float3 halfway = normalize(lightDir + viewDir);
-
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotH = max(dot(normal, halfway), 0.0);
-    float VdotH = max(dot(viewDir, halfway), 0.0);
-
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
-    float3 F = F_Schlick(F0, VdotH);
-    float D = D_GGX(NdotH, roughness);
-    float G = G_Smith(NdotV, NdotL, roughness);
-
-    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001));
-    specularBRDF *= specular;
-
-    float3 kS = F;
-    float3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
-
-    float3 diffuse = albedo / PI;
-
-    float3 radiance = light.Color * light.Intensity;
-
-    return ((kD * diffuse + specularBRDF) * radiance * NdotL) * shadow;
-}
-
-// Calculates spot light contribution
-float3 CalculateSpotLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
-{
-    float3 lightDir = light.Position - worldPos;
-    float distance = length(lightDir);
-
-    if (distance > light.Range)
-        return float3(0, 0, 0);
-
-    lightDir = normalize(lightDir);
-
-    // Spot cone
-    float spotFactor = dot(lightDir, -normalize(light.Direction));
-    float spotCutoff = cos(radians(light.SpotAngle * 0.5));
-    if (spotFactor < spotCutoff)
-        return float3(0, 0, 0);
-
-    float spotAttenuation = smoothstep(spotCutoff, spotCutoff + 0.1, spotFactor);
-
-    // Distance attenuation
-    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0) * spotAttenuation;
-
-    // Cook-Torrance lighting
-    float3 halfway = normalize(lightDir + viewDir);
-
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotH = max(dot(normal, halfway), 0.0);
-    float VdotH = max(dot(viewDir, halfway), 0.0);
-
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
-    float3 F = F_Schlick(F0, VdotH);
-    float D = D_GGX(NdotH, roughness);
-    float G = G_Smith(NdotV, NdotL, roughness);
-
-    float3 specularBRDF = (D * G * F) / (4.0 * max(NdotV * NdotL, 0.001));
-    specularBRDF *= specular;
-
-    float3 kS = F;
-    float3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
-
-    float3 diffuse = albedo / PI;
-    float3 radiance = light.Color * light.Intensity * attenuation;
-
-    return (kD * diffuse + specularBRDF) * radiance * NdotL;
+    return shadow / float(pcfSamples * pcfSamples);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET
@@ -600,13 +464,17 @@ float4 main(PS_INPUT input) : SV_TARGET
         if (light.Type == 0) // Point light
         {
             lighting += CalculatePointLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
-        }        else if (light.Type == 1) // Directional light
+        }
+    	else if (light.Type == 1) // Directional light
         {
             float shadow = 1.0f;
             if (light.ShadowMap > 0)
             {
-                // Use very conservative normal bias to prevent peter panning and noise
-                shadow = SampleShadow(worldPos, normal, 0.005f);
+                // Check if CSM is enabled (CSMCascadeCount > 0)
+                if (CSMCascadeCount > 0)
+                {
+                    shadow = SampleCSMShadow(worldPos, normal, 0.005f);
+                }
             }
             
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);

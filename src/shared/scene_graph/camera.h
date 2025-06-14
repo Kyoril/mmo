@@ -98,6 +98,8 @@ namespace mmo
 
 		void GetFrustumExtents(float& outLeft, float& outRight, float& outTop, float& outBottom) const;
 
+		const Radian& GetFOVy() const { return m_fovY; }
+
 		void SetFOVy(const Radian& fovY);
 
 		const Vector3* GetWorldSpaceCorners() const;
