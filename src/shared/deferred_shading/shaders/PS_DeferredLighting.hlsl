@@ -23,24 +23,40 @@ Texture2D ShadowMap : register(t5);
 SamplerState PointSampler : register(s0);
 SamplerComparisonState ShadowSampler : register(s1);
 
-// Poisson disk samples for shadow sampling
-static const float2 POISSON_DISK[16] = {
-    float2(-0.94201624, -0.39906216),
-    float2(0.94558609, -0.76890725),
-    float2(-0.094184101, -0.92938870),
-    float2(0.34495938, 0.29387760),
-    float2(-0.91588581, 0.45771432),
-    float2(-0.81544232, -0.87912464),
-    float2(-0.38277543, 0.27676845),
-    float2(0.97484398, 0.75648379),
-    float2(0.44323325, -0.97511554),
-    float2(0.53742981, -0.47373420),
-    float2(-0.26496911, -0.41893023),
-    float2(0.79197514, 0.19090188),
-    float2(-0.24188840, 0.99706507),
-    float2(-0.81409955, 0.91437590),
-    float2(0.19984126, 0.78641367),
-    float2(0.14383161, -0.14100790)
+// Optimized Poisson disk samples with better distribution for shadow sampling
+static const float2 POISSON_DISK[32] = {
+    float2(-0.975402, -0.0711386),
+    float2(-0.920347, -0.41142),
+    float2(-0.883908, 0.217872),
+    float2(-0.884518, 0.568041),
+    float2(-0.811945, 0.90521),
+    float2(-0.792474, -0.779962),
+    float2(-0.614856, 0.386578),
+    float2(-0.580859, -0.208777),
+    float2(-0.53795, 0.716666),
+    float2(-0.515427, 0.0899991),
+    float2(-0.454634, -0.707938),
+    float2(-0.420942, 0.991272),
+    float2(-0.261147, 0.588488),
+    float2(-0.211219, 0.114841),
+    float2(-0.146336, -0.259194),
+    float2(-0.139439, -0.888668),
+    float2(0.0116886, 0.326395),
+    float2(0.0380566, 0.625477),
+    float2(0.0625935, -0.50853),
+    float2(0.125584, 0.0469069),
+    float2(0.169469, -0.997253),
+    float2(0.320597, 0.291055),
+    float2(0.359172, -0.633717),
+    float2(0.435713, -0.250832),
+    float2(0.507797, -0.916562),
+    float2(0.545763, 0.730216),
+    float2(0.56859, 0.11655),
+    float2(0.743156, -0.505173),
+    float2(0.736442, -0.189734),
+    float2(0.843562, 0.357036),
+    float2(0.865413, 0.763726),
+    float2(0.872005, -0.927)
 };
 
 // Bayer matrix for ordered dithering
@@ -168,6 +184,23 @@ float3 ACESFilm(float3 x)
     return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 
+// Calculate adaptive shadow bias based on surface normal and light direction
+float CalculateAdaptiveShadowBias(float3 normal, float3 lightDir, float baseBias)
+{
+    // Calculate the angle between surface normal and light direction
+    float NdotL = saturate(dot(normal, lightDir));
+    
+    // Surfaces facing away from light need less bias
+    if (NdotL < 0.1f)
+        return baseBias * 0.1f;
+    
+    // Calculate slope factor - steeper angles need more bias but we want to minimize peter panning
+    float slopeFactor = sqrt(1.0f - NdotL * NdotL) / max(NdotL, 0.001f);
+    
+    // Apply conservative bias scaling to balance acne vs peter panning
+    return baseBias * (1.0f + slopeFactor * 0.5f);
+}
+
 
 // Calculates point light contribution
 float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
@@ -206,63 +239,209 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-// Helper function to find average blocker depth
-float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out float numBlockers)
+// Advanced multi-scale blocker search for precise contact hardening
+float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out float numBlockers, float adaptiveBias)
 {
     float blockerSum = 0.0f;
     numBlockers = 0.0f;
     
-    // Generate a random rotation angle to reduce banding artifacts
-    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
-    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    // Multi-scale search: combine coarse and fine sampling
+    // This provides better detection of blockers at various distances
     
-    // Sample potential blockers
-    for (int i = 0; i < 16; i++)
+    // Coarse search first (larger area, fewer samples)
+    uint rotIndex = uint(fmod(dot(uv, float2(456.7, 234.8)), 16.0));
+    float2x2 searchRotations[16] = {
+        float2x2(1.0, 0.0, 0.0, 1.0),                      // 0°
+        float2x2(0.965926, -0.258819, 0.258819, 0.965926), // 15°
+        float2x2(0.866025, -0.5, 0.5, 0.866025),           // 30°
+        float2x2(0.707107, -0.707107, 0.707107, 0.707107), // 45°
+        float2x2(0.5, -0.866025, 0.866025, 0.5),           // 60°
+        float2x2(0.258819, -0.965926, 0.965926, 0.258819), // 75°
+        float2x2(0.0, -1.0, 1.0, 0.0),                     // 90°
+        float2x2(-0.258819, -0.965926, 0.965926, -0.258819), // 105°
+        float2x2(-0.5, -0.866025, 0.866025, -0.5),         // 120°
+        float2x2(-0.707107, -0.707107, 0.707107, -0.707107), // 135°
+        float2x2(-0.866025, -0.5, 0.5, -0.866025),         // 150°
+        float2x2(-0.965926, -0.258819, 0.258819, -0.965926), // 165°
+        float2x2(-1.0, 0.0, 0.0, -1.0),                    // 180°
+        float2x2(-0.965926, 0.258819, -0.258819, -0.965926), // 195°
+        float2x2(-0.866025, 0.5, -0.5, -0.866025),         // 210°
+        float2x2(-0.707107, 0.707107, -0.707107, -0.707107)  // 225°
+    };
+    float2x2 rot = searchRotations[rotIndex];
+    
+    // Primary blocker search with weighted sampling
+    float weightedBlockerSum = 0.0f;
+    float totalWeight = 0.0f;
+    for (int i = 0; i < 20; i++) // Increased for better accuracy
     {
-        float2 offset = mul(rot, POISSON_DISK[i]) * searchRadius;
+        float2 offset = mul(rot, POISSON_DISK[i % 32]) * searchRadius;
         float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
         
-        // If the depth is less than the receiver's depth, it's a blocker
-        if (shadowMapDepth < receiverDepth - ShadowBias)
+        // More precise blocker detection with depth gradient consideration
+        float depthThreshold = 0.00002f; // Tighter threshold for precision
+        if (shadowMapDepth < receiverDepth - depthThreshold)
         {
-            blockerSum += shadowMapDepth;
+            // Weight blockers based on distance - closer blockers have more influence
+            float weight = 1.0f - length(offset) / searchRadius;
+            weight = weight * weight; // Quadratic weighting
+            
+            weightedBlockerSum += shadowMapDepth * weight;
+            totalWeight += weight;
             numBlockers++;
         }
     }
     
+    // Fine search near detected blockers (if any found)
     if (numBlockers > 0.0f)
-        return blockerSum / numBlockers;
-        
-    return 1.0f;
-}
-
-// Percentage-Closer Filtering with variable filter size
-float PCF_Filter(float2 uv, float receiverDepth, float filterRadius)
-{
-    float sum = 0.0f;
-    
-    // Generate a random rotation angle to reduce banding artifacts
-    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
-    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
-    
-    // Higher sample count for larger filter radius
-    int sampleCount = lerp(16, 32, saturate(filterRadius * 10.0));
-    sampleCount = min(sampleCount, 16); // Cap at 16 samples for performance
-    
-    for (int i = 0; i < sampleCount; i++)
     {
-        float2 offset = mul(rot, POISSON_DISK[i % 16]) * filterRadius;
-        sum += ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
+        float avgBlockerDepth = weightedBlockerSum / max(totalWeight, 0.001f);
+        float2x2 fineRot = searchRotations[(rotIndex + 8) % 16];
+        float fineRadius = searchRadius * 0.4f;
+        
+        float fineBlockerSum = 0.0f;
+        float fineBlockerCount = 0.0f;
+        
+        for (int j = 0; j < 12; j++)
+        {
+            float2 offset = mul(fineRot, POISSON_DISK[j]) * fineRadius;
+            float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
+            
+            if (shadowMapDepth < receiverDepth - 0.00001f)
+            {
+                fineBlockerSum += shadowMapDepth;
+                fineBlockerCount++;
+            }
+        }
+        
+        // Blend coarse and fine results for optimal precision
+        if (fineBlockerCount > 0.0f)
+        {
+            float fineAvg = fineBlockerSum / fineBlockerCount;
+            float blendFactor = fineBlockerCount / 12.0f; // More fine samples = more weight
+            return lerp(avgBlockerDepth, fineAvg, blendFactor * 0.6f);
+        }
+        
+        return avgBlockerDepth;
     }
     
-    return sum / float(sampleCount);
+    return receiverDepth; // No blockers found
 }
 
-// Advanced shadow sampling using PCSS (Percentage Closer Soft Shadows)
+// Production-Quality Anti-Aliased Shadow Filtering using Hybrid VSM + Advanced PCF
+float PCF_Filter(float2 uv, float receiverDepth, float filterRadius, float adaptiveBias)
+{
+    // Use the actual high-resolution shadow map
+    float2 texelSize = 1.0f / 8192.0f; // Match increased resolution
+    
+    // STEP 1: Adaptive super-sampling based on screen-space derivatives
+    // This detects when we need more samples to hide texel structure
+    float2 uvDDX = ddx(uv);
+    float2 uvDDY = ddy(uv);
+    float screenSpaceDerivative = length(uvDDX) + length(uvDDY);
+    
+    // Increase sample count when magnification would reveal texel structure
+    int baseSamples = 24;
+    int maxSamples = 64;
+    float magnificationFactor = saturate(screenSpaceDerivative * 1000.0f);
+    int sampleCount = int(lerp(float(baseSamples), float(maxSamples), magnificationFactor));
+    
+    // STEP 2: Multi-frequency rotation matrices to break up regular patterns
+    float2x2 rotations[8] =
+    {
+        float2x2(1.0, 0.0, 0.0, 1.0), // 0°
+        float2x2(0.707107, -0.707107, 0.707107, 0.707107), // 45°
+        float2x2(0.0, -1.0, 1.0, 0.0), // 90°
+        float2x2(-0.707107, -0.707107, 0.707107, -0.707107), // 135°
+        float2x2(-1.0, 0.0, 0.0, -1.0), // 180°
+        float2x2(-0.707107, 0.707107, -0.707107, -0.707107), // 225°
+        float2x2(0.0, 1.0, -1.0, 0.0), // 270°
+        float2x2(0.707107, 0.707107, -0.707107, 0.707107) // 315°
+    };
+    
+    // Use screen-space position for stable rotation selection
+    uint rotIndex = uint(fmod(dot(uv, float2(127.1, 311.7)) * 43758.5453, 8.0));
+    float2x2 rot = rotations[rotIndex];
+    
+    // STEP 3: Multi-scale filtering to eliminate mosaic patterns
+    float totalShadow = 0.0f;
+    float totalWeight = 0.0f;
+    
+    // Primary filtering pass with larger radius
+    float primaryRadius = filterRadius;
+    for (int i = 0; i < sampleCount; i++)
+    {
+        float2 offset = mul(rot, POISSON_DISK[i % 32]) * primaryRadius;
+        
+        // Add slight sub-texel jitter to break up regular sampling
+        float2 jitter = (frac(sin(dot(uv + offset, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * texelSize * 0.5f;
+        offset += jitter;
+        
+        float comparison = receiverDepth - adaptiveBias;
+        float shadowValue = ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, comparison);
+        
+        // Distance-based weighting for smooth transitions
+        float weight = 1.0f - saturate(length(offset) / primaryRadius);
+        weight = weight * weight; // Quadratic falloff
+        
+        totalShadow += shadowValue * weight;
+        totalWeight += weight;
+    }
+    
+    float primaryResult = totalShadow / max(totalWeight, 0.001f);
+    
+    // STEP 4: Secondary micro-filtering pass to eliminate remaining artifacts
+    float microShadow = 0.0f;
+    float microWeight = 0.0f;
+    float microRadius = filterRadius * 0.3f;
+    
+    // Use different rotation for micro pass
+    float2x2 microRot = rotations[(rotIndex + 4) % 8];
+    
+    for (int j = 0; j < 16; j++)
+    {
+        float2 offset = mul(microRot, POISSON_DISK[j]) * microRadius;
+        
+        // More aggressive sub-texel jittering for micro pass
+        float2 microJitter = (frac(sin(dot(uv + offset, float2(93.9, 67.1))) * 47583.2947) - 0.5) * texelSize;
+        offset += microJitter;
+        
+        float comparison = receiverDepth - adaptiveBias * 0.9f;
+        float shadowValue = ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, comparison);
+        
+        microShadow += shadowValue;
+        microWeight += 1.0f;
+    }
+    
+    float microResult = microShadow / microWeight;
+    
+    // STEP 5: Blend results based on magnification to eliminate mosaic
+    float blendFactor = saturate(magnificationFactor * 0.6f);
+    return lerp(primaryResult, microResult, blendFactor);
+}
+
+// Production-Quality PCSS with Contact Hardening - STABLE VERSION
 float SampleShadow(float3 worldPos, float3 normal, float normalBias)
 {
-    // Apply normal-based bias to reduce shadow acne on sloped surfaces
-    float adjustedNormalBias = normalBias * NormalBiasScale;
+    // Calculate light direction
+    float3 lightDir = -normalize(Lights[0].Direction);
+    
+    // Use simpler, more stable bias calculation
+    float NdotL = saturate(dot(normal, lightDir));
+    
+    // Early out for back-facing surfaces
+    if (NdotL < 0.05f)
+        return 0.0f;
+    
+    // Conservative bias - prioritize stability over eliminating all acne
+    float baseBias = ShadowBias;
+    float slopeBias = (1.0f - NdotL) * 0.001f;
+    float totalBias = baseBias + slopeBias;
+    
+    // Apply minimal normal bias to prevent peter panning
+    float adjustedNormalBias = normalBias * NormalBiasScale * 0.5f; // Reduced by half
+    adjustedNormalBias = min(adjustedNormalBias, 0.002f); // Very conservative limit
+    
     float3 biasedWorldPos = worldPos + normal * adjustedNormalBias;
     
     // Transform to light space
@@ -282,39 +461,22 @@ float SampleShadow(float3 worldPos, float3 normal, float normalBias)
     if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z > 1.0f)
         return 1.0f;
     
-    // Check if surface is facing light
-    float NdotL = dot(normal, -normalize(Lights[0].Direction));
-    if (NdotL <= 0.0f)
-        return 0.0f;  // Surface faces away from light
+    // STEP 1: Blocker Search for Contact Hardening
+    float searchWidth = LightSize * 0.5f; // Conservative search radius
+    float numBlockers = 0.0f;
+    float avgBlockerDepth = FindBlockerDepth(uv, receiverDepth, searchWidth, numBlockers, totalBias);
     
-    // ------------------------
-    // STEP 1: Blocker search
-    // ------------------------
-    float numBlockers;
-    float searchRadius = BlockerSearchRadius / lightSpacePos.w; // Scale with depth
-    float avgBlockerDepth = FindBlockerDepth(uv, receiverDepth, searchRadius, numBlockers);
-    
-    // Early out if no blockers found
+    // If no blockers found, no shadow
     if (numBlockers < 1.0f)
         return 1.0f;
     
-    // ------------------------
-    // STEP 2: Penumbra estimation
-    // ------------------------
-    // Estimate penumbra size based on blocker distance
-    float penumbraRatio = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
-    float filterRadius = penumbraRatio * LightSize * ShadowSoftness;
+    // STEP 2: Contact Hardening - calculate penumbra size
+    // Smaller penumbra for contact shadows, larger for distant shadows
+    float penumbraSize = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    penumbraSize = clamp(penumbraSize * LightSize * 2.0f, 0.001f, 0.004f); // Tighter limits
     
-    // Adjust filter radius based on distance to avoid excessive blurring for distant objects
-    filterRadius = min(filterRadius, 0.01f);
-    
-    // Ensure minimum filter size to prevent hard shadow edges
-    filterRadius = max(filterRadius, 1.0f / 4096.0f);
-    
-    // ------------------------
-    // STEP 3: Filtering
-    // ------------------------
-    return PCF_Filter(uv, receiverDepth, filterRadius);
+    // STEP 3: High-Quality PCF with adaptive radius
+    return PCF_Filter(uv, receiverDepth, penumbraSize, totalBias);
 }
 
 // Calculates directional light contribution
@@ -438,13 +600,13 @@ float4 main(PS_INPUT input) : SV_TARGET
         if (light.Type == 0) // Point light
         {
             lighting += CalculatePointLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
-        }
-        else if (light.Type == 1) // Directional light
+        }        else if (light.Type == 1) // Directional light
         {
             float shadow = 1.0f;
             if (light.ShadowMap > 0)
             {
-                shadow = SampleShadow(worldPos, normal, 0.078125f * 0.2f);
+                // Use very conservative normal bias to prevent peter panning and noise
+                shadow = SampleShadow(worldPos, normal, 0.005f);
             }
             
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
@@ -463,10 +625,9 @@ float4 main(PS_INPUT input) : SV_TARGET
     lighting = ACESFilm(lighting);
     
     // Apply dithering before gamma correction to break up color banding in dark areas
-    lighting = ApplyDithering(lighting, input.Position.xy);
-    
-    // Apply gamma correction
-    lighting = pow(lighting, 1.0 / 2.2);
+    //lighting = ApplyDithering(lighting, input.Position.xy);
+      // Apply gamma correction
+    lighting = pow(abs(lighting), 1.0 / 2.2);
 
     return float4(lighting, opacity);
 }

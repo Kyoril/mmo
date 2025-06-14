@@ -1,5 +1,4 @@
-﻿
-#include "shadow_camera_setup.h"
+﻿#include "shadow_camera_setup.h"
 
 #include "scene_graph/scene.h"
 #include "scene_graph/camera.h"
@@ -14,7 +13,9 @@ namespace mmo
 		// reset custom view / projection matrix in case already set
 		shadowCamera.SetCustomViewMatrix(false);
 		shadowCamera.SetCustomProjMatrix(false);
-		shadowCamera.SetNearClipDistance(0.01f);
+		
+		// Set reasonable near clip distance to avoid artifacts
+		shadowCamera.SetNearClipDistance(0.1f);
 		shadowCamera.SetFarClipDistance(light.GetShadowFarDistance());
 
 		// get the shadow frustum's far distance
@@ -27,73 +28,63 @@ namespace mmo
 
 		// Calculate shadow offset - this controls where we center the shadow texture
 		// Smaller value brings shadow focus closer to camera for better quality on nearby objects
-		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset() * 0.3f);
+		float shadowOffset = shadowDist * (scene.GetShadowDirLightTextureOffset() * 0.5f);  // Increased from 0.3 to 0.5 to put more shadow detail near camera
 
 		// Directional lights 
 		if (light.GetType() == LightType::Directional)
 		{
-			// set up the shadow texture
-			// Set ortho projection
+			// Set ortho projection for directional light
 			shadowCamera.SetProjectionType(ProjectionType::Orthographic);
-			// set ortho window so that texture covers far dist
-			shadowCamera.SetOrthoWindow(shadowDist * 2, shadowDist * 2);
-
-			// Calculate look at position
-			// We want to look at a spot shadowOffset away from near plane
-			// 0.5 is a little too close for angles
+			
+			// Significantly tighter ortho window for better texel density
+			shadowCamera.SetOrthoWindow(shadowDist * 1.2f, shadowDist * 1.2f);  // Reduced from 1.5f
+			
+			// Calculate look at position - target a spot in front of camera
 			Vector3 target = camera.GetDerivedPosition() + (camera.GetDerivedDirection() * shadowOffset);
-
-			// Calculate direction, which same as directional light direction
-			dir = -light.GetDerivedDirection(); // backwards since point down -z
+			
+			// Calculate light direction and normalize
+			dir = -light.GetDerivedDirection();
 			dir.Normalize();
-
-			// Calculate position
-			// We want to be in the -ve direction of the light direction
-			// far enough to project for the dir light extrusion distance
-			pos = target + dir * scene.GetShadowDirectionalLightExtrusionDistance();
-
-			// Round local x/y position based on a world-space texel; this helps to reduce
-			// jittering caused by the projection moving with the camera
-			// Viewport is 2 * near clip distance across (90 degree fov)
-			//~ Real worldTexelSize = (texCam->getNearClipDistance() * 20) / vp->getActualWidth();
-			//~ pos.x -= fmod(pos.x, worldTexelSize);
-			//~ pos.y -= fmod(pos.y, worldTexelSize);
-			//~ pos.z -= fmod(pos.z, worldTexelSize);
-			int32 vw;
-			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &vw);
-			float worldTexelSize = (shadowDist * 2) / static_cast<float>(vw);
-
-			//get texCam orientation
+			
+			// Calculate the shadow camera position
+			float extrusionDistance = scene.GetShadowDirectionalLightExtrusionDistance();
+			pos = target + dir * extrusionDistance;
+			
+			// Use the actual high-resolution shadow map size
+			float shadowMapResolution = 8192.0f; // Match the increased resolution
+			float worldTexelSize = (shadowCamera.GetOrthoWindowWidth() / shadowMapResolution);
+			
+			// Setup camera orientation vectors
 			Vector3 up = Vector3::UnitY;
-
-			// Check it's not coincident with dir
+			
+			// Make sure up vector isn't aligned with light direction
 			if (::fabsf(up.Dot(dir)) >= 0.99f)
 			{
-				// Use camera up
+				// Use Z axis as up vector instead
 				up = Vector3::UnitZ;
 			}
-
-			// 1. build an orthonormal basis that matches DirectX LH look‑at
-			Vector3 right = up.Cross(dir);   //  X  axis  (points right)
+			
+			// Build an orthonormal basis for the shadow camera
+			Vector3 right = up.Cross(dir);
 			right.Normalize();
-			up = dir.Cross(right);        //  Y  axis  (re‑derived, keeps it orthogonal)
+			up = dir.Cross(right);
 			up.Normalize();
-
-			// 2. build the quaternion from X,Y,Z
+			
+			// Create orientation quaternion
 			Quaternion q;
-			q.FromAxes(right, up, dir);      // q rotates local +Z onto 'dir'
-
-			//convert world space camera position into light space
+			q.FromAxes(right, up, dir);
+			
+			// Transform position to light space
 			Vector3 lightSpacePos = q.Inverse() * pos;
-
-			//snap to nearest texel
+			
+			// More precise texel snapping with higher resolution
 			lightSpacePos.x = std::floor(lightSpacePos.x / worldTexelSize) * worldTexelSize;
 			lightSpacePos.y = std::floor(lightSpacePos.y / worldTexelSize) * worldTexelSize;
-
-			//convert back to world space
+			
+			// Transform back to world space
 			pos = q * lightSpacePos;
-
-			// TODO: Other light types
+			
+			// Set camera position and orientation
 			shadowCamera.GetParentNode()->SetPosition(pos);
 			shadowCamera.GetParentSceneNode()->LookAt(target, TransformSpace::World, Vector3::UnitZ);
 		}

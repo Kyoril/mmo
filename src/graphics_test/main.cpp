@@ -1,4 +1,3 @@
-
 #ifdef _WIN32
 #	include<Windows.h>
 #else
@@ -242,7 +241,8 @@ namespace mmo
 		g_sunLight->SetIntensity(1.0f);
 		g_sunLight->SetCastShadows(true);
 		g_sunLight->SetShadowFarDistance(75.0f);
-		g_sunLight->SetDirection({ -0.5f, -1.0f, -0.3f });
+		// Use a less vertical light direction for better shadow definition
+		g_sunLight->SetDirection({ -0.7f, -0.7f, -0.3f });
 
 		g_sunLightNode = g_scene->GetRootSceneNode().CreateChildSceneNode("SunLightNode");
 		g_sunLightNode->AttachObject(*g_sunLight);
@@ -274,6 +274,18 @@ namespace mmo
 
 		// Create deferred renderer
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
+
+		// Optimize shadow settings for better quality
+		g_deferredRenderer->SetDepthBias(100.0f, 2.5f, 0.01f); // Hardware depth bias settings
+		g_deferredRenderer->SetShadowBias(0.00025f);           // Software depth bias in shadow space
+		g_deferredRenderer->SetNormalBiasScale(0.05f);         // Scale factor for normal-based bias
+		g_deferredRenderer->SetShadowSoftness(2.5f);           // Shadow softness for smooth edges
+		g_deferredRenderer->SetBlockerSearchRadius(0.03f);     // Blocker search radius for PCSS-style shadows
+		g_deferredRenderer->SetLightSize(0.005f);              // Virtual light size for penumbra simulation
+		
+		// Set shadow map information and direction in the scene
+		g_scene->SetShadowDirLightTextureOffset(0.5f);
+		g_scene->SetShadowDirectionalLightExtrusionDistance(50.0f);
 
 		g_terrain = std::make_unique<terrain::Terrain>(*g_scene, g_camera, 64, 64);
 		g_terrain->SetBaseFileName("GraphicsTest");

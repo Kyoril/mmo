@@ -92,13 +92,13 @@ namespace mmo
 
 #ifdef WIN32        // TODO: Fix me: Move me to graphicsd3d11
         D3D11_SAMPLER_DESC sampDesc = {};
-        // Using anisotropic filtering for better quality at oblique angles
-        sampDesc.Filter = D3D11_FILTER_COMPARISON_ANISOTROPIC;
-        // Use border addressing to avoid shadow edge artifacts
+        // Using higher quality comparison filtering for shadows
+        sampDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+        // Use border addressing mode to avoid artifacts at shadow map edges
         sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
         sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
         sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
-        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;  // Shadow test: fragment depth < stored depth
+        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;  // Shadow test: fragment depth <= stored depth
         // White border color to avoid darkening at edges
         sampDesc.BorderColor[0] = 1.0f;
         sampDesc.BorderColor[1] = 1.0f;
@@ -106,8 +106,8 @@ namespace mmo
         sampDesc.BorderColor[3] = 1.0f;
         sampDesc.MinLOD = 0;
         sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-        // Increase anisotropy level for better quality
-        sampDesc.MaxAnisotropy = 4;
+        // Using standard filtering - anisotropic isn't necessary for shadow mapping
+        sampDesc.MaxAnisotropy = 1;
         sampDesc.MipLODBias = 0;
 
 		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
@@ -313,10 +313,12 @@ namespace mmo
 
         m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirecitonalLight, *m_shadowCamera);
 
-        // Setup some depth bias settings
+        // Setup hardware depth bias settings (helps with shadow acne)
         m_device.SetDepthBias(m_depthBias);
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
-        m_device.SetDepthBiasClamp(m_depthBiasClamp);        // Update the shadow buffer with the light view-projection matrix and shadow parameters
+        m_device.SetDepthBiasClamp(m_depthBiasClamp);
+        
+        // Update the shadow buffer with the light view-projection matrix and shadow parameters
         ShadowBuffer buffer;
         buffer.lightViewProjection = (m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix());
         buffer.shadowBias = m_shadowBias;
@@ -332,7 +334,7 @@ namespace mmo
         scene.Render(*m_shadowCamera, PixelShaderType::ShadowMap);
         m_shadowMapRT->Update();
 
-        // Reset
+        // Reset depth bias settings
         m_device.SetDepthBias(0);
         m_device.SetSlopeScaledDepthBias(0);
         m_device.SetDepthBiasClamp(0);

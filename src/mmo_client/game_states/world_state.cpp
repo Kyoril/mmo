@@ -936,7 +936,7 @@ namespace mmo
 
 		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "50");
 		m_cvarChangedSignals += s_depthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "0.25");
+		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "1.5");
 		m_cvarChangedSignals += s_slopeDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.005");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);

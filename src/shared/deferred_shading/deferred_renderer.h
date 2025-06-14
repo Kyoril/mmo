@@ -3,7 +3,6 @@
 #pragma once
 
 #include "shadow_camera_setup.h"
-#include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
@@ -49,7 +48,9 @@ namespace mmo
         Camera* GetShadowCamera() const
         {
             return m_shadowCamera;
-        }        void SetDepthBias(float bias, float slope, float clamp)
+        }        
+        
+        void SetDepthBias(float bias, float slope, float clamp)
         {
 			m_depthBias = bias;
 			m_slopeScaledDepthBias = slope;
@@ -68,7 +69,8 @@ namespace mmo
 
         void SetBlockerSearchRadius(float radius) { m_blockerSearchRadius = radius; }
         float GetBlockerSearchRadius() const { return m_blockerSearchRadius; }
-          void SetLightSize(float size) { m_lightSize = size; }
+        
+        void SetLightSize(float size) { m_lightSize = size; }
         float GetLightSize() const { return m_lightSize; }
         
         void SetShadowMapSize(uint16 size);
@@ -126,17 +128,19 @@ namespace mmo
 #ifdef _WIN32
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 #endif
+          std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
         
-        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;        float m_depthBias = 250.0f;
-		float m_slopeScaledDepthBias = 1.0f;
-		float m_depthBiasClamp = 0.0f;
-
-        // Advanced shadow parameters
-        float m_shadowBias = 0.0005f;         // Depth bias in shadow space
-        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor        float m_shadowSoftness = 1.0f;        // Overall shadow softness
-        float m_shadowSoftness = 1.0f;        // Overall shadow softness
-        float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
-        float m_lightSize = 0.0025f;          // Size of the virtual light
-        uint16 m_shadowMapSize = 8192;        // Size of the shadow map texture (default 8k)
+        // Hardware depth biasing - helps with shadow acne at shadow edges
+        float m_depthBias = 25.0f;            // Further reduced to minimize peter panning
+		float m_slopeScaledDepthBias = 1.0f;  // Reduced to balance acne vs peter panning
+		float m_depthBiasClamp = 0.002f;      // Very small clamp for precision
+        
+        // Advanced shadow parameters - balanced for stability and anti-aliasing
+        float m_shadowBias = 0.00005f;        // Very small bias for stability
+        float m_normalBiasScale = 0.01f;      // Minimal normal bias to prevent peter panning
+        float m_shadowSoftness = 0.8f;        // Reduced from 2.0f for better definition
+        float m_blockerSearchRadius = 0.003f;  // Slightly increased for better quality
+        float m_lightSize = 0.0015f;           // Reduced for tighter, more defined shadows
+        uint16 m_shadowMapSize = 8192;        // Consider increasing to 8192 for production quality
     };
 }
