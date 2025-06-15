@@ -17,7 +17,7 @@
 template <>
 struct std::hash<std::pair<int, int>>
 {
-	std::size_t operator()(const std::pair<int, int>& coordinate) const noexcept
+	std::size_t operator()(const std::pair<int, int>& coordinate) const
 	{
 		return std::hash<int>()(coordinate.first ^ coordinate.second);
 	}

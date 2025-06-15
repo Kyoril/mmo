@@ -56,11 +56,11 @@ namespace mmo
 
 		[[nodiscard]] const Matrix4& GetViewMatrix() const;
 
-		[[nodiscard]] float GetNearClipDistance() const noexcept { return m_nearDist; }
+		[[nodiscard]] float GetNearClipDistance() const { return m_nearDist; }
 
-		[[nodiscard]] float GetFarClipDistance() const noexcept { return m_farDist; }
+		[[nodiscard]] float GetFarClipDistance() const { return m_farDist; }
 
-		[[nodiscard]] float GetAspectRatio() const noexcept { return m_aspect; }
+		[[nodiscard]] float GetAspectRatio() const { return m_aspect; }
 
 		void SetOrientation(const Quaternion& quaternion);
 
@@ -168,7 +168,7 @@ namespace mmo
 
 		void SetFillMode(const FillMode fillMode) { m_fillMode = fillMode; }
 
-		[[nodiscard]] FillMode GetFillMode() const noexcept { return m_fillMode; }
+		[[nodiscard]] FillMode GetFillMode() const { return m_fillMode; }
 
 		bool IsVisible(const Sphere& bound) const;
 

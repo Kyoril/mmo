@@ -853,7 +853,7 @@ namespace mmo
 		}
 	}
 
-	bool MeshDeserializer::OnReadFinished() noexcept
+	bool MeshDeserializer::OnReadFinished()
 	{
 		CreateHardwareBuffers();
 		

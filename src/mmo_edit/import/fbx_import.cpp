@@ -258,7 +258,7 @@ namespace mmo
         return true;
     }
 
-	bool FbxImport::SupportsExtension(const String& extension) const noexcept
+	bool FbxImport::SupportsExtension(const String& extension) const
 	{
 		return extension == ".fbx" || extension == ".gltf" || extension == ".glb";
 	}

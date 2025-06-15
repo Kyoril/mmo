@@ -10,7 +10,7 @@ namespace mmo
 	{
 	public:
 		/// @copydoc ShaderCompiler::GetShaderFormat
-		[[nodiscard]] const String& GetShaderFormat() const noexcept override { return ShaderFormat_Metal_SM; }
+		[[nodiscard]] const String& GetShaderFormat() const override { return ShaderFormat_Metal_SM; }
 		
 		/// @copydoc ShaderCompiler::Compile
 		void Compile(const ShaderCompileInput& input, ShaderCompileResult& output) override;

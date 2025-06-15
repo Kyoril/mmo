@@ -43,51 +43,51 @@ namespace mmo
 	public:
 		/// @brief Gets the type of the light.
 		/// @return The type of the light.
-		[[nodiscard]] LightType GetType() const noexcept { return m_type; }
+		[[nodiscard]] LightType GetType() const { return m_type; }
 
 		/// @brief Sets the type of the light.
 		/// @param type The new type of the light.
-		void SetType(LightType type) noexcept { m_type = type; }
+		void SetType(LightType type) { m_type = type; }
 
 		/// @brief Gets the color of the light.
 		/// @return The color of the light.
-		[[nodiscard]] const Vector4& GetColor() const noexcept { return m_color; }
+		[[nodiscard]] const Vector4& GetColor() const { return m_color; }
 
 		/// @brief Sets the color of the light.
 		/// @param color The new color of the light.
-		void SetColor(const Vector4& color) noexcept { m_color = color; }
+		void SetColor(const Vector4& color) { m_color = color; }
 
 		/// @brief Gets the intensity of the light.
 		/// @return The intensity of the light.
-		[[nodiscard]] float GetIntensity() const noexcept { return m_intensity; }
+		[[nodiscard]] float GetIntensity() const { return m_intensity; }
 
 		/// @brief Sets the intensity of the light.
 		/// @param intensity The new intensity of the light.
-		void SetIntensity(float intensity) noexcept { m_intensity = intensity; }
+		void SetIntensity(float intensity) { m_intensity = intensity; }
 
 		/// @brief Gets the range of the light.
 		/// @return The range of the light.
-		[[nodiscard]] float GetRange() const noexcept { return m_range; }
+		[[nodiscard]] float GetRange() const { return m_range; }
 
 		/// @brief Sets the range of the light.
 		/// @param range The new range of the light.
-		void SetRange(float range) noexcept { m_range = range; }
+		void SetRange(float range) { m_range = range; }
 
 		/// @brief Gets the inner cone angle of the spot light.
 		/// @return The inner cone angle of the spot light in radians.
-		[[nodiscard]] float GetInnerConeAngle() const noexcept { return m_innerConeAngle; }
+		[[nodiscard]] float GetInnerConeAngle() const { return m_innerConeAngle; }
 
 		/// @brief Sets the inner cone angle of the spot light.
 		/// @param angle The new inner cone angle of the spot light in radians.
-		void SetInnerConeAngle(float angle) noexcept { m_innerConeAngle = angle; }
+		void SetInnerConeAngle(float angle) { m_innerConeAngle = angle; }
 
 		/// @brief Gets the outer cone angle of the spot light.
 		/// @return The outer cone angle of the spot light in radians.
-		[[nodiscard]] float GetOuterConeAngle() const noexcept { return m_outerConeAngle; }
+		[[nodiscard]] float GetOuterConeAngle() const { return m_outerConeAngle; }
 
 		/// @brief Sets the outer cone angle of the spot light.
 		/// @param angle The new outer cone angle of the spot light in radians.
-		void SetOuterConeAngle(float angle) noexcept { m_outerConeAngle = angle; }
+		void SetOuterConeAngle(float angle) { m_outerConeAngle = angle; }
 
 		const Vector3& GetPosition() const { return m_position; }
 

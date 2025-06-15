@@ -56,7 +56,7 @@ namespace mmo
 
 	public:
 		/// @brief Gets the editor host.
-		[[nodiscard]] EditorHost& GetHost() const noexcept { return m_host; }
+		[[nodiscard]] EditorHost& GetHost() const { return m_host; }
 
 	protected:
 		virtual std::shared_ptr<EditorInstance> OpenAssetImpl(const Path& asset) = 0;

@@ -39,9 +39,9 @@ namespace mmo
 
 		virtual void SetMemoryBudget(const uint64 bytes) { m_memoryBudget = bytes; CheckUsage(); }
 
-		virtual uint64 GetMemoryBudget() const noexcept { return m_memoryBudget; }
+		virtual uint64 GetMemoryBudget() const { return m_memoryBudget; }
 
-		virtual uint64 GetMemoryUsage() const noexcept { return m_memoryUsage.load(); }
+		virtual uint64 GetMemoryUsage() const { return m_memoryUsage.load(); }
 
 		virtual void Unload(std::string_view name);
 
@@ -89,16 +89,16 @@ namespace mmo
 
 		virtual ResourcePtr Load(std::string_view name, std::string_view group, bool isManual = false, ManualResourceLoader* loader = nullptr, bool backgroundThread = false);
 
-		virtual const std::vector<String>& GetFilePatterns() const noexcept { return m_filePatterns; }
+		virtual const std::vector<String>& GetFilePatterns() const { return m_filePatterns; }
 
 		virtual void ParseFile(io::Reader& reader, std::string_view group) {};
 
-		virtual float GetLoadingOrder() const noexcept { return m_loadOrder; }
+		virtual float GetLoadingOrder() const { return m_loadOrder; }
 
 		std::string_view GetResourceType() const { return m_resourceType; }
 
 	protected:
-		ResourceHandle GetNextHandle() noexcept { return m_nextHandle++; }
+		ResourceHandle GetNextHandle() { return m_nextHandle++; }
 
 		virtual ResourcePtr CreateImpl(std::string_view name, ResourceHandle handle, std::string_view group, bool isManual, ManualResourceLoader* loader) = 0;
 

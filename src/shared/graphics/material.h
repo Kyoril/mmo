@@ -86,9 +86,9 @@ namespace mmo
 
 		virtual std::shared_ptr<Material> GetBaseMaterial() = 0;
 
-		virtual ShaderPtr& GetVertexShader(VertexShaderType type) noexcept = 0;
+		virtual ShaderPtr& GetVertexShader(VertexShaderType type) = 0;
 
-		virtual ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept = 0;
+		virtual ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) = 0;
 
 		virtual void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) = 0;
 
@@ -96,47 +96,47 @@ namespace mmo
 
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
-		virtual void SetTwoSided(const bool value) noexcept = 0;
+		virtual void SetTwoSided(const bool value) = 0;
 
 		/// @brief Gets whether this material should render geometry without backface culling.
-		[[nodiscard]] virtual bool IsTwoSided() const noexcept = 0;
+		[[nodiscard]] virtual bool IsTwoSided() const = 0;
 
 		/// @brief Sets whether this material casts shadows.
 		/// @param value True if this material should cast shadows.
-		virtual void SetCastShadows(const bool value) noexcept = 0;
+		virtual void SetCastShadows(const bool value) = 0;
 
 		/// @brief Gets whether this material casts shadows.
-		[[nodiscard]] virtual bool IsCastingShadows() const noexcept = 0;
+		[[nodiscard]] virtual bool IsCastingShadows() const = 0;
 
 		/// @brief Sets whether this material should receive shadows.
 		/// @param receive True if the material should receive shadows.
-		virtual void SetReceivesShadows(const bool receive) noexcept = 0;
+		virtual void SetReceivesShadows(const bool receive) = 0;
 
 		/// @brief Gets whether this material is receiving shadows.
-		[[nodiscard]] virtual bool IsReceivingShadows() const noexcept = 0;
+		[[nodiscard]] virtual bool IsReceivingShadows() const = 0;
 
 		/// @brief Sets the type of the material.
 		/// @param value The new material type.
-		virtual void SetType(const MaterialType value) noexcept = 0;
+		virtual void SetType(const MaterialType value) = 0;
 
 		/// @brief Gets the type of this material.
-		[[nodiscard]] virtual MaterialType GetType() const noexcept = 0;
+		[[nodiscard]] virtual MaterialType GetType() const = 0;
 
 		/// @brief Gets whether this material is translucent.
-		[[nodiscard]] virtual bool IsTranslucent() const noexcept = 0;
+		[[nodiscard]] virtual bool IsTranslucent() const = 0;
 
 		/// @brief Gets whether this material is receiving light.
-		[[nodiscard]] virtual bool IsLit() const noexcept = 0;
+		[[nodiscard]] virtual bool IsLit() const = 0;
 
-		[[nodiscard]] virtual bool IsDepthTestEnabled() const noexcept = 0;
+		[[nodiscard]] virtual bool IsDepthTestEnabled() const = 0;
 
-		void virtual SetDepthTestEnabled(const bool enable) noexcept = 0;
+		void virtual SetDepthTestEnabled(const bool enable) = 0;
 
-		[[nodiscard]] virtual bool IsDepthWriteEnabled() const noexcept = 0;
+		[[nodiscard]] virtual bool IsDepthWriteEnabled() const = 0;
 
-		virtual void SetDepthWriteEnabled(const bool enable) noexcept = 0;
+		virtual void SetDepthWriteEnabled(const bool enable) = 0;
 
-		[[nodiscard]] virtual std::string_view GetName() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view GetName() const = 0;
 
 		virtual void ClearParameters() = 0;
 
@@ -186,63 +186,63 @@ namespace mmo
 
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
-		void SetTwoSided(const bool value) noexcept override { m_twoSided = value; }
+		void SetTwoSided(const bool value) override { m_twoSided = value; }
 
 		/// @brief Gets whether this material should render geometry without backface culling.
-		[[nodiscard]] bool IsTwoSided() const noexcept override { return m_twoSided; }
+		[[nodiscard]] bool IsTwoSided() const override { return m_twoSided; }
 
 		/// @brief Sets whether this material casts shadows.
 		/// @param value True if this material should cast shadows.
-		void SetCastShadows(const bool value) noexcept override { m_castShadow = value; }
+		void SetCastShadows(const bool value) override { m_castShadow = value; }
 
 		/// @brief Gets whether this material casts shadows.
-		[[nodiscard]] bool IsCastingShadows() const noexcept override { return m_castShadow; }
+		[[nodiscard]] bool IsCastingShadows() const override { return m_castShadow; }
 
 		/// @brief Sets whether this material should receive shadows.
 		/// @param receive True if the material should receive shadows.
-		void SetReceivesShadows(const bool receive) noexcept override { m_receiveShadows = receive; }
+		void SetReceivesShadows(const bool receive) override { m_receiveShadows = receive; }
 
 		/// @brief Gets whether this material is receiving shadows.
-		[[nodiscard]] bool IsReceivingShadows() const noexcept override { return m_receiveShadows; }
+		[[nodiscard]] bool IsReceivingShadows() const override { return m_receiveShadows; }
 
 		/// @brief Sets the type of the material.
 		/// @param value The new material type.
-		void SetType(const MaterialType value) noexcept override { m_type = value; }
+		void SetType(const MaterialType value) override { m_type = value; }
 
 		/// @brief Gets the type of this material.
-		[[nodiscard]] MaterialType GetType() const noexcept override { return m_type; }
+		[[nodiscard]] MaterialType GetType() const override { return m_type; }
 
 		/// @brief Gets whether this material is translucent.
-		[[nodiscard]] bool IsTranslucent() const noexcept override { return m_type == MaterialType::Translucent; }
+		[[nodiscard]] bool IsTranslucent() const override { return m_type == MaterialType::Translucent; }
 
 		/// @brief Gets whether this material is receiving light.
-		[[nodiscard]] bool IsLit() const noexcept override { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
+		[[nodiscard]] bool IsLit() const override { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
 
-		[[nodiscard]] std::string_view GetName() const noexcept override { return m_name; }
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
 
 		/// @brief Sets the name of the material.
 		/// @param name The material name.
-		void SetName(const std::string_view name) noexcept { m_name = name; }
+		void SetName(const std::string_view name) { m_name = name; }
 
 		void ClearTextures();
 
 		void AddTexture(std::string_view texture);
 
-		void SetVertexShaderCode(VertexShaderType shaderType, std::span<uint8> code) noexcept;
+		void SetVertexShaderCode(VertexShaderType shaderType, std::span<uint8> code);
 
-		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code) noexcept;
+		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code);
 
-        [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const noexcept { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
+        [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
 		
-		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(PixelShaderType type = PixelShaderType::Forward) const noexcept { return { m_pixelShaderCode[static_cast<uint32_t>(type)] }; }
+		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(PixelShaderType type = PixelShaderType::Forward) const { return { m_pixelShaderCode[static_cast<uint32_t>(type)] }; }
 
-		[[nodiscard]] bool IsDepthTestEnabled() const noexcept override { return m_depthTest; }
+		[[nodiscard]] bool IsDepthTestEnabled() const override { return m_depthTest; }
 		
-		void SetDepthTestEnabled(const bool enable) noexcept override { m_depthTest = enable; }
+		void SetDepthTestEnabled(const bool enable) override { m_depthTest = enable; }
 
-		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept override { return m_depthWrite; }
+		[[nodiscard]] bool IsDepthWriteEnabled() const override { return m_depthWrite; }
 		
-		void SetDepthWriteEnabled(const bool enable) noexcept override { m_depthWrite = enable; }
+		void SetDepthWriteEnabled(const bool enable) override { m_depthWrite = enable; }
 
 		virtual ConstantBufferPtr GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device) override;
 
@@ -276,14 +276,14 @@ namespace mmo
 
 	public:
 		/// @brief Gets the texture files referenced by this material, in order.
-		[[nodiscard]] const std::vector<String>& GetTextureFiles() const noexcept { return m_textureFiles; }
+		[[nodiscard]] const std::vector<String>& GetTextureFiles() const { return m_textureFiles; }
 
 		/// @brief Ensures that the material is loaded.
 		void Update() override;
 
-		ShaderPtr& GetVertexShader(VertexShaderType type) noexcept override { return m_vertexShader[static_cast<uint32_t>(type)]; }
+		ShaderPtr& GetVertexShader(VertexShaderType type) override { return m_vertexShader[static_cast<uint32_t>(type)]; }
 
-		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept override { return m_pixelShader[static_cast<uint32_t>(type)]; }
+		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) override { return m_pixelShader[static_cast<uint32_t>(type)]; }
 
 		void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) override;
 

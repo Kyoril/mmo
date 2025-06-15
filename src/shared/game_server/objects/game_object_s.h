@@ -255,10 +255,10 @@ namespace mmo
 		uint64 GetGuid() const { return m_fields.GetFieldValue<uint64>(object_fields::Guid); }
 
 		/// Gets the position of this object.
-		virtual const Vector3& GetPosition() const noexcept { return m_movementInfo.position; }
+		virtual const Vector3& GetPosition() const { return m_movementInfo.position; }
 
 		/// Gets the facing of this object.
-		const Radian& GetFacing() const noexcept { return m_movementInfo.facing; }
+		const Radian& GetFacing() const { return m_movementInfo.facing; }
 
 		void SetFacing(const Radian& facing)
 		{

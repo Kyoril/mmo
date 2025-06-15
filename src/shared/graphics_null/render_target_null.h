@@ -18,8 +18,8 @@ namespace mmo
 	class RenderTargetNull
 	{
 	public:
-		explicit RenderTargetNull(GraphicsDeviceNull& device) noexcept;
-		virtual ~RenderTargetNull() noexcept = default;
+		explicit RenderTargetNull(GraphicsDeviceNull& device);
+		virtual ~RenderTargetNull() = default;
 
 	public:
 		virtual void Activate();

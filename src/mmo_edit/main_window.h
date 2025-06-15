@@ -82,7 +82,7 @@ namespace mmo
 
 		EditorWindowBase* GetWindow(size_t index) const;
 
-		size_t GetWindowCount() const noexcept { return m_editorWindows.size(); }
+		size_t GetWindowCount() const { return m_editorWindows.size(); }
 
 		void RemoveEditorWindow(const String& name) override;
 
@@ -103,7 +103,7 @@ namespace mmo
 	public:
 		void SetCurrentPath(const Path& selectedPath) override { m_selectedPath = selectedPath; }
 
-		const Path& GetCurrentPath() const noexcept override { return m_selectedPath; }
+		const Path& GetCurrentPath() const override { return m_selectedPath; }
 		
 		bool OpenAsset(const Path& assetPath) override;
 		

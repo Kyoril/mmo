@@ -320,7 +320,7 @@ namespace mmo
 			scalarValues = other.scalarValues;
 		}
 
-		explicit AvatarConfiguration(AvatarConfiguration&& other) noexcept
+		explicit AvatarConfiguration(AvatarConfiguration&& other)
 		{
 			chosenOptionPerGroup = std::move(other.chosenOptionPerGroup);
 			scalarValues = std::move(other.scalarValues);
@@ -330,7 +330,7 @@ namespace mmo
 
 		AvatarConfiguration& operator=(const AvatarConfiguration& other) = default;
 
-		AvatarConfiguration& operator=(AvatarConfiguration&& other) noexcept
+		AvatarConfiguration& operator=(AvatarConfiguration&& other)
 		{
 			chosenOptionPerGroup = std::move(other.chosenOptionPerGroup);
 			scalarValues = std::move(other.scalarValues);

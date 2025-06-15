@@ -342,7 +342,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool SkeletonDeserializer::OnReadFinished() noexcept
+	bool SkeletonDeserializer::OnReadFinished()
 	{
 		m_skeleton.SetBindingPose();
 

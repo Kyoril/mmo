@@ -4,7 +4,7 @@
 
 namespace mmo
 {
-	Sphere::Sphere(const Vector3& center, const float radius) noexcept
+	Sphere::Sphere(const Vector3& center, const float radius)
 		: m_radius(radius)
 		, m_center(center)
 	{

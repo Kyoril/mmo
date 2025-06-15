@@ -90,7 +90,7 @@ namespace mmo
 
 	    /// @brief Moves an existing MaterialGraph instance to a new memory local value.
 	    /// @param other The MaterialGraph instance to move.
-	    MaterialGraph(MaterialGraph&& other) noexcept;
+	    MaterialGraph(MaterialGraph&& other);
 
 		/// @brief Default destructor which frees memory.
 	    ~MaterialGraph();
@@ -109,7 +109,7 @@ namespace mmo
 	    /// @brief Move assignment operator override.
 	    /// @param other The MaterialGraph instance to move.
 	    /// @return A reference on this object.
-	    MaterialGraph& operator=(MaterialGraph&& other) noexcept;
+	    MaterialGraph& operator=(MaterialGraph&& other);
 
 	public:
 		/// @brief Creates a new node based on a given node type.
@@ -209,7 +209,7 @@ namespace mmo
 
 		void Compile(MaterialCompiler& compiler) const;
 
-	    bool IsRootNode(uint32 nodeId) const noexcept;
+	    bool IsRootNode(uint32 nodeId) const;
 
     private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;

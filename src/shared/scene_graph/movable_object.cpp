@@ -204,7 +204,7 @@ namespace mmo
 		m_renderQueuePrioritySet = true;
 	}
 
-	uint8 MovableObject::GetRenderQueueGroup() const noexcept
+	uint8 MovableObject::GetRenderQueueGroup() const
 	{
 		return m_renderQueueId;
 	}

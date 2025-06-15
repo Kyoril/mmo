@@ -35,8 +35,8 @@ namespace mmo
 		static AngleUnit s_angleUnit;
 
 	public:
-		static void SetAngleUnit(AngleUnit unit) noexcept { s_angleUnit = unit; }
-		static AngleUnit GetAngleUnit() noexcept { return s_angleUnit; }
+		static void SetAngleUnit(AngleUnit unit) { s_angleUnit = unit; }
+		static AngleUnit GetAngleUnit() { return s_angleUnit; }
 
 		/**
 		 * \brief Converts a given angle unit value to a degree value.

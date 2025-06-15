@@ -128,9 +128,9 @@ namespace mmo
 			m_indexCount = indexCount;
 		}
 
-		bool HasTearingSupport() const noexcept { return m_tearingSupport; }
+		bool HasTearingSupport() const { return m_tearingSupport; }
 
-		bool IsVSyncEnabled() const noexcept { return m_vsync; }
+		bool IsVSyncEnabled() const { return m_vsync; }
 
 		// Method to get or create an input layout
 		ID3D11InputLayout* GetOrCreateInputLayout(
@@ -145,7 +145,7 @@ namespace mmo
 
 	private:
 		/// Checks support for GSync displays.
-		void CheckTearingSupport() noexcept;
+		void CheckTearingSupport();
 
 		/// Creates the d3d11 device objects.
 		void CreateD3D11();

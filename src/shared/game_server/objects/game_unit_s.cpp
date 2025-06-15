@@ -150,7 +150,7 @@ namespace mmo
 	{
 	}
 
-	const Vector3& GameUnitS::GetPosition() const noexcept
+	const Vector3& GameUnitS::GetPosition() const
 	{
 		m_lastPosition = m_mover->GetCurrentLocation();
 		return m_lastPosition;

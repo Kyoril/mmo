@@ -51,7 +51,7 @@ namespace mmo
 		}
 
 	public:
-		void swap(Matrix3& other) noexcept
+		void swap(Matrix3& other)
 		{
 			std::swap(m[0][0], other.m[0][0]);
 			std::swap(m[0][1], other.m[0][1]);

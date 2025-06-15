@@ -329,7 +329,7 @@ namespace mmo
 #endif
 	}
 
-	//Warum gibt die Funktion etwas zurück?
+	//Warum gibt die Funktion etwas zurï¿½ck?
 	bool performUpdateThread()
 	{
 		ILOG("Connecting to the update server...");
@@ -470,7 +470,7 @@ namespace mmo
 						dispatcher.stop();
 						dispatcher.post([errorMessage]()
 						{
-							throw std::runtime_error(errorMessage);
+							//throw std::runtime_error(errorMessage);
 						});
 					});
 				}

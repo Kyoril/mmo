@@ -20,7 +20,7 @@ namespace mmo
 
 		virtual void NotifyObjectData(const	ObjectInfo& data);
 
-		const ObjectInfo* GetEntry() const noexcept { return m_entry; }
+		const ObjectInfo* GetEntry() const { return m_entry; }
 
 	protected:
 		virtual void SetupSceneObjects();

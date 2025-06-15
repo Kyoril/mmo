@@ -29,7 +29,7 @@ namespace mmo
 		bool Draw() override;
 
 		/// @copydoc EditorWindowBase::IsDockable 
-		bool IsDockable() const noexcept override { return true; }
+		bool IsDockable() const override { return true; }
 
 	private:
 		bool m_visible = true;

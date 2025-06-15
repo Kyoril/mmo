@@ -30,20 +30,20 @@ namespace mmo
 
 	public:
 		/// @brief Gets the scene that the world grid is placing it's resources in.
-		[[nodiscard]] Scene& GetScene() const noexcept { return m_scene; }
+		[[nodiscard]] Scene& GetScene() const { return m_scene; }
 
 		/// @brief Gets the number of rows that should be displayed by the world grid.
-		[[nodiscard]] uint8 GetRowCount() const noexcept { return m_numRows; }
+		[[nodiscard]] uint8 GetRowCount() const { return m_numRows; }
 
 		/// @brief Gets the number of columns that should be displayed by the world grid.
-		[[nodiscard]] uint8 GetColumnCount() const noexcept { return m_numCols; }
+		[[nodiscard]] uint8 GetColumnCount() const { return m_numCols; }
 
 		/// @brief Gets the interval of rows / columns after which a major line should be rendered to split the grid
 		///	       into large chunks, optically.
-		[[nodiscard]] uint8 GetLargeGridInterval() const noexcept { return m_largeGrid; }
+		[[nodiscard]] uint8 GetLargeGridInterval() const { return m_largeGrid; }
 
 		/// @brief Gets the size of a single square in the grid, which is the distance between each row / column in world units.
-		[[nodiscard]] float GetGridSize() const noexcept { return m_gridSize; }
+		[[nodiscard]] float GetGridSize() const { return m_gridSize; }
 
 		/// @brief Sets the size of the grid in world units, which is the distance between each row / column.
 		/// @param size The new grid size.

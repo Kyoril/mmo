@@ -40,13 +40,13 @@ namespace mmo
 		}
 	}
 
-	SubEntity* Entity::GetSubEntity(const uint16 index) const noexcept
+	SubEntity* Entity::GetSubEntity(const uint16 index) const
 	{
 		ASSERT(index <= m_subEntities.size());
 		return m_subEntities[index].get();
 	}
 
-	SubEntity* Entity::GetSubEntity(const String& name) const noexcept
+	SubEntity* Entity::GetSubEntity(const String& name) const
 	{
 		if (!m_mesh) return nullptr;
 
@@ -59,7 +59,7 @@ namespace mmo
 		return GetSubEntity(static_cast<uint16>(index));
 	}
 
-	uint32 Entity::GetNumSubEntities() const noexcept
+	uint32 Entity::GetNumSubEntities() const
 	{
 		return static_cast<uint32>(m_subEntities.size());
 	}

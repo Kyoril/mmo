@@ -76,9 +76,9 @@ namespace mmo
 		/// Gets the world manager which manages all connected world nodes.
 		WorldManager& GetWorldManager() const { return m_worldManager; }
 
-		[[nodiscard]] bool HasCharacterGuid() const noexcept { return m_characterData.has_value(); }
+		[[nodiscard]] bool HasCharacterGuid() const { return m_characterData.has_value(); }
 
-		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
+		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
 
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
@@ -213,7 +213,7 @@ namespace mmo
 			{
 			}
 
-			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other) noexcept
+			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other)
 				: m_player(std::move(other.m_player)), m_opCode(other.m_opCode)
 			{
 				other.m_opCode = std::numeric_limits<uint16>::max();

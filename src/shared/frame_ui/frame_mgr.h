@@ -79,7 +79,7 @@ namespace mmo
 		
 		void SetNativeResolution(const Size& nativeResolution);
 
-		const Size& GetNativeResolution() const noexcept { return m_nativeResolution; }
+		const Size& GetNativeResolution() const { return m_nativeResolution; }
 
 		void SetCursorIcon(TexturePtr cursorIconTexture, const Size size);
 
@@ -191,10 +191,10 @@ namespace mmo
 
 	public:
 		/// Gets the root frame or nullptr if there is none.
-		FramePtr GetTopFrame() const noexcept { return m_topFrame; }
+		FramePtr GetTopFrame() const { return m_topFrame; }
 
 		/// Gets the localization instance.
-		const Localization& GetLocalization() const noexcept { return m_localization; }
+		const Localization& GetLocalization() const { return m_localization; }
 
 	private:
 		/// A map of mouse-down frames.

@@ -43,7 +43,7 @@ namespace mmo
 		
 		void SetControlledUnit(const std::shared_ptr<GameUnitC>& controlledUnit);
 
-		[[nodiscard]] const std::shared_ptr<GameUnitC>& GetControlledUnit() const noexcept { return m_controlledUnit; }
+		[[nodiscard]] const std::shared_ptr<GameUnitC>& GetControlledUnit() const { return m_controlledUnit; }
 
 		[[nodiscard]] Camera& GetCamera() const { ASSERT(m_defaultCamera); return *m_defaultCamera;}
 

@@ -29,10 +29,10 @@ namespace mmo
 	public:
 		/// @brief Gets the name of the window.
 		/// @return Name of the window.
-		[[nodiscard]] const String& GetName() const noexcept { return m_name; }
+		[[nodiscard]] const String& GetName() const { return m_name; }
 
 		/// Gets whether the window is currently visible.
-		[[nodiscard]] virtual bool IsVisible() const noexcept { return m_visible; }
+		[[nodiscard]] virtual bool IsVisible() const { return m_visible; }
 
 		/// @brief Sets the visibility of this window.
 		/// @param value The new visibility. True if the window should be visible.
@@ -53,18 +53,18 @@ namespace mmo
 
 		/// @brief Determines whether the window is dockable.
 		/// @return True if the window is dockable, false otherwise.
-		[[nodiscard]] virtual bool IsDockable() const noexcept { return false; }
+		[[nodiscard]] virtual bool IsDockable() const { return false; }
 
 		/// @brief Determines whethe the window is resizable.
 		/// @return True if the window is resizable.
-		[[nodiscard]] virtual bool IsResizable() const noexcept { return true; }
+		[[nodiscard]] virtual bool IsResizable() const { return true; }
 
 		/// @brief Gets the default dock direction of the window.
 		///	@return The default dock direction of the window.
-		[[nodiscard]] virtual DockDirection GetDefaultDockDirection() const noexcept { return DockDirection::Bottom; }
+		[[nodiscard]] virtual DockDirection GetDefaultDockDirection() const { return DockDirection::Bottom; }
 
 		/// @brief Gets the default dock size of the window.
-		[[nodiscard]] virtual float GetDefaultDockSize() const noexcept { return 400.0f; }
+		[[nodiscard]] virtual float GetDefaultDockSize() const { return 400.0f; }
 
 	protected:
 		String m_name;

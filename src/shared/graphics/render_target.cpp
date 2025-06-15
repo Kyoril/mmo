@@ -7,7 +7,7 @@
 
 namespace mmo
 {
-	RenderTarget::RenderTarget(std::string name, uint16 width, uint16 height) noexcept
+	RenderTarget::RenderTarget(std::string name, uint16 width, uint16 height)
 		: m_name(std::move(name))
 		, m_width(width)
 		, m_height(height)
@@ -25,7 +25,7 @@ namespace mmo
 		m_height = height;
 	}
 
-	MultiRenderTarget::MultiRenderTarget(std::string name, const uint16 width, const uint16 height, PixelFormat format) noexcept
+	MultiRenderTarget::MultiRenderTarget(std::string name, const uint16 width, const uint16 height, PixelFormat format)
 		: RenderTarget(std::move(name), width, height)
 	{
 	}

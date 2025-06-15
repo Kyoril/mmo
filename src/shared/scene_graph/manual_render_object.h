@@ -32,10 +32,10 @@ namespace mmo
 
 	protected:
 		/// Gets the topology type to use when rendering this operation. Must be implemented.
-		[[nodiscard]] virtual TopologyType GetTopologyType() const noexcept = 0;
+		[[nodiscard]] virtual TopologyType GetTopologyType() const = 0;
 
 		/// Gets the vertex format used when rendering this operation. Must be implemented.
-		[[nodiscard]] virtual VertexFormat GetFormat() const noexcept = 0;
+		[[nodiscard]] virtual VertexFormat GetFormat() const = 0;
 
 	public:
 		/// Creates the gpu resources used for rendering this operation, like the vertex and/or
@@ -53,7 +53,7 @@ namespace mmo
 
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
 
-		[[nodiscard]] virtual const AABB& GetBoundingBox() const noexcept = 0;
+		[[nodiscard]] virtual const AABB& GetBoundingBox() const = 0;
 
 		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
@@ -84,7 +84,7 @@ namespace mmo
 		}
 
 		/// Move operator.
-		ManualRenderOperationRef(ManualRenderOperationRef&& other) noexcept
+		ManualRenderOperationRef(ManualRenderOperationRef&& other)
 		{
 			m_operation = other.m_operation;
 			other.m_operation = nullptr;
@@ -100,7 +100,7 @@ namespace mmo
 		}
 
 	public:
-		T* operator->() const noexcept
+		T* operator->() const
 		{
 			return m_operation;
 		}
@@ -121,7 +121,7 @@ namespace mmo
 			///	be set to opaque white by default.
 			///	@param start The start position of the line.
 			///	@param end The end position of the line.
-			Line(const Vector3& start, const Vector3& end) noexcept
+			Line(const Vector3& start, const Vector3& end)
 				: m_start(start)
 				, m_end(end)
 				, m_startColor(0xffffffff)
@@ -132,36 +132,36 @@ namespace mmo
 		public:
 			/// Sets the color for the entire line.
 			///	@param color The new color value as argb value.
-			void SetColor(const uint32 color) noexcept
+			void SetColor(const uint32 color)
 			{
 				m_startColor = m_endColor = color;
 			}
 
 			/// Sets the color for the start point of the line.
 			///	@param color The new color value as argb value.
-			void SetStartColor(const uint32 color) noexcept
+			void SetStartColor(const uint32 color)
 			{
 				m_startColor = color;
 			}
 
 			/// Sets the color for the end point of the line.
 			///	@param color The new color value as argb value.
-			void SetEndColor(const uint32 color) noexcept
+			void SetEndColor(const uint32 color)
 			{
 				m_endColor = color;
 			}
 
 			/// Gets the start position of the line.
-			[[nodiscard]] const Vector3& GetStartPosition() const noexcept { return m_start; }
+			[[nodiscard]] const Vector3& GetStartPosition() const { return m_start; }
 
 			/// Gets the end position of the line.
-			[[nodiscard]] const Vector3& GetEndPosition() const noexcept { return m_end; }
+			[[nodiscard]] const Vector3& GetEndPosition() const { return m_end; }
 
 			/// Gets the start color of the line.
-			[[nodiscard]] uint32 GetStartColor() const noexcept { return m_startColor; }
+			[[nodiscard]] uint32 GetStartColor() const { return m_startColor; }
 
 			/// Gets the end color of the line.
-			[[nodiscard]] uint32 GetEndColor() const noexcept { return m_endColor; }
+			[[nodiscard]] uint32 GetEndColor() const { return m_endColor; }
 			
 		private:
 			Vector3 m_start;
@@ -181,13 +181,13 @@ namespace mmo
 
 	protected:
 		/// @copydoc ManualRenderOperation::GetTopologyType
-		[[nodiscard]] TopologyType GetTopologyType() const noexcept override
+		[[nodiscard]] TopologyType GetTopologyType() const override
 		{
 			return TopologyType::LineList;
 		}
 
 		/// @copydoc ManualRenderOperation::GetFormat
-		[[nodiscard]] VertexFormat GetFormat() const noexcept override
+		[[nodiscard]] VertexFormat GetFormat() const override
 		{
 			return VertexFormat::PosColor;
 		}
@@ -266,7 +266,7 @@ namespace mmo
 			return m_lines.back();
 		}
 
-		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
+		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_boundingBox; }
 
 	private:
 		/// A list of lines to render.
@@ -287,7 +287,7 @@ namespace mmo
 			///	@param v1 First vector of the triangle.
 			///	@param v2 Second vector of the triangle.
 			///	@param v3 Third vector of the triangle.
-			Triangle(const Vector3& v1, const Vector3& v2, const Vector3& v3) noexcept
+			Triangle(const Vector3& v1, const Vector3& v2, const Vector3& v3)
 				: m_points{ v1, v2, v3 }
 				, m_colors{ 0xffffffff, 0xffffffff, 0xffffffff }
 			{
@@ -296,7 +296,7 @@ namespace mmo
 		public:
 			/// Sets the color for the entire line.
 			///	@param color The new color value as argb value.
-			void SetColor(const uint32 color) noexcept
+			void SetColor(const uint32 color)
 			{
 				m_colors[0] = m_colors[1] = m_colors[2] = color;
 			}
@@ -304,7 +304,7 @@ namespace mmo
 			/// Sets the color for the start point of the line.
 			///	@param index Index of the vertex to set the color for.
 			///	@param color The new color value as argb value.
-			void SetStartColor(const uint8_t index, const uint32 color) noexcept
+			void SetStartColor(const uint8_t index, const uint32 color)
 			{
 				assert(index < 3 && "Index out of range!");
 				m_colors[index] = color;
@@ -332,13 +332,13 @@ namespace mmo
 
 	protected:
 		/// @copydoc ManualRenderOperation::GetTopologyType
-		[[nodiscard]] TopologyType GetTopologyType() const noexcept override
+		[[nodiscard]] TopologyType GetTopologyType() const override
 		{
 			return TopologyType::TriangleList;
 		}
 
 		/// @copydoc ManualRenderOperation::GetFormat
-		[[nodiscard]] VertexFormat GetFormat() const noexcept override
+		[[nodiscard]] VertexFormat GetFormat() const override
 		{
 			return VertexFormat::PosColor;
 		}
@@ -401,7 +401,7 @@ namespace mmo
 			return m_triangles.back();
 		}
 
-		[[nodiscard]] const AABB& GetBoundingBox() const noexcept override { return m_boundingBox; }
+		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_boundingBox; }
 
 		void ConvertToSubmesh(SubMesh& subMesh) override;
 
@@ -430,13 +430,13 @@ namespace mmo
 		ManualRenderOperationRef<ManualTriangleListOperation> AddTriangleListOperation(MaterialPtr material);
 
 		/// Removes all operations.
-		void Clear() noexcept;
+		void Clear();
 
 		MeshPtr ConvertToMesh(const String& meshName) const;
 
 		void SetMaterial(uint32 operationIndex, const MaterialPtr& material) const;
 
-		uint32 GetOperationCount() const noexcept { return static_cast<uint32>(m_operations.size()); }
+		uint32 GetOperationCount() const { return static_cast<uint32>(m_operations.size()); }
 
 	public:
 		/// @copydoc MovableObject::GetMovableType

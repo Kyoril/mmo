@@ -39,13 +39,13 @@ namespace mmo
 
 	public:
 		// Make ConsoleVar movable
-		ConsoleVar(ConsoleVar&& other) noexcept
+		ConsoleVar(ConsoleVar&& other)
 			: m_floatValue(0.0f)
 		{
 			swap(other);
 		}
 
-		ConsoleVar& operator=(ConsoleVar&& other) noexcept
+		ConsoleVar& operator=(ConsoleVar&& other)
 		{
 			if (this != &other)
 			{
@@ -55,7 +55,7 @@ namespace mmo
 			return *this;
 		}
 
-		void swap(ConsoleVar& other) noexcept
+		void swap(ConsoleVar& other)
 		{
 			m_name = std::move(other.m_name);
 			m_description = std::move(other.m_description);

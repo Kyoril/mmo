@@ -18,12 +18,12 @@ namespace mmo
 		void Save();
 
 	public:
-		[[nodiscard]] DBItemCache& GetItemCache() noexcept override { return m_itemCache; }
-		[[nodiscard]] DBCreatureCache& GetCreatureCache() noexcept override { return m_creatureCache; }
-		[[nodiscard]] DBQuestCache& GetQuestCache() noexcept override { return m_questCache; }
-		[[nodiscard]] DBNameCache& GetNameCache() noexcept override { return m_nameCache; }
-		[[nodiscard]] DBGuildCache& GetGuildCache() noexcept override { return m_guildCache; }
-		[[nodiscard]] DBObjectCache& GetObjectCache() noexcept override { return m_objectCache; }
+		[[nodiscard]] DBItemCache& GetItemCache() override { return m_itemCache; }
+		[[nodiscard]] DBCreatureCache& GetCreatureCache() override { return m_creatureCache; }
+		[[nodiscard]] DBQuestCache& GetQuestCache() override { return m_questCache; }
+		[[nodiscard]] DBNameCache& GetNameCache() override { return m_nameCache; }
+		[[nodiscard]] DBGuildCache& GetGuildCache() override { return m_guildCache; }
+		[[nodiscard]] DBObjectCache& GetObjectCache() override { return m_objectCache; }
 
 	private:
 		DBItemCache m_itemCache;

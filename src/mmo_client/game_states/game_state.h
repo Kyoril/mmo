@@ -17,7 +17,7 @@ namespace mmo
 	public:
 		/// @brief Default constructor.
 		/// @param gameStateManager The game state manager that this game state belongs to.
-		explicit GameState(GameStateMgr& gameStateManager) noexcept
+		explicit GameState(GameStateMgr& gameStateManager)
 			: m_gameStateMgr(gameStateManager)
 		{
 		}
@@ -38,7 +38,7 @@ namespace mmo
 
 		/// @brief Gets the game state manager that this game state belongs to.
 		///	@return Game state manager that this game state belongs to.
-		[[nodiscard]] GameStateMgr& GetGameStateManager() const noexcept { return m_gameStateMgr; }
+		[[nodiscard]] GameStateMgr& GetGameStateManager() const { return m_gameStateMgr; }
 
 	protected:
 		GameStateMgr& m_gameStateMgr;

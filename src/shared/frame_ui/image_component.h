@@ -50,7 +50,7 @@ namespace mmo
 		/// Sets the tiling mode for this component.
 		void SetTilingMode(ImageTilingMode mode);
 		void SetTint(argb_t tint);
-		inline argb_t GetTint() const noexcept { return m_tint; }
+		inline argb_t GetTint() const { return m_tint; }
 		void SetImageFile(const std::string& filename);
 		void SetImagePropertyName(std::string propertyName);
 		void SetTintPropertyName(std::string propertyName);

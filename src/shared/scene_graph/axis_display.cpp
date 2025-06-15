@@ -23,7 +23,7 @@ namespace mmo
 		m_sceneNode->RemoveFromParent();
 	}
 
-	bool AxisDisplay::IsVisible() const noexcept
+	bool AxisDisplay::IsVisible() const
 	{
 		ASSERT(m_renderObject);
 		return m_renderObject->IsVisible();

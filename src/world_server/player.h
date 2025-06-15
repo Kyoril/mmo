@@ -127,7 +127,7 @@ namespace mmo
 
 	public:
 		/// @brief Gets the character guid.
-		[[nodiscard]] uint64 GetCharacterGuid() const noexcept { return m_character->GetGuid(); }
+		[[nodiscard]] uint64 GetCharacterGuid() const { return m_character->GetGuid(); }
 
 	private:
 		// Client Network Handlers, Implemented in player.cpp

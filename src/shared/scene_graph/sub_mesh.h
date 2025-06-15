@@ -30,7 +30,7 @@ namespace mmo
 		void PrepareRenderOperation(RenderOperation& op) const;
 
 		/// @brief Gets the material assigned to this sub mesh.
-		[[nodiscard]] MaterialPtr& GetMaterial() noexcept { return m_material; }
+		[[nodiscard]] MaterialPtr& GetMaterial() { return m_material; }
 
 		void SetMaterialName(const String& name);
 

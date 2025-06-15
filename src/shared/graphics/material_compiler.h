@@ -82,10 +82,10 @@ namespace mmo
 
 	public:
 		/// @brief Gets the generated high level vertex shader code.
-		[[nodiscard]] const String& GetVertexShaderCode() const noexcept { return m_vertexShaderCode; }
+		[[nodiscard]] const String& GetVertexShaderCode() const { return m_vertexShaderCode; }
 
 		/// @brief Gets the generated high level pixel shader code.
-		[[nodiscard]] const String& GetPixelShaderCode(PixelShaderType type) const noexcept { return m_pixelShaderCode[(int)type]; }
+		[[nodiscard]] const String& GetPixelShaderCode(PixelShaderType type) const { return m_pixelShaderCode[(int)type]; }
 
 	public:
 		/// @brief Adds a global shader function.
@@ -265,17 +265,17 @@ namespace mmo
 		virtual ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) = 0;
 
 	public:
-		void SetDepthTestEnabled(const bool enable) noexcept { m_depthTest = enable; }
+		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 
-		void SetDepthWriteEnabled(const bool enable) noexcept { m_depthWrite = enable; }
+		void SetDepthWriteEnabled(const bool enable) { m_depthWrite = enable; }
 
-		void SetLit(const bool enable) noexcept { m_lit = enable; }
+		void SetLit(const bool enable) { m_lit = enable; }
 
-		void SetTranslucent(const bool enable) noexcept { m_translucent = enable; }
+		void SetTranslucent(const bool enable) { m_translucent = enable; }
 
-		void SetTwoSided(const bool enable) noexcept { m_twoSided = enable; }
+		void SetTwoSided(const bool enable) { m_twoSided = enable; }
 
-		void SetIsUserInterface(const bool enable) noexcept { m_userInterface = enable; }
+		void SetIsUserInterface(const bool enable) { m_userInterface = enable; }
 
 	protected:
 		/// @brief Called to generate the vertex shader code.

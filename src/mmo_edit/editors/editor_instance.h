@@ -39,7 +39,7 @@ namespace mmo
 		virtual bool Save() = 0;
 
 	public:
-		[[nodiscard]] const Path& GetAssetPath() const noexcept { return m_assetPath; }
+		[[nodiscard]] const Path& GetAssetPath() const { return m_assetPath; }
 
 	protected:
 		EditorHost& m_host;

@@ -16,18 +16,18 @@ namespace mmo
 	public:
 
 		Sphere() = default;
-		Sphere(const Vector3& center, float radius) noexcept;
+		Sphere(const Vector3& center, float radius);
 
 	public:
-		[[nodiscard]] float GetRadius() const noexcept { return m_radius; }
+		[[nodiscard]] float GetRadius() const { return m_radius; }
 
-		void SetRadius(const float radius) noexcept { m_radius = radius; }
+		void SetRadius(const float radius) { m_radius = radius; }
 
-		[[nodiscard]] const Vector3& GetCenter() const noexcept { return m_center; }
+		[[nodiscard]] const Vector3& GetCenter() const { return m_center; }
 
-		void SetCenter(const Vector3& center) noexcept { m_center = center; }
+		void SetCenter(const Vector3& center) { m_center = center; }
 
-		[[nodiscard]] bool Intersects(const Sphere& other) const noexcept
+		[[nodiscard]] bool Intersects(const Sphere& other) const
 		{
 			return (other.m_center - m_center).GetSquaredLength() <= ::sqrtf(m_radius + m_radius);
 		}

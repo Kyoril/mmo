@@ -15,6 +15,6 @@ namespace mmo
 		virtual ~VertexShader() override = default;
 
 	public:
-		[[nodiscard]] ShaderType GetType() const noexcept override { return ShaderType::VertexShader; }
+		[[nodiscard]] ShaderType GetType() const override { return ShaderType::VertexShader; }
 	};
 }

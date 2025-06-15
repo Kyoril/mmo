@@ -33,17 +33,17 @@ namespace mmo
 	public:
 		void ResetSubEntities();
 
-		[[nodiscard]] const MeshPtr& GetMesh() const noexcept { return m_mesh; }
+		[[nodiscard]] const MeshPtr& GetMesh() const { return m_mesh; }
 
-		[[nodiscard]] std::shared_ptr<SkeletonInstance> GetSkeleton() const noexcept { return m_skeleton; }
+		[[nodiscard]] std::shared_ptr<SkeletonInstance> GetSkeleton() const { return m_skeleton; }
 
-		[[nodiscard]] bool HasSkeleton() const noexcept { return m_skeleton != nullptr; }
+		[[nodiscard]] bool HasSkeleton() const { return m_skeleton != nullptr; }
 
-		SubEntity* GetSubEntity(uint16 index) const noexcept;
+		SubEntity* GetSubEntity(uint16 index) const;
 
-		SubEntity* GetSubEntity(const String& name) const noexcept;
+		SubEntity* GetSubEntity(const String& name) const;
 
-		uint32 GetNumSubEntities() const noexcept;
+		uint32 GetNumSubEntities() const;
 
 		AnimationState* GetAnimationState(const String& name) const;
 

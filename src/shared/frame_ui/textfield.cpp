@@ -244,25 +244,25 @@ namespace mmo
 		return charIndex;
 	}
 
-	void TextField::SetHorzAlignment(HorizontalAlignment value) noexcept
+	void TextField::SetHorzAlignment(HorizontalAlignment value)
 	{
 		m_horzAlign = value;
 		Invalidate();
 	}
 
-	void TextField::SetVertAlignment(VerticalAlignment value) noexcept
+	void TextField::SetVertAlignment(VerticalAlignment value)
 	{
 		m_vertAlign = value;
 		Invalidate();
 	}
 
-	void TextField::SetEnabledTextColor(const Color & value) noexcept
+	void TextField::SetEnabledTextColor(const Color & value)
 	{
 		m_enabledColor = value;
 		Invalidate();
 	}
 
-	void TextField::SetDisabledTextColor(const Color & value) noexcept
+	void TextField::SetDisabledTextColor(const Color & value)
 	{
 		m_disabledColor = value;
 		Invalidate();

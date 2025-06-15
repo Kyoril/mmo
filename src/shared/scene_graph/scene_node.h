@@ -37,7 +37,7 @@ namespace mmo
 
 		void AttachObject(MovableObject& obj);
 
-		uint32 GetNumAttachedObjects() const noexcept { return static_cast<uint32>(m_objectsByName.size()); }
+		uint32 GetNumAttachedObjects() const { return static_cast<uint32>(m_objectsByName.size()); }
 
 		MovableObject* GetAttachedObject(uint32 index) const;
 
@@ -49,9 +49,9 @@ namespace mmo
 
 		void DetachAllObjects();
 
-		bool IsInSceneGraph() const noexcept { return m_isInSceneGraph; }
+		bool IsInSceneGraph() const { return m_isInSceneGraph; }
 
-		void NotifyRootNode() noexcept { m_isInSceneGraph = true; }
+		void NotifyRootNode() { m_isInSceneGraph = true; }
 
 		void Update(bool updateChildren, bool parentHasChanged) override;
 
@@ -62,7 +62,7 @@ namespace mmo
 		virtual void FindVisibleObjects(Camera& camera, RenderQueue& renderQueue, VisibleObjectsBoundsInfo& visibleObjectBounds, bool includeChildren,
 			bool onlyShadowCasters);
 
-		const AABB& GetWorldAABB() const noexcept { return m_worldAABB; }
+		const AABB& GetWorldAABB() const { return m_worldAABB; }
 
 		Scene& GetScene() const { return m_scene; }
 

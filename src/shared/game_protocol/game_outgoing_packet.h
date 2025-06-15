@@ -20,10 +20,10 @@ namespace mmo
 
 		public:
 			/// @brief Gets the id of this packet.
-			[[nodiscard]] uint16 GetId() const noexcept { return m_id; }
+			[[nodiscard]] uint16 GetId() const { return m_id; }
 
 			/// @brief Gets the size of this packet in bytes.
-			[[nodiscard]] uint32 GetSize() const noexcept { return m_size; }
+			[[nodiscard]] uint32 GetSize() const { return m_size; }
 
 		private:
 			uint16 m_id { 0 };

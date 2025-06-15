@@ -33,7 +33,7 @@ namespace mmo
 
 		namespace
 		{
-			inline uint32 CalculateARGB(const Vector4& val) noexcept
+			inline uint32 CalculateARGB(const Vector4& val)
 			{
 				return (
 					static_cast<uint32>(val.w * 255) << 24 |
@@ -135,12 +135,12 @@ namespace mmo
 			return true;
 		}
 
-		bool Page::IsValid() const noexcept
+		bool Page::IsValid() const
 		{
 			return ChunkReader::IsValid();
 		}
 
-		bool Page::OnReadFinished() noexcept
+		bool Page::OnReadFinished()
 		{
 			return ChunkReader::OnReadFinished();
 		}
@@ -863,7 +863,7 @@ namespace mmo
 			// Compute the sum of all four *after* setting the chosen channel
 			const float sumAfter = v.x + v.y + v.z + v.w;
 
-			// If the sum is 0 (or extremely close to 0), we can’t scale. 
+			// If the sum is 0 (or extremely close to 0), we canï¿½t scale. 
 			// Handle that case gracefully.
 			if (std::fabs(sumAfter) < 1e-6f)
 			{

@@ -87,7 +87,7 @@ namespace mmo
 
 		void Clear();
 
-		[[nodiscard]] const QueuedRenderableCollection& GetSolids() const noexcept { return m_solidCollection; }
+		[[nodiscard]] const QueuedRenderableCollection& GetSolids() const { return m_solidCollection; }
 
 		[[nodiscard]] uint32 GetGroupId() const { return m_groupId; }
 

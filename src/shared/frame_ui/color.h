@@ -26,14 +26,14 @@ namespace mmo
 		static const Color Black;
 
 	public:
-		Color() noexcept;
-		Color(const Color& other) noexcept;
-		Color(float r, float g, float b, float a = 1.0f) noexcept;
-		Color(argb_t argb) noexcept;
+		Color();
+		Color(const Color& other);
+		Color(float r, float g, float b, float a = 1.0f);
+		Color(argb_t argb);
 
 	public:
 
-		inline argb_t GetARGB() const noexcept
+		inline argb_t GetARGB() const
 		{
 			if (!m_argbValid)
 			{
@@ -43,36 +43,36 @@ namespace mmo
 			return m_argb;
 		}
 
-		inline argb_t GetABGR() const noexcept
+		inline argb_t GetABGR() const
 		{
 			return CalculateABGR();
 		}
 
-		inline float GetAlpha() const noexcept { return m_alpha; }
-		inline float GetRed() const noexcept { return m_red; }
-		inline float GetGreen() const noexcept { return m_green; }
-		inline float GetBlue() const noexcept { return m_blue; }
-		inline void SetAlpha(float alpha) noexcept
+		inline float GetAlpha() const { return m_alpha; }
+		inline float GetRed() const { return m_red; }
+		inline float GetGreen() const { return m_green; }
+		inline float GetBlue() const { return m_blue; }
+		inline void SetAlpha(float alpha)
 		{
 			m_argbValid = false;
 			m_alpha = alpha;
 		}
-		inline void SetRed(float red) noexcept
+		inline void SetRed(float red)
 		{
 			m_argbValid = false;
 			m_red = red;
 		}
-		inline void SetGreen(float green) noexcept
+		inline void SetGreen(float green)
 		{
 			m_argbValid = false;
 			m_green = green;
 		}
-		inline void SetBlue(float blue) noexcept
+		inline void SetBlue(float blue)
 		{
 			m_argbValid = false;
 			m_blue = blue;
 		}
-		inline void Set(float red, float green, float blue, float alpha = 1.0f) noexcept
+		inline void Set(float red, float green, float blue, float alpha = 1.0f)
 		{
 			m_argbValid = false;
 			m_red = red;
@@ -80,14 +80,14 @@ namespace mmo
 			m_blue = blue;
 			m_alpha = alpha;
 		}
-		inline void SetRGB(float red, float green, float blue) noexcept
+		inline void SetRGB(float red, float green, float blue)
 		{
 			m_argbValid = false;
 			m_red = red;
 			m_green = green;
 			m_blue = blue;
 		}
-		inline void SetRGB(const Color& col) noexcept
+		inline void SetRGB(const Color& col)
 		{
 			// Apply rgb components from other color
 			m_red = col.m_red;
@@ -107,13 +107,13 @@ namespace mmo
 		}
 
 	public:
-		float GetHue() const noexcept;
-		float GetSaturation() const noexcept;
-		float GetLumination() const noexcept;
-		void SetARGB(argb_t argb) noexcept;
-		void SetHSL(float hue, float saturation, float luminance, float alpha = 1.0f) noexcept;
-		void Invert() noexcept;
-		void InvertWithAlpha() noexcept;
+		float GetHue() const;
+		float GetSaturation() const;
+		float GetLumination() const;
+		void SetARGB(argb_t argb);
+		void SetHSL(float hue, float saturation, float luminance, float alpha = 1.0f);
+		void Invert();
+		void InvertWithAlpha();
 
 	public:
 		inline operator float*() const
@@ -126,13 +126,13 @@ namespace mmo
 			return &m_red;
 		}
 
-		inline Color& operator=(argb_t argb) noexcept
+		inline Color& operator=(argb_t argb)
 		{
 			SetARGB(argb);
 			return *this;
 		}
 
-		inline Color& operator=(const Color& color) noexcept
+		inline Color& operator=(const Color& color)
 		{
 			m_alpha = color.m_alpha;
 			m_red = color.m_red;
@@ -143,37 +143,37 @@ namespace mmo
 
 			return *this;
 		}
-		inline Color& operator&=(argb_t argb) noexcept
+		inline Color& operator&=(argb_t argb)
 		{
 			SetARGB(GetARGB() & argb);
 			return *this;
 		}
-		inline Color& operator&=(const Color& color) noexcept
+		inline Color& operator&=(const Color& color)
 		{
 			SetARGB(GetARGB() & color.GetARGB());
 			return *this;
 		}
-		inline Color& operator|=(argb_t argb) noexcept
+		inline Color& operator|=(argb_t argb)
 		{
 			SetARGB(GetARGB() | argb);
 			return *this;
 		}
-		inline Color& operator|=(const Color& color) noexcept
+		inline Color& operator|=(const Color& color)
 		{
 			SetARGB(GetARGB() | color.GetARGB());
 			return *this;
 		}
-		inline Color& operator<<=(int32 val) noexcept
+		inline Color& operator<<=(int32 val)
 		{
 			SetARGB(GetARGB() << val);
 			return *this;
 		}
-		inline Color& operator>>=(int32 val) noexcept
+		inline Color& operator>>=(int32 val)
 		{
 			SetARGB(GetARGB() >> val);
 			return *this;
 		}
-		inline Color operator+(const Color& val) const noexcept
+		inline Color operator+(const Color& val) const
 		{
 			return Color(
 				m_red + val.m_red,
@@ -182,7 +182,7 @@ namespace mmo
 				m_alpha + val.m_alpha
 			);
 		}
-		inline Color operator-(const Color& val) const noexcept
+		inline Color operator-(const Color& val) const
 		{
 			return Color(
 				m_red - val.m_red,
@@ -191,7 +191,7 @@ namespace mmo
 				m_alpha - val.m_alpha
 			);
 		}
-		inline Color operator*(float scalar) const noexcept
+		inline Color operator*(float scalar) const
 		{
 			return Color(
 				m_red * scalar,
@@ -201,7 +201,7 @@ namespace mmo
 			);
 		}
 
-		inline Color& operator*=(const Color& color) noexcept
+		inline Color& operator*=(const Color& color)
 		{
 			m_red *= color.m_red;
 			m_green *= color.m_green;
@@ -213,7 +213,7 @@ namespace mmo
 			return *this;
 		}
 
-		inline bool operator==(const Color& rhs) const noexcept
+		inline bool operator==(const Color& rhs) const
 		{
 			// Try to compare by argb value, which is uint32 instead of costly float comparison
 			return
@@ -223,7 +223,7 @@ namespace mmo
 				std::fabs(m_alpha - rhs.m_alpha) <= FLT_EPSILON;
 		}
 
-		inline bool operator!=(const Color& rhs) const noexcept
+		inline bool operator!=(const Color& rhs) const
 		{
 			return !(*this == rhs);
 		}
@@ -253,9 +253,9 @@ namespace mmo
 			return s;
 		}
 		/// Conversion operator.
-		operator argb_t() const noexcept { return GetARGB(); }
+		operator argb_t() const { return GetARGB(); }
 
-		static argb_t CalculateARGB(uint8 alpha, uint8 red, uint8 green, uint8 blue) noexcept
+		static argb_t CalculateARGB(uint8 alpha, uint8 red, uint8 green, uint8 blue)
 		{
 			return (
 				static_cast<argb_t>(alpha) << 24 |
@@ -266,11 +266,11 @@ namespace mmo
 		}
 
 	private:
-		argb_t CalculateARGB() const noexcept;
-		argb_t CalculateABGR() const noexcept;
+		argb_t CalculateARGB() const;
+		argb_t CalculateABGR() const;
 
-		inline float MaxComponentVal() const noexcept { return std::max(std::max(m_red, m_green), m_blue); }
-		inline float MinComponentVal() const noexcept { return std::min(std::min(m_red, m_green), m_blue); }
+		inline float MaxComponentVal() const { return std::max(std::max(m_red, m_green), m_blue); }
+		inline float MinComponentVal() const { return std::min(std::min(m_red, m_green), m_blue); }
 
 	private:
 

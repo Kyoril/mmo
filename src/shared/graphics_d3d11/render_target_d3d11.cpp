@@ -6,7 +6,7 @@
 
 namespace mmo
 {
-	RenderTargetD3D11::RenderTargetD3D11(GraphicsDeviceD3D11 & device) noexcept
+	RenderTargetD3D11::RenderTargetD3D11(GraphicsDeviceD3D11 & device)
 		: m_device(device)
 		, m_clearColorFloat{0.0f, 0.0f, 0.0f, 0.0f}
 	{
@@ -35,7 +35,7 @@ namespace mmo
 		}
 		else
 		{
-			// Neither color nor depth is available — invalid usage
+			// Neither color nor depth is available ï¿½ invalid usage
 			ASSERT(!"RenderTargetD3D11: No valid render or depth target to bind.");
 		}
 	}

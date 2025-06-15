@@ -68,7 +68,7 @@ namespace mmo
 		int32 GetSubMeshIndex(const String& name) const;
 
         /// Determines whether this mesh has a link to a skeleton resource and thus supports animation.
-		[[nodiscard]] bool HasSkeleton() const noexcept { return !m_skeletonName.empty(); }
+		[[nodiscard]] bool HasSkeleton() const { return !m_skeletonName.empty(); }
 
 		void SetSkeletonName(const String& skeletonName);
 
@@ -76,15 +76,15 @@ namespace mmo
 
         [[nodiscard]] const String& GetSkeletonName() const { return m_skeletonName; }
 
-		[[nodiscard]] const SubMeshList& GetSubMeshes() const noexcept { return m_subMeshes; }
+		[[nodiscard]] const SubMeshList& GetSubMeshes() const { return m_subMeshes; }
 
-		[[nodiscard]] uint16 GetSubMeshCount() const noexcept { return static_cast<uint16>(m_subMeshes.size()); }
+		[[nodiscard]] uint16 GetSubMeshCount() const { return static_cast<uint16>(m_subMeshes.size()); }
 
-		[[nodiscard]] const AABB& GetBounds() const noexcept { return m_aabb; }
+		[[nodiscard]] const AABB& GetBounds() const { return m_aabb; }
 
-		[[nodiscard]] float GetBoundRadius() const noexcept { return m_boundRadius; }
+		[[nodiscard]] float GetBoundRadius() const { return m_boundRadius; }
 
-        [[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+        [[nodiscard]] std::string_view GetName() const { return m_name; }
 
 		void AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign);
 

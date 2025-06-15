@@ -44,7 +44,7 @@ namespace mmo
 
     public:
         /// @brief Gets the name of this material function.
-        [[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+        [[nodiscard]] std::string_view GetName() const { return m_name; }
 
         /// @brief Sets the name of this material function.
         void SetName(std::string_view name) { m_name = name; }

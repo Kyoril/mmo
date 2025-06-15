@@ -303,7 +303,7 @@ namespace mmo
 		bool IsHovered() const;
 
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
-		void Invalidate(bool includeLayout = true) noexcept;
+		void Invalidate(bool includeLayout = true);
 
 		/// Tries to retrieve a child frame at the given position.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
@@ -324,7 +324,7 @@ namespace mmo
 		virtual void OnInputReleased() {}
 
 		/// Whether this frame can receive the input focus.
-		inline bool IsFocusable() const noexcept { return m_focusable; }
+		inline bool IsFocusable() const { return m_focusable; }
 
 		/// Invalidates all children.
 		void InvalidateChildren(bool recursive = true);
@@ -406,13 +406,13 @@ namespace mmo
 		/// Gets the font of this frame, or it's parent frames.
 		FontPtr GetFont() const;
 
-		inline uint32 GetFlags() const noexcept { return m_flags; }
+		inline uint32 GetFlags() const { return m_flags; }
 
-		inline void AddFlags(uint32 flags) noexcept { m_flags |= flags; }
+		inline void AddFlags(uint32 flags) { m_flags |= flags; }
 
-		inline void RemoveFlags(uint32 flags) noexcept { m_flags &= ~flags; }
+		inline void RemoveFlags(uint32 flags) { m_flags &= ~flags; }
 
-		inline void SetFlags(uint32 flags) noexcept { m_flags = flags; }
+		inline void SetFlags(uint32 flags) { m_flags = flags; }
 
 		void SetOnTabPressed(const luabind::object& func) { m_onTabPressed = func; }
 

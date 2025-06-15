@@ -6,7 +6,7 @@
 
 namespace mmo
 {
-	RenderTargetNull::RenderTargetNull(GraphicsDeviceNull & device) noexcept
+	RenderTargetNull::RenderTargetNull(GraphicsDeviceNull & device)
 		: m_device(device)
 	{
 	}

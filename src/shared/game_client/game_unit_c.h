@@ -35,15 +35,15 @@ namespace mmo
 
 		bool CanExpire() const { return m_expiration > 0; }
 
-		GameTime GetExpiration() const noexcept { return m_expiration; }
+		GameTime GetExpiration() const { return m_expiration; }
 
 		bool IsExpired() const;
 
-		const proto_client::SpellEntry* GetSpell() const noexcept { return m_spell; }
+		const proto_client::SpellEntry* GetSpell() const { return m_spell; }
 
-		uint64 GetCasterId() const noexcept { return m_casterId; }
+		uint64 GetCasterId() const { return m_casterId; }
 
-		uint64 GetTargetId() const noexcept { return m_targetId; }
+		uint64 GetTargetId() const { return m_targetId; }
 
 	private:
 		const proto_client::SpellEntry* m_spell;
@@ -129,7 +129,7 @@ namespace mmo
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 
-		ICollisionProvider& GetCollisionProvider() const noexcept { return m_collisionProvider; }
+		ICollisionProvider& GetCollisionProvider() const { return m_collisionProvider; }
 
 		bool OnAuraUpdate(io::Reader& reader);
 
@@ -279,7 +279,7 @@ namespace mmo
 		void UnlearnSpell(uint32 spellId);
 
 		/// @brief Returns whether this unit knows any spells at all.
-		bool HasSpells() const noexcept { return !m_spells.empty(); }
+		bool HasSpells() const { return !m_spells.empty(); }
 
 		bool HasSpell(uint32 spellId) const;
 
@@ -290,20 +290,20 @@ namespace mmo
 		const proto_client::SpellEntry* GetVisibleSpell(uint32 index) const;
 
 		/// @brief Returns the number of known spells of this unit.
-		uint32 GetSpellCount() const noexcept { return static_cast<uint32>(m_spells.size()); }
+		uint32 GetSpellCount() const { return static_cast<uint32>(m_spells.size()); }
 
 		/// @brief Returns whether the unit is currently casting any spell.
 		bool IsCastingSpell() const { return false; }
 
 	public:
 		/// @brief Returns whether the unit is currently attacking any unit.
-		bool IsAttacking() const noexcept { return m_victim != 0; }
+		bool IsAttacking() const { return m_victim != 0; }
 
 		/// @brief Returns whether the unit is currently attacking the specified unit.
-		bool IsAttacking(const GameUnitC& victim) const noexcept { return victim.GetGuid() == m_victim; }
+		bool IsAttacking(const GameUnitC& victim) const { return victim.GetGuid() == m_victim; }
 
 		/// @brief Returns whether the unit can attack right now at all.
-		bool CanAttack() const noexcept { return false; }
+		bool CanAttack() const { return false; }
 
 		/// @brief Starts auto attacking the specified unit.
 		void Attack(GameUnitC& victim);
@@ -331,13 +331,13 @@ namespace mmo
 
 	public:
 		/// @brief Returns the current movement information of this unit.
-		[[nodiscard]] const MovementInfo& GetMovementInfo() const noexcept { return m_movementInfo; }
+		[[nodiscard]] const MovementInfo& GetMovementInfo() const { return m_movementInfo; }
 
-		const Capsule& GetCollider() const noexcept { return m_collider; }
+		const Capsule& GetCollider() const { return m_collider; }
 
-		const proto_client::FactionEntry* GetFaction() const noexcept { return m_faction; }
+		const proto_client::FactionEntry* GetFaction() const { return m_faction; }
 
-		const proto_client::FactionTemplateEntry* GetFactionTemplate() const noexcept { return m_factionTemplate; }
+		const proto_client::FactionTemplateEntry* GetFactionTemplate() const { return m_factionTemplate; }
 
 		bool IsFriendlyTo(const GameUnitC& other) const;
 

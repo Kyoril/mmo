@@ -59,7 +59,7 @@ namespace mmo
 		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
-		bool OnReadFinished() noexcept override;
+		bool OnReadFinished() override;
 
 	private:
 		WorldModelEditor& m_editor;

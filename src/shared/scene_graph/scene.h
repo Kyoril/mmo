@@ -353,11 +353,11 @@ namespace mmo
 
 		void DestroyManualRenderObject(const ManualRenderObject& object);
 
-		[[nodiscard]] float GetShadowFarDistance() const noexcept { return m_defaultShadowFarDist; }
+		[[nodiscard]] float GetShadowFarDistance() const { return m_defaultShadowFarDist; }
 
-		[[nodiscard]] float GetShadowFarDistanceSquared() const noexcept { return m_defaultShadowFarDist * m_defaultShadowFarDist; }
+		[[nodiscard]] float GetShadowFarDistanceSquared() const { return m_defaultShadowFarDist * m_defaultShadowFarDist; }
 
-		void SetShadowFarDistance(const float value) noexcept { m_defaultShadowFarDist = value; m_defaultShadowFarDistSquared = value * value; }
+		void SetShadowFarDistance(const float value) { m_defaultShadowFarDist = value; m_defaultShadowFarDistSquared = value * value; }
 
 		void SetShadowDirLightTextureOffset(float offset) { m_shadowTextureOffset = offset; }
 

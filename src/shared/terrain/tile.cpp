@@ -25,6 +25,8 @@ namespace mmo
 		{
 			SetRenderQueueGroup(WorldGeometry1);
 
+			SetCastShadows(false);
+
 			m_tileX = m_startX / (constants::VerticesPerTile - 1);
 			m_tileY = m_startZ / (constants::VerticesPerTile - 1);
 

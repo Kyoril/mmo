@@ -202,18 +202,18 @@ namespace mmo
 		{
 		}
 
-		void SetPath(const std::string_view value) noexcept { m_path = value; }
+		void SetPath(const std::string_view value) { m_path = value; }
 
-		std::string_view GetPath() const noexcept { return m_path; }
+		std::string_view GetPath() const { return m_path; }
 
-		std::string_view GetFilter() const noexcept { return m_filter; }
+		std::string_view GetFilter() const { return m_filter; }
 
 	private:
 		String m_path;
 		String m_filter;
 	};
 
-	inline bool operator==(const AssetPathValue& lhs, const AssetPathValue& rhs) noexcept
+	inline bool operator==(const AssetPathValue& lhs, const AssetPathValue& rhs)
 	{
 		return lhs.GetPath() == rhs.GetPath() && lhs.GetFilter() == rhs.GetFilter();
 	}
@@ -242,17 +242,17 @@ namespace mmo
 
 	public:
 		/// @brief Gets the name of this property.
-		[[nodiscard]] std::string_view GetName() const noexcept { return m_name; }
+		[[nodiscard]] std::string_view GetName() const { return m_name; }
 
 		/// @brief Gets a constant pointer to the value of the property in the specified type, or nullptr if the type isn't compatible.
 		/// @tparam T The type to cast the value to.
 		/// @return nullptr if the type is incompatible with the actual value, otherwise a const pointer to the value.
 		template<typename T>
-		const T* GetValueAs() const noexcept { return std::get_if<T>(&m_value); }
+		const T* GetValueAs() const { return std::get_if<T>(&m_value); }
 
 		/// @brief Sets the value of this property.
 		/// @param value The new value to use.
-		virtual void SetValue(const ValueType& value) noexcept
+		virtual void SetValue(const ValueType& value)
 		{
 			if (m_value == value)
 			{
@@ -282,7 +282,7 @@ namespace mmo
 		virtual ~Property() = default;
 
 	public:
-		void SetValue(const ValueType& value) noexcept
+		void SetValue(const ValueType& value)
 		{
 			const TPropertyType* newValue = std::get_if<TPropertyType>(&value);
 			if (!newValue)
@@ -411,7 +411,7 @@ namespace mmo
 	public:
 		/// @brief Sets the value of this property using the enum value
 		/// @param value The new enum value
-		void SetEnumValue(TEnum value) noexcept
+		void SetEnumValue(TEnum value)
 		{
 			m_enumRef = value;
 			PropertyBase::SetValue(static_cast<int32>(value));
@@ -419,14 +419,14 @@ namespace mmo
 		
 		/// @brief Gets the current enum value
 		/// @return The current enum value
-		TEnum GetEnumValue() const noexcept
+		TEnum GetEnumValue() const
 		{
 			return m_enumRef;
 		}
 		
 		/// @brief Gets all available options for this enum
 		/// @return The list of enum options
-		const std::vector<EnumOption>& GetOptions() const noexcept
+		const std::vector<EnumOption>& GetOptions() const
 		{
 			return m_options;
 		}
@@ -434,7 +434,7 @@ namespace mmo
 		/// @brief Find the display name for a specific enum value
 		/// @param value The enum value to look up
 		/// @return The display name for the enum value, or empty string if not found
-		String GetDisplayName(TEnum value) const noexcept
+		String GetDisplayName(TEnum value) const
 		{
 			for (const auto& option : m_options)
 			{
@@ -448,7 +448,7 @@ namespace mmo
 		
 		/// @brief Get the display name for the current enum value
 		/// @return The display name of the current value
-		String GetCurrentDisplayName() const noexcept
+		String GetCurrentDisplayName() const
 		{
 			return GetDisplayName(m_enumRef);
 		}
@@ -565,14 +565,14 @@ namespace mmo
 
 		std::span<PropertyBase*> GetProperties() override;
 
-		const MaterialPin& GetBaseColorPin() const noexcept { return m_baseColor; }
-		const MaterialPin& GetMetallicPin() const noexcept { return m_metallic; }
-		const MaterialPin& GetSpecularPin() const noexcept { return m_specular; }
-		const MaterialPin& GetRoughnessPin() const noexcept { return m_roughness; }
-		const MaterialPin& GetEmissivePin() const noexcept { return m_emissive; }
-		const MaterialPin& GetOpacityPin() const noexcept { return m_opacity; }
-		const MaterialPin& GetOpacityMaskPin() const noexcept { return m_opacityMask; }
-		const MaterialPin& GetNormalPin() const noexcept { return m_normal; }
+		const MaterialPin& GetBaseColorPin() const { return m_baseColor; }
+		const MaterialPin& GetMetallicPin() const { return m_metallic; }
+		const MaterialPin& GetSpecularPin() const { return m_specular; }
+		const MaterialPin& GetRoughnessPin() const { return m_roughness; }
+		const MaterialPin& GetEmissivePin() const { return m_emissive; }
+		const MaterialPin& GetOpacityPin() const { return m_opacity; }
+		const MaterialPin& GetOpacityMaskPin() const { return m_opacityMask; }
+		const MaterialPin& GetNormalPin() const { return m_normal; }
 
 	private:
 		bool m_isTwoSided { false };

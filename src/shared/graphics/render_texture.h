@@ -32,8 +32,8 @@ namespace mmo
 		, public Texture
 	{
 	public:
-		RenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat = PixelFormat::R8G8B8A8, PixelFormat depthFormat = PixelFormat::D32F) noexcept;
-		~RenderTexture() noexcept override = default;
+		RenderTexture(std::string name, uint16 width, uint16 height, RenderTextureFlags flags, PixelFormat colorFormat = PixelFormat::R8G8B8A8, PixelFormat depthFormat = PixelFormat::D32F);
+		~RenderTexture() override = default;
 
 	public:
 		virtual TexturePtr StoreToTexture() = 0;

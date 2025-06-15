@@ -7,7 +7,7 @@
 
 namespace mmo
 {
-	RenderWindow::RenderWindow(std::string name, uint16 width, uint16 height) noexcept
+	RenderWindow::RenderWindow(std::string name, uint16 width, uint16 height)
 		: RenderTarget(std::move(name), width, height)
 	{
 	}

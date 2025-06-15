@@ -130,7 +130,7 @@ namespace mmo
 
 		void SetDebugName(String debugName);
 
-		[[nodiscard]] const String& GetDebugName() const noexcept { return m_debugName; }
+		[[nodiscard]] const String& GetDebugName() const { return m_debugName; }
 
 	protected:
 		/// Texture file header.

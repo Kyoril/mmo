@@ -43,7 +43,7 @@ namespace mmo
 		bool ReadAnimationChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	protected:
-		bool OnReadFinished() noexcept override;
+		bool OnReadFinished() override;
 
 	private:
 		SkeletonVersion m_version;

@@ -63,14 +63,14 @@ TEST_CASE("NonCopyable allows move construction if implemented", "[non_copyable]
         explicit MoveableNonCopyable(int val) : value(val) {}
         
         // Move constructor
-        MoveableNonCopyable(MoveableNonCopyable&& other) noexcept
+        MoveableNonCopyable(MoveableNonCopyable&& other)
             : value(other.value)
         {
             other.value = 0;
         }
         
         // Move assignment
-        MoveableNonCopyable& operator=(MoveableNonCopyable&& other) noexcept
+        MoveableNonCopyable& operator=(MoveableNonCopyable&& other)
         {
             if (this != &other)
             {

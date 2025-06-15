@@ -44,14 +44,14 @@ namespace mmo
 		bool Read(io::Reader& reader);
 
 		/// @brief Determines whether unhandled chunks will be ignored or make the Read call fail.
-		[[nodiscard]] bool DoesIgnoreUnhandledChunks() const noexcept { return m_ignoreUnhandledChunks; }
+		[[nodiscard]] bool DoesIgnoreUnhandledChunks() const { return m_ignoreUnhandledChunks; }
 
 	protected:
 		/// @brief Implement for custom IsValid check after deserialization has been done.
 		/// @return true if deserialization has been valid, false otherwise.
-		virtual bool IsValid() const noexcept { return m_requiredChunkHandlers.empty(); }
+		virtual bool IsValid() const { return m_requiredChunkHandlers.empty(); }
 
-		virtual bool OnReadFinished() noexcept { return true; }
+		virtual bool OnReadFinished() { return true; }
 
 	public:
 		template<typename TInstance, typename TClass, typename... TArgs>

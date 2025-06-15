@@ -27,7 +27,7 @@ namespace mmo
 		Clear();
 	}
 
-	MaterialGraph::MaterialGraph(MaterialGraph&& other) noexcept
+	MaterialGraph::MaterialGraph(MaterialGraph&& other)
 		: m_nodeRegistry(std::move(other.m_nodeRegistry))
 		, m_idGenerator(std::move(other.m_idGenerator))
 		, m_nodes(std::move(other.m_nodes))
@@ -138,7 +138,7 @@ namespace mmo
 	    return *this;
 	}
 
-	MaterialGraph& MaterialGraph::operator=(MaterialGraph&& other) noexcept
+	MaterialGraph& MaterialGraph::operator=(MaterialGraph&& other)
 	{
 	    if (this == &other)
 	    {
@@ -353,7 +353,7 @@ namespace mmo
 		m_rootNode->Compile(compiler, nullptr);
 	}
 
-	bool MaterialGraph::IsRootNode(const uint32 nodeId) const noexcept
+	bool MaterialGraph::IsRootNode(const uint32 nodeId) const
 	{
 		if (!m_rootNode)
 		{

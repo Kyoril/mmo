@@ -74,7 +74,7 @@ namespace mmo
 		void SetColor(const Color& color);
 
 		/// Determines the number of lines.
-		inline uint32 GetLineCount() const noexcept { return m_lineCache.size(); }
+		inline uint32 GetLineCount() const { return m_lineCache.size(); }
 
 		void SetHorzAlignmentPropertyName(std::string propertyName);
 

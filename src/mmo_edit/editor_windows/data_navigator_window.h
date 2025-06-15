@@ -47,19 +47,19 @@ namespace mmo
          * @brief Indicates that this window should be docked.
          * @return True as this window is dockable.
          */
-        [[nodiscard]] bool IsDockable() const noexcept override { return true; }
+        [[nodiscard]] bool IsDockable() const override { return true; }
 
         /**
          * @brief Gets the default dock direction for this window.
          * @return Left dock direction.
          */
-        [[nodiscard]] DockDirection GetDefaultDockDirection() const noexcept override { return DockDirection::Left; }
+        [[nodiscard]] DockDirection GetDefaultDockDirection() const override { return DockDirection::Left; }
 
         /**
          * @brief Gets the default dock size for this window.
          * @return A default width value.
          */
-        [[nodiscard]] float GetDefaultDockSize() const noexcept override { return 300.0f; }
+        [[nodiscard]] float GetDefaultDockSize() const override { return 300.0f; }
 
         /**
          * @brief Sets the callback for window visibility change requests

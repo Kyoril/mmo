@@ -18,8 +18,8 @@ namespace mmo
 	class RenderTargetMetal
 	{
 	public:
-		explicit RenderTargetMetal(GraphicsDeviceMetal& device) noexcept;
-		virtual ~RenderTargetMetal() noexcept = default;
+		explicit RenderTargetMetal(GraphicsDeviceMetal& device);
+		virtual ~RenderTargetMetal() = default;
 
 	public:
 		virtual void Activate();

@@ -22,8 +22,8 @@ namespace mmo
 	class RenderTargetD3D11
 	{
 	public:
-		explicit RenderTargetD3D11(GraphicsDeviceD3D11& device) noexcept;
-		virtual ~RenderTargetD3D11() noexcept = default;
+		explicit RenderTargetD3D11(GraphicsDeviceD3D11& device);
+		virtual ~RenderTargetD3D11() = default;
 
 	public:
 		virtual void Activate();
@@ -39,8 +39,8 @@ namespace mmo
 	class MultiRenderTargetD3D11 : public MultiRenderTarget
 	{
 	public:
-		explicit MultiRenderTargetD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height, PixelFormat format) noexcept;
-		~MultiRenderTargetD3D11() noexcept override = default;
+		explicit MultiRenderTargetD3D11(GraphicsDeviceD3D11& device, uint16 width, uint16 height, PixelFormat format);
+		~MultiRenderTargetD3D11() override = default;
 
 	public:
 		void Clear(ClearFlags flags) override;

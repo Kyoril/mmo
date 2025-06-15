@@ -40,7 +40,7 @@ namespace mmo
 		return true;
 	}
 
-	bool TextureImport::SupportsExtension(const String& extension) const noexcept
+	bool TextureImport::SupportsExtension(const String& extension) const
 	{
 		// Use formats supported by stb_image implementation
 		static const std::set<String> supportedExtension = {

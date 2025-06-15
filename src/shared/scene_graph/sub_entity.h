@@ -18,10 +18,10 @@ namespace mmo
 
 	public:
 		/// @brief Gets the parent entity that this sub entity belongs to.
-		[[nodiscard]] Entity& GetParent() const noexcept { return m_parent; }
+		[[nodiscard]] Entity& GetParent() const { return m_parent; }
 
 		/// @brief Gets the sub mesh assigned to this sub entity.
-		[[nodiscard]] SubMesh& GetSubMesh() const noexcept { return m_subMesh; }
+		[[nodiscard]] SubMesh& GetSubMesh() const { return m_subMesh; }
 		
 		/// @copydoc Renderable::PrepareRenderOperation
 		virtual void PrepareRenderOperation(RenderOperation& operation) override;
@@ -37,11 +37,11 @@ namespace mmo
 
 		/// @brief Sets the material to use when rendering this renderable.
 		/// @param material The material to use for rendering or nullptr to use a default material.
-		void SetMaterial(const MaterialPtr& material) noexcept { m_material = material; }
+		void SetMaterial(const MaterialPtr& material) { m_material = material; }
 
 		void SetVisible(bool visible) { m_visible = visible; }
 
-		[[nodiscard]] bool IsVisible() const noexcept { return m_visible; }
+		[[nodiscard]] bool IsVisible() const { return m_visible; }
 
 	private:
 		Entity& m_parent;

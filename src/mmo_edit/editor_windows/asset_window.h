@@ -36,7 +36,7 @@ namespace mmo
 		bool Draw() override;
 
 	public:
-		bool IsDockable() const noexcept override { return true; }
+		bool IsDockable() const override { return true; }
 
 	private:
 		void RenderAssetEntry(const std::string& name, const AssetEntry& entry, const std::string& path);

@@ -26,7 +26,7 @@ namespace mmo
 	public:
 		/// Returns the group GUID.
 		/// @returns The unique group identifier as uint64.
-		[[nodiscard]] uint64 GetId() const noexcept
+		[[nodiscard]] uint64 GetId() const
 		{
 			return m_guid;
 		}
@@ -48,7 +48,7 @@ namespace mmo
 		/// Determines whether a player is a member of the group.
 		/// @param playerGuid The player GUID to check.
 		/// @returns true if the player is a member, false otherwise.
-		[[nodiscard]] bool IsMember(const uint64 playerGuid) const noexcept { return m_members.contains(playerGuid); }
+		[[nodiscard]] bool IsMember(const uint64 playerGuid) const { return m_members.contains(playerGuid); }
 
 	private:
 		uint64 m_guid;

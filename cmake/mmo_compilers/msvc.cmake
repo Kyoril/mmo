@@ -33,3 +33,5 @@ add_definitions("/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /wd4267 /wd
 
 # Disable MIN and MAX macros for windows
 add_definitions("-DNOMINMAX")
+
+#add_compile_options(/EHs- /GR-)

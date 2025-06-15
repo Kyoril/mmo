@@ -29,7 +29,7 @@ namespace mmo
 		[[nodiscard]] GraphicsDevice& GetGraphicsDevice() const { ASSERT(m_graphicsDevice); return *m_graphicsDevice; }
 
 		/// @brief Gets the current configuration object which contains all the relevant settings.
-		[[nodiscard]] const Configuration& GetConfiguration() const noexcept { return m_configuration; }
+		[[nodiscard]] const Configuration& GetConfiguration() const { return m_configuration; }
 
 		void AddEditor(const std::shared_ptr<EditorBase>& editor);
 		

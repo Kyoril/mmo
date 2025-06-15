@@ -158,7 +158,7 @@ namespace mmo
 		return result;
 	}
 
-	HashGeneratorSha1::HashGeneratorSha1() noexcept
+	HashGeneratorSha1::HashGeneratorSha1()
 	{
 	}
 

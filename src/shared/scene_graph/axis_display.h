@@ -31,7 +31,7 @@ namespace mmo
 		[[nodiscard]] SceneNode& GetSceneNode() const { ASSERT(m_sceneNode); return *m_sceneNode; }
 
 		/// @brief Determines whether the object is visible in the scene.
-		[[nodiscard]] bool IsVisible() const noexcept;
+		[[nodiscard]] bool IsVisible() const;
 
 		/// @brief Sets whether the object should be rendered.
 		/// @param visible If set to true, the object will be visible.

@@ -51,14 +51,14 @@ namespace mmo
 		/// Tries to find the cursor position based on the given local coordinate.
 		int32 GetCursorAt(const Point& position);
 
-		inline HorizontalAlignment GetHorzAlignmnet() const noexcept { return m_horzAlign; }
-		inline VerticalAlignment GetVertAlignment() const noexcept { return m_vertAlign; }
-		inline const Color& GetEnabledTextColor() const noexcept { return m_enabledColor; }
-		inline const Color& GetDisabledTextColor() const noexcept { return m_disabledColor; }
-		void SetHorzAlignment(HorizontalAlignment value) noexcept;
-		void SetVertAlignment(VerticalAlignment value) noexcept;
-		void SetEnabledTextColor(const Color& value) noexcept;
-		void SetDisabledTextColor(const Color& value) noexcept;
+		inline HorizontalAlignment GetHorzAlignmnet() const { return m_horzAlign; }
+		inline VerticalAlignment GetVertAlignment() const { return m_vertAlign; }
+		inline const Color& GetEnabledTextColor() const { return m_enabledColor; }
+		inline const Color& GetDisabledTextColor() const { return m_disabledColor; }
+		void SetHorzAlignment(HorizontalAlignment value);
+		void SetVertAlignment(VerticalAlignment value);
+		void SetEnabledTextColor(const Color& value);
+		void SetDisabledTextColor(const Color& value);
 		void SetTextAreaOffset(const Rect& offset);
 		const Rect& GetTextAreaOffset() const { return m_textAreaOffset; }
 		float GetCursorOffset() const;

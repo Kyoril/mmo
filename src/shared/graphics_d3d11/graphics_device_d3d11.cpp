@@ -39,12 +39,12 @@ namespace mmo
 {
 	namespace
 	{
-		constexpr D3D11_FILL_MODE D3D11FillMode(const FillMode mode) noexcept
+		constexpr D3D11_FILL_MODE D3D11FillMode(const FillMode mode)
 		{
 			return (mode == FillMode::Wireframe) ? D3D11_FILL_WIREFRAME : D3D11_FILL_SOLID;
 		}
 
-		constexpr D3D11_CULL_MODE D3D11CullMode(const FaceCullMode mode) noexcept
+		constexpr D3D11_CULL_MODE D3D11CullMode(const FaceCullMode mode)
 		{
 			switch (mode)
 			{
@@ -62,7 +62,7 @@ namespace mmo
 			D3D11_TEXTURE_ADDRESS_MIRROR  // TextureAddressMode::Mirror
 		};
 
-		constexpr D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(const TextureAddressMode mode) noexcept
+		constexpr D3D11_TEXTURE_ADDRESS_MODE D3D11TextureAddressMode(const TextureAddressMode mode)
 		{
 			return (static_cast<int>(mode) >= 0 && static_cast<int>(mode) < std::size(TextureAddressModeTable)) ? TextureAddressModeTable[static_cast<int>(mode)] : D3D11_TEXTURE_ADDRESS_CLAMP;
 		}
@@ -75,14 +75,14 @@ namespace mmo
 			D3D11_FILTER_ANISOTROPIC              // TextureFilter::Anisotropic
 		};
 
-		constexpr D3D11_FILTER D3D11TextureFilter(const TextureFilter mode) noexcept
+		constexpr D3D11_FILTER D3D11TextureFilter(const TextureFilter mode)
 		{
 			return (static_cast<int>(mode) >= 0 && static_cast<int>(mode) < std::size(TextureFilterTable)) ? TextureFilterTable[static_cast<int>(mode)] : D3D11_FILTER_ANISOTROPIC;
 		}
 	}
 
 	
-	void GraphicsDeviceD3D11::CheckTearingSupport() noexcept
+	void GraphicsDeviceD3D11::CheckTearingSupport()
 	{
 		// Rather than create the 1.5 factory interface directly, we create the 1.4
 		// interface and query for the 1.5 interface. This will enable the graphics

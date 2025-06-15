@@ -25,7 +25,7 @@ namespace mmo
 		struct Context;
 
 	public:
-		explicit HashGeneratorHmac() noexcept;
+		explicit HashGeneratorHmac();
 
 	public:
 		void Update(const char* data, size_t len);

@@ -59,7 +59,7 @@ namespace mmo
 	public:
 		void Update(const Camera* camera);
 
-		[[nodiscard]] const bool IsActive() const noexcept { return m_active; }
+		[[nodiscard]] const bool IsActive() const { return m_active; }
 
 		void SetTransformMode(const TransformMode mode) { m_mode = mode; SetVisibility(); }
 
@@ -79,7 +79,7 @@ namespace mmo
 
 		void SetCopyMode(bool copyMode);
 
-		TransformMode GetTransformMode() const noexcept { return m_mode; }
+		TransformMode GetTransformMode() const { return m_mode; }
 
 	private:
 		void UpdateTanslationAxisLines();

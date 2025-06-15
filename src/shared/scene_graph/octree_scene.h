@@ -4,6 +4,7 @@
 #include "octree.h"
 #include "math/plane.h"
 #include <array>
+#include <memory>
 
 namespace mmo
 {

@@ -627,7 +627,7 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
-	void Frame::Invalidate(bool includeLayout) noexcept
+	void Frame::Invalidate(bool includeLayout)
 	{
 		m_needsRedraw = true;
 

@@ -104,14 +104,14 @@ namespace mmo
 			}
 
 			/// Move constructor.
-			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other) noexcept
+			PacketHandlerRegistrationHandle(PacketHandlerRegistrationHandle&& other)
 				: m_connector(std::move(other.m_connector)), m_opCode(other.m_opCode)
 			{
 				other.m_opCode = std::numeric_limits<uint16>::max();
 			}
 
 			/// Move assignment operator.
-			PacketHandlerRegistrationHandle& operator=(PacketHandlerRegistrationHandle&& other) noexcept
+			PacketHandlerRegistrationHandle& operator=(PacketHandlerRegistrationHandle&& other)
 			{
 				m_connector = std::move(other.m_connector);
 				m_opCode = other.m_opCode;

@@ -23,25 +23,25 @@ namespace mmo
 		{}
 
 	public:
-		inline Size& operator+=(const Size& rhs) noexcept
+		inline Size& operator+=(const Size& rhs)
 		{
 			width += rhs.width;
 			height += rhs.height;
 			return *this;
 		}
-		inline Size& operator-=(const Size& rhs) noexcept
+		inline Size& operator-=(const Size& rhs)
 		{
 			width -= rhs.width;
 			height -= rhs.height;
 			return *this;
 		}
-		inline Size& operator*=(float scalar) noexcept
+		inline Size& operator*=(float scalar)
 		{
 			width *= scalar;
 			height *= scalar;
 			return *this;
 		}
-		inline Size& operator*=(const Size& rhs) noexcept
+		inline Size& operator*=(const Size& rhs)
 		{
 			width *= rhs.width;
 			height *= rhs.height;

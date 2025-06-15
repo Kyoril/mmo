@@ -301,22 +301,22 @@ namespace mmo
         connection() = default;
         ~connection() = default;
 
-        connection(connection&& rhs) noexcept
+        connection(connection&& rhs)
             : base{ std::move(rhs.base) }
         {
         }
 
-        connection(connection const& rhs) noexcept
+        connection(connection const& rhs)
             : base{ rhs.base }
         {
         }
 
-        explicit connection(detail::connection_base* base) noexcept
+        explicit connection(detail::connection_base* base)
             : base{ base }
         {
         }
 
-        connection& operator = (connection&& rhs) noexcept
+        connection& operator = (connection&& rhs)
         {
             base = std::move(rhs.base);
             return *this;
@@ -388,7 +388,7 @@ namespace mmo
         {
         }
 
-        scoped_connection(scoped_connection&& rhs) noexcept
+        scoped_connection(scoped_connection&& rhs)
 	        : connection{ std::move(rhs) }
         {
         }
@@ -401,7 +401,7 @@ namespace mmo
             return *this;
         }
 
-        scoped_connection& operator = (scoped_connection&& rhs) noexcept
+        scoped_connection& operator = (scoped_connection&& rhs)
         {
             disconnect();
 
@@ -428,12 +428,12 @@ namespace mmo
         scoped_connection_container() = default;
         ~scoped_connection_container() = default;
 
-        scoped_connection_container(scoped_connection_container&& s) noexcept
+        scoped_connection_container(scoped_connection_container&& s)
 	        : connections{ std::move(s.connections) }
         {
         }
 
-        scoped_connection_container& operator = (scoped_connection_container&& rhs) noexcept
+        scoped_connection_container& operator = (scoped_connection_container&& rhs)
         {
             connections = std::move(rhs.connections);
             return *this;

@@ -103,7 +103,7 @@ namespace mmo
 		return *result;
 	}
 
-	void ManualRenderObject::Clear() noexcept
+	void ManualRenderObject::Clear()
 	{
 		m_operations.clear();
 

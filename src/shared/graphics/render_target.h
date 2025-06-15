@@ -36,8 +36,8 @@ namespace mmo
 		: public std::enable_shared_from_this<RenderTarget>
 	{
 	public:
-		explicit RenderTarget(std::string name, uint16 width, uint16 height) noexcept;
-		virtual ~RenderTarget() noexcept = default;
+		explicit RenderTarget(std::string name, uint16 width, uint16 height);
+		virtual ~RenderTarget() = default;
 
 	public:
 		/// Activates the render target and makes all following render commands target this render target.
@@ -55,11 +55,11 @@ namespace mmo
 		virtual void Update() = 0;
 
 	public:
-		inline const std::string& GetName() const noexcept { return m_name; }
+		inline const std::string& GetName() const { return m_name; }
 
-		inline uint16 GetWidth() const noexcept { return m_width; }
+		inline uint16 GetWidth() const { return m_width; }
 
-		inline uint16 GetHeight() const noexcept { return m_height; }
+		inline uint16 GetHeight() const { return m_height; }
 
 	protected:
 
@@ -77,7 +77,7 @@ namespace mmo
 		: public RenderTarget
 	{
 	public:
-		explicit MultiRenderTarget(std::string name, uint16 width, uint16 height, PixelFormat format) noexcept;
+		explicit MultiRenderTarget(std::string name, uint16 width, uint16 height, PixelFormat format);
 		~MultiRenderTarget() override = default;
 
 	public:

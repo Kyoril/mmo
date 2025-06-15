@@ -28,6 +28,6 @@ namespace mmo
 		///	       Extension is provided in all lowercase and starts with a dot.
 		/// @param extension The lowercase extension starting with a dot.
 		///	@return true if this importer supports the given extension, false otherwise.
-		[[nodiscard]] virtual bool SupportsExtension(const String& extension) const noexcept = 0;
+		[[nodiscard]] virtual bool SupportsExtension(const String& extension) const = 0;
 	};
 }

@@ -15,6 +15,6 @@ namespace mmo
 		virtual ~PixelShader() override = default;
 
 	public:
-		[[nodiscard]] ShaderType GetType() const noexcept override { return ShaderType::PixelShader; }
+		[[nodiscard]] ShaderType GetType() const override { return ShaderType::PixelShader; }
 	};
 }

@@ -92,7 +92,7 @@ namespace mmo
 	}
 
 	OctreeScene::~OctreeScene()
-	= default;
+		= default;
 
 	void OctreeScene::Clear()
 	{

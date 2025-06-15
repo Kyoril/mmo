@@ -250,7 +250,7 @@ namespace mmo
 
 		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
-		bool OnReadFinished() noexcept override;
+		bool OnReadFinished() override;
 
 		void SetEditMode(WorldEditMode* editMode);
 

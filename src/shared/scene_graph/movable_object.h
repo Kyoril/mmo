@@ -61,15 +61,15 @@ namespace mmo
 		virtual ~MovableObject();
 
 	public:
-		virtual void SetCreator(MovableObjectFactory* creator) noexcept { m_creator = creator; }
+		virtual void SetCreator(MovableObjectFactory* creator) { m_creator = creator; }
 
-		[[nodiscard]] virtual MovableObjectFactory* GetCreator() const noexcept { return m_creator; }
+		[[nodiscard]] virtual MovableObjectFactory* GetCreator() const { return m_creator; }
 
-		virtual void SetScene(Scene* scene) noexcept { m_scene = scene; }
+		virtual void SetScene(Scene* scene) { m_scene = scene; }
 		
-		[[nodiscard]] Scene* GetScene() const noexcept { return m_scene; }
+		[[nodiscard]] Scene* GetScene() const { return m_scene; }
 
-		[[nodiscard]] virtual const String& GetName() const noexcept { return m_name; }
+		[[nodiscard]] virtual const String& GetName() const { return m_name; }
 
 		[[nodiscard]] virtual const String& GetMovableType() const = 0;
 
@@ -77,7 +77,7 @@ namespace mmo
 
 		[[nodiscard]] virtual SceneNode* GetParentSceneNode() const;
 
-		[[nodiscard]] virtual bool ParentIsTagPoint() const noexcept { return m_parentIsTagPoint; }
+		[[nodiscard]] virtual bool ParentIsTagPoint() const { return m_parentIsTagPoint; }
 
 		virtual void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false);
 
@@ -101,7 +101,7 @@ namespace mmo
 
 		void SetRenderQueueGroupAndPriority(uint8 queueId, uint16 priority);
 
-		uint8 GetRenderQueueGroup() const noexcept;
+		uint8 GetRenderQueueGroup() const;
 
 		const Matrix4& GetParentNodeFullTransform() const;
 
@@ -113,7 +113,7 @@ namespace mmo
 
 		[[nodiscard]] virtual bool IsVisible() const;
 
-		virtual void SetRenderingDistance(const float dist) noexcept
+		virtual void SetRenderingDistance(const float dist)
 		{
 			m_upperDistance = dist;
 			m_squaredUpperDistance = dist * dist;
@@ -121,12 +121,12 @@ namespace mmo
 
 		[[nodiscard]] virtual float GetRenderingDistance() const { return m_upperDistance; }
 
-		virtual void SetRenderingMinPixelSize(const float pixelSize) noexcept
+		virtual void SetRenderingMinPixelSize(const float pixelSize)
 		{
 			m_minPixelSize = pixelSize;
 		}
 
-		[[nodiscard]] virtual float GetRenderingMinPixelSize() const noexcept { return m_minPixelSize; }
+		[[nodiscard]] virtual float GetRenderingMinPixelSize() const { return m_minPixelSize; }
 
 		virtual void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables = false) = 0;
 
@@ -136,9 +136,9 @@ namespace mmo
 
 		void SetQueryFlags(const uint32 mask) { m_queryFlags = mask; }
 		
-		virtual void SetDebugDisplayEnabled(const bool enabled) noexcept { m_debugDisplay = enabled; }
+		virtual void SetDebugDisplayEnabled(const bool enabled) { m_debugDisplay = enabled; }
 
-		[[nodiscard]] virtual bool IsDebugDisplayEnabled(void) const noexcept { return m_debugDisplay; }
+		[[nodiscard]] virtual bool IsDebugDisplayEnabled(void) const { return m_debugDisplay; }
 
 		/// @brief Method by which the movable must add Renderable instances to the rendering queue.
 		virtual void PopulateRenderQueue(RenderQueue& queue) = 0;

@@ -164,7 +164,7 @@ namespace mmo
 	}
 
 
-	HashGeneratorHmac::HashGeneratorHmac() noexcept
+	HashGeneratorHmac::HashGeneratorHmac()
 	{
 		EnsureContextCreated();
 	}

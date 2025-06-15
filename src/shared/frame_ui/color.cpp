@@ -8,7 +8,7 @@ namespace mmo
 	const Color Color::White{ 1.0f, 1.0f, 1.0f, 1.0f };
 	const Color Color::Black{ 0.0f, 0.0f, 0.0f, 1.0f };
 
-	argb_t Color::CalculateARGB() const noexcept
+	argb_t Color::CalculateARGB() const
 	{
 		return (
 			static_cast<argb_t>(m_alpha * 255) << 24 |
@@ -18,7 +18,7 @@ namespace mmo
 			);
 	}
 
-	argb_t Color::CalculateABGR() const noexcept
+	argb_t Color::CalculateABGR() const
 	{
 		return (
 			static_cast<argb_t>(m_alpha * 255) << 24 |
@@ -28,7 +28,7 @@ namespace mmo
 			);
 	}
 
-	Color::Color() noexcept
+	Color::Color()
 		: m_alpha(1.0f)
 		, m_red(0.0f)
 		, m_green(0.0f)
@@ -38,12 +38,12 @@ namespace mmo
 	{
 	}
 
-	Color::Color(const Color & other) noexcept
+	Color::Color(const Color & other)
 	{
 		this->operator=(other);
 	}
 
-	Color::Color(float r, float g, float b, float a) noexcept
+	Color::Color(float r, float g, float b, float a)
 		: m_alpha(a)
 		, m_red(r)
 		, m_green(g)
@@ -53,12 +53,12 @@ namespace mmo
 	{
 	}
 
-	Color::Color(argb_t argb) noexcept
+	Color::Color(argb_t argb)
 	{
 		SetARGB(argb);
 	}
 
-	float Color::GetHue() const noexcept
+	float Color::GetHue() const
 	{
 		const float maxVal = MaxComponentVal();
 		const float minVal = MinComponentVal();
@@ -95,7 +95,7 @@ namespace mmo
 		return hue;
 	}
 
-	float Color::GetSaturation() const noexcept
+	float Color::GetSaturation() const
 	{
 		const float maxVal = MaxComponentVal();
 		const float minVal = MinComponentVal();
@@ -115,7 +115,7 @@ namespace mmo
 		return (maxVal - minVal) / (2 - maxVal - minVal);
 	}
 
-	float Color::GetLumination() const noexcept
+	float Color::GetLumination() const
 	{
 		const float maxVal = MaxComponentVal();
 		const float minVal = MinComponentVal();
@@ -123,7 +123,7 @@ namespace mmo
 		return (maxVal + minVal) / 2;
 	}
 
-	void Color::SetARGB(argb_t argb) noexcept
+	void Color::SetARGB(argb_t argb)
 	{
 		m_argb = argb;
 
@@ -138,7 +138,7 @@ namespace mmo
 		m_argbValid = true;
 	}
 
-	void Color::SetHSL(float hue, float saturation, float luminance, float alpha) noexcept
+	void Color::SetHSL(float hue, float saturation, float luminance, float alpha)
 	{
 		m_alpha = alpha;
 
@@ -211,14 +211,14 @@ namespace mmo
 		m_argbValid = false;
 	}
 
-	void Color::Invert() noexcept
+	void Color::Invert()
 	{
 		m_red = 1.0f - m_red;
 		m_green = 1.0f - m_green;
 		m_blue = 1.0f - m_blue;
 	}
 
-	void Color::InvertWithAlpha() noexcept
+	void Color::InvertWithAlpha()
 	{
 		m_red = 1.0f - m_red;
 		m_green = 1.0f - m_green;

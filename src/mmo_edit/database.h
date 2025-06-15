@@ -26,7 +26,7 @@ namespace mmo
 			name = other.name;
 		}
 
-		EntityHeader(EntityHeader&& other) noexcept
+		EntityHeader(EntityHeader&& other)
 		{
 			id = other.id;
 			name = std::move(other.name);

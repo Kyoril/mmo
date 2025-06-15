@@ -146,9 +146,9 @@ namespace mmo
 			void UpdateMaterial();
 
 		protected:
-			bool IsValid() const noexcept override;
+			bool IsValid() const override;
 
-			bool OnReadFinished() noexcept override;
+			bool OnReadFinished() override;
 
 		private:
 			typedef Grid<std::unique_ptr<Tile>> TileGrid;

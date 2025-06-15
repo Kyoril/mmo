@@ -122,53 +122,53 @@ namespace mmo
 
 		/// @brief Determines whether the resource can be loaded again after it has been unloaded.
 		/// @return true if the resource can be reloaded.
-		virtual bool IsReloadable() const noexcept { return !m_manual || m_loader; }
+		virtual bool IsReloadable() const { return !m_manual || m_loader; }
 
 		/// @brief Gets whether the resource is manually loaded.
 		/// @return true if the resource is loaded manually.
-		virtual bool IsManuallyLoaded() const noexcept { return m_manual; }
+		virtual bool IsManuallyLoaded() const { return m_manual; }
 
 		/// @brief Unloads the resource. The resource can be reloaded later if required.
 		virtual void Unload();
 
 		/// @brief Gets the size of the resource in bytes.
 		/// @return Size of the resource in bytes.
-		virtual uint64 GetSize() const noexcept { return m_size; }
+		virtual uint64 GetSize() const { return m_size; }
 
 		/// @brief Touches the resource to indicate it has been used.
 		virtual void Touch();
 
 		/// @brief Gets the unique name of the resource.
 		/// @return The unique name of the resource.
-		virtual std::string_view GetName() const noexcept { return m_name; }
+		virtual std::string_view GetName() const { return m_name; }
 
 		/// @brief Gets the resource handle.
 		/// @return The resource handle.
-		virtual ResourceHandle GetHandle() const noexcept { return m_handle; }
+		virtual ResourceHandle GetHandle() const { return m_handle; }
 
 		/// @brief Gets whether the resource is currently in the prepared state.
 		/// @return true if the resource is currently in the prepared state.
-		virtual bool IsPrepared() const noexcept { return m_loadingState.load() == LoadingState::Prepared; }
+		virtual bool IsPrepared() const { return m_loadingState.load() == LoadingState::Prepared; }
 
 		/// @brief Gets whether the resource is currently in the loaded state.
 		/// @return true if the resource is currently in the loaded state.
-		virtual bool IsLoaded() const noexcept { return m_loadingState.load() == LoadingState::Loaded; }
+		virtual bool IsLoaded() const { return m_loadingState.load() == LoadingState::Loaded; }
 
 		/// @brief Gets whether the resource is currently in the loading state.
 		/// @return true if the resource is currently in the loading state.
-		virtual bool IsLoading() const noexcept { return m_loadingState.load() == LoadingState::Loading; }
+		virtual bool IsLoading() const { return m_loadingState.load() == LoadingState::Loading; }
 
 		/// @brief Gets the current loading state of the resource.
 		/// @return The current loading state of the resource.
-		virtual LoadingState GetLoadingState() const noexcept { return m_loadingState.load(); }
+		virtual LoadingState GetLoadingState() const { return m_loadingState.load(); }
 
 		/// @brief Gets whether this resource is using background loading.
 		/// @return true if this resource is using background loading.
-		virtual bool IsBackgroundLoaded() const noexcept { return m_backgroundLoaded; }
+		virtual bool IsBackgroundLoaded() const { return m_backgroundLoaded; }
 
 		/// @brief Sets whether this resource is using background loading.
 		/// @param backgroundLoading true to enable background loading.
-		virtual void SetBackgroundLoading(const bool backgroundLoading) noexcept { m_backgroundLoaded = backgroundLoading; }
+		virtual void SetBackgroundLoading(const bool backgroundLoading) { m_backgroundLoaded = backgroundLoading; }
 
 		/// @brief Escalate the loading of a background loaded resource, locking the calling thread
 		///	       until the resource is loaded.
@@ -176,7 +176,7 @@ namespace mmo
 
 		/// @brief Gets the group name of this resource.
 		/// @return The group name of this resource.
-		virtual std::string_view GetGroup() const noexcept { return m_group; }
+		virtual std::string_view GetGroup() const { return m_group; }
 
 		/// @brief Changes the owning group of the resource.
 		/// @param newGroup Name of the new resource group to own the resource.
@@ -184,12 +184,12 @@ namespace mmo
 
 		/// @brief Gets the creator of this resource, if any.
 		/// @return Pointer to the creator of this resource or nullptr if not available.
-		virtual ResourceManager* GetCreator() const noexcept { return m_creator; }
+		virtual ResourceManager* GetCreator() const { return m_creator; }
 
 		/// @brief Gets an optional string which indicates the origin of this resource, if available.
 		///	       This can be things like a file name.
 		/// @return String indicating the origin of the resource.
-		virtual std::string_view GetOrigin() const noexcept { return m_origin; }
+		virtual std::string_view GetOrigin() const { return m_origin; }
 
 		/// @brief Tells the resource where it originated from.
 		/// @param origin The origin of the resource.
@@ -197,11 +197,11 @@ namespace mmo
 
 		/// @brief Gets the number of loading state changes of the resource.
 		/// @return The number of loading state changes of the resource.
-		virtual uint64 GetStateCount() const noexcept { return m_stateCount; }
+		virtual uint64 GetStateCount() const { return m_stateCount; }
 
 		/// @brief Manually marks the state of this resource as having been changed.
 		///	       This will increase the number returned by GetStateCount.
-		virtual void InvalidateState() noexcept { m_stateCount++; }
+		virtual void InvalidateState() { m_stateCount++; }
 
 		/// @brief Fires the loadingComplete signal.
 		/// @param wasBackgroundLoaded Flag indicating whether the resource was loaded by a background loading thread.

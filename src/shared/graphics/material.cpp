@@ -27,13 +27,13 @@ namespace mmo
 		m_texturesChanged = true;
 	}
 
-	void Material::SetVertexShaderCode(VertexShaderType vertexShaderType, std::span<uint8> code) noexcept
+	void Material::SetVertexShaderCode(VertexShaderType vertexShaderType, std::span<uint8> code)
 	{
 		m_vertexShaderCode[static_cast<uint32_t>(vertexShaderType)].assign(code.begin(), code.end());
 		m_vertexShaderChanged = true;
 	}
 
-	void Material::SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code) noexcept
+	void Material::SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code)
 	{
 		m_pixelShaderCode[static_cast<uint32_t>(shaderType)].assign(code.begin(), code.end());
 		m_pixelShaderChanged[static_cast<uint32_t>(shaderType)] = true;

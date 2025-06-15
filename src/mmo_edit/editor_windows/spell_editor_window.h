@@ -31,9 +31,9 @@ namespace mmo
 		void OnNewEntry(proto::TemplateManager<proto::Spells, proto::SpellEntry>::EntryType& entry) override;
 
 	public:
-		bool IsDockable() const noexcept override { return true; }
+		bool IsDockable() const override { return true; }
 
-		[[nodiscard]] DockDirection GetDefaultDockDirection() const noexcept override { return DockDirection::Center; }
+		[[nodiscard]] DockDirection GetDefaultDockDirection() const override { return DockDirection::Center; }
 
 	private:
 		EditorHost& m_host;

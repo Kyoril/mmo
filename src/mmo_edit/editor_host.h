@@ -23,7 +23,7 @@ namespace mmo
 	public:
 		virtual void SetCurrentPath(const Path& selectedPath) = 0;
 
-		virtual const Path& GetCurrentPath() const noexcept = 0;
+		virtual const Path& GetCurrentPath() const = 0;
 		
 		virtual bool OpenAsset(const Path& assetPath) = 0;
 		

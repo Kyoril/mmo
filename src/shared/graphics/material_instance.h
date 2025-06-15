@@ -31,55 +31,55 @@ namespace mmo
 
 		/// @brief Sets whether this material should render geometry without backface culling.
 		/// @param value True if both sides of geometry should be rendered, false to cull the back face.
-		virtual void SetTwoSided(const bool value) noexcept override { m_twoSided = value; }
+		virtual void SetTwoSided(const bool value) override { m_twoSided = value; }
 
 		/// @brief Gets whether this material should render geometry without backface culling.
-		[[nodiscard]] bool IsTwoSided() const noexcept override { return m_twoSided; }
+		[[nodiscard]] bool IsTwoSided() const override { return m_twoSided; }
 
 		/// @brief Sets whether this material casts shadows.
 		/// @param value True if this material should cast shadows.
-		void SetCastShadows(const bool value) noexcept override { m_castShadows = value; }
+		void SetCastShadows(const bool value) override { m_castShadows = value; }
 
 		/// @brief Gets whether this material casts shadows.
-		[[nodiscard]] bool IsCastingShadows() const noexcept override { return m_castShadows; }
+		[[nodiscard]] bool IsCastingShadows() const override { return m_castShadows; }
 
 		/// @brief Sets whether this material should receive shadows.
 		/// @param receive True if the material should receive shadows.
-		void SetReceivesShadows(const bool receive) noexcept override { m_receiveShadows = receive; }
+		void SetReceivesShadows(const bool receive) override { m_receiveShadows = receive; }
 
 		/// @brief Gets whether this material is receiving shadows.
-		[[nodiscard]] bool IsReceivingShadows() const noexcept override { return m_receiveShadows; }
+		[[nodiscard]] bool IsReceivingShadows() const override { return m_receiveShadows; }
 
 		/// @brief Sets the type of the material.
 		/// @param value The new material type.
-		void SetType(const MaterialType value) noexcept override { m_type = value; }
+		void SetType(const MaterialType value) override { m_type = value; }
 
 		/// @brief Gets the type of this material.
-		[[nodiscard]] MaterialType GetType() const noexcept override { return m_type; }
+		[[nodiscard]] MaterialType GetType() const override { return m_type; }
 
 		/// @brief Gets whether this material is translucent.
-		[[nodiscard]] bool IsTranslucent() const noexcept override { ASSERT(m_parent); return m_parent->IsTranslucent(); }
+		[[nodiscard]] bool IsTranslucent() const override { ASSERT(m_parent); return m_parent->IsTranslucent(); }
 
 		/// @brief Gets whether this material is receiving light.
-		[[nodiscard]] bool IsLit() const noexcept override { ASSERT(m_parent); return m_parent->IsLit(); }
+		[[nodiscard]] bool IsLit() const override { ASSERT(m_parent); return m_parent->IsLit(); }
 
-		[[nodiscard]] bool IsDepthTestEnabled() const noexcept override { return m_depthTest; }
+		[[nodiscard]] bool IsDepthTestEnabled() const override { return m_depthTest; }
 
-		void SetDepthTestEnabled(const bool enable) noexcept override { m_depthTest = enable; }
+		void SetDepthTestEnabled(const bool enable) override { m_depthTest = enable; }
 
-		[[nodiscard]] bool IsDepthWriteEnabled() const noexcept override { return m_depthWrite; }
+		[[nodiscard]] bool IsDepthWriteEnabled() const override { return m_depthWrite; }
 
-		void SetDepthWriteEnabled(const bool enable) noexcept override { m_depthWrite = enable; }
+		void SetDepthWriteEnabled(const bool enable) override { m_depthWrite = enable; }
 
-		[[nodiscard]] std::string_view GetName() const noexcept override { return m_name; }
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
 
 		/// @brief Sets the name of the material.
 		/// @param name The material name.
-		void SetName(const std::string_view name) noexcept { m_name = name; }
+		void SetName(const std::string_view name) { m_name = name; }
 
-		void SetParent(MaterialPtr parent) noexcept;
+		void SetParent(MaterialPtr parent);
 
-		[[nodiscard]] MaterialPtr GetParent() const noexcept { return m_parent; }
+		[[nodiscard]] MaterialPtr GetParent() const { return m_parent; }
 
 		std::shared_ptr<MaterialInstance> AsShared();
 
@@ -92,9 +92,9 @@ namespace mmo
 		/// @brief Ensures that the material is loaded.
 		void Update() override;
 
-		ShaderPtr& GetVertexShader(VertexShaderType type) noexcept override { return m_parent->GetVertexShader(type); }
+		ShaderPtr& GetVertexShader(VertexShaderType type) override { return m_parent->GetVertexShader(type); }
 
-		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) noexcept override { return m_parent->GetPixelShader(type); }
+		ShaderPtr& GetPixelShader(PixelShaderType type = PixelShaderType::Forward) override { return m_parent->GetPixelShader(type); }
 
 		void Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType = PixelShaderType::Forward) override;
 

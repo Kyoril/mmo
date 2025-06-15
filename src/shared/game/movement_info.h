@@ -143,17 +143,17 @@ namespace mmo
 		float jumpXZSpeed { 0.0f };
 
 	public:
-		bool IsChangingPosition() const noexcept { return (movementFlags & movement_flags::PositionChanging) != 0; }
+		bool IsChangingPosition() const { return (movementFlags & movement_flags::PositionChanging) != 0; }
 
-		bool IsMoving() const noexcept { return (movementFlags & movement_flags::Moving) != 0; }
+		bool IsMoving() const { return (movementFlags & movement_flags::Moving) != 0; }
 
-		bool IsStrafing() const noexcept { return (movementFlags & movement_flags::Strafing) != 0; }
+		bool IsStrafing() const { return (movementFlags & movement_flags::Strafing) != 0; }
 
-		bool IsTurning() const noexcept { return (movementFlags & movement_flags::Turning) != 0; }
+		bool IsTurning() const { return (movementFlags & movement_flags::Turning) != 0; }
 
-		bool IsPitching() const noexcept { return (movementFlags & movement_flags::Pitching) != 0; }
+		bool IsPitching() const { return (movementFlags & movement_flags::Pitching) != 0; }
 
-		bool IsFalling() const noexcept { return (movementFlags & movement_flags::Falling) != 0; }
+		bool IsFalling() const { return (movementFlags & movement_flags::Falling) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)

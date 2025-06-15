@@ -23,7 +23,7 @@ namespace mmo
 
 		void SetTint(argb_t tint);
 
-		inline argb_t GetTint() const noexcept { return m_tint; }
+		inline argb_t GetTint() const { return m_tint; }
 
 	public:
 		virtual std::unique_ptr<FrameComponent> Copy() const override;

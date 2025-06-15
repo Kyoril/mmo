@@ -20,8 +20,8 @@ namespace mmo
 		signal<void(uint16 width, uint16 height)> Resized;
 
 	public:
-		RenderWindow(std::string name, uint16 width, uint16 height) noexcept;
-		virtual ~RenderWindow() noexcept = default;
+		RenderWindow(std::string name, uint16 width, uint16 height);
+		virtual ~RenderWindow() = default;
 
 	public:
 		virtual void SetTitle(const std::string& title) = 0;

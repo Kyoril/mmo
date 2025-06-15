@@ -168,7 +168,7 @@ namespace mmo
         float m_shadowSoftness = 0.8f;        // Reduced from 2.0f for better definition
         float m_blockerSearchRadius = 0.003f;  // Slightly increased for better quality
         float m_lightSize = 0.0015f;           // Reduced for tighter, more defined shadows
-        uint16 m_shadowMapSize = 4096;        // Consider increasing to 8192 for production quality
+        uint16 m_shadowMapSize = 2048;        // Consider increasing to 8192 for production quality
 
         // Cascaded Shadow Maps support
         bool m_csmEnabled = true;

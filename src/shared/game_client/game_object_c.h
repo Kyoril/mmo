@@ -35,17 +35,17 @@ namespace mmo
 
 		~GameObjectC() override;
 
-		[[nodiscard]] bool IsPlayer() const noexcept { return GetTypeId() == ObjectTypeId::Player; }
+		[[nodiscard]] bool IsPlayer() const { return GetTypeId() == ObjectTypeId::Player; }
 
-		[[nodiscard]] bool IsUnit() const noexcept { return IsPlayer() || GetTypeId() == ObjectTypeId::Unit; }
+		[[nodiscard]] bool IsUnit() const { return IsPlayer() || GetTypeId() == ObjectTypeId::Unit; }
 
-		[[nodiscard]] bool IsItem() const noexcept { return IsContainer() || GetTypeId() == ObjectTypeId::Item; }
+		[[nodiscard]] bool IsItem() const { return IsContainer() || GetTypeId() == ObjectTypeId::Item; }
 
-		[[nodiscard]] bool IsContainer() const noexcept { return GetTypeId() == ObjectTypeId::Container; }
+		[[nodiscard]] bool IsContainer() const { return GetTypeId() == ObjectTypeId::Container; }
 
-		[[nodiscard]] bool IsWorldObject() const noexcept { return GetTypeId() == ObjectTypeId::Object; }
+		[[nodiscard]] bool IsWorldObject() const { return GetTypeId() == ObjectTypeId::Object; }
 
-		uint32 GetMapId() const noexcept { return m_mapId; }
+		uint32 GetMapId() const { return m_mapId; }
 
 		GameUnitC& AsUnit();
 
@@ -169,7 +169,7 @@ namespace mmo
 	public:
 		virtual void Deserialize(io::Reader& reader, bool complete);
 		
-		[[nodiscard]] SceneNode* GetSceneNode() const noexcept { return m_sceneNode; }
+		[[nodiscard]] SceneNode* GetSceneNode() const { return m_sceneNode; }
 
 		virtual void Update(float deltaTime);
 
@@ -179,7 +179,7 @@ namespace mmo
 		virtual void SetupSceneObjects();
 
 	public:
-		[[nodiscard]] ObjectGuid GetGuid() const noexcept { return m_fieldMap.GetFieldValue<ObjectGuid>(object_fields::Guid); }
+		[[nodiscard]] ObjectGuid GetGuid() const { return m_fieldMap.GetFieldValue<ObjectGuid>(object_fields::Guid); }
 		
 	protected:
 		Scene& m_scene;

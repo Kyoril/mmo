@@ -37,7 +37,7 @@ namespace mmo
 		bool ImportFromFile(const Path& filename, const Path& currentAssetPath) override;
 
 		/// @copydoc ImportBase::SupportsExtension
-		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
+		[[nodiscard]] bool SupportsExtension(const String& extension) const override;
 
 		/// Override this method if the importer needs to render some UI elements.
 		void Draw() override;

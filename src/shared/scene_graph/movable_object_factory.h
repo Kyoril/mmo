@@ -38,10 +38,10 @@ namespace mmo
 		/// Destroys a movable object that was created by this factory. Must be overridden.
 		virtual void DestroyInstance(MovableObject& object) = 0;
 		
-		[[nodiscard]] virtual bool RequestTypeFlags() const noexcept { return false; }
+		[[nodiscard]] virtual bool RequestTypeFlags() const { return false; }
 
-		void SetTypeFlags(const uint32 flags) noexcept { m_typeFlags = flags; }
+		void SetTypeFlags(const uint32 flags) { m_typeFlags = flags; }
 
-		[[nodiscard]] uint32 GetTypeFlags() const noexcept { return m_typeFlags; }
+		[[nodiscard]] uint32 GetTypeFlags() const { return m_typeFlags; }
 	};
 }

@@ -14,7 +14,7 @@ namespace mmo
 
 	struct HashGeneratorSha1 : public NonCopyable
 	{
-		explicit HashGeneratorSha1() noexcept;
+		explicit HashGeneratorSha1();
 
 		void update(const char* data, size_t len);
 

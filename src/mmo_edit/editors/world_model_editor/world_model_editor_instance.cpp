@@ -788,7 +788,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldModelEditorInstance::OnReadFinished() noexcept
+	bool WorldModelEditorInstance::OnReadFinished()
 	{
 		m_meshNames.clear();
 		RemoveAllChunkHandlers();

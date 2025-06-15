@@ -65,7 +65,7 @@ namespace mmo
 		bool ImportFromFile(const Path& filename, const Path& currentAssetPath) override;
 		
 		/// @copydoc ImportBase::SupportsExtension
-		[[nodiscard]] bool SupportsExtension(const String& extension) const noexcept override;
+		[[nodiscard]] bool SupportsExtension(const String& extension) const override;
 
 	private:
 		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const;

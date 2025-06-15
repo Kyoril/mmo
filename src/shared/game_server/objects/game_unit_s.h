@@ -479,7 +479,7 @@ namespace mmo
 
 		/// Gets the current position of the unit.
 		/// @returns The position vector of the unit.
-		const Vector3& GetPosition() const noexcept override;
+		const Vector3& GetPosition() const override;
 
 		/// Gets the specified unit modifier value.
 		/// @param mod The unit modifier to retrieve.

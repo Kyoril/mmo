@@ -15,7 +15,7 @@ namespace mmo
 		SetParent(parent);
 	}
 
-	void MaterialInstance::SetParent(MaterialPtr parent) noexcept
+	void MaterialInstance::SetParent(MaterialPtr parent)
 	{
 		ASSERT(parent);
 

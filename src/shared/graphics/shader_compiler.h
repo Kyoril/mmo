@@ -45,7 +45,7 @@ namespace mmo
 
 	public:
 		/// @brief Gets the shader format that this compiler supports.
-		[[nodiscard]] virtual const String& GetShaderFormat() const noexcept = 0;
+		[[nodiscard]] virtual const String& GetShaderFormat() const = 0;
 
 		/// @brief Compiles the given shader code input and generates an output result.
 		/// @param input The input parameter.

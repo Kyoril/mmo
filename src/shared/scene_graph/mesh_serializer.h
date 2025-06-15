@@ -193,10 +193,10 @@ namespace mmo
 		void CalculateBinormalsAndTangents();
 		void CreateHardwareBuffers();
 
-		bool OnReadFinished() noexcept override;
+		bool OnReadFinished() override;
 
 	public:
-		const MeshEntry& GetMeshEntry() const noexcept { return m_entry; }
+		const MeshEntry& GetMeshEntry() const { return m_entry; }
 
 	private:
 		MeshVersion m_version;

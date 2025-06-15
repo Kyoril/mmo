@@ -9,6 +9,7 @@
 #include "hpak_v1_0/allocation_map.h"
 #include "binary_io/stream_source.h"
 #include "binary_io/reader.h"
+#include "base/macros.h"
 
 #include "simple_file_format/sff_write_table.h"
 #include "simple_file_format/sff_write_array.h"
@@ -34,7 +35,7 @@ namespace mmo
 		PreHeader preHeader;
 		if (!loadPreHeader(preHeader, archiveReader))
 		{
-			throw std::runtime_error("Archive version coult not be detected");
+			ASSERT(! "Archive version coult not be detected");
 		}
 
 		// Depending on the header version, describe the hpak archive.
@@ -46,8 +47,7 @@ namespace mmo
 				v1_0::Header header(preHeader.version);
 				if (!loadHeader(header, archiveReader))
 				{
-					throw std::runtime_error(
-					    "The header does not conform to HPAK 1.0");
+					ASSERT(! "The header does not conform to HPAK 1.0");
 				}
 
 				// Setup an sff writer
@@ -85,8 +85,7 @@ namespace mmo
 			} break;
 
 		default:
-			throw std::runtime_error(
-				"Unsupported HPAK version " + std::to_string(preHeader.version));
+			ASSERT(! "Unsupported HPAK version");
 		}
 	}
 }

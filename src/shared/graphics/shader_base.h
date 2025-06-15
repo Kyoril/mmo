@@ -34,7 +34,7 @@ namespace mmo
 		/// Activates the vertex shader for the current graphics device pipeline.
 		virtual void Set() = 0;
 
-		[[nodiscard]] virtual ShaderType GetType() const noexcept = 0;
+		[[nodiscard]] virtual ShaderType GetType() const = 0;
 
 		[[nodiscard]] std::span<uint8> GetByteCode() { return m_byteCode; }
 

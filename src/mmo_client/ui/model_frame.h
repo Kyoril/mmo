@@ -61,13 +61,13 @@ namespace mmo
 
 	public:
 		/// Gets the mesh instance or nullptr if there is no mesh loaded.
-		inline MeshPtr GetMesh() const noexcept { return m_mesh; }
+		inline MeshPtr GetMesh() const { return m_mesh; }
 
 		Scene& GetScene() { return m_scene; }
 
-		Entity* GetEntity() const noexcept { return m_entity; }
+		Entity* GetEntity() const { return m_entity; }
 
-		Camera* GetCamera() const noexcept { return m_camera; }
+		Camera* GetCamera() const { return m_camera; }
 
 	protected:
 		/// This method is called whenever the ModelFile property is changed.

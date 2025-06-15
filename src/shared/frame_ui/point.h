@@ -19,19 +19,19 @@ namespace mmo
 		static Point Zero;
 
 	public:
-		Point(float x = 0.0f, float y = 0.0f) noexcept
+		Point(float x = 0.0f, float y = 0.0f)
 			: x(x)
 			, y(y)
 		{
 		}
 
-		Point(const Point& other) noexcept
+		Point(const Point& other)
 			: x(other.x)
 			, y(other.y)
 		{
 		}
 
-		inline float DistanceTo(const Point& other) const noexcept
+		inline float DistanceTo(const Point& other) const
 		{
 			float dx = x - other.x;
 			float dy = y - other.y;
@@ -44,25 +44,25 @@ namespace mmo
 		}
 
 	public:
-		inline Point& operator+=(const Point& rhs) noexcept
+		inline Point& operator+=(const Point& rhs)
 		{
 			x += rhs.x;
 			y += rhs.y;
 			return *this;
 		}
-		inline Point& operator-=(const Point& rhs) noexcept
+		inline Point& operator-=(const Point& rhs)
 		{
 			x -= rhs.x;
 			y -= rhs.y;
 			return *this;
 		}
-		inline Point& operator*=(float scalar) noexcept
+		inline Point& operator*=(float scalar)
 		{
 			x *= scalar;
 			y *= scalar;
 			return *this;
 		}
-		inline Point& operator*=(const Point& rhs) noexcept
+		inline Point& operator*=(const Point& rhs)
 		{
 			x *= rhs.x;
 			y *= rhs.y;

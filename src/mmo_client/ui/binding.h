@@ -63,7 +63,7 @@ namespace mmo
 			: m_bindings(bindings)
 		{
 		}
-		~BindingXmlLoader() noexcept override = default;
+		~BindingXmlLoader() override = default;
 
 	public:
 		void ElementStart(const std::string& element, const XmlAttributes& attributes) override;

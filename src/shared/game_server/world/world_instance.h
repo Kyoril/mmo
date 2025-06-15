@@ -103,14 +103,14 @@ namespace mmo
 		void Update(const RegularUpdate& update);
 		
 		/// Gets the id of this world instance.
-		[[nodiscard]] InstanceId GetId() const noexcept { return m_id; }
+		[[nodiscard]] InstanceId GetId() const { return m_id; }
 		
 		/// Gets the map id of this world instance.
-		[[nodiscard]] MapId GetMapId() const noexcept { return m_mapId; }
+		[[nodiscard]] MapId GetMapId() const { return m_mapId; }
 
-		Universe& GetUniverse() const noexcept { return m_universe; }
+		Universe& GetUniverse() const { return m_universe; }
 
-		WorldInstanceManager& GetManager() const noexcept { return m_manager; }
+		WorldInstanceManager& GetManager() const { return m_manager; }
 
 		/// Adds a game object to this world instance.
 		void AddGameObject(GameObjectS &added);
