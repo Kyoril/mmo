@@ -49,9 +49,9 @@ namespace mmo
 
 			uint32 GetColorAt(uint32 x, uint32 z);
 
-			const uint32 GetLayersAt(uint32 x, uint32 z);
+			uint32 GetLayersAt(uint32 x, uint32 z) const;
 
-			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value);
+			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value) const;
 
 			float GetSmoothHeightAt(float x, float z);
 
@@ -63,11 +63,11 @@ namespace mmo
 
 			Tile* GetTile(int32 x, int32 z);
 
-			Page* GetPage(uint32 x, uint32 z) const;
+			[[nodiscard]] Page* GetPage(uint32 x, uint32 z) const;
 
 			bool GetPageIndexByWorldPosition(const Vector3& position, int32& x, int32& y) const;
 
-			void SetVisible(const bool visible) const;
+			void SetVisible(bool visible) const;
 
 			void SetWireframeVisible(bool visible);
 
@@ -83,23 +83,23 @@ namespace mmo
 
 			void SetBaseFileName(const String& name);
 
-			const String& GetBaseFileName() const;
+			[[nodiscard]] const String& GetBaseFileName() const;
 
-			MaterialPtr GetDefaultMaterial() const;
+			[[nodiscard]] MaterialPtr GetDefaultMaterial() const;
 
 			void SetDefaultMaterial(MaterialPtr material);
 
-			Scene& GetScene();
+			[[nodiscard]] Scene& GetScene() const;
 
-			SceneNode* GetNode();
+			[[nodiscard]] SceneNode* GetNode() const;
 
-			uint32 GetWidth() const;
+			[[nodiscard]] uint32 GetWidth() const;
 
-			uint32 GetHeight() const;
+			[[nodiscard]] uint32 GetHeight() const;
 
 			void SetTileSceneQueryFlags(uint32 mask);
 
-			uint32 GetTileSceneQueryFlags() const { return m_tileSceneQueryFlags; }
+			[[nodiscard]] uint32 GetTileSceneQueryFlags() const { return m_tileSceneQueryFlags; }
 
 			struct RayIntersectsResult
 			{
@@ -109,7 +109,7 @@ namespace mmo
 
 			std::pair<bool, RayIntersectsResult> RayIntersects(const Ray& ray);
 
-			void GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ);
+			static void GetTerrainVertex(float x, float z, uint32& vertexX, uint32& vertexZ);
 
 			void Deform(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
 
@@ -123,25 +123,25 @@ namespace mmo
 
 			void Color(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, uint32 color);
 
-			void SetHeightAt(int x, int y, float height);
+			void SetHeightAt(int x, int y, float height) const;
 
-			void SetColorAt(int x, int y, uint32 color);
+			void SetColorAt(int x, int y, uint32 color) const;
 
-			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
+			void UpdateTiles(int fromX, int fromZ, int toX, int toZ) const;
 
-			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
+			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ) const;
 
-			void SetArea(const Vector3& position, uint32 area);
+			void SetArea(const Vector3& position, uint32 area) const;
 
-			void SetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 area);
+			void SetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 area) const;
 
-			uint32 GetArea(const Vector3& position) const;
+			[[nodiscard]] uint32 GetArea(const Vector3& position) const;
 
-			uint32 GetAreaForTile(uint32 globalTileX, uint32 globalTileY) const;
+			[[nodiscard]] uint32 GetAreaForTile(uint32 globalTileX, uint32 globalTileY) const;
 
-			void SetWireframeMaterial(MaterialPtr wireframeMaterial);
+			void SetWireframeMaterial(const MaterialPtr& wireframeMaterial);
 
-			const MaterialPtr& GetWireframeMaterial() const { return m_wireframeMaterial; }
+			[[nodiscard]] const MaterialPtr& GetWireframeMaterial() const { return m_wireframeMaterial; }
 
 		private:
 
@@ -268,9 +268,9 @@ namespace mmo
 			// Helper methods
 			bool RayAABBIntersection(const Ray& ray, float& tmin, float& tmax) const;
 
-			bool RayTriangleIntersection(const Ray& ray, const Vector3& v0, const Vector3& v1, const Vector3& v2, float& t, Vector3& intersectionPoint) const;
+			static bool RayTriangleIntersection(const Ray& ray, const Vector3& v0, const Vector3& v1, const Vector3& v2, float& t, Vector3& intersectionPoint);
 
-			float GetHeightAtGridPoint(int gridX, int gridZ) const;
+			[[nodiscard]] float GetHeightAtGridPoint(int gridX, int gridZ) const;
 
 		private:
 

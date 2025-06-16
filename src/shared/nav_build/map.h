@@ -77,7 +77,7 @@ namespace mmo
         std::set<PageChunkLocation> PageChunks;
 
         MapEntityInstance(const MapEntity* entity,
-            const AABB& bounds,
+                          AABB bounds,
             const Matrix4& transformMatrix);
 
         Vector3 TransformVertex(const Vector3& vertex) const;

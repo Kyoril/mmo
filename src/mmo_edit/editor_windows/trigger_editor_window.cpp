@@ -1,26 +1,21 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "trigger_editor_window.h"
+#include "game_server/spells/spell_cast.h"
+#include "graphics/texture_mgr.h"
+#include "proto_data/trigger_helper.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
-#include "assets/asset_registry.h"
-#include "game/aura.h"
-#include "game/spell.h"
-#include "game/zone.h"
-#include "game_server/spells/spell_cast.h"
-#include "graphics/texture_mgr.h"
-#include "log/default_log_levels.h"
-#include "proto_data/trigger_helper.h"
 
 namespace ImGui
 {
-	bool HyperLink(const char* label, bool underlineWhenHoveredOnly = false)
+	bool HyperLink(const char* label, const bool underlineWhenHoveredOnly = false)
 	{
-		const ImU32 linkColor = ImGui::ColorConvertFloat4ToU32({ 0.2, 0.3, 0.8, 1 });
-		const ImU32 linkHoverColor = ImGui::ColorConvertFloat4ToU32({ 0.4, 0.6, 0.8, 1 });
-		const ImU32 linkFocusColor = ImGui::ColorConvertFloat4ToU32({ 0.6, 0.4, 0.8, 1 });
+		const ImU32 linkColor = ImGui::ColorConvertFloat4ToU32({ 0.2f, 0.3f, 0.8f, 1 });
+		const ImU32 linkHoverColor = ImGui::ColorConvertFloat4ToU32({ 0.4f, 0.6f, 0.8f, 1 });
+		const ImU32 linkFocusColor = ImGui::ColorConvertFloat4ToU32({ 0.6f, 0.4f, 0.8f, 1 });
 
 		const ImGuiID id = ImGui::GetID(label);
 

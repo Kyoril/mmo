@@ -3,7 +3,7 @@
 #pragma once
 
 #include "shadow_camera_setup.h"
-#include "cascaded_shadow_camera_setup.h"
+#include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
@@ -49,9 +49,7 @@ namespace mmo
         Camera* GetShadowCamera() const
         {
             return m_shadowCamera;
-        }        
-        
-        void SetDepthBias(float bias, float slope, float clamp)
+        }        void SetDepthBias(float bias, float slope, float clamp)
         {
 			m_depthBias = bias;
 			m_slopeScaledDepthBias = slope;
@@ -70,30 +68,11 @@ namespace mmo
 
         void SetBlockerSearchRadius(float radius) { m_blockerSearchRadius = radius; }
         float GetBlockerSearchRadius() const { return m_blockerSearchRadius; }
-        
-        void SetLightSize(float size) { m_lightSize = size; }
+          void SetLightSize(float size) { m_lightSize = size; }
         float GetLightSize() const { return m_lightSize; }
         
         void SetShadowMapSize(uint16 size);
         uint16 GetShadowMapSize() const { return m_shadowMapSize; }
-
-        /// @brief Enable/disable cascaded shadow maps
-        void SetCascadedShadowMapsEnabled(bool enabled);
-        bool IsCascadedShadowMapsEnabled() const { return m_csmEnabled; }
-
-        /// @brief Set number of shadow cascades (1-4)
-        void SetCascadeCount(uint32 count);
-        uint32 GetCascadeCount() const;
-
-        /// @brief Get cascade shadow cameras
-        const std::vector<Camera*>& GetCascadeShadowCameras() const { return m_cascadeShadowCameras; }
-
-        /// @brief Get cascade split distances for debugging
-        const std::vector<float>& GetCascadeSplits() const;
-
-        /// @brief Set CSM split lambda (blend between uniform and logarithmic splits)
-        void SetSplitLambda(float lambda);
-        float GetSplitLambda() const;
 
     private:
         /// @brief Renders the geometry pass.
@@ -109,12 +88,6 @@ namespace mmo
         void FindLights(Scene& scene, Camera& camera);
 
 		void RenderShadowMap(Scene& scene, Camera& camera);
-
-		/// @brief Render cascaded shadow maps
-		void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
-
-		/// @brief Initialize CSM resources
-		void InitializeCascadedShadowMaps();
 
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
@@ -133,8 +106,6 @@ namespace mmo
         ConstantBufferPtr m_lightBuffer;
 
         ConstantBufferPtr m_shadowBuffer;
-
-        ConstantBufferPtr m_csmShadowBuffer;  // CSM shadow buffer
 
         ShaderPtr m_deferredLightVs;
 
@@ -155,27 +126,17 @@ namespace mmo
 #ifdef _WIN32
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 #endif
-          std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
         
-        // Hardware depth biasing - helps with shadow acne at shadow edges
-        float m_depthBias = 25.0f;            // Further reduced to minimize peter panning
-		float m_slopeScaledDepthBias = 1.0f;  // Reduced to balance acne vs peter panning
-		float m_depthBiasClamp = 0.002f;      // Very small clamp for precision
-        
-        // Advanced shadow parameters - balanced for stability and anti-aliasing
-        float m_shadowBias = 0.00005f;        // Very small bias for stability
-        float m_normalBiasScale = 0.01f;      // Minimal normal bias to prevent peter panning
-        float m_shadowSoftness = 0.8f;        // Reduced from 2.0f for better definition
-        float m_blockerSearchRadius = 0.003f;  // Slightly increased for better quality
-        float m_lightSize = 0.0015f;           // Reduced for tighter, more defined shadows
-        uint16 m_shadowMapSize = 2048;        // Consider increasing to 8192 for production quality
+        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;        float m_depthBias = 250.0f;
+		float m_slopeScaledDepthBias = 1.0f;
+		float m_depthBiasClamp = 0.0f;
 
-        // Cascaded Shadow Maps support
-        bool m_csmEnabled = true;
-        uint32 m_cascadeCount = 3;
-        std::vector<RenderTexturePtr> m_cascadeShadowMaps;
-        std::vector<SceneNode*> m_cascadeShadowCameraNodes;
-        std::vector<Camera*> m_cascadeShadowCameras;
-        std::shared_ptr<class CascadedShadowCameraSetup> m_csmCameraSetup;
+        // Advanced shadow parameters
+        float m_shadowBias = 0.0005f;         // Depth bias in shadow space
+        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor        float m_shadowSoftness = 1.0f;        // Overall shadow softness
+        float m_shadowSoftness = 1.0f;        // Overall shadow softness
+        float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
+        float m_lightSize = 0.0025f;          // Size of the virtual light
+        uint16 m_shadowMapSize = 8192;        // Size of the shadow map texture (default 8k)
     };
 }

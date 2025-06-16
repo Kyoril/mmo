@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
-#include <algorithm>
 
 #include "base/utilities.h"
 #include "game_client/world_entity_loader.h"
@@ -24,7 +23,7 @@ namespace mmo
     static const ChunkMagic EntityChunkMagic = MakeChunkMagic('MENT');
     static const ChunkMagic TerrainChunkMagic = MakeChunkMagic('RRET');
 
-    uint16 GetIndex(size_t x, size_t y)
+    static uint16 GetIndex(const size_t x, const size_t y)
     {
         return static_cast<uint16>(x + y * terrain::constants::VerticesPerTile);
     }
@@ -66,9 +65,9 @@ namespace mmo
 		Bounds = collisionTree.GetBoundingBox();
     }
 
-    MapEntityInstance::MapEntityInstance(const MapEntity* entity, const AABB& bounds, const Matrix4& transformMatrix)
+    MapEntityInstance::MapEntityInstance(const MapEntity* entity, AABB bounds, const Matrix4& transformMatrix)
 		: TransformMatrix(transformMatrix)
-		, Bounds(bounds)
+		, Bounds(std::move(bounds))
 		, Model(entity)
     {
         std::vector<Vector3> vertices;
@@ -147,7 +146,7 @@ namespace mmo
                     {
                         const float height = page->GetHeightAt(i, j);
 
-                        Vector3 position = Vector3(scale * i, height, scale * j);
+                        auto position = Vector3(scale * i, height, scale * j);
 
                         // TODO: Convert this position to the global position!
                         position.x += Bounds.min.x;
@@ -189,7 +188,7 @@ namespace mmo
                 map->GetMapEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_mapEntityInstances);
 
                 // Adjust min and max Y values based on map entities
-                for (auto& uniqueId : m_chunks[y][x]->m_mapEntityInstances)
+                for (const auto& uniqueId : m_chunks[y][x]->m_mapEntityInstances)
                 {
                     const auto* instance = map->GetMapEntityInstance(uniqueId);
 
