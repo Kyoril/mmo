@@ -4,6 +4,7 @@
 #include "luabind_lambda.h"
 #include "game_client/object_mgr.h"
 #include "net/realm_connector.h"
+#include "frame_ui/frame_mgr.h"
 
 namespace mmo
 {
@@ -41,24 +42,37 @@ namespace mmo
 				.def_readonly("tabId", &TalentInfo::tabId)
 				.def_readonly("tier", &TalentInfo::tier)
 				.def_readonly("column", &TalentInfo::column)),
-
+				
 			luabind::def_lambda("GetNumTalentTabs", [this]() { return GetNumTalentTabs(); }),
-			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),
-
-			luabind::def_lambda("GetNumTalents", [this](int32 tabId) { return GetNumTalents(tabId); }),
-			luabind::def_lambda("GetTalentInfo", [this](int32 tabId, int32 index) { return GetTalentInfo(tabId, index); }),
-			luabind::def_lambda("LearnTalent", [this](int32 tabId, int32 index) { return LearnTalent(tabId, index); })
+			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),			luabind::def_lambda("GetNumTalents", [this](int32 tabIndex) { return GetNumTalents(tabIndex); }),
+			luabind::def_lambda("GetTalentInfo", [this](int32 tabIndex, int32 talentIndex) { return GetTalentInfo(tabIndex, talentIndex); }),
+			luabind::def_lambda("GetTalentPointsSpentInTab", [this](int32 tabIndex) { return GetTalentPointsSpentInTabByIndex(tabIndex); }),
+			luabind::def_lambda("LearnTalent", [this](int32 tabIndex, int32 talentIndex) { return LearnTalent(tabIndex, talentIndex); })
 		];
 	}
-
+	
 	void TalentClient::NotifyCharacterClassChanged()
 	{
 		RebuildTalentTrees();
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
+	}
+
+	void TalentClient::OnSpellLearned(uint32 spellId)
+	{
+		UpdateTalentRanks();
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
+	}
+
+	void TalentClient::OnSpellUnlearned(uint32 spellId)
+	{
+		UpdateTalentRanks();
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 	}
 
 	void TalentClient::RebuildTalentTrees()
 	{
 		m_talentsByTreeId.clear();
+		m_talentPointsSpentPerTab.clear();
 
 		std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
 		if (!player)
@@ -98,12 +112,108 @@ namespace mmo
 				talent.column(),
 				spell->id(),
 				spell,
-				0,
+				0, // rank will be updated in UpdateTalentRanks
 				static_cast<uint32>(talent.ranks_size()),
 				spell->icon(),
 				spell->name()
 			);
+
+			// Initialize talent points spent counter for this tab
+			if (m_talentPointsSpentPerTab.find(talent.tab()) == m_talentPointsSpentPerTab.end())
+			{
+				m_talentPointsSpentPerTab[talent.tab()] = 0;
+			}
 		}
+
+		// Update talent ranks based on learned spells
+		UpdateTalentRanks();
+	}
+
+	void TalentClient::UpdateTalentRanks()
+	{
+		std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return;
+		}
+
+		// Reset talent point counters
+		for (auto& pair : m_talentPointsSpentPerTab)
+		{
+			pair.second = 0;
+		}
+
+		// Check each talent in each tab
+		for (auto& tabPair : m_talentsByTreeId)
+		{
+			uint32 tabId = tabPair.first;
+			auto& talents = tabPair.second;
+
+			for (auto& talentInfo : talents)
+			{
+				// Find the talent definition to get all rank spell IDs
+				const proto_client::TalentEntry* talentEntry = nullptr;
+				for (const auto& talent : m_talentManager.getTemplates().entry())
+				{
+					if (talent.id() == talentInfo.id)
+					{
+						talentEntry = &talent;
+						break;
+					}
+				}
+
+				if (!talentEntry)
+				{
+					continue;
+				}
+
+				// Check which rank the player has learned
+				int32 currentRank = 0;
+				for (int32 rank = 0; rank < talentEntry->ranks_size(); ++rank)
+				{
+					const uint32 spellId = talentEntry->ranks(rank);
+					if (player->HasSpell(spellId))
+					{
+						currentRank = rank + 1; // rank is 1-based
+						
+						// Update spell reference to the highest rank spell
+						talentInfo.spellId = spellId;
+						talentInfo.spell = m_spellManager.getById(spellId);
+						if (talentInfo.spell)
+						{
+							talentInfo.icon = talentInfo.spell->icon();
+							talentInfo.name = talentInfo.spell->name();
+						}
+					}
+				}
+
+				talentInfo.rank = currentRank;
+				
+				// Add to talent points spent in this tab
+				m_talentPointsSpentPerTab[tabId] += currentRank;
+			}
+		}
+	}
+
+	uint32 TalentClient::GetTalentPointsSpentInTab(uint32 tabId) const
+	{
+		auto it = m_talentPointsSpentPerTab.find(tabId);
+		return (it != m_talentPointsSpentPerTab.end()) ? it->second : 0;
+	}
+
+	uint32 TalentClient::GetTalentPointsSpentInTabByIndex(int32 tabIndex) const
+	{
+		if (tabIndex < 0 || tabIndex >= GetNumTalentTabs())
+		{
+			return 0;
+		}
+
+		auto it = m_talentsByTreeId.begin();
+		std::advance(it, tabIndex);
+
+		// Now we have the actual tab ID
+		uint32 tabId = it->first;
+		return GetTalentPointsSpentInTab(tabId);
 	}
 
 	int32 TalentClient::GetNumTalentTabs() const
@@ -139,63 +249,55 @@ namespace mmo
 		return tab->name().c_str();
 	}
 
-	int32 TalentClient::GetNumTalents(const int32 tabId)
+	int32 TalentClient::GetNumTalents(const int32 tabIndex)
 	{
+		if (tabIndex < 0 || tabIndex >= GetNumTalentTabs())
+		{
+			return 0;
+		}
+
 		auto it = m_talentsByTreeId.begin();
-		if (it == m_talentsByTreeId.end())
-		{
-			return 0;
-		}
-
-		std::advance(it, tabId);
-
-		if (it == m_talentsByTreeId.end())
-		{
-			return 0;
-		}
+		std::advance(it, tabIndex);
 
 		return static_cast<int32>(it->second.size());
 	}
 
-	const TalentInfo* TalentClient::GetTalentInfo(const int32 tabId, const int32 index)
+	const TalentInfo* TalentClient::GetTalentInfo(const int32 tabIndex, const int32 talentIndex)
 	{
+		if (tabIndex < 0 || tabIndex >= GetNumTalentTabs())
+		{
+			return nullptr;
+		}
+
 		auto it = m_talentsByTreeId.begin();
-		if (it == m_talentsByTreeId.end())
+		std::advance(it, tabIndex);
+
+		if (talentIndex < 0 || talentIndex >= static_cast<int32>(it->second.size()))
 		{
 			return nullptr;
 		}
 
-		std::advance(it, tabId);
-
-		if (it == m_talentsByTreeId.end())
-		{
-			return nullptr;
-		}
-
-		if (index < 0 || index >= static_cast<int32>(it->second.size()))
-		{
-			return nullptr;
-		}
-
-		return &it->second[index];
+		return &it->second[talentIndex];
 	}
-
-	bool TalentClient::LearnTalent(const uint32 tabId, const int32 index)
+	
+	bool TalentClient::LearnTalent(const uint32 tabIndex, const int32 talentIndex)
 	{
-		const TalentInfo* info = GetTalentInfo(tabId, index);
+		const TalentInfo* info = GetTalentInfo(tabIndex, talentIndex);
 		if (!info)
 		{
 			ELOG("Failed to learn talent: Unknown talent");
 			return false;
 		}
 
-		if (info->rank >= info->maxRank)
+		if (static_cast<uint32>(info->rank) >= info->maxRank)
 		{
 			WLOG("Unable to learn talent: Max rank already reached");
 			return false;
 		}
 
-		m_realmConnector.LearnTalent(info->id, info->rank + 1);
+		// Note: Since we treat rank as 1-based here rank 0 for us actually means that we don't know the talent yet.
+		// So we just pass the current rank to the packet as the server expects it to be 0-based.
+		m_realmConnector.LearnTalent(info->id, info->rank);
 		return true;
 	}
 }

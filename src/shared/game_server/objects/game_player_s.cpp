@@ -1199,14 +1199,15 @@ namespace mmo
 
 		// Get current rank (0 if not learned yet)
 		const uint32 currentRank = GetTalentRank(talentId);
-		if (currentRank >= talentEntry->ranks_size() - rank)
+		if (currentRank >= talentEntry->ranks_size() - 1)
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
 			return false; // Already at max rank
 		}
 
 		// Always need at least one talent point for higher ranks
-		const uint32 talentPointCost = (rank - currentRank) + 1;
+		const uint32 talentPointCost = HasTalent(talentId) ? 
+			(rank - currentRank) : rank + 1;
 
 		// Check if player has enough talent points
 		uint32 availablePoints = GetAvailableTalentPoints();
@@ -1627,7 +1628,7 @@ namespace mmo
 		uint32 spentPoints = 0;
 		for (const auto& [talentId, rank] : m_talents)
 		{
-			spentPoints += rank;
+			spentPoints += rank + 1;
 		}
 
 		// Did we somehow exceed the available talent points? If so, we force a talent point reset here

@@ -1526,6 +1526,8 @@ namespace mmo
 			if (spell)
 			{
 				spells.push_back(spell);
+
+				m_talentClient.OnSpellLearned(spellId);
 			}
 			else
 			{
@@ -1712,15 +1714,24 @@ namespace mmo
 					m_actionBar.SetActionButton(emptySlot, { static_cast<uint16>(spellId), action_button_type::Spell });
 				}
 			}
-
+			
 			// Update possible trainer spell list
 			m_trainerClient.OnSpellLearned(spellId);
+			
+			// Update talent information
+			m_talentClient.OnSpellLearned(spellId);
 
 			FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
+			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 		}
 		else
 		{
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
+			
+			// Update talent information for unlearned spell
+			m_talentClient.OnSpellUnlearned(spellId);
+			
+			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 		}
 
 		return PacketParseResult::Pass;
