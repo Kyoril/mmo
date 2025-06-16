@@ -45,7 +45,7 @@ namespace mmo
 	private:
 		void RebuildTalentTrees();
 
-		int32 GetNumTalentTabs();
+		int32 GetNumTalentTabs() const;
 
 		const char* GetTalentTabName(int32 index);
 

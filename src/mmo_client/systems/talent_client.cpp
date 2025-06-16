@@ -99,19 +99,19 @@ namespace mmo
 				spell->id(),
 				spell,
 				0,
-				static_cast<uint32>(talent.ranks_size() - 1),
+				static_cast<uint32>(talent.ranks_size()),
 				spell->icon(),
 				spell->name()
 			);
 		}
 	}
 
-	int32 TalentClient::GetNumTalentTabs()
+	int32 TalentClient::GetNumTalentTabs() const
 	{
 		return m_talentsByTreeId.size();
 	}
 
-	const char* TalentClient::GetTalentTabName(int32 index)
+	const char* TalentClient::GetTalentTabName(const int32 index)
 	{
 		if (index < 0 || index >= GetNumTalentTabs())
 		{
