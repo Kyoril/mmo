@@ -834,10 +834,6 @@ namespace mmo
 		{
 			ELOG("Failed to learn talent " << talentId << " rank " << rank << " for player");
 		}
-		else
-		{
-			DLOG("Player learned talent " << talentId << " rank " << rank);
-		}
 	}
 
 	const proto::GossipMenuEntry* Player::GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const

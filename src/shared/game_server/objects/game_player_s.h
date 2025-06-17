@@ -198,9 +198,12 @@ namespace mmo
 		///
 		/// @return Number of talent points spent in total.
 		uint32 GetTalentPointsSpent() const;
-
 		/// Gets the amount of available talent points to spend.
 		uint32 GetAvailableTalentPoints() const;
+		/// Gets the complete talent map for serialization.
+		///
+		/// @return Reference to the talent map containing talent IDs and their ranks.
+		const std::unordered_map<uint32, uint32>& GetTalents() const { return m_talents; }
 
 	protected:
 

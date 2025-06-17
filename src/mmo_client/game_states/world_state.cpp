@@ -1526,8 +1526,6 @@ namespace mmo
 			if (spell)
 			{
 				spells.push_back(spell);
-
-				m_talentClient.OnSpellLearned(spellId);
 			}
 			else
 			{
@@ -1537,6 +1535,7 @@ namespace mmo
 
 		ASSERT(m_playerController->GetControlledUnit());
 		m_playerController->GetControlledUnit()->SetInitialSpells(spells);
+		m_talentClient.NotifyCharacterClassChanged();
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
 

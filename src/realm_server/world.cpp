@@ -694,7 +694,6 @@ namespace mmo
 				return;
 			}
 		};
-
 		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
 			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
 			player.Get<uint32>(object_fields::Xp), 
@@ -708,7 +707,8 @@ namespace mmo
 			player.GetBindPosition(),
 			player.GetBindFacing(),
 			attributePoints,
-			spellIds
+			spellIds,
+			player.GetTalents()
 			);
 
 		return PacketParseResult::Pass;

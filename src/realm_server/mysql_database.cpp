@@ -720,10 +720,9 @@ namespace mmo
 			throw mysql::Exception("Could not save chat message to database");
 		}
 	}
-
-	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,
-		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
-		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds)
+	
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -840,6 +839,43 @@ namespace mmo
 				// There was an error
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character spell data!");
+			}
+		}
+
+		// Save character talents
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_talents` WHERE `character`={0};"
+			, characterId					// 0
+		)))
+		{
+			// There was an error
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character talent data!");
+		}
+
+		// Save character talents
+		if (!talentRanks.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_talents` (`character`, `talent`, `rank`) VALUES ";
+			bool isFirstItem = true;
+			for (const auto& [talentId, rank] : talentRanks)
+			{
+				if (!isFirstItem) strm << ",";
+				else
+				{
+					isFirstItem = false;
+				}
+
+				strm << "(" << characterId << "," << talentId << "," << static_cast<uint32>(rank) << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				// There was an error
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character talent data!");
 			}
 		}
 

@@ -112,7 +112,21 @@ namespace mmo
 		uint32 talentPoints = m_totalTalentPointsAtLevel;
 		bool resetTalents = false;
 
-		for (const auto& [talentId, rank] : talentRanks)
+		// Sort talents by row first
+		std::vector<std::pair<uint32, uint8>> sortedTalents(talentRanks.begin(), talentRanks.end());
+		std::sort(sortedTalents.begin(), sortedTalents.end(),
+			[this](const std::pair<uint32, uint8>& a, const std::pair<uint32, uint8>& b)
+			{
+				const auto& talentA = m_project.talents.getById(a.first);
+				const auto& talentB = m_project.talents.getById(b.first);
+				if (!talentA || !talentB)
+				{
+					return false; // If either talent is invalid, do not sort
+				}
+				return talentA->row() < talentB->row();
+			});
+
+		for (const auto& [talentId, rank] : sortedTalents)
 		{
 			// Ensure this talent exists
 			if (!m_project.talents.getById(talentId))
@@ -1196,6 +1210,7 @@ namespace mmo
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " which is not intended for his class!");
 			return false;
 		}
+
 		// Get current rank (0 if not learned yet)
 		const uint32 currentRank = GetTalentRank(talentId);
 		if (currentRank >= static_cast<uint32>(talentEntry->ranks_size()) - 1)
@@ -1205,8 +1220,7 @@ namespace mmo
 		}
 
 		// Always need at least one talent point for higher ranks
-		const uint32 talentPointCost = HasTalent(talentId) ? 
-			(rank - currentRank) : rank + 1;
+		const uint32 talentPointCost = HasTalent(talentId) ? (rank - currentRank) : rank + 1;
 
 		// Check if player has enough talent points
 		uint32 availablePoints = GetAvailableTalentPoints();
@@ -1730,6 +1744,14 @@ namespace mmo
 			w << io::write<uint32>(spell->id());
 		}
 
+		// Write talent data
+		w << io::write<uint32>(object.m_talents.size());
+		for (const auto& [talentId, rank] : object.m_talents)
+		{
+			w << io::write<uint32>(talentId);
+			w << io::write<uint8>(rank);
+		}
+
 		return w;
 	}
 
@@ -1739,7 +1761,6 @@ namespace mmo
 		r >> reinterpret_cast<GameUnitS&>(object);
 		r >> object.m_inventory;
 		r >> io::read_range(object.m_attributePointEnhancements);
-
 		// Read spells
 		uint32 spellCount;
 		r >> io::read<uint32>(spellCount);
@@ -1754,6 +1775,20 @@ namespace mmo
 			{
 				object.m_spells.emplace(spell);
 			}
+		}
+
+		// Read talent data
+		uint32 talentCount;
+		r >> io::read<uint32>(talentCount);
+		object.m_talents.clear();
+		for (uint32 i = 0; i < talentCount; ++i)
+		{
+			uint32 talentId;
+			uint8 rank;
+			r >> io::read<uint32>(talentId);
+			r >> io::read<uint8>(rank);
+
+			object.m_talents[talentId] = rank;
 		}
 
 		for (uint32 i = 0; i < 5; ++i)
