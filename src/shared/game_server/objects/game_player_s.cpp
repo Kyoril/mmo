@@ -1196,10 +1196,9 @@ namespace mmo
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " which is not intended for his class!");
 			return false;
 		}
-
 		// Get current rank (0 if not learned yet)
 		const uint32 currentRank = GetTalentRank(talentId);
-		if (currentRank >= talentEntry->ranks_size() - 1)
+		if (currentRank >= static_cast<uint32>(talentEntry->ranks_size()) - 1)
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
 			return false; // Already at max rank
@@ -1218,6 +1217,29 @@ namespace mmo
 		}
 
 		// Check prerequisites (if any)
+
+		// Check tier requirements - each tier requires 5 points spent in the tab
+		if (talentEntry->row() > 0) // Tier 0 has no requirements
+		{
+			uint32 requiredPointsInTab = talentEntry->row() * 5;
+			uint32 pointsSpentInTab = 0;
+
+			// Count points spent in this talent tab
+			for (const auto& [learnedTalentId, learnedRank] : m_talents)
+			{
+				const auto* learnedTalentEntry = m_project.talents.getById(learnedTalentId);
+				if (learnedTalentEntry && learnedTalentEntry->tab() == talentEntry->tab())
+				{
+					pointsSpentInTab += (learnedRank + 1); // Rank 0 costs 1 point, rank 1 costs 2 points total, etc.
+				}
+			}
+
+			if (pointsSpentInTab < requiredPointsInTab)
+			{
+				ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " at tier " << talentEntry->row() << " but only has " << pointsSpentInTab << " points spent in tab (required: " << requiredPointsInTab << ")!");
+				return false;
+			}
+		}
 
 		// Unlearn previous rank's spell if needed
 		if (rank > 0)
