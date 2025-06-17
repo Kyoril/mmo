@@ -74,6 +74,9 @@ namespace mmo
 		case AuraType::ModResistance:
 			HandleModResistance(apply);
 			break;
+		case AuraType::ModResistancePct:
+			HandleModResistancePct(apply);
+			break;
 		case AuraType::ModSpeedAlways:
 		case AuraType::ModIncreaseSpeed:
 			HandleRunSpeedModifier(apply);
@@ -260,6 +263,22 @@ namespace mmo
 
 		m_container.GetOwner().UpdateModifierValue(static_cast<UnitMods>(static_cast<uint32>(unit_mods::Armor) + resistance),
 			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModResistancePct(bool apply) const
+	{
+		const int32 resistance = GetEffect().miscvaluea();
+
+		if (resistance < 0 || resistance > 6)
+		{
+			ELOG("AURA_TYPE_MOD_RESISTANCE_PCT: Invalid resistance index " << resistance);
+			return;
+		}
+
+		m_container.GetOwner().UpdateModifierValue(static_cast<UnitMods>(static_cast<uint32>(unit_mods::Armor) + resistance),
+			unit_mod_type::TotalPct,
 			GetBasePoints(),
 			apply);
 	}

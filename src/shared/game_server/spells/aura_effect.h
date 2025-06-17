@@ -85,6 +85,8 @@ namespace mmo
 
 		void HandleModResistance(bool apply) const;
 
+		void HandleModResistancePct(bool apply) const;
+
 		void HandleRunSpeedModifier(bool apply) const;
 
 		void HandleSwimSpeedModifier(bool apply) const;

@@ -123,6 +123,8 @@ namespace mmo
 
 			ModVisibility,
 
+			ModResistancePct,
+
 			Count_,
 			Invalid_ = Count_
 		};

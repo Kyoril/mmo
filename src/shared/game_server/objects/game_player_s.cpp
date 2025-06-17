@@ -1566,8 +1566,7 @@ namespace mmo
 	void GamePlayerS::UpdateArmor()
 	{
 		// Update armor value
-		int32 baseArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::BaseValue));
-		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue));
+		int32 armor = static_cast<int32>(GetCalculatedModifierValue(unit_mods::Armor));
 
 		// Class
 		if (m_classEntry)
@@ -1578,14 +1577,15 @@ namespace mmo
 				const auto& statSource = m_classEntry->armorstatsources(i);
 				if (statSource.statid() < 5)
 				{
-					baseArmor += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+					armor += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
 				}
 			}
-
 		}
 
-		Set<int32>(object_fields::Armor, baseArmor + totalArmor);
-		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);
+		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue) * GetModifierValue(unit_mods::Armor, unit_mod_type::TotalPct));
+
+		Set<int32>(object_fields::Armor, armor);
+		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);	// TODO
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
 	}
 

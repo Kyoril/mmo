@@ -147,7 +147,8 @@ namespace mmo
 		"ModStun",
 		"ModFear",
 
-		"ModVisibility"
+		"ModVisibility",
+		"ModResistancePct"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -1167,6 +1168,7 @@ namespace mmo
 			break;
 
 		case aura_type::ModResistance:
+		case aura_type::ModResistancePct:
 			{
 			int resistanceType = effect.miscvaluea();
 			if (ImGui::Combo("Resistance", &resistanceType,
