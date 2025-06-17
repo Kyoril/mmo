@@ -21,10 +21,19 @@ namespace mmo
 		uint32 column = 0;
 		uint32 spellId = 0;
 		const proto_client::SpellEntry* spell = nullptr;
+		const proto_client::SpellEntry* nextRankSpell = nullptr;
 		int32 rank = -1;
 		uint32 maxRank = 0;
 		String icon;
 		String name;
+		TalentInfo(uint32 id, uint32 tabId, uint32 tier, uint32 column, uint32 spellId, 
+				   const proto_client::SpellEntry* spell, const proto_client::SpellEntry* nextRankSpell,
+				   int32 rank, uint32 maxRank, const String& icon, const String& name)
+			: id(id), tabId(tabId), tier(tier), column(column), spellId(spellId)
+			, spell(spell), nextRankSpell(nextRankSpell), rank(rank), maxRank(maxRank)
+			, icon(icon), name(name)
+		{
+		}
 	};
 	class TalentClient final : public NonCopyable
 	{

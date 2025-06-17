@@ -39,6 +39,7 @@ namespace mmo
 				.def_readonly("maxRank", &TalentInfo::maxRank)
 				.def_readonly("spellId", &TalentInfo::spellId)
 				.def_readonly("spell", &TalentInfo::spell)
+				.def_readonly("nextRankSpell", &TalentInfo::nextRankSpell)
 				.def_readonly("tabId", &TalentInfo::tabId)
 				.def_readonly("tier", &TalentInfo::tier)
 				.def_readonly("column", &TalentInfo::column)),
@@ -112,6 +113,7 @@ namespace mmo
 				talent.column(),
 				spell->id(),
 				spell,
+				nullptr,
 				0, // rank will be updated in UpdateTalentRanks
 				static_cast<uint32>(talent.ranks_size()),
 				spell->icon(),
@@ -166,7 +168,7 @@ namespace mmo
 				{
 					continue;
 				}
-
+				
 				// Check which rank the player has learned
 				int32 currentRank = 0;
 				for (int32 rank = 0; rank < talentEntry->ranks_size(); ++rank)
@@ -188,6 +190,17 @@ namespace mmo
 				}
 
 				talentInfo.rank = currentRank;
+
+				// Set next rank spell if not at max rank
+				if (currentRank < static_cast<int32>(talentInfo.maxRank) && currentRank < talentEntry->ranks_size())
+				{
+					const uint32 nextRankSpellId = talentEntry->ranks(currentRank); // currentRank is already 1-based, so this gives us the next rank
+					talentInfo.nextRankSpell = m_spellManager.getById(nextRankSpellId);
+				}
+				else
+				{
+					talentInfo.nextRankSpell = nullptr;
+				}
 				
 				// Add to talent points spent in this tab
 				m_talentPointsSpentPerTab[tabId] += currentRank;
@@ -279,7 +292,7 @@ namespace mmo
 
 		return &it->second[talentIndex];
 	}
-	
+
 	bool TalentClient::LearnTalent(const uint32 tabIndex, const int32 talentIndex)
 	{
 		const TalentInfo* info = GetTalentInfo(tabIndex, talentIndex);

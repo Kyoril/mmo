@@ -532,7 +532,7 @@ namespace mmo
 		}
 
 		// Remove applied auras due to spell removal
-		RemoveAllAurasFromCaster(GetGuid());
+		RemoveAllAurasFromCaster(GetGuid(), spellId);
 
 		// Parry, dodge & block update
 		for (const auto& effect : spell->effects())
@@ -788,13 +788,20 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::RemoveAllAurasFromCaster(const uint64 casterGuid)
+	void GameUnitS::RemoveAllAurasFromCaster(const uint64 casterGuid, uint32 spellId)
 	{
 		ASSERT(casterGuid != 0);
 
 		// Remove existing auras first
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
+			// Check for spell match first
+			if (spellId != 0 && (*it)->GetSpellId() != spellId)
+			{
+				++it;
+				continue;
+			}
+
 			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetCasterId() == casterGuid)
 			{
 				it = m_auras.erase(it);

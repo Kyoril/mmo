@@ -695,7 +695,8 @@ namespace mmo
 
 		/// Removes all auras applied by a specific caster.
 		/// @param casterGuid The GUID of the caster.
-		void RemoveAllAurasFromCaster(uint64 casterGuid);
+		/// @param spellId If set to 0, all auras will be removed, otherwise only auras that match the spell id will be removed.
+		void RemoveAllAurasFromCaster(uint64 casterGuid, uint32 spellId = 0);
 
 		/// Removes a specific aura from the unit.
 		/// @param aura The aura container to remove.
@@ -779,7 +780,7 @@ namespace mmo
 			totalPct += static_cast<float>(GetTotalSpellMods(spell_mod_type::Pct, op, spellId)) * 0.01f;
 
 			const float diff = static_cast<float>(ref_value) * (totalPct - 1.0f) + static_cast<float>(totalFlat);
-			ref_value = T(static_cast<float>(ref_value) + diff);
+			ref_value = T(static_cast<float>(ref_value) + roundf(diff));
 
 			return T(diff);
 		}

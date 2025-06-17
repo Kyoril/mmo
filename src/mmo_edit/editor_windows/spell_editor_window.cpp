@@ -601,6 +601,24 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(procflags, "When Main Hand Weapon Attack Performed", spell_proc_flags::DoneMainhandAttack);
 			CHECKBOX_FLAG_PROP(procflags, "When Off Hand Weapon Attack Performed", spell_proc_flags::DoneOffhandAttack);
 			CHECKBOX_FLAG_PROP(procflags, "On Death", spell_proc_flags::Death);
+
+			ImGui::Separator();
+			ImGui::Text("Additional Proc Flags");
+			ImGui::Separator();
+
+			CHECKBOX_FLAG_PROP(procexflags, "Normal Hit", spell_proc_flags_ex::NormalHit);
+			CHECKBOX_FLAG_PROP(procexflags, "Critical Hit", spell_proc_flags_ex::CriticalHit);
+			CHECKBOX_FLAG_PROP(procexflags, "Absorb", spell_proc_flags_ex::Absorb);
+			CHECKBOX_FLAG_PROP(procexflags, "Block", spell_proc_flags_ex::Block);
+			CHECKBOX_FLAG_PROP(procexflags, "Deflect", spell_proc_flags_ex::Deflect);
+			CHECKBOX_FLAG_PROP(procexflags, "Dodge", spell_proc_flags_ex::Dodge);
+			CHECKBOX_FLAG_PROP(procexflags, "Evade", spell_proc_flags_ex::Evade);
+			CHECKBOX_FLAG_PROP(procexflags, "Immune", spell_proc_flags_ex::Immune);
+			CHECKBOX_FLAG_PROP(procexflags, "Interrupt", spell_proc_flags_ex::Interrupt);
+			CHECKBOX_FLAG_PROP(procexflags, "Miss", spell_proc_flags_ex::Miss);
+			CHECKBOX_FLAG_PROP(procexflags, "Parry", spell_proc_flags_ex::Parry);
+			CHECKBOX_FLAG_PROP(procexflags, "Reflect", spell_proc_flags_ex::Reflect);
+			CHECKBOX_FLAG_PROP(procexflags, "Resist", spell_proc_flags_ex::Resist);
 		}
 
 		if (ImGui::CollapsingHeader("Interrupt##header", ImGuiTreeNodeFlags_None))

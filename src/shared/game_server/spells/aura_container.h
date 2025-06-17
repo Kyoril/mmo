@@ -124,6 +124,9 @@ namespace mmo
 		/// Gets the proc flags of the aura container's spell
 		uint32 GetProcFlags() const { return m_spell.procflags(); }
 
+		/// Gets the extended proc flags of the aura container's spell
+		uint32 GetProcFlagsEx() const { return m_spell.procexflags(); }
+
 		/// Gets the proc chance of the aura container's spell
 		uint32 GetProcChance() const { return m_procChance; }
 

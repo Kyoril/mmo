@@ -521,6 +521,16 @@ namespace mmo
 			return false;
 		}
 
+		// Check additional proc flags
+		if (GetProcFlagsEx() != spell_proc_flags_ex::None)
+		{
+			// No match - ignore. This check does something like "Only on crit / dodge / parry etc.)
+			if ((GetProcFlagsEx() & procEx) == 0)
+			{
+				return false;
+			}
+		}
+
 		// Random roll (0-100)
 		std::uniform_real_distribution<float> distribution(0.0f, 100.0f);
 		const float roll = distribution(randomGenerator);

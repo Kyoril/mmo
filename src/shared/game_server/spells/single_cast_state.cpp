@@ -992,16 +992,40 @@ namespace mmo
 			else
 			{
 				healingAmount = 0;
-			}			unitTarget.Heal(healingAmount, &m_cast.GetExecuter());
+			}
+
+			// Crit chance (TODO: Calculate crit chance)
+			float critChance = 5.0f;		// Default crit chance for healing spells
+			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
+
+			bool isCrit = false;
+			if (critChance > 0.0f)
+			{
+				std::uniform_real_distribution<float> critDistribution(0.0f, 100.0f);
+				if (critDistribution(randomGenerator) < critChance)
+				{
+					// Crit heal (double healing amount)
+					healingAmount = static_cast<uint32>(healingAmount * 2.0f);
+					isCrit = true;
+				}
+			}
+
+			unitTarget.Heal(healingAmount, &m_cast.GetExecuter());
+
+			uint32 procFlags = proc_ex_flags::NormalHit;
+			if (isCrit)
+			{
+				procFlags |= proc_ex_flags::CriticalHit;
+			}
 
 			// Trigger proc events for healing
-			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &m_cast.GetExecuter(), healingAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, procFlags, m_spell.spellschool(), false, m_spell.familyflags());
+			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &m_cast.GetExecuter(), healingAmount, procFlags, m_spell.spellschool(), false, m_spell.familyflags());
 
 			GameUnitS& caster = m_cast.GetExecuter();
 			const uint32 spellId = m_spell.id();
 			SendPacketFromCaster(m_cast.GetExecuter(),
-				[&unitTarget, &caster, spellId, healingAmount](game::OutgoingPacket& out_packet)
+				[&unitTarget, &caster, spellId, healingAmount, isCrit](game::OutgoingPacket& out_packet)
 				{
 					out_packet.Start(game::realm_client_packet::SpellHealLog);
 					out_packet
@@ -1009,7 +1033,7 @@ namespace mmo
 						<< io::write_packed_guid(caster.GetGuid())
 						<< io::write<uint32>(spellId)
 						<< io::write<uint32>(healingAmount)
-						<< io::write<uint8>(false);
+						<< io::write<uint8>(isCrit);
 					out_packet.Finish();
 				});
 		}
