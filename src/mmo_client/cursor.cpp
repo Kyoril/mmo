@@ -4,6 +4,14 @@
 #include "frame_ui/frame_mgr.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
+#include "spell_entry.h"
+#include "shared/game_client/game_item_c.h"
+#include "shared/game_client/game_bag_c.h"
+#include "shared/game_client/item_handle.h"
+#include "shared/game_client/object_mgr.h"
+#include "shared/game/item.h"
+#include "shared/game/object_type_id.h"
+#include "shared/client_data/proto_client/spells.pb.h"
 
 #ifdef WIN32
 #	include <Windows.h>
@@ -19,6 +27,10 @@ namespace mmo
 
 namespace mmo
 {
+	void Cursor::Initialize(const proto_client::Project& project)
+	{
+		m_project = &project;
+	}
 	void Cursor::SetCursorType(CursorType type)
 	{
 #ifdef WIN32
@@ -130,7 +142,6 @@ namespace mmo
 
 		return false;
 	}
-
 	void Cursor::Clear()
 	{
 		m_type = CursorItemType::None;
@@ -144,7 +155,7 @@ namespace mmo
 		m_type = CursorItemType::Item;
 		m_itemSlot = slot;
 
-		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
+		UpdateCursorIcon();
 	}
 
 	void Cursor::SetSpell(uint32 spell)
@@ -152,19 +163,123 @@ namespace mmo
 		m_type = CursorItemType::Spell;
 		m_itemSlot = spell;
 
-		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
+		UpdateCursorIcon();
 	}
-
-	void Cursor::SetActionButton(uint32 slot)
-	{
-		m_type = CursorItemType::ActionButton;
-		m_itemSlot = slot;
-
-		FrameManager::Get().SetCursorIcon(TextureManager::Get().CreateOrRetrieve("Interface/Icons/Spells/S_Attack.htex"), Size(96.0f, 96.0f));
-	}
-
 	uint32 Cursor::GetCursorItem() const
 	{
 		return m_itemSlot;
+	}
+	std::shared_ptr<GameItemC> Cursor::ResolveItemFromSlot(uint32 slot) const
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player || player->GetTypeId() != ObjectTypeId::Player)
+		{
+			return nullptr;
+		}
+
+		// Resolve the slot to an item GUID using the same logic as in game_script.cpp
+		uint64 itemGuid = 0;
+		
+		// Backpack?
+		if ((static_cast<uint16>(slot) >> 8) == player_inventory_slots::Bag_0 && 
+			(slot & 0xFF) >= player_inventory_pack_slots::Start && 
+			(slot & 0xFF) < player_inventory_pack_slots::End)
+		{
+			const uint8 slotFieldOffset = (static_cast<uint8>(slot & 0xFF) - player_inventory_slots::End) * 2;
+			itemGuid = player->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
+		}
+		else if ((static_cast<uint16>(slot) >> 8) == player_inventory_slots::Bag_0 &&
+			(slot & 0xFF) >= player_equipment_slots::Start &&
+			(slot & 0xFF) < player_equipment_slots::End)
+		{
+			const uint8 slotFieldOffset = static_cast<uint8>(slot & 0xFF) * 2;
+			itemGuid = player->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+		}
+		else if ((static_cast<uint16>(slot) >> 8) == player_inventory_slots::Bag_0 &&
+			(slot & 0xFF) >= player_inventory_slots::Start &&
+			(slot & 0xFF) < player_inventory_slots::End)
+		{
+			const uint8 slotFieldOffset = static_cast<uint8>(slot & 0xFF) * 2;
+			itemGuid = player->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+		}
+		else if (static_cast<uint16>(slot) >> 8 >= player_inventory_slots::Start &&
+			static_cast<uint16>(slot) >> 8 < player_inventory_slots::End)
+		{
+			// Bag slots, get bag item first
+			const uint8 slotFieldOffset = (static_cast<uint16>(slot) >> 8) * 2;
+			itemGuid = player->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
+
+			if (itemGuid == 0)
+			{
+				return nullptr;
+			}
+
+			// The actual bag item
+			std::shared_ptr<GameBagC> bag = ObjectMgr::Get<GameBagC>(itemGuid);
+			if (!bag)
+			{
+				return nullptr;
+			}
+
+			// Out of bag bounds?
+			if ((slot & 0xFF) >= bag->Get<uint32>(object_fields::NumSlots))
+			{
+				return nullptr;
+			}
+
+			itemGuid = bag->Get<uint64>(object_fields::Slot_1 + (slot & 0xFF) * 2);
+			if (itemGuid == 0)
+			{
+				return nullptr;
+			}
+
+			return ObjectMgr::Get<GameItemC>(itemGuid);
+		}
+
+		if (itemGuid == 0)
+		{
+			return nullptr;
+		}
+
+		// Get item at the specified slot
+		return ObjectMgr::Get<GameItemC>(itemGuid);
+	}
+
+	void Cursor::UpdateCursorIcon()
+	{
+		String iconPath = GetDefaultIcon();
+		
+		if (m_type == CursorItemType::Spell && m_project)
+		{
+			// Resolve spell icon
+			const auto* spell = m_project->spells.getById(m_itemSlot);
+			if (spell && !spell->icon().empty())
+			{
+				iconPath = spell->icon();
+			}
+		}
+		else if (m_type == CursorItemType::Item && m_project)
+		{
+			// Resolve item icon
+			const auto item = ResolveItemFromSlot(m_itemSlot);
+			if (item)
+			{
+				ItemHandle itemHandle(*item, m_project->spells);
+				const char* itemIcon = itemHandle.GetIcon();
+				if (itemIcon)
+				{
+					iconPath = itemIcon;
+				}
+			}
+		}
+
+		// Set the cursor icon
+		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(iconPath);
+		FrameManager::Get().SetCursorIcon(texture, Size(96.0f, 96.0f));
+	}
+
+	const char* Cursor::GetDefaultIcon() const
+	{
+		return "Interface/Icons/Spells/S_Attack.htex";
 	}
 }

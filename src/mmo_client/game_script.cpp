@@ -760,6 +760,9 @@ namespace mmo
 		, m_gameTime(gameTime)
 		, m_talentClient(talentClient)
 	{
+		// Initialize the cursor with project data for icon resolution
+		g_cursor.Initialize(m_project);
+
 		// Initialize the lua state instance
 		m_luaState = LuaStatePtr(luaL_newstate());
 

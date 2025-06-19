@@ -356,7 +356,7 @@ namespace mmo
 			GeometryHelper::CreateRect(m_cursorIconBuffer,
 				Color::White,
 				Rect(0.0f, 0.0f, m_cursorIconSize.width, m_cursorIconSize.height),
-				Rect(0.0f, m_cursorIconTexture->GetHeight(), m_cursorIconTexture->GetWidth(), 0.0f),
+				Rect(0.0f, 0.0f, m_cursorIconTexture->GetWidth(), m_cursorIconTexture->GetHeight()),
 				m_cursorIconTexture->GetWidth(),
 				m_cursorIconTexture->GetHeight());
 		}
