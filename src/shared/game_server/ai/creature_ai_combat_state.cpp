@@ -10,6 +10,43 @@
 
 namespace mmo
 {
+	// === MovementState Implementation ===
+
+	bool CreatureAICombatState::MovementState::IsValidFor(const GameUnitS& target, float currentCombatRange) const
+	{
+		if (!isMovingToCombat)
+		{
+			return false;
+		}
+
+		// Check if combat range changed significantly
+		if (std::abs(combatRange - currentCombatRange) > 0.5f)
+		{
+			return false;
+		}
+
+		// Check if target is still within reasonable range of our target position
+		const float targetDistanceSq = (target.GetPosition() - targetPosition).GetSquaredLength();
+		const float toleranceRange = currentCombatRange * 0.5f;
+		
+		return targetDistanceSq <= (toleranceRange * toleranceRange);
+	}
+
+	void CreatureAICombatState::MovementState::UpdateTarget(const Vector3& target, float range)
+	{
+		targetPosition = target;
+		combatRange = range;
+		isMovingToCombat = true;
+	}
+
+	void CreatureAICombatState::MovementState::Reset()
+	{
+		targetPosition = Vector3::Zero;
+		combatRange = 0.0f;
+		isMovingToCombat = false;
+	}
+
+	// === CreatureAICombatState Implementation ===
 	CreatureAICombatState::CreatureAICombatState(CreatureAI& ai, GameUnitS& victim)
 		: CreatureAIState(ai)
 		, m_combatInitiator(std::static_pointer_cast<GameUnitS>(victim.shared_from_this()))
@@ -26,98 +63,60 @@ namespace mmo
 	CreatureAICombatState::~CreatureAICombatState()
 	{
 	}
-
 	void CreatureAICombatState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
 		
+		// Initialize state
 		m_stuckCounter = 0;
+		m_movementState.Reset();
 
 		auto& controlled = GetControlled();
 		controlled.RemoveAllCombatParticipants();
 
+		// Set initial target
 		const std::shared_ptr<GameUnitS> initiator = m_combatInitiator.lock();
-		AddThreat(*initiator, 0.0f);
+		if (initiator)
+		{
+			AddThreat(*initiator, 0.0f);
+		}
 		m_combatInitiator.reset();
 
-		m_nextActionCountdown.ended.connect(this, &CreatureAICombatState::ChooseNextAction);
+		// Setup event connections
+		SetupEventConnections();
 
 		controlled.SetInCombat(true, false);
 
-		// Watch for threat events
-		m_onThreatened = controlled.threatened.connect([this](GameUnitS& threatener, float amount)
-		{
-			AddThreat(threatener, amount);
-		});
-
-		ASSERT(controlled.GetWorldInstance());
-
-		// Reset AI if target is out of range, but only in non-instanced-pve-areas
-		if (!controlled.GetWorldInstance()->IsInstancedPvE())
-		{
-			m_canReset = true;
-
-			m_onMoveTargetChanged = GetControlled().GetMover().targetChanged.connect([this]()
-			{
-				auto& homePos = GetAI().GetHome().position;
-				const auto& controlled = GetControlled();
-
-				if (auto* victim = controlled.GetVictim())
-				{
-					// Target flying / swimming?
-					if (victim->GetMovementInfo().movementFlags & (movement_flags::Flying | movement_flags::Swimming))
-					{
-						// TODO: Check if controlled unit can swim
-
-						// Check if move target would be in hit 3d hit range
-						const float combatRangeSq = ::powf(controlled.GetMeleeReach() + victim->GetMeleeReach(), 2.0f);
-						const float distSq = (controlled.GetMover().GetTarget() - victim->GetPosition()).GetSquaredLength();
-						if (distSq > combatRangeSq)
-						{
-							GetAI().Reset();
-							return;
-						}
-					}
-				}
-
-				const bool outOfRange =
-					controlled.GetSquaredDistanceTo(homePos, false) >= 60.0f * 60.0f ||
-					controlled.GetSquaredDistanceTo(controlled.GetMover().GetTarget(), true) >= 60.0f * 60.0f;
-
-				if (GetAsyncTimeMs() >= (m_lastThreatTime + constants::OneSecond * 10) && outOfRange)
-				{
-					GetAI().Reset();
-					return;
-				}
-			});
-		}
+		// Setup reset conditions if applicable
+		SetupResetConditions();
 
 		m_entered = true;
 
-		// Save weakptr reference
+		// Schedule first action for next tick
 		std::weak_ptr weakThis = std::static_pointer_cast<CreatureAICombatState>(shared_from_this());
-
-		// Delay first action on the next world tick
-		controlled.GetWorldInstance()->GetUniverse().Post([weakThis]() {
+		controlled.GetWorldInstance()->GetUniverse().Post([weakThis]() 
+		{
 			if (const auto strongThis = weakThis.lock())
 			{
 				strongThis->ChooseNextAction();
 			}
 		});
 
-
 		// Raise OnAggro triggers
-		controlled.RaiseTrigger(trigger_event::OnAggro, initiator.get());
+		if (initiator)
+		{
+			controlled.RaiseTrigger(trigger_event::OnAggro, initiator.get());
+		}
 	}
-
 	void CreatureAICombatState::OnLeave()
 	{
 		CreatureAIState::OnLeave();
 
-		// Reset all events here to prevent them being fired in another ai state
+		// Reset all events and connections
 		m_nextActionCountdown.ended.clear();
-
 		m_nextActionCountdown.Cancel();
+		
+		// Disconnect all event connections
 		m_onThreatened.disconnect();
 		m_getThreat.disconnect();
 		m_setThreat.disconnect();
@@ -128,10 +127,11 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
 
-		// Stop movement!
+		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();
+		m_movementState.Reset();
 
-		// All remaining threateners are no longer in combat with this unit
+		// Clean up combat participants
 		for (auto& pair : m_threat)
 		{
 			if (auto threatener = pair.second.threatener.lock())
@@ -139,6 +139,10 @@ namespace mmo
 				threatener->RemoveAttackingUnit(GetControlled());
 			}
 		}
+
+		// Clear all signal containers
+		m_killedSignals.clear();
+		m_miscSignals.clear();
 	}
 
 	void CreatureAICombatState::OnDamage(GameUnitS& attacker)
@@ -165,7 +169,6 @@ namespace mmo
 	{
 		CreatureAIState::OnControlledMoved();
 	}
-
 	void CreatureAICombatState::AddThreat(GameUnitS& threatener, float amount)
 	{
 		// No negative threat
@@ -177,220 +180,235 @@ namespace mmo
 			return;
 		}
 
-		// Add threat amount (Note: A value of 0 is fine here, as it will still add an
-		// entry to the threat list)
-		uint64 guid = threatener.GetGuid();
+		const uint64 guid = threatener.GetGuid();
 		auto it = m_threat.find(guid);
+		
 		if (it == m_threat.end())
 		{
 			// Insert new entry
-			it = m_threat.insert(m_threat.begin(), std::make_pair(guid, ThreatEntry(threatener, 0.0f)));
+			it = m_threat.emplace(guid, ThreatEntry(threatener, 0.0f)).first;
 
-			// Watch for unit killed signal
-			m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS*)
-				{
-					RemoveThreat(threatener);
-				});
-
-			auto strongThreatener = std::static_pointer_cast<GameUnitS>(threatener.shared_from_this());
-			std::weak_ptr weakThreatener(strongThreatener);
-
-			// Watch for unit despawned signal
-			m_miscSignals[guid] +=
-				threatener.despawned.connect([this, strongThreatener](GameObjectS&)
-					{
-						RemoveThreat(*strongThreatener);
-					});
+			// Setup signals for this threatener
+			SetupThreatenerSignals(threatener, guid);
 
 			// Add this unit to the list of attacking units
 			threatener.AddAttackingUnit(GetControlled());
 			GetControlled().AddCombatParticipant(threatener);
 		}
 
-		auto& threatEntry = it->second;
-		threatEntry.amount += amount;
-
+		// Update threat amount
+		it->second.amount += amount;
 		m_lastThreatTime = GetAsyncTimeMs();
 
-		// If not casting right now and already initialized, choose next action
+		// If not casting and already initialized, choose next action
 		if (!m_isCasting && m_entered)
 		{
 			ChooseNextAction();
 		}
 	}
-
 	void CreatureAICombatState::RemoveThreat(GameUnitS& threatener)
 	{
 		const uint64 guid = threatener.GetGuid();
-		const auto it = m_threat.find(guid);
-		if (it != m_threat.end())
+		
+		// Remove threat entry
+		const auto threatIt = m_threat.find(guid);
+		if (threatIt != m_threat.end())
 		{
-			m_threat.erase(it);
+			m_threat.erase(threatIt);
 		}
 
+		// Clean up signals
 		const auto killedIt = m_killedSignals.find(guid);
 		if (killedIt != m_killedSignals.end())
 		{
 			m_killedSignals.erase(killedIt);
 		}
 
-		const auto despawnedIt = m_miscSignals.find(guid);
-		if (despawnedIt != m_miscSignals.end())
+		const auto miscIt = m_miscSignals.find(guid);
+		if (miscIt != m_miscSignals.end())
 		{
-			m_miscSignals.erase(despawnedIt);
+			m_miscSignals.erase(miscIt);
 		}
 
+		// Remove combat relationships
 		auto& controlled = GetControlled();
 		threatener.RemoveAttackingUnit(controlled);
 
-		if (controlled.GetVictim() == &threatener ||
-			m_threat.empty())
+		// Check if we need to find a new victim or reset
+		if (controlled.GetVictim() == &threatener || m_threat.empty())
 		{
 			controlled.StopAttack();
 			controlled.SetTarget(0);
+			m_movementState.Reset();
 			ChooseNextAction();
 		}
 	}
-
-	float CreatureAICombatState::GetThreat(const GameUnitS& threatener)
+	float CreatureAICombatState::GetThreat(const GameUnitS& threatener) const
 	{
 		const uint64 guid = threatener.GetGuid();
-		if (const auto it = m_threat.find(guid); it == m_threat.end())
-		{
-			return 0.0f;
-		}
-		else
-		{
-			return it->second.amount;
-		}
+		const auto it = m_threat.find(guid);
+		return (it != m_threat.end()) ? it->second.amount : 0.0f;
 	}
 
 	void CreatureAICombatState::SetThreat(const GameUnitS& threatener, const float amount)
 	{
 		const uint64 guid = threatener.GetGuid();
-		if (const auto it = m_threat.find(guid); it != m_threat.end())
+		const auto it = m_threat.find(guid);
+		if (it != m_threat.end())
 		{
 			it->second.amount = amount;
 		}
 	}
 
-	GameUnitS* CreatureAICombatState::GetTopThreatener()
+	GameUnitS* CreatureAICombatState::GetTopThreatener() const
 	{
 		float highestThreat = -1.0f;
 		GameUnitS* topThreatener = nullptr;
-		for (auto& entry : m_threat)
+		
+		for (const auto& entry : m_threat)
 		{
 			if (entry.second.amount > highestThreat)
 			{
-				topThreatener = entry.second.threatener.lock().get();
-				if (topThreatener)
+				if (auto threatener = entry.second.threatener.lock())
 				{
+					topThreatener = threatener.get();
 					highestThreat = entry.second.amount;
 				}
 			}
 		}
+		
 		return topThreatener;
 	}
 
-	void CreatureAICombatState::UpdateVictim()
+	void CreatureAICombatState::CleanupExpiredThreats()
 	{
-		GameCreatureS& controlled = GetControlled();
-
-		GameUnitS* victim = controlled.GetVictim();
-
-		// Now, determine the victim with the highest threat value
-		float highestThreat = -1.0f;
-		GameUnitS* newVictim = nullptr;
-		for (auto& entry : m_threat)
+		std::vector<uint64> expiredGuids;
+		
+		for (const auto& pair : m_threat)
 		{
-			auto threatener = entry.second.threatener.lock();
-			if (!threatener)
+			if (pair.second.threatener.expired())
 			{
-				continue;
-			}
-
-			if (entry.second.amount > highestThreat)
-			{
-				newVictim = threatener.get();
-				highestThreat = entry.second.amount;
+				expiredGuids.push_back(pair.first);
 			}
 		}
+		
+		for (uint64 guid : expiredGuids)
+		{
+			m_threat.erase(guid);
+			m_killedSignals.erase(guid);
+			m_miscSignals.erase(guid);
+		}
+	}
+	void CreatureAICombatState::UpdateVictim()
+	{
+		// Clean up any expired threat entries first
+		CleanupExpiredThreats();
 
-		if (newVictim && newVictim != victim)
+		GameCreatureS& controlled = GetControlled();
+		GameUnitS* currentVictim = controlled.GetVictim();
+
+		// Find the unit with the highest threat
+		GameUnitS* newVictim = GetTopThreatener();
+
+		// Only switch victims if necessary
+		if (newVictim && newVictim != currentVictim)
 		{
 			if (!newVictim->CanBeSeenBy(controlled))
 			{
 				controlled.StopAttack();
 				controlled.SetTarget(0);
+				m_movementState.Reset();
 			}
 			else
 			{
 				controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
+				m_movementState.Reset(); // Reset movement when switching targets
 			}
 		}
 		else if (!newVictim)
 		{
 			controlled.StopAttack();
 			controlled.SetTarget(0);
+			m_movementState.Reset();
 		}
 	}
-
-	void CreatureAICombatState::ChaseTarget(GameUnitS& target)
+	bool CreatureAICombatState::ShouldMoveToTarget(const GameUnitS& target) const
 	{
-		// Nothing to do when our unit is rooted
-		if (GetControlled().IsRooted())
+		auto& controlled = GetControlled();
+		auto& mover = controlled.GetMover();
+
+		// Nothing to do when rooted
+		if (controlled.IsRooted())
 		{
-			return;
+			return false;
 		}
 
-		const float combatRange = GetControlled().GetMeleeReach();
+		const float combatRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float combatRangeSq = combatRange * combatRange;
+
+		// Check if we're already in combat range
+		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true);
+		if (currentDistanceSq <= combatRangeSq)
+		{
+			return false; // Already in range
+		}
+
+		// If we're moving, check if our current movement is still valid
+		if (mover.IsMoving())
+		{
+			// Check if current movement path is still valid for this target
+			if (m_movementState.IsValidFor(target, combatRange))
+			{
+				return false; // Current movement is still good
+			}
+		}
+
+		return true; // Need to initiate or update movement
+	}
+
+	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
+	{
+		if (!ShouldMoveToTarget(target))
+		{
+			return true; // No movement needed
+		}
+
+		// Check if target is too far from home
+		if (ShouldResetAI(&target))
+		{
+			GetAI().Reset();
+			return false; // AI reset, movement aborted
+		}
+
+		const float combatRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
+		const float moveRange = combatRange * COMBAT_RANGE_FACTOR;
 
 		auto& mover = GetControlled().GetMover();
-
-		// Are we moving at all?
-		if (!mover.IsMoving())
+		
+		// Attempt to move to the target
+		if (mover.MoveTo(target.GetPosition(), moveRange))
 		{
-			// Not moving: Check if we are in hit range to the target
-			if (target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true) <= combatRange)
-			{
-				// We are in combat range, no need to move
-				return;
-			}
-		}
-		else
-		{
-			// Are we on our way to a location where we can hit the target?
-			if (target.GetSquaredDistanceTo(mover.GetTarget(), true) <= combatRange)
-			{
-				// We are, no need to adjust current movement path
-				return;
-			}
-		}
-
-		// Check if target location is too far away from home
-		if (m_canReset && target.GetSquaredDistanceTo(GetAI().GetHome().position, false) > 60.0f * 60.0f)
-		{
-			// We are too far away from home, reset AI
-			GetAI().Reset();
-			return; // Important: ResetAI might destroy this AI state
-		}
-
-		// We need to move!
-		if (mover.MoveTo(target.GetPosition(), combatRange * 0.75f))
-		{
-			// Successfully moving, reset stuck counter
+			// Successfully initiated movement
+			m_movementState.UpdateTarget(target.GetPosition(), combatRange);
 			m_stuckCounter = 0;
-			return;
+			return true;
 		}
 
-		if (++m_stuckCounter > 20)
+		// Movement failed, handle stuck detection
+		return !HandleMovementFailure();
+	}
+
+	bool CreatureAICombatState::HandleMovementFailure()
+	{
+		if (++m_stuckCounter > MAX_STUCK_COUNT)
 		{
 			// We are stuck, reset AI
 			GetAI().Reset();
-			return; // Important: ResetAI might destroy this AI state
+			return true; // Indicates AI was reset
 		}
+		
+		return false; // Not stuck yet
 	}
-
 	void CreatureAICombatState::ChooseNextAction()
 	{
 		GameCreatureS& controlled = GetControlled();
@@ -398,16 +416,112 @@ namespace mmo
 		// First, determine our current victim
 		UpdateVictim();
 
-		// We should have a valid victim here, otherwise there is nothing to do but to reset
+		// Check if we should reset due to no valid targets
 		GameUnitS* victim = controlled.GetVictim();
 		if (!victim || !victim->IsAlive())
 		{
-			// Warning: this will destroy the current AI state.
 			GetAI().Reset();
 			return;
 		}
 
-		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + 500);
+		// Schedule next action check
+		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+
+		// Attempt to chase the target (only moves if necessary)
 		ChaseTarget(*victim);
+	}
+
+	bool CreatureAICombatState::ShouldResetAI(const GameUnitS* victim) const
+	{
+		if (!m_canReset)
+		{
+			return false;
+		}
+
+		const auto& controlled = GetControlled();
+		const auto& homePos = GetAI().GetHome().position;
+
+		// Check distance constraints
+		const bool outOfRange = 
+			controlled.GetSquaredDistanceTo(homePos, false) >= RESET_DISTANCE_SQ ||
+			(victim && victim->GetSquaredDistanceTo(homePos, false) >= RESET_DISTANCE_SQ);
+
+		// Check timeout since last threat
+		const bool timedOut = 
+			GetAsyncTimeMs() >= (m_lastThreatTime + RESET_TIMEOUT_MS);
+
+		return outOfRange && timedOut;
+	}
+
+	void CreatureAICombatState::SetupEventConnections()
+	{
+		auto& controlled = GetControlled();
+
+		// Setup action countdown
+		m_nextActionCountdown.ended.connect(this, &CreatureAICombatState::ChooseNextAction);
+
+		// Watch for threat events
+		m_onThreatened = controlled.threatened.connect([this](GameUnitS& threatener, float amount)
+		{
+			AddThreat(threatener, amount);
+		});
+	}
+
+	void CreatureAICombatState::SetupResetConditions()
+	{
+		auto& controlled = GetControlled();
+		
+		ASSERT(controlled.GetWorldInstance());
+
+		// Only setup reset conditions in non-instanced PvE areas
+		if (!controlled.GetWorldInstance()->IsInstancedPvE())
+		{
+			m_canReset = true;
+
+			m_onMoveTargetChanged = controlled.GetMover().targetChanged.connect([this]()
+			{
+				const auto& controlled = GetControlled();
+				
+				if (auto* victim = controlled.GetVictim())
+				{
+					// Handle flying/swimming targets
+					if (victim->GetMovementInfo().movementFlags & (movement_flags::Flying | movement_flags::Swimming))
+					{
+						// TODO: Check if controlled unit can swim/fly
+						const float combatRangeSq = ::powf(controlled.GetMeleeReach() + victim->GetMeleeReach(), 2.0f);
+						const float distSq = (controlled.GetMover().GetTarget() - victim->GetPosition()).GetSquaredLength();
+						
+						if (distSq > combatRangeSq)
+						{
+							GetAI().Reset();
+							return;
+						}
+					}
+
+					// Check if we should reset due to distance/timeout
+					if (ShouldResetAI(victim))
+					{
+						GetAI().Reset();
+						return;
+					}
+				}
+			});
+		}
+	}
+
+	void CreatureAICombatState::SetupThreatenerSignals(GameUnitS& threatener, uint64 guid)
+	{
+		// Watch for unit killed signal
+		m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS*)
+		{
+			RemoveThreat(threatener);
+		});
+
+		// Watch for unit despawned signal
+		auto strongThreatener = std::static_pointer_cast<GameUnitS>(threatener.shared_from_this());
+		m_miscSignals[guid] += threatener.despawned.connect([this, strongThreatener](GameObjectS&)
+		{
+			RemoveThreat(*strongThreatener);
+		});
 	}
 }
