@@ -346,18 +346,28 @@ namespace mmo
 
 		// Calculate base stats with level scaling
 		const auto& base = unitClass->levelbasevalues(level - 1);
-		const uint32 finalStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 finalStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 finalAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 finalIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
-		const uint32 finalSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
+		const uint32 baseStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 baseStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 baseAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 baseIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
+		const uint32 baseSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
+		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, baseStamina);
+		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, baseStrength);
+		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, baseAgility);
+		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, baseIntellect);
+		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, baseSpirit);
 
-		// Set the base stats
-		Set<uint32>(object_fields::StatStamina, finalStamina);
-		Set<uint32>(object_fields::StatStrength, finalStrength);
-		Set<uint32>(object_fields::StatAgility, finalAgility);
-		Set<uint32>(object_fields::StatIntellect, finalIntellect);
-		Set<uint32>(object_fields::StatSpirit, finalSpirit);
+		// Apply the base stats
+		const float totalStamina = GetCalculatedModifierValue(unit_mods::StatStamina);
+		const float totalStrength = GetCalculatedModifierValue(unit_mods::StatStrength);
+		const float totalAgility = GetCalculatedModifierValue(unit_mods::StatAgility);
+		const float totalIntellect = GetCalculatedModifierValue(unit_mods::StatIntellect);
+		const float totalSpirit = GetCalculatedModifierValue(unit_mods::StatSpirit);
+		Set<uint32>(object_fields::StatStamina, static_cast<uint32>(totalStamina));
+		Set<uint32>(object_fields::StatStrength, static_cast<uint32>(totalStrength));
+		Set<uint32>(object_fields::StatAgility, static_cast<uint32>(totalAgility));
+		Set<uint32>(object_fields::StatIntellect, static_cast<uint32>(totalIntellect));
+		Set<uint32>(object_fields::StatSpirit, static_cast<uint32>(totalSpirit));
 
 		// Calculate health (base + per level + stamina modifier)
 		uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
@@ -371,19 +381,19 @@ namespace mmo
 				switch (healthSource.statid())
 				{
 					case 2: // STAMINA
-						healthFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * healthSource.factor());
+						healthFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * healthSource.factor());
 						break;
 					case 0: // STRENGTH
-						healthFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * healthSource.factor());
+						healthFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20U) - 20) * healthSource.factor());
 						break;
 					case 1: // AGILITY
-						healthFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * healthSource.factor());
+						healthFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20U) - 20) * healthSource.factor());
 						break;
 					case 3: // INTELLECT
-						healthFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * healthSource.factor());
+						healthFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20U) - 20) * healthSource.factor());
 						break;
 					case 4: // SPIRIT
-						healthFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * healthSource.factor());
+						healthFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20U) - 20) * healthSource.factor());
 						break;
 				}
 			}
@@ -404,19 +414,19 @@ namespace mmo
 				switch (manaSource.statid())
 				{
 					case 2: // STAMINA
-						manaFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * manaSource.factor());
+						manaFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * manaSource.factor());
 						break;
 					case 0: // STRENGTH
-						manaFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * manaSource.factor());
+						manaFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * manaSource.factor());
 						break;
 					case 1: // AGILITY
-						manaFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * manaSource.factor());
+						manaFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * manaSource.factor());
 						break;
 					case 3: // INTELLECT
-						manaFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * manaSource.factor());
+						manaFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * manaSource.factor());
 						break;
 					case 4: // SPIRIT
-						manaFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * manaSource.factor());
+						manaFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * manaSource.factor());
 						break;
 				}
 			}
@@ -437,19 +447,19 @@ namespace mmo
 				switch (armorSource.statid())
 				{
 					case 2: // STAMINA
-						armorFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * armorSource.factor());
+						armorFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * armorSource.factor());
 						break;
 					case 0: // STRENGTH
-						armorFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * armorSource.factor());
+						armorFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * armorSource.factor());
 						break;
 					case 1: // AGILITY
-						armorFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * armorSource.factor());
+						armorFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * armorSource.factor());
 						break;
 					case 3: // INTELLECT
-						armorFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * armorSource.factor());
+						armorFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * armorSource.factor());
 						break;
 					case 4: // SPIRIT
-						armorFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * armorSource.factor());
+						armorFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * armorSource.factor());
 						break;
 				}
 			}
@@ -470,19 +480,19 @@ namespace mmo
 				switch (attackPowerSource.statid())
 				{
 					case 2: // STAMINA
-						attackPower += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * attackPowerSource.factor());
+						attackPower += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * attackPowerSource.factor());
 						break;
 					case 0: // STRENGTH
-						attackPower += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * attackPowerSource.factor());
+						attackPower += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * attackPowerSource.factor());
 						break;
 					case 1: // AGILITY
-						attackPower += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * attackPowerSource.factor());
+						attackPower += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * attackPowerSource.factor());
 						break;
 					case 3: // INTELLECT
-						attackPower += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * attackPowerSource.factor());
+						attackPower += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * attackPowerSource.factor());
 						break;
 					case 4: // SPIRIT
-						attackPower += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * attackPowerSource.factor());
+						attackPower += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * attackPowerSource.factor());
 						break;
 				}
 			}
