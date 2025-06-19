@@ -1,0 +1,45 @@
+syntax = "proto2";
+package mmo.proto;
+
+// This file defines constants and enums used by the stat system
+// to ensure consistency across unit classes and player classes
+
+message StatConstants {
+	// Base stat IDs - these must match the values used in the game code
+	enum StatType {
+		STRENGTH = 0;
+		AGILITY = 1;
+		STAMINA = 2;
+		INTELLECT = 3;
+		SPIRIT = 4;
+	}
+	
+	// Power types - consistent with unit classes and player classes
+	enum PowerType {
+		MANA = 0;
+		RAGE = 1;
+		ENERGY = 2;
+		FOCUS = 3;
+		RUNIC_POWER = 4;
+	}
+	
+	// Resistance schools
+	enum ResistanceSchool {
+		PHYSICAL = 0;
+		HOLY = 1;
+		FIRE = 2;
+		NATURE = 3;
+		FROST = 4;
+		SHADOW = 5;
+		ARCANE = 6;
+	}
+	
+	// Creature type flags for different calculation modifiers
+	enum CreatureTypeFlags {
+		NORMAL = 0;
+		ELITE = 1;
+		RARE_ELITE = 2;
+		BOSS = 3;
+		RARE = 4;
+	}
+}

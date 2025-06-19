@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_server/objects/game_creature_s.h"
+
+#include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game_server/world/world_instance.h"
 #include "binary_io/vector_sink.h"
@@ -23,8 +25,12 @@ namespace mmo
 
 		SetRegeneration(m_originalEntry.regeneration());
 
+		// Choose random level between min and maxlevel
+		std::uniform_int_distribution levelDist(m_originalEntry.minlevel(), m_originalEntry.maxlevel());
+		const uint32 level = levelDist(randomGenerator);
+
 		// Initialize creature based on unit entry values
-		Set<uint32>(object_fields::Level, m_originalEntry.minlevel());
+		Set<uint32>(object_fields::Level, level);
 		ClearFieldChanges();
 
 		// Setup AI
@@ -88,23 +94,34 @@ namespace mmo
 		{
 			npcFlags |= npc_flags::QuestGiver;
 		}
-
 		Set<uint32>(object_fields::NpcFlags, npcFlags);
-		Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth());
-		Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana());
+		
+		// For legacy system, set max health/mana from entry
+		if (!m_entry->usestatbasedsystem())
+		{
+			Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth());
+			Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana());
+		}
+		
 		Set<uint32>(object_fields::Entry, m_entry->id());
 		Set<float>(object_fields::Scale, m_entry->scale());
 		Set<uint32>(object_fields::DisplayId, m_entry->malemodel());	// TODO: gender roll
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
-		Set<uint32>(object_fields::PowerType, power_type::Mana);	// TODO
+		
+		// For legacy system, set power type to mana
+		if (!m_entry->usestatbasedsystem())
+		{
+			Set<uint32>(object_fields::PowerType, power_type::Mana);
+		}
+		
 		RefreshStats();
 
 		SetRegeneration(m_entry->regeneration());
 
 		if (firstInitialization)
 		{
-			Set<uint32>(object_fields::Health, static_cast<uint32>(static_cast<float>(m_entry->minlevelhealth()) * m_healthPercent));
-			Set<uint32>(object_fields::Mana, m_entry->minlevelmana());
+			// Initialize current health and mana using the calculated max values			Set<uint32>(object_fields::Health, static_cast<uint32>(static_cast<float>(GetMaxHealth()) * m_healthPercent));
+			Set<uint32>(object_fields::Mana, Get<uint32>(object_fields::MaxMana));
 			ClearFieldChanges();
 		}
 
@@ -292,14 +309,226 @@ namespace mmo
 			m_ai->OnCreatureMovementChanged();
 		}
 	}
-
 	void GameCreatureS::RefreshStats()
 	{
 		GameUnitS::RefreshStats();
 
-		Set<uint32>(object_fields::Armor, m_entry->armor());
-		Set<float>(object_fields::MinDamage, m_entry->minmeleedmg());
-		Set<float>(object_fields::MaxDamage, m_entry->maxmeleedmg());
+		// Check if this creature uses the new stat-based system
+		if (m_entry->usestatbasedsystem())
+		{
+			CalculateStatBasedStats();
+		}
+		else
+		{
+			// Legacy stat calculation
+			Set<uint32>(object_fields::Armor, m_entry->armor());
+			Set<float>(object_fields::MinDamage, m_entry->minmeleedmg());
+			Set<float>(object_fields::MaxDamage, m_entry->maxmeleedmg());
+		}
+	}
+
+	void GameCreatureS::CalculateStatBasedStats()
+	{
+		// Get the unit class entry if specified
+		const proto::UnitClassEntry* unitClass = nullptr;
+		if (m_entry->unitclassid() != 0)
+		{
+			unitClass = GetProject().unitClasses.getById(m_entry->unitclassid());
+		}
+
+		ASSERT(unitClass);
+		ASSERT(unitClass->levelbasevalues_size() > 0);
+
+		const int32 level = std::min(static_cast<int32>(GetLevel()), unitClass->levelbasevalues_size());
+		ASSERT(level > 0);
+
+		const float eliteMultiplier = m_entry->elitestatmultiplier();
+
+		// Calculate base stats with level scaling
+		const auto& base = unitClass->levelbasevalues(level - 1);
+		const uint32 finalStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 finalStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 finalAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 finalIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
+		const uint32 finalSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
+
+		// Set the base stats
+		Set<uint32>(object_fields::StatStamina, finalStamina);
+		Set<uint32>(object_fields::StatStrength, finalStrength);
+		Set<uint32>(object_fields::StatAgility, finalAgility);
+		Set<uint32>(object_fields::StatIntellect, finalIntellect);
+		Set<uint32>(object_fields::StatSpirit, finalSpirit);
+
+		// Calculate health (base + per level + stamina modifier)
+		uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
+		uint32 healthFromStats = 0;
+
+		// Add health from unit class stat sources
+		if (unitClass != nullptr)
+		{
+			for (const auto& healthSource : unitClass->healthstatsources())
+			{
+				switch (healthSource.statid())
+				{
+					case 2: // STAMINA
+						healthFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * healthSource.factor());
+						break;
+					case 0: // STRENGTH
+						healthFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * healthSource.factor());
+						break;
+					case 1: // AGILITY
+						healthFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * healthSource.factor());
+						break;
+					case 3: // INTELLECT
+						healthFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * healthSource.factor());
+						break;
+					case 4: // SPIRIT
+						healthFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * healthSource.factor());
+						break;
+				}
+			}
+		}
+
+		const uint32 finalHealth = baseHealth + healthFromStats;
+		Set<uint32>(object_fields::MaxHealth, finalHealth);
+
+		// Calculate mana (base + per level + intellect modifier)
+		uint32 baseMana = static_cast<uint32>(base.mana() * eliteMultiplier);
+		uint32 manaFromStats = 0;
+
+		// Add mana from unit class stat sources
+		if (unitClass != nullptr)
+		{
+			for (const auto& manaSource : unitClass->manastatsources())
+			{
+				switch (manaSource.statid())
+				{
+					case 2: // STAMINA
+						manaFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * manaSource.factor());
+						break;
+					case 0: // STRENGTH
+						manaFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * manaSource.factor());
+						break;
+					case 1: // AGILITY
+						manaFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * manaSource.factor());
+						break;
+					case 3: // INTELLECT
+						manaFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * manaSource.factor());
+						break;
+					case 4: // SPIRIT
+						manaFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * manaSource.factor());
+						break;
+				}
+			}
+		}
+
+		const uint32 finalMana = baseMana + manaFromStats;
+		Set<uint32>(object_fields::MaxMana, finalMana);
+
+		// Calculate armor (base + per level + agility modifier)
+		uint32 baseArmor = static_cast<uint32>((m_entry->basearmor() + m_entry->armorperlevel() * (level - 1)) * eliteMultiplier);
+		uint32 armorFromStats = 0;
+
+		// Add armor from unit class stat sources
+		if (unitClass != nullptr)
+		{
+			for (const auto& armorSource : unitClass->armorstatsources())
+			{
+				switch (armorSource.statid())
+				{
+					case 2: // STAMINA
+						armorFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * armorSource.factor());
+						break;
+					case 0: // STRENGTH
+						armorFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * armorSource.factor());
+						break;
+					case 1: // AGILITY
+						armorFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * armorSource.factor());
+						break;
+					case 3: // INTELLECT
+						armorFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * armorSource.factor());
+						break;
+					case 4: // SPIRIT
+						armorFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * armorSource.factor());
+						break;
+				}
+			}
+		}
+
+		const uint32 finalArmor = baseArmor + armorFromStats;
+		Set<uint32>(object_fields::Armor, finalArmor);
+
+		// Calculate attack power
+		uint32 attackPower = 0;
+		if (unitClass != nullptr)
+		{
+			attackPower = static_cast<uint32>((unitClass->attackpoweroffset() + unitClass->attackpowerperlevel() * (level - 1)) * eliteMultiplier);
+
+			// Add attack power from unit class stat sources
+			for (const auto& attackPowerSource : unitClass->attackpowerstatsources())
+			{
+				switch (attackPowerSource.statid())
+				{
+					case 2: // STAMINA
+						attackPower += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * attackPowerSource.factor());
+						break;
+					case 0: // STRENGTH
+						attackPower += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * attackPowerSource.factor());
+						break;
+					case 1: // AGILITY
+						attackPower += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * attackPowerSource.factor());
+						break;
+					case 3: // INTELLECT
+						attackPower += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * attackPowerSource.factor());
+						break;
+					case 4: // SPIRIT
+						attackPower += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * attackPowerSource.factor());
+						break;
+				}
+			}
+		}
+
+		Set<uint32>(object_fields::AttackPower, attackPower);
+
+		// Calculate damage (base damage from legacy system + scaling + variance)
+		float baseDamage = static_cast<float>((m_entry->minmeleedmg() + m_entry->damageperlevel() * (level - 1)) * eliteMultiplier);
+		const float damageVariance = m_entry->basedamagevariance();
+		
+		// Calculate damage based on attack power and weapon speed if unit class defines it
+		if (unitClass != nullptr && attackPower > 0)
+		{
+			const uint32 attackTime = unitClass->basemeleeattacktime();
+			const float weaponSpeed = static_cast<float>(attackTime) / 1000.0f;
+			baseDamage = std::max(baseDamage, static_cast<float>(attackPower) * weaponSpeed / 14.0f);
+		}
+
+		const float minDamage = baseDamage * (1.0f - damageVariance);
+		const float maxDamage = baseDamage * (1.0f + damageVariance);
+
+		Set<float>(object_fields::MinDamage, minDamage);
+		Set<float>(object_fields::MaxDamage, maxDamage);		// Set power type from unit class
+		if (unitClass != nullptr)
+		{
+			// Convert protobuf power type to game power type (they match for the basic types)
+			uint32 gamePowerType = power_type::Mana; // Default
+			switch (unitClass->powertype())
+			{
+				case 0: // MANA
+					gamePowerType = power_type::Mana;
+					break;
+				case 1: // RAGE
+					gamePowerType = power_type::Rage;
+					break;
+				case 2: // ENERGY
+					gamePowerType = power_type::Energy;
+					break;
+				default:
+					gamePowerType = power_type::Mana;
+					break;
+			}
+
+			Set<uint32>(object_fields::PowerType, gamePowerType);
+		}
 	}
 
 	const String& GameCreatureS::GetName() const

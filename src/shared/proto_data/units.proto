@@ -75,6 +75,26 @@ message UnitEntry {
 	repeated uint32 gossip_menus = 59;
 	optional string greeting_text = 60;
 	optional uint32 regeneration = 61;
+	
+	// === New Stat-Based System Fields (v2) ===
+	// These fields enable creatures to use a class-based stat system similar to players
+	
+	// Reference to the unit class that defines stats, power type, and calculations
+	optional uint32 unitClassId = 62;
+	
+	// Damage scaling
+	optional float baseDamageVariance = 77 [default = 0.1]; // ±10% damage variance by default
+	optional float damagePerLevel = 78 [default = 0.0];
+	
+	// Armor scaling
+	optional uint32 baseArmor = 79 [default = 0];
+	optional float armorPerLevel = 80 [default = 0.0];
+	
+	// Elite modifier (multiplies all stats by this factor)
+	optional float eliteStatMultiplier = 81 [default = 1.0];
+	
+	// Whether to use the new stat system (when false, falls back to legacy system)
+	optional bool useStatBasedSystem = 82 [default = false];
 }
 
 message Units {

@@ -330,7 +330,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_None))
 		{
 			if (ImGui::BeginTable("table", 4, ImGuiTableFlags_None))
 			{
@@ -418,7 +418,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_None))
 		{
 			int32 currentTrainer = currentEntry.trainerentry();
 
@@ -474,7 +474,7 @@ namespace mmo
 			RenderGossipMenus(m_project.gossipMenus, currentEntry);
 		}
 
-		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::InputTextMultiline("Greeting Text", currentEntry.mutable_greeting_text());
 
@@ -596,7 +596,7 @@ namespace mmo
 
 		}
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_FLOAT_PROP(scale, "Scale", 0.01f, 10.0f);
 
@@ -649,7 +649,9 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		bool useStatSystem = currentEntry.usestatbasedsystem();
+
+		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::PushID("Level");
 			ImGui::BeginGroupPanel("Level");
@@ -658,12 +660,20 @@ namespace mmo
 			ImGui::EndGroupPanel();
 			ImGui::PopID();
 
-			ImGui::PushID("Health");
-			ImGui::BeginGroupPanel("Health");
-			SLIDER_UINT32_PROP(minlevelhealth, "Min", 1, 200000000);
-			SLIDER_UINT32_PROP(maxlevelhealth, "Max", 1, 200000000);
-			ImGui::EndGroupPanel();
-			ImGui::PopID();
+			if (!useStatSystem)
+			{
+				ImGui::PushID("Health");
+				ImGui::BeginGroupPanel("Health");
+				SLIDER_UINT32_PROP(minlevelhealth, "Min", 1, 200000000);
+				SLIDER_UINT32_PROP(maxlevelhealth, "Max", 1, 200000000);
+				ImGui::EndGroupPanel();
+				ImGui::PopID();
+
+				ImGui::BeginGroupPanel("Damage");
+				SLIDER_FLOAT_PROP(minmeleedmg, "Min Melee Dmg", 0.0f, 10000000.0f);
+				SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
+				ImGui::EndGroupPanel();
+			}
 
 			ImGui::PushID("Experience");
 			ImGui::BeginGroupPanel("Experience");
@@ -680,17 +690,278 @@ namespace mmo
 
 			SLIDER_UINT32_PROP(armor, "Armor", 0, 100000);
 
-			ImGui::BeginGroupPanel("Damage");
-			SLIDER_FLOAT_PROP(minmeleedmg, "Min Melee Dmg", 0.0f, 10000000.0f);
-			SLIDER_FLOAT_PROP(maxmeleedmg, "Max Melee Dmg", 0.0f, 10000000.0f);
-			ImGui::EndGroupPanel();
 
 			CHECKBOX_FLAG_PROP(regeneration, "Regenerate Health", regeneration_flags::Health);
 			ImGui::SameLine();
 			CHECKBOX_FLAG_PROP(regeneration, "Regenerate Power", regeneration_flags::Power);
 		}
 
-		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_DefaultOpen))
+		// New Stat-Based System Section
+		if (ImGui::CollapsingHeader("Stat-Based System (v2)", ImGuiTreeNodeFlags_None))
+		{
+			// Enable/Disable checkbox
+			if (ImGui::Checkbox("Use Stat-Based System", &useStatSystem))
+			{
+				currentEntry.set_usestatbasedsystem(useStatSystem);
+			}
+			
+			if (useStatSystem)
+			{
+				ImGui::Separator();
+				
+				// Unit Class Selection
+				ImGui::BeginGroupPanel("Unit Class");
+				{
+					static const char* s_unitClassNone = "<None>";
+					uint32 unitClassId = currentEntry.unitclassid();
+					
+					const auto* unitClass = m_project.unitClasses.getById(unitClassId);
+					if (ImGui::BeginCombo("Unit Class", unitClass != nullptr ? unitClass->name().c_str() : s_unitClassNone, ImGuiComboFlags_None))
+					{
+						ImGui::PushID(-1);
+						if (ImGui::Selectable(s_unitClassNone, unitClass == nullptr))
+						{
+							currentEntry.set_unitclassid(0);
+						}
+						ImGui::PopID();
+
+						for (int i = 0; i < m_project.unitClasses.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.unitClasses.getTemplates().entry(i).id() == unitClassId;
+							const char* item_text = m_project.unitClasses.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								currentEntry.set_unitclassid(m_project.unitClasses.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+				}
+				ImGui::EndGroupPanel();
+				
+				// Damage & Armor Scaling
+				ImGui::BeginGroupPanel("Damage & Armor Scaling");
+				{
+					if (ImGui::BeginTable("damage_armor_scaling_table", 3, ImGuiTableFlags_None))
+					{
+						if (ImGui::TableNextColumn())
+						{
+							SLIDER_FLOAT_PROP(damageperlevel, "Damage/Level", 0.0f, 100.0f);
+						}
+						if (ImGui::TableNextColumn())
+						{
+							SLIDER_UINT32_PROP(basearmor, "Base Armor", 0, 100000);
+						}
+						if (ImGui::TableNextColumn())
+						{
+							SLIDER_FLOAT_PROP(armorperlevel, "Armor/Level", 0.0f, 1000.0f);
+						}
+						ImGui::EndTable();
+					}
+					
+					SLIDER_FLOAT_PROP(basedamagevariance, "Damage Variance", 0.0f, 1.0f);
+				}
+				ImGui::EndGroupPanel();
+				
+				// Elite Modifier
+				ImGui::BeginGroupPanel("Elite Modifiers");
+				{
+					SLIDER_FLOAT_PROP(elitestatmultiplier, "Elite Stat Multiplier", 0.1f, 10.0f);
+					
+					if (ImGui::Button("Set Normal (1.0x)"))
+					{
+						currentEntry.set_elitestatmultiplier(1.0f);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Set Elite (1.5x)"))
+					{
+						currentEntry.set_elitestatmultiplier(1.5f);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Set Rare Elite (2.0x)"))
+					{
+						currentEntry.set_elitestatmultiplier(2.0f);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Set Boss (3.0x)"))
+					{
+						currentEntry.set_elitestatmultiplier(3.0f);
+					}
+				}
+				ImGui::EndGroupPanel();
+				
+				// Preview calculated stats at different levels
+				uint32 unitClassId = currentEntry.unitclassid();
+				const auto* unitClass = m_project.unitClasses.getById(unitClassId);
+				if (unitClass != nullptr && ImGui::CollapsingHeader("Calculated Stats Preview"))
+				{
+					ImGui::TextWrapped("Preview of final stats at different levels (calculated from unit class + base stats + scaling):");
+					
+					if (ImGui::BeginTable("calculated_preview_table", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+					{
+						ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+						ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Stamina", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Strength", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Attack Power", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableHeadersRow();
+
+						// Show preview for min level, mid level, and max level
+						std::vector previewLevels = { currentEntry.minlevel() };
+						if (currentEntry.maxlevel() > currentEntry.minlevel())
+						{
+							// Add mid level if it exists
+							uint32 midLevel = (currentEntry.minlevel() + currentEntry.maxlevel()) / 2;
+							if (midLevel > currentEntry.minlevel() && midLevel < currentEntry.maxlevel())
+								previewLevels.push_back(midLevel);
+							
+							// Always add max level
+							previewLevels.push_back(currentEntry.maxlevel());
+						}
+						
+						for (uint32 level : previewLevels)
+						{
+							ImGui::TableNextRow();
+
+							const float eliteMultiplier = currentEntry.elitestatmultiplier();
+
+							// Calculate base stats with level scaling
+							const auto& base = unitClass->levelbasevalues(level - 1);
+							const uint32 finalStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
+							const uint32 finalStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
+							const uint32 finalAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
+							const uint32 finalIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
+							const uint32 finalSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
+
+							// Calculate health (base + per level + stamina modifier)
+							uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
+							uint32 healthFromStats = 0;
+
+							// Add health from unit class stat sources
+							if (unitClass != nullptr)
+							{
+								for (const auto& healthSource : unitClass->healthstatsources())
+								{
+									switch (healthSource.statid())
+									{
+									case 2: // STAMINA
+										healthFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * healthSource.factor());
+										break;
+									case 0: // STRENGTH
+										healthFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * healthSource.factor());
+										break;
+									case 1: // AGILITY
+										healthFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * healthSource.factor());
+										break;
+									case 3: // INTELLECT
+										healthFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * healthSource.factor());
+										break;
+									case 4: // SPIRIT
+										healthFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * healthSource.factor());
+										break;
+									}
+								}
+							}
+
+							const uint32 finalHealth = baseHealth + healthFromStats;
+
+							// Calculate mana (base + per level + intellect modifier)
+							uint32 baseMana = static_cast<uint32>(base.mana() * eliteMultiplier);
+							uint32 manaFromStats = 0;
+
+							// Add mana from unit class stat sources
+							if (unitClass != nullptr)
+							{
+								for (const auto& manaSource : unitClass->manastatsources())
+								{
+									switch (manaSource.statid())
+									{
+									case 2: // STAMINA
+										manaFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * manaSource.factor());
+										break;
+									case 0: // STRENGTH
+										manaFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * manaSource.factor());
+										break;
+									case 1: // AGILITY
+										manaFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * manaSource.factor());
+										break;
+									case 3: // INTELLECT
+										manaFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * manaSource.factor());
+										break;
+									case 4: // SPIRIT
+										manaFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * manaSource.factor());
+										break;
+									}
+								}
+							}
+
+							const uint32 finalMana = baseMana + manaFromStats;
+
+							// Calculate attack power
+							uint32 attackPower = 0;
+							if (unitClass != nullptr)
+							{
+								attackPower = static_cast<uint32>((unitClass->attackpoweroffset() + unitClass->attackpowerperlevel() * (level - 1)) * eliteMultiplier);
+
+								// Add attack power from unit class stat sources
+								for (const auto& attackPowerSource : unitClass->attackpowerstatsources())
+								{
+									switch (attackPowerSource.statid())
+									{
+									case 2: // STAMINA
+										attackPower += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * attackPowerSource.factor());
+										break;
+									case 0: // STRENGTH
+										attackPower += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * attackPowerSource.factor());
+										break;
+									case 1: // AGILITY
+										attackPower += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * attackPowerSource.factor());
+										break;
+									case 3: // INTELLECT
+										attackPower += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * attackPowerSource.factor());
+										break;
+									case 4: // SPIRIT
+										attackPower += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * attackPowerSource.factor());
+										break;
+									}
+								}
+							}
+
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", level);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalHealth);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalMana);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalStamina);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalStrength);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalAgility);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalIntellect);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalSpirit);
+							if (ImGui::TableNextColumn()) ImGui::Text("%u", attackPower);
+						}
+						
+						ImGui::EndTable();
+					}
+					
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Note: This is a simplified preview. Actual calculations will include unit class formulas.");
+				}
+			}
+			else
+			{
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Using legacy stat system (fixed health/mana values above)");
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_None))
 		{
 			static const char* s_itemNone = "<None>";
 
@@ -808,7 +1079,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Scripting", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Scripting", ImGuiTreeNodeFlags_None))
 		{
 			static const char* s_none = "<None>";
 
@@ -932,5 +1203,12 @@ namespace mmo
 		entry.set_femalemodel(0);
 		entry.set_type(0);
 		entry.set_family(0);
+		entry.set_usestatbasedsystem(true);
+
+		// Ensure we have a unit class set up
+		if (m_project.unitClasses.count() > 0)
+		{
+			entry.set_unitclass(m_project.unitClasses.getTemplates().entry(0).id());
+		}
 	}
 }

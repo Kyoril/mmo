@@ -16,6 +16,7 @@
 #include "range_type_editor_window.h"
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
+#include "unit_class_editor_window.h"
 #include "race_editor_window.h"
 #include "faction_editor_window.h"
 #include "faction_template_editor_window.h"
@@ -223,12 +224,18 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(CreatureEditorWindow))); },
             static_cast<int>(m_project.units.count())
         });
-        
-        characterCategory.editors.push_back({
+          characterCategory.editors.push_back({
             std::type_index(typeid(ClassEditorWindow)),
             "Classes",
             [this]() { OpenEditorWindow(std::type_index(typeid(ClassEditorWindow))); },
             static_cast<int>(m_project.classes.count())
+        });
+        
+        characterCategory.editors.push_back({
+            std::type_index(typeid(UnitClassEditorWindow)),
+            "Unit Classes",
+            [this]() { OpenEditorWindow(std::type_index(typeid(UnitClassEditorWindow))); },
+            static_cast<int>(m_project.unitClasses.count())
         });
         
         characterCategory.editors.push_back({

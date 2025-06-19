@@ -163,8 +163,10 @@ namespace mmo
 		}
 
 		const String& GetName() const override;
-
 	private:
+
+		/// Calculates and applies stats using the new stat-based system
+		void CalculateStatBasedStats();
 
 		std::unique_ptr<CreatureAI> m_ai;
 		const proto::UnitEntry& m_originalEntry;

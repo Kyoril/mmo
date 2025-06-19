@@ -1,0 +1,99 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "stat_constants.proto";
+
+// This file defines calculation formulas and helper structures
+// for the stat-based unit system
+
+message StatCalculationFormula {
+	// Base formula: FinalValue = (BaseValue + (BasePerLevel * (Level - 1))) * (1 + StatModifier)
+	// StatModifier = Sum(StatValue[i] * StatFactor[i]) for all stat sources
+	
+	message StatSource {
+		required StatConstants.StatType statType = 1;
+		required float factor = 2;
+		optional float cap = 3;  // Optional cap for this stat contribution
+	}
+	
+	// For Health calculation
+	message HealthFormula {
+		required uint32 baseHealth = 1;
+		required float healthPerLevel = 2;
+		repeated StatSource statSources = 3;  // Usually stamina
+		optional float minimumHealth = 4 [default = 1.0];
+	}
+	
+	// For Mana calculation  
+	message ManaFormula {
+		required uint32 baseMana = 1;
+		required float manaPerLevel = 2;
+		repeated StatSource statSources = 3;  // Usually intellect
+		optional float minimumMana = 4 [default = 0.0];
+	}
+	
+	// For Attack Power calculation
+	message AttackPowerFormula {
+		required float baseAttackPower = 1;
+		required float attackPowerPerLevel = 2;
+		repeated StatSource statSources = 3;  // Usually strength + agility
+		optional float minimumAttackPower = 4 [default = 0.0];
+	}
+	
+	// For Armor calculation
+	message ArmorFormula {
+		required uint32 baseArmor = 1;
+		required float armorPerLevel = 2;
+		repeated StatSource statSources = 3;  // Usually agility
+		optional float minimumArmor = 4 [default = 0.0];
+	}
+	
+	// For Damage calculation
+	message DamageFormula {
+		required float baseDamageMin = 1;
+		required float baseDamageMax = 2;
+		required float damagePerLevel = 3;
+		repeated StatSource statSources = 4;  // Usually attack power
+		optional float minimumDamage = 5 [default = 1.0];
+		optional float variance = 6 [default = 0.1];  // ±10% by default
+	}
+}
+
+// Predefined calculation sets for common creature types
+message CalculationPresets {
+	enum PresetType {
+		WARRIOR_MELEE = 0;    // High stamina/strength focus
+		ROGUE_MELEE = 1;      // High agility focus  
+		CASTER_RANGED = 2;    // High intellect/spirit focus
+		HYBRID_BALANCED = 3;  // Balanced stats
+		TANK_DEFENSIVE = 4;   // Very high stamina/armor
+		ELITE_ENHANCED = 5;   // All stats enhanced
+	}
+	
+	message PresetConfig {
+		required PresetType type = 1;
+		required StatCalculationFormula.HealthFormula healthFormula = 2;
+		optional StatCalculationFormula.ManaFormula manaFormula = 3;
+		required StatCalculationFormula.AttackPowerFormula attackPowerFormula = 4;
+		required StatCalculationFormula.ArmorFormula armorFormula = 5;
+		required StatCalculationFormula.DamageFormula damageFormula = 6;
+	}
+	
+	repeated PresetConfig presets = 1;
+}
+
+// Runtime calculation results (not stored, but used in game)
+message CalculatedStats {
+	required uint32 finalHealth = 1;
+	required uint32 finalMana = 2;
+	required uint32 finalStamina = 3;
+	required uint32 finalStrength = 4;
+	required uint32 finalAgility = 5;
+	required uint32 finalIntellect = 6;
+	required uint32 finalSpirit = 7;
+	required uint32 finalAttackPower = 8;
+	required uint32 finalArmor = 9;
+	required float finalDamageMin = 10;
+	required float finalDamageMax = 11;
+	required uint32 level = 12;
+}

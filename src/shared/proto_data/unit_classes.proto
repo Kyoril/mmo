@@ -1,0 +1,82 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "stat_constants.proto";
+
+message UnitClassBaseValues {
+	required uint32 health = 1;
+	required uint32 mana = 2;
+	required uint32 stamina = 3;
+	required uint32 strength = 4;
+	required uint32 agility = 5;
+	required uint32 intellect = 6;
+	required uint32 spirit = 7;
+}
+
+message UnitClassAttackPowerStatSource {
+	required StatConstants.StatType statId = 1;
+	required float factor = 2;
+}
+
+message UnitClassHealthStatSource {
+	required StatConstants.StatType statId = 1;
+	required float factor = 2;
+}
+
+message UnitClassManaStatSource {
+	required StatConstants.StatType statId = 1;
+	required float factor = 2;
+}
+
+message UnitClassArmorStatSource {
+	required StatConstants.StatType statId = 1;
+	required float factor = 2;
+}
+
+message UnitClassEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	required string internalName = 3;
+	
+	required StatConstants.PowerType powertype = 4;
+	
+	// Base values per level for this unit class
+	repeated UnitClassBaseValues levelbasevalues = 5;
+	
+	// Attack power calculation
+	optional float attackPowerPerLevel = 6 [default = 0.0];
+	optional float attackPowerOffset = 7 [default = 0.0];
+	repeated UnitClassAttackPowerStatSource attackPowerStatSources = 8;
+	
+	// Regeneration settings
+	optional float baseManaRegenPerTick = 9 [default = 0.0];
+	optional float spiritPerManaRegen = 10 [default = 5.0];
+	optional float healthRegenPerTick = 11 [default = 0.0];
+	optional float spiritPerHealthRegen = 12 [default = 10.0];
+	
+	// Armor calculation
+	repeated UnitClassArmorStatSource armorStatSources = 13;
+	
+	// Health and mana calculation from stats
+	repeated UnitClassHealthStatSource healthStatSources = 14;
+	repeated UnitClassManaStatSource manaStatSources = 15;
+	
+	// Damage modifiers
+	optional float baseMeleeDamageMultiplier = 16 [default = 1.0];
+	optional float baseRangedDamageMultiplier = 17 [default = 1.0];
+	
+	// Resistances (indexed by school: 0=physical, 1=holy, 2=fire, 3=nature, 4=frost, 5=shadow, 6=arcane)
+	repeated uint32 baseResistances = 18;
+	
+	// Default speeds
+	optional float walkSpeed = 19 [default = 1.0];
+	optional float runSpeed = 20 [default = 1.0];
+	
+	// Attack timings
+	optional uint32 baseMeleeAttackTime = 21 [default = 2000];
+	optional uint32 baseRangedAttackTime = 22 [default = 2000];
+}
+
+message UnitClasses {
+	repeated UnitClassEntry entry = 1;
+}

@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "unit_classes.proto";
+
+// This file contains default unit class definitions for common creature types
+// These provide a foundation for different types of NPCs and creatures
+
+message DefaultUnitClasses {
+	repeated UnitClassEntry entry = 1;
+}
