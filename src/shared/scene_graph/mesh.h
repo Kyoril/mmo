@@ -128,7 +128,7 @@ namespace mmo
 		SkeletonPtr m_skeleton{ nullptr };
 		VertexBoneAssignmentList m_boneAssignments;
 		std::vector<Matrix4> m_boneMatrices;
-		AABBTree m_collisionTree;
+		AABBTree m_collisionTree {};
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

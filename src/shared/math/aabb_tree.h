@@ -57,7 +57,7 @@ namespace mmo
 			uint32 numFaces = 0;
 
 			/// 
-			AABB bounds;
+			AABB bounds{};
 		};
 
 	public:
@@ -157,11 +157,11 @@ namespace mmo
 	private:
 
 		uint32 m_freeNode = 0;
-		std::vector<Node> m_nodes;
-		std::vector<Vertex> m_vertices;
-		std::vector<Index> m_indices;
-		std::vector<AABB> m_faceBounds;
-		std::vector<uint32> m_faceIndices;
+		std::vector<Node> m_nodes{};
+		std::vector<Vertex> m_vertices{};
+		std::vector<Index> m_indices{};
+		std::vector<AABB> m_faceBounds{};
+		std::vector<uint32> m_faceIndices{};
 	};
 
 	io::Writer& operator << (io::Writer& w, AABBTree const& tree);

@@ -79,6 +79,8 @@ namespace mmo
 		: MovableObject(name)
 		, m_device(device)
 	{
+		m_queryFlags = 0;
+		m_defaultQueryFlags = 0;
 	}
 
 	ManualRenderOperationRef<ManualLineListOperation> ManualRenderObject::AddLineListOperation(MaterialPtr material)

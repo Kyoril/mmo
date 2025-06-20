@@ -322,11 +322,11 @@ namespace mmo
 
 		std::vector<Entity*> GetAllEntities() const;
 
-		std::unique_ptr<AABBSceneQuery> CreateAABBQuery(const AABB& box);
+		virtual std::unique_ptr<AABBSceneQuery> CreateAABBQuery(const AABB& box);
 
-		std::unique_ptr<SphereSceneQuery> CreateSphereQuery(const Sphere& sphere);
+		virtual std::unique_ptr<SphereSceneQuery> CreateSphereQuery(const Sphere& sphere);
 
-		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
+		virtual std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
 		void SetFogRange(float start, float end);
 

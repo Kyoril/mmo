@@ -366,4 +366,127 @@ namespace mmo
 	{
 		return std::make_unique<OctreeNode>(*this, name);
 	}
+
+	std::unique_ptr<OctreeRaySceneQuery> OctreeScene::CreateOctreeRayQuery(const Ray& ray)
+	{
+		auto query = std::make_unique<OctreeRaySceneQuery>(*this);
+		query->SetRay(ray);
+		return query;
+	}
+
+	std::unique_ptr<RaySceneQuery> OctreeScene::CreateRayQuery(const Ray& ray)
+	{
+		return CreateOctreeRayQuery(ray);
+	}
+
+	// Implementation of OctreeRaySceneQuery
+	OctreeRaySceneQuery::OctreeRaySceneQuery(OctreeScene& scene)
+		: RaySceneQuery(scene)
+		, m_octreeScene(scene)
+	{
+	}
+
+	void OctreeRaySceneQuery::Execute(RaySceneQueryListener& listener)
+	{
+		if (!m_octreeScene.m_octree)
+		{
+			return;
+		}
+
+		// Start the recursive octree traversal from the root
+		WalkOctreeForRay(listener, *m_octreeScene.m_octree, GetRay());
+	}
+	bool OctreeRaySceneQuery::WalkOctreeForRay(RaySceneQueryListener& listener, Octree& octant, const Ray& ray)
+	{
+		// Early exit if this octant has no nodes
+		if (octant.GetNumNodes() == 0)
+		{
+			return true;
+		}
+
+		// Test if the ray intersects this octant's bounding box
+		const auto rayIntersection = ray.IntersectsAABB(octant.m_box);
+		if (!rayIntersection.first)
+		{
+			return true; // Ray doesn't intersect this octant, continue with siblings
+		}
+
+		// Test all nodes directly attached to this octant
+		for (OctreeNode* node : octant.m_nodes)
+		{
+			// Check all MovableObjects attached to this scene node
+			const uint32 numObjects = node->GetNumAttachedObjects();
+			for (uint32 i = 0; i < numObjects; ++i)
+			{
+				MovableObject* movableObj = node->GetAttachedObject(i);
+				if (!movableObj)
+				{
+					continue;
+				}
+
+				// Debug notification if enabled
+				if (IsDebuggingHitTestResults())
+				{
+					listener.NotifyObjectChecked(*movableObj);
+				}
+
+				// Apply type and query mask filters
+				if ((movableObj->GetTypeFlags() & GetQueryTypeMask()) == 0)
+				{
+					continue;
+				}
+
+				if ((movableObj->GetQueryFlags() & GetQueryMask()) == 0)
+				{
+					continue;
+				}
+
+				// Test intersection with the object's world bounding box
+				const auto objIntersection = ray.IntersectsAABB(movableObj->GetWorldBoundingBox(true));
+				if (!objIntersection.first)
+				{
+					continue;
+				}
+
+				// Report the hit to the listener
+				if (!listener.QueryResult(*movableObj, objIntersection.second))
+				{
+					return false; // Listener requested early termination
+				}
+			}
+		}
+
+		// Recursively process child octants
+		// Optimize traversal order based on ray direction for better early termination
+		const Vector3& rayDir = ray.direction;
+		
+		// Determine traversal order based on ray direction
+		// Visit octants in the direction the ray is traveling for better culling
+		const bool rayGoesPositiveX = rayDir.x > 0.0f;
+		const bool rayGoesPositiveY = rayDir.y > 0.0f;
+		const bool rayGoesPositiveZ = rayDir.z > 0.0f;
+
+		for (int i = 0; i < 2; ++i)
+		{
+			const int x = rayGoesPositiveX ? i : 1 - i;
+			for (int j = 0; j < 2; ++j)
+			{
+				const int y = rayGoesPositiveY ? j : 1 - j;
+				for (int k = 0; k < 2; ++k)
+				{
+					const int z = rayGoesPositiveZ ? k : 1 - k;
+					
+					if (Octree* child = octant.m_children[x][y][z].get())
+					{
+						if (!WalkOctreeForRay(listener, *child, ray))
+						{
+							return false; // Early termination requested
+						}
+					}
+				}
+			}
+		}
+
+		return true; // Continue processing
+	}
 }

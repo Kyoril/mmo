@@ -360,15 +360,15 @@ namespace mmo
 		{
 			if (const Entity* entity = static_cast<Entity*>(result.movable))
 			{
-				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
-				Ray localRay = Ray(inverse * cameraRay.origin, inverse * cameraRay.destination);
-				localRay.hitDistance = std::numeric_limits<float>::max();
-
 				const auto& tree = entity->GetMesh()->GetCollisionTree();
 				if (tree.IsEmpty())
 				{
 					continue;
 				}
+
+				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
+				Ray localRay = Ray(inverse * cameraRay.origin, inverse * cameraRay.destination);
+				localRay.hitDistance = std::numeric_limits<float>::max();
 
 				if (tree.IntersectRay(localRay, nullptr, raycast_flags::EarlyExit))
 				{

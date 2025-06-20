@@ -14,6 +14,7 @@ namespace mmo
 		, m_renderObject(m_scene.CreateManualRenderObject(name))
 	{
 		m_sceneNode->AttachObject(*m_renderObject);
+		m_renderObject->SetQueryFlags(0);
 
 		SetupManualRenderObject();
 	}
