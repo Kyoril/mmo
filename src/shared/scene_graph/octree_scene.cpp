@@ -455,10 +455,9 @@ namespace mmo
 				}
 			}
 		}
-
 		// Recursively process child octants
 		// Optimize traversal order based on ray direction for better early termination
-		const Vector3& rayDir = ray.direction;
+		const Vector3& rayDir = ray.GetDirection();
 		
 		// Determine traversal order based on ray direction
 		// Visit octants in the direction the ray is traveling for better culling

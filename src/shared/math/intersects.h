@@ -41,7 +41,7 @@ namespace mmo
     {
         float t;
         {
-            float denom = normal.Dot(ray.direction);
+            float denom = normal.Dot(ray.GetDirection());
 
             // Check intersect side
             if (denom > +std::numeric_limits<float>::epsilon())
@@ -98,8 +98,8 @@ namespace mmo
             float v1 = b[i1] - a[i1];
             float u2 = c[i0] - a[i0];
             float v2 = c[i1] - a[i1];
-            float u0 = t * ray.direction[i0] + ray.origin[i0] - a[i0];
-            float v0 = t * ray.direction[i1] + ray.origin[i1] - a[i1];
+            float u0 = t * ray.GetDirection()[i0] + ray.origin[i0] - a[i0];
+            float v0 = t * ray.GetDirection()[i1] + ray.origin[i1] - a[i1];
 
             float alpha = u0 * v2 - u2 * v0;
             float beta = u1 * v0 - u0 * v1;

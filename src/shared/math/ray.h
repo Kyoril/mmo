@@ -19,9 +19,6 @@ namespace mmo
 		/// @brief Destination point of the ray.
 		Vector3 destination;
 
-		/// @brief Normalized direction of the ray.
-		Vector3 direction;
-
 		/// @brief Perctual hit distance or 1.0f if nothing was hit.
 		float hitDistance = 1.0f;
 
@@ -29,6 +26,49 @@ namespace mmo
 		{
 		}
 
+		/// @brief Gets the normalized direction of the ray.
+		/// @returns The normalized direction vector.
+		const Vector3& GetDirection() const
+		{
+			return direction;
+		}
+
+		/// @brief Sets the normalized direction of the ray.
+		/// @param dir The new normalized direction vector.
+		void SetDirection(const Vector3& dir)
+		{
+			ASSERT(dir.GetLength() >= 0.9999f && dir.GetLength() <= 1.0001f);
+			direction = dir;
+			invDirDirty = true;
+		}
+
+		/// @brief Gets the cached inverse direction for performance optimization.
+		/// @returns The inverse direction vector (1.0f / direction for each component).
+		const Vector3& GetInverseDirection() const
+		{
+			if (invDirDirty)
+			{
+				invDir = Vector3{
+					1.0f / direction.x,
+					1.0f / direction.y,
+					1.0f / direction.z
+				};
+				invDirDirty = false;
+			}
+			return invDir;
+		}
+
+	private:
+		/// @brief Normalized direction of the ray.
+		Vector3 direction;
+
+		/// @brief Cached inverse direction for performance optimization.
+		mutable Vector3 invDir;
+
+		/// @brief Flag to track if the inverse direction cache is dirty.
+		mutable bool invDirDirty = true;
+
+	public:
 		/// @brief Initializes the ray by providing a start point and an end point. This
 		/// will automatically calculate the direction of the ray.
 		/// @param start The starting point of the ray.
@@ -40,8 +80,8 @@ namespace mmo
 			ASSERT(origin != destination);
 			direction = (destination - origin);
 			direction.Normalize();
+			invDirDirty = true;
 		}
-
 		/// @brief Initializes the ray by providing an origin, a direction and a maximum distance.
 		/// @param start The starting point of the ray.
 		/// @param dir The normalized direction of the ray.
@@ -54,6 +94,7 @@ namespace mmo
 			ASSERT(maxDistance > 0.0f);
 			ASSERT(direction.GetLength() >= 0.9999f && direction.GetLength() <= 1.0001f);
 			destination = origin + (direction * maxDistance);
+			invDirDirty = true;
 		}
 		/// @brief Gets the vector representation of this ray.
 		/// @returns Vector representation of this ray.
@@ -68,12 +109,10 @@ namespace mmo
 		{
 			return GetVector().GetLength();
 		}
-
 		Vector3 GetPoint(const float t) const
 		{
-			return Vector3(origin + direction * t);
+			return Vector3(origin + GetDirection() * t);
 		}
-
 		/// @brief Checks whether this ray intersects with a triangle.
 		/// @param a The first vertex of the triangle.
 		/// @param b The second vertex of the triangle.
@@ -84,7 +123,7 @@ namespace mmo
 		{
 			const float upscaleFactor = 100.0f;
 
-			Vector3 rayDir = direction * upscaleFactor;
+			Vector3 rayDir = GetDirection() * upscaleFactor;
 			Vector3 v0 = a * upscaleFactor;
 			Vector3 v1 = b * upscaleFactor - v0;
 			Vector3 v2 = c * upscaleFactor - v0;
@@ -121,18 +160,13 @@ namespace mmo
 
 			return { true, d / GetLength() };
 		}
-
 		/// @brief Checks whether this ray intersects with a bounding box.
 		/// @param box The bounding box to check.
 		/// @returns First paramater is true if ray cast intersects. Second parameter returns the
 		///          hit distance, which can be used to calculate the hit point (if first parameter is true).
 		std::pair<bool, float> IntersectsAABB(const AABB& box) const
 		{
-			const Vector3 invDir{
-				1.0f / direction.x,
-				1.0f / direction.y,
-				1.0f / direction.z
-			};
+			const Vector3& invDir = GetInverseDirection();
 
 			float t1 = (box.min.x - origin.x) * invDir.x;
 			float t2 = (box.max.x - origin.x) * invDir.x;
@@ -158,10 +192,9 @@ namespace mmo
 
 			return std::make_pair(true, tmin);
 		}
-
 		std::pair<bool, float> Intersects(const Plane& p) const
 		{
-			const float denom = p.normal.Dot(direction);
+			const float denom = p.normal.Dot(GetDirection());
 			if (::fabsf(denom) < std::numeric_limits<float>::epsilon())
 			{
 				// Parallel

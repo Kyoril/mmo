@@ -1146,7 +1146,7 @@ namespace mmo
 
 			Vector3 edge1 = v1 - v0;
 			Vector3 edge2 = v2 - v0;
-			Vector3 h = ray.direction.Cross(edge2);
+			Vector3 h = ray.GetDirection().Cross(edge2);
 			float a = edge1.Dot(h);
 
 			if (std::abs(a) < epsilon)
@@ -1165,7 +1165,7 @@ namespace mmo
 
 			const Vector3 q = s.Cross(edge1);
 
-			if (const float v = f * ray.direction.Dot(q); v < 0.0f || u + v > 1.0f)
+			if (const float v = f * ray.GetDirection().Dot(q); v < 0.0f || u + v > 1.0f)
 				return false;
 
 			// At this stage, we can compute t to find out where the intersection point is on the line
@@ -1173,7 +1173,7 @@ namespace mmo
 
 			if (t > epsilon) // Ray intersection
 			{
-				intersectionPoint = ray.origin + ray.direction * t;
+				intersectionPoint = ray.origin + ray.GetDirection() * t;
 				return true;
 			}
 			
