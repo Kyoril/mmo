@@ -711,6 +711,7 @@ namespace mmo
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
 	}
+
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
@@ -974,6 +975,10 @@ namespace mmo
 				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
 			}, ConsoleCommandCategory::Debug, "Toggles culling.");
 
+
+		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
+		OnRenderShadowsChanged(*s_renderShadowsVar, "");
+		OnShadowBiasChanged(*s_depthBiasVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()

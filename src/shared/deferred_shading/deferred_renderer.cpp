@@ -143,7 +143,7 @@ namespace mmo
         // Traverse the scene graph and find all kind of lighting information for the current frame
         FindLights(scene, camera);
 
-        if (m_shadowCastingDirecitonalLight)
+        if (m_shadowCastingDirectionalLight)
         {
 			// Render the shadow map for the directional light
 			RenderShadowMap(scene, camera);
@@ -233,7 +233,7 @@ namespace mmo
 
     void DeferredRenderer::FindLights(Scene& scene, Camera& camera)
     {
-        m_shadowCastingDirecitonalLight = nullptr;
+        m_shadowCastingDirectionalLight = nullptr;
 
         // Prepare the light buffer with a single directional light for now
         LightBuffer lightBuffer;
@@ -252,12 +252,12 @@ namespace mmo
                 continue;
             }
 
-            if (light->GetType() == LightType::Directional && m_shadowCastingDirecitonalLight == nullptr)
+            if (light->GetType() == LightType::Directional && m_shadowCastingDirectionalLight == nullptr)
             {
                 // Check if the light is a shadow-casting directional light
                 if (light->IsCastingShadows())
                 {
-                    m_shadowCastingDirecitonalLight = light;
+                    m_shadowCastingDirectionalLight = light;
                 }
             }
 
@@ -306,12 +306,12 @@ namespace mmo
 
     void DeferredRenderer::RenderShadowMap(Scene& scene, Camera& camera)
     {
-        if (m_shadowCastingDirecitonalLight == nullptr)
+        if (m_shadowCastingDirectionalLight == nullptr)
         {
             return;
         }
 
-        m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirecitonalLight, *m_shadowCamera);
+        m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirectionalLight, *m_shadowCamera);
 
         // Setup some depth bias settings
         m_device.SetDepthBias(m_depthBias);

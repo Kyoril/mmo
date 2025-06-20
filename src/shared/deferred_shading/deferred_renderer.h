@@ -115,7 +115,7 @@ namespace mmo
 
         RenderTexturePtr m_renderTexture;
 
-        Light* m_shadowCastingDirecitonalLight;
+        Light* m_shadowCastingDirectionalLight;
 
         RenderTexturePtr m_shadowMapRT;
 
