@@ -355,18 +355,54 @@ namespace mmo
 			return false; // Already in range
 		}
 
-		// If we're moving, check if our current movement is still valid
+		// If we're moving, check if we'll be in range by the time we reach our destination
 		if (mover.IsMoving())
 		{
 			// Check if current movement path is still valid for this target
 			if (m_movementState.IsValidFor(target, attackRange))
 			{
-				return false; // Current movement is still good
+				// Additional check: if target is moving toward us, we might intercept before reaching destination
+				const Vector3 ourDestination = mover.GetTarget();
+				const float distanceToDestinationSq = target.GetSquaredDistanceTo(ourDestination, true);
+				
+				// If target is close to where we're going, continue current movement
+				if (distanceToDestinationSq <= attackRangeSq)
+				{
+					return false; // Current movement should get us in range
+				}
 			}
 		}
 
 		return true; // Need to initiate or update movement
 	}
+
+	Vector3 CreatureAICombatState::PredictTargetPosition(const GameUnitS& target) const
+	{
+		Vector3 predictedPosition = target.GetPosition();
+		
+		// If target is moving, predict where they'll be
+		const auto& targetMover = target.GetMover();
+		if (targetMover.IsMoving())
+		{
+			const Vector3 currentPos = target.GetPosition();
+			const Vector3 targetDestination = targetMover.GetTarget();
+			const Vector3 direction = (targetDestination - currentPos).NormalizedCopy();
+			
+			// Predict 1-2 seconds ahead based on target's movement speed
+			const float targetSpeed = target.GetSpeed(movement_type::Run);
+			const float predictionTime = 1.5f; // seconds
+			const float maxPredictionDistance = targetSpeed * predictionTime;
+			
+			// Don't predict beyond their actual destination
+			const float distanceToDestination = (targetDestination - currentPos).GetLength();
+			const float actualPredictionDistance = std::min(maxPredictionDistance, distanceToDestination);
+			
+			predictedPosition = currentPos + direction * actualPredictionDistance;
+		}
+		
+		return predictedPosition;
+	}
+
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
 		if (!ShouldMoveToTarget(target))
@@ -388,11 +424,14 @@ namespace mmo
 
 		auto& mover = GetControlled().GetMover();
 		
-		// Attempt to move to the target
-		if (mover.MoveTo(target.GetPosition(), moveRange))
+		// Use predicted target position for better interception
+		const Vector3 targetPosition = PredictTargetPosition(target);
+		
+		// Attempt to move to the predicted target position
+		if (mover.MoveTo(targetPosition, moveRange))
 		{
 			// Successfully initiated movement
-			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
+			m_movementState.UpdateTarget(targetPosition, attackRange);
 			m_stuckCounter = 0;
 			return true;
 		}
@@ -412,6 +451,7 @@ namespace mmo
 		
 		return false; // Not stuck yet
 	}
+
 	void CreatureAICombatState::ChooseNextAction()
 	{
 		GameCreatureS& controlled = GetControlled();
@@ -427,8 +467,15 @@ namespace mmo
 			return;
 		}
 
+		// Use shorter intervals when target is moving to improve responsiveness
+		uint32 actionInterval = ACTION_INTERVAL_MS;
+		if (victim->GetMover().IsMoving())
+		{
+			actionInterval = ACTION_INTERVAL_MS / 2; // 250ms instead of 500ms for moving targets
+		}
+
 		// Schedule next action check
-		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + actionInterval);
 
 		// Attempt to chase the target (only moves if necessary)
 		ChaseTarget(*victim);
@@ -487,6 +534,18 @@ namespace mmo
 				
 				if (auto* victim = controlled.GetVictim())
 				{
+					// Immediate range check when we start moving - if we're already in range, stop
+					const float attackRange = controlled.GetMeleeReach() + victim->GetMeleeReach();
+					const float attackRangeSq = attackRange * attackRange;
+					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), true);
+					
+					if (currentDistanceSq <= attackRangeSq)
+					{
+						// We're already in range, stop movement
+						controlled.GetMover().StopMovement();
+						return;
+					}
+					
 					// Handle flying/swimming targets
 					if (victim->GetMovementInfo().movementFlags & (movement_flags::Flying | movement_flags::Swimming))
 					{

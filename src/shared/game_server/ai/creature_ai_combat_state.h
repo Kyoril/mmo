@@ -183,6 +183,13 @@ namespace mmo
 		bool ChaseTarget(GameUnitS& target);
 
 		/**
+		 * @brief Predicts where the target will be based on their current movement.
+		 * @param target The unit to predict position for.
+		 * @return Predicted position of the target.
+		 */
+		Vector3 PredictTargetPosition(const GameUnitS& target) const;
+
+		/**
 		 * @brief Handles movement failure and stuck detection.
 		 * @return True if the unit is considered stuck and AI should reset.
 		 */
