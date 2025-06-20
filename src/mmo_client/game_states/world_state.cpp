@@ -942,7 +942,7 @@ namespace mmo
 		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.005");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
-		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "2");
+		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string&, const std::string&)
@@ -3491,13 +3491,12 @@ namespace mmo
 		}
 
 		const uint16 s_shadowTexSizes[] = {
+			512,
 			1024,
-			2048,
-			4096,
-			8192
+			2048
 		};
 
-		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
+		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 2)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
 	}
