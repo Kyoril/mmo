@@ -246,12 +246,12 @@ namespace mmo
 		scoped_connection m_getTopThreatener;
 		scoped_connection m_onUnitStateChanged;
 		scoped_connection m_onAutoAttackDone;
-		
-		// === Constants ===
+				// === Constants ===
 		static constexpr float RESET_DISTANCE_SQ = 60.0f * 60.0f;
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
+		/// Movement target range factor (0.75 = move to 75% of attack range to ensure we're close enough)
 		static constexpr float COMBAT_RANGE_FACTOR = 0.75f;
 	};
 }

@@ -2280,9 +2280,9 @@ namespace mmo
 			m_victim.reset();
 			return;
 		}
-
-		// Get the distance
-		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (GetMeleeReach() * GetMeleeReach()))
+		// Get the distance - use combined melee reach of both attacker and target
+		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
+		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (attackRange * attackRange))
 		{
 			OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
 			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);

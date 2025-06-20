@@ -332,6 +332,7 @@ namespace mmo
 			m_movementState.Reset();
 		}
 	}
+
 	bool CreatureAICombatState::ShouldMoveToTarget(const GameUnitS& target) const
 	{
 		auto& controlled = GetControlled();
@@ -343,12 +344,13 @@ namespace mmo
 			return false;
 		}
 
-		const float combatRange = controlled.GetMeleeReach() + target.GetMeleeReach();
-		const float combatRangeSq = combatRange * combatRange;
+		// Use the actual attack range for consistency with OnAttackSwing()
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float attackRangeSq = attackRange * attackRange;
 
-		// Check if we're already in combat range
+		// Check if we're already in attack range
 		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true);
-		if (currentDistanceSq <= combatRangeSq)
+		if (currentDistanceSq <= attackRangeSq)
 		{
 			return false; // Already in range
 		}
@@ -357,7 +359,7 @@ namespace mmo
 		if (mover.IsMoving())
 		{
 			// Check if current movement path is still valid for this target
-			if (m_movementState.IsValidFor(target, combatRange))
+			if (m_movementState.IsValidFor(target, attackRange))
 			{
 				return false; // Current movement is still good
 			}
@@ -365,7 +367,6 @@ namespace mmo
 
 		return true; // Need to initiate or update movement
 	}
-
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
 		if (!ShouldMoveToTarget(target))
@@ -380,8 +381,10 @@ namespace mmo
 			return false; // AI reset, movement aborted
 		}
 
-		const float combatRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
-		const float moveRange = combatRange * COMBAT_RANGE_FACTOR;
+		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing
+		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
+		// Move slightly closer than attack range to ensure we're definitely in range
+		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
 
 		auto& mover = GetControlled().GetMover();
 		
@@ -389,7 +392,7 @@ namespace mmo
 		if (mover.MoveTo(target.GetPosition(), moveRange))
 		{
 			// Successfully initiated movement
-			m_movementState.UpdateTarget(target.GetPosition(), combatRange);
+			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
 			m_stuckCounter = 0;
 			return true;
 		}
