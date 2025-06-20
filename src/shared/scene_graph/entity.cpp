@@ -100,6 +100,9 @@ namespace mmo
 
 		m_mesh = mesh;
 
+		// Invalidate animation cache since we're changing the mesh/skeleton
+		InvalidateAnimationCache();
+
 		Initialize();
 	}
 
@@ -209,11 +212,19 @@ namespace mmo
 			m_parentNode->NeedUpdate();
 		}
 	}
-
+	
 	void Entity::UpdateAnimations()
 	{
-		// Move matrices into buffer
 		ASSERT(m_skeleton);
+		ASSERT(m_animationStates);
+
+		// Check if animations have been updated this frame already
+		const uint64 currentAnimationFrame = m_animationStates->GetDirtyFrameNumber();
+		if (m_lastAnimationUpdateFrame == currentAnimationFrame && !m_animationsNeedUpdate)
+		{
+			// Animations are already up to date for this frame
+			return;
+		}
 
 		// Apply animation states
 		m_skeleton->SetAnimationState(*m_animationStates);
@@ -226,6 +237,10 @@ namespace mmo
 
 		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
 		m_boneMatrixBuffer->Update(m_boneMatrices.data());
+
+		// Update cache information
+		m_lastAnimationUpdateFrame = currentAnimationFrame;
+		m_animationsNeedUpdate = false;
 	}
 
 	void Entity::AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint)
@@ -299,6 +314,9 @@ namespace mmo
 			m_skeleton->InitAnimationState(*m_animationStates);
 
 			m_skeleton->Load();
+
+			// Invalidate animation cache since we're initializing new animations
+			InvalidateAnimationCache();
 		}
 
 		if (m_parentNode)

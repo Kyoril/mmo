@@ -76,8 +76,11 @@ namespace mmo
 		void DetachObjectFromBone(const MovableObject& obj);
 
 		void DetachAllObjectsFromBone();
-
 	protected:
+		/// @brief Updates skeletal animations and bone matrices.
+		/// This method is optimized to avoid redundant updates when called multiple times
+		/// per frame (e.g., during shadow map and deferred rendering passes).
+		/// Uses frame-based caching to ensure animations are only computed once per frame.
 		void UpdateAnimations();
 
 		void AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint);
@@ -108,6 +111,20 @@ namespace mmo
 		std::shared_ptr<SkeletonInstance> m_skeleton;
 
 		std::shared_ptr<AnimationStateSet> m_animationStates{ nullptr };
+		
+		/// @brief Frame number when animations were last updated to prevent multiple updates per frame
+		mutable uint64 m_lastAnimationUpdateFrame{ 0 };
+		
+		/// @brief Cached flag to check if animations need updating this frame
+		mutable bool m_animationsNeedUpdate{ true };
+
+	public:
+
+		/// @brief Invalidates the animation cache, forcing an update on next render
+		void InvalidateAnimationCache() const 
+		{ 
+			m_animationsNeedUpdate = true; 
+		}
 		
 	protected:
 		void BuildSubEntityList(const MeshPtr& mesh, SubEntities& subEntities);
