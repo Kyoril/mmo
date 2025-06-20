@@ -8,6 +8,12 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30")
     cmake_policy(SET CMP0169 OLD)
 endif()
 
+# Add cmake directory to the list of paths
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
+# Add project options early so they can affect dependencies
+include(mmo_options)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -29,6 +35,13 @@ if(NOT protobuf_POPULATED)
 
   # Add the fetched Google Protobuf as a subdirectory
   add_subdirectory(${protobuf_SOURCE_DIR} ${protobuf_BINARY_DIR})
+    # Apply iterator debug settings to protobuf targets if disabled
+  if (MSVC AND MMO_DISABLE_ITERATOR_DEBUG)
+    apply_iterator_debug_to_target(libprotobuf)
+    apply_iterator_debug_to_target(libprotobuf-lite)
+    apply_iterator_debug_to_target(libprotoc)
+    apply_iterator_debug_to_target(protoc)
+  endif()
   
   set_property(TARGET libprotobuf PROPERTY FOLDER "deps")
   set_property(TARGET libprotobuf-lite PROPERTY FOLDER "deps")
@@ -54,9 +67,6 @@ include_directories(${Protobuf_INCLUDE_DIR})
 # Add cmake directory to the list of paths
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-# Add project options
-include(mmo_options)
-
 # Include compiler-specific settings and options
 include(mmo_compiler_settings)
 
@@ -80,4 +90,14 @@ add_definitions("-DUUID_SYSTEM_GENERATOR")
 
 # Add source directory
 add_subdirectory(deps)
+
+# Apply iterator debug settings to all dependency targets
+if (MSVC AND MMO_DISABLE_ITERATOR_DEBUG)
+	# Get all targets in the deps directory
+	get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps PROPERTY BUILDSYSTEM_TARGETS)
+	foreach(target ${all_targets})
+		apply_iterator_debug_to_target(${target})
+	endforeach()
+endif()
+
 add_subdirectory(src)

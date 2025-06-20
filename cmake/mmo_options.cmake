@@ -49,6 +49,9 @@ option(MMO_BUILD_TOOLS "If checked, will try to build tools." OFF)
 # If enabled, unit tests will be built.
 option(MMO_BUILD_TESTS "If checked, will try to test programs." ON)
 
+# If enabled, disables MSVC iterator debugging in debug builds for better performance
+option(MMO_DISABLE_ITERATOR_DEBUG "If checked, disables MSVC iterator debugging in debug builds." ON)
+
 # If enabled, unit tests will be built.
 set(MMO_SRP6_N "894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7" CACHE STRING "Hex representation of a prime number for srp6a calculations.")
 set(MMO_SRP6_g "07" CACHE STRING "Hex representation of a prime number for srp6a calculations.")
@@ -98,6 +101,18 @@ if (MMO_BUILD_CLIENT)
 else()
 	add_definitions("-DMMO_BUILD_CLIENT=0")
 endif()
+
+# Apply MSVC iterator debug settings
+if (MSVC AND MMO_DISABLE_ITERATOR_DEBUG)
+	add_definitions("-D_ITERATOR_DEBUG_LEVEL=0")
+endif()
+
+# Function to apply iterator debug settings to a target
+function(apply_iterator_debug_to_target target_name)
+	if (MSVC AND MMO_DISABLE_ITERATOR_DEBUG)
+		target_compile_definitions(${target_name} PRIVATE _ITERATOR_DEBUG_LEVEL=0)
+	endif()
+endfunction()
 
 # TODO: Add more option-specific settings here as you need
 
