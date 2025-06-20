@@ -3491,9 +3491,10 @@ namespace mmo
 		}
 
 		const uint16 s_shadowTexSizes[] = {
-			512,
 			1024,
-			2048
+			2048,
+			4096,
+			8192
 		};
 
 		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];

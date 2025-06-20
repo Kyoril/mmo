@@ -32,7 +32,9 @@ namespace mmo
 				, amount(amount)
 			{
 			}
-		};		/// Manages movement state to prevent unnecessary path recalculation.
+		};
+		
+		/// Manages movement state to prevent unnecessary path recalculation.
 		struct MovementState
 		{
 			/// Current target position being moved to.
@@ -41,21 +43,14 @@ namespace mmo
 			float combatRange;
 			/// Whether we are currently moving to a valid combat position.
 			bool isMovingToCombat;
-			/// Whether we should check for fanning adjustments when in range.
-			bool shouldCheckFanning;
-			/// Whether we have reached our initial position and are now eligible for fanning.
-			bool hasReachedInitialPosition;
-			/// Game time when we can next check for fanning (to prevent constant adjustments).
-			GameTime nextFanningCheckTime;			/**
+
+			/**
 			 * @brief Constructs a new movement state.
 			 */
 			MovementState()
 				: targetPosition(Vector3::Zero)
 				, combatRange(0.0f)
 				, isMovingToCombat(false)
-				, shouldCheckFanning(false)
-				, hasReachedInitialPosition(false)
-				, nextFanningCheckTime(0)
 			{
 			}
 
@@ -193,20 +188,6 @@ namespace mmo
 		 * @return Predicted position of the target.
 		 */
 		Vector3 PredictTargetPosition(const GameUnitS& target) const;
-		/**
-		 * @brief Calculates a fanned position around the target to avoid clumping with other attackers.
-		 * @param target The target being attacked.
-		 * @param basePosition The base position to move to.
-		 * @return Adjusted position to avoid clustering.
-		 */
-		Vector3 CalculateFanningPosition(const GameUnitS& target, const Vector3& basePosition) const;
-
-		/**
-		 * @brief Checks if we need a fanning adjustment when already in combat range.
-		 * @param target The target being attacked.
-		 * @return True if a fanning adjustment is needed.
-		 */
-		bool NeedsFanningAdjustment(const GameUnitS& target) const;
 
 		/**
 		 * @brief Handles movement failure and stuck detection.
@@ -279,12 +260,5 @@ namespace mmo
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
 		/// Movement target range factor (0.75 = move to 75% of attack range to ensure we're close enough)
 		static constexpr float COMBAT_RANGE_FACTOR = 0.75f;
-		/// Maximum distance to search for nearby creatures for fanning behavior (in world units)
-		static constexpr float FANNING_SEARCH_RADIUS = 10.0f;
-		/// Minimum distance to maintain between creatures to trigger fanning (in world units)
-		static constexpr float FANNING_MIN_DISTANCE = 3.0f;		/// Maximum spread distance for fanning positioning (in world units)
-		static constexpr float FANNING_MAX_SPREAD = 4.0f;
-		/// Time interval between fanning checks (in milliseconds) to prevent constant adjustments
-		static constexpr uint32 FANNING_CHECK_INTERVAL = 2000;
 	};
 }
