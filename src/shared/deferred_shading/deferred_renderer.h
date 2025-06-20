@@ -137,6 +137,6 @@ namespace mmo
         float m_shadowSoftness = 1.0f;        // Overall shadow softness
         float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
         float m_lightSize = 0.0025f;          // Size of the virtual light
-        uint16 m_shadowMapSize = 8192;        // Size of the shadow map texture (default 8k)
+        uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (default 2k)
     };
 }

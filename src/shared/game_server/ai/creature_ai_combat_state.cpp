@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include <algorithm>
+#include <cmath>
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
@@ -10,6 +11,9 @@
 
 namespace mmo
 {
+	// Math constants
+	static constexpr float PI = 3.14159265359f;
+
 	// === MovementState Implementation ===
 
 	bool CreatureAICombatState::MovementState::IsValidFor(const GameUnitS& target, float currentCombatRange) const
@@ -37,6 +41,8 @@ namespace mmo
 		targetPosition = target;
 		combatRange = range;
 		isMovingToCombat = true;
+		shouldCheckFanning = false; // Don't check fanning until we reach the initial position
+		hasReachedInitialPosition = false; // Reset this flag for new movement
 	}
 
 	void CreatureAICombatState::MovementState::Reset()
@@ -44,6 +50,9 @@ namespace mmo
 		targetPosition = Vector3::Zero;
 		combatRange = 0.0f;
 		isMovingToCombat = false;
+		shouldCheckFanning = false;
+		hasReachedInitialPosition = false;
+		nextFanningCheckTime = 0;
 	}
 
 	// === CreatureAICombatState Implementation ===
@@ -63,6 +72,7 @@ namespace mmo
 	CreatureAICombatState::~CreatureAICombatState()
 	{
 	}
+
 	void CreatureAICombatState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
@@ -108,6 +118,7 @@ namespace mmo
 			controlled.RaiseTrigger(trigger_event::OnAggro, initiator.get());
 		}
 	}
+
 	void CreatureAICombatState::OnLeave()
 	{
 		CreatureAIState::OnLeave();
@@ -206,6 +217,7 @@ namespace mmo
 			ChooseNextAction();
 		}
 	}
+
 	void CreatureAICombatState::RemoveThreat(GameUnitS& threatener)
 	{
 		const uint64 guid = threatener.GetGuid();
@@ -299,6 +311,7 @@ namespace mmo
 			m_miscSignals.erase(guid);
 		}
 	}
+
 	void CreatureAICombatState::UpdateVictim()
 	{
 		// Clean up any expired threat entries first
@@ -403,11 +416,257 @@ namespace mmo
 		return predictedPosition;
 	}
 
+	Vector3 CreatureAICombatState::CalculateFanningPosition(const GameUnitS& target, const Vector3& basePosition) const
+	{
+		auto& controlled = GetControlled();
+		
+		// Get all units attacking the same target within a reasonable radius
+		std::vector<GameUnitS*> nearbyAttackers;
+		const Vector3& targetPos = target.GetPosition();
+		
+		// Find nearby units that are also attacking our target
+		controlled.GetWorldInstance()->GetUnitFinder().FindUnits(
+			Circle(targetPos.x, targetPos.z, FANNING_SEARCH_RADIUS), 
+			[&](GameUnitS& unit) -> bool
+			{
+				// Skip ourselves
+				if (&unit == &controlled)
+				{
+					return true;
+				}
+				
+				// Only consider creatures (not players)
+				if (unit.GetTypeId() != ObjectTypeId::Unit)
+				{
+					return true;
+				}
+				
+				// Only consider units that are attacking the same target
+				if (unit.GetVictim() != &target)
+				{
+					return true;
+				}
+				
+				// Only consider units that are close enough to matter
+				const float distanceToTarget = unit.GetSquaredDistanceTo(targetPos, false);
+				const float maxReach = unit.GetMeleeReach() + target.GetMeleeReach() + FANNING_MIN_DISTANCE;
+				if (distanceToTarget > (maxReach * maxReach))
+				{
+					return true;
+				}
+				
+				nearbyAttackers.push_back(&unit);
+				return true;
+			});
+		
+		// If no nearby attackers, no need to fan out
+		if (nearbyAttackers.empty())
+		{
+			return basePosition;
+		}
+		
+		// Calculate our desired radius from the target
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float desiredRadius = attackRange * COMBAT_RANGE_FACTOR;
+		
+		// Use a more deterministic approach: sort by GUID for consistent positioning
+		std::sort(nearbyAttackers.begin(), nearbyAttackers.end(), 
+			[](const GameUnitS* a, const GameUnitS* b) 
+			{
+				return a->GetGuid() < b->GetGuid();
+			});
+		
+		// Find our index in the sorted list to determine our base angle
+		int ourIndex = 0;
+		const uint64 ourGuid = controlled.GetGuid();
+		for (size_t i = 0; i < nearbyAttackers.size(); ++i)
+		{
+			if (nearbyAttackers[i]->GetGuid() < ourGuid)
+			{
+				ourIndex++;
+			}
+		}
+		
+		// Total number of attackers including ourselves
+		const int totalAttackers = static_cast<int>(nearbyAttackers.size()) + 1;
+		
+		// Calculate base angle for even distribution
+		const float baseAngleStep = (2.0f * PI) / static_cast<float>(totalAttackers);
+		float ourAngle = static_cast<float>(ourIndex) * baseAngleStep;
+		
+		// Check if any nearby creature is too close to our calculated position
+		// If so, try adjacent positions
+		Vector3 bestPosition;
+		float bestDistance = 0.0f;
+		bool foundGoodPosition = false;
+		
+		for (int attempt = 0; attempt < totalAttackers && !foundGoodPosition; ++attempt)
+		{
+			const float testAngle = ourAngle + (static_cast<float>(attempt) * baseAngleStep);
+			
+			const float x = targetPos.x + desiredRadius * cos(testAngle);
+			const float z = targetPos.z + desiredRadius * sin(testAngle);
+			const Vector3 testPosition(x, targetPos.y, z);
+			
+			// Check if this position is far enough from other attackers
+			float minDistanceToOthers = std::numeric_limits<float>::max();
+			for (const GameUnitS* other : nearbyAttackers)
+			{
+				const float distanceToOther = other->GetSquaredDistanceTo(testPosition, false);
+				minDistanceToOthers = std::min(minDistanceToOthers, distanceToOther);
+			}
+			
+			// Accept this position if it's far enough from others or if it's better than what we found
+			const float minRequiredDistance = FANNING_MIN_DISTANCE * FANNING_MIN_DISTANCE;
+			if (minDistanceToOthers >= minRequiredDistance)
+			{
+				bestPosition = testPosition;
+				foundGoodPosition = true;
+			}
+			else if (minDistanceToOthers > bestDistance)
+			{
+				bestPosition = testPosition;
+				bestDistance = minDistanceToOthers;
+			}
+		}
+		
+		// If we couldn't find a good position, use the best one we found
+		if (!foundGoodPosition && bestDistance > 0.0f)
+		{
+			return bestPosition;
+		}
+		else if (foundGoodPosition)
+		{
+			return bestPosition;
+		}
+		
+		// Fallback: use the original calculated position
+		const float x = targetPos.x + desiredRadius * cos(ourAngle);
+		const float z = targetPos.z + desiredRadius * sin(ourAngle);
+		return Vector3(x, targetPos.y, z);
+	}
+
+	bool CreatureAICombatState::NeedsFanningAdjustment(const GameUnitS& target) const
+	{
+		auto& controlled = GetControlled();
+		
+		// Only check if we have reached our initial position and are supposed to check fanning
+		if (!m_movementState.hasReachedInitialPosition || !m_movementState.shouldCheckFanning)
+		{
+			return false;
+		}
+		
+		// Check if enough time has passed since the last fanning check
+		const GameTime currentTime = GetAsyncTimeMs();
+		if (currentTime < m_movementState.nextFanningCheckTime)
+		{
+			return false;
+		}
+		
+		// Only check if we're already in combat range
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float currentDistanceSq = target.GetSquaredDistanceTo(controlled.GetPosition(), true);
+		if (currentDistanceSq > (attackRange * attackRange))
+		{
+			return false; // Not in range yet
+		}
+		
+		// Count nearby attackers attacking the same target
+		int nearbyCount = 0;
+		const Vector3& targetPos = target.GetPosition();
+		
+		controlled.GetWorldInstance()->GetUnitFinder().FindUnits(
+			Circle(targetPos.x, targetPos.z, FANNING_SEARCH_RADIUS), 
+			[&](GameUnitS& unit) -> bool
+			{
+				// Skip ourselves
+				if (&unit == &controlled)
+				{
+					return true;
+				}
+				
+				// Only consider creatures (not players)
+				if (unit.GetTypeId() != ObjectTypeId::Unit)
+				{
+					return true;
+				}
+				
+				// Only consider units that are attacking the same target
+				if (unit.GetVictim() != &target)
+				{
+					return true;
+				}
+				
+				// Check if they're too close to us
+				const float distanceToUs = unit.GetSquaredDistanceTo(controlled.GetPosition(), false);
+				if (distanceToUs < (FANNING_MIN_DISTANCE * FANNING_MIN_DISTANCE))
+				{
+					nearbyCount++;
+				}
+				
+				return true;
+			});
+		
+		// Need fanning if there are multiple creatures too close
+		return nearbyCount > 0;
+	}
+
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
+		auto& controlled = GetControlled();
+		auto& mover = controlled.GetMover();
+		const GameTime currentTime = GetAsyncTimeMs();
+		
+		// Check if we need fanning adjustment when already in range
 		if (!ShouldMoveToTarget(target))
 		{
-			return true; // No movement needed
+			// We're already in range - mark that we've reached our initial position
+			if (!m_movementState.hasReachedInitialPosition)
+			{
+				m_movementState.hasReachedInitialPosition = true;
+				m_movementState.shouldCheckFanning = true; // Now enable fanning checks
+				// Set the next fanning check time to give the creature time to settle
+				m_movementState.nextFanningCheckTime = currentTime + FANNING_CHECK_INTERVAL;
+			}
+			else if (currentTime >= m_movementState.nextFanningCheckTime && !m_movementState.shouldCheckFanning)
+			{
+				// Re-enable fanning checks periodically
+				m_movementState.shouldCheckFanning = true;
+			}
+			
+			// Check if we need fanning adjustment
+			if (NeedsFanningAdjustment(target))
+			{
+				const Vector3 currentPos = controlled.GetPosition();
+				const Vector3 fannedPosition = CalculateFanningPosition(target, currentPos);
+				
+				// Only move if the fanned position is significantly different
+				const float adjustmentDistance = (fannedPosition - currentPos).GetLength();
+				if (adjustmentDistance > 1.0f) // Only adjust if we need to move more than 1 unit
+				{
+					const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+					const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
+
+					DLOG("Adjust fanning position to " << fannedPosition << " (range: " << moveRange << ")");
+					if (mover.MoveTo(fannedPosition, moveRange))
+					{
+						m_movementState.UpdateTarget(fannedPosition, attackRange);
+						// Mark as having reached initial position since this is a fanning adjustment
+						m_movementState.hasReachedInitialPosition = true;
+						m_movementState.shouldCheckFanning = false; // Don't check again immediately
+						m_movementState.nextFanningCheckTime = currentTime + FANNING_CHECK_INTERVAL;
+						m_stuckCounter = 0;
+					}
+				}
+				else
+				{
+					// We're good where we are, disable further fanning checks for a while
+					m_movementState.shouldCheckFanning = false;
+					m_movementState.nextFanningCheckTime = currentTime + FANNING_CHECK_INTERVAL;
+				}
+			}
+
+			return true; // No initial movement needed
 		}
 
 		// Check if target is too far from home
@@ -418,13 +677,11 @@ namespace mmo
 		}
 
 		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing
-		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
 		// Move slightly closer than attack range to ensure we're definitely in range
 		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
-
-		auto& mover = GetControlled().GetMover();
 		
-		// Use predicted target position for better interception
+		// Use predicted target position for better interception (no fanning yet)
 		const Vector3 targetPosition = PredictTargetPosition(target);
 		
 		// Attempt to move to the predicted target position
