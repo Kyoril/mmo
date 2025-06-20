@@ -36,11 +36,20 @@ namespace mmo
 	public:
 
 		void AttachObject(MovableObject& obj);
+		uint32 GetNumAttachedObjects() const { return static_cast<uint32>(m_objectsByIndex.size()); }
 
-		uint32 GetNumAttachedObjects() const { return static_cast<uint32>(m_objectsByName.size()); }
-
+		/**
+		 * @brief Gets an attached object by index with O(1) complexity.
+		 * @param index The zero-based index of the object to retrieve.
+		 * @return Pointer to the MovableObject at the specified index, or nullptr if index is out of bounds.
+		 */
 		MovableObject* GetAttachedObject(uint32 index) const;
 
+		/**
+		 * @brief Gets an attached object by name with O(1) average complexity.
+		 * @param name The name of the object to retrieve.
+		 * @return Pointer to the MovableObject with the specified name, or nullptr if not found.
+		 */
 		MovableObject* GetAttachedObject(const String& name) const;
 
 		void DetachObject(MovableObject& object);
@@ -107,10 +116,12 @@ namespace mmo
 		void SetParent(Node* parent) override;
 
 		void SetInSceneGraph(bool inSceneGraph);
-
 	protected:
 		typedef std::unordered_map<String, MovableObject*> ObjectMap;
 		ObjectMap m_objectsByName{};
+		
+		/// @brief Vector to provide O(1) index-based access to attached objects
+		std::vector<MovableObject*> m_objectsByIndex{};
 
 		Scene& m_scene;
 

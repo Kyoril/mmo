@@ -5,6 +5,8 @@
 #include "movable_object.h"
 #include "render_queue.h"
 
+#include <algorithm>
+
 
 namespace mmo
 {
@@ -190,7 +192,6 @@ namespace mmo
 
 		m_objectsByName.clear();
 	}
-
 	void SceneNode::AttachObject(MovableObject& obj)
 	{
 		ASSERT(!obj.IsAttached());
@@ -203,16 +204,16 @@ namespace mmo
         assert(insresult.second && "Object was not attached because an object of the same name was already attached to this scene node.");
         (void)insresult;
         
+        // Add to index-based vector for O(1) access
+        m_objectsByIndex.push_back(&obj);
+        
         NeedUpdate();
 	}
-
 	MovableObject* SceneNode::GetAttachedObject(uint32 index) const
 	{
-		if (index < m_objectsByName.size())
+		if (index < m_objectsByIndex.size())
 		{
-			auto it = m_objectsByName.begin();
-			std::advance(it, index);
-			return it->second;
+			return m_objectsByIndex[index];
 		}
 
 		return nullptr;
@@ -228,20 +229,26 @@ namespace mmo
 
 		return nullptr;
 	}
-
 	void SceneNode::DetachObject(MovableObject& object)
 	{
+		// Remove from name-based map
 		std::erase_if(m_objectsByName, [&object](const auto& item)
 		{
 			auto const& [key, value] = item;
 			return value == &object;
 		});
 
+		// Remove from index-based vector
+		auto it = std::find(m_objectsByIndex.begin(), m_objectsByIndex.end(), &object);
+		if (it != m_objectsByIndex.end())
+		{
+			m_objectsByIndex.erase(it);
+		}
+
         object.NotifyAttachmentChanged(nullptr);
 
         NeedUpdate();
 	}
-
 	MovableObject* SceneNode::DetachObject(const String& name)
 	{
 		const auto it = m_objectsByName.find(name);
@@ -249,6 +256,14 @@ namespace mmo
 		{
 			MovableObject* obj = it->second;
 			m_objectsByName.erase(it);
+			
+			// Remove from index-based vector
+			auto vectorIt = std::find(m_objectsByIndex.begin(), m_objectsByIndex.end(), obj);
+			if (vectorIt != m_objectsByIndex.end())
+			{
+				m_objectsByIndex.erase(vectorIt);
+			}
+			
 			obj->NotifyAttachmentChanged(nullptr);
 			NeedUpdate();
 			return obj;
@@ -256,7 +271,6 @@ namespace mmo
 
 		return nullptr;
 	}
-
 	void SceneNode::DetachAllObjects()
 	{
 		for (const auto& [name, object] : m_objectsByName)
@@ -265,6 +279,7 @@ namespace mmo
 		}
 
 		m_objectsByName.clear();
+		m_objectsByIndex.clear();
 		NeedUpdate();
 	}
 

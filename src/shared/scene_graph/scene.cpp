@@ -247,6 +247,8 @@ namespace mmo
 
 	void Scene::RenderVisibleObjects()
 	{
+		m_renderQueue->SortByMaterial();
+
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
 		{
 			if (m_pixelShaderType == PixelShaderType::ShadowMap && groupId < RenderQueueGroupId::WorldGeometry1)

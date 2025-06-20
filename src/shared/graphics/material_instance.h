@@ -11,6 +11,7 @@
 
 #include <span>
 #include <memory>
+#include <unordered_map>
 
 #include "material.h"
 
@@ -147,7 +148,7 @@ namespace mmo
 		std::vector<ScalarParameterValue> m_scalarParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;
 		std::vector<TextureParameterValue> m_textureParameters;
-		std::map<String, TexturePtr> m_textureParamTextures;
+		std::unordered_map<String, TexturePtr> m_textureParamTextures;
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

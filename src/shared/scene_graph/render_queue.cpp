@@ -4,6 +4,7 @@
 
 #include "movable_object.h"
 #include "camera.h"
+#include <algorithm>
 
 namespace mmo
 {
@@ -24,6 +25,34 @@ namespace mmo
 			visitor.Visit(*renderable, m_groupId);
 		}
 	}
+
+	void QueuedRenderableCollection::SortByMaterial(size_t minRenderablesForSorting)
+	{
+		// Only sort if we have enough renderables to make it worthwhile
+		if (m_renderables.size() < minRenderablesForSorting)
+		{
+			return;
+		}
+
+		// Sort by material pointer for fast comparison and minimal overhead
+		// Using stable_sort to preserve original order for renderables with same material
+		std::stable_sort(m_renderables.begin(), m_renderables.end(),
+			[](const Renderable* a, const Renderable* b) -> bool
+			{
+				// Compare material pointers directly for fastest possible comparison
+				const auto materialA = a->GetMaterial();
+				const auto materialB = b->GetMaterial();
+				
+				// Handle null materials (put them at the end)
+				if (!materialA && !materialB) return false;
+				if (!materialA) return false;
+				if (!materialB) return true;
+				
+				// Compare by raw pointer value for fastest sorting
+				return materialA.get() < materialB.get();
+			});
+	}
+
 	void RenderPriorityGroup::AddRenderable(Renderable& renderable)
 	{
 		// TODO: Implement non-solid renderables based on material settings
@@ -39,6 +68,11 @@ namespace mmo
 	void RenderPriorityGroup::AddSolidRenderable(Renderable& renderable)
 	{
 		m_solidCollection.AddRenderable(renderable);
+	}
+
+	void RenderPriorityGroup::SortSolidsByMaterial(size_t minRenderablesForSorting)
+	{
+		m_solidCollection.SortByMaterial(minRenderablesForSorting);
 	}
 
 	VisibleObjectsBoundsInfo::VisibleObjectsBoundsInfo()
@@ -96,6 +130,14 @@ namespace mmo
 		}
 
 		it->second->AddRenderable(renderable);
+	}
+
+	void RenderQueueGroup::SortByMaterial(size_t minRenderablesForSorting)
+	{
+		for (const auto& [priority, group] : m_priorityGroups)
+		{
+			group->SortSolidsByMaterial(minRenderablesForSorting);
+		}
 	}
 
 	RenderQueue::RenderQueue()
@@ -177,5 +219,13 @@ namespace mmo
 
 		movableObject.PopulateRenderQueue(*this);
 		visibleBounds.Merge(worldBoundingBox, movableObject.GetWorldBoundingSphere(true), camera);
+	}
+
+	void RenderQueue::SortByMaterial(size_t minRenderablesForSorting)
+	{
+		for (const auto& [groupId, group] : m_groups)
+		{
+			group->SortByMaterial(minRenderablesForSorting);
+		}
 	}
 }
