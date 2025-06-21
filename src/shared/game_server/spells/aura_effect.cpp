@@ -45,6 +45,9 @@ namespace mmo
 		case AuraType::ModStat:
 			HandleModStat(apply);
 			break;
+		case AuraType::ModStatPct:
+			HandleModStat(apply);
+			break;
 		case AuraType::ModHealth:
 			break;
 		case AuraType::ModMana:
@@ -151,6 +154,23 @@ namespace mmo
 		// Apply stat modifier
 		m_container.GetOwner().UpdateModifierValue(GameUnitS::GetUnitModByStat(stat),
 			unit_mod_type::TotalValue,
+			GetBasePoints(),
+			apply);
+	}
+
+	void AuraEffect::HandleModStatPct(bool apply) const
+	{
+		const int32 stat = GetEffect().miscvaluea();
+
+		if (stat < 0 || stat > 4)
+		{
+			ELOG("AURA_TYPE_MOD_STAT_PCT: Invalid stat index " << stat);
+			return;
+		}
+
+		// Apply stat modifier
+		m_container.GetOwner().UpdateModifierValue(GameUnitS::GetUnitModByStat(stat),
+			unit_mod_type::TotalPct,
 			GetBasePoints(),
 			apply);
 	}
