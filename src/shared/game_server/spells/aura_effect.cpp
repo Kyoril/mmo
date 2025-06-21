@@ -46,7 +46,7 @@ namespace mmo
 			HandleModStat(apply);
 			break;
 		case AuraType::ModStatPct:
-			HandleModStat(apply);
+			HandleModStatPct(apply);
 			break;
 		case AuraType::ModHealth:
 			break;
