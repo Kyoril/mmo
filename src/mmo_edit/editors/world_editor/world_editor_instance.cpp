@@ -1228,9 +1228,29 @@ namespace mmo
 				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
 				if (mapEntity)
 				{
-					String asset = entity->GetMesh()->GetName().data();					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
+					String asset = entity->GetMesh()->GetName().data();
+
+					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
 					{
-						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), GenerateUniqueId());
+						SelectedMapEntity& selectedEntity = static_cast<SelectedMapEntity&>(selected);
+						Entity& originalSceneEntity = selectedEntity.GetEntity().GetEntity();
+
+						// Ensure all materials are applied to the duplicated entity
+						Entity* duplicated = CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), GenerateUniqueId());
+						ASSERT(originalSceneEntity.GetNumSubEntities() == duplicated->GetNumSubEntities());
+						for (uint32 i = 0; i < originalSceneEntity.GetNumSubEntities(); ++i)
+						{
+							SubEntity* originalSub = originalSceneEntity.GetSubEntity(i);
+							ASSERT(originalSub);
+							SubEntity* duplicatedSub = duplicated->GetSubEntity(i);
+							ASSERT(duplicatedSub);
+
+							// Copy material from original sub entity to duplicated one
+							if (originalSub->GetMaterial())
+							{
+								duplicatedSub->SetMaterial(originalSub->GetMaterial());
+							}
+						}
 					}));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 					
