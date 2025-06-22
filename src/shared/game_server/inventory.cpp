@@ -1011,34 +1011,30 @@ namespace mmo
 		// Check if it is a special bag....
 		if (IsEquipmentSlot(slot))
 		{
-			/*
 			auto armorProf = m_owner.GetArmorProficiency();
 			auto weaponProf = m_owner.GetWeaponProficiency();
 
 			// Determine whether the provided inventory type can go into the slot
 			if (entry.itemclass() == item_class::Weapon)
 			{
-				if ((weaponProf & weaponProficiency(entry.subclass())) == 0)
+				if ((weaponProf & (1 << entry.subclass())) == 0)
 				{
 					return inventory_change_failure::NoRequiredProficiency;
 				}
 			}
 			else if (entry.itemclass() == item_class::Armor)
 			{
-				if ((armorProf & armorProficiency(entry.subclass())) == 0)
+				if ((armorProf & (1 << entry.subclass())) == 0)
 				{
 					return inventory_change_failure::NoRequiredProficiency;
 				}
 			}
-			*/
 
-			/*
 			if (entry.requiredlevel() > 0 &&
 				entry.requiredlevel() > m_owner.GetLevel())
 			{
 				return inventory_change_failure::CantEquipLevel;
 			}
-			*/
 
 			/*
 			if (entry.requiredskill() != 0 &&
@@ -1114,7 +1110,8 @@ namespace mmo
 				{
 					return inventory_change_failure::ItemDoesNotGoToSlot;
 				}
-				else if (srcInvType == inventory_type::TwoHandedWeapon)
+
+				if (srcInvType == inventory_type::TwoHandedWeapon)
 				{
 					auto offhand = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand));
 					if (offhand)
@@ -1129,23 +1126,22 @@ namespace mmo
 				}
 				break;
 			case player_equipment_slots::Offhand:
-				if (srcInvType != inventory_type::OffHandWeapon &&
-					srcInvType != inventory_type::Shield &&
-					srcInvType != inventory_type::Weapon &&
-					srcInvType != inventory_type::Holdable)
 				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				else
-				{
+					if (srcInvType != inventory_type::OffHandWeapon &&
+						srcInvType != inventory_type::Shield &&
+						srcInvType != inventory_type::Weapon &&
+						srcInvType != inventory_type::Holdable)
+					{
+						return inventory_change_failure::ItemDoesNotGoToSlot;
+					}
 					if (srcInvType != inventory_type::Shield &&
-						srcInvType != inventory_type::Holdable /*&&
-						!m_owner.CanDualWield()*/)
+						srcInvType != inventory_type::Holdable &&
+						!m_owner.CanDualWield())
 					{
 						return inventory_change_failure::CantDualWield;
 					}
 
-					auto item = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Mainhand));
+					const auto item = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Mainhand));
 					if (item &&
 						item->GetEntry().inventorytype() == inventory_type::TwoHandedWeapon)
 					{
@@ -1365,17 +1361,20 @@ namespace mmo
 			return nullptr;
 		}
 
+		if ((m_owner.GetWeaponProficiency() & (1 << item->GetEntry().subclass())) == 0) 
+		{
+			return nullptr; // No proficiency for this weapon type
+		}
+
 		if (nonbroken && item->IsBroken())
 		{
 			return nullptr;
 		}
 
-		/*
 		if (useable && !m_owner.CanUseWeapon(attackType))
 		{
 			return nullptr;
 		}
-		*/
 
 		return item;
 	}

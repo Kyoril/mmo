@@ -236,6 +236,24 @@ namespace mmo
 	{
 		const auto& itemEntry = item.GetEntry();
 
+		// Check if item is usable
+		if (item.GetEntry().itemclass() == item_class::Weapon)
+		{
+			// Do not apply this: Proficiency check failed!
+			if ((GetWeaponProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			{
+				return;
+			}
+		}
+		else if (item.GetEntry().itemclass() == item_class::Armor)
+		{
+			// Do not apply this: Proficiency check failed!
+			if ((GetArmorProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			{
+				return;
+			}
+		}
+
 		if (itemEntry.durability() == 0 || item.Get<uint32>(object_fields::Durability) > 0)
 		{
 			// Apply values

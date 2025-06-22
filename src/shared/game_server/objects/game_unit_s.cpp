@@ -1117,6 +1117,12 @@ namespace mmo
 	{
 	}
 
+	bool GameUnitS::CanUseWeapon(WeaponAttack attackType)
+	{
+		// TODO: Implement weapon usage checks
+		return true;
+	}
+
 	void GameUnitS::DoLocalChatMessage(ChatType type, const String& message)
 	{
 		auto position = GetPosition();

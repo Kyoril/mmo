@@ -900,6 +900,8 @@ namespace mmo
 			}
 		}
 
+		bool CanUseWeapon(WeaponAttack attackType);
+
 	protected:
 		/// Sends a local chat message from the unit.
 		/// @param type The type of chat message.
@@ -928,10 +930,6 @@ namespace mmo
 		/// @returns true if the unit has an offhand weapon, false otherwise.
 		virtual bool HasOffhandWeapon() const;
 
-		/// Checks if the unit can dual wield weapons.
-		/// @returns true if the unit can dual wield, false otherwise.
-		bool CanDualWield() const;
-
 		/// Gets the maximum skill value for a given level.
 		/// @param level The level to check.
 		/// @returns The maximum skill value as an int32.
@@ -944,6 +942,10 @@ namespace mmo
 		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS& victim, WeaponAttack attackType) const;
 
 	public:
+		/// Checks if the unit can dual wield weapons.
+		/// @returns true if the unit can dual wield, false otherwise.
+		bool CanDualWield() const;
+
 		/// Gets the miss chance for a melee attack against a victim.
 		/// @param victim The victim of the attack.
 		/// @param attackType The type of weapon attack.
